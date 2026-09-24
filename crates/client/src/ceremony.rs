@@ -119,6 +119,17 @@ pub enum Abort {
     PatronRefused(String),
 }
 
+/// One archive fetch under way with a party: the nonce the next reply must
+/// echo, the frontier it was asked for, the chronology owed from earlier
+/// pages, and the page size.
+#[derive(Debug, Clone)]
+struct Fetch {
+    nonce: [u8; 16],
+    frontier: Vec<Txid>,
+    bounds: BTreeMap<Txid, u64>,
+    max: u64,
+}
+
 /// What a restore from the device's own storage found.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Restored {
@@ -351,7 +362,7 @@ pub struct Client {
     /// Archive fetches outstanding, by subject: the nonce sent and the
     /// head asked for.  One at a time per subject, which is what lets a
     /// reply be tied to a request (design §15).
-    fetching: BTreeMap<Keyhash, ([u8; 16], Option<Txid>)>,
+    fetching: BTreeMap<Keyhash, Fetch>,
     /// As a recovering subject: the rotation from the prior key, holding
     /// that key until the lines are sealed.
     pub rotation: Option<Box<Rotation>>,
@@ -1335,6 +1346,11 @@ impl Client {
         }
         emit_bstr(&mut out, &self.horizon.materialise().encode());
         emit_bstr(&mut out, &self.horizon.delegations_held());
+        // the holder: whose state this is, so a blob is refused by any other
+        // client, a device's material and sessions being its own; and what
+        // it holds for its provider
+        emit_array_head(&mut out, 2);
+        emit_bstr(&mut out, &self.public.keyhash);
         crate::durable::emit_opt_bstr(&mut out, self.provider_credential.as_deref());
         out
     }
@@ -1348,6 +1364,27 @@ impl Client {
     pub fn restore_durable(&mut self, b: &[u8]) -> Result<Restored, String> {
         use crate::durable::*;
         let (_, f) = parse_array(b, 7).ok_or("not a durable state")?;
+        // bound to an identity and a device before anything is read: a
+        // client restoring another's state, or another device's, would
+        // hold sessions and material that are not its own
+        // **the preceding format is read, not refused** (OPS-009): field 6
+        // carried the provider credential alone before the holder was named
+        // beside it, and a client that refused its own last state would lose
+        // the archive, the sessions and the obligations it wrote.  Where the
+        // holder is named it is checked; where it is not, the device and the
+        // archive's own signer rule are what bind the state to this client.
+        let holder: Option<[u8; 32]> = match &f[6] {
+            rhtn_codec::cbor::Item::Array(a) if a.len() == 2 => {
+                let parts = array(&f[6]).ok_or("holder")?;
+                Some(fixed::<32>(b, &parts[0]).ok_or("owner")?)
+            }
+            _ => None,
+        };
+        if let Some(owner) = holder
+            && owner != self.public.keyhash
+        {
+            return Err("this state belongs to another identity".into());
+        }
         let recs: Vec<Vec<u8>> = array(&f[0])
             .ok_or("records")?
             .iter()
@@ -1367,8 +1404,21 @@ impl Client {
         let snap = rhtn_archive::topology::Snapshot::decode(&bytes(b, &f[4]).ok_or("snapshot")?)
             .ok_or("snapshot")?;
         let delegations = bytes(b, &f[5]).ok_or("delegations")?;
-        let provider = optional(&f[6], |it| bytes(b, it)).ok_or("provider")?;
-        // everything parsed: nothing below can fail halfway
+        let provider = match &f[6] {
+            rhtn_codec::cbor::Item::Array(a) if a.len() == 2 => {
+                let parts = array(&f[6]).ok_or("holder")?;
+                optional(&parts[1], |it| bytes(b, it)).ok_or("provider")?
+            }
+            // the preceding shapes: a byte string, or nothing
+            rhtn_codec::cbor::Item::Bytes(_) => Some(bytes(b, &f[6]).ok_or("provider")?),
+            _ => None,
+        };
+        if payload.device != self.payload.device {
+            return Err("this state belongs to another device".into());
+        }
+        // everything is built into temporaries before any of it lands:
+        // the last fallible step is behind the first replacement, so a
+        // refusal leaves this client exactly as it was
         let kh = self.public.keyhash;
         let mut archive = Archive::new(kh);
         let mut parsed: Vec<Record> = recs
@@ -1382,9 +1432,6 @@ impl Client {
             archive.append(rec).map_err(|e| format!("record: {e}"))?;
             records += 1;
         }
-        self.archive = archive;
-        self.store = store;
-        self.payload = payload;
         let mut horizon = Horizon::new(kh);
         for r in held {
             horizon.restore_record(r);
@@ -1393,6 +1440,9 @@ impl Client {
         horizon
             .restore_delegations(&delegations)
             .ok_or("delegations")?;
+        self.archive = archive;
+        self.store = store;
+        self.payload = payload;
         self.horizon = horizon;
         self.provider_credential = provider;
         self.positions.clear();
@@ -1412,6 +1462,24 @@ impl Client {
     pub fn install(&mut self, contents: backup::Contents) -> Result<usize, String> {
         if !self.archive.is_empty() {
             return Err("this client already holds an archive".into());
+        }
+        // **decryption establishes that the passphrase opened it, not that
+        // this identity owns it.**  Every backup names its subject, and a
+        // device holding no seed makes one too: a provider credential and
+        // an evidence store are identity state whether or not the seeds
+        // travel with them, so the owner is carried in its own right and
+        // not inferred from what happens to be present.
+        let named = contents.owner.or_else(|| {
+            contents.seeds.map(|[ed, pq]| {
+                rhtn_crypto::SigningIdentity::from_seeds(&ed, &pq)
+                    .public
+                    .keyhash
+            })
+        });
+        match named {
+            Some(owner) if owner == self.public.keyhash => {}
+            Some(_) => return Err("this backup belongs to another identity".into()),
+            None => return Err("this backup names no owner".into()),
         }
         let mut parsed: Vec<Record> = contents
             .records
@@ -1447,6 +1515,7 @@ impl Client {
         secret: &[u8],
     ) -> Result<Vec<u8>, backup::Failure> {
         let contents = backup::Contents {
+            owner: Some(self.public.keyhash),
             seeds,
             records: self.archive.records().map(|r| r.bytes.clone()).collect(),
             store: self.store.clone(),
@@ -1771,7 +1840,15 @@ impl Client {
             stop_before: None,
             nonce,
         };
-        self.fetching.insert(subject, (nonce, head));
+        self.fetching.insert(
+            subject,
+            Fetch {
+                nonce,
+                frontier: head.into_iter().collect(),
+                bounds: BTreeMap::new(),
+                max,
+            },
+        );
         self.send_payload(subject, payload::KIND_ARCHIVE_REQUEST, &req.encode())
     }
 
@@ -1790,7 +1867,20 @@ impl Client {
                 more: false,
             };
         };
-        let reply = self.archive.serve(&req);
+        let mut reply = self.archive.serve(&req);
+        // a presence record arrives in the presented form (`wire-format.md`
+        // §7.9): the envelope and its seven slots, nothing revealed unless
+        // the holder chooses to, which is what this path is for.  One whose
+        // disclosure set this holder does not have goes as the envelope,
+        // there being nothing to present it with
+        for raw in reply.records.iter_mut() {
+            if let Ok(rec) = Record::parse(raw)
+                && rec.tx_type == rhtn_archive::tx::TYPE_PRESENCE
+                && let Some(set) = self.store.disclosures.get(&rec.txid)
+            {
+                *raw = crate::record::present(raw, set, &[]);
+            }
+        }
         let (records, more) = (reply.records.len(), reply.more);
         if let Ok(msgs) = self.send_payload(from, payload::KIND_ARCHIVE_REPLY, &reply.encode()) {
             self.outbox.extend(msgs);
@@ -1808,32 +1898,75 @@ impl Client {
     /// evidence store, where an adoption naming one can be evaluated
     /// against it (design §15: attestation is fetched on demand).
     fn take_archive_reply(&mut self, from: Keyhash, bytes: &[u8]) -> Result<usize, String> {
+        use rhtn_archive::walk::{BatchEnd, verify_batch_bounded};
         let reply = rhtn_archive::chain::ArchiveReply::decode(bytes)?;
-        let Some((nonce, head)) = self.fetching.get(&from).copied() else {
+        let Some(fetch) = self.fetching.get(&from).cloned() else {
             return Err("no fetch outstanding with this party".into());
         };
-        if reply.nonce != nonce {
+        if reply.nonce != fetch.nonce {
             return Err("reply does not carry the nonce of the fetch".into());
         }
-        self.fetching.remove(&from);
-        let mut kept = 0;
-        // the head asked for, then the subject's own back-pointers from
-        // each record to the one after it.  A head this client did not name
-        // constrains the first record not at all, which is §7.9's
-        // holder's-newest case
-        let mut expected: Option<Vec<Txid>> = head.map(|h| vec![h]);
-        for raw in &reply.records {
-            let rec = Record::parse(raw).map_err(|e| format!("record does not parse: {e}"))?;
-            if let Some(want) = &expected
-                && !want.contains(&rec.txid)
-            {
-                return Err("the walk does not continue from the record before it".into());
+        // **the batch is verified as the DAG it is** (`wire-format.md`
+        // §7.9): every record reachable from the frontier, on every branch
+        // of a merge, with the chronology an earlier page established
+        // carried into this one.  A head this client did not name
+        // constrains the first record not at all, the holder's-newest case
+        let v = verify_batch_bounded(&from, &fetch.frontier, &fetch.bounds, &reply, &self.known);
+        // **nothing lands until the whole batch stands.**  A reply whose
+        // verified prefix is followed by a record the frontier does not
+        // name is a refused reply, and a refused reply leaves no durable
+        // state behind it (`wire-format.md` §7.9)
+        for (rec, (_, status)) in v.verified.iter().zip(v.signatures.iter()) {
+            if !matches!(status, rhtn_archive::record::SigStatus::Verified) {
+                self.fetching.remove(&from);
+                return Err(format!("record {} does not verify", hex8(&rec.txid)));
             }
-            verify::envelope(&self.known, raw)
-                .map_err(|e| format!("record does not verify: {e}"))?;
-            expected = rec.back_pointers_of(&from).map(|b| b.to_vec());
-            self.store.records.insert(rec.txid, raw.clone());
+        }
+        if let BatchEnd::Mismatch { why, .. } = &v.end {
+            self.fetching.remove(&from);
+            return Err(format!("the batch does not verify: {why}"));
+        }
+        let mut kept = 0;
+        for rec in &v.verified {
+            self.store.records.insert(rec.txid, rec.bytes.clone());
             kept += 1;
+        }
+        // more remain: the reply's frontier is what this page named and did
+        // not return, and the next request asks for exactly that, under a
+        // fresh nonce and the bounds this page owes
+        match (&v.end, reply.more) {
+            (BatchEnd::Unfetched { continue_from, .. }, true) => {
+                let frontier = if reply.frontier.is_empty() {
+                    vec![*continue_from]
+                } else {
+                    reply.frontier.clone()
+                };
+                let nonce = self.nonce();
+                let req = rhtn_archive::chain::ArchiveRequest {
+                    subject: from,
+                    frontier: frontier.clone(),
+                    max_records: fetch.max,
+                    stop_before: None,
+                    nonce,
+                };
+                self.fetching.insert(
+                    from,
+                    Fetch {
+                        nonce,
+                        frontier,
+                        bounds: v.bounds.clone(),
+                        max: fetch.max,
+                    },
+                );
+                if let Ok(msgs) =
+                    self.send_payload(from, payload::KIND_ARCHIVE_REQUEST, &req.encode())
+                {
+                    self.outbox.extend(msgs);
+                }
+            }
+            _ => {
+                self.fetching.remove(&from);
+            }
         }
         Ok(kept)
     }
@@ -2070,6 +2203,14 @@ impl Client {
     /// transport key it presents, and its messages say they are from it.
     pub fn as_device(&mut self, key: [u8; 32]) {
         self.payload.device = key;
+    }
+
+    /// The session moved to `serving`, a sibling after a failover: what
+    /// this client publishes, sweeps and asks now goes there, and what it
+    /// records of the answers names that node (`light-client-requirements.md`
+    /// §4).
+    pub fn reattached(&mut self, serving: Keyhash) {
+        self.payload.serving = Some(serving);
     }
 
     /// The bundle to publish now, if this device can: signed here where

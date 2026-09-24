@@ -26,8 +26,10 @@ pub type Nonces = Arc<dyn Fn() -> [u8; 16] + Send + Sync>;
 pub type Current = Arc<dyn Fn() -> Option<Arc<rhtn_transport::session::Session>> + Send + Sync>;
 
 pub struct AttachedNode {
-    /// The node's own keyhash, which a client knows before it attaches.
-    node: Keyhash,
+    /// The node's own keyhash, which a client knows before it attaches;
+    /// replaced by a failover, since the session it holds is then with a
+    /// sibling and what it asks is answered by that sibling.
+    node: std::sync::Mutex<Keyhash>,
     session: Current,
     nonce: Nonces,
 }
@@ -35,10 +37,16 @@ pub struct AttachedNode {
 impl AttachedNode {
     pub fn new(node: Keyhash, session: Current, nonce: Nonces) -> Arc<AttachedNode> {
         Arc::new(AttachedNode {
-            node,
+            node: std::sync::Mutex::new(node),
             session,
             nonce,
         })
+    }
+
+    /// The session moved to `node`: everything asked from here on is asked
+    /// of it and attributed to it.
+    pub fn moved_to(&self, node: Keyhash) {
+        *self.node.lock().unwrap() = node;
     }
 
     /// One request on the current session, or nothing where there is none.
@@ -71,7 +79,7 @@ impl AttachedNode {
 
 impl Serving for AttachedNode {
     fn me(&self) -> Keyhash {
-        self.node
+        *self.node.lock().unwrap()
     }
 
     /// The key the serving node presented on the current session; all

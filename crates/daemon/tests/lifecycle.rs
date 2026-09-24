@@ -453,9 +453,16 @@ fn bare(cfg: &rhtn_daemon::config::Config) -> rhtn_node::view::NodeView {
 type Slots = Vec<(u64, Option<[u8; 32]>)>;
 
 /// The table and the slots a full replay of the whole store produces.
-fn replayed(cfg: &rhtn_daemon::config::Config) -> (Vec<[u8; 32]>, Slots) {
+/// What a view restored from the derived copy holds.  **Not a replay**: a
+/// node keeps the seen-set and the table it produced, never a third
+/// party's acts (`infra-client-requirements.md` §4.3, design §15.1.1
+/// [author, 2026-09-23]), so there is no record set to fold again.
+fn restored(cfg: &rhtn_daemon::config::Config) -> (Vec<[u8; 32]>, Slots) {
     let mut view = bare(cfg);
-    view.rebuild_from_store(&ids());
+    let snap = std::fs::read(cfg.topology.join("derived"))
+        .ok()
+        .and_then(|b| rhtn_archive::topology::Snapshot::decode(&b));
+    view.restore_materialised(snap.as_ref(), &ids());
     let subs = view.table.subordinates(&kh("bob")).into_iter().collect();
     let slots = view.slots.iter().map(|(n, s)| (*n, s.occupant)).collect();
     (subs, slots)
@@ -528,7 +535,7 @@ async fn a_wake_folds_in_what_arrived_since_rather_than_replaying_the_store() {
     let held: Vec<[u8; 32]> = view.table.subordinates(&kh("bob")).into_iter().collect();
     let slots: Slots = view.slots.iter().map(|(n, sl)| (*n, sl.occupant)).collect();
     drop(view);
-    let (subs, replay_slots) = replayed(&cfg);
+    let (subs, replay_slots) = restored(&cfg);
     assert_eq!(held, subs, "the same table a replay produces");
     assert_eq!(slots, replay_slots, "and the same slots");
     assert!(
@@ -595,7 +602,17 @@ async fn a_derived_view_that_cannot_account_for_the_store_is_discarded_whole() {
         s.persist().expect("persists");
     }
     let good = Snapshot::decode(&std::fs::read(cfg.topology.join("derived")).unwrap()).unwrap();
-    let expected: Vec<[u8; 32]> = replayed(&cfg).0;
+    // **a discarded view leaves nothing**, where it once left a replay:
+    // a node keeps the seen-set and the table it produced, never a third
+    // party's acts, so the fold has no input to run again (design §15.1.1,
+    // `infra-client-requirements.md` §4.3 [author, 2026-09-23]).  What the
+    // good view restores is the control
+    assert_eq!(
+        restored(&cfg).0,
+        vec![kh("carol")],
+        "control: the view restores it"
+    );
+    let expected: Vec<[u8; 32]> = Vec::new();
     let fresh = || bare(&cfg);
     // a view whose table bytes do not read
     let damaged = Snapshot {
@@ -605,7 +622,7 @@ async fn a_derived_view_that_cannot_account_for_the_store_is_discarded_whole() {
     let mut v = fresh();
     assert_eq!(
         v.restore_materialised(Some(&damaged), &ids()),
-        Restored::Replayed { replayed: 1 }
+        Restored::Replayed { replayed: 0 }
     );
     assert_eq!(
         v.table
@@ -613,7 +630,7 @@ async fn a_derived_view_that_cannot_account_for_the_store_is_discarded_whole() {
             .into_iter()
             .collect::<Vec<_>>(),
         expected,
-        "the same answer a replay gives"
+        "the damaged view is discarded and nothing stands in for it"
     );
     // a view claiming more records than the store holds
     let other_input = Snapshot {
@@ -623,7 +640,7 @@ async fn a_derived_view_that_cannot_account_for_the_store_is_discarded_whole() {
     let mut v = fresh();
     assert_eq!(
         v.restore_materialised(Some(&other_input), &ids()),
-        Restored::Replayed { replayed: 1 }
+        Restored::Replayed { replayed: 0 }
     );
     assert_eq!(
         v.table
@@ -649,13 +666,13 @@ async fn a_derived_view_that_cannot_account_for_the_store_is_discarded_whole() {
             .subordinates(&kh("bob"))
             .into_iter()
             .collect::<Vec<_>>(),
-        expected
+        vec![kh("carol")]
     );
     // and no view at all
     let mut v = fresh();
     assert_eq!(
         v.restore_materialised(None, &ids()),
-        Restored::Replayed { replayed: 1 }
+        Restored::Replayed { replayed: 0 }
     );
     assert_eq!(
         v.table
@@ -664,7 +681,7 @@ async fn a_derived_view_that_cannot_account_for_the_store_is_discarded_whole() {
             .collect::<Vec<_>>(),
         expected
     );
-    // the good one, for contrast: taken, and nothing replayed
+    // the good one, for contrast: taken, and the binding with it
     let mut v = fresh();
     assert_eq!(
         v.restore_materialised(Some(&good), &ids()),
@@ -675,7 +692,7 @@ async fn a_derived_view_that_cannot_account_for_the_store_is_discarded_whole() {
             .subordinates(&kh("bob"))
             .into_iter()
             .collect::<Vec<_>>(),
-        expected
+        vec![kh("carol")]
     );
     let _ = std::fs::remove_dir_all(&l.dir);
 }
@@ -760,7 +777,10 @@ async fn serving_a_one_time_key_does_not_stop_the_node_writing_its_state_back() 
         "the derived view is written"
     );
     assert!(cfg.archive.exists(), "and the archive");
-    assert!(cfg.topology.join("tx").exists(), "and the topology store");
+    assert!(
+        cfg.topology.join("seen").exists(),
+        "and the topology store's seen-set"
+    );
     let _ = std::fs::remove_dir_all(&l.dir);
 }
 
@@ -796,7 +816,7 @@ async fn a_derived_view_belonging_to_another_identity_is_discarded() {
         drop(view);
         s.persist().expect("persists");
     }
-    let expected = replayed(&cfg);
+    let expected = restored(&cfg);
     assert_eq!(
         expected.0,
         vec![kh("carol")],
@@ -819,7 +839,6 @@ async fn a_derived_view_belonging_to_another_identity_is_discarded() {
         },
     );
     theirs.store = rhtn_node::store::TopologyStore::load(&cfg.topology).unwrap();
-    theirs.rebuild_from_store(&ids());
     let foreign: Snapshot = theirs.materialise();
 
     // **whose view this is, is this node's own answer.**  Installing
@@ -827,7 +846,7 @@ async fn a_derived_view_belonging_to_another_identity_is_discarded() {
     let mut v = bare(&cfg);
     assert_eq!(
         v.restore_materialised(Some(&foreign), &ids()),
-        Restored::Replayed { replayed: 1 },
+        Restored::Replayed { replayed: 0 },
         "another identity's derived view is discarded"
     );
     assert_eq!(
@@ -835,16 +854,16 @@ async fn a_derived_view_belonging_to_another_identity_is_discarded() {
             .subordinates(&kh("bob"))
             .into_iter()
             .collect::<Vec<_>>(),
-        expected.0,
-        "and the node rebuilds its own"
+        Vec::<[u8; 32]>::new(),
+        "and nothing of theirs is installed under this node"
     );
     assert_eq!(
         v.slots
             .iter()
             .map(|(n, s)| (*n, s.occupant))
             .collect::<Slots>(),
-        expected.1,
-        "with its own routing slots"
+        Slots::new(),
+        "and none of their routing slots either"
     );
     let _ = std::fs::remove_dir_all(&l.dir);
 }

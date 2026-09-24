@@ -230,11 +230,15 @@ async fn a_transaction_crosses_two_daemon_processes_and_survives_a_restart() {
     // and the daemon writes its state back on the way out
     drop(observer);
     set.stop("bob");
-    let held = set.get("bob").topology().join("tx");
-    let names: Vec<String> = std::fs::read_dir(&held)
+    // **by identifier, not by act** (`infra-client-requirements.md` §4.3
+    // [author, 2026-09-23]): what the process wrote down of a transaction
+    // it was not a party to is that it stored it
+    let held = set.get("bob").topology().join("seen");
+    let names: Vec<String> = std::fs::read_to_string(&held)
         .expect("a topology store")
-        .flatten()
-        .map(|e| e.file_name().to_string_lossy().to_string())
+        .lines()
+        .filter_map(|l| l.split(' ').next().map(|s| s.to_string()))
+        .filter(|s| !s.is_empty())
         .collect();
     for r in [&n_adopt, &w_adopt] {
         let want: String = r.txid.iter().map(|b| format!("{b:02x}")).collect();
@@ -351,14 +355,19 @@ async fn a_daemon_answers_a_resolution_from_the_topology_it_was_pushed() {
         last.unwrap_or_default()
     );
 
-    // **a party that attaches late is reconciled with, not left behind.**
-    // §10.1.3 makes reconciliation a replay of the same frames, and this
-    // one arrives after every record did: nothing is pushed to it, and it
-    // is handed what the process holds because its session came up.
+    // **a party that attaches late is handed the current state and this
+    // node's own acts** [author, 2026-09-23].  §10.1.3 makes reconciliation
+    // a replay of the same frames, and what P holds of a transaction it was
+    // not a party to is that it stored it and the table it produced: N's
+    // adoption, which P countersigned, is replayed from P's own archive,
+    // and C's, which P only witnessed, is fetched from a party to it (§7.9).
+    // What P replays of its own acts it keeps apart from its archive: the
+    // archive is a chain and refuses a record whose predecessors it lacks,
+    // and what replay wants is the act.
     let mut late = attach_to("w2", kh("alice"), p_addr).await;
     assert!(
-        awaits(&mut late, c_adopt.txid, 30_000).await,
-        "the store it never saw arrive is replayed to it"
+        !awaits(&mut late, c_adopt.txid, 3_000).await,
+        "a third party's act is not replayed: P no longer holds one to replay"
     );
 
     // a subject in no record it holds is a failure it can state, not a hang

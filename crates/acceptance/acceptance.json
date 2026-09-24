@@ -12631,6 +12631,33 @@
     "interpretation": null
   },
   {
+    "id": "TOP-45",
+    "area": "topology",
+    "gap": "topology",
+    "title": "Persist the seen fact and the table it produced, never a transaction the node was no party to",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "infra-client-requirements.md §4.3",
+      "design §15.1.1"
+    ],
+    "rule": [
+      {
+        "where": "infra-client-requirements.md §4.3",
+        "text": "Evaluate a transaction you are no party to, and keep what the evaluation came to rather than the act"
+      },
+      {
+        "where": "infra-client-requirements.md §4.3",
+        "text": "Replay your current state and your own acts, and nothing else"
+      }
+    ],
+    "given": "Node P holds an adoption and a departure by parties it did not sign, a current endpoint line for its own child, and a derived view written beside them.",
+    "when": "P is stopped and started again, and a party attaches to it and reconciles.",
+    "then": "What P wrote of the foreign acts is their identifiers alone: neither body nor the evidence they cited survives, and an upgrade removes what an earlier version wrote under those names. The identifiers still suppress a second forwarding wave. P replays the endpoint line byte for byte and no foreign act, and its derived view still accounts for what it accepted; a view that cannot is discarded and leaves nothing to fold.",
+    "oracle": "behaviour",
+    "interpretation": null
+  },
+  {
     "id": "MET-12",
     "area": "metric",
     "gap": "metric",

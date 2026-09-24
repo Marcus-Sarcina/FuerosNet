@@ -10451,7 +10451,7 @@ the grandpatron's siblings and the great-grandpatron, who never hold it.
 **`functional_tests.md` is a shared document** [author, 2026-09-23]: rows are
 added whenever the base documents define new functionality, the reviewer
 reviews and adds what they discover, and removal needs the author's approval.
-APP-010 and MAIL-012 join it for the device holding a delegation and no seed.
+APP-010 and MAIL-025 join it for the device holding a delegation and no seed.
 
 **The Kotlin binding exists and is driven.** The facade carries `uniffi`'s
 annotations, the generated Kotlin compiles, and a Kotlin shell starts two
@@ -10459,6 +10459,40 @@ participants against a real node, attaches, and sends and receives through
 the binding; the gate runs that trip where a JDK and the Kotlin compiler are
 found. Four boundary shapes changed for the generator: the refusal is an enum,
 tuples became records, the platform crosses by reference.
+
+**The third conformance run: eight of nine findings closed.** A refused
+restore now leaves the client unchanged; durable state and backups are bound
+to their identity and a replacement device starts from the envelope alone;
+archive pagination carries chronology across pages and both consumers take a
+presence record in its presented form; the client's fetch follows a frontier
+and keeps every branch of a merge; an initial message's device is the
+bundle's and never the channel's; a completed catalog sweep replaces the
+host's portion; a failover moves the serving identity with the session. The
+ninth, on persisting another party's transaction bodies, sets
+`infra-client-requirements.md` §4.3 against the replay `wire-format.md`
+§10.1.3 requires, and is the author's.
+
+**An uninvolved party keeps the abstraction, not the act** [author,
+2026-09-23]. A transaction between parties a node is not one of is evaluated
+for its effect on topology, on whom the node can reach and on what it makes
+of their trust, and the act itself is not persisted: it lives in the archives
+of the parties to it, a copy in each and none authoritative. A node therefore
+keeps a seen-set and the table it produced; an upgrade removes the bodies an
+earlier version wrote. What it replays to a new adjacency is its current state
+and its own acts, and a peer that missed a transaction fetches it from a
+participant. design §15.1.1 follows: the derived copy is the state rather than
+a cache of one, and a copy that cannot account for what was accepted is
+repaired rather than refolded.
+
+**A second conformance run the same day closed four more.** A backup names
+its owner in its own right, so one made on a device holding no seed can no
+longer be installed by anyone holding the passphrase. The durable-state
+reader takes the format its own previous version wrote, rather than refusing
+to start over it. A refused archive reply leaves no record behind it. And an
+upgrade migrates the former topology layout before removing it: each body
+yields its identifier, the node's own acts are kept, and only the foreign
+bodies and the evidence go. `functional_tests.md` counts 463 families across
+26 prefixes and its design-input hashes are rebaselined.
 
 **Counts checked.** 2,305 references across the five documents resolve with no flag;
 the staleness sweep reports its baseline; 1,424 citations across `models/` and the

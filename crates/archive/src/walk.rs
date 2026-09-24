@@ -220,6 +220,28 @@ pub struct BatchVerdict {
     /// False when no head was requested: the first record's newestness is
     /// the holder's claim (`wire-format.md` §7.9).
     pub head_verified: bool,
+    /// What the next page owes this one: for every record this batch
+    /// named and did not return, the earliest effective time among the
+    /// records naming it, which the predecessor may not exceed
+    /// (`wire-format.md` §3.3).  A page boundary carries the obligation;
+    /// it does not end it.
+    pub bounds: BTreeMap<Txid, u64>,
+}
+
+/// The envelope a reply entry carries: itself, or the one inside a
+/// presentation (`wire-format.md` §7.9: a map is an envelope, an array a
+/// presentation), which must verify whole before its envelope is read.
+fn entry_envelope<'a, L: Lookup + ?Sized>(ids: &L, bytes: &'a [u8]) -> Result<&'a [u8], String> {
+    match rhtn_codec::cbor::parse_all(bytes) {
+        Ok(rhtn_codec::cbor::Item::Array(_)) => {
+            rhtn_crypto::verify::presentation(ids, bytes)
+                .map_err(|e| format!("presentation: {e}"))?;
+            let ranges =
+                rhtn_codec::cbor::array_item_ranges(bytes, 0).ok_or("presentation walk")?;
+            Ok(&bytes[ranges[0].clone()])
+        }
+        _ => Ok(bytes),
+    }
 }
 
 impl BatchVerdict {
@@ -240,6 +262,19 @@ pub fn verify_batch<L: Lookup + ?Sized>(
     reply: &ArchiveReply,
     ids: &L,
 ) -> BatchVerdict {
+    verify_batch_bounded(subject, requested, &BTreeMap::new(), reply, ids)
+}
+
+/// [`verify_batch`] with what an earlier page established: `bounds` is the
+/// previous verdict's, and a record this page returns for a frontier entry
+/// may not be effective after the record that named it there.
+pub fn verify_batch_bounded<L: Lookup + ?Sized>(
+    subject: &Keyhash,
+    requested: &[Txid],
+    bounds: &BTreeMap<Txid, u64>,
+    reply: &ArchiveReply,
+    ids: &L,
+) -> BatchVerdict {
     let g = genesis(subject);
     let mut verified: Vec<Record> = Vec::new();
     let mut signatures = Vec::new();
@@ -248,7 +283,7 @@ pub fn verify_batch<L: Lookup + ?Sized>(
     let mut checkpoint_names: BTreeMap<Txid, Txid> = BTreeMap::new();
     let mut end = None;
     for (i, bytes) in reply.records.iter().enumerate() {
-        let rec = match Record::parse(bytes) {
+        let rec = match entry_envelope(ids, bytes).and_then(Record::parse) {
             Ok(r) => r,
             Err(why) => {
                 end = Some(BatchEnd::Mismatch {
@@ -280,6 +315,13 @@ pub fn verify_batch<L: Lookup + ?Sized>(
             end = Some(BatchEnd::Mismatch {
                 index: i,
                 why: "effective time after the record that names it".into(),
+            });
+            break;
+        }
+        if bounds.get(&rec.txid).is_some_and(|b| rec.effective > *b) {
+            end = Some(BatchEnd::Mismatch {
+                index: i,
+                why: "effective time after the record that named it on an earlier page".into(),
             });
             break;
         }
@@ -324,11 +366,27 @@ pub fn verify_batch<L: Lookup + ?Sized>(
             }
         }
     });
+    // what the next page owes: the frontier entries, each bounded by the
+    // earliest naming record, on this page or an earlier one
+    let mut owed: BTreeMap<Txid, u64> = BTreeMap::new();
+    for t in &expected {
+        let here = named_by.get(t).map(|js| {
+            js.iter()
+                .map(|j| verified[*j].time)
+                .min()
+                .unwrap_or(u64::MAX)
+        });
+        let before = bounds.get(t).copied();
+        if let Some(b) = [here, before].into_iter().flatten().min() {
+            owed.insert(*t, b);
+        }
+    }
     BatchVerdict {
         verified,
         signatures,
         end,
         head_verified: !requested.is_empty(),
+        bounds: owed,
     }
 }
 
@@ -362,6 +420,7 @@ pub fn fetch_chain<L: Lookup + ?Sized>(
     let mut newest = None;
     let mut end;
     let mut first = true;
+    let mut bounds: BTreeMap<Txid, u64> = BTreeMap::new();
     loop {
         let nonce = rhtn_codec::cose::sha256(&records.len().to_be_bytes())[..16]
             .try_into()
@@ -381,7 +440,8 @@ pub fn fetch_chain<L: Lookup + ?Sized>(
             };
             break;
         }
-        let v = verify_batch(subject, &next, &reply, ids);
+        let v = verify_batch_bounded(subject, &next, &bounds, &reply, ids);
+        bounds = v.bounds.clone();
         if first {
             newest = v.verified.first().map(|r| r.txid);
             first = false;

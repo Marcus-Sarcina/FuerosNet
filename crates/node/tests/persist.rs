@@ -10,6 +10,7 @@ use rhtn_node::propagation::{FRAME_TOPOLOGY_PUSH, encode_push};
 use rhtn_node::resolution::endpoint_record;
 use rhtn_node::store::{Decision, KIND_ENDPOINT_RECORD, KIND_TRANSACTION, TopologyStore};
 
+// acceptance: TOP-45
 #[test]
 fn a_saved_store_is_the_seen_set_after_a_restart() {
     let mut w = World::new();
@@ -58,7 +59,13 @@ fn a_saved_store_is_the_seen_set_after_a_restart() {
     let loaded = TopologyStore::load(&dir).unwrap();
     assert!(loaded.holds_txid(&a_x.txid));
     assert_eq!(loaded.endpoint(&kh("carol")).unwrap().bytes, er);
-    assert_eq!(loaded.presence(&pop.txid), Some(&pop.bytes));
+    // **the seen fact, not the act** (`infra-client-requirements.md` §4.3
+    // [author, 2026-09-23]): the adoption is remembered by identifier, so
+    // no second forwarding wave leaves here, and neither its body nor the
+    // presence record it cited survives the restart.  A node that needs
+    // the act fetches it from a party's archive (`wire-format.md` §7.9)
+    assert_eq!(loaded.presence(&pop.txid), None);
+    assert!(loaded.transaction(&a_x.txid).is_none());
     assert!(loaded.series_proved(&kh("carol"), 2));
     assert_eq!(loaded.objects().len(), n.store.objects().len());
     let mut again = view(

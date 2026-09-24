@@ -837,15 +837,21 @@ impl Sessions {
                 // the binding is the bundle held for the sending device;
                 // one held for another of the sender's devices still says
                 // whether the key is that party's at all
+                // **the device is the bundle's, never the channel's**: the
+                // channel names a device in the clear, and what a message
+                // is attributed to is decided by the material it opens
+                // under (`wire-format.md` §7.10).  The bundle whose key
+                // this message carries says which device published it,
+                // and a channel naming any other device is not that
+                // device's message
                 let held = self.prefetched_of(&from);
-                let bound = self
-                    .prefetched
-                    .get(&(from, device))
-                    .or_else(|| held.first().copied())
-                    .ok_or(PayloadError::NoBundle)?
-                    .blob
-                    .ik;
-                if bound != m.ik {
+                if held.is_empty() {
+                    return Err(PayloadError::NoBundle);
+                }
+                let Some(bound) = held.iter().find(|p| p.blob.ik == m.ik) else {
+                    return Err(PayloadError::NotTheSender);
+                };
+                if bound.device != device {
                     return Err(PayloadError::NotTheSender);
                 }
                 let (spk, pqspk) = keys

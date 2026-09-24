@@ -105,6 +105,12 @@ impl Wrap {
 /// exactly why it is enveloped.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Contents {
+    /// **Whose backup this is.**  Carried in its own right, because a
+    /// device holding no seed still makes one and its provider credential
+    /// and evidence store are as much identity state as the seeds would
+    /// have been.  Absent only in an envelope written before this field
+    /// existed.
+    pub owner: Option<crate::Keyhash>,
     /// The two seeds an identity is derived from, classical then
     /// post-quantum, as `rhtn keys` writes them.
     pub seeds: Option<[[u8; 32]; 2]>,
@@ -309,7 +315,7 @@ fn decode_header(b: &[u8]) -> Result<(Wrap, [u8; 12], [u8; 12]), Failure> {
 
 fn encode_contents(c: &Contents) -> Vec<u8> {
     let mut out = Vec::new();
-    emit_array_head(&mut out, 4);
+    emit_array_head(&mut out, 5);
     match &c.seeds {
         Some([a, b]) => {
             emit_array_head(&mut out, 2);
@@ -327,14 +333,29 @@ fn encode_contents(c: &Contents) -> Vec<u8> {
         Some(p) => emit_bstr(&mut out, p),
         None => emit_array_head(&mut out, 0),
     }
+    match &c.owner {
+        Some(k) => emit_bstr(&mut out, k),
+        None => emit_array_head(&mut out, 0),
+    }
     out
 }
 
 fn decode_contents(b: &[u8]) -> Option<Contents> {
     let item = parse_all(b).ok()?;
     let Item::Array(f) = &item else { return None };
-    let [s, r, st, p] = f.as_slice() else {
-        return None;
+    // four fields is the shape written before the owner was named; it is
+    // read rather than refused, and what it installs is bound by the seeds
+    // it carries
+    let (s, r, st, p, o) = match f.as_slice() {
+        [s, r, st, p] => (s, r, st, p, None),
+        [s, r, st, p, o] => (s, r, st, p, Some(o)),
+        _ => return None,
+    };
+    let owner = match o {
+        None => None,
+        Some(Item::Array(a)) if a.is_empty() => None,
+        Some(it @ Item::Bytes(_)) => Some(raw(b, it).ok()?.try_into().ok()?),
+        Some(_) => return None,
     };
     let Item::Array(sa) = s else { return None };
     let seeds = match sa.as_slice() {
@@ -353,6 +374,7 @@ fn decode_contents(b: &[u8]) -> Option<Contents> {
         _ => return None,
     };
     Some(Contents {
+        owner,
         seeds,
         records,
         store: ClientStore::decode(&raw(b, st).ok()?)?,

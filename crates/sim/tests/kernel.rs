@@ -380,6 +380,9 @@ async fn the_kernel_joins_the_direct_path_honours_the_override_and_sweeps_the_ca
         "registered"
     );
     let n = LiveNode::start(node_cfg("bob", 30), view, ids(), anchors());
+    for r in records {
+        n.originate_transaction(&r.bytes);
+    }
     // bob's store holds the records its table folded, so the shape reaches
     // the clients it serves at attach and their horizons place each other
     for r in records {
@@ -424,6 +427,16 @@ async fn the_kernel_joins_the_direct_path_honours_the_override_and_sweeps_the_ca
         .await
         .unwrap()
         .expect("carol sweeps");
+    // **what bob replays is its own acts**: it countersigned both
+    // adoptions, so they are its to keep and to hand a client that
+    // attaches after they passed (`infra-client-requirements.md` §4.3
+    // [author, 2026-09-23]), and the two clients place each other from them
+    assert!(
+        until(8000, || alice.distance(idv("carol")).is_some()
+            && carol.distance(idv("alice")).is_some())
+        .await,
+        "each places the other in its horizon, from the acts bob is a party to"
+    );
     assert_eq!(alice.path(), PathPolicy::Auto);
     assert!(!alice.direct_to(idv("carol")), "nothing offered yet");
 

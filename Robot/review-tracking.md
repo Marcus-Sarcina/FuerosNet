@@ -11324,7 +11324,7 @@ it; the reviewer reviews and adds what they discover; removing a row needs
 the author's approval.  Recorded in `CLAUDE.md`.  Under that rule, two rows
 for the device holding no seed, whose tests have stood unmarked since the
 22nd: APP-010 (the device itself: its start, its attach under the
-delegation, the identity-key acts it refuses by name) and MAIL-012 (its
+delegation, the identity-key acts it refuses by name) and MAIL-025 (its
 bundle, made over its own material and signed on the ceremony device, with
 what each side refuses).  The acceptance catalogue's entries for them are
 PAY-21 and DMN-27, and their tests are marked: 441 of 457, 0 flags.
@@ -11381,3 +11381,175 @@ has been done.
 
 Milestone 13 is met on this machine and unmet in CI until the runner
 exists.
+
+## Conformance review of 2026-09-23 at `8ada6ce`: eight closed, one the author's
+
+The third run, against the brief.  The reviewer reports the workspace at
+597 passed, the retained harness at 67 of 67, the pins, format, clippy,
+`cargo deny`, the five fuzz smokes and the Kotlin round trip all green,
+and nine new findings reproduced by eleven failing assertions in an
+independent harness of thirteen tests.  Each was verified against the code
+and the cited text before any change.  **Eight hold and are closed; the
+ninth exposes a contradiction between two root documents and is the
+author's.**
+
+| ID | What it was | Disposition |
+|---|---|---|
+| R01 | `restore_durable` replaced the archive, store and payload before the delegations were decoded: a malformed blob refused after the replacement | Everything is built into temporaries and committed after the last fallible step |
+| R02 | A durable blob carried no owner, so any client restored any other's; `install` never read the envelope's seeds, so another identity's backup installed under this one; no way to start from a backup alone | The blob's seventh field carries the holder's keyhash beside the provider credential and a restore refuses another identity's or another device's state; `install` derives the owner from the seeds and refuses a mismatch; `Participant::start_from_backup` starts a replacement device from the envelope and passphrase alone |
+| R03 | `fetch_chain` started a fresh verifier per page and lost the chronology the naming record imposed on its predecessor | `verify_batch_bounded` carries the bound each frontier entry owes into the next page; `verify_batch` is the unbounded form the reviewer's tests call |
+| R04 | An initial message's channel named a device in the clear and the receiver fell back to any bundle of the sender, installing a ratchet under an invented device | The device is the bundle's whose key the message carries; a channel naming any other device is refused (`wire-format.md` §7.10: attribution is decided by the material it opens under) |
+| R05 | A completed sweep inserted entries and never removed those the host stopped serving | A sweep gathers and replaces the host's portion on completion, marking truncation |
+| R06 | `ArchiveEntry = PresentedRecord / Envelope` (§7.9), and both verifying paths parsed every entry as an envelope; the serving path sent presence records bare | The walk verifies a presentation whole and reads its envelope; the client serves a presence record presented, withheld, where it holds the disclosure set |
+| R07 | The client's fetch was a one-page linear walk: it dropped the fetch on the first reply, ignored `more`, and rejected the second branch of a merge | The fetch keeps its frontier and owed bounds, verifies each page as the DAG, stores every verified record, and posts the continuation for the reply's frontier under a fresh nonce |
+| R08 | Failover moved the session and left the attached node's identity and the client's serving record on the former node | The identity moves with the session: `AttachedNode::moved_to`, `Client::reattached` |
+| R09 | The topology store persists every held transaction body; `infra-client-requirements.md` §4.3 says a node holds of another party's transaction that it stored it and the table it produced, not the transaction as a history | **Held, the author's.** `wire-format.md` §10.1.3 makes repair *a replay of the same frames*, and the attach-time replay feeds a client's horizon from those bodies: a node that kept only the fact could replay nothing.  Which text yields is a ruling; the reviewer's assertion stands untouched, `#[ignore]`d with the reason until it is given |
+
+**Two things about the reviewer's fixtures.** R08's test finds the saved
+state by counting seven fields, so the owner binding R02 needed rides
+inside the seventh field rather than as an eighth.  The tests reach the
+simulator's fixtures by a path relative to the reviewer's directory, and
+`quinn`; both repaired as compile repairs when the file moved to
+`crates/conformance/tests/september23.rs`.  The reviewer also caught a
+collision I made on the 23rd: the functional row I added as MAIL-012
+duplicated an existing MAIL-012; it is MAIL-025 now.
+
+The reviewer's harness passes 12 of 13 in place, and the same in the
+workspace with R09 ignored.
+
+## R09 ruled: an uninvolved party keeps the abstraction, not the act (2026-09-23)
+
+**The author's ruling**, which settles R09 in the reviewer's favour and
+reaches further than `infra-client-requirements.md` §4.3 as written:
+
+- A transaction by parties a node is **not** involved with — a patron
+  reviewing history, a member of the trust horizon seeing a live
+  transaction — **is evaluated and not persisted**.  What the evaluation
+  leaves behind is its impact on topology, the counterparties added to the
+  evaluator's address book and route cache, and the increment or decrement
+  of its internal representation of trust.
+- **Rotation and recovery connect the new key to those abstracted
+  representations, not to the history.**  Bob rotates and is Bernie: every
+  evaluator in the horizon opens a record for Bernie carrying Bob's
+  accumulated trust state.  This refines rather than contradicts design
+  §7.5.2.9's *rotation and recovery never carry state forward from beyond
+  the local trust horizon*: within the horizon the abstraction carries;
+  beyond it nothing does.
+- **The archives are the participants'.**  A transaction record lives on
+  the user's active devices and as encrypted blobs on their peers and
+  desktop devices; only the node itself and its receiving patrons ever read
+  their version.  This is not a rule that a record exists in one place: a
+  copy sits in the archive of every participating node and **none is
+  authoritative over the others**.
+
+**What it costs, which the ruling does not settle.** The node's whole
+derived state is a fold over bodies it keeps, and the ruling removes the
+input:
+
+- `wire-format.md` §10.1.3 makes the second repair path *a replay of the
+  same frames*, and `propagation.rs`'s `replay_to` sends stored bodies to a
+  new adjacency; a node holding none replays nothing.
+- design §15.1.1 says the derived copy sits *beside the transactions it
+  came from* and is *discarded whole* and refolded when it cannot account
+  for them.  With no input the fold cannot be re-run, so the derived state
+  stops being a cache of a pure function and becomes the state itself,
+  maintained forward only.
+- Four readers dereference a held body on demand rather than a fold:
+  peering edges (`peering.rs`), a disavowal's band (`trust.rs`), an
+  adoption's cited evidence (`store.rs`'s `Fetch`), and the fold's own
+  rebuild (`rebuild_from_store`, `restore_materialised`).  Each would have
+  to leave its answer in the abstraction at evaluation time.
+- The light client's `Horizon` keeps records for exactly the same stated
+  reason and is the same change again.
+
+**Ruled the same day [author]: only current state and its own acts.** A
+node replays the current-state objects it holds and the transactions it is
+itself a party to, from its own archive; a node that missed a foreign
+transaction fetches the subject's archive from a participant
+(`wire-format.md` §7.9), and §10.1.3's second repair path narrows to that.
+
+### What that came to in the code
+
+- **The store is a seen-set.** `TopologyStore` keeps `(txid, effective)`
+  for every transaction it stored and writes that, where it wrote the
+  bodies under `tx/` and the cited evidence under `presence/`.  An upgrade
+  removes both directories rather than merely stopping the write, which is
+  the shape R09's own predecessor S04 established.  The bodies stay in
+  memory while the process runs, because the fold dereferences them and a
+  relay forwards them; nothing of them survives a restart.
+- **The derived view's watermark is taken over the seen-set**, so a view
+  that accounts for what was accepted still restores the table and the
+  slots exactly as before.  What changes is the failure: a view that
+  cannot account for the seen-set is discarded and leaves nothing, because
+  there is no record set to fold again, and the node repairs by
+  reconciliation instead.  design §15.1.1 said the copy sat *beside the
+  transactions it came from* and that the honest failure was to *run the
+  fold*; both are now false, and the section is corrected. **The wording
+  there is the assistant's and the author's to replace**: the fact is
+  forced by the ruling, the sentences are not his.
+- **A party keeps its own acts.** A node that stores a transaction it
+  signed keeps the body — its own to keep, the ruling's *a copy in the
+  archives of all participating nodes* — and replays it.  Kept apart from
+  the archive, because the archive is a chain and refuses a record whose
+  predecessors it lacks, while what replay wants is the act; it is also
+  appended to the archive where it fits.  `adopt_own_position` reads its
+  own adoption's locator from the archive where the store no longer has
+  the body, which is what the reviewer's retained D01 needed after a
+  restart.  **This is most of what a client's horizon needs**: a serving
+  node countersigns the adoptions of the clients it serves, so a client
+  attaching long after the flood is still handed the acts that place its
+  neighbours.
+- **Replication is not reconciliation.** A sibling stands in for this node
+  (design §3.4) and takes what it holds this run; §10.1.3's replay to a new
+  adjacency carries current state and this node's own acts.  The two were
+  one call and are now two, so the ruling did not propagate into a
+  mechanism it was not about.
+
+Re-derived, all ours: DMN-11 (the view is restored, not compared against a
+replay), DMN-12 and DMN-16 (a discarded view leaves nothing), DMN-14 (the
+store's file is the seen-set), the two daemon scenarios, and PRP-15, whose
+claim that reconciliation is *the same frames and no distinct mechanism*
+holds for what a node has to replay: a current line goes byte for byte and
+a third party's act does not go at all.  `functional_tests.md` gains
+TOP-035 and the catalogue TOP-45 for the rule.  The reviewer's thirteen
+assertions are untouched, and R09 now passes among them.  Its fixture read
+the `tx/` directory, which the ruling removes rather than empties; the read
+is now over everything the store wrote, which is strictly more places than
+the reviewer looked in and leaves the assertion exactly as written.
+
+**Left open, and the author's.** What a party attaching late is *not*
+handed is topology its node only witnessed: P replays its own acts and its
+current state, and C's adoption under N, which P neither signed nor is
+named in, is not among them.  For a client of N this rarely bites, since N
+countersigned it; for a client reaching past its own patron it does, and
+§7.9's fetch from a participant is the mechanism that exists.  How far a
+client's horizon should reach on that basis is the question that follows.
+The daemon scenario asserts only what the ruling settles.
+
+## Conformance review of 2026-09-23, second run: four closed (2026-09-23)
+
+The reviewer ran again the same evening, against `8ada6ce` plus the
+uncommitted worktree carrying the R09 work, and reviewed those bytes rather
+than the commit.  Eight of the nine prior findings resolved on their
+retained assertions; R02 was partially resolved and three findings were new,
+all three of them mine from that day's work.  Each was verified against the
+code and the cited text before any change.  **All four hold and are closed;
+the reviewer's nineteen tests pass untouched.**
+
+| ID | What it was | Disposition |
+|---|---|---|
+| R02 | A backup made on a device holding no seed named no owner, so `install` checked nothing and Bob took Alice's provider credential and store from an envelope he had the passphrase for | `Contents` names its owner in its own right, written by `export` and checked by `install`; the seeds are no longer what carries it. An envelope that names neither owner nor seeds installs nothing |
+| N01 | `durable()` changed field 6 from the provider credential to `[owner, provider]` and the reader took only the new shape, so a client refused the state its own previous version wrote and the boundary refused to start over it | The reader takes both: where the holder is named it is checked, and where it is not the device and the archive's own signer rule are what bind the state. **The lesson is mine**: a local format changed in place is a format that refuses its own predecessor, and the fix belonged in the same edit as the change |
+| N02 | `take_archive_reply` inserted each verified record before it knew the batch's verdict, so a reply whose valid prefix was followed by an unrelated record was refused and left the prefix behind | Signatures and verdict first, records after: a refused reply leaves nothing |
+| N03 | The store read only its new files, so an upgraded node recovered neither the identifiers nor its own acts, and then deleted the former layout | `load` migrates: every body under the former layout yields its identifier and effective time to the seen-set, and the bodies are taken whole until `prune_own` drops the foreign ones as soon as the identity is at hand. The old derived view accounts for the migrated seen-set again, so the table survives the upgrade |
+
+**Two things the reviewer found that were not findings.** The functional
+document's footer counted 458 families across 26 prefixes where the rows
+say 463, and its five design-input hashes were stale; the document itself
+says to rebaseline them when the specifications change, and both are now
+current.  Counting excludes §9's open-decision register, which is what
+makes 463 rather than 479.
+
+The reviewer's file needed one fixture repair on the move, the simulator
+fixture's path; the recursive store scan I had repaired on the previous run
+is now theirs.

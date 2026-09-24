@@ -464,13 +464,17 @@ fn a_record_a_client_makes_reaches_the_node_that_serves_it() {
         "and carol places its patron one edge away"
     );
 
-    // and it is in what the process wrote when it stopped, not in a view
+    // and it is in what the process wrote when it stopped, not in a view.
+    // **By identifier** (`infra-client-requirements.md` §4.3
+    // [author, 2026-09-23]): what the node wrote of a transaction it was no
+    // party to is that it stored it and the table it produced
     nodes.stop("bob");
-    let held = nodes.get("bob").topology().join("tx");
-    let names: Vec<String> = std::fs::read_dir(&held)
+    let held = nodes.get("bob").topology().join("seen");
+    let names: Vec<String> = std::fs::read_to_string(&held)
         .expect("a topology store")
-        .flatten()
-        .map(|e| e.file_name().to_string_lossy().to_string())
+        .lines()
+        .filter_map(|l| l.split(' ').next().map(|s| s.to_string()))
+        .filter(|s| !s.is_empty())
         .collect();
     assert!(
         names.contains(&txid),

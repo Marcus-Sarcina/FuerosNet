@@ -167,6 +167,25 @@ guarantee, which is a floor rather than a ceiling.
   [author, 2026-09-21]. A node
   that forgets what it held replays a forwarding wave into every cycle in its
   horizon, which is correct behaviour and a cost your neighbours pay for you.
+- **Evaluate a transaction you are no party to, and keep what the evaluation
+  came to rather than the act** [author, 2026-09-23]. Its effect on the
+  topology, the counterparties it adds to what you can reach, and what it
+  moves in your own representation of their trust: those you keep. The
+  transaction you do not. Where a key is later rotated or recovered, what
+  connects to the new key is those accumulated representations and not a
+  history of the acts behind them.
+- **A copy of a transaction sits in the archive of every node party to it,
+  and none is authoritative over the others** [author, 2026-09-23]. So file
+  what you co-signed in your own archive, and read your own position from
+  there; and where you need an act you were no party to, fetch it from one
+  of them (`wire-format.md` §7.9) rather than expecting a neighbour to have
+  kept it for you.
+- **Replay your current state and your own acts, and nothing else**
+  [author, 2026-09-23]. `wire-format.md` §10.1.3 makes reconciliation a
+  replay of the same frames; what you have to replay is the current-state
+  objects you hold — endpoint records, delegations, acknowledgements — and
+  the transactions you signed. A party that attaches after a flood has
+  passed is not handed it again from here.
 - **Keep the derived view too, and keep it beside the store** (design §15.1.1).
   Your table, your routing slots and your own position are a fold over the
   records you hold, and folding them again is work paid on every start. Store

@@ -87,6 +87,7 @@ fn contents(w: &mut World) -> (Contents, [u8; 32]) {
     );
     (
         Contents {
+            owner: Some(kh("alice")),
             seeds: Some([[1; 32], [2; 32]]),
             records: vec![rec.bytes.clone()],
             store,
@@ -456,6 +457,10 @@ fn a_backup_installs_into_an_empty_client_and_is_refused_into_one_with_an_archiv
     let mut w = World::new();
     let (mut c, t) = contents(&mut w);
     c.provider = Some(b"provider".to_vec());
+    // as a backup made on a device holding no seed is: no seeds, and the
+    // owner named in its own right
+    c.seeds = None;
+    c.owner = Some(kh("alice"));
     let blob = rhtn_client::backup::export(&c, &Wrap::passphrase(cheap()), b"pw").unwrap();
 
     let mut fresh_alice = fresh("alice", 1_790_000_000_000);

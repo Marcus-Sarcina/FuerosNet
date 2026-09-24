@@ -923,7 +923,16 @@ land on their own.
    2026-09-23**: the initializer repaired on the 22nd, the status files
    superseded by the gate's run of the harness (67 of 67 at `dbeaecd`), the
    commit green and the brief at `Robot/conformance-run-3-brief.md`; the
-   run itself is the reviewer's, commissioned by the author. **Ruled [author, 2026-09-23]: within storage reach**; design §11.2.1.1 now names the acceptors as the nodes within the acknowledgement's own reach, the patron's siblings in practice.
+   run itself is the reviewer's, commissioned by the author. **Run
+   2026-09-23 at `8ada6ce`**: nine findings, eight closed the same day, the
+   ninth (R09) **ruled and applied 2026-09-23**: an uninvolved party
+   evaluates and does not persist, and replays its current state and its own
+   acts alone.  The store is a seen-set, the derived view's watermark is
+   taken over it, a party files what it co-signed in its own archive, and
+   design §15.1.1, `infra-client-requirements.md` §4.3 and
+   `functional_tests.md` TOP-035 follow (`review-tracking.md`).  **Open**:
+   where a light client gets its horizon on a first attach to a node that
+   has been running since before it arrived. **Ruled [author, 2026-09-23]: within storage reach**; design §11.2.1.1 now names the acceptors as the nodes within the acknowledgement's own reach, the patron's siblings in practice.
 
 **Exit for milestone A, through generated bindings**: a shell opens durable
 state, attaches with the supported credential, observes its connection status,

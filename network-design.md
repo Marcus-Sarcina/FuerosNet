@@ -5868,15 +5868,26 @@ function of the transactions a participant has accepted, and recomputing it
 means replaying all of them; **the whole transaction history must not be
 replayed on every wake** [author]. A light client woken by a doorbell (§14.1.5)
 is the case that names the cost, and it is the same fold on a node that
-restarts. So the derived state is stored as derived state, beside the
-transactions it came from.
+restarts. So the derived state is stored as derived state, beside the record of
+which transactions produced it.
+
+**The derived copy is the state, not a cache of one** [author, 2026-09-23].
+A party evaluates a transaction it is not itself a party to and keeps its
+effect — the topology, the counterparties, what it makes of their trust — and
+not the act, which lives in the archives of the parties to it
+(`infra-client-requirements.md` §4.3). So the fold has no input to be run
+again from: what is kept alongside the copy is the set of identifiers it
+folded, which is enough to say whether the copy still accounts for what was
+accepted and not enough to reconstruct it.
 
 **A materialised copy carries enough to say whether it is still current**, and
-is discarded whole when it cannot. It is a cache of a pure function of a record
-set, so the honest failure is to notice that the record set has moved and run
-the fold: the cost of a stale or damaged copy is then the work it was meant to
-save, and never a wrong answer. Nothing here fixes how the copy or its
-watermark is encoded, which is local storage and no counterparty's business.
+is discarded whole when it cannot. **The honest failure is then repair rather
+than replay**: a party whose copy cannot account for what it accepted asks its
+neighbours, which `wire-format.md` §10.1.3 makes a replay of the same frames,
+and fetches what it needs from the parties themselves (§10), which is slower
+than a fold and, like a fold, never a
+wrong answer. Nothing here fixes how the copy or its watermark is encoded,
+which is local storage and no counterparty's business.
 
 ### 15.2 The rootward memo
 

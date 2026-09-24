@@ -75,7 +75,7 @@ changed for the generator: `Refused` is an enum, tuples are records, the
 platform crosses by reference.
 
 **The functional document gained two rows on 2026-09-23** for the device
-holding a delegation and no seed, APP-010 and MAIL-012, and the catalogue
+holding a delegation and no seed, APP-010 and MAIL-025, and the catalogue
 their entries PAY-21 and DMN-27. The document is shared: rows are added as
 the base documents define functionality, and the reviewer reviews and adds
 what they discover; removal is the author's.

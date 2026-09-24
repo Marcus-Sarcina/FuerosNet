@@ -31,6 +31,8 @@ rhtn-archive = { path = "../archive" }
 rhtn-node = { path = "../node" }
 rhtn-transport = { path = "../transport" }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
+# the reviewer's 2026-09-23 tests reach the simulator's fixtures, which dial
+quinn = { version = "0.11", default-features = false, features = ["runtime-tokio", "rustls-aws-lc-rs", "log"] }
 
 rhtn-client = { path = "../client" }
 rhtn-adaptors = { path = "../adaptors" }

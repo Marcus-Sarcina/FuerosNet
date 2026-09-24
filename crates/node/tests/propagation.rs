@@ -643,15 +643,38 @@ fn reconciliation_replays_the_same_frame() {
     p.take_object(&*pfab, &kh("w1"), KIND_TRANSACTION, &lost.bytes, &ids());
     assert!(p.store.holds_txid(&lost.txid));
     assert!(!s.n.store.holds_txid(&lost.txid));
-    // N reconciles with its patron: a replay of the same frames
+    // and a current-state object beside it
+    let line = er(
+        "bob",
+        &[point(1, 5000)],
+        Seqno {
+            series: 1,
+            counter: 5,
+        },
+    );
+    assert_eq!(
+        p.take_object(&*pfab, &kh("w1"), KIND_ENDPOINT_RECORD, &line, &ids()),
+        Decision::Stored,
+        "control: P holds a current line for its own child"
+    );
+    // N reconciles with its patron: a replay of the same frames, byte for
+    // byte, and no distinct mechanism.  **What P has to replay is its
+    // current state and its own acts** (`infra-client-requirements.md` §4.3
+    // [author, 2026-09-23]): of S1's departure, which P was no party to, it
+    // holds that it stored it and the table it produced, and a party that
+    // needs the act fetches it from a signer's archive (§7.9)
     pfab.clear();
     p.replay_to(&*pfab, &kh("bob"));
     let replayed = pfab.to(&kh("bob"), FRAME_TOPOLOGY_PUSH);
     assert_eq!(replayed.len(), 1);
     assert_eq!(
         replayed[0],
-        encode_push(KIND_TRANSACTION, &lost.bytes),
+        encode_push(KIND_ENDPOINT_RECORD, &line),
         "the same shape as the original"
+    );
+    assert!(
+        !replayed.contains(&encode_push(KIND_TRANSACTION, &lost.bytes)),
+        "and no third party's act, which P keeps no copy of to replay"
     );
     s.fab.clear();
     let d =

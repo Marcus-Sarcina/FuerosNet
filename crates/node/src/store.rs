@@ -151,6 +151,25 @@ pub struct HeldDelegation {
 
 #[derive(Default)]
 pub struct TopologyStore {
+    /// **The seen-set: what this node stored, by identifier.**  This is
+    /// what survives a restart and what the forwarding rule consults
+    /// (`wire-format.md` §10.1.1), and it is all a node keeps of a
+    /// transaction it is not a party to: that it stored it, and the table
+    /// it produced (`infra-client-requirements.md` §4.3)
+    /// [author, 2026-09-23].
+    seen: BTreeMap<Txid, u64>,
+    /// **This node's own acts**: the transactions it signed, kept and
+    /// replayed because they are its own to keep — a copy of a transaction
+    /// sits in the archive of every node party to it
+    /// [author, 2026-09-23].  Held apart from the archive, which is a
+    /// chain and refuses a record whose predecessors it lacks; what is
+    /// wanted here is the act, not the chain.
+    own: BTreeMap<Txid, Vec<u8>>,
+    /// The bodies of what this node stored, held while the process runs so
+    /// the fold can dereference an adoption's evidence and read a peering
+    /// or a disavowal's band.  **Never written**: a node is not entitled to
+    /// a third party's sequence of signed acts, and a restart leaves the
+    /// seen-set and the topology it produced.
     transactions: BTreeMap<Txid, Record>,
     /// One endpoint record per subject per series (`wire-format.md` §7.6:
     /// one record per patron relationship).
@@ -177,7 +196,7 @@ impl TopologyStore {
     }
 
     pub fn holds_txid(&self, t: &Txid) -> bool {
-        self.transactions.contains_key(t)
+        self.seen.contains_key(t)
     }
 
     pub fn transaction(&self, t: &Txid) -> Option<&Record> {
@@ -188,8 +207,36 @@ impl TopologyStore {
         self.transactions.values()
     }
 
+    /// The seen-set in fold order: what this node stored, by effective
+    /// time and identifier (`infra-client-requirements.md` §4.3).  This is
+    /// what the derived view's watermark is taken over, so the view can
+    /// still say whether it accounts for the store when the acts
+    /// themselves are gone.
+    /// Drop from the retained acts anything this node did not sign: what a
+    /// migration from the preceding format takes in bulk, before the
+    /// identity is known, and keeps only where it is this node's own
+    /// (`infra-client-requirements.md` §4.3).  Returns how many were
+    /// dropped.
+    pub fn prune_own(&mut self, me: &Keyhash) -> usize {
+        let before = self.own.len();
+        self.own
+            .retain(|_, b| Record::parse(b).is_ok_and(|r| r.signers.contains(me)));
+        before - self.own.len()
+    }
+
+    /// Keep a transaction this node signed, as a party to it.
+    pub fn keep_own(&mut self, txid: Txid, bytes: Vec<u8>) {
+        self.own.insert(txid, bytes);
+    }
+
+    pub fn seen(&self) -> Vec<(u64, Txid)> {
+        let mut out: Vec<(u64, Txid)> = self.seen.iter().map(|(t, e)| (*e, *t)).collect();
+        out.sort();
+        out
+    }
+
     pub fn len(&self) -> usize {
-        self.transactions.len() + self.endpoints.len()
+        self.seen.len() + self.endpoints.len()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -278,11 +325,18 @@ impl TopologyStore {
 
     /// Every object the store holds, as `(kind, bytes)`: what a
     /// reconciliation replays (`wire-format.md` §10.1.3).
+    /// What this node replays to a new adjacency (`wire-format.md`
+    /// §10.1.3): **the current-state objects it holds, and nothing of a
+    /// third party's history** [author, 2026-09-23].  A node that missed a
+    /// transaction fetches the subject's archive from a participant
+    /// (§7.9), which is where the act lives; what this node holds of one
+    /// it was not party to is the table it produced.  Its own acts ride
+    /// with these, from its own archive, which `NodeView::replay_to` adds.
     pub fn objects(&self) -> Vec<(u64, Vec<u8>)> {
         let mut out: Vec<(u64, Vec<u8>)> = self
-            .transactions
+            .own
             .values()
-            .map(|r| (KIND_TRANSACTION, r.bytes.clone()))
+            .map(|b| (KIND_TRANSACTION, b.clone()))
             .collect();
         out.extend(
             self.endpoints
@@ -295,6 +349,19 @@ impl TopologyStore {
                 .map(|h| (KIND_DELEGATION, h.bytes.clone())),
         );
         out.extend(self.acks.values().map(|b| (KIND_SUBTREE_ACK, b.clone())));
+        out
+    }
+
+    /// Everything this node holds while it runs, bodies included: what a
+    /// sibling takes to stand in for it (design §3.4).  Distinct from
+    /// [`TopologyStore::objects`], which is what reconciliation replays.
+    pub fn held_objects(&self) -> Vec<(u64, Vec<u8>)> {
+        let mut out: Vec<(u64, Vec<u8>)> = self
+            .transactions
+            .values()
+            .map(|r| (KIND_TRANSACTION, r.bytes.clone()))
+            .collect();
+        out.extend(self.objects());
         out
     }
 
@@ -425,7 +492,7 @@ impl TopologyStore {
         }
         // the store is the seen-set, and it is consulted before anything else
         // that costs work (§10.1.2)
-        if self.transactions.contains_key(&rec.txid) {
+        if self.seen.contains_key(&rec.txid) {
             return Decision::Duplicate;
         }
         if !stores(&rec, hz) {
@@ -448,6 +515,10 @@ impl TopologyStore {
             }
             SigStatus::Invalid(e) => return Decision::Malformed(e),
         }
+        // the effective time rides with the identifier: it is what orders
+        // the fold and what the derived view's watermark is taken over,
+        // and it is a property of the fact rather than the act
+        self.seen.insert(rec.txid, rec.effective);
         self.transactions.insert(rec.txid, rec);
         Decision::Stored
     }
@@ -550,12 +621,29 @@ impl TopologyStore {
     /// replays a forwarding wave into every cycle in the horizon
     /// (`infra-client-requirements.md` §4.3).
     pub fn save(&self, dir: &std::path::Path) -> std::io::Result<()> {
-        for sub in ["tx", "ep", "presence", "deleg", "ack"] {
+        for sub in ["ep", "deleg", "ack", "own"] {
             std::fs::create_dir_all(dir.join(sub))?;
         }
-        for (t, r) in &self.transactions {
-            std::fs::write(dir.join("tx").join(hex(t)), &r.bytes)?;
+        // **the seen fact, not the act** [author, 2026-09-23]: a node holds
+        // of another party's transaction that it stored it and the table it
+        // produced, and the transaction itself lives in the archives of the
+        // parties to it.  An earlier version wrote the bodies under `tx/`
+        // and the evidence under `presence/`; an upgrade removes what the
+        // current rules forbid rather than merely stopping the write
+        for gone in ["tx", "presence"] {
+            if dir.join(gone).is_dir() {
+                std::fs::remove_dir_all(dir.join(gone))?;
+            }
         }
+        for (t, b) in &self.own {
+            std::fs::write(dir.join("own").join(hex(t)), b)?;
+        }
+        let seen: Vec<String> = self
+            .seen
+            .iter()
+            .map(|(t, e)| format!("{} {e}", hex(t)))
+            .collect();
+        std::fs::write(dir.join("seen"), seen.join("\n"))?;
         // the endpoint records are rewritten whole: a record retired since
         // the last save, by a newer counter or a conflict, must not outlive
         // it on disk
@@ -569,9 +657,6 @@ impl TopologyStore {
                 dir.join("ep").join(format!("{}-{series}", hex(subject))),
                 &h.record.bytes,
             )?;
-        }
-        for (t, b) in &self.presence {
-            std::fs::write(dir.join("presence").join(hex(t)), b)?;
         }
         // rewritten whole, like the endpoint records: a delegation
         // replaced by a newer one must not outlive it on disk
@@ -613,10 +698,42 @@ impl TopologyStore {
     /// held was waiting on a prerequisite the restart may have lost too.
     pub fn load(dir: &std::path::Path) -> std::io::Result<TopologyStore> {
         let mut st = TopologyStore::new();
+        // **the preceding format, migrated** (OPS-016's shape: an upgrade
+        // moves what the current rules allow and removes only what they
+        // forbid).  An earlier version wrote every stored body under `tx/`;
+        // each one's identifier and effective time are the seen fact this
+        // node keeps, and a body it signed is its own act.  Whose they are
+        // is not known here, so all are taken and the foreign ones are
+        // dropped by `prune_own` as soon as the node's identity is at hand.
         if let Ok(rd) = std::fs::read_dir(dir.join("tx")) {
             for e in rd.flatten() {
-                if let Ok(rec) = Record::parse(&std::fs::read(e.path())?) {
-                    st.transactions.insert(rec.txid, rec);
+                if let Ok(bytes) = std::fs::read(e.path())
+                    && let Ok(rec) = Record::parse(&bytes)
+                {
+                    st.seen.insert(rec.txid, rec.effective);
+                    st.own.insert(rec.txid, bytes);
+                }
+            }
+        }
+        if let Ok(rd) = std::fs::read_dir(dir.join("own")) {
+            for e in rd.flatten() {
+                if let Ok(bytes) = std::fs::read(e.path())
+                    && let Ok(rec) = Record::parse(&bytes)
+                {
+                    st.own.insert(rec.txid, bytes);
+                }
+            }
+        }
+        if let Ok(seen) = std::fs::read_to_string(dir.join("seen")) {
+            for line in seen.lines().filter(|l| !l.is_empty()) {
+                let mut f = line.split(' ');
+                if let Some(t) = f
+                    .next()
+                    .and_then(unhex)
+                    .and_then(|v| <[u8; 32]>::try_from(v).ok())
+                    && let Some(e) = f.next().and_then(|e| e.parse::<u64>().ok())
+                {
+                    st.seen.insert(t, e);
                 }
             }
         }
@@ -628,14 +745,7 @@ impl TopologyStore {
                 }
             }
         }
-        if let Ok(rd) = std::fs::read_dir(dir.join("presence")) {
-            for e in rd.flatten() {
-                let name = e.file_name().to_string_lossy().to_string();
-                if let Some(t) = unhex(&name).and_then(|v| <[u8; 32]>::try_from(v).ok()) {
-                    st.presence.insert(t, std::fs::read(e.path())?);
-                }
-            }
-        }
+
         if let Ok(rd) = std::fs::read_dir(dir.join("deleg")) {
             for e in rd.flatten() {
                 let bytes = std::fs::read(e.path())?;

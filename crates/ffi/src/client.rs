@@ -714,6 +714,39 @@ impl Participant {
         Ok(p)
     }
 
+    /// Start from a backup and its passphrase alone, on a replacement
+    /// device (`light-client-requirements.md` §2: a restore is a whole
+    /// one).  The identity is the envelope's seeds; the records, the
+    /// capture store and the provider credential are installed; the
+    /// result is written to the platform's storage.  Refused where the
+    /// envelope does not open, carries no seeds, or where the storage
+    /// already holds a state.
+    #[uniffi::constructor]
+    pub fn start_from_backup(
+        blob: Vec<u8>,
+        secret: Vec<u8>,
+        known: Vec<Vec<u8>>,
+        platform: Arc<Platform>,
+    ) -> Result<Participant, Refused> {
+        if platform.storage.read(STATE.into()).is_some() {
+            return Err(Refused::new(
+                "this device already holds a state; a restore replaces nothing",
+            ));
+        }
+        let contents = rhtn_client::backup::import(&blob, &secret)
+            .map_err(|e| Refused::new(format!("the backup does not open: {e:?}")))?;
+        let Some([ed, pq]) = contents.seeds else {
+            return Err(Refused::new(
+                "the backup carries no seeds: it was made on a device holding none",
+            ));
+        };
+        let mut seeds = ed.to_vec();
+        seeds.extend_from_slice(&pq);
+        let p = Participant::start(seeds, known, platform)?;
+        p.restore_backup(blob, secret)?;
+        Ok(p)
+    }
+
     /// Whether this device holds the seed.
     #[must_use]
     pub fn holds_seed(&self) -> bool {

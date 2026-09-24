@@ -324,6 +324,23 @@ impl NodeView {
                 for p in self.adjacent(adj, Some(from)) {
                     adj.send(&p, FRAME_TOPOLOGY_PUSH, &push);
                 }
+                // **a party to it files its own copy** [author, 2026-09-23]:
+                // a copy of each transaction sits in the archive of every
+                // participating node and none is authoritative over the
+                // others.  Best effort: a record whose predecessors this
+                // archive does not hold is one to fetch (§7.9), not one to
+                // refuse the storage decision over
+                if kind == KIND_TRANSACTION
+                    && let Ok(rec) = Record::parse(object)
+                    && rec.signers.contains(&me)
+                {
+                    self.store.keep_own(rec.txid, object.to_vec());
+                    // and in the chain too where it fits: the archive
+                    // refuses a record whose predecessors it lacks, which
+                    // is a fetch (§7.9) rather than a reason to refuse the
+                    // storage decision
+                    let _ = self.archive.append(rec);
+                }
                 if kind == KIND_TRANSACTION {
                     // a change to one of this node's own slots travels rootward
                     // as a memo (§10.2); an adoption under one of them may be
@@ -697,7 +714,16 @@ impl NodeView {
             .iter()
             .filter(|b| b.node == me && b.open())
             .filter_map(|b| {
-                let mut loc = self.store.transaction(&b.adoption)?.locator()?;
+                // **its own adoption is its own act**, and a party to a
+                // transaction keeps a copy in its archive
+                // [author, 2026-09-23]; the store holds the body only while
+                // this process runs, so the archive is what answers after a
+                // restart (`infra-client-requirements.md` §4.3)
+                let mut loc = self
+                    .store
+                    .transaction(&b.adoption)
+                    .or_else(|| self.archive.get(&b.adoption))?
+                    .locator()?;
                 loc.seqno = rhtn_archive::tx::Seqno {
                     series: b.series,
                     counter: loc.seqno.counter,
@@ -766,8 +792,16 @@ impl NodeView {
             .collect()
     }
 
-    /// Replay this node's store to `to` as `TopologyPush` frames: that is
-    /// the whole of reconciliation (`wire-format.md` §10.1.3).
+    /// Replay to `to` as `TopologyPush` frames: that is the whole of
+    /// reconciliation (`wire-format.md` §10.1.3).
+    ///
+    /// **What is replayed is the current state this node holds and the acts
+    /// it is itself a party to** [author, 2026-09-23].  A node keeps no
+    /// third party's history to replay: what it holds of another's
+    /// transaction is that it stored it and the table it produced
+    /// (`infra-client-requirements.md` §4.3), and a peer that missed the
+    /// act fetches it from a participant's archive (§7.9), where every
+    /// party to it keeps a copy and none is authoritative.
     pub fn replay_to(&self, adj: &dyn Adjacency, to: &Keyhash) {
         for (kind, object) in self.store.objects() {
             adj.send(to, FRAME_TOPOLOGY_PUSH, &encode_push(kind, &object));
@@ -1076,12 +1110,7 @@ impl NodeView {
     /// this node's own subordinates occupy, and the watermark that says
     /// which store this was derived from.
     pub fn materialise(&self) -> Snapshot {
-        let mut at: Vec<(u64, Txid)> = self
-            .store
-            .transactions()
-            .map(|r| (r.effective, r.txid))
-            .collect();
-        at.sort();
+        let at: Vec<(u64, Txid)> = self.store.seen();
         let folded = rhtn_archive::topology::fold_digest(at.iter().map(|(_, t)| t));
         let mut table = self.table.materialise();
         // the slots ride with the table: they are derived by the same fold,
@@ -1125,25 +1154,25 @@ impl NodeView {
         snap: Option<&Snapshot>,
         ids: &L,
     ) -> Restored {
-        let mut all: Vec<Vec<u8>> = self.store.transactions().map(|r| r.bytes.clone()).collect();
-        all.sort_by_key(|b| {
-            Record::parse(b)
-                .map(|r| (r.effective, r.txid))
-                .unwrap_or_default()
-        });
+        // a store read from the preceding format took every body it found;
+        // the ones this node did not sign go now that the identity is known
+        let me = self.me();
+        self.store.prune_own(&me);
+        // **the watermark is taken over the seen-set**, which survives a
+        // restart where the acts do not (`infra-client-requirements.md`
+        // §4.3 [author, 2026-09-23]).  What a snapshot cannot account for
+        // it cannot be caught up with either: the bodies are gone, so the
+        // view is discarded and the node repairs by reconciliation rather
+        // than by a replay it has no input for.
+        let all: Vec<(u64, Txid)> = self.store.seen();
         let usable = snap.and_then(|s| {
-            let later = unfolded(s, &all, |b| {
-                Record::parse(b)
-                    .map(|r| (r.effective, r.txid))
-                    .unwrap_or_default()
-            })?;
+            let later = unfolded(s, &all, |k| *k)?;
+            let held: Vec<Vec<u8>> = later
+                .into_iter()
+                .filter_map(|i| self.store.transaction(&all[i].1).map(|r| r.bytes.clone()))
+                .collect();
             self.take_snapshot(s)?;
-            Some(
-                later
-                    .into_iter()
-                    .map(|i| all[i].clone())
-                    .collect::<Vec<_>>(),
-            )
+            Some(held)
         });
         match usable {
             Some(later) => {

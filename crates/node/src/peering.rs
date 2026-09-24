@@ -236,8 +236,15 @@ impl NodeView {
     /// topology store and the trust-bearing history in it.  Nothing here
     /// reads the queue.
     pub fn replication_payload(&self) -> Vec<Replicated> {
+        // **replication is not reconciliation.**  A sibling stands in for
+        // this node and needs what this node would have answered with
+        // (design §3.4), so it takes the bodies this node holds while it
+        // runs, where §10.1.3's replay to a new adjacency carries only
+        // current state and this node's own acts.  Neither is written:
+        // what survives a restart is the seen-set and the table
+        // (`infra-client-requirements.md` §4.3).
         self.store
-            .objects()
+            .held_objects()
             .into_iter()
             .map(|(kind, object)| Replicated::Topology { kind, object })
             .collect()

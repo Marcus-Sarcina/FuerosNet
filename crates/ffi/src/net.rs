@@ -479,6 +479,7 @@ impl Net {
             self.status.clone(),
             self.events_tx.clone(),
             live.courier.clone(),
+            live._serving.clone(),
         )));
         // the previous session's readers stop when this replaces it
         *self.live.lock().unwrap() = Some(live);
@@ -711,6 +712,7 @@ async fn watch(
     status: Arc<Mutex<Status>>,
     events: UnboundedSender<Event>,
     courier: Arc<Courier>,
+    serving: Arc<AttachedNode>,
 ) {
     let mut session = session;
     let mut peer = peer;
@@ -753,6 +755,12 @@ async fn watch(
         let mode = sess.ack.mode;
         let sess = Arc::new(sess);
         *current.lock().unwrap() = Some(sess.clone());
+        // **the serving identity moves with the session**: the node asked
+        // from here on is the sibling, the client's own record of whom it
+        // is served by says so, and what it stores of the answers names
+        // the sibling (`light-client-requirements.md` §4)
+        serving.moved_to(to);
+        handle.with(move |c| c.reattached(to)).await;
         // the new session's readers feed the same courier and client
         tokio::spawn(attached::follow(handle.clone(), frames));
         tokio::spawn(attached::collect(courier.inbound(), deliveries));

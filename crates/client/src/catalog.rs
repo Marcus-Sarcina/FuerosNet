@@ -46,6 +46,10 @@ pub enum Step {
 #[derive(Debug, Clone, Default)]
 pub struct Sweep {
     asked: BTreeSet<Option<String>>,
+    /// What this sweep has been served so far, by resource: the portion it
+    /// replaces on completion, so an entry the host no longer returns is
+    /// gone from the view rather than kept from the last sweep.
+    gathered: BTreeMap<Keyhash, Vec<u8>>,
     /// The nonce of the query this sweep is waiting on.  One at a time:
     /// a sweep asks, takes, and asks again.
     outstanding: Option<[u8; 16]>,
@@ -83,19 +87,27 @@ impl Sweep {
             if let Ok(e) = CatalogEntry::parse(bytes)
                 && e.verify(ids).is_ok()
             {
-                portion.entries.insert(e.resource, bytes.clone());
+                self.gathered.insert(e.resource, bytes.clone());
             }
         }
-        match &reply.continuation {
+        // a completed sweep is the host's portion now, whole: what it served
+        // and nothing it stopped serving (`light-client-requirements.md`
+        // §8); a truncated one is the portion as far as it goes, marked
+        let step = match &reply.continuation {
             None => Step::Done,
             Some(t)
                 if self.asked.contains(&Some(t.clone())) && reply.entries.len() >= full_page =>
             {
-                portion.truncated = true;
                 Step::Truncated
             }
             Some(t) => Step::Again(t.clone()),
+        };
+        if matches!(step, Step::Done | Step::Truncated) {
+            portion.entries = std::mem::take(&mut self.gathered);
+            portion.stale = false;
+            portion.truncated = matches!(step, Step::Truncated);
         }
+        step
     }
 }
 

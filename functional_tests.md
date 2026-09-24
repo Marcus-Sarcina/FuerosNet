@@ -184,6 +184,7 @@ The Cargo workspace has **15 crates**. Components below follow responsibilities 
 | TOP-011 | S | Dispatch TopologyPush kind 0 as a signed transaction, kind 1 as an EndpointRecord, kind 2 as a Delegation and kind 3 as a SubtreeAck, preserving the enclosed bytes; store a Delegation when it verifies under its delegating keyhash and keep the newest per keyhash. Reject malformed known push bodies and unsupported kind values with the specified frame-level behavior. | W §§8.2, 10.1 |
 | TOP-012 | C | Store a pushed topology-class transaction only when valid and its type-defined subject is in the receiver's h_store; exercise adoption, departure, disavowal and reissue subjects plus either peering endpoint. Do not use all signers as interchangeable propagation subjects. | W §10.1.1 |
 | TOP-013 | C | Forward if and only if the item was newly stored, to authenticated adjacent patron/children/peers/serving node/attached clients except the sender. No hop count or TTL is added, and a rejected or out-of-horizon item is not forwarded. | W §10.1.1 |
+| TOP-035 | C | Persist the seen fact and the table it produced, never a transaction the node was no party to: after a restart the identifier suppresses a second forwarding wave, the body and any cited evidence are gone, and an upgrade migrates what an earlier version wrote before removing it: each body under the former layout yields its identifier and effective time, a body this node signed moves to its retained own acts, and only the foreign bodies and the evidence go. Replay to a new adjacency carries current-state objects and the node's own signed acts alone; a co-signed transaction is filed in the node's own archive and its own position read from there. | I §4.3; D §15.1.1; W §§10.1.1, 10.1.3 |
 | TOP-014 | C | Missing transaction signer keys leave a pending unverifiable object that is not flooded as verified. Distinguish the explicitly allowed unverified endpoint routing hint from a verified topology transaction. | W §§3.4, 7.6, 10.1 |
 | TOP-015 | C | Deduplicate transactions by txid against retained store state, not a short-lived packet cache; replay after restart or around a cycle must not create another forwarding wave. Do not discard a legitimate missing predecessor merely because a descendant was seen. | W §10.1.2 |
 | TOP-016 | C | For an endpoint's proven series, a higher counter replaces older state, an exact equal-counter duplicate is inert, and a different equal-counter value makes neither candidate current. Report/re-resolve equivocation instead of arrival-order selection or forwarding the conflict as a new current endpoint. | W §§7.6, 10.1.2 |
@@ -311,7 +312,7 @@ The Cargo workspace has **15 crates**. Components below follow responsibilities 
 | MAIL-009 | C | Preserve ciphertext unchanged across serving nodes, queue and RelayedPayload. The peer/key hint is a routing hint, not authenticated authorship; use end-to-end authentication for the delivered sender identity. | W §§7.10, 8.2; D §14.2 |
 | MAIL-010 | S | SubmissionReply echoes the request nonce and exactly the defined codes 0 accepted, 1 refused, 2 unknown. Do not append invented explanatory fields to unsigned replies or report storage failure as accepted. | W §7.10 |
 | MAIL-011 | E | Persist one-time consumption/custody before acknowledging success; inject failure between validation, durable write and reply. Retrying after an ambiguous reply may not disclose the same one-time prekey twice or lose acknowledged stored ciphertext. | I §§2, 6; W §§7.8, 7.10 |
-| MAIL-012 | C | A device's prekey bundle is made over material that device generated and signed by the identity on the ceremony device, naming the device under the signature; the signer refuses a payload naming another subject, and the device refuses a signed bundle that does not verify under its identity, names another device, or is not over its current material. A device whose material is unsigned publishes nothing, stocks its own pool, and offers the payload again when its material rotates. | W §7.8; D §§14.2.4, 23.3; L §3 |
+| MAIL-025 | C | A device's prekey bundle is made over material that device generated and signed by the identity on the ceremony device, naming the device under the signature; the signer refuses a payload naming another subject, and the device refuses a signed bundle that does not verify under its identity, names another device, or is not over its current material. A device whose material is unsigned publishes nothing, stocks its own pool, and offers the payload again when its material rotates. | W §7.8; D §§14.2.4, 23.3; L §3 |
 
 ### Mailbox retention, delivery and external wake
 
@@ -931,7 +932,7 @@ Open local parameters are not all specification defects: cache TTLs, queue cap, 
 
 ## 10. Document baseline and coverage totals
 
-This specification contains **458 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
+This specification contains **463 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
 
 | Prefix | Families |
 |---|---:|
@@ -939,12 +940,12 @@ This specification contains **458 numbered requirement/test families** across **
 | SIG | 13 |
 | TX | 30 |
 | ARC | 17 |
-| TOP | 34 |
+| TOP | 35 |
 | RES | 15 |
-| CUR | 10 |
+| CUR | 12 |
 | NET | 11 |
 | SES | 15 |
-| MAIL | 24 |
+| MAIL | 25 |
 | CER | 20 |
 | VER | 18 |
 | CAP | 16 |
@@ -954,7 +955,7 @@ This specification contains **458 numbered requirement/test families** across **
 | CAT | 22 |
 | GAT | 37 |
 | PKG | 14 |
-| APP | 9 |
+| APP | 10 |
 | UX | 14 |
 | OPS | 18 |
 | TOOL | 7 |
@@ -964,10 +965,10 @@ This specification contains **458 numbered requirement/test families** across **
 
 | Design input | SHA-256 of reviewed bytes |
 |---|---|
-| [network-design.md](network-design.md) | `2bcb36c9e30d1acf6a6a6a1b4fc3d82aca07eaf77cbf735b58778ead7795a239` |
-| [wire-format.md](wire-format.md) | `a3096433c8f66803aebe884a2ddb6963a0af502e7bae80f2a64fa9527df806d3` |
-| [light-client-requirements.md](light-client-requirements.md) | `d5b4d4746da5e7b3e7c7c22b85e6cf75686a4c83a94f2d63cc0c501096a86f5b` |
-| [infra-client-requirements.md](infra-client-requirements.md) | `ef0664c140cafe202448654ce215437407a080d5a8101f1b9360bac7aee9824c` |
-| [resource-requirements.md](resource-requirements.md) | `d78a8e530c3bc1c38d388aae7b1d4f9f81c0c297057cb5738359cfa864724a6e` |
+| [network-design.md](network-design.md) | `c26d228c35cfdbe3ede873e9549591a04eebae659d4c513f5c4da38fb3dce015` |
+| [wire-format.md](wire-format.md) | `5fb34586d8b9d970c64daa5fc14ae05fc8c3ac7a1c3fe1510a1463c2975b31db` |
+| [light-client-requirements.md](light-client-requirements.md) | `4ab4927a4ff0f0cff96a2cd6df96fe9e6db00c96152cb26bf2d638e4832ca002` |
+| [infra-client-requirements.md](infra-client-requirements.md) | `780b188301c668cdf8b35fe506678b305bcf073289536461c70fda7a3e7254d4` |
+| [resource-requirements.md](resource-requirements.md) | `54edf8e85eacee7b68e69c0f8b971ae83c19b05e284ae3187bf14d6846ee6f8d` |
 
 Implementation inventory: `crates/Cargo.toml` and the source directories listed in §2 at the stated commit. Production code and prior conformance-review files were not modified to prepare this document. Rebaseline hashes and affected test families when the specifications change.
