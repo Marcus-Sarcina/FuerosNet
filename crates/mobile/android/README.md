@@ -1,6 +1,15 @@
 # Android shell
 
-Kotlin over `rhtn-ffi`. Nothing is built here yet.
+Kotlin over `rhtn-ffi`. What is here is the skeleton: a Gradle project
+whose one screen starts the kernel over the binding and shows what it
+presents. `tools/build-native.sh` cross-compiles `librhtn_ffi.so` for
+`arm64-v8a` and `x86_64` and generates the Kotlin binding from a host
+build of the same crate, both into directories the tree does not carry;
+`./gradlew assembleDebug` then builds the APK. The binding is generated
+without the `harness` feature, which is never in a shell's build, so the
+load-time checksum probe wants exactly the symbols the packaged library
+has. The seeds the skeleton mints on first launch stand in until the
+ceremony exists; the application id `com.comptus.fueros` is provisional.
 
 **What this shell owes**, beyond rendering the client's states:
 

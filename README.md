@@ -35,6 +35,60 @@ The system consists of three main components:
 3) Several Light-Client-Node repositories will contain reference implementations of the user-facing app for various desktop and mobile targets. (In FN jargon, this is called the “light client” in recognition that many users will not contribute infrastructure and will only operate as this type of node). Launching and administering infrastructure nodes will also primarily be done through an interface in the light client.
 
 
+### Building from source
+
+The Rust workspace is `crates/`; the root of the repository holds the design
+documents it implements.
+
+**Core libraries and tools.** Install [rustup](https://rustup.rs) (stable
+toolchain, 1.98 or later) with the `rustfmt` and `clippy` components,
+Python 3, and the two cargo tools the gate requires:
+
+```
+cargo install cargo-deny cargo-sweep --locked
+```
+
+Then run the code gate, which is the build:
+
+```
+cd crates && ./check.sh
+```
+
+It checks the specification pins, the acceptance catalogue and its
+generated test stubs, formatting, lints with warnings denied, licences and
+advisories, and runs every test in the workspace. A plain
+`cargo build --workspace` or `cargo test --workspace` from `crates/` works
+too. `test-vectors/tools/verify.py` checks the draft canonical vectors
+against their pinned inputs.
+
+**Optional gate steps.** With a JDK (17 or later), the Kotlin compiler
+2.4.20 and `jna-5.17.0.jar` present, the gate also generates the Kotlin
+binding and drives it against a real node; the tools are found on `PATH`
+(or under `~/opt`, see `crates/tools/kotlin-roundtrip.sh`, with the jar
+named by `RHTN_JNA_JAR`). With a nightly toolchain and `cargo-fuzz`, it
+runs five short fuzz passes. Either set absent, those steps report
+themselves skipped, never passed.
+
+**The Android shell** (`crates/mobile/android/`) additionally needs the
+Android SDK (platform 36, build-tools), NDK r30, `cmake`, and the Rust
+cross-targets:
+
+```
+rustup target add aarch64-linux-android x86_64-linux-android
+cargo install cargo-ndk --locked
+```
+
+Point `ANDROID_HOME` (or `local.properties`) at the SDK, then from
+`crates/mobile/android/`:
+
+```
+./tools/build-native.sh && ./gradlew assembleDebug
+```
+
+The first command cross-compiles `librhtn_ffi.so` and generates the Kotlin
+binding; the second builds the APK. Continuous integration runs the gate
+from `crates/.gitlab-ci.yml` on every push.
+
 ### Authors
 
 A. Marcus Zuech is a small business owner and former PHB who wanted to see if he could actually vibe-code something genuinely ambitious.
