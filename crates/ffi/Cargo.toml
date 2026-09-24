@@ -21,6 +21,11 @@ name = "uniffi-bindgen"
 path = "src/bin/uniffi-bindgen.rs"
 required-features = ["cli"]
 
+[[bin]]
+name = "payload-peer"
+path = "src/bin/payload-peer.rs"
+required-features = ["harness"]
+
 [dependencies]
 # MPL-2.0, allowed for the binding generator [author, 2026-09-16]
 uniffi = "0.32"

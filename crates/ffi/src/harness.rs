@@ -51,6 +51,34 @@ pub struct TestNode {
 impl TestNode {
     #[uniffi::constructor]
     pub fn start(name: String, clients: Vec<String>) -> Arc<TestNode> {
+        Self::started(name, clients, None)
+    }
+
+    /// `start`, serving on the given address instead of loopback: what a
+    /// driver on a workstation needs so an emulator or a second machine
+    /// can reach the node.
+    #[uniffi::constructor]
+    pub fn start_on(name: String, clients: Vec<String>, listen: String) -> Arc<TestNode> {
+        Self::started(name, clients, listen.parse().ok())
+    }
+
+    /// Where it serves.
+    pub fn address(&self) -> String {
+        self.node.addr.to_string()
+    }
+
+    /// What waits for `client` in its mailbox.
+    pub fn queued(&self, client: Id) -> u64 {
+        crate::types::keyhash(&client).map_or(0, |k| self.node.node.queued(&k) as u64)
+    }
+}
+
+impl TestNode {
+    fn started(
+        name: String,
+        clients: Vec<String>,
+        listen: Option<std::net::SocketAddr>,
+    ) -> Arc<TestNode> {
         let rt = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()
@@ -81,6 +109,7 @@ impl TestNode {
         }
         let mut cfg = NodeConfig::defaults(me, pins, 30);
         cfg.log = Log::default();
+        cfg.listen = listen;
         let node = LiveNode::start(
             cfg,
             view,
@@ -88,15 +117,5 @@ impl TestNode {
             AnchorTable::new(0, Ingestion::UnverifiedGossip),
         );
         Arc::new(TestNode { node, _rt: rt })
-    }
-
-    /// Where it serves.
-    pub fn address(&self) -> String {
-        self.node.addr.to_string()
-    }
-
-    /// What waits for `client` in its mailbox.
-    pub fn queued(&self, client: Id) -> u64 {
-        crate::types::keyhash(&client).map_or(0, |k| self.node.node.queued(&k) as u64)
     }
 }
