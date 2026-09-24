@@ -11610,3 +11610,47 @@ tests: the daemon's and participant's 0644 cases assert the service's
 own mode *check* (a metadata comparison, root-safe, and green in the
 container); no other test leans on the kernel refusing the test's own
 uid.
+
+## A first payload that outruns its binding wedges the pair (2026-09-24)
+
+Found while driving the Android payload screen, and confirmed by
+reproduction in `client/tests/payload.rs`'s harness rather than by reading
+alone.  **Not applied, and not mine to settle**: the remedy is a protocol
+decision.
+
+**What happens.** A sender's ratchet is created when it sends, whoever
+receives it and whatever they make of it.  If the receiver does not yet
+hold the sender's binding, `Sessions::receive` refuses the initial message
+with `NoBundle`, `receive_payload` notifies `PayloadUnattributable` and
+records the peer in `payload.wanted`, and the next maintenance fetches the
+binding — the recovery the comment at `ceremony.rs` describes as *the
+peer's next attempt is attributable*.  But there is no next attempt of that
+kind.  `Sessions::send` emits `CHANNEL_MESSAGE` from the ratchet it already
+has and never another `CHANNEL_INITIAL`, so every later message meets a
+receiver with no session and fails `NoSession` — which raises **no notice
+at all**.  The pair is wedged for good, and neither side is told.
+
+**The reproduction**, three steps in the payload harness: attach carol,
+attach alice (alice holds carol's binding; carol never re-sweeps), put
+alice's direct path down so her messages relay and queue, then
+
+    message 1 (initial)      -> "no bundle for that peer"
+    carol sweeps, holds it   -> true
+    message 2 (with binding) -> "no session with that peer"
+
+The second line is the point: the binding the recovery went and fetched is
+in hand, and it buys nothing.
+
+**Why the tests do not see it.**  Every payload test sweeps the recipient
+again after the sender has published (`Net::sweep`'s own comment says why),
+so the binding is always in hand before the first message.  That ordering
+is arranged in a test and cannot be arranged between two phones.
+
+**For the author.**  The question is which side gives way, and each answer
+costs something different: a receiver that keeps an unattributable message
+and retries it after the fetch is storing what it cannot yet attribute; a
+receiver that asks the sender to start again needs a signal the wire does
+not have; a sender that does not count its ratchet established until
+something comes back changes what sending means.  A fourth answer is that
+the race is acceptable and the first message of a conversation may be lost,
+in which case the silence of `NoSession` is the part to fix.
