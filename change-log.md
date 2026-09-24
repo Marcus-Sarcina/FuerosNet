@@ -10434,6 +10434,8 @@ message.  The courier carries a catalog query and the client takes each
 reply; the shell sweeps and reads the entries with the node that served
 them.
 
+### 2026-09-23 (the binding driven, the run returned, and what an uninvolved party keeps)
+
 **The third conformance run is commissioned.** The reviewer's harness stands
 at 67 of 67 in the gate at `dbeaecd`, where the pins are green; a brief for
 the run names the kernel paths the last run could not reach, the two node
@@ -10494,8 +10496,21 @@ yields its identifier, the node's own acts are kept, and only the foreign
 bodies and the evidence go. `functional_tests.md` counts 463 families across
 26 prefixes and its design-input hashes are rebaselined.
 
-**Counts checked.** 2,305 references across the five documents resolve with no flag;
-the staleness sweep reports its baseline; 1,424 citations across `models/` and the
-workspace resolve; check.py 441 of 457 implemented, 0 flags, stubs in sync; the
-test-vector pins are current on all three documents; the gate's 19 hashes match,
-`cargo deny` clean.
+**The client keeps the abstraction too.** A light client is no more a party
+to another's adoption than its node is, so its horizon now keeps the
+identifier, the effective time and what the evaluation came to — including a
+patron's determination, which rides with the derived copy where the disavowal
+itself does not — and not the act. Its durable state carries those facts and
+reads the records a state written before them carried.
+`light-client-requirements.md` §4.2 follows: a copy that cannot account for
+what was taken is earned again by propagation and fetch, there being nothing
+left to fold.
+
+**Counts checked**, at the day's end rather than its middle. 2,318 references
+across the five documents resolve with no flag; the staleness sweep reports its
+baseline; 1,451 citations across `models/` and the workspace resolve; check.py
+442 of 458 implemented, 0 flags, stubs in sync; `functional_tests.md` counts
+464 families across 26 prefixes and its five input hashes match the current
+bytes; the test-vector pins are current on all three documents; the gate's 19
+hashes match, `cargo deny` clean, 616 tests pass with the 19 owed stubs
+ignored, and the Kotlin round trip runs inside the gate.

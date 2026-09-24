@@ -1339,10 +1339,17 @@ impl Client {
         }
         emit_bstr(&mut out, &self.store.encode());
         emit_bstr(&mut out, &self.payload.encode());
-        let held: Vec<&Vec<u8>> = self.horizon.stored().map(|(_, b)| b).collect();
-        emit_array_head(&mut out, held.len());
-        for r in held {
-            emit_bstr(&mut out, r);
+        // **the seen fact, not the act** (`infra-client-requirements.md`
+        // §4.3, design §15.1.1 [author, 2026-09-23]): a client is no party
+        // to another's adoption, so what it keeps of one is that it took it
+        // and the shape it produced.  Written as `[txid, effective]`; a
+        // blob written before this carried the bodies, and is read.
+        let seen = self.horizon.seen();
+        emit_array_head(&mut out, seen.len());
+        for (txid, effective) in seen {
+            emit_array_head(&mut out, 2);
+            emit_bstr(&mut out, &txid);
+            emit_uint(&mut out, effective);
         }
         emit_bstr(&mut out, &self.horizon.materialise().encode());
         emit_bstr(&mut out, &self.horizon.delegations_held());
@@ -1395,10 +1402,25 @@ impl Client {
         let payload =
             PayloadState::decode(self.cfg.payload.clone(), &bytes(b, &f[2]).ok_or("payload")?)
                 .ok_or("payload")?;
-        let held: Vec<Vec<u8>> = array(&f[3])
+        // each entry is a seen fact, or a whole record where the blob was
+        // written before the fact replaced the act
+        enum Held {
+            Fact(Txid, u64),
+            Act(Vec<u8>),
+        }
+        let held: Vec<Held> = array(&f[3])
             .ok_or("horizon")?
             .iter()
-            .map(|x| bytes(b, x))
+            .map(|x| match x {
+                rhtn_codec::cbor::Item::Array(_) => {
+                    let pair = array(x)?;
+                    if pair.len() != 2 {
+                        return None;
+                    }
+                    Some(Held::Fact(fixed::<32>(b, &pair[0])?, uint(&pair[1])?))
+                }
+                _ => bytes(b, x).map(Held::Act),
+            })
             .collect::<Option<_>>()
             .ok_or("horizon")?;
         let snap = rhtn_archive::topology::Snapshot::decode(&bytes(b, &f[4]).ok_or("snapshot")?)
@@ -1433,8 +1455,13 @@ impl Client {
             records += 1;
         }
         let mut horizon = Horizon::new(kh);
-        for r in held {
-            horizon.restore_record(r);
+        for h in held {
+            match h {
+                Held::Fact(txid, effective) => horizon.restore_seen(txid, effective),
+                Held::Act(bytes) => {
+                    horizon.restore_record(bytes);
+                }
+            }
         }
         let woke = horizon.wake(Some(&snap), &self.known);
         horizon

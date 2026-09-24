@@ -114,6 +114,19 @@ pub struct Horizon {
     /// What the serving node propagated, by txid: this client's own
     /// seen-set.  Kept because the table is a fold over it and a fold
     /// needs its input to be re-runnable.
+    /// **The seen-set**: what this client took, by identifier and effective
+    /// time.  All it keeps of a transaction it was no party to — that it
+    /// took it, and the shape it produced (`infra-client-requirements.md`
+    /// §4.3, design §15.1.1 [author, 2026-09-23]) — and what the derived
+    /// copy's watermark is taken over.
+    seen: BTreeMap<Txid, u64>,
+    /// `(patron, node)` for every relationship a patron ended with
+    /// prejudice: what the evaluation of a disavowal came to, kept where
+    /// the disavowal itself is not.
+    determinations: BTreeSet<(Keyhash, Keyhash)>,
+    /// The bodies of what it took, held while the process runs so the fold
+    /// can read them.  **Never written**: the act lives in the archives of
+    /// the parties to it.
     records: BTreeMap<Txid, Vec<u8>>,
     /// The fold's result.
     pub table: Table,
@@ -158,6 +171,8 @@ impl Horizon {
     pub fn new(me: Keyhash) -> Horizon {
         Horizon {
             me,
+            seen: BTreeMap::new(),
+            determinations: BTreeSet::new(),
             records: BTreeMap::new(),
             table: Table::with_me(me),
             places: BTreeMap::new(),
@@ -350,7 +365,7 @@ impl Horizon {
     }
 
     pub fn holds(&self, txid: &Txid) -> bool {
-        self.records.contains_key(txid)
+        self.seen.contains_key(txid)
     }
 
     /// `(patron, node)` for every relationship a patron ended **with
@@ -362,27 +377,26 @@ impl Horizon {
     /// not order the two — so a determination that lost the race is still
     /// a determination the patron made and this client holds.
     pub fn determinations(&self) -> Vec<(Keyhash, Keyhash)> {
-        let mut out = Vec::new();
-        for bytes in self.records.values() {
-            let Ok(rec) = Record::parse(bytes) else {
-                continue;
-            };
-            if rec.tx_type != rhtn_archive::tx::TYPE_DISAVOWAL {
-                continue;
-            }
-            // §4.3 puts the reason in field 4; absent, nothing is alleged
-            if !rec.field_uint(4).is_some_and(End::band) {
-                continue;
-            }
-            if let (Some(patron), Some(node)) = (rec.field_hash(1), rec.field_hash(2)) {
-                out.push((patron, node));
-            }
+        self.determinations.iter().copied().collect()
+    }
+
+    /// Note what a record determined, at the moment it is taken: the
+    /// disavowal itself is not kept, and this is what it came to.
+    fn note_determination(&mut self, rec: &Record) {
+        if rec.tx_type != rhtn_archive::tx::TYPE_DISAVOWAL {
+            return;
         }
-        out
+        // §4.3 puts the reason in field 4; absent, nothing is alleged
+        if !rec.field_uint(4).is_some_and(End::band) {
+            return;
+        }
+        if let (Some(patron), Some(node)) = (rec.field_hash(1), rec.field_hash(2)) {
+            self.determinations.insert((patron, node));
+        }
     }
 
     pub fn records(&self) -> usize {
-        self.records.len()
+        self.seen.len()
     }
 
     /// Take a record the serving node propagated.
@@ -396,7 +410,7 @@ impl Horizon {
         let Ok(rec) = Record::parse(bytes) else {
             return Took::Refused;
         };
-        if self.records.contains_key(&rec.txid) {
+        if self.seen.contains_key(&rec.txid) {
             return Took::Duplicate;
         }
         if self
@@ -408,6 +422,8 @@ impl Horizon {
         }
         self.note_locator(&rec);
         self.note_end(&rec);
+        self.note_determination(&rec);
+        self.seen.insert(rec.txid, rec.effective);
         self.records.insert(rec.txid, bytes.to_vec());
         Took::Applied
     }
@@ -644,6 +660,8 @@ impl Horizon {
         self.endpoints.retain(|(n, _), _| inside.contains(n));
         self.delegations
             .retain(|n, _| inside.contains(n) || *n == self.me);
+        self.determinations
+            .retain(|(p, n)| inside.contains(p) || inside.contains(n));
         self.records.retain(|_, b| {
             Record::parse(b).is_ok_and(|r| {
                 r.participants().iter().any(|p| inside.contains(p))
@@ -657,15 +675,11 @@ impl Horizon {
     /// The derived shape as it goes to local storage, with the watermark
     /// that says which records produced it.
     pub fn materialise(&self) -> Snapshot {
-        let mut at: Vec<(u64, Txid)> = self
-            .records
-            .values()
-            .filter_map(|b| Record::parse(b).ok().map(|r| (r.effective, r.txid)))
-            .collect();
+        let mut at: Vec<(u64, Txid)> = self.seen.iter().map(|(t, e)| (*e, *t)).collect();
         at.sort();
         let folded = rhtn_archive::topology::fold_digest(at.iter().map(|(_, t)| t));
         let mut out = Vec::new();
-        rhtn_codec::encode::emit_array_head(&mut out, 3);
+        rhtn_codec::encode::emit_array_head(&mut out, 4);
         rhtn_codec::encode::emit_bstr(&mut out, &self.table.materialise());
         rhtn_codec::encode::emit_bstr(&mut out, &encode_places(&self.places, &self.locators));
         // **the addresses go with the shape** (`light-client-requirements.md`
@@ -675,6 +689,10 @@ impl Horizon {
         // replay cannot rebuild them — if they are not written here they
         // are gone until the patron floods them again.
         rhtn_codec::encode::emit_bstr(&mut out, &encode_lines(&self.endpoints, &self.conflicts));
+        // **what the disavowals came to**, kept where they are not: a
+        // determination a patron made is this client's to hold, and the
+        // record that carried it is the patron's and the subject's
+        rhtn_codec::encode::emit_bstr(&mut out, &encode_determinations(&self.determinations));
         Snapshot {
             folded,
             high: at.last().copied(),
@@ -690,18 +708,25 @@ impl Horizon {
     /// be squared with what is held, all land on the same answer a fold
     /// from nothing gives.
     pub fn wake<L: Lookup + ?Sized>(&mut self, snap: Option<&Snapshot>, ids: &L) -> Woke {
-        let mut all: Vec<Vec<u8>> = self.records.values().cloned().collect();
-        all.sort_by_key(|b| {
-            Record::parse(b)
-                .map(|r| (r.effective, r.txid))
-                .unwrap_or_default()
-        });
+        // **the watermark is taken over the seen-set**, which survives a
+        // wake where the acts do not; what it cannot account for it cannot
+        // be caught up with either, and the copy is discarded whole
+        let mut keys: Vec<(u64, Txid)> = self.seen.iter().map(|(t, e)| (*e, *t)).collect();
+        keys.sort();
+        let all: Vec<Vec<u8>> = keys
+            .iter()
+            .filter_map(|(_, t)| self.records.get(t).cloned())
+            .collect();
         let taken = snap.and_then(|s| {
-            let later = unfolded(s, &all, |b| {
-                Record::parse(b)
-                    .map(|r| (r.effective, r.txid))
-                    .unwrap_or_default()
-            })?;
+            let later = unfolded(s, &keys, |k| *k)?;
+            let later: Vec<usize> = later
+                .into_iter()
+                .filter_map(|i| {
+                    let t = keys[i].1;
+                    all.iter()
+                        .position(|b| Record::parse(b).is_ok_and(|r| r.txid == t))
+                })
+                .collect();
             self.take(s)?;
             Some(
                 later
@@ -759,17 +784,29 @@ impl Horizon {
         let rhtn_codec::cbor::Item::Array(parts) = &item else {
             return None;
         };
-        let [
-            rhtn_codec::cbor::Item::Bytes(t),
-            rhtn_codec::cbor::Item::Bytes(l),
-            rhtn_codec::cbor::Item::Bytes(e),
-        ] = parts.as_slice()
-        else {
-            return None;
+        // three elements is the shape written before the determinations
+        // rode with the copy; it is read rather than refused
+        let (t, l, e, d) = match parts.as_slice() {
+            [
+                rhtn_codec::cbor::Item::Bytes(t),
+                rhtn_codec::cbor::Item::Bytes(l),
+                rhtn_codec::cbor::Item::Bytes(e),
+            ] => (t, l, e, None),
+            [
+                rhtn_codec::cbor::Item::Bytes(t),
+                rhtn_codec::cbor::Item::Bytes(l),
+                rhtn_codec::cbor::Item::Bytes(e),
+                rhtn_codec::cbor::Item::Bytes(d),
+            ] => (t, l, e, Some(d)),
+            _ => return None,
         };
         let mut table = Table::from_materialised(&snap.table[t.clone()])?;
         let (places, locators) = decode_places(&snap.table[l.clone()])?;
         let (endpoints, conflicts) = decode_lines(&snap.table[e.clone()])?;
+        let determinations = match d {
+            Some(d) => decode_determinations(&snap.table[d.clone()])?,
+            None => BTreeSet::new(),
+        };
         // whose horizon this is, is this client's own answer and never a
         // snapshot's: a copy naming somebody else is one to discard
         if table.me != Some(self.me) {
@@ -781,6 +818,7 @@ impl Horizon {
         self.locators = locators;
         self.endpoints = endpoints;
         self.conflicts = conflicts;
+        self.determinations.extend(determinations);
         Some(())
     }
 
@@ -794,9 +832,29 @@ impl Horizon {
     /// wakes.
     pub fn restore_record(&mut self, bytes: Vec<u8>) -> bool {
         match Record::parse(&bytes) {
-            Ok(r) => self.records.insert(r.txid, bytes).is_none(),
+            Ok(r) => {
+                self.note_determination(&r);
+                self.seen.insert(r.txid, r.effective);
+                self.records.insert(r.txid, bytes).is_none()
+            }
             Err(_) => false,
         }
+    }
+
+    /// Put a seen fact back without its act: what a load does where the
+    /// body is gone, which after a restart is every one of them.
+    pub fn restore_seen(&mut self, txid: Txid, effective: u64) {
+        self.seen.insert(txid, effective);
+    }
+
+    /// Put back what a disavowal determined.
+    pub fn restore_determination(&mut self, patron: Keyhash, node: Keyhash) {
+        self.determinations.insert((patron, node));
+    }
+
+    /// The seen-set, for a caller that persists it beside the snapshot.
+    pub fn seen(&self) -> Vec<(Txid, u64)> {
+        self.seen.iter().map(|(t, e)| (*t, *e)).collect()
     }
 }
 
@@ -813,6 +871,43 @@ impl Horizon {
 /// **The retirements travel with the lines.** A restored client that took
 /// the addresses and forgot which pairs were retired would accept a
 /// conflicting record it had already ruled out.
+fn encode_determinations(d: &BTreeSet<(Keyhash, Keyhash)>) -> Vec<u8> {
+    use rhtn_codec::encode::*;
+    let mut out = Vec::new();
+    emit_array_head(&mut out, d.len());
+    for (patron, node) in d {
+        emit_array_head(&mut out, 2);
+        emit_bstr(&mut out, patron);
+        emit_bstr(&mut out, node);
+    }
+    out
+}
+
+fn decode_determinations(b: &[u8]) -> Option<BTreeSet<(Keyhash, Keyhash)>> {
+    let item = rhtn_codec::cbor::parse_all(b).ok()?;
+    let rhtn_codec::cbor::Item::Array(a) = &item else {
+        return None;
+    };
+    let mut out = BTreeSet::new();
+    for one in a {
+        let rhtn_codec::cbor::Item::Array(pair) = one else {
+            return None;
+        };
+        let [
+            rhtn_codec::cbor::Item::Bytes(p),
+            rhtn_codec::cbor::Item::Bytes(n),
+        ] = pair.as_slice()
+        else {
+            return None;
+        };
+        out.insert((
+            <[u8; 32]>::try_from(&b[p.clone()]).ok()?,
+            <[u8; 32]>::try_from(&b[n.clone()]).ok()?,
+        ));
+    }
+    Some(out)
+}
+
 fn encode_lines(
     endpoints: &BTreeMap<(Keyhash, u32), EndpointRecord>,
     conflicts: &BTreeSet<(Keyhash, u32, u32)>,

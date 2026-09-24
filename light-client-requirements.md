@@ -443,11 +443,20 @@ session secrecy. The client implements them; it does not reinvent them.
   authority, to a user or to a counterparty.
 - **Materialise it, so a wake does not replay your transaction history**
   (design §15.1.1). Store the derived shape as derived, with a watermark saying
-  which records produced it, and on waking fold in only what arrived since.
+  which transactions produced it, and on waking fold in only what arrived
+  since.
+- **Evaluate a transaction you are no party to, and keep what the evaluation
+  came to rather than the act** [author, 2026-09-23], as a node does
+  (`infra-client-requirements.md` §4.3): the shape, the parties you can now
+  reach, what a patron's determination moved. The transaction is the archive's
+  of everyone party to it, and not yours to retain.
 - **Discard the copy whole when its watermark cannot account for what you
-  hold**, and rebuild. A cache that cannot prove it is current is one you have
-  to earn again; keeping a partial one to save the work is how a client comes
-  to route on a relationship that ended.
+  hold.** A cache that cannot prove it is current is one you have to earn
+  again, and keeping a partial one to save the work is how a client comes to
+  route on a relationship that ended. **Earning it again is repair, not a
+  replay**: with the acts gone there is nothing to fold, so what you hold
+  comes from your serving node's propagation and from the archives of the
+  parties themselves (`wire-format.md` §7.9).
 - **Keep it bounded by the horizon** (design §15.1). Nodes leave it, and a copy
   that only ever grew would hold topology about parties you no longer have a
   reason to know anything about.

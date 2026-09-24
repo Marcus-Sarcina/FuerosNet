@@ -11553,3 +11553,41 @@ makes 463 rather than 479.
 The reviewer's file needed one fixture repair on the move, the simulator
 fixture's path; the recursive store scan I had repaired on the previous run
 is now theirs.
+
+## The client keeps the abstraction too (2026-09-23)
+
+The half of the 09-23 ruling I had left: a light client is as much an
+uninvolved party to another's adoption as a node is, and its horizon kept
+and persisted the bodies for the same stated reason the node's store did.
+
+- **The horizon is a seen-set.** `(txid, effective)` for everything it
+  took, which is what the derived copy's watermark is now taken over, and
+  what its durable state carries where it carried whole records.  A state
+  written before this is read and converted: an entry that is a record
+  becomes its fact.  The bodies stay in memory while the process runs,
+  for the fold, and nothing of them is written.
+- **A determination is kept where the disavowal is not.**  `determinations()`
+  read the band out of held disavowal bodies; the pair is now noted when the
+  record is taken and rides with the materialised copy, which is exactly the
+  ruling's *what the evaluation came to*.  The copy's encoding went from
+  three parts to four and reads both.
+- **A wake that cannot account for the seen-set discards the copy and
+  earns it again by propagation and fetch**, where it replayed the store
+  before.  `light-client-requirements.md` §4.2 said *rebuild*; it now says
+  what rebuilding is when there is no input, and gains the evaluate-and-keep
+  bullet that `infra-client-requirements.md` §4.3 has.  `functional_tests.md`
+  gains TOP-036.
+
+Both format changes read their predecessor, which is N01's lesson applied
+in the same edit rather than after the reviewer found it.
+
+## The §15.1.1 wording stands (2026-09-24)
+
+The author read the replacement wording flagged on the 23rd and keeps it:
+the section conveys what is required.  Any change there would come as a
+later style pass over the whole document, or as a separately written
+whitepaper, neither scheduled.  The flag is closed and nothing in the root
+moves.  The change-log also gains the `### 2026-09-23` heading its last
+day's work was filed without, and its closing counts paragraph is restated
+at the entry's end state (2,318 references; 1,451 citations; 442 of 458;
+464 families across 26 prefixes; 616 tests, 19 ignored).
