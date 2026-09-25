@@ -11730,3 +11730,43 @@ Landed: design §12.6.3, `light-client-requirements.md` §4,
   vendors' clients could not complete a ceremony together today, candidates
   or no candidates. Pre-existing and not caused by this ruling, but it is the
   channel the ruling now depends on.
+
+## The gate override, and §14 opened for local interfaces (2026-09-25)
+
+**Ruled [author, 2026-09-25]**, closing the first of the three consequences
+left open above: **a ceremony in person overrides the horizon gate.** Landed
+in design §12.6.3 and `light-client-requirements.md` §4. The reason given is
+the property the same ruling asked be written down — the interfaces are not
+intermediable by a wide-area network — so the override rests on the same fact
+the ceremony itself rests on rather than on a new assumption. A candidate that
+arrived any other way is gated as before, which keeps P17's bound where it was
+for everything except the case it was never about.
+
+**`wire-format.md` §14 is opened** [author, 2026-09-25], for local
+device-to-device interfaces, marked by that property and **deliberately
+incomplete**. §14.1 states the class and the non-bridging obligation; §14.2
+records what travels on these interfaces today with every encoding marked
+owed; §14.3 lists what is owed before the section is canonical. Functional
+NET-013 and catalogue TRV-13 carry the obligation; 443 of 461, both TRV
+entries owed.
+
+**Placed at §14 rather than §12 on purpose.** Substantive content would sit
+better before *Size estimates* and *Open items*, but renumbering moves §13,
+and seven of the fifteen references to it are in `change-log.md`, which is
+history and is not remapped. A silent repointing of historical citations
+costs more than the ordering buys. Moving it is a decision available later
+and cheap while nothing cites §14 yet.
+
+**Two citations I had to correct before landing**, both of the kind that
+resolve and mislead: the candidate structure is not `wire-format.md` §9.2
+(that is Binding — ALPN and ports) and in fact **appears nowhere in the
+document**, so §14.2's row now says the structure is owed too; and design
+§7.1/§13.2 had to be qualified per document, since a bare §13.2 inside
+`wire-format.md` reads as that document's own. The reference checker found
+the second and a `Robot/` citation I had no business making from a root
+document; it did not and cannot find the first.
+
+**Still open from the previous ruling**: whether §19 owes a register row of
+its own for the second way an IP is disclosed, and the ceremony exchange's
+absence from the wire — now recorded as §14.2's first row rather than only
+in this file.

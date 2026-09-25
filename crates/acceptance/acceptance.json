@@ -12302,6 +12302,28 @@
     "interpretation": null
   },
   {
+    "id": "TRV-13",
+    "area": "traversal",
+    "gap": "traversal",
+    "title": "A local device-to-device interface is never bridged over a wide-area network",
+    "milestone": "after-5",
+    "kind": "negative",
+    "spec": [
+      "wire-format.md §14.1"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §14.1",
+        "text": "An implementation MUST NOT bridge one of these interfaces over a wide-area network"
+      }
+    ],
+    "given": "A client offering the ceremony's proximity channels, and a peer reachable only over the network.",
+    "when": "Anything arrives claiming to have come from a local interface, or a caller asks for one of those interfaces to carry to a remote peer.",
+    "then": "The client refuses: nothing is treated as locally delivered that did not arrive on a local interface, and no local interface is carried remotely. The horizon override rests on this, so a candidate admitted this way is refused when the claim is false.",
+    "oracle": "behaviour",
+    "interpretation": "The property is unenforceable against a peer (design §1.1) and is stated as a commitment; the test binds this implementation's own paths, not another's."
+  },
+  {
     "id": "TRN-23",
     "area": "transport",
     "gap": "transport",

@@ -475,7 +475,11 @@ session secrecy. The client implements them; it does not reinvent them.
   rather than a patron's cooperation, and so survives one that is
   uncooperative or eclipsing. Offer it as the disclosure it is — §5's rule
   applies whoever hands the candidate over — and open nothing from candidates
-  that did not come from the party they name.
+  that did not come from the party they name. **A candidate taken this way is
+  not gated by the horizon** [author, 2026-09-25]: the party was in front of
+  you, which the gate's disclosure argument does not reach, and an exit must
+  not depend on a horizon the patron being exited controls. One that arrived
+  any other way is gated as before (design §12.6.3).
 
 ---
 

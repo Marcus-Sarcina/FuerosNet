@@ -19,3 +19,21 @@
 fn trv_12_candidates_offered_on_the_ceremony_s_proximity_c() {
     todo!("TRV-12: Candidates offered on the ceremony's proximity channels open a direct path")
 }
+
+/// A local device-to-device interface is never bridged over a wide-area network
+///
+/// Spec: wire-format.md §14.1
+/// Milestone: after-5.  Kind: negative.  Oracle: behaviour.
+///
+/// Rule (wire-format.md §14.1): "An implementation MUST NOT bridge one of these interfaces over a wide-area network"
+///
+/// Given: A client offering the ceremony's proximity channels, and a peer reachable only over the network.
+/// When: Anything arrives claiming to have come from a local interface, or a caller asks for one of those interfaces to carry to a remote peer.
+/// Then: The client refuses: nothing is treated as locally delivered that did not arrive on a local interface, and no local interface is carried remotely. The horizon override rests on this, so a candidate admitted this way is refused when the claim is false.
+///
+/// Interpretation: The property is unenforceable against a peer (design §1.1) and is stated as a commitment; the test binds this implementation's own paths, not another's.
+#[test]
+#[ignore = "acceptance TRV-13: owed at milestone after-5"]
+fn trv_13_a_local_device_to_device_interface_is_never_brid() {
+    todo!("TRV-13: A local device-to-device interface is never bridged over a wide-area network")
+}

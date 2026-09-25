@@ -10579,3 +10579,26 @@ drawn rather than ruled and wait on the author (`review-tracking.md`): whether
 an in-person exchange licenses a path the horizon gate would refuse, whether
 §19 owes a register row of its own, and that the ceremony's device-to-device
 exchange is specified nowhere on the wire.
+
+**A ceremony in person overrides the horizon gate** [author, 2026-09-25],
+which was the consequence the previous ruling left drawn and unsettled. The
+gate bounds who may be dialled because an IP is novel disclosure outside the
+horizon, and it is not novel to somebody standing in front of you; a horizon
+an eclipsing patron controls is also the thing an exit most needs not to
+depend on. What licenses the override is what licenses the ceremony: these
+interfaces are not intermediable by a wide-area network. A candidate that
+arrived any other way is gated as before.
+
+**`wire-format.md` §14 opens, for local device-to-device interfaces**
+[author, 2026-09-25], and is deliberately incomplete. The protocol has had
+these exchanges since the ceremony was specified and has never said what
+crosses them. §14.1 states the class, the non-intermediability property the
+rest now leans on, and the obligation not to bridge one remotely or to accept
+anything as having arrived on one that did not. §14.2 records what travels
+today — the ceremony's intent exchange, the optical transcript, the channel
+outcomes, traversal candidates, and a delegated device's material — with
+**every encoding marked owed**, including the candidate structure, which this
+document turns out never to have carried. §14.3 lists what is owed before the
+section is canonical: an encoding per row, vectors, a model where one would
+say anything, and the property restated as something checkable or plainly as
+unenforceable. Functional NET-013, catalogue TRV-13; 443 of 461.

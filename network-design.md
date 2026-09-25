@@ -4471,6 +4471,16 @@ permeability past the meeting itself, so an uncooperative patron loses its
 position astride the route as it has already lost its position astride the
 record.
 
+**A ceremony in person overrides the horizon gate** [author, 2026-09-25]. The
+gate above bounds who may be dialled because an IP is novel disclosure outside
+the horizon (P17); it is not novel to a party standing in front of you, and a
+horizon an eclipsing patron controls is the thing an exit most needs not to
+depend on. What licenses the override is what licenses the ceremony itself:
+the interfaces this travels on are **not intermediable by a wide-area
+network** (`wire-format.md` §14), so no remote party can put itself in the
+position the exchange assumes. A candidate that arrived any other way is gated
+as before.
+
 The relayed path is the federation shape (email, XMPP, Matrix). **In every case
 the hierarchy carries no payload**, which is what makes the f=10 cap affordable
 (§3.2).

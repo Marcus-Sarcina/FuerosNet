@@ -4617,3 +4617,72 @@ verifiable for decades. A few hundred per user per decade is under 10 MB lifetim
    fixtures against independently written code. **Canonical status still waits
    on an independent party's implementation reproducing every computed
    value.**
+
+---
+
+## 14. Local device-to-device interfaces
+
+**Opened 2026-09-25 and deliberately incomplete.** The protocol has carried
+device-to-device exchanges since the ceremony was specified, and has never
+said what crosses them. This section is where that goes. **What is settled
+here is the class and its defining property; the encodings are not**, and
+each is named below as owed. Nothing in `test-vectors/` or `models/` covers
+this section yet, which is the work that follows a workable set of these
+interfaces rather than preceding it.
+
+### 14.1 What the class is, and the property that defines it
+
+**An interface in this class is not intermediable by a wide-area network**
+[author, 2026-09-25]. The two endpoints are in each other's physical
+presence, and the carriage — a radio with metres of range, a tap, a screen
+read by a camera — has no route through which a remote party can interpose
+itself. That is not a claim that the channels are unattackable: design
+§7.6.3 records that deployed UWB has been defeated by physical-layer
+distance reduction, and NFC offers friction rather than a distance bound.
+**The claim is narrower and is what the rest of the protocol leans on**: an
+attacker must be *there*, and being there is the cost this network meters
+(design §1).
+
+**This property is load-bearing, not incidental.** It is why a ceremony can
+establish presence at all, and, since 2026-09-25, why a candidate handed over
+at one overrides the horizon gate that bounds dialling elsewhere (design
+§12.6.3). A rule that rested on these interfaces while they were remotely
+reachable would be a rule about nothing.
+
+**An implementation MUST NOT bridge one of these interfaces over a wide-area
+network**, and MUST NOT accept, as having arrived on one, anything that
+reached it another way. A shell that offered to "pair remotely" over the same
+code path would silently convert every guarantee above into an assumption.
+
+### 14.2 What travels on them today
+
+Recorded as it stands, so the set is visible before it is encoded. **Each
+row's encoding is owed**; the column says what the interface carries and who
+holds it, which is what the rest of the design already depends on.
+
+| What | Between | Where it is stated | Encoding |
+|---|---|---|---|
+| The ceremony's intent exchange — the contribution, the nominees, the evidence bundle, the timing and who initiated | Two participants' devices | design §7.1, design §13.2 | **Owed.** Held only in `rhtn-client`, so two vendors' clients cannot complete a ceremony together |
+| The optical transcript — key exchange and the transcript hash, screen to camera | Two participants' devices | design §1.3 item 3 | **Owed** |
+| Proximity channel outcomes — the UWB, NFC or optical result and its ranking | Two participants' devices | §3.2, design §1.3 item 4 | The *outcome* is carried in records (§4.5.1); the exchange producing it is **owed** |
+| Traversal candidates | Two participants' devices | design §12.6.3 [author, 2026-09-25] | **Owed, and so is the candidate structure**, which this document has never carried |
+| A delegated device's payload material, and the ceremony device's signature over it | Two devices of one identity | design §23.3, §7.8 | **Owed.** The bundle it produces is §7.8's |
+
+**The last row is the one that is not between two people.** A phone
+provisioning a desktop it owns is the same class of interface and the same
+property: the two devices are in one place, and the protocol should not
+care whether the parties either side of a local interface are two people or
+one person's two devices.
+
+### 14.3 What is owed before this section is canonical
+
+1. **An encoding per row of §14.2**, each with the usual obligations of §1:
+   deterministic CBOR, an explicit version, and bounded arrays.
+2. **Test vectors.** `test-vectors/` covers none of this, and cannot cover
+   interfaces that have no encoding yet.
+3. **A model, where a model would say anything.** The ceremony's binding is
+   modelled in `models/`; the local exchange feeding it is not.
+4. **The non-intermediability property stated as something checkable**, or
+   stated plainly as unenforceable in the manner §1.1 requires. An
+   implementation can be told not to bridge these interfaces; no party on the
+   far side of one can verify that it did not.
