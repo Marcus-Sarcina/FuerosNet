@@ -969,9 +969,9 @@ This specification contains **467 numbered requirement/test families** across **
 
 | Design input | SHA-256 of reviewed bytes |
 |---|---|
-| [network-design.md](network-design.md) | `21de01037b995e1a9dd3f4c445179790561f86017ea37201302ce64fb0a44fe4` |
+| [network-design.md](network-design.md) | `78c3729d854ca0af50887a4e7266ec352eec2d1b5812a7beeb5b2e37decc13f7` |
 | [wire-format.md](wire-format.md) | `a78aff6252a3b05aff6ac7e99eb74c10b5a87a8359314a7e5d1636a2455707a8` |
-| [light-client-requirements.md](light-client-requirements.md) | `be2ba87e862baf4b09aa16ab25d7b297776a9cd1c286cbab83e7d3cb629e1af1` |
+| [light-client-requirements.md](light-client-requirements.md) | `f7caf4c98a3368ca70f625e634735c1b32ddcfee1b1175034fbfe3f27b9f30cd` |
 | [infra-client-requirements.md](infra-client-requirements.md) | `780b188301c668cdf8b35fe506678b305bcf073289536461c70fda7a3e7254d4` |
 | [resource-requirements.md](resource-requirements.md) | `54edf8e85eacee7b68e69c0f8b971ae83c19b05e284ae3187bf14d6846ee6f8d` |
 

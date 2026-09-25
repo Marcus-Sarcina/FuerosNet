@@ -479,7 +479,8 @@ session secrecy. The client implements them; it does not reinvent them.
   not gated by the horizon** [author, 2026-09-25]: the party was in front of
   you, which the gate's disclosure argument does not reach, and an exit must
   not depend on a horizon the patron being exited controls. One that arrived
-  any other way is gated as before (design §12.6.3).
+  any other way is gated as before (design §12.6.3). What it discloses is
+  design §19.4's P40, and §5's rule covers saying so.
 
 ---
 

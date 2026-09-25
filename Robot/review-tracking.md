@@ -11770,3 +11770,30 @@ document; it did not and cannot find the first.
 its own for the second way an IP is disclosed, and the ceremony exchange's
 absence from the wire — now recorded as §14.2's first row rather than only
 in this file.
+
+## P40, and the bound that inverts (2026-09-25)
+
+**Asked for by the author**, closing the second of the three consequences: the
+register owes a row for the IP a ceremony discloses. Allocated **P40** in
+§19.4 — P39 was the last, and numbers there are never reused. Cited from
+design §12.6.3 and `light-client-requirements.md` §4, so the ruling reaches
+its cost rather than only the other way about.
+
+**What the row says that P17 does not.** P17 bounds the disclosure by the
+horizon and calls the exposure *bounded rather than chosen* — a set the user
+did not pick. The override inverts exactly that: the counterparty is a party
+the user decided to meet, so the exposure is **chosen rather than bounded**,
+and no horizon limits the set. Better in one direction and worse in the other,
+which is why it is its own finding and not a note under P17.
+
+**One thing I noted and did not act on.** The row observes that this supplies
+C1's coarse-location ingredient directly rather than by inference (§7.6 makes
+an IP a coarse location, and C1 is witness set + presence timestamp + coarse
+location). Whether that warrants its own composition entry in §19.8 is the
+author's: C-numbers are allocated on the same never-reused rule, and §19.8's
+own preamble says assessment found most new material compositional rather than
+novel, which is a judgment I should not make for him. The cross-reference is
+in P40 either way, so a reader arrives at the question.
+
+No count sentence governs §19.4, so nothing drifted on the insertion; checked
+rather than assumed.

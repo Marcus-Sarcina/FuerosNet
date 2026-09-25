@@ -10602,3 +10602,16 @@ document turns out never to have carried. §14.3 lists what is owed before the
 section is canonical: an encoding per row, vectors, a model where one would
 say anything, and the property restated as something checkable or plainly as
 unenforceable. Functional NET-013, catalogue TRV-13; 443 of 461.
+
+**The disclosure has a register row** [author, 2026-09-25]. §19.4 gains **P40**:
+offering traversal candidates at a ceremony discloses an IP to the counterparty,
+and not within the horizon bound P17 rests on. It is its own finding rather than
+a note under P17 because it **inverts P17's shape** — P17 calls the exposure
+bounded rather than chosen, a set the user did not pick, and this is chosen
+rather than bounded, a party the user decided to meet with no horizon limiting
+the set. Better in one direction, worse in the other. The residual named: §7.6
+makes an IP a coarse location, so a counterparty met once holds an ongoing
+signal for as long as the address lasts, and it supplies C1's coarse-location
+ingredient directly rather than by inference. Refusable — the ceremony completes
+without candidates — and cited from design §12.6.3 and LCR §4 so the ruling
+reaches its cost.
