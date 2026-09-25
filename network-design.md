@@ -4453,6 +4453,24 @@ it to chosen parties**, and both defaults must therefore be overridable —
 relay-with-a-patron's-sibling and direct-with-a-distant-trusted-party are both
 reasonable user choices (P17).
 
+**Candidates may travel the ceremony's proximity channels** [author,
+2026-09-25]. The exchange above has a carriage this section did not name, and
+the relay is not the only one it can have: two parties standing in front of
+each other hand candidates over on the channels the ceremony already uses
+(`light-client-requirements.md` §1.3), and leave with a route to each other
+that neither patron carried.
+
+**This reifies the exit right §10.1 states.** A portable archive makes leaving
+cost proximity rather than evidence. A route obtained in person makes
+*reaching* somebody cost proximity rather than a patron's cooperation, which is
+the half that was missing: §6 holds that the false social universe is permeable
+wherever the victim meets a human being, and concedes that an established user's
+escape is harder because reaching verifiers may run through the very patron
+doing the eclipsing. A candidate handed over at that meeting carries the
+permeability past the meeting itself, so an uncooperative patron loses its
+position astride the route as it has already lost its position astride the
+record.
+
 The relayed path is the federation shape (email, XMPP, Matrix). **In every case
 the hierarchy carries no payload**, which is what makes the f=10 cap affordable
 (§3.2).

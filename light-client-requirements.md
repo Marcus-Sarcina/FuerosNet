@@ -468,6 +468,15 @@ session secrecy. The client implements them; it does not reinvent them.
   frame, a desktop under an identity you know being the ordinary case, and it
   is current state like the rest of the view, never a history of keys.
 
+- **Candidates may be offered and taken on the ceremony's proximity channels**
+  [author, 2026-09-25], where the two parties are in front of each other
+  (§1.3, design §12.6.3). A route obtained this way was carried by no patron,
+  which is what it is for: it makes reaching a counterparty cost proximity
+  rather than a patron's cooperation, and so survives one that is
+  uncooperative or eclipsing. Offer it as the disclosure it is — §5's rule
+  applies whoever hands the candidate over — and open nothing from candidates
+  that did not come from the party they name.
+
 ---
 
 ## 5. Privacy choices the user must be able to make

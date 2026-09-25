@@ -12275,6 +12275,33 @@
     "interpretation": "design §14.1.1 defers to RFC 8445's ordering [author, 2026-09-22]; the transport dials every candidate at once today, so this entry is owed and TRV-02, TRV-07 and PAY-15 keep their outcome assertions."
   },
   {
+    "id": "TRV-12",
+    "area": "traversal",
+    "gap": "traversal",
+    "title": "Candidates offered on the ceremony's proximity channels open a direct path",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "design §12.6.3",
+      "light-client-requirements.md §4"
+    ],
+    "rule": [
+      {
+        "where": "design §12.6.3",
+        "text": "two parties standing in front of each other hand candidates over on the channels the ceremony already uses"
+      },
+      {
+        "where": "light-client-requirements.md §4",
+        "text": "open nothing from candidates that did not come from the party they name"
+      }
+    ],
+    "given": "A and B are at a ceremony, on a proximity channel, and neither has written to the other.",
+    "when": "Each offers its traversal candidates on that channel, and afterwards A sends payload to B.",
+    "then": "A dials B on the candidates B handed over and the payload takes that path; neither serving node carried it. Candidates presented as another party's are not opened from.",
+    "oracle": "behaviour",
+    "interpretation": null
+  },
+  {
     "id": "TRN-23",
     "area": "transport",
     "gap": "transport",

@@ -10550,3 +10550,32 @@ and a second corpus vector for the three-element form.
 **The Android shell sends and receives payload.** A phone that minted its own
 identity, attached to a node over the emulator's NAT, and was attributed on
 its first message, with the reply back on the same session.
+
+---
+
+### 2026-09-25 (a route handed over in person)
+
+**Candidates may travel the ceremony's proximity channels** [author,
+2026-09-25]. §12.6.3 had named an exchange of addresses during setup and no
+carriage for it, and the implementation had picked the relay by default. Two
+parties standing in front of each other may now hand candidates over on the
+channels the ceremony already uses, and leave with a route to each other that
+neither patron carried.
+
+**The reason is an exit right rather than a convenience.** §10.1 makes leaving
+cost proximity rather than evidence, which is the difference between an exit
+right and a real one; a route obtained in person makes *reaching* somebody cost
+proximity rather than a patron's cooperation, which is the half that was
+missing. §6 holds the false social universe permeable wherever the victim meets
+a human being, and concedes that an established user's escape is harder because
+reaching verifiers may run through the very patron doing the eclipsing. A
+candidate handed over at that meeting carries the permeability past the meeting
+itself.
+
+design §12.6.3 and `light-client-requirements.md` §4 carry it,
+`functional_tests.md` gains NET-012, and the catalogue gains TRV-12 as owed
+work: the ruling is landed and the code is not written. Three consequences are
+drawn rather than ruled and wait on the author (`review-tracking.md`): whether
+an in-person exchange licenses a path the horizon gate would refuse, whether
+§19 owes a register row of its own, and that the ceremony's device-to-device
+exchange is specified nowhere on the wire.

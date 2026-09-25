@@ -11692,3 +11692,41 @@ first message, with the echo back.
 channels, which is the only way first contact could be both direct and
 unrelayed, and which §12.6.3 leaves unstated ("the peers exchange
 addresses during setup" names no carriage).
+
+## Candidates may ride the ceremony's proximity channels (2026-09-25)
+
+**Ruled [author, 2026-09-25]**, closing the question §12.6.3 left open when
+it named an exchange and no carriage. The reason is his and is recorded in
+the design rather than paraphrased here: a route obtained in person was
+carried by no patron, so reaching a counterparty costs proximity rather than
+a patron's cooperation. It **reifies the exit right** §10.1 already states
+for evidence — leaving costs proximity, not evidence — by extending it to
+reach. §6's eclipse argument holds the false social universe permeable
+wherever the victim meets a human being, and concedes an established user's
+escape is harder because reaching verifiers may run through the eclipsing
+patron; a candidate handed over at the meeting carries that permeability
+past the meeting.
+
+Landed: design §12.6.3, `light-client-requirements.md` §4,
+`functional_tests.md` NET-012, catalogue TRV-12 as owed work (443 of 460).
+**No code yet** — the entry counts what the ruling owes.
+
+**Three things drawn rather than ruled, for the author.**
+
+- **The horizon gate.** §12.6.3 limits a direct connection to the horizon
+  because IP is novel disclosure outside it (P17). Somebody met in person may
+  sit outside that horizon, and under an eclipsing patron the horizon is the
+  very thing the patron controls — so the ruling appears to require that an
+  in-person exchange licenses the path whatever the gate says. That is not
+  written, and I have not written it: the design still says the gate binds.
+  Until it is settled a client cannot know whether to dial a candidate from
+  somebody outside its horizon, which is most of the exit case.
+- **The register.** P17 prices IP disclosure on the direct path. A second
+  way to make that disclosure may owe §19 a row of its own; numbers there are
+  never reused, so it needs allocating rather than folding into P17.
+- **The ceremony exchange is unspecified on the wire.** `Intent` — what the
+  two devices hand each other, `crates/client/src/ceremony.rs` — appears
+  nowhere in `wire-format.md`. Candidates riding it inherit that: two
+  vendors' clients could not complete a ceremony together today, candidates
+  or no candidates. Pre-existing and not caused by this ruling, but it is the
+  channel the ruling now depends on.
