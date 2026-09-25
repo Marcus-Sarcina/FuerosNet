@@ -257,8 +257,8 @@ pub fn collect(
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         while let Some(bytes) = deliveries.recv().await {
-            if let Some((from, payload)) = rhtn_archive::submission::unrelayed(&bytes) {
-                inbound(from, payload);
+            if let Some((from, payload, binding)) = rhtn_archive::submission::unrelayed(&bytes) {
+                inbound(from, payload, binding);
             }
         }
     })

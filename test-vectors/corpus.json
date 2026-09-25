@@ -1,8 +1,8 @@
 {
  "format": "rhtn-test-corpus/1",
  "pins": {
-  "wire-format.md": "5fb34586d8b9d970c64daa5fc14ae05fc8c3ac7a1c3fe1510a1463c2975b31db",
-  "network-design.md": "c26d228c35cfdbe3ede873e9549591a04eebae659d4c513f5c4da38fb3dce015",
+  "wire-format.md": "8082fa1cfeb9dd65b89b2c7797dd936f08127d664739d0670dd782849c7a5d42",
+  "network-design.md": "4cabf13b14b1e08e31d9e8437f5428b9d6fe600787c13b14f0347f2ac8e5805e",
   "light-client-requirements.md": "ec6526baaefee2a7de3e3e1a8eb4354a219f1b6ff12d672061584917af263781"
  },
  "classes": {
@@ -380,6 +380,15 @@
     "kind": "RelayedPayload"
    },
    "hex": "8258208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8dcfc852aa6a582018564c22b6674f09a7ca123ddfd4b071a45df48054715c17e4945aabdcb238c4"
+  },
+  {
+   "id": "P-relayed-bound",
+   "class": "bytes",
+   "expect": {
+    "outcome": "accept",
+    "kind": "RelayedPayload"
+   },
+   "hex": "8358208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8dcfc852aa6a582018564c22b6674f09a7ca123ddfd4b071a45df48054715c17e4945aabdcb238c458dca60158208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8dcfc852aa6a0201035840c5b654905fcee6436b8d3d1ba96ba61a02948f1cf18e89a9b45fa174cb970800fb66e27d796ea27e4642b735e251341f9bf8e7de7fc8e47b35cb59e3a8c31ad9041a6a431510055820fafb7967ea0e2bc7d3b5023bdb9e0bc3ccc2366470048255c85f0b879313ac2a068443a10127a0f658407318d11754f8dd5e104a4c16d6b65b9c755394cd8a54a650282d6d164987a645051ebb68b810f3416920c7d7087023c67b8f3c8d6b0028b1f5d8c5a9065add03"
   },
   {
    "id": "P-frame-01",

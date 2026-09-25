@@ -1205,13 +1205,16 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
         "body" => check_body(b, item),
         // what a node delivers for a relay submission (`wire-format.md`
         // §7.10): the submitter in front of the ciphertext, an array and
-        // not a map
+        // not a map.  The submitter's binding is a third element where the
+        // node holds one, and optional because it holds none for a device
+        // that published none
         "RelayedPayload" => match item {
-            Item::Array(a) if a.len() == 2 => match (&a[0], &a[1]) {
-                (Item::Bytes(f), Item::Bytes(_)) if f.len() == 32 => Ok(()),
+            Item::Array(a) if a.len() == 2 || a.len() == 3 => match (&a[0], &a[1], a.get(2)) {
+                (Item::Bytes(f), Item::Bytes(_), None) if f.len() == 32 => Ok(()),
+                (Item::Bytes(f), Item::Bytes(_), Some(Item::Bytes(_))) if f.len() == 32 => Ok(()),
                 _ => Err(Error("relayed payload shape")),
             },
-            _ => Err(Error("relayed payload is a two-element array")),
+            _ => Err(Error("relayed payload is a two- or three-element array")),
         },
         _ => Ok(()),
     }

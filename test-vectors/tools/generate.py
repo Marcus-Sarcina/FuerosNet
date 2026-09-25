@@ -2606,6 +2606,11 @@ r_sub_bound = e_map([(e_uint(1), e_bstr(NONCE(b'deposit'))), (e_uint(2), e_uint(
 # what the node then delivers for a relay submission: the submitter in
 # front of the ciphertext, an array and not a map
 relayed = e_arr([e_bstr(alice.keyhash), e_bstr(H(b'rhtn-test-vectors:relayed-ciphertext'))])
+# the same delivery with the submitter's binding in it, which a node
+# carries where it holds one (`wire-format.md` §7.10's third element)
+relayed_bound = e_arr([e_bstr(alice.keyhash),
+                       e_bstr(H(b'rhtn-test-vectors:relayed-ciphertext')),
+                       e_bstr(prekey)])
 
 f_attach_deleg = frame(1, e_map([(e_uint(1), e_bstr(alice.keyhash)),
                                  (e_uint(2), currency),
@@ -2756,6 +2761,18 @@ opens under decides.
 {hexblock(relayed)}
 ```
 
+The submitter's bundle rides as an optional third element where the node holds
+one, because a recipient cannot have asked for the bundle of a party who had
+not written to it yet. It is signed by the submitter, so the node carrying it
+gains no say in attribution; **a decoder MUST read both shapes.**
+
+**RelayedPayload — the same delivery with the submitter's binding**
+({len(relayed_bound)} bytes):
+
+```
+{hexblock(relayed_bound)}
+```
+
 ## Replies
 
 {chr(10).join(_msg_md[:len(_reply_pairs)])}
@@ -2854,6 +2871,7 @@ for fid, by, kind in [
     ('P-delegation-alice-desktop', deleg_alice_desktop, 'Delegation'),
     ('P-verification-query', rec_query, 'VerificationQuery'),
     ('P-relayed', relayed, 'RelayedPayload'),
+    ('P-relayed-bound', relayed_bound, 'RelayedPayload'),
 ]:
     reg(fid, 'bytes', ACC(kind), by)
 for i, (cap, by) in enumerate(_msg_pairs):

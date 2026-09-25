@@ -3332,6 +3332,8 @@ ciphertext.**
 RelayedPayload = [             ; what a node delivers for a submission
   keyhash,                     ; the submitter, as this node authenticated it
   bstr,                        ; the ciphertext, unchanged
+  ? bstr,                      ; the submitter's bundle (§7.8) for the device
+                               ; that submitted, where this node holds one
 ]
 ```
 
@@ -3342,6 +3344,26 @@ the node's assertion, not the sender's, and a recipient that treated it as
 authorship would be letting its own node say who wrote to it; what a message
 is attributed to is decided by the material it opens under (§7.8, design
 §14.2.4).
+
+**The third element is what the recipient opens it under, and the node is not
+trusted for it.** Attribution needs the submitter's bundle, and a recipient
+cannot have asked for the bundle of a party who has not written to it yet:
+store-and-forward means the first message arrives before there was anything to
+ask about (design §14.2.2). The node that took the submission holds that
+bundle already — serving it is §7.8's business — so it carries it. **The
+bundle is signed by the submitter** (§7.8), so a node that substitutes or
+alters one produces a bundle that does not verify, or one whose key is not the
+key the message carries; either way the recipient is left exactly where it
+would have been without it. A serving node can withhold this and cannot forge
+it, which is the same authority it already has over delivery itself.
+
+**The element is optional and a recipient MUST accept its absence**, since a
+node holds no bundle for a device that has published none, and a node that
+does not carry one is delivering what §7.10 has always defined. A recipient
+that already holds the binding ignores what arrived; **a bundle that fails
+verification is discarded and the message is processed as though none came**,
+because a delivery is not the place to learn that a party's published material
+is bad.
 
 ## 8. Session messages
 

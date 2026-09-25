@@ -24,10 +24,10 @@ pub struct Inlet(Arc<Mutex<Option<Inbound>>>);
 impl Inlet {
     pub fn inbound(&self) -> Inbound {
         let slot = self.0.clone();
-        Arc::new(move |from, bytes| {
+        Arc::new(move |from, bytes, binding| {
             let f = slot.lock().unwrap().clone();
             if let Some(f) = f {
-                f(from, bytes);
+                f(from, bytes, binding);
             }
         })
     }
@@ -143,9 +143,9 @@ impl Courier {
     /// what arrived from a peer.
     pub fn inbound(self: &Arc<Self>) -> Inbound {
         let me = self.clone();
-        Arc::new(move |from, bytes| {
+        Arc::new(move |from, bytes, binding| {
             let me = me.clone();
-            tokio::spawn(async move { me.receive(from, bytes).await });
+            tokio::spawn(async move { me.receive(from, bytes, binding).await });
         })
     }
 
@@ -153,10 +153,19 @@ impl Courier {
     /// client and delivered by kind.  Candidates open the direct path, and
     /// this side offers its own if it has not; a grant that answered a
     /// waiting query completes its stream; the rest is the application's.
-    pub async fn receive(self: Arc<Self>, from: Keyhash, bytes: Vec<u8>) {
+    pub async fn receive(self: Arc<Self>, from: Keyhash, bytes: Vec<u8>, binding: Option<Vec<u8>>) {
+        // The binding the node carried is taken first, so an initial
+        // message from a peer this client has never held one for is
+        // attributable on arrival rather than a message too late
+        // (`wire-format.md` §7.10).
         let d = self
             .handle
-            .with(move |c| c.receive_payload(from, &bytes))
+            .with(move |c| {
+                if let Some(b) = binding {
+                    c.take_binding(&b);
+                }
+                c.receive_payload(from, &bytes)
+            })
             .await;
         match d {
             Ok(Dispatched::Candidates(b)) => {

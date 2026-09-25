@@ -5504,6 +5504,14 @@ not there.** Therefore:
 - Each node **publishes prekeys**, which its patron serves on request, the X3DH
   shape. Carriage is in `wire-format.md` §7.8; the bundle itself is opaque to this
   protocol, since only the endpoints hold the state to interpret it.
+- **A serving node attaches the submitter's bundle to a relayed payload**
+  [author, 2026-09-24], carried as `wire-format.md` §7.10's third element. A
+  recipient cannot have asked for the bundle of a party who has not written to
+  it yet, and §14.2.4's attribution needs one: the first message would
+  otherwise arrive unattributable however well it decrypts. The node serves
+  that bundle already. It is not trusted with it — the bundle carries the
+  submitter's own signature, so a substituted one does not verify — and it can
+  withhold it, which is the authority it already holds over delivery.
 - **Prekey exhaustion degrades forward secrecy rather than blocking messaging**: an
   attacker drains a target's one-time prekeys, after which sessions open from
   reusable or last-resort material and the first message loses one-time-key forward

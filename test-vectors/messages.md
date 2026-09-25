@@ -1,6 +1,6 @@
 # Unsigned message families (`wire-format.md` §§6–11)
 
-Generated against `wire-format.md` `5fb34586d8b9d970…`, `network-design.md` `c26d228c35cfdbe3…` and `light-client-requirements.md` `ec6526baaefee2a7…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `8082fa1cfeb9dd65…`, `network-design.md` `4cabf13b14b1e08e…` and `light-client-requirements.md` `ec6526baaefee2a7…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Draft. Spec-derived, unverified by an implementation.** Canonical bar 9:
 one positive known-answer encoding per framed message family. Framing is
@@ -1314,6 +1314,27 @@ opens under decides.
 8258208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8dcfc8
 52aa6a582018564c22b6674f09a7ca123ddfd4b071a45df48054715c17e4945a
 abdcb238c4
+```
+
+The submitter's bundle rides as an optional third element where the node holds
+one, because a recipient cannot have asked for the bundle of a party who had
+not written to it yet. It is signed by the submitter, so the node carrying it
+gains no say in attribution; **a decoder MUST read both shapes.**
+
+**RelayedPayload — the same delivery with the submitter's binding**
+(291 bytes):
+
+```
+8358208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8dcfc8
+52aa6a582018564c22b6674f09a7ca123ddfd4b071a45df48054715c17e4945a
+abdcb238c458dca60158208410def778a5de3a25991aba399716bc8eccfda9ad
+57d4ea8a0c8dcfc852aa6a0201035840c5b654905fcee6436b8d3d1ba96ba61a
+02948f1cf18e89a9b45fa174cb970800fb66e27d796ea27e4642b735e251341f
+9bf8e7de7fc8e47b35cb59e3a8c31ad9041a6a431510055820fafb7967ea0e2b
+c7d3b5023bdb9e0bc3ccc2366470048255c85f0b879313ac2a068443a10127a0
+f658407318d11754f8dd5e104a4c16d6b65b9c755394cd8a54a650282d6d1649
+87a645051ebb68b810f3416920c7d7087023c67b8f3c8d6b0028b1f5d8c5a906
+5add03
 ```
 
 ## Replies

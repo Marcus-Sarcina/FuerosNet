@@ -2136,6 +2136,24 @@ impl Client {
         }
     }
 
+    /// A binding that arrived beside a delivery (`wire-format.md` §7.10).
+    ///
+    /// Kept where it verifies against material this client already holds,
+    /// and **discarded where it does not**: the node carrying it is not
+    /// trusted for it, and a delivery is not the place to learn that a
+    /// party's published material is bad. Answering whether it was kept is
+    /// for the caller's own accounting; the message that came with it is
+    /// processed either way.
+    pub fn take_binding(&mut self, bytes: &[u8]) -> bool {
+        match payload::read_bundle(&self.known, bytes) {
+            Ok(p) => {
+                self.payload.sessions.prefetch(p);
+                true
+            }
+            Err(_) => false,
+        }
+    }
+
     /// A reply from the serving node: a sweep's bundles are kept; a
     /// one-time reply opens the session it was asked for, with the key
     /// where one came and on reusable material alone where none did, and

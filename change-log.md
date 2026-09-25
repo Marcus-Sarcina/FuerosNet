@@ -10515,7 +10515,7 @@ bytes; the test-vector pins are current on all three documents; the gate's 19
 hashes match, `cargo deny` clean, 616 tests pass with the 19 owed stubs
 ignored, and the Kotlin round trip runs inside the gate.
 
-### 2026-09-24 (the gate runs where root ignores a permission bit)
+### 2026-09-24 (CI meets root; and the node carries what a message is opened under)
 
 **The gate runs on GitLab CI**, on the author's runner, from
 `crates/.gitlab-ci.yml`. Its first run failed on one test: PAY-19's
@@ -10526,3 +10526,27 @@ the write whoever runs it, and exercises the unlink of the first key
 where the old arrangement failed before anything was written. 13 of 13
 in the container as root and on the workstation unprivileged; nothing in
 the service changed.
+
+**A first payload that outran its binding wedged the pair for good.** A
+sender's ratchet exists from the moment it sends; a recipient holding no
+bundle for that sender refused the initial message, fetched the bundle it
+was missing, and then had no use for it, since everything after the first
+message is a ratchet message into a session it never opened. Neither side
+was told. Found driving the Android payload screen and reproduced in the
+payload harness.
+
+**The node that took the submission carries the submitter's bundle with it**
+[author, 2026-09-24], as `wire-format.md` §7.10's optional third element and
+design §14.2.2's fact. The precondition is removed rather than recovered
+from: a recipient cannot have asked for the bundle of somebody who had not
+yet written to it, and the node serving that bundle already holds it. It is
+not trusted with it — the bundle is the submitter's own signature, so a
+substituted one does not verify — and it can withhold it, which is the
+authority it already had over delivery. The element is optional, a recipient
+reads both shapes, and a bundle that fails verification is discarded with the
+message processed as though none came. SUB-15, `functional_tests.md` MAIL-026,
+and a second corpus vector for the three-element form.
+
+**The Android shell sends and receives payload.** A phone that minted its own
+identity, attached to a node over the emulator's NAT, and was attributed on
+its first message, with the reply back on the same session.

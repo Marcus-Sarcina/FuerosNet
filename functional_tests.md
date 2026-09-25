@@ -314,6 +314,7 @@ The Cargo workspace has **15 crates**. Components below follow responsibilities 
 | MAIL-010 | S | SubmissionReply echoes the request nonce and exactly the defined codes 0 accepted, 1 refused, 2 unknown. Do not append invented explanatory fields to unsigned replies or report storage failure as accepted. | W §7.10 |
 | MAIL-011 | E | Persist one-time consumption/custody before acknowledging success; inject failure between validation, durable write and reply. Retrying after an ambiguous reply may not disclose the same one-time prekey twice or lose acknowledged stored ciphertext. | I §§2, 6; W §§7.8, 7.10 |
 | MAIL-025 | C | A device's prekey bundle is made over material that device generated and signed by the identity on the ceremony device, naming the device under the signature; the signer refuses a payload naming another subject, and the device refuses a signed bundle that does not verify under its identity, names another device, or is not over its current material. A device whose material is unsigned publishes nothing, stocks its own pool, and offers the payload again when its material rotates. | W §7.8; D §§14.2.4, 23.3; L §3 |
+| MAIL-026 | C | A serving node attaches the submitter's bundle for the device on the authenticated session to what it delivers, as the optional third element; a recipient holding no binding for that submitter attributes the first message on arrival rather than refusing it. The element is absent where the node holds no bundle for that device, and a recipient accepts both shapes. A bundle that fails verification is discarded and the message processed as though none came; the node can withhold it and cannot forge it. | W §7.10; D §14.2.2, §14.2.4 |
 
 ### Mailbox retention, delivery and external wake
 
@@ -933,7 +934,7 @@ Open local parameters are not all specification defects: cache TTLs, queue cap, 
 
 ## 10. Document baseline and coverage totals
 
-This specification contains **464 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
+This specification contains **465 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
 
 | Prefix | Families |
 |---|---:|
@@ -946,7 +947,7 @@ This specification contains **464 numbered requirement/test families** across **
 | CUR | 12 |
 | NET | 11 |
 | SES | 15 |
-| MAIL | 25 |
+| MAIL | 26 |
 | CER | 20 |
 | VER | 18 |
 | CAP | 16 |
@@ -966,8 +967,8 @@ This specification contains **464 numbered requirement/test families** across **
 
 | Design input | SHA-256 of reviewed bytes |
 |---|---|
-| [network-design.md](network-design.md) | `c26d228c35cfdbe3ede873e9549591a04eebae659d4c513f5c4da38fb3dce015` |
-| [wire-format.md](wire-format.md) | `5fb34586d8b9d970c64daa5fc14ae05fc8c3ac7a1c3fe1510a1463c2975b31db` |
+| [network-design.md](network-design.md) | `4cabf13b14b1e08e31d9e8437f5428b9d6fe600787c13b14f0347f2ac8e5805e` |
+| [wire-format.md](wire-format.md) | `8082fa1cfeb9dd65b89b2c7797dd936f08127d664739d0670dd782849c7a5d42` |
 | [light-client-requirements.md](light-client-requirements.md) | `ec6526baaefee2a7de3e3e1a8eb4354a219f1b6ff12d672061584917af263781` |
 | [infra-client-requirements.md](infra-client-requirements.md) | `780b188301c668cdf8b35fe506678b305bcf073289536461c70fda7a3e7254d4` |
 | [resource-requirements.md](resource-requirements.md) | `54edf8e85eacee7b68e69c0f8b971ae83c19b05e284ae3187bf14d6846ee6f8d` |

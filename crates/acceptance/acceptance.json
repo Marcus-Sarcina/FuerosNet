@@ -12710,6 +12710,33 @@
     "interpretation": null
   },
   {
+    "id": "SUB-15",
+    "area": "submission",
+    "gap": "submission",
+    "title": "A delivery carries the submitter's binding where the node holds one",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "wire-format.md §7.10",
+      "design §14.2.2"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §7.10",
+        "text": "A serving node can withhold this and cannot forge it, which is the same authority it already has over delivery itself."
+      },
+      {
+        "where": "design §14.2.2",
+        "text": "A recipient cannot have asked for the bundle of a party who has not written to it yet"
+      }
+    ],
+    "given": "Node N serves S and R. S has published a bundle for the device it presents on its session; R holds no binding for S.",
+    "when": "S submits ciphertext for R, and R collects it.",
+    "then": "What R collects carries S's bundle for that device as its third element, byte-for-byte as S signed it; where N holds no bundle for the submitting device the two-element form is delivered instead, and R accepts both.",
+    "oracle": "behaviour",
+    "interpretation": null
+  },
+  {
     "id": "ARC-28",
     "area": "archive",
     "gap": "archive",

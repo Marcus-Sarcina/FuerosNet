@@ -11654,3 +11654,41 @@ not have; a sender that does not count its ratchet established until
 something comes back changes what sending means.  A fourth answer is that
 the race is acceptable and the first message of a conversation may be lost,
 in which case the silence of `NoSession` is the part to fix.
+
+## The delivering node carries the binding (2026-09-24)
+
+**Ruled [author, 2026-09-24]** against the four shapes put to him: the node
+that takes a submission carries the submitter's bundle with it. The wedge
+recorded above is closed by removing its precondition rather than by
+recovering from it.
+
+- **`wire-format.md` §7.10** gains an optional third element on
+  `RelayedPayload`, the submitter's bundle for the device on the
+  authenticated session. Optional because a node holds none for a device
+  that published none, and because the two-element form is what §7.10 has
+  always defined; a recipient reads both, which is N01's lesson applied
+  in the same edit. design §14.2.2 carries the fact.
+- **The node is not trusted with it.** The bundle is the submitter's own
+  signature, so a substituted one fails verification or fails the key
+  match, and either way leaves the recipient where it would have been.
+  A serving node can withhold it and cannot forge it, which is the
+  authority it already holds over delivery.
+- **The client takes it before the message**, discarding one that does
+  not verify: a delivery is not the place to learn that a party's
+  published material is bad.
+- **Where no node is in the path, no binding is carried**: the direct
+  path passes `None`, and so does the in-process serving adaptor, which
+  is handed the recipient's device and never the submitter's. The first
+  message to a stranger relays (§7.6: a light client holds no static
+  address and publishes no endpoint), so the case that wedges is the case
+  the node is in.
+
+Landed with SUB-15, `functional_tests.md` MAIL-026, and a second corpus
+vector for the three-element form. Shown working on the emulator: a phone
+that minted its own identity attached, sent, and was attributed on its
+first message, with the echo back.
+
+**Still open**: whether candidates may ride a ceremony's proximity
+channels, which is the only way first contact could be both direct and
+unrelayed, and which §12.6.3 leaves unstated ("the peers exchange
+addresses during setup" names no carriage).

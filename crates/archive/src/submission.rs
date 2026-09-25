@@ -309,22 +309,41 @@ fn nonce_at(b: &[u8], m: &[(Item, Item)], key: u64) -> Result<[u8; 16], String> 
 /// for many peers can choose which to try.  **A routing hint, not an
 /// attribution**: the name is the node's assertion, and what a message is
 /// attributed to is decided by the material it opens under.
-pub fn relayed(from: Keyhash, ciphertext: &[u8]) -> Vec<u8> {
+///
+/// `binding` is the submitter's bundle for the device that submitted,
+/// where the node holds one: what the recipient attributes the message
+/// under, carried because a recipient cannot have asked for the bundle of
+/// somebody who had not yet written to it.  Signed by the submitter, so
+/// carrying it costs the node no authority it did not have.
+pub fn relayed(from: Keyhash, ciphertext: &[u8], binding: Option<&[u8]>) -> Vec<u8> {
     let mut out = Vec::new();
-    emit_array_head(&mut out, 2);
+    emit_array_head(&mut out, if binding.is_some() { 3 } else { 2 });
     emit_bstr(&mut out, &from);
     emit_bstr(&mut out, ciphertext);
+    if let Some(b) = binding {
+        emit_bstr(&mut out, b);
+    }
     out
 }
 
 /// Split what `relayed` composed; nothing where the bytes are not that.
-pub fn unrelayed(b: &[u8]) -> Option<(Keyhash, Vec<u8>)> {
+///
+/// **Both shapes are read**: the binding is optional on the wire, so a
+/// node holding no bundle for that device, and any node that predates
+/// carrying one, deliver the two-element form.
+pub fn unrelayed(b: &[u8]) -> Option<(Keyhash, Vec<u8>, Option<Vec<u8>>)> {
     let item = parse_all(b).ok()?;
     let Item::Array(parts) = &item else {
         return None;
     };
-    let [Item::Bytes(f), Item::Bytes(p)] = parts.as_slice() else {
-        return None;
+    let (f, p, binding) = match parts.as_slice() {
+        [Item::Bytes(f), Item::Bytes(p)] => (f, p, None),
+        [Item::Bytes(f), Item::Bytes(p), Item::Bytes(k)] => (f, p, Some(b[k.clone()].to_vec())),
+        _ => return None,
     };
-    Some((b[f.clone()].try_into().ok()?, b[p.clone()].to_vec()))
+    Some((
+        b[f.clone()].try_into().ok()?,
+        b[p.clone()].to_vec(),
+        binding,
+    ))
 }

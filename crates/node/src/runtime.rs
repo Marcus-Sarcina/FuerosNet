@@ -632,7 +632,8 @@ impl LiveNode {
                     }
                     Family::RelaySubmission => {
                         let node = s.lock().unwrap().clone();
-                        crate::submissions::relay(node.as_ref(), &peer, &body)
+                        let view = v.lock().unwrap();
+                        crate::submissions::relay(&view, node.as_ref(), &peer, &device, &body)
                     }
                     Family::WakeRegistration => {
                         let mut view = v.lock().unwrap();

@@ -10,7 +10,10 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 
 /// Where payload for a client goes, with the peer it came from.
-pub type Inbound = Arc<dyn Fn(Keyhash, Vec<u8>) + Send + Sync>;
+/// What a delivery hands the client: the submitter the node named, the
+/// ciphertext, and the submitter's binding where the node carried one
+/// (`wire-format.md` §7.10).
+pub type Inbound = Arc<dyn Fn(Keyhash, Vec<u8>, Option<Vec<u8>>) + Send + Sync>;
 
 /// The clients hosted in this process, by keyhash, each with where its
 /// payload goes: what a node holds for a client beside it in place of a
@@ -32,7 +35,7 @@ impl Inboxes {
         let inbound = self.0.lock().unwrap().get(to).cloned();
         match inbound {
             Some(f) => {
-                f(from, bytes);
+                f(from, bytes, None);
                 true
             }
             None => false,
@@ -228,12 +231,17 @@ impl Serving for LocalNode {
             }
             // served here: delivered on the session or queued for the next
             // (design §14.1.6), the sender named in front for the
-            // recipient, as `wire-format.md` §7.10 composes it
+            // recipient, as `wire-format.md` §7.10 composes it.
+            // **No binding goes with it here**: this path is handed the
+            // recipient's device and never the submitter's, so it cannot
+            // name the bundle §7.10's third element wants.  The session
+            // path that authenticated a submitting device carries one
+            // (`node/src/submissions.rs`)
             if self.node.node.has_session(&to) {
                 return self
                     .node
                     .node
-                    .enqueue_for(to, device, framed(from, &bytes))
+                    .enqueue_for(to, device, framed(from, &bytes, None))
                     .is_ok();
             }
             // a recipient the node beyond serves goes there; anyone else waits
@@ -243,7 +251,7 @@ impl Serving for LocalNode {
                 _ => self
                     .node
                     .node
-                    .enqueue_for(to, device, framed(from, &bytes))
+                    .enqueue_for(to, device, framed(from, &bytes, None))
                     .is_ok(),
             }
         })

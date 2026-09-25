@@ -76,11 +76,28 @@ pub fn deposit(
 /// sender made to wait for delivery would be waiting on a party who may
 /// be away for days.  The sender is named in front of the ciphertext for
 /// the recipient, the way everything else this node queues is.
-pub fn relay(node: Option<&Arc<Node>>, peer: &Keyhash, body: &[u8]) -> Option<Vec<u8>> {
+///
+/// **The submitter's binding goes with it** (`wire-format.md` §7.10,
+/// design §14.2.2): the bundle of the device on this session, which this
+/// node serves anyway, because the recipient cannot have asked for the
+/// bundle of somebody who had not written to it yet.  Where this node
+/// holds none the two-element form goes, as it always did.
+pub fn relay(
+    view: &NodeView,
+    node: Option<&Arc<Node>>,
+    peer: &Keyhash,
+    device: &[u8; 32],
+    body: &[u8],
+) -> Option<Vec<u8>> {
     let r = RelaySubmission::decode(body).ok()?;
+    let binding = view.prekeys.bundle_for(peer, device).cloned();
     let code = match node {
         None => SUBMISSION_REFUSED,
-        Some(n) => match n.enqueue_for(r.recipient, r.device, relayed(*peer, &r.ciphertext)) {
+        Some(n) => match n.enqueue_for(
+            r.recipient,
+            r.device,
+            relayed(*peer, &r.ciphertext, binding.as_deref()),
+        ) {
             Ok(()) => SUBMISSION_ACCEPTED,
             // at a cap is a bound; a recipient this node holds no record
             // of, and a credential it has verified superseded, are both

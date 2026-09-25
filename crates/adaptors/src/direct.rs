@@ -201,7 +201,10 @@ impl LightDirect {
         tokio::spawn(async move {
             while let Ok(mut s) = conn.accept_uni().await {
                 if let Ok(bytes) = s.read_to_end(1 << 20).await {
-                    (l.0.inbound)(peer, bytes);
+                    // no binding: nothing relayed this, so there was no
+                    // node in the path to carry one (`wire-format.md`
+                    // §7.10)
+                    (l.0.inbound)(peer, bytes, None);
                 }
             }
             // gone: the path is down unless a newer connection replaced this one
@@ -307,7 +310,8 @@ impl NodeDirect {
         let mut inbox = node.take_direct_deliveries();
         tokio::spawn(async move {
             while let Some((peer, bytes)) = inbox.recv().await {
-                inbound(peer, bytes);
+                // direct again: no node carried it and none bound it
+                inbound(peer, bytes, None);
             }
         });
         Arc::new(NodeDirect {

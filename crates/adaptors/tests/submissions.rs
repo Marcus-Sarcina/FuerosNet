@@ -319,11 +319,55 @@ async fn a_relay_submission_is_answered_on_taking_and_collected_later() {
         .await
         .expect("delivered")
         .expect("bytes");
-    assert_eq!(unrelayed(&delivered), Some((carol.me, b"sealed".to_vec())));
+    let (who, what, binding) = unrelayed(&delivered).expect("a relayed payload");
+    assert_eq!((who, what), (carol.me, b"sealed".to_vec()));
+    // carol published no bundle in this fixture, so the node had none
+    // to name and delivered the two-element form (`wire-format.md` §7.10)
+    assert!(binding.is_none(), "no bundle held, none carried");
     assert_eq!(
         node.node.queued(&kh("w1")),
         0,
         "no copy outlives the delivery"
+    );
+}
+
+/// The submitter's binding rides the delivery (`wire-format.md` §7.10,
+/// design §14.2.2): the node carries the bundle of the device on the
+/// session it authenticated, so a recipient that has never held one can
+/// attribute the first message instead of refusing it for want of a
+/// binding it had no occasion to ask for.
+// acceptance: SUB-15
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_delivery_carries_the_submitters_binding_where_the_node_holds_one() {
+    let node = node_with("bob", |_, _| {});
+    let carol = attach_light("carol", &node).await;
+    assert!(
+        carol.serving.publish(&bundle("carol")).await,
+        "the node holds carol's bundle for the device she presents"
+    );
+    let n = [8u8; 16];
+    let body = RelaySubmission {
+        recipient: kh("w1"),
+        ciphertext: b"sealed".to_vec(),
+        nonce: n,
+        device: [0; 32],
+    }
+    .encode();
+    assert_eq!(
+        code(&carol, REQUEST_RELAY, n, body).await,
+        Some(SUBMISSION_ACCEPTED)
+    );
+    let mut w1 = attach_light("w1", &node).await;
+    let delivered = tokio::time::timeout(std::time::Duration::from_secs(3), w1.deliveries.recv())
+        .await
+        .expect("delivered")
+        .expect("bytes");
+    let (who, what, binding) = unrelayed(&delivered).expect("a relayed payload");
+    assert_eq!((who, what), (carol.me, b"sealed".to_vec()));
+    assert_eq!(
+        binding.as_deref(),
+        Some(bundle("carol").as_slice()),
+        "carol's own bundle, byte for byte as she signed it"
     );
 }
 
