@@ -318,6 +318,7 @@ The Cargo workspace has **15 crates**. Components below follow responsibilities 
 | MAIL-011 | E | Persist one-time consumption/custody before acknowledging success; inject failure between validation, durable write and reply. Retrying after an ambiguous reply may not disclose the same one-time prekey twice or lose acknowledged stored ciphertext. | I §§2, 6; W §§7.8, 7.10 |
 | MAIL-025 | C | A device's prekey bundle is made over material that device generated and signed by the identity on the ceremony device, naming the device under the signature; the signer refuses a payload naming another subject, and the device refuses a signed bundle that does not verify under its identity, names another device, or is not over its current material. A device whose material is unsigned publishes nothing, stocks its own pool, and offers the payload again when its material rotates. | W §7.8; D §§14.2.4, 23.3; L §3 |
 | MAIL-026 | C | A serving node attaches the submitter's bundle for the device on the authenticated session to what it delivers, as the optional third element; a recipient holding no binding for that submitter attributes the first message on arrival rather than refusing it. The element is absent where the node holds no bundle for that device, and a recipient accepts both shapes. A bundle that fails verification is discarded and the message processed as though none came; the node can withhold it and cannot forge it. | W §7.10; D §14.2.2, §14.2.4 |
+| MAIL-027 | S | Run at least the Double Ratchet over a PQXDH session; run the Triple Ratchet where an implementation of the post-quantum half is available. The floor is what a peer can hold you to, since neither end can verify the other's construction — the session derives the same keys or it does not. A client states which it is running where its own user can reach it. The post-quantum half mixes into the root chain and carries in the header; a session at the floor derives and persists exactly what it did before that seam existed. | D §14.2.4.3, §1.1; L §3 |
 
 ### Mailbox retention, delivery and external wake
 
@@ -937,7 +938,7 @@ Open local parameters are not all specification defects: cache TTLs, queue cap, 
 
 ## 10. Document baseline and coverage totals
 
-This specification contains **468 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
+This specification contains **469 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
 
 | Prefix | Families |
 |---|---:|
@@ -950,7 +951,7 @@ This specification contains **468 numbered requirement/test families** across **
 | CUR | 12 |
 | NET | 14 |
 | SES | 15 |
-| MAIL | 26 |
+| MAIL | 27 |
 | CER | 20 |
 | VER | 18 |
 | CAP | 16 |
@@ -970,9 +971,9 @@ This specification contains **468 numbered requirement/test families** across **
 
 | Design input | SHA-256 of reviewed bytes |
 |---|---|
-| [network-design.md](network-design.md) | `1e406f154016c34c76d458e34f8368bfe7822b06ab288290aef4bb323182b949` |
+| [network-design.md](network-design.md) | `a3061f8f785f0105bd269bff71b16df478e1e311316875872c11f9179d228914` |
 | [wire-format.md](wire-format.md) | `a78aff6252a3b05aff6ac7e99eb74c10b5a87a8359314a7e5d1636a2455707a8` |
-| [light-client-requirements.md](light-client-requirements.md) | `872fb15eee3adbb29b0617bdaa8ee78baaf07c725329d5fc71ce6ef961dd253c` |
+| [light-client-requirements.md](light-client-requirements.md) | `ca3bf55bf505a4ba279f848d0050fa911e2e76dc956a6cb497503de671caf861` |
 | [infra-client-requirements.md](infra-client-requirements.md) | `780b188301c668cdf8b35fe506678b305bcf073289536461c70fda7a3e7254d4` |
 | [resource-requirements.md](resource-requirements.md) | `54edf8e85eacee7b68e69c0f8b971ae83c19b05e284ae3187bf14d6846ee6f8d` |
 

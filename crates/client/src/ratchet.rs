@@ -26,9 +26,76 @@ pub const MAX_SKIPPED_KEYS: usize = 2000;
 const ROOT_INFO: &[u8] = b"rhtn/1:ratchet-root";
 const MESSAGE_INFO: &[u8] = b"rhtn/1:ratchet-message";
 
+/// The post-quantum half of the Triple Ratchet (design §14.2.4.3).
+///
+/// **The Double Ratchet above is the conformance floor** [author,
+/// 2026-09-26]; a Triple Ratchet is that ratchet with this one beside it
+/// and their outputs mixed. This interface is the seam between them, and
+/// it is **written from design §14.2.4.3 and the published Sparse
+/// Post-Quantum Ratchet specification, not from any implementation of
+/// one**: an implementation of this trait may carry whatever licence it
+/// likes without reaching the crates that define it.
+///
+/// **Provisional until something implements it.** No post-quantum ratchet
+/// exists here to exercise the shape, so what this promises is that the
+/// mixing point and the carriage are where §14.2.4.3 puts them, not that
+/// the method set is final.
+pub trait PostQuantumRatchet {
+    /// What to mix into the root chain at this advance, where this ratchet
+    /// has something ready.
+    ///
+    /// **`None` is the ordinary answer.** A sparse ratchet spends most
+    /// steps moving erasure-coded key material across successive headers
+    /// and has nothing to contribute until a whole one lands; the step then
+    /// proceeds on the Diffie-Hellman output alone, exactly as the floor
+    /// does.
+    fn contribution(&mut self) -> Option<[u8; 32]>;
+
+    /// What this ratchet wants carried in the next header. Empty carries
+    /// nothing, and a header with nothing to carry is the floor's header
+    /// byte for byte.
+    fn outgoing(&mut self) -> Vec<u8>;
+
+    /// Material from the peer's header. An error is the message's, not the
+    /// session's: the caller leaves its state as it was.
+    fn incoming(&mut self, chunk: &[u8]) -> Result<(), String>;
+
+    /// State to persist beside the ratchet's own (`crate::durable`).
+    fn encode(&self) -> Vec<u8>;
+
+    /// The reverse, into a default-constructed ratchet.
+    fn restore(&mut self, b: &[u8]) -> Result<(), String>;
+}
+
+/// No post-quantum ratchet: the Double Ratchet alone, which is the floor.
+///
+/// Contributes nothing, carries nothing and persists nothing, so a session
+/// running this derives exactly the keys and writes exactly the bytes it
+/// did before the seam existed.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct NoPostQuantum;
+
+impl PostQuantumRatchet for NoPostQuantum {
+    fn contribution(&mut self) -> Option<[u8; 32]> {
+        None
+    }
+    fn outgoing(&mut self) -> Vec<u8> {
+        Vec::new()
+    }
+    fn incoming(&mut self, _chunk: &[u8]) -> Result<(), String> {
+        Err("no post-quantum ratchet holds this session".into())
+    }
+    fn encode(&self) -> Vec<u8> {
+        Vec::new()
+    }
+    fn restore(&mut self, _b: &[u8]) -> Result<(), String> {
+        Ok(())
+    }
+}
+
 /// One party's ratchet state for one session.
 #[derive(Clone)]
-pub struct Ratchet {
+pub struct Ratchet<P: PostQuantumRatchet + Clone + Default = NoPostQuantum> {
     dhs: DhSecret,
     dhr: Option<DhPublic>,
     rk: [u8; 32],
@@ -38,6 +105,8 @@ pub struct Ratchet {
     nr: u32,
     pn: u32,
     skipped: BTreeMap<([u8; 32], u32), [u8; 32]>,
+    /// The post-quantum half, or [`NoPostQuantum`] at the floor.
+    pq: P,
     /// The associated data every message binds: the two identity keys.
     ad: Vec<u8>,
 }
@@ -55,9 +124,24 @@ impl std::fmt::Debug for Ratchet {
     }
 }
 
-fn kdf_rk(rk: &[u8; 32], dh_out: &[u8; 32]) -> ([u8; 32], [u8; 32]) {
+/// Advance the root chain.
+///
+/// **`pq` is where the two ratchets' outputs are mixed** (design
+/// §14.2.4.3): it extends the key material rather than replacing it, so a
+/// step with nothing post-quantum ready derives precisely what the Double
+/// Ratchet alone derives, and the floor is bit-identical to what this
+/// function computed before the seam existed.
+fn kdf_rk(rk: &[u8; 32], dh_out: &[u8; 32], pq: Option<[u8; 32]>) -> ([u8; 32], [u8; 32]) {
     let mut out = [0u8; 64];
-    hkdf_sha256(rk, dh_out, ROOT_INFO, &mut out);
+    match pq {
+        None => hkdf_sha256(rk, dh_out, ROOT_INFO, &mut out),
+        Some(q) => {
+            let mut ikm = [0u8; 64];
+            ikm[..32].copy_from_slice(dh_out);
+            ikm[32..].copy_from_slice(&q);
+            hkdf_sha256(rk, &ikm, ROOT_INFO, &mut out);
+        }
+    }
     (out[..32].try_into().unwrap(), out[32..].try_into().unwrap())
 }
 
@@ -74,19 +158,31 @@ fn aead_key(mk: &[u8; 32]) -> ([u8; 32], [u8; 12]) {
     (out[..32].try_into().unwrap(), out[32..].try_into().unwrap())
 }
 
-fn header_bytes(dh: &DhPublic, pn: u32, n: u32) -> Vec<u8> {
+/// The header.
+///
+/// **Key 4 is the post-quantum ratchet's carriage and appears only when it
+/// has something to carry**, so the floor emits the same three entries it
+/// always did. The header is the AEAD's associated data, so a party that
+/// adds the key and one that does not are not speaking the same session —
+/// which is the conformance question design §14.2.4.3 settles, not
+/// something either end can negotiate here.
+fn header_bytes(dh: &DhPublic, pn: u32, n: u32, pq: &[u8]) -> Vec<u8> {
     let mut h = Vec::new();
-    emit_map_head(&mut h, 3);
+    emit_map_head(&mut h, if pq.is_empty() { 3 } else { 4 });
     emit_uint(&mut h, 1);
     emit_bstr(&mut h, &dh.0);
     emit_uint(&mut h, 2);
     emit_uint(&mut h, pn as u64);
     emit_uint(&mut h, 3);
     emit_uint(&mut h, n as u64);
+    if !pq.is_empty() {
+        emit_uint(&mut h, 4);
+        emit_bstr(&mut h, pq);
+    }
     h
 }
 
-fn parse_header(h: &[u8]) -> Result<(DhPublic, u32, u32), String> {
+fn parse_header(h: &[u8]) -> Result<(DhPublic, u32, u32, Vec<u8>), String> {
     let item = parse_all(h).map_err(|e| e.0)?;
     let Item::Map(m) = &item else {
         return Err("header not a map".into());
@@ -99,7 +195,13 @@ fn parse_header(h: &[u8]) -> Result<(DhPublic, u32, u32), String> {
     };
     let pn = map_get(m, 2).and_then(as_uint).ok_or("header pn")? as u32;
     let n = map_get(m, 3).and_then(as_uint).ok_or("header n")? as u32;
-    Ok((dh, pn, n))
+    // key 4 where the sender's post-quantum ratchet had something to carry
+    let pq = match map_get(m, 4) {
+        Some(Item::Bytes(r)) => h[r.clone()].to_vec(),
+        None => Vec::new(),
+        _ => return Err("header pq".into()),
+    };
+    Ok((dh, pn, n, pq))
 }
 
 fn seal(mk: &[u8; 32], ad: &[u8], header: &[u8], plaintext: &[u8]) -> Vec<u8> {
@@ -135,11 +237,12 @@ fn open(mk: &[u8; 32], ad: &[u8], header: &[u8], ciphertext: &[u8]) -> Result<Ve
     Ok(buf)
 }
 
-impl Ratchet {
+impl<P: PostQuantumRatchet + Clone + Default> Ratchet<P> {
     /// The initiator, holding the shared secret and the responder's signed
     /// prekey as its first ratchet key, with a fresh ratchet key of its own.
     pub fn initiator(sk: [u8; 32], their_spk: DhPublic, dhs: DhSecret, ad: Vec<u8>) -> Self {
-        let (rk, cks) = kdf_rk(&sk, &dhs.agree(&their_spk));
+        let mut pq = P::default();
+        let (rk, cks) = kdf_rk(&sk, &dhs.agree(&their_spk), pq.contribution());
         Ratchet {
             dhs,
             dhr: Some(their_spk),
@@ -150,6 +253,7 @@ impl Ratchet {
             nr: 0,
             pn: 0,
             skipped: BTreeMap::new(),
+            pq,
             ad,
         }
     }
@@ -166,6 +270,7 @@ impl Ratchet {
             nr: 0,
             pn: 0,
             skipped: BTreeMap::new(),
+            pq: P::default(),
             ad,
         }
     }
@@ -177,7 +282,8 @@ impl Ratchet {
         let cks = self.cks.ok_or("no sending chain yet")?;
         let (ck, mk) = kdf_ck(&cks);
         self.cks = Some(ck);
-        let header = header_bytes(&self.dhs.public(), self.pn, self.ns);
+        let carried = self.pq.outgoing();
+        let header = header_bytes(&self.dhs.public(), self.pn, self.ns, &carried);
         self.ns += 1;
         let ct = seal(&mk, &self.ad, &header, plaintext);
         let mut out = Vec::new();
@@ -208,8 +314,13 @@ impl Ratchet {
             }
         };
         let (header, ct) = (bs(&parts[0])?, bs(&parts[1])?);
-        let (dh, pn, n) = parse_header(&header)?;
+        let (dh, pn, n, carried) = parse_header(&header)?;
+        // on a trial copy, so a header this session cannot use leaves the
+        // post-quantum half as it was along with everything else
         let mut trial = self.clone();
+        if !carried.is_empty() {
+            trial.pq.incoming(&carried)?;
+        }
         let plaintext = trial.decrypt_in(&header, &ct, dh, pn, n, fresh)?;
         *self = trial;
         Ok(plaintext)
@@ -264,11 +375,11 @@ impl Ratchet {
         self.ns = 0;
         self.nr = 0;
         self.dhr = Some(dh);
-        let (rk, ckr) = kdf_rk(&self.rk, &self.dhs.agree(&dh));
+        let (rk, ckr) = kdf_rk(&self.rk, &self.dhs.agree(&dh), self.pq.contribution());
         self.rk = rk;
         self.ckr = Some(ckr);
         self.dhs = DhSecret::from_seed(fresh());
-        let (rk, cks) = kdf_rk(&self.rk, &self.dhs.agree(&dh));
+        let (rk, cks) = kdf_rk(&self.rk, &self.dhs.agree(&dh), self.pq.contribution());
         self.rk = rk;
         self.cks = Some(cks);
     }
@@ -277,7 +388,7 @@ impl Ratchet {
     pub fn encode(&self) -> Vec<u8> {
         use crate::durable::*;
         let mut out = Vec::new();
-        emit_array_head(&mut out, 10);
+        emit_array_head(&mut out, 11);
         emit_bstr(&mut out, &self.dhs.to_bytes());
         emit_opt_bstr(&mut out, self.dhr.as_ref().map(|p| &p.0[..]));
         emit_bstr(&mut out, &self.rk);
@@ -294,13 +405,23 @@ impl Ratchet {
             emit_bstr(&mut out, mk);
         }
         emit_bstr(&mut out, &self.ad);
+        // the post-quantum half's own state; empty at the floor
+        emit_bstr(&mut out, &self.pq.encode());
         out
     }
 
     /// One back, whole or not at all.
-    pub fn decode(b: &[u8]) -> Option<Ratchet> {
+    ///
+    /// **Both shapes are read**: a state written before the seam existed
+    /// carries ten elements and no post-quantum half, which is what the
+    /// floor writes anyway.
+    pub fn decode(b: &[u8]) -> Option<Ratchet<P>> {
         use crate::durable::*;
-        let (_, f) = parse_array(b, 10)?;
+        let (_, f) = parse_array(b, 11).or_else(|| parse_array(b, 10))?;
+        let mut pq = P::default();
+        if let Some(it) = f.get(10) {
+            pq.restore(&bytes(b, it)?).ok()?;
+        }
         let mut skipped = BTreeMap::new();
         for s in array(&f[8])? {
             let [pk, n, mk] = array(s)?.as_slice() else {
@@ -321,6 +442,7 @@ impl Ratchet {
             nr: uint(&f[6])? as u32,
             pn: uint(&f[7])? as u32,
             skipped,
+            pq,
             ad: bytes(b, &f[9])?,
         })
     }

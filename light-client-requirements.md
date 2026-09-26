@@ -298,6 +298,14 @@ job.
 design §14.2.4 adopts **PQXDH** for key agreement and the **Triple Ratchet** for
 session secrecy. The client implements them; it does not reinvent them.
 
+**The Double Ratchet is the floor** (design §14.2.4.3) [author, 2026-09-26]:
+run at least it over a PQXDH session, and run the Triple Ratchet where an
+implementation of the post-quantum half is available. A client running the
+floor alone has the post-quantum session establishment PQXDH gives and lacks
+post-compromise security against a quantum adversary. **Say which one is
+running** where the user can reach it: no peer can tell from the wire, so the
+only party who can tell them is their own client.
+
 - **Publish a prekey bundle and keep it stocked.** A subject with no one-time
   prekeys left falls back to the last-resort key, which is a **declared reduction
   in forward secrecy.** Not a state to remain in. Replenish

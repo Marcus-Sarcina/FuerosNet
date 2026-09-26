@@ -690,7 +690,7 @@ impl Sessions {
             };
             ratchets.insert(
                 (fixed::<32>(b, kh)?, fixed::<32>(b, dev)?),
-                Ratchet::decode(&bytes(b, bytes_)?)?,
+                <Ratchet>::decode(&bytes(b, bytes_)?)?,
             );
         }
         let mut prefetched = BTreeMap::new();

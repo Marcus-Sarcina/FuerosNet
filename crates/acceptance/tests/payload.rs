@@ -3,22 +3,22 @@
 //! still owed for this area.  tests/rustfmt.toml keeps rustfmt off
 //! this directory: the titles are the catalogue's, not hand-laid code.
 
-/// Instantiate PQXDH with X25519 and ML-KEM-768 and run the Triple Ratchet, matching the adopted specifications
+/// Instantiate PQXDH with X25519 and ML-KEM-768 and run at least the Double Ratchet, matching the adopted specifications
 ///
 /// Spec: design §14.2.4.2; design §14.2.4.3; design §14.2.4
 /// Milestone: after-5.  Kind: positive.  Oracle: fixture.
 ///
 /// Rule (design §14.2.4.2): "this profile instantiates it with X25519 and ML-KEM-768"
-/// Rule (design §14.2.4.3): "Signal's Triple Ratchet."
+/// Rule (design §14.2.4.3): "A conforming client MUST run at least the Double Ratchet over a PQXDH session"
 /// Rule (design §14.2.4): "The requirement below is to adopt it, not to design a replacement."
 ///
-/// Given: Two clients with fixed key material and the adopted library's published test vectors. The identity binding, prekey cadence and last-resort policy are open integration decisions (design §22.2) and are supplied to the test as parameters.
+/// Given: Two clients with fixed key material and the adopted specifications' published vectors. The identity binding, prekey cadence and last-resort policy are open integration decisions (design §22.2) and are supplied to the test as parameters.
 /// When: They establish a session and exchange messages.
-/// Then: The key agreement and ratchet outputs match the adopted specifications' vectors for the same inputs, and a message decrypts only at its recipient.
+/// Then: The key agreement and ratchet outputs match the adopted specifications for the same inputs, and a message decrypts only at its recipient. The floor is what is asserted; a client running the Triple Ratchet satisfies it too, and PAY-22 covers the seam the post-quantum half plugs into.
 ///
-/// Interpretation: How the session is bound to the hybrid identity is open; the test parameterises the binding and asserts agreement with the adopted construction's vectors.
+/// Interpretation: How the session is bound to the hybrid identity is open; the test parameterises the binding. Re-derived 2026-09-26 when §14.2.4.3 made the Double Ratchet the floor and the Triple Ratchet recommended.
 #[test]
 #[ignore = "acceptance PAY-13: owed at milestone after-5"]
 fn pay_13_instantiate_pqxdh_with_x25519_and_ml_kem_768_and() {
-    todo!("PAY-13: Instantiate PQXDH with X25519 and ML-KEM-768 and run the Triple Ratchet, matching the adopted specifications")
+    todo!("PAY-13: Instantiate PQXDH with X25519 and ML-KEM-768 and run at least the Double Ratchet, matching the adopted specifications")
 }

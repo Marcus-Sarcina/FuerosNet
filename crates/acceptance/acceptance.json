@@ -2775,7 +2775,7 @@
     "id": "PAY-13",
     "area": "payload",
     "gap": "payload",
-    "title": "Instantiate PQXDH with X25519 and ML-KEM-768 and run the Triple Ratchet, matching the adopted specifications",
+    "title": "Instantiate PQXDH with X25519 and ML-KEM-768 and run at least the Double Ratchet, matching the adopted specifications",
     "milestone": "after-5",
     "kind": "positive",
     "spec": [
@@ -2790,18 +2790,18 @@
       },
       {
         "where": "design §14.2.4.3",
-        "text": "Signal's Triple Ratchet."
+        "text": "A conforming client MUST run at least the Double Ratchet over a PQXDH session"
       },
       {
         "where": "design §14.2.4",
         "text": "The requirement below is to adopt it, not to design a replacement."
       }
     ],
-    "given": "Two clients with fixed key material and the adopted library's published test vectors. The identity binding, prekey cadence and last-resort policy are open integration decisions (design §22.2) and are supplied to the test as parameters.",
+    "given": "Two clients with fixed key material and the adopted specifications' published vectors. The identity binding, prekey cadence and last-resort policy are open integration decisions (design §22.2) and are supplied to the test as parameters.",
     "when": "They establish a session and exchange messages.",
-    "then": "The key agreement and ratchet outputs match the adopted specifications' vectors for the same inputs, and a message decrypts only at its recipient.",
+    "then": "The key agreement and ratchet outputs match the adopted specifications for the same inputs, and a message decrypts only at its recipient. The floor is what is asserted; a client running the Triple Ratchet satisfies it too, and PAY-22 covers the seam the post-quantum half plugs into.",
     "oracle": "fixture",
-    "interpretation": "How the session is bound to the hybrid identity is open; the test parameterises the binding and asserts agreement with the adopted construction's vectors."
+    "interpretation": "How the session is bound to the hybrid identity is open; the test parameterises the binding. Re-derived 2026-09-26 when §14.2.4.3 made the Double Ratchet the floor and the Triple Ratchet recommended."
   },
   {
     "id": "PAY-14",
@@ -12202,6 +12202,28 @@
     "then": "D2's attach publishes no bundle; the payload names T and D2; another identity's phone refuses to sign it; a signature by another identity, or one over material D2 does not hold, is refused by D2; the phone's signature is published under D2 and republished on a later attach; S sends to both devices and only D2 opens the ciphertext addressed to it.",
     "oracle": "behaviour",
     "interpretation": null
+  },
+  {
+    "id": "PAY-22",
+    "area": "payload",
+    "gap": "payload",
+    "title": "The post-quantum ratchet plugs into a seam that mixes into the root chain and carries in the header",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "design §14.2.4.3"
+    ],
+    "rule": [
+      {
+        "where": "design §14.2.4.3",
+        "text": "SHOULD run the Triple Ratchet where an implementation of the post-quantum half is available to it"
+      }
+    ],
+    "given": "A session at the floor, and a second implementation of the post-quantum half behind the same interface.",
+    "when": "Both parties run the same construction and exchange messages across a ratchet step.",
+    "then": "What the post-quantum half carries crosses in the header and what it contributes reaches the root chain, so the same messages under the same keys encrypt differently from the floor's. A session at the floor derives and persists exactly what it did before the seam existed, and a state written before it still opens.",
+    "oracle": "behaviour",
+    "interpretation": "No Sparse Post-Quantum Ratchet is available to this tree, so the test exercises the seam with a stand-in. It asserts that the seam is load-bearing, never that any particular construction is correct."
   },
   {
     "id": "QUE-21",

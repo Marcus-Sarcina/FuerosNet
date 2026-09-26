@@ -688,7 +688,17 @@ for.
   credential remain for what only they reach. `rhtn-daemon` gains a page
   server and no frontend dependency beyond it; the client's frame is a
   sandbox isolated from its keys, archive and captures.
-- The payload library and its licence (section 3).
+- ~~The payload library and its licence (section 3)~~ — **settled**
+  [author, 2026-09-26]. The core libraries stay Apache-2.0 and link nothing
+  copyleft. Every artifact the project authors in the reference clients is
+  Apache-2.0 too; libsignal is the one AGPL dependency, and a build that
+  carries it is conveyed as a whole under AGPL-3.0 while a build without it
+  is Apache-2.0 throughout. No file changes licence either way, releases say
+  which they are, and contributions in the client repositories are granted
+  under Apache-2.0 as they are here — which is what keeps the swap available
+  if an audited permissive implementation appears. The ratchet sits behind a
+  trait so the default implementation ships with the library and an
+  application may supply another (design §14.2.4.3's floor, `PAY-22`).
 - The post-quantum provider: RustCrypto now, aws-lc-rs when, or both behind the
   trait.
 - ~~The binding generator for the mobile shells~~ — **uniffi** [author,

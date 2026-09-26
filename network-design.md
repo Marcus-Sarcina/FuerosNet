@@ -864,6 +864,58 @@ plainly: **the design's post-quantum choices depend on unaudited implementations
 Browser wasm additionally needs `getrandom` / Web Crypto integration for entropy,
 which is target-specific work to be tested rather than assumed.
 
+### 5.3 The hybrid key is pre-positioned, and what that buys later
+
+**Carrying both components everywhere is provisioning, not only protection**
+[author, 2026-09-26]. §5.1 requires both wherever authenticity must outlast the
+post-quantum horizon, and permits the classical component alone where relevance
+expires before it. The objects taking that permission are the short-lived ones:
+a locator, which expires when the node next moves (`wire-format.md` §2.3); an
+endpoint record, for the same reason (§7.6); a prekey bundle's signature, which
+expires on replacement (§7.8); a subtree acknowledgement, which lapses with the
+relationship it acknowledges; a currency attestation, which vouches that a key
+is live now (§7.1); an anchor entry; a catalog entry; and the Diffie-Hellman
+ratchet of the payload session (§14.2.4.3).
+
+**The version is global and all-or-nothing** [author, 2026-09-26]. None of
+those classes migrates on its own, and the list above is not a set of
+independent triggers. **The protocol is designed and evaluated for security as
+an interlocking system of message types**, so what one class carries is
+reasoned about against what the others carry; a construction changed in one
+place and not the others has not been analysed at all. Should a version 2 ever
+be specified, it states a single version-2 construction of **every** class, and
+an implementation speaks version 1 or version 2 and not a chosen mixture of
+them.
+
+**What the pre-positioning buys is that such a version costs no
+redistribution.** The keyhash covers both components (§5.1), so every party
+already holds every counterparty's post-quantum half; the transport already
+negotiates `X25519MLKEM768`; and payload establishment is already PQXDH. A
+version that moved the short-lived classes to the post-quantum component would
+therefore be a change of construction alone — not a key rollover, not a new
+trust establishment, and not a change of anybody's identity. **That is the
+return on hybrid identity that is easy to miss**, and it is the reason to carry
+the second component in records that do not yet need it.
+
+**One row would not need moving even then, for a reason that is not about the
+horizon.** The verifier and witness signatures inside a presence record are
+classical because they are evidence embedded in a hybrid-signed body
+(`wire-format.md` §4.5), so forging one means forging the envelope that covers
+it. They inherit the envelope's strength whatever the rest of the version
+does.
+
+**The migration itself is not designed here, and will not be** [author,
+2026-09-26]. The schema version is the instrument (`wire-format.md` §3): an
+unknown version is rejected rather than best-efforted, because a verifier that
+cannot interpret a structure cannot establish what a signature covers, and
+session capabilities are exchanged at the attach so that two peers operate
+within what both support (`wire-format.md` §8.1). Parties exchange versions and
+work at the earlier one; **carrying compatibility is the later implementation's
+obligation, against the later protocol version.** Engineering a migration path
+for a profile that does not exist would fix choices for a system nobody has
+designed, and the mechanisms above already carry ordinary version skew without
+making it a connectivity problem.
+
 ---
 
 ## 6. Transactions
@@ -5618,6 +5670,32 @@ too large to put in every message header, so it transmits them as erasure-coded
 chunks across successive headers. This design is unusually sensitive to object
 size (§5), so a construction that already addresses key-size inflation is worth
 more here than elsewhere.
+
+**The Double Ratchet is the floor and the Triple Ratchet is recommended**
+[author, 2026-09-26]. A conforming client MUST run at least the Double Ratchet
+over a PQXDH session and SHOULD run the Triple Ratchet where an implementation
+of the post-quantum half is available to it.
+
+**What the floor already has, and what it lacks.** PQXDH makes the session's
+initial root key post-quantum secure, so an adversary recording traffic against
+a future quantum capability gains nothing — that property does not depend on
+SPQR. What the post-quantum ratchet adds is **post-compromise security against
+a quantum adversary**: after a device compromise the Double Ratchet heals
+through fresh Diffie-Hellman, which such an adversary follows, and SPQR's
+contributions are what evict it. The gap is therefore a compound case —
+state compromise *and* a quantum adversary — rather than the whole of
+post-quantum security, and §19.4's P5 already prices a compromised device as
+critical on other grounds.
+
+**Why recommended and not required.** §1.1's test: a rule aimed at a party you
+share no state with is a wish. **Neither end can verify the other's ratchet
+construction** — the session either derives the same keys or does not — so a
+MUST here would be unenforceable in exactly the way this document declines to
+issue rules. The floor is what a peer can hold you to; the ceiling is what a
+client owes its own user. The practical cost of requiring it is that the only
+implementation of SPQR is licensed such that every conforming client would
+inherit that licence, which would close the door this protocol holds open to
+alternate clients.
 
 ##### 14.2.4.4 A property that falls out, and is wanted
 

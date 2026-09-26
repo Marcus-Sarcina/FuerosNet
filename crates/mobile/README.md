@@ -17,6 +17,16 @@ in a file the catalogue's walk reaches. A shell in another repository could
 never close one. The walk is extended to `.kt` and `.swift` when the first
 marker is written; until then these directories hold no code.
 
+**Licensing: Apache-2.0 per artifact, AGPL per build that carries
+libsignal** [author, 2026-09-26]. Every file written here is Apache-2.0, as
+the workspace beneath is. A shell that links libsignal — the audited
+implementation of the payload session's cryptography, AGPL-3.0 — is conveyed
+as a whole under AGPL-3.0, because linking it requires that; a build without
+it is Apache-2.0 throughout. **No file changes licence either way**, and a
+release says which of the two it is. Contributions here are granted under
+Apache-2.0, as in the root repository, which is what lets the dependency be
+swapped later without anyone's permission.
+
 **The boundary is `rhtn-ffi` and nothing else.** A shell that reaches past
 it into `rhtn-client` puts protocol behaviour above the boundary, where no
 other client would have it.

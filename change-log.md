@@ -10633,3 +10633,87 @@ network, then cellular — least of the address behind it first.
 another permitted choice is not a malformed protocol, since the available
 transports are the platform's and an implementation holding one of them is not
 in breach.
+
+---
+
+### 2026-09-26 (a floor, a seam, and an inbound licence)
+
+**The Double Ratchet is the conformance floor and the Triple Ratchet is
+recommended** [author, 2026-09-26]. design §14.2.4.3 now says what the floor
+has and what it lacks: PQXDH already makes session establishment post-quantum,
+so recording traffic against a future quantum capability gains nothing, and
+what the post-quantum ratchet adds is post-compromise security against a
+quantum adversary — a compound case, state compromise *and* that adversary,
+rather than the whole of post-quantum security. **The ceiling is a SHOULD
+because of §1.1**: neither end can verify the other's construction, the
+session derives the same keys or it does not, and a rule aimed at a party you
+share no state with is a wish. That the only implementation of the
+post-quantum half would carry its licence into every conforming client is a
+consequence of requiring it, and is recorded as one rather than as the reason.
+`light-client-requirements.md` §3 follows and adds that a client tells its own
+user which construction is running, since no peer can.
+
+**The seam is built.** `rhtn-client` gains a `PostQuantumRatchet` trait with
+`NoPostQuantum` as the floor, written from §14.2.4.3 and the published
+specification rather than from any implementation. The contribution mixes into
+the root chain where §14.2.4.3 puts it, extending the key material rather than
+replacing it, so a step with nothing ready derives exactly what the Double
+Ratchet alone derives and the floor is bit-identical to what the tree computed
+before. Carriage is header key 4 and appears only when there is something to
+carry. The persisted state went from ten elements to eleven and reads both.
+PAY-13 is re-derived to the floor — no longer blocked on a licence, still owed
+on published vectors — and PAY-22 covers the seam. `functional_tests.md`
+MAIL-027. 444 of 462.
+
+**Contributions are accepted under Apache-2.0, with DCO 1.1 sign-off**
+(`README.md`). Apache-2.0 §5 already makes that the default; the sign-off adds
+the certification of right-to-submit and an explicit record. The reason it is
+worth stating now is that a single copyright holder is what keeps every
+licensing decision reversible, and the first contribution of ambiguous
+provenance removes that permanently, for everyone.
+
+**Carrying both halves everywhere is provisioning, not only protection**
+[author, 2026-09-26]. design §5.3 opens on the return that hybrid identity buys
+later: because the keyhash covers both components, every party already holds
+every counterparty's post-quantum half, so migrating a class of object that is
+classical today is a change of which component signs it — not a key rollover,
+a new trust establishment, or a change of anybody's identity. The section
+inventories the eight classes taking §5.1's permission and states that **none of
+them migrates on its own**: the version is global and all-or-nothing, a version
+2 would specify a single version-2 construction of every class, and an
+implementation speaks one version or the other rather than a chosen mixture —
+because the protocol is designed and evaluated for security as an interlocking
+system of message types, so a construction changed in one class and not the
+others has not been analysed. One row would not need moving even then, for a
+reason that is not about the horizon: the evidence signatures inside a presence
+record sit in a hybrid-signed body, so forging one means forging the envelope
+over it.
+
+**The migration itself is not designed, and will not be** [author,
+2026-09-26]. The schema version is the instrument. Parties exchange versions
+and work at the earlier one, and carrying compatibility is the later
+implementation's obligation against the later protocol version. Engineering a
+path for a profile that does not exist would fix choices for a system nobody
+has designed, and §3's rejection of an unknown envelope version and §8.1's
+capability exchange already carry ordinary version skew without making it a
+connectivity problem.
+
+**The payload library's licence is settled** [author, 2026-09-26], closing the
+implementation plan's longest open decision. Core libraries Apache-2.0, linking
+nothing copyleft. Every artifact the project authors in the reference clients is
+Apache-2.0 too, libsignal being the one AGPL dependency. **A client build that
+carries libsignal is conveyed as a whole under AGPL-3.0; a build without it is
+Apache-2.0 throughout.** The distinction is per build and not per file — no
+source artifact changes licence either way, and a release states which of the two
+it is. Contributions in the client repositories are granted under Apache-2.0
+exactly as in the root, which is what keeps the dependency swappable later
+without anyone's permission if an audited permissive implementation appears.
+
+**What forced it**: the paid cryptographic audit named in the review plan's
+Stage 2 is not going to happen [author, 2026-09-26]. That makes the tree's own
+ratchet permanently unaudited rather than temporarily so, and the choice becomes
+shipping unreviewed cryptography or adopting somebody else's reviewed
+implementation. Of the constraints that could give — audited, permissive in the
+shared crate, Signal's construction, post-quantum establishment — the second did,
+being the only one that reaches real users without giving up PQXDH. Stated at
+`README.md`, `crates/mobile/README.md`, and struck from the plan's section 7.

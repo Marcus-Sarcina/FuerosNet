@@ -11836,3 +11836,164 @@ interface for arbitrary third-party data on it, and more decisively it is
 intermediated by a vendor over the wide-area network, which is the one thing
 `wire-format.md` §14.1 says these interfaces must not be. The platform
 facilities that do fit are the peer-to-peer local ones.
+
+## The Double Ratchet floor, the seam, and inbound licensing (2026-09-26)
+
+Three instructions from the author, all landed.
+
+**The floor is ruled** [author, 2026-09-26]. design §14.2.4.3: a conforming
+client MUST run at least the Double Ratchet over a PQXDH session and SHOULD
+run the Triple Ratchet where an implementation of the post-quantum half is
+available. The section now also says what the floor has and lacks — PQXDH
+already makes session establishment post-quantum, and what SPQR adds is
+post-compromise security *against a quantum adversary*, a compound case
+rather than the whole of it — and why the ceiling is a SHOULD: **§1.1's
+test.** Neither end can verify the other's construction, the session either
+derives the same keys or does not, so a MUST would be a wish. The licence
+consequence is stated as a consequence, not as the reason.
+`light-client-requirements.md` §3 follows, and adds that a client says which
+construction it runs where its own user can reach it, since no peer can tell.
+
+**The seam is built.** `rhtn-client`'s `PostQuantumRatchet` trait, with
+`NoPostQuantum` as the floor. Three properties held deliberately:
+
+- **The mixing point is `kdf_rk`**, where §14.2.4.3 puts it. A contribution
+  extends the key material rather than replacing it, so a step with nothing
+  ready derives exactly what the Double Ratchet alone derives. The floor is
+  bit-identical to what the tree computed before the seam existed.
+- **Carriage is header key 4 and appears only when there is something to
+  carry**, so the floor's header is the header it always was. The header is
+  the AEAD's associated data, which is why construction is a conformance
+  question and not something two ends negotiate.
+- **The persisted state went from ten elements to eleven and reads both**,
+  N01's lesson applied in the same edit rather than after a reviewer finds
+  it.
+
+**Written from the specification, not from an implementation** — the trait is
+derived from §14.2.4.3 and the published SPQR specification, and nobody read
+libsignal to write it. That is deliberate: code written by studying AGPL
+source is plausibly derivative of it and could not be released under
+Apache-2.0, which would defeat the point of the seam.
+
+**PAY-22 covers the seam**, tested with a stand-in that contributes
+unconditionally. The stand-in is symmetric on purpose and the test says why:
+the two ends reach a given root advance at different moments — the initiator
+mixes when built, the responder when it first steps — so a stub contributing
+on what it had heard derives two roots and proves only that the stub is
+wrong. Agreeing what to mix at each advance is the real ratchet's problem and
+is what the carriage is for.
+
+**PAY-13 is re-derived and still owed.** Its rule now quotes the floor rather
+than the Triple Ratchet, so it is no longer blocked on a licence. It stays
+unmarked because its oracle is a fixture against the adopted specifications'
+published vectors, and `client/tests/keys.rs` tests against **this project's
+own spec-derived draft vectors**, which is not the same claim. 444 of 462.
+
+**Inbound licensing is fixed at Apache-2.0.** `README.md` gains a Contributing
+section requiring DCO 1.1 sign-off. Noted there that Apache-2.0 §5 already
+makes inbound contributions Apache-2.0 by default, so what the DCO adds is the
+certification of right-to-submit and an explicit record rather than a default a
+contributor could state around. The reason it matters now is in the section
+itself: a single copyright holder is what keeps every licensing decision
+reversible, and the first ambiguous contribution removes that permanently.
+
+## §5.3: the hybrid key is pre-positioned (2026-09-26)
+
+**The author's correction, and it was a correction.** I had read "identities
+are already hybrid" as closing the post-quantum migration question. His point
+is the opposite and better: carrying both components everywhere is what
+*provisions* the later migration of the parts that are classical today. Every
+party already holds every counterparty's post-quantum half, so the day a
+short-lived object class must become post-quantum, nothing is distributed —
+it is a change of which component signs, not a key rollover, a new trust
+establishment, or a change of anybody's identity.
+
+design §5.3 now states that, with the inventory it applies to: locator,
+endpoint record, prekey bundle signature, subtree acknowledgement, currency
+attestation, anchor entry, catalog entry, and the payload session's
+Diffie-Hellman ratchet.
+
+**Corrected by the author the same day, and the correction matters.** I had
+written that each of the eight carries its own migration trigger, since each
+took §5.1's permission on the ground that relevance expires before the
+horizon. That is wrong and the section no longer says it. **The version is
+global and all-or-nothing**: a version 2, if ever specified, states a single
+version-2 construction of every class, and an implementation speaks one
+version or the other rather than a chosen mixture. The reason is that **the
+protocol is designed and evaluated for security as an interlocking system of
+message types** — a construction changed in one class and not the others has
+not been analysed. My framing would have licensed exactly the piecemeal
+migration the design's security argument cannot support.
+
+**One row would not need moving even then**, for a reason that is not about
+the horizon: the verifier and witness signatures inside a presence record sit
+in a hybrid-signed body, so forging one means forging the envelope over it.
+Structural rather than temporal, and it holds whatever the rest of a version
+does.
+
+**The migration is not designed, by ruling** [author, 2026-09-26]: the schema
+version is the instrument, parties exchange versions and work at the earlier,
+and carrying compatibility is the later implementation's obligation against
+the later protocol version. I had raised the negotiation as owed; it is not.
+Checking before recording it, the machinery is already there in two
+complementary forms — `wire-format.md` §3 rejects an unknown envelope version
+outright, because a verifier that cannot interpret a structure cannot
+establish what a signature covers, and §8.1 exchanges session capabilities so
+two peers operate within what both support and an older serving node keeps its
+client attached with fewer features rather than failing the attach.
+
+**No functional row and no catalogue entry**, deliberately. The ruling adds
+rationale and a deferral; the mechanisms it rests on are already covered
+(ENC-007 for the envelope version, SES-003 and ten other rows for
+capabilities), and the forward-looking obligation has no oracle while only
+version 1 exists. Adding a row for it would be counting work nobody can do.
+
+## The licence arrangement, settled (2026-09-26)
+
+**Ruled [author, 2026-09-26]**, closing `implementation-plan.md` §7's longest
+open decision. Core libraries Apache-2.0 and linking nothing copyleft; every
+artifact the project authors in the reference clients Apache-2.0 as well;
+libsignal the one AGPL dependency; a build carrying it conveyed as a whole
+under AGPL-3.0, with that denoted as applying to those builds and no others;
+contributions in the client repositories granted under Apache-2.0 exactly as
+in the root.
+
+**The distinction that makes it work is per build, not per file.** No source
+file changes licence when libsignal is linked — each stays under the licence
+its header states, and the copyright holder's grant is unaffected. What is
+conveyed under AGPL is the combined work, and only for builds that contain
+it. A build without libsignal is Apache-2.0 throughout. That is why the
+arrangement is reversible: swap the dependency and subsequent builds are
+Apache-2.0 again, with nobody's permission needed — which is exactly what the
+inbound Apache-2.0 rule protects and why it had to extend to the client
+repositories too.
+
+**What forced it**, recorded because the reasoning is not obvious from the
+result: the author ruled that Stage 2's paid cryptographic audit is **never
+going to happen** — drafter gloss rather than a plan. That removes "audit our
+own implementation" from the table permanently, so the choice was between
+shipping permanently unaudited cryptography and adopting somebody else's
+audited implementation. Of the four constraints that could give — audited,
+permissive in the shared crate, Signal's construction, post-quantum
+establishment — he relaxed the second, which is the only one that puts
+reviewed cryptography on real users' devices without losing PQXDH.
+
+Landed at `README.md` (a Licensing section beside Contributing),
+`crates/mobile/README.md`, `Robot/implementation-plan.md` §7 struck, and the
+licence-policy memory.
+
+**Not built, and not instructed**: the ratchet does not yet sit behind a
+trait the way the post-quantum half does. The arrangement implies that seam —
+the library needs a complete Apache-2.0 default and the applications need
+somewhere to supply libsignal — but the ruling was about licensing and I have
+not read it as an instruction to build. **Two hygiene items also stand
+unaddressed and need no ruling**: no zeroization anywhere in `client/src/` or
+`crypto/src/`, including the per-message `trial = self.clone()` in
+`Ratchet::decrypt`; and the archive and durable blob are written to disk in
+plaintext. If expert review is never coming, these matter more rather than
+less, because nothing else will catch them.
+
+**Owed to the documents, low stakes**: `Robot/review-plan.md` Stage 2 still
+asserts a paid cryptographic audit as though it were planned. It is a working
+file rather than a root document, but it now says something the author has
+said is untrue.

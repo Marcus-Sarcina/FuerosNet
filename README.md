@@ -99,3 +99,27 @@ A. Marcus Zuech is a small business owner and former PHB who wanted to see if he
 The [github repo](https://github.com/Marcus-Sarcina/FuerosNet) is a mirror of the official master hosted at [gitgud.io](https://gitgud.io/MZuech/FuerosNet) for visibility purposes(gitgud requires registration to browse public repos). Your comments are welcome in either location, but pull requests and contributor applications should be made to the gitgud.io instance.
 
 You are also welcome to email marcus@sarcina.co with your comments, questions, unhinged verbal abuse, etc.
+
+### Licensing
+
+**The core libraries are Apache-2.0**, and are meant to be built on without a copyleft obligation propagating out of them. Nothing under a copyleft licence is linked into them.
+
+**Every artifact this project authors in the reference clients is also Apache-2.0** — the application code, the platform shells, the resources, all of it. The exception is one dependency: [libsignal](https://github.com/signalapp/libsignal), which is AGPL-3.0 and is the audited implementation of the payload session's cryptography.
+
+**A client build that includes libsignal is conveyed as a whole under AGPL-3.0**, because that is what linking AGPL code requires. This does not relicense any file: each source artifact remains under the licence its header states, and **a build that does not include libsignal is Apache-2.0 throughout**. Releases carry which of the two they are, and the AGPL obligation attaches to those builds that contain it and to no others.
+
+**Contributions are Apache-2.0 everywhere**, in the client repositories exactly as in this one, on the terms below. That is what keeps the arrangement above reversible: if an audited implementation under a permissive licence becomes available, the dependency is swapped and subsequent builds are Apache-2.0 again, with nobody's permission needed.
+
+### Contributing
+
+**Contributions are accepted under the Apache License 2.0**, the licence this project carries. Apache-2.0 §5 already makes that the default for anything intentionally submitted for inclusion; this states it rather than leaving it to a default.
+
+Sign off each commit, certifying the [Developer Certificate of Origin 1.1](https://developercertificate.org):
+
+```
+git commit -s
+```
+
+which appends a `Signed-off-by:` line with your name and email. That line certifies that you wrote the contribution, or otherwise have the right to submit it under Apache-2.0, and that you understand it is a public and permanent record.
+
+This matters more than the usual boilerplate. The tree has a single copyright holder today, which is what keeps every licensing decision reversible — including whether an optional component under a copyleft licence is ever linked into a client build. A contribution whose inbound licence is clear preserves that freedom; one whose licence is ambiguous removes it permanently, for everyone.
