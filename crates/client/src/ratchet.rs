@@ -17,6 +17,7 @@ use rhtn_codec::cbor::*;
 use rhtn_codec::encode::*;
 use rhtn_crypto::pqxdh::{DhPublic, DhSecret, hkdf_sha256};
 use std::collections::BTreeMap;
+use zeroize::Zeroize;
 
 /// How far ahead a receiving chain is advanced for a message that has not
 /// arrived (the specification's MAX_SKIP).
@@ -111,6 +112,30 @@ pub struct Ratchet<P: PostQuantumRatchet + Clone + Default = NoPostQuantum> {
     ad: Vec<u8>,
 }
 
+/// **Everything this holds is wiped when it goes.** The root key, both
+/// chain keys and every skipped message key are ours rather than a dalek or
+/// `aws-lc-rs` type's, so nothing else wipes them; `dhs` wipes its own.
+///
+/// This also covers the trial copy [`Ratchet::decrypt`] makes of the whole
+/// state on every message: the copy is dropped on the failing path and the
+/// original on the succeeding one, and either way what is dropped is wiped
+/// rather than left in freed memory.
+impl<P: PostQuantumRatchet + Clone + Default> Drop for Ratchet<P> {
+    fn drop(&mut self) {
+        use zeroize::Zeroize;
+        self.rk.zeroize();
+        if let Some(k) = self.cks.as_mut() {
+            k.zeroize();
+        }
+        if let Some(k) = self.ckr.as_mut() {
+            k.zeroize();
+        }
+        for mk in self.skipped.values_mut() {
+            mk.zeroize();
+        }
+    }
+}
+
 impl std::fmt::Debug for Ratchet {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -140,9 +165,14 @@ fn kdf_rk(rk: &[u8; 32], dh_out: &[u8; 32], pq: Option<[u8; 32]>) -> ([u8; 32], 
             ikm[..32].copy_from_slice(dh_out);
             ikm[32..].copy_from_slice(&q);
             hkdf_sha256(rk, &ikm, ROOT_INFO, &mut out);
+            ikm.zeroize();
         }
     }
-    (out[..32].try_into().unwrap(), out[32..].try_into().unwrap())
+    let split = (out[..32].try_into().unwrap(), out[32..].try_into().unwrap());
+    // the buffer the two halves were copied out of, and the mixed key
+    // material beside it, are wiped rather than left on the stack
+    out.zeroize();
+    split
 }
 
 fn kdf_ck(ck: &[u8; 32]) -> ([u8; 32], [u8; 32]) {
@@ -280,12 +310,13 @@ impl<P: PostQuantumRatchet + Clone + Default> Ratchet<P> {
     /// counters.  `[header, ciphertext]`.
     pub fn encrypt(&mut self, plaintext: &[u8]) -> Result<Vec<u8>, String> {
         let cks = self.cks.ok_or("no sending chain yet")?;
-        let (ck, mk) = kdf_ck(&cks);
+        let (ck, mut mk) = kdf_ck(&cks);
         self.cks = Some(ck);
         let carried = self.pq.outgoing();
         let header = header_bytes(&self.dhs.public(), self.pn, self.ns, &carried);
         self.ns += 1;
         let ct = seal(&mk, &self.ad, &header, plaintext);
+        mk.zeroize();
         let mut out = Vec::new();
         emit_array_head(&mut out, 2);
         emit_bstr(&mut out, &header);
@@ -335,8 +366,12 @@ impl<P: PostQuantumRatchet + Clone + Default> Ratchet<P> {
         n: u32,
         fresh: &mut dyn FnMut() -> [u8; 32],
     ) -> Result<Vec<u8>, String> {
-        if let Some(mk) = self.skipped.remove(&(dh.0, n)) {
-            return open(&mk, &self.ad, header, ct);
+        if let Some(mut mk) = self.skipped.remove(&(dh.0, n)) {
+            let opened = open(&mk, &self.ad, header, ct);
+            // spent either way: it opened the message it was kept for, or
+            // it did not and is not wanted again
+            mk.zeroize();
+            return opened;
         }
         if self.dhr != Some(dh) {
             self.skip(pn)?;
@@ -344,10 +379,12 @@ impl<P: PostQuantumRatchet + Clone + Default> Ratchet<P> {
         }
         self.skip(n)?;
         let ckr = self.ckr.ok_or("no receiving chain")?;
-        let (ck, mk) = kdf_ck(&ckr);
+        let (ck, mut mk) = kdf_ck(&ckr);
         self.ckr = Some(ck);
         self.nr += 1;
-        open(&mk, &self.ad, header, ct)
+        let opened = open(&mk, &self.ad, header, ct);
+        mk.zeroize();
+        opened
     }
 
     fn skip(&mut self, until: u32) -> Result<(), String> {

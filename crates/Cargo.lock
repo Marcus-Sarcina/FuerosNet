@@ -1499,6 +1499,7 @@ dependencies = [
  "rhtn-policy",
  "rhtn-transport",
  "serde_json",
+ "zeroize",
 ]
 
 [[package]]
@@ -1542,6 +1543,7 @@ dependencies = [
  "serde_json",
  "sha2 0.11.0",
  "x25519-dalek",
+ "zeroize",
 ]
 
 [[package]]

@@ -9,7 +9,6 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
-import java.io.File
 import java.security.SecureRandom
 import org.json.JSONObject
 import uniffi.rhtn_ffi.Event
@@ -118,7 +117,7 @@ class MainActivity : Activity() {
             ?: listOf()
         val p: Participant
         try {
-            p = Participant.start(mintedSeeds(), known, platformOf(this))
+            p = Participant.start(mintedSeeds(shell), known, platformOf(this))
             participant = p
             show(p, Status.Detached)
         } catch (e: Refused.Reason) {
@@ -180,12 +179,18 @@ class MainActivity : Activity() {
     private fun unhex(s: String): ByteArray =
         ByteArray(s.length / 2) { ((s[2 * it].digitToInt(16) shl 4) + s[2 * it + 1].digitToInt(16)).toByte() }
 
-    private fun mintedSeeds(): ByteArray {
-        val f = File(File(filesDir, "kernel"), "seeds")
-        if (f.isFile) return f.readBytes()
+    /**
+     * The device's own seeds, minted once.
+     *
+     * **Through the shell's storage and never around it**: these are the
+     * whole of the identity, so writing them with plain file I/O would put
+     * the most sensitive thing on the device in the one place the at-rest
+     * encryption does not reach (`light-client-requirements.md` §9).
+     */
+    private fun mintedSeeds(shell: AndroidShell): ByteArray {
+        shell.read("seeds")?.let { if (it.size == 64) return it }
         val s = ByteArray(64).also { SecureRandom().nextBytes(it) }
-        f.parentFile?.mkdirs()
-        f.writeBytes(s)
+        check(shell.write("seeds", s)) { "the device's own storage refused the seeds" }
         return s
     }
 }

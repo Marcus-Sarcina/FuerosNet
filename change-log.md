@@ -10717,3 +10717,34 @@ implementation. Of the constraints that could give — audited, permissive in th
 shared crate, Signal's construction, post-quantum establishment — the second did,
 being the only one that reaches real users without giving up PQXDH. Stated at
 `README.md`, `crates/mobile/README.md`, and struck from the plan's section 7.
+
+**Key material is wiped rather than left in freed memory.** `KemSecret` wipes
+the seed that is its storage form; the ratchet wipes its root key, both chain
+keys and every skipped message key on drop, which also covers the copy of the
+whole state it makes on every message while deciding whether that message
+opens. Message keys are wiped where they are spent, and the root KDF wipes its
+working buffers. The dalek and `aws-lc-rs` types wipe their own; these were
+ours. `light-client-requirements.md` §3 states the obligation, naming why it is
+worth writing down: no expert review of this implementation is coming, and an
+obligation nobody wrote down is one nobody implements.
+
+**What the kernel hands out for storage is encrypted before it reaches the
+disk** (`light-client-requirements.md` §9). The obligation sits on the
+application, because the boundary persists entirely through the platform's
+storage and the only key worth using is one the kernel cannot hold, being
+platform-agnostic by construction. The Android shell seals under an
+AES-256-GCM key generated in the Android Keystore, which never enters the
+process. Testing it found a second hole: the device's own identity seeds were
+being written with plain file I/O, around the seam rather than through it, so
+the most sensitive thing on the device sat in the one place the encryption did
+not reach. Both are fixed and verified on the emulator — the same identity
+recovers across a restart, payload still round-trips, and every file the
+kernel leaves behind is sealed. `Client::save(dir)`, the daemon and command-line
+path, still writes plaintext and is recorded as owed: where an operator's key
+comes from is a decision rather than a fix. Functional APP-011 and APP-012.
+
+**The review plan no longer promises an audit that is not coming** [author,
+2026-09-26]. Stage 2 named a paid human cryptographic audit. It now says that
+will not be commissioned, that this project's own cryptographic code is
+permanently unreviewed rather than awaiting review, and what remains available
+instead.

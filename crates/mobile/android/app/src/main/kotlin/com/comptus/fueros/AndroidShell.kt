@@ -1,9 +1,16 @@
 package com.comptus.fueros
 
 import android.content.Context
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
 import android.util.Log
 import java.io.File
+import java.security.KeyStore
 import java.security.SecureRandom
+import javax.crypto.Cipher
+import javax.crypto.KeyGenerator
+import javax.crypto.SecretKey
+import javax.crypto.spec.GCMParameterSpec
 import uniffi.rhtn_ffi.Ask
 import uniffi.rhtn_ffi.Channel
 import uniffi.rhtn_ffi.ChannelOutcome
@@ -49,19 +56,69 @@ class AndroidShell(context: Context) :
         Log.i("fueros", "notice: $notice")
     }
 
+    // What the kernel hands over is its archive, its payload sessions and
+    // its ratchet state — key material included — so it is encrypted here
+    // before it reaches the disk (`light-client-requirements.md` §9).  The
+    // key lives in the Android Keystore and **never enters this process**:
+    // hardware-backed where the device has it, and not recoverable from a
+    // backup or from the app's files on their own.
     override fun read(name: String): ByteArray? {
         val f = File(dir, name)
-        return try { if (f.isFile) f.readBytes() else null } catch (_: Exception) { null }
+        return try {
+            if (!f.isFile) return null
+            val whole = f.readBytes()
+            if (whole.size <= IV_BYTES) return null
+            val cipher = Cipher.getInstance(TRANSFORM)
+            cipher.init(
+                Cipher.DECRYPT_MODE,
+                atRestKey(),
+                GCMParameterSpec(TAG_BITS, whole, 0, IV_BYTES),
+            )
+            cipher.doFinal(whole, IV_BYTES, whole.size - IV_BYTES)
+        } catch (_: Exception) {
+            // an unreadable state is no state: the kernel is told nothing is
+            // there rather than handed something it cannot trust
+            null
+        }
     }
 
     override fun write(name: String, bytes: ByteArray): Boolean {
         return try {
+            val cipher = Cipher.getInstance(TRANSFORM)
+            cipher.init(Cipher.ENCRYPT_MODE, atRestKey())
+            val sealed = cipher.iv + cipher.doFinal(bytes)
             val tmp = File(dir, "$name.tmp")
-            tmp.writeBytes(bytes)
+            tmp.writeBytes(sealed)
             tmp.renameTo(File(dir, name))
         } catch (_: Exception) {
             false
         }
+    }
+
+    /** The at-rest key, made once and thereafter only referred to. */
+    private fun atRestKey(): SecretKey {
+        val ks = KeyStore.getInstance(KEYSTORE).apply { load(null) }
+        (ks.getEntry(KEY_ALIAS, null) as? KeyStore.SecretKeyEntry)?.let { return it.secretKey }
+        val gen = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, KEYSTORE)
+        gen.init(
+            KeyGenParameterSpec.Builder(
+                KEY_ALIAS,
+                KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
+            )
+                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                .setKeySize(256)
+                .build()
+        )
+        return gen.generateKey()
+    }
+
+    private companion object {
+        const val KEYSTORE = "AndroidKeyStore"
+        const val KEY_ALIAS = "fueros.kernel.at-rest"
+        const val TRANSFORM = "AES/GCM/NoPadding"
+        const val IV_BYTES = 12
+        const val TAG_BITS = 128
     }
 }
 

@@ -616,6 +616,8 @@ The Cargo workspace has **15 crates**. Components below follow responsibilities 
 | APP-008 | C | On mobile suspension/offline termination retain the persistent identity, archive and obligations needed for later reconnect; perform background work only within OS capabilities. Foreground operation remains useful with no push permission. | D §§14.1.0, 14.1.4–14.1.6; L §§2, 4 |
 | APP-009 | O | Supply Android camera/radio/keystore/lifecycle and iOS equivalents plus generated bindings, then test on actual supported devices. Rust facade/instrument tests cannot satisfy product consent, camera, OS wake or durable backup claims. | L §§1, 2, 4, 9–10; D §§14.1.4, 24 |
 | APP-010 | C | A device holding a delegation and no seed starts from the identity's key material, a transport seed of its own and the run the ceremony device signed; it attaches under the delegation, is a payload endpoint of its own with material it generated, and refuses by name every act of the identity key: consent, a verifier's answer, a body, witness and departure signatures, a recovery response, and delegation issuance. Refuse a start with no delegation or with a delegation by another identity. | D §23.3; W §§7.8, 8.2; L §§3, 4.2 |
+| APP-011 | C | Encrypt everything the kernel hands out for storage before it reaches the disk, under a key the application does not hold in normal working state — a platform key store, hardware-backed where available. What crosses is the archive, the payload sessions and the ratchet state, key material among it, and the kernel cannot encrypt it because the only key worth using is the platform's. Seeds minted by the application go the same way and never around it. State that fails to open is reported as no state held. | L §9, §2 |
+| APP-012 | C | Wipe key material rather than leaving it in freed memory: root keys, chain keys, message keys and prekey seeds, including the copies a ratchet makes of its own state while deciding whether a message opens. Not observable to a peer and not enforceable against one; stated because no expert review of this implementation is coming. | L §3; D §14.2.4.3 |
 
 ### Human authorization, privacy choices and warnings
 
@@ -938,7 +940,7 @@ Open local parameters are not all specification defects: cache TTLs, queue cap, 
 
 ## 10. Document baseline and coverage totals
 
-This specification contains **469 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
+This specification contains **471 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
 
 | Prefix | Families |
 |---|---:|
@@ -961,7 +963,7 @@ This specification contains **469 numbered requirement/test families** across **
 | CAT | 22 |
 | GAT | 37 |
 | PKG | 14 |
-| APP | 10 |
+| APP | 12 |
 | UX | 14 |
 | OPS | 18 |
 | TOOL | 7 |
@@ -973,7 +975,7 @@ This specification contains **469 numbered requirement/test families** across **
 |---|---|
 | [network-design.md](network-design.md) | `a3061f8f785f0105bd269bff71b16df478e1e311316875872c11f9179d228914` |
 | [wire-format.md](wire-format.md) | `a78aff6252a3b05aff6ac7e99eb74c10b5a87a8359314a7e5d1636a2455707a8` |
-| [light-client-requirements.md](light-client-requirements.md) | `ca3bf55bf505a4ba279f848d0050fa911e2e76dc956a6cb497503de671caf861` |
+| [light-client-requirements.md](light-client-requirements.md) | `99b0cb365b81bb0598c0654f274bf751b21af80ac0602ea6d4b5ca7c2cd6ed89` |
 | [infra-client-requirements.md](infra-client-requirements.md) | `780b188301c668cdf8b35fe506678b305bcf073289536461c70fda7a3e7254d4` |
 | [resource-requirements.md](resource-requirements.md) | `54edf8e85eacee7b68e69c0f8b971ae83c19b05e284ae3187bf14d6846ee6f8d` |
 

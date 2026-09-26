@@ -7,6 +7,7 @@ authors.workspace = true
 description = "RHTN participant client: verifier selection, consent and key grants, the sealed capture store, and the presence ceremony over device I/O behind an interface"
 
 [dependencies]
+zeroize = { workspace = true }
 rhtn-codec = { path = "../codec" }
 rhtn-crypto = { path = "../crypto" }
 rhtn-archive = { path = "../archive" }

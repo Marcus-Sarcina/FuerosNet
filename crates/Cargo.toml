@@ -17,6 +17,8 @@ hex = "0.4.3"
 serde_json = "1.0.151"
 ed25519-dalek = "3.0.0"
 ml-dsa = "0.1.1"
+# wiping key material that is ours rather than a dalek or aws-lc type's
+zeroize = "1.9"
 
 # The reference metric runs one max-flow per candidate; its tests score
 # regions of a thousand identities, which an unoptimised build makes slow.

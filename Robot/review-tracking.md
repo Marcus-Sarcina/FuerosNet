@@ -11997,3 +11997,59 @@ less, because nothing else will catch them.
 asserts a paid cryptographic audit as though it were planned. It is a working
 file rather than a root document, but it now says something the author has
 said is untrue.
+
+## Zeroization, at-rest, and the audit language (2026-09-26)
+
+Three instructed fixes. **The at-rest one found a second hole by being
+tested rather than asserted.**
+
+**Key material is wiped.** `zeroize` is a workspace dependency now.
+`KemSecret` wipes its 64-byte seed, which is the key in FIPS 203's storage
+form; `Ratchet` wipes its root key, both chain keys and every skipped
+message key on drop, which also covers **the trial copy `decrypt` makes of
+the whole state on every message** — the copy is dropped on the failing path
+and the original on the succeeding one, and either way what is dropped is
+wiped. Message keys are wiped at all four sites where one is spent, and the
+root KDF wipes its working buffers. The dalek and `aws-lc-rs` types wipe
+their own; these were ours and nothing else would have.
+
+**At rest, the obligation sits on the shell and the shell now meets it.**
+The FFI persists *entirely* through `Storage::write` and never touches
+`Client::save(dir)`, so for the mobile client the whole at-rest story is the
+platform's — which is right, since the only key worth using is one the
+kernel cannot hold, being platform-agnostic by construction.
+`light-client-requirements.md` §9 states it; `AndroidShell` seals under an
+**AES-256-GCM key generated in the Android Keystore**, which never enters the
+process at all and is hardware-backed where the device has it. Verified on
+the emulator rather than claimed: `seeds` is 92 bytes of ciphertext where it
+was 64 of plaintext, the same identity is recovered across a restart so the
+decrypt path works, payload still round-trips, and `client`, `provision`,
+`siblings` and `seeds` are all sealed.
+
+**The second hole, found by testing.** `MainActivity.mintedSeeds` wrote the
+device's 64-byte identity seed with plain file I/O, going *around* the
+storage seam — so the most sensitive thing on the device sat in the one
+place the encryption did not reach. It now goes through the shell's storage
+like everything else. I would not have found this by reading the diff; the
+`ls -l` did.
+
+**Owed and stated, not fixed**: `Client::save(dir)` — the daemon and CLI
+path — still writes plaintext, and has no key source. That is a decision
+about where an operator's key comes from, not a fix, and it is not the path
+carrying a participant's archive.
+
+`functional_tests.md` APP-011 and APP-012 carry the two obligations; 471
+families. **No catalogue entries**: APP-012 is not externally observable and
+APP-011's oracle is a device test, which is the tier `mobile/` owes and that
+`gen_stubs` would otherwise count as workspace work.
+
+**The audit language is gone.** `Robot/review-plan.md` Stage 2 said a paid
+human cryptographic audit was the plan; it now says the audit is not
+happening, that this project's own cryptographic code is therefore
+**permanently unreviewed rather than awaiting review**, why the payload
+construction is taken from libsignal in the reference clients instead, and
+what remains available — the hygiene an auditor would have charged to
+report, and differential testing, which establishes agreement and says
+nothing about implementation security. `light-client-requirements.md` §3's
+wipe obligation names the same reason: an obligation nobody wrote down is
+one nobody implements.

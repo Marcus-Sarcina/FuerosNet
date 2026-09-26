@@ -298,6 +298,13 @@ job.
 design §14.2.4 adopts **PQXDH** for key agreement and the **Triple Ratchet** for
 session secrecy. The client implements them; it does not reinvent them.
 
+- **Wipe key material rather than leaving it in freed memory** [author,
+  2026-09-26]. Root keys, chain keys, message keys and prekey seeds are
+  wiped when they go, including the copies a ratchet makes of its own state
+  while deciding whether a message opens. This is not observable to a peer
+  and §1.1 cannot reach it; it is stated because **no expert review is
+  coming** and an obligation nobody wrote down is one nobody implements.
+
 **The Double Ratchet is the floor** (design §14.2.4.3) [author, 2026-09-26]:
 run at least it over a PQXDH session, and run the Triple Ratchet where an
 implementation of the post-quantum half is available. A client running the
@@ -655,6 +662,17 @@ on the wire.
   application obtains it from the service the user picked (§4.1) and hands it
   in; the kernel holds no relationship with that service and obtains nothing
   itself.
+- **The application's storage encrypts what the kernel hands it, at rest**
+  [author, 2026-09-26]. What crosses outward to be persisted is the archive,
+  the payload sessions and the ratchet state — **key material among it** — and
+  the kernel cannot encrypt it, because the only key worth using is one the
+  platform holds and the kernel is platform-agnostic by construction
+  (design §14.1.0). So the obligation sits on this side of the seam.
+  **Under a key not held in normal working state**, which is the rule design
+  §7.5.2 already states for captures: a platform key store, hardware-backed
+  where the device has one, so that the app's files are not the whole of what
+  an attacker needs. State that fails to open is no state — report nothing
+  held rather than hand the kernel something that cannot be trusted.
 - **Refusals are values that carry their reason.** A bad length, an absent
   session, an endpoint the node would not take: each is an answer with words in
   it rather than a silence the application has to interpret, which is design

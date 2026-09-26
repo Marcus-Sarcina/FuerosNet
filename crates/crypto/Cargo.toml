@@ -7,6 +7,7 @@ authors.workspace = true
 description = "RHTN identities and signatures: hybrid Ed25519 + ML-DSA-65 over the structures rhtn-codec parses"
 
 [dependencies]
+zeroize = { workspace = true }
 rhtn-codec = { path = "../codec" }
 sha2 = { workspace = true }
 ed25519-dalek = { workspace = true }

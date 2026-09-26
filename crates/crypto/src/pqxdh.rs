@@ -66,6 +66,16 @@ pub struct KemSecret {
     seed: [u8; 64],
 }
 
+/// **The seed is wiped when the secret goes.** It is the key in its storage
+/// form, so a copy left in freed memory is the key left there; the dalek
+/// and `aws-lc-rs` types beside it wipe their own, and this one is ours.
+impl Drop for KemSecret {
+    fn drop(&mut self) {
+        use zeroize::Zeroize;
+        self.seed.zeroize();
+    }
+}
+
 /// An ML-KEM-768 encapsulation key, encoded.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct KemPublic(pub Vec<u8>);
