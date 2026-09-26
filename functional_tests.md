@@ -274,6 +274,7 @@ The Cargo workspace has **15 crates**. Components below follow responsibilities 
 | NET-011 | E | Run fragmented/read-coalesced control and request streams concurrently and isolate an individual stream's failure. A malicious large frame or bad request must not be mistaken for a valid later message on a different stream. | W §§8.0, 9.2 |
 | NET-012 | C | Offer and take traversal candidates on the ceremony's proximity channels, and open a direct path from candidates so obtained. The route is carried by no patron, which is the point: reaching a counterparty met in person costs proximity rather than a patron's cooperation, and survives one that is uncooperative or eclipsing. Candidates are accepted only from the party they name, and handing them over is disclosed as the IP disclosure it is. | D §12.6.3, §10.1; L §4, §1.3, §5 |
 | NET-013 | S | Never bridge a local device-to-device interface over a wide-area network, and never treat as having arrived on one anything that reached the device another way. The class is defined by not being intermediable remotely, and a ceremony's override of the horizon gate rests on that property; a remote pairing path through the same code would convert the guarantee into an assumption. Unenforceable against a peer, so stated as a commitment. | W §14.1; D §12.6.3, §1.1 |
+| NET-014 | P | Where more than one local transport is available for establishing a connection at a ceremony, prefer the one exposing least of the address behind it: a link-local duplex channel, then a shared wireless network, then cellular. Recommended and not required — the available transports are the platform's. What this protects is the carrier or ISP behind the address, not the geography, which a counterparty in the room already has. | L §4; D §19.8 C24, §19.4 P40 |
 
 ### Attach, sibling state, heartbeat and failover
 
@@ -936,7 +937,7 @@ Open local parameters are not all specification defects: cache TTLs, queue cap, 
 
 ## 10. Document baseline and coverage totals
 
-This specification contains **467 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
+This specification contains **468 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
 
 | Prefix | Families |
 |---|---:|
@@ -947,7 +948,7 @@ This specification contains **467 numbered requirement/test families** across **
 | TOP | 36 |
 | RES | 15 |
 | CUR | 12 |
-| NET | 13 |
+| NET | 14 |
 | SES | 15 |
 | MAIL | 26 |
 | CER | 20 |
@@ -969,9 +970,9 @@ This specification contains **467 numbered requirement/test families** across **
 
 | Design input | SHA-256 of reviewed bytes |
 |---|---|
-| [network-design.md](network-design.md) | `78c3729d854ca0af50887a4e7266ec352eec2d1b5812a7beeb5b2e37decc13f7` |
+| [network-design.md](network-design.md) | `1e406f154016c34c76d458e34f8368bfe7822b06ab288290aef4bb323182b949` |
 | [wire-format.md](wire-format.md) | `a78aff6252a3b05aff6ac7e99eb74c10b5a87a8359314a7e5d1636a2455707a8` |
-| [light-client-requirements.md](light-client-requirements.md) | `f7caf4c98a3368ca70f625e634735c1b32ddcfee1b1175034fbfe3f27b9f30cd` |
+| [light-client-requirements.md](light-client-requirements.md) | `872fb15eee3adbb29b0617bdaa8ee78baaf07c725329d5fc71ce6ef961dd253c` |
 | [infra-client-requirements.md](infra-client-requirements.md) | `780b188301c668cdf8b35fe506678b305bcf073289536461c70fda7a3e7254d4` |
 | [resource-requirements.md](resource-requirements.md) | `54edf8e85eacee7b68e69c0f8b971ae83c19b05e284ae3187bf14d6846ee6f8d` |
 

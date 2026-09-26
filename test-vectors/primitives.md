@@ -1,6 +1,6 @@
 # Primitives
 
-Generated against `wire-format.md` `a78aff6252a3b05a…`, `network-design.md` `78c3729d854ca0af…` and `light-client-requirements.md` `f7caf4c98a3368ca…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `a78aff6252a3b05a…`, `network-design.md` `1e406f154016c34c…` and `light-client-requirements.md` `872fb15eee3adbb2…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md).

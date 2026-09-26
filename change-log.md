@@ -10615,3 +10615,21 @@ signal for as long as the address lasts, and it supplies C1's coarse-location
 ingredient directly rather than by inference. Refusable — the ceremony completes
 without candidates — and cited from design §12.6.3 and LCR §4 so the ruling
 reaches its cost.
+
+**The ceremony IP discloses a carrier, not a place** [author, 2026-09-25],
+which corrects the reading this side had offered. §19.8 gains **C24**: the
+composition that looked alarming is not one, because the counterparty was in
+the room and the geography an IP yields is geography they already have. C1 is
+untouched and its withholding mitigation is not weakened; P40's sentence
+claiming otherwise is removed. What the address can add is the operator behind
+it, which physical presence does not imply and which the user carries between
+places. Severity Low.
+
+**A recommendation that is not a requirement**: when establishing a local
+connection, prefer a link-local duplex channel, then a shared wireless
+network, then cellular — least of the address behind it first.
+`light-client-requirements.md` §4 states it with the reason, and
+`functional_tests.md` NET-014 carries it as class P, configurable policy where
+another permitted choice is not a malformed protocol, since the available
+transports are the platform's and an implementation holding one of them is not
+in breach.

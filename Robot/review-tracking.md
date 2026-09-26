@@ -11797,3 +11797,42 @@ in P40 either way, so a reader arrives at the question.
 
 No count sentence governs §19.4, so nothing drifted on the insertion; checked
 rather than assumed.
+
+## C24, and a correction of my own reading (2026-09-25)
+
+**Ruled [author, 2026-09-25]**, and it corrects the analysis I gave him.  I
+had said the ceremony IP supplies C1's coarse-location ingredient directly
+and so weakens C1's withholding mitigation.  **It does not**: the
+counterparty was standing in the room, so the geography an IP yields is
+geography they already have.  P40 is corrected accordingly — the sentence
+claiming it sharpened C1 is gone — and **C24** records why the join is not
+one, so the next reader does not have to re-derive it.
+
+**What is left is the carrier.** An address can disclose the operator behind
+it, which physical presence does not imply, which the user carries between
+places, and which is a handle for parties other than the counterparty. That
+is the whole of the novel disclosure and C24 says so. Severity Low.
+
+**The recommendation is not a requirement** [author]: prefer a link-local
+duplex channel, then a shared wireless network, then cellular, when
+establishing a local connection. Landed at `light-client-requirements.md` §4
+with the reason stated (it protects the carrier, not the geography) and with
+why it cannot be a conformance condition: the available transports are the
+platform's, and an implementation holding only one of them is not in breach.
+`functional_tests.md` NET-014 carries it as class **P** — configurable
+policy, where another permitted choice is not a malformed protocol — which is
+the only class that fits a recommendation.
+
+**Two numbering traps, both checked rather than assumed.** The C register
+runs to **C23**, not C8: I had read a truncated view of §19.8 earlier and
+told the author the next number was C9, which was already taken. The next
+free one is C24. And `I` in `functional_tests.md` is a *source* letter for
+`infra-client-requirements.md`, not a row class; the classes are S, C, P, E
+and O, and I had used I before checking. Every row's class is now verified
+against that set.
+
+**Answered for the author**: iMessage cannot carry this. There is no public
+interface for arbitrary third-party data on it, and more decisively it is
+intermediated by a vendor over the wide-area network, which is the one thing
+`wire-format.md` §14.1 says these interfaces must not be. The platform
+facilities that do fit are the peer-to-peer local ones.

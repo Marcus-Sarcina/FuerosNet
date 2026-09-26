@@ -481,6 +481,16 @@ session secrecy. The client implements them; it does not reinvent them.
   not depend on a horizon the patron being exited controls. One that arrived
   any other way is gated as before (design §12.6.3). What it discloses is
   design §19.4's P40, and §5's rule covers saying so.
+- **Recommended, and not required** [author, 2026-09-25]: when a local
+  connection is being established, prefer the transport that exposes the least
+  of the address behind it — a link-local duplex channel such as Bluetooth
+  first, a shared wireless network second, and the cellular interface last. The
+  geography is not what this protects: a counterparty at a ceremony was in the
+  room and knows where the user is (design §19.8, C24). **It is the carrier or
+  ISP behind the address**, which physical presence does not imply and which
+  travels with the user. Stated as a recommendation because the available
+  transports are the platform's and the ranking cannot be made a conformance
+  condition; an implementation with only one of them is not in breach.
 
 ---
 
