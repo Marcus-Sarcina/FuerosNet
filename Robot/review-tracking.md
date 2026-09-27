@@ -12206,3 +12206,72 @@ themselves as-of-filing and cannot be checked by construction
 them, `implementation-plan.md` and `outstanding-work-2026-09-21.md` most of
 that. Whether those are live enough to check is a question about which working
 files are frozen, which is the author's.
+
+## The working files' references are checked too (2026-09-26)
+
+**No default fits them, so a bare §N in a working file is a flag.** The nine
+checkable working files were surveyed before the rule was chosen, and each
+disagreed with the next: `transaction-rules.md`'s bare §N meant wire-format,
+`app-requirements-notes.md`'s meant *itself*, `outstanding-work`'s meant both,
+and `implementation-plan.md`'s meant three documents in as many paragraphs. A
+per-file default was measured and rejected — it left **67 references no default
+could confirm**, because their numbers exist in more than one design document,
+which is a checker reporting clean while being wrong. The rule instead is: a
+working file writes `design §N` or "`<file>.md` §N", and refers to its own
+sections as "section N", which is what most of them already did.
+
+**Two candidate rules were measured and thrown away.** Letting the qualifier
+window reach back past an intervening reference to the previous qualifier cost
+**194 false flags in the design documents** — the warning in the checker's own
+comment was right. Bounding that window at a clause instead still cost 13 and
+saved only 33 edits. The existing window stands.
+
+**110 bare references, now 0** — the checker's own count at the commit before
+this pass, and after it. Each was read and resolved against the heading
+actually cited: **90 qualifiers inserted**, 40 naming `wire-format.md`, 38 the
+design, 9 `infra-client-requirements.md` and 3 `light-client-requirements.md`.
+Eleven self-references in `app-requirements-notes.md` became "section N", four
+lists were folded into the `§§` form so one qualifier governs them (`I §1 to
+§4, §6` was two markers with the tail stranded), and eight markers turned out
+to be code-span literals. Two abbreviations used twice in one file and nowhere
+else, `LCR §5` and `LCR §6`, are written out. Total flags 113 to 3.
+
+**Findings the pass turned up, beyond notation.** `transaction-rules.md` cited
+`§3.2` for *the envelope is the four-key map §N fixes* — the envelope is fixed
+in `wire-format.md` §3's own body, and §3.2 is *Structural rules for presence
+records*. `app-requirements-notes.md` broke `` `infra-client-requirements.md` ``
+across a line with a hyphen, which makes the citation unresolvable to anything
+reading it. And an edit of mine to `conformance-run-3-brief.md` never landed —
+the batch aborted on an assertion before reaching it and I reported it done
+without re-running the check, which is precisely the failure mode
+`CLAUDE.md` names.
+
+**Three rules the checker reads off the documents, so none is a list in the
+tool.** A file declaring *Section references {here,in this file} are
+as-of-filing* is not section-checked: `review-tracking.md` (1607 references)
+and `resource-interaction-requirements.md` (39), by their own words. A file
+declaring *Status: Frozen checkpoint* carries the numbering it froze, so its
+bare §N are self-references — `network-design-checkpoint-2026-08-12.md` checks
+clean at 16 that way and would flag 3 any other. And **a §N inside a code span
+is a literal, not a reference**: that is how this corpus shows notation as text
+— a malformed marker quoted as an example, a retired identifier like `§4a`, the
+citation format itself. Eight of those, counted in the output rather than
+passed over.
+
+**4290 references across 15 documents, 3 flags** — 2378 across five when the
+day started. The working files contribute 703.
+
+**The last three are remapped, not declared** [author, 2026-09-26]: *document
+history belongs in git and in the working corpus, not in the documents.*
+`authoring-conventions.md` carried three pre-migration numbers that resolved
+nowhere. §9.6 becomes **§11.6** *Abuse reporting*, where the rule the passage
+quotes now lives — the resource reports, the owner receives, and it has no
+carriage at all. §7.1.4 becomes **§7.4.3** *Availability, and what silence is
+worth*, which is the migration-descendant of the old number and also holds the
+queue argument the passage is making: a query to an offline light client waits
+at its patron, and nothing transmits a deadline. And *Moved from design §14.5
+(2026-08-27)* loses its provenance clause rather than gaining a false one — the
+material never sat in what is now §19 — leaving the rule and a current citation
+of the registers themselves, **§§19.4, 19.7, 19.8**.
+
+**4292 references across 15 documents, 0 flags.**

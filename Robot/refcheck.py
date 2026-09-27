@@ -31,7 +31,28 @@ Resolution, read off the documents themselves:
       wherever a design section number coincides with §1-§10 or §3.1-§3.7,
       which is why the comma-repeated marker above is joined rather than left
       to fall through, and why --self lists what it resolved that way.
+  * a §N inside a code span is a LITERAL, not a reference.  That is how this
+      corpus shows notation as text: a malformed marker quoted as an example
+      (`[D (§6.2]`), a retired alphanumeric identifier (`§4a`), the citation
+      format itself (`design §12.6.5`).  The count is printed rather than
+      passed over in silence.
   * "RFC nnnn §N" is external and skipped.
+
+The working files are checked too, and there a bare §N is a FLAG rather than
+a default: no default fits.  Their bare references were surveyed and each
+file disagreed with the next -- transaction-rules.md's meant wire-format,
+app-requirements-notes.md's meant itself, outstanding-work's meant both --
+so a per-file default would have passed the minority wrongly wherever a
+number happened to exist in the wrong document.  A working file writes
+`design §N` or "`<file>.md` §N", and refers to its OWN sections as "section
+N", which is what most of them already did.  Two exceptions come from the
+documents themselves and are counted, not silent:
+  * a file declaring "Section references {here,in this file} are as-of-filing"
+      is not section-checked at all: its references point at numbering that
+      has since moved, by declaration, and cannot be checked against current
+      headings.
+  * a file declaring "**Status:** Frozen checkpoint" carries the numbering of
+      the document it froze, so its bare §N are self-references.
 
 `--self` prints every reference that resolved to its own document, and
 `--counts` the per-document totals.  Neither changes the verdict.
@@ -45,9 +66,21 @@ DOCS = ["network-design.md", "wire-format.md", "light-client-requirements.md",
 ROBOT = [os.path.join("Robot", f) for f in sorted(os.listdir(os.path.join(ROOT, "Robot")))
          if f.endswith(".md")]
 ALL = DOCS + ROBOT
+
+
+def declares(path, pattern):
+    text = open(os.path.join(ROOT, path), encoding="utf-8").read()
+    return bool(re.search(pattern, text))
+
+
+# Read off the documents rather than listed here, so that a file becoming
+# frozen or ceasing to be needs no edit to this checker.
+AS_OF = [r for r in ROBOT
+         if declares(r, r"Section references (?:here|in this file) are as-of-filing")]
+FROZEN = [r for r in ROBOT if declares(r, r"\*\*Status:\*\* Frozen checkpoint")]
 # change-log.md's references are as-of-filing, so its section references are
 # excluded here but NOT from the Robot/ rule below.
-CHECK = [d for d in DOCS if d != "change-log.md"]
+CHECK = [d for d in DOCS if d != "change-log.md"] + [r for r in ROBOT if r not in AS_OF]
 # functional_tests.md's §1 abbreviation table, which is a qualifier there and
 # nowhere else: a standalone "I" or "D" in the design documents is prose.
 ABBREV = {"D": "network-design.md", "W": "wire-format.md",
@@ -72,6 +105,12 @@ def headings(path):
 H = {d: headings(d) for d in ALL}
 BASE = {os.path.basename(d): d for d in ALL}
 DEFAULT = {d: ("network-design.md" if d == "change-log.md" else d) for d in ALL}
+# A working file has no default: a bare §N there is a flag, because no default
+# fits all of them (see the module docstring).  A frozen checkpoint is the
+# exception it declares itself to be.
+UNQUALIFIED = "unqualified -- name the document"
+for r in ROBOT:
+    DEFAULT[r] = r if r in FROZEN else UNQUALIFIED
 
 NUM = r"[0-9]+(?:\.[0-9]+)*"
 # One marker and the list it introduces: members separated by commas, ranges
@@ -92,15 +131,20 @@ LETTER = re.compile(r"(?<![0-9A-Za-z])([DWLIR])(?![0-9A-Za-z])")
 # a reason: as a general rule it would let "D §6.4 and W §4.5 agree ... §6.4's
 # threshold language" resolve §6.4 against W, where it also exists, and pass.
 QUOTE = re.compile(r'\*"[^"]*"\*')
+# A code span shows notation as text, not a reference to follow.
+CODE = re.compile(r"`[^`\n]*`")
 
-total = flags = 0
+total = flags = literal = 0
 per_doc = collections.Counter()
 findings = []
 selfref = []
 for d in CHECK:
     text = open(os.path.join(ROOT, d), encoding="utf-8").read()
     quotes = [(q.start(), q.end()) for q in QUOTE.finditer(text)]
-    marks = list(MARKER.finditer(text))
+    spans = [(c.start(), c.end()) for c in CODE.finditer(text)]
+    marks = [m for m in MARKER.finditer(text)
+             if not any(a < m.start() < b for a, b in spans)]
+    literal += len(list(MARKER.finditer(text))) - len(marks)
     ends = [m.end() for m in marks]
     targets = []
     for n, mk in enumerate(marks):
@@ -164,6 +208,10 @@ if "--counts" in sys.argv:
     print()
     for d in CHECK:
         print(f"  {per_doc[d]:>5} {d}")
-print(f"\n{total} references checked across {len(CHECK)} documents, "
+print(f"\n{total} references checked across {len(CHECK)} documents "
+      f"({len(CHECK) - len(DOCS) + 1} of them working files), "
       f"Robot/ citations across {len(DOCS)}; {flags} flags")
+print(f"  not references: {literal} inside code spans")
+print(f"  not section-checked, by their own declaration: "
+      f"{', '.join(os.path.basename(a) for a in AS_OF)}")
 sys.exit(1 if flags else 0)

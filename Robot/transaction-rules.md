@@ -15,14 +15,14 @@ than from the code.
 
 **Coverage is read from the tests, not from the citations.** The first pass
 built these tables by asking which entries cite `wire-format.md` §4.x, and
-understated §4.5 badly: CER-18 holds five of that section's rules and cites
-`light-client-requirements.md` §1.3 and design §8.1.1.3, because those are
-where the *obligation* is stated and the wire is where the *encoding* is.
-A survey by citation finds the tests somebody filed under a section, which
+understated `wire-format.md` §4.5 badly: CER-18 holds five of that section's
+rules and cites `light-client-requirements.md` §1.3 and design §8.1.1.3, because
+those are where the *obligation* is stated and the wire is where the *encoding*
+is. A survey by citation finds the tests somebody filed under a section, which
 is not the same question. For each condition, name the component that enforces
-it, and require **two** tests: one that the condition is honoured when it
-holds, and one that it is enforced when it does not. A condition with only
-one polarity is a gap, and is listed as one.
+it, and require **two** tests: one that the condition is honoured when it holds,
+and one that it is enforced when it does not. A condition with only one polarity
+is a gap, and is listed as one.
 
 **Where a condition cannot be reached yet** — the proximity channels and
 the guided capture need radios and a camera, and milestone 14's shells wait
@@ -58,12 +58,12 @@ all six.
 
 | Condition | Rule | Enforced in | + | − |
 |---|---|---|---|---|
-| `envelope-shape` | The envelope is the four-key map §3.2 fixes, and an unknown key in it is refused | decoder | DEC-05 | DEC-09 |
+| `envelope-shape` | The envelope is the four-key map `wire-format.md` §3 fixes, and an unknown key in it is refused | decoder | DEC-05 | DEC-09 |
 | `locator-nibble-in-range` | A path nibble is 0–9; 10–15 are malformed, and the packed length and pad nibble are fixed | decoder | DEC-23, CER-40 | DEC-23 |
 | `cose-profile` | Entries in canonical order, one hybrid pair, no carried payload, no header beyond alg and kid | decoder | — | DEC-17, DEC-19 |
 | `declared-algorithm` | A signature's declared algorithm is held to the profile before it is verified | verifier | — | DEC-25 |
 | `body-matches-type` | The body is checked against the type its envelope names | decoder | — | DEC-22 |
-| `two-parties-differ` | The two parties of a two-party type differ; a node cannot hold authority over itself (§4.1) | decoder | — | DEC-22 |
+| `two-parties-differ` | The two parties of a two-party type differ; a node cannot hold authority over itself (`wire-format.md` §4.1) | decoder | — | DEC-22 |
 | `nested-structures` | Structures nested in a signed body are checked, and the public verifier refuses what the record parser refuses | decoder | — | DEC-24 |
 | `missing-signer-key` | A signer whose key is absent is a third outcome — held and fetched for — not a rejection | verifier | DEC-26 | — |
 | `back-pointers` | One back-pointer list per signer in signer order, reaching the signer's own last record | table | ARC-02 | ARC-03 |
@@ -86,16 +86,15 @@ refuses to flood what a client had no standing to offer.
 `duplicate-is-not-news` has no positive, which is the same rule read the
 other way: nothing asserts that an object *not* already held is taken.
 
-**`endpoint-line-current` was two implementations of one rule**
-[2026-09-15]. The node applied §10.1.2 in full — exact duplicate, older,
-incomparable, an equal-`seqno` pair retired on both sides, a second series
-held for the chain that proves it. The participant's own copy, written
-later, applied one line of it: *counter at or below the held one is a
-duplicate*. So a client took an equivocating pair and kept whichever
-arrived first, and admitted a series nothing proved. The decision now lives
-in `rhtn-archive` and both holders ask it; each still does its own storing.
-A client's series evidence is its own table, where a node's is a presented
-chain.
+**`endpoint-line-current` was two implementations of one rule** [2026-09-15].
+The node applied `wire-format.md` §10.1.2 in full — exact duplicate, older,
+incomparable, an equal-`seqno` pair retired on both sides, a second series held
+for the chain that proves it. The participant's own copy, written later, applied
+one line of it: *counter at or below the held one is a duplicate*. So a client
+took an equivocating pair and kept whichever arrived first, and admitted a
+series nothing proved. The decision now lives in `rhtn-archive` and both holders
+ask it; each still does its own storing. A client's series evidence is its own
+table, where a node's is a presented chain.
 
 ---
 
@@ -173,13 +172,13 @@ evidence which *is* good is counted. `second-binding-stands` and
 sharpest of the three and is closed: DEC-32 offers a departure and a disavowal
 countersigned, and the derived entry ceiling refuses both.
 
-**`counter-advances-strictly` is retired, not a gap** [author,
-2026-09-15]. It was recorded as enforced in the table with ARC-04 as its
-positive; it was enforced nowhere, and the ruling on finding that out is that
-it should not be. **A signed departure is proof enough that the departure takes
-effect.** §2.3's counter sequences *locator updates* so a distant holder can
-tell a later address from an earlier one, and a departure is not an update to
-be ordered against anything — it is terminal. The two jobs a counter does
+**`counter-advances-strictly` is retired, not a gap** [author, 2026-09-15]. It
+was recorded as enforced in the table with ARC-04 as its positive; it was
+enforced nowhere, and the ruling on finding that out is that it should not be.
+**A signed departure is proof enough that the departure takes effect.**
+`wire-format.md` §2.3's counter sequences *locator updates* so a distant holder
+can tell a later address from an earlier one, and a departure is not an update
+to be ordered against anything — it is terminal. The two jobs a counter does
 elsewhere are done here by other fields: the **series** names which binding
 ends, so an old series leaves a later re-adoption untouched, and a repeat is
 caught as a repeat by its `txid`. Both were already true in the fold, which is
@@ -189,17 +188,16 @@ why nothing had ever missed the check.
 series-opens-at-zero half, and ARC-05 moved off departures onto the comparison
 itself, since testing it on a departure taught that departures are ranked.
 
-**On `departed-becomes-root`, and which table** [author, 2026-09-14]. Two
-facts, and the first was being stated in a way that invited the second to
-be forgotten. In **the holder's own fold** the departed party stays a node
-it knows about — it still has the records naming it — and with no patron
-left it reads as a root, which is §4.2's own word: a departure is *required
-for a node to become a root*. But the **horizon walks open bindings**, so
-the party is gone from the place it left: neither the old patron nor a
-sibling adopted afterwards can reach it there. §4.2 states that
-consequence the other way round — without a departure a node that adopts
-elsewhere *remains in the old subtree's view indefinitely* — and TOP-33
-asserts it.
+**On `departed-becomes-root`, and which table** [author, 2026-09-14]. Two facts,
+and the first was being stated in a way that invited the second to be forgotten.
+In **the holder's own fold** the departed party stays a node it knows about — it
+still has the records naming it — and with no patron left it reads as a root,
+which is `wire-format.md` §4.2's own word: a departure is *required for a node
+to become a root*. But the **horizon walks open bindings**, so the party is gone
+from the place it left: neither the old patron nor a sibling adopted afterwards
+can reach it there. `wire-format.md` §4.2 states that consequence the other way
+round — without a departure a node that adopts elsewhere *remains in the old
+subtree's view indefinitely* — and TOP-33 asserts it.
 
 **And a third thing the two were hiding: the address book** [author,
 2026-09-14]. The author's question was *who* retains, and of what kind. A
@@ -236,10 +234,10 @@ sides.
 | `prejudice-band-read` | A banded code is the patron's determination and a member of its horizon defaults to it; an unbanded one alleges nothing | policy | MET-10 | MET-10 |
 
 **Closed** (2026-09-14). All eight hold on both sides. Writing the first six
-found one real gap: the reason code was carried and round-tripped and
-**nothing read the band**, so no policy could act on an unfamiliar code the
-way §4.3 describes — which is the whole reason the space is banded. `End`
-answers `with_prejudice`, and `End::band` is the rule both readers share.
+found one real gap: the reason code was carried and round-tripped and **nothing
+read the band**, so no policy could act on an unfamiliar code the way
+`wire-format.md` §4.3 describes — which is the whole reason the space is banded.
+`End` answers `with_prejudice`, and `End::band` is the rule both readers share.
 
 **And the band had no consumer until the contested exit was ruled on**
 [author, 2026-09-14]. A member of the patron's horizon takes the patron's
@@ -249,7 +247,7 @@ no due process to non-members. **Read from the records, not from the
 binding's end** — whichever object reached the fold first is the one the
 binding records, so reading the end would make the answer depend on the
 race the ruling says nobody should adjudicate. A tree wanting a timing rule
-runs a variant policy; §16.4 keeps what it stores and forwards identical.
+runs a variant policy; design §16.4 keeps what it stores and forwards identical.
 
 ---
 
@@ -263,13 +261,13 @@ runs a variant policy; §16.4 keeps what it stores and forwards identical.
 | `asn-does-not-move-standing` | ASN concentration leaves the metric's output unchanged | metric | — | REP-07 |
 | `peering-is-acquaintance` | A peering joins two parties in the acquaintance graph and confers no scope | metric | MET-11 | MET-11 |
 
-**No condition in this survey is held on neither side any more**
-[2026-09-15]. The five that were went together, and two of them were not
-test gaps at all: the decoder did not enforce §4.5's classical/hybrid
-split, so a recovery's hybrid verifier signature passed inside a presence
-record and the presence record's classical one passed inside a recovery,
-with every signature verifying either way. "The field's type is fixed by
-where the response sits", and now it is.
+**No condition in this survey is held on neither side any more** [2026-09-15].
+The five that were went together, and two of them were not test gaps at all: the
+decoder did not enforce `wire-format.md` §4.5's classical/hybrid split, so a
+recovery's hybrid verifier signature passed inside a presence record and the
+presence record's classical one passed inside a recovery, with every signature
+verifying either way. "The field's type is fixed by where the response sits",
+and now it is.
 
 `peering-is-acquaintance` was the last, and it was the same class of
 oversight as the presence records a node never pulled: a stored peering had
@@ -283,11 +281,11 @@ passing for some other reason.
 
 ## Type 5 — presence record (`wire-format.md` §4.5)
 
-**The least covered type and the one carrying the deferrals.** One
-catalogue entry cites §4.5. The ceremony that produces a record is tested
+**The least covered type and the one carrying the deferrals.** One catalogue
+entry cites `wire-format.md` §4.5. The ceremony that produces a record is tested
 end to end (CER-\*, PRT-04) but the record's own rules — the disclosure
-construction, what a decoder must do with a presentation, what a recipient
-may and may not infer — are almost untested, and the proximity and capture
+construction, what a decoder must do with a presentation, what a recipient may
+and may not infer — are almost untested, and the proximity and capture
 conditions cannot be reached on a machine with no radio and no camera.
 
 | Condition | Rule | Enforced in | + | − |
@@ -307,7 +305,7 @@ conditions cannot be reached on a machine with no radio and no camera.
 | `any-subset-accepted` | Any subset of disclosures is accepted, including none | decoder | CER-18 | CER-36 |
 | `withheld-is-not-a-default` | A withheld field is never treated as a default value | decoder | CER-36 | CER-36 |
 | `no-aggregate-verdict` | There is no aggregate verdict; collapsing the responses into one boolean is a policy act | client | CER-36 | CER-36 |
-| `strongest-channel-checked-when-revealed` | §3.2's strongest-channel rule is checked when `proximity` is revealed | decoder | CER-18 | CER-18 |
+| `strongest-channel-checked-when-revealed` | `wire-format.md` §3.2's strongest-channel rule is checked when `proximity` is revealed | decoder | CER-18 | CER-18 |
 | `strongest-is-what-passed` | The record says the strongest channel that passed, and nothing is promoted | client | CER-01 | CER-02 |
 | `channel-achieved-on-hardware` | The channel recorded is the strongest the hardware actually supports | client, platform | **deferred** CER-37 | **deferred** CER-37 |
 | `guided-capture-on-a-camera` | Three to five images over ten to fifteen seconds under prompts that vary, from a real camera | client, platform | **deferred** CER-38 | **deferred** CER-38 |
@@ -323,11 +321,12 @@ generator decision, and a toolchain this machine does not have. The
 instrument reaches the `latency` rung and reports what it was told, which
 is honest and is not the same claim.
 
-**The presentation is closed** (2026-09-14): every §4.5.1.5 rule holds on
-both sides, and the three hardware conditions are written and ignored with
-what each waits for. What remains on this type is the record's *own* shape
-rules — the witness fields, and which signatures are classical — which the
-ceremony tests never reach because a ceremony builds well-formed records.
+**The presentation is closed** (2026-09-14): every `wire-format.md` §4.5.1.5
+rule holds on both sides, and the three hardware conditions are written and
+ignored with what each waits for. What remains on this type is the record's
+*own* shape rules — the witness fields, and which signatures are classical —
+which the ceremony tests never reach because a ceremony builds well-formed
+records.
 
 **And one thing the catalogue had to learn.** A rule whose enforcement *is*
 its observation — *never treat a withheld field as a default* is the same

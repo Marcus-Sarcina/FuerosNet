@@ -10876,3 +10876,43 @@ this log does.
 five: 1435 design, 621 wire, 126 light, 127 infra, 73 resource, 1328
 functional. The six `RFC nnnn §N` are external and skipped. No document lost
 coverage. 471 families across 26 prefixes, unchanged.
+
+### 2026-09-26 (the working files' references are checked too, and nothing is exempt)
+
+**A bare §N in a working file is a flag, not a default** [author, 2026-09-26].
+The reference checker now reads the process-facing files as well, which leaves
+no document in the tree unchecked. No default fits them: one file's bare §N
+meant `wire-format.md`, another's meant itself, a third's meant both, so a
+per-file default was measured and rejected — it left **67 references no default
+could confirm**, their numbers existing in more than one design document, which
+is a checker reporting clean while being wrong. A working file writes
+`design §N` or names the file, and refers to its own sections as "section N".
+Two candidate relaxations were measured and thrown away: letting a qualifier
+reach back past an intervening reference costs **194 false flags in the design
+documents**, and bounding that reach at a clause still costs 13.
+
+**110 unqualified references, now none.** Ninety qualifiers inserted, eleven
+self-references rewritten, four lists folded into the `§§` form, and eight
+markers reclassified as what they are: a §N inside a code span is a literal,
+which is how this corpus shows notation as text — a malformed marker quoted as
+an example, a retired identifier, the citation format itself.
+
+**Three rules the checker reads off the documents** rather than holding as a
+list of its own, so a file becoming frozen needs no edit to the tool: a file
+declaring its section references as-of-filing is not section-checked, a file
+declaring itself a frozen checkpoint carries the numbering it froze, and a code
+span is a literal. Each count is printed rather than passed over in silence.
+
+**Document history belongs in git, not in the documents** [author,
+2026-09-26]. Three citations named sections that no longer exist, all
+pre-migration numbers inside statements about drafting. They are remapped to
+where the rules now live — §11.6 for the abuse report, §7.4.3 for what silence
+is worth — and the one whose provenance clause could only have been remapped
+into a falsehood, the material having left the design before the renumbering,
+loses the clause and cites the registers themselves at §§19.4, 19.7 and 19.8.
+
+**4292 references across 15 documents, zero flags**, where the day began at
+2378 across five. Two findings fell out of the pass that were not notation: a
+citation gave §3.2 for the envelope's four-key map, which `wire-format.md` §3
+fixes in its own body, and one filename was broken across a line by a hyphen,
+which makes a citation unresolvable to anything that reads it.

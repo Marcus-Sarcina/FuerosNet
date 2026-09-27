@@ -24,15 +24,15 @@ and are cited from there; this file keeps the working state.
 
 **The light client has two modes**, before an infra node is attached and after,
 and the difference is real software state rather than presentation: the
-operator's frame appears (`infra-client-requirements.md` §8.3), the client begins
-issuing delegations (§2.1), and its envelope gains a provider credential
-(`light-client-requirements.md` §2). Whatever encourages a user toward the
-infrastructure tier is therefore a rendering of which mode they are in, and is
-**idempotent on that state** — it stops when an instance exists because the
-condition stops, returns if the instance goes away, and needs no memory of having
-prompted [author, 2026-09-16]. The backup prompt has the same shape by
-construction, which is why §5 could close it as "until one exists" rather than as
-a campaign.
+operator's frame appears (`infra-client-requirements.md` §8.3), the client
+begins issuing delegations (section 2.1), and its envelope gains a provider
+credential (`light-client-requirements.md` §2). Whatever encourages a user
+toward the infrastructure tier is therefore a rendering of which mode they are
+in, and is **idempotent on that state** — it stops when an instance exists
+because the condition stops, returns if the instance goes away, and needs no
+memory of having prompted [author, 2026-09-16]. The backup prompt has the same
+shape by construction, which is why section 5 could close it as "until one
+exists" rather than as a campaign.
 
 *Two classes of notice, and an implementation should know which it is building.*
 State-keyed notices need no storage: the condition is the whole of the logic.
@@ -62,8 +62,8 @@ clients. This paragraph counted the node's other signatures as endpoint records
 and the anchor entry, rare and batchable to the operator's client; the count
 built from the code on 2026-09-21 adds currency attestations, subtree
 acknowledgements and the cycle-repair transaction, all unattended, and the
-allocation is ruled in §2.1's last paragraph below. **The transport was the
-reason the seed had to be on the box; it was not the only signature there.**
+allocation is ruled in section 2.1's last paragraph below. **The transport was
+the reason the seed had to be on the box; it was not the only signature there.**
 
 *Shape.* The node holds an ephemeral keypair. The operator's client signs a
 delegation binding that key to the operator's keyhash for a window. Peers verify
@@ -110,9 +110,9 @@ Inside the horizon it ends as fast as the endpoint record propagates.
 is recoverable, **propagating the new binding to every node it knows belongs in
 an instance's initiation**, not left to ordinary drift. "Every node it knows" is
 the horizon and the far endpoints of visible peering records — there is no wider
-list to push to — which is precisely the set §12.6.5 hands supersession. What
-the ninety days then covers is the residue: stale contacts, long-idle operators,
-and operators who never re-provision after a seizure.
+list to push to — which is precisely the set design §12.6.5 hands supersession.
+What the ninety days then covers is the residue: stale contacts, long-idle
+operators, and operators who never re-provision after a seizure.
 
 *Residual exposure to state in the surgery.* For that window a seized node is
 still the serving node for its subtree: it sees what a serving node sees and
@@ -156,15 +156,17 @@ flight, and is never in replayable early data.
 The real interaction is **resumption outliving the delegation**. A resumed 0-RTT
 connection authenticates by pre-shared key and re-presents nothing, so a ticket
 issued under a live delegation still works after that delegation expires — or
-after the node is seized. This is §12.6.5's stale-credential failure wearing a
-different hat. **Decided** [author, 2026-09-16]: **never issue a resumption
-ticket whose lifetime exceeds the delegation's remaining validity.** Standard
-practice, one clamp, no new machinery, and it costs design §14.1.3's battery
-argument nothing — tickets stay long for all but the tail of each window.
+after the node is seized. This is design §12.6.5's stale-credential failure
+wearing a different hat. **Decided** [author, 2026-09-16]: **never issue a
+resumption ticket whose lifetime exceeds the delegation's remaining validity.**
+Standard practice, one clamp, no new machinery, and it costs design §14.1.3's
+battery argument nothing — tickets stay long for all but the tail of each
+window.
 
 ---
 
-**§2.1 is fully specified.** What the surgery moves, for scoping the review:
+**Section 2.1 is fully specified.** What the surgery moves, for scoping the
+review:
 
 | Where | What |
 |---|---|
@@ -172,20 +174,20 @@ argument nothing — tickets stay long for all but the tail of each window.
 | design §14.1.1, §14.1.3 | A node presents an ephemeral key with a delegation rather than its identity key; the resumption-ticket clamp |
 | design §12.6.5 | Already carries the playbook this inherits; check whether it needs to name the delegation as a thing supersession answers |
 | `infra-client-requirements.md` §7 | What an operator's node holds, presents and rotates |
-| `infra-client-requirements.md` §8.2 | Cites design §23.3's same-key sentence, which §2.1 changes |
+| `infra-client-requirements.md` §8.2 | Cites design §23.3's same-key sentence, which section 2.1 changes |
 | `infra-client-requirements.md` §4.3, §4.4 | Endpoint and anchor records signed by the operator's client rather than by the node |
 | `light-client-requirements.md` §4.1 | What a client verifies on attach, and that it caches a checked delegation |
 | `wire-format.md` §9.1 | The authentication step itself: which key a peer presents and what binds it to the keyhash sought. Not in this table when the surgery ran; caught by cycle 3's 0.5 |
-| §2.2 below | P33's answer follows from this one |
+| Section 2.2 below | P33's answer follows from this one |
 
 ### 2.2 P33 — which devices hold seeds, sealed captures and deletion state
 
-Design §23.3 leaves it open and §22.2 tracks it; the register entry says
+Design §23.3 leaves it open and design §22.2 tracks it; the register entry says
 retention and deletion commitments cannot be assessed at all while it stands.
 **The premium-tab product makes it blocking rather than background**, because
 one-click provisioning places a seed on hardware the operator does not control.
-§2.1 is the mitigation if it lands; if it does not, the answer to P33 has to
-account for a compelled provider (design §18.1).
+Section 2.1 is the mitigation if it lands; if it does not, the answer to P33 has
+to account for a compelled provider (design §18.1).
 
 **P33's shape** [author, 2026-09-16]. The register entry allocates five things;
 they are three decisions, not one.
@@ -216,11 +218,11 @@ they are three decisions, not one.
 
 **The cold store resolves CER-39 rather than inheriting it.** That entry defers
 because a desktop has no platform key storage to hold a live seal under. A
-§13.7.1 envelope needs none: a random data key encrypts the blob, an Argon2id
-KEK derived from a passphrase encrypts the data key, and the KEK is never
-stored. A desktop holding that envelope holds ciphertext, and what protects it
-is a passphrase rather than an enclave. **Cold store, not live client** is the
-distinction to keep.
+design §13.7.1 envelope needs none: a random data key encrypts the blob, an
+Argon2id KEK derived from a passphrase encrypts the data key, and the KEK is
+never stored. A desktop holding that envelope holds ciphertext, and what
+protects it is a passphrase rather than an enclave. **Cold store, not live
+client** is the distinction to keep.
 
 *The trade to state plainly in the surgery.* Design §23.3: a user who syncs
 their archive to three devices has three places to lose it from. This buys
@@ -234,14 +236,14 @@ a second factor, and the design says so already.
 Not protocol changes, but places where the application decisions and the
 existing text do not obviously agree.
 
-- ~~**`infra-client-requirements.md` §8.1 says an operator's interface "reads and
-  never speaks for the node".**~~ **Withdrawn — a misreading** [author,
-  2026-09-16]. §8.1 draws design §14.1.0's kernel line: the operator's view is
-  not a second protocol implementation, which is why what crosses to it is what
-  to draw and why an interface handed frames would be a second parser. It says
-  nothing about the operator's authority to command their own node. A button
-  asking the kernel to act composes no frame, and nothing in §8.1 forbids the
-  product.
+- ~~**`infra-client-requirements.md` §8.1 says an operator's interface "reads
+  and never speaks for the node".**~~ **Withdrawn — a misreading** [author,
+  2026-09-16]. `infra-client-requirements.md` §8.1 draws design §14.1.0's kernel
+  line: the operator's view is not a second protocol implementation, which is
+  why what crosses to it is what to draw and why an interface handed frames
+  would be a second parser. It says nothing about the operator's authority to
+  command their own node. A button asking the kernel to act composes no frame,
+  and nothing in `infra-client-requirements.md` §8.1 forbids the product.
 
 - **Administration does not go on the wire at all** [author, 2026-09-16], which
   is the answer to where an operator's command rides and removes the item from
@@ -255,12 +257,13 @@ existing text do not obviously agree.
 
   So: no new request type, no `wire-format.md` change, no host binding, and no
   sandboxed component administering its own sandbox. The cost is a channel the
-  product must carry and the document set does not specify. **`infra-client-
-  requirements.md` §8.2 was written the other way and has been corrected**; the
-  earlier text argued from authentication — the node can verify the operator's
-  key, so why a second credential — which was answering the wrong question.
-  Layering, not authentication, is what decides this. The premise is gone as well
-  as the argument: under §2.1 the instance no longer holds that key at all.
+  product must carry and the document set does not specify.
+  **`infra-client-requirements.md` §8.2 was written the other way and has been
+  corrected**; the earlier text argued from authentication — the node can verify
+  the operator's key, so why a second credential — which was answering the wrong
+  question. Layering, not authentication, is what decides this. The premise is
+  gone as well as the argument: under section 2.1 the instance no longer holds
+  that key at all.
 
 - ~~**The node serves its own administration pages.**~~ **Closed** [author,
   2026-09-16] and landed at `infra-client-requirements.md` §8.3. Both halves went
@@ -274,17 +277,17 @@ existing text do not obviously agree.
 
 - **`light-client-requirements.md` §6** — order a provisioning choice by how
   concentrated each provider is inside the operator's own horizon, mark the
-  crowded ones rather than hiding them, and say what the ordering does not cover.
-- **`infra-client-requirements.md` §8.2** — an operator reaches their instance
-  over the session their own key already authenticates; the host's operating
-  system and the provider's control plane stay out of band.
-- **`infra-client-requirements.md` §8.3** — a node develops and serves its own
+  crowded ones rather than hiding them, and say what the ordering does not
+  cover. - **`infra-client-requirements.md` §8.2** — an operator reaches their
+  instance over the session their own key already authenticates; the host's
+  operating system and the provider's control plane stay out of band. -
+  **`infra-client-requirements.md` §8.3** — a node develops and serves its own
   administration pages, a client ships only provisioning, and the frame is a
-  sandbox isolated from the presenting client's keys, archive and captures.
-- **`network-design.md` §23.3, §18.1** — an instance carries a delegated
-  credential rather than its operator's seed, and §18.1's residual narrows with
-  it from impersonating the operator to continuing as the node.
-- **`implementation-plan.md` section 7** — PRD-06 is a terminal *and* a page in
+  sandbox isolated from the presenting client's keys, archive and captures. -
+  **`network-design.md` §23.3, §18.1** — an instance carries a delegated
+  credential rather than its operator's seed, and design §18.1's residual
+  narrows with it from impersonating the operator to continuing as the node. -
+  **`implementation-plan.md` section 7** — PRD-06 is a terminal *and* a page in
   the light client; the binding generator is `uniffi`.
 
 ---
@@ -296,36 +299,35 @@ gets an answer.
 
 - ~~**Provisioning.**~~ **Closed as a UX note, not a requirement** [author,
   2026-09-16]. What an operator is taking on — the recurring commitment being
-  with the provider rather than the network, the capacity design §3.3's two-level
-  bound buys, and the exposure the configuration creates — belongs in a
-  selectable explainer about what infra operation means. Not warnings and
-  click-throughs crowding the screen. Nothing lands in the requirements: LCR §6's
-  ordering rule is the whole of what is owed there, and payment never touches the
-  network.
-- ~~**Re-provisioning after loss.**~~ **Decided** [author, 2026-09-16]: with the
-  seed off the box, re-provisioning is routine housekeeping. Launch a new
-  instance through the same sign-up screen, initialise it with the operator's
-  key, and recover topology from siblings and peers — which is what sibling
-  replication (design §3.4) exists for. A seizure costs the user data held on
-  that instance and the services it hosted locally; everything else is a
-  re-launch. **Only if the seed was on the box does the same event also require
-  a key succession** (design §9), which is the heavier path and the one a
-  non-technical operator is least able to drive. That asymmetry is the argument
-  for §2.1.
-- **The administration page.** What state does it read, at what rate, and over
-  which stream? §8.1 bounds it to what to draw — a count, a keyhash, a time.
-  *Described [author, 2026-09-23]*: a frame in the light client holding a
-  graphical page the node serves, opened over the remote administration channel
-  the client uses to reach the node's host (TLS or the like), never the
-  `rhtn/1` session; what the page reads and how often is the node's own.
-- ~~**Custody on the phone.**~~ **Decided** [author, 2026-09-16]: **the
-  control-plane credential is persisted inside design §13.7.1's backup
+  with the provider rather than the network, the capacity design §3.3's
+  two-level bound buys, and the exposure the configuration creates — belongs in
+  a selectable explainer about what infra operation means. Not warnings and
+  click-throughs crowding the screen. Nothing lands in the requirements:
+  `light-client-requirements.md` §6's ordering rule is the whole of what is owed
+  there, and payment never touches the network. - ~~**Re-provisioning after
+  loss.**~~ **Decided** [author, 2026-09-16]: with the seed off the box,
+  re-provisioning is routine housekeeping. Launch a new instance through the
+  same sign-up screen, initialise it with the operator's key, and recover
+  topology from siblings and peers — which is what sibling replication (design
+  §3.4) exists for. A seizure costs the user data held on that instance and the
+  services it hosted locally; everything else is a re-launch. **Only if the seed
+  was on the box does the same event also require a key succession** (design
+  §9), which is the heavier path and the one a non-technical operator is least
+  able to drive. That asymmetry is the argument for section 2.1. - **The
+  administration page.** What state does it read, at what rate, and over which
+  stream? `infra-client-requirements.md` §8.1 bounds it to what to draw — a
+  count, a keyhash, a time. *Described [author, 2026-09-23]*: a frame in the
+  light client holding a graphical page the node serves, opened over the remote
+  administration channel the client uses to reach the node's host (TLS or the
+  like), never the `rhtn/1` session; what the page reads and how often is the
+  node's own. - ~~**Custody on the phone.**~~ **Decided** [author, 2026-09-16]:
+  **the control-plane credential is persisted inside design §13.7.1's backup
   envelope.** Encrypted under a passphrase and held on a controlled device it is
-  as secure as it needs to be, and it makes the desktop cold store a fully potent
-  restore source — a user who remembers their passphrase recovers the ability to
-  administer, not only to participate. A lost or compromised store is the one
-  failure recoverable outside this network, since providers carry their own
-  account recovery and can withdraw and reissue. Landed at
+  as secure as it needs to be, and it makes the desktop cold store a fully
+  potent restore source — a user who remembers their passphrase recovers the
+  ability to administer, not only to participate. A lost or compromised store is
+  the one failure recoverable outside this network, since providers carry their
+  own account recovery and can withdraw and reissue. Landed at
   `light-client-requirements.md` §2.
 
   *The precision that matters:* the envelope, not the archive. Siblings replicate
@@ -335,42 +337,43 @@ gets an answer.
   default, push opt-in, the dependency the client's and not the network's) and
   `light-client-requirements.md` §4.1 carries six obligations covering the
   mechanics. What remains is shell behaviour under iOS suspension and Android
-  Doze, which §14.1.4 already scopes.
+  Doze, which design §14.1.4 already scopes.
 
-  *A disclosure requirement was proposed and declined* [author, 2026-09-16].
-  The proposal was that LCR §5 should make a client state what opting into a
-  doorbell reveals, on the pattern of its direct-versus-relayed bullet. Declined:
-  push is an OS feature behind an OS opt-in, and a phone comes active on the
-  network for every app at the same times, so a doorbell discloses nothing a
-  user's other notifications do not. **This is not a darknet protocol and does
-  not owe users pro-active remediation of leaks through other products.**
-  Recorded so it is not raised again.
-- ~~**Backup and restore**~~ **Closed** [author, 2026-09-16]. PRD-07 carries the
+  *A disclosure requirement was proposed and declined* [author, 2026-09-16]. The
+  proposal was that `light-client-requirements.md` §5 should make a client state
+  what opting into a doorbell reveals, on the pattern of its
+  direct-versus-relayed bullet. Declined: push is an OS feature behind an OS
+  opt-in, and a phone comes active on the network for every app at the same
+  times, so a doorbell discloses nothing a user's other notifications do not.
+  **This is not a darknet protocol and does not owe users pro-active remediation
+  of leaks through other products.** Recorded so it is not raised again. -
+  ~~**Backup and restore**~~ **Closed** [author, 2026-09-16]. PRD-07 carries the
   mechanics and needs no change. The distinction worth holding is that **a
-  self-restore is not a recovery from a holder** — and both places that govern it
-  already say so: PRD-09 fires only when a reviewer "restores from a holder", and
-  `light-client-requirements.md` §2 opens its bullet with restoring *from a
+  self-restore is not a recovery from a holder** — and both places that govern
+  it already say so: PRD-09 fires only when a reviewer "restores from a holder",
+  and `light-client-requirements.md` §2 opens its bullet with restoring *from a
   holder* being an act of trust. Restoring your own envelope from your own cold
   store has no holder and is outside both. Recorded because the nearest mistake
-  is over-applying PRD-09 until its warning means nothing, and because a reviewer
-  may otherwise read the gap as missing rather than scoped.
-- ~~**The desktop variant.**~~ **Closed** [author, 2026-09-16]. It owes no
-  messaging about setting up a mobile client, because **the order is fixed by the
+  is over-applying PRD-09 until its warning means nothing, and because a
+  reviewer may otherwise read the gap as missing rather than scoped. - ~~**The
+  desktop variant.**~~ **Closed** [author, 2026-09-16]. It owes no messaging
+  about setting up a mobile client, because **the order is fixed by the
   mechanism**: a desktop cannot be initialised until a mobile client exists to
   create the identity and issue it a credential. Nothing needs saying about a
   sequence that cannot be performed out of order. What replaces it is a
   mobile-side obligation — prompt for a backup until one exists, with a desktop
   among the destinations offered — landed at `light-client-requirements.md` §2.
-- ~~**Multi-device in the ordinary case.**~~ **Closed** [author, 2026-09-16]:
-  **noted in the design, kept out of the UX.** Design §23.3's residual now records
-  that the reference client holds the device count down rather than warning about
-  it — prompting for a backup until one exists, offering the infrastructure tier
-  until an instance does — so the ordinary shape is a device and a store, with an
-  instance beside them for anyone in §3.3's tier. Past three is the unusual case
-  by construction, and that is the whole of the shaping needed. Merge is automatic
-  and presents no decision, so there was never a screen owed.
+  - ~~**Multi-device in the ordinary case.**~~ **Closed** [author, 2026-09-16]:
+  **noted in the design, kept out of the UX.** Design §23.3's residual now
+  records that the reference client holds the device count down rather than
+  warning about it — prompting for a backup until one exists, offering the
+  infrastructure tier until an instance does — so the ordinary shape is a device
+  and a store, with an instance beside them for anyone in design §3.3's tier.
+  Past three is the unusual case by construction, and that is the whole of the
+  shaping needed. Merge is automatic and presents no decision, so there was
+  never a screen owed.
 
 ---
 
-**§5 is closed.** Nothing left in it touches the wire: the surgery's scope is
-§2.1 and §2.2 alone.
+**Section 5 is closed.** Nothing left in it touches the wire: the surgery's
+scope is sections 2.1 and 2.2 alone.

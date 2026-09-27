@@ -739,10 +739,10 @@ The threat-model perspective for this session, and the only one to consider:
     [ONE ROLE FROM THE TABLE]
 
 You have been given everything, deliberately — including the designers' own
-register of known weaknesses (design §18 accepted risks, §19.4 findings
-requiring action, §19.7 accepted costs, §19.8 correlations, §20.1 unsourced
-assumptions, §20.2 load-bearing assumptions) and their change log. The
-review must reach past what those registers already record.
+register of known weaknesses (design §18 accepted risks, design §19.4 findings
+requiring action, design §19.7 accepted costs, design §19.8 correlations, design
+§20.1 unsourced assumptions, design §20.2 load-bearing assumptions) and their
+change log. The review must reach past what those registers already record.
 
 Work by proving or falsifying the specification's own security claims as
 they face this adversary: each stated defence, bound, and accepted-risk
@@ -759,7 +759,7 @@ you can state. For each finding, provide only:
                     they did not describe
        NOVEL      — not in the registers at all
        REASONING  — an accepted risk whose stated JUSTIFICATION is wrong;
-                    every entry in design §18 and §19.7 carries a reason,
+                    every entry in design §18 and design §19.7 carries a reason,
                     and if a reason does not hold, show why
   6. A defensive design change or invariant that would mitigate it.
   7. A test, simulation, or property-check that could validate the
@@ -851,9 +851,9 @@ first and `network-design.md` second — the rule that finally reproduced a clea
 | A | Document conventions | 0 | moved to appendix |
 | B | Decision log | Appendix A | — |
 
-**§7 splits three ways, not two** [author]. The ceremony is ~1,000 lines on its own and
-is not further divisible without cutting a single argument; the record and the recovery
-procedure separate cleanly from it and from each other.
+**design §7 splits three ways, not two** [author]. The ceremony is ~1,000 lines
+on its own and is not further divisible without cutting a single argument; the
+record and the recovery procedure separate cleanly from it and from each other.
 
 ### `wire-format.md` — chapter mapping
 
@@ -865,7 +865,7 @@ procedure separate cleanly from it and from each other.
 | 6 | Resource registration, catalog, abuse reports | 4.7 | the section says these are *not* transactions |
 | 7 | Attestations and records | 5 | — |
 | 8 | Session messages | 6 | — |
-| 9 | Transport binding | 7.1–7.2 | §7 outgrew "QUIC binding" |
+| 9 | Transport binding | 7.1–7.2 | `wire-format.md` §7 outgrew "QUIC binding" |
 | 10 | Topology propagation | 7.2a, 7.2b | split; retires the alphanumerics |
 | 11 | Resource requests | 7.3 | split; 7.3.1–7.3.2 become 11.1–11.2 |
 | 12 | Size estimates | 8 | — |
@@ -873,27 +873,33 @@ procedure separate cleanly from it and from each other.
 
 ### `infra-client-requirements.md` — alphanumeric normalisation
 
-`§4a` became **§5** and `§9.2a` became **§10.3**, with the sections after each shifted. Both are retrofit identifiers that break decimal sorting
-and outline generation. `wire-format.md`'s `7.2a`/`7.2b` retire in the split above.
+`§4a` became **`infra-client-requirements.md` §5** and `§9.2a` became
+**`infra-client-requirements.md` §10.3**, with the sections after each shifted.
+Both are retrofit identifiers that break decimal sorting and outline generation.
+`wire-format.md`'s `7.2a`/`7.2b` retire in the split above.
 
 ### Open work: two chapters, not six lists
 
-**The distinction is release-scoped** [author]: what must be settled for the initial
-release is separate from what is wanted in a later one. §23.2 already carries it as
-three subheadings — *blocks a subsystem*, *decide during implementation*, *deferred by
-decision* — so this promotes an existing classification rather than inventing one.
+**The distinction is release-scoped** [author]: what must be settled for the
+initial release is separate from what is wanted in a later one. design §23.2
+already carries it as three subheadings — *blocks a subsystem*, *decide during
+implementation*, *deferred by decision* — so this promotes an existing
+classification rather than inventing one.
 
-- **§22 Open for v1** — the single index. Former §22's live questions and §23.2's first
-  two groups. This is the section that must be empty of blockers before release.
-- **§23 Deferred to a later version** — §23.2's third group, §23.1 multi-device, §4's
-  *Explicitly deferred*, §22's two standing deferrals, and §23.3's test-vector note.
-  Nothing here blocks anything; it is the wishlist and should read as one.
+- **design §22 Open for v1** — the single index. Former design §22's live
+  questions and design §23.2's first two groups. This is the section that must
+  be empty of blockers before release. - **design §23 Deferred to a later
+  version** — design §23.2's third group, design §23.1 multi-device, design §4's
+  *Explicitly deferred*, design §22's two standing deferrals, and design §23.3's
+  test-vector note. Nothing here blocks anything; it is the wishlist and should
+  read as one.
 
 **The other four lists stay where they are and are referenced, not absorbed.**
-`wire-format.md` §13, `light-client-requirements.md` §Open, `infra-client-requirements.md`
-§Open and the local block in the ceremony chapter each hold items belonging to their own
-document's authority. §22 names them and says what each holds; moving their contents into
-the design would break the authority split Appendix A sets up.
+`wire-format.md` §13, `light-client-requirements.md` §Open,
+`infra-client-requirements.md` §Open and the local block in the ceremony chapter
+each hold items belonging to their own document's authority. design §22 names
+them and says what each holds; moving their contents into the design would break
+the authority split Appendix A sets up.
 
 ### Verification before commit
 
@@ -947,11 +953,11 @@ argument.
 
 **Tool:** a graph simulator, not a model checker.
 
-**Targets:** the flow-metric claims in design §16.2 and §17.1 — that a fake subtree's
-claim is bounded by its cut regardless of size; that λ < 1/f is necessary; the
-detection probability arithmetic for shared identities; hub formation around
-infra operators. All of these are currently argued analytically and none has been
-run.
+**Targets:** the flow-metric claims in design §16.2 and design §17.1 — that a
+fake subtree's claim is bounded by its cut regardless of size; that λ < 1/f is
+necessary; the detection probability arithmetic for shared identities; hub
+formation around infra operators. All of these are currently argued analytically
+and none has been run.
 
 ---
 
@@ -1017,7 +1023,7 @@ Stated plainly so it is not over-trusted:
 | 4 | **0.7** | Purge | LINDDUN privacy |
 | 5 | **0.8** | Purge, high effort, **different model family** | Adversarial. Last of the substantive passes — an adversarial reviewer distracted by inconsistencies produces worse attack analysis. **Cycle 3 reverses this against 0.6; see below** |
 | 6 | **0.9-before** | Purge | Organisation, on the current structure. Fix local defects — heading levels, misfiled blocks, out-of-sequence subsections — **before** anything is moved, so the migration relocates sound material rather than carrying breakage into a new place where it is harder to attribute |
-| 7 | **migration** | — | **DONE 2026-09-01**, in four stages. Not a review. Spec below, settled from 0.9-before: `network-design.md` reordered and three chapters split, `wire-format.md` split at §3 and §7, `infra-client-requirements.md`'s alphanumerics normalised, and the six open-work lists reduced to two release-scoped chapters plus references. **One atomic two-phase renumber** — sections to unique placeholders, then to final numbers — so Topology-becomes-2 cannot collide with Scope-becomes-3 mid-sweep. ~420 section references across seven files; the reference checker validates the result exactly |
+| 7 | **migration** | — | **DONE 2026-09-01**, in four stages. Not a review. Spec below, settled from 0.9-before: `network-design.md` reordered and three chapters split, `wire-format.md` split at §3 and `wire-format.md` §7, `infra-client-requirements.md`'s alphanumerics normalised, and the six open-work lists reduced to two release-scoped chapters plus references. **One atomic two-phase renumber** — sections to unique placeholders, then to final numbers — so Topology-becomes-2 cannot collide with Scope-becomes-3 mid-sweep. ~420 section references across seven files; the reference checker validates the result exactly |
 | 8 | **0.9-after** | Purge | **DONE 2026-09-01.** Organisation again, on the migrated structure. **Confirmed nothing was orphaned or double-numbered in the move** — the pass's whole purpose, and the result was negative. What it found was local: three heading-level defects, three misfiled blocks, four chapters needing subsections, one real duplication and one that was not, and the change log's own heading collisions. Applied in four passes; dispositions in `review-tracking.md` |
 
 ## Second cycle (2026-09-01 →)
@@ -1045,16 +1051,16 @@ reads naturally before Topology since a reader meets *patron*, *subordinate* and
 
 ## Third cycle (2026-09-16 →)
 
-**The programme restarts from 0.1 again** [author, 2026-09-16]: the changes since
-cycle 2 reach the protocol rather than its wording. An operator's instance carries
-a credential its operator's client delegates for a window instead of the
+**The programme restarts from 0.1 again** [author, 2026-09-16]: the changes
+since cycle 2 reach the protocol rather than its wording. An operator's instance
+carries a credential its operator's client delegates for a window instead of the
 operator's seed, so a handshake now proves something different and proves it one
-layer higher; §23.3 settles which device holds seeds, sealed captures and storage,
-which answers P33; and administration left the wire entirely, a node serving its
-own pages rather than any request type carrying a command. The five client
-variants also have obligations neither earlier cycle saw. A consistency pass and a
-de-lint ran 2026-09-16 against the result to produce the baseline; `change-log.md`
-records the numbers.
+layer higher; design §23.3 settles which device holds seeds, sealed captures and
+storage, which answers P33; and administration left the wire entirely, a node
+serving its own pages rather than any request type carrying a command. The five
+client variants also have obligations neither earlier cycle saw. A consistency
+pass and a de-lint ran 2026-09-16 against the result to produce the baseline;
+`change-log.md` records the numbers.
 
 **0.8 runs before 0.6 this cycle** [author, 2026-09-16]. Both passes are
 expensive, and **0.8 is the likelier to surface a gap needing a protocol
@@ -1074,11 +1080,11 @@ first**; a 0.8 finding that turns out to be a gap rather than an attack belongs 
 ## De-linting: the released document is a design, not a record of drafting it
 
 **Target** [author, 2026-08-28]: the initial specification should read as a
-**discrete, self-contained design**. Alternatives are mentioned briefly, future-state
-material is confined to one topic, and nothing narrates how the document was
-written. Example given: §20.1's *"Flagged by the 2026-08-14 factual verification
-pass as asserted without an external source"* — a true statement about the drafting
-process and no part of the design as released.
+**discrete, self-contained design**. Alternatives are mentioned briefly,
+future-state material is confined to one topic, and nothing narrates how the
+document was written. Example given: design §20.1's *"Flagged by the 2026-08-14
+factual verification pass as asserted without an external source"* — a true
+statement about the drafting process and no part of the design as released.
 
 **Survey (2026-08-28).** Smaller than it feels, and concentrated in four kinds:
 

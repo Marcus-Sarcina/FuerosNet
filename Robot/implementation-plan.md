@@ -83,15 +83,15 @@ moving code between repositories.
 | `rhtn-crypto` | Keyhash over both components; hybrid sign and verify per signing context; SHA-256; provider trait so the unaudited crates can be replaced | design §5, §5.1, §5.2; `wire-format.md` §1.1, §1.4, §2.2 | `records.md` known-answer signatures with wrong-signer analogues; `keys.md` seed recipe |
 | `rhtn-archive` | The chain and back-pointers from the first transaction; genesis and ordinals; timestamps and monotonicity; series reissue and chain ordering; fork detection at the inquirer; archive fetch; evaluation of a presented archive; the local topology table | design §6, §9.0.2, §10, §13; `wire-format.md` §3.1, §3.3, §4.6, §7.9; `infra-client-requirements.md` §5; `light-client-requirements.md` §2 | Property tests over chain rules; `tla/SupersessionDiscipline` invariants as tests; corpus presentations |
 | `rhtn-transport` | QUIC and TLS 1.3 with the one named group; raw public key mutual authentication; ALPN; control-frame framing and capabilities; 0-RTT deferral; attach bound to the authenticated identity; close codes for refusal | design §14.1.1, §14.1.3; `wire-format.md` §8.0, §8.1, §9; `infra-client-requirements.md` §7; `light-client-requirements.md` §4 | The `compliant/attach` and `wire-only/attach` obligations as executable tests; two-node interop |
-| `rhtn-node` | Serving; queue; currency issuance and escalation; resolution and anchor table; endpoint records; subtree acknowledgement; prekey service; sibling replication; topology propagation and the rootward memo; role table and hosted-session lifecycle; catalog | `infra-client-requirements.md` §1 to §4, §6, §10, §11; design §3.4, §12, §14.1.2, §14.1.6, §15; `wire-format.md` §6, §7.1, §7.2, §7.5, §7.6, §7.7, §7.8, §10 | Sim scenarios from `tla/`; `wire-only/currency` and `tla/IssuerAuthorisation` as tests; queue and heartbeat tests (section 8) |
-| `rhtn-client` | Session and failover; archive handling; horizon; verifier selection, consent and key grants; ceremony state machine with device I/O behind an interface; recovery assembly; payload encryption integration; resource requests; cycle handling; the client on a device holding no seed (design §23.3), with delegations and device bundles signed on the ceremony device | `light-client-requirements.md` §1 to §8; design §7, §8, §9, §14.2, §15; `wire-format.md` §5, §7.3, §7.4, §8.2, §11 | `compliant/ceremony` and `compliant/recovery` obligations as tests; verifier-selection vectors; sealed-store tests (section 8) |
+| `rhtn-node` | Serving; queue; currency issuance and escalation; resolution and anchor table; endpoint records; subtree acknowledgement; prekey service; sibling replication; topology propagation and the rootward memo; role table and hosted-session lifecycle; catalog | `infra-client-requirements.md` §§1–4, 6, 10, 11; design §3.4, §12, §14.1.2, §14.1.6, §15; `wire-format.md` §6, §7.1, §7.2, §7.5, §7.6, §7.7, §7.8, §10 | Sim scenarios from `tla/`; `wire-only/currency` and `tla/IssuerAuthorisation` as tests; queue and heartbeat tests (section 8) |
+| `rhtn-client` | Session and failover; archive handling; horizon; verifier selection, consent and key grants; ceremony state machine with device I/O behind an interface; recovery assembly; payload encryption integration; resource requests; cycle handling; the client on a device holding no seed (design §23.3), with delegations and device bundles signed on the ceremony device | `light-client-requirements.md` §§1–8; design §7, §8, §9, §14.2, §15; `wire-format.md` §5, §7.3, §7.4, §8.2, §11 | `compliant/ceremony` and `compliant/recovery` obligations as tests; verifier-selection vectors; sealed-store tests (section 8) |
 | `rhtn-policy` | The reference flow metric; the conformance test; the policy interface | design §16, §17; `models/simulation/flow_metric.py` | The four regression cases carried across; fixed-graph expected scores |
 | `rhtn-resources` | The component-model sandbox a hosted package runs in: what it may import, what one request may spend, and the `Backend` a gateway hands a request to. Catalog registration, query and lifecycle, the request evaluation order and refusal, the gateway and the host's export list landed in `rhtn-node` and `rhtn-archive` at milestone 10 (section 5) | design §11; `wire-format.md` §6, §11; `resource-requirements.md`; `infra-client-requirements.md` §9, §10 | Evaluation-order tests; sandbox capability tests |
 | `rhtn-adaptors` | `rhtn-client` bound to what is local to its process: the client on a thread of its own, the node beside it as serving node, the direct payload path over the transport's socket (the client's own or the node's), a hosted verifier answered on the node's request stream, and the courier. The seams the documents leave unwritten, a serving node's leg to a client attached over the wire and a client's hand-off of payload to relay, are traits with the in-process implementation behind them | design §12.6.3, §14.1.1; `wire-format.md` §5.6, §7.7.2, §9.2 | Live tests over loopback QUIC for both kinds of client |
 | `rhtn-sim` | In-process multi-node harness over localhost QUIC, with a datagram-level path harness (a UDP proxy or a recording socket) for loss, delay, replay and blackholing; scripted scenarios | design §12.3, §13, §15; the `tla/` models | The TLA+ invariants restated over the running code; the path harness replaces the frame-filter emulations in the session tests |
 | `rhtn-participant` | `rhtnp`: a participant a person or a script can run. One command a line on standard input, the terminal standing in for the seven platform objects, and nothing kept between runs. **An instrument and not a product**: it claims none of the product entries, because a command read from standard input is not a person | `light-client-requirements.md` §1.3, §3; design §14.1.0, §14.2.4 | PRT-01 onward; a ceremony and a payload between processes rather than inside one |
 | `rhtn-daemon` | `rhtnd`: a node run from an operator's configuration. The configuration a node cannot derive; the lifecycle from start to signal to stop, losing no delivery in flight; and the operator's view of what the configuration exposes to the identities below it | `infra-client-requirements.md` §1, §2, §4.1, §7, §8, §10.6, §10.7; design §13, §14.1.2, §14.1.6 | PRD-06; a node started from a file serves a client and survives a restart |
-| `rhtn-cli` | `rhtn`: decode what the wire carries with the parser a node uses, mint and inspect identities, and ask a running node the read-only questions | No obligation document requires a command line. What it may send is bounded by `wire-format.md` §9.2's read-only class: §7.7, §7.9, §6.4 | Every corpus object prints; a probe resolves, fetches and queries over a real session |
+| `rhtn-cli` | `rhtn`: decode what the wire carries with the parser a node uses, mint and inspect identities, and ask a running node the read-only questions | No obligation document requires a command line. What it may send is bounded by `wire-format.md` §9.2's read-only class: `wire-format.md` §§7.7, 7.9, 6.4 | Every corpus object prints; a probe resolves, fetches and queries over a real session |
 | `rhtn-ffi` | The one boundary the mobile shells bind to: the client's operations outward, the platform's camera, channels and clock inward, and the value types that cross; a constructor for a device holding a delegation and no seed, and delegation issuance and the device bundle's signature across the boundary. No decision is taken at the boundary that is not taken below it | `light-client-requirements.md` §1.3 | The facade compiles against both shells' generated bindings |
 | `mobile/android`, `mobile/ios` | The light client application: the ceremony's channels and capture, the privacy choices, the warnings before anything irreversible, and encrypted backup. Kotlin and Swift, not Cargo members, not built by the gate | `light-client-requirements.md` §1.3, §5, §6; design §13.7.1 | PRD-01 to PRD-05 and PRD-07 to PRD-09 |
 
@@ -123,29 +123,27 @@ that settles one of them is the drafting-history failure in a new medium.
 Kept to what earns its place:
 
 - **`cargo test`** with `proptest` for round-trips, field reordering, locator
-  truncation at nibble boundaries, and chain rules.
-- **`cargo-fuzz`** on the CBOR decoder, continuously. `Robot/review-plan.md` Stage 2
-  names it the highest-value target: malformed input from strangers is the largest
-  untrusted surface.
-- **`cargo-deny`** for licences and advisories. The natural PQXDH and Triple Ratchet
-  source, libsignal, is AGPL, which is a decision (section 7) before design §24
-  step 9. Landed 2026-09-22 as the gate's step 3c against `crates/deny.toml`:
-  an allow-list of the twelve permissive licences the tree carries, copyleft
-  refused by absence, sources pinned to crates.io, advisories failing the gate.
-- **`wasmtime`** for the component-model sandbox when `rhtn-resources` arrives
-  (`infra-client-requirements.md` §9.2).
-- **`toml`** for the operator's two files, the `rhtnd` configuration and the
-  hosting file [author, 2026-09-14]. Not for the package manifest, which is
-  the package's own file and what §9.1's signing will sign — a signed object
-  wants a canonical encoding and TOML has none.
-- **`uniffi`** to expose `rhtn-client` to Kotlin and Swift when the mobile track
-  starts. The ceremony's channels (`light-client-requirements.md` §1.3) need camera,
-  NFC and UWB, which exist only there.
-- **One gate, `crates/check.sh`**, in the shape of `models/run-all.sh`: format, lint,
-  tests, corpus, a bounded fuzz run, deny. Separate from the model gate, which runs
-  on a different cadence.
-- **A spec pin for the code**, in the shape of the test-vector pin: the gate records
-  the specification hashes it last passed against and fails when they change without
+  truncation at nibble boundaries, and chain rules. - **`cargo-fuzz`** on the
+  CBOR decoder, continuously. `Robot/review-plan.md` Stage 2 names it the
+  highest-value target: malformed input from strangers is the largest untrusted
+  surface. - **`cargo-deny`** for licences and advisories. The natural PQXDH and
+  Triple Ratchet source, libsignal, is AGPL, which is a decision (section 7)
+  before design §24 step 9. Landed 2026-09-22 as the gate's step 3c against
+  `crates/deny.toml`: an allow-list of the twelve permissive licences the tree
+  carries, copyleft refused by absence, sources pinned to crates.io, advisories
+  failing the gate. - **`wasmtime`** for the component-model sandbox when
+  `rhtn-resources` arrives (`infra-client-requirements.md` §9.2). - **`toml`**
+  for the operator's two files, the `rhtnd` configuration and the hosting file
+  [author, 2026-09-14]. Not for the package manifest, which is the package's own
+  file and what `infra-client-requirements.md` §9.1's signing will sign — a
+  signed object wants a canonical encoding and TOML has none. - **`uniffi`** to
+  expose `rhtn-client` to Kotlin and Swift when the mobile track starts. The
+  ceremony's channels (`light-client-requirements.md` §1.3) need camera, NFC and
+  UWB, which exist only there. - **One gate, `crates/check.sh`**, in the shape
+  of `models/run-all.sh`: format, lint, tests, corpus, a bounded fuzz run, deny.
+  Separate from the model gate, which runs on a different cadence. - **A spec
+  pin for the code**, in the shape of the test-vector pin: the gate records the
+  specification hashes it last passed against and fails when they change without
   an acknowledged re-run. Landed 2026-09-22 as the gate's step 0,
   `crates/tools/pincheck.py`: the six root documents against
   `crates/spec-pins.json`, rewritten only by `--accept`; and the vector pin's
@@ -153,13 +151,12 @@ Kept to what earns its place:
   step landed the same day as step 3a, rustfmt at its default width [author,
   2026-09-22], the reviewer harness and the generated stubs outside its reach;
   the gate's list is complete. A sixth step followed on 2026-09-22 [author]:
-  `cargo-sweep`, stamped before the pins and run after the fuzz smoke, so a
-  pass leaves one copy of every artifact; `target/` had reached 58 GB, 38 GB
-  of it superseded test binaries at about 330 MB each.
-- **Every long job is fenced** as the prover now is: a core cap and a heap ceiling
-  under `nice`. A fuzzer or a full build on 32 cores reproduces the 2026-09-08
-  lock-up otherwise.
-- **CI**, if hosted, on the remote's GitLab.
+  `cargo-sweep`, stamped before the pins and run after the fuzz smoke, so a pass
+  leaves one copy of every artifact; `target/` had reached 58 GB, 38 GB of it
+  superseded test binaries at about 330 MB each. - **Every long job is fenced**
+  as the prover now is: a core cap and a heap ceiling under `nice`. A fuzzer or
+  a full build on 32 cores reproduces the 2026-09-08 lock-up otherwise. -
+  **CI**, if hosted, on the remote's GitLab.
 
 ---
 
@@ -251,11 +248,11 @@ clock, randomness, operator, notifier and engine — with an in-process
 harness that carries the direct channel and logs every path. The engine
 is a stand-in that hashes a frame's leading bytes (design §22.2 is
 undecided); the sealed store's AEAD, nonce and framing are the
-implementation's choice pending §7.5.2.10. All 29 ceremony entries pass;
+implementation's choice pending design §7.5.2.10. All 29 ceremony entries pass;
 224 of 286 entries pass. One reading is open to the author: design §7.3
 says a verifier's operator is not told they were sampled, and design
 §19.6 says a verifier is told, when asked, that answering records them;
-the client raises the §19.6 disclosure as a notice naming no ceremony.
+the client raises the design §19.6 disclosure as a notice naming no ceremony.
 
 **Milestone 7, recovery** (design §24 step 8). Exit: the 14 recovery
 entries pass.
@@ -388,7 +385,7 @@ milestones answer to the obligation documents rather than to a step of the
 design's order, and the catalogue's product entries are what they close.
 Nothing here may decide protocol behaviour: a rule enforced in an
 application and not in the library is absent from every other client, and
-§1.1's test disposes of it.
+design §1.1's test disposes of it.
 
 **Milestone 11, the daemon** (`rhtn-daemon`). Exit: `rhtn-sim`'s scenarios
 rerun against daemon processes rather than in-process nodes, and a daemon
@@ -425,21 +422,22 @@ an `on_attach` hook as a session is inserted and removed, and the runtime
 installs one that maintains the set. PRP-23 holds it.
 
 **Which node the answer names was settled by the author** [2026-09-14]:
-publishing an endpoint record is what marks a node infrastructure, which is
-what `wire-format.md` §7.6's *published by infra nodes only* already said.
-A stored record now marks its subject, the mark is re-derived on a rebuild
-rather than kept beside the store, and there is no unmarking — §7.6 gives a
+publishing an endpoint record is what marks a node infrastructure, which is what
+`wire-format.md` §7.6's *published by infra nodes only* already said. A stored
+record now marks its subject, the mark is re-derived on a rebuild rather than
+kept beside the store, and there is no unmarking — `wire-format.md` §7.6 gives a
 record a successor and no retraction. DMN-18 asserts the referral again, and
 PRP-24 holds the marking on its own.
 
-**Two more callers were missing under it**, both the same shape as the
-attach hook. Nothing in a running node called `replay_to`, so §10.1.3's
-reconciliation — *a replay of the same frames* — never ran: two parties that
-connected after their records were made never exchanged them, and an
-endpoint record published before a session existed reached nobody. A session
+**Two more callers were missing under it**, both the same shape as the attach
+hook. Nothing in a running node called `replay_to`, so `wire-format.md`
+§10.1.3's reconciliation — *a replay of the same frames* — never ran: two
+parties that connected after their records were made never exchanged them, and
+an endpoint record published before a session existed reached nobody. A session
 coming up now replays, in both directions. **The periodic half is still
-absent**: §10.1.3 asks for a periodic reconciliation with siblings and the
-patron, and its interval is an operator's number that no document states.
+absent**: `wire-format.md` §10.1.3 asks for a periodic reconciliation with
+siblings and the patron, and its interval is an operator's number that no
+document states.
 
 What it owes beyond the library. The identity is read and never minted: a
 node that generates a key when its file is missing serves under an identity
@@ -470,28 +468,27 @@ decodes with the parser a node uses and no other, because a second and
 laxer decoder written for convenience would disagree with the first
 invisibly.
 
-Done (2026-09-12). Every byte-class corpus entry decodes and prints from
-the binary under the kind the corpus declares, and a probe resolves,
-fetches an archive and queries a catalog against a running node over a
-real session. `inspect` prints the shape in diagnostic notation, an
-envelope's derived txid and its signers, and reports a signed object no
-key is held for as unverifiable rather than failing, which is §3.4's
-distinction. `keys` mints an identity readable by its owner alone,
-refuses to replace one, never prints a private half, and reproduces the
-seeds `test-vectors/keys.md` derives. DMN-05 and DMN-06. The argument
-parser is hand-rolled, for the reason the daemon's configuration format
-is: section 7 lists the choice of one as the author's, and taking none
-leaves it open.
+Done (2026-09-12). Every byte-class corpus entry decodes and prints from the
+binary under the kind the corpus declares, and a probe resolves, fetches an
+archive and queries a catalog against a running node over a real session.
+`inspect` prints the shape in diagnostic notation, an envelope's derived txid
+and its signers, and reports a signed object no key is held for as unverifiable
+rather than failing, which is `wire-format.md` §3.4's distinction. `keys` mints
+an identity readable by its owner alone, refuses to replace one, never prints a
+private half, and reproduces the seeds `test-vectors/keys.md` derives. DMN-05
+and DMN-06. The argument parser is hand-rolled, for the reason the daemon's
+configuration format is: section 7 lists the choice of one as the author's, and
+taking none leaves it open.
 
 **Milestone 13, the boundary** (`rhtn-ffi`). Exit: the facade covers the
 ceremony, recovery, attach and payload, with the platform's channels,
 camera and clock arriving as callbacks, and a generated binding for one
 platform compiles against it.
 
-The facade translates and never adjudicates. The camera's metadata is
-stripped at the boundary (`light-client-requirements.md` §1.3), and the
-platform's clock is the clock: a skew a shell corrected silently would move
-a witness's tolerance check without saying so (§1.2).
+The facade translates and never adjudicates. The camera's metadata is stripped
+at the boundary (`light-client-requirements.md` §1.3), and the platform's clock
+is the clock: a skew a shell corrected silently would move a witness's tolerance
+check without saying so (`light-client-requirements.md` §1.2).
 
 Done in part (2026-09-13). The facade carries the value types, the
 platform's six objects inward and the client's operations outward, and a
@@ -573,13 +570,13 @@ grants, witness asks, the proposal, review and signature, finalisation —
 which is milestone 13's own work and is now done: the facade carries them
 as values, following the shape `Intent` already had.
 
-**A step's product is one token the instrument's operator carries.**
-design §7 has the ceremony cross whatever channel the two devices have and
-fixes no encoding, which is why `rhtn-ffi` carries it as fields; a shell
-must therefore choose one, and a harness copying a token between two
-processes is the analogue of a screen and a camera. The encoding is the
-instrument's and is not protocol: two instruments agreeing on another would
-interoperate with each other and nothing else, which is what §7 leaves open.
+**A step's product is one token the instrument's operator carries.** design §7
+has the ceremony cross whatever channel the two devices have and fixes no
+encoding, which is why `rhtn-ffi` carries it as fields; a shell must therefore
+choose one, and a harness copying a token between two processes is the analogue
+of a screen and a camera. The encoding is the instrument's and is not protocol:
+two instruments agreeing on another would interoperate with each other and
+nothing else, which is what design §7 leaves open.
 
 **The finding was in the client's own entry point.** A participant's key
 was not in its own lookup, so it could not verify a record it had just
@@ -620,24 +617,23 @@ one that broke — `infra-client-requirements.md` §9 makes those different
 facts. `Hosted` is the `Backend` a `Gateway` already knew how to call.
 RSC-30 to RSC-35.
 
-**The daemon binds what its configuration names**, which nothing did
-before: `Gateway::bind` had no production caller, so a `view.resources` was
-empty at every node and every resource request answered refused. A
-`resources` key names a hosting file, `host` and `grant` a line at a time,
-and a `host` line names a **manifest** rather than a component — what a
-package declares is the package's (§9.1), and an operator writing role
-names into their own file would be declaring them on its behalf. The
-manifest and the component are checked against each other in both
-directions. Every package is admitted and every grant checked before any is
-bound, so a file refused at its last line binds nothing from its first, and
-a daemon that will not host what it was given says so and does not start.
-DMN-19 to DMN-21.
+**The daemon binds what its configuration names**, which nothing did before:
+`Gateway::bind` had no production caller, so a `view.resources` was empty at
+every node and every resource request answered refused. A `resources` key names
+a hosting file, `host` and `grant` a line at a time, and a `host` line names a
+**manifest** rather than a component — what a package declares is the package's
+(`infra-client-requirements.md` §9.1), and an operator writing role names into
+their own file would be declaring them on its behalf. The manifest and the
+component are checked against each other in both directions. Every package is
+admitted and every grant checked before any is bound, so a file refused at its
+last line binds nothing from its first, and a daemon that will not host what it
+was given says so and does not start. DMN-19 to DMN-21.
 
-**What is not here is the supply chain.** §9.1 names signing, provenance
-and an update channel, and calls them a distribution problem rather than a
-protocol one. None of the three is implemented and none is claimed: a
-manifest that agrees with its component is not a manifest anybody vouched
-for.
+**What is not here is the supply chain.** `infra-client-requirements.md` §9.1
+names signing, provenance and an update channel, and calls them a distribution
+problem rather than a protocol one. None of the three is implemented and none is
+claimed: a manifest that agrees with its component is not a manifest anybody
+vouched for.
 
 **Then the split** (section 2), on its trigger rather than on a date.
 
@@ -680,7 +676,7 @@ for.
 - ~~Whether the operator's view (PRD-06) is a terminal on the host or a page
   served to the operator alone~~ — **a terminal, and a page in the light
   client** [author, 2026-09-16], as first ruled; the same day's later ruling
-  landed at `infra-client-requirements.md` §8.2 and §8.3 and governs: the
+  landed at `infra-client-requirements.md` §§8.2–8.3 and governs: the
   node develops and serves its own administration pages, the client ships
   the provisioning pages and the frame they appear in, and administration is
   out of band rather than a request type or the session, the channel being

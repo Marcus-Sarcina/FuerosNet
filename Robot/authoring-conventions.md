@@ -116,18 +116,18 @@ policy bounds, tunable knobs, per-client behaviour — favours inclusion in that
 component's requirements document, with `network-design.md` saying what is
 always true of the system as a whole. The design does not mirror component
 parameter lists: keeping two tables in sync is one more surface for error
-(§21.1 states this for its own table). The exception runs the other way:
+(design §21.1 states this for its own table). The exception runs the other way:
 an implementation-variable characteristic whose setting impacts the system
 argument — the security model, the privacy posture — must additionally be
 named in the design where that impact is weighed.
 
-**Generalising a rule can break design §1.1, and has.** Abstraction widens scope, and a
-wider rule may reach past the enforcement boundary that the narrower one respected.
-design §9.6's abuse-report rule began as *"addressed to the owner and not broadcast"* —
-a delivery property the sender controls completely. Its role-level rewrite added
-*"intermediaries must neither receive nor retain it as reputation evidence"*, which
-governs foreign storage and is unenforceable. **The generalisation was more elegant
-and less true.**
+**Generalising a rule can break design §1.1, and has.** Abstraction widens
+scope, and a wider rule may reach past the enforcement boundary that the
+narrower one respected. design §11.6's abuse-report rule began as *"addressed to
+the owner and not broadcast"* — a delivery property the sender controls
+completely. Its role-level rewrite added *"intermediaries must neither receive
+nor retain it as reputation evidence"*, which governs foreign storage and is
+unenforceable. **The generalisation was more elegant and less true.**
 
 So the two conventions must be applied together, in order: state the property, then
 **ask who would enforce the restated version against whom** (design §1.1). If the answer
@@ -209,13 +209,13 @@ rationales here are better than the original intuition behind the decision.
   manufactures a dependency nobody chose, and it then sits in the register looking
   as though something was built on it.
 
-**Two were written and removed the same day.** The keystream scheme was justified by
-*"custody obligations are otherwise a real barrier to hosting"* and the queue policy
-by *"a time window forces a choice nobody wants to make"*. Both entered the
-assumptions register. Neither was the author's reasoning, and the queue's real
-argument was better: an expired verification query cannot be answered, and design §7.1.4
-counts a missing answer against **the subject**, so expiry penalises a third party
-for their verifier's connection habits.
+**Two were written and removed the same day.** The keystream scheme was
+justified by *"custody obligations are otherwise a real barrier to hosting"* and
+the queue policy by *"a time window forces a choice nobody wants to make"*. Both
+entered the assumptions register. Neither was the author's reasoning, and the
+queue's real argument was better: an expired verification query cannot be
+answered, and design §7.4.3 counts a missing answer against **the subject**, so
+expiry penalises a third party for their verifier's connection habits.
 
 **Where the author states reasoning, push back if it seems wrong.** Recording a
 stated rationale is not transcription. If the reasoning does not hold, or rests on
@@ -251,8 +251,8 @@ is happening — the register looks like it is working.
 
 ## Register discipline for privacy findings
 
-Moved from design §14.5 (2026-08-27): method rules for the findings register,
-illustrated by its own history. The design keeps only the registers themselves.
+Method rules for the findings register, illustrated by its own history. The
+design keeps only the registers themselves (design §§19.4, 19.7, 19.8).
 
 **When a finding assumes a component, ask whether the component is required.**
 Not whether it can be made safe — that question takes the component as given and

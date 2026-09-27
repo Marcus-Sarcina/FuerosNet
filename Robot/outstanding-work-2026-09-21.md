@@ -104,7 +104,7 @@ seed. Built from every `aad::` use outside tests:
 | `endpoints`, `anchor` | the node's identity (`wire-format.md` §7.6 and `wire-format.md` §7.2) | `crates/node/src/resolution.rs` lines 641–682 | rare; provisionable in advance |
 | `currency` | the issuer, per attestation (`wire-format.md` §7.1; `infra-client-requirements.md` §3) | `crates/node/src/currency.rs` line 345, `self.identity` | yes, on every issuance. **Ruled: no change needed; the staple carries the delegation** [author, 2026-09-21] |
 | `subtree-ack` | *the grandpatron's node, not its operator* (`wire-format.md` §7.5) | `crates/archive/src/topology.rs` line 565, `AckIssuer.identity` | yes, by the section's own words. **Ruled: the temporary key; the adoption is recognised locally at once** [author, 2026-09-21] |
-| cycle repair, today a type-3 disavowal | `wire-format.md` §10.2.4 | `crates/node/src/propagation.rs` line 716 mints the envelope | yes. **Ruled: a removal, not a disavowal; the vacancy memo suffices; §10.2.4 reworded** [author, 2026-09-21] |
+| cycle repair, today a type-3 disavowal | `wire-format.md` §10.2.4 | `crates/node/src/propagation.rs` line 716 mints the envelope | yes. **Ruled: a removal, not a disavowal; the vacancy memo suffices; `wire-format.md` §10.2.4 reworded** [author, 2026-09-21] |
 | `prekey` | the subject (`wire-format.md` §7.8) | `crates/archive/src/prekey.rs` line 38, `SigningIdentity` | a delegated desktop or instrument rotating its bundle has no seed |
 | `catalog` | the owner (`wire-format.md` §6.1) | `crates/archive/src/catalog.rs` line 183 | an owner registering from a delegated device |
 | `locator` | the subject (`wire-format.md` §2.3) | `crates/archive` | a delegated device changing address, or sealing |
@@ -679,93 +679,91 @@ do in tests.
 
   **What the documents and code say today, to be changed.** `wire-format.md`
   §10.2.4 has the detecting node *disavow* the forwarding subordinate with
-  reason code 5 under §4.3, and `crates/node/src/propagation.rs` line 716
-  mints that type-3 envelope; both become a topology-state change. The wire
-  gains the delegation's carriage in the topology class under §10.1's
-  forwarding rule, replaced by `not_before` and held in the topology store;
-  `wire-format.md` §8.2's *signs nothing beyond the handshake* and the
-  verification rules of §7.5 and §7.1 say a key the issuer delegated
-  suffices; `crates/node/src/store.rs` keeps txids and the fold.
+  reason code 5 under `wire-format.md` §4.3, and
+  `crates/node/src/propagation.rs` line 716 mints that type-3 envelope; both
+  become a topology-state change. The wire gains the delegation's carriage in
+  the topology class under `wire-format.md` §10.1's forwarding rule, replaced by
+  `not_before` and held in the topology store; `wire-format.md` §8.2's *signs
+  nothing beyond the handshake* and the verification rules of `wire-format.md`
+  §7.5 and `wire-format.md` §7.1 say a key the issuer delegated suffices;
+  `crates/node/src/store.rs` keeps txids and the fold.
 
   **Ruled [author, 2026-09-21], closing the signing question.** The staple
-  carries the delegation. The vacancy memo suffices to tell a cut
-  subordinate. `wire-format.md` §10.2.4 needs a wording change: the
-  subordinate is *removed*; *disavow* is a synonym for that removal, and the
-  term is overloaded with the §4.3 transaction, so §10.2.4 stops using it.
+  carries the delegation. The vacancy memo suffices to tell a cut subordinate.
+  `wire-format.md` §10.2.4 needs a wording change: the subordinate is *removed*;
+  *disavow* is a synonym for that removal, and the term is overloaded with the
+  `wire-format.md` §4.3 transaction, so `wire-format.md` §10.2.4 stops using it.
 
   **The document pass this makes**, one commit, step 0 of milestone A:
-  `wire-format.md` §8.2 (the delegated key signs topology state, not only
-  the handshake); §7.5 and §7.1 (a key the issuer delegated verifies;
-  `CurrencyAttestation` or its introduction carries the issuer's delegation);
-  §10.1 (the delegation as a topology-class object, forwarded under the
-  rule, replaced by `not_before`, held in the topology store); §10.2.4
-  (removal, the vacancy memo, no transaction and no reason code); §4.3's
-  reason code 5 kept as a tombstone if it names the cycle case, numbers in
-  registers never being reused; and the two stale §7.9 sentences of section
-  2.2. Then the sweep by search: *automatic disavowal* at `wire-format.md`
-  line 4185 and wherever design §15.2 and §6.2 describe the cycle case;
-  PRP-12 (*disavow the subordinate*) and PRP-18 re-derived;
-  `crates/node/src/propagation.rs` lines 153, 716 and 722 from a type-3
-  envelope to a slot removal and its memo. The participant half, a
-  delegated desktop or instrument signing `prekey` (`wire-format.md` §7.8),
-  `catalog` (`wire-format.md` §6.1) or `locator` (`wire-format.md` §2.3),
-  which `app-requirements-notes.md` line 188's count of three contexts
-  missed, is answered by the flooded delegation, the verifiers of all three
-  being horizon members; for prekeys it is also which device holds the
-  private halves, which is the one residue of this item.
-- ~~**The binding on a connection that never attaches.**~~ **Ruled
-  [author, 2026-09-21]: the delegated peer presents its delegation first on
-  every connection**, the attach's fields being that rule's instance on a
-  session and control frame type 7 its instance where no session opens; the
-  direct path, being inside the horizon, binds by the delegation already held
-  from the topology class. Applied to `wire-format.md` §8.0, §8.2 and §9.1,
-  `infra-client-requirements.md` §7 and `light-client-requirements.md` §4.1;
-  RES-12, TRN-03 and TRN-04 requoted; TRN-18 to TRN-20 added (section 2.1).
-- ~~**The delegation window.**~~ **Ruled [author, 2026-09-21]:** the decoder
-  enforces exactly 48 hours; times against the Unix epoch; credentials in a
-  run finish-to-start; the receiver's clock check carries a configurable
-  leeway, default 10 seconds, relaxed for high-latency links; a connection
-  refused on the window is retried. Applied to `wire-format.md` §8.2; TRN-21
-  and TRN-22.
-- ~~**Who mints the transport keypair.**~~ **Ruled [author, 2026-09-21]:** the
-  instance mints its own and sends the public half to be signed, prior art
-  being OpenSSH; one key serves the whole run, the instance being trusted for
-  the cache. Applied to `wire-format.md` §8.2 and
-  `infra-client-requirements.md` §7; DMN-23.
-- ~~**Candidate-pair order**~~ **Ruled [author, 2026-09-22]: defer to the
-  RFC.** design §14.1.1 now says the order is RFC 8445's and binds this
-  implementation; TRV-02, TRV-07 and PAY-15 keep their outcome assertions and
-  TRV-11 holds the order, which `connect_direct` does not yet keep.
-- ~~**The open-decision register**~~ **Ruled [author, 2026-09-22], no
-  objection to the reading offered:** O-007 and O-013 before the kernel-facing
-  API, both being wire interoperability; O-015's restoration during the first
-  shell; O-011, O-012, O-014 and O-016 before release, with O-012's light-patron
-  delegation and down-line threshold and O-014's peer backup optional, as the
-  design has them.
-- ~~**`runner-rs`**~~ **Ruled [author, 2026-09-22]: retired and purged**, so
+  `wire-format.md` §8.2 (the delegated key signs topology state, not only the
+  handshake); `wire-format.md` §7.5 and `wire-format.md` §7.1 (a key the issuer
+  delegated verifies; `CurrencyAttestation` or its introduction carries the
+  issuer's delegation); `wire-format.md` §10.1 (the delegation as a
+  topology-class object, forwarded under the rule, replaced by `not_before`,
+  held in the topology store); `wire-format.md` §10.2.4 (removal, the vacancy
+  memo, no transaction and no reason code); `wire-format.md` §4.3's reason code
+  5 kept as a tombstone if it names the cycle case, numbers in registers never
+  being reused; and the two stale `wire-format.md` §7.9 sentences of section
+  2.2. Then the sweep by search: *automatic disavowal* at `wire-format.md` line
+  4185 and wherever design §15.2 and design §6.2 describe the cycle case; PRP-12
+  (*disavow the subordinate*) and PRP-18 re-derived;
+  `crates/node/src/propagation.rs` lines 153, 716 and 722 from a type-3 envelope
+  to a slot removal and its memo. The participant half, a delegated desktop or
+  instrument signing `prekey` (`wire-format.md` §7.8), `catalog`
+  (`wire-format.md` §6.1) or `locator` (`wire-format.md` §2.3), which
+  `app-requirements-notes.md` line 188's count of three contexts missed, is
+  answered by the flooded delegation, the verifiers of all three being horizon
+  members; for prekeys it is also which device holds the private halves, which
+  is the one residue of this item. - ~~**The binding on a connection that never
+  attaches.**~~ **Ruled [author, 2026-09-21]: the delegated peer presents its
+  delegation first on every connection**, the attach's fields being that rule's
+  instance on a session and control frame type 7 its instance where no session
+  opens; the direct path, being inside the horizon, binds by the delegation
+  already held from the topology class. Applied to `wire-format.md` §8.0, §8.2
+  and `wire-format.md` §9.1, `infra-client-requirements.md` §7 and
+  `light-client-requirements.md` §4.1; RES-12, TRN-03 and TRN-04 requoted;
+  TRN-18 to TRN-20 added (section 2.1). - ~~**The delegation window.**~~ **Ruled
+  [author, 2026-09-21]:** the decoder enforces exactly 48 hours; times against
+  the Unix epoch; credentials in a run finish-to-start; the receiver's clock
+  check carries a configurable leeway, default 10 seconds, relaxed for
+  high-latency links; a connection refused on the window is retried. Applied to
+  `wire-format.md` §8.2; TRN-21 and TRN-22. - ~~**Who mints the transport
+  keypair.**~~ **Ruled [author, 2026-09-21]:** the instance mints its own and
+  sends the public half to be signed, prior art being OpenSSH; one key serves
+  the whole run, the instance being trusted for the cache. Applied to
+  `wire-format.md` §8.2 and `infra-client-requirements.md` §7; DMN-23. -
+  ~~**Candidate-pair order**~~ **Ruled [author, 2026-09-22]: defer to the RFC.**
+  design §14.1.1 now says the order is RFC 8445's and binds this implementation;
+  TRV-02, TRV-07 and PAY-15 keep their outcome assertions and TRV-11 holds the
+  order, which `connect_direct` does not yet keep. - ~~**The open-decision
+  register**~~ **Ruled [author, 2026-09-22], no objection to the reading
+  offered:** O-007 and O-013 before the kernel-facing API, both being wire
+  interoperability; O-015's restoration during the first shell; O-011, O-012,
+  O-014 and O-016 before release, with O-012's light-patron delegation and
+  down-line threshold and O-014's peer backup optional, as the design has them.
+  - ~~**`runner-rs`**~~ **Ruled [author, 2026-09-22]: retired and purged**, so
   that any dependency on it surfaces; none did. `wire-format.md` §13,
-  `test-vectors/README.md`, the corpus test's header and the plan say so.
-- ~~**Placement** of `functional_tests.md`~~ **Ruled [author, 2026-09-22]:**
+  `test-vectors/README.md`, the corpus test's header and the plan say so. -
+  ~~**Placement** of `functional_tests.md`~~ **Ruled [author, 2026-09-22]:**
   `Robot/` is scratch and context and no part of the deliverable;
-  `functional_tests.md` is part of the deliverable design, lives in the root
-  and is tracked like any core design document, having been constructed by the
+  `functional_tests.md` is part of the deliverable design, lives in the root and
+  is tracked like any core design document, having been constructed by the
   reviewer with `Robot/` withheld so that it summarises the design as written.
   `CLAUDE.md` names it as the seventh document and it is staged.
-  **`conformance-review/`, ruled 2026-09-22 [author]:** tooling, not design;
-  the harness is a workspace member at `crates/conformance/` so the gate runs
-  the reviewer's tests on every change and a reproduced finding stays a
-  regression; the reports at a commit are not in the tree. The rule that
-  keeps it evidence, stated in the crate's manifest and `crates/README.md`:
-  we repair what stops a reviewer's test compiling and never what it asserts.
-- ~~**The first shell's slice**~~ **Ruled [author, 2026-09-22]:** payload
-  first, then the ceremony, then infra provisioning, then the resource round
-  trip, each because the next cannot exist without it; any part may be taken
-  up as it comes up, the shared primitives written aware of the whole system
-  rather than revised and left to break their callers. Recorded at
-  `implementation-plan.md` milestone 14 and in section 9.
-- Still open from `implementation-plan.md` section 7: the payload library and
-  its licence, the post-quantum provider, the shell framework, `rhtn`'s
-  argument parser, and the design §22.2 items.
+  **`conformance-review/`, ruled 2026-09-22 [author]:** tooling, not design; the
+  harness is a workspace member at `crates/conformance/` so the gate runs the
+  reviewer's tests on every change and a reproduced finding stays a regression;
+  the reports at a commit are not in the tree. The rule that keeps it evidence,
+  stated in the crate's manifest and `crates/README.md`: we repair what stops a
+  reviewer's test compiling and never what it asserts. - ~~**The first shell's
+  slice**~~ **Ruled [author, 2026-09-22]:** payload first, then the ceremony,
+  then infra provisioning, then the resource round trip, each because the next
+  cannot exist without it; any part may be taken up as it comes up, the shared
+  primitives written aware of the whole system rather than revised and left to
+  break their callers. Recorded at `implementation-plan.md` milestone 14 and in
+  section 9. - Still open from `implementation-plan.md` section 7: the payload
+  library and its licence, the post-quantum provider, the shell framework,
+  `rhtn`'s argument parser, and the design §22.2 items.
 
 ---
 
@@ -795,144 +793,137 @@ land on their own.
 
 ### Milestone A — before the kernel-facing API is committed
 
-0. **The decisions the oracles depend on** (section 8): signing authority,
-   the non-attach authentication boundary, the window, the keypair's minting,
-   the candidate-pair reading, the register's dispositions, `runner-rs`, and
-   the first shell's slice. Each is a document edit in the author's words;
+0.  **The decisions the oracles depend on** (section 8): signing authority, the
+   non-attach authentication boundary, the window, the keypair's minting, the
+   candidate-pair reading, the register's dispositions, `runner-rs`, and the
+   first shell's slice. Each is a document edit in the author's words;
    `light-client-requirements.md` §2 and `wire-format.md` §3 lose their two
    stale sentences (section 2.2) in the same pass. **Done 2026-09-21** but for
-   the candidate-pair reading, the register's dispositions, `runner-rs` and
-   the first shell's slice; the light client is a holder of delegations
+   the candidate-pair reading, the register's dispositions, `runner-rs` and the
+   first shell's slice; the light client is a holder of delegations
    (`light-client-requirements.md` §4.2; TOP-43). **The prekey question was
-   ruled 2026-09-22**: a delegated device generates its own payload keys and
-   the ceremony device signs their public halves; a session is with a device;
-   landed in design §23.3 and §14.2.4. **Its carriage was ruled the same day**:
-   a device is named by the key it presents in a handshake, *necessary to
-   allow multi-device on root nodes* [author, 2026-09-22]; applied to
-   `wire-format.md` §7.8 (`device`, bundle field 5 under the signature, the
-   reply an array of at most eight), §7.10 (the submission names the device;
-   publication, deposit and wake belong to the session's device), §8.2 (an
-   attach speaks for a device), design §14.1.6 (a queue per device),
-   `light-client-requirements.md` §4.1 and `infra-client-requirements.md` §6.
-   PAY-01, PAY-04, PAY-06, PAY-12, SUB-02 and QUE-05 re-derived and five of
-   their tests unmarked; SUB-12, PAY-20, QUE-21 and SES-26 added. The three
-   numbers entered as the assistant's on the 22nd **are the author's
-   [2026-09-23]**: the ceiling of eight bundles per reply; the register row
-   for a fetch revealing a subject's device count, now design §19 P39; and
-   `TopologyPush` body kind 2 for a `Delegation`. Kind 3 for a `SubtreeAck`
-   was the author's [2026-09-22]. **One reading
-   is the author's too**: design §11.2.1 names the grandpatron's siblings
-   and the great-grandpatron as the parties who may accept an
-   acknowledgement, and §10.1.1 carries it only as far as the acknowledged
-   node's adoption, two edges from that node, which reaches neither; the
-   code follows §10.1.1 (TOP-44's sibling is the patron's).
-1. **Models** (section 4). The delegated bind, the non-attach modes covered or
-   excluded by name, the mutant, the currency premise restated, `run-all.sh`
-   rerun. A gap found here goes back to step 0.
-2. **Catalogue** (sections 2.1, 2.3, 2.4, 2.5, and one entry per driver in
-   section 6). Stubs regenerated, `check.py` at 0 flags; the implemented count
-   falls, which is the owed work counted. **Done 2026-09-22**: 395 of 455.
-   Beyond the entries the rulings wrote as they landed, twenty-two more: the
-   delegation's remaining mechanics (TRN-23 to TRN-27, SES-27, DMN-24 to
-   DMN-26, DEC-35, PRP-28), the no-history pairs for the newly named classes
-   and the role table (RSC-41, RSC-42, SUB-13), one entry per caller-less
-   driver in section 6 (TOP-44 acknowledgements, MET-12 evaluation, SUB-14
-   wake delivery), the provider credential in the envelope (ARC-28), and the
-   four product obligations of 09-16 as manual entries (PRD-10 to PRD-13).
-   Not entered: the verifier's leg to a client behind its serving node, which
-   the documents leave unwritten and so gives nothing to quote; it stays in
-   section 6 as owed to the documents first.
-3. **Vectors, once, landed with the codec** (section 3): the audit of the
-   hand-authored fixtures across the whole delta; the generator extended for
-   both mechanisms; `--accept-spec-change`; `verify.py` green; then
-   `rhtn-codec` and `rhtn-crypto` until `corpus.rs` is green. One commit. Write
-   the Rust from the specification and not from `generate.py`: the corpus
-   test is evidence only while the two readings are independent. **Done
-   2026-09-22**, and it reached further than the codec: the shapes are
-   parsed and emitted by `rhtn-archive`, `rhtn-node`, `rhtn-client`,
-   `rhtn-adaptors` and `rhtn-cli` as well, since every one of them reads
-   the corpus and the tree stays coherent at every commit. Eight of the
-   unmarked tests now hold their entries (ARC-08, ARC-09, ARC-11, DMN-09,
-   PAY-01, PAY-04, PAY-12, SUB-02): 403 of 455. Three things are plumbed
-   and not yet done, each an owed entry: one bundle per subject at the
+   ruled 2026-09-22**: a delegated device generates its own payload keys and the
+   ceremony device signs their public halves; a session is with a device; landed
+   in design §23.3 and design §14.2.4. **Its carriage was ruled the same day**:
+   a device is named by the key it presents in a handshake, *necessary to allow
+   multi-device on root nodes* [author, 2026-09-22]; applied to `wire-format.md`
+   §7.8 (`device`, bundle field 5 under the signature, the reply an array of at
+   most eight), `wire-format.md` §7.10 (the submission names the device;
+   publication, deposit and wake belong to the session's device),
+   `wire-format.md` §8.2 (an attach speaks for a device), design §14.1.6 (a
+   queue per device), `light-client-requirements.md` §4.1 and
+   `infra-client-requirements.md` §6. PAY-01, PAY-04, PAY-06, PAY-12, SUB-02 and
+   QUE-05 re-derived and five of their tests unmarked; SUB-12, PAY-20, QUE-21
+   and SES-26 added. The three numbers entered as the assistant's on the 22nd
+   **are the author's [2026-09-23]**: the ceiling of eight bundles per reply;
+   the register row for a fetch revealing a subject's device count, now design
+   §19 P39; and `TopologyPush` body kind 2 for a `Delegation`. Kind 3 for a
+   `SubtreeAck` was the author's [2026-09-22]. **One reading is the author's
+   too**: design §11.2.1 names the grandpatron's siblings and the
+   great-grandpatron as the parties who may accept an acknowledgement, and
+   `wire-format.md` §10.1.1 carries it only as far as the acknowledged node's
+   adoption, two edges from that node, which reaches neither; the code follows
+   `wire-format.md` §10.1.1 (TOP-44's sibling is the patron's). 1. **Models**
+   (section 4). The delegated bind, the non-attach modes covered or excluded by
+   name, the mutant, the currency premise restated, `run-all.sh` rerun. A gap
+   found here goes back to step 0. 2. **Catalogue** (sections 2.1, 2.3, 2.4,
+   2.5, and one entry per driver in section 6). Stubs regenerated, `check.py` at
+   0 flags; the implemented count falls, which is the owed work counted. **Done
+   2026-09-22**: 395 of 455. Beyond the entries the rulings wrote as they
+   landed, twenty-two more: the delegation's remaining mechanics (TRN-23 to
+   TRN-27, SES-27, DMN-24 to DMN-26, DEC-35, PRP-28), the no-history pairs for
+   the newly named classes and the role table (RSC-41, RSC-42, SUB-13), one
+   entry per caller-less driver in section 6 (TOP-44 acknowledgements, MET-12
+   evaluation, SUB-14 wake delivery), the provider credential in the envelope
+   (ARC-28), and the four product obligations of 09-16 as manual entries (PRD-10
+   to PRD-13). Not entered: the verifier's leg to a client behind its serving
+   node, which the documents leave unwritten and so gives nothing to quote; it
+   stays in section 6 as owed to the documents first. 3. **Vectors, once, landed
+   with the codec** (section 3): the audit of the hand-authored fixtures across
+   the whole delta; the generator extended for both mechanisms;
+   `--accept-spec-change`; `verify.py` green; then `rhtn-codec` and
+   `rhtn-crypto` until `corpus.rs` is green. One commit. Write the Rust from the
+   specification and not from `generate.py`: the corpus test is evidence only
+   while the two readings are independent. **Done 2026-09-22**, and it reached
+   further than the codec: the shapes are parsed and emitted by `rhtn-archive`,
+   `rhtn-node`, `rhtn-client`, `rhtn-adaptors` and `rhtn-cli` as well, since
+   every one of them reads the corpus and the tree stays coherent at every
+   commit. Eight of the unmarked tests now hold their entries (ARC-08, ARC-09,
+   ARC-11, DMN-09, PAY-01, PAY-04, PAY-12, SUB-02): 403 of 455. Three things are
+   plumbed and not yet done, each an owed entry: one bundle per subject at the
    node where a bundle per device is owed (PAY-20, SUB-12), the queue per
    recipient where a queue per device is owed (QUE-05, QUE-21), and the
-   courier's relay to the serving node itself carrying an all-zero device
-   until the node's own device reaches it (QUE-21). **All three done
-   2026-09-22 under step 5**: bundles, pools, queues and sessions per
-   device, and the courier addressing the node's presented key.
-4. **The gate** (section 6): the freshness check, so step 3 cannot go stale
-   silently again; the format step; `cargo-deny`. **Done 2026-09-22**: step 0
-   pins, step 3a format at the default width, step 3c deny; the reformat is
-   its own commit (section 6).
-5. **Behavioural code per mechanism**, each against its entries: archive,
-   node, client and `probe` for `wire-format.md` §7.9; transport, node,
-   daemon, client and FFI for the delegation, on the signing table as decided;
-   the design §19.6 notices removed; the no-history audit; section 2.6's
-   confirmations as tests. Also the harness item the gate raised twice
-   (2026-09-22, both times under the full run's load, passing alone):
-   DMN-17's daemon scenario's dial between two daemon processes does not
-   complete inside the 120 s the scenario already allows: a stalled
-   handshake under load, cause not found, a harness matter to run down.
-   **Found 2026-09-22**: the harness closed the daemon's stdout after its
-   first line, and the daemon's next print killed it on the broken pipe
-   when it lost that race under load; the harness now keeps its pipes and
-   the daemon survives a closed one.
-   **In progress 2026-09-22.** Landed: the three-way bind in the transport
-   on every connection mode, the credential and presenter, the request-only
-   dial, the window and its leeway, the cache, the ticket clamp (TRN-03 and
-   RES-12 rewritten, TRN-18 to TRN-27, SES-27); the node's delegations in
-   the store, the deferred acknowledgement, the delegated signers and the
-   staple (PRP-26, PRP-28, TOP-41, TOP-42, CUR-21, CUR-22, DEC-35); the
-   push wrapper's kind 2 in the wire, the vectors and the codec; the
-   seedless node and daemon (DMN-23 to DMN-26), the identity replaced by a
-   party in the transport's configurations and by a public half and an
-   optional signer in the view; the cycle repair as a removal (PRP-12,
-   PRP-27); the queue and sessions per device (SES-26, QUE-05, QUE-21,
-   PAY-20, SUB-12), which closes the three plumbed-not-done items of step
-   3; the light client's held delegations (TOP-43); acknowledgements
-   travelling as kind 3, issued and taken in a running node (TOP-44); the
-   direct path's checks in RFC 8445's order and at its pace (TRV-11);
-   the no-history audit of section 2.5 (RSC-41, RSC-42, SUB-13); section
-   2.6's five confirmations; the light client and the boundary on a device
-   holding a delegation and no seed, with the backup's provider slot
-   (ARC-28). **Step 5 is complete 2026-09-22** but for what waits on the
-   author, all four ruled 2026-09-23: kind 2, the ceiling of eight, the
-   §19 row (P39), and the reach of §11.2.1 read within §10.1.1's storage
-   reach (design §11.2.1.1 reworded; TOP-44 re-derived). **Step 6 in progress**: the durable lifecycle
-   and the storage seam; failover, status and the maintenance contract
-   inside the kernel; the direct path joined with its override; the
-   catalog branch, the capability matrix (`Robot/capability-matrix.md`) and
-   the `.kt`/`.swift` walk, all landed 2026-09-22. `uniffi` landed
-   2026-09-23 with the Kotlin round trip in the gate; the administration
-   channel is described by the author and awaits his word that the
-   description closes it.
-   Next: step 7.
-6. **The kernel a shell binds to** (section 7): the durable lifecycle and
-   storage seam, failover and status inside the kernel, the maintenance
-   contract, the direct path joined, the catalog branch in the courier, the
-   capability matrix, the delegation-holding constructor, `uniffi` with one
-   binding compiling and one round trip through it, the catalogue walk over
-   `.kt` and `.swift`, and the administration-channel decision. Whichever of
-   section 6's drivers the chosen slice needs: the verifier leg for a
-   ceremony-first slice; the acknowledgement driver, evaluation and the
-   resource paths for a resource-first one.
-7. **The reviewer harness** (section 5): the one initializer, the status
-   files, and a third conformance run at a commit where the pins are green,
-   reaching the paths step 6 integrated. **This side's part done
-   2026-09-23**: the initializer repaired on the 22nd, the status files
-   superseded by the gate's run of the harness (67 of 67 at `dbeaecd`), the
-   commit green and the brief at `Robot/conformance-run-3-brief.md`; the
-   run itself is the reviewer's, commissioned by the author. **Run
-   2026-09-23 at `8ada6ce`**: nine findings, eight closed the same day, the
-   ninth (R09) **ruled and applied 2026-09-23**: an uninvolved party
-   evaluates and does not persist, and replays its current state and its own
-   acts alone.  The store is a seen-set, the derived view's watermark is
-   taken over it, a party files what it co-signed in its own archive, and
-   design §15.1.1, `infra-client-requirements.md` §4.3 and
-   `functional_tests.md` TOP-035 follow (`review-tracking.md`).  **Open**:
-   where a light client gets its horizon on a first attach to a node that
-   has been running since before it arrived. **Ruled [author, 2026-09-23]: within storage reach**; design §11.2.1.1 now names the acceptors as the nodes within the acknowledgement's own reach, the patron's siblings in practice.
+   courier's relay to the serving node itself carrying an all-zero device until
+   the node's own device reaches it (QUE-21). **All three done 2026-09-22 under
+   step 5**: bundles, pools, queues and sessions per device, and the courier
+   addressing the node's presented key. 4. **The gate** (section 6): the
+   freshness check, so step 3 cannot go stale silently again; the format step;
+   `cargo-deny`. **Done 2026-09-22**: step 0 pins, step 3a format at the default
+   width, step 3c deny; the reformat is its own commit (section 6). 5.
+   **Behavioural code per mechanism**, each against its entries: archive, node,
+   client and `probe` for `wire-format.md` §7.9; transport, node, daemon, client
+   and FFI for the delegation, on the signing table as decided; the design §19.6
+   notices removed; the no-history audit; section 2.6's confirmations as tests.
+   Also the harness item the gate raised twice (2026-09-22, both times under the
+   full run's load, passing alone): DMN-17's daemon scenario's dial between two
+   daemon processes does not complete inside the 120 s the scenario already
+   allows: a stalled handshake under load, cause not found, a harness matter to
+   run down. **Found 2026-09-22**: the harness closed the daemon's stdout after
+   its first line, and the daemon's next print killed it on the broken pipe when
+   it lost that race under load; the harness now keeps its pipes and the daemon
+   survives a closed one. **In progress 2026-09-22.** Landed: the three-way bind
+   in the transport on every connection mode, the credential and presenter, the
+   request-only dial, the window and its leeway, the cache, the ticket clamp
+   (TRN-03 and RES-12 rewritten, TRN-18 to TRN-27, SES-27); the node's
+   delegations in the store, the deferred acknowledgement, the delegated signers
+   and the staple (PRP-26, PRP-28, TOP-41, TOP-42, CUR-21, CUR-22, DEC-35); the
+   push wrapper's kind 2 in the wire, the vectors and the codec; the seedless
+   node and daemon (DMN-23 to DMN-26), the identity replaced by a party in the
+   transport's configurations and by a public half and an optional signer in the
+   view; the cycle repair as a removal (PRP-12, PRP-27); the queue and sessions
+   per device (SES-26, QUE-05, QUE-21, PAY-20, SUB-12), which closes the three
+   plumbed-not-done items of step 3; the light client's held delegations
+   (TOP-43); acknowledgements travelling as kind 3, issued and taken in a
+   running node (TOP-44); the direct path's checks in RFC 8445's order and at
+   its pace (TRV-11); the no-history audit of section 2.5 (RSC-41, RSC-42,
+   SUB-13); section 2.6's five confirmations; the light client and the boundary
+   on a device holding a delegation and no seed, with the backup's provider slot
+   (ARC-28). **Step 5 is complete 2026-09-22** but for what waits on the author,
+   all four ruled 2026-09-23: kind 2, the ceiling of eight, the design §19 row
+   (P39), and the reach of design §11.2.1 read within `wire-format.md` §10.1.1's
+   storage reach (design §11.2.1.1 reworded; TOP-44 re-derived). **Step 6 in
+   progress**: the durable lifecycle and the storage seam; failover, status and
+   the maintenance contract inside the kernel; the direct path joined with its
+   override; the catalog branch, the capability matrix
+   (`Robot/capability-matrix.md`) and the `.kt`/`.swift` walk, all landed
+   2026-09-22. `uniffi` landed 2026-09-23 with the Kotlin round trip in the
+   gate; the administration channel is described by the author and awaits his
+   word that the description closes it. Next: step 7. 6. **The kernel a shell
+   binds to** (section 7): the durable lifecycle and storage seam, failover and
+   status inside the kernel, the maintenance contract, the direct path joined,
+   the catalog branch in the courier, the capability matrix, the
+   delegation-holding constructor, `uniffi` with one binding compiling and one
+   round trip through it, the catalogue walk over `.kt` and `.swift`, and the
+   administration-channel decision. Whichever of section 6's drivers the chosen
+   slice needs: the verifier leg for a ceremony-first slice; the acknowledgement
+   driver, evaluation and the resource paths for a resource-first one. 7. **The
+   reviewer harness** (section 5): the one initializer, the status files, and a
+   third conformance run at a commit where the pins are green, reaching the
+   paths step 6 integrated. **This side's part done 2026-09-23**: the
+   initializer repaired on the 22nd, the status files superseded by the gate's
+   run of the harness (67 of 67 at `dbeaecd`), the commit green and the brief at
+   `Robot/conformance-run-3-brief.md`; the run itself is the reviewer's,
+   commissioned by the author. **Run 2026-09-23 at `8ada6ce`**: nine findings,
+   eight closed the same day, the ninth (R09) **ruled and applied 2026-09-23**:
+   an uninvolved party evaluates and does not persist, and replays its current
+   state and its own acts alone. The store is a seen-set, the derived view's
+   watermark is taken over it, a party files what it co-signed in its own
+   archive, and design §15.1.1, `infra-client-requirements.md` §4.3 and
+   `functional_tests.md` TOP-035 follow (`review-tracking.md`). **Open**: where
+   a light client gets its horizon on a first attach to a node that has been
+   running since before it arrived. **Ruled [author, 2026-09-23]: within storage
+   reach**; design §11.2.1.1 now names the acceptors as the nodes within the
+   acknowledgement's own reach, the patron's siblings in practice.
 
 **Exit for milestone A, through generated bindings**: a shell opens durable
 state, attaches with the supported credential, observes its connection status,
