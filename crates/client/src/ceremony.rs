@@ -2139,10 +2139,11 @@ impl Client {
     /// Which payload construction this build runs, for the client to put
     /// where its user can reach it (`light-client-requirements.md` §3): no
     /// peer can tell from the wire, so the only party who can say is the
-    /// client itself.
-    pub fn payload_construction(&self) -> &'static str {
-        use crate::ratchet::{NoPostQuantum, PostQuantumRatchet};
-        NoPostQuantum.construction()
+    /// client itself. **A value, read off the sessions' own type** — a
+    /// restated answer would quietly go wrong the day the type moved —
+    /// and the wording is each shell's, in its user's own language.
+    pub fn payload_construction(&self) -> crate::ratchet::Construction {
+        payload::construction()
     }
 
     /// A binding that arrived beside a delivery (`wire-format.md` §7.10).

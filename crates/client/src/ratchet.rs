@@ -67,12 +67,23 @@ pub trait PostQuantumRatchet {
     /// The reverse, into a default-constructed ratchet.
     fn restore(&mut self, b: &[u8]) -> Result<(), String>;
 
-    /// What a client tells its own user is running
-    /// (`light-client-requirements.md` §3): no peer can tell from the
-    /// wire, so the only party who can say is the client itself.
-    fn construction(&self) -> &'static str {
-        "the Triple Ratchet"
+    /// Which construction this half makes of the session, for the client
+    /// to put where its own user can reach it (`light-client-requirements.md`
+    /// §3): no peer can tell from the wire, so the only party who can say
+    /// is the client itself. **A value, not a sentence** — the wording is
+    /// each shell's, in its user's own language.
+    fn construction(&self) -> Construction {
+        Construction::TripleRatchet
     }
+}
+
+/// The payload session's construction, as the client states it to its own
+/// user (design §14.2.4.3: the Double Ratchet is the floor and the Triple
+/// Ratchet is recommended).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Construction {
+    DoubleRatchet,
+    TripleRatchet,
 }
 
 /// No post-quantum ratchet: the Double Ratchet alone, which is the floor.
@@ -99,8 +110,8 @@ impl PostQuantumRatchet for NoPostQuantum {
     fn restore(&mut self, _b: &[u8]) -> Result<(), String> {
         Ok(())
     }
-    fn construction(&self) -> &'static str {
-        "the Double Ratchet (the floor)"
+    fn construction(&self) -> Construction {
+        Construction::DoubleRatchet
     }
 }
 
@@ -282,6 +293,12 @@ fn open(mk: &[u8; 32], ad: &[u8], header: &[u8], ciphertext: &[u8]) -> Result<Ve
 }
 
 impl<P: PostQuantumRatchet + Clone + Default> Ratchet<P> {
+    /// Which construction this ratchet type makes of a session: the
+    /// post-quantum half's own answer, off the type and never restated.
+    pub fn construction() -> Construction {
+        P::default().construction()
+    }
+
     /// The initiator, holding the shared secret and the responder's signed
     /// prekey as its first ratchet key, with a fresh ratchet key of its own.
     pub fn initiator(sk: [u8; 32], their_spk: DhPublic, dhs: DhSecret, ad: Vec<u8>) -> Self {

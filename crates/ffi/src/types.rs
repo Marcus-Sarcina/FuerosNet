@@ -63,6 +63,24 @@ impl Channel {
 /// unavailable and never a failure**, and nothing is promoted: the
 /// distinction is the shell's to report and the client's to weigh
 /// (`light-client-requirements.md` §1.3).
+/// The payload session's construction, as the client states it to its own
+/// user (`light-client-requirements.md` §3). A value, not a sentence: the
+/// wording is each shell's, in its user's own language.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum Construction {
+    DoubleRatchet,
+    TripleRatchet,
+}
+
+impl From<rhtn_client::ratchet::Construction> for Construction {
+    fn from(c: rhtn_client::ratchet::Construction) -> Self {
+        match c {
+            rhtn_client::ratchet::Construction::DoubleRatchet => Construction::DoubleRatchet,
+            rhtn_client::ratchet::Construction::TripleRatchet => Construction::TripleRatchet,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum ChannelOutcome {
     Pass,

@@ -3,6 +3,7 @@ package com.comptus.fueros
 import android.content.Context
 import java.security.SecureRandom
 import org.json.JSONObject
+import uniffi.rhtn_ffi.Construction
 import uniffi.rhtn_ffi.Event
 import uniffi.rhtn_ffi.Participant
 import uniffi.rhtn_ffi.Refused
@@ -160,7 +161,12 @@ object Kernel {
             is Status.Reconnecting -> "reconnecting…"
             is Status.Lost -> "lost: no serving node reachable"
         }
-        status("$line · presents $key…\npayload: ${p.payloadConstruction()}")
+        // the kernel says which; the words are this shell's
+        val construction = when (p.payloadConstruction()) {
+            Construction.DOUBLE_RATCHET -> "the Double Ratchet (the floor)"
+            Construction.TRIPLE_RATCHET -> "the Triple Ratchet"
+        }
+        status("$line · presents $key…\npayload: $construction")
     }
 
     private fun status(line: String) = front.status(line)

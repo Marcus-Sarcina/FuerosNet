@@ -12423,3 +12423,35 @@ is absent, which the gate reports as skipped and never as passed, and
 failing the gate where a test fails. It prints the count, not a state:
 *6 run, 0 failed*. The settings file's boundary statement moved with the
 boundary: the APK and the native library stay outside the gate.
+
+## The last two platform leaks, closed (2026-09-27)
+
+**The construction crosses as a value; the words are each shell's.** The
+audit's sharpest finding was English UI copy in `client/src/ratchet.rs` —
+*"the Double Ratchet (the floor)"* — handed through the boundary "verbatim
+what the shell shows its user", so every shell either displayed that
+English or re-derived. And the client's answer was hardcoded
+(`NoPostQuantum.construction()`), a latent lie for the day SPQR lands. Both
+gone at once: `Construction { DoubleRatchet, TripleRatchet }` is read **off
+the ratchet type the payload module actually runs** — `payload::
+construction()` asks its own `Ratchet` alias, so the answer moves if the
+type ever does and can never restate it wrongly — crosses the FFI as a
+uniffi enum, and the Android shell phrases it in its `when`, where its
+user's language lives. The screen still reads *payload: the Double Ratchet
+(the floor)*, asserted on the emulator; what changed is who owns the words.
+
+**The cleaner setting moved to the app.** `crates/ffi/uniffi.toml` is
+deleted: the library no longer carries an Android lint constraint that
+bound every Kotlin consumer, and the generated binding regains its default
+— the `Class.forName` probe for `java.lang.ref.Cleaner`, JNA below API 33.
+What the app owns instead is an app-scoped `lint.xml` exempting **NewApi in
+the generated tree alone**, with the reasoning in the file: the probe is
+correct and invisible to lint, and minSdk is the app's, so the exemption is
+the app's. Lint: 0 errors with the guarded calls back in. The host
+roundtrip now exercises the JVM's own cleaner; the emulator ran the probe's
+Cleaner branch on API 36 through attach, exchange and recreation.
+
+**Verified**: client ratchet/payload/sealed 25, boundary 9, shell unit
+tests 6, Kotlin roundtrip, lint 0 errors, APK assembled, emulator smoke
+with the wording asserted on screen; the full gate re-run follows in this
+entry's commit.

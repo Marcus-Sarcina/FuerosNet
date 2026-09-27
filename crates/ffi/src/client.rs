@@ -913,11 +913,14 @@ impl Participant {
         self.handle.with_blocking(|c| c.public.key_material())
     }
 
-    /// Which payload construction this build runs, verbatim what the shell
-    /// shows its user (`light-client-requirements.md` §3).
-    pub fn payload_construction(&self) -> String {
+    /// Which payload construction this build runs, for the shell to show
+    /// its user (`light-client-requirements.md` §3): a value, and the
+    /// wording is the shell's, in its user's own language.
+    #[must_use]
+    pub fn payload_construction(&self) -> crate::types::Construction {
         self.handle
-            .with_blocking(|c| c.payload_construction().to_string())
+            .with_blocking(|c| c.payload_construction())
+            .into()
     }
 
     /// Begin a ceremony with `counterparty`, nominating witnesses from

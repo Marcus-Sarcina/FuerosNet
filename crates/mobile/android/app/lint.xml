@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The generated binding probes for `java.lang.ref.Cleaner` with
+     `Class.forName` and falls back to JNA's cleaner below API 33 — correct,
+     and invisible to lint, which reports the guarded calls as NewApi errors
+     against minSdk 31. The exemption is scoped to the generated tree and
+     lives HERE because minSdk is this app's: the library carries no
+     Android lint constraint, and every other Kotlin consumer gets the
+     generator's default cleaner [author, 2026-09-27]. -->
+<lint>
+    <issue id="NewApi">
+        <ignore path="src/generated/kotlin" />
+    </issue>
+</lint>

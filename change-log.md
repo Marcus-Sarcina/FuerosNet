@@ -11020,3 +11020,32 @@ reported as skipped and never as passed, failing the gate where a test
 fails, and printing the count rather than a state. The boundary statement
 moved with the boundary: the gate runs the shell's JVM unit tests; the APK
 and the native library stay outside it.
+
+### 2026-09-27 (a value, not a sentence, and the lint constraint goes home)
+
+**The payload construction crosses the boundary as a value.** The library
+was handing shells English — *"the Double Ratchet (the floor)"* — to show
+verbatim, and the client's answer was restated rather than read, a latent
+lie for the day the post-quantum half lands. Both gone at once: the
+construction is an enum read off the ratchet type the payload module
+actually runs, so the answer moves if the type ever does; it crosses the
+boundary as a value, and each shell phrases it in its user's own language.
+The screen reads as it read; what changed is who owns the words
+(`light-client-requirements.md` §3's statement obligation, unchanged).
+
+**The library carries no Android lint constraint.** The binding generator's
+configuration that disabled the Java cleaner — added to quiet Android lint,
+binding every Kotlin consumer to one platform's minSdk — is deleted, and
+the generated binding regains its default: a runtime probe for the JVM's
+own cleaner, JNA below API 33. The app owns an app-scoped lint exemption
+for the generated tree alone, with the reasoning in the file: the probe is
+correct and invisible to lint, and minSdk is the app's, so the exemption is
+the app's [author, 2026-09-27]. Lint reports zero errors with the guarded
+calls back in; the emulator ran the probe's Cleaner branch through attach,
+exchange and recreation; the gate passes end to end.
+
+With these two, the separation audit's ledger is clean: nothing in the
+library names a platform outside the test harness, the boundary carries
+values rather than sentences, and the one platform-motivated setting sits
+in the platform's own application. A repository split, whenever its trigger
+fires, is a move rather than a repair.

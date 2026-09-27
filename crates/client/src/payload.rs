@@ -484,6 +484,13 @@ pub struct InitialMessage {
 pub const CHANNEL_INITIAL: u64 = 0;
 pub const CHANNEL_MESSAGE: u64 = 1;
 
+/// Which construction this module's sessions run: read off the ratchet
+/// type in use here, so the answer moves if the type ever does and can
+/// never restate it wrongly.
+pub fn construction() -> crate::ratchet::Construction {
+    <Ratchet>::construction()
+}
+
 /// Plaintext kinds, the demultiplexing this construction settles on
 /// (design §14.2.4.6): a protocol object or application payload.
 pub const KIND_APPLICATION: u64 = 0;
