@@ -12145,3 +12145,64 @@ holds. L §9 and D §14.1.0 are the authority; neither said it in those words,
 which is why the row exists. PAY goes 11 to 10 and APP 12 to 13, so the
 document still carries 471 families across 26 prefixes and every per-prefix
 count was re-checked against the footer.
+
+## `functional_tests.md` joins the reference checker (2026-09-26)
+
+**The document with the most citations in the tree was the one nothing
+checked.** It is a root document whose entire Authority column is `§N` into
+the five design documents, and `refcheck.py` had never looked at it. Adding it
+took three changes to the resolver and turned up **seven references that did
+not resolve** plus one `Robot/` path.
+
+**Bare §N means this document's own sections** [author, 2026-09-26, by
+instruction]. Its own §1 states the rule — *"References such as `W §4.1` point
+to numbered sections in these files"* — so a reference to a design document
+always carries its letter and an unqualified one is a self-reference. The
+abbreviation table is a qualifier in that document and nowhere else: a
+standalone `I` or `D` in the design documents is prose.
+
+**The convention has a sharp edge and the checker exposes it rather than
+hiding it.** `functional_tests.md` has its own §1–§10 and §3.1–§3.7, so a bare
+§N whose number happens to be one of those resolves silently instead of
+flagging. That is why the resolver now joins a comma-repeated marker — `L §4,
+§1.3, §5` is one qualified list, and left unjoined it attributed §4 to L while
+§1.3 and §5 fell through to this document, §5 *passing* because §5 exists here.
+`--self` prints the set that resolved that way so it can be read rather than
+trusted; it is four, and all four are genuine (`§4`, `§1`, `§1`, `§2`, the
+third reading *"in §1 here"*).
+
+**A §N inside a verbatim quotation is the quoted document's reference.** Two
+sites reproduce a design sentence that refers to its own document, and neither
+can be qualified without falsifying the quote — which the acceptance checker
+verifies. They resolve against the document the quotation is attributed to.
+Inheritance is confined to quotations deliberately: as a general rule it would
+let *"D §6.4 and W §4.5 agree … §6.4's threshold language"* resolve §6.4
+against W, where it also exists, and pass.
+
+**Two blind spots found while measuring, both now closed.** A `§§` list only
+ever had its *first* member checked, so `W §§1, 1.2, 3.6` verified §1 and
+ignored the rest — 4 members in the design documents, 426 in
+`functional_tests.md`. And a range is now checked at both endpoints; the
+interior is not enumerated, because `§7–7.3` changes depth partway.
+
+**What the seven were.** NET-014's `D §19.8 C24, §19.4 P40` — the comma join
+broken by the finding id between. OPS-017's bare `§10.1.3`, which its own
+Authority column gives as `W §§10.1.2–10.1.3`. And five in the open-decisions
+register, each a second sentence continuing a `D §N` it had stopped naming:
+O-002 §11.2, O-003 §9.0, O-004 §6.4 and §8.1.2, O-010 §7.3. All now carry
+their letter. `functional_tests.md` also named `Robot/` with its path, which no
+root document may do; it names the working files under `Robot` without one, as
+`change-log.md` does.
+
+**3710 references across six documents, 0 flags** — 2378 across five before.
+Per document: 1435 design, 621 wire, 126 light, 127 infra, 73 resource, 1328
+functional. The six `RFC nnnn §N` are external and skipped.
+
+**Owed, and not mine to close**: `Robot/*.md` section references are still
+unchecked, and always were — **2247 of them**. Three documents declare
+themselves as-of-filing and cannot be checked by construction
+(`review-tracking.md` 1607, `review-plan.md` 47,
+`resource-interaction-requirements.md` 39). The other eight hold 554 between
+them, `implementation-plan.md` and `outstanding-work-2026-09-21.md` most of
+that. Whether those are live enough to check is a question about which working
+files are frozen, which is the author's.

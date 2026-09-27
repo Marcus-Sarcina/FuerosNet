@@ -10832,3 +10832,47 @@ reachability and no order at all, which O-006 settled on 2026-09-17. The
 inventory said 15 crates against 16, that the binding generator was unadopted,
 and that both mobile shells were READMEs. 471 families across 26 prefixes,
 unchanged.
+
+### 2026-09-26 (the document with the most citations was the one nothing checked)
+
+**`functional_tests.md` is in the reference checker.** It is a root document
+whose whole Authority column is section references into the five design
+documents, and the checker had never looked at it. **A bare §N there means its
+own sections** [author, 2026-09-26]: its §1 states the rule — *"References such
+as `W §4.1` point to numbered sections in these files"* — so a reference to a
+design document always carries its letter, and an unqualified one is a
+self-reference. The abbreviation table is a qualifier in that document and
+nowhere else, a standalone `I` or `D` in the design documents being prose. Two
+more rules came from the text rather than from preference: a comma may repeat
+the marker, so `D §12.6.3, §10.1` is one qualified list; and **a §N inside a
+verbatim quotation is the quoted document's reference**, which cannot be
+qualified without falsifying the quote and so resolves against the document the
+quotation is attributed to.
+
+**The convention has an edge, and it is printed rather than hidden.** That
+document has its own §1–§10 and §3.1–§3.7, so a bare §N whose number is one of
+those resolves silently instead of flagging. Joining the comma-repeated marker
+is what keeps that from mattering: unjoined, `L §4, §1.3, §5` attributed §4 to
+the light-client document and let §5 *pass* against this document's own §5.
+`--self` lists the set that resolved to the containing document so it can be
+read; it is four, and all four are genuine.
+
+**Two blind spots the checker already had are closed.** A `§§` list had only
+ever had its first member checked, so `W §§1, 1.2, 3.6` verified §1 and ignored
+the rest — four members in the design documents and 426 in the test document.
+A range is now checked at both endpoints; its interior is not enumerated,
+because `§7–7.3` changes depth partway.
+
+**Seven references did not resolve, and are fixed.** NET-014 carried
+`D §19.8 C24, §19.4 P40`, where the finding id breaks the comma join; OPS-017
+named `§10.1.3` bare where its own Authority gives `W §§10.1.2–10.1.3`; and
+five in the open-decisions register were second sentences continuing a `D §N`
+they had stopped naming — O-002 §11.2, O-003 §9.0, O-004 §6.4 and §8.1.2,
+O-010 §7.3. No quotation was altered. The same document also named the working
+files by path, which no root document may do; it names them without one, as
+this log does.
+
+**3710 references across six documents, zero flags**, where it was 2378 across
+five: 1435 design, 621 wire, 126 light, 127 infra, 73 resource, 1328
+functional. The six `RFC nnnn §N` are external and skipped. No document lost
+coverage. 471 families across 26 prefixes, unchanged.
