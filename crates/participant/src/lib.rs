@@ -92,6 +92,7 @@ impl Instrument {
             shell.clone(),
             shell.clone(),
             shell.clone(),
+            shell.clone(),
         );
         let client =
             Participant::start(seeds, known, Arc::new(p)).map_err(|e| e.reason().to_string())?;

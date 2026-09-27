@@ -40,6 +40,22 @@ pub struct Terminal {
     kept: Mutex<std::collections::BTreeMap<String, Vec<u8>>>,
 }
 
+// **Unsealed by declaration** (`light-client-requirements.md` §9): this
+// instrument is explicitly ephemeral, and on a terminal the store's
+// protection is the operating environment's, as an operator's is
+// (`infra-client-requirements.md` §7). Stated here, never fallen back to.
+impl rhtn_ffi::device::Custody for Terminal {
+    fn key(&self) -> Option<Vec<u8>> {
+        None
+    }
+    fn keep(&self, _key: Vec<u8>) -> bool {
+        false
+    }
+    fn unsealed(&self) -> bool {
+        true
+    }
+}
+
 impl Storage for Terminal {
     fn read(&self, name: String) -> Option<Vec<u8>> {
         self.kept.lock().unwrap().get(&name).cloned()

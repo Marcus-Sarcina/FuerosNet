@@ -27,6 +27,7 @@ path = "src/bin/payload-peer.rs"
 required-features = ["harness"]
 
 [dependencies]
+zeroize = { workspace = true }
 # MPL-2.0, allowed for the binding generator [author, 2026-09-16]
 uniffi = "0.32"
 rhtn-node = { path = "../node", optional = true }

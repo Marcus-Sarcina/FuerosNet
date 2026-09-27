@@ -12275,3 +12275,82 @@ material never sat in what is now §19 — leaving the rule and a current citati
 of the registers themselves, **§§19.4, 19.7, 19.8**.
 
 **4292 references across 15 documents, 0 flags.**
+
+## The kernel seals; the platform keeps the key (2026-09-27)
+
+**Ruled** [author, 2026-09-26, confirmed 2026-09-27]: the storage key is an
+environment-supplied input — any library function needing it calls a *named,
+environment-defined source*, and providing that source is the
+platform-specific implementation's whole job. "Envelope for the desktop
+client, environment-owned for the daemon" stands for the platforms; the
+library owns the construction.
+
+**What moved, and why it is the separation-of-concerns answer.** The sealing
+cryptography left the shell: `AndroidShell` was doing AES-GCM in Kotlin, an
+iOS shell would have done its own in Swift, a desktop shell a third — per-
+platform cryptography multiplying against the project's own premise that no
+expert review is coming. Now `rhtn-client::sealed` is the one construction
+(AES-256-GCM, a fresh 96-bit nonce per write, **the storage name as the
+associated data** so a blob lifted from one file refuses to open as another,
+a header no deterministic-CBOR item can begin with), and a shell's
+cryptographic job is custody alone. A first-class iOS or desktop client now
+differs from Android only in where 32 bytes come from.
+
+**The seam is the eighth platform object.** `Custody` sits beside clock,
+random and storage: `key()` returns the kept key, `keep()` persists one the
+kernel minted, `unsealed()` declares the environment-owned case.
+`SealedStore` wraps the storage seam at every start; a source that cannot
+keep the key **refuses the start** — falling quietly to plaintext is the one
+thing the seam must never do, and a boundary test holds it there. Sealed
+state that fails to open refuses the start rather than beginning fresh over
+it, which was already the boundary's stance for state that does not parse.
+The key is wiped when the seam drops.
+
+**One security delta, accepted knowingly** [author, 2026-09-27]: the sealing
+key now enters process memory (wiped, beside the ratchet keys it protects),
+where the old shell arrangement kept it inside the Keystore entirely. What
+custody buys is the state at rest; the Keystore still wraps the kept key and
+the seeds, and its wrapping key still never enters the process.
+
+**Documents**: `light-client-requirements.md` §9's at-rest bullet inverted —
+the old rationale said the kernel *cannot* encrypt because the only key worth
+using is the platform's; the kernel now can, and platform-agnosticism is
+preserved through the key's provenance. `infra-client-requirements.md` §7
+gained the at-rest sentence it never had: on an operator's box protection is
+the operating environment's, stated so the choice is a choice, with instance
+mode (a delegated key, never the seed) as what actually bounds a seized
+disk. APP-011 reworded to the new contract; 471 families unchanged. The
+vector pin was re-accepted after the audit: nothing the generator constructs
+or the hand-authored fixtures assert leans on the changed passages — the
+only "sealed" in the generator is a sealed series or capture.
+
+**Proof, not assertion.** Boundary suite 9 of 9, three of them new: pre-seam
+plaintext state is read and the first write after the seam seals; failed
+custody refuses the start with nothing written on the way down; another
+key's state refuses the start. The seal itself: 6 vectors including
+name-swap and truncation refusals. Kotlin roundtrip through the new
+interface passes. And the emulator ran the real migration: the pre-custody
+APK (yesterday's, saved before the rebuild) provisioned and exchanged; the
+new APK installed over its data; **the same identity attached from carried
+state and exchanged again**; on disk, `client` begins `rhtn/1:sealed`,
+`custody` holds the wrapped key, `seeds` stays the shell's 92 wrapped bytes.
+A cold restart then opened the kernel-sealed state — the start would refuse
+if it did not — with the same material logged.
+
+**Two loose ends, named**: the restart test's byte-equality assertion moved
+to after the clean detach, because a fresh nonce per write makes equality
+across a re-save meaningless — the assertion still pins that *starting*
+rewrites nothing. And `payload-peer` keeps its key beside its store because
+the peer is ephemeral by design; a shell with anything to lose keeps it
+apart, and says so in place.
+
+**The first gate run failed, on my sweep, not on the seam.** I enumerated
+the platform's construction sites by grepping `ffi/` — the exact
+fixing-the-instance failure the working conventions warn about — and the
+gate found five more across three crates: the terminal instrument, the sim
+kernel fixture, and three in the retained reviewer suite. The instrument is
+**unsealed by declaration**, which is the ruling's own terminal case; the
+fixtures declare unsealed too, the repair that compiles them while touching
+nothing their tests assert, under the harness's own rule. The minted key's
+drawn copy is also wiped now, which the first pass left in freed memory —
+found by reading the landed code, which is what reading it is for.

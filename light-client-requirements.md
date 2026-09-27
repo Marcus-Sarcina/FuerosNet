@@ -662,17 +662,26 @@ on the wire.
   application obtains it from the service the user picked (§4.1) and hands it
   in; the kernel holds no relationship with that service and obtains nothing
   itself.
-- **The application's storage encrypts what the kernel hands it, at rest**
-  [author, 2026-09-26]. What crosses outward to be persisted is the archive,
-  the payload sessions and the ratchet state — **key material among it** — and
-  the kernel cannot encrypt it, because the only key worth using is one the
-  platform holds and the kernel is platform-agnostic by construction
-  (design §14.1.0). So the obligation sits on this side of the seam.
-  **Under a key not held in normal working state**, which is the rule design
-  §7.5.2 already states for captures: a platform key store, hardware-backed
-  where the device has one, so that the app's files are not the whole of what
-  an attacker needs. State that fails to open is no state — report nothing
-  held rather than hand the kernel something that cannot be trusted.
+- **The kernel seals what it persists; the application keeps the key**
+  [author, 2026-09-26]. What is persisted is the archive, the payload
+  sessions and the ratchet state — **key material among it** — so it is
+  encrypted before it reaches the platform's storage, in the kernel, under a
+  storage key the kernel mints. The kernel stays platform-agnostic
+  (design §14.1.0) through the key's **provenance**: it never chooses where
+  the key lives, it calls a named source the application supplies, and
+  providing that source from platform-local affordances is the application's
+  whole obligation — a platform key store wrapping it on a phone,
+  hardware-backed where the device has one, so the wrapping key never enters
+  the process; a key derived from a passphrase where a person is present at
+  start (design §13.7.1's envelope); the operating environment's own
+  convention where the platform declares itself unsealed. **Unsealed is a
+  declared configuration, never a fallback**: a source that cannot keep the
+  key refuses the start rather than quietly writing plain. The storage key
+  sits in the kernel's working memory while it runs, beside the session keys
+  it protects, and is wiped like them (§3); what custody buys is the state at
+  rest. Sealed state that fails to open refuses the start — beginning fresh
+  over unreadable state would mint new material and silently lose every
+  message queued for the old.
 - **Refusals are values that carry their reason.** A bad length, an absent
   session, an endpoint the node would not take: each is an answer with words in
   it rather than a silence the application has to interpret, which is design

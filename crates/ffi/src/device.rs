@@ -94,6 +94,25 @@ pub trait Notices: Send + Sync {
     fn told(&self, notice: Told);
 }
 
+/// Custody of the kernel's storage key (`light-client-requirements.md`
+/// §9). The kernel mints the key and seals what it persists under it; where
+/// the key lives between runs is the platform's, by whatever affordance the
+/// platform has — a key store wrapping it, a passphrase deriving it, the
+/// operating environment where the platform declares itself unsealed. The
+/// kernel calls this named source and never chooses.
+#[uniffi::export(with_foreign)]
+pub trait Custody: Send + Sync {
+    /// The kept storage key, where one is kept; nothing where none is yet.
+    fn key(&self) -> Option<Vec<u8>>;
+    /// Keep a key the kernel minted. False refuses the start: failed
+    /// custody is never a quiet fall to plaintext.
+    fn keep(&self, key: Vec<u8>) -> bool;
+    /// Declared unsealed: at rest, protection is the operating
+    /// environment's (`infra-client-requirements.md` §7). A configuration
+    /// the platform states, never inferred from a missing key.
+    fn unsealed(&self) -> bool;
+}
+
 /// Everything a shell supplies, in one object it hands over once.
 #[derive(Clone, uniffi::Object)]
 pub struct Platform {
@@ -104,6 +123,7 @@ pub struct Platform {
     pub operator: Arc<dyn Operator>,
     pub notices: Arc<dyn Notices>,
     pub storage: Arc<dyn Storage>,
+    pub custody: Arc<dyn Custody>,
 }
 
 impl Platform {

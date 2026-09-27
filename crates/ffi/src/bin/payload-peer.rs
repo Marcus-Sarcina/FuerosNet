@@ -18,13 +18,31 @@
 //! machine can route to.
 
 use rhtn_ffi::client::Participant;
-use rhtn_ffi::device::{Camera, Clock, Notices, Operator, Platform, Proximity, Random, Storage};
+use rhtn_ffi::device::{
+    Camera, Clock, Custody, Notices, Operator, Platform, Proximity, Random, Storage,
+};
 use rhtn_ffi::harness::{TestNode, test_identity};
 use rhtn_ffi::types::{Ask, Channel, ChannelOutcome, Told};
 use std::sync::{Arc, Mutex};
 
 struct Shell {
     store: Mutex<std::collections::BTreeMap<String, Vec<u8>>>,
+    custody: Mutex<Option<Vec<u8>>>,
+}
+
+// the key lives beside the store it opens because this peer is ephemeral
+// by design; a shell with anything to lose keeps it apart
+impl Custody for Shell {
+    fn key(&self) -> Option<Vec<u8>> {
+        self.custody.lock().unwrap().clone()
+    }
+    fn keep(&self, key: Vec<u8>) -> bool {
+        *self.custody.lock().unwrap() = Some(key);
+        true
+    }
+    fn unsealed(&self) -> bool {
+        false
+    }
 }
 
 impl Storage for Shell {
@@ -136,6 +154,7 @@ fn main() {
 
     let s = Arc::new(Shell {
         store: Mutex::default(),
+        custody: Mutex::default(),
     });
     let platform = Arc::new(Platform {
         proximity: s.clone(),
@@ -144,7 +163,8 @@ fn main() {
         random: s.clone(),
         operator: s.clone(),
         notices: s.clone(),
-        storage: s,
+        storage: s.clone(),
+        custody: s,
     });
     let known = vec![bob.material.clone(), carol.material.clone(), phone.clone()];
     let me = Participant::start(carol.seeds.clone(), known, platform).expect("carol starts");

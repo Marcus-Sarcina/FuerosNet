@@ -339,6 +339,18 @@ serving node.
   (`wire-format.md` §8.2) and what you present in a handshake is the key that
   credential names. The key that signs as your operator stays on the device that
   performs ceremonies.
+- **At rest, your store's protection is your operating environment's**
+  [author, 2026-09-26]. A daemon that restarts unattended cannot hold a
+  secret its own disk does not, so this document issues no sealing rule it
+  could not enforce (design §1.1): disk encryption and file permissions on
+  an operator's box are the operator's own arrangements, stated here so the
+  choice is a choice. What bounds the exposure instead is what the box holds
+  — an instance runs on a delegated transport key and a run of credentials,
+  never the operator's seed (design §23.3), so a seized disk yields a
+  credential that expires, not an identity. An operator who runs with a seed
+  on the box, or with a light client's store beside the node, is choosing
+  that exposure, and the client store's own sealing is the client's
+  obligation wherever it runs (`light-client-requirements.md` §9).
 - **Sign what you emit unattended under that same key, and push the credential
   so your horizon can check it** [author, 2026-09-21]. A subtree acknowledgement
   (`wire-format.md` §7.5) and a currency attestation (`wire-format.md` §7.1)

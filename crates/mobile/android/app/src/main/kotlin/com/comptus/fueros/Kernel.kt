@@ -218,15 +218,16 @@ object Kernel {
     /**
      * The device's own seeds, minted once.
      *
-     * **Through the shell's storage and never around it**: these are the
-     * whole of the identity, so writing them with plain file I/O would put
-     * the most sensitive thing on the device in the one place the at-rest
-     * encryption does not reach (`light-client-requirements.md` §9).
+     * **Under the shell's own custody and never around it**: these are the
+     * whole of the identity, and they never cross the kernel's storage
+     * seam, so the kernel's sealing does not reach them — they are
+     * Keystore-wrapped here, exactly as the storage key itself is
+     * (`light-client-requirements.md` §9).
      */
     private fun mintedSeeds(shell: AndroidShell): ByteArray {
-        shell.read("seeds")?.let { if (it.size == 64) return it }
+        shell.unseal("seeds")?.let { if (it.size == 64) return it }
         val s = ByteArray(64).also { SecureRandom().nextBytes(it) }
-        check(shell.write("seeds", s)) { "the device's own storage refused the seeds" }
+        check(shell.seal("seeds", s)) { "the device's own storage refused the seeds" }
         return s
     }
 

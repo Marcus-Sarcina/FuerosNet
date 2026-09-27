@@ -26,6 +26,31 @@ struct Shell {
     /// app-private storage a phone would give it, kept here so a second
     /// process can start from what the first wrote.
     store: Mutex<std::collections::BTreeMap<String, Vec<u8>>>,
+    /// The storage key this platform keeps (`light-client-requirements.md`
+    /// §9), beside the store for the same reason the store is here.
+    custody: Mutex<Option<Vec<u8>>>,
+    /// A platform that declares itself unsealed: the environment owns at
+    /// rest, and the kernel writes what it writes.
+    declared_unsealed: bool,
+    /// A platform whose custody refuses to keep a key, which must refuse
+    /// the start rather than fall to plaintext.
+    keeps_nothing: bool,
+}
+
+impl Custody for Shell {
+    fn key(&self) -> Option<Vec<u8>> {
+        self.custody.lock().unwrap().clone()
+    }
+    fn keep(&self, key: Vec<u8>) -> bool {
+        if self.keeps_nothing {
+            return false;
+        }
+        *self.custody.lock().unwrap() = Some(key);
+        true
+    }
+    fn unsealed(&self) -> bool {
+        self.declared_unsealed
+    }
 }
 
 impl Storage for Shell {
@@ -116,7 +141,8 @@ fn platform_of(shell: Arc<Shell>) -> Arc<Platform> {
         random: shell.clone(),
         operator: shell.clone(),
         notices: shell.clone(),
-        storage: shell,
+        storage: shell.clone(),
+        custody: shell,
     })
 }
 
@@ -221,6 +247,9 @@ fn randomness_of_short_measure_is_refused_and_the_shell_is_told() {
     let shell = Arc::new(Shell {
         has: vec![Channel::Nfc],
         short: true,
+        // a kept storage key: the mint would otherwise draw from the same
+        // short source and refuse first, which is not this test's target
+        custody: Mutex::new(Some(vec![5u8; 32])),
         ..Default::default()
     });
     let known: Vec<Vec<u8>> = ["alice"].iter().map(|n| material(n)).collect();
@@ -844,9 +873,12 @@ async fn a_kernel_restarts_from_the_storage_seam_with_its_session_and_its_queue_
         .await
         .unwrap()
         .expect("carol sweeps");
+    let on_disk = carol_shell
+        .read("client".into())
+        .expect("an attach writes the state");
     assert!(
-        carol_shell.read("client".into()).is_some(),
-        "an attach writes the state"
+        rhtn_client::sealed::is_sealed(&on_disk),
+        "what reaches the platform's storage is sealed, not the kernel's bytes"
     );
 
     // a session both ways
@@ -876,8 +908,6 @@ async fn a_kernel_restarts_from_the_storage_seam_with_its_session_and_its_queue_
             bytes: b"second".to_vec()
         })
     );
-    let written = carol_shell.read("client".into()).unwrap();
-
     // carol's process ends: detached cleanly, then gone
     {
         let q = carol.clone();
@@ -888,6 +918,9 @@ async fn a_kernel_restarts_from_the_storage_seam_with_its_session_and_its_queue_
     }
     assert!(!carol.attached());
     drop(carol);
+    // what the process left behind, exactly: a seal carries a fresh nonce
+    // per write, so byte-equality is asserted across the restart alone
+    let written = carol_shell.read("client".into()).unwrap();
     // meanwhile alice sends: the node queues it for carol's device
     let before = node.node.queued(&sid("carol").public.keyhash);
     send(alice.clone(), id("carol"), b"third")
@@ -984,4 +1017,88 @@ async fn a_kernel_restarts_from_the_storage_seam_with_its_session_and_its_queue_
             .expect_err("a wrong passphrase opens nothing")
     };
     assert!(e.reason().contains("Secret"), "{e}");
+}
+
+// functional APP-011
+#[test]
+fn state_written_before_the_kernel_sealed_is_read_and_resealed() {
+    // a device from before the seam: the platform declared unsealed, so the
+    // kernel's bytes reached the disk as written
+    let before = Arc::new(Shell {
+        declared_unsealed: true,
+        ..Default::default()
+    });
+    let known = vec![material("alice")];
+    let p = Participant::start(seeds("alice"), known.clone(), platform_of(before.clone()))
+        .expect("starts unsealed, by declaration");
+    p.save().expect("saves");
+    let plain = before.read("client".into()).expect("state written");
+    assert!(
+        !rhtn_client::sealed::is_sealed(&plain),
+        "a declared-unsealed platform holds the kernel's bytes as written"
+    );
+    drop(p);
+
+    // the same files under a platform that now keeps a key: the older shape
+    // carries no header, is read as it always was, and the next write seals
+    let after = Arc::new(Shell {
+        store: Mutex::new(before.store.lock().unwrap().clone()),
+        ..Default::default()
+    });
+    let p = Participant::start(seeds("alice"), known, platform_of(after.clone()))
+        .expect("pre-seam state opens");
+    assert!(
+        after.custody.lock().unwrap().is_some(),
+        "a key was minted and kept"
+    );
+    p.save().expect("saves");
+    let now = after.read("client".into()).expect("state written");
+    assert!(
+        rhtn_client::sealed::is_sealed(&now),
+        "the first write after the seam seals"
+    );
+}
+
+// functional APP-011
+#[test]
+fn failed_custody_refuses_the_start_rather_than_writing_plain() {
+    let shell = Arc::new(Shell {
+        keeps_nothing: true,
+        ..Default::default()
+    });
+    let refused = Participant::start(
+        seeds("alice"),
+        vec![material("alice")],
+        platform_of(shell.clone()),
+    );
+    assert!(
+        refused.is_err(),
+        "unsealed is declared, never fallen back to"
+    );
+    assert!(
+        shell.store.lock().unwrap().is_empty(),
+        "and nothing reached the disk on the way down"
+    );
+}
+
+// functional APP-011
+#[test]
+fn anothers_key_does_not_open_the_state_and_the_start_is_refused() {
+    let theirs = Arc::new(Shell::default());
+    let known = vec![material("alice")];
+    let p = Participant::start(seeds("alice"), known.clone(), platform_of(theirs.clone()))
+        .expect("starts");
+    p.save().expect("saves");
+    drop(p);
+
+    let wrong = Arc::new(Shell {
+        store: Mutex::new(theirs.store.lock().unwrap().clone()),
+        custody: Mutex::new(Some(vec![9u8; 32])),
+        ..Default::default()
+    });
+    let refused = Participant::start(seeds("alice"), known, platform_of(wrong));
+    assert!(
+        refused.is_err(),
+        "sealed state that does not open refuses the start rather than beginning fresh over it"
+    );
 }

@@ -5,8 +5,9 @@
 // facade's `harness` feature, which a shell never builds.
 import uniffi.rhtn_ffi.*
 
-class Shell : Proximity, Camera, Clock, Random, Operator, Notices, Storage {
+class Shell : Proximity, Camera, Clock, Random, Operator, Notices, Storage, Custody {
     private val kept = HashMap<String, ByteArray>()
+    private var custody: ByteArray? = null
     private val rng = java.security.SecureRandom()
     override fun `supported`(): List<Channel> = listOf()
     override fun `run`(`channel`: Channel, `peer`: ByteArray): ChannelOutcome = ChannelOutcome.UNAVAILABLE
@@ -19,9 +20,14 @@ class Shell : Proximity, Camera, Clock, Random, Operator, Notices, Storage {
     override fun `told`(`notice`: Told) {}
     override fun `read`(`name`: String): ByteArray? = kept[`name`]
     override fun `write`(`name`: String, `bytes`: ByteArray): Boolean { kept[`name`] = `bytes`; return true }
+    // custody beside the store it opens: this shell is one process's proof,
+    // and the sealed path is what it proves
+    override fun `key`(): ByteArray? = custody
+    override fun `keep`(`key`: ByteArray): Boolean { custody = `key`; return true }
+    override fun `unsealed`(): Boolean = false
 }
 
-fun platformOf(): Platform { val s = Shell(); return Platform(s, s, s, s, s, s, s) }
+fun platformOf(): Platform { val s = Shell(); return Platform(s, s, s, s, s, s, s, s) }
 
 fun main() {
     val node = TestNode.start("bob", listOf("alice", "carol"))

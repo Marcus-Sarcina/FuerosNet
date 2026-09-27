@@ -65,6 +65,19 @@ impl Storage for Shell {
         true
     }
 }
+// 2026-09-27: the platform gained a custody object; unsealed by declaration
+// repairs compilation without touching what any test asserts
+impl Custody for Shell {
+    fn key(&self) -> Option<Vec<u8>> {
+        None
+    }
+    fn keep(&self, _: Vec<u8>) -> bool {
+        false
+    }
+    fn unsealed(&self) -> bool {
+        true
+    }
+}
 fn client(name: &str) -> Client {
     let s = Arc::new(Shell::default());
     let p = Platform {
@@ -74,7 +87,8 @@ fn client(name: &str) -> Client {
         random: s.clone(),
         operator: s.clone(),
         notices: s.clone(),
-        storage: s,
+        storage: s.clone(),
+        custody: s,
     };
     Client::new(
         test_identity(name),
@@ -164,7 +178,8 @@ async fn r08_failover_must_update_the_kernel_serving_identity() {
             random: s.clone(),
             operator: s.clone(),
             notices: s.clone(),
-            storage: s,
+            storage: s.clone(),
+            custody: s,
         });
         let mut seeds = rhtn_codec::cose::sha256(b"rhtn-test-vectors:alice:ed25519-seed").to_vec();
         seeds.extend_from_slice(&rhtn_codec::cose::sha256(
@@ -1003,6 +1018,7 @@ fn control_start_from_backup_restores_the_identity_and_writes_current_state() {
         operator: shell.clone(),
         notices: shell.clone(),
         storage: shell.clone(),
+        custody: shell.clone(),
     });
     let restored = Participant::start_from_backup(
         blob,

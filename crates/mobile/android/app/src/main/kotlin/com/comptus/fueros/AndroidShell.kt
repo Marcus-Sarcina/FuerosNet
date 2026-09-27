@@ -16,6 +16,7 @@ import uniffi.rhtn_ffi.Channel
 import uniffi.rhtn_ffi.ChannelOutcome
 import uniffi.rhtn_ffi.Camera
 import uniffi.rhtn_ffi.Clock
+import uniffi.rhtn_ffi.Custody
 import uniffi.rhtn_ffi.Notices
 import uniffi.rhtn_ffi.Operator
 import uniffi.rhtn_ffi.Platform
@@ -34,7 +35,7 @@ import uniffi.rhtn_ffi.Told
  * private files directory; the kernel's state file names contain no path.
  */
 class AndroidShell(context: Context) :
-    Proximity, Camera, Clock, Random, Operator, Notices, Storage {
+    Proximity, Camera, Clock, Random, Operator, Notices, Storage, Custody {
 
     private val dir: File = File(context.filesDir, "kernel").apply { mkdirs() }
     private val rng = SecureRandom()
@@ -56,17 +57,58 @@ class AndroidShell(context: Context) :
         Log.i("fueros", "notice: $notice")
     }
 
-    // What the kernel hands over is its archive, its payload sessions and
-    // its ratchet state — key material included — so it is encrypted here
-    // before it reaches the disk (`light-client-requirements.md` §9).  The
-    // key lives in the Android Keystore and **never enters this process**:
-    // hardware-backed where the device has it, and not recoverable from a
-    // backup or from the app's files on their own.
+    // **The kernel seals what it persists; this shell keeps the key**
+    // (`light-client-requirements.md` §9).  What arrives through this seam
+    // is sealed already, so it is stored as written; what leaves goes back
+    // as written, except files this shell Keystore-wrapped before the
+    // kernel sealed its own — those still open here, so a device from
+    // before the seam reads on.  The shell's cryptography is custody
+    // alone: the storage key, and its own small secrets (the seeds), are
+    // wrapped under an Android Keystore key that **never enters this
+    // process** — hardware-backed where the device has one, and not
+    // recoverable from a backup or from the app's files on their own.
     override fun read(name: String): ByteArray? {
         val f = File(dir, name)
+        if (!f.isFile) return null
+        val whole = f.readBytes()
+        // written by this shell before the kernel sealed, or by [seal]:
+        // Keystore-wrapped, and opened here.  Anything else is the
+        // kernel's, as written; a wrapped blob that fails to open falls
+        // through as bytes the kernel will refuse for what they are
+        return unwrap(whole) ?: whole
+    }
+
+    override fun write(name: String, bytes: ByteArray): Boolean = land(name, bytes)
+
+    /** The kernel's storage key, where one is kept (`Custody`). */
+    override fun key(): ByteArray? = unseal(CUSTODY)?.takeIf { it.size == 32 }
+
+    /** Keep the key the kernel minted, wrapped under the Keystore. */
+    override fun keep(key: ByteArray): Boolean = seal(CUSTODY, key)
+
+    /** This platform keeps keys; unsealed is for platforms that cannot. */
+    override fun unsealed(): Boolean = false
+
+    /** Write `bytes` under `name` Keystore-wrapped: the shell's own secrets. */
+    fun seal(name: String, bytes: ByteArray): Boolean {
         return try {
-            if (!f.isFile) return null
-            val whole = f.readBytes()
+            val cipher = Cipher.getInstance(TRANSFORM)
+            cipher.init(Cipher.ENCRYPT_MODE, atRestKey())
+            land(name, cipher.iv + cipher.doFinal(bytes))
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /** What [seal] wrote under `name`, or nothing. */
+    fun unseal(name: String): ByteArray? {
+        val f = File(dir, name)
+        if (!f.isFile) return null
+        return unwrap(f.readBytes())
+    }
+
+    private fun unwrap(whole: ByteArray): ByteArray? {
+        return try {
             if (whole.size <= IV_BYTES) return null
             val cipher = Cipher.getInstance(TRANSFORM)
             cipher.init(
@@ -76,19 +118,14 @@ class AndroidShell(context: Context) :
             )
             cipher.doFinal(whole, IV_BYTES, whole.size - IV_BYTES)
         } catch (_: Exception) {
-            // an unreadable state is no state: the kernel is told nothing is
-            // there rather than handed something it cannot trust
             null
         }
     }
 
-    override fun write(name: String, bytes: ByteArray): Boolean {
+    private fun land(name: String, bytes: ByteArray): Boolean {
         return try {
-            val cipher = Cipher.getInstance(TRANSFORM)
-            cipher.init(Cipher.ENCRYPT_MODE, atRestKey())
-            val sealed = cipher.iv + cipher.doFinal(bytes)
             val tmp = File(dir, "$name.tmp")
-            tmp.writeBytes(sealed)
+            tmp.writeBytes(bytes)
             tmp.renameTo(File(dir, name))
         } catch (_: Exception) {
             false
@@ -114,6 +151,7 @@ class AndroidShell(context: Context) :
     }
 
     private companion object {
+        const val CUSTODY = "custody"
         const val KEYSTORE = "AndroidKeyStore"
         const val KEY_ALIAS = "fueros.kernel.at-rest"
         const val TRANSFORM = "AES/GCM/NoPadding"
@@ -129,4 +167,4 @@ class AndroidShell(context: Context) :
  * and one shell answering every interface is one answer per question.
  */
 fun platformOf(shell: AndroidShell): Platform =
-    Platform(shell, shell, shell, shell, shell, shell, shell)
+    Platform(shell, shell, shell, shell, shell, shell, shell, shell)

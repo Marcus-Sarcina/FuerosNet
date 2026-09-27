@@ -1579,6 +1579,7 @@ dependencies = [
  "rhtn-transport",
  "tokio",
  "uniffi",
+ "zeroize",
 ]
 
 [[package]]

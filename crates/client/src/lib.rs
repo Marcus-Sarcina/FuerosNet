@@ -50,6 +50,7 @@ pub mod query;
 pub mod ratchet;
 pub mod record;
 pub mod rotation;
+pub mod sealed;
 pub mod selection;
 pub mod store;
 pub mod subject;

@@ -70,6 +70,20 @@ impl Storage for Shell {
     }
 }
 
+impl Custody for Shell {
+    // unsealed by declaration: this fixture's assertions read the store's
+    // bytes as the kernel wrote them
+    fn key(&self) -> Option<Vec<u8>> {
+        None
+    }
+    fn keep(&self, _key: Vec<u8>) -> bool {
+        false
+    }
+    fn unsealed(&self) -> bool {
+        true
+    }
+}
+
 fn platform_of(s: Arc<Shell>) -> Arc<Platform> {
     Arc::new(Platform {
         proximity: s.clone(),
@@ -78,7 +92,8 @@ fn platform_of(s: Arc<Shell>) -> Arc<Platform> {
         random: s.clone(),
         operator: s.clone(),
         notices: s.clone(),
-        storage: s,
+        storage: s.clone(),
+        custody: s,
     })
 }
 

@@ -42,6 +42,88 @@ pub const STATE: &str = "client";
 /// The name the cached sibling list is written under
 /// (`light-client-requirements.md` §4: persisted across restarts).
 pub const SIBLINGS: &str = "siblings";
+
+/// The storage seam with the kernel's sealing on it
+/// (`light-client-requirements.md` §9): what goes down is sealed under the
+/// key the platform's custody returned, what comes up is opened, and a blob
+/// written before the kernel sealed carries no header and passes through to
+/// the readers that always read it.
+struct SealedStore {
+    under: Arc<dyn crate::device::Storage>,
+    key: [u8; 32],
+}
+
+impl SealedStore {
+    /// The storage a start runs on, per the platform's declared custody:
+    /// the plain seam where the platform is unsealed by configuration, and
+    /// the sealing seam otherwise — under the kept key, or under one minted
+    /// here and kept there. **A source that cannot keep the key refuses the
+    /// start**; falling quietly to plaintext is the one thing this must
+    /// never do.
+    fn over(platform: &Platform) -> Result<Arc<dyn crate::device::Storage>, Refused> {
+        if platform.custody.unsealed() {
+            return Ok(platform.storage.clone());
+        }
+        let key: [u8; 32] = match platform.custody.key() {
+            Some(k) => k.try_into().map_err(|k: Vec<u8>| {
+                Refused::new(format!("a storage key is 32 bytes, not {}", k.len()))
+            })?,
+            None => {
+                let mut drawn = platform.random.fill(32);
+                let minted = <[u8; 32]>::try_from(drawn.as_slice());
+                // the drawn copy is wiped whichever way this goes: it is
+                // the storage key, and freed memory keeps no keys (§3)
+                {
+                    use zeroize::Zeroize;
+                    let kept = minted.is_ok() && platform.custody.keep(drawn.clone());
+                    drawn.zeroize();
+                    let Ok(k) = minted else {
+                        return Err(Refused::new("the platform's random source came up short"));
+                    };
+                    if !kept {
+                        return Err(Refused::new(
+                            "the platform did not keep the storage key; \
+                             unsealed is declared, never fallen back to",
+                        ));
+                    }
+                    k
+                }
+            }
+        };
+        Ok(Arc::new(SealedStore {
+            under: platform.storage.clone(),
+            key,
+        }))
+    }
+}
+
+impl crate::device::Storage for SealedStore {
+    fn read(&self, name: String) -> Option<Vec<u8>> {
+        let bytes = self.under.read(name.clone())?;
+        if rhtn_client::sealed::is_sealed(&bytes) {
+            // an authentication failure hands back the bytes as written, so
+            // the caller refuses the start over state that does not open
+            // rather than beginning fresh as though nothing were held
+            rhtn_client::sealed::open(&self.key, &name, &bytes).or(Some(bytes))
+        } else {
+            // written before the kernel sealed; read as it always was
+            Some(bytes)
+        }
+    }
+    fn write(&self, name: String, bytes: Vec<u8>) -> bool {
+        let sealed = rhtn_client::sealed::seal(&self.key, &name, &bytes);
+        self.under.write(name, sealed)
+    }
+}
+
+/// The key is wiped when the seam goes (`light-client-requirements.md` §3).
+impl Drop for SealedStore {
+    fn drop(&mut self) {
+        use zeroize::Zeroize;
+        self.key.zeroize();
+    }
+}
+
 /// **The maintenance contract.**  While the process runs and a session is
 /// held, the kernel rotates a prekey whose interval has elapsed, replenishes
 /// a pool that has fallen low and asks for bindings it wants, every this
@@ -499,7 +581,9 @@ impl Participant {
         });
         let net = Net::new(Party::of(me), pins_for(&ids), nonce)?;
         let known = ids.clone();
-        let storage = platform.storage.clone();
+        // the storage this run persists through: the platform's, with the
+        // kernel's sealing on it per the platform's declared custody
+        let storage = SealedStore::over(&platform)?;
         let reachable = net.reachable();
         let handle = Handle::spawn(move || {
             let me = rhtn_crypto::SigningIdentity::from_seeds(&ed, &pq);
@@ -690,7 +774,7 @@ impl Participant {
         });
         let net = Net::new(Party::of(credential), pins_for(&ids), nonce)?;
         let known = ids.clone();
-        let storage = platform.storage.clone();
+        let storage = SealedStore::over(&platform)?;
         let reachable = net.reachable();
         let handle = Handle::spawn(move || {
             let direct: std::rc::Rc<dyn DirectPath> = std::rc::Rc::new(reachable);
@@ -1490,7 +1574,7 @@ fn outcome_of(r: rhtn_client::device::ChannelResult) -> ChannelOutcome {
 
 #[uniffi::export]
 impl Platform {
-    /// The platform's seven objects, handed over once.
+    /// The platform's eight objects, handed over once.
     #[uniffi::constructor]
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -1501,12 +1585,16 @@ impl Platform {
         operator: Arc<dyn crate::device::Operator>,
         notices: Arc<dyn crate::device::Notices>,
         storage: Arc<dyn crate::device::Storage>,
+        custody: Arc<dyn crate::device::Custody>,
     ) -> Platform {
-        platform(proximity, camera, clock, random, operator, notices, storage)
+        platform(
+            proximity, camera, clock, random, operator, notices, storage, custody,
+        )
     }
 }
 
 /// So a shell need not hold `Arc` itself.
+#[allow(clippy::too_many_arguments)]
 pub fn platform(
     proximity: Arc<dyn crate::device::Proximity>,
     camera: Arc<dyn crate::device::Camera>,
@@ -1515,6 +1603,7 @@ pub fn platform(
     operator: Arc<dyn crate::device::Operator>,
     notices: Arc<dyn crate::device::Notices>,
     storage: Arc<dyn crate::device::Storage>,
+    custody: Arc<dyn crate::device::Custody>,
 ) -> Platform {
     Platform {
         proximity,
@@ -1524,5 +1613,6 @@ pub fn platform(
         operator,
         notices,
         storage,
+        custody,
     }
 }

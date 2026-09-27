@@ -10916,3 +10916,66 @@ loses the clause and cites the registers themselves at §§19.4, 19.7 and 19.8.
 citation gave §3.2 for the envelope's four-key map, which `wire-format.md` §3
 fixes in its own body, and one filename was broken across a line by a hyphen,
 which makes a citation unresolvable to anything that reads it.
+
+### 2026-09-27 (the kernel seals; the platform keeps the key)
+
+**The storage key is an environment-supplied input** [author, 2026-09-26,
+confirmed 2026-09-27]: any library function needing it calls a named,
+environment-defined source, and providing that source from platform-local
+affordances and conventions is the platform implementation's whole job.
+Envelope for the desktop client, environment-owned for the daemon, stands
+for the platforms; the library owns the construction.
+
+**The sealing cryptography left the shells.** The Android shell was doing
+AES-GCM in Kotlin; an iOS shell would have written its own in Swift, a
+desktop shell a third — per-platform cryptography multiplying against the
+project's own premise that no expert review is coming. One construction now
+lives in the client library: AES-256-GCM under a 32-byte key the kernel
+mints, a fresh 96-bit nonce per write, **the storage name as the associated
+data** so a blob lifted from one file refuses to open as another, and a
+header no deterministic-CBOR item can begin with, which is how state written
+before the seam keeps reading. A first-class client on any platform now
+differs from Android only in where 32 bytes come from.
+
+**Custody is the eighth platform object**, beside the clock, the random
+source and storage: the kept key comes back, a minted key is kept, or the
+platform declares itself unsealed. **A source that cannot keep the key
+refuses the start with nothing written on the way down** — unsealed is a
+declared configuration, never a fallback — and sealed state that fails to
+open refuses the start rather than beginning fresh over it, which would mint
+new material and silently lose every message queued for the old. The key is
+wiped when the seam drops, and the minted copy on its way to custody is
+wiped behind it.
+
+**One security delta, accepted knowingly** [author, 2026-09-27]: the sealing
+key now enters the kernel's working memory — wiped, beside the session keys
+it protects — where the previous shell arrangement kept it inside the
+platform key store entirely. What custody buys is the state at rest; the
+key store still wraps the kept key and the device's seeds, and its wrapping
+key still never enters the process.
+
+**The documents inverted with the mechanism.**
+`light-client-requirements.md` §9 said the kernel *cannot* encrypt its own
+storage because the only key worth using is one the platform holds; it now
+says the kernel seals and the application keeps the key, platform-agnosticism
+preserved through the key's provenance rather than the kernel's blindness.
+`infra-client-requirements.md` §7 gained the at-rest sentence it never had:
+on an operator's box, protection of the store is the operating environment's
+— a daemon that restarts unattended cannot hold a secret its own disk does
+not, so no unenforceable sealing rule is issued (§1.1) — with instance mode,
+a delegated key and never the seed, as what actually bounds a seized disk.
+APP-011 restates the contract; 471 families, unchanged. The vector pin was
+re-accepted after its audit: nothing the generator constructs or the
+hand-authored fixtures assert leans on the changed passages.
+
+**Verified on the emulator against a device from before the seam, not
+asserted.** The pre-custody APK provisioned and exchanged; the new build
+installed over its data; the same identity attached from carried state and
+exchanged again; on disk the client state begins `rhtn/1:sealed`, the
+wrapped key sits beside it, and the seeds remain the shell's 92 wrapped
+bytes. A cold restart then opened the kernel-sealed state — a blob that did
+not open would have refused the start. The gate passes end to end; the
+suite grew by nine: six seal vectors, name-swap and truncation refusals
+among them, and three custody contract tests. The terminal instrument and
+the test fixtures declare themselves unsealed, the terminal because it is
+the ruling's own environment-owned case.
