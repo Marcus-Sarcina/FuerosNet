@@ -20,9 +20,10 @@
 //! below it would be absent from every other client, so the facade
 //! translates and never adjudicates.
 //!
-//! The binding generator is not adopted: `uniffi` is the candidate and the
-//! choice is the author's. Until it is made the facade is plain Rust, which
-//! is what a generator would read anyway.
+//! **`uniffi` is the binding generator.** The facade stays plain Rust — the
+//! scaffolding reads it rather than shaping it — and the Kotlin the Android
+//! shell speaks is generated from the built library by
+//! `mobile/android/tools/build-native.sh`.
 
 uniffi::setup_scaffolding!();
 

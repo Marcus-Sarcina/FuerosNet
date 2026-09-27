@@ -66,6 +66,13 @@ pub trait PostQuantumRatchet {
 
     /// The reverse, into a default-constructed ratchet.
     fn restore(&mut self, b: &[u8]) -> Result<(), String>;
+
+    /// What a client tells its own user is running
+    /// (`light-client-requirements.md` §3): no peer can tell from the
+    /// wire, so the only party who can say is the client itself.
+    fn construction(&self) -> &'static str {
+        "the Triple Ratchet"
+    }
 }
 
 /// No post-quantum ratchet: the Double Ratchet alone, which is the floor.
@@ -91,6 +98,9 @@ impl PostQuantumRatchet for NoPostQuantum {
     }
     fn restore(&mut self, _b: &[u8]) -> Result<(), String> {
         Ok(())
+    }
+    fn construction(&self) -> &'static str {
+        "the Double Ratchet (the floor)"
     }
 }
 
@@ -185,7 +195,9 @@ fn kdf_ck(ck: &[u8; 32]) -> ([u8; 32], [u8; 32]) {
 fn aead_key(mk: &[u8; 32]) -> ([u8; 32], [u8; 12]) {
     let mut out = [0u8; 44];
     hkdf_sha256(&[0u8; 32], mk, MESSAGE_INFO, &mut out);
-    (out[..32].try_into().unwrap(), out[32..].try_into().unwrap())
+    let split = (out[..32].try_into().unwrap(), out[32..].try_into().unwrap());
+    out.zeroize();
+    split
 }
 
 /// The header.
@@ -235,8 +247,9 @@ fn parse_header(h: &[u8]) -> Result<(DhPublic, u32, u32, Vec<u8>), String> {
 }
 
 fn seal(mk: &[u8; 32], ad: &[u8], header: &[u8], plaintext: &[u8]) -> Vec<u8> {
-    let (k, nonce) = aead_key(mk);
+    let (mut k, nonce) = aead_key(mk);
     let key = LessSafeKey::new(UnboundKey::new(&AES_256_GCM, &k).expect("32-byte key"));
+    k.zeroize();
     let mut aad = ad.to_vec();
     aad.extend_from_slice(header);
     let mut buf = plaintext.to_vec();
@@ -250,8 +263,9 @@ fn seal(mk: &[u8; 32], ad: &[u8], header: &[u8], plaintext: &[u8]) -> Vec<u8> {
 }
 
 fn open(mk: &[u8; 32], ad: &[u8], header: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>, String> {
-    let (k, nonce) = aead_key(mk);
+    let (mut k, nonce) = aead_key(mk);
     let key = LessSafeKey::new(UnboundKey::new(&AES_256_GCM, &k).expect("32-byte key"));
+    k.zeroize();
     let mut aad = ad.to_vec();
     aad.extend_from_slice(header);
     let mut buf = ciphertext.to_vec();
@@ -401,7 +415,11 @@ impl<P: PostQuantumRatchet + Clone + Default> Ratchet<P> {
             self.ckr = Some(ckr);
             while self.skipped.len() > MAX_SKIPPED_KEYS {
                 let oldest = *self.skipped.keys().next().unwrap();
-                self.skipped.remove(&oldest);
+                // evicted, not merely dropped: the destructor only visits
+                // keys still in the map when the ratchet itself goes
+                if let Some(mut mk) = self.skipped.remove(&oldest) {
+                    mk.zeroize();
+                }
             }
         }
         Ok(())
@@ -425,7 +443,13 @@ impl<P: PostQuantumRatchet + Clone + Default> Ratchet<P> {
     pub fn encode(&self) -> Vec<u8> {
         use crate::durable::*;
         let mut out = Vec::new();
-        emit_array_head(&mut out, 11);
+        let pq_state = self.pq.encode();
+        // **the floor writes the shape it always wrote**: ten elements,
+        // byte for byte what preceded the seam, which is the promise
+        // `functional_tests.md` MAIL-027 makes.  An eleventh element
+        // appears only when the post-quantum half has state to keep, and
+        // the reader takes both.
+        emit_array_head(&mut out, if pq_state.is_empty() { 10 } else { 11 });
         emit_bstr(&mut out, &self.dhs.to_bytes());
         emit_opt_bstr(&mut out, self.dhr.as_ref().map(|p| &p.0[..]));
         emit_bstr(&mut out, &self.rk);
@@ -442,8 +466,9 @@ impl<P: PostQuantumRatchet + Clone + Default> Ratchet<P> {
             emit_bstr(&mut out, mk);
         }
         emit_bstr(&mut out, &self.ad);
-        // the post-quantum half's own state; empty at the floor
-        emit_bstr(&mut out, &self.pq.encode());
+        if !pq_state.is_empty() {
+            emit_bstr(&mut out, &pq_state);
+        }
         out
     }
 

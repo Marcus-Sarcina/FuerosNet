@@ -2136,15 +2136,40 @@ impl Client {
         }
     }
 
+    /// Which payload construction this build runs, for the client to put
+    /// where its user can reach it (`light-client-requirements.md` §3): no
+    /// peer can tell from the wire, so the only party who can say is the
+    /// client itself.
+    pub fn payload_construction(&self) -> &'static str {
+        use crate::ratchet::{NoPostQuantum, PostQuantumRatchet};
+        NoPostQuantum.construction()
+    }
+
     /// A binding that arrived beside a delivery (`wire-format.md` §7.10).
     ///
     /// Kept where it verifies against material this client already holds,
     /// and **discarded where it does not**: the node carrying it is not
     /// trusted for it, and a delivery is not the place to learn that a
-    /// party's published material is bad. Answering whether it was kept is
-    /// for the caller's own accounting; the message that came with it is
-    /// processed either way.
+    /// party's published material is bad. Kept only where no binding for
+    /// that subject's device is held already, which is §7.10's rule and
+    /// not an optimisation. Answering whether it was kept is for the
+    /// caller's own accounting — false is *not held from here*, whether
+    /// because one was held already or because this one did not verify —
+    /// and the message that came with it is processed either way.
     pub fn take_binding(&mut self, bytes: &[u8]) -> bool {
+        // **A recipient that already holds the binding ignores what
+        // arrived** (`wire-format.md` §7.10).  A delivery is carriage and
+        // not a refresh: honouring a carried bundle over a held one would
+        // let an old-but-valid bundle displace a newer binding and send
+        // session establishment toward retired material, and checking
+        // held-ness first also spares verifying a signature per relayed
+        // message.  Freshness comes from publication and the sweep.
+        let Ok(b) = rhtn_archive::prekey::PrekeyBundle::parse(bytes) else {
+            return false;
+        };
+        if self.payload.sessions.holds_binding(&b.subject, &b.device) {
+            return false;
+        }
         match payload::read_bundle(&self.known, bytes) {
             Ok(p) => {
                 self.payload.sessions.prefetch(p);

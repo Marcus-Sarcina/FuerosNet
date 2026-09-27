@@ -829,6 +829,13 @@ impl Participant {
         self.handle.with_blocking(|c| c.public.key_material())
     }
 
+    /// Which payload construction this build runs, verbatim what the shell
+    /// shows its user (`light-client-requirements.md` §3).
+    pub fn payload_construction(&self) -> String {
+        self.handle
+            .with_blocking(|c| c.payload_construction().to_string())
+    }
+
     /// Begin a ceremony with `counterparty`, nominating witnesses from
     /// their neighbourhood (`light-client-requirements.md` §1.1).
     ///

@@ -38,7 +38,7 @@ Boundary tests use minimum, minimum−1 when representable, maximum, maximum+1, 
 
 ## 2. Implementation structure and major components
 
-The Cargo workspace has **15 crates**. Components below follow responsibilities rather than assuming one crate per protocol role. Infrastructure operators also participate through the ordinary participant kernel; they are not a separate identity species.
+The Cargo workspace has **16 crates**. Components below follow responsibilities rather than assuming one crate per protocol role. Infrastructure operators also participate through the ordinary participant kernel; they are not a separate identity species.
 
 | Component | Implementation locations under `crates/` | Present structure and planned work | Test families |
 |---|---|---|---|
@@ -52,11 +52,11 @@ The Cargo workspace has **15 crates**. Components below follow responsibilities 
 | Observer-relative policy | `policy/src/{evidence,flow,landscape,archive,series,conformance,policy}.rs` | Typed evidence, flow metric, landscape, archive and policy evaluation present. | POL |
 | Resource gateway and package runtime | `node/src/{catalog,resources,http}.rs`, `resources/src/lib.rs` | Gateway/catalog/roles present. **A Wasmtime component sandbox is implemented**, including admission, request/response bindings and bounded execution. Full distribution, provenance/update conventions and external adapters remain implementation work. | CAT, GAT, PKG |
 | Continuous operator process | `daemon/src/{config,service,hosting,operator,main}.rs` | Daemon startup/configuration, persistence and hosting integration present. | OPS |
-| Application boundary | `ffi/src/{client,device,net,types}.rs` | Plain Rust facade with typed events and device bridges present. Foreign binding generator is not yet adopted. | APP |
-| Android and iOS applications | `mobile/android/`, `mobile/ios/` | Planned platform shells; directories currently contain README descriptions, not shipping applications. Camera/radio/OS wake, backup and consent/warning UX need platform implementation and device validation. | APP, UX, CAP |
+| Application boundary | `ffi/src/{client,device,net,types}.rs` | Plain Rust facade with typed events and device bridges present. `uniffi` is adopted as the binding generator; the Kotlin binding the Android shell speaks is generated from the built library. | APP |
+| Android and iOS applications | `mobile/android/`, `mobile/ios/` | The Android shell is a Gradle project that builds: self-minted identity, public provisioning, a payload screen, and kernel bytes sealed under an Android Keystore key. iOS is a README. Neither is a shipping application. Camera/radio/OS wake, backup and consent/warning UX need platform implementation and device validation. | APP, UX, CAP |
 | Inspection and key tools | `cli/src/{inspect,keys,probe,main}.rs` | CLI inspection, identity tooling and network probes present. | TOOL |
 | Runnable participant instrument | `participant/src/{carry,terminal,main,lib}.rs` | `rhtnp` drives the FFI participant across real sockets. Explicitly an experiment instrument with ephemeral state beyond its supplied identity, not a persistent user product. | TOOL, INT |
-| Simulation and acceptance support | `sim/src/{path,nat,mesh,scenario,daemons,participants,packages}.rs`, `acceptance/` | Network/process/package simulation and acceptance support present. Existing acceptance catalogue is not treated as an exhaustive requirements source. | INT, VAL |
+| Simulation and acceptance support | `sim/src/{path,nat,mesh,scenario,daemons,participants,packages}.rs`, `acceptance/`, `conformance/` | Network/process/package simulation and acceptance support present. `conformance/` retains an external reviewer's own reproductions as regressions. Existing acceptance catalogue is not treated as an exhaustive requirements source. | INT, VAL |
 
 ## 3. Component requirements by transaction and internal operation
 
@@ -157,7 +157,7 @@ The Cargo workspace has **15 crates**. Components below follow responsibilities 
 | ARC-013 | C | Keep archive retention, capture retention, seed retention and selective disclosure as different decisions. Withholding a field or presenting an older head must not delete it; deleting an expired capture does not delete signed history. | D §§7.5.2, 8.1.1, 10.2; L §2 |
 | ARC-014 | C | Present current-series proof as the originating adoption followed by its reissues. A longer consistent prefix supersedes an older proof; divergent proofs expose patron equivocation and do not yield a numeric-series winner. | W §4.6.1 |
 | ARC-015 | C | Reject stale updates from an abandoned series even if their counters are enormous. Admit no endpoint state or forwarding until the corresponding series is proven current; keep independent proven bindings separate. | W §§4.6.1, 7.6, 10.1 |
-| ARC-016 | C | The subject serves archive requests for its own archive over the peer-to-peer channel; no infrastructure node serves it on a subject's behalf, and a request naming another subject is answered empty. The fetcher verifies the walk rather than trusting it: the first record is the head requested, each record's back-pointers reach the one after it, and every signature is checked before anything is kept. An attestation delivery carrying no nonce the fetcher issued is not taken. | L §2; W §7.9; D §15 |
+| ARC-016 | C | The subject serves archive requests for its own archive over the peer-to-peer channel; no infrastructure node serves it on a subject's behalf, and a request naming another subject is answered empty. The fetcher verifies the structure itself and order is no part of it: every returned record is named either by the requested frontier or by a back-pointer of another record in the batch, every back-pointer naming nothing in the batch comes back as the continuation frontier, and every signature is checked before anything is kept. Where no frontier was requested — the recovery case — there is no head to match, and the chain verifies internally while its newestness stays the holder's claim. An attestation delivery carrying no nonce the fetcher issued is not taken. | L §2; W §7.9; D §15 |
 | ARC-017 | C | A participant's own store persists beside its archive with the lifetimes its contents have: records, sealed captures and seeds written once, and material that grows against a record rewritten. The seed that releases a capture key is the only secret among them and is not world-readable; ciphertext the holder cannot open needs no such care. Positions are re-derived from the archive rather than stored, so a restored archive reaches the same answer. | D §§13.7.1, 7.5.2; L §2 |
 
 ## 3.2 Infrastructure topology, propagation, addressing and currency
@@ -317,7 +317,7 @@ The Cargo workspace has **15 crates**. Components below follow responsibilities 
 | MAIL-010 | S | SubmissionReply echoes the request nonce and exactly the defined codes 0 accepted, 1 refused, 2 unknown. Do not append invented explanatory fields to unsigned replies or report storage failure as accepted. | W §7.10 |
 | MAIL-011 | E | Persist one-time consumption/custody before acknowledging success; inject failure between validation, durable write and reply. Retrying after an ambiguous reply may not disclose the same one-time prekey twice or lose acknowledged stored ciphertext. | I §§2, 6; W §§7.8, 7.10 |
 | MAIL-025 | C | A device's prekey bundle is made over material that device generated and signed by the identity on the ceremony device, naming the device under the signature; the signer refuses a payload naming another subject, and the device refuses a signed bundle that does not verify under its identity, names another device, or is not over its current material. A device whose material is unsigned publishes nothing, stocks its own pool, and offers the payload again when its material rotates. | W §7.8; D §§14.2.4, 23.3; L §3 |
-| MAIL-026 | C | A serving node attaches the submitter's bundle for the device on the authenticated session to what it delivers, as the optional third element; a recipient holding no binding for that submitter attributes the first message on arrival rather than refusing it. The element is absent where the node holds no bundle for that device, and a recipient accepts both shapes. A bundle that fails verification is discarded and the message processed as though none came; the node can withhold it and cannot forge it. | W §7.10; D §14.2.2, §14.2.4 |
+| MAIL-026 | C | A serving node attaches the submitter's bundle for the device on the authenticated session to what it delivers, as the optional third element; a recipient holding no binding for that submitter attributes the first message on arrival rather than refusing it. The element is absent where the node holds no bundle for that device, and a recipient accepts both shapes. A recipient already holding a binding for that subject's device ignores the one that arrived: a delivery is carriage and not a refresh, so an older valid bundle must not displace a newer held one, and freshness comes from publication and the client's own sweep. A bundle that fails verification is discarded and the message processed as though none came; the node can withhold it and cannot forge it. | W §7.10; D §14.2.2, §14.2.4 |
 | MAIL-027 | S | Run at least the Double Ratchet over a PQXDH session; run the Triple Ratchet where an implementation of the post-quantum half is available. The floor is what a peer can hold you to, since neither end can verify the other's construction — the session derives the same keys or it does not. A client states which it is running where its own user can reach it. The post-quantum half mixes into the root chain and carries in the header; a session at the floor derives and persists exactly what it did before that seam existed. | D §14.2.4.3, §1.1; L §3 |
 
 ### Mailbox retention, delivery and external wake
@@ -447,7 +447,7 @@ The Cargo workspace has **15 crates**. Components below follow responsibilities 
 |---|---|---|---|
 | PAY-001 | C | Bootstrap end-to-end sessions asynchronously from PQXDH prekeys using X25519 and ML-KEM-768, binding encryption material to the authenticated hybrid identity while keeping signing keys separate from encryption keys. | D §§14.2.2–14.2.4; L §3 |
 | PAY-002 | C | Support both one-time and last-resort initiation, making weaker initial forward secrecy visible when one-time material is absent. A serving node that substitutes prekeys must not silently impersonate the recipient. | D §14.2.4; W §7.8 |
-| PAY-003 | O | The required ongoing construction is Triple Ratchet combining Double Ratchet and SPQR, not Double Ratchet alone. Test the implemented classical path separately, then require pinned upstream combined-construction vectors, binding and state transitions before claiming full completion. | D §14.2.4; L §3 |
+| PAY-003 | — | **WITHDRAWN 2026-09-26** [author]. The row required the Triple Ratchet and excluded the Double Ratchet alone. D §14.2.4.3 makes the Double Ratchet over PQXDH the floor and the Triple Ratchet a recommendation, and MAIL-027 carries both; PAY-004 carries the profile's negative cases. The number is not reused. | D §14.2.4.3; L §3 |
 | PAY-004 | E | For the selected encryption profile test tamper, wrong peer, stale/replayed messages, lost and reordered messages, skipped-key bounds, restart and state rollback. No rejected payload produces unauthenticated application plaintext or reuses consumed encryption state. | D §14.2.4; L §§2–3 |
 | PAY-005 | C | Default to direct payload only after horizon eligibility and successful traversal for online parties; on traversal failure or out-of-horizon routing use serving-node relays. Anchor resolution nodes carry queries, not application payload merely because they were on the lookup path. | D §§12.6.3, 14.1.1; L §§3–5 |
 | PAY-006 | C | Apply each user's direct/relay privacy choice in both send and receive directions before releasing endpoint candidates. Mutual horizon policy is the default, not permission to ignore an explicit user override or invent an absolute prohibition beyond it. | D §12.6.3; L §5 |
@@ -618,6 +618,7 @@ The Cargo workspace has **15 crates**. Components below follow responsibilities 
 | APP-010 | C | A device holding a delegation and no seed starts from the identity's key material, a transport seed of its own and the run the ceremony device signed; it attaches under the delegation, is a payload endpoint of its own with material it generated, and refuses by name every act of the identity key: consent, a verifier's answer, a body, witness and departure signatures, a recovery response, and delegation issuance. Refuse a start with no delegation or with a delegation by another identity. | D §23.3; W §§7.8, 8.2; L §§3, 4.2 |
 | APP-011 | C | Encrypt everything the kernel hands out for storage before it reaches the disk, under a key the application does not hold in normal working state — a platform key store, hardware-backed where available. What crosses is the archive, the payload sessions and the ratchet state, key material among it, and the kernel cannot encrypt it because the only key worth using is the platform's. Seeds minted by the application go the same way and never around it. State that fails to open is reported as no state held. | L §9, §2 |
 | APP-012 | C | Wipe key material rather than leaving it in freed memory: root keys, chain keys, message keys and prekey seeds, including the copies a ratchet makes of its own state while deciding whether a message opens. Not observable to a peer and not enforceable against one; stated because no expert review of this implementation is coming. | L §3; D §14.2.4.3 |
+| APP-013 | C | The application holds one kernel per identity per storage location. A platform lifecycle event that recreates a screen neither starts a second kernel against that state nor loses what the first holds: the kernel outlives the screen, a screen that has gone receives nothing, and a screen that replaces it is given the state so far. Two kernels over one storage location would each overwrite what the other kept, so this is a correctness rule and not only a resource one. | L §9; D §14.1.0 |
 
 ### Human authorization, privacy choices and warnings
 
@@ -958,12 +959,12 @@ This specification contains **471 numbered requirement/test families** across **
 | VER | 18 |
 | CAP | 16 |
 | REC | 12 |
-| PAY | 11 |
+| PAY | 10 |
 | POL | 21 |
 | CAT | 22 |
 | GAT | 37 |
 | PKG | 14 |
-| APP | 12 |
+| APP | 13 |
 | UX | 14 |
 | OPS | 18 |
 | TOOL | 7 |

@@ -120,6 +120,14 @@ pub struct Horizon {
     /// §4.3, design §15.1.1 [author, 2026-09-23]) — and what the derived
     /// copy's watermark is taken over.
     seen: BTreeMap<Txid, u64>,
+    /// The seen facts applied to the **current** table generation, kept in
+    /// memory only.  Seen and applied part company when a derived copy is
+    /// discarded: the seen-set survives, the table starts again, and a
+    /// record the serving node repropagates must be applied although it is
+    /// not news — which is TOP-036's *earned again by propagation and
+    /// fetch* made mechanical.  Forwarding suppression and counting stay
+    /// on the seen-set, where they were.
+    applied: std::collections::BTreeSet<Txid>,
     /// `(patron, node)` for every relationship a patron ended with
     /// prejudice: what the evaluation of a disavowal came to, kept where
     /// the disavowal itself is not.
@@ -172,6 +180,7 @@ impl Horizon {
         Horizon {
             me,
             seen: BTreeMap::new(),
+            applied: BTreeSet::new(),
             determinations: BTreeSet::new(),
             records: BTreeMap::new(),
             table: Table::with_me(me),
@@ -410,7 +419,13 @@ impl Horizon {
         let Ok(rec) = Record::parse(bytes) else {
             return Took::Refused;
         };
-        if self.seen.contains_key(&rec.txid) {
+        // **seen is not the same as applied.**  Seen suppresses counting
+        // and forwarding, and it survives a wake that discards the derived
+        // copy; applied says the CURRENT table reflects the record.  After
+        // a discard the two part company, and a repropagated record this
+        // client has seen is exactly the repair TOP-036 promises — taken
+        // again, counted never.
+        if self.seen.contains_key(&rec.txid) && self.applied.contains(&rec.txid) {
             return Took::Duplicate;
         }
         if self
@@ -424,6 +439,7 @@ impl Horizon {
         self.note_end(&rec);
         self.note_determination(&rec);
         self.seen.insert(rec.txid, rec.effective);
+        self.applied.insert(rec.txid);
         self.records.insert(rec.txid, bytes.to_vec());
         Took::Applied
     }
@@ -719,24 +735,33 @@ impl Horizon {
             .collect();
         let taken = snap.and_then(|s| {
             let later = unfolded(s, &keys, |k| *k)?;
-            let later: Vec<usize> = later
-                .into_iter()
-                .filter_map(|i| {
-                    let t = keys[i].1;
-                    all.iter()
-                        .position(|b| Record::parse(b).is_ok_and(|r| r.txid == t))
-                })
-                .collect();
+            // **every later fact must have its body in hand.**  One that
+            // does not is one this copy cannot be caught up with, and a
+            // copy that cannot account for the facts is discarded whole
+            // (TOP-036) — never certified current with the gap folded
+            // silently away.  The bodies come from the txid index, not a
+            // scan.
+            let mut later_bodies = Vec::with_capacity(later.len());
+            for i in later {
+                later_bodies.push(self.records.get(&keys[i].1)?.clone());
+            }
             self.take(s)?;
-            Some(
-                later
-                    .into_iter()
-                    .map(|i| all[i].clone())
-                    .collect::<Vec<_>>(),
-            )
+            Some(later_bodies)
         });
         match taken {
             Some(later) => {
+                // the snapshot accounts for everything at its watermark;
+                // what lies past it is applied only as it actually folds
+                let past: std::collections::BTreeSet<Txid> = later
+                    .iter()
+                    .filter_map(|b| Record::parse(b).ok().map(|r| r.txid))
+                    .collect();
+                self.applied = self
+                    .seen
+                    .keys()
+                    .filter(|t| !past.contains(*t))
+                    .copied()
+                    .collect();
                 for bytes in &later {
                     if let Ok(rec) = Record::parse(bytes)
                         && self
@@ -746,6 +771,7 @@ impl Horizon {
                     {
                         self.note_locator(&rec);
                         self.note_end(&rec);
+                        self.applied.insert(rec.txid);
                     }
                 }
                 if later.is_empty() {
@@ -760,6 +786,10 @@ impl Horizon {
                 self.table = Table::with_me(self.me);
                 self.places.clear();
                 self.locators.clear();
+                // the copy is gone: nothing is applied until a body is,
+                // and the seen-set stays, which is what makes the repair
+                // a re-take rather than a re-count
+                self.applied.clear();
                 for bytes in &all {
                     if let Ok(rec) = Record::parse(bytes)
                         && self
@@ -769,6 +799,7 @@ impl Horizon {
                     {
                         self.note_locator(&rec);
                         self.note_end(&rec);
+                        self.applied.insert(rec.txid);
                     }
                 }
                 Woke::Replayed {

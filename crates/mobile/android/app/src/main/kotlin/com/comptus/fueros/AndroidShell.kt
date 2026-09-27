@@ -122,7 +122,11 @@ class AndroidShell(context: Context) :
     }
 }
 
-fun platformOf(context: Context): Platform {
-    val s = AndroidShell(context)
-    return Platform(s, s, s, s, s, s, s)
-}
+/**
+ * The platform, from the shell the caller already holds.
+ *
+ * The kernel reads its own provision and seeds through one before it starts,
+ * and one shell answering every interface is one answer per question.
+ */
+fun platformOf(shell: AndroidShell): Platform =
+    Platform(shell, shell, shell, shell, shell, shell, shell)

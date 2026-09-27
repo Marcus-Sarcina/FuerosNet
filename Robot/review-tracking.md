@@ -12053,3 +12053,95 @@ report, and differential testing, which establishes agreement and says
 nothing about implementation security. `light-client-requirements.md` §3's
 wipe obligation names the same reason: an obligation nobody wrote down is
 one nobody implements.
+
+## The fifth conformance review: five findings, four closed here (2026-09-26)
+
+`conformance-review/` at `aa470d4` plus the then-worktree. All twelve previous
+findings hold their retained assertions. **Three of the five current findings
+were already fixed in the worktree when the review landed** and its own
+reproductions now pass; the review's suite is in the tree as
+`crates/conformance/tests/september26.rs`, 26 of 26 passing, `september23.rs`
+retired.
+
+**S01 and S02, both P1, were the same mistake in two places.** A snapshot's
+missing later facts were `filter_map`'d away, so a copy that could not be
+caught up with was installed and reported `Current` — and body absence is the
+*normal* persisted format now, which is what turned a corner case into the
+ordinary one. `Horizon::wake` and `NodeView::restore_materialised` now refuse
+the snapshot whole when a later fact has no body, which is what TOP-036 already
+said. S02 is the other half: after a discard the seen-set survives and the
+table does not, so a repropagated record was rejected as `Duplicate` before it
+could be applied. **Seen and applied are now separate**, seen keeping
+forwarding suppression and counting where they were, and applied saying only
+that the current generation reflects the record. The linear body scan the
+review also flagged went with it: the lookup is by txid now.
+
+**S03: a delivery is carriage and not a refresh.** W §7.10's ignore-if-held
+rule was not implemented, so an older valid carried bundle displaced a newer
+held one and could send session establishment toward retired material.
+`take_binding` checks held-ness before verifying, which also stops a signature
+verification per relayed message. Freshness comes from publication and the
+sweep, which are untouched.
+
+**S04 was answered by the zeroization pass, except for the dependency
+feature.** `ml-kem`'s `zeroize` feature was off, so `DecapsulationKey`'s own
+erasing destructor was compiled out and `KemSecret` wiped only its seed; it is
+on, and the resolved feature graph confirms it. The evicted skipped keys, the
+AEAD derivation buffer and its copied key, and PQXDH's concatenated secret are
+wiped at the sites the review named. Evidence remains source and configuration
+inspection.
+
+**S05 is fixed and verified on the emulator, not asserted.** `MainActivity`
+started a new `bringUp` thread on every `onCreate` and the old loop could not
+terminate, so a font change left two kernels, two connections and two
+maintenance clocks against one set of state files. `Kernel` is now a
+process-owned singleton: it starts once, screens bind and unbind, and a screen
+that has gone is a null sink. On API 36, threads went 31 → 30 across a font-scale
+recreation where the review saw 35 → 40, the process was the same, no second
+kernel started, and the recreated screen replayed the transcript from the
+kernel rather than losing it. Startup, sealed seeds, attachment and the payload
+echo all still pass.
+
+**M8 closed with it.** `Participant::payload_construction` crosses the FFI and
+the Android status line shows `payload: the Double Ratchet (the floor)`, which
+is L §3's obligation — the one thing a peer cannot check, so the only party who
+can say it is this one.
+
+**The Android lint gate is green with no exemption.** The three `NewApi` errors
+were in generated code that probes for `java.lang.ref.Cleaner` with
+`Class.forName` — correct, and invisible to lint. `crates/ffi/uniffi.toml` sets
+`disable_java_cleaner`, so the branch is not generated at all and JNA's cleaner
+(already the fallback below API 33, and already in the APK) is used at every
+level. No baseline, no suppression, and minSdk 31 stands on its own reasons.
+`0 errors, 7 warnings`.
+
+**MAIL-027's exact-persistence promise is kept literally.** The encoder wrote
+an eleven-element array with an empty trailing byte string even at the floor;
+it writes ten, byte for byte the pre-seam shape, and the reader takes both. The
+interim eleven-element shape is asserted readable rather than dropped.
+
+**Document corrections.** `functional_tests.md` said 15 crates against 16; the
+application-boundary row said the binding generator was not adopted, which
+`uniffi::setup_scaffolding!()` two lines below the same claim in
+`ffi/src/lib.rs` contradicted; the mobile row said both shells were READMEs
+after the Android shell was built, assembled and run. ARC-016 still described
+walking a line — first record is the head, each back-pointer reaches the next —
+against W §7.9's reachability, which O-006 settled on 2026-09-17 and ARC-010
+already carries. MAIL-026 gained the ignore-if-held clause S03 is about. The
+code pin was re-accepted for the changed `functional_tests.md`.
+
+**PAY-003 is withdrawn** [author, 2026-09-26]. It required the Triple Ratchet
+and excluded the Double Ratchet alone, against D §14.2.4.3's floor of the same
+day; its kind was O, an oracle awaiting an open decision that has since been
+taken. MAIL-027 carries the floor and the recommendation and PAY-004 the
+profile's negative cases, so nothing it asserted is lost. The row keeps a
+tombstone and the number is not reused.
+
+**APP-013 states what S05 was about** [author, 2026-09-26]: the application
+holds **one kernel per identity per storage location** — per identity, so a
+multi-identity client is not ruled out — and a lifecycle event that recreates a
+screen neither starts a second against that state nor loses what the first
+holds. L §9 and D §14.1.0 are the authority; neither said it in those words,
+which is why the row exists. PAY goes 11 to 10 and APP 12 to 13, so the
+document still carries 471 families across 26 prefixes and every per-prefix
+count was re-checked against the footer.

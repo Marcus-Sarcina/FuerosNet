@@ -1167,10 +1167,17 @@ impl NodeView {
         let all: Vec<(u64, Txid)> = self.store.seen();
         let usable = snap.and_then(|s| {
             let later = unfolded(s, &all, |k| *k)?;
-            let held: Vec<Vec<u8>> = later
-                .into_iter()
-                .filter_map(|i| self.store.transaction(&all[i].1).map(|r| r.bytes.clone()))
-                .collect();
+            // **every later fact must have its body in hand.**  One that
+            // does not is one this copy cannot be caught up with — the
+            // ordinary case where the store was written and the snapshot
+            // was not — and a copy that cannot account for the facts is
+            // discarded whole, never certified current with the gap
+            // dropped on the floor.  The rebuild below is the repair by
+            // reconciliation §15.1.1 names.
+            let mut held = Vec::with_capacity(later.len());
+            for i in later {
+                held.push(self.store.transaction(&all[i].1)?.bytes.clone());
+            }
             self.take_snapshot(s)?;
             Some(held)
         });

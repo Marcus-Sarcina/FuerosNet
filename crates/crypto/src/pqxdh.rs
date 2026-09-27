@@ -163,8 +163,13 @@ pub fn initiate(
     }
     let (ct, ss) = their.pqopk.unwrap_or(their.pqspk).encapsulate(kem_m)?;
     km.extend_from_slice(&ss);
+    let sk = kdf(&km);
+    {
+        use zeroize::Zeroize;
+        km.zeroize();
+    }
     Ok(Initiated {
-        sk: kdf(&km),
+        sk,
         ek: ek_a.public(),
         kem_ciphertext: ct,
     })
@@ -195,7 +200,12 @@ pub fn respond(
     }
     let ss = me.pqopk.unwrap_or(me.pqspk).decapsulate(kem_ciphertext)?;
     km.extend_from_slice(&ss);
-    Ok(kdf(&km))
+    let sk = kdf(&km);
+    {
+        use zeroize::Zeroize;
+        km.zeroize();
+    }
+    Ok(sk)
 }
 
 /// The associated data both parties bind their first messages to: the
@@ -210,12 +220,16 @@ pub fn associated_data(ik_a: &DhPublic, ik_b: &DhPublic) -> Vec<u8> {
 /// KDF(KM) = HKDF-SHA-256 with a zero salt of the hash's length, input
 /// F ‖ KM where F is 32 bytes of 0xFF for X25519, and the info string.
 pub fn kdf(km: &[u8]) -> [u8; 32] {
+    use zeroize::Zeroize;
     let mut ikm = vec![0xFFu8; 32];
     ikm.extend_from_slice(km);
     let hk = Hkdf::<Sha256>::new(Some(&[0u8; 32]), &ikm);
     let mut out = [0u8; 32];
     hk.expand(INFO, &mut out)
         .expect("32 bytes is within HKDF's bound");
+    // the prefixed copy of the concatenated secrets; the caller wipes its
+    // own original
+    ikm.zeroize();
     out
 }
 

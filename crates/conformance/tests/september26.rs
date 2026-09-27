@@ -1,4 +1,5 @@
-//! Independent September 23 review assertions. Failures assert required behavior.
+//! Current September 26 assertions, retaining the September 23 regressions.
+//! Failures assert required behavior; production source is not modified.
 use rhtn_archive::{chain::ArchiveReply, record::Record, tx::*, walk::*};
 use rhtn_client::{
     ceremony::{Client, Config},
@@ -794,8 +795,8 @@ fn r02_seedless_backup_must_still_be_bound_to_its_identity() {
 
 #[test]
 fn n01_current_client_must_open_the_previous_durable_format() {
-    // HEAD wrote field 6 as the optional provider credential.  The current
-    // worktree replaced it in place with [owner, provider].  An upgrade must
+    // The preceding review baseline wrote field 6 as an optional provider
+    // credential, later replaced with [owner, provider]. An upgrade must
     // retain the authoritative state written by the immediately preceding
     // implementation rather than refusing startup over it.
     let before = client("alice");
@@ -1021,4 +1022,276 @@ fn control_start_from_backup_restores_the_identity_and_writes_current_state() {
         shell.store.lock().unwrap().contains_key(STATE),
         "a successful replacement-device restore writes current durable state"
     );
+}
+
+struct Silent;
+impl rhtn_node::Adjacency for Silent {
+    fn peers(&self) -> Vec<[u8; 32]> {
+        vec![]
+    }
+    fn send(&self, _: &[u8; 32], _: u64, _: &[u8]) {}
+    fn request(&self, _: &[u8; 32], _: u64, _: &[u8]) -> bool {
+        false
+    }
+}
+
+fn topology_pair() -> (Record, Record) {
+    use network_fixture::*;
+    let mut sg = Signers::new();
+    let adoption = sg.adopt("carol", "bob", "bob", &[0], 1);
+    let departure = Record::parse(&envelope(
+        TYPE_DEPARTURE,
+        &departure_body(
+            &[adoption.txid],
+            &kh("carol"),
+            &kh("bob"),
+            Seqno {
+                series: 1,
+                counter: 1,
+            },
+            sg.clock + 1,
+            None,
+        ),
+        &[&id("carol")],
+    ))
+    .unwrap();
+    (adoption, departure)
+}
+
+#[test]
+fn s01_client_must_not_certify_a_stale_snapshot_when_later_bodies_are_gone() {
+    use network_fixture::*;
+    use rhtn_client::horizon::{Horizon, Took, Woke};
+    let (adoption, departure) = topology_pair();
+    let mut running = Horizon::new(kh("bob"));
+    assert_eq!(running.ingest(&adoption.bytes, &ids()), Took::Applied);
+    let old = running.materialise();
+    assert_eq!(running.ingest(&departure.bytes, &ids()), Took::Applied);
+    assert!(
+        !running
+            .table
+            .bindings()
+            .iter()
+            .any(|b| b.node == kh("carol") && b.open())
+    );
+    let mut waking = Horizon::new(kh("bob"));
+    for (t, e) in running.seen() {
+        waking.restore_seen(t, e);
+    }
+    let result = waking.wake(Some(&old), &ids());
+    assert!(
+        result != Woke::Current
+            && !waking
+                .table
+                .bindings()
+                .iter()
+                .any(|b| b.node == kh("carol") && b.open()),
+        "TOP-036: missing departure body silently skipped; stale adoption retained and wake reported {result:?}"
+    );
+}
+
+#[test]
+fn s01_node_must_not_certify_a_stale_snapshot_after_store_only_persistence() {
+    use network_fixture::*;
+    use rhtn_node::{
+        store::{Decision, KIND_TRANSACTION, TopologyStore},
+        view::NodeView,
+    };
+    let (adoption, departure) = topology_pair();
+    let mut running = NodeView::new(
+        Arc::new(id("bob")),
+        Locator::root(
+            kh("bob"),
+            Seqno {
+                series: 1,
+                counter: 0,
+            },
+        ),
+    );
+    assert_eq!(
+        running.take_object(
+            &Silent,
+            &kh("carol"),
+            KIND_TRANSACTION,
+            &adoption.bytes,
+            &ids()
+        ),
+        Decision::Stored
+    );
+    let old = running.materialise();
+    assert_eq!(
+        running.take_object(
+            &Silent,
+            &kh("carol"),
+            KIND_TRANSACTION,
+            &departure.bytes,
+            &ids()
+        ),
+        Decision::Stored
+    );
+    let dir = std::env::temp_dir().join(format!("fueros-review-stale-node-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    running.store.save(&dir).unwrap();
+    let mut waking = NodeView::new(
+        Arc::new(id("bob")),
+        Locator::root(
+            kh("bob"),
+            Seqno {
+                series: 1,
+                counter: 0,
+            },
+        ),
+    );
+    waking.store = TopologyStore::load(&dir).unwrap();
+    let result = waking.restore_materialised(Some(&old), &ids());
+    std::fs::remove_dir_all(&dir).unwrap();
+    assert!(
+        result != rhtn_archive::topology::Restored::Current
+            && !waking
+                .table
+                .bindings()
+                .iter()
+                .any(|b| b.node == kh("carol") && b.open()),
+        "TOP-035/OPS-016: crash after store save but before snapshot resurrected an ended relationship: {result:?}"
+    );
+}
+
+#[test]
+fn s02_client_must_relearn_seen_topology_after_discarding_its_only_derived_copy() {
+    use network_fixture::*;
+    use rhtn_client::horizon::{Horizon, Took};
+    let (adoption, _) = topology_pair();
+    let mut running = Horizon::new(kh("bob"));
+    assert_eq!(running.ingest(&adoption.bytes, &ids()), Took::Applied);
+    let mut broken = running.materialise();
+    broken.table = b"corrupt derived bytes".to_vec();
+    let mut waking = Horizon::new(kh("bob"));
+    for (t, e) in running.seen() {
+        waking.restore_seen(t, e);
+    }
+    waking.wake(Some(&broken), &ids());
+    let retaken = waking.ingest(&adoption.bytes, &ids());
+    assert!(
+        waking
+            .table
+            .bindings()
+            .iter()
+            .any(|b| b.node == kh("carol") && b.open()),
+        "TOP-036: after discarding the derived copy, propagation is suppressed as {retaken:?} and the relationship never returns"
+    );
+}
+
+#[test]
+fn s03_carried_binding_must_not_replace_an_already_held_binding() {
+    let mut receiver = client("bob");
+    let signer = test_identity("alice");
+    let device = [4; 32];
+    let mut old_keys = PayloadKeys::generate(&mut fresh, 100);
+    let mut current_keys = PayloadKeys::generate(&mut fresh, 200);
+    let old = old_keys.bundle(&signer, &device, 100);
+    let current = current_keys.bundle(&signer, &device, 200);
+    assert!(receiver.take_binding(&current));
+    let before = receiver.payload.sessions.encode();
+    receiver.take_binding(&old);
+    assert_eq!(
+        receiver.payload.sessions.encode(),
+        before,
+        "W 7.10 / MAIL-026: a carried, older signed bundle overwrote an existing binding"
+    );
+}
+
+#[test]
+fn control_carried_binding_authenticates_first_message_and_invalid_binding_is_ignored() {
+    let mut receiver = client("bob");
+    let signer = test_identity("alice");
+    let device = [4; 32];
+    let mut keys = PayloadKeys::generate(&mut fresh, 100);
+    let bundle = keys.bundle(&signer, &device, 100);
+    assert!(receiver.take_binding(&bundle));
+    let before = receiver.payload.sessions.encode();
+    assert!(!receiver.take_binding(b"not a bundle"));
+    assert_eq!(receiver.payload.sessions.encode(), before);
+    let bob = test_identity("bob");
+    let receiver_device = receiver.payload.device;
+    let receiver_bundle = receiver.payload.keys.bundle(&bob, &receiver_device, 100);
+    let p = read_bundle(&vec![bob.public.clone()], &receiver_bundle).unwrap();
+    let mut sender = Sessions::default();
+    let first = sender
+        .open(
+            &keys,
+            &device,
+            bob.public.keyhash,
+            &p,
+            None,
+            &mut fresh,
+            b"first without prefetch",
+        )
+        .unwrap();
+    assert_eq!(
+        receiver
+            .payload
+            .sessions
+            .receive(
+                &mut receiver.payload.keys,
+                signer.public.keyhash,
+                &first,
+                &mut fresh
+            )
+            .unwrap(),
+        b"first without prefetch"
+    );
+}
+
+#[test]
+fn control_fact_only_client_state_restores_its_current_topology_without_foreign_bodies() {
+    use network_fixture::*;
+    use rhtn_client::horizon::Took;
+    let (adoption, _) = topology_pair();
+    let mut before = client("alice");
+    before.known = ids();
+    assert_eq!(
+        before.horizon.ingest(&adoption.bytes, &before.known),
+        Took::Applied
+    );
+    let bytes = before.durable();
+    assert!(
+        !bytes
+            .windows(adoption.bytes.len())
+            .any(|w| w == adoption.bytes),
+        "foreign full transaction must not be in durable state"
+    );
+    let mut after = client("alice");
+    after.known = ids();
+    after.restore_durable(&bytes).unwrap();
+    assert!(after.horizon.holds(&adoption.txid));
+    assert!(
+        after
+            .horizon
+            .table
+            .bindings()
+            .iter()
+            .any(|b| b.node == kh("carol") && b.open())
+    );
+    assert_eq!(after.horizon.stored().count(), 0);
+}
+
+#[test]
+fn control_seedless_client_export_names_its_owner_and_roundtrips_only_there() {
+    use rhtn_client::backup::Cost;
+    let alice = client("alice");
+    let bytes = alice
+        .export(
+            None,
+            Cost {
+                m_kib: 32,
+                passes: 1,
+                lanes: 1,
+            },
+            b"password",
+        )
+        .unwrap();
+    let (contents, _) = alice.import(&bytes, b"password").unwrap();
+    assert_eq!(contents.owner, Some(alice.keyhash()));
+    assert!(client("alice").install(contents.clone()).is_ok());
+    assert!(client("bob").install(contents).is_err());
 }

@@ -709,6 +709,13 @@ impl Sessions {
         self.prefetched.insert((p.subject, p.device), p);
     }
 
+    /// Whether a binding is held for this subject's device: what decides
+    /// that one carried with a delivery is ignored (`wire-format.md`
+    /// §7.10).
+    pub fn holds_binding(&self, subject: &Keyhash, device: &[u8; 32]) -> bool {
+        self.prefetched.contains_key(&(*subject, *device))
+    }
+
     /// The bundles held for `peer`, one per device.
     pub fn prefetched_of(&self, peer: &Keyhash) -> Vec<&Prefetched> {
         self.prefetched

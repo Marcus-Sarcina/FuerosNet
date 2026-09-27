@@ -180,7 +180,9 @@ fn the_seam_persists_and_reads_the_state_written_before_it() {
     let back: Ratchet<Stub> = <Ratchet<Stub>>::decode(&a.encode()).expect("round trips");
     assert_eq!(back.encode(), a.encode(), "including the post-quantum half");
 
-    // ten elements is what a state written before the seam carries
+    // the floor writes the ten-element shape it wrote before the seam
+    // existed (MAIL-027) and reads it back; the eleven-element shape one
+    // interim build wrote even at the floor is read too, never refused
     let floor: Ratchet = Ratchet::initiator(
         sk,
         spk.public(),
@@ -188,14 +190,19 @@ fn the_seam_persists_and_reads_the_state_written_before_it() {
         b"ad".to_vec(),
     );
     let whole = floor.encode();
-    let ten = {
+    assert_eq!(
+        whole[0], 0x8a,
+        "array(10): byte for byte the pre-seam shape"
+    );
+    assert!(<Ratchet>::decode(&whole).is_some(), "and it reads back");
+    let eleven = {
         let mut v = whole.clone();
-        v[0] = 0x8a; // array(11) -> array(10)
-        v.truncate(v.len() - 1); // drop the trailing empty bstr
+        v[0] = 0x8b; // array(11)
+        v.push(0x40); // trailing empty bstr, as that build wrote
         v
     };
     assert!(
-        <Ratchet>::decode(&ten).is_some(),
-        "the preceding shape is read, not refused"
+        <Ratchet>::decode(&eleven).is_some(),
+        "the interim shape is read, not refused"
     );
 }

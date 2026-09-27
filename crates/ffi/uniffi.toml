@@ -1,0 +1,13 @@
+# The generated binding's cleaner.
+#
+# `java.lang.ref.Cleaner` arrived at API 33 and the app's minSdk is 31 (UWB
+# reached Android at 31, and the ceremony's channels are the application's
+# reason to exist).  The generator's default emits both paths and chooses at
+# runtime with `Class.forName`, which is correct and which Android lint
+# cannot see through: it reports three `NewApi` errors against generated
+# code and fails the build.  JNA's cleaner is already the fallback below 33
+# and is what the app carries anyway, so it is used at every API level and
+# the unreachable branch is not generated.  No lint exemption, no baseline,
+# and no blind spot bought to silence it.
+[bindings.kotlin]
+disable_java_cleaner = true

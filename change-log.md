@@ -10748,3 +10748,87 @@ comes from is a decision rather than a fix. Functional APP-011 and APP-012.
 will not be commissioned, that this project's own cryptographic code is
 permanently unreviewed rather than awaiting review, and what remains available
 instead.
+
+### 2026-09-26 (a copy that cannot account for the facts, and a kernel the screen does not own)
+
+**A snapshot whose later facts have no bodies is refused whole.** Both the
+client's horizon and the node's derived view obtained the identifiers a
+snapshot did not cover and then dropped every one whose body was absent —
+which became the *ordinary* case once neither keeps a transaction it was no
+party to, so the gap folded away silently and the older copy was certified
+current. A relationship that had ended could return as live after a restart,
+and on the daemon the store is written before the derived snapshot, so an
+interrupted write reaches it. `functional_tests.md` TOP-036 already said a
+copy that cannot account for the facts is discarded whole; it now is, and the
+bodies come from the txid index rather than a scan of every resident record.
+
+**Seen is not applied** [author, 2026-09-26]. After a derived copy is
+discarded the seen-set survives and the table starts again, so a record the
+serving node repropagates must be applied although it is not news — which is
+TOP-036's *earned again by propagation and fetch* made mechanical. Forwarding
+suppression and counting stay on the seen-set where they were; a second set,
+in memory only, says what the current generation reflects. Without it a
+correctly repropagated adoption was rejected as a duplicate and the
+relationship never came back.
+
+**A delivery is carriage and not a refresh** (`wire-format.md` §7.10). The
+rule that a recipient already holding a binding ignores the one that arrived
+was not implemented, so an older valid carried bundle displaced a newer held
+one and could send session establishment toward retired material. Held-ness is
+checked before the signature, which also spares a verification per relayed
+message. Freshness comes from publication and the sweep. `functional_tests.md`
+MAIL-026 carries the rule.
+
+**`ml-kem`'s own erasure was compiled out.** The crate has an erasing
+destructor for its decapsulation key behind a feature that was off, so
+`KemSecret` wiped the seed that is the key's storage form and the key's
+internals stayed. The feature is on and the resolved graph confirms it.
+
+**The kernel is owned by the process and not by the screen** [author,
+2026-09-26]. `MainActivity.onCreate` started a bring-up thread every time it
+ran and the resulting poll loop retained its Activity and its Participant
+with no way to end, so a font change left two kernels, two connections and
+two maintenance clocks writing one set of state files. A `Kernel` object
+starts once, screens bind to it and unbind from it, and a screen that has gone
+is a null sink; what a replacing screen shows is replayed from the kernel
+rather than lost. Verified on an API-36 emulator rather than asserted: threads
+went 31 to 30 across a font-scale recreation, the process was the same, no
+second kernel started, and the payload still round-tripped.
+`functional_tests.md` APP-013 states the rule as **one kernel per identity per
+storage location** — per identity, so a multi-identity client is not ruled
+out. `light-client-requirements.md` §9 and design §14.1.0 are its authority;
+neither says it in those words, which is why the row exists.
+
+**A client says which construction it runs** (`light-client-requirements.md`
+§3). No peer can tell from the wire — the session derives the same keys or it
+does not — so the only party who can say is the client itself, and the Android
+status line now reads `payload: the Double Ratchet (the floor)`. It crosses
+the boundary as `Participant::payload_construction`.
+
+**The floor writes the shape it always wrote.** `functional_tests.md`
+MAIL-027 promises that a session at the floor persists exactly what it did
+before the post-quantum seam existed; the encoder emitted an eleven-element
+array with an empty trailing byte string even there. It emits ten, byte for
+byte, and the reader takes both — the interim shape included, which is
+asserted rather than assumed.
+
+**`uniffi` is the binding generator, and its cleaner is JNA's.** The facade
+said the choice was unmade two lines above `uniffi::setup_scaffolding!()`.
+Separately, the generated Kotlin probed for `java.lang.ref.Cleaner` with
+`Class.forName` and fell back to JNA below API 33 — correct, and invisible to
+Android lint, which reported three `NewApi` errors against generated code and
+failed the build. `crates/ffi/uniffi.toml` disables the Java cleaner, so the
+branch is not generated and JNA's is used at every level. No baseline and no
+suppression: minSdk stays 31 on the reasons it already had.
+
+**PAY-003 is withdrawn** [author, 2026-09-26]. It required the Triple Ratchet
+and excluded the Double Ratchet alone, against design §14.2.4.3's floor of the
+same day; its kind was O, an oracle awaiting a decision that has since been
+taken. MAIL-027 carries the floor and the recommendation and PAY-004 the
+profile's negative cases. The row keeps a tombstone and the number is not
+reused. ARC-016 still described walking a line — first record the head, each
+back-pointer reaching the next — where `wire-format.md` §7.9 verifies
+reachability and no order at all, which O-006 settled on 2026-09-17. The
+inventory said 15 crates against 16, that the binding generator was unadopted,
+and that both mobile shells were READMEs. 471 families across 26 prefixes,
+unchanged.
