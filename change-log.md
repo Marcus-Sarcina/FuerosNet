@@ -10979,3 +10979,21 @@ suite grew by nine: six seal vectors, name-swap and truncation refusals
 among them, and three custody contract tests. The terminal instrument and
 the test fixtures declare themselves unsealed, the terminal because it is
 the ruling's own environment-owned case.
+
+### 2026-09-27 (two phones, each a device of its own)
+
+**Milestone A's exit is demonstrated whole, on shells.** `payload-peer` grew
+a two-material mode: one material keeps the node-plus-echoing-carol shape,
+two start the node alone and print a provision for each phone naming the
+other as its peer — every field public, no synthetic peer in the world at
+all. On two emulators of one read-only image, each phone minted its own
+identity, both attached to the one node, and payload ran both ways. Then the
+exit's restart clause in one motion: one phone force-stopped with the
+session live, a message queued while it was away, and its restart — sealed
+state opened through the custody seam, the same identity asserted on the
+full material — delivered the queued message and the session continued.
+Durable state, attach, status, restart with a live session and queued
+messages, payload between two phones: every line of the exit, on the
+product rather than at the boundary. Emulators are not hardware, and the
+provisioning blob remains the ceremony's hand-carried stand-in, which is
+milestone B's business.

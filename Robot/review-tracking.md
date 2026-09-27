@@ -12354,3 +12354,40 @@ fixtures declare unsealed too, the repair that compiles them while touching
 nothing their tests assert, under the harness's own rule. The minted key's
 drawn copy is also wiped now, which the first pass left in freed memory —
 found by reading the landed code, which is what reading it is for.
+
+## Milestone A's exit, demonstrated whole (2026-09-27)
+
+**`payload-peer` grew a two-material mode.** One material keeps yesterday's
+shape — the node plus carol, who echoes. Two materials start the node alone
+and print `PROVISION-A` and `PROVISION-B`, each phone provisioned with the
+other as its peer: known is `[node, other, own]`, every field public, no
+carol in the world at all. The bind-address argument trails the materials
+and an argument is a phone precisely when it parses as a `KeyMaterial`
+array.
+
+**The run, on two API-36 emulators of the same read-only AVD**: each phone
+minted its own identity (materials asserted distinct, in full); both
+attached to the one node; B reached A first — B's attach prefetches A's
+bundle because A attached before it — and A answered on the session, so the
+payload ran both ways. Then the exit's restart clause in one motion: A
+force-stopped with the session live, B sent while A was away, and A's
+restart — sealed state opened through custody, same material asserted in
+full — **delivered the queued message and the session continued**. Every
+line of the milestone exit is now demonstrated on shells: durable state,
+attach, status, restart with a live session and queued messages, and
+payload between two phones, each a device of its own.
+
+**Reproduction**: two emulators (`-read-only -no-window -no-snapshot`,
+ports 5580/5582), `pm clear`, install the APK on both, read each phone's
+`material` line from logcat, then
+
+    cargo run -p rhtn-ffi --features harness --bin payload-peer -- <mat-a> <mat-b>
+
+and hand each `PROVISION-*` line to its phone as the `provision` extra. The
+sends and assertions were driven through `uiautomator` dumps, message tags
+`hello-from-b`, `hello-from-a`, `while-you-were-away`, `back-again`.
+
+**What the exit does not certify**, said before it is asked: emulators are
+not hardware — Keystore backing, power loss and supported-device behaviour
+stay open as ever — and the provisioning blob remains the ceremony's
+hand-carried stand-in, which is milestone B's business.

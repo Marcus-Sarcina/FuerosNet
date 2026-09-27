@@ -1,21 +1,30 @@
-//! A workstation peer for driving the Android payload screen, behind the
-//! `harness` feature a shell never builds: a serving node reachable off
-//! the machine, a participant that echoes every payload it is sent, and
-//! on stdout the provisioning the phone needs until the ceremony exists
-//! to replace it.
+//! A workstation harness for driving the Android payload screen, behind
+//! the `harness` feature a shell never builds: a serving node reachable
+//! off the machine, and on stdout the provisioning each phone needs until
+//! the ceremony exists to replace it.
+//!
+//! **One phone**: the node plus a participant, carol, who echoes every
+//! payload she is sent -- the phone talks to the workstation.
 //!
 //!     cargo run -p rhtn-ffi --features harness --bin payload-peer -- <material-hex>
 //!
-//! **No seed crosses this boundary.** The phone mints its own identity and
-//! shows its public half; that half is this driver's argument, the node
-//! admits it, and the provision sent back names only public things -- the
-//! node, where it serves, the peer, and the key material of each. A blob
-//! carrying seeds would drive the screen just as well, and would be a
-//! shape worth nobody's trouble to imitate.
+//! **Two phones**: the node alone, each phone provisioned with the other
+//! as its peer -- payload between two phones, each a device of its own,
+//! which is the milestone's own words. `PROVISION-A` goes to the phone
+//! whose material came first, `PROVISION-B` to the other.
+//!
+//!     cargo run -p rhtn-ffi --features harness --bin payload-peer -- <material-a> <material-b>
+//!
+//! **No seed crosses this boundary.** A phone mints its own identity and
+//! shows its public half; those halves are this driver's arguments, the
+//! node admits them, and each provision sent back names only public
+//! things -- the node, where it serves, the peer, and the key material of
+//! each. A blob carrying seeds would drive the screen just as well, and
+//! would be a shape worth nobody's trouble to imitate.
 //!
 //! The node binds loopback by default, which an Android emulator reaches
-//! at `10.0.2.2`; pass a second argument to bind an interface a separate
-//! machine can route to.
+//! at `10.0.2.2`; pass a trailing bind address for an interface a
+//! separate machine can route to.
 
 use rhtn_ffi::client::Participant;
 use rhtn_ffi::device::{
@@ -115,34 +124,44 @@ fn unhex(s: &str) -> Option<Vec<u8>> {
         .collect()
 }
 
+/// A phone's key material, read off an argument: long hex that parses as
+/// a `KeyMaterial` array. Anything else is taken for the bind address.
+fn phone_of(arg: &str) -> Option<Vec<u8>> {
+    let km = unhex(arg)?;
+    rhtn_crypto::Identity::from_key_material(&km)?;
+    Some(km)
+}
+
 fn main() {
-    let Some(arg) = std::env::args().nth(1) else {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let phones: Vec<Vec<u8>> = args.iter().map_while(|a| phone_of(a)).collect();
+    if phones.is_empty() || phones.len() > 2 || args.len() > phones.len() + 1 {
         eprintln!(
-            "usage: payload-peer <phone-key-material-hex> [bind-addr]\n\n\
+            "usage: payload-peer <phone-material-hex> [phone-b-material-hex] [bind-addr]\n\n\
              An unprovisioned phone prints its key material to logcat under\n\
              the `fueros` tag:\n\n    \
-             adb logcat -d -s fueros | grep material\n"
+             adb logcat -d -s fueros | grep material\n\n\
+             One material: the node plus carol, who echoes.  Two: the node\n\
+             alone, each phone provisioned with the other as its peer.\n"
         );
         std::process::exit(2);
-    };
-    let Some(phone) = unhex(&arg) else {
-        eprintln!("the first argument is the phone's key material in hex");
-        std::process::exit(2);
-    };
-    let Some(phone_id) = rhtn_crypto::Identity::from_key_material(&phone) else {
-        eprintln!("that hex is not a KeyMaterial array");
-        std::process::exit(2);
-    };
+    }
     // Loopback by default: an emulator reaches its host's loopback at
     // 10.0.2.2, so nothing need listen past this machine for the ordinary
     // case.  A second machine needs an interface it can route to, and has
     // to say so.
-    let bind = std::env::args().nth(2).unwrap_or("127.0.0.1:0".into());
+    let bind = args
+        .get(phones.len())
+        .cloned()
+        .unwrap_or("127.0.0.1:0".into());
 
+    // carol exists only where there is one phone and nobody for it to
+    // talk to; two phones are each other's peer
+    let echoes = phones.len() == 1;
     let node = TestNode::start_on(
         "bob".into(),
-        vec!["carol".into()],
-        vec![phone.clone()],
+        if echoes { vec!["carol".into()] } else { vec![] },
+        phones.clone(),
         bind.clone(),
     );
     let port = node.address().rsplit(':').next().unwrap().to_string();
@@ -150,7 +169,42 @@ fn main() {
         Some("127.0.0.1" | "localhost" | "0.0.0.0") | None => "10.0.2.2".to_string(),
         Some(ip) => ip.to_string(),
     };
-    let (bob, carol) = (test_identity("bob".into()), test_identity("carol".into()));
+    let bob = test_identity("bob".into());
+
+    if let [a, b] = phones.as_slice() {
+        // both identities parsed in phone_of; the ids name the peers
+        let (ida, idb) = (
+            rhtn_crypto::Identity::from_key_material(a).expect("parsed once already"),
+            rhtn_crypto::Identity::from_key_material(b).expect("parsed once already"),
+        );
+        for (label, own, other, other_id, other_name) in [
+            ("PROVISION-A", a, b, &idb, "phone-b"),
+            ("PROVISION-B", b, a, &ida, "phone-a"),
+        ] {
+            // public in every field, as below: what each phone needs is
+            // the node, where it serves, and who its peer is
+            let provision = format!(
+                r#"{{"known":["{}","{}","{}"],"node":"{}","addr":"{host}:{port}","peer":"{}","peer_name":"{other_name}"}}"#,
+                hex(&bob.material),
+                hex(other),
+                hex(own),
+                hex(&bob.id),
+                hex(&other_id.keyhash),
+            );
+            println!("{label} {provision}");
+        }
+        eprintln!(
+            "node bob serves on {bind} (port {port}); two phones, each a \
+             device of its own; ctrl-c ends it"
+        );
+        loop {
+            std::thread::sleep(std::time::Duration::from_secs(3600));
+        }
+    }
+
+    let phone = phones[0].clone();
+    let phone_id = rhtn_crypto::Identity::from_key_material(&phone).expect("parsed once already");
+    let carol = test_identity("carol".into());
 
     let s = Arc::new(Shell {
         store: Mutex::default(),

@@ -931,7 +931,12 @@ survives a process restart with an established payload session and queued
 messages, and performs its slice's one complete action — **payload between two
 phones, each a device of its own** [author, 2026-09-22], the ceremony,
 provisioning and the resource round trip following in that order during
-milestone B. `implementation-plan.md`
+milestone B. **Demonstrated whole, 2026-09-27**: two API-36 emulators, each
+minting its own identity, provisioned against one node by `payload-peer`'s
+two-material mode; payload both ways; one phone force-stopped with the
+session live, a message queued while it was away, and the restart — from
+sealed state, through custody — opened it and the session continued
+(`review-tracking.md`, this date). `implementation-plan.md`
 lines 588 and 657–665 are corrected before the plan is handed over.
 
 ### Milestone B — during the first shell
