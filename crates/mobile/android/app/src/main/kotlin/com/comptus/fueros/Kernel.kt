@@ -20,45 +20,20 @@ import uniffi.rhtn_ffi.kindApplication
  */
 object Kernel {
 
-    /** What a bound screen renders. Calls arrive on the kernel's thread. */
-    interface Ui {
-        fun status(line: String)
-
-        fun say(line: String)
-    }
+    /** The screen contract lives in [Front], which a JVM test can hold. */
+    private val front = Front()
 
     private val lock = Any()
-    @Volatile private var ui: Ui? = null
     @Volatile private var participant: Participant? = null
     @Volatile private var peer: ByteArray? = null
     private var peerName: String = "peer"
     private var started = false
     private var provisioned = false
-    private var statusLine = "starting the kernel…"
-    private val transcript = mutableListOf<String>()
 
-    /**
-     * Bind a screen: it receives the state so far, then everything new.
-     *
-     * Under the lock, so that a line the kernel is saying at this moment
-     * arrives either in the replay or after it and never in both places or
-     * out of order.
-     */
-    fun bind(u: Ui) {
-        synchronized(lock) {
-            ui = u
-            u.status(statusLine)
-            transcript.forEach(u::say)
-        }
-    }
+    /** Bind a screen: it receives the state so far, then everything new. */
+    fun bind(u: Front.Ui) = front.bind(u)
 
-    fun unbind(u: Ui) {
-        synchronized(lock) {
-            if (ui === u) {
-                ui = null
-            }
-        }
-    }
+    fun unbind(u: Front.Ui) = front.unbind(u)
 
     /**
      * Start the kernel, once for the life of the process.
@@ -188,29 +163,9 @@ object Kernel {
         status("$line · presents $key…\npayload: ${p.payloadConstruction()}")
     }
 
-    // **Under the lock, and the bound screen told inside it.**  What a
-    // screen has been told and what the transcript holds then cannot part
-    // company across a bind, which is the only thing that makes the replay
-    // exact.  A sink posts to its own thread and never calls back in here,
-    // so nothing waits on anything.
-    private fun status(line: String) {
-        synchronized(lock) {
-            statusLine = line
-            ui?.status(line)
-        }
-    }
+    private fun status(line: String) = front.status(line)
 
-    private fun say(line: String) {
-        synchronized(lock) {
-            transcript.add(line)
-            // the transcript outlives every screen now, so it is bounded:
-            // an unbounded one is a leak the process never recovers from
-            while (transcript.size > TRANSCRIPT_LINES) {
-                transcript.removeAt(0)
-            }
-            ui?.say(line)
-        }
-    }
+    private fun say(line: String) = front.say(line)
 
     private fun unhex(s: String): ByteArray =
         ByteArray(s.length / 2) { ((s[2 * it].digitToInt(16) shl 4) + s[2 * it + 1].digitToInt(16)).toByte() }
@@ -231,5 +186,4 @@ object Kernel {
         return s
     }
 
-    private const val TRANSCRIPT_LINES = 500
 }

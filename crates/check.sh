@@ -137,6 +137,16 @@ if [ "$rc" -eq 0 ]; then echo "  kotlin round trip: ok"
 elif [ "$rc" -eq 3 ]; then :
 else echo "  kotlin round trip: FAILED"; fail=1; fi
 
+echo "=== 4c. The Android shell's unit tests (skipped where no SDK or JBR) ==="
+# the shell's own logic on the JVM -- the screen contract -- run through
+# Gradle, which is the shell's build and not the workspace's [author,
+# 2026-09-27]. The APK and the native library stay outside the gate;
+# absent toolchains skip and say so; a failure fails the gate.
+"$HERE/tools/android-unit-tests.sh"; rc=$?
+if [ "$rc" -eq 0 ]; then echo "  android unit tests: ok"
+elif [ "$rc" -eq 3 ]; then :
+else echo "  android unit tests: FAILED"; fail=1; fi
+
 echo "=== 5. Build cache ==="
 # whatever this pass did not build is stale; the fuzz build under codec/
 # has a target of its own and is small

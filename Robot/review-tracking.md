@@ -12391,3 +12391,35 @@ sends and assertions were driven through `uiautomator` dumps, message tags
 not hardware — Keystore backing, power loss and supported-device behaviour
 stay open as ever — and the provisioning blob remains the ceremony's
 hand-carried stand-in, which is milestone B's business.
+
+## The shell's own logic is under test sources (2026-09-27)
+
+**`testDebugUnitTest` is no longer NO-SOURCE.** What made it testable was a
+separation worth having anyway: the screen contract left the `Kernel`
+singleton for a `Front` class that imports nothing — no Android, no
+binding, no participant — so a JVM test can hold it. `Kernel` keeps the
+lifecycle and the participant and delegates bind, unbind, say and status;
+`MainActivity`'s sink speaks `Front.Ui`.
+
+**Six tests, and they are S05 as tests rather than as an emulator
+observation**: a bound screen gets the state so far then everything new;
+what a gone screen missed replays to its replacement; a stale unbind from
+a replaced screen does not silence its replacement; the transcript is
+bounded at 500 and the oldest lines go; the latest status replays on bind;
+and the documented concurrency guarantee — a line said during a bind
+arrives exactly once and in order — held across twenty runs of a speaker
+thread racing the bind. 6 run, 0 failed, under `gradlew testDebugUnitTest`
+with JUnit 4 as the one new test dependency.
+
+**The refactor was re-proven in anger, not assumed**: on the emulator,
+provision, exchange, then a font-scale recreation — the same process, one
+kernel (31 to 30 threads, one start logged), and the recreated screen
+showing the replayed transcript. Lint stays at zero errors and the APK
+assembles in the same run.
+
+**The gate runs them** [author, 2026-09-27]: a guarded step in the shape of
+the Kotlin roundtrip's — a tools script exiting 3 where the SDK or the JBR
+is absent, which the gate reports as skipped and never as passed, and
+failing the gate where a test fails. It prints the count, not a state:
+*6 run, 0 failed*. The settings file's boundary statement moved with the
+boundary: the APK and the native library stay outside the gate.

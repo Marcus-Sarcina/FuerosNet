@@ -10997,3 +10997,26 @@ messages, payload between two phones: every line of the exit, on the
 product rather than at the boundary. Emulators are not hardware, and the
 provisioning blob remains the ceremony's hand-carried stand-in, which is
 milestone B's business.
+
+### 2026-09-27 (the shell's own logic, under test and under the gate)
+
+**The Android shell has unit-test sources, and the gate runs them.** What
+made the shell testable on the JVM was a separation worth having anyway:
+the screen contract left the kernel singleton for a `Front` class that
+imports nothing — no Android, no binding, no participant — with the kernel
+keeping the lifecycle and delegating. Six tests hold what an emulator
+observation held before: a bound screen gets the state so far then
+everything new, a gone screen's misses replay to its replacement, a stale
+unbind from a replaced screen does not silence its replacement, the
+transcript is bounded and the oldest lines go, the latest status replays on
+bind, and a line said during a bind arrives exactly once and in order —
+twenty runs of a speaker thread racing the bind. The refactor was re-proven
+on the emulator rather than assumed: one kernel across a font-scale
+recreation, and the recreated screen showing the replayed transcript.
+
+**The gate gained the step in the Kotlin roundtrip's shape** [author,
+2026-09-27]: a tools script exiting 3 where the SDK or the JBR is absent,
+reported as skipped and never as passed, failing the gate where a test
+fails, and printing the count rather than a state. The boundary statement
+moved with the boundary: the gate runs the shell's JVM unit tests; the APK
+and the native library stay outside it.

@@ -32,4 +32,7 @@ dependencies {
     // The generated binding speaks JNA and nothing else; the @aar carries
     // libjnidispatch.so for each ABI.
     implementation("net.java.dev.jna:jna:5.17.0@aar")
+    // Unit tests hold the shell's own logic on the JVM; what needs a
+    // device stays on the device.
+    testImplementation("junit:junit:4.13.2")
 }

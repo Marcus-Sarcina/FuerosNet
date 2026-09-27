@@ -45,7 +45,7 @@ class MainActivity : Activity() {
      * names the same sink the bind in [onStart] installed, and the kernel
      * can tell a screen that has gone from the one that replaced it.
      */
-    private val sink = object : Kernel.Ui {
+    private val sink = object : Front.Ui {
         override fun status(line: String) = runOnUiThread { status.text = line }
 
         override fun say(line: String) = runOnUiThread { append(line) }
