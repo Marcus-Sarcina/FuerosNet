@@ -8,13 +8,20 @@
     <application
         android:label="Fueros"
         android:allowBackup="false">
+
+        <!-- Home is the launcher and navigation-first; it brings the kernel
+             up and takes a provision extra. The rest are destinations. -->
         <activity
-            android:name=".MainActivity"
+            android:name=".HomeActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity android:name=".ConversationsActivity" android:exported="false" />
+        <activity android:name=".ConversationActivity" android:exported="false" />
+        <activity android:name=".PlaceholderActivity" android:exported="false" />
     </application>
 </manifest>

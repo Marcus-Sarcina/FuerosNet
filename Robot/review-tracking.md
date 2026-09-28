@@ -12507,3 +12507,53 @@ unit tests 6 and lint 0 errors on the regenerated binding (`PathPolicy`
 gone from it), vectors re-audited and re-pinned — the one "P17" on the
 vector side is a malformed-back-pointer case, not the register row — and
 the full gate runs at this entry's close.
+
+## The Home shell and the conversation thread (2026-09-27)
+
+Milestone B's first UI slice, built on the ruled screens sheet (sections B
+and C). The shell was one payload screen; it is now navigation-first with
+the conversation as a destination, and the kernel's flat transcript became
+a conversation model.
+
+**`Front` is the state, `Kernel` mutates it, screens render it.** The old
+`Front` held a list of strings and a `say`. It now holds a status line,
+bounded system notices, and threads keyed by peer — each a list of
+`Message { mine, who, text, delivery, reason }`. `Kernel` feeds it typed
+events: `peerKnown`, `incoming` (attributed to the sender it came with),
+`outgoing`/`settle`, `directPath`. The `Ui` is a single `render()` that
+re-reads under the lock, which keeps the S05 lifecycle whole — bind renders
+the state so far, a gone screen is a null sink, a stale unbind does not
+silence a replacement — now proven against the conversation state rather
+than a transcript. Eleven JVM tests, up from six, run under the gate's 4c.
+
+**Delivery is honest.** An outgoing message is `SENDING` → `SENT` or
+`UNSENT(reason)`, and the enum has no `DELIVERED` or `READ` to reach — a
+test asserts the three states and the screen renders *sent* as accepted for
+carriage, never a delivery the protocol carries no receipt for (C2). A
+refusal is a value with its reason on the bubble.
+
+**The screens.** `HomeActivity` is the launcher, navigation-first: a thin
+peripheral status bar, then Conversations · Meet · People · Catalog ·
+Settings. It brings the kernel up and takes the provision extra, which
+`MainActivity` did — `MainActivity` is retired. The four unbuilt sections
+lead to a `PlaceholderActivity` that says so plainly; Operator is absent
+until the mode query exists, rather than shown disabled.
+`ConversationsActivity` (C1) lists the peers, each with a **status-only**
+direct/relayed chip (the path order is fixed, nobody chooses), and the
+unprovisioned empty state is the provisioning guidance.
+`ConversationActivity` (C2) is the thread and the compose box, each message
+with its real sender and its honest delivery mark.
+
+**Proven on the emulator, not just built**: Home shows the navigation;
+after provisioning the status bar reads attached on the periphery;
+Conversations lists carol with a path chip; the thread sends `hello-home`,
+carol's echo returns attributed to her, and the outgoing bubble reads
+*sent* with no *delivered* or *read* anywhere on screen. Lint 0 errors (the
+new `SetTextI18n` warnings are the shell's existing literal-string style, a
+stand-in's deferral); the APK assembles; the gate's 4c runs the eleven unit
+tests.
+
+**Owed, unchanged by this slice**: the sections behind the placeholders,
+the Operator mode query, and everything the capability matrix already marks
+Owed. This built B and C over what the kernel already carried; it added no
+kernel call.

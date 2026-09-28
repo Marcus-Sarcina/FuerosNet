@@ -11087,3 +11087,36 @@ disclosure and choice front-loads before the ceremony's hands-off phase,
 the device facing away from its user from the optical exchange to the
 capture; and the home screen is navigation first. The flow sheet is a
 working file; the decisions it records are these.
+
+### 2026-09-28 (Home, and a conversation that reads as one)
+
+**The shell grew a Home and a conversation thread** — milestone B's first
+UI slice, on the ruled screens sheet. It was one payload screen; it is now
+navigation-first, with the conversation as a destination reached from Home.
+`HomeActivity` is the launcher: a thin peripheral status bar over the
+navigation list — Conversations, Meet, People, Catalog, Settings — and it
+brings the kernel up and takes the provision extra. `MainActivity`, which
+did those last two, is retired into it. The four sections not built in this
+slice lead to a placeholder that says so plainly; Operator is absent until
+the kernel can say an identity runs an instance, rather than shown disabled.
+
+**The kernel's flat transcript became a conversation model.** `Front` now
+holds a status line, bounded system notices, and threads keyed by peer,
+each a list of messages carrying their sender and how far an outgoing one
+got. The kernel feeds it typed events — a peer becomes known, a message
+arrives attributed to its sender, an outgoing one is sent or refused, a
+direct path is held or not — and a screen renders it through one `render()`
+that re-reads under the lock, which keeps the bind/unbind lifecycle whole.
+Delivery is honest: an outgoing message is sending, then sent — accepted
+for carriage — or unsent with its reason, and there is no delivered or read
+to reach, because the protocol carries no receipt. `ConversationsActivity`
+lists the peers with a status-only direct/relayed chip, the path order
+being fixed; `ConversationActivity` is the thread and the compose box.
+
+**Proven on the emulator, not just built**: Home shows the navigation,
+provisioning lands and the status bar reads attached on the periphery,
+Conversations lists the peer, and the thread sends and receives — the reply
+attributed to its sender, the outgoing bubble reading sent and never
+delivered. Eleven JVM unit tests, up from six, under the gate's Android
+step; lint zero errors; the APK assembles. Built over what the kernel
+already carried, adding no kernel call.

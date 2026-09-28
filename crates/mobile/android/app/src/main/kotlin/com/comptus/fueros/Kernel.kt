@@ -15,26 +15,34 @@ import uniffi.rhtn_ffi.kindApplication
  *
  * An Activity is recreated on a font change; a Participant holds a
  * connection, an event loop and a maintenance clock, and must not be. One
- * kernel is started here once, screens bind to it and unbind from it, and
- * a screen that has gone is a null sink rather than a leaked loop. Every
- * context used is the application's, so nothing here retains an Activity.
+ * kernel is started here once, screens bind to its [front] and unbind from
+ * it, and a screen that has gone is a null sink rather than a leaked loop.
+ * Every context used is the application's, so nothing here retains an
+ * Activity.
  */
 object Kernel {
 
-    /** The screen contract lives in [Front], which a JVM test can hold. */
-    private val front = Front()
+    /** The state a screen renders. Screens read it and bind to it; only the
+     *  kernel mutates it. It lives in [Front], which a JVM test can hold. */
+    val front = Front()
 
     private val lock = Any()
     @Volatile private var participant: Participant? = null
     @Volatile private var peer: ByteArray? = null
+    @Volatile private var peerKey: String? = null
     private var peerName: String = "peer"
     private var started = false
     private var provisioned = false
 
-    /** Bind a screen: it receives the state so far, then everything new. */
+    /** Bind a screen: it is rendered against the state so far, then on
+     *  every change. */
     fun bind(u: Front.Ui) = front.bind(u)
 
     fun unbind(u: Front.Ui) = front.unbind(u)
+
+    /** The one peer this device was provisioned to talk to, or null while
+     *  unprovisioned: what a conversation screen opens onto. */
+    fun peerKey(): String? = peerKey
 
     /**
      * Start the kernel, once for the life of the process.
@@ -65,27 +73,32 @@ object Kernel {
         synchronized(lock) {
             if (!started || provisioned) return
         }
-        say("· provision stored. Restart the app for it to take effect.")
+        front.note("· provision stored. Restart the app for it to take effect.")
     }
 
     /**
      * Send application bytes to the provisioned peer.
      *
-     * Off the caller's thread: the kernel's own send blocks on the network.
+     * The bubble goes up at once as *sending*; the kernel's own send blocks
+     * on the network, so it runs off the caller's thread and settles the
+     * bubble to *sent* — accepted for carriage, never *delivered* — or to
+     * *unsent* with the refusal's reason.
      */
     fun send(text: String) {
         val p = participant
         val to = peer
-        if (p == null || to == null) {
-            say("· unprovisioned: nobody to send to")
+        val key = peerKey
+        if (p == null || to == null || key == null) {
+            front.note("· unprovisioned: nobody to send to")
             return
         }
-        say("me: $text")
+        val id = front.outgoing(key, text)
         Thread {
             try {
                 p.send(to, kindApplication(), text.toByteArray())
+                front.settle(key, id, Front.Delivery.SENT, null)
             } catch (e: Refused.Reason) {
-                say("· refused: ${e.reason}")
+                front.settle(key, id, Front.Delivery.UNSENT, e.reason)
             }
         }.start()
     }
@@ -96,6 +109,7 @@ object Kernel {
             try { JSONObject(String(it)) } catch (_: Exception) { null }
         }
         synchronized(lock) { provisioned = provision != null }
+        front.setProvisioned(provision != null)
         // the identity is this device's own, whether or not anybody has
         // been told about it yet
         val known = provision?.getJSONArray("known")
@@ -107,7 +121,7 @@ object Kernel {
             participant = p
             show(p, Status.Detached)
         } catch (e: Refused.Reason) {
-            status("kernel refused: ${e.reason}")
+            front.setStatus("kernel refused: ${e.reason}")
             return
         }
 
@@ -116,30 +130,37 @@ object Kernel {
         android.util.Log.i("fueros", "material $material")
 
         if (provision == null) {
-            say("· unprovisioned. On the workstation:")
-            say("    adb logcat -d -s fueros | grep material")
-            say("    cargo run -p rhtn-ffi --features harness \\")
-            say("      --bin payload-peer -- <that material>")
-            say("· then hand its PROVISION line back as the `provision` extra.")
+            front.note("· unprovisioned. On the workstation:")
+            front.note("    adb logcat -d -s fueros | grep material")
+            front.note("    cargo run -p rhtn-ffi --features harness \\")
+            front.note("      --bin payload-peer -- <that material>")
+            front.note("· then hand its PROVISION line back as the `provision` extra.")
             return
         }
 
         try {
-            peer = unhex(provision.getString("peer"))
+            val to = unhex(provision.getString("peer"))
+            peer = to
             peerName = provision.optString("peer_name", "peer")
+            peerKey = hex(to)
+            front.peerKnown(peerKey!!, peerName)
             val node = unhex(provision.getString("node"))
-            val a = p.attach(node, listOf(provision.getString("addr")), listOf(peer!!))
+            val a = p.attach(node, listOf(provision.getString("addr")), listOf(to))
             show(p, Status.Attached(node, a.primary))
         } catch (e: Refused.Reason) {
-            status("attach refused: ${e.reason}")
+            front.setStatus("attach refused: ${e.reason}")
             return
         }
         while (true) {
             when (val e = p.nextEvent(2000UL)) {
-                is Event.Payload -> say("$peerName: ${String(e.bytes)}")
+                is Event.Payload -> {
+                    val from = hex(e.from)
+                    val who = if (from == peerKey) peerName else from.take(16)
+                    front.incoming(from, who, String(e.bytes))
+                }
                 is Event.Connection -> show(p, e.v1)
                 null -> {}
-                else -> say("· $e")
+                else -> front.note("· $e")
             }
         }
     }
@@ -151,7 +172,9 @@ object Kernel {
      * **The construction is the client's own statement** and nothing a peer
      * can check (`light-client-requirements.md` §3): the session derives the
      * same keys or it does not, so the only party who can say which half is
-     * running is this one, and it says it where its user can read it.
+     * running is this one, and it says it where its user can read it. The
+     * direct-path chip is updated here too — **status, never a choice**: the
+     * path order is fixed (design §12.6.3).
      */
     private fun show(p: Participant, s: Status) {
         val key = p.presentedKey().joinToString("") { "%02x".format(it) }.take(16)
@@ -166,15 +189,18 @@ object Kernel {
             Construction.DOUBLE_RATCHET -> "the Double Ratchet (the floor)"
             Construction.TRIPLE_RATCHET -> "the Triple Ratchet"
         }
-        status("$line · presents $key…\npayload: $construction")
+        front.setStatus("$line · presents $key…\npayload: $construction")
+        val to = peer
+        val k = peerKey
+        if (to != null && k != null) {
+            front.directPath(k, p.directTo(to))
+        }
     }
-
-    private fun status(line: String) = front.status(line)
-
-    private fun say(line: String) = front.say(line)
 
     private fun unhex(s: String): ByteArray =
         ByteArray(s.length / 2) { ((s[2 * it].digitToInt(16) shl 4) + s[2 * it + 1].digitToInt(16)).toByte() }
+
+    private fun hex(b: ByteArray): String = b.joinToString("") { "%02x".format(it) }
 
     /**
      * The device's own seeds, minted once.
@@ -191,5 +217,4 @@ object Kernel {
         check(shell.seal("seeds", s)) { "the device's own storage refused the seeds" }
         return s
     }
-
 }

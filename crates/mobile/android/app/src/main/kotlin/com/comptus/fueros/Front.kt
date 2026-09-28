@@ -1,48 +1,81 @@
 package com.comptus.fueros
 
 /**
- * The kernel's front: what a screen binds to, kept apart from the kernel
- * so it depends on nothing a JVM test cannot hold — no Android, no
+ * The kernel's front: the UI state a screen renders, kept apart from the
+ * kernel so it depends on nothing a JVM test cannot hold — no Android, no
  * binding, no participant.
  *
- * One screen is bound at a time; a screen that has gone is a null sink; a
- * replacement is given the state so far and then everything new. The
- * transcript outlives every screen, so it is bounded — an unbounded one is
- * a leak the process never recovers from.
+ * A screen binds, is rendered once against the state so far, and rendered
+ * again on every change; a screen that has gone is a null sink; a stale
+ * unbind from a replaced screen does not silence its replacement. State and
+ * the bound screen move together under one lock, so a screen never renders
+ * a half-applied change and a bind never races a mutation.
  */
 class Front {
 
-    /** What a bound screen renders. Calls arrive on the kernel's thread. */
+    /**
+     * What a bound screen is told: re-read the accessors and redraw. Called
+     * on the kernel's thread, under the lock, so a screen posts to its own
+     * thread and never reads back synchronously into the kernel.
+     */
     interface Ui {
-        fun status(line: String)
+        fun render()
+    }
 
-        fun say(line: String)
+    /**
+     * How far an outgoing message got. **Never delivered or read**: the
+     * protocol carries no receipt, so the furthest honest state is that the
+     * kernel accepted the message for carriage — a submission, not a
+     * delivery (`light-client-requirements.md` §9; the screens sheet's C2).
+     */
+    enum class Delivery {
+        SENDING,
+        SENT,
+        UNSENT,
+    }
+
+    data class Message(
+        val id: Long,
+        val mine: Boolean,
+        val who: String,
+        val text: String,
+        val delivery: Delivery,
+        val reason: String?,
+    )
+
+    data class Thread(
+        val peerKey: String,
+        val peerName: String,
+        val direct: Boolean,
+        val messages: List<Message>,
+    )
+
+    private class Convo(var name: String) {
+        var direct: Boolean = false
+        val messages = mutableListOf<Message>()
     }
 
     private val lock = Any()
     private var ui: Ui? = null
     private var statusLine = "starting the kernel…"
-    private val transcript = mutableListOf<String>()
+    private var provisioned = false
+    private val notices = mutableListOf<String>()
+    // insertion order is thread order: the peer provisioned first sits first
+    private val convos = linkedMapOf<String, Convo>()
+    private var seq = 0L
 
-    /**
-     * Bind a screen: it receives the state so far, then everything new.
-     *
-     * Under the lock, so that a line the kernel is saying at this moment
-     * arrives either in the replay or after it and never in both places or
-     * out of order.
-     */
+    // ---- binding, the S05 lifecycle ------------------------------------
+
+    /** Bind a screen and render it once against the state so far. */
     fun bind(u: Ui) {
         synchronized(lock) {
             ui = u
-            u.status(statusLine)
-            transcript.forEach(u::say)
+            u.render()
         }
     }
 
-    /**
-     * Unbind a screen, if it is still the one bound: a stale unbind from a
-     * screen already replaced must not silence its replacement.
-     */
+    /** Unbind, if this is still the screen bound: a late unbind from a
+     *  screen already replaced must not silence its replacement. */
     fun unbind(u: Ui) {
         synchronized(lock) {
             if (ui === u) {
@@ -51,31 +84,112 @@ class Front {
         }
     }
 
-    // **Under the lock, and the bound screen told inside it.**  What a
-    // screen has been told and what the transcript holds then cannot part
-    // company across a bind, which is the only thing that makes the replay
-    // exact.  A sink posts to its own thread and never calls back in here,
-    // so nothing waits on anything.
-    fun status(line: String) {
+    private fun changed() {
+        // under the lock, so what a render reads is the state this change
+        // produced and not the next one
+        ui?.render()
+    }
+
+    // ---- accessors: snapshots under the lock ---------------------------
+
+    fun status(): String = synchronized(lock) { statusLine }
+
+    fun provisioned(): Boolean = synchronized(lock) { provisioned }
+
+    fun notices(): List<String> = synchronized(lock) { notices.toList() }
+
+    fun threads(): List<Thread> =
+        synchronized(lock) { convos.entries.map { it.value.snapshot(it.key) } }
+
+    fun thread(peerKey: String): Thread? =
+        synchronized(lock) { convos[peerKey]?.snapshot(peerKey) }
+
+    private fun Convo.snapshot(key: String) = Thread(key, name, direct, messages.toList())
+
+    // ---- mutators: the kernel's side -----------------------------------
+
+    fun setStatus(line: String) {
         synchronized(lock) {
             statusLine = line
-            ui?.status(line)
+            changed()
         }
     }
 
-    fun say(line: String) {
+    fun setProvisioned(yes: Boolean) {
         synchronized(lock) {
-            transcript.add(line)
-            // the transcript outlives every screen, so it is bounded: an
-            // unbounded one is a leak the process never recovers from
-            while (transcript.size > TRANSCRIPT_LINES) {
-                transcript.removeAt(0)
+            provisioned = yes
+            changed()
+        }
+    }
+
+    /** A system line — provisioning guidance, a refusal not tied to one
+     *  message. Bounded: an unbounded log is a leak the process never
+     *  recovers from. */
+    fun note(line: String) {
+        synchronized(lock) {
+            notices.add(line)
+            while (notices.size > NOTICE_LINES) {
+                notices.removeAt(0)
             }
-            ui?.say(line)
+            changed()
+        }
+    }
+
+    /** The peer this device was provisioned to talk to is known: its thread
+     *  exists from here, empty until something is said. */
+    fun peerKnown(peerKey: String, name: String) {
+        synchronized(lock) {
+            convos.getOrPut(peerKey) { Convo(name) }.name = name
+            changed()
+        }
+    }
+
+    /** Whether a direct path to the peer is held now: **status, never a
+     *  choice** — the path order is fixed (design §12.6.3). */
+    fun directPath(peerKey: String, held: Boolean) {
+        synchronized(lock) {
+            convos[peerKey]?.let {
+                it.direct = held
+                changed()
+            }
+        }
+    }
+
+    /** An arrival, attributed to its sender: the name it came with is the
+     *  attribution and the thread's name from here. */
+    fun incoming(peerKey: String, name: String, text: String) {
+        synchronized(lock) {
+            val c = convos.getOrPut(peerKey) { Convo(name) }
+            c.name = name
+            c.messages.add(Message(seq++, false, name, text, Delivery.SENT, null))
+            changed()
+        }
+    }
+
+    /** An outgoing message, in flight. Returns its id for [settle]. */
+    fun outgoing(peerKey: String, text: String): Long {
+        synchronized(lock) {
+            val c = convos.getOrPut(peerKey) { Convo(peerKey) }
+            val id = seq++
+            c.messages.add(Message(id, true, "me", text, Delivery.SENDING, null))
+            changed()
+            return id
+        }
+    }
+
+    /** The kernel's send returned: sent for carriage, or unsent with why. */
+    fun settle(peerKey: String, id: Long, delivery: Delivery, reason: String?) {
+        synchronized(lock) {
+            val c = convos[peerKey] ?: return
+            val i = c.messages.indexOfFirst { it.id == id }
+            if (i >= 0) {
+                c.messages[i] = c.messages[i].copy(delivery = delivery, reason = reason)
+                changed()
+            }
         }
     }
 
     private companion object {
-        const val TRANSCRIPT_LINES = 500
+        const val NOTICE_LINES = 200
     }
 }
