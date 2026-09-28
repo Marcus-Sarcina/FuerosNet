@@ -68,14 +68,6 @@ pub struct Courier {
     app: mpsc::UnboundedSender<(Keyhash, Dispatched)>,
     verifiers: Mutex<Option<Arc<Verifiers>>>,
     offered: Mutex<HashSet<Keyhash>>,
-    /// Whether the relay carries what the direct path does not.  Off when
-    /// the person chose the direct path alone (`light-client-requirements.md`
-    /// §5): a message with no direct path is then unsent, and said so.
-    relay_allowed: std::sync::atomic::AtomicBool,
-    /// Whether a held direct path carries payload.  Off when the person
-    /// chose the relay alone: what is held is not used, and nothing new is
-    /// gathered, which the gate decides.
-    direct_allowed: std::sync::atomic::AtomicBool,
 }
 
 impl Courier {
@@ -94,8 +86,6 @@ impl Courier {
                 direct,
                 app,
                 verifiers: Mutex::new(None),
-                relay_allowed: std::sync::atomic::AtomicBool::new(true),
-                direct_allowed: std::sync::atomic::AtomicBool::new(true),
                 offered: Mutex::new(HashSet::new()),
             }),
             rx,
@@ -108,30 +98,6 @@ impl Courier {
 
     pub fn me(&self) -> Keyhash {
         self.handle.me()
-    }
-
-    /// Whether the relay may carry payload: the person's override, in the
-    /// direction that forbids the serving node the communication graph.
-    pub fn set_relay_allowed(&self, allowed: bool) {
-        self.relay_allowed
-            .store(allowed, std::sync::atomic::Ordering::Relaxed);
-    }
-
-    fn relay_allowed(&self) -> bool {
-        self.relay_allowed
-            .load(std::sync::atomic::Ordering::Relaxed)
-    }
-
-    /// Whether a held direct path may carry payload: the person's override
-    /// in the direction that keeps this device's address from a peer.
-    pub fn set_direct_allowed(&self, allowed: bool) {
-        self.direct_allowed
-            .store(allowed, std::sync::atomic::Ordering::Relaxed);
-    }
-
-    fn direct_allowed(&self) -> bool {
-        self.direct_allowed
-            .load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// Whether `peer` has been offered the direct path from here.
@@ -298,18 +264,16 @@ impl Courier {
                     Msg::Payload { to, bytes, device } => {
                         // a delivery short of complete leaves the message
                         // with the sender, and the relay carries it (design
-                        // §14.1.1), unless the person forbade the relay
-                        if !(me.direct_allowed() && me.direct.deliver(to, bytes.clone()).await)
-                            && !(me.relay_allowed()
-                                && me.serving.relay(me.me(), to, bytes.clone(), device).await)
+                        // §14.1.1): direct where a path is held, the relay
+                        // as the fallback, nobody's choice
+                        if !me.direct.deliver(to, bytes.clone()).await
+                            && !me.serving.relay(me.me(), to, bytes.clone(), device).await
                         {
                             out.refused.push(Msg::Payload { to, bytes, device });
                         }
                     }
                     Msg::Relay { to, bytes, device } => {
-                        if !(me.relay_allowed()
-                            && me.serving.relay(me.me(), to, bytes.clone(), device).await)
-                        {
+                        if !me.serving.relay(me.me(), to, bytes.clone(), device).await {
                             out.refused.push(Msg::Relay { to, bytes, device });
                         }
                     }

@@ -97,18 +97,8 @@ pub enum PayloadPath {
     /// Inside the horizon: the peers exchange addresses and connect, and
     /// nobody sees the flow.
     Direct,
-    /// Outside the horizon, or where the user chose it: both serving infra
-    /// nodes carry ciphertext.
+    /// Outside the horizon: both serving infra nodes carry ciphertext.
     Relayed,
-}
-
-/// A user's choice, which overrides either default (design §12.6.3: both
-/// defaults must be overridable).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PathOverride {
-    None,
-    ForceDirect,
-    ForceRelayed,
 }
 
 /// What a node replicates to its siblings (design §3.4).  Payload queues are
@@ -203,12 +193,10 @@ impl NodeView {
     /// Which path payload takes to `peer`.  The check is the whole of it:
     /// is this peer in my h = 2 topology store?  A peering edge carries none
     /// of the subnet's authority and does not count (design §15.1, §6.3).
-    pub fn payload_path(&self, peer: &Keyhash, over: PathOverride) -> PayloadPath {
-        match over {
-            PathOverride::ForceDirect => return PayloadPath::Direct,
-            PathOverride::ForceRelayed => return PayloadPath::Relayed,
-            PathOverride::None => {}
-        }
+    /// **There is no override** [author, 2026-09-27]: direct is preferred
+    /// inside the horizon, the relay is the fallback, and neither is a user
+    /// choice (design §12.6.3, `light-client-requirements.md` §5).
+    pub fn payload_path(&self, peer: &Keyhash) -> PayloadPath {
         let me = self.me();
         if self.table.horizon(&me, 2).contains(peer) {
             PayloadPath::Direct
@@ -286,7 +274,6 @@ impl NodeView {
     pub fn send_payload(
         &self,
         peer: &Keyhash,
-        over: PathOverride,
         online: bool,
         sink: &dyn PayloadSink,
         bytes: &[u8],
@@ -297,7 +284,7 @@ impl NodeView {
             sink.carry(Some(at), peer, bytes);
             return Delivery::Queued { at, to: *peer };
         }
-        match self.payload_path(peer, over) {
+        match self.payload_path(peer) {
             PayloadPath::Direct => {
                 sink.carry(None, peer, bytes);
                 Delivery::Direct { to: *peer }

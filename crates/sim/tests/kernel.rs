@@ -7,7 +7,7 @@ mod common;
 use common::*;
 use rhtn_ffi::client::Participant;
 use rhtn_ffi::device::*;
-use rhtn_ffi::net::{Event, PathPolicy, Status};
+use rhtn_ffi::net::{Event, Status};
 use rhtn_ffi::types::*;
 use rhtn_node::resolution::{AnchorTable, Ingestion};
 use rhtn_node::runtime::LiveNode;
@@ -452,7 +452,6 @@ async fn the_kernel_joins_the_direct_path_honours_the_override_and_sweeps_the_ca
         .await,
         "each places the other in its horizon, from the acts bob is a party to"
     );
-    assert_eq!(alice.path(), PathPolicy::Auto);
     assert!(!alice.direct_to(idv("carol")), "nothing offered yet");
 
     // the first send offers candidates over the relay and the path opens
@@ -507,23 +506,6 @@ async fn the_kernel_joins_the_direct_path_honours_the_override_and_sweeps_the_ca
     );
     assert_eq!(n.node.relayed(), relayed, "bob relayed none of it");
 
-    // the override, both ways: relay only sends through bob though the
-    // path is held; direct only to a peer with no path is unsent
-    alice.set_path(PathPolicy::RelayOnly);
-    send(alice.clone(), idv("carol"), b"fourth")
-        .await
-        .unwrap()
-        .expect("sent");
-    assert_eq!(
-        next(carol.clone()).await.unwrap(),
-        Some(Event::Payload {
-            from: idv("alice"),
-            bytes: b"fourth".to_vec()
-        })
-    );
-    assert_eq!(n.node.relayed(), relayed + 1, "through bob by choice");
-    alice.set_path(PathPolicy::Auto);
-
     // the catalog: swept over the session, held with the node that served
     // it, and shown as values
     {
@@ -543,22 +525,10 @@ async fn the_kernel_joins_the_direct_path_honours_the_override_and_sweeps_the_ca
     assert_eq!(it.data_practice, Some(0));
     assert!(!it.truncated && !it.stale);
 
-    // direct only: to carol, whose path is held, still goes around bob
-    alice.set_path(PathPolicy::DirectOnly);
-    send(alice.clone(), idv("carol"), b"fifth")
-        .await
-        .unwrap()
-        .expect("sent");
-    assert_eq!(
-        next(carol.clone()).await.unwrap(),
-        Some(Event::Payload {
-            from: idv("alice"),
-            bytes: b"fifth".to_vec()
-        })
-    );
-    assert_eq!(n.node.relayed(), relayed + 1);
-    // carol leaves: the held path dies with her socket, and with the relay
-    // forbidden the next message is unsent, and said so
+    // carol leaves: the held path dies with her socket, and the next
+    // message takes the fallback — through bob, queued for carol — with
+    // nobody choosing anything [author, 2026-09-27]: direct is preferred,
+    // the relay is the fallback, and there is no override
     {
         let q = carol.clone();
         tokio::task::spawn_blocking(move || q.detach())
@@ -568,18 +538,10 @@ async fn the_kernel_joins_the_direct_path_honours_the_override_and_sweeps_the_ca
     }
     drop(carol);
     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-    let e = send(alice.clone(), idv("carol"), b"nowhere")
-        .await
-        .unwrap()
-        .expect_err("no path and no relay");
-    assert!(e.reason().contains("unsent"), "{e}");
-    assert_eq!(n.node.relayed(), relayed + 1, "and bob saw nothing");
-    // the fallback, once allowed again: through bob, queued for carol
-    alice.set_path(PathPolicy::Auto);
-    send(alice.clone(), idv("carol"), b"sixth")
+    send(alice.clone(), idv("carol"), b"fourth")
         .await
         .unwrap()
         .expect("relayed");
-    assert_eq!(n.node.relayed(), relayed + 2);
+    assert_eq!(n.node.relayed(), relayed + 1);
     assert_eq!(n.node.queued(&kh("carol")), 1, "waiting for carol at bob");
 }

@@ -8,7 +8,6 @@
 mod common;
 
 use common::*;
-use rhtn_node::peering::PathOverride;
 use rhtn_node::resolution::{AnchorTable, Ingestion};
 use rhtn_node::runtime::{LiveDelivery, LiveNode};
 use rhtn_sim::nat::{Filtering, Mapping, Nat};
@@ -434,5 +433,4 @@ async fn the_reflexive_addresses_travel_only_between_the_two_leaves() {
             }
         }
     }
-    let _ = PathOverride::None;
 }

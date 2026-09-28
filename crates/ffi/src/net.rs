@@ -54,22 +54,6 @@ pub struct Wake {
     pub lapses_at: Option<u64>,
 }
 
-/// Direct versus relayed payload, overridable in both directions
-/// (`light-client-requirements.md` §5; PRD-01).  **The two disclosures are
-/// the shell's to state**: direct reveals this device's address to a peer
-/// inside the horizon; relayed reveals the communication graph to the
-/// serving node.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
-pub enum PathPolicy {
-    /// The direct path where a peer inside the horizon answers, the relay
-    /// otherwise (design §14.1.1).
-    Auto,
-    /// Never direct: nothing gathered, nothing offered, nothing dialled.
-    RelayOnly,
-    /// Never relayed: a message with no direct path is unsent, and said so.
-    DirectOnly,
-}
-
 /// The connection as a screen shows it (`light-client-requirements.md`
 /// §4: the user is told when attachment is degraded, and when it is gone).
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
@@ -157,7 +141,6 @@ pub(crate) struct Net {
     /// The peers a direct path is held to: shared with the client, whose
     /// route reads it, and with the socket that fills it.
     reachable: Reachable,
-    policy: Arc<Mutex<PathPolicy>>,
     /// Nonces for what this client hands its node: the platform's random
     /// source, which is the only one this workspace has.
     nonce: Arc<dyn Fn() -> [u8; 16] + Send + Sync>,
@@ -209,7 +192,6 @@ impl Net {
         let (events_tx, events) = tokio::sync::mpsc::unbounded_channel();
         Ok(Net {
             reachable: Reachable::default(),
-            policy: Arc::new(Mutex::new(PathPolicy::Auto)),
             rt: Some(rt),
             endpoint,
             me,
@@ -230,21 +212,6 @@ impl Net {
     /// The set the client's own route reads, for the client to be built on.
     pub(crate) fn reachable(&self) -> Reachable {
         self.reachable.clone()
-    }
-
-    pub(crate) fn path(&self) -> PathPolicy {
-        *self.policy.lock().unwrap()
-    }
-
-    /// The person's override, applied to the session in force at once:
-    /// the gate reads it at each gather, and the courier's relay switch
-    /// follows it.
-    pub(crate) fn set_path(&self, p: PathPolicy) {
-        *self.policy.lock().unwrap() = p;
-        if let Some(l) = self.live.lock().unwrap().as_ref() {
-            l.courier.set_relay_allowed(p != PathPolicy::DirectOnly);
-            l.courier.set_direct_allowed(p != PathPolicy::RelayOnly);
-        }
     }
 
     pub(crate) fn direct_to(&self, peer: &Keyhash) -> bool {
@@ -345,7 +312,7 @@ impl Net {
             (handle.clone(), self.endpoint.clone(), self.nonce.clone());
         let current = self.current.clone();
         let addrs = addrs.to_vec();
-        let (reachable, policy) = (self.reachable.clone(), self.policy.clone());
+        let reachable = self.reachable.clone();
         let built = self.rt().block_on(async move {
             // the serving node first, and the cached siblings where it is
             // unreachable at attach time: the cold-start fallback
@@ -391,16 +358,13 @@ impl Net {
             // **The direct path, on a socket of this client's own**
             // (design §14.1.1): candidates gathered there, the peer's
             // dialled from it, and what a peer opens toward it taken under
-            // the key it authenticates.  Gated to the horizon and to the
-            // person's override; the relay is the answer where there is no
-            // path.
+            // the key it authenticates.  Gated to the horizon — the whole
+            // of the check, and nobody's choice [author, 2026-09-27] — and
+            // the relay is the answer where there is no path.
             let inlet = Inlet::default();
             let gate: Gate = {
-                let (h, p) = (handle_for_task.clone(), policy.clone());
+                let h = handle_for_task.clone();
                 Arc::new(move |peer| {
-                    if *p.lock().unwrap() == PathPolicy::RelayOnly {
-                        return false;
-                    }
                     let peer = *peer;
                     h.with_blocking(move |c| c.horizon.distance(&peer).is_some())
                 })
@@ -423,9 +387,6 @@ impl Net {
                 Arc::new(direct),
             );
             inlet.bind(courier.inbound());
-            let p = *policy.lock().unwrap();
-            courier.set_relay_allowed(p != PathPolicy::DirectOnly);
-            courier.set_direct_allowed(p != PathPolicy::RelayOnly);
             let tasks = vec![
                 attached::follow(handle_for_task.clone(), frames),
                 attached::collect(courier.inbound(), deliveries),

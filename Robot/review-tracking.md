@@ -12455,3 +12455,55 @@ Cleaner branch on API 36 through attach, exchange and recreation.
 tests 6, Kotlin roundtrip, lint 0 errors, APK assembled, emulator smoke
 with the wording asserted on screen; the full gate re-run follows in this
 entry's commit.
+
+## Five rulings on the screens sheet, one of them a design change (2026-09-27)
+
+The screens review came back with rulings on all four questions and a fifth
+correction. Four reshaped the working sheet; the path ruling reshaped the
+design, the functional document, the catalogue and the kernel.
+
+**There is no path choice** [author, 2026-09-27: *"direct is preferred and
+relay is the fallback and neither is user-overridable or warned"*]. What
+fell: `light-client-requirements.md` §5's override bullet — the section is
+retitled *Path selection* and states the fixed rule; design §12.6.3's
+"both defaults must therefore be overridable" conclusion — the boundedness
+analysis stands, the bound is now the whole of the mitigation; P17's
+register row, which carried the override as mitigation; P40's residual,
+which cited §4 *and §5* for the ceremony-candidate disclosure and now cites
+§4 alone — **the candidate disclosure itself stands**, being the 2026-09-25
+ruling about a different thing, and §4 carries its own wording. Withdrawn
+with tombstones: functional PAY-006 and UX-004 (469 families now, PAY 9,
+UX 13, counts re-verified), catalogue PRD-01 (manual 12, withdrawn 3, stubs
+regenerated), and catalogue REP-14 — found not by me but by the catalogue's
+own verbatim-quote check the moment the design sentence changed; its
+implementing test asserted an override out of the horizon and went with it.
+**And caught twice**: I removed the test, recorded the withdrawal here, and
+did not withdraw the entry — the first gate run failed on the same quote
+check, which is the recorded-ahead-of-done failure again, held this time by
+the gate. A second repair of the same pass: my catalogue edit had gone
+through a JSON round-trip that reformatted all thirteen thousand lines of
+the file; it is restored and both withdrawals are surgical, sixteen lines
+in, thirty out.
+INT-016 reworded. In the kernel: `PathPolicy`, `set_path`/`path`, the
+courier's person-switches and `PathOverride` in the node's peering all
+dissolved; the horizon gate is the whole check; `direct_to` stays as
+status. The sim kernel test's tail now *is* the ruling: the held path dies
+with the peer and the next message relays, nobody choosing anything.
+
+**The other four**: the horizon shows **users, never devices** — one
+representation per person, endpoints behind it, infra/non-infra an icon
+state read from current topology (UX-014's no-permanent-type rule kept).
+**Adoption is chosen at D1** (meet, or meet-and-adopt with direction), and
+an in-horizon offer — a non-PoP transfer — arrives as a notification with
+accept/deny. **Everything a person reads or decides front-loads at D1.5**,
+because from D2 on the device faces away and takes no input; D2–D4 are
+hands-off, D5–D7 back in hand — the capture disclosure moved from D4 to
+D1.5 with the disclosure-slot choices. **Home is navigation first**, status
+peripheral. All woven into `light-client-screens.md`, whose question
+section closed into rulings; the capability matrix row updated.
+
+**Verified**: node peering 12, sim kernel and traversal, boundary 9, shell
+unit tests 6 and lint 0 errors on the regenerated binding (`PathPolicy`
+gone from it), vectors re-audited and re-pinned — the one "P17" on the
+vector side is a malformed-back-pointer case, not the register row — and
+the full gate runs at this entry's close.

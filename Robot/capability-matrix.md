@@ -45,7 +45,7 @@ shell through the platform's `Notices` object as `Told`; events through
 |---|---|---|---|---|
 | Send | `send(to, kind, bytes)` | a session per device of the recipient; the direct path where held, the relay otherwise | ok; `unsent` where nothing carried it | DMN-13, DMN-15, PAY-20 |
 | Receive | `next_event` | decrypted on the client's thread | `Event::Payload` | DMN-13 |
-| Path setting, both overrides | `set_path(Auto \| RelayOnly \| DirectOnly)`, `path`, `direct_to(peer)` | gate and courier switches | | PRD-01 (the two disclosures are the shell's text) |
+| Direct-path status | `direct_to(peer)` | the courier's held paths; **there is no path setting** [author, 2026-09-27]: direct preferred, relay the fallback, nobody's choice | held or not | (PRD-01 withdrawn) |
 | Late response, response copy | `next_event` | | `Event::Late`, `Event::ResponseCopy` | |
 
 ## 4. Catalog and resources

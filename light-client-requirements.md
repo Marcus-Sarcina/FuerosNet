@@ -488,9 +488,10 @@ only party who can tell them is their own client.
   (§1.3, design §12.6.3). A route obtained this way was carried by no patron,
   which is what it is for: it makes reaching a counterparty cost proximity
   rather than a patron's cooperation, and so survives one that is
-  uncooperative or eclipsing. Offer it as the disclosure it is — §5's rule
-  applies whoever hands the candidate over — and open nothing from candidates
-  that did not come from the party they name. **A candidate taken this way is
+  uncooperative or eclipsing. Offer it as the disclosure it is — a route
+  handed over is an IP the counterparty keeps (design §19.4, P40), whoever
+  hands it — and open nothing from candidates that did not come from the
+  party they name. **A candidate taken this way is
   not gated by the horizon** [author, 2026-09-25]: the party was in front of
   you, which the gate's disclosure argument does not reach, and an exit must
   not depend on a horizon the patron being exited controls. One that arrived
@@ -509,12 +510,15 @@ only party who can tell them is their own client.
 
 ---
 
-## 5. Privacy choices the user must be able to make
+## 5. Path selection
 
-- **Direct versus relayed payload must be overridable**, in both directions, and
-  the client must state what each discloses. A direct connection reveals the
-  user's IP to a peer inside the horizon; relaying reveals the communication graph
-  to the serving node (design §19.4, P17).
+- **Direct is preferred and the relay is the fallback, and neither is a user
+  choice** [author, 2026-09-27]. The direct path opens inside the horizon
+  where one can (design §12.6.3) and payload falls back to the relay where
+  none is held; the client offers no override and raises no per-connection
+  warning. The trade each path carries — an IP to a peer inside the horizon,
+  a communication graph to the serving node — is recorded where trades are
+  (design §19.4, P17), not put to the person.
 
 ---
 

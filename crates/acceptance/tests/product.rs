@@ -3,22 +3,6 @@
 //! still owed for this area.  tests/rustfmt.toml keeps rustfmt off
 //! this directory: the titles are the catalogue's, not hand-laid code.
 
-/// Let the user override direct versus relayed payload in both directions, with each disclosure stated
-///
-/// Spec: light-client-requirements.md §5
-/// Milestone: manual.  Kind: manual.  Oracle: behaviour.
-///
-/// Rule (light-client-requirements.md §5): "Direct versus relayed payload must be overridable"
-///
-/// Given: A release build of the light client.
-/// When: A reviewer opens the payload path setting.
-/// Then: Both overrides exist, and the setting states that direct reveals the user's IP to a peer inside the horizon and relayed reveals the communication graph to the serving node.
-#[test]
-#[ignore = "acceptance PRD-01: owed at milestone manual"]
-fn prd_01_let_the_user_override_direct_versus_relayed_payl() {
-    todo!("PRD-01: Let the user override direct versus relayed payload in both directions, with each disclosure stated")
-}
-
 /// Warn before an authority change that revokes resource access, and list upward-reaching policies on a new patron
 ///
 /// Spec: light-client-requirements.md §6

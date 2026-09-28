@@ -2860,23 +2860,16 @@
     "id": "PRD-01",
     "area": "product",
     "gap": "product",
-    "title": "Let the user override direct versus relayed payload in both directions, with each disclosure stated",
+    "title": "Withdrawn: let the user override direct versus relayed payload in both directions",
     "milestone": "manual",
-    "kind": "manual",
-    "spec": [
-      "light-client-requirements.md §5"
-    ],
-    "rule": [
-      {
-        "where": "light-client-requirements.md §5",
-        "text": "Direct versus relayed payload must be overridable"
-      }
-    ],
-    "given": "A release build of the light client.",
-    "when": "A reviewer opens the payload path setting.",
-    "then": "Both overrides exist, and the setting states that direct reveals the user's IP to a peer inside the horizon and relayed reveals the communication graph to the serving node.",
+    "kind": "withdrawn",
+    "spec": [],
+    "rule": [],
+    "given": "Withdrawn.",
+    "when": "Withdrawn.",
+    "then": "Withdrawn.",
     "oracle": "behaviour",
-    "interpretation": null
+    "interpretation": "Withdrawn 2026-09-27 [author]. There is no user override of the payload path: direct is preferred, the relay is the fallback, and neither is offered as a choice nor warned (light-client-requirements.md §5, design §12.6.3). The trade each path carries is recorded in design §19.4 P17, not put to the person. The number is not reused."
   },
   {
     "id": "PRD-02",
@@ -4820,23 +4813,16 @@
     "id": "REP-14",
     "area": "replication-peering",
     "gap": "replication-peering",
-    "title": "Honour a user override of the direct-path default",
+    "title": "Withdrawn: honour a user override of the direct-path default",
     "milestone": 4,
-    "kind": "positive",
-    "spec": [
-      "design §12.6.3"
-    ],
-    "rule": [
-      {
-        "where": "design §12.6.3",
-        "text": "both defaults must therefore be overridable — relay-with-a-patron's-sibling and direct-with-a-distant-trusted-party are both reasonable user choices (P17)"
-      }
-    ],
-    "given": "As REP-12 (L1 and L2 outside each other's horizon), except that L1's user has chosen direct connection for L2 and L2's user has chosen it for L1; traversal succeeds.",
-    "when": "L1 sends payload to L2.",
-    "then": "L2 receives the payload directly from L1's address and neither serving node carries it.",
+    "kind": "withdrawn",
+    "spec": [],
+    "rule": [],
+    "given": "Withdrawn.",
+    "when": "Withdrawn.",
+    "then": "Withdrawn.",
     "oracle": "behaviour",
-    "interpretation": "The spec makes the default overridable and does not say whether one side's choice suffices; the test sets the override on both sides."
+    "interpretation": "Withdrawn 2026-09-27 [author]. There is no user override of the payload path — the horizon check is the whole of the path decision (design §12.6.3), and an override piercing it out of the horizon went with the choice itself. Its test in node/tests/peering.rs was removed the same day; REP-12 keeps the default's own assertion. The number is not reused."
   },
   {
     "id": "REP-15",

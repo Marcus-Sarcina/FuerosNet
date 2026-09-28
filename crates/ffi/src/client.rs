@@ -11,7 +11,7 @@
 //! or the hardware did.
 
 use crate::device::Platform;
-use crate::net::{Attached, Event, Net, PathPolicy, Status, Wake, pins_for};
+use crate::net::{Attached, Event, Net, Status, Wake, pins_for};
 use crate::types::{Answer, Channel, ChannelOutcome, Id, Refused, id_of, keyhash};
 use rhtn_adaptors::actor::Handle;
 use rhtn_archive::Keyhash;
@@ -611,19 +611,8 @@ impl Participant {
         self.net.status()
     }
 
-    /// Direct versus relayed payload, as the person set it (PRD-01).  The
-    /// setting's two disclosures are the shell's text; this side applies
-    /// the choice.
-    pub fn set_path(&self, policy: PathPolicy) {
-        self.net.set_path(policy);
-    }
-
-    #[must_use]
-    pub fn path(&self) -> PathPolicy {
-        self.net.path()
-    }
-
-    /// Whether a direct path to `peer` is held now.
+    /// Whether a direct path to `peer` is held now: status a screen may
+    /// show, never a choice — the path order is fixed (design §12.6.3).
     #[must_use]
     pub fn direct_to(&self, peer: Id) -> bool {
         keyhash(&peer).is_some_and(|k| self.net.direct_to(&k))

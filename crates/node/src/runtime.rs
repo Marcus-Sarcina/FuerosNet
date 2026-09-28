@@ -836,11 +836,7 @@ impl LiveNode {
         &self,
         peer: &Keyhash,
     ) -> Option<Vec<rhtn_transport::traversal::Candidate>> {
-        let path = self
-            .view
-            .lock()
-            .unwrap()
-            .payload_path(peer, crate::peering::PathOverride::None);
+        let path = self.view.lock().unwrap().payload_path(peer);
         match path {
             crate::peering::PayloadPath::Direct => Some(self.gather().await),
             crate::peering::PayloadPath::Relayed => None,
@@ -1132,6 +1128,5 @@ pub fn pump_client(
 /// it, nor to accept what it opens.
 fn permits_direct(view: &Arc<Mutex<NodeView>>, peer: &Keyhash) -> bool {
     let view = view.lock().unwrap();
-    view.payload_path(peer, crate::peering::PathOverride::None)
-        == crate::peering::PayloadPath::Direct
+    view.payload_path(peer) == crate::peering::PayloadPath::Direct
 }

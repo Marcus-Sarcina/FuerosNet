@@ -238,7 +238,7 @@ fn payload_inside_the_horizon_takes_the_direct_path() {
         "distance 1, inside the h = 2 store"
     );
     let sink = Carriers::default();
-    let d = l1.send_payload(&kh("w1"), PathOverride::None, true, &sink, b"hello");
+    let d = l1.send_payload(&kh("w1"), true, &sink, b"hello");
     assert_eq!(d, Delivery::Direct { to: kh("w1") });
     assert_eq!(
         sink.saw(),
@@ -276,7 +276,7 @@ fn payload_outside_the_horizon_is_relayed() {
         "outside each other's h = 2 horizon"
     );
     let sink = Carriers::default();
-    let d = l1.send_payload(&kh("w5"), PathOverride::None, true, &sink, b"hello");
+    let d = l1.send_payload(&kh("w5"), true, &sink, b"hello");
     assert_eq!(
         d,
         Delivery::Relayed {
@@ -318,7 +318,7 @@ fn a_peering_edge_does_not_extend_the_horizon_for_the_direct_path() {
         "M is absent from L's h = 2 store"
     );
     let sink = Carriers::default();
-    let d = l1.send_payload(&kh("w5"), PathOverride::None, true, &sink, b"hello");
+    let d = l1.send_payload(&kh("w5"), true, &sink, b"hello");
     assert_eq!(
         d,
         Delivery::Relayed {
@@ -326,37 +326,6 @@ fn a_peering_edge_does_not_extend_the_horizon_for_the_direct_path() {
             to: kh("w5")
         },
         "no direct connection is attempted"
-    );
-}
-
-// acceptance: REP-14
-#[test]
-fn a_user_override_of_the_direct_path_default_is_honoured() {
-    let (_w, l1) = distant_scene();
-    let sink = Carriers::default();
-    let d = l1.send_payload(&kh("w5"), PathOverride::ForceDirect, true, &sink, b"hello");
-    assert_eq!(d, Delivery::Direct { to: kh("w5") });
-    assert_eq!(
-        sink.saw(),
-        vec![(None, kh("w5"))],
-        "neither serving node carries it"
-    );
-    // and the other default is overridable too
-    let (_w2, near) = siblings_scene();
-    let sink2 = Carriers::default();
-    let d2 = near.send_payload(
-        &kh("w1"),
-        PathOverride::ForceRelayed,
-        true,
-        &sink2,
-        b"hello",
-    );
-    assert_eq!(
-        d2,
-        Delivery::Relayed {
-            via: kh("alice"),
-            to: kh("w1")
-        }
     );
 }
 

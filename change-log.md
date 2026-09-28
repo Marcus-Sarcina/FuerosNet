@@ -11049,3 +11049,41 @@ library names a platform outside the test harness, the boundary carries
 values rather than sentences, and the one platform-motivated setting sits
 in the platform's own application. A repository split, whenever its trigger
 fires, is a move rather than a repair.
+
+### 2026-09-27 (the path is not a choice)
+
+**The direct-versus-relay override is struck** [author, 2026-09-27: *"direct
+is preferred and relay is the fallback and neither is user-overridable or
+warned"*]. It had reached far: `light-client-requirements.md` §5 ordered the
+client to offer the choice with its disclosures; design §12.6.3 concluded
+"both defaults must therefore be overridable"; P17 carried the override as
+part of its mitigation; a catalogue entry required honouring it and a kernel
+test asserted an override piercing the horizon. All of it goes. §5 is
+retitled **Path selection** and states the fixed rule; §12.6.3's boundedness
+analysis stands and the bound is now the whole of the mitigation; P17
+records that the path order is fixed and the register is where the trade
+lives — recorded, not put to the person per connection. P40's residual cites
+§4 alone, and the ceremony-candidate disclosure it describes — the
+2026-09-25 ruling — stands untouched, carrying its own wording.
+
+**Withdrawn with tombstones**: functional PAY-006 and UX-004 (469 families
+across 26 prefixes, every per-prefix count re-verified), and catalogue
+PRD-01 and REP-14 — the second found by the catalogue's own verbatim-quote
+check the moment the design sentence changed, which is what quoting the
+design verbatim is for. In the kernel, the whole override apparatus
+dissolved: the boundary's path policy, the courier's person-switches, the
+node's path override; the horizon check is the whole of the path decision,
+and what remains observable is whether a direct path is held. The kernel
+test that exercised the override now demonstrates the rule instead: the
+held path dies with the peer, and the next message takes the relay, nobody
+choosing anything.
+
+**The light client's screens were worked out and ruled on the same day**:
+the horizon shows users and never devices, with all of a person's endpoints
+behind one representation and infra standing an icon state read from
+current topology; adoption is chosen with the meeting intent, and an
+in-horizon offer arrives as a notification to accept or deny; every
+disclosure and choice front-loads before the ceremony's hands-off phase,
+the device facing away from its user from the optical exchange to the
+capture; and the home screen is navigation first. The flow sheet is a
+working file; the decisions it records are these.

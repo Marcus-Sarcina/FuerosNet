@@ -450,7 +450,7 @@ The Cargo workspace has **16 crates**. Components below follow responsibilities 
 | PAY-003 | — | **WITHDRAWN 2026-09-26** [author]. The row required the Triple Ratchet and excluded the Double Ratchet alone. D §14.2.4.3 makes the Double Ratchet over PQXDH the floor and the Triple Ratchet a recommendation, and MAIL-027 carries both; PAY-004 carries the profile's negative cases. The number is not reused. | D §14.2.4.3; L §3 |
 | PAY-004 | E | For the selected encryption profile test tamper, wrong peer, stale/replayed messages, lost and reordered messages, skipped-key bounds, restart and state rollback. No rejected payload produces unauthenticated application plaintext or reuses consumed encryption state. | D §14.2.4; L §§2–3 |
 | PAY-005 | C | Default to direct payload only after horizon eligibility and successful traversal for online parties; on traversal failure or out-of-horizon routing use serving-node relays. Anchor resolution nodes carry queries, not application payload merely because they were on the lookup path. | D §§12.6.3, 14.1.1; L §§3–5 |
-| PAY-006 | C | Apply each user's direct/relay privacy choice in both send and receive directions before releasing endpoint candidates. Mutual horizon policy is the default, not permission to ignore an explicit user override or invent an absolute prohibition beyond it. | D §12.6.3; L §5 |
+| PAY-006 | — | **WITHDRAWN 2026-09-27** [author]. The row applied a user's direct/relay choice; there is no such choice — direct is preferred, the relay is the fallback, and neither is overridable or warned (L §5, D §12.6.3). PAY-005 carries the fixed preference order and the horizon gate. The number is not reused. | L §5; D §12.6.3 |
 | PAY-007 | C | Discover reflexive candidates with STUN on the actual QUIC socket and exchange traversal candidates through authenticated end-to-end control. Test NAT mapping/filtering combinations, CGNAT failure and relay fallback without exposing an IP before the chosen admission policy. | D §14.1.1; L §3 |
 | PAY-008 | C | Relay from sender's serving node to recipient's serving node and finally the recipient; keep queued/delivered payload encrypted end to end, including verifier profiles and capture grants. Hop TLS is not a substitute for that encryption. | D §§12.6.3, 14.2; L §3 |
 | PAY-009 | C | A direct-path failure or disabled capability does not disable base messaging; report relay/degraded mode through the application facade. A relay refusal is delivered to the caller rather than silently counted as a sent message. | D §§14.1.1, 14.2; L §§3–4, 9 |
@@ -627,7 +627,7 @@ The Cargo workspace has **16 crates**. Components below follow responsibilities 
 | UX-001 | C | At ceremony capture time tell both people what identity, timing, relationship and disclosed fields become durable and who may later read them. The notice appears at the action, not only in terms of service or an after-the-fact log. | L §1.5; D §19.6 |
 | UX-002 | C | At capture, disclose to the participant what the record will contain and who will be able to read it. Assert that **no** per-query notice is given to a witness or a verifier: both roles are automatic and owed no warning. Absence of a user notice is not detectable by a wire validator. | D §§19.6, Appendix A.3 |
 | UX-003 | C | Warn about missing familiar verifiers, witness imbalance, unavailable evidence and weak proximity/integrity before signing, without presenting a legitimate degraded ceremony as cryptographically malformed. | L §§1.1–1.4; D §§7.6.3, 13.5 |
-| UX-004 | C | Expose independent direct-versus-relay choices for inbound and outbound traffic and explain peer-IP disclosure versus serving-node communication-graph disclosure. Verify the choice changes actual routing, not only a UI preference. | L §5; D §§12.6.3, 19.4 |
+| UX-004 | — | **WITHDRAWN 2026-09-27** [author]. The row exposed a direct-versus-relay choice with its disclosures; there is no such choice and no per-connection warning — the trade is recorded in the design's register (D §19.4 P17), not put to the person (L §5). The number is not reused. | L §5; D §§12.6.3, 19.4 |
 | UX-005 | C | Encourage a second independent adoption early, while reachable, and explain peerless/infrastructure concentration exposure where relevant. Do not force it as an extra wire admission requirement. | L §6; D §§13.3, 18.4 |
 | UX-006 | C | Before any user-initiated authority change, compute and warn about loss of currently used resource access; include transfers, disavowals/other applicable changes, not only departure. A stale permission list must be identified rather than used to promise continued access. | L §6; D §11.2 |
 | UX-007 | C | Before accepting a new patron list the user's resources with upward-reaching policies and the newly affected people. Show expanded names and counts; a count alone is insufficient for confirming a role binding. | L §§6, 8; I §10.4 |
@@ -807,7 +807,7 @@ These scenarios verify that individually correct modules remain correct when joi
 | INT-013 | E | Send to an offline client through PQXDH prekeys, race two one-time requests, restart the serving node, reconnect and drain. Accepted ciphertext survives before delivery, one-time material is not reissued, and all delivered queue copies disappear. | D §§14.1.6, 14.2.4; MAIL, PAY, OPS |
 | INT-014 | E | Fill one recipient's queue while another has capacity. Refuse newest excess with a correctly bound response, retain old accepted mail indefinitely, and verify sender-facing failure without a global queue outage or hidden eviction. | I §2; MAIL |
 | INT-015 | E | Register, refresh, expire and withdraw wake endpoints while toggling OS push permission. A content-free doorbell reconnects through the kernel; no message content or mailbox count leaks to the external service and default foreground use still works. | D §§14.1.4–14.1.5; MAIL, APP, UX |
-| INT-016 | E | Exercise direct communication across supported NAT pairs, then blocked traversal, out-of-horizon peers and both users' relay overrides. Candidate disclosure follows the choice and every completed payload has authenticated end-to-end attribution. | D §§12.6.3, 14.1.1, 14.2; PAY, NET, APP |
+| INT-016 | E | Exercise direct communication across supported NAT pairs, then blocked traversal and out-of-horizon peers, with the relay taken as the fallback it is. Candidate release follows the horizon gate and every completed payload has authenticated end-to-end attribution. | D §§12.6.3, 14.1.1, 14.2; PAY, NET, APP |
 | INT-017 | E | Register two owners' resources on one host and conflicting resource claims on separate hosts. Sweep a horizon with an offline host and more than 111 entries of one type; preserve ownership, stale/truncated portions and stop repeated continuation loops. | W §6; CAT, UX |
 | INT-018 | E | Access an existing resource from inside/outside its owner's horizon with missing Ack, denied connect, malformed HTTP and stopped backend. Exercise all combinations to verify the ordered error ladder and absence of preauthorization backend requests. | W §11; GAT |
 | INT-019 | E | Change a user's roles, cross a tenure boundary and move the owner while two resources share one QUIC connection. Retire only affected resource sessions, recompute grants and issue new session IDs without carrying old permissions forward. A request already running completes under its entry snapshot; the transport connection is untouched. | I §10; GAT, TOP, UX |
@@ -941,7 +941,7 @@ Open local parameters are not all specification defects: cache TTLs, queue cap, 
 
 ## 10. Document baseline and coverage totals
 
-This specification contains **471 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
+This specification contains **469 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
 
 | Prefix | Families |
 |---|---:|
@@ -959,13 +959,13 @@ This specification contains **471 numbered requirement/test families** across **
 | VER | 18 |
 | CAP | 16 |
 | REC | 12 |
-| PAY | 10 |
+| PAY | 9 |
 | POL | 21 |
 | CAT | 22 |
 | GAT | 37 |
 | PKG | 14 |
 | APP | 13 |
-| UX | 14 |
+| UX | 13 |
 | OPS | 18 |
 | TOOL | 7 |
 | SCH | 22 |
