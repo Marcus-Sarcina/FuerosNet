@@ -38,7 +38,7 @@ class HomeActivity : Activity() {
      *  runs an instance (the mode query is owed). */
     private val destinations = listOf(
         "Conversations" to { open(ConversationsActivity::class.java) },
-        "Meet" to { placeholder("Meet", "The ceremony — milestone B.") },
+        "Meet" to { open(MeetActivity::class.java) },
         "People" to { placeholder("People", "Your horizon — later.") },
         "Catalog" to { placeholder("Catalog", "Resources your node serves — later.") },
         "Settings" to { placeholder("Settings", "Wake endpoint, backup — later.") },
@@ -78,10 +78,12 @@ class HomeActivity : Activity() {
 
     override fun onStart() {
         super.onStart()
+        Consent.host(this)
         Kernel.bind(sink)
     }
 
     override fun onStop() {
+        Consent.release(this)
         Kernel.unbind(sink)
         super.onStop()
     }

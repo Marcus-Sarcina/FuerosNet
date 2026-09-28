@@ -11120,3 +11120,29 @@ attributed to its sender, the outgoing bubble reading sent and never
 delivered. Eleven JVM unit tests, up from six, under the gate's Android
 step; lint zero errors; the APK assembles. Built over what the kernel
 already carried, adding no kernel call.
+
+### 2026-09-28 (Meet, the ceremony flow, walked)
+
+**The shell has the ceremony flow** — section D of the screens sheet, one
+`MeetActivity` walking the whole sequence over a process-scoped `Meet` state
+machine so a recreation mid-ceremony rejoins it. Seven JVM tests pin the
+rulings: the flow begins at intent and takes input there; adoption is fixed
+with the intent and settable nowhere later; the brief is the only door into
+the hands-off phase; optical, proximity and capture take no input; a record
+is signed only from review; a stop is terminal. The whole ceremony API was
+already exported on the FFI, so this added no kernel call.
+
+**Consent became real.** `begin` asks the operator to consent, and the shell
+had been answering every such question no. `Consent` now raises a dialog on
+the foreground screen and blocks the kernel's thread on the person's answer,
+refusing only where no screen can host it — the shell never consents on the
+person's behalf (`light-client-requirements.md` §1.4). Without it the
+ceremony could not start.
+
+**What it honestly cannot do is named, not faked.** The optical exchange
+needs a counterparty's screen in the camera; proximity needs the radios;
+capture needs a face; and the bearer past the handshake is the shell's to
+build. Each says so on its own step, and a dim walkthrough control advances
+the flow for inspection — scaffolding, not the ceremony, claiming no record.
+Walked on the emulator through every step and gate; the passive witness and
+verifier roles keep no screen, answered in the kernel's event loop.

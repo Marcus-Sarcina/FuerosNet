@@ -21,6 +21,7 @@
         </activity>
 
         <activity android:name=".ConversationsActivity" android:exported="false" />
+        <activity android:name=".MeetActivity" android:exported="false" />
         <activity android:name=".ConversationActivity" android:exported="false" />
         <activity android:name=".PlaceholderActivity" android:exported="false" />
     </application>

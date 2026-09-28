@@ -34,11 +34,57 @@ object Kernel {
     private var started = false
     private var provisioned = false
 
+    /** The ceremony in progress, or null. Process-scoped like the
+     *  connection: a font change mid-ceremony must not lose it. */
+    @Volatile private var meet: Meet? = null
+
     /** Bind a screen: it is rendered against the state so far, then on
      *  every change. */
     fun bind(u: Front.Ui) = front.bind(u)
 
     fun unbind(u: Front.Ui) = front.unbind(u)
+
+    fun meet(): Meet? = meet
+
+    /**
+     * Begin a ceremony with the one provisioned peer, meeting or adopting
+     * as chosen. The kernel prepares the local half; the optical handshake
+     * and the bearer that carries the intent are specified now
+     * (`wire-format.md` §14.4) but not yet wired in this shell, so this
+     * stands the flow up rather than completing it. A ceremony already live
+     * is returned as-is.
+     */
+    fun startMeet(adopt: Meet.Adopt): Meet? {
+        val p = participant ?: return null
+        val to = peer ?: return null
+        val key = peerKey ?: return null
+        synchronized(lock) {
+            meet?.let { return it }
+            meet = Meet(key, peerName, adopt)
+        }
+        val m = meet!!
+        Thread {
+            try {
+                // witnesses are nominated from the counterparty's
+                // neighbourhood (design §7.1); with no horizon yet the
+                // nomination is empty and the ceremony is that much weaker,
+                // which the record carries honestly rather than hiding
+                p.begin(to, listOf(), true)
+                m.note("intent prepared. A handshake goes screen-to-screen and")
+                m.note("the intent rides a bearer the shell picks (wire-format")
+                m.note("§14.4); the carriage is not wired in this build.")
+            } catch (e: Refused.Reason) {
+                m.stop("begin refused: ${e.reason}")
+            }
+        }.start()
+        return m
+    }
+
+    /** End the ceremony in progress. */
+    fun stopMeet(reason: String) {
+        meet?.stop(reason)
+        synchronized(lock) { meet = null }
+    }
 
     /** The one peer this device was provisioned to talk to, or null while
      *  unprovisioned: what a conversation screen opens onto. */

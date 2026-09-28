@@ -12557,3 +12557,56 @@ tests.
 the Operator mode query, and everything the capability matrix already marks
 Owed. This built B and C over what the kernel already carried; it added no
 kernel call.
+
+## The Meet ceremony flow (2026-09-28)
+
+Milestone B's ceremony, section D of the screens sheet, built as one
+Activity walking the whole sequence — a ceremony is one continuous flow,
+not places you navigate between. The whole ceremony API is already exported
+on the FFI `Participant` (begin, take_intent, proximity, take_channels,
+capture_key, capture, select_verifiers, query_for/request/responses/
+gathered, nominees, witness_ask/sign, propose, body, review_and_sign,
+sign_body, finalize, propose_adoption/take_adoption), so this added no
+kernel call.
+
+**`Meet` is the flow's state machine**, process-scoped in the kernel so a
+recreation mid-ceremony rejoins it, and pure so a JVM test holds it. Seven
+tests pin the rulings: the flow begins at intent and takes input there;
+adoption is a constructor argument, fixed with the intent and settable
+nowhere later; the brief cannot be skipped and is the only door into the
+hands-off phase; optical, proximity and capture accept no input; a record
+is signed only from review; a stop is terminal and carries its reason. 18
+JVM unit tests now, up from 11, under the gate's 4c.
+
+**Consent became real.** `begin` asks the operator to consent, and the
+shell answered every such question `false` — no prompt existed. `Consent`
+now posts a dialog to the foreground screen and blocks the kernel's thread
+on the person's answer; with no screen to host it, the answer is still no,
+because the shell must never consent on the person's behalf
+(`light-client-requirements.md` §1.4). `AndroidShell.ask` routes through it.
+Without this the ceremony could not start at all.
+
+**What this build honestly cannot do, surfaced not faked.** Three things
+block a real ceremony and each is named on its screen: the optical channel
+needs a counterparty's screen in the camera *and* an encoding
+`wire-format.md` §14 still leaves owed, so the cross-device carriage is not
+wired; proximity needs the radios; capture needs a face in the camera. A
+dim, labelled *walkthrough* control advances the flow for inspection — it
+is scaffolding, not the ceremony, and it claims no record (DONE reads
+"walkthrough, no record"). The passive roles keep no screen: a witness or
+verifier is answered in the kernel's event loop, asked and warned of
+nothing (design §19.6).
+
+**Walked on the emulator**: Home → Meet offers the intent choice, fixed at
+the start; choosing it prompts the person for consent; the brief front-
+loads what becomes durable, the retention, the disclosure rule and the weak
+points before the phone faces away; the hands-off phase takes nothing; and
+review precedes a sign that makes no real record. Lint 0 errors; the APK
+assembles; the flow's screenshots are retained with the run.
+
+**Owed, and now sharper for the advisory**: the §14 optical-channel
+encoding (blocks carriage even with two real phones); the camera and
+proximity platform backends (emulation has neither); the capture engine
+(`HashEngine` is a stub); and a real device test with two phones plus a
+third as verifier. None is a kernel gap — the kernel carries the whole
+ceremony API — they are the platform and the one owed spec decision.

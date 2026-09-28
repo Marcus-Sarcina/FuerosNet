@@ -51,7 +51,9 @@ class AndroidShell(context: Context) :
 
     override fun fill(n: UInt): ByteArray = ByteArray(n.toInt()).also { rng.nextBytes(it) }
 
-    override fun ask(question: String): Boolean = false
+    // the person is asked, on whatever screen is foreground; a question
+    // nobody is shown is answered no (`light-client-requirements.md` §1.4)
+    override fun ask(question: String): Boolean = Consent.ask(question)
 
     override fun told(notice: Told) {
         Log.i("fueros", "notice: $notice")
