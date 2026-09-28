@@ -275,6 +275,7 @@ The Cargo workspace has **16 crates**. Components below follow responsibilities 
 | NET-012 | C | Offer and take traversal candidates on the ceremony's proximity channels, and open a direct path from candidates so obtained. The route is carried by no patron, which is the point: reaching a counterparty met in person costs proximity rather than a patron's cooperation, and survives one that is uncooperative or eclipsing. Candidates are accepted only from the party they name, and handing them over is disclosed as the IP disclosure it is. | D §12.6.3, §10.1; L §4, §1.3, §5 |
 | NET-013 | S | Never bridge a local device-to-device interface over a wide-area network, and never treat as having arrived on one anything that reached the device another way. The class is defined by not being intermediable remotely, and a ceremony's override of the horizon gate rests on that property; a remote pairing path through the same code would convert the guarantee into an assumption. Unenforceable against a peer, so stated as a commitment. | W §14.1; D §12.6.3, §1.1 |
 | NET-014 | P | Where more than one local transport is available for establishing a connection at a ceremony, prefer the one exposing least of the address behind it: a link-local duplex channel, then a shared wireless network, then cellular. Recommended and not required — the available transports are the platform's. What this protects is the carrier or ISP behind the address, not the geography, which a counterparty in the room already has. | L §4; D §19.8 C24, D §19.4 P40 |
+| NET-015 | C | The ceremony's bulk exchange rides a bearer the shell chooses, preferring a direct local radio and falling back to a FuerosNet fetch last (`wire-format.md` §14.4.1). Integrity is the optical anchor, not the bearer: both devices derive the ceremony-id from the two contributions read screen-to-screen (design §13.2) and confirm it optically, and a bearer-carried `IntentExchange` whose echoed contribution disagrees with the optical one is rejected. A bearer is never bridged over a wide-area network (NET-013), and Bluetooth as a bearer is not barred the way Bluetooth as distance evidence is (design §1.3, §7.6.3). | W §14.4; D §13.2, §1.3 |
 
 ### Attach, sibling state, heartbeat and failover
 
@@ -714,6 +715,7 @@ The following ledger makes the common field-by-field mutation suite in §1 manda
 | SCH-020 | S | Cover Capabilities, Attach identity/optional currency/capabilities/optional delegation, AttachAck mode/siblings/interval/u64 queue count/capabilities/optional delegation, Delegation key/keyhash/window/hybrid signature, SiblingRef identity/endpoints/material, Heartbeat counter/time and SiblingUpdate optional replacement list. | W §§8.1–8.2 |
 | SCH-021 | S | Cover TopologyPush kind/encoded object and TopologyMemo patron/locator/slot/source timestamp/optional occupant. Control type numbers are 1 Attach, 2 Ack, 3 Heartbeat, 4 SiblingUpdate, 5 Push, 6 Memo, 7 Delegation; numeric spaces are not interchangeable with transaction/request tags. | W §§8.0–8.2, 10 |
 | SCH-022 | S | Cover ResourceRequest resource/HTTP bytes and ResourceResponse status/conditional HTTP bytes, all statuses 0–5 and response streaming conditions. Unknown fields in either unsigned map are malformed even when the enclosed HTTP is valid. | W §§11–11.2 |
+| SCH-023 | S | Cover the ceremony's local-interface encodings (`wire-format.md` §14.4): `OpticalContribution` version/keyhash/16-byte contribution, `TranscriptConfirm` version/32-byte ceremony-id, and `IntentExchange` version/echoed contribution/nominees (0..64 keyhashes)/bundle (0..256 `ArchiveEntry`)/started_at/retention/initiator. Versioned deterministic CBOR with the §1 bounds; a bundle entry is a presented record or an envelope as `wire-format.md` §7.9 defines. | W §§14.4, 7.9, 1 |
 
 ### Required structural boundary matrix
 
@@ -941,7 +943,7 @@ Open local parameters are not all specification defects: cache TTLs, queue cap, 
 
 ## 10. Document baseline and coverage totals
 
-This specification contains **469 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
+This specification contains **471 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
 
 | Prefix | Families |
 |---|---:|
@@ -952,7 +954,7 @@ This specification contains **469 numbered requirement/test families** across **
 | TOP | 36 |
 | RES | 15 |
 | CUR | 12 |
-| NET | 14 |
+| NET | 15 |
 | SES | 15 |
 | MAIL | 27 |
 | CER | 20 |
@@ -968,7 +970,7 @@ This specification contains **469 numbered requirement/test families** across **
 | UX | 13 |
 | OPS | 18 |
 | TOOL | 7 |
-| SCH | 22 |
+| SCH | 23 |
 | INT | 24 |
 | VAL | 11 |
 

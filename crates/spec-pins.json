@@ -1,12 +1,12 @@
 {
  "specs": {
   "network-design.md": "09fa2f1af863cf1295a149dcf2610891a23cd7f4f75be7622a7dc124e62d8e33",
-  "wire-format.md": "a78aff6252a3b05aff6ac7e99eb74c10b5a87a8359314a7e5d1636a2455707a8",
+  "wire-format.md": "4e26b0ca7c325535a4f05e081b3eb3cd382b6d377c20e02c48a9460c28a1bcbc",
   "light-client-requirements.md": "d43f07ee0bc2a48aa958f66e9dd0a7ba5242caed2a76fc573bfa99490ca4e46b",
   "infra-client-requirements.md": "21abdf80e7f60b77d1b6e283d8a5a1c69b668f80df366f3cf80803239a9c9028",
   "resource-requirements.md": "54edf8e85eacee7b68e69c0f8b971ae83c19b05e284ae3187bf14d6846ee6f8d",
-  "functional_tests.md": "f026e3c0c7f3d1ddd3a995445894ca426aa44cf503e73d4ba21db58d6d7f7884"
+  "functional_tests.md": "318afa1d4d42be1311acb4a431b4b969f2c162765e6e07e4e76857d830d03711"
  },
- "accepted": "2026-09-27",
+ "accepted": "2026-09-28",
  "note": "the documents crates/check.sh last passed against; rewritten only by tools/pincheck.py --accept"
 }

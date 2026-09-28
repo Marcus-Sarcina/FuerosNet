@@ -11146,3 +11146,33 @@ build. Each says so on its own step, and a dim walkthrough control advances
 the flow for inspection — scaffolding, not the ceremony, claiming no record.
 Walked on the emulator through every step and gate; the passive witness and
 verifier roles keep no screen, answered in the kernel's event loop.
+
+### 2026-09-28 (the optical channel, encoded)
+
+**`wire-format.md` §14's optical and intent encodings are specified**, owed
+since the section opened on 2026-09-25 and settled now that building the Meet
+flow showed the carriage was blocked at the spec, not only at the hardware.
+The physics decided the shape: a QR at 6 ft on a low-spec selfie camera
+resolves below the smallest QR, so the optical channel is a close-range
+bootstrap and not a bearer. What crosses it is already specified and small —
+each device's 16-byte contribution (design §13.2), from which both derive the
+ceremony-id that consents and capture keys already bind to. The exchange is
+two steps to match design §1.3 item 3's *key exchange and the transcript
+hash*: OpticalContribution, then TranscriptConfirm carrying the ceremony-id
+each device checks against its own, which is where a man in the middle shows.
+
+**The bearer is the shell's choice, bounded** [author, 2026-09-28]: a direct
+local radio first, a FuerosNet fetch last, ranked by locality because the
+integrity is the optical anchor and not the bearer. The intent-with-bundle
+rides it as IntentExchange, echoing its contribution so a bearer that
+disagrees with the screen is caught; the bundle reuses §7.9's ArchiveEntry.
+Bluetooth as a bearer is not Bluetooth as distance evidence — design §1.3
+bars the latter for spoofable RSSI, but anchor-bound data needs no distance
+guarantee of its own. No new crypto invented: the contributory pre-commitment
+is design §13.2's, reused, and whether a confidential bearer is wanted is
+left open as a future row rather than smuggled in.
+
+Applied to §14.2, §14.3 and a new §14.4; functional SCH-023 and NET-015
+added, 471 families across 26 prefixes; vector pin re-accepted after audit
+(nothing vector-side leans on §14.4). Test vectors, a model and the
+three-party ceremony test follow the encoding, as §14.3 orders.

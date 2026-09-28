@@ -12610,3 +12610,54 @@ proximity platform backends (emulation has neither); the capture engine
 (`HashEngine` is a stub); and a real device test with two phones plus a
 third as verifier. None is a kernel gap — the kernel carries the whole
 ceremony API — they are the platform and the one owed spec decision.
+
+## §14 optical channel: the encoding, settled (2026-09-28)
+
+Two rulings on the ceremony's local-interface encoding (`wire-format.md`
+§14, owed since 2026-09-25), taken while building the Meet flow surfaced
+that the carriage was blocked at the spec, not only at the hardware.
+
+**The optical channel is a bootstrap, not a bearer** [author, 2026-09-28,
+on the physics]. The engineering: a QR at 6 ft on a low-spec selfie camera
+resolves below QR version 1 (≤17 bytes) — 6 ft is outside QR's envelope. But
+the ceremony is close-range and 6 ft is a recommendation, not a hard limit,
+so the optical handshake is an arm's-length step while capture and proximity
+keep the 6 ft reach. What must cross optically is small and already
+specified: each device's 16-byte contribution (design §13.2), from which
+both derive the ceremony-id — `SHA-256("rhtn/1:ceremony" ‖ contributions in
+keyhash order)` — which is the transcript hash consents and capture keys
+already bind to. The optical exchange is two steps to match design §1.3
+item 3's *key exchange and the transcript hash*: `OpticalContribution`, then
+`TranscriptConfirm` carrying the derived ceremony-id, which each device
+checks against its own — the point where a man in the middle shows.
+
+**The bearer is the shell's choice, bounded** [author, 2026-09-28]: a direct
+local radio (Bluetooth, device-to-device) first, a FuerosNet fetch last. What
+ranks a bearer is locality, not integrity — integrity is the optical anchor,
+so a MITM on the bearer is caught by the ceremony-id the two screens fixed —
+and the network fetch is last because it leaves the physical-presence
+property §14.1 rests on. The intent-with-bundle rides that bearer as
+`IntentExchange`, echoing its contribution so a bearer that disagrees with
+the screen is caught; the bundle reuses §7.9's `ArchiveEntry`, bounded at
+256. **Bluetooth as a bearer is not Bluetooth as distance evidence**: design
+§1.3 bars RSSI from the proximity channel, but a bearer moving
+anchor-bound data needs no distance guarantee, so the two uses are distinct
+and only one is barred.
+
+**Not invented, and named as owed**: no new key-exchange crypto — the
+contributory pre-commitment is design §13.2's, reused. Whether a confidential
+bearer channel is wanted is left open (the contributions and bundle are not
+secret, the ceremony-id is a commitment not a key), and if one is added its
+key exchange is a new §14 row, not smuggled into these. `§14.4` specifies the
+optical and intent encodings; the proximity-outcome exchange, the traversal-
+candidate structure and the delegated-device handover stay owed (§14.3).
+
+**Applied**: `wire-format.md` §14.2 table rows and §14.3 owed list updated;
+§14.4 added with the carriage rule and the three CBOR encodings.
+`functional_tests.md` SCH-023 (the encodings) and NET-015 (the carriage and
+anchor binding) added — 471 families across 26 prefixes, SCH 23, NET 15,
+counts re-verified. Vector pin re-accepted after audit: nothing vector-side
+leans on §14.4 (the "§14.2.4" in the vectors is design's payload section, not
+this). Refcheck 0 flags. **No test vectors or model yet** — §14.3 orders them
+after a workable encoding, which is now what exists; the three-party Rust
+ceremony test is the next no-hardware step and would exercise this.

@@ -4662,8 +4662,8 @@ holds it, which is what the rest of the design already depends on.
 
 | What | Between | Where it is stated | Encoding |
 |---|---|---|---|
-| The ceremony's intent exchange — the contribution, the nominees, the evidence bundle, the timing and who initiated | Two participants' devices | design §7.1, design §13.2 | **Owed.** Held only in `rhtn-client`, so two vendors' clients cannot complete a ceremony together |
-| The optical transcript — key exchange and the transcript hash, screen to camera | Two participants' devices | design §1.3 item 3 | **Owed** |
+| The ceremony's intent exchange — the contribution, the nominees, the evidence bundle, the timing and who initiated | Two participants' devices | design §7.1, design §13.2 | `IntentExchange` (§14.4.2), carried by the shell's chosen bearer (§14.4.1) and bound to the pre-commitment. The CBOR is specified; two vendors' clients compute the same ceremony-id (design §13.2) either way |
+| The optical transcript — each device's contribution, then the derived ceremony-id, screen to camera | Two participants' devices | design §1.3 item 3, design §13.2 | `OpticalContribution` then `TranscriptConfirm` (§14.4.2): the contribution is the key-exchange input, the ceremony-id is the transcript hash both display and check |
 | Proximity channel outcomes — the UWB, NFC or optical result and its ranking | Two participants' devices | §3.2, design §1.3 item 4 | The *outcome* is carried in records (§4.5.1); the exchange producing it is **owed** |
 | Traversal candidates | Two participants' devices | design §12.6.3 [author, 2026-09-25] | **Owed, and so is the candidate structure**, which this document has never carried |
 | A delegated device's payload material, and the ceremony device's signature over it | Two devices of one identity | design §23.3, §7.8 | **Owed.** The bundle it produces is §7.8's |
@@ -4677,7 +4677,11 @@ one person's two devices.
 ### 14.3 What is owed before this section is canonical
 
 1. **An encoding per row of §14.2**, each with the usual obligations of §1:
-   deterministic CBOR, an explicit version, and bounded arrays.
+   deterministic CBOR, an explicit version, and bounded arrays. **Two are
+   specified in §14.4** [author, 2026-09-28]: the optical exchange and the
+   intent exchange, with the carriage they move over. The proximity-outcome
+   exchange, the traversal-candidate structure and the delegated-device
+   handover remain owed.
 2. **Test vectors.** `test-vectors/` covers none of this, and cannot cover
    interfaces that have no encoding yet.
 3. **A model, where a model would say anything.** The ceremony's binding is
@@ -4686,3 +4690,97 @@ one person's two devices.
    stated plainly as unenforceable in the manner §1.1 requires. An
    implementation can be told not to bridge these interfaces; no party on the
    far side of one can verify that it did not.
+
+### 14.4 Carriage, and the two encodings it moves
+
+**The bearer is the shell's choice, in a hierarchy of desirability**
+[author, 2026-09-28]: a direct local radio — Bluetooth or a device-to-device
+link — first, and a fetch over FuerosNet last. What ranks a bearer is
+locality, not integrity: **the integrity comes from the optical anchor, not
+the bearer**, so a bearer is preferred for keeping the exchange off
+infrastructure and within the physical-presence property §14.1 names, and
+the network fetch is the last resort precisely because it leaves that
+property — the two devices reach each other through nodes rather than across
+the room. A shell picks the best bearer it and its counterparty share, and
+the protocol does not name which, the way design §7.1 already leaves the
+carriage to *whatever means the two have*.
+
+**Bluetooth as a bearer is not Bluetooth as proximity evidence.** design
+§1.3 item 4 bars Bluetooth RSSI from the *distance* channel because signal
+strength is attacker-controllable (design §7.6.3). That bar is about evidence of
+nearness. A bearer moving data that is already bound to the optical anchor
+needs no distance guarantee of its own: a man in the middle of the Bluetooth
+link is caught by the ceremony-id each party computed from contributions
+read off the other's actual screen. The two uses are different and only one
+is barred.
+
+#### 14.4.1 What the anchor is, and what it binds
+
+**The optical channel carries two things across the exchange** (design §1.3
+item 3), and neither is secret. First each device shows its 16-byte
+contribution. From the two, both devices compute the ceremony's
+pre-commitment — `SHA-256` of `rhtn/1:ceremony` and the two contributions in
+ascending participant-keyhash order (design §13.2). Then each device shows
+that 32-byte **ceremony-id**, and each checks the other's against its own: a
+mismatch is where a man in the middle shows, and the ceremony stops. That
+value is the transcript hash the rest of the exchange binds to — consents
+and capture keys already bind to it (design §13.2), and everything the
+bearer carries is checked against it, so a substitution on the bearer
+produces a value that does not match what the two screens fixed. **Each
+party reads both values off a screen it is looking at**, which is the whole
+of the man-in-the-middle resistance and the reason this step is close-range:
+a QR of this size resolves at arm's length on a modest selfie camera, not
+across a room.
+
+#### 14.4.2 The encodings
+
+Every one is deterministic CBOR under §1, versioned, with the array bounds
+§1 requires.
+
+```
+OpticalContribution = [        ; the first QR each device shows
+  uint,                        ; version, 1
+  keyhash,                     ; this device's identity (§2.2), for ordering
+                               ;   the contributions and naming the party
+  bstr .size 16,               ; this device's contribution (design §13.2)
+]
+
+TranscriptConfirm = [          ; the second QR, once both contributions are in
+  uint,                        ; version, 1
+  bstr .size 32,               ; the ceremony-id this device computed
+                               ;   (design §13.2); the other checks it equals
+                               ;   its own, and stops where it does not
+]
+```
+
+```
+IntentExchange = [             ; carried by the bearer (§14.4.1), not optical
+  uint,                        ; version, 1
+  bstr .size 16,               ; the sender's contribution, echoing its
+                               ;   OpticalHandshake so a bearer that disagrees
+                               ;   with the screen is caught
+  [ * keyhash ],               ; nominees, from the counterparty's
+                               ;   neighbourhood (design §7.1); 0..64
+  [ * ArchiveEntry ],          ; the evidence bundle: prior presented records
+                               ;   for verifier selection (§7.9's entry type),
+                               ;   0..256 as everything else
+  timestamp,                   ; started_at
+  uint,                        ; retention_years the sender commits to
+  bool,                        ; initiator
+]
+```
+
+**The bundle is `ArchiveEntry` (§7.9), reused not reinvented**: a prior
+presented record is exactly what a verifier-selection bundle holds, and the
+256-entry bound is the array bound the rest of the document carries. A
+receiver checks the echoed contribution in field 2 against the
+`OpticalHandshake` it read optically before trusting anything bearer-carried;
+a mismatch is a bearer that does not agree with the screen, and the ceremony
+does not continue over it.
+
+**Owed still, and named**: whether a confidential bearer channel is wanted
+at all — the contributions and the bundle are not secret, and the ceremony-id
+is a commitment rather than a key, so nothing here requires bearer
+encryption; if a later decision adds one, its key exchange is a new row here
+and is not smuggled into these two. Test vectors and a model follow, as
+§14.3 orders.
