@@ -290,6 +290,17 @@ pub struct SubjectCopy {
     pub bytes: Vec<u8>,
 }
 
+/// What consenting yielded: the consent the querier's request carries,
+/// and, where this subject holds a record with the query's verifier, the
+/// grant that releases the capture key.  **The grant is owed to that
+/// verifier directly and to nobody else** (design §7.5.2), and the client
+/// cannot see what carries it, so honouring that is the caller's.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct Consented {
+    pub consent: Vec<u8>,
+    pub grant: Option<Vec<u8>>,
+}
+
 /// The two nominee lists a ceremony holds: this side's and the other's.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Nominees {
@@ -1001,10 +1012,15 @@ impl Participant {
     ///
     /// **The person is asked, and this returns what they answered.** A
     /// shell that consented on their behalf would be signing for them.
-    pub fn consent(&self, query: Vec<u8>) -> Result<Option<Vec<u8>>, Refused> {
+    /// Consenting is also what mints the grant, where one is owed: the
+    /// two are one act of the subject, so they leave together.
+    pub fn consent(&self, query: Vec<u8>) -> Result<Option<Consented>, Refused> {
         self.handle.with_blocking(move |c| {
             let q = rhtn_client::query::VerificationQuery::decode(&query).map_err(Refused::new)?;
-            Ok(c.consent(&q).map(|(consent, _)| consent))
+            Ok(c.consent(&q).map(|(consent, grant)| Consented {
+                consent,
+                grant: grant.map(|g| g.encode()),
+            }))
         })
     }
 

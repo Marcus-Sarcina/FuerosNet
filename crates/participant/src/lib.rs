@@ -350,13 +350,23 @@ impl Instrument {
                     .query_for(id(verifier)?)
                     .map_err(|e| e.reason().to_string())?)
             )]),
-            ["consent", query] => Ok(vec![match c
-                .consent(bytes(query)?)
-                .map_err(|e| e.reason().to_string())?
-            {
-                None => "consent none".into(),
-                Some(s) => format!("consent {}", hex(&s)),
-            }]),
+            ["consent", query] => Ok(
+                match c
+                    .consent(bytes(query)?)
+                    .map_err(|e| e.reason().to_string())?
+                {
+                    None => vec!["consent none".into()],
+                    Some(s) => {
+                        let mut out = vec![format!("consent {}", hex(&s.consent))];
+                        // the grant leaves with the consent, one more token to
+                        // carry — to the query's verifier and to nobody else
+                        if let Some(g) = s.grant {
+                            out.push(format!("grant {}", hex(&g)));
+                        }
+                        out
+                    }
+                },
+            ),
             ["request", query, consent, basis] => {
                 let b: u32 = basis
                     .parse()
@@ -743,7 +753,8 @@ capture-key               the key your captures will be sealed under
 capture <key>             capture them under the key they sent
 verifiers                 the verifiers selected, and the basis of each
 query <verifier>          the query to put to one of them
-consent <query>           the subject's consent, or none
+consent <query>           the subject's consent, or none; where a grant is
+                          owed it follows, to carry to the query's verifier
 request <query> <consent> <basis>
                           the request that carries all three
 take-query <from> <request>       as a verifier

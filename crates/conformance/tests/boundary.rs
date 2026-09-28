@@ -57,7 +57,7 @@ fn b01_named_ceremony_passthrough_preserves_consent_binding() {
     let cid=alice.take_intent(ids[1].keyhash.to_vec(),theirs).unwrap();
     let query=VerificationQuery {subject:ids[0].keyhash,querier:ids[1].keyhash,ceremony_id:cid.try_into().unwrap(),profile:vec![1],template_version:1,verifier:ids[2].keyhash};
     let out=alice.consent(query.encode()).unwrap();
-    let exported=out.as_ref().is_some_and(|b|consent_verifies(&ids[0],b,&query.query_id()));
+    let exported=out.as_ref().is_some_and(|b|consent_verifies(&ids[0],&b.consent,&query.query_id()));
     // The former blanket ban is superseded by D 14.1.0 / L 9 named opaque pass-through.
     // This control verifies binding only; it does not certify a shipping shell never interprets or routes routine wire data.
     assert!(exported,"the named ceremony exchange must preserve the consent/query binding");

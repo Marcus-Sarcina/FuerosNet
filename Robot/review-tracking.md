@@ -12661,3 +12661,48 @@ leans on §14.4 (the "§14.2.4" in the vectors is design's payload section, not
 this). Refcheck 0 flags. **No test vectors or model yet** — §14.3 orders them
 after a workable encoding, which is now what exists; the three-party Rust
 ceremony test is the next no-hardware step and would exercise this.
+
+## The three-party ceremony test, and the grant that had nowhere to go (2026-09-28)
+
+Asked for as the next no-hardware step. **Verified before writing**: the
+call sequence begin→finalize was already proven twice — in process with a
+real verifier (CER-24's setting: carol selects bob for alice, bob's Match
+lands in the record) and across four processes with witnesses only
+(PRT-04). The unproven branch was the verifier's legs across process
+boundaries: `verifiers`, `query`, `consent`, `take-query`, `take-grant`,
+`take-response` all existed on the instrument, and no test had ever driven
+them.
+
+**Driving them flushed a real hole at the FFI seam.** The client's
+`consent` returns the consent *and* the minted `KeyGrant`; the FFI dropped
+the grant (`.map(|(consent, _)| consent)`), and nothing anywhere sent one —
+`KIND_KEY_GRANT` had a kernel-internal receive path (buffering, expiry,
+`report_grants_to`) and no sender. The verifier was fully wired to answer
+on a key that could never arrive. Closed at parity with the client API:
+`consent` returns `Consented { consent, grant }` — one act of the subject,
+so they leave together — and the instrument prints the grant as one more
+token to carry, to the query's verifier and to nobody else. One conformance
+caller adapted (B01; its binding check unchanged). How a grant travels in
+the live network stays as the documents leave it: the node-to-client
+carriage of queries is unwritten (`wire-format.md` §7.7.2 stops at the
+serving node), and nothing was invented past that line.
+
+**PRT-07** (five processes): alice meets bob twice — floor(n/2) of a
+bundle of two obliges exactly one verifier, one record obliges none; a 2 s
+pause honours the window's exclusive bound at the next ceremony's start on
+second-resolution clocks. Carol selects bob at her discretion, told she
+recognises nobody in the pool; her empty bundle obliges alice to seek
+nobody. The request reaches bob before its key and he fabricates nothing;
+the grant opens his sealed capture of alice; the answer leaves with a copy
+addressed to the subject; carol takes it under bob's signature, proposes
+over it, and the record finalizes under four signers, the verifier not
+among them.
+
+**What the test does not claim**: the reference engine compares hashes and
+recognises nobody, so the Match attests the key release and the carried
+legs, not recognition; and the tokens are the instrument's carriage, not
+`wire-format.md` §14.4's wire encodings — the previous entry's closing line
+overstated that this test "would exercise" §14.4, and it does not. §14.4's
+vectors and model stay owed. PRT-07 added to the acceptance catalogue (465
+entries, checker 0 flags); PRT-04's closing steps extracted as
+`sign_and_finalize`, its claims unmoved (live suite 7 of 7).

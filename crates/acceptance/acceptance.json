@@ -10344,6 +10344,38 @@
     "interpretation": "A client cannot flood and does not try. What it can do is offer the one node it is attached to a transaction it signed, which is the same edge §10.1.1 already counts read in the other direction."
   },
   {
+    "id": "PRT-07",
+    "area": "participant",
+    "gap": "participant",
+    "title": "A verifier in a third process answers, and the record carries it",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "wire-format.md §5.2",
+      "design §7.4.2",
+      "design §7.5.2"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §5.2",
+        "text": "it sizes how many verifiers the selector should seek"
+      },
+      {
+        "where": "design §7.4.2",
+        "text": "No verifier may answer an identity-comparison request unless the subject of that request has signed it."
+      },
+      {
+        "where": "design §7.4.2",
+        "text": "a verifier answering a query about subject S sends a copy of its signed response to S as well as to the querier"
+      }
+    ],
+    "given": "Five participant processes: A, who has met B in two prior finalized ceremonies; C, a stranger to both; and two witnesses. A meets C, every token carried between the processes as PRT-04 carries them.",
+    "when": "C selects A's verifiers from the bundle A handed over, and the query, the consent, the grant and the response cross the process boundaries, the request reaching B before its grant.",
+    "then": "C is obliged to seek exactly one verifier and the one candidate is B, marked selected at C's discretion; C's own empty bundle obliges A to seek nobody. A's consent yields the one grant. B answers nothing while the grant is missing, then answers with a copy addressed to A. C takes the response under B's signature, the record is proposed over it and finalized by both participants and both witnesses, and B signs nothing.",
+    "oracle": "behaviour",
+    "interpretation": "The reference engine compares byte-equal hashes and recognises nobody (design §22.2 leaves the engine open), so the match observed attests the grant's key release and the carried legs, not recognition. Carriage between processes is the instrument's, as PRT-04 reads it."
+  },
+  {
     "id": "TOP-28",
     "area": "topology",
     "gap": "topology",

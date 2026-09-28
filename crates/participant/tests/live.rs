@@ -203,6 +203,14 @@ fn line(lines: Vec<String>, prefix: &str) -> String {
         .to_string()
 }
 
+/// The value of the first `key=value` word in a line.
+fn field(line: &str, key: &str) -> String {
+    line.split_whitespace()
+        .find_map(|w| w.strip_prefix(key))
+        .unwrap_or_else(|| panic!("no `{key}` in {line:?}"))
+        .to_string()
+}
+
 // acceptance: PRT-05
 #[test]
 fn a_newly_minted_root_adopts_on_the_record_it_just_made() {
@@ -321,6 +329,28 @@ fn ceremony(
     );
     let witnesses = format!("{}:{a}:{f_a},{}:{b}:{f_b}", hex(&kh(wa)), hex(&kh(wb)));
     let theirs = line(set.get(two).must("gathered"), "gathered ");
+    let (signers, txid) = sign_and_finalize(set, cast, one, two, &theirs, &witnesses);
+    assert_eq!(
+        signers.len(),
+        4,
+        "two participants and two witnesses signed it"
+    );
+    txid
+}
+
+/// From `one`'s proposal over the responses `two` gathered and the
+/// witnesses' answers, drive the record to finalization: the participants
+/// sign over the disclosures, the witnesses without them, and every
+/// signer takes the finished record.  Returns the signers and the one
+/// txid they all named.
+fn sign_and_finalize(
+    set: &mut Participants,
+    cast: &[&str],
+    one: &str,
+    two: &str,
+    theirs: &str,
+    witnesses: &str,
+) -> (Vec<String>, String) {
     let made = set.get(one).must(&format!("propose {theirs} {witnesses}"));
     let proposal = line(made.clone(), "proposed ");
     let disclosures = line(made, "disclosures ");
@@ -383,12 +413,7 @@ fn ceremony(
         txids.windows(2).all(|w| w[0] == w[1]),
         "one record, and every signer names it the same: {txids:?}"
     );
-    assert_eq!(
-        txids.len(),
-        4,
-        "two participants and two witnesses signed it"
-    );
-    txids.remove(0)
+    (signers, txids.remove(0))
 }
 
 // acceptance: PRT-06
@@ -480,4 +505,135 @@ fn a_record_a_client_makes_reaches_the_node_that_serves_it() {
         names.contains(&txid),
         "the node holds the transaction its client made: {names:?}"
     );
+}
+
+// acceptance: PRT-07
+#[test]
+fn a_verifier_in_a_third_process_answers_and_the_record_carries_it() {
+    let cast = ["alice", "bob", "carol", "w1", "w2"];
+    let mut set = Participants::new(env!("CARGO_BIN_EXE_rhtnp"), "verifier");
+    for n in cast {
+        set.start(n, &cast);
+    }
+    // **bob can answer for alice the only way anybody comes to**: he has
+    // met her, and holds her sealed captures to show for it.  Twice,
+    // because the criterion is floor(n/2) of the records she hands over
+    // (`wire-format.md` §5.2) — a bundle of one obliges no verifier and
+    // the selection never runs.
+    ceremony(&mut set, &cast, "alice", "bob", "w1", "w2");
+    ceremony(&mut set, &cast, "alice", "bob", "w1", "w2");
+    // the window is exclusive at the next ceremony's own start
+    // (`wire-format.md` §5.3) and these clocks are seconds: the second
+    // record must have finalized strictly before alice begins again
+    std::thread::sleep(std::time::Duration::from_secs(2));
+
+    // alice meets carol; intent through capture are PRT-04's steps.
+    // carol's hardware, like everybody's, is what was declared: nothing,
+    // until here
+    set.get("carol").must("channel latency pass 30");
+    let (a, b, c) = (hex(&kh("alice")), hex(&kh("bob")), hex(&kh("carol")));
+    let ia = line(
+        set.get("alice")
+            .must(&format!("begin {c} {} initiator", hex(&kh("w1")))),
+        "intent ",
+    );
+    let ic = line(
+        set.get("carol")
+            .must(&format!("begin {a} {}", hex(&kh("w2")))),
+        "intent ",
+    );
+    assert_eq!(
+        line(
+            set.get("carol").must(&format!("intent {a} {ia}")),
+            "ceremony "
+        ),
+        line(
+            set.get("alice").must(&format!("intent {c} {ic}")),
+            "ceremony "
+        ),
+    );
+    let ch = line(set.get("alice").must("proximity"), "channels ");
+    set.get("carol").must(&format!("take-channels {ch}"));
+    let ka = line(set.get("alice").must("capture-key"), "capture-key ");
+    let kc = line(set.get("carol").must("capture-key"), "capture-key ");
+    set.get("carol").must(&format!("capture {ka}"));
+    set.get("alice").must(&format!("capture {kc}"));
+
+    // **the pool is what alice handed over, not configuration**
+    // (`wire-format.md` §5.4): two records, one distinct prior
+    // counterparty, so carol must seek one verifier and the one candidate
+    // is bob — a stranger to her, taken at her discretion and marked so,
+    // and her person is told nobody in the pool is known to her
+    assert_eq!(
+        set.get("carol").must("verifiers"),
+        [
+            format!("verifier {b} basis=3"),
+            "told no-candidate-recognised".to_string(),
+        ],
+    );
+    // carol, meanwhile, hands over nothing, and obliges alice to nothing
+    assert!(
+        set.get("alice").must("verifiers").is_empty(),
+        "no bundle, no verifier owed"
+    );
+
+    // the query about the person in front of carol; alice's consent over
+    // its id, and with the consent the one grant, minted for bob and
+    // carried to him and to nobody else (design §7.5.2)
+    let q = line(set.get("carol").must(&format!("query {b}")), "query ");
+    let consented = set.get("alice").must(&format!("consent {q}"));
+    let consent = line(consented.clone(), "consent ");
+    let grant = line(consented, "grant ");
+    let req = line(
+        set.get("carol").must(&format!("request {q} {consent} 3")),
+        "request ",
+    );
+
+    // **the request reaches bob before its key does, and bob fabricates
+    // nothing for it**: no signed response exists until the grant arrives
+    assert_eq!(
+        set.get("bob").must(&format!("take-query {c} {req}")),
+        ["awaiting-grant"]
+    );
+    // the grant opens bob's sealed capture of alice, and the buffered
+    // query is answered on the spot.  What the match attests is the key
+    // release and the carried legs, not a face: the reference engine
+    // compares hashes and recognises nobody (design §22.2 leaves the
+    // engine open).
+    let answered = set.get("bob").must(&format!("take-grant {a} {grant}"));
+    let response = field(&answered[0], "querier=");
+    assert!(
+        field(&answered[0], "subject=").starts_with(&format!("{a}:")),
+        "the copy is addressed to the subject herself (design §7.4.2)"
+    );
+
+    // carol holds bob's answer under his signature, for the body
+    set.get("carol").must(&format!("take-response {response}"));
+    assert_eq!(
+        set.get("carol").must("responses"),
+        [format!("response verifier={b} subject={a} answer=Match")],
+    );
+
+    // witnesses, proposal, signatures, finalization: PRT-04's close, with
+    // the one difference that is the point — what carol gathered is no
+    // longer empty, and the record is proposed over it
+    let ask_a = line(set.get("alice").must("witness-ask"), "witness-ask ");
+    let ask_c = line(set.get("carol").must("witness-ask"), "witness-ask ");
+    let f_a = line(
+        set.get("w1").must(&format!("take-witness-ask {ask_a}")),
+        "witnessing ",
+    );
+    let f_c = line(
+        set.get("w2").must(&format!("take-witness-ask {ask_c}")),
+        "witnessing ",
+    );
+    let witnesses = format!("{}:{a}:{f_a},{}:{c}:{f_c}", hex(&kh("w1")), hex(&kh("w2")));
+    let theirs = line(set.get("carol").must("gathered"), "gathered ");
+    assert_ne!(theirs, "-", "the response is in what carol carries over");
+    let (signers, txid) = sign_and_finalize(&mut set, &cast, "alice", "carol", &theirs, &witnesses);
+    assert_eq!(txid.len(), 64, "a record is named by a 32-byte txid");
+    // the verifier answered and signs nothing: bob is no party to this
+    // meeting, and the record he served is not his to hold
+    assert!(!signers.contains(&b), "the verifier is not a signer");
+    assert_eq!(signers.len(), 4, "two participants and two witnesses");
 }

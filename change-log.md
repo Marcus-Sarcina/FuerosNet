@@ -11176,3 +11176,44 @@ Applied to §14.2, §14.3 and a new §14.4; functional SCH-023 and NET-015
 added, 471 families across 26 prefixes; vector pin re-accepted after audit
 (nothing vector-side leans on §14.4). Test vectors, a model and the
 three-party ceremony test follow the encoding, as §14.3 orders.
+
+### 2026-09-28 (the verifier's legs cross processes, and a grant that had nowhere to go)
+
+**The three-party ceremony test the last entry named is written** — and
+what needed proving was checked before anything was: the ceremony's call
+sequence, begin to finalize, was already shown in process with a real
+verifier answering into the record, and across four OS processes with
+witnesses. The unproven branch was the verifier's own legs — selection,
+query, consent, grant, answer — crossing process boundaries through the
+surface a shell drives.
+
+**Writing it flushed a hole at the FFI seam.** The client returns the
+minted capture-key grant with the subject's consent; the FFI dropped it,
+and nothing anywhere sent one. The receive side was complete — the grant's
+payload kind dispatched kernel-internally, the hosted verifier buffering
+queries against a grant's arrival, expiry answering *unavailable* when none
+came — a verifier fully wired to answer on a key with no sender. Closed at
+parity with the client API: consenting now returns the consent and the
+grant together, one act of the subject, and the instrument prints the
+grant as one more token to carry — to the query's verifier and to nobody
+else (design §7.5.2).
+
+**PRT-07, five processes.** Alice meets bob twice, because the
+reasonableness criterion obliges a verifier only from a bundle of two
+(`wire-format.md` §5.2), and the window is exclusive at the next ceremony's
+own start (`wire-format.md` §5.3), which a two-second pause honours on wall
+clocks counted in seconds. Carol, a stranger holding no records, selects
+bob at her discretion and is told she recognises nobody in the pool; her
+own empty bundle obliges alice to seek no one. The request reaches bob
+before its key and he fabricates nothing for it; the grant opens his sealed
+capture of alice, the answer leaves with a copy addressed to the subject
+(design §7.4.2), carol takes it under bob's signature and proposes over it,
+and the record finalizes under four signers, the verifier not among them.
+
+**What the test does not claim**: the reference engine compares hashes and
+recognises nobody (design §22.2), so its match attests the key release and
+the carried legs, not a face; and the tokens are the instrument's carriage,
+not `wire-format.md` §14.4's wire encodings — the previous entry's closing
+overstated that, and §14.4's vectors and model stay owed. The acceptance
+catalogue carries PRT-07 (checker: 0 flags), PRT-04's closing steps are
+shared rather than repeated, and the live suite runs seven of seven.
