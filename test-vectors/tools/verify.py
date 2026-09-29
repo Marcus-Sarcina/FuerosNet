@@ -739,6 +739,39 @@ _npr_hexes = re.findall(r'```\n([0-9a-f\n]+?)```', tx[tx.index('## Normal presen
 check(byid['P-normal-record']['hex'] ==
       [h for h in _npr_hexes if len(h) > 60000][0].replace('\n', ''),
       'corpus: P-normal-record is byte-identical to the transactions.md envelope')
+
+# ------------------------------------------- local interfaces (wire s14.4)
+# One coherent exchange: the optical values ARE records.md's pre-commitment
+# known answer, the intent echoes them, the anchored exchanges carry the
+# derived ceremony-id, and the device handover reuses the delegation and
+# bundle fixtures byte-for-byte.
+_cid = pcm.group(3).replace('\n', '')
+_oc_a = canonical(bytes.fromhex(byid['P-optical-contribution-alice']['hex']))
+_oc_b = canonical(bytes.fromhex(byid['P-optical-contribution-bob']['hex']))
+check(_oc_a[1] == KH['alice'] and _oc_b[1] == KH['bob'],
+      's14.4: each OpticalContribution names its device by keyhash')
+_pair = (_oc_a[2], _oc_b[2]) if KH['alice'] < KH['bob'] else (_oc_b[2], _oc_a[2])
+check(H(b'rhtn/1:ceremony' + bytes.fromhex(_pair[0]) + bytes.fromhex(_pair[1])).hex() == _cid,
+      's14.4: the two contributions derive the pre-commitment known answer')
+_tc = canonical(bytes.fromhex(byid['P-transcript-confirm']['hex']))
+check(_tc == [1, _cid],
+      's14.4: TranscriptConfirm carries exactly the derived ceremony-id')
+_ix = canonical(bytes.fromhex(byid['P-intent-exchange']['hex']))
+check(_ix[1] == _oc_a[2],
+      "s14.4: the intent echoes alice's optical contribution byte-for-byte")
+check(enc(_ix[3][0]).hex() == byid['P-alice-c1-record']['hex'],
+      "s14.4: the intent's bundle entry is the alice-c1 envelope byte-for-byte")
+for _fid in ('P-proximity-outcomes', 'P-candidate-handover'):
+    check(canonical(bytes.fromhex(byid[_fid]['hex']))[1] == _cid,
+          f's14.4: {_fid} is anchored to the derived ceremony-id')
+_dc = canonical(bytes.fromhex(byid['P-device-credential']['hex']))
+check(_dc[1][0] == byid['P-delegation-alice-desktop']['hex']
+      and _dc[2] == byid['P-prekey-desktop']['hex'],
+      's14.4: the credential carries the delegation and signed bundle byte-for-byte')
+_di = canonical(bytes.fromhex(byid['P-device-introduction']['hex']))
+_pd = canonical(bytes.fromhex(byid['P-prekey-desktop']['hex']))
+check(canonical(bytes.fromhex(_di[2])) == {k: v for k, v in _pd.items() if k != 6},
+      "s14.4: the introduction's payload is the signed bundle less its field 6")
 check(len([e for e in corpus['entries'] if e['class'] == 'trace']) == 24
       and len([e for e in corpus['entries'] if e['class'] == 'context']) == 5,
       'corpus: twenty-four traces and five contexts')

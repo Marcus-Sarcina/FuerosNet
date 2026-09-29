@@ -11288,3 +11288,45 @@ store's AEAD parameters — the rest of the canonical profile, to settle with
 the implementation. The survey stays a working brief outside the root; the
 design carries the decision and its selection rule in its own words and
 depends on nothing else.
+
+### 2026-09-29 (the vectors and the model for §14.4, and what the model said back)
+
+**§14.3's last two items are closed, and closing them changed §14.** Draft
+vectors for all five encodings landed as `test-vectors/local-interfaces.md`,
+written as **one coherent exchange** rather than five isolated blobs: the
+optical contributions and the ceremony-id they derive are `records.md`'s
+pre-commitment known answer byte-for-byte, the intent echoes one of them, the
+two anchored exchanges carry the derived id, and the device handover reuses
+the desktop transport key, its delegation and its signed bundle byte-for-byte
+— so a harness that disagrees anywhere disagrees with a fixture that already
+existed. Nine cross-checks in `verify.py` re-derive those relationships
+independently; the corpus grew to 264 entries with the bounds and shape
+negatives, and the workspace decoder gained schema arms for the eight kinds
+so those negatives actually bite rather than being skipped as unknown.
+
+**The model is a third tree, `models/tamarin/local/`, and it found the
+section overclaiming.** The optical channel is modelled authentic but
+**public** — §14.1's property and §14.4.1's "neither is secret", side by side
+— and the bearer is the adversary's entirely. What verifies is that an
+accepted message's anchor is a ceremony-id **both** devices derived, and it
+is mutation-tested: delete the anchor comparison and it falsifies. What also
+verifies, as `exists-trace` lemmas because the attacks are reachable, is that
+the anchor **authenticates nobody** and does not stop a payload being
+re-anchored into another ceremony. Every anchored value is public, so a party
+that read the screens passes every check §14.4.2 makes.
+
+**That is not a break, and the documents now say where the line is.** The
+resistance was always physical — reading the screens costs being there, the
+cost design §1 meters — and Dolev-Yao has no locality, so no symbolic model
+can express it. What was wrong was the prose: three sites claimed or implied
+that a bearer substitution is caught, and each is corrected to say *by a
+party that did not watch the screens*. §14.3 is rewritten from an owed list
+into what the encodings establish, stating plainly that none of it is
+cryptographic and that an implementer must not read §14.4.2's checks as
+authentication. §14's preamble says the section is complete. NET-016 carries
+the same warning, so a test author does not write an authentication test that
+cannot pass.
+
+**Also**: `models/README.md`'s `compliant/` lemma count had stood at 29 since
+before two of its theories grew, and is corrected to 33 from what the tool
+reported. Refcheck 4,448 references, 0 flags.

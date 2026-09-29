@@ -1,0 +1,246 @@
+theory RHTNLocalExchange
+/*
+================================================================================
+  RHTN local device-to-device exchange -- symbolic analysis (Tamarin)
+================================================================================
+
+WHICH TREE THIS IS.  `local/`, a third tree, and it needed to be one.
+`wire-only/` holds properties a third party checks from bytes it receives;
+there is no third party here and no record is produced.  `compliant/` holds
+obligations only the acting party can check; this is not an obligation but an
+exchange under an adversary.  What `local/` holds is a **two-party exchange
+across two channels of different strength** (`wire-format.md` §14.4), and the
+question is which of its guarantees come from the bytes and which come from
+the physical premise.
+
+WHAT IS MODELLED.  §14.4's exchange, to the point where a bearer-carried
+message is accepted:
+
+  1. each device shows its 16-byte contribution optically;
+  2. both derive the ceremony-id, SHA-256 over the tag and the two
+     contributions (design §13.2), and each shows it;
+  3. each checks the other's ceremony-id against its own -- §14.4.1's
+     "a mismatch is where a man in the middle shows";
+  4. a bearer carries an anchored message, whose anchor and echoed
+     contribution the receiver checks against what it read optically
+     (§14.4.2).
+
+  ONE RULE PAIR STANDS FOR ALL THREE ANCHORED MESSAGES.  `IntentExchange`,
+  `ProximityOutcomes` and `CandidateHandover` differ in payload and share
+  their entire checking discipline -- anchor against own ceremony-id, and for
+  the intent the echoed contribution as well.  The payload is opaque here, so
+  the result covers all three.  `DeviceIntroduction` and `DeviceCredential`
+  are NOT modelled: §14.4.3 states outright that they carry no anchor, so
+  there is nothing for a symbolic model to check that the section does not
+  already concede.
+
+THE TWO CHANNELS, and this is the whole of the theory's content.
+
+  OPTICAL: **authentic and public.**  A `!Optical` fact is created only by the
+  rules below, so the adversary cannot inject one -- that is §14.1's
+  non-intermediability, taken as the premise it is.  Every optical value is
+  also sent to `Out`, so the adversary reads all of them -- that is §14.4.1's
+  "neither is secret", stated as plainly in the model as in the document.
+
+  BEARER: **fully adversarial.**  `Out` and `In`, nothing else.  Bluetooth, a
+  local radio, or a fetch through FuerosNet: §14.4 leaves the choice to the
+  shell and ranks it by locality rather than integrity, so the model gives the
+  adversary the strongest position the ranking permits.
+
+WHAT IS ESTABLISHED, AND WHAT IS NOT.  The one positive property is
+`an_accepted_anchor_was_derived_by_both`: a message accepted over the bearer
+carries a ceremony-id both devices independently computed and each read off
+the other's screen.  It is mutation-tested -- delete the anchor comparison and
+it falsifies.
+
+  **The anchor does not authenticate the sender, and does not prevent replay
+  into another ceremony.**  Both are recorded below as `exists-trace` lemmas
+  that VERIFY, because the attack being reachable is the finding: the anchor
+  and the contributions are public by §14.4.1, so an adversary that has read
+  the screens can wrap any payload it likes in a valid-looking anchor.  What
+  the check buys is that a payload cannot be accepted under an anchor nobody
+  derived -- ceremony-binding against a party who did not watch, and nothing
+  against one who did.
+
+  WHY THAT IS NOT A DEFECT IN THE DESIGN, and why the model cannot say so
+  itself.  §14.4.1 puts the man-in-the-middle resistance in one sentence --
+  "each party reads both values off a screen it is looking at" -- and the cost
+  of reading those screens is physical presence, which is the cost design §1
+  meters.  **Dolev-Yao has no locality**: reading `Out` is free here, so the
+  adversary of this model is automatically co-present at no cost, and the
+  protection the design relies on is outside what any symbolic model can
+  express.  The lemmas therefore mark the boundary rather than a break: past
+  it the guarantee is physical, and §14.1 already states it as a goal that
+  nothing can verify.
+
+LIMITS, stated as the ceremony theories state theirs.
+  - **The contribution ordering is a projection.**  design §13.2 orders the
+    two contributions by ascending participant keyhash; the model fixes the
+    initiator's first.  That is what the ordering rule achieves -- one
+    canonical term both sides compute -- and an implementation getting the
+    order wrong produces two different ceremony-ids, which is the mismatch
+    step 3 catches and not a property this theory adds.
+  - **The payload is opaque.**  Nothing here models what an intent's bundle
+    is worth: a bundle entry's integrity comes from its own signatures
+    (`wire-format.md` §5.3 requires each to verify alone), not from the
+    anchor, so bearer substitution cannot manufacture a qualifying record it
+    does not already hold.  That is the wire theories' subject, not this one's.
+  - **No confidentiality is modelled or claimed**, because none is wanted:
+    §14.4.2 closed the confidential-bearer question, nothing carried being
+    secret.
+================================================================================
+*/
+
+begin
+
+builtins: hashing
+
+restriction Distinct:
+  "All a b #i. Distinct(a, b) @ #i ==> not(a = b)"
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ #i ==> x = y"
+
+/*
+--------------------------------------------------------------------------------
+  THE OPTICAL EXCHANGE -- authentic, and public
+--------------------------------------------------------------------------------
+  Each rule mints one contribution and shows it.  The `!Optical` fact is the
+  screen: unforgeable, because no adversary rule produces one.  The `Out` is
+  the same value in the clear, because a QR held up between two phones hides
+  nothing from a third camera.
+*/
+
+rule Initiator_Shows_Contribution:
+    [ Fr(~ca) ]
+  --[ Showed($A, $B, ~ca), Distinct($A, $B) ]->
+    [ !Optical($A, $B, 'contribution', ~ca)
+    , Out(~ca)
+    , Init1($A, $B, ~ca) ]
+
+rule Responder_Shows_Contribution:
+    [ Fr(~cb) ]
+  --[ Showed($B, $A, ~cb), Distinct($B, $A) ]->
+    [ !Optical($B, $A, 'contribution', ~cb)
+    , Out(~cb)
+    , Resp1($B, $A, ~cb) ]
+
+/*
+  THE CEREMONY-ID, derived and then shown (design §13.2, §14.4.1).  Both
+  rules build the identical term -- the initiator's contribution first -- for
+  the reason the document orders by keyhash: the two devices must compute one
+  value, not two.
+*/
+
+rule Initiator_Confirms:
+    [ Init1($A, $B, ca), !Optical($B, $A, 'contribution', cb) ]
+  --[ Derived($A, $B, h(<'rhtn/1:ceremony', ca, cb>)) ]->
+    [ !Optical($A, $B, 'confirm', h(<'rhtn/1:ceremony', ca, cb>))
+    , Out(h(<'rhtn/1:ceremony', ca, cb>))
+    , Init2($A, $B, ca, cb, h(<'rhtn/1:ceremony', ca, cb>)) ]
+
+rule Responder_Confirms:
+    [ Resp1($B, $A, cb), !Optical($A, $B, 'contribution', ca) ]
+  --[ Derived($B, $A, h(<'rhtn/1:ceremony', ca, cb>)) ]->
+    [ !Optical($B, $A, 'confirm', h(<'rhtn/1:ceremony', ca, cb>))
+    , Out(h(<'rhtn/1:ceremony', ca, cb>))
+    , Resp2($B, $A, cb, ca, h(<'rhtn/1:ceremony', ca, cb>)) ]
+
+/*
+  THE CHECK THAT ANCHORS.  Each device reads the other's ceremony-id and
+  compares it with its own; a mismatch stops the ceremony (§14.4.1), which
+  here is the `Eq` restriction refusing the trace.
+*/
+
+rule Initiator_Anchors:
+    [ Init2($A, $B, ca, cb, cid), !Optical($B, $A, 'confirm', theirs) ]
+  --[ Eq(theirs, cid), Anchored($A, $B, cid) ]->
+    [ AnchorA($A, $B, ca, cb, cid) ]
+
+rule Responder_Anchors:
+    [ Resp2($B, $A, cb, ca, cid), !Optical($A, $B, 'confirm', theirs) ]
+  --[ Eq(theirs, cid), Anchored($B, $A, cid) ]->
+    [ AnchorB($B, $A, cb, ca, cid) ]
+
+/*
+--------------------------------------------------------------------------------
+  THE BEARER -- everything the adversary holds
+--------------------------------------------------------------------------------
+  One send and one take, standing for all three anchored messages.  The
+  payload is fresh on the honest path and any term the adversary likes on the
+  other, which is exactly the substitution §14.4.2's echo check is there to
+  catch.
+*/
+
+rule Bearer_Send:
+    [ AnchorA($A, $B, ca, cb, cid), Fr(~payload) ]
+  --[ Sent($A, $B, cid, ~payload) ]->
+    [ Out(<'anchored', cid, ca, ~payload>) ]
+
+rule Bearer_Take:
+    [ AnchorB($B, $A, cb, ca, cid), In(<'anchored', anchor, echo, payload>) ]
+  --[ Eq(anchor, cid)                 // the anchor, against this device's own
+    , Eq(echo, ca)                    // the echoed contribution (§14.4.2)
+    // THE ANCHOR AS THE MESSAGE CARRIED IT, not as this device computed it.
+    // Recording the device's own `cid` here would make the lemma below hold
+    // through `Responder_Anchors`' optical confirm whatever the bearer said,
+    // and deleting the comparison above would leave it verifying -- a green
+    // lemma for an unchecked field, which is the failure the theory
+    // mutations exist to catch.
+    , Accepted($B, $A, anchor, payload) ]->
+    [ ]
+
+/*
+--------------------------------------------------------------------------------
+  LEMMAS
+--------------------------------------------------------------------------------
+*/
+
+// SANITY, and it must exclude the adversary doing the work: an honest run in
+// which the payload accepted is the payload sent.
+lemma exchange_is_executable:
+  exists-trace
+  "Ex A B cid p #s #i.
+       Sent(A, B, cid, p) @ #s
+     & Accepted(B, A, cid, p) @ #i
+     & #s < #i"
+
+/*  THE ONE POSITIVE PROPERTY.  A message accepted over the bearer carries a
+    ceremony-id that BOTH devices independently derived -- so the anchor
+    cannot be a value the adversary chose, and cannot be one only a single
+    party ever computed.  That is ceremony-binding, and it is all of it.
+
+    MUTATION-TESTED: replace `Eq(anchor, cid)` in `Bearer_Take` with a
+    tautology and this falsifies, the adversary then supplying an anchor
+    nobody derived.                                                         */
+lemma an_accepted_anchor_was_derived_by_both:
+  "All B A cid p #i.
+     Accepted(B, A, cid, p) @ #i
+     ==> (Ex #x. Derived(A, B, cid) @ #x & #x < #i)
+       & (Ex #y. Derived(B, A, cid) @ #y & #y < #i)"
+
+/*  THE FIRST BOUNDARY, and it VERIFIES because the attack is reachable.  The
+    contribution is public (§14.4.1), so an adversary that read the screens
+    echoes it correctly and the receiver accepts a payload the sender never
+    sent.  §14.4.2 says the echo catches "a bearer that does not agree with
+    the screen"; what it catches is a bearer contradicting the screen, never
+    one quoting it.                                                          */
+lemma the_anchor_does_not_authenticate_the_sender:
+  exists-trace
+  "Ex B A cid p #i.
+       Accepted(B, A, cid, p) @ #i
+     & not(Ex #s. Sent(A, B, cid, p) @ #s)"
+
+/*  THE SECOND BOUNDARY, same cause.  The ceremony-id is public too, so a
+    payload from one ceremony is re-anchorable into another: the adversary
+    rewraps it under the second ceremony's id and echo, both of which it
+    read.  Ceremony-binding holds against a party who did not watch the
+    screens and not against one who did.                                     */
+lemma a_payload_is_re_anchorable_into_another_ceremony:
+  exists-trace
+  "Ex A B cid1 cid2 p #s #i.
+       Sent(A, B, cid1, p) @ #s
+     & Accepted(B, A, cid2, p) @ #i
+     & not(cid1 = cid2)"
+
+end

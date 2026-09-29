@@ -265,5 +265,13 @@ fn implemented_kind(kind: &str) -> bool {
             | "Delegation"
             | "ArchiveReply"
             | "PrekeyReply"
+            | "OpticalContribution"
+            | "TranscriptConfirm"
+            | "IntentExchange"
+            | "ProximityOutcomes"
+            | "Candidates"
+            | "CandidateHandover"
+            | "DeviceIntroduction"
+            | "DeviceCredential"
     )
 }

@@ -10,7 +10,7 @@ That is their purpose — **a disagreement between a vector and the
 specification is a finding against one of them**, and either answer is
 progress. Both rounds so far produced specification fixes.
 
-**Pinned**: wire-format.md `0c0f6723864573e1ca626ae52a6573c954240e2902fc01f30bc45552cd6de92d` · network-design.md `aeb023d9a5af1e9e6358c601265cb6a599126fe5ee88a69fdc56a9b92eb6f703`
+**Pinned**: wire-format.md `5e3447586c61e0c9a603f4d7b2ca81cb563ba365c700981ff6b2cce456a36873` · network-design.md `aeb023d9a5af1e9e6358c601265cb6a599126fe5ee88a69fdc56a9b92eb6f703`
 
 **Scope**: wire-format/protocol **interoperability** vectors.
 `light-client-requirements.md` is pinned alongside the two protocol documents
@@ -50,6 +50,7 @@ vector. This file and `negative-vectors.md` are authored by hand.
 | `corpus.json` | The machine-readable corpus (bar 6): every fixture under a stable id with class, exact bytes and a structured expect — no harness parses Markdown headings as an interface |
 | *(the Rust corpus runner)* | Retired 2026-09-22 [author]. Its parser grew into `rhtn-codec`, and `crates/crypto/tests/corpus.rs` now carries every corpus entry through the workspace's own decoder and RustCrypto `ml-dsa`, against the generator's dilithium-py signatures: the cross-implementation check the runner made, without a second decoder to keep in step with the wire |
 | `verifier-selection.md` | The reasonableness criterion — `required()` table rows generated from the formula — and the window boundaries. *The nonce, seed and rank vectors retired 2026-09-01 with deterministic selection* |
+| `local-interfaces.md` | The five local device-to-device encodings of `wire-format.md` §14.4, as one coherent exchange [2026-09-29]: the optical contributions and the ceremony-id they derive (`records.md`'s pre-commitment known answer byte-for-byte), the bearer-carried intent echoing one, the two anchored exchanges, and the handover between one identity's devices reusing `records.md`'s delegation and desktop bundle. **No signatures of their own** — every one is unsigned, which is the point §14.4.3 and `models/tamarin/local/` both turn on |
 | `negative-vectors.md` | Conformance fixtures against a **structured result model** (structural / signatures / chain / per-subject selection / effectiveness / evidentiary), in byte-level, context-dependent, method, and must-accept sections |
 
 ## What every vector assumes

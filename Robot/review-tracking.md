@@ -12761,3 +12761,61 @@ survey confirmed, worth remembering at integration: InsightFace's weights
 are non-commercial however MIT its code is, and most "permissive"
 MobileFaceNet conversions inherit research-only training data. Licences
 re-verified at integration time, per the brief.
+
+## §14.4 vectors and model, and the overclaim the model found (2026-09-29)
+
+Both of §14.3's remaining items, done together because the model is what
+told us whether the vectors were describing a guarantee.
+
+**Vectors** — `test-vectors/local-interfaces.md`, generated. Written as one
+exchange so every value is tied to something that already existed: the
+contributions and ceremony-id ARE `records.md`'s pre-commitment known answer,
+the intent's bundle entry IS the alice-c1 envelope, the credential's
+delegation and bundle ARE `records.md`'s desktop fixtures — nine `verify.py`
+checks re-derive those ties from the corpus rather than trusting the
+generator. Corpus 241 → 264 entries: nine positives, the bounds pairs
+(8/9 candidates, 8/9 channels, 16/17 delegations), and the shape negatives
+(port zero, empty candidate list, 8-byte address, 15-byte contribution,
+31-byte ceremony-id, 65 nominees); the 257-entry bundle bound is a `unit`
+recipe, 257 hybrid-signed envelopes being past the size discipline.
+
+**The negatives would have been silent.** `crates/crypto/tests/corpus.rs`
+skips a reject fixture whose kind no validator implements, so the eight new
+kinds got schema arms in `crates/codec/src/schema.rs` and their bounds in
+`bounds.rs`. The existing `Channel` validation was factored out and shared,
+since `ProximityOutcomes` carries §4.5's maps unchanged — the reuse the spec
+claims, made real in one function rather than two copies.
+
+**Model** — a THIRD tree, `models/tamarin/local/exchange.spthy`, because
+neither existing one fits: `wire-only/` needs a third party checking bytes
+(there is none; no record is produced) and `compliant/` is a single party's
+own obligation (this is an exchange under an adversary). Optical channel:
+authentic (`!Optical` facts, unforgeable) but public (`Out`). Bearer: pure
+Dolev-Yao.
+
+**What it established, and the finding.** `an_accepted_anchor_was_derived_by_
+both` verifies and is mutation-tested — the mutation is wired into
+`run-all.sh` and falsifies, after a first attempt at it did NOT: recording the
+receiver's own `cid` in the `Accepted` action made the lemma hold through the
+optical confirm whatever the bearer said, so the action now records the
+anchor **as the message carried it**. That near-miss is the reason the
+mutation gate exists. The two boundaries are `exists-trace` lemmas that
+verify: the anchor authenticates nobody, and a payload is re-anchorable into
+another ceremony. Cause in both: §14.4.1 makes every anchored value public,
+so reading the screens is the whole of the attacker's work.
+
+**Swept, not patched at one site**: three places in `wire-format.md` §14.4
+claimed a bearer substitution is caught; each now says *by a party that did
+not watch the screens*. §14.3 rewritten from an owed list to what the
+encodings establish, with the sentence an implementer needs — none of it is
+cryptographic. §14 preamble marks the section complete. NET-016 warns the
+test author off an authentication test that cannot pass. `models/README.md`
+gained the third tree and a corrected `compliant/` count (29 → 33, stale
+since two theories grew; counted from `results/`, not from source).
+
+**Not claimed**: the theory models the three anchored messages as one
+send/take pair (they share the whole checking discipline and the payload is
+opaque), does not model §14.4.3's handover (§14.4.3 already concedes it
+carries no anchor), fixes the contribution order rather than deriving it from
+keyhashes, and says nothing about a bundle entry's worth — that comes from
+each entry's own signatures (§5.3), not from the anchor.

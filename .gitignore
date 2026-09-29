@@ -6,3 +6,8 @@ __pycache__/
 states/
 *.st
 models/results/*.spthy
+
+# Assistant-facing guidance that is not part of the design set [author,
+# 2026-09-29]: the seven root documents plus CLAUDE.md are what the
+# repository carries, and Robot/ holds everything else process-facing
+AGENTS.md

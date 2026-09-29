@@ -1,0 +1,197 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory RHTNLocalExchange] Theory loaded
+[Theory RHTNLocalExchange] Theory translated
+[Theory RHTNLocalExchange] Derivation checks started
+[Theory RHTNLocalExchange] Derivation checks ended
+[Theory RHTNLocalExchange] Theory closed
+[Saturating Sources] Step 1 (Max 5)
+[Saturating Sources] Done
+theory RHTNLocalExchange
+
+begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1, h/1, pair/2, snd/1
+equations: fst(<x.1, x.2>) = x.1, snd(<x.1, x.2>) = x.2
+
+restriction Distinct:
+  "∀ a b #i. (Distinct( a, b ) @ #i) ⇒ (¬(a = b))"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ a b #i. (Distinct( a, b ) @ #i) ⇒ (¬(a = b))"
+  */
+
+restriction Equality:
+  "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
+  */
+
+rule (modulo E) Initiator_Shows_Contribution:
+   [ Fr( ~ca ) ]
+  --[ Showed( $A, $B, ~ca ), Distinct( $A, $B ) ]->
+   [
+   !Optical( $A, $B, 'contribution', ~ca ), Out( ~ca ), Init1( $A, $B, ~ca )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Responder_Shows_Contribution:
+   [ Fr( ~cb ) ]
+  --[ Showed( $B, $A, ~cb ), Distinct( $B, $A ) ]->
+   [
+   !Optical( $B, $A, 'contribution', ~cb ), Out( ~cb ), Resp1( $B, $A, ~cb )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Initiator_Confirms:
+   [ Init1( $A, $B, ca ), !Optical( $B, $A, 'contribution', cb ) ]
+  --[ Derived( $A, $B, h(<'rhtn/1:ceremony', ca, cb>) ) ]->
+   [
+   !Optical( $A, $B, 'confirm', h(<'rhtn/1:ceremony', ca, cb>) ),
+   Out( h(<'rhtn/1:ceremony', ca, cb>) ),
+   Init2( $A, $B, ca, cb, h(<'rhtn/1:ceremony', ca, cb>) )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Responder_Confirms:
+   [ Resp1( $B, $A, cb ), !Optical( $A, $B, 'contribution', ca ) ]
+  --[ Derived( $B, $A, h(<'rhtn/1:ceremony', ca, cb>) ) ]->
+   [
+   !Optical( $B, $A, 'confirm', h(<'rhtn/1:ceremony', ca, cb>) ),
+   Out( h(<'rhtn/1:ceremony', ca, cb>) ),
+   Resp2( $B, $A, cb, ca, h(<'rhtn/1:ceremony', ca, cb>) )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Initiator_Anchors:
+   [ Init2( $A, $B, ca, cb, cid ), !Optical( $B, $A, 'confirm', theirs ) ]
+  --[ Eq( theirs, cid ), Anchored( $A, $B, cid ) ]->
+   [ AnchorA( $A, $B, ca, cb, cid ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Responder_Anchors:
+   [ Resp2( $B, $A, cb, ca, cid ), !Optical( $A, $B, 'confirm', theirs ) ]
+  --[ Eq( theirs, cid ), Anchored( $B, $A, cid ) ]->
+   [ AnchorB( $B, $A, cb, ca, cid ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Bearer_Send:
+   [ AnchorA( $A, $B, ca, cb, cid ), Fr( ~payload ) ]
+  --[ Sent( $A, $B, cid, ~payload ) ]->
+   [ Out( <'anchored', cid, ca, ~payload> ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Bearer_Take:
+   [
+   AnchorB( $B, $A, cb, ca, cid ), In( <'anchored', anchor, echo, payload> )
+   ]
+  --[ Eq( cid, cid ), Eq( echo, ca ), Accepted( $B, $A, anchor, payload )
+  ]->
+   [ ]
+
+  /* has exactly the trivial AC variant */
+
+lemma exchange_is_executable:
+  exists-trace
+  "∃ A B cid p #s #i.
+    ((Sent( A, B, cid, p ) @ #s) ∧ (Accepted( B, A, cid, p ) @ #i)) ∧
+    (#s < #i)"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ A B cid p #s #i.
+  (Sent( A, B, cid, p ) @ #s) ∧ (Accepted( B, A, cid, p ) @ #i) ∧ #s < #i"
+*/
+by sorry
+
+lemma an_accepted_anchor_was_derived_by_both:
+  all-traces
+  "∀ B A cid p #i.
+    (Accepted( B, A, cid, p ) @ #i) ⇒
+    ((∃ #x. (Derived( A, B, cid ) @ #x) ∧ (#x < #i)) ∧
+     (∃ #y. (Derived( B, A, cid ) @ #y) ∧ (#y < #i)))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ B A cid p #i.
+  (Accepted( B, A, cid, p ) @ #i)
+ ∧
+  ((∀ #x. (Derived( A, B, cid ) @ #x) ⇒ ¬(#x < #i)) ∨
+   (∀ #y. (Derived( B, A, cid ) @ #y) ⇒ ¬(#y < #i)))"
+*/
+simplify
+solve( (∀ #x. (Derived( $A, $B, cid.1 ) @ #x) ⇒ ¬(#x < #i))  ∥
+       (∀ #y. (Derived( $B, $A, cid.1 ) @ #y) ⇒ ¬(#y < #i)) )
+  case case_1
+  solve( AnchorB( $B, $A, cb, ca, cid ) ▶₀ #i )
+    case Responder_Anchors
+    solve( !KU( ~ca ) @ #vk.5 )
+      case Bearer_Send
+      SOLVED // trace found
+    qed
+  qed
+qed
+
+lemma the_anchor_does_not_authenticate_the_sender:
+  exists-trace
+  "∃ B A cid p #i.
+    (Accepted( B, A, cid, p ) @ #i) ∧ (¬(∃ #s. Sent( A, B, cid, p ) @ #s))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ B A cid p #i.
+  (Accepted( B, A, cid, p ) @ #i) ∧ ∀ #s. (Sent( A, B, cid, p ) @ #s) ⇒ ⊥"
+*/
+by sorry
+
+lemma a_payload_is_re_anchorable_into_another_ceremony:
+  exists-trace
+  "∃ A B cid1 cid2 p #s #i.
+    ((Sent( A, B, cid1, p ) @ #s) ∧ (Accepted( B, A, cid2, p ) @ #i)) ∧
+    (¬(cid1 = cid2))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ A B cid1 cid2 p #s #i.
+  (Sent( A, B, cid1, p ) @ #s) ∧ (Accepted( B, A, cid2, p ) @ #i)
+ ∧
+  ¬(cid1 = cid2)"
+*/
+by sorry
+
+/* All wellformedness checks were successful. */
+
+/*
+Generated from:
+Tamarin version 1.12.0
+Maude version 3.5.1
+Git revision: 82780bbaf3328a45f624ddb41e51bf75425f851c (with uncommited changes), branch: master
+Compiled at: 2026-03-07 14:22:39.174278293 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: /home/aspiringsavage/Documents/FuerosNet/models/results/mutant-local-exchange-an_accepted_anchor_was_derived_by_both.spthy
+
+  processing time: 1.03s
+  
+  exchange_is_executable (exists-trace): analysis incomplete (1 steps)
+  an_accepted_anchor_was_derived_by_both (all-traces): falsified - found trace (5 steps)
+  the_anchor_does_not_authenticate_the_sender (exists-trace): analysis incomplete (1 steps)
+  a_payload_is_re_anchorable_into_another_ceremony (exists-trace): analysis incomplete (1 steps)
+
+==============================================================================

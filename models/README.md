@@ -15,8 +15,20 @@ verification result comes from the tool." Re-run everything with
 ```
 
 Current status: 3 Python assertion families, 5 TLA+ models (invariants +
-temporal properties), and **8 Tamarin theories in two trees** — `wire-only/`
-(38 lemmas) and `compliant/` (29 lemmas).
+temporal properties), and **9 Tamarin theories in three trees** —
+`wire-only/` (38 lemmas), `compliant/` (33) and `local/` (4). Counted from
+what the tool reported in `results/`, not from the source: the
+`compliant/` figure had stood at 29 since before `attach.spthy` and
+`recovery.spthy` grew, and is corrected here [2026-09-29].
+
+**`local/` is the third tree, added 2026-09-29** with `exchange.spthy`:
+`wire-format.md` §14.4's device-to-device exchange, where the optical
+channel is authentic but public and the bearer is the adversary's. Neither
+older tree fits it — there is no third party checking bytes and no
+single-party obligation — and its result is as much a boundary as a
+guarantee: the anchor binds a message to a ceremony both devices computed,
+and authenticates nobody, every anchored value being public by §14.4.1. The
+two reachable attacks are recorded as `exists-trace` lemmas that verify.
 
 **Three obligations verify only over a bounded model**, all in `compliant/`:
 `no_issuance_for_a_key_this_issuer_superseded` in `currency.spthy`, and

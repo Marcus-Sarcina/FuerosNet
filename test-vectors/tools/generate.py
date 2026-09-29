@@ -3506,6 +3506,195 @@ principal_id:
 ```
 """)
 
+# ---------------------------------------------- local-interfaces.md (§14.4)
+# The five local device-to-device encodings, one coherent exchange: alice
+# initiates with bob, the contributions and ceremony-id are records.md's
+# pre-commitment known answer byte-for-byte, and the device handover reuses
+# keys.md's desktop transport key, records.md's delegation and the desktop's
+# prekey bundle byte-for-byte.  The bytes are the objects alone: what a QR
+# encodes them as, and how a bearer frames them, is no part of these vectors.
+
+oc_alice = e_arr([e_uint(1), e_bstr(alice.keyhash), e_bstr(pc_a)])
+oc_bob = e_arr([e_uint(1), e_bstr(bob.keyhash), e_bstr(pc_b)])
+tconfirm = e_arr([e_uint(1), e_bstr(pc_demo)])
+
+# the intent alice's bearer carries: her echoed contribution, carol nominated
+# from bob's neighbourhood, her one prior record (the alice-c1 envelope; §7.9
+# permits the envelope and the presented forms both, and the envelope is the
+# holder-withholds-nothing case), and the defaults the documents state
+intent_x = e_arr([e_uint(1), e_bstr(pc_a),
+                  e_arr([e_bstr(carol.keyhash)]),
+                  e_arr([pc1_env]),
+                  e_uint(TS_REC), e_uint(2), b'\xf5'])
+
+# the outcomes that crossed are the channels the record's own proximity
+# disclosure carries, byte-for-byte (NFC pass, optical pass)
+prox_channels = [e_map([(e_uint(1), e_uint(2)), (e_uint(2), e_uint(0))]),
+                 e_map([(e_uint(1), e_uint(3)), (e_uint(2), e_uint(0))])]
+prox_x = e_arr([e_uint(1), e_bstr(pc_demo), e_arr(prox_channels)])
+
+def candidate(kind, ip, port):
+    return e_arr([e_uint(kind), e_bstr(bytes(ip)), e_uint(port)])
+cand_host = candidate(0, [192, 0, 2, 7], 4443)                    # TEST-NET-1
+cand_v6 = candidate(1, [0x20, 0x01, 0x0d, 0xb8] + [0] * 11 + [7], 40404)
+cands_bare = e_arr([cand_host, cand_v6])
+cand_handover = e_arr([e_uint(1), e_bstr(pc_demo), cands_bare])
+
+# the handover between alice's two devices: the desktop's transport key and
+# its bundle payload (the PrekeyBundle map with field 6 absent — exactly
+# what alice's identity signs), answered by the delegation and the signed
+# bundle records.md already carries
+intro_payload = e_map(pk_desk_pairs)
+dev_intro = e_arr([e_uint(1), e_bstr(TK['alice-desktop'].pub), e_bstr(intro_payload)])
+dev_cred = e_arr([e_uint(1), e_arr([e_bstr(deleg_alice_desktop)]), e_bstr(prekey_desktop)])
+
+emit('local-interfaces.md', f"""# Local device-to-device interfaces (`wire-format.md` §14.4)
+
+{PIN}
+
+**Draft. Spec-derived, unverified by an implementation.** The five encodings
+of `wire-format.md` §14.4, as one coherent exchange: **alice initiates with
+bob**, the contributions and the ceremony-id are the pre-commitment known
+answer in `records.md` **byte-for-byte**, and the device handover reuses the
+desktop transport key (`keys.md`), alice's delegation to it (`records.md`)
+and the desktop's signed prekey bundle (`records.md`) byte-for-byte. The
+bytes are the objects alone — what a QR encodes them as, and how a bearer
+frames them, is the shell's and no part of these vectors. **Interpretations
+taken**: the intent's bundle entry uses `wire-format.md` §7.9's *envelope*
+form (the presented form is equally legal; the envelope is the
+holder-withholds-nothing case); the intent's retention is the design's
+stated two-year default; the proximity outcomes are the channel maps the
+normal record's own `proximity` disclosure carries.
+
+## The optical exchange (§14.4.1–.2)
+
+**OpticalContribution — alice's first QR** ({len(oc_alice)} bytes):
+
+```
+{hexblock(oc_alice)}
+```
+
+**OpticalContribution — bob's** ({len(oc_bob)} bytes):
+
+```
+{hexblock(oc_bob)}
+```
+
+**TranscriptConfirm — the second QR, both devices' (the ceremony-id each
+computed; a receiver checks it equals its own)** ({len(tconfirm)} bytes):
+
+```
+{hexblock(tconfirm)}
+```
+
+## The bearer-carried intent (§14.4.2)
+
+**IntentExchange — alice's, echoing her optical contribution; carol
+nominated, one prior record carried as its envelope, retention 2,
+initiator true** ({len(intent_x)} bytes):
+
+```
+{hexblock(intent_x)}
+```
+
+## The anchored exchanges (§14.4.2)
+
+**ProximityOutcomes — the two channels the normal record's disclosure
+carries, NFC pass then optical pass, anchored to the ceremony-id**
+({len(prox_x)} bytes):
+
+```
+{hexblock(prox_x)}
+```
+
+**Candidates, bare — the payload path's form: an IPv4 host candidate and an
+IPv6 server-reflexive one** ({len(cands_bare)} bytes):
+
+```
+{hexblock(cands_bare)}
+```
+
+**CandidateHandover — the same two candidates on the ceremony's channels,
+anchored** ({len(cand_handover)} bytes):
+
+```
+{hexblock(cand_handover)}
+```
+
+## The handover between one identity's devices (§14.4.3)
+
+**DeviceIntroduction — alice's desktop offers its transport key and its
+unsigned bundle payload (the `PrekeyBundle` map, field 6 absent)**
+({len(dev_intro)} bytes):
+
+```
+{hexblock(dev_intro)}
+```
+
+**DeviceCredential — the answer: one delegation and the signed bundle, each
+byte-identical to its `records.md` fixture** ({len(dev_cred)} bytes):
+
+```
+{hexblock(dev_cred)}
+```
+""")
+
+for fid, by, kind, note in [
+    ('P-optical-contribution-alice', oc_alice, 'OpticalContribution', "alice's first QR"),
+    ('P-optical-contribution-bob', oc_bob, 'OpticalContribution', "bob's"),
+    ('P-transcript-confirm', tconfirm, 'TranscriptConfirm', "the ceremony-id both derive; records.md's known answer"),
+    ('P-intent-exchange', intent_x, 'IntentExchange', 'echoes the optical contribution; bundle entry is the §7.9 envelope form'),
+    ('P-proximity-outcomes', prox_x, 'ProximityOutcomes', "the record's own channels, anchored"),
+    ('P-candidates-bare', cands_bare, 'Candidates', 'the payload path form; both address families'),
+    ('P-candidate-handover', cand_handover, 'CandidateHandover', 'the same candidates, anchored'),
+    ('P-device-introduction', dev_intro, 'DeviceIntroduction', 'field 3 is the PrekeyBundle map, field 6 absent'),
+    ('P-device-credential', dev_cred, 'DeviceCredential', 'delegation and signed bundle, byte-identical to records.md'),
+]:
+    reg(fid, 'bytes', ACC(kind, note), by)
+
+_c9 = [candidate(0, [192, 0, 2, i + 1], 4443) for i in range(9)]
+reg('B-candidates-8', 'bytes', ACC('Candidates', 'eight candidates, the ceiling'), e_arr(_c9[:8]))
+reg('B-candidates-9', 'bytes',
+    REJ('Candidates', 'schema', 'nine candidates exceed the ceiling of eight'), e_arr(_c9))
+reg('N-candidates-empty', 'bytes',
+    REJ('Candidates', 'schema', 'a candidate exchange carries one to eight, and an empty gather is no offer'),
+    e_arr([]))
+reg('N-candidate-port-zero', 'bytes',
+    REJ('Candidates', 'schema', 'zero is never a destination'),
+    e_arr([candidate(0, [192, 0, 2, 7], 0)]))
+reg('N-candidate-addr-8-bytes', 'bytes',
+    REJ('Candidates', 'schema', 'an address is 4 bytes or 16, nothing between'),
+    e_arr([candidate(0, [192, 0, 2, 7, 0, 0, 0, 7], 4443)]))
+reg('N-optical-contribution-15', 'bytes',
+    REJ('OpticalContribution', 'schema', 'a contribution is 16 bytes'),
+    e_arr([e_uint(1), e_bstr(alice.keyhash), e_bstr(pc_a[:15])]))
+reg('N-transcript-confirm-31', 'bytes',
+    REJ('TranscriptConfirm', 'schema', 'a ceremony-id is 32 bytes'),
+    e_arr([e_uint(1), e_bstr(pc_demo[:31])]))
+reg('N-intent-nominees-65', 'bytes',
+    REJ('IntentExchange', 'schema', 'nominees bound at 64'),
+    e_arr([e_uint(1), e_bstr(pc_a),
+           e_arr([e_bstr(H(b'rhtn-test-vectors:nominee:' + bytes([i]))) for i in range(65)]),
+           e_arr([]), e_uint(TS_REC), e_uint(2), b'\xf5']))
+reg('B-outcomes-channels-8', 'bytes', ACC('ProximityOutcomes', 'eight channels, the ceiling'),
+    e_arr([e_uint(1), e_bstr(pc_demo), e_arr(prox_channels * 4)]))
+reg('N-outcomes-channels-9', 'bytes',
+    REJ('ProximityOutcomes', 'schema', "nine channels exceed the record's own ceiling of eight"),
+    e_arr([e_uint(1), e_bstr(pc_demo), e_arr(prox_channels * 4 + prox_channels[:1])]))
+reg('N-outcomes-channels-empty', 'bytes',
+    REJ('ProximityOutcomes', 'schema', 'an outcome exchange carries at least one channel'),
+    e_arr([e_uint(1), e_bstr(pc_demo), e_arr([])]))
+reg('B-credential-delegations-16', 'bytes',
+    ACC('DeviceCredential', 'sixteen delegations, 32 days, the ceiling'),
+    e_arr([e_uint(1), e_arr([e_bstr(deleg_alice_desktop)] * 16), e_bstr(prekey_desktop)]))
+reg('N-credential-delegations-17', 'bytes',
+    REJ('DeviceCredential', 'schema', 'seventeen delegations exceed the ceiling of sixteen'),
+    e_arr([e_uint(1), e_arr([e_bstr(deleg_alice_desktop)] * 17), e_bstr(prekey_desktop)]))
+reg('U-intent-bundle-257', 'unit',
+    REJ('IntentExchange', 'schema', 'a bundle of 257 entries exceeds the ceiling of 256'),
+    note='recipe: any IntentExchange whose field-4 array holds 257 ArchiveEntry values; '
+         'materialising one exceeds the corpus size discipline (257 hybrid-signed envelopes)')
+
 # ---------------------------------------------------------------- write files
 
 import os

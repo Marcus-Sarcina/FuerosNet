@@ -857,6 +857,86 @@ fn record_extension_bounds(b: &[u8], kind: &str, item: &Item) -> Result<(), Erro
     }
 }
 
+/// The §4.5 `Channel` maps, exactly as a record's proximity field and a
+/// `ProximityOutcomes` exchange (`wire-format.md` §14.4.2) both carry
+/// them.  Each channel's kind and outcome are closed enumerations, and
+/// §1.2 rejects an unknown value in a known enumerated field.
+fn channels_ok(ch: &[Item]) -> Result<(), Error> {
+    for c in ch {
+        let Item::Map(cm) = c else {
+            return Err(Error("channel not map"));
+        };
+        match map_get(cm, 1).and_then(as_uint) {
+            Some(1..=4) => {}
+            _ => return Err(Error("channel kind out of range")),
+        }
+        match map_get(cm, 2).and_then(as_uint) {
+            Some(0..=2) => {}
+            _ => return Err(Error("channel outcome out of range")),
+        }
+        match map_get(cm, 4) {
+            Some(Item::Bytes(r)) if !r.is_empty() && r.len() <= 128 => {}
+            None => {}
+            _ => return Err(Error("channel evidence out of range")),
+        }
+    }
+    Ok(())
+}
+
+/// A `Candidate` array (`wire-format.md` §14.4.2): one to eight, each
+/// `[kind, address, port]` — kind a closed enumeration, the address 4
+/// bytes or 16 and nothing between, and port zero never a destination.
+fn candidates_ok(item: &Item) -> Result<(), Error> {
+    let Item::Array(cs) = item else {
+        return Err(Error("candidates not array"));
+    };
+    if cs.is_empty() || cs.len() > CANDIDATES_PER_EXCHANGE {
+        return Err(Error("one to eight candidates"));
+    }
+    for c in cs {
+        let Item::Array(f) = c else {
+            return Err(Error("candidate not array"));
+        };
+        if f.len() != 3 {
+            return Err(Error("a candidate has three fields"));
+        }
+        match as_uint(&f[0]) {
+            Some(0 | 1) => {}
+            _ => return Err(Error("candidate kind out of range")),
+        }
+        match &f[1] {
+            Item::Bytes(r) if r.len() == 4 || r.len() == 16 => {}
+            _ => return Err(Error("an address is 4 or 16 bytes")),
+        }
+        match as_uint(&f[2]) {
+            Some(1..=65535) => {}
+            _ => return Err(Error("candidate port")),
+        }
+    }
+    Ok(())
+}
+
+/// A carried `PrekeyBundle` blob (`wire-format.md` §14.4.3): parses as a
+/// map, within the ceiling, its signature slot present or absent as the
+/// carriage requires.
+fn device_bundle_ok(b: &[u8], f: &Item, signed: bool) -> Result<(), Error> {
+    let Item::Bytes(r) = f else {
+        return Err(Error("bundle not bstr"));
+    };
+    if r.is_empty() || r.len() > DEVICE_BUNDLE_BYTES {
+        return Err(Error("bundle over the ceiling"));
+    }
+    let inner = parse_all(&b[r.clone()]).map_err(|_| Error("bundle does not parse"))?;
+    let Item::Map(m) = &inner else {
+        return Err(Error("bundle not a map"));
+    };
+    match (signed, map_get(m, 6).is_some()) {
+        (true, true) | (false, false) => Ok(()),
+        (true, false) => Err(Error("a credential's bundle carries field 6")),
+        (false, true) => Err(Error("an introduction's bundle omits field 6")),
+    }
+}
+
 /// Per-kind validation for the signed records and transaction bodies the
 /// corpus names.  `b` holds the bytes the item's ranges index.
 pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
@@ -987,32 +1067,153 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             if ch.is_empty() || ch.len() > PROXIMITY_CHANNELS_PER_RECORD {
                 return Err(Error("channel count"));
             }
-            // each channel's kind and outcome are closed enumerations, and
-            // §1.2 rejects an unknown value in a known enumerated field
-            // (`wire-format.md` §4.5)
-            for c in ch {
-                let Item::Map(cm) = c else {
-                    return Err(Error("channel not map"));
-                };
-                match map_get(cm, 1).and_then(as_uint) {
-                    Some(1..=4) => {}
-                    _ => return Err(Error("channel kind out of range")),
-                }
-                match map_get(cm, 2).and_then(as_uint) {
-                    Some(0..=2) => {}
-                    _ => return Err(Error("channel outcome out of range")),
-                }
-                match map_get(cm, 4) {
-                    Some(Item::Bytes(r)) if !r.is_empty() && r.len() <= 128 => {}
-                    None => {}
-                    _ => return Err(Error("channel evidence out of range")),
-                }
-            }
+            channels_ok(ch)?;
             match map_get(m, 2).and_then(as_uint) {
                 Some(1..=4) => {}
                 _ => return Err(Error("strongest channel out of range")),
             }
             Ok(())
+        }
+        // ---- the local device-to-device interfaces (`wire-format.md` §14.4)
+        "OpticalContribution" => {
+            let Item::Array(a) = item else {
+                return Err(Error("not array"));
+            };
+            if a.len() != 3 {
+                return Err(Error("three fields"));
+            }
+            as_uint(&a[0]).ok_or(Error("version"))?;
+            match &a[1] {
+                Item::Bytes(r) if r.len() == 32 => {}
+                _ => return Err(Error("a keyhash is 32 bytes")),
+            }
+            match &a[2] {
+                Item::Bytes(r) if r.len() == 16 => {}
+                _ => return Err(Error("a contribution is 16 bytes")),
+            }
+            Ok(())
+        }
+        "TranscriptConfirm" => {
+            let Item::Array(a) = item else {
+                return Err(Error("not array"));
+            };
+            if a.len() != 2 {
+                return Err(Error("two fields"));
+            }
+            as_uint(&a[0]).ok_or(Error("version"))?;
+            match &a[1] {
+                Item::Bytes(r) if r.len() == 32 => {}
+                _ => return Err(Error("a ceremony-id is 32 bytes")),
+            }
+            Ok(())
+        }
+        "IntentExchange" => {
+            let Item::Array(a) = item else {
+                return Err(Error("not array"));
+            };
+            if a.len() != 7 {
+                return Err(Error("seven fields"));
+            }
+            as_uint(&a[0]).ok_or(Error("version"))?;
+            match &a[1] {
+                Item::Bytes(r) if r.len() == 16 => {}
+                _ => return Err(Error("an echoed contribution is 16 bytes")),
+            }
+            let Item::Array(noms) = &a[2] else {
+                return Err(Error("nominees not array"));
+            };
+            if noms.len() > INTENT_NOMINEES {
+                return Err(Error("nominees over 64"));
+            }
+            for n in noms {
+                match n {
+                    Item::Bytes(r) if r.len() == 32 => {}
+                    _ => return Err(Error("a nominee is a keyhash")),
+                }
+            }
+            let Item::Array(bundle) = &a[3] else {
+                return Err(Error("bundle not array"));
+            };
+            if bundle.len() > INTENT_BUNDLE_ENTRIES {
+                return Err(Error("bundle over 256"));
+            }
+            as_uint(&a[4]).ok_or(Error("started_at"))?;
+            as_uint(&a[5]).ok_or(Error("retention"))?;
+            match &a[6] {
+                Item::Bool(_) => Ok(()),
+                _ => Err(Error("initiator is a bool")),
+            }
+        }
+        "ProximityOutcomes" => {
+            let Item::Array(a) = item else {
+                return Err(Error("not array"));
+            };
+            if a.len() != 3 {
+                return Err(Error("three fields"));
+            }
+            as_uint(&a[0]).ok_or(Error("version"))?;
+            match &a[1] {
+                Item::Bytes(r) if r.len() == 32 => {}
+                _ => return Err(Error("a ceremony-id is 32 bytes")),
+            }
+            let Item::Array(ch) = &a[2] else {
+                return Err(Error("channels not array"));
+            };
+            if ch.is_empty() || ch.len() > PROXIMITY_CHANNELS_PER_RECORD {
+                return Err(Error("one to eight channels"));
+            }
+            channels_ok(ch)
+        }
+        "Candidates" => candidates_ok(item),
+        "CandidateHandover" => {
+            let Item::Array(a) = item else {
+                return Err(Error("not array"));
+            };
+            if a.len() != 3 {
+                return Err(Error("three fields"));
+            }
+            as_uint(&a[0]).ok_or(Error("version"))?;
+            match &a[1] {
+                Item::Bytes(r) if r.len() == 32 => {}
+                _ => return Err(Error("a ceremony-id is 32 bytes")),
+            }
+            candidates_ok(&a[2])
+        }
+        "DeviceIntroduction" => {
+            let Item::Array(a) = item else {
+                return Err(Error("not array"));
+            };
+            if a.len() != 3 {
+                return Err(Error("three fields"));
+            }
+            as_uint(&a[0]).ok_or(Error("version"))?;
+            match &a[1] {
+                Item::Bytes(r) if r.len() == 32 => {}
+                _ => return Err(Error("a device key is 32 bytes")),
+            }
+            device_bundle_ok(b, &a[2], false)
+        }
+        "DeviceCredential" => {
+            let Item::Array(a) = item else {
+                return Err(Error("not array"));
+            };
+            if a.len() != 3 {
+                return Err(Error("three fields"));
+            }
+            as_uint(&a[0]).ok_or(Error("version"))?;
+            let Item::Array(dels) = &a[1] else {
+                return Err(Error("delegations not array"));
+            };
+            if dels.is_empty() || dels.len() > DELEGATIONS_PER_CREDENTIAL {
+                return Err(Error("one to sixteen delegations"));
+            }
+            for d in dels {
+                match d {
+                    Item::Bytes(r) if !r.is_empty() && r.len() <= DELEGATION_ENTRY_BYTES => {}
+                    _ => return Err(Error("a delegation entry over the ceiling")),
+                }
+            }
+            device_bundle_ok(b, &a[2], true)
         }
         "Scope" => match item {
             Item::Uint(3) => Err(Error("retired tag")),

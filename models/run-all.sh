@@ -141,8 +141,14 @@ for mut in "SupersessionDiscipline:SupersessionDiscipline_Mutation:NeverIssuedFo
 done
 
 echo "=== 3. Tamarin symbolic protocol models ==="
+#   local/     -- a two-party exchange across two channels of different
+#                  strength (`wire-format.md` §14.4), where the question is
+#                  which guarantees come from the bytes and which from the
+#                  physical premise.  Neither tree above fits: there is no
+#                  third party checking bytes, and no single-party obligation.
 for spec in wire-only/attach wire-only/currency wire-only/recovery wire-only/ceremony \
-            compliant/currency compliant/attach compliant/ceremony compliant/recovery; do
+            compliant/currency compliant/attach compliant/ceremony compliant/recovery \
+            local/exchange; do
   t="${spec%%/*}-${spec##*/}"
   [ -f "$HERE/tamarin/$spec.spthy" ] || continue
   out="$RESULTS/$t.txt"
@@ -267,6 +273,11 @@ MUTATIONS=(
   'wire-only/attach|a_delegated_bind_names_a_key_the_identity_delegated|, Eq(named, presented)             // (c)|, Eq(presented, presented)         // (c)'
   'wire-only/attach|a_delegated_bind_names_a_key_the_identity_delegated|    , Eq(namedC, presentedC)\n    , Eq(verify(csig|    , Eq(presentedC, presentedC)\n    , Eq(verify(csig'
   'wire-only/attach|a_delegated_bind_names_a_key_the_identity_delegated|Eq(verify(del, <'"'"'delegation'"'"', k, $S>, fst(km)), true)|Eq(true, true)'
+  # local/exchange -- the receiver stops comparing the bearer's anchor field
+  # with the ceremony-id it derived optically, so the adversary supplies one
+  # nobody derived.  The check is the whole of what §14.4.2 buys, the anchor
+  # being public; with it gone the exchange keeps no binding at all.
+  'local/exchange|an_accepted_anchor_was_derived_by_both|Eq(anchor, cid)                 // the anchor|Eq(cid, cid)                     // the anchor'
 )
 
 echo "=== 3c. Theory mutations: each must FALSIFY ==="

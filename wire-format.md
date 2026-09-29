@@ -4625,11 +4625,12 @@ verifiable for decades. A few hundred per user per decade is under 10 MB lifetim
 
 ## 14. Local device-to-device interfaces
 
-**Opened 2026-09-25.** The protocol has carried device-to-device exchanges
-since the ceremony was specified, and had never said what crosses them. This
-section is where that goes: the class and its defining property (§14.1),
-what travels (§14.2), and an encoding for every row (§14.4). What remains
-owed before the section is canonical is named in §14.3.
+**Opened 2026-09-25, complete 2026-09-29.** The protocol has carried
+device-to-device exchanges since the ceremony was specified, and had never
+said what crosses them. This section is where that goes: the class and its
+defining property (§14.1), what travels (§14.2), an encoding for every row
+(§14.4), and in §14.3 what the encodings turned out to guarantee — which is
+less than the checks look like, and is physical rather than cryptographic.
 
 ### 14.1 What the class is, and the property that defines it
 
@@ -4683,18 +4684,33 @@ property: the two devices are in one place, and the protocol should not
 care whether the parties either side of a local interface are two people or
 one person's two devices.
 
-### 14.3 What is owed before this section is canonical
+### 14.3 What was owed, and what the encodings turned out to establish
 
-1. **Test vectors.** `test-vectors/` covers none of §14.4's five encodings
-   yet.
-2. **A model, where a model would say anything.** The ceremony's binding is
-   modelled in `models/`; the local exchange feeding it is not.
+**All four items are closed** [author, 2026-09-28, 2026-09-29]. Every row of
+§14.2 has its encoding in §14.4, each under §1's obligations — deterministic
+CBOR, an explicit version, bounded arrays; non-intermediability is stated in
+§14.1 as the design goal it is, currently unenforceable by known means; the
+five encodings have draft vectors, as one worked exchange; and the exchange
+is modelled symbolically, with the optical channel authentic and the bearer
+the adversary's.
 
-Two earlier items are closed: every row of §14.2 now has its encoding in
-§14.4, each with the usual obligations of §1 — deterministic CBOR, an
-explicit version, and bounded arrays [author, 2026-09-28, 2026-09-29] — and
-the non-intermediability property is stated in §14.1 as the design goal it
-is, currently unenforceable by known means [author, 2026-09-29].
+**What the model established is narrower than §14.4.1 reads, and is stated
+here because a reader should not have to find it elsewhere.** An anchored
+message binds to a ceremony both devices computed — the anchor cannot be a
+value only one party derived, or one the adversary invented. It
+**authenticates nobody**. Every anchored value is public by §14.4.1: the
+contributions are shown on screens and the ceremony-id is derived from them,
+so a party that has read those screens can wrap any payload in an anchor
+that checks, and can re-anchor one ceremony's message into another. The echo
+of §14.4.2 catches a bearer that *contradicts* the screen, never one that
+quotes it.
+
+**That is the property §14.1 already describes, arriving where it was always
+going to.** The resistance is physical: reading the screens costs being
+there, which is the cost design §1 meters. What is worth stating plainly is
+that **no part of it is cryptographic** — an implementer must not read
+§14.4.2's checks as authentication, because a co-present adversary passes
+them all.
 
 ### 14.4 Carriage, and the two encodings it moves
 
@@ -4714,10 +4730,10 @@ carriage to *whatever means the two have*.
 §1.3 item 4 bars Bluetooth RSSI from the *distance* channel because signal
 strength is attacker-controllable (design §7.6.3). That bar is about evidence of
 nearness. A bearer moving data that is already bound to the optical anchor
-needs no distance guarantee of its own: a man in the middle of the Bluetooth
-link is caught by the ceremony-id each party computed from contributions
-read off the other's actual screen. The two uses are different and only one
-is barred.
+needs no distance guarantee of its own: a *remote* man in the middle of the
+Bluetooth link is caught by the ceremony-id each party computed from
+contributions read off the other's actual screen — a co-present one is not,
+and §14.3 says why. The two uses are different and only one is barred.
 
 #### 14.4.1 What the anchor is, and what it binds
 
@@ -4730,8 +4746,10 @@ that 32-byte **ceremony-id**, and each checks the other's against its own: a
 mismatch is where a man in the middle shows, and the ceremony stops. That
 value is the transcript hash the rest of the exchange binds to — consents
 and capture keys already bind to it (design §13.2), and everything the
-bearer carries is checked against it, so a substitution on the bearer
-produces a value that does not match what the two screens fixed. **Each
+bearer carries is checked against it, so a substitution by a party that did
+not watch the two screens produces a value that does not match what they
+fixed — and one by a party that did is **not** caught, every anchored value
+being public (§14.3). **Each
 party reads both values off a screen it is looking at**, which is the whole
 of the man-in-the-middle resistance and the reason this step is close-range:
 a QR of this size resolves at arm's length on a modest selfie camera, not
@@ -4781,7 +4799,9 @@ presented record is exactly what a verifier-selection bundle holds, and the
 receiver checks the echoed contribution in field 2 against the
 `OpticalContribution` it read optically before trusting anything
 bearer-carried; a mismatch is a bearer that does not agree with the screen,
-and the ceremony does not continue over it.
+and the ceremony does not continue over it. **The check is not
+authentication** and §14.3 states what it is: the contribution is public, so
+it catches a bearer contradicting the screen and never one quoting it.
 
 **Two more exchanges ride the ceremony's interfaces, anchored the same way**
 [author, 2026-09-29]:
