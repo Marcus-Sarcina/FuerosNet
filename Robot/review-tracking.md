@@ -12746,3 +12746,18 @@ have no code carriage yet, like `IntentExchange` before them.
 **Registers**: SCH-024, NET-016 added; 473 families, prefix table sums to
 the stated total. Bounds table: three rows. Vector pin regenerated after
 audit (pin-only diffs, verified with git). Refcheck 0 flags, pins 0 stale.
+
+## The biometric engine, surveyed and chosen (2026-09-29)
+
+The author asked for a survey of permissively licensed cross-platform
+on-device face verification; `Robot/biometric-engine-options.md` is the
+survey, and the author accepted its first choice the same day: **OpenCV
+SFace int8 + YuNet via the `ort` Rust crate**. design §22.2's
+canonical-profile item now records the extractor and matcher as chosen,
+with the selection rule (permissive grant on the weights themselves, from
+their distributor); the rest of the profile — registry entry, fuzzing
+algorithm, thresholds, AEAD parameters — stays open there. The trap the
+survey confirmed, worth remembering at integration: InsightFace's weights
+are non-commercial however MIT its code is, and most "permissive"
+MobileFaceNet conversions inherit research-only training data. Licences
+re-verified at integration time, per the brief.

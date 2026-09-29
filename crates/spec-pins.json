@@ -1,6 +1,6 @@
 {
  "specs": {
-  "network-design.md": "09fa2f1af863cf1295a149dcf2610891a23cd7f4f75be7622a7dc124e62d8e33",
+  "network-design.md": "aeb023d9a5af1e9e6358c601265cb6a599126fe5ee88a69fdc56a9b92eb6f703",
   "wire-format.md": "0c0f6723864573e1ca626ae52a6573c954240e2902fc01f30bc45552cd6de92d",
   "light-client-requirements.md": "d43f07ee0bc2a48aa958f66e9dd0a7ba5242caed2a76fc573bfa99490ca4e46b",
   "infra-client-requirements.md": "21abdf80e7f60b77d1b6e283d8a5a1c69b668f80df366f3cf80803239a9c9028",

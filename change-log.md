@@ -11267,3 +11267,24 @@ offer of nothing; one new transport test pins the bounds. Vector pin
 regenerated after audit — every vector change is pin-only. Refcheck 4,432
 references, 0 flags; pins 19, 0 stale. Test vectors and a model for the five
 encodings remain §14.3's owed items and are the next work.
+
+### 2026-09-29 (the engine that recognises somebody, chosen)
+
+**The biometric extractor and matcher are decided** [author, 2026-09-29]:
+OpenCV SFace, int8, with YuNet for detection and alignment, run through the
+`ort` Rust crate — 9.9 MB on device, 112×112 in, a 128-dimension template
+compared by cosine distance, and Apache-2.0 for code and model weights
+alike. The rule that did the selecting, recorded in design §22.2 with the
+decision: the weights themselves must carry a permissive grant from their
+distributor, because most published face models are trained on
+research-restricted data whatever their code licence says — the survey
+found exactly three candidates surviving that filter, and the other two
+(AuraFace-v1, unquantised at 261 MB; dlib, 2017-grade accuracy) stand as
+the upgrade path and the fallback.
+
+What this does not decide, and design §22.2 still holds open: the template
+registry entry, the fuzzing algorithm, the match thresholds and the sealed
+store's AEAD parameters — the rest of the canonical profile, to settle with
+the implementation. The survey stays a working brief outside the root; the
+design carries the decision and its selection rule in its own words and
+depends on nothing else.

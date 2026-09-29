@@ -7976,8 +7976,17 @@ order and refusal behaviour, with the role row consulted as a lookup.
   capture framing (§7.5.2). **Cross-client verification depends on the whole
   set**: a fuzzed profile one engine produces must be comparable by another's
   matcher, or verifier queries only work between clients sharing an
-  implementation. *The channel and size question is closed: any channel carries
-  32 bytes.*
+  implementation. **The extractor and matcher are chosen** [author,
+  2026-09-29]: OpenCV SFace, int8, with YuNet for detection and alignment —
+  112×112 input, a 128-dimension template compared by cosine distance, and
+  Apache-2.0 for code and model weights alike. The rule that selected it:
+  the model weights themselves must carry a permissive grant from their
+  distributor, most published face models being trained on
+  research-restricted data whatever their code licence says. The rest of
+  the set — template registry entry, fuzzing algorithm, thresholds, and the
+  sealed store's AEAD parameters — remains to decide with the
+  implementation. *The channel and size question
+  is closed: any channel carries 32 bytes.*
 - **Whether a subject may re-derive and re-release a capture key after a device
   restore** (§7.5.2).
 - **Peering audit calibration** and **replication distance** (§22.3), both tuning problems
