@@ -211,6 +211,9 @@ malformed, not merely unusual.
 | Proximity channels per record | 8 |
 | Explicit-scope keyhash list | 256 |
 | NetworkPoint entries per anchor entry or endpoint record (§7.2, §7.6) | 8 — this row is the anchor entry's and the endpoint record's alone; **peering carries exactly one `NetworkPoint` per endpoint** (§4.4) |
+| `Channel` entries per `ProximityOutcomes` (§14.4.2) | 8 — the same ceiling as proximity channels per record, above |
+| `Candidate` entries per `CandidateHandover` or per payload-path candidate exchange (§14.4.2) | 8 |
+| Delegations per `DeviceCredential` (§14.4.3) | 16 — sixteen 48-hour windows is 32 days |
 | `CatalogEntry`, total encoded bytes | 2048 |
 | `CatalogReply` entries | 111 — an answering node answers for **itself plus the ≤110 users it serves** (§6.4, design §11.5). Not the trust horizon population, which is larger (design §15.1) and irrelevant here: the bound is per *answering node*, not per horizon. The frame bound caps this at 127 |
 | Unknown extension keys per map | 16 |
@@ -4622,13 +4625,11 @@ verifiable for decades. A few hundred per user per decade is under 10 MB lifetim
 
 ## 14. Local device-to-device interfaces
 
-**Opened 2026-09-25 and deliberately incomplete.** The protocol has carried
-device-to-device exchanges since the ceremony was specified, and has never
-said what crosses them. This section is where that goes. **What is settled
-here is the class and its defining property; the encodings are not**, and
-each is named below as owed. Nothing in `test-vectors/` or `models/` covers
-this section yet, which is the work that follows a workable set of these
-interfaces rather than preceding it.
+**Opened 2026-09-25.** The protocol has carried device-to-device exchanges
+since the ceremony was specified, and had never said what crosses them. This
+section is where that goes: the class and its defining property (§14.1),
+what travels (§14.2), and an encoding for every row (§14.4). What remains
+owed before the section is canonical is named in §14.3.
 
 ### 14.1 What the class is, and the property that defines it
 
@@ -4654,6 +4655,14 @@ network**, and MUST NOT accept, as having arrived on one, anything that
 reached it another way. A shell that offered to "pair remotely" over the same
 code path would silently convert every guarantee above into an assumption.
 
+**Non-intermediability is a design goal, currently unenforceable by known
+means** [author, 2026-09-29]. No party on the far side of one of these
+interfaces shares the state that would let it verify the interface was not
+bridged (design §1.1), so the MUST above binds the implementation that
+honours it and is invisible on the wire either way: what a counterparty
+holds is the implementation's conduct, never a checkable property. The rule
+is stated as the obligation it is rather than dressed as a guarantee.
+
 ### 14.2 What travels on them today
 
 Recorded as it stands, so the set is visible before it is encoded. **Each
@@ -4664,9 +4673,9 @@ holds it, which is what the rest of the design already depends on.
 |---|---|---|---|
 | The ceremony's intent exchange — the contribution, the nominees, the evidence bundle, the timing and who initiated | Two participants' devices | design §7.1, design §13.2 | `IntentExchange` (§14.4.2), carried by the shell's chosen bearer (§14.4.1) and bound to the pre-commitment. The CBOR is specified; two vendors' clients compute the same ceremony-id (design §13.2) either way |
 | The optical transcript — each device's contribution, then the derived ceremony-id, screen to camera | Two participants' devices | design §1.3 item 3, design §13.2 | `OpticalContribution` then `TranscriptConfirm` (§14.4.2): the contribution is the key-exchange input, the ceremony-id is the transcript hash both display and check |
-| Proximity channel outcomes — the UWB, NFC or optical result and its ranking | Two participants' devices | §3.2, design §1.3 item 4 | The *outcome* is carried in records (§4.5.1); the exchange producing it is **owed** |
-| Traversal candidates | Two participants' devices | design §12.6.3 [author, 2026-09-25] | **Owed, and so is the candidate structure**, which this document has never carried |
-| A delegated device's payload material, and the ceremony device's signature over it | Two devices of one identity | design §23.3, §7.8 | **Owed.** The bundle it produces is §7.8's |
+| Proximity channel outcomes — the UWB, NFC or optical result and its ranking | Two participants' devices | §3.2, design §1.3 item 4 | `ProximityOutcomes` (§14.4.2): the §4.5 `Channel` maps as measured, anchored to the ceremony-id. The record's `strongest` (§3.2) is not carried — each device computes it from the outcomes, as each computes the ceremony-id |
+| Traversal candidates | Two participants' devices | design §12.6.3 [author, 2026-09-25] | `CandidateHandover` (§14.4.2), carrying the `Candidate` structure this document now defines; the same candidates travel the end-to-end payload path when a direct connection is set up remotely (design §12.6.3, §14.1.1) |
+| A delegated device's payload material, and the ceremony device's signature over it | Two devices of one identity | design §23.3, §7.8 | `DeviceIntroduction` then `DeviceCredential` (§14.4.3): §7.8's bundle unsigned and then signed, beside §8.2's delegations |
 
 **The last row is the one that is not between two people.** A phone
 provisioning a desktop it owns is the same class of interface and the same
@@ -4676,20 +4685,16 @@ one person's two devices.
 
 ### 14.3 What is owed before this section is canonical
 
-1. **An encoding per row of §14.2**, each with the usual obligations of §1:
-   deterministic CBOR, an explicit version, and bounded arrays. **Two are
-   specified in §14.4** [author, 2026-09-28]: the optical exchange and the
-   intent exchange, with the carriage they move over. The proximity-outcome
-   exchange, the traversal-candidate structure and the delegated-device
-   handover remain owed.
-2. **Test vectors.** `test-vectors/` covers none of this, and cannot cover
-   interfaces that have no encoding yet.
-3. **A model, where a model would say anything.** The ceremony's binding is
+1. **Test vectors.** `test-vectors/` covers none of §14.4's five encodings
+   yet.
+2. **A model, where a model would say anything.** The ceremony's binding is
    modelled in `models/`; the local exchange feeding it is not.
-4. **The non-intermediability property stated as something checkable**, or
-   stated plainly as unenforceable in the manner §1.1 requires. An
-   implementation can be told not to bridge these interfaces; no party on the
-   far side of one can verify that it did not.
+
+Two earlier items are closed: every row of §14.2 now has its encoding in
+§14.4, each with the usual obligations of §1 — deterministic CBOR, an
+explicit version, and bounded arrays [author, 2026-09-28, 2026-09-29] — and
+the non-intermediability property is stated in §14.1 as the design goal it
+is, currently unenforceable by known means [author, 2026-09-29].
 
 ### 14.4 Carriage, and the two encodings it moves
 
@@ -4757,8 +4762,8 @@ TranscriptConfirm = [          ; the second QR, once both contributions are in
 IntentExchange = [             ; carried by the bearer (§14.4.1), not optical
   uint,                        ; version, 1
   bstr .size 16,               ; the sender's contribution, echoing its
-                               ;   OpticalHandshake so a bearer that disagrees
-                               ;   with the screen is caught
+                               ;   OpticalContribution so a bearer that
+                               ;   disagrees with the screen is caught
   [ * keyhash ],               ; nominees, from the counterparty's
                                ;   neighbourhood (design §7.1); 0..64
   [ * ArchiveEntry ],          ; the evidence bundle: prior presented records
@@ -4774,13 +4779,121 @@ IntentExchange = [             ; carried by the bearer (§14.4.1), not optical
 presented record is exactly what a verifier-selection bundle holds, and the
 256-entry bound is the array bound the rest of the document carries. A
 receiver checks the echoed contribution in field 2 against the
-`OpticalHandshake` it read optically before trusting anything bearer-carried;
-a mismatch is a bearer that does not agree with the screen, and the ceremony
-does not continue over it.
+`OpticalContribution` it read optically before trusting anything
+bearer-carried; a mismatch is a bearer that does not agree with the screen,
+and the ceremony does not continue over it.
 
-**Owed still, and named**: whether a confidential bearer channel is wanted
-at all — the contributions and the bundle are not secret, and the ceremony-id
-is a commitment rather than a key, so nothing here requires bearer
-encryption; if a later decision adds one, its key exchange is a new row here
-and is not smuggled into these two. Test vectors and a model follow, as
-§14.3 orders.
+**Two more exchanges ride the ceremony's interfaces, anchored the same way**
+[author, 2026-09-29]:
+
+```
+ProximityOutcomes = [          ; what the distance channels measured
+  uint,                        ; version, 1
+  bstr .size 32,               ; the ceremony-id (§14.4.1); the receiver
+                               ;   checks it equals its own, and stops where
+                               ;   it does not
+  [ 1*8 Channel ],             ; §4.5's Channel maps, exactly as a record
+                               ;   carries them: kind, result, claimed
+                               ;   resolution, session-key binding. Eight is
+                               ;   the record's own proximity ceiling (§1.3)
+]
+```
+
+The device that drove the channels reports what they measured, and the
+counterparty weighs it — the outcome is each device's claim, as everywhere
+(design §1.3 item 4). The record's `strongest` (§3.2) is no part of the
+exchange: each device computes it from the same outcomes, and a value both
+sides derive needs no carriage.
+
+```
+Candidate = [                  ; one address for the direct path
+  uint,                        ; 0 host | 1 server-reflexive: RFC 8445's
+                               ;   candidate types, which design §14.1.1
+                               ;   defers to
+  bstr .size 4
+  / bstr .size 16,             ; the address, IPv4 or IPv6. BOTH families,
+                               ;   where §7.6's NetworkPoint takes IPv4
+                               ;   alone in v1: that rule prices PUBLISHED
+                               ;   infrastructure endpoints, routable IPv4
+                               ;   being a leg of Sybil cost (design §4),
+                               ;   and a candidate is an ephemeral address
+                               ;   handed to one peer for one dial, whose
+                               ;   success design §14.1.1 already ties to
+                               ;   IPv6 availability
+  uint,                        ; UDP port, u16 range. ZERO IS MALFORMED —
+                               ;   it is never a destination (§7.6's rule).
+                               ;   No default and no omission: a candidate
+                               ;   names its port or is not one
+]
+
+CandidateHandover = [          ; candidates on the ceremony's channels
+  uint,                        ; version, 1
+  bstr .size 32,               ; the ceremony-id (§14.4.1), checked as above
+  [ 1*8 Candidate ],           ; eight, the NetworkPoint rows' ceiling (§1.3)
+]
+```
+
+**The same `[ 1*8 Candidate ]` array, bare, is the end-to-end payload path's
+candidate exchange** when a direct connection is set up remotely (design
+§12.6.3, §14.1.1): the session it rides in already authenticates the peer,
+so the anchor field is the local carriage's alone. Either way what is handed
+over is an address to dial, not evidence of anything — reachability is
+settled by the dial (RFC 8445's checks), and nearness by the proximity
+channels and nothing else.
+
+**A confidential bearer channel is not wanted** [author, 2026-09-29, closing
+what 2026-09-28 left open]: the contributions and the bundle are not secret,
+and the ceremony-id is a commitment rather than a key, so nothing here
+requires bearer encryption. A bearer that happens to encrypt — a Bluetooth
+pairing, a fetch inside a session — is welcome and relied upon for nothing.
+Test vectors and a model follow, as §14.3 orders.
+
+#### 14.4.3 The handover between one identity's devices
+
+The last row of §14.2 is not between two people: a device that holds no seed
+is introduced to the one that does (design §23.3), across the same class of
+interface and under the same property (§14.1). Two messages, and every
+signature that comes back is the identity's:
+
+```
+DeviceIntroduction = [         ; the new device offers what it minted
+  uint,                        ; version, 1
+  device,                      ; §7.8: the raw transport key the delegation
+                               ;   will name — a device is named by nothing
+                               ;   else [author, 2026-09-22]
+  bstr .size (1..5120),        ; a PrekeyBundle (§7.8) with field 6 ABSENT:
+                               ;   the payload the identity signs, over
+                               ;   payload material the device generated
+                               ;   (design §23.3). The ceiling is §1.3's
+                               ;   4 KB blob bound plus the bundle's own
+                               ;   fields
+]
+
+DeviceCredential = [           ; the ceremony device answers
+  uint,                        ; version, 1
+  [ 1*16 bstr .size (1..4096) ],
+                               ; Delegations (§8.2), contiguous 48-hour
+                               ;   windows — the run an instance or a
+                               ;   desktop is provisioned with
+                               ;   (`infra-client-requirements.md` §7).
+                               ;   Sixteen windows is 32 days, a chosen
+                               ;   ceiling (§1.3); 4096 bounds a hybrid
+                               ;   signature and its fields with room
+  bstr .size (1..5120),        ; the same PrekeyBundle, field 6 PRESENT:
+                               ;   signed by the identity on the ceremony
+                               ;   device (§7.8, design §23.3)
+]
+```
+
+**Nothing cryptographic binds an introduction to the device across the
+table.** The two devices share no prior value — there is no ceremony here
+and no ceremony-id — so the whole of an introduction's integrity is §14.1's
+property, stated there as the goal it is. Stated plainly rather than
+softened: an intermediated introduction, which §14.1 forbids and nothing can
+detect, would carry the identity's own signatures to a key the intermediary
+chose, for as long as the delegations run. What comes back is at least
+checkable everywhere it is later used — a delegation verifies under the
+identity and names the key it delegates to (§8.2), the bundle verifies under
+the identity and names the device whose material it covers under the
+signature (§7.8, field 5) — so the artifacts say exactly what the identity
+signed, and the exposure is bounded by the windows it signed for.

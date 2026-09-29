@@ -12706,3 +12706,43 @@ overstated that this test "would exercise" §14.4, and it does not. §14.4's
 vectors and model stay owed. PRT-07 added to the acceptance catalogue (465
 entries, checker 0 flags); PRT-04's closing steps extracted as
 `sign_and_finalize`, its claims unmoved (live suite 7 of 7).
+
+## §14 completed: the last three encodings, and two questions closed (2026-09-29)
+
+Six rulings arrived together [author, 2026-09-29]; four are spec work done
+here, two are queue ordering (the verifier step with the query-carriage row
+follows the vectors-and-model work; the Meet verifier UI follows the
+encodings).
+
+**Closed as not wanted**: the confidential bearer channel — the reasoning
+already in `wire-format.md` §14.4.2 (nothing secret, the ceremony-id a
+commitment not a key) now carries the decision rather than an open question.
+
+**Stated as a goal**: non-intermediability, in `wire-format.md` §14.1 —
+"a design goal, currently unenforceable by known means" [author's words],
+grounded in design §1.1's shared-state test. Found on the way: the old
+§14.3 item's bare "§1.1" resolved against `wire-format.md` itself (domain
+separation) — structurally clean under refcheck, semantically the wrong
+document. The new text cites design §1.1 explicitly.
+
+**The three encodings** reuse before inventing: `ProximityOutcomes` =
+version, ceremony-id, 1..8 of `wire-format.md` §4.5's `Channel` maps
+unchanged (strongest computed, never carried); `Candidate`/`CandidateHandover`
+write down what `crates/transport/src/traversal.rs` has exchanged since
+traversal was built, versioned and anchored on the local carriage, bare on
+the payload path; `DeviceIntroduction`/`DeviceCredential` = `wire-format.md`
+§7.8's bundle with field 6 absent then present, plus §8.2 delegations
+(1..16, 32 days, chosen ceiling). Address families: both, distinguished
+from `NetworkPoint`'s v1-IPv4 rule on the document's own grounds (design §4
+prices published endpoints; design §14.1.1 ties traversal to IPv6
+availability) — no new justification invented.
+
+**Code reconciled, not rewritten**: `decode_candidates` bounds at eight and
+refuses port zero; the two gather paths (`crates/adaptors/src/direct.rs`,
+`crates/node/src/runtime.rs`) return no offer instead of an empty one; one
+transport test pins it. The §14.4.3 handover and the anchored exchanges
+have no code carriage yet, like `IntentExchange` before them.
+
+**Registers**: SCH-024, NET-016 added; 473 families, prefix table sums to
+the stated total. Bounds table: three rows. Vector pin regenerated after
+audit (pin-only diffs, verified with git). Refcheck 0 flags, pins 0 stale.

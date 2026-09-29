@@ -276,6 +276,7 @@ The Cargo workspace has **16 crates**. Components below follow responsibilities 
 | NET-013 | S | Never bridge a local device-to-device interface over a wide-area network, and never treat as having arrived on one anything that reached the device another way. The class is defined by not being intermediable remotely, and a ceremony's override of the horizon gate rests on that property; a remote pairing path through the same code would convert the guarantee into an assumption. Unenforceable against a peer, so stated as a commitment. | W §14.1; D §12.6.3, §1.1 |
 | NET-014 | P | Where more than one local transport is available for establishing a connection at a ceremony, prefer the one exposing least of the address behind it: a link-local duplex channel, then a shared wireless network, then cellular. Recommended and not required — the available transports are the platform's. What this protects is the carrier or ISP behind the address, not the geography, which a counterparty in the room already has. | L §4; D §19.8 C24, D §19.4 P40 |
 | NET-015 | C | The ceremony's bulk exchange rides a bearer the shell chooses, preferring a direct local radio and falling back to a FuerosNet fetch last (`wire-format.md` §14.4.1). Integrity is the optical anchor, not the bearer: both devices derive the ceremony-id from the two contributions read screen-to-screen (design §13.2) and confirm it optically, and a bearer-carried `IntentExchange` whose echoed contribution disagrees with the optical one is rejected. A bearer is never bridged over a wide-area network (NET-013), and Bluetooth as a bearer is not barred the way Bluetooth as distance evidence is (design §1.3, §7.6.3). | W §14.4; D §13.2, §1.3 |
+| NET-016 | C | The anchored local exchanges are checked against the ceremony-id both screens fixed: a `ProximityOutcomes` or `CandidateHandover` whose ceremony-id differs from the receiver's own is rejected and the ceremony does not continue (`wire-format.md` §14.4.1–.2). Each device computes the strongest channel (`wire-format.md` §3.2) from the exchanged outcomes; it is never taken on carriage. The device handover carries no anchor — one identity's two devices share no prior value — so its integrity is `wire-format.md` §14.1's stated property, and what returns is checkable: each delegation verifies under the identity and names the delegated key, the bundle verifies under the identity and names the covered device (`wire-format.md` §14.4.3, §8.2, §7.8). | W §§14.4, 14.1, 3.2, 8.2, 7.8 |
 
 ### Attach, sibling state, heartbeat and failover
 
@@ -716,6 +717,7 @@ The following ledger makes the common field-by-field mutation suite in §1 manda
 | SCH-021 | S | Cover TopologyPush kind/encoded object and TopologyMemo patron/locator/slot/source timestamp/optional occupant. Control type numbers are 1 Attach, 2 Ack, 3 Heartbeat, 4 SiblingUpdate, 5 Push, 6 Memo, 7 Delegation; numeric spaces are not interchangeable with transaction/request tags. | W §§8.0–8.2, 10 |
 | SCH-022 | S | Cover ResourceRequest resource/HTTP bytes and ResourceResponse status/conditional HTTP bytes, all statuses 0–5 and response streaming conditions. Unknown fields in either unsigned map are malformed even when the enclosed HTTP is valid. | W §§11–11.2 |
 | SCH-023 | S | Cover the ceremony's local-interface encodings (`wire-format.md` §14.4): `OpticalContribution` version/keyhash/16-byte contribution, `TranscriptConfirm` version/32-byte ceremony-id, and `IntentExchange` version/echoed contribution/nominees (0..64 keyhashes)/bundle (0..256 `ArchiveEntry`)/started_at/retention/initiator. Versioned deterministic CBOR with the §1 bounds; a bundle entry is a presented record or an envelope as `wire-format.md` §7.9 defines. | W §§14.4, 7.9, 1 |
+| SCH-024 | S | Cover the remaining local-interface encodings (`wire-format.md` §14.4.2–.3): `ProximityOutcomes` version/32-byte ceremony-id/1..8 `Channel` maps exactly as `wire-format.md` §4.5 defines them; `Candidate` kind (0 host, 1 server-reflexive)/address (4-byte IPv4 or 16-byte IPv6, both families)/nonzero u16 port, with `CandidateHandover` version/ceremony-id/1..8 candidates and the same bare 1..8 `Candidate` array on the payload path; `DeviceIntroduction` version/32-byte device key/`PrekeyBundle` payload with field 6 absent, and `DeviceCredential` version/1..16 `wire-format.md` §8.2 delegations/the bundle with field 6 present. Versioned deterministic CBOR with the §1 bounds; port zero, an empty candidate list and a ninth candidate are malformed. | W §§14.4, 4.5, 7.8, 8.2, 1 |
 
 ### Required structural boundary matrix
 
@@ -943,7 +945,7 @@ Open local parameters are not all specification defects: cache TTLs, queue cap, 
 
 ## 10. Document baseline and coverage totals
 
-This specification contains **471 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
+This specification contains **473 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
 
 | Prefix | Families |
 |---|---:|
@@ -954,7 +956,7 @@ This specification contains **471 numbered requirement/test families** across **
 | TOP | 36 |
 | RES | 15 |
 | CUR | 12 |
-| NET | 15 |
+| NET | 16 |
 | SES | 15 |
 | MAIL | 27 |
 | CER | 20 |
@@ -970,7 +972,7 @@ This specification contains **471 numbered requirement/test families** across **
 | UX | 13 |
 | OPS | 18 |
 | TOOL | 7 |
-| SCH | 23 |
+| SCH | 24 |
 | INT | 24 |
 | VAL | 11 |
 

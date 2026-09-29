@@ -230,12 +230,15 @@ impl Direct for LightDirect {
             if !(self.0.gate)(&peer) {
                 return None;
             }
-            Some(
-                self.0
-                    .socket
-                    .gather(self.0.stun, Duration::from_secs(2))
-                    .await,
-            )
+            let cands = self
+                .0
+                .socket
+                .gather(self.0.stun, Duration::from_secs(2))
+                .await;
+            // a candidate exchange carries one to eight candidates
+            // (`wire-format.md` §14.4.2): an empty gather is no offer,
+            // not an offer of nothing
+            if cands.is_empty() { None } else { Some(cands) }
         })
     }
 

@@ -11217,3 +11217,53 @@ not `wire-format.md` §14.4's wire encodings — the previous entry's closing
 overstated that, and §14.4's vectors and model stay owed. The acceptance
 catalogue carries PRT-07 (checker: 0 flags), PRT-04's closing steps are
 shared rather than repeated, and the live suite runs seven of seven.
+
+### 2026-09-29 (three encodings, a closed question, and a goal stated as one)
+
+**Every §14.2 row now has its encoding**, on six rulings taken today. The
+three that were owed reuse before they invent: `ProximityOutcomes` carries
+`wire-format.md` §4.5's `Channel` maps exactly as a record carries them,
+anchored to the ceremony-id, with §3.2's strongest computed by each device
+rather than carried; `Candidate` writes down the structure the direct path
+has exchanged since traversal was built — kind, address, nonzero port — with
+`CandidateHandover` anchoring it on the ceremony's channels and the bare
+array remaining the payload path's form; `DeviceIntroduction` and
+`DeviceCredential` carry `wire-format.md` §7.8's bundle unsigned then
+signed, beside `wire-format.md` §8.2's delegations in contiguous windows,
+sixteen being 32 days, a chosen ceiling. A candidate admits both address
+families where a `NetworkPoint` takes IPv4 alone: the v1 rule prices
+published infrastructure endpoints as Sybil cost (design §4), and a
+candidate is an ephemeral address for one dial whose success design §14.1.1
+already ties to IPv6 availability.
+
+**Two questions closed** [author, 2026-09-29]. A confidential bearer channel
+is not wanted: nothing carried is secret, the ceremony-id is a commitment
+rather than a key, and a bearer that happens to encrypt is relied upon for
+nothing. And non-intermediability is stated in `wire-format.md` §14.1 as
+what it is — a design goal, currently unenforceable by known means: no party
+across one of these interfaces shares the state that would let it verify the
+interface was not bridged (design §1.1), so the MUST binds the
+implementation that honours it and is invisible either way. The old
+`wire-format.md` §14.3 item citing "§1.1" resolved to this document's
+domain-separation section rather than the design's enforceability test; the
+restated text cites design §1.1 by name.
+
+**The handover's integrity is stated plainly rather than softened**: one
+identity's two devices share no prior value, so nothing cryptographic binds
+an introduction, an intermediated one would carry the identity's own
+signatures to a key the intermediary chose for as long as the delegations
+run, and what bounds the exposure is the windows signed for and the §14.1
+property alone.
+
+**Applied**: `wire-format.md` §14 preamble, §14.2 rows, §14.3 rewritten to
+the two items genuinely owed (vectors, model), §14.4.2 extended, §14.4.3
+added, three §1.3 bounds rows; the two stale `OpticalHandshake` references
+renamed to the `OpticalContribution` the section defines. Functional
+SCH-024 and NET-016 added — 473 families across 26 prefixes, sum re-verified
+against the prefix table. Code reconciled where it already carried the
+structure: `decode_candidates` now bounds the list at eight and refuses port
+zero, and both gather paths treat an empty gather as no offer rather than an
+offer of nothing; one new transport test pins the bounds. Vector pin
+regenerated after audit — every vector change is pin-only. Refcheck 4,432
+references, 0 flags; pins 19, 0 stale. Test vectors and a model for the five
+encodings remain §14.3's owed items and are the next work.

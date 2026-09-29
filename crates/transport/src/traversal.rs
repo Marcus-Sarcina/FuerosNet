@@ -386,6 +386,11 @@ pub fn decode_candidates(b: &[u8]) -> Result<Vec<Candidate>, String> {
     let Item::Array(list) = &item else {
         return Err("candidates not an array".into());
     };
+    // eight is the bound (`wire-format.md` §14.4.2, §1.3), and exceeding a
+    // bound is malformed rather than merely unusual
+    if list.is_empty() || list.len() > 8 {
+        return Err("one to eight candidates".into());
+    }
     let mut out = Vec::new();
     for c in list {
         let Item::Array(f) = c else {
@@ -408,8 +413,10 @@ pub fn decode_candidates(b: &[u8]) -> Result<Vec<Candidate>, String> {
             }
             _ => return Err("candidate address".into()),
         };
+        // zero is malformed — it is never a destination (`wire-format.md`
+        // §14.4.2, carrying §7.6's rule)
         let port = as_uint(&f[2])
-            .filter(|p| *p <= u16::MAX as u64)
+            .filter(|p| *p >= 1 && *p <= u16::MAX as u64)
             .ok_or("candidate port")? as u16;
         out.push(Candidate {
             kind,

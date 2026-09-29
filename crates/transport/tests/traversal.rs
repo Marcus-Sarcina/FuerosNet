@@ -173,3 +173,34 @@ async fn a_check_that_ends_early_lets_the_next_start_before_the_interval() {
     // dial waited for no longer than the interval
     assert!(d[1].1 <= d[0].1 + TA.as_millis() as u64 + 20, "{d:?}");
 }
+
+#[test]
+fn a_candidate_list_is_bounded_and_a_candidate_names_a_real_port() {
+    use rhtn_transport::traversal::{decode_candidates, encode_candidates};
+    let one = |addr: &str| Candidate {
+        kind: CandidateKind::Host,
+        addr: addr.parse().unwrap(),
+    };
+    // both families round-trip: a candidate is an ephemeral address for one
+    // dial, not a published endpoint, and design §14.1.1 ties traversal to
+    // IPv6 availability (`wire-format.md` §14.4.2)
+    let both = vec![one("192.0.2.7:7431"), one("[2001:db8::7]:7431")];
+    assert_eq!(decode_candidates(&encode_candidates(&both)).unwrap(), both);
+    // eight is the bound and exceeding it is malformed, not unusual
+    let eight: Vec<Candidate> = (1..=8).map(|i| one(&format!("192.0.2.{i}:1"))).collect();
+    assert!(decode_candidates(&encode_candidates(&eight)).is_ok());
+    let nine: Vec<Candidate> = (1..=9).map(|i| one(&format!("192.0.2.{i}:1"))).collect();
+    assert_eq!(
+        decode_candidates(&encode_candidates(&nine)),
+        Err("one to eight candidates".into())
+    );
+    assert_eq!(
+        decode_candidates(&encode_candidates(&[])),
+        Err("one to eight candidates".into())
+    );
+    // port zero is never a destination (`wire-format.md` §14.4.2)
+    assert_eq!(
+        decode_candidates(&encode_candidates(&[one("192.0.2.7:0")])),
+        Err("candidate port".into())
+    );
+}
