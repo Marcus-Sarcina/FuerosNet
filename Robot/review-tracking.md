@@ -12819,3 +12819,44 @@ opaque), does not model §14.4.3's handover (§14.4.3 already concedes it
 carries no anchor), fixes the contribution order rather than deriving it from
 keyhashes, and says nothing about a bundle entry's worth — that comes from
 each entry's own signatures (§5.3), not from the anchor.
+
+## Meet's verifier step (2026-09-29)
+
+Queued after the §14.4 encodings work. What the shell can honestly do at D5
+turned out to be more than the placeholder implied and less than the flow
+needs, and both halves are now visible on the screen.
+
+**Built**: `Meet` carries the selection (`Chosen`: key, `Basis`, nullable
+`Verdict`), whether the selection has run at all, and the queries surfaced
+about this person. `Kernel.selectVerifiers` drives `select_verifiers` off the
+UI thread, maps §5.5's basis integer to the shell's words with the unknown
+value falling to the discretionary tier (which claims least), prepares a
+query per verifier, and says in the log what it could not send.
+`MeetActivity` renders the selection, each basis as a claim, each verdict,
+and the queries about the person.
+
+**Two things the placeholder had hidden.** First, `Told.QuerySurfaced` — the
+notice design §7.4.2 owes the *subject* — was going to logcat and nowhere
+else; `AndroidShell.told` now routes notices by audience through
+`Kernel.told`. Second, an empty selection needed to be distinguishable from
+an unasked one, or the screen would report "none required" before asking; the
+model carries `selectionRun` for exactly that, and a test pins it.
+
+**Two lifecycle rules, learned from the S05 discipline**: the selection is
+requested at the transition out of capture rather than from inside `redraw`
+(a draw that starts work re-runs it on every recreation), and
+`Kernel.selectVerifiers` returns early where the selection has already run,
+because a query issued twice is two queries.
+
+**Left owed, and it is the queued item**: the query's carriage past the
+serving node (`wire-format.md` §7.7.2 stops there) and the capture-key
+grant's route in a live network. The FFI can mint the grant since
+`3687601`, and nothing yet carries it. The screen states this rather than
+implying the step completed.
+
+Six new JVM tests (24 total, from 18): none-required versus not-yet-asked,
+the basis carried per verifier, a response landing against its own verifier
+and a stray being ignored, a query about me surfaced rather than asked, the
+step still taking input and handing to review, and the render count for each
+landing — including that a stray response renders nothing, since it changes
+nothing.

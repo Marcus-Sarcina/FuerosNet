@@ -8,6 +8,7 @@ import uniffi.rhtn_ffi.Event
 import uniffi.rhtn_ffi.Participant
 import uniffi.rhtn_ffi.Refused
 import uniffi.rhtn_ffi.Status
+import uniffi.rhtn_ffi.Told
 import uniffi.rhtn_ffi.kindApplication
 
 /**
@@ -78,6 +79,86 @@ object Kernel {
             }
         }.start()
         return m
+    }
+
+    /**
+     * Select the counterparty's verifiers and put this device's queries to
+     * them (design §8.1.2; `wire-format.md` §5.1–5.5).
+     *
+     * **The selection is the kernel's and not a choice on a screen**: the
+     * tiers are computed from what this device knows and the pool from the
+     * records the counterparty handed over, so the screen shows who was
+     * picked and why, never a list to choose from.
+     *
+     * What this build cannot do is **carry a query to its verifier**. A
+     * verifier is a third party reached through the network, and the
+     * documents stop at its serving node (`wire-format.md` §7.7.2): how
+     * that node hands a query to a client attached over the wire is
+     * unwritten, and so is how the capture-key grant travels. So the
+     * queries are prepared and the selection is real; nothing is sent.
+     */
+    fun selectVerifiers() {
+        val p = participant ?: return
+        val m = meet ?: return
+        // once per ceremony: a query issued twice is two queries, and the
+        // selection is not a thing to re-run on a recreated screen
+        if (m.selectionRun()) return
+        Thread {
+            try {
+                val picked = p.selectVerifiers()
+                m.selected(
+                    picked.map {
+                        Meet.Chosen(hex(it.verifier), basisOf(it.basis))
+                    },
+                )
+                if (picked.isEmpty()) {
+                    m.note("no verifier is required: the counterparty handed")
+                    m.note("over no records, so its pool is empty and")
+                    m.note("wire-format §5.2 obliges none.")
+                } else {
+                    // prepared, to show the call sequence is whole even
+                    // where the carriage is not
+                    for (s in picked) {
+                        p.queryFor(s.verifier)
+                    }
+                    m.note("${picked.size} query/queries prepared. Carrying one to")
+                    m.note("its verifier needs the leg wire-format §7.7.2")
+                    m.note("leaves unwritten; nothing was sent.")
+                }
+            } catch (e: Refused.Reason) {
+                m.note("selection refused: ${e.reason}")
+            }
+        }.start()
+    }
+
+    /** `wire-format.md` §5.5's `selection_basis`, as the shell's own words
+     *  render it; an unknown value is the discretionary tier, which claims
+     *  the least. */
+    private fun basisOf(basis: UInt): Meet.Basis = when (basis.toInt()) {
+        0 -> Meet.Basis.MET
+        1 -> Meet.Basis.IN_HORIZON
+        2 -> Meet.Basis.REACHABLE
+        else -> Meet.Basis.DISCRETIONARY
+    }
+
+    /**
+     * A notice the kernel raised, routed where its audience is.
+     *
+     * **A query about this person is theirs to be told about** (design
+     * §7.4.2): their client consented to it, bound to the ceremony they are
+     * standing in, and they are owed the telling even though they were not
+     * asked. Everything else goes to the conversation's notice line.
+     */
+    fun told(notice: Told) {
+        when (notice) {
+            is Told.QuerySurfaced -> {
+                val v = hex(notice.verifier).take(16)
+                meet?.querySurfaced(v) ?: front.note("· a query about you was answered by $v…")
+            }
+            is Told.NomineesOutnumbered ->
+                meet?.note("· witnesses: ${notice.mine} of mine, ${notice.theirs} of theirs")
+            else -> front.note("· $notice")
+        }
     }
 
     /** End the ceremony in progress. */

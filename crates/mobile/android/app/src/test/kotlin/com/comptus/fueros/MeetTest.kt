@@ -101,4 +101,86 @@ class MeetTest {
         m.acknowledgeBrief()
         assertEquals(atBind + 2, renders)
     }
+
+    // ---- the verifier step -------------------------------------------
+
+    /** The flow, up to the point the verifier step is live. */
+    private fun atVerifiers(): Meet = meet().apply {
+        intentExchanged(); acknowledgeBrief(); opticalDone(); proximityDone(); captureDone()
+    }
+
+    @Test
+    fun the_verifier_step_distinguishes_none_required_from_not_yet_asked() {
+        val m = atVerifiers()
+        assertEquals(Meet.Step.VERIFIERS, m.step())
+        // before the selection runs, an empty list means nothing was asked
+        assertFalse(m.selectionRun())
+        assertTrue(m.chosen().isEmpty())
+        // an empty selection is a real answer: a thin pool obliges nobody
+        m.selected(listOf())
+        assertTrue(m.selectionRun())
+        assertTrue(m.chosen().isEmpty())
+    }
+
+    @Test
+    fun a_selected_verifier_carries_the_basis_claimed_for_it() {
+        val m = atVerifiers()
+        m.selected(
+            listOf(
+                Meet.Chosen("bb", Meet.Basis.MET),
+                Meet.Chosen("cc", Meet.Basis.DISCRETIONARY),
+            ),
+        )
+        assertEquals(listOf(Meet.Basis.MET, Meet.Basis.DISCRETIONARY), m.chosen().map { it.basis })
+        // and no verdict until one answers
+        assertTrue(m.chosen().all { it.verdict == null })
+    }
+
+    @Test
+    fun a_response_lands_against_its_own_verifier_and_others_are_ignored() {
+        val m = atVerifiers()
+        m.selected(listOf(Meet.Chosen("bb", Meet.Basis.MET), Meet.Chosen("cc", Meet.Basis.MET)))
+        m.responded("cc", Meet.Verdict.MATCH)
+        assertEquals(null, m.chosen()[0].verdict)
+        assertEquals(Meet.Verdict.MATCH, m.chosen()[1].verdict)
+        // a response naming a verifier this device never selected is not
+        // this ceremony's business
+        m.responded("zz", Meet.Verdict.NO_MATCH)
+        assertEquals(listOf(null, Meet.Verdict.MATCH), m.chosen().map { it.verdict })
+    }
+
+    @Test
+    fun a_query_about_me_is_surfaced_rather_than_asked() {
+        val m = atVerifiers()
+        // the subject is told (design 7.4.2); nothing here asks anything,
+        // so there is no answer to give and none is recorded
+        m.querySurfaced("bb")
+        m.querySurfaced("cc")
+        assertEquals(listOf("bb", "cc"), m.queriesAboutMe())
+    }
+
+    @Test
+    fun the_verifier_step_still_takes_input_and_hands_on_to_review() {
+        val m = atVerifiers()
+        assertTrue(m.acceptsInput())
+        assertFalse(m.handsOff())
+        m.selected(listOf())
+        m.verifiersDone()
+        assertEquals(Meet.Step.REVIEW, m.step())
+    }
+
+    @Test
+    fun a_bound_screen_renders_when_the_selection_and_its_answers_land() {
+        val m = atVerifiers()
+        var renders = 0
+        m.bind(object : Meet.Ui { override fun render() { renders++ } })
+        val atBind = renders
+        m.selected(listOf(Meet.Chosen("bb", Meet.Basis.MET)))
+        m.responded("bb", Meet.Verdict.MATCH)
+        m.querySurfaced("cc")
+        assertEquals(atBind + 3, renders)
+        // a response against nobody changes nothing, so it renders nothing
+        m.responded("zz", Meet.Verdict.MATCH)
+        assertEquals(atBind + 3, renders)
+    }
 }

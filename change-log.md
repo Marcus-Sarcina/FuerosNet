@@ -11330,3 +11330,41 @@ cannot pass.
 **Also**: `models/README.md`'s `compliant/` lemma count had stood at 29 since
 before two of its theories grew, and is corrected to 33 from what the tool
 reported. Refcheck 4,448 references, 0 flags.
+
+### 2026-09-29 (the verifier step, and a notice that had been going to a log)
+
+**Meet's D5 is the flow's own selection rather than a placeholder.** The
+kernel calls `select_verifiers` and the screen shows who was picked and the
+basis claimed for each — met, in the horizon, one edge beyond it, or a
+stranger taken at discretion (`wire-format.md` §5.5) — with each verifier's
+answer as it lands, and *unavailable* shown as silence counting for nothing
+either way. **Nothing is offered to pick**: the tiers are computed from what
+this device knows and the pool from what the counterparty handed over, so a
+list to choose from would misrepresent whose decision it is.
+
+**An empty selection is a real answer, and the screen says which kind.**
+`wire-format.md` §5.2 obliges a verifier only where the counterparty's
+records oblige one, so a thin bundle obliges none — and the state model keeps
+*none required* apart from *not asked yet*, which a single empty list could
+not express.
+
+**The subject's notice was going to a log.** `Told.QuerySurfaced` tells the
+person a query about them was consented to on their behalf — bound to the
+ceremony they are standing in, so the client gives consent without stopping
+to ask (design §7.4.2) and owes them the telling instead. The shell was
+printing it to logcat and nothing else. Notices now route by audience: a
+query about this person to the ceremony they are in, the rest to the
+conversation's notice line.
+
+**The selection is asked for once, at the transition out of capture**, not
+from inside a draw — a render that starts work runs it again on every
+recreation — and the kernel refuses a second run for the same ceremony,
+since a query issued twice is two queries.
+
+**What it still cannot do, named on the screen**: carry a query to its
+verifier. A verifier is a third party across the network and the documents
+stop at its serving node (`wire-format.md` §7.7.2); how that node hands a
+query to a client attached over the wire is unwritten, and so is the
+capture-key grant's route. The queries are prepared, so the call sequence is
+whole where the carriage is not. Twenty-four JVM unit tests, up from
+eighteen; lint 0 errors; the APK assembles.

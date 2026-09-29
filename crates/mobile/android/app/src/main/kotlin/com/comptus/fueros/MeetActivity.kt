@@ -94,7 +94,12 @@ class MeetActivity : Activity() {
             Meet.Step.BRIEF -> brief(m)
             Meet.Step.OPTICAL -> handsOff(m, "the optical channel", "a counterparty's screen in the camera", m::opticalDone)
             Meet.Step.PROXIMITY -> handsOff(m, "the proximity radios", "UWB or NFC hardware", m::proximityDone)
-            Meet.Step.CAPTURE -> handsOff(m, "the guided capture", "a face in front of the camera", m::captureDone)
+            // leaving capture is what asks for the selection: once, at the
+            // transition, so a recreated screen redraws without re-running it
+            Meet.Step.CAPTURE -> handsOff(m, "the guided capture", "a face in front of the camera") {
+                m.captureDone()
+                Kernel.selectVerifiers()
+            }
             Meet.Step.VERIFIERS -> verifiers(m)
             Meet.Step.REVIEW -> review(m)
             Meet.Step.DONE -> done(m)
@@ -155,9 +160,46 @@ class MeetActivity : Activity() {
     // ---- D5 verifiers --------------------------------------------------
 
     private fun verifiers(m: Meet) {
-        para("Each party picks the other's verifiers from the records they were handed, preferring people they know. Responses land here as they arrive.")
-        para("No records were exchanged in this build, so there is nothing to select or await.")
+        para("Your device picks ${m.counterpartyName}'s verifiers from the records they handed over, preferring people you have met. The choice is computed, not offered: there is nothing here to pick.")
+        if (!m.selectionRun()) {
+            // the selection is asked for once, when the flow enters this
+            // step, and never from inside a draw
+            para("Selecting…")
+            return
+        }
+        val chosen = m.chosen()
+        heading("Selected")
+        if (chosen.isEmpty()) {
+            para("• None required. ${m.counterpartyName} handed over no records, so there is no pool to draw from and none is owed — a meeting with fewer verifiers is thinner, not malformed.")
+        } else {
+            chosen.forEach { c ->
+                val answer = when (c.verdict) {
+                    null -> "awaiting an answer"
+                    Meet.Verdict.MATCH -> "answered: a match"
+                    Meet.Verdict.NO_MATCH -> "answered: no match"
+                    Meet.Verdict.INCONCLUSIVE -> "answered: inconclusive"
+                    Meet.Verdict.UNAVAILABLE -> "unavailable — silence counts for nothing either way"
+                }
+                para("• ${c.key.take(16)}… — ${basisWords(c.basis)}; $answer")
+            }
+            para("A query cannot reach its verifier from this build: a verifier is a third party across the network, and the route to one attached elsewhere is not yet specified. The selection above is real; nothing was sent.")
+        }
+        val mine = m.queriesAboutMe()
+        if (mine.isNotEmpty()) {
+            heading("Queries about you")
+            para("${m.counterpartyName} asked these verifiers about you. Your device consented on each — consent is bound to the ceremony you are standing in, so it is given without stopping to ask, and you are told instead.")
+            mine.forEach { para("• $it…") }
+        }
         button("Continue to review") { m.verifiersDone() }
+    }
+
+    /** `wire-format.md` §5.5's basis, in words, and each says whose claim
+     *  it is: nobody audits a selector's tier. */
+    private fun basisWords(b: Meet.Basis): String = when (b) {
+        Meet.Basis.MET -> "you have met them"
+        Meet.Basis.IN_HORIZON -> "in your horizon"
+        Meet.Basis.REACHABLE -> "one edge beyond it"
+        Meet.Basis.DISCRETIONARY -> "a stranger, taken at your discretion"
     }
 
     // ---- D6 review and sign --------------------------------------------

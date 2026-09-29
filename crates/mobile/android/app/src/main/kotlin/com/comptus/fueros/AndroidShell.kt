@@ -55,8 +55,13 @@ class AndroidShell(context: Context) :
     // nobody is shown is answered no (`light-client-requirements.md` §1.4)
     override fun ask(question: String): Boolean = Consent.ask(question)
 
+    // a notice has an audience, and the kernel knows which: a query about
+    // this person belongs on the ceremony they are standing in (design
+    // §7.4.2), the rest on the conversation's notice line.  Logged as well,
+    // because a notice nobody was looking at is still evidence
     override fun told(notice: Told) {
         Log.i("fueros", "notice: $notice")
+        Kernel.told(notice)
     }
 
     // **The kernel seals what it persists; this shell keeps the key**

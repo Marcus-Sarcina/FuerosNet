@@ -49,6 +49,38 @@ class Meet(
         ME_UNDER_THEM,
     }
 
+    /**
+     * Why this verifier was selected — `wire-format.md` §5.5's
+     * `selection_basis`, in the order the tiers rank (design §8.1.2).
+     * **The selector's own claim and nobody's to audit**, which is why the
+     * screen shows it as a claim rather than as a credential.
+     */
+    enum class Basis {
+        MET,
+        IN_HORIZON,
+        REACHABLE,
+        DISCRETIONARY,
+    }
+
+    /** What a verifier answered about the counterparty, or nothing yet. */
+    enum class Verdict {
+        MATCH,
+        NO_MATCH,
+        INCONCLUSIVE,
+        UNAVAILABLE,
+    }
+
+    /**
+     * One verifier this device selected of the counterparty's pool, and
+     * what has come back. A verifier is **asked nothing and told nothing**
+     * (design §19.6); this is the selector's side of the exchange.
+     */
+    data class Chosen(
+        val key: String,
+        val basis: Basis,
+        val verdict: Verdict? = null,
+    )
+
     interface Ui {
         fun render()
     }
@@ -60,6 +92,9 @@ class Meet(
     private val log = mutableListOf<String>()
     private var recordTxid: String? = null
     private var stopReason: String? = null
+    private var chosen: List<Chosen> = listOf()
+    private var selectionRun = false
+    private val queriesAboutMe = mutableListOf<String>()
 
     // ---- binding, same lifecycle discipline as Front --------------------
 
@@ -104,6 +139,59 @@ class Meet(
 
     fun handsOff(): Boolean = synchronized(lock) {
         step == Step.OPTICAL || step == Step.PROXIMITY || step == Step.CAPTURE
+    }
+
+    // ---- the verifiers this device selected, and what came back ---------
+
+    fun chosen(): List<Chosen> = synchronized(lock) { chosen.toList() }
+
+    /** Whether the selection has been run at all, which is what tells a
+     *  screen apart *no verifiers were required* from *not asked yet*. */
+    fun selectionRun(): Boolean = synchronized(lock) { selectionRun }
+
+    /** The verifiers queried about **me**, which the subject is owed
+     *  (design §7.4.2) and the verifier is not (design §19.6). */
+    fun queriesAboutMe(): List<String> = synchronized(lock) { queriesAboutMe.toList() }
+
+    /**
+     * The selection the kernel computed, in the order it returned. Empty is
+     * a real answer and not a failure: `wire-format.md` §5.2 requires a
+     * verifier only where the counterparty handed over records enough to
+     * oblige one, so a thin bundle obliges none.
+     */
+    fun selected(v: List<Chosen>) {
+        synchronized(lock) {
+            chosen = v.toList()
+            selectionRun = true
+            changed()
+        }
+    }
+
+    /**
+     * A verifier answered. Recorded against the verifier it names and
+     * ignored where that verifier was never selected here — a response to
+     * a query this device did not issue is not this ceremony's business.
+     */
+    fun responded(key: String, verdict: Verdict) {
+        synchronized(lock) {
+            val i = chosen.indexOfFirst { it.key == key }
+            if (i < 0) return
+            chosen = chosen.toMutableList().also { it[i] = it[i].copy(verdict = verdict) }
+            changed()
+        }
+    }
+
+    /**
+     * A query about me reached a verifier and was consented to on my
+     * behalf. **Surfaced, not asked**: consent is bound to the ceremony
+     * this person is standing in, so the client gives it without a
+     * question (design §7.4.2) and owes them the telling.
+     */
+    fun querySurfaced(verifier: String) {
+        synchronized(lock) {
+            queriesAboutMe.add(verifier)
+            changed()
+        }
     }
 
     // ---- progress: each step hands to the next -------------------------
