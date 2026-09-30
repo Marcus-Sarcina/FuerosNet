@@ -168,6 +168,14 @@ documents. Where a requirement leaves a visible artifact, that is noted in place
   missing one is the counterparty editing your evidence, and your signature is
   the veto (design §7.4.2). A response you never received is the thin-record
   case and signs normally.
+- **Read each response copy against the retention its verifier declared**
+  [author, 2026-09-30]. You chose the grant, so you know which prior record
+  that verifier should still hold and the retention it committed to there
+  (design §7.5.1); an `unavailable` inside that window is your private
+  signal about that verifier's caching compliance. It is yours alone to
+  attribute — a response names no prior record, by decision (design §7.4.3),
+  since the counterparty could not read one without the whole prior record —
+  and nothing of it enters the record.
 - **Compute *n* over the bundle handed to you, and treat it as your
   counterparty's claim** (`wire-format.md` §5.2 and `wire-format.md` §5.4). The bundle is theirs to
   curate — records from any of their series, no chaining, no completeness, so

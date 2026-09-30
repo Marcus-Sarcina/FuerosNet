@@ -377,6 +377,7 @@ The Cargo workspace has **16 crates**. Components below follow responsibilities 
 | CER-018 | P | Continue fishing until the chosen responsive threshold/patience or participant decision, accepting mutually known eligible additions according to the stated procedure. Distinguish no response, explicit refusal and unavailable evidence; do not silently represent policy-filtered candidates as offline. | D §8.1.2; L §1.4 |
 | CER-019 | C | Show the actual selected verifiers, bases, coverage and absence of familiar candidates before signing. Sparse evidence may lower third-party weight while still yielding a valid personally meaningful relationship. | D §§8.1.2, 16.1; L §§1.4, 6 |
 | CER-020 | C | Do not invent a protocol byte/count cap for the entire off-record curated bundle. Any local operational truncation is explicit to the user and selector and must not misstate n or completeness. | W §5.4 |
+| CER-021 | C | As subject, check each response copy against the retention that verifier declared in the prior record you granted against: an unavailable inside that window is your private signal about the verifier's caching compliance, attributable by you alone, since only you know which prior meeting it should reference. Nothing of it enters the record or reaches the counterparty, and a response names no prior record. | D §§7.4.2, 7.4.3, 7.5.1; W §5.6; L §1 |
 
 ### VerifierQuery, consent, key grants and response processing
 
@@ -492,6 +493,7 @@ The Cargo workspace has **16 crates**. Components below follow responsibilities 
 |---|---|---|---|
 | POL-020 | P | A verifier signature authenticates carriage of selection_basis but does not endorse that claim. Re-signing the same selector assertion must not increase its weight; evaluate it by the observer's own recognition of the selector and available evidence. | W §5.6; D §§8.1.2, 16.1 |
 | POL-021 | P | A member of a disavowing patron's horizon defaults to that patron's determination and does not order a with-prejudice disavowal against a departure of the same party. A banded code yields no standing and no admission; an unbanded or absent one alleges nothing. Read the determination from the records held, not from whichever object closed the binding. A declared variant may order the pair instead. | D §§18.5, 16.4; W §4.3 |
+| POL-022 | P | Tally each verifier's conduct across the records the observer holds — answered (match, no-match, inconclusive) against unavailable — and read the unavailable share into the reliability channel only, never the social one. Distinguish silence from an identity running an instance (weighs fully) from a light client's (lightly); count only responses in the record, never late private replies; let the tally fall away with the records that carry it rather than by a formula. Magnitude is the observer's own and is published nowhere. | D §§7.4.3, 16.5, 16.6, 16.4; W §5.5 |
 
 ## 3.6 Resource registration, discovery, credentials, requests and packages
 
@@ -946,7 +948,7 @@ Open local parameters are not all specification defects: cache TTLs, queue cap, 
 
 ## 10. Document baseline and coverage totals
 
-This specification contains **474 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
+This specification contains **476 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
 
 | Prefix | Families |
 |---|---:|
@@ -960,12 +962,12 @@ This specification contains **474 numbered requirement/test families** across **
 | NET | 16 |
 | SES | 15 |
 | MAIL | 27 |
-| CER | 20 |
+| CER | 21 |
 | VER | 18 |
 | CAP | 16 |
 | REC | 12 |
 | PAY | 9 |
-| POL | 21 |
+| POL | 22 |
 | CAT | 22 |
 | GAT | 37 |
 | PKG | 14 |

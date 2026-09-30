@@ -38,7 +38,7 @@ pub mod landscape;
 pub mod policy;
 pub mod series;
 
-pub use evidence::{Evidence, World};
+pub use evidence::{Conduct, Evidence, Observation, World};
 pub use flow::{FlowGraph, UNTHROTTLED};
 pub use landscape::{Allocation, Scope};
 pub use policy::{DistanceDecay, Evaluation, Policy, ReferenceMetric, Uniform};

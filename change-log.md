@@ -11447,3 +11447,49 @@ already does, a same-anchor locator replacing under `wire-format.md` §2.3's
 freshness rule and a new anchor inserting; a network point replaces
 outright. Applied to `wire-format.md` §4.4, `light-client-requirements.md`
 §2, TX-031 and design §6.3.
+
+### 2026-09-30 (client integrity signals, from a new reviewer family)
+
+**Hardware attestation is given no weight** [author, 2026-09-30] — design
+§7.8 had let policies weight an attested build; it now says the design
+weights it neither as a gate nor as a signal, for the central dependency on
+a manufacturer's root and the platform lock-in it would reward. Users on
+unattested or open-source builds are not excluded and not discounted; the
+record's integrity field and its scheme registry stay open for evidence that
+needs no global trusted party.
+
+**What the review confirmed, checked against text and code.** Structural
+consistency — the strongest-channel rule, one profile per ceremony, the
+witness clock tolerance — is enforced as *validity* at signing and at
+reveal, which is stronger than the weighting the reviewer proposed; the
+proposed cross-check of a proximity claim against a witness's latency
+corroboration turned out to compare orthogonal quantities, `location` being
+one field per record. The verifier's conduct is honest by construction: an
+unopenable grant is `inconclusive`, a missing one `unavailable`, never a
+silence.
+
+**What it found missing.** Design §7.4.3 names a high unavailable rate
+across an identity's history as a signal, and nothing derives it: no
+evaluator rule, no functional row, no consumer in the policy crate. A rule
+is proposed in the tracker for the author to ruled on, with one wire
+question beside it — whether a verifier's response should name the prior
+record it answered from, which is what would make a per-response retention
+check computable. Also declined: publishing the reference policy's weights,
+which §16.4 argues against outright.
+
+**Addendum, the layer-4 rule applied** [author, 2026-09-30]. An evaluator
+reads a verifier's unavailable rate as a tally on the reliability axis
+alone: per verifier identity, across the records it holds, answered against
+`unavailable`; falling away with the records that carry it rather than by a
+formula; an instance's silence weighing fully and a light client's lightly;
+late private replies uncounted; magnitude the observer's own. **And a
+response names no prior record, by decision**: the subject chose the grant
+and so knows which meeting the verifier should reference, the counterparty
+cannot without the whole prior record, and a reference would leak to no
+benefit — so retention compliance is the subject's private signal, read from
+the copy it already receives, attributable by the subject alone. Applied to
+design §7.4.3, a `light-client-requirements.md` §1 bullet, POL-022 and
+CER-021 (476 families), and `rhtn-policy`'s evidence: an `Observation` per
+held response, a `Conduct` tally keeping answered, unavailable-from-an-
+instance and unavailable-from-a-light-client apart, with the holding window
+as the only decay; two tests.

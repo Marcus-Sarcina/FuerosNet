@@ -1811,7 +1811,23 @@ person in front of them as continuous with a history.
   response. Present encoding: the record **commits to a retention period at
   meeting time**, so a later "unavailable" is checkable against a declared
   policy rather than being an unfalsifiable excuse. A high rate of unavailable
-  responses across an identity's history is itself a signal.
+  responses across an identity's history is itself a signal. **An evaluator
+  reads that signal as a tally, on the reliability axis alone** [author,
+  2026-09-30]: per verifier identity, across the records it holds, responses
+  answered against `unavailable`. The unavailable share enters the
+  reliability channel (§16.6) and never the social one; it falls away with
+  the records that carry it, the tally being derived standing and the
+  records facts (§16.5); silence from an identity with an instance weighs
+  fully and from a light client lightly, on the distinction below; and a
+  late reply reaches the querier privately, outside the record, so it is not
+  counted. Magnitude is the observer's own policy, published nowhere
+  (§16.4). **A response names no prior record, by decision** [author,
+  2026-09-30]: the subject already knows which meeting the verifier should
+  be able to reference, having chosen the grant, and the counterparty cannot
+  know it without the whole prior record — so a reference in the response
+  would leak to no benefit. Whether a verifier honoured the retention it
+  declared is therefore the **subject's private signal**, read from the copy
+  it receives (§7.4.2), and the subject alone can attribute it.
 - **Light clients vs infrastructure nodes are judged differently on
   availability.** Light clients have legitimately unstable uptime, so silence
   from them carries little weight; infrastructure nodes have none of that
@@ -2418,10 +2434,16 @@ from a user's typical patterns, while removing venue-level identification.
 Every step depends on a sensor reporting honestly, and a modified client can
 fabricate the camera feed, the ranging result and the timing. Hardware
 attestation (Play Integrity, App Attest) would reintroduce the manufacturer as a
-global trusted party, the same tension as §23.2's autonomous-participation entry raises about attestation. Resolution: treat attested
-client integrity as a **trust-raising attribute carried in the record, not a
-requirement**, so policies can weight it and users on unattested or open-source
-builds are not excluded. A user can only trust their own client's features,
+global trusted party, the same tension as §23.2's autonomous-participation entry raises about attestation. Resolution: attested
+client integrity is **carried in the record and is not a requirement**, and
+**this design gives hardware attestation no weight either** [author,
+2026-09-30] — not as a gate and not as a signal — for the central dependency
+on a manufacturer's root it would create and the platform lock-in it would
+reward, an attested build on one platform and none on another being a
+gradient toward the incumbent rather than evidence of honesty. Users on
+unattested or open-source builds are not excluded and not discounted. The
+field and its scheme registry remain open for integrity evidence that needs
+no global trusted party. A user can only trust their own client's features,
 never the presumed features of a counterparty's client.
 
 ---

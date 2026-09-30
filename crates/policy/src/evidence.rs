@@ -34,6 +34,47 @@ pub struct Evidence<N: Ord + Clone> {
     /// a timing rule runs a variant policy; nothing on the wire consumes
     /// either reading (design §16.4).
     pub disavowed: BTreeSet<(N, N)>,
+    /// What this observer has seen each verifier *do*, one observation per
+    /// response in a record it holds (design §7.4.3): whether the verifier
+    /// answered or was `unavailable`, kept with the record's `finalized_at`
+    /// so that the observer's own holding window is the decay — the tally
+    /// is derived standing and falls away with the records that carry it,
+    /// which are facts and do not (design §16.5).  `infra` is the
+    /// observer's own knowledge of whether the verifier ran an instance,
+    /// because silence from one weighs fully and from a light client
+    /// lightly; the tally keeps them apart and weighs nothing itself.
+    pub conduct: Vec<Observation<N>>,
+}
+
+/// One response a verifier gave, as this observer holds it.  A late reply
+/// reaches the querier privately and is in no record, so it is never one
+/// of these (design §7.4.3).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Observation<N> {
+    pub verifier: N,
+    pub finalized_at: u64,
+    pub unavailable: bool,
+    pub infra: bool,
+}
+
+/// A verifier's conduct over the records in an observer's window: what
+/// enters the reliability channel and never the social one (design
+/// §16.6).  Counts only — the magnitude any of it moves a score is the
+/// observer's own policy, published nowhere (design §16.4).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Conduct {
+    pub answered: u32,
+    pub unavailable_infra: u32,
+    pub unavailable_light: u32,
+}
+
+impl Conduct {
+    pub fn unavailable(&self) -> u32 {
+        self.unavailable_infra + self.unavailable_light
+    }
+    pub fn total(&self) -> u32 {
+        self.answered + self.unavailable()
+    }
 }
 
 fn unordered<N: Ord + Clone>(a: N, b: N) -> (N, N) {
@@ -47,7 +88,39 @@ impl<N: Ord + Clone + Debug> Evidence<N> {
             adoptions: BTreeSet::new(),
             acquaintances: BTreeSet::new(),
             disavowed: BTreeSet::new(),
+            conduct: Vec::new(),
         }
+    }
+
+    /// A response this observer holds in a record finalized at `at`:
+    /// `verifier` answered, or was unavailable, and ran an instance or did
+    /// not as this observer knows it.
+    pub fn observed(&mut self, verifier: N, at: u64, unavailable: bool, infra: bool) {
+        self.conduct.push(Observation {
+            verifier,
+            finalized_at: at,
+            unavailable,
+            infra,
+        });
+    }
+
+    /// `verifier`'s conduct over the records finalized at or after
+    /// `since`: the observer's holding window, which is the whole of the
+    /// decay (design §16.5).  An identity never observed has no conduct,
+    /// which is a different thing from a bad one.
+    pub fn conduct(&self, verifier: &N, since: u64) -> Conduct {
+        let mut c = Conduct::default();
+        for o in &self.conduct {
+            if o.verifier != *verifier || o.finalized_at < since {
+                continue;
+            }
+            match (o.unavailable, o.infra) {
+                (false, _) => c.answered += 1,
+                (true, true) => c.unavailable_infra += 1,
+                (true, false) => c.unavailable_light += 1,
+            }
+        }
+        c
     }
 
     /// An adoption of `node` under `patron` this observer holds.

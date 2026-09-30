@@ -12946,3 +12946,57 @@ hold routing per subnet membership, which the address table already requires
 (the client's own `positions` is one locator per anchor). A locator for an
 anchor already held replaces; one for a new (peer, anchor) inserts. Stated
 in wire §4.4, light-client §2, TX-031 and design §6.3.
+
+## reviewer2 — client integrity signals (design-only pass, 2026-09-30)
+
+A new outside reviewer family; this response was pasted by the author and
+is not in `conformance-review/`. Four layers proposed. The author's brief:
+1 and 4 were believed already in place — verify signals and business rules
+exist; 3 is excluded (central dependency, platform lock-in); 2 is
+interesting but doubted feasible without a deep refactor. Every sub-claim
+was checked against the text and the code before disposition.
+
+| # | Finding | Disposition |
+|---|---|---|
+| L1a | `started_at` audited against witnesses' clocks by the evaluator | **NOT-A-FINDING, enforced where it can be.** A witness applies the tolerance at signing and refuses outside it (`light-client-requirements.md` §1.2; `record::witness_check`, `Abort::ClockFar`). The record carries no witness clock — `Witness` is flags — so an evaluator cannot recompute this, and need not: a witness signature *is* the statement that the clock was accepted |
+| L1b | Proximity claim cross-checked against witness-corroborated latency bounds ("UWB-pass with a 4,000 km bound is a flag") | **NOT-A-FINDING — ill-founded in this schema.** A latency corroboration (`Corroboration` method 3, `radius_km`) bounds the *meeting's* location relative to the *witness*; `location` is one field per record, not per participant. Two participants each within 4,000 km of a witness are consistent with being a metre apart, which is what the proximity channel measures. The two quantities are orthogonal; no coherence test exists between them to run. A reviewer reading a shared frame into per-witness evidence |
+| L1c | Template versions in verifier responses match the client's claims elsewhere | **NOT-A-FINDING, already stronger.** Enforced twice: the subject consents only under one profile per ceremony (`subject.rs` digest, design §7.4.2), and a verifier MUST reject a query whose profile differs from another countersigned under the same pre-commitment (`wire-format.md` §5.5 field 7); TX-025 pins version presence per basis |
+| L1d | Channel ranking internally consistent (§3.2's strongest rule) | **NOT-A-FINDING, in place.** Checked at reveal, malformed on violation (`record.rs` "strongest is not the highest-ranked channel that passed"; `wire-format.md` §3.2) |
+| L1 | "A multi-year history where every cross-party field agrees" as a systematic-vs-opportunistic discriminator | **NOT-A-FINDING.** Per-record enforcement makes an inconsistent record malformed, so a held history is consistent by construction or absent; there is no weighted "consistency history" to derive and none is needed. **Layer 1 as a whole: in place, and structurally — as validity, not as weight — which is the stronger form.** The author's belief was right |
+| L2 | Build provenance: reproducible builds + countersigned manifests through `ClientIntegrity`'s scheme/evidence | **DEFERRED, assessed.** Protocol-cheap: the field already carries a scheme id and an uninterpreted evidence blob, an open registry is the location-method precedent, and countersignature by recognised nodes is §16.1's intersection rule applied to a binary. Engineering-expensive: reproducible builds across the Rust, Android (Gradle/JBR) and iOS toolchains, a manifest object with its own §1.1 domain tag, and a policy that reads it. Not a deep refactor of the protocol — the record was designed for it — but a large build-engineering programme. Nothing needs changing now to keep the door open |
+| L3 | Key-provenance attestation as a weighted signal (Android Keystore; Apple/wasm none) | **REJECTED [author, 2026-09-30]** — excluded for central dependency and platform lock-in. Applied to design §7.8, which had permitted weighting. Consequence noted: `ClientIntegrity`'s `attested` bool is vestigial pending L2's fate; the field and its scheme registry stay |
+| L4a | Grant that fails to decrypt is `inconclusive`, never silent; no grant is `unavailable` | **NOT-A-FINDING, in place** (`verifier.rs`: open failure → `Inconclusive`; missing grant → `Unavailable`; `wire-format.md` §5.5 has no pending value, the slot is absent) |
+| L4b | `unavailable` checkable against the declared retention window, per response | **PARTLY ILL-FOUNDED.** The retention commitment is in the record (`pN.retention`; design §7.4.3) and the intent is stated. But a `VerifierResponse` does not name the prior record it answered from — only the private `KeyGrant` does — so an evaluator cannot test *this* unavailable against *that* retention. What is computable is the rate: "a high rate of unavailable responses across an identity's history is itself a signal" (§7.4.3, verbatim) |
+| L4c | Verifier track record read by policy on the reliability axis, decaying per §16.5 | **GAP — the one the author believed covered.** The signal's data flows and the design names it (§7.4.3; §16.6's reliability channel; §16.5's decay), but **no rule states what an evaluator derives, no functional row requires it, and no code consumes it** — `rhtn-policy`'s `Evidence` holds pairs only; §16.6's reliability weighting is infra-status, not conduct. Proposed rule below, awaiting the author |
+| C1 | No layer can signal internal state (key discarded, camera not fed synthetic video) | **ACCEPTED** — §7.5.2.1 already says so; differential cost, never proof. Expectations stay honest |
+| C2 | The reference policy should publish its weights "per §16.4's conformance-reporting suggestion" | **REJECTED — contradicts §16.4**, which reads the other way: "Nothing publishes a policy, so an attacker cannot read one… that is the reason no declaration exists." Non-publication is the durable asymmetry the section argues for. The blue-check concern (§7.4.3) is real and is met by L3's exclusion, not by publishing weights |
+
+**The proposed layer-4 rule, for the author's ruling** — not applied, because
+it defines evaluator behaviour and that justification is his to give:
+
+> An evaluator tallies, per verifier identity across the records it holds:
+> answered (match, no-match, inconclusive) against unavailable. The share of
+> unavailable enters the **reliability** channel (§16.6), never the social
+> one; it decays with the records that carry it (§16.5); silence from an
+> identity with an instance weighs fully and from a light client lightly
+> (§7.4.3's own distinction); late private replies are not in the record
+> and do not count. Magnitude is the observer's policy, published nowhere
+> (§16.4).
+
+If ruled: one paragraph in design §7.4.3, a POL functional row requiring the
+tally with the infra/light distinction and decay, and the tally itself in
+`rhtn-policy` — a new per-identity evidence kind beside the pairs, roughly
+a hundred lines and its tests. **Also worth a ruling**: whether the
+response should name the prior record it answered from (a new §5.5 field),
+which is what would make L4b's per-response check computable — a wire
+change, and the record then discloses which prior meeting was consulted.
+
+**Addendum** [author, 2026-09-30]: the proposed layer-4 rule is applied as
+drafted; the §5.5 field is declined, with the sharper point that retention
+compliance is the *subject's* signal — it chose the grant, so it alone knows
+which prior meeting should be referenceable — and never the evaluator's,
+which sees the rate. L4c → **FIXED**; L4b → **NOT-A-FINDING as an evaluator
+check, FIXED as the subject's** (the light-client bullet). The tally in
+`rhtn-policy` reports counts and weighs nothing: the reliability channel's
+magnitude is the observer's policy, published nowhere, so no §21.1
+parameter was added. Rows POL-022 and CER-021; 476 families.
