@@ -10598,8 +10598,7 @@ anything as having arrived on one that did not. §14.2 records what travels
 today — the ceremony's intent exchange, the optical transcript, the channel
 outcomes, traversal candidates, and a delegated device's material — with
 **every encoding marked owed**, including the candidate structure, which this
-document turns out never to have carried. §14.3 lists what is owed before the
-section is canonical: an encoding per row, vectors, a model where one would
+document turns out never to have carried. the section lists what is owed before it is canonical: an encoding per row, vectors, a model where one would
 say anything, and the property restated as something checkable or plainly as
 unenforceable. Functional NET-013, catalogue TRV-13; 443 of 461.
 
@@ -11172,10 +11171,10 @@ guarantee of its own. No new crypto invented: the contributory pre-commitment
 is design §13.2's, reused, and whether a confidential bearer is wanted is
 left open as a future row rather than smuggled in.
 
-Applied to §14.2, §14.3 and a new §14.4; functional SCH-023 and NET-015
+Applied to §14.2, the owed list and a new encodings subsection; functional SCH-023 and NET-015
 added, 471 families across 26 prefixes; vector pin re-accepted after audit
-(nothing vector-side leans on §14.4). Test vectors, a model and the
-three-party ceremony test follow the encoding, as §14.3 orders.
+(nothing vector-side leans on the new encodings). Test vectors, a model and
+the three-party ceremony test follow the encoding, as the owed list orders.
 
 ### 2026-09-28 (the verifier's legs cross processes, and a grant that had nowhere to go)
 
@@ -11213,8 +11212,8 @@ and the record finalizes under four signers, the verifier not among them.
 **What the test does not claim**: the reference engine compares hashes and
 recognises nobody (design §22.2), so its match attests the key release and
 the carried legs, not a face; and the tokens are the instrument's carriage,
-not `wire-format.md` §14.4's wire encodings — the previous entry's closing
-overstated that, and §14.4's vectors and model stay owed. The acceptance
+not `wire-format.md` §14's wire encodings — the previous entry's closing
+overstated that, and their vectors and model stay owed. The acceptance
 catalogue carries PRT-07 (checker: 0 flags), PRT-04's closing steps are
 shared rather than repeated, and the live suite runs seven of seven.
 
@@ -11244,7 +11243,7 @@ what it is — a design goal, currently unenforceable by known means: no party
 across one of these interfaces shares the state that would let it verify the
 interface was not bridged (design §1.1), so the MUST binds the
 implementation that honours it and is invisible either way. The old
-`wire-format.md` §14.3 item citing "§1.1" resolved to this document's
+the owed-list item citing "§1.1" resolved to `wire-format.md`'s own
 domain-separation section rather than the design's enforceability test; the
 restated text cites design §1.1 by name.
 
@@ -11255,9 +11254,9 @@ signatures to a key the intermediary chose for as long as the delegations
 run, and what bounds the exposure is the windows signed for and the §14.1
 property alone.
 
-**Applied**: `wire-format.md` §14 preamble, §14.2 rows, §14.3 rewritten to
-the two items genuinely owed (vectors, model), §14.4.2 extended, §14.4.3
-added, three §1.3 bounds rows; the two stale `OpticalHandshake` references
+**Applied**: `wire-format.md` §14 preamble, §14.2 rows, the owed list cut to
+the two items genuinely owed (vectors, model), the encodings extended, the
+device handover added, three §1.3 bounds rows; the two stale `OpticalHandshake` references
 renamed to the `OpticalContribution` the section defines. Functional
 SCH-024 and NET-016 added — 473 families across 26 prefixes, sum re-verified
 against the prefix table. Code reconciled where it already carried the
@@ -11266,7 +11265,7 @@ zero, and both gather paths treat an empty gather as no offer rather than an
 offer of nothing; one new transport test pins the bounds. Vector pin
 regenerated after audit — every vector change is pin-only. Refcheck 4,432
 references, 0 flags; pins 19, 0 stale. Test vectors and a model for the five
-encodings remain §14.3's owed items and are the next work.
+encodings remain the owed items and are the next work.
 
 ### 2026-09-29 (the engine that recognises somebody, chosen)
 
@@ -11289,9 +11288,9 @@ the implementation. The survey stays a working brief outside the root; the
 design carries the decision and its selection rule in its own words and
 depends on nothing else.
 
-### 2026-09-29 (the vectors and the model for §14.4, and what the model said back)
+### 2026-09-29 (the vectors and the model for §14's encodings, and what the model said back)
 
-**§14.3's last two items are closed, and closing them changed §14.** Draft
+**The last two owed items are closed, and closing them changed §14.** Draft
 vectors for all five encodings landed as `test-vectors/local-interfaces.md`,
 written as **one coherent exchange** rather than five isolated blobs: the
 optical contributions and the ceremony-id they derive are `records.md`'s
@@ -11306,23 +11305,23 @@ so those negatives actually bite rather than being skipped as unknown.
 
 **The model is a third tree, `models/tamarin/local/`, and it found the
 section overclaiming.** The optical channel is modelled authentic but
-**public** — §14.1's property and §14.4.1's "neither is secret", side by side
+**public** — §14.1's property and the anchor section's "neither is secret", side by side
 — and the bearer is the adversary's entirely. What verifies is that an
 accepted message's anchor is a ceremony-id **both** devices derived, and it
 is mutation-tested: delete the anchor comparison and it falsifies. What also
 verifies, as `exists-trace` lemmas because the attacks are reachable, is that
 the anchor **authenticates nobody** and does not stop a payload being
 re-anchored into another ceremony. Every anchored value is public, so a party
-that read the screens passes every check §14.4.2 makes.
+that read the screens passes every check the encodings make.
 
 **That is not a break, and the documents now say where the line is.** The
 resistance was always physical — reading the screens costs being there, the
 cost design §1 meters — and Dolev-Yao has no locality, so no symbolic model
 can express it. What was wrong was the prose: three sites claimed or implied
 that a bearer substitution is caught, and each is corrected to say *by a
-party that did not watch the screens*. §14.3 is rewritten from an owed list
+party that did not watch the screens*. The owed list is rewritten
 into what the encodings establish, stating plainly that none of it is
-cryptographic and that an implementer must not read §14.4.2's checks as
+cryptographic and that an implementer must not read those checks as
 authentication. §14's preamble says the section is complete. NET-016 carries
 the same warning, so a test author does not write an authentication test that
 cannot pass.
@@ -11368,3 +11367,83 @@ query to a client attached over the wire is unwritten, and so is the
 capture-key grant's route. The queries are prepared, so the call sequence is
 whole where the carriage is not. Twenty-four JVM unit tests, up from
 eighteen; lint 0 errors; the APK assembles.
+
+### 2026-09-29 (the owed list leaves the specification)
+
+**`wire-format.md` §14's owed list is removed** [author, 2026-09-29]: nothing
+in it described the state of the design — it rolled up what had been owed,
+when each item closed, and what the model had established, which is
+issue-tracking and drafting history rather than protocol fact. A core design
+document does not carry either.
+
+**What was a property stayed, and moved to where the property lives.** The
+anchor's guarantee and its limit are now stated in §14.3.1, beside the anchor
+itself: an anchored message binds to a ceremony both devices computed and
+**authenticates nobody**; every anchored value is public, so a party that read
+the screens can wrap any payload in an anchor that checks, or re-anchor one
+ceremony's message into another; a check catches a bearer contradicting the
+screens and never one quoting them; **none of that resistance is
+cryptographic**, and an implementer must not read the checks as
+authentication. Two smaller pieces of drafting history went with the section
+— an aside recording which earlier date a decision closed, and a line saying
+vectors and a model would follow.
+
+**Renumbered rather than left with a hole**: §14.4 → §14.3 and §14.4.1–.3 →
+§14.3.1–.3, the document's numbering being dense everywhere else. Sixty-four
+live citations moved across fifteen files — the spec, the functional tests,
+the vectors with their generator and harness, the model with its runner, five
+crates and two shell files. Three exclusions, each for its own reason: a
+process file whose one match is `network-design.md`'s old chapter in a
+migration mapping; the assistant's tracker, whose references are
+as-of-filing by declaration; and this log's own historical entries, thirteen
+of which now name what they described rather than cite a number that would
+resolve to different content. No reference-checker exemption was added.
+
+Refcheck 4,436 references, 0 flags; vectors regenerated and their harness
+passes; the model's four lemmas still verify with its mutation intact; pins
+20, 0 stale.
+
+### 2026-09-29 (peering between users, and an endpoint that outlives its snapshot)
+
+**Peering is a condition between users on the social graph** [author,
+2026-09-29], not between infra nodes alone. What it carries depends on what
+each runs: where one or both are light clients, the encrypted backup design
+§6.3 already priced and the trust distance the required meeting already
+gives; where both run instances, a network topology function as well. The
+record names each peer by what it has — a network point where it runs an
+instance, a locator otherwise, since the one is how a server is reached
+directly and the other how a light client is reached through resolution.
+`wire-format.md` §4.4's fields 3 and 4 are now `NetworkPoint / Locator`,
+each validated as its own type and told apart by key 1's width.
+
+**The endpoint outlives the record's snapshot of it.** The peering
+transaction memorialises consent to peer; static addresses move with hosting
+migrations and after disruptions, and no peering is reissued for that. Peers
+keep each other current by exchanging what already exists — an instance its
+newest `EndpointRecord` (`wire-format.md` §7.6), a light client its newest
+`SignedLocator` — each self-signed and `seqno`-fresh, verified under the key
+the peering names, on the end-to-end channel. When a user adds an instance
+its endpoint reaches their peers the same way; once both run instances they
+route directly.
+
+**What a peer holds, stated** [author, 2026-09-29]: the contacts and the
+transaction records as ciphertext; not the sealed captures, which go to a
+desktop or third-party backup with the archive (design §23.3); never a seed,
+which leaves the ceremony device for nowhere. Three points the author
+confirmed against the text on the way: seeds never leave, the shortened trust
+distance comes from the meeting and not the edge (§6.3's collapse rule), and
+a peer is not in one's horizon by virtue of peering.
+
+Applied to design §6.3; `wire-format.md` §4.4, §7.6 and the §1.3 bounds
+row; two `light-client-requirements.md` §2 bullets; TX-013 amended and TX-031
+added, 474 families, prefix table re-summed; the codec's type-4 arm; a
+server–light-client peering vector and a neither-shape negative, corpus 264
+→ 266, the Rust runner accepting the one and refusing the other. Refcheck
+4,468 references, 0 flags; pins 20, 0 stale.
+
+**Addendum** [author, 2026-09-29]: the locator push is kept, and a peer holds
+routing **per subnet** — one locator per (peer, anchor), as the address table
+already does, a same-anchor locator replacing under `wire-format.md` §2.3's
+freshness rule and a new anchor inserting; a network point replaces
+outright. Applied to `wire-format.md` §4.4, `light-client-requirements.md`
+§2, TX-031 and design §6.3.

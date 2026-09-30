@@ -236,7 +236,7 @@ impl Direct for LightDirect {
                 .gather(self.0.stun, Duration::from_secs(2))
                 .await;
             // a candidate exchange carries one to eight candidates
-            // (`wire-format.md` §14.4.2): an empty gather is no offer,
+            // (`wire-format.md` §14.3.2): an empty gather is no offer,
             // not an offer of nothing
             if cands.is_empty() { None } else { Some(cands) }
         })

@@ -51,7 +51,7 @@ object Kernel {
      * Begin a ceremony with the one provisioned peer, meeting or adopting
      * as chosen. The kernel prepares the local half; the optical handshake
      * and the bearer that carries the intent are specified now
-     * (`wire-format.md` §14.4) but not yet wired in this shell, so this
+     * (`wire-format.md` §14.3) but not yet wired in this shell, so this
      * stands the flow up rather than completing it. A ceremony already live
      * is returned as-is.
      */
@@ -73,7 +73,7 @@ object Kernel {
                 p.begin(to, listOf(), true)
                 m.note("intent prepared. A handshake goes screen-to-screen and")
                 m.note("the intent rides a bearer the shell picks (wire-format")
-                m.note("§14.4); the carriage is not wired in this build.")
+                m.note("§14.3); the carriage is not wired in this build.")
             } catch (e: Refused.Reason) {
                 m.stop("begin refused: ${e.reason}")
             }

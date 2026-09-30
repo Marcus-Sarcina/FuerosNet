@@ -51,15 +51,77 @@ Two rules govern every screen before any is drawn:
 
 | Step | Elements | Beneath | Owes |
 |---|---|---|---|
-| D1 Intent | Start/accept a meeting, **and the adoption option is chosen here** [author, 2026-09-27]: meet alone, or meet-and-adopt with its direction | `begin`, `take_intent`, `nominees` | design §7.1.1 |
-| D1.5 The brief | **Every warning and choice, front-loaded** [author, 2026-09-27]: from D2 on the device faces away from its user and takes no input, so everything a person must read or decide comes before any capture or exchange — the capture disclosure (what becomes durable, who may read it, the retention period), the disclosure-slot choices, and the adoption's authority consequences where D1 chose it. Witness cross-nomination runs beneath (each nominates from the *other's* neighbourhood — no picker for one's own) | | UX-001, UX-002; `light-client-requirements.md` §§1.5, 6 |
-| D2 Optical exchange | QR pane and camera pane, both directions; carries key exchange and the transcript hash; retry path | shell carries; `proximity`/ceremony conversation | design §7.1 step 3 |
+| D1 Intent | **Two halves, and two different cameras** [author, 2026-09-29 — see the handshake ruling below]. D1a, the initiator: a *meet someone* command, then the transaction-type choice, then a **bootstrap QR** on screen carrying the basics intent needs — this device's identifier and the type of transaction. D1b, the responder: a *scan a QR code* command reading that QR with the **rear-facing camera**. Nothing of the ceremony's own anchor crosses here | `begin`, `nominees` | design §7.1.1 |
+| D1.5 The brief and the acceptance | **Both devices show the transaction and both people answer** [author, 2026-09-29]: once the bootstrap QR is scanned, each device describes what is about to happen with every necessary warning and asks its own user to accept or refuse. Acceptance is what reveals the intention QR and the turn-the-phone instruction. **Every warning and choice, front-loaded** [author, 2026-09-27]: from D2 on the device faces away from its user and takes no input, so everything a person must read or decide comes before any capture or exchange — the capture disclosure (what becomes durable, who may read it, the retention period), the disclosure-slot choices, and the adoption's authority consequences where D1 chose it. Witness cross-nomination runs beneath (each nominates from the *other's* neighbourhood — no picker for one's own) | | UX-001, UX-002; `light-client-requirements.md` §§1.5, 6 |
+| D2 Optical exchange | The **intention QR**, mutual and on the **selfie cameras**, each device reading the other's off the screen it is looking at: the contributions and then the ceremony-id both compute and check (`wire-format.md` §14.3.1). Entered from the acceptance at D1.5 with an **instruction and illustration to turn the phone to face the counterparty** [author, 2026-09-29], which is the moment the device stops being the user's; retry path | shell carries; `take_intent` once the bearer has the intent | design §7.1 step 3; `wire-format.md` §14.3 |
 | D3 Proximity | Channel attempt UWB → NFC; the **channel recorded is the strongest the hardware supports**; result chips; continue-with-weaker is allowed and shown as the parties' own assurance | `proximity`, `take_channels` | CER-18; design §7.6.3 |
 | D4 Capture | Guided capture of the **other** person: 3–5 frames, randomised prompts ("turn slightly…"), voice or tone cues only — the disclosures were read at D1.5, the device faces away; capture keys handed and captures sealed beneath, silently | `capture_key`, `capture` | `light-client-requirements.md` §1.3 |
 | D5 Verifiers | The counterparty's handed bundle rendered for **selection by recognition**: prefer people met or shared-horizon, fish for common acquaintances, fill the rest deliberately; live progress as responses land (match / no-match / inconclusive / unavailable) against `min(floor(n/2), 10, |candidates|)` | `select_verifiers`, `query_for`, `request`, `responses`, `gathered` | design §7.1 step 6 and design §8.1.2 |
 | D6 Review and sign | **Each party reviews the other's selection before signing**; the pre-sign warnings: missing familiar verifiers, witness imbalance, unavailable evidence, weak proximity/integrity — a degraded ceremony presented as degraded, **never as malformed** | `review_and_sign`, `sign_body`, `finalize` | UX-003; design §7.1 step 7 |
 | D7 After | Record txid, carried up; the adoption D1 chose proposed and taken; **simultaneous opposite adoptions resolved by asking the two to choose a direction**, never reported as a protocol failure | `propose_adoption`, `take_adoption`, `position_in` | PRD-05; `light-client-requirements.md` §7 |
 | D∅ The passive roles | **No screen at all.** A witness or verifier is asked nothing and warned of nothing — the absence is asserted, not forgotten; at most a quiet activity log | `take_witness_ask`, `witness_sign`, `take_query`, `take_grant` | UX-002; design §19.6 |
+
+### The meeting handshake, as the author specified it [author, 2026-09-29]
+
+Given verbatim, because it settles a sequencing question the shell could not
+settle for itself:
+
+1. User A selects the *meet someone* command. A dialogue asks the kind of
+   transaction. **"Regular meeting" is the default**, with a checkbox *"Ask
+   this person to backup my user data"*, and a separate option making it a
+   patronage action, which then prompts **"I will be the Patron"** or
+   **"I will be the Client"**.
+2. A's device displays a QR carrying the basics intent requires: A's
+   identifier and the type of transaction.
+3. User B activates *scan a QR code* and scans it — **the rear-facing camera,
+   not the selfie cam**.
+4. Both devices then describe the transaction with any necessary warnings and
+   ask their respective users to accept or refuse.
+5. Once a user accepts, the screen shows the **intention QR** with
+   instructions and an illustration to **turn the phone to face the
+   counterparty**.
+6. Once both devices have the counterparty's intention QR in view of their
+   respective **selfie cams**, the rest of the ceremony proceeds.
+
+**What this settles.** The shell had `intentExchanged()` completing D1 before
+the optical step, following design §7.1's numbered summary — which cannot hold
+once `wire-format.md` §14.3.2's `IntentExchange` echoes an optical
+contribution that D2 has not yet shown. The ruling separates the two: a
+**bootstrap** QR at D1 carrying only identifier and transaction type, read
+rear-camera and one-directional, and the **anchor** exchange at D2, mutual and
+selfie-camera. Acceptance sits between them, which is also where the
+front-loading ruling wanted every warning, and the turn-the-phone moment is
+now explicit rather than implied.
+
+**Two consequences for the state machine.** D1 completes on the bootstrap
+being scanned and both descriptions being shown, not on an intent arriving;
+and the transaction type is chosen at D1a by the initiator, before the
+responder has seen anything, so the responder's D1.5 is the first place they
+can refuse it.
+
+**The checkbox is peering, and peering carries the backup** — I had this
+wrong on first reading and the author corrected it [2026-09-29].
+`network-design.md` §6.3 rules it [author, 2026-09-04]: a peer persists the
+other's data as an encrypted backup, "the one thing a peer gets that an
+ordinary acquaintance does not." The author's shape, confirmed against the
+documents: peering is a condition between users on the social graph; where
+one or both are light clients it carries the backup function and the trust
+distance the required meeting already gives; where both run instances it
+carries the topology function as well. Three points confirmed [author,
+2026-09-29]: seeds never leave the ceremony device (design §23.3), so a full
+backup still excludes them; the shortened trust distance comes from the
+meeting, not the edge (design §6.3's collapse rule); a peer is not in one's
+horizon by virtue of peering (design §6.3).
+
+**Ruled, and the checkbox has a mechanism** [author, 2026-09-29]. A
+light-client peering produces a `wire-format.md` §4.4 record; its endpoint
+field is a network point for an instance and a locator for a light client;
+peers keep each other's endpoint current by `EndpointRecord` or
+`SignedLocator` on the end-to-end channel, with no peering reissued for an
+address change; adding an instance sends its endpoint to peers, and two
+instances route directly. The checkbox therefore means: after the meeting's
+record, propose a type-4 peering naming it in field 8, and take on the backup
+obligation `light-client-requirements.md` §2 now states.
 
 **D2 through D4 are hands-off** [author, 2026-09-27]: the device faces the
 counterparty and receives no user input, which is why D1.5 front-loads every

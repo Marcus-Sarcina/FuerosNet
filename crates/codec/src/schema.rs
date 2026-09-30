@@ -858,7 +858,7 @@ fn record_extension_bounds(b: &[u8], kind: &str, item: &Item) -> Result<(), Erro
 }
 
 /// The §4.5 `Channel` maps, exactly as a record's proximity field and a
-/// `ProximityOutcomes` exchange (`wire-format.md` §14.4.2) both carry
+/// `ProximityOutcomes` exchange (`wire-format.md` §14.3.2) both carry
 /// them.  Each channel's kind and outcome are closed enumerations, and
 /// §1.2 rejects an unknown value in a known enumerated field.
 fn channels_ok(ch: &[Item]) -> Result<(), Error> {
@@ -883,7 +883,7 @@ fn channels_ok(ch: &[Item]) -> Result<(), Error> {
     Ok(())
 }
 
-/// A `Candidate` array (`wire-format.md` §14.4.2): one to eight, each
+/// A `Candidate` array (`wire-format.md` §14.3.2): one to eight, each
 /// `[kind, address, port]` — kind a closed enumeration, the address 4
 /// bytes or 16 and nothing between, and port zero never a destination.
 fn candidates_ok(item: &Item) -> Result<(), Error> {
@@ -916,7 +916,7 @@ fn candidates_ok(item: &Item) -> Result<(), Error> {
     Ok(())
 }
 
-/// A carried `PrekeyBundle` blob (`wire-format.md` §14.4.3): parses as a
+/// A carried `PrekeyBundle` blob (`wire-format.md` §14.3.3): parses as a
 /// map, within the ceiling, its signature slot present or absent as the
 /// carriage requires.
 fn device_bundle_ok(b: &[u8], f: &Item, signed: bool) -> Result<(), Error> {
@@ -1074,7 +1074,7 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             }
             Ok(())
         }
-        // ---- the local device-to-device interfaces (`wire-format.md` §14.4)
+        // ---- the local device-to-device interfaces (`wire-format.md` §14.3)
         "OpticalContribution" => {
             let Item::Array(a) = item else {
                 return Err(Error("not array"));
@@ -1613,10 +1613,23 @@ pub fn check_body_of_type(b: &[u8], item: &Item, tx_type: u64) -> Result<(), Err
             Ok(())
         }
         4 => {
-            // both network points, each in the shape §4.4 gives them
+            // each endpoint is a network point where that peer runs an
+            // instance and a locator otherwise (§4.4), told apart by key 1:
+            // only a 32-byte anchor keyhash is a locator, and everything
+            // else is judged as a network point — so a malformed address
+            // still fails as an address ("address width"), not as a shape
+            // nobody claimed
             for k in [3u64, 4] {
-                let r = value_slice(b, k).ok_or(Error("peering network point"))?;
-                network_point_at(b, r.start, true)?;
+                let r = value_slice(b, k).ok_or(Error("peering endpoint"))?;
+                let is_locator = matches!(
+                    map_get(m, k),
+                    Some(Item::Map(fm)) if matches!(map_get(fm, 1), Some(Item::Bytes(k1)) if k1.len() == 32)
+                );
+                if is_locator {
+                    check_type(b, r.start, Locator)?;
+                } else {
+                    network_point_at(b, r.start, true)?;
+                }
             }
             let r3 = value_slice(b, 3).ok_or(Error("field 3"))?;
             extension_bounds(b, r3.start, |k| (1..=3).contains(&k))?;

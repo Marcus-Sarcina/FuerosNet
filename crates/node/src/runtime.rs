@@ -840,7 +840,7 @@ impl LiveNode {
         match path {
             // an empty gather is no offer, not an offer of nothing: a
             // candidate exchange carries one to eight (`wire-format.md`
-            // §14.4.2)
+            // §14.3.2)
             crate::peering::PayloadPath::Direct => {
                 Some(self.gather().await).filter(|c| !c.is_empty())
             }

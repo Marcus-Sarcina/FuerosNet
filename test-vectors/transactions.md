@@ -1,6 +1,6 @@
 # Transaction bodies, txids, and one full envelope
 
-Generated against `wire-format.md` `5e3447586c61e0c9…`, `network-design.md` `aeb023d9a5af1e9e…` and `light-client-requirements.md` `d43f07ee0bc2a48a…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `008eb1c8a111a3fb…`, `network-design.md` `6262335e88cf08b5…` and `light-client-requirements.md` `a7b09828b408ca4d…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md).
@@ -14833,3 +14833,27 @@ ed0c83417a33591dbc7da88d50a5da9b52559527cdcf510a4704e1b088715d4c
 868fbd0d4549818eabc7ee084c6bc6d800000000000000000000000000000000
 000000070f13171f24
 ```
+
+### Peering between an instance and a light client (§4.4) [author, 2026-09-29]
+
+Bob is named by his network point, carol by her locator — anchor bob, path
+`4`, series 1 counter 0 — since she runs no instance. The locator is a
+snapshot: the peers keep each other's current endpoint by `EndpointRecord`
+and `SignedLocator` on the end-to-end channel, and this record is never
+reissued for it.
+
+Body (248 bytes):
+
+```
+a70082815820252e1f58e8c0d3f9002fad507fe04dcc772859f8183743106e24
+26062c840e3e815820262a7e58b63c11f5862862554c90c18a2520abcb84db38
+dab96bfa9eb5b412fd0158206bcf8a3e8899fc206bc603744414d58b01db8579
+86d82f611b0794ac9c32c37502582071591ef14497c49bd95fc61e243ccc9e2d
+041f54d210e89ad6654f61554a2cf203a301440a0000010219fbff03191d0804
+a30158206bcf8a3e8899fc206bc603744414d58b01db857986d82f611b0794ac
+9c32c37502a2014140020103820100051a6a014630085820d7a46d12f86c7b46
+959dd7018e727b6dcbc7e04c916df337d25c7daab3856c9c
+```
+
+txid: `2f3f62e3a0eb077b6d65d35ee43eaba426ca99e2e54fa961b98dbaa1d38d516d`
+

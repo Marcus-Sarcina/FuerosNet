@@ -142,7 +142,7 @@ done
 
 echo "=== 3. Tamarin symbolic protocol models ==="
 #   local/     -- a two-party exchange across two channels of different
-#                  strength (`wire-format.md` §14.4), where the question is
+#                  strength (`wire-format.md` §14.3), where the question is
 #                  which guarantees come from the bytes and which from the
 #                  physical premise.  Neither tree above fits: there is no
 #                  third party checking bytes, and no single-party obligation.
@@ -275,7 +275,7 @@ MUTATIONS=(
   'wire-only/attach|a_delegated_bind_names_a_key_the_identity_delegated|Eq(verify(del, <'"'"'delegation'"'"', k, $S>, fst(km)), true)|Eq(true, true)'
   # local/exchange -- the receiver stops comparing the bearer's anchor field
   # with the ceremony-id it derived optically, so the adversary supplies one
-  # nobody derived.  The check is the whole of what §14.4.2 buys, the anchor
+  # nobody derived.  The check is the whole of what §14.3.2 buys, the anchor
   # being public; with it gone the exchange keeps no binding at all.
   'local/exchange|an_accepted_anchor_was_derived_by_both|Eq(anchor, cid)                 // the anchor|Eq(cid, cid)                     // the anchor'
 )

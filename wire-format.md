@@ -210,10 +210,10 @@ malformed, not merely unusual.
 | Corroborations per record | 16 (one per witness) |
 | Proximity channels per record | 8 |
 | Explicit-scope keyhash list | 256 |
-| NetworkPoint entries per anchor entry or endpoint record (§7.2, §7.6) | 8 — this row is the anchor entry's and the endpoint record's alone; **peering carries exactly one `NetworkPoint` per endpoint** (§4.4) |
-| `Channel` entries per `ProximityOutcomes` (§14.4.2) | 8 — the same ceiling as proximity channels per record, above |
-| `Candidate` entries per `CandidateHandover` or per payload-path candidate exchange (§14.4.2) | 8 |
-| Delegations per `DeviceCredential` (§14.4.3) | 16 — sixteen 48-hour windows is 32 days |
+| NetworkPoint entries per anchor entry or endpoint record (§7.2, §7.6) | 8 — this row is the anchor entry's and the endpoint record's alone; **peering carries exactly one `NetworkPoint` or `Locator` per endpoint** (§4.4) |
+| `Channel` entries per `ProximityOutcomes` (§14.3.2) | 8 — the same ceiling as proximity channels per record, above |
+| `Candidate` entries per `CandidateHandover` or per payload-path candidate exchange (§14.3.2) | 8 |
+| Delegations per `DeviceCredential` (§14.3.3) | 16 — sixteen 48-hour windows is 32 days |
 | `CatalogEntry`, total encoded bytes | 2048 |
 | `CatalogReply` entries | 111 — an answering node answers for **itself plus the ≤110 users it serves** (§6.4, design §11.5). Not the trust horizon population, which is larger (design §15.1) and irrelevant here: the bound is per *answering node*, not per horizon. The frame bound caps this at 127 |
 | Unknown extension keys per map | 16 |
@@ -1318,10 +1318,17 @@ party holding both halves is the disavowing patron, who already knows them.
 
 ```
 {
-  1: keyhash,          ; infra node A
-  2: keyhash,          ; infra node B
-  3: NetworkPoint,     ; A
-  4: NetworkPoint,     ; B
+  1: keyhash,          ; peer A
+  2: keyhash,          ; peer B
+  3: NetworkPoint
+     / Locator,        ; A: its network point where A runs an instance, its
+                       ;   locator (§2) otherwise [author, 2026-09-29]. A
+                       ;   SNAPSHOT at signing: the current value travels
+                       ;   between the peers as §7.6's EndpointRecord or a
+                       ;   SignedLocator, and this record is not reissued
+                       ;   when it changes
+  4: NetworkPoint
+     / Locator,        ; B, the same
   5: timestamp,
   6: ? uint,           ; replication commitment, bytes
   7: ? [ * Audit ],    ; most recent few only (design §6.3)
@@ -1362,6 +1369,27 @@ one legal order (design §17.3). The field is optional and self-asserted besides
 no IP-to-ASN validation is specified anywhere.
 The audit list is pruned to the most recent few; peering is a status
 rather than a trust-bearing history.
+
+**Peering is between users, and the record names each by what it has**
+[author, 2026-09-29]: a network point is how a server is reached directly, a
+locator how a light client is reached through resolution (§7.7), so field 3
+and field 4 carry whichever their peer runs. **The endpoint outlives the
+record's snapshot of it.** The transaction memorialises consent to peer;
+addresses move with hosting migrations and after disruptions, and a peer's
+current endpoint is kept by the peers themselves — an instance sends its
+peers its newest `EndpointRecord` (§7.6) and a light client its newest
+`SignedLocator` (§2), each self-signed and `seqno`-fresh, verified under the
+key the peering record already names, carried on the end-to-end channel.
+No peering transaction is reissued for an address change. **A peer's
+routing is held per subnet** [author, 2026-09-29]: a user may be bound into
+several subnets at once (design §3.1.1) and holds one position in each, so a
+peer keeps one locator per (peer, anchor) as the address table already does
+— a locator whose anchor is already held **replaces** that entry under
+§2.3's freshness rule, and a locator for an anchor not yet held **inserts**
+a new one. A network point is per instance, not per subnet, and replaces
+outright. When a user adds
+an instance its endpoint goes to their peers the same way, and once both
+peers run instances they route to each other directly.
 
 ### 4.5 Presence record (type 5)
 
@@ -2834,7 +2862,10 @@ EndpointRecord = {
 **Published by infra nodes only.** A light client's endpoints arrive when it attaches
 (design §14.1.2) and it holds no static address; an infra node serves itself and
 never attaches, so nothing otherwise carries its address to its patron, and without
-it **the patron cannot refer** (design §12.6.1).
+it **the patron cannot refer** (design §12.6.1). **It also travels peer to peer**
+[author, 2026-09-29]: an instance sends its newest record to its peers on the
+end-to-end channel, which is how a peering's snapshot of an address is kept
+current without reissuing the peering (§4.4).
 
 **Carried in the topology class**, by §10.1's forwarding rule, so it reaches the
 node's horizon and its patron with it. **It does not travel rootward** (§10.2).
@@ -4625,12 +4656,10 @@ verifiable for decades. A few hundred per user per decade is under 10 MB lifetim
 
 ## 14. Local device-to-device interfaces
 
-**Opened 2026-09-25, complete 2026-09-29.** The protocol has carried
-device-to-device exchanges since the ceremony was specified, and had never
-said what crosses them. This section is where that goes: the class and its
-defining property (§14.1), what travels (§14.2), an encoding for every row
-(§14.4), and in §14.3 what the encodings turned out to guarantee — which is
-less than the checks look like, and is physical rather than cryptographic.
+The protocol has carried device-to-device exchanges since the ceremony was
+specified. This section says what crosses them: the class and the property
+that defines it (§14.1), what travels on these interfaces (§14.2), and an
+encoding for every row (§14.3).
 
 ### 14.1 What the class is, and the property that defines it
 
@@ -4672,11 +4701,11 @@ holds it, which is what the rest of the design already depends on.
 
 | What | Between | Where it is stated | Encoding |
 |---|---|---|---|
-| The ceremony's intent exchange — the contribution, the nominees, the evidence bundle, the timing and who initiated | Two participants' devices | design §7.1, design §13.2 | `IntentExchange` (§14.4.2), carried by the shell's chosen bearer (§14.4.1) and bound to the pre-commitment. The CBOR is specified; two vendors' clients compute the same ceremony-id (design §13.2) either way |
-| The optical transcript — each device's contribution, then the derived ceremony-id, screen to camera | Two participants' devices | design §1.3 item 3, design §13.2 | `OpticalContribution` then `TranscriptConfirm` (§14.4.2): the contribution is the key-exchange input, the ceremony-id is the transcript hash both display and check |
-| Proximity channel outcomes — the UWB, NFC or optical result and its ranking | Two participants' devices | §3.2, design §1.3 item 4 | `ProximityOutcomes` (§14.4.2): the §4.5 `Channel` maps as measured, anchored to the ceremony-id. The record's `strongest` (§3.2) is not carried — each device computes it from the outcomes, as each computes the ceremony-id |
-| Traversal candidates | Two participants' devices | design §12.6.3 [author, 2026-09-25] | `CandidateHandover` (§14.4.2), carrying the `Candidate` structure this document now defines; the same candidates travel the end-to-end payload path when a direct connection is set up remotely (design §12.6.3, §14.1.1) |
-| A delegated device's payload material, and the ceremony device's signature over it | Two devices of one identity | design §23.3, §7.8 | `DeviceIntroduction` then `DeviceCredential` (§14.4.3): §7.8's bundle unsigned and then signed, beside §8.2's delegations |
+| The ceremony's intent exchange — the contribution, the nominees, the evidence bundle, the timing and who initiated | Two participants' devices | design §7.1, design §13.2 | `IntentExchange` (§14.3.2), carried by the shell's chosen bearer (§14.3.1) and bound to the pre-commitment. The CBOR is specified; two vendors' clients compute the same ceremony-id (design §13.2) either way |
+| The optical transcript — each device's contribution, then the derived ceremony-id, screen to camera | Two participants' devices | design §1.3 item 3, design §13.2 | `OpticalContribution` then `TranscriptConfirm` (§14.3.2): the contribution is the key-exchange input, the ceremony-id is the transcript hash both display and check |
+| Proximity channel outcomes — the UWB, NFC or optical result and its ranking | Two participants' devices | §3.2, design §1.3 item 4 | `ProximityOutcomes` (§14.3.2): the §4.5 `Channel` maps as measured, anchored to the ceremony-id. The record's `strongest` (§3.2) is not carried — each device computes it from the outcomes, as each computes the ceremony-id |
+| Traversal candidates | Two participants' devices | design §12.6.3 [author, 2026-09-25] | `CandidateHandover` (§14.3.2), carrying the `Candidate` structure this document now defines; the same candidates travel the end-to-end payload path when a direct connection is set up remotely (design §12.6.3, §14.1.1) |
+| A delegated device's payload material, and the ceremony device's signature over it | Two devices of one identity | design §23.3, §7.8 | `DeviceIntroduction` then `DeviceCredential` (§14.3.3): §7.8's bundle unsigned and then signed, beside §8.2's delegations |
 
 **The last row is the one that is not between two people.** A phone
 provisioning a desktop it owns is the same class of interface and the same
@@ -4684,35 +4713,7 @@ property: the two devices are in one place, and the protocol should not
 care whether the parties either side of a local interface are two people or
 one person's two devices.
 
-### 14.3 What was owed, and what the encodings turned out to establish
-
-**All four items are closed** [author, 2026-09-28, 2026-09-29]. Every row of
-§14.2 has its encoding in §14.4, each under §1's obligations — deterministic
-CBOR, an explicit version, bounded arrays; non-intermediability is stated in
-§14.1 as the design goal it is, currently unenforceable by known means; the
-five encodings have draft vectors, as one worked exchange; and the exchange
-is modelled symbolically, with the optical channel authentic and the bearer
-the adversary's.
-
-**What the model established is narrower than §14.4.1 reads, and is stated
-here because a reader should not have to find it elsewhere.** An anchored
-message binds to a ceremony both devices computed — the anchor cannot be a
-value only one party derived, or one the adversary invented. It
-**authenticates nobody**. Every anchored value is public by §14.4.1: the
-contributions are shown on screens and the ceremony-id is derived from them,
-so a party that has read those screens can wrap any payload in an anchor
-that checks, and can re-anchor one ceremony's message into another. The echo
-of §14.4.2 catches a bearer that *contradicts* the screen, never one that
-quotes it.
-
-**That is the property §14.1 already describes, arriving where it was always
-going to.** The resistance is physical: reading the screens costs being
-there, which is the cost design §1 meters. What is worth stating plainly is
-that **no part of it is cryptographic** — an implementer must not read
-§14.4.2's checks as authentication, because a co-present adversary passes
-them all.
-
-### 14.4 Carriage, and the two encodings it moves
+### 14.3 Carriage, and the encodings it moves
 
 **The bearer is the shell's choice, in a hierarchy of desirability**
 [author, 2026-09-28]: a direct local radio — Bluetooth or a device-to-device
@@ -4733,9 +4734,10 @@ nearness. A bearer moving data that is already bound to the optical anchor
 needs no distance guarantee of its own: a *remote* man in the middle of the
 Bluetooth link is caught by the ceremony-id each party computed from
 contributions read off the other's actual screen — a co-present one is not,
-and §14.3 says why. The two uses are different and only one is barred.
+for the reason §14.3.1 gives. The two uses are different and only one is
+barred.
 
-#### 14.4.1 What the anchor is, and what it binds
+#### 14.3.1 What the anchor is, and what it binds
 
 **The optical channel carries two things across the exchange** (design §1.3
 item 3), and neither is secret. First each device shows its 16-byte
@@ -4746,16 +4748,27 @@ that 32-byte **ceremony-id**, and each checks the other's against its own: a
 mismatch is where a man in the middle shows, and the ceremony stops. That
 value is the transcript hash the rest of the exchange binds to — consents
 and capture keys already bind to it (design §13.2), and everything the
-bearer carries is checked against it, so a substitution by a party that did
-not watch the two screens produces a value that does not match what they
-fixed — and one by a party that did is **not** caught, every anchored value
-being public (§14.3). **Each
-party reads both values off a screen it is looking at**, which is the whole
-of the man-in-the-middle resistance and the reason this step is close-range:
-a QR of this size resolves at arm's length on a modest selfie camera, not
-across a room.
+bearer carries is checked against it. **Each party reads both values off a
+screen it is looking at**, which is the whole of the man-in-the-middle
+resistance and the reason this step is close-range: a QR of this size
+resolves at arm's length on a modest selfie camera, not across a room.
 
-#### 14.4.2 The encodings
+**What the anchor binds, and what it does not.** An anchored message binds
+to a ceremony **both** devices computed: the anchor cannot be a value only
+one party derived, nor one an adversary invented. It **authenticates
+nobody**. Every anchored value is public — the contributions are shown on
+screens and the ceremony-id is derived from them — so a party that has read
+those screens can wrap any payload in an anchor that checks, and can
+re-anchor one ceremony's message into another. A check against the anchor
+catches a bearer that *contradicts* the screens, never one that quotes
+them.
+
+**No part of that resistance is cryptographic**, and an implementer must
+not read these checks as authentication: a co-present adversary passes all
+of them. What stands in its place is §14.1's property — reading the screens
+costs being there, which is the cost design §1 meters.
+
+#### 14.3.2 The encodings
 
 Every one is deterministic CBOR under §1, versioned, with the array bounds
 §1 requires.
@@ -4777,7 +4790,7 @@ TranscriptConfirm = [          ; the second QR, once both contributions are in
 ```
 
 ```
-IntentExchange = [             ; carried by the bearer (§14.4.1), not optical
+IntentExchange = [             ; carried by the bearer (§14.3.1), not optical
   uint,                        ; version, 1
   bstr .size 16,               ; the sender's contribution, echoing its
                                ;   OpticalContribution so a bearer that
@@ -4800,7 +4813,7 @@ receiver checks the echoed contribution in field 2 against the
 `OpticalContribution` it read optically before trusting anything
 bearer-carried; a mismatch is a bearer that does not agree with the screen,
 and the ceremony does not continue over it. **The check is not
-authentication** and §14.3 states what it is: the contribution is public, so
+authentication** and §14.3.1 says what it is: the contribution is public, so
 it catches a bearer contradicting the screen and never one quoting it.
 
 **Two more exchanges ride the ceremony's interfaces, anchored the same way**
@@ -4809,7 +4822,7 @@ it catches a bearer contradicting the screen and never one quoting it.
 ```
 ProximityOutcomes = [          ; what the distance channels measured
   uint,                        ; version, 1
-  bstr .size 32,               ; the ceremony-id (§14.4.1); the receiver
+  bstr .size 32,               ; the ceremony-id (§14.3.1); the receiver
                                ;   checks it equals its own, and stops where
                                ;   it does not
   [ 1*8 Channel ],             ; §4.5's Channel maps, exactly as a record
@@ -4848,7 +4861,7 @@ Candidate = [                  ; one address for the direct path
 
 CandidateHandover = [          ; candidates on the ceremony's channels
   uint,                        ; version, 1
-  bstr .size 32,               ; the ceremony-id (§14.4.1), checked as above
+  bstr .size 32,               ; the ceremony-id (§14.3.1), checked as above
   [ 1*8 Candidate ],           ; eight, the NetworkPoint rows' ceiling (§1.3)
 ]
 ```
@@ -4861,14 +4874,13 @@ over is an address to dial, not evidence of anything — reachability is
 settled by the dial (RFC 8445's checks), and nearness by the proximity
 channels and nothing else.
 
-**A confidential bearer channel is not wanted** [author, 2026-09-29, closing
-what 2026-09-28 left open]: the contributions and the bundle are not secret,
+**A confidential bearer channel is not wanted** [author, 2026-09-29]: the
+contributions and the bundle are not secret,
 and the ceremony-id is a commitment rather than a key, so nothing here
 requires bearer encryption. A bearer that happens to encrypt — a Bluetooth
 pairing, a fetch inside a session — is welcome and relied upon for nothing.
-Test vectors and a model follow, as §14.3 orders.
 
-#### 14.4.3 The handover between one identity's devices
+#### 14.3.3 The handover between one identity's devices
 
 The last row of §14.2 is not between two people: a device that holds no seed
 is introduced to the one that does (design §23.3), across the same class of

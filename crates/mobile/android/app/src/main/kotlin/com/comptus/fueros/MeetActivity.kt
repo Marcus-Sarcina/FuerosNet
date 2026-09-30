@@ -21,7 +21,7 @@ import android.widget.TextView
  * here and enforced by [Meet]. The steps that need the world are not
  * faked: the optical exchange needs a counterparty's screen in the camera,
  * and the bearer that carries the intent past the handshake is the shell's
- * to build (`wire-format.md` §14.4 fixed the encoding; the carriage is not
+ * to build (`wire-format.md` §14.3 fixed the encoding; the carriage is not
  * yet wired here); proximity needs the radios; capture needs a face in front
  * of the camera. Where a step needs reality, the screen says so. A dim
  * **walkthrough** control advances the flow for inspection — it is
@@ -131,7 +131,7 @@ class MeetActivity : Activity() {
 
     private fun intent(m: Meet) {
         para("A short code goes screen-to-screen with ${m.counterpartyName} — each phone's contribution, then the ceremony id both compute and check. That handshake is what a person verifies by looking.")
-        para("The intent and the records behind it then cross on a bearer the shell picks (wire-format §14.4: a direct radio first, a network fetch last). The encoding is fixed; the carriage is not wired in this build.")
+        para("The intent and the records behind it then cross on a bearer the shell picks (wire-format §14.3: a direct radio first, a network fetch last). The encoding is fixed; the carriage is not wired in this build.")
         walkthrough("the counterparty's intent arrived") { m.intentExchanged() }
     }
 

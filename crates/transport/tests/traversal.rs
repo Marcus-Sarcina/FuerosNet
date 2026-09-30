@@ -183,7 +183,7 @@ fn a_candidate_list_is_bounded_and_a_candidate_names_a_real_port() {
     };
     // both families round-trip: a candidate is an ephemeral address for one
     // dial, not a published endpoint, and design §14.1.1 ties traversal to
-    // IPv6 availability (`wire-format.md` §14.4.2)
+    // IPv6 availability (`wire-format.md` §14.3.2)
     let both = vec![one("192.0.2.7:7431"), one("[2001:db8::7]:7431")];
     assert_eq!(decode_candidates(&encode_candidates(&both)).unwrap(), both);
     // eight is the bound and exceeding it is malformed, not unusual
@@ -198,7 +198,7 @@ fn a_candidate_list_is_bounded_and_a_candidate_names_a_real_port() {
         decode_candidates(&encode_candidates(&[])),
         Err("one to eight candidates".into())
     );
-    // port zero is never a destination (`wire-format.md` §14.4.2)
+    // port zero is never a destination (`wire-format.md` §14.3.2)
     assert_eq!(
         decode_candidates(&encode_candidates(&[one("192.0.2.7:0")])),
         Err("candidate port".into())

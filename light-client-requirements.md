@@ -251,6 +251,24 @@ job.
   §13.7.1's envelope is what makes any of them safe to use.
 - **Scan any imported backup for expired retention** and delete what is past its
   window. Import is exactly where an over-retention leak occurs (design §13.7.1).
+- **Hold a peer's backup as ciphertext, and give a peer only what a peer holds**
+  [author, 2026-09-29]: the contacts and the transaction records, under design
+  §13.7.1's envelope. Not the sealed captures — those go to a desktop or
+  third-party backup with the archive (design §23.3) — and never a seed, which
+  leaves the ceremony device for nowhere (design §23.3). Peering is priced in a
+  meeting and memorialised in a record (design §6.3); the backup is what the
+  record entitles the two of you to, and nothing else does.
+- **Keep your peers' endpoints current, and tell them yours** [author,
+  2026-09-29]. A peering record's endpoint is a snapshot; send your peers your
+  newest signed locator when your position changes and, when you add an
+  instance, its endpoint record (`wire-format.md` §4.4, §7.6), each on the
+  end-to-end channel and verified by them under the key the peering already
+  names. Once both of you run instances, route to each other directly.
+  **Hold a peer's locators per subnet**: one per anchor, as your own address
+  table does — a locator for an anchor you already hold for that peer replaces
+  it under `wire-format.md` §2.3's freshness rule; one for an anchor you do
+  not inserts a new entry (design §3.1.1: a user is bound into several subnets
+  at once, and holds one position in each).
 - **An operator's backup carries their provider credential too.** It belongs in
   design §13.7.1's envelope with everything else and **not in the archive**,
   which siblings replicate (design §3.4) and which is the wrong place for

@@ -1184,7 +1184,25 @@ consequence of subnet plurality, not a gap in this mechanism.
 - **The record carries each endpoint's network point.** Address, and where
   available the ASN, so **concentration** is observable rather than asserted
   (§3.4, §17.3). Independence is not: ASN is routing, not legal control.
-- Two signatures, between infra nodes in different subtrees.
+- **Two signatures, between two users in different subtrees** [author,
+  2026-09-29]. Peering is a condition between users on the social graph, and
+  what it carries depends on what each runs: where one or both are light
+  clients it carries the backup below and the trust distance the required
+  meeting already gives; where both run instances it carries a network
+  topology function as well — the endpoints, and the concentration
+  observability above. **The record names each peer by its network point
+  where it runs an instance and by its locator otherwise** (`wire-format.md`
+  §4.4): the one is how to reach a server directly, the other how to reach a
+  light client through resolution, and each is what that peer has.
+- **A peer's endpoint changes without the peering changing** [author,
+  2026-09-29]. The peering record memorialises consent to peer; the address
+  it carried is a snapshot, and static addresses move with hosting migrations
+  and after disruptions. Peers therefore keep each other's *current* endpoint
+  by exchanging `wire-format.md` §7.6's endpoint record directly — a light
+  client its signed locator, held one per subnet since a user is bound into
+  several at once (§3.1.1) — and no peering transaction is reissued for it.
+  **When a user adds an instance, its endpoint goes to their peers**, and
+  once both peers run instances they route to each other directly.
 - **It requires a proof of presence between the two peers** [author,
   2026-09-05], named in the record as an adoption names one (§6.1.1,
   `wire-format.md` §4.4). **No alternative applies**: §6.1.1's former-patron
@@ -1205,7 +1223,12 @@ consequence of subnet plurality, not a gap in this mechanism.
 - Carries a real cost: persisting the peer's data — **as an encrypted
   backup** [author, 2026-09-04]. What a peer holds is ciphertext, so the
   entrustment is of durability and not of readable content, and it is the
-  one thing a peer gets that an ordinary acquaintance does not.
+  one thing a peer gets that an ordinary acquaintance does not. **What a
+  peer holds is the contacts and the transaction records, not the captures
+  and never a secret** [author, 2026-09-29]: the sealed captures go to a
+  desktop or third-party backup with the archive (§23.3), and the seeds go
+  nowhere — they sit on the device that performs ceremonies and nowhere
+  else (§23.3).
 - **It confers no scope, and does not extend the horizon.** A peering edge is
   **ungoverned**: permissionless, outside the tree, requiring nobody's authority and
   therefore carrying none of the subnet's. A peer is not in your trust horizon by virtue

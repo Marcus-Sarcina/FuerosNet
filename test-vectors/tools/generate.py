@@ -1147,6 +1147,32 @@ peer_body = e_map([
 ])
 peer_txid = H(peer_body)
 
+# --- Peering between a server and a light client (§4.4) [author, 2026-09-29]:
+# bob runs an instance and is named by its network point; carol runs none and
+# is named by her locator — a snapshot, kept current between the peers by
+# §7.6's EndpointRecord and a SignedLocator, never by reissuing this.
+carol_loc = locator(bob.keyhash, path([4]), seqno(1, 0))
+peer_light_body = e_map([
+    (e_uint(0), backptrs([adopt_txid], [formation_txid])),
+    (e_uint(1), e_bstr(bob.keyhash)),
+    (e_uint(2), e_bstr(carol.keyhash)),
+    (e_uint(3), network_point([10, 0, 0, 1], asn=64511, port=7432)),
+    (e_uint(4), carol_loc),
+    (e_uint(5), e_uint(TS_DEPART + 7200)),
+    (e_uint(8), e_bstr(bc_txid)),
+])
+peer_light_txid = H(peer_light_body)
+# an endpoint that is neither shape: key 1 of eight bytes
+peer_neither_body = e_map([
+    (e_uint(0), backptrs([adopt_txid], [formation_txid])),
+    (e_uint(1), e_bstr(bob.keyhash)),
+    (e_uint(2), e_bstr(carol.keyhash)),
+    (e_uint(3), network_point([10, 0, 0, 1], asn=64511, port=7432)),
+    (e_uint(4), e_map([(e_uint(1), e_bstr(bytes(8))), (e_uint(2), path([4])), (e_uint(3), seqno(1, 0))])),
+    (e_uint(5), e_uint(TS_DEPART + 7200)),
+    (e_uint(8), e_bstr(bc_txid)),
+])
+
 # --- Node endpoint record (§7.6): classical-only COSE_Sign1, fully computable.
 # Payload: the map of exactly fields 1-3, per §1's fields-X–Y rule.
 AAD_ENDPOINTS = b'rhtn/1:endpoints'
@@ -2848,7 +2874,7 @@ for fid, by, kind in [
     ('P-adopt-min', adopt_env, 'envelope'), ('P-adopt-divergent', div_env, 'envelope'),
     ('P-adopt-extensions', ext_env, 'envelope'), ('P-adopt-optionals', adopt_full_body, 'body'),
     ('P-departure', depart_body, 'body'), ('P-departure-merge', merge_body, 'body'),
-    ('P-disavowal-code40', code40_body, 'body'), ('P-peering', peer_body, 'body'),
+    ('P-disavowal-code40', code40_body, 'body'), ('P-peering', peer_body, 'body'), ('P-peering-light', peer_light_body, 'body'),
     ('P-reissue', reissue_body, 'body'), ('P-formation', formation_env, 'envelope'),
     ('P-normal-record', npr_env, 'envelope'), ('P-fin-nomatch', fin_nm_env, 'envelope'),
     ('P-fin-absent', fin_ab_env, 'envelope'), ('P-ac1', ac1_env, 'envelope'),
@@ -3308,6 +3334,7 @@ reg('N-shape-relay-missing-device', 'bytes',
     REJ('frame', 'schema', 'RelaySubmission field 4 required: a session is with a device'), f_relay_nodevice)
 reg('B-prekey-reply-8', 'bytes', ACC('PrekeyReply', 'eight bundles, the ceiling'), r_pk_8)
 reg('B-prekey-reply-9', 'bytes', REJ('PrekeyReply', 'schema', 'nine bundles exceed the ceiling of eight'), r_pk_9)
+reg('N-peering-endpoint-neither', 'bytes', REJ('body', 'schema', 'a peering endpoint is a network point or a locator, told apart by key 1'), peer_neither_body)
 reg('P-archive-request-frontier-2', 'bytes', ACC('frame', 'a two-txid frontier, past a merge'), f_archive_frontier2)
 reg('B-archive-frontier-0', 'bytes', REJ('frame', 'schema', 'an empty frontier: field 2 is [ + txid ]'),
     frame(2, e_map([(e_uint(1), e_bstr(alice.keyhash)), (e_uint(2), e_arr([])),
@@ -3506,7 +3533,26 @@ principal_id:
 ```
 """)
 
-# ---------------------------------------------- local-interfaces.md (§14.4)
+
+emit('transactions.md', f"""
+### Peering between an instance and a light client (§4.4) [author, 2026-09-29]
+
+Bob is named by his network point, carol by her locator — anchor bob, path
+`4`, series 1 counter 0 — since she runs no instance. The locator is a
+snapshot: the peers keep each other's current endpoint by `EndpointRecord`
+and `SignedLocator` on the end-to-end channel, and this record is never
+reissued for it.
+
+Body ({len(peer_light_body)} bytes):
+
+```
+{hexblock(peer_light_body)}
+```
+
+txid: `{hx(peer_light_txid)}`
+""")
+
+# ---------------------------------------------- local-interfaces.md (§14.3)
 # The five local device-to-device encodings, one coherent exchange: alice
 # initiates with bob, the contributions and ceremony-id are records.md's
 # pre-commitment known answer byte-for-byte, and the device handover reuses
@@ -3548,12 +3594,12 @@ intro_payload = e_map(pk_desk_pairs)
 dev_intro = e_arr([e_uint(1), e_bstr(TK['alice-desktop'].pub), e_bstr(intro_payload)])
 dev_cred = e_arr([e_uint(1), e_arr([e_bstr(deleg_alice_desktop)]), e_bstr(prekey_desktop)])
 
-emit('local-interfaces.md', f"""# Local device-to-device interfaces (`wire-format.md` §14.4)
+emit('local-interfaces.md', f"""# Local device-to-device interfaces (`wire-format.md` §14.3)
 
 {PIN}
 
 **Draft. Spec-derived, unverified by an implementation.** The five encodings
-of `wire-format.md` §14.4, as one coherent exchange: **alice initiates with
+of `wire-format.md` §14.3, as one coherent exchange: **alice initiates with
 bob**, the contributions and the ceremony-id are the pre-commitment known
 answer in `records.md` **byte-for-byte**, and the device handover reuses the
 desktop transport key (`keys.md`), alice's delegation to it (`records.md`)
@@ -3566,7 +3612,7 @@ holder-withholds-nothing case); the intent's retention is the design's
 stated two-year default; the proximity outcomes are the channel maps the
 normal record's own `proximity` disclosure carries.
 
-## The optical exchange (§14.4.1–.2)
+## The optical exchange (§14.3.1–.2)
 
 **OpticalContribution — alice's first QR** ({len(oc_alice)} bytes):
 
@@ -3587,7 +3633,7 @@ computed; a receiver checks it equals its own)** ({len(tconfirm)} bytes):
 {hexblock(tconfirm)}
 ```
 
-## The bearer-carried intent (§14.4.2)
+## The bearer-carried intent (§14.3.2)
 
 **IntentExchange — alice's, echoing her optical contribution; carol
 nominated, one prior record carried as its envelope, retention 2,
@@ -3597,7 +3643,7 @@ initiator true** ({len(intent_x)} bytes):
 {hexblock(intent_x)}
 ```
 
-## The anchored exchanges (§14.4.2)
+## The anchored exchanges (§14.3.2)
 
 **ProximityOutcomes — the two channels the normal record's disclosure
 carries, NFC pass then optical pass, anchored to the ceremony-id**
@@ -3621,7 +3667,7 @@ anchored** ({len(cand_handover)} bytes):
 {hexblock(cand_handover)}
 ```
 
-## The handover between one identity's devices (§14.4.3)
+## The handover between one identity's devices (§14.3.3)
 
 **DeviceIntroduction — alice's desktop offers its transport key and its
 unsigned bundle payload (the `PrekeyBundle` map, field 6 absent)**

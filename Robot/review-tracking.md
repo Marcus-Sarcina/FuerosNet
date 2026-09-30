@@ -12860,3 +12860,89 @@ and a stray being ignored, a query about me surfaced rather than asked, the
 step still taking input and handing to review, and the render count for each
 landing — including that a stray response renders nothing, since it changes
 nothing.
+
+## §14's owed list removed from the spec (2026-09-29)
+
+**Ruling** [author, 2026-09-29]: nothing in `wire-format.md` §14.3 described
+the current state of the project — it was historical and issue-tracking, and
+does not belong in a core design document. Reflect what matters as context
+here; otherwise remove the section.
+
+**Removed**: the section, and with it the "all four items are closed" roll,
+the list of what had been owed, and the narration of what the model
+established. Renumbering followed, the document carrying no gaps anywhere
+else: §14.4 → §14.3, §14.4.1–.3 → §14.3.1–.3.
+
+**Kept in the spec, because it is a property and not a history**: the
+anchor's guarantee and its limit, now stated in §14.3.1 where the anchor is
+defined. An anchored message binds to a ceremony both devices computed and
+authenticates nobody; every anchored value is public, so a party that read
+the screens can wrap any payload in an anchor that checks or re-anchor one
+ceremony's message into another; a check catches a bearer contradicting the
+screens, never one quoting them; none of the resistance is cryptographic,
+and an implementer must not read the checks as authentication. Also trimmed
+while there: a `[author, …, closing what … left open]` aside and a "test
+vectors and a model follow" line, both drafting history.
+
+**The context the section carried, preserved here rather than there.** The
+four items that had been owed were: an encoding per §14.2 row; test vectors;
+a model where a model would say anything; and the non-intermediability
+property either stated as checkable or stated plainly as unenforceable. All
+four closed between 2026-09-28 and 2026-09-29 — the encodings in §14.3, the
+vectors in `test-vectors/local-interfaces.md`, the model in
+`models/tamarin/local/`, and the property in §14.1 as a design goal
+currently unenforceable by known means. The finding that produced the
+property statement above is recorded in this file's 2026-09-29 vectors-and-
+model entry; that entry's own §14.4 citations are as-of-filing, like every
+reference here, and are not remapped.
+
+**The sweep**: 64 live citations moved across fifteen files (spec,
+functional tests, vectors and their generator and harness, the model and its
+runner, five crates, two shell files). Excluded deliberately —
+`Robot/review-plan.md`, whose one `14.4` is `network-design.md`'s old
+chapter in a migration mapping; this file, as-of-filing by declaration; and
+`change-log.md`'s thirteen historical entries, which now name the thing
+rather than cite a number that would resolve to different content. No
+refcheck exemption was added, per the no-exemptions rule. Refcheck 4,436
+references, 0 flags.
+
+## Peering generalised to users, on the author's ruling (2026-09-29)
+
+The peering checkbox in the handshake ruling had no mechanism behind it; it
+now does. I had first read design §6.3 as an infra-only edge with no custody
+function — wrong, and corrected by the author: the encrypted backup is the
+one thing a peer gets [author, 2026-09-04], and the author's shape
+(peering between users; backup plus the meeting's trust distance for light
+clients; topology as well for two instances) was confirmed against the text.
+
+**Rulings** [author, 2026-09-29]: a light-client peering does produce a
+`wire-format.md` §4.4 record, distinguishable from a bare proof of presence;
+the endpoint field is optionally a locator; peers update each other's
+endpoint without a new transaction, the original memorialising consent; on
+adding an instance its endpoint goes to peers, and two instances route
+directly. Confirmed: seeds never leave; distance comes from the meeting;
+peers are not horizon members.
+
+**Reused, not invented**: the update facility is §7.6's `EndpointRecord`
+for an instance and `SignedLocator` for a light client — both already
+self-signed and `seqno`-fresh, and the Locator counter already advances "on
+every endpoint change." The locator half is my extension of the ruling's
+`NetworkPoint` wording to the field's new alternative; flagged for the author
+to strike if unwanted. "Different subtrees" kept: design §3.4's vertex-cut
+argument gives a backup outside the subtree its fault independence.
+
+**Applied**: design §6.3 (two bullets rewritten, one added); wire §4.4 fields
+3/4 and prose, §7.6 one sentence, bounds row; light-client §2 two bullets;
+TX-013, TX-031; `schema.rs` type-4 arm keyed on key 1's width;
+`P-peering-light` and `N-peering-endpoint-neither`. Not touched:
+`infra-client-requirements.md` — the obligation to tell peers is the user's
+client's, which holds the peerings, so it lives in the light-client document.
+**Open**: the payload kind that carries the update on the end-to-end channel
+is a code-level demultiplexing decision (design §22.2 still lists it), not
+yet assigned.
+
+**Addendum, the locator push kept and keyed** [author, 2026-09-29]: peers
+hold routing per subnet membership, which the address table already requires
+(the client's own `positions` is one locator per anchor). A locator for an
+anchor already held replaces; one for a new (peer, anchor) inserts. Stated
+in wire §4.4, light-client §2, TX-031 and design §6.3.

@@ -1,9 +1,9 @@
-# Local device-to-device interfaces (`wire-format.md` §14.4)
+# Local device-to-device interfaces (`wire-format.md` §14.3)
 
-Generated against `wire-format.md` `5e3447586c61e0c9…`, `network-design.md` `aeb023d9a5af1e9e…` and `light-client-requirements.md` `d43f07ee0bc2a48a…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `008eb1c8a111a3fb…`, `network-design.md` `6262335e88cf08b5…` and `light-client-requirements.md` `a7b09828b408ca4d…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Draft. Spec-derived, unverified by an implementation.** The five encodings
-of `wire-format.md` §14.4, as one coherent exchange: **alice initiates with
+of `wire-format.md` §14.3, as one coherent exchange: **alice initiates with
 bob**, the contributions and the ceremony-id are the pre-commitment known
 answer in `records.md` **byte-for-byte**, and the device handover reuses the
 desktop transport key (`keys.md`), alice's delegation to it (`records.md`)
@@ -16,7 +16,7 @@ holder-withholds-nothing case); the intent's retention is the design's
 stated two-year default; the proximity outcomes are the channel maps the
 normal record's own `proximity` disclosure carries.
 
-## The optical exchange (§14.4.1–.2)
+## The optical exchange (§14.3.1–.2)
 
 **OpticalContribution — alice's first QR** (53 bytes):
 
@@ -40,7 +40,7 @@ computed; a receiver checks it equals its own)** (36 bytes):
 e5ca2b18
 ```
 
-## The bearer-carried intent (§14.4.2)
+## The bearer-carried intent (§14.3.2)
 
 **IntentExchange — alice's, echoing her optical contribution; carol
 nominated, one prior record carried as its envelope, retention 2,
@@ -386,7 +386,7 @@ f79193b7e9fc0000000000000000000000000000000000000000000000000000
 000000000005070f14191a6a43151002f5
 ```
 
-## The anchored exchanges (§14.4.2)
+## The anchored exchanges (§14.3.2)
 
 **ProximityOutcomes — the two channels the normal record's disclosure
 carries, NFC pass then optical pass, anchored to the ceremony-id**
@@ -414,7 +414,7 @@ e5ca2b1882830044c000020719115b83015020010db800000000000000000000
 0007199dd4
 ```
 
-## The handover between one identity's devices (§14.4.3)
+## The handover between one identity's devices (§14.3.3)
 
 **DeviceIntroduction — alice's desktop offers its transport key and its
 unsigned bundle payload (the `PrekeyBundle` map, field 6 absent)**

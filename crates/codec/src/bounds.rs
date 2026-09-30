@@ -24,16 +24,16 @@ pub const CAPABILITIES_ENTRIES: usize = 64;
 pub const CAPABILITIES_VALUE_BYTES: usize = 1024;
 pub const SIBLING_REFS: usize = 9;
 pub const PEERING_AUDIT_HISTORY: usize = 8;
-/// The local device-to-device interfaces (§14.4).
+/// The local device-to-device interfaces (§14.3).
 pub const INTENT_NOMINEES: usize = 64;
 pub const INTENT_BUNDLE_ENTRIES: usize = 256;
 pub const CANDIDATES_PER_EXCHANGE: usize = 8;
 pub const DELEGATIONS_PER_CREDENTIAL: usize = 16;
 /// A `DeviceCredential` delegation entry: a hybrid signature and its
-/// fields, bounded with room (§14.4.3).
+/// fields, bounded with room (§14.3.3).
 pub const DELEGATION_ENTRY_BYTES: usize = 4096;
 /// A carried `PrekeyBundle`, signed or its unsigned payload: §1.3's 4 KB
-/// blob bound plus the bundle's own fields (§14.4.3).
+/// blob bound plus the bundle's own fields (§14.3.3).
 pub const DEVICE_BUNDLE_BYTES: usize = 5120;
 /// Stream-0 control frames (§8.0): the length prefix's ceiling.
 pub const CONTROL_FRAME_BYTES: usize = 65_536;

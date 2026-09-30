@@ -2,7 +2,7 @@
 
 Stage 1 of `Robot/review-plan.md` — the formal-modelling reviews the plan
 calls "the highest-value reviews in the plan and the ones least replaceable
-by an LLM pass." Three tool families, fifteen artifacts, each checking claims
+by an LLM pass." Three tool families, each checking claims
 the design documents make analytically and had never run.
 
 **Every result here is the tool's, not the author's.** As the plan states:
@@ -11,7 +11,7 @@ verification result comes from the tool." Re-run everything with
 `./run-all.sh`; it exits non-zero if any check regresses.
 
 ```bash
-./run-all.sh          # builds and checks all fourteen; writes results/
+./run-all.sh          # builds and checks every model; writes results/
 ```
 
 Current status: 3 Python assertion families, 5 TLA+ models (invariants +
@@ -22,12 +22,12 @@ what the tool reported in `results/`, not from the source: the
 `recovery.spthy` grew, and is corrected here [2026-09-29].
 
 **`local/` is the third tree, added 2026-09-29** with `exchange.spthy`:
-`wire-format.md` §14.4's device-to-device exchange, where the optical
+`wire-format.md` §14.3's device-to-device exchange, where the optical
 channel is authentic but public and the bearer is the adversary's. Neither
 older tree fits it — there is no third party checking bytes and no
 single-party obligation — and its result is as much a boundary as a
 guarantee: the anchor binds a message to a ceremony both devices computed,
-and authenticates nobody, every anchored value being public by §14.4.1. The
+and authenticates nobody, every anchored value being public by §14.3.1. The
 two reachable attacks are recorded as `exists-trace` lemmas that verify.
 
 **Three obligations verify only over a bounded model**, all in `compliant/`:
