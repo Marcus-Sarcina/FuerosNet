@@ -10,6 +10,22 @@ use rhtn_codec::cbor::{Item, as_uint, map_get, parse_all};
 use rhtn_codec::encode::*;
 use rhtn_crypto::signer::Sign1;
 use rhtn_crypto::verify::{self, Lookup};
+
+/// How many records are held for a prerequisite that has not arrived, per
+/// list.  Each of the three lists below holds what arrived out of order and
+/// settles when its prerequisite lands; a peer that floods records whose
+/// prerequisites never come otherwise grows them for the archive's life.
+/// Past the ceiling the oldest goes, an item held for something that never
+/// arrived being the least worth keeping -- the rule `rhtn-node`'s own
+/// held list follows.
+const PENDING_HELD: usize = 256;
+
+fn hold<T>(list: &mut Vec<T>, item: T) {
+    if list.len() >= PENDING_HELD {
+        list.remove(0);
+    }
+    list.push(item);
+}
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::Arc;
@@ -747,7 +763,7 @@ impl Table {
                         // held for the adoption it advances, as a departure is:
                         // arrival order cannot lose a series change
                         None => {
-                            self.pending_reissues.push((node, patron, left, entered));
+                            hold(&mut self.pending_reissues, (node, patron, left, entered));
                             false
                         }
                     };
@@ -789,8 +805,10 @@ impl Table {
                     None,
                 );
                 if !ended {
-                    self.pending_departures
-                        .push((node, patron, series, rec.txid, rec.time));
+                    hold(
+                        &mut self.pending_departures,
+                        (node, patron, series, rec.txid, rec.time),
+                    );
                 }
                 self.nodes.insert(node);
                 Outcome {
@@ -814,8 +832,10 @@ impl Table {
                     Some(rec.time),
                 );
                 if !ended {
-                    self.pending_disavowals
-                        .push((patron, node, rec.time, rec.txid, code));
+                    hold(
+                        &mut self.pending_disavowals,
+                        (patron, node, rec.time, rec.txid, code),
+                    );
                 }
                 Outcome {
                     applied: if ended {

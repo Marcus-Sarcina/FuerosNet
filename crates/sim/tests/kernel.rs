@@ -220,7 +220,7 @@ async fn the_kernel_fails_over_to_the_named_sibling_and_starts_cold_from_the_lis
         .read("siblings".into())
         .expect("the list N pushed is written");
     assert_eq!(
-        rhtn_transport::session::decode_sibling_update(&list)
+        rhtn_transport::session::decode_sibling_update(&list, &[9u8; 32])
             .unwrap()
             .iter()
             .map(|r| r.keyhash)

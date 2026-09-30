@@ -54,6 +54,16 @@ if python3 "$HERE/tools/pincheck.py"; then :; else fail=1; fi
 echo "=== 1. Acceptance catalogue ==="
 if python3 "$HERE/acceptance/tools/check.py"; then :; else fail=1; fi
 
+echo "=== 1b. Counts and citations stated in the documents ==="
+# A number in prose is a claim, and both of these were false while nothing
+# checked them: functional_tests §10's prefix table drifted two behind its
+# own rows, and four negative-vector citations pointed at rows that had been
+# renumbered under them -- two of those inside pinned reason strings, so the
+# corpus re-pinned the error on every run (2026-09-30).  citecheck's
+# existence check only; its `--overlap` sweep is for a human to read.
+if python3 "$HERE/../Robot/countcheck.py"; then :; else fail=1; fi
+if python3 "$HERE/../test-vectors/tools/citecheck.py"; then :; else fail=1; fi
+
 echo "=== 2. Generated stubs in sync ==="
 tmp="$(mktemp -d)"
 python3 "$HERE/acceptance/tools/gen_stubs.py" "$tmp" > /dev/null

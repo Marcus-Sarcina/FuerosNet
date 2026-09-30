@@ -399,8 +399,10 @@ impl AnchorEntry {
             endpoints,
             subtree_size: map_get(m, 3).and_then(as_uint).ok_or("field 3")?,
             seqno: Seqno {
-                series: as_uint(sq.first().ok_or("series")?).ok_or("series")? as u32,
-                counter: as_uint(sq.get(1).ok_or("counter")?).ok_or("counter")? as u32,
+                series: u32::try_from(as_uint(sq.first().ok_or("series")?).ok_or("series")?)
+                    .map_err(|_| "series over u32")?,
+                counter: u32::try_from(as_uint(sq.get(1).ok_or("counter")?).ok_or("counter")?)
+                    .map_err(|_| "counter over u32")?,
             },
             bytes: b.to_vec(),
         })

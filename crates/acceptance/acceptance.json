@@ -2832,6 +2832,29 @@
     "interpretation": "The demultiplexing scheme is undecided; the test asserts correct dispatch under whichever scheme is supplied."
   },
   {
+    "id": "PAY-23",
+    "area": "payload",
+    "gap": "payload",
+    "title": "Refuse a replayed initial message and leave the live session standing, across a restart",
+    "milestone": 4,
+    "kind": "negative",
+    "spec": [
+      "wire-format.md §7.8",
+      "design §14.2.4"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §7.8",
+        "text": "**Only the one-time key is consumed on serving.**"
+      }
+    ],
+    "given": "A client holding a live payload session with a peer, and a copy of the initial message that opened it, captured by an adversary.",
+    "when": "The copy is presented again, both within the run and after the client has been restarted from its persisted state.",
+    "then": "The message is refused as a replay and the live ratchet is untouched, so the session continues and the adversary has neither read nor reset it. The refusal survives the restart: the cache of seen initials is persisted with the session state, since a cache that emptied on restart reopened the window it closes.",
+    "oracle": "behaviour",
+    "interpretation": "Refusing every initial message for a peer that already has a ratchet would also close it, and would break a peer that legitimately lost its state and re-initiates; the replay cache keeps that case working [2026-09-30]."
+  },
+  {
     "id": "PAY-15",
     "area": "payload",
     "gap": "payload",
@@ -12300,6 +12323,28 @@
     "interpretation": null
   },
   {
+    "id": "QUE-22",
+    "area": "queue",
+    "gap": "queue",
+    "title": "Refuse a submission the mailbox store will not take, rather than acknowledging it",
+    "milestone": 4,
+    "kind": "negative",
+    "spec": [
+      "wire-format.md §7.10"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §7.10",
+        "text": "The answer says the node took it, which is the same promise design §14.1.6's queue\nmakes"
+      }
+    ],
+    "given": "A node whose mailbox store cannot store anything — a full or unwritable disk — and a relay submission for a recipient it serves.",
+    "when": "The submission arrives.",
+    "then": "The node answers refused, nothing counts as queued for that recipient, and the node stays up. It does not answer accepted, since the answer is a promise the node took the message; it does not answer over-bound, which would tell the sender the recipient's mailbox is full — a claim about somebody else that may be false; and it does not abort the process, which a storage fault must not be able to do.",
+    "oracle": "behaviour",
+    "interpretation": ""
+  },
+  {
     "id": "SES-26",
     "area": "session",
     "gap": "session",
@@ -12511,6 +12556,28 @@
     "then": "AttachAck field 6 is present and equals D on this and every later attach it acknowledges; a node holding its own identity key sends field 6 absent.",
     "oracle": "behaviour",
     "interpretation": null
+  },
+  {
+    "id": "SES-28",
+    "area": "session",
+    "gap": "session",
+    "title": "Refuse an AttachAck whose sibling list names the client reading it",
+    "milestone": 4,
+    "kind": "negative",
+    "spec": [
+      "wire-format.md §8.2"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §8.2",
+        "text": "**A sibling list naming the receiving client is malformed**, as is one containing\nduplicate keyhashes. A client cannot fail over to itself"
+      }
+    ],
+    "given": "A client attaching to a serving node, which answers with an AttachAck whose sibling list names that client among the siblings.",
+    "when": "The client decodes the ack.",
+    "then": "The ack is discarded and the attach does not complete on it, the same answer the SiblingUpdate path gives for the same list. A list of distinct keyhashes none of which is the client's is accepted, and a list repeating a keyhash is discarded.",
+    "oracle": "behaviour",
+    "interpretation": "The check needs the receiver's own keyhash to make. A decoder given no keyhash can only enforce distinctness, which is half the rule [2026-09-30]."
   },
   {
     "id": "DMN-24",

@@ -103,7 +103,11 @@ pub fn relay(
             // of, and a credential it has verified superseded, are both
             // refusals about somebody else
             Err(Refusal::AtCap) => SUBMISSION_OVER_BOUND,
-            Err(Refusal::NoRecord | Refusal::Superseded) => SUBMISSION_REFUSED,
+            // a store that would not take it is this node's own trouble,
+            // and the bare refusal is the honest answer: over-bound would
+            // tell the sender the recipient's mailbox is full, which is a
+            // claim about somebody else and may be false (§7.10)
+            Err(Refusal::NoRecord | Refusal::Superseded | Refusal::NotStored) => SUBMISSION_REFUSED,
         },
     };
     Some(SubmissionReply::code(r.nonce, code).encode())

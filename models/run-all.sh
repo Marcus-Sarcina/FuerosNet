@@ -281,13 +281,18 @@ MUTATIONS=(
 )
 
 echo "=== 3c. Theory mutations: each must FALSIFY ==="
+# Several mutations may target ONE lemma -- the delegated bind has three --
+# so the index is part of the name [2026-09-30]: without it each overwrote
+# the last, and two of the three left nothing to inspect.
+mi=0
 for m in "${MUTATIONS[@]}"; do
   IFS='|' read -r spec lem from to bounded <<< "$m"
+  mi=$((mi + 1))
   t="${spec%%/*}-${spec##*/}"
   src="$HERE/tamarin/$spec.spthy"
   frag="$HERE/tamarin/$spec.bounded"
-  mfile="$RESULTS/mutant-${t}-${lem}.spthy"
-  mout="$RESULTS/mutant-${t}-${lem}.txt"
+  mfile="$RESULTS/mutant-${mi}-${t}-${lem}.spthy"
+  mout="$RESULTS/mutant-${mi}-${t}-${lem}.txt"
   # The substitution is literal and MUST land: a mutation that matched nothing
   # would prove the unmutated theory and report a clean pass.
   if ! python3 -c '

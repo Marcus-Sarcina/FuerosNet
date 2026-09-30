@@ -96,10 +96,12 @@ fn split_name(name: &str) -> Option<(u64, u64, [u8; 32])> {
 }
 
 impl QueueStore for DirStore {
-    fn push(&self, item: Queued) {
+    fn push(&self, item: Queued) -> bool {
         use std::io::Write;
         let dir = self.recipient_dir(&item.recipient);
-        std::fs::create_dir_all(&dir).expect("recipient directory");
+        if std::fs::create_dir_all(&dir).is_err() {
+            return false;
+        }
         let mut seq = self.seq.lock().unwrap();
         let device: String = item.device.iter().map(|b| format!("{b:02x}")).collect();
         loop {
@@ -113,11 +115,16 @@ impl QueueStore for DirStore {
                 .open(&path)
             {
                 Ok(mut f) => {
-                    f.write_all(&item.ciphertext).expect("queue write");
-                    return;
+                    // written AND flushed before this returns true: an
+                    // item counts as queued once it is on the disk, not
+                    // once it is in a buffer the process may not outlive
+                    return f
+                        .write_all(&item.ciphertext)
+                        .and_then(|()| f.sync_all())
+                        .is_ok();
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
-                Err(e) => panic!("queue write: {e}"),
+                Err(_) => return false,
             }
         }
     }

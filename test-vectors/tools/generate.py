@@ -2375,7 +2375,7 @@ byte-identical fields, the signature cryptographically valid under a key the
 object does **not** name — the binding, not the mathematics, is the defect
 (S23's rule). And each signature is bound to its tag: verified under any other
 context's `external_aad`, it MUST fail — the cross-context substitution family
-(S24).
+(S25).
 
 **Currency attestation** — subject alice, issuer bob (role 0, patron), ~10 h
 expiry, signed under bob's instance's delegated key with bob's delegation
@@ -2704,11 +2704,15 @@ kg = e_map([(e_uint(1), e_bstr(pc1_txid)),
 # the late verifier answers a query addressed to IT (§5.5 field 7; TR24): its
 # own, under the same ceremony and profile as the record's three
 npr_q_late, _ = vquery(alice, bob, npr_precommit, b'rhtn-test-vectors:npr-profile', 3, IDS['c4'])
+# an `inconclusive` carries basis 0 and the query's template version (s5.5
+# [2026-09-02]): a capture in hand that could not be read, the attempted
+# mechanism rather than a claim that comparison ran.  Personal knowledge
+# cannot be inconclusive -- nothing was attempted that could fail to read.
 late = e_map([(e_uint(1), e_bstr(npr_txid)),
               (e_uint(2), e_bstr(alice.keyhash)),
               (e_uint(3), classical_response(IDS['c4'], alice, npr_q_late,
                                              consent_over(npr_q_late, alice),
-                                             2, basis=1, sb=0))])
+                                             2, basis=0, tplv=3, sb=0))])
 r_reg = e_map([(e_uint(1), e_bstr(NONCE(b'register'))), (e_uint(2), e_uint(0))])
 
 _reply_pairs = [
@@ -2749,7 +2753,7 @@ for cap, by in _reply_pairs:
 {hexblock(by)}
 ```""")
 for cap, by in _e2e_pairs:
-    _msg_md.append(f"""**{cap}** ({len(by)} bytes — an END-TO-END PAYLOAD, not a stream reply: the bytes are the object alone, and what frames or discriminates it on the encrypted channel is §14.2.4's open demultiplexing decision — no prefix is claimed here):
+    _msg_md.append(f"""**{cap}** ({len(by)} bytes — an END-TO-END PAYLOAD, not a stream reply: the bytes are the object alone; on the channel a `uint` kind tag precedes them, §7.10.1's registry — kind 2 for this object — and no prefix is included below):
 
 ```
 {hexblock(by)}
@@ -2809,8 +2813,8 @@ gains no say in attribution; **a decoder MUST read both shapes.**
 ## End-to-end payloads
 
 Objects that ride the encrypted end-to-end channel (design §14.2.4), never a
-request/reply stream. Their on-channel framing and type discrimination are the
-open demultiplexing decision; the bytes below are the objects alone.
+request/reply stream. On the channel each is preceded by a `uint` kind tag
+(§7.10.1's registry); the bytes below are the objects alone, without it.
 
 {chr(10).join(_msg_md[len(_reply_pairs):])}
 
@@ -2948,9 +2952,9 @@ reg('CTX-referral-overshoot', 'context',
             'reply': 'the P-reply-02 referral with field 5.3 = 6'},
     note='Schema-valid bytes; the defect is relative to the request, so this is a context fixture.')
 
-# ---- retired-number tombstones (T29, 2026-09-02) and a non-witness corroborator
+# ---- retired-number tombstones (T50, 2026-09-02) and a non-witness corroborator
 reg('N-retired-body-key-7', 'bytes',
-    REJ('body', 'schema', 'retired key 7 is a tombstone, not extension space (T29)'),
+    REJ('body', 'schema', 'retired key 7 is a tombstone, not extension space (T50)'),
     e_map([(e_uint(0), backptrs(*[[genesis(x.keyhash)] for x in (n_hi, n_lo, IDS['w2'])])),
            (e_uint(1), e_uint(TS_C2)), (e_uint(2), e_uint(TS_C2F)),
            (e_uint(3), e_arr([participant(n_hi), participant(n_lo)])),
@@ -2958,7 +2962,7 @@ reg('N-retired-body-key-7', 'bytes',
            (e_uint(6), e_uint(0)), (e_uint(7), e_uint(5)),
            (e_uint(8), e_bstr(fin_ab_root))]))
 reg('N-retired-witness-key-4', 'bytes',
-    REJ('Witness', 'schema', 'retired key 4 is a tombstone, not extension space (T29)'),
+    REJ('Witness', 'schema', 'retired key 4 is a tombstone, not extension space (T50)'),
     e_map([(e_uint(1), e_bstr(IDS['w1'].keyhash)),
            (e_uint(2), e_bstr(alice.keyhash)),
            (e_uint(3), e_uint(7)),
@@ -2983,7 +2987,11 @@ reg('N-enum-result', 'bytes', REJ('VerifierResponse', 'schema', 'result 9 outsid
     classical_response(IDS['c1'], alice, npr_q0, consent_over(npr_q0, alice), 9, basis=0, tplv=3, sb=0))
 reg('N-enum-basis', 'bytes', REJ('VerifierResponse', 'schema', 'basis 9 outside 0-2'),
     classical_response(IDS['c1'], alice, npr_q0, consent_over(npr_q0, alice), 0, basis=9, tplv=3, sb=0))
-reg('N-enum-selection-basis', 'bytes', REJ('VerifierResponse', 'schema', 'selection_basis 9 outside 0-3 (T27)'),
+reg('N-response-inconclusive-personal', 'bytes',
+    REJ('VerifierResponse', 'schema', 'an inconclusive carries the photo basis (s5.5)'),
+    classical_response(IDS['c1'], alice, npr_q0, consent_over(npr_q0, alice),
+                       2, basis=1, sb=0))
+reg('N-enum-selection-basis', 'bytes', REJ('VerifierResponse', 'schema', 'selection_basis 9 outside 0-3 (T49)'),
     classical_response(IDS['c1'], alice, npr_q0, consent_over(npr_q0, alice), 0, basis=0, tplv=3, sb=9))
 reg('N-enum-disavowal-64', 'bytes', REJ('body', 'schema', 'code 64 outside the 0-63 space (T8) — contrast P-disavowal-code40'),
     e_map([(e_uint(0), backptrs([adopt_txid])), (e_uint(1), e_bstr(bob.keyhash)),
@@ -3389,7 +3397,7 @@ os_empty_body = e_map([
     (e_uint(8), e_bstr(fin_nm_root)),
 ])
 reg('N-responses-empty-array', 'bytes',
-    REJ('body', 'schema', 'zero responses OMIT key 5 - the empty-array spelling is the second encoding of one logical record (s4.5, T30)'),
+    REJ('body', 'schema', 'zero responses OMIT key 5 - the empty-array spelling is the second encoding of one logical record (s4.5, T51)'),
     os_empty_body,
     note='Stress: an implementer reading field 5 as required-with-empty-array emits and accepts this; P-fin-absent is the one valid spelling.')
 
@@ -3816,6 +3824,13 @@ for fname, parts in OUT.items():
     data = '\n'.join(parts) + '\n'
     _pending[fname] = data
     _outputs[fname] = hashlib.sha256(data.encode()).hexdigest()
+# `corpus.json` is written above and belongs in the comparison below, NOT
+# after it [2026-09-30]: pinned but unchecked, a corpus that changed with
+# specs and tools unchanged re-pinned itself silently, which is the one
+# thing this gate exists to stop.  The two hand-written files are added
+# after it instead, and for the opposite reason -- their pin line is part
+# of their bytes, so they change on every run by construction.
+_outputs['corpus.json'] = hashlib.sha256(open('corpus.json', 'rb').read()).hexdigest()
 # Output-drift gate: identical specs and tools must reproduce identical bytes.
 # A divergence here means an untracked input changed — a crypto dependency,
 # the platform — and silently baselining it would defeat the pins (ninth
@@ -3837,6 +3852,5 @@ _repin_hand_file('negative-vectors.md')
 for name in ('README.md', 'negative-vectors.md'):
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', name)
     _outputs[name] = hashlib.sha256(open(path, 'rb').read()).hexdigest()
-_outputs['corpus.json'] = hashlib.sha256(open('corpus.json', 'rb').read()).hexdigest()
 _write_pins(_outputs)
 print("repinned README.md, negative-vectors.md; corpus.json pinned; pins written")

@@ -995,6 +995,15 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
                 return Err(Error("basis does not follow the result"));
             }
             let version = map_get(m, 6).and_then(as_uint);
+            // §5.5 narrows the matrix for one result [2026-09-02]:
+            // `inconclusive` is a capture in hand that could not be read,
+            // and it carries basis 0 and the query's template version --
+            // the attempted mechanism, not a claim that comparison ran.
+            // Personal knowledge cannot be inconclusive: nothing was
+            // attempted that could fail to be read.
+            if result == 2 && basis != Some(0) {
+                return Err(Error("an inconclusive carries the photo basis"));
+            }
             if matches!(basis, Some(0) | Some(2)) != version.is_some() {
                 return Err(Error("template version does not follow the basis"));
             }

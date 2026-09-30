@@ -187,8 +187,8 @@ impl Record {
         };
         let Item::Array(a) = &sq else { return None };
         Some(Seqno {
-            series: as_uint(a.first()?)? as u32,
-            counter: as_uint(a.get(1)?)? as u32,
+            series: u32::try_from(as_uint(a.first()?)?).ok()?,
+            counter: u32::try_from(as_uint(a.get(1)?)?).ok()?,
         })
     }
 
@@ -202,8 +202,8 @@ impl Record {
             return None;
         };
         Some(Seqno {
-            series: as_uint(a.first()?)? as u32,
-            counter: as_uint(a.get(1)?)? as u32,
+            series: u32::try_from(as_uint(a.first()?)?).ok()?,
+            counter: u32::try_from(as_uint(a.get(1)?)?).ok()?,
         })
     }
 

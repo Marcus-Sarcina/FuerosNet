@@ -3,7 +3,7 @@
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md).
 
-**Pinned**: wire-format.md `cba96636b3216a009cbd193d3046a98aabcb6bb1c3698e2fd5033a72ffb65ccd` · network-design.md `061d5691199aa4e43633169cc54d0d393e44f4ec6c89b8f93d89f4087723c95f`
+**Pinned**: wire-format.md `5ba5091883a197253b0457794bdd8c400fdd36a58163b618b9611aa7fd3addd0` · network-design.md `839e5ba7e8bdccb291781de717ada0e246a6d12ca03e570e6d55d51345836136`
 
 ## The result model is structured, not a single status
 
@@ -175,6 +175,7 @@ photo comparison without its template version is unverifiable as evidence:
 | T22 | `basis` 1 (or absent) with `template_version` present | MUST be absent — there is no template in personal knowledge |
 | T23 | ~~response from an unselected verifier~~ | **Retired 2026-09-01**: no selected set exists apart from the selector's judgment (§5.5); any consenting-queried verifier's response is structurally fine. The id is not reused |
 | T49 | A response whose `selection_basis` (field 10) is absent, or carries a value outside 0–3 | §5.5: required, closed enumeration — the selector's claim of met / in-horizon / reachable / discretionary. Tier-aligned renumbering 2026-09-03: met and merely-in-horizon are different security facts (A23) and the record retains the difference |
+| T56 | A response whose `result` is **2 (inconclusive)** with `basis` 1 (personal knowledge) | §5.5 [2026-09-02]: an `inconclusive` is a capture in hand that could not be read, and it carries **basis 0 and the query's template version** — the attempted mechanism, not a claim that comparison ran. Personal knowledge cannot be inconclusive: nothing was attempted that could fail to be read. §4.5's conditional-field matrix admits the pair on its own, so this is the narrowing the matrix does not carry |
 | T50 | A presence body carrying retired key 7, or a `Witness` carrying retired key 4 or 5 | §4.5 [2026-09-02]: retired numbers are tombstones, not extension space — a decoder meeting one rejects, the §4 type-6 rule. An unknown key is one the schema never assigned; a retired key is one it remembers |
 | T51 | A normal presence record whose key 5 is an **empty array** | §4.5 [2026-09-02]: zero responses omit the key — the empty-array spelling gives one logical record two encodings. The over-strictness complement: an implementation reading field 5 as required-with-empty emits this and rejects the valid absent spelling |
 | T52 | A normal presence record none of whose witnesses set both `protocol_ran` and `both_responsive` | §3.2 [author, 2026-09-03]: the witness floor counts only entries with bits 0 and 1 both set — a witness attesting nothing (or latency alone) is partial evidence, present but not corroborating, and a normal record with no affirmative witness fails. The uncorroborated meeting remains expressible as a formation record, visible as what it is. `latency_bound` (bit 2) stays genuinely optional: the existing bits-3 fixtures are positives |

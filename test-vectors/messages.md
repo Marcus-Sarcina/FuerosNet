@@ -1,6 +1,6 @@
 # Unsigned message families (`wire-format.md` §§6–11)
 
-Generated against `wire-format.md` `cba96636b3216a00…`, `network-design.md` `061d5691199aa4e4…` and `light-client-requirements.md` `bed20cc1a877b423…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `5ba5091883a19725…`, `network-design.md` `839e5ba7e8bdccb2…` and `light-client-requirements.md` `85bb59fee95600e9…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Draft. Spec-derived, unverified by an implementation.** Canonical bar 9:
 one positive known-answer encoding per framed message family. Framing is
@@ -3901,10 +3901,10 @@ ce9a4bee6970726f78696d697479a20182a201020200a201030200020203f4
 ## End-to-end payloads
 
 Objects that ride the encrypted end-to-end channel (design §14.2.4), never a
-request/reply stream. Their on-channel framing and type discrimination are the
-open demultiplexing decision; the bytes below are the objects alone.
+request/reply stream. On the channel each is preceded by a `uint` kind tag
+(§7.10.1's registry); the bytes below are the objects alone, without it.
 
-**KeyGrant — the key sealing the capture c1 holds of alice from their PRIOR meeting (field 1 names that record), released against the normal record's first query** (106 bytes — an END-TO-END PAYLOAD, not a stream reply: the bytes are the object alone, and what frames or discriminates it on the encrypted channel is §14.2.4's open demultiplexing decision — no prefix is claimed here):
+**KeyGrant — the key sealing the capture c1 holds of alice from their PRIOR meeting (field 1 names that record), released against the normal record's first query** (106 bytes — an END-TO-END PAYLOAD, not a stream reply: the bytes are the object alone; on the channel a `uint` kind tag precedes them, §7.10.1's registry — kind 2 for this object — and no prefix is included below):
 
 ```
 a30158203bba204761228f945e43fc8d366d194b6191aa9031478f894df886a1
@@ -3912,20 +3912,20 @@ a30158203bba204761228f945e43fc8d366d194b6191aa9031478f894df886a1
 8a8614b0742edb0358206157379db20e9b35da24fbab9ab4c8bc8676dc8f8c22
 c89d2b1fe2fea7b2985c
 ```
-**LateResponse — the normal record supplemented by a late `inconclusive` from a fourth verifier; private information for the participants, never part of the record** (332 bytes — an END-TO-END PAYLOAD, not a stream reply: the bytes are the object alone, and what frames or discriminates it on the encrypted channel is §14.2.4's open demultiplexing decision — no prefix is claimed here):
+**LateResponse — the normal record supplemented by a late `inconclusive` from a fourth verifier; private information for the participants, never part of the record** (334 bytes — an END-TO-END PAYLOAD, not a stream reply: the bytes are the object alone; on the channel a `uint` kind tag precedes them, §7.10.1's registry — kind 2 for this object — and no prefix is included below):
 
 ```
 a3015820b5b6227510ef730eccc3a3d9e256b30e48898bde156c29eead5e394b
 c3f350de0258208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a
-0c8dcfc852aa6a03a80158204384a2cc10f2d505660a16118457e9aeddee9438
+0c8dcfc852aa6a03a90158204384a2cc10f2d505660a16118457e9aeddee9438
 9abd9c4d0dffb610ef0342a20258208410def778a5de3a25991aba399716bc8e
 ccfda9ad57d4ea8a0c8dcfc852aa6a035820215ac766a26664442b850fb190bf
-ff7312d4cfbd898b57a18d3e6e9f9b34706904020501078443a10127a0f65840
-19062fe53ac3bcddb4f7b9a1676832b19b6e8053476efdf9761f96543a73a3ef
-e6394c0d79b0e18efb499760f493bab34e5112b175656d11583f718121c62801
-098443a10127a0f658408ba528fba7f69041401958c6b2848559d04dbf0579be
-7b4df81882e4a9ebc53072db898fd6a32995d9ed4dc4564d09d24615a3b1cbfc
-e272ba925946929575090a00
+ff7312d4cfbd898b57a18d3e6e9f9b347069040205000603078443a10127a0f6
+584019062fe53ac3bcddb4f7b9a1676832b19b6e8053476efdf9761f96543a73
+a3efe6394c0d79b0e18efb499760f493bab34e5112b175656d11583f718121c6
+2801098443a10127a0f65840838671607c80a9ebbb69ef4f547141c5aa5ef3d2
+f19d86dce6c32e053d1283dc0f37c442749a092112d70fbcca63844e3f701e04
+cd6ae249e079bf0d6254ac070a00
 ```
 
 ## Session traces (canonical bar 9's trace class)

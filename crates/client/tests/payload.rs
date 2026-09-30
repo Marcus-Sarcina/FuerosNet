@@ -1426,6 +1426,7 @@ fn a_client_restarts_from_its_own_storage_with_its_sessions_intact() {
     assert_eq!(alice2.durable(), before);
 }
 
+// acceptance: PAY-23
 #[test]
 fn a_replayed_initial_message_is_refused_and_the_live_session_stands() {
     let mut n = net(&["w1"], &[("alice", "w1"), ("carol", "w1"), ("bob", "w1")]);
@@ -1469,4 +1470,20 @@ fn a_replayed_initial_message_is_refused_and_the_live_session_stands() {
             .receive_payload(kh("carol"), &next)
             .expect("the session continues");
     assert!(matches!(&d, Dispatched::Application(b) if b == b"second"));
+    // **and the refusal survives a restart** [2026-09-30].  Held only in
+    // memory, the cache emptied on every start and the window reopened
+    // with it: the same captured bytes would take the session over on the
+    // far side of a restart.  Round-trip the persisted state and replay.
+    let persisted = n.s.client("bob").payload.sessions.encode();
+    let restored =
+        rhtn_client::payload::Sessions::decode(&persisted).expect("the sessions come back");
+    n.s.client("bob").payload.sessions = restored;
+    let e =
+        n.s.client("bob")
+            .receive_payload(kh("carol"), &initial)
+            .unwrap_err();
+    assert!(
+        e.contains("already received") || e.contains("one-time"),
+        "a replay after a restart is refused too: {e}"
+    );
 }

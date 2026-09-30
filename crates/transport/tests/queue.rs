@@ -528,7 +528,7 @@ fn two_submissions_at_once_cannot_both_take_the_room_for_one() {
     /// that were not serialised would both read it empty.
     struct Slow(MemoryStore);
     impl QueueStore for Slow {
-        fn push(&self, q: Queued) {
+        fn push(&self, q: Queued) -> bool {
             self.0.push(q)
         }
         fn peek_oldest(&self, k: &[u8; 32]) -> Option<Queued> {
@@ -564,4 +564,43 @@ fn two_submissions_at_once_cannot_both_take_the_room_for_one() {
         "one fits, the other is refused: {results:?}"
     );
     assert_eq!(node.queued(&kh("carol")), 1);
+}
+
+// acceptance: QUE-22
+#[test]
+fn a_submission_the_store_will_not_take_is_refused_and_never_acknowledged() {
+    use rhtn_transport::queue::{MemoryStore, QueueStore, Queued, Refusal};
+    /// A store with no room on the disk: everything else works, and `push`
+    /// says no. The on-disk store used to panic here, which took the whole
+    /// node down with the disk, and a store that returned quietly would
+    /// have lost mail the node had already answered `accepted` for.
+    struct Full(MemoryStore);
+    impl QueueStore for Full {
+        fn push(&self, _q: Queued) -> bool {
+            false
+        }
+        fn peek_oldest(&self, k: &[u8; 32]) -> Option<Queued> {
+            self.0.peek_oldest(k)
+        }
+        fn remove(&self, k: &[u8; 32], q: &Queued) -> bool {
+            self.0.remove(k, q)
+        }
+        fn list(&self, k: &[u8; 32]) -> Vec<Queued> {
+            self.0.list(k)
+        }
+        fn drop_all(&self, k: &[u8; 32]) {
+            self.0.drop_all(k)
+        }
+    }
+    let mut cfg = node_cfg("alice");
+    cfg.queue = Arc::new(Full(MemoryStore::default()));
+    let node = Node::new(cfg);
+    assert_eq!(
+        node.enqueue(kh("carol"), vec![1]),
+        Err(Refusal::NotStored),
+        "the answer says the node took it, so a node that could not store \
+         it does not answer accepted (`wire-format.md` §7.10)"
+    );
+    // and nothing is left claiming to be queued
+    assert_eq!(node.queued(&kh("carol")), 0);
 }

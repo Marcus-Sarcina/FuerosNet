@@ -251,7 +251,7 @@ impl Net {
     /// The list back, whole or not at all: a failed or partial load means
     /// no cached siblings, never a partial list.
     pub(crate) fn restore_siblings(&self, b: &[u8]) -> usize {
-        let list = decode_sibling_update(b).unwrap_or_default();
+        let list = decode_sibling_update(b, &self.cfg.me.keyhash).unwrap_or_default();
         for s in &list {
             if let Some(km) = &s.key_material {
                 let _ = self.cfg.pins.pin(s.keyhash, km);

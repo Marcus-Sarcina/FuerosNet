@@ -10,7 +10,7 @@ That is their purpose — **a disagreement between a vector and the
 specification is a finding against one of them**, and either answer is
 progress. Both rounds so far produced specification fixes.
 
-**Pinned**: wire-format.md `cba96636b3216a009cbd193d3046a98aabcb6bb1c3698e2fd5033a72ffb65ccd` · network-design.md `061d5691199aa4e43633169cc54d0d393e44f4ec6c89b8f93d89f4087723c95f`
+**Pinned**: wire-format.md `5ba5091883a197253b0457794bdd8c400fdd36a58163b618b9611aa7fd3addd0` · network-design.md `839e5ba7e8bdccb291781de717ada0e246a6d12ca03e570e6d55d51345836136`
 
 **Scope**: wire-format/protocol **interoperability** vectors.
 `light-client-requirements.md` is pinned alongside the two protocol documents
@@ -176,7 +176,7 @@ loudly.
 | resolution (documented trap) | require a consumed-equals-length arrival equation | TR14 — a deeper-caching node's early `ServingInfra` is complete |
 | attach (heartbeat sketch) | accept only the exact expected counter | TR12 — a gapped beat resets liveness; TR7 states the rule |
 | attach (noted trap) | infer degraded mode from having dialled a sibling | TR13 — the server's mode determination is authoritative |
-| presence #11 | field 5 required-with-empty-array; reject the absent spelling | P-fin-absent (valid absent) + N-responses-empty-array / T30 (the empty spelling rejects) |
+| presence #11 | field 5 required-with-empty-array; reject the absent spelling | P-fin-absent (valid absent) + N-responses-empty-array / T51 (the empty spelling rejects) |
 | presence #3 | one Proximity entry per channel kind | P-channel-retry / D19 — optical failed, retried, passed |
 | presence phase 1 (first run) | reject counters that skip (`+1` contiguity) | D6 — `[5,42] → [5,100]` is a valid supersession |
 | general (frame decode) | closed deserializing enum over control-frame types | TR1 — unknown frames are skipped, the session survives |
@@ -227,7 +227,7 @@ negatives (T9–T12). Still open:
    presence/classical (the normal record's three responses, with a worked
    ceremony-form query where the querier is the counterparty) — and the
    `selection_basis` matrix: 0/1/2 positively across the normal record's
-   responses, 0-only inside a `Recovery` block, T27 carrying the malformed
+   responses, 0-only inside a `Recovery` block, T49 carrying the malformed
    cases. The harness verifies every signature in both forms.
 5. ~~The selective-disclosure construction~~ **DONE 2026-09-02**: both
    records' presentation sets recompute, and the negative family is in the
@@ -258,7 +258,7 @@ negatives (T9–T12). Still open:
    abuse, anchor, subtree-ack and prekey in `records.md`; successor, verifier
    and consent in `transactions.md`; locator, endpoints and envelope already
    present; the fourteenth, `rhtn/1:delegation`, added 2026-09-22 with the
-   delegation itself — and the **cross-context substitution family is live** (S24): the
+   delegation itself — and the **cross-context substitution family is live** (S25): the
    harness verifies every `records.md` signature fails under a neighbouring
    tag, the check that catches two real paths sharing a hard-coded AAD while
    S12's artificial empty-AAD case still passes.

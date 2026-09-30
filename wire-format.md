@@ -632,9 +632,21 @@ Rules a validator checks from the record alone. All were previously unstated.
   strangers with no standing with anyone — a candidate for nobody real.
 - **Formation records omit fields 4 and 5 entirely** rather than encoding empty
   arrays, per §1's rule. Absence means empty.
+- **Neither field 3 nor field 4 has a canonical order** [2026-09-30]. The
+  order of the two participants, and of the witnesses, is the **proposer's**:
+  one ceremony yields one proposed body, which the other participant signs or
+  refuses (design §7.1), so no two parties encode the same record
+  independently and there is nothing for a canonical order to protect. This is
+  not true of the arrays that *are* ordered — verifier responses (§4.5) and
+  map keys (§1) — and the difference is that those are assembled from
+  material arriving separately. Field 3's order also fixes the back-pointer
+  list order (§3.1) **independently of** the envelope's `kid` order (§3.5),
+  which is ascending: a decoder reading one of those orders from the other is
+  wrong, and the canonical vectors reverse field 3 against the keyhashes to
+  catch it.
 - **Witness identities MUST be distinct**, and **MUST NOT include either
-  participant.** Duplicates would leave the ascending-keyhash ordering undefined
-  between equal keys; a
+  participant.** A witness named twice would be counted twice toward the
+  witness floor below; a
   participant witnessing their own ceremony is not an independent witness, which is
   the entire role.
 - **A normal record MUST carry at least one witness whose attestation sets both
@@ -1659,7 +1671,8 @@ root         = SHA-256( 0x01 || concatenation of all digests, ascending by label
 is looking at without a table. **Exactly seven, in ascending byte order**:
 `capture`, `location`, `p0.integrity`, `p0.retention`, `p1.integrity`,
 `p1.retention`, `proximity`. A label outside this set is malformed. **`pN` is the
-participant at index N of field 3**, which §3.2 orders by ascending keyhash, so
+participant at index N of field 3**, whose order is the proposer's and not
+keyhash order (§3.2), so
 both clients compute the root over one labelling without a table.
 
 **Each label's value is the CBOR the field carried when it lived in the body**, stated because the move otherwise orphans the schemas:

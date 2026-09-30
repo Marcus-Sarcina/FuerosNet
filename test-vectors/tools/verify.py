@@ -651,6 +651,12 @@ lp = enc({k: lr[k] for k in (1, 2, 3, 4, 5, 6, 7, 10) if k in lr})
 check(verify_sig(BY[lr[1]], -8, bytes.fromhex(lr[9][3]),
                  sig_sign1(bytes.fromhex(lr[9][0]), b'rhtn/1:verifier', lp)),
       'LateResponse: the embedded verifier signature verifies')
+# s5.5 [2026-09-02]: an inconclusive is a capture in hand that could not be
+# read, so it carries basis 0 and the query's template version.  s4.5's
+# conditional-field matrix admits personal knowledge with it and s5.5
+# narrows that out; the class went unguarded here until 2026-09-30.
+check(lr[4] != 2 or (lr.get(5) == 0 and 6 in lr),
+      'LateResponse: an inconclusive carries the photo basis and a template version')
 # positions by type, since control frames were appended after the request families (2026-09-22)
 QUERY_AT = len(control) + [i for i, f in enumerate(EXPECT_FRAMES[len(control):]) if f == 4][0]
 push_body = frame_objs[EXPECT_FRAMES.index(5)][1]
@@ -868,7 +874,7 @@ check(len(wit) == 16 and wit == sorted(wit, key=lambda w: w[1])
 pset = {n_body[3][0][1], n_body[3][1][1]}
 check(all(w[2] in pset for w in wit), 'normal record: every nominated_by names a participant')
 check(any(w[3] & 3 == 3 for w in wit),
-      'normal record: witness floor - at least one entry attests protocol_ran and both_responsive (T31)')
+      'normal record: witness floor - at least one entry attests protocol_ran and both_responsive (T52)')
 resps = n_body[5]
 check(resps == sorted(resps, key=lambda r: (r[1], r[2])) and len(resps) == 3,
       'normal record: responses sorted by (verifier, subject) keyhash')

@@ -99,7 +99,7 @@ impl OneTimePair {
             return None;
         };
         Some(OneTimePair {
-            id: uint(id)? as u32,
+            id: u32::try_from(uint(id)?).ok()?,
             dh: DhSecret::from_seed(fixed::<32>(b, dh)?),
             kem: KemSecret::from_seed(fixed::<64>(b, kem)?),
         })
@@ -145,7 +145,7 @@ impl PayloadKeys {
                 return None;
             };
             retired.insert(
-                uint(id)? as u32,
+                u32::try_from(uint(id)?).ok()?,
                 (
                     DhSecret::from_seed(fixed::<32>(b, dh)?),
                     KemSecret::from_seed(fixed::<64>(b, kem)?),
@@ -159,14 +159,14 @@ impl PayloadKeys {
         }
         Some(PayloadKeys {
             ik: DhSecret::from_seed(fixed::<32>(b, &f[0])?),
-            spk_id: uint(&f[1])? as u32,
+            spk_id: u32::try_from(uint(&f[1])?).ok()?,
             spk: DhSecret::from_seed(fixed::<32>(b, &f[2])?),
             spk_since: uint(&f[3])?,
-            pqspk_id: uint(&f[4])? as u32,
+            pqspk_id: u32::try_from(uint(&f[4])?).ok()?,
             pqspk: KemSecret::from_seed(fixed::<64>(b, &f[5])?),
             retired,
             one_time,
-            next_id: uint(&f[8])? as u32,
+            next_id: u32::try_from(uint(&f[8])?).ok()?,
             published_at: optional(&f[9], uint)?,
         })
     }
@@ -334,9 +334,11 @@ impl Blob {
         };
         Ok(Blob {
             ik: k32(1)?,
-            spk_id: map_get(m, 2).and_then(as_uint).ok_or("blob field 2")? as u32,
+            spk_id: u32::try_from(map_get(m, 2).and_then(as_uint).ok_or("blob field 2")?)
+                .map_err(|_| "blob spk_id over u32")?,
             spk: k32(3)?,
-            pqspk_id: map_get(m, 4).and_then(as_uint).ok_or("blob field 4")? as u32,
+            pqspk_id: u32::try_from(map_get(m, 4).and_then(as_uint).ok_or("blob field 4")?)
+                .map_err(|_| "blob pqspk_id over u32")?,
             pqspk,
         })
     }
@@ -383,7 +385,8 @@ impl OneTimeKey {
         Ok(OneTimeKey {
             id: map_get(m, 1)
                 .and_then(as_uint)
-                .ok_or("one-time key field 1")? as u32,
+                .ok_or("one-time key field 1")
+                .and_then(|v| u32::try_from(v).map_err(|_| "one-time id over u32"))?,
             dh,
             kem,
         })
@@ -624,9 +627,14 @@ impl InitialMessage {
             ik: k32(1)?,
             ek: k32(2)?,
             kem_ciphertext: bytes(3)?,
-            spk_id: map_get(m, 4).and_then(as_uint).ok_or("field 4")? as u32,
-            pqspk_id: map_get(m, 5).and_then(as_uint).ok_or("field 5")? as u32,
-            opk_id: map_get(m, 6).and_then(as_uint).map(|v| v as u32),
+            spk_id: u32::try_from(map_get(m, 4).and_then(as_uint).ok_or("field 4")?)
+                .map_err(|_| "field 4 over u32")?,
+            pqspk_id: u32::try_from(map_get(m, 5).and_then(as_uint).ok_or("field 5")?)
+                .map_err(|_| "field 5 over u32")?,
+            opk_id: match map_get(m, 6).and_then(as_uint) {
+                None => None,
+                Some(v) => Some(u32::try_from(v).map_err(|_| "field 6 over u32")?),
+            },
             first: bytes(7)?,
         })
     }
@@ -694,7 +702,7 @@ impl Sessions {
     /// and every bundle held.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
-        emit_array_head(&mut out, 2);
+        emit_array_head(&mut out, 3);
         emit_array_head(&mut out, self.ratchets.len());
         for ((kh, dev), r) in &self.ratchets {
             emit_array_head(&mut out, 3);
@@ -706,12 +714,20 @@ impl Sessions {
         for p in self.prefetched.values() {
             p.encode(&mut out);
         }
+        // **the replay cache is persisted** [2026-09-30].  Held only in
+        // memory, it emptied on every restart and the window it closes
+        // reopened with it: a captured initial message replayed after a
+        // restart would again replace the live session.
+        emit_array_head(&mut out, self.seen_initials.len());
+        for ek in &self.seen_initials {
+            emit_bstr(&mut out, ek);
+        }
         out
     }
 
     pub fn decode(b: &[u8]) -> Option<Sessions> {
         use crate::durable::*;
-        let (_, f) = parse_array(b, 2)?;
+        let (_, f) = parse_array(b, 3)?;
         let mut ratchets = BTreeMap::new();
         for r in array(&f[0])? {
             let [kh, dev, bytes_] = array(r)?.as_slice() else {
@@ -727,8 +743,12 @@ impl Sessions {
             let p = Prefetched::decode(b, p)?;
             prefetched.insert((p.subject, p.device), p);
         }
+        let mut seen_initials = std::collections::VecDeque::new();
+        for ek in array(&f[2])? {
+            seen_initials.push_back(fixed::<32>(b, ek)?);
+        }
         Some(Sessions {
-            seen_initials: std::collections::VecDeque::new(),
+            seen_initials,
             ratchets,
             prefetched,
         })

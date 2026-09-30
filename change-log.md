@@ -11597,3 +11597,57 @@ listed the question as unsettled. Nine now, in a table.
 **What remains between a prepared query and a sent one** is the consent
 exchange over the ceremony's local bearer, which the shell does not yet
 carry.
+
+### 2026-09-30 (a review of the fixes, and two places I was wrong)
+
+**The follow-up review's diagnosis was right**: every incomplete fix had
+been fixed at the instance and missed at the sweep. Two of its findings
+land differently from the rest.
+
+**One true finding I had dismissed.** An `inconclusive` verifier response
+carries **basis 0 and the query's template version** (`wire-format.md`
+§5.5): a capture in hand that could not be read, the attempted mechanism
+rather than a claim that comparison ran. I had checked §4.5's
+conditional-field matrix, which admits personal knowledge with it, and
+closed the finding as the reviewer's error. The codec now refuses the pair,
+the fixture carries the photo basis, a negative and row T56 pin it, the
+harness guards the class, and TX-025 states the narrowing.
+
+**One fix that was itself the mistake.** The sentence binding `p0`/`p1` to
+field 3's positions had acquired a clause asserting that §3.2 orders the
+participants by keyhash. Nothing did. The answer was to delete the clause —
+and, when I tried instead to state and enforce the rule, the tree refused it
+twice: the canonical vectors reverse field 3 **on purpose**, so that
+participant order and envelope `kid` order disagree and a decoder conflating
+them fails; and the witness array's order is exchanged between the two sides
+of a ceremony rather than derived by each. §3.2 now says plainly that both
+orders are the proposer's, and the witness distinctness rules give the
+reason they actually have.
+
+**Code, all confirmed.** The replay cache is persisted, so the window it
+closes no longer reopens on restart — and a test replays across a decode of
+the stored state. The archive's three pending lists are bounded through one
+`hold()`; they were never "the same list" as the node's, which was my
+reading. Eleven more `as u32` narrowings refuse. The `AttachAck`'s sibling
+list is checked against the client reading it, restoring the half of §8.2
+that a zero keyhash had made vacuous. A mailbox write that fails is a
+refusal rather than a panic, and an item is flushed before it counts as
+queued. A store-sized topology replay is snapshotted under the view lock
+and sent outside it, which the comment beside it had claimed and not done.
+
+**Two checkers, because the manual sweep demonstrably misses.** Ten
+negative-vector citations pointed at rows renumbered under them — four
+distinct numbers, three inside pinned reason strings, so the corpus
+re-pinned the error on every run. `citecheck.py` now checks every citation
+against the table and is in the gate. `countcheck.py` recounts
+functional_tests §10's headline, prefix table and prefix count against its
+own rows: 478 live families, 26 prefixes, 3 withdrawn tombstones. Also in
+the gate.
+
+**And the fixes' own fallout**: §22.2 and P12 no longer carry the
+demultiplexing decision `wire-format.md` §7.10.1 closed; the vector
+documents say a kind tag precedes an end-to-end object; light-client §8
+claims only absolute-rank predicates depend on others, structural being
+population-independent; §10's hash table is not rebaselined; the generator's
+drift gate covers `corpus.json`; and each theory mutation writes its own
+result file.

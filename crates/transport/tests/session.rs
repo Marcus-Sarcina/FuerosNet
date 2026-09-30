@@ -231,7 +231,7 @@ async fn trn_06_frames_stream_0_as_length_over_typed_array_matching_the_fixtures
     let aparts = array_item_ranges(ap, 0).unwrap();
     let ack_body_fx = &ap[aparts[1].clone()];
     let ack_fx_decoded =
-        AttachAck::decode(ack_body_fx, 0, &parse_all(ack_body_fx).unwrap()).unwrap();
+        AttachAck::decode(ack_body_fx, 0, &parse_all(ack_body_fx).unwrap(), &[9u8; 32]).unwrap();
     let mut ncfg = node_cfg("bob", ack_fx_decoded.interval);
     ncfg.siblings = {
         let list = ack_fx_decoded.siblings.clone();
@@ -296,7 +296,7 @@ async fn trn_06_frames_stream_0_as_length_over_typed_array_matching_the_fixtures
     assert_eq!(as_uint(&a[0]), Some(2));
     let aranges = array_item_ranges(&ack[4..], 0).unwrap();
     let strip_ack = |body: &[u8]| -> Vec<u8> {
-        let mut d = AttachAck::decode(body, 0, &parse_all(body).unwrap()).unwrap();
+        let mut d = AttachAck::decode(body, 0, &parse_all(body).unwrap(), &[9u8; 32]).unwrap();
         d.capabilities.retain(|k, _| *k == named);
         d.encode()
     };

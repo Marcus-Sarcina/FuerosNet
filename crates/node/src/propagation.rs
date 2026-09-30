@@ -803,9 +803,21 @@ impl NodeView {
     /// act fetches it from a participant's archive (§7.9), where every
     /// party to it keeps a copy and none is authoritative.
     pub fn replay_to(&self, adj: &dyn Adjacency, to: &Keyhash) {
-        for (kind, object) in self.store.objects() {
-            adj.send(to, FRAME_TOPOLOGY_PUSH, &encode_push(kind, &object));
+        for frame in self.replay_frames() {
+            adj.send(to, FRAME_TOPOLOGY_PUSH, &frame);
         }
+    }
+
+    /// The same frames, built and handed back rather than sent: a caller
+    /// holding a lock over this view takes them, drops the lock, and sends
+    /// outside it, so a store-sized replay does not hold the view for its
+    /// whole length.
+    pub fn replay_frames(&self) -> Vec<Vec<u8>> {
+        self.store
+            .objects()
+            .into_iter()
+            .map(|(kind, object)| encode_push(kind, &object))
+            .collect()
     }
 
     /// Where a resolution goes when a conflict retires a record: the node

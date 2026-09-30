@@ -13162,3 +13162,98 @@ carriage in the shell — it is the ceremony's own local conversation, and the
 one leg between "queries prepared" and "queries sent". TRV-12/13 and MET-12
 remain unimplemented; the direct-path leg they name is the same courier
 path, exercised by `adaptors/tests/direct.rs` for payload generally.
+
+## reviewer2 — follow-up on the fixes (2026-09-30)
+
+A review of the previous pass rather than of the design. Its closing
+diagnosis is the one to keep: *every incomplete fix failed the same way —
+fixed at the instance, missed at the sweep*. That is `CLAUDE.md`'s
+first-listed failure mode, and it was right about eight of the nine cases it
+named. Two findings are recorded against me for a different reason: one
+where I **dismissed a true finding** by reading the wrong section, and one
+where the fix I had shipped **invented a rule** rather than removing a
+claim.
+
+### Where I was wrong about the reviewer
+
+| # | Finding | Disposition |
+|---|---|---|
+| — | `inconclusive` with a `personal_knowledge` basis in the LateResponse fixture | **THE REVIEWER WAS RIGHT AND I WAS WRONG.** I checked §4.5's conditional-field matrix, which admits the pair, and closed it as the reviewer's error. §5.5's prose two sections on says an `inconclusive` "carries **basis 0 and the query's template version** — the attempted mechanism, not an assertion that comparison ran" [2026-09-02]. Personal knowledge cannot be inconclusive: nothing was attempted that could fail to be read. **Fixed at four layers** — the codec refuses it, the fixture carries basis 0 with template version 3, `N-response-inconclusive-personal` and row T56 pin the refusal, `verify.py` guards the class (113 checks), and TX-025 now states the narrowing the matrix does not carry |
+| P1 | The `p0`/`p1` fix cites a §3.2 rule that does not exist | **RIGHT, AND THE FIX WAS THE MISTAKE.** I wrote "which §3.2 orders by ascending keyhash" to prop up a sentence whose *positional* half was the whole fix. **The answer was to delete the clause, not to make the spec true to it** — `CLAUDE.md`'s "elaborating where the answer is to remove something". Done. I then tried to state and enforce the ordering anyway, and the tree refused it twice, which is the finding below |
+
+### The ordering question, for the author
+
+**Neither field 3 nor field 4 has a stated order, and both are load-bearing
+as they stand.** What the tree says:
+
+- **Field 3 is deliberately unordered.** `generate.py` reverses it against
+  the keyhashes on purpose: *"so that participant order (which fixes
+  back-pointer list order, §3.1) and envelope kid order (which fixes
+  signature entry order, §3.5) disagree — a decoder conflating the two
+  fails this vector."* A canonical order would retire that test. Enforcing
+  ascending refused **nine canonical fixtures**.
+- **Field 4 is unordered in the client and ascending in the vectors.**
+  Enforcing ascending refused the client's own records; sorting them in the
+  client broke `run_adoption`, because the witness array's order is
+  *exchanged* between the two sides rather than derived by each.
+- §3.2's parenthetical presumed an ordering all the same ("Duplicates would
+  leave the ascending-keyhash ordering undefined"). **Reworded**: the
+  duplicate rules now give the reason they actually have — a witness named
+  twice would be counted twice toward the floor — and §3.2 says plainly that
+  the order of both arrays is the proposer's, with the §3.1-versus-§3.5
+  reason field 3's stays that way.
+
+**The decision, if the author wants one.** The reviewer's failure case —
+"two honest encoders produce opposite orders" — does not arise: one ceremony
+yields one *proposed* body, which the counterparty signs or refuses (design
+§7.1). Nothing derives the same record twice. So my recommendation is to
+**leave both unordered**, as now stated. Canonicalising field 4 alone would
+cost the ceremony's exchanged-order flow and buy a property nothing needs.
+
+### Partially fixed, now closed
+
+| # | Finding | Disposition |
+|---|---|---|
+| P2 | Replay cache unpersisted and evictable | **FIXED, but not as proposed.** `Sessions` persists `seen_initials`; the test now replays across a decode of the persisted state. **The suggested `ratchets.contains_key` refusal is declined**: it also refuses a peer that legitimately lost its state and re-initiates, which is the case the cache keeps working. The 256-entry bound stays — a flood-then-replay needs 256 fresh ephemeral keys *and* the original session still live, and the alternative is an unbounded list a peer controls |
+| P3 | The pending-cap fix stopped at `rhtn-node`; the archive's three lists are still unbounded | **RIGHT, AND "THE SAME LIST" WAS MY ERROR.** `pending_reissues`, `pending_departures` and `pending_disavowals` are three separate lists in `archive/src/topology.rs`. All three now go through one `hold()` at 256, oldest evicted, the idiom `node/src/store.rs` already uses |
+| P4 | The `as u32` sweep missed its twins | **RIGHT — eleven more.** `resolution.rs` (series, counter), `archive/src/record.rs` (series, counter, twice), `client/src/payload.rs` (nine prekey ids). All refuse now. The frame-length and CRC casts are left: those are widths this code produces, not values a peer supplies |
+| P6 | The renumbering missed ≥10 citation sites, and the generator's re-pin themselves | **RIGHT, and worse than stated: ten sites, four distinct stale numbers.** T29→**T50** (×3), T27→**T49** (×2), T30→**T51** (×2), T31→**T52**, S24→**S25** (×3). Three were in pinned reason strings, so the corpus re-pinned the error every run. **`test-vectors/tools/citecheck.py` written and gated**: 67 citations against 119 rows, 0 flags. Its existence check is exact and in the gate; its `--overlap` sweep — a citation sharing no *distinctive* word with the row it names, distinctive meaning a word naming ≤5 rows — is the sweep that found T31 and T30, and stays a tool a human runs, because its false positives (ranges like `T9–T12`, back-references like `(S23)`) are the kind of noise that buys exemptions |
+| P7 | FFI seeds, `km`, archive prune, `channels_ok` | **`km` NOT REPRODUCED**: the only `km` in the client is `public.key_material()` in the ceremony harness — public material, nothing to wipe. The rest stay owed, below |
+
+### The fixes' own inconsistencies, all confirmed
+
+| Finding | Disposition |
+|---|---|
+| §22.2 still lists payload-type demultiplexing; P12 says five decisions | **FIXED** — §22.2 names it settled at `wire-format.md` §7.10.1, P12 says four, and its cite moves from §22.1 (which is "Blocks a subsystem — none") to §22.2 |
+| `messages.md` and PAY-011 carry the same staleness | **FIXED** — both generator sites now say a `uint` kind tag precedes the object, §7.10.1's registry, naming kind 2 for the `LateResponse`; PAY-011 keeps the two decisions that are open |
+| functional_tests §10: three counts | **FIXED, and it is two, not three.** The headline 478 is right; the prefix table was two behind because NET-017/018 never reached it. The reviewer's 481 counts the withdrawn tombstones, which the table's posture excludes by design (PAY 2, UX 1). **`Robot/countcheck.py` written and gated**: 478 live families across 26 prefixes, 3 tombstones, 0 flags — and it checks the headline, the per-prefix rows and the prefix count against the document's own rows |
+| light-client §8 over-corrected | **FIXED** — resource §7.2.1 makes structural predicates population-*independent*; only absolute-rank depends on others |
+| The FFI nonce helper panics where the commit said "refused" | **CONFIRMED, and the panic stays.** The nonce source is a `Fn() -> [u8; 16]` with nowhere to return a refusal to; the choice is a loud stop or a silent weak nonce. The doc comment now says it panics and why, which is what was wrong — the wording, not the behaviour |
+| §10's hash table: "a record, not a live pin" against an instruction to rebaseline | **FIXED** — the hashes are not rebaselined; `crates/spec-pins.json` tracks the documents, and what gets revisited is the affected test families |
+| `generate.py` pins `corpus.json` after the drift comparison | **FIXED** — the corpus hash is computed before the gate and inside it. The two hand-written files stay after it, for the opposite reason: their pin line is part of their bytes, so they change every run by construction. A clean re-run now passes the gate with the corpus in it |
+| Three mutations of one lemma write one filename | **FIXED** — the mutation's index is in the name. Each check did run and was read before the next overwrote it, so the gate was sound; what was lost was the evidence for two of the three |
+
+### Process
+
+**The catalogue entries the reviewer asked for.** Three, with markers and a
+new test: **SES-28** (an `AttachAck` whose sibling list names the receiver —
+§8.2's *"A client cannot fail over to itself"*, which a zero keyhash had
+made vacuous on that path); **QUE-22** (a submission the store will not take
+is refused, never acknowledged — §7.10's *"The answer says the node took
+it"*); **PAY-23** (a replayed initial refused across a restart). The
+remaining new tests — the heartbeat window, the held-object caps, the attach
+deadline — state no rule any document makes; they are internal bounds, and
+putting them in the catalogue would claim a specification that does not
+exist. Recorded here instead.
+
+**Owed, carried forward**: the archive's `load` swallowing append errors
+after a prune; the FFI's identity seeds unwiped; the KeyMaterial-hash check
+in the codec's `ServingInfra`/`AnchorEntry` arms; `channels_ok`'s field 3
+and `device_bundle_ok` (the review names them without a claim, so nothing
+is verified either way); D14/D15 and the remaining enum variants; the §12
+size table's classical-only rows; freshness stamps on `models/results/`.
+
+**Next model, on the reviewer's recommendation**: the §7.7.2 verification-query
+leg, this project's own construction, in preference to PQXDH — which would
+duplicate Signal's own analysis at high cost, and which the models README
+already declares unmodelled.

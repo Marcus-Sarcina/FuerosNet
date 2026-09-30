@@ -1,6 +1,6 @@
 # Standalone signed records (`wire-format.md` §7)
 
-Generated against `wire-format.md` `cba96636b3216a00…`, `network-design.md` `061d5691199aa4e4…` and `light-client-requirements.md` `bed20cc1a877b423…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `5ba5091883a19725…`, `network-design.md` `839e5ba7e8bdccb2…` and `light-client-requirements.md` `85bb59fee95600e9…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md). Each **signed** §7 object is a standalone `COSE_Sign1`
@@ -117,7 +117,7 @@ byte-identical fields, the signature cryptographically valid under a key the
 object does **not** name — the binding, not the mathematics, is the defect
 (S23's rule). And each signature is bound to its tag: verified under any other
 context's `external_aad`, it MUST fail — the cross-context substitution family
-(S24).
+(S25).
 
 **Currency attestation** — subject alice, issuer bob (role 0, patron), ~10 h
 expiry, signed under bob's instance's delegated key with bob's delegation

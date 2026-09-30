@@ -1,9 +1,9 @@
 {
  "format": "rhtn-test-corpus/1",
  "pins": {
-  "wire-format.md": "cba96636b3216a009cbd193d3046a98aabcb6bb1c3698e2fd5033a72ffb65ccd",
-  "network-design.md": "061d5691199aa4e43633169cc54d0d393e44f4ec6c89b8f93d89f4087723c95f",
-  "light-client-requirements.md": "bed20cc1a877b4237120e4eedace469a8cfd96347c4de9dd72102c4db0cd2e66"
+  "wire-format.md": "5ba5091883a197253b0457794bdd8c400fdd36a58163b618b9611aa7fd3addd0",
+  "network-design.md": "839e5ba7e8bdccb291781de717ada0e246a6d12ca03e570e6d55d51345836136",
+  "light-client-requirements.md": "85bb59fee95600e946052fd4f8dd8f00a8b5a824c1e3c4e5e05edaafa26bc45b"
  },
  "classes": {
   "bytes": "hex is the complete input",
@@ -862,7 +862,7 @@
     "outcome": "accept",
     "kind": "e2e-payload"
    },
-   "hex": "a3015820b5b6227510ef730eccc3a3d9e256b30e48898bde156c29eead5e394bc3f350de0258208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8dcfc852aa6a03a80158204384a2cc10f2d505660a16118457e9aeddee94389abd9c4d0dffb610ef0342a20258208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8dcfc852aa6a035820215ac766a26664442b850fb190bfff7312d4cfbd898b57a18d3e6e9f9b34706904020501078443a10127a0f6584019062fe53ac3bcddb4f7b9a1676832b19b6e8053476efdf9761f96543a73a3efe6394c0d79b0e18efb499760f493bab34e5112b175656d11583f718121c62801098443a10127a0f658408ba528fba7f69041401958c6b2848559d04dbf0579be7b4df81882e4a9ebc53072db898fd6a32995d9ed4dc4564d09d24615a3b1cbfce272ba925946929575090a00",
+   "hex": "a3015820b5b6227510ef730eccc3a3d9e256b30e48898bde156c29eead5e394bc3f350de0258208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8dcfc852aa6a03a90158204384a2cc10f2d505660a16118457e9aeddee94389abd9c4d0dffb610ef0342a20258208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8dcfc852aa6a035820215ac766a26664442b850fb190bfff7312d4cfbd898b57a18d3e6e9f9b347069040205000603078443a10127a0f6584019062fe53ac3bcddb4f7b9a1676832b19b6e8053476efdf9761f96543a73a3efe6394c0d79b0e18efb499760f493bab34e5112b175656d11583f718121c62801098443a10127a0f65840838671607c80a9ebbb69ef4f547141c5aa5ef3d2f19d86dce6c32e053d1283dc0f37c442749a092112d70fbcca63844e3f701e04cd6ae249e079bf0d6254ac070a00",
    "note": "LateResponse \u2014 the normal record supplemented by a late `inconclusive` from a fourth verifier; private information for the participants, never part of the record"
   },
   {
@@ -966,7 +966,7 @@
     "outcome": "reject",
     "kind": "body",
     "layer": "schema",
-    "reason": "retired key 7 is a tombstone, not extension space (T29)"
+    "reason": "retired key 7 is a tombstone, not extension space (T50)"
    },
    "hex": "a80083815820819a3ccd925a384a47b4efec09bec2932730dc300fb6c9782ed620a58d2d6efa815820ab3e6198fe328056a6be08da4d807999465436b8aa96c7dd657b3bbd995165b8815820306b0cfefc0a091b4056b0786c1bcacbee300247ff7be4d86ec50b2edd176113011a6a35e610021a6a35f4200382a10158208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8dcfc852aa6aa10158206bcf8a3e8899fc206bc603744414d58b01db857986d82f611b0794ac9c32c3750481a30158205c5f9a52ddbd9c7cfd08d87c82183a5b730379cc55df76ab85a6e06b54bf5ab30258206bcf8a3e8899fc206bc603744414d58b01db857986d82f611b0794ac9c32c3750307060007050858208023ff2a75d088738ec31503512ad74637269fa6a5be7634e708e2b158df6fcc"
   },
@@ -977,7 +977,7 @@
     "outcome": "reject",
     "kind": "Witness",
     "layer": "schema",
-    "reason": "retired key 4 is a tombstone, not extension space (T29)"
+    "reason": "retired key 4 is a tombstone, not extension space (T50)"
    },
    "hex": "a4015820efe7876868352e6f8cabae9ba591a3e5ca61cf64950d19eb40ab82120738587f0258208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8dcfc852aa6a0307045820ab2e924d34f44a6d5231c65228c432fcf4cbf093fde091c727f894879dd3ccb8"
   },
@@ -1037,13 +1037,24 @@
    "hex": "a901582096664caec817f958a439b6d326c45f5ab7bbb3671ebb447eca25a411b975e73a0258208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8dcfc852aa6a0358206e8929881f4fef5cac9185fdc78abf443ddd8cc21e5186fd008a8614b0742edb040005090603078443a10127a0f65840bf72169ab988b519ba77230c05eedbac0faec83b9c7f053e74f77b17a211c5a76aa83df4874c84986a03478c752a58e5aae3142b9bb6eebe8f30f171214b5806098443a10127a0f658408dc0a4406d18c8ea57b508755ed29de703e1d48a7eb68db3d81878fdd021f0f63065b4abfb026d03b7ad6ad7ab19f8087d75f5b1eb2b124fbef2fcd40622480c0a00"
   },
   {
+   "id": "N-response-inconclusive-personal",
+   "class": "bytes",
+   "expect": {
+    "outcome": "reject",
+    "kind": "VerifierResponse",
+    "layer": "schema",
+    "reason": "an inconclusive carries the photo basis (s5.5)"
+   },
+   "hex": "a801582096664caec817f958a439b6d326c45f5ab7bbb3671ebb447eca25a411b975e73a0258208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8dcfc852aa6a0358206e8929881f4fef5cac9185fdc78abf443ddd8cc21e5186fd008a8614b0742edb04020501078443a10127a0f65840bf72169ab988b519ba77230c05eedbac0faec83b9c7f053e74f77b17a211c5a76aa83df4874c84986a03478c752a58e5aae3142b9bb6eebe8f30f171214b5806098443a10127a0f65840b236bfe5c5a75d9f7037eecdc32305409c99bf877822c5d0f1bdc14dda5e6f574fd9af33cc7cba6afb141654502c636de1455ad59a5b97e3ceae1b4cea8a74080a00"
+  },
+  {
    "id": "N-enum-selection-basis",
    "class": "bytes",
    "expect": {
     "outcome": "reject",
     "kind": "VerifierResponse",
     "layer": "schema",
-    "reason": "selection_basis 9 outside 0-3 (T27)"
+    "reason": "selection_basis 9 outside 0-3 (T49)"
    },
    "hex": "a901582096664caec817f958a439b6d326c45f5ab7bbb3671ebb447eca25a411b975e73a0258208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8dcfc852aa6a0358206e8929881f4fef5cac9185fdc78abf443ddd8cc21e5186fd008a8614b0742edb040005000603078443a10127a0f65840bf72169ab988b519ba77230c05eedbac0faec83b9c7f053e74f77b17a211c5a76aa83df4874c84986a03478c752a58e5aae3142b9bb6eebe8f30f171214b5806098443a10127a0f658402191f480d7bcd0526930432d8ef550734d7c867337764d76504b42f5517be0123db857b94094269e7b0f9c436336fdb4b05fdb0514bff56dcdc8947336630b020a09"
   },
@@ -2212,7 +2223,7 @@
     "outcome": "reject",
     "kind": "body",
     "layer": "schema",
-    "reason": "zero responses OMIT key 5 - the empty-array spelling is the second encoding of one logical record (s4.5, T30)"
+    "reason": "zero responses OMIT key 5 - the empty-array spelling is the second encoding of one logical record (s4.5, T51)"
    },
    "hex": "a80083815820819a3ccd925a384a47b4efec09bec2932730dc300fb6c9782ed620a58d2d6efa815820ab3e6198fe328056a6be08da4d807999465436b8aa96c7dd657b3bbd995165b881582054e7ce47b2c2e7789bc965f67d8dc7a0386421f8e086e816824f50ef743ca5e6011a6a39da90021a6a39e1980382a10158208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8dcfc852aa6aa10158206bcf8a3e8899fc206bc603744414d58b01db857986d82f611b0794ac9c32c3750481a3015820efe7876868352e6f8cabae9ba591a3e5ca61cf64950d19eb40ab82120738587f0258208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8dcfc852aa6a030705800600085820479597cff3e135ea4dbd2603ddf63abf4830519df5860558d3e34ea3ea173063",
    "note": "Stress: an implementer reading field 5 as required-with-empty-array emits and accepts this; P-fin-absent is the one valid spelling."

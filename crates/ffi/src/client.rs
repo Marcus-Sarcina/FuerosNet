@@ -45,7 +45,14 @@ pub const SIBLINGS: &str = "siblings";
 
 /// A submission nonce drawn from the platform's randomness, in full or
 /// not at all: short measure is refused rather than padded, as the seed
-/// path refuses it, because a nonce completed with zeroes is not random.
+/// path refuses it (`device.rs`), because a nonce completed with zeroes is
+/// not random.
+///
+/// **It refuses by panicking, and the closure's type is why**: the nonce
+/// source is a `Fn() -> [u8; 16]` the transport calls, with nowhere to
+/// return a refusal to. The choice is a loud stop or a silent weak nonce,
+/// and a platform whose randomness returns short measure is broken in a
+/// way no submission should proceed under.
 fn nonce_drawn(random: &dyn crate::device::Random) -> [u8; 16] {
     let drawn = random.fill(16);
     <[u8; 16]>::try_from(drawn.as_slice()).unwrap_or_else(|_| {

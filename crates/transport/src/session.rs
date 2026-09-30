@@ -403,13 +403,17 @@ impl AttachAck {
     }
     /// Decode the map at `at` in `b`, whose parsed item is `it`: the
     /// body's offset within a frame payload, or 0 for the body alone.
-    pub fn decode(b: &[u8], at: usize, it: &Item) -> Option<Self> {
+    /// `me` is the receiver the list is checked against: §8.2's validity
+    /// is distinctness **and** that the list does not name the client
+    /// reading it, and a caller that has no keyhash to offer has no way to
+    /// check the second half.
+    pub fn decode(b: &[u8], at: usize, it: &Item, me: &[u8; 32]) -> Option<Self> {
         let Item::Map(m) = it else { return None };
         Some(AttachAck {
             mode: map_get(m, 1).and_then(as_uint)?,
             // the same §8.2 validity the SiblingUpdate path enforces
             siblings: decode_sibling_list(b, map_get(m, 2))
-                .filter(|l| valid_sibling_list(l, &[0u8; 32]))?,
+                .filter(|l| valid_sibling_list(l, me))?,
             interval: map_get(m, 3).and_then(as_uint)?,
             queued: map_get(m, 4).and_then(as_uint)?,
             capabilities: decode_capabilities(b, map_get(m, 5)?),
@@ -467,7 +471,7 @@ pub fn encode_heartbeat(counter: u64, timestamp: u64) -> Vec<u8> {
 /// cached sibling list (`light-client-requirements.md` §4).  **Nothing
 /// partial**: a list that does not decode whole is no list, since failing
 /// over on uncertain data is worse than reporting disconnection.
-pub fn decode_sibling_update(b: &[u8]) -> Option<Vec<SiblingRef>> {
+pub fn decode_sibling_update(b: &[u8], me: &[u8; 32]) -> Option<Vec<SiblingRef>> {
     let item = parse_all(b).ok()?;
     let Item::Map(m) = &item else {
         return None;
@@ -476,7 +480,7 @@ pub fn decode_sibling_update(b: &[u8]) -> Option<Vec<SiblingRef>> {
         return None;
     }
     let list = decode_sibling_list(b, map_get(m, 1))?;
-    if !valid_sibling_list(&list, &[0u8; 32]) {
+    if !valid_sibling_list(&list, me) {
         return None;
     }
     Some(list)
@@ -1041,12 +1045,14 @@ impl Node {
         // accepted means stored: the message enters the mailbox, and a live
         // session drains it from there, so nothing is reported delivered
         // before the peer has taken it
-        self.cfg.queue.push(Queued {
+        if !self.cfg.queue.push(Queued {
             ciphertext: bytes,
             recipient: keyhash,
             device,
             arrival: (self.cfg.clock)(),
-        });
+        }) {
+            return Err(queue::Refusal::NotStored);
+        }
         self.relayed
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         if let Some(((_, d), conn)) = conn {
@@ -1953,7 +1959,7 @@ async fn attach_on(
             }
             FrameRead::Payload(p) => match classify(&p) {
                 Control::Known(Family::AttachAck, b, body, it) => {
-                    match AttachAck::decode(&b, body.start, &it) {
+                    match AttachAck::decode(&b, body.start, &it, &cfg.me.keyhash) {
                         Some(a) if (1..=3600).contains(&a.interval) => break a,
                         _ => log.push(Event::Discarded),
                     }
@@ -2381,8 +2387,9 @@ mod bounds_and_validity {
         );
     }
 
+    // acceptance: SES-28
     #[test]
-    fn an_attach_ack_naming_one_sibling_twice_does_not_decode() {
+    fn an_attach_ack_naming_one_sibling_twice_or_the_receiver_does_not_decode() {
         let point = NetworkPoint {
             ip: [10, 0, 0, 1],
             asn: None,
@@ -2401,10 +2408,20 @@ mod bounds_and_validity {
             capabilities: BTreeMap::new(),
             delegation: None,
         };
+        let me = [9u8; 32];
         let ok = ack(vec![sib(1), sib(2)]).encode();
-        assert!(AttachAck::decode(&ok, 0, &parse_all(&ok).unwrap()).is_some());
+        assert!(AttachAck::decode(&ok, 0, &parse_all(&ok).unwrap(), &me).is_some());
         // the validity the SiblingUpdate path already enforced (§8.2)
         let dup = ack(vec![sib(1), sib(1)]).encode();
-        assert!(AttachAck::decode(&dup, 0, &parse_all(&dup).unwrap()).is_none());
+        assert!(AttachAck::decode(&dup, 0, &parse_all(&dup).unwrap(), &me).is_none());
+        // and the half a zero keyhash made vacuous: a list naming the
+        // client reading it is not a failover set [2026-09-30]
+        let mine = sib(1);
+        let me = mine.keyhash;
+        let self_named = ack(vec![mine, sib(2)]).encode();
+        assert!(
+            AttachAck::decode(&self_named, 0, &parse_all(&self_named).unwrap(), &me).is_none(),
+            "an ack whose siblings name the receiver is refused"
+        );
     }
 }

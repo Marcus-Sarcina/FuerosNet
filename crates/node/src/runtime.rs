@@ -426,7 +426,11 @@ impl LiveNode {
             // also holds the view lock for as long as the store is large.
             let (v, a) = (attached.clone(), reconcile.clone());
             tokio::spawn(async move {
-                v.lock().unwrap().replay_to(&a, &peer);
+                // snapshot under the lock, send outside it
+                let frames = v.lock().unwrap().replay_frames();
+                for frame in frames {
+                    a.send(&peer, crate::propagation::FRAME_TOPOLOGY_PUSH, &frame);
+                }
             });
         }));
 

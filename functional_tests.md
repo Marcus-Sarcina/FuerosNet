@@ -132,7 +132,7 @@ The Cargo workspace has **16 crates**. Components below follow responsibilities 
 | TX-022 | S | Every participant and witness signs the complete immutable presence body, while embedded verifier signatures remain evidence rather than envelope signer roles. Removing a body response invalidates the collected envelope signatures. | W §§3.5, 4.5; D §8.2 |
 | TX-023 | S | Require finalized_at ≥ started_at and a difference no greater than 86,400 seconds; exercise zero and exact-24-hour records. Structural acceptance does not compare either timestamp with the receiver's clock. | W §§3.2–3.3 |
 | TX-024 | S | Ordinary verifier responses name a participant as subject and a different identity as verifier. Allow one verifier to answer for both subjects, but reject duplicate (verifier, subject) responses and enforce verifier-then-subject ordering. | W §§3.2, 4.5 |
-| TX-025 | S | Match, no-match and inconclusive responses require a comparison basis; unavailable omits it. Photo/both bases require template version, personal-only omits it, and unavailable omits it. prior_key is confined to recovery. | W §4.5 |
+| TX-025 | S | Match, no-match and inconclusive responses require a comparison basis; unavailable omits it. Photo/both bases require template version, personal-only omits it, and unavailable omits it. **An inconclusive carries basis 0 and the query's template version** — `wire-format.md` §4.5's matrix admits personal knowledge with an inconclusive and `wire-format.md` §5.5 narrows it out, a capture that could not be read being the only thing inconclusive names. prior_key is confined to recovery. | W §§4.5, 5.5 |
 | TX-026 | S | Validate ClientIntegrity's declared attestation fields, CaptureSummary's 3–5 image count/modality/liveness/version, proximity channel types/outcomes and optional binding lengths. Do not infer that a syntactically present attestation proves a device trustworthy. | W §4.5; D §§7.5, 7.8 |
 | TX-027 | S | Location assertions have supported geohash lengths 3 or 4 and canonical alphabet; method is extensible. Corroborations name actual witnesses and describe witness-relative radius, not precise coordinates. Enforce record-level location/corroboration maxima. | W §4.5; D §§7.6.2, 7.7 |
 | TX-028 | S | When proximity is disclosed, strongest must identify a passing channel and no stronger disclosed channel may have passed: UWB, NFC, optical, then latency. Repeated channel entries are allowed; do not reject repetition solely as duplicate type. | W §§3.2, 4.5; D §7.6.3 |
@@ -461,7 +461,7 @@ The Cargo workspace has **16 crates**. Components below follow responsibilities 
 | PAY-008 | C | Relay from sender's serving node to recipient's serving node and finally the recipient; keep queued/delivered payload encrypted end to end, including verifier profiles and capture grants. Hop TLS is not a substitute for that encryption. | D §§12.6.3, 14.2; L §3 |
 | PAY-009 | C | A direct-path failure or disabled capability does not disable base messaging; report relay/degraded mode through the application facade. A relay refusal is delivered to the caller rather than silently counted as a sent message. | D §§14.1.1, 14.2; L §§3–4, 9 |
 | PAY-010 | C | Group send is client-side fanout over the selected depth/horizon, with each recipient's independent end-to-end session. Do not promise a network group identity, atomic broadcast, global ordering or implicit read receipts. | D §14.3 |
-| PAY-011 | O | Pin payload envelope/type demultiplexing, ratchet key-state serialization and upstream PQXDH hybrid-auth binding before independent interoperability claims. Temporary local adapters are not themselves the settled wire contract. | D §14.2.4; W §13; L §10 |
+| PAY-011 | O | Pin ratchet key-state serialization and upstream PQXDH hybrid-auth binding before independent interoperability claims (envelope/type demultiplexing is settled: `wire-format.md` §7.10.1's kind registry). Temporary local adapters are not themselves the settled wire contract. | D §14.2.4; W §13; L §10 |
 
 ## 3.5 Observer-relative trust and policy evaluation
 
@@ -961,7 +961,7 @@ This specification contains **478 numbered requirement/test families** across **
 | TOP | 36 |
 | RES | 15 |
 | CUR | 12 |
-| NET | 16 |
+| NET | 18 |
 | SES | 15 |
 | MAIL | 27 |
 | CER | 21 |
@@ -991,4 +991,4 @@ This specification contains **478 numbered requirement/test families** across **
 | [infra-client-requirements.md](infra-client-requirements.md) | `780b188301c668cdf8b35fe506678b305bcf073289536461c70fda7a3e7254d4` |
 | [resource-requirements.md](resource-requirements.md) | `54edf8e85eacee7b68e69c0f8b971ae83c19b05e284ae3187bf14d6846ee6f8d` |
 
-Implementation inventory: `crates/Cargo.toml` and the source directories listed in §2 at the stated commit. Production code and prior conformance-review files were not modified to prepare this document. Rebaseline hashes and affected test families when the specifications change.
+Implementation inventory: `crates/Cargo.toml` and the source directories listed in §2 at the stated commit. Production code and prior conformance-review files were not modified to prepare this document. **The hashes above are not rebaselined** — they record what was reviewed, and `crates/spec-pins.json` is what tracks the documents as they change; revisit the affected test families when they do.

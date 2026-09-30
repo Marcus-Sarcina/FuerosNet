@@ -47,10 +47,19 @@ pub enum Refusal {
     /// This node holds no record of the recipient at all, which is a
     /// different answer from "offline" (design §14.1.2, §7.4.3).
     NoRecord,
+    /// The store would not take it -- a full or unwritable disk
+    /// [2026-09-30].  **Accepted means stored** (§7.10), so a submission
+    /// that cannot be stored is refused rather than acknowledged, and the
+    /// sender still holds it.
+    NotStored,
 }
 
 pub trait QueueStore: Send + Sync {
-    fn push(&self, item: Queued);
+    /// Store `item`.  **False means it is not stored**, and the caller
+    /// refuses the submission rather than reporting it queued: a store
+    /// that panicked here took the whole node down with a full disk, and
+    /// one that returned quietly lost mail it had acknowledged.
+    fn push(&self, item: Queued) -> bool;
     /// The oldest message waiting for `recipient`, left in place: what a
     /// drain reads before it delivers.
     fn peek_oldest(&self, recipient: &[u8; 32]) -> Option<Queued>;
@@ -88,13 +97,14 @@ pub trait QueueStore: Send + Sync {
 pub struct MemoryStore(Mutex<HashMap<[u8; 32], VecDeque<Queued>>>);
 
 impl QueueStore for MemoryStore {
-    fn push(&self, item: Queued) {
+    fn push(&self, item: Queued) -> bool {
         self.0
             .lock()
             .unwrap()
             .entry(item.recipient)
             .or_default()
             .push_back(item);
+        true
     }
     fn peek_oldest(&self, recipient: &[u8; 32]) -> Option<Queued> {
         self.0
