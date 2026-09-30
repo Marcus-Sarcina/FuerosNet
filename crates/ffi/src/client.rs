@@ -1319,10 +1319,22 @@ impl Participant {
             })
     }
 
-    /// Take a verifier's response about the counterparty.
+    /// Take a verifier's response about the counterparty, handed in by
+    /// the shell; one that arrives on the end-to-end path is taken by the
+    /// kernel and surfaces as [`crate::net::Event::Answered`].
     pub fn take_response(&self, bytes: Vec<u8>) -> Result<(), Refused> {
         self.handle
-            .with_blocking(move |c| c.take_response(&bytes).map_err(Refused::new))
+            .with_blocking(move |c| c.take_response(&bytes).map(|_| ()).map_err(Refused::new))
+    }
+
+    /// Put a consented query to its verifier (`wire-format.md` §5.6): the
+    /// request is built and carried on the end-to-end path — direct where
+    /// the path is held, through the serving nodes otherwise (design
+    /// §12.6.3) — and the answer comes back as
+    /// [`crate::net::Event::Answered`].
+    pub fn put_query(&self, query: Vec<u8>, consent: Vec<u8>, basis: u32) -> Result<(), Refused> {
+        let req = self.request(query, consent, basis)?;
+        self.net.carry(vec![rhtn_client::ceremony::Msg::Query(req)])
     }
 
     /// The responses gathered so far, as they will sit in the body.

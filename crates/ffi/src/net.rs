@@ -94,6 +94,14 @@ pub enum Event {
         record: Option<Id>,
         refused: Option<String>,
     },
+    /// A verifier answered a query this device put to it: the query and
+    /// the verdict, or why the response was refused.
+    Answered {
+        from: Id,
+        query: Option<Id>,
+        answer: Option<crate::types::Answer>,
+        refused: Option<String>,
+    },
 }
 
 /// The session and everything hung off it, replaced whole on each attach;
@@ -766,7 +774,21 @@ fn event_of(from: Keyhash, d: Dispatched) -> Option<Event> {
         // fetch is the kernel answering and evaluating for itself
         // (`light-client-requirements.md` §2), and its result reaches the
         // shell as the standing it changes rather than as an event
-        Dispatched::Grant(_)
+        Dispatched::Response(Ok((q, v))) => Some(Event::Answered {
+            from,
+            query: Some(id_of(&q)),
+            answer: Some(crate::types::Answer::of(v)),
+            refused: None,
+        }),
+        Dispatched::Response(Err(why)) => Some(Event::Answered {
+            from,
+            query: None,
+            answer: None,
+            refused: Some(why),
+        }),
+        // answered by the kernel on the path it came, or waiting on a grant
+        Dispatched::Query { .. }
+        | Dispatched::Grant(_)
         | Dispatched::Candidates(_)
         | Dispatched::Served { .. }
         | Dispatched::Fetched(_) => None,

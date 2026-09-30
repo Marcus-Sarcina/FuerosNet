@@ -2812,7 +2812,8 @@
     "kind": "positive",
     "spec": [
       "wire-format.md §7.3",
-      "design §14.2.4.6"
+      "wire-format.md §7.10",
+      "wire-format.md §7.10.1"
     ],
     "rule": [
       {
@@ -2820,8 +2821,8 @@
         "text": "Carried as payload, never as a record."
       },
       {
-        "where": "design §14.2.4.6",
-        "text": "Payload-type demultiplexing."
+        "where": "wire-format.md §7.10.1",
+        "text": "A kind tag in front of the plaintext, and nothing else"
       }
     ],
     "given": "Subject A sends verifier B a KeyGrant and an application message over the same end-to-end session. The demultiplexing scheme is an open decision (design §22.2) supplied as a parameter.",
@@ -8481,7 +8482,7 @@
       },
       {
         "where": "wire-format.md §5.6",
-        "text": "field 2 MUST equal the transport-authenticated peer on the stream carrying the query, and a mismatch is rejected"
+        "text": "field 2 MUST equal the transport-authenticated peer on the stream carrying the query — or, on the end-to-end path, the peer the session attributed the message to (§7.8, design §14.2.4) — and a mismatch is rejected"
       }
     ],
     "given": "A verifier hosted in a node's process with a query pending its grant, and a second peer presenting the same signed query body under its own authenticated identity.",
@@ -11126,6 +11127,34 @@
         "+"
       ]
     ]
+  },
+  {
+    "id": "CER-43",
+    "area": "ceremony",
+    "gap": "ceremony",
+    "title": "Carry a query to its verifier on the end-to-end path and the answer back on it",
+    "milestone": 4,
+    "kind": "positive",
+    "spec": [
+      "wire-format.md §5.6",
+      "wire-format.md §7.10",
+      "design §12.6.3"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §5.6",
+        "text": "rides the **end-to-end payload path** from querier to verifier, as plaintext kind 7 (§7.10.1), and the `VerifierResponse` rides it back as kind 8"
+      },
+      {
+        "where": "design §12.6.3",
+        "text": "A verification query and its response are payload (§7.3, `wire-format.md` §5.6), and take the same paths."
+      }
+    ],
+    "given": "A querier in a ceremony has captured its counterparty, issued a query about them addressed to a verifier that is a light client elsewhere, and holds the counterparty's consent; nobody holds a direct path, so the serving node is the only route.",
+    "when": "The querier's client hands the request to the courier.",
+    "then": "The request reaches the verifier's client as plaintext kind 7 attributed to the querier's session; the verifier answers on the same path as kind 8, after its grant bound where no grant comes; the querier verifies the response under the verifier, finds it answers a query it issued, and holds it for the record; the subject receives the verifier's copy. A response to a query the querier never issued is refused on arrival and enters nothing.",
+    "oracle": "behaviour",
+    "interpretation": ""
   },
   {
     "id": "RSC-38",

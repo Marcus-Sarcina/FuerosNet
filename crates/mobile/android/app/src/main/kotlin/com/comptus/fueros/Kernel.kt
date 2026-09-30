@@ -3,6 +3,7 @@ package com.comptus.fueros
 import android.content.Context
 import java.security.SecureRandom
 import org.json.JSONObject
+import uniffi.rhtn_ffi.Answer
 import uniffi.rhtn_ffi.Construction
 import uniffi.rhtn_ffi.Event
 import uniffi.rhtn_ffi.Participant
@@ -90,12 +91,15 @@ object Kernel {
      * records the counterparty handed over, so the screen shows who was
      * picked and why, never a list to choose from.
      *
-     * What this build cannot do is **carry a query to its verifier**. A
-     * verifier is a third party reached through the network, and the
-     * documents stop at its serving node (`wire-format.md` §7.7.2): how
-     * that node hands a query to a client attached over the wire is
-     * unwritten, and so is how the capture-key grant travels. So the
-     * queries are prepared and the selection is real; nothing is sent.
+     * A query reaches its verifier on the end-to-end path once the
+     * counterparty has consented to it (`wire-format.md` §5.6): the kernel
+     * carries it, direct or through the serving nodes, and the answer lands
+     * here as [Event.Answered]. What this build does not carry is the
+     * consent exchange itself — the query to the counterparty's device and
+     * the consent back — which is the ceremony's own local conversation
+     * over a bearer the shell does not yet have. So the queries are
+     * prepared and the selection is real; each waits on a consent that
+     * cannot yet arrive.
      */
     fun selectVerifiers() {
         val p = participant ?: return
@@ -121,9 +125,9 @@ object Kernel {
                     for (s in picked) {
                         p.queryFor(s.verifier)
                     }
-                    m.note("${picked.size} query/queries prepared. Carrying one to")
-                    m.note("its verifier needs the leg wire-format §7.7.2")
-                    m.note("leaves unwritten; nothing was sent.")
+                    m.note("${picked.size} query/queries prepared. Each waits on the")
+                    m.note("counterparty's consent, which crosses the local bearer")
+                    m.note("this build does not carry; consented, it is sent.")
                 }
             } catch (e: Refused.Reason) {
                 m.note("selection refused: ${e.reason}")
@@ -134,6 +138,13 @@ object Kernel {
     /** `wire-format.md` §5.5's `selection_basis`, as the shell's own words
      *  render it; an unknown value is the discretionary tier, which claims
      *  the least. */
+    private fun verdictOf(a: Answer): Meet.Verdict = when (a) {
+        Answer.MATCH -> Meet.Verdict.MATCH
+        Answer.NO_MATCH -> Meet.Verdict.NO_MATCH
+        Answer.INCONCLUSIVE -> Meet.Verdict.INCONCLUSIVE
+        Answer.UNAVAILABLE -> Meet.Verdict.UNAVAILABLE
+    }
+
     private fun basisOf(basis: UInt): Meet.Basis = when (basis.toInt()) {
         0 -> Meet.Basis.MET
         1 -> Meet.Basis.IN_HORIZON
@@ -286,6 +297,17 @@ object Kernel {
                     front.incoming(from, who, String(e.bytes))
                 }
                 is Event.Connection -> show(p, e.v1)
+                // a verifier answered on the end-to-end path: the kernel
+                // took it against the query it issued, and the screen
+                // shows the verdict against the verifier it names
+                is Event.Answered -> {
+                    val v = e.answer
+                    if (v != null) {
+                        meet?.responded(hex(e.from), verdictOf(v))
+                    } else {
+                        front.note("· a response was refused: ${e.refused}")
+                    }
+                }
                 null -> {}
                 else -> front.note("· $e")
             }

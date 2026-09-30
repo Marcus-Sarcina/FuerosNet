@@ -7,13 +7,15 @@ use crate::serving::{Inbound, Serving};
 use crate::verifier::Verifiers;
 use rhtn_archive::Keyhash;
 use rhtn_client::ceremony::{Dispatched, Msg};
-use rhtn_client::payload::KIND_CANDIDATES;
-use rhtn_client::verifier::GrantOutcome;
+use rhtn_client::payload::{KIND_CANDIDATES, KIND_QUERY, KIND_RESPONSE, KIND_RESPONSE_COPY};
+use rhtn_client::query::QueryRequest;
+use rhtn_client::verifier::{Answer, GrantOutcome, QueryOutcome};
 use rhtn_transport::traversal::{decode_candidates, encode_candidates};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use tokio::sync::mpsc;
 
 /// Where inbound payload goes once a courier exists: bound late, since the
@@ -68,6 +70,10 @@ pub struct Courier {
     app: mpsc::UnboundedSender<(Keyhash, Dispatched)>,
     verifiers: Mutex<Option<Arc<Verifiers>>>,
     offered: Mutex<HashSet<Keyhash>>,
+    /// Queries that arrived on the end-to-end path and wait for their
+    /// grant, by id: who asked, so the answer goes back the way the query
+    /// came.
+    awaiting: Mutex<HashMap<[u8; 32], Keyhash>>,
 }
 
 impl Courier {
@@ -87,6 +93,7 @@ impl Courier {
                 app,
                 verifiers: Mutex::new(None),
                 offered: Mutex::new(HashSet::new()),
+                awaiting: Mutex::new(HashMap::new()),
             }),
             rx,
         )
@@ -144,18 +151,67 @@ impl Courier {
                 }
             }
             Ok(Dispatched::Grant(GrantOutcome::Answered(a))) => {
-                let v = self.verifiers.lock().unwrap().clone();
-                if let Some(v) = v {
-                    v.granted(a);
+                // a query that came on the end-to-end path is answered on
+                // it; one that came on a request stream completes the stream
+                let querier = self.awaiting.lock().unwrap().remove(&a.query_id);
+                match querier {
+                    Some(querier) => self.answer_back(querier, a).await,
+                    None => {
+                        let v = self.verifiers.lock().unwrap().clone();
+                        if let Some(v) = v {
+                            v.granted(a);
+                        }
+                    }
                 }
             }
             Ok(Dispatched::Grant(_)) => {}
+            // a query on the end-to-end path (`wire-format.md` §5.6): the
+            // querier is the peer the session attributed it to, and the
+            // answer goes back to it the same way
+            Ok(Dispatched::Query { query, outcome }) => match outcome {
+                QueryOutcome::Answered(a) => self.answer_back(from, a).await,
+                QueryOutcome::AwaitingGrant => {
+                    if let Some(qid) = query {
+                        self.awaiting.lock().unwrap().insert(qid, from);
+                        self.expire_after(qid).await;
+                    }
+                }
+                QueryOutcome::Closed(_) => {}
+            },
             Ok(other) => {
                 let _ = self.app.send((from, other));
             }
             // undecryptable: dropped, and nothing said to anyone
             Err(_) => {}
         }
+    }
+
+    /// A verifier's answer, back to the querier on the end-to-end path and
+    /// its copy to the subject over the association the grant established
+    /// (`wire-format.md` §5.6, design §7.4.2).
+    async fn answer_back(self: &Arc<Self>, querier: Keyhash, a: Answer) {
+        let (subject, copy) = a.to_subject.clone();
+        let _ = self.send(querier, KIND_RESPONSE, a.to_querier).await;
+        let _ = self.send(subject, KIND_RESPONSE_COPY, copy).await;
+    }
+
+    /// Let the grant buffer's bound pass for a waiting query: past it the
+    /// client answers `unavailable`, the key never having come, and that
+    /// answer goes back like any other.
+    async fn expire_after(self: &Arc<Self>, qid: [u8; 32]) {
+        let bound = self.handle.with(|c| c.cfg.verifier.grant_buffer_ms).await;
+        let me = self.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(bound + 20)).await;
+            let querier = me.awaiting.lock().unwrap().remove(&qid);
+            let Some(querier) = querier else {
+                return;
+            };
+            let due = me.handle.with(|c| c.expire()).await;
+            if let Some(a) = due.into_iter().find(|a| a.query_id == qid) {
+                me.answer_back(querier, a).await;
+            }
+        });
     }
 
     /// Attach to the serving node beside this client: what the client
@@ -300,6 +356,17 @@ impl Courier {
                             out.refused.push(Msg::Record(b));
                         }
                     }
+                    // a query to its verifier on the end-to-end path
+                    // (`wire-format.md` §5.6): the body names the verifier
+                    // it may reach, and the route is payload's (design
+                    // §12.6.3) — direct where held, the relay otherwise
+                    Msg::Query(b) => match QueryRequest::decode(&b) {
+                        Ok(req) => match me.send(req.query.verifier, KIND_QUERY, b.clone()).await {
+                            Ok(c) => out.absorb(c),
+                            Err(_) => out.refused.push(Msg::Query(b)),
+                        },
+                        Err(_) => out.refused.push(Msg::Query(b)),
+                    },
                     Msg::Transport(b) => {
                         // material for the serving node itself is addressed
                         // to the device it presented (`wire-format.md` §7.10)

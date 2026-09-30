@@ -145,6 +145,10 @@ documents. Where a requirement leaves a visible artifact, that is noted in place
   evidence of identity continuity must issue the queries without asking; a client
   that skips them silently produces evidence weaker than it appears (design
   §7.3).
+- **Put each query to its verifier on the end-to-end path, and take the answer
+  there** (`wire-format.md` §5.6): direct where you hold a path to the
+  verifier, through the serving nodes otherwise, as any payload goes (design
+  §12.6.3). A verifier that is your own serving node is asked on the session.
 - **Select your counterparty's verifiers by your own recognition, and say which
   was which** (design §8.1.2): people you have met, people in any of your trust
   horizons, then one further edge, and go fishing for common acquaintances

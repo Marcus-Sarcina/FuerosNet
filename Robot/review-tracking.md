@@ -13120,3 +13120,45 @@ followed the sentence it quotes.
 the shell is left to produce `IntentExchange` bytes and split the bundle
 into continuations — the encode/decode belongs behind the FFI, as the
 comment on `ffi::client::Intent` now says the shell carries it.
+
+## The query's carriage, on the author's ruling (2026-09-30)
+
+**Ruled**: "same rule as before — P2P is the happy path, serving node is a
+fallback." Read as design §12.6.3's payload rule, which is what "before"
+was: direct where a path is held, relayed through the serving nodes
+otherwise, queued where the verifier is offline.
+
+**Built.** The `[ VerificationQuery, COSE_Sign1, uint ]` body rides the
+end-to-end path as plaintext kind 7 and the `VerifierResponse` returns as
+kind 8; the subject's copy goes as before. The courier carries `Msg::Query`
+(decoding the verifier from the body) through `send`, which offers the
+direct path first and relays otherwise; on arrival the client's
+`take_query` runs, an answer goes back the way the query came, a query
+waiting on its grant is remembered by id with its querier, and the grant's
+arrival or the buffer's expiry answers it on that path. Request type 4 is
+now stated as the form for a verifier that *is* the serving node the
+querier's session reaches; nothing descends past a serving node to a client
+it serves, which is what `wire-format.md` §7.7.2 now says outright. FFI:
+`put_query(query, consent, basis)` and `Event::Answered`; the shell routes
+the event to the Meet model's `responded`, and its "nothing was sent" text
+now says what is true: each query waits on the counterparty's consent over
+the local bearer the shell does not yet carry.
+
+**A spec gap closed on the way.** design §14.2.4.6 still listed
+payload-type demultiplexing as unsettled while the code carried kinds 0–6
+and the wire registered none. `wire-format.md` §7.10.1 now carries the
+table, kinds 0–8, and the bullet is gone.
+
+**Records**: wire §5.6 (route paragraph; the attribution sentence covers the
+session), §7.7.2, §7.10.1, §9.2 row 4; design §7.3, §12.6.3, §14.2.4.6;
+light-client §1.4 bullet; functional_tests VER-003 amended, NET-018 added
+(478 families); catalogue CER-43 with `adaptors/tests/query.rs`, PAY-14 and
+CER-31 quotes moved with their sentences. Client, adaptors and FFI suites
+pass; Android 24 run, 0 failed on the regenerated binding.
+
+**Left**: the consent exchange over the local bearer (the query to the
+counterparty's device and the consent back) has no encoding in §14.3 and no
+carriage in the shell — it is the ceremony's own local conversation, and the
+one leg between "queries prepared" and "queries sent". TRV-12/13 and MET-12
+remain unimplemented; the direct-path leg they name is the same courier
+path, exercised by `adaptors/tests/direct.rs` for payload generally.

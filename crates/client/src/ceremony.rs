@@ -11,7 +11,7 @@ use crate::horizon::Horizon;
 use crate::keys::{capture_key, pre_commitment};
 use crate::notice::{Notice, Role};
 use crate::payload::{self, PayloadError, PayloadState};
-use crate::query::{KeyGrant, QueryRequest, Response, VerificationQuery};
+use crate::query::{KeyGrant, QueryRequest, Response, Verdict, VerificationQuery};
 use crate::record::{
     self, DisclosureSet, Proposal, Refusal, disclosure_root, disclosures, participant_check,
     sort_responses, witness_check,
@@ -402,6 +402,16 @@ pub enum Dispatched {
     /// A verifier's copy of its response about me: the query it answered,
     /// or why the copy was refused.
     ResponseCopy(Result<[u8; 32], String>),
+    /// A query put to this client as a verifier on the end-to-end path:
+    /// its id, where the body decoded, and what it came to.  An answer
+    /// waiting on a grant is answered when the grant lands, or expires.
+    Query {
+        query: Option<[u8; 32]>,
+        outcome: QueryOutcome,
+    },
+    /// A verifier's response to a query I issued: the query and the
+    /// verdict, or why the response was refused.
+    Response(Result<([u8; 32], Verdict), String>),
     /// An archive fetch this client answered from its own archive: how
     /// many records went back, and whether more remain.  The reply is in
     /// the outbox.
@@ -818,8 +828,8 @@ impl Client {
     }
 
     /// As querier: a response to a query I issued, verified under its
-    /// verifier.
-    pub fn take_response(&mut self, bytes: &[u8]) -> Result<(), String> {
+    /// verifier.  The query it answers and the verdict.
+    pub fn take_response(&mut self, bytes: &[u8]) -> Result<([u8; 32], Verdict), String> {
         let r = Response::read(bytes)?;
         verify::response(&self.known, bytes, false).map_err(|e| e.to_string())?;
         let a = self.active.as_mut().ok_or("no ceremony")?;
@@ -827,7 +837,7 @@ impl Client {
             return Err("not a query I issued".into());
         }
         a.responses.push(bytes.to_vec());
-        Ok(())
+        Ok((r.query_id, r.verdict))
     }
 
     /// As subject: the copy of a response about me.
@@ -2440,6 +2450,13 @@ impl Client {
             payload::KIND_RESPONSE_COPY => {
                 Dispatched::ResponseCopy(self.take_response_copy(&inner))
             }
+            payload::KIND_QUERY => Dispatched::Query {
+                query: QueryRequest::decode(&inner)
+                    .ok()
+                    .map(|r| r.query.query_id()),
+                outcome: self.take_query(from, &inner),
+            },
+            payload::KIND_RESPONSE => Dispatched::Response(self.take_response(&inner)),
             payload::KIND_ARCHIVE_REQUEST => self.serve_archive(from, &inner),
             payload::KIND_ARCHIVE_REPLY => {
                 Dispatched::Fetched(self.take_archive_reply(from, &inner))

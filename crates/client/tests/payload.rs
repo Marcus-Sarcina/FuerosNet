@@ -79,6 +79,8 @@ fn describe(d: &Dispatched) -> String {
         Dispatched::ResponseCopy(r) => format!("ResponseCopy({r:?})"),
         Dispatched::Served { records, more } => format!("Served({records}, more {more})"),
         Dispatched::Fetched(r) => format!("Fetched({r:?})"),
+        Dispatched::Query { query, outcome } => format!("Query({query:?}, {outcome:?})"),
+        Dispatched::Response(r) => format!("Response({r:?})"),
     }
 }
 

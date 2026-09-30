@@ -1588,7 +1588,8 @@ in many cities to build an unnaturally rich meeting history, then exploiting the
 resulting standing.
 
 Protocol: C, having just met someone claiming to be B, sends a **fuzzed
-biometric profile** point-to-point to A, a prior counterparty of B. A replies
+biometric profile** point-to-point to A, a prior counterparty of B — on the
+end-to-end payload path, direct or relayed as any payload is (§12.6.3). A replies
 `match` / `no-match` / `inconclusive` / `unavailable`. Full photos never transit
 the network; fuzzed profiles travel point-to-point only, never broadcast.
 
@@ -4525,7 +4526,8 @@ traffic.** The exception is control-plane transactions, which must be visible to
 the local network and therefore travel the tree.
 
 **Payload takes the direct path where it can, and the relayed path when it
-cannot.**
+cannot.** A verification query and its response are payload (§7.3,
+`wire-format.md` §5.6), and take the same paths.
 
 | Path | When | Who sees the flow |
 |---|---|---|
@@ -5833,10 +5835,6 @@ but given A2 that is the rarer case, and such traffic is relayed anyway (§12.6.
 - **Whether prekeys are served only by the patron** or also by siblings. Serving
   a **one-time key** is a metadata event (§14.2.2, C11), and spreading it changes
   who sees it. Serving reusable material is not.
-- **Payload-type demultiplexing.** Protocol objects ride the end-to-end channel —
-  capture key grants (`wire-format.md` §7.3), late verifier responses
-  (`wire-format.md` §7.4) —
-  beside application payload, and nothing says how a recipient tells them apart.
 - **Crate maturity.** §5.2's audit caveat applies here too.
 
 ---

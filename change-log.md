@@ -11577,3 +11577,23 @@ infra node is an estimate for characterising the global network, it was
 being read as a requirement, a requirement would lock two parties each
 waiting on the other, and mandating a behaviour priced in a meeting with one
 specific counterparty would be awkward and restrictive to enforce.
+
+### 2026-09-30 (the query reaches its verifier)
+
+**A verification query rides the end-to-end path** [author]: direct where
+the querier holds a path to the verifier, through the serving nodes as
+relay otherwise, queued where the verifier is offline — payload's own rule
+(design §12.6.3), which is the rule the author gave. `wire-format.md` §5.6
+says so, §7.7.2 says nothing descends past a serving node to a client it
+serves, and request type 4 is the form for a verifier that is the node the
+querier's session reaches. The kernel carries it, answers on the path it
+came, waits for a grant where one is owed, and expires where none comes;
+the shell shows the verdict against the verifier it names.
+
+**The plaintext kinds are registered** (`wire-format.md` §7.10.1): the code
+had carried seven kinds nobody had written down, and design §14.2.4.6 had
+listed the question as unsettled. Nine now, in a table.
+
+**What remains between a prepared query and a sent one** is the consent
+exchange over the ceremony's local bearer, which the shell does not yet
+carry.

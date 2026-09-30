@@ -2134,9 +2134,20 @@ it, because the id commits to the query's full contents including the profile.
 Carrying the query itself would add up to 64 KB to a record with sixteen responses,
 for no verification benefit.
 
-**How consent reaches the verifier**: request type 4's body is the
-array `[ VerificationQuery, COSE_Sign1, uint ]` — the query, the subject's
-consent beside it, never inside it, and the selector's `selection_basis` claim.
+**How the query reaches the verifier** [author, 2026-09-30]: the body
+`[ VerificationQuery, COSE_Sign1, uint ]` — the query, the subject's consent
+beside it, never inside it, and the selector's `selection_basis` claim —
+rides the **end-to-end payload path** from querier to verifier, as plaintext
+kind 7 (§7.10.1), and the `VerifierResponse` rides it back as kind 8. The
+route is payload's (design §12.6.3): direct where the two hold a path,
+through the serving nodes as relay otherwise, queued where the verifier is
+offline — in which case what comes back is a late response (§7.4). A
+verifier that is itself the node the querier's session reaches, a node that
+is a participant, answers on that session instead: request type 4 (§9.2)
+carries the same body and replies with the same response, and nothing
+descends past a serving node to a client attached to it (§7.7.2).
+
+**How consent reaches the verifier**: it is the second element of that body.
 Consent cannot be a query field: it signs
 `query_id`, which hashes fields 1–5 and 7, so placing it in the map it authorises would be
 the §5.6 circularity again one level up. The verifier checks the consent against
@@ -2156,8 +2167,10 @@ querier (§4.1) and no type-4 request travels.
 
 **The querier a verifier limits and attributes is the party the transport
 authenticated, never one the request names** [2026-09-02]: field 2 MUST equal
-the transport-authenticated peer on the stream carrying the query, and a
-mismatch is rejected. Otherwise a request chooses its own rate-limit bucket.
+the transport-authenticated peer on the stream carrying the query — or, on
+the end-to-end path, the peer the session attributed the message to (§7.8,
+design §14.2.4) — and a mismatch is rejected. Otherwise a request chooses its
+own rate-limit bucket.
 
 **The successful reply body is a single `VerifierResponse`** [2026-09-02],
 framed as every reply is (§9.2). A malformed query — consent absent or
@@ -2961,6 +2974,12 @@ is the node the target attaches to (design §14.1.2).
 uses it to identify which of its attached clients is meant. This is what lets a
 path address a light client that nothing can route to directly.
 
+**Nothing descends past the serving node** [author, 2026-09-30]. Resolution
+yields an address; what is then said to the client behind it is payload, on
+the end-to-end path (design §12.6.3) — a verification query included (§5.6).
+No request type asks a serving node to carry a request onward to a client it
+serves.
+
 #### 7.7.3 Messages
 
 ```
@@ -3408,6 +3427,33 @@ that already holds the binding ignores what arrived; **a bundle that fails
 verification is discarded and the message is processed as though none came**,
 because a delivery is not the place to learn that a party's published material
 is bad.
+
+#### 7.10.1 What the end-to-end plaintext carries
+
+**A kind tag in front of the plaintext, and nothing else** [2026-09-30]. Once
+a message on the end-to-end channel (§7.8, design §14.2.4) is opened, its
+plaintext is `uint kind || bytes`, the tag a deterministic CBOR uint. Protocol
+objects ride the channel beside application payload, and the tag is how a
+recipient tells them apart. It is inside the ciphertext, so it is the
+sender's word alone, under the sender's session — the discriminator §7.10
+refuses at the node is refused there because a node reads it before it can
+attribute it; here nothing is read before attribution.
+
+| Kind | Carries | Between |
+|---|---|---|
+| 0 | Application payload | Any two peers |
+| 1 | `KeyGrant` (§7.3) | Subject to verifier |
+| 2 | `LateResponse` (§7.4) | Verifier to a participant of the record |
+| 3 | `[ 1*8 Candidate ]` (§14.3.2), bare | Two peers setting up the direct path (design §14.1.1) |
+| 4 | The verifier's copy of its `VerifierResponse` (§5.6) | Verifier to subject |
+| 5 | `ArchiveRequest` (§7.9) | A reader to the subject of the archive |
+| 6 | `ArchiveReply` (§7.9) | The subject back to the reader |
+| 7 | `[ VerificationQuery, COSE_Sign1, uint ]` (§5.6) | Querier to verifier |
+| 8 | `VerifierResponse` (§5.6) | Verifier to querier |
+
+An unknown kind is application payload to a recipient that does not know it,
+and a kind whose body does not decode is dropped by the recipient that
+opened it: the sender is attributed, and the message is not evidence.
 
 ## 8. Session messages
 
@@ -4005,7 +4051,7 @@ no continuation to preserve.
 | 1 | `ResolveRequest` (§7.7) |
 | 2 | `ArchiveRequest` (§7.9) |
 | 3 | `PrekeyRequest` / `PrekeyBatchRequest` (§7.8) |
-| 4 | `[ VerificationQuery, COSE_Sign1, uint ]` — the query, the subject's consent, and the selector's `selection_basis` claim (§5) |
+| 4 | `[ VerificationQuery, COSE_Sign1, uint ]` — the query, the subject's consent, and the selector's `selection_basis` claim (§5) — to a verifier that is this node; a verifier that is a client is reached on the end-to-end path (§5.6, §7.10.1) |
 | 5 | `CatalogQuery` (§6.4) |
 | 6 | `ResourceRequest` (§11) |
 | 7 | `ResourceRegistration` (§6.2) |

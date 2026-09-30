@@ -510,6 +510,13 @@ pub const KIND_RESPONSE_COPY: u64 = 4;
 /// you and no infra node serves it on your behalf.
 pub const KIND_ARCHIVE_REQUEST: u64 = 5;
 pub const KIND_ARCHIVE_REPLY: u64 = 6;
+/// A verification query to its verifier, and the signed response back
+/// (`wire-format.md` §5.6): the same `[ VerificationQuery, COSE_Sign1,
+/// uint ]` body request type 4 carries, on the end-to-end path between
+/// querier and verifier — direct where the path is held, relayed
+/// otherwise (design §12.6.3) — and the `VerifierResponse` the other way.
+pub const KIND_QUERY: u64 = 7;
+pub const KIND_RESPONSE: u64 = 8;
 
 /// A plaintext with its kind in front.
 pub fn wrap(kind: u64, bytes: &[u8]) -> Vec<u8> {

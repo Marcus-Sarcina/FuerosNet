@@ -583,6 +583,20 @@ impl Instrument {
                         refused.unwrap_or_else(|| "-".into())
                     )
                 }
+                rhtn_ffi::net::Event::Answered {
+                    from,
+                    query,
+                    answer,
+                    refused,
+                } => {
+                    format!(
+                        "answered from={} query={} answer={} refused={}",
+                        hex(&from),
+                        query.map_or("-".into(), |q| hex(&q)),
+                        answer.map_or("-".into(), |a| format!("{a:?}")),
+                        refused.unwrap_or_else(|| "-".into())
+                    )
+                }
             });
             // one pass over what is already waiting: a second wait would
             // make `events` a blocking command with no way back out

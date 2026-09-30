@@ -182,7 +182,7 @@ class MeetActivity : Activity() {
                 }
                 para("• ${c.key.take(16)}… — ${basisWords(c.basis)}; $answer")
             }
-            para("A query cannot reach its verifier from this build: a verifier is a third party across the network, and the route to one attached elsewhere is not yet specified. The selection above is real; nothing was sent.")
+            para("Each query waits on the counterparty's consent, which crosses the local bearer this build does not yet carry. Once consented, the kernel carries it to its verifier over the network and the answer lands above.")
         }
         val mine = m.queriesAboutMe()
         if (mine.isNotEmpty()) {
