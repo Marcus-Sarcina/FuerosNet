@@ -11555,3 +11555,25 @@ and needs re-deriving rather than rewording. **Owed**: the KeyMaterial-hash
 check in the codec, a checkpoint-aware archive load, the FFI's identity
 seeds unwiped, the verify harness's envelope-signature count, the §12 size
 table's classical-only rows.
+
+### 2026-09-30 (two rulings from the review)
+
+**The reliability bundle's carriage is bounded and the bundle is not**
+[author]. `wire-format.md` §5.4 had said the bundle has no protocol
+ceiling; §14.3.2's `IntentExchange` carried it at 256, and the two now
+agree: the intent holds the first 256 entries and states how many
+`BundleContinuation` messages follow, each anchored to the ceremony-id and
+numbered from one, each holding up to 256 more. A sender that hands fewer
+than it holds has truncated, visibly as a smaller *n*; a receiver that
+stops reading has truncated, and its *n* is what it holds. Codec, corpus
+(272 → 276), the model's count of anchored messages, SCH-023 and a new
+NET-017 follow.
+
+**Why peering is optional, in the author's words** [author]. §12.7.5's
+argument from ordering — peering being an infra-tier act a new node could
+not reach — could not survive peering between users. The section now says
+what was true all along: the high-level design's two cross-tree peers per
+infra node is an estimate for characterising the global network, it was
+being read as a requirement, a requirement would lock two parties each
+waiting on the other, and mandating a behaviour priced in a meeting with one
+specific counterparty would be awkward and restrictive to enforce.

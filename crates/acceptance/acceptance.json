@@ -4714,7 +4714,7 @@
     "rule": [
       {
         "where": "design §12.7.5",
-        "text": "a disconnected node must be able to adopt or be adopted before it has any peers"
+        "text": "a disconnected node can adopt or be adopted before it has any peers"
       },
       {
         "where": "design §3.4",

@@ -25,11 +25,11 @@ message is accepted:
      contribution the receiver checks against what it read optically
      (§14.3.2).
 
-  ONE RULE PAIR STANDS FOR ALL THREE ANCHORED MESSAGES.  `IntentExchange`,
-  `ProximityOutcomes` and `CandidateHandover` differ in payload and share
-  their entire checking discipline -- anchor against own ceremony-id, and for
-  the intent the echoed contribution as well.  The payload is opaque here, so
-  the result covers all three.  `DeviceIntroduction` and `DeviceCredential`
+  ONE RULE PAIR STANDS FOR ALL FOUR ANCHORED MESSAGES.  `IntentExchange`,
+  `BundleContinuation`, `ProximityOutcomes` and `CandidateHandover` differ in
+  payload and share their entire checking discipline -- anchor against own
+  ceremony-id, and for the intent the echoed contribution as well.  The
+  payload is opaque here, so the result covers all four.  `DeviceIntroduction` and `DeviceCredential`
   are NOT modelled: §14.3.3 states outright that they carry no anchor, so
   there is nothing for a symbolic model to check that the section does not
   already concede.

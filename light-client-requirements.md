@@ -180,7 +180,10 @@ documents. Where a requirement leaves a visible artifact, that is noted in place
   counterparty's claim** (`wire-format.md` §5.2 and `wire-format.md` §5.4). The bundle is theirs to
   curate — records from any of their series, no chaining, no completeness, so
   verify each record alone, count qualifying ones once by txid, and read the
-  result as sizing your diligence, never as a fact about their history.
+  result as sizing your diligence, never as a fact about their history. A
+  bundle larger than one carriage arrives in numbered continuations
+  (`wire-format.md` §14.3.2); how many you read is your resource policy, and
+  *n* is what you hold.
 - **Report a record as unverifiable, not invalid, when you lack a participant's
   history.** Those are different answers and a caller may act on the difference.
 - **Look at the candidate population you are sampling, not only at the answers it

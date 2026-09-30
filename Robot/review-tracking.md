@@ -13089,3 +13089,34 @@ quote of the §3.4 sentence the peering sweep reworded — the quote and two
 "infra nodes A and B" premises (REP-06, REP-13)
 refreshed; catalogue 0 flags, stubs match; fuzz five targets no crash;
 Kotlin round trip ok; Android 24 run, 0 failed.
+
+**W2 ruled (author, 2026-09-30): the carriage is bounded and the bundle is
+not.** Applied as: `IntentExchange` gains a final `uint` — how many
+`BundleContinuation` messages follow (0 where the bundle fits) — and
+`BundleContinuation = [version, ceremony-id, index from 1, 1*256
+ArchiveEntry]` is a fourth anchored message, checked as the others are.
+The bundle a receiver evaluates is what it accepted in order; a
+continuation failing its anchor or index, or declined by local policy, ends
+the bundle there with *n* as held, and the ceremony is not rejected over it.
+`wire-format.md` §5.4, §14.3.2, §1.3 (two rows); `light-client-requirements.md`
+§8 one clause; functional_tests SCH-023 amended and NET-017 added (477
+families); codec: eight fields, the continuation arm; corpus 272 → 276
+(P-bundle-continuation, N-intent-continuations-missing,
+N-continuation-index-0, N-continuation-empty); the model's preamble counts
+four anchored messages, the rule pair unchanged. **The shape (a count in
+the intent plus numbered continuations, rather than a terminator) is my
+drafting, not a ruling** — flagged for the author.
+
+**§12.7.5 ruled (author, 2026-09-30)**: optionality was a corrective to an
+over-broad reading of the high-level design's "two peers per infra node",
+which is an estimate used to characterise the global network, not a
+requirement; stated optional to prevent conflicting lock conditions; the
+gating argument holds but the underlying reason is that a mandate would be
+awkward and restrictive to enforce. Section rewritten in those terms; the
+ordering sentence and "infra-tier operation" gone; REP-10's catalogue quote
+followed the sentence it quotes.
+
+**Owed, new**: the client hands the intent across the FFI as fields and
+the shell is left to produce `IntentExchange` bytes and split the bundle
+into continuations — the encode/decode belongs behind the FFI, as the
+comment on `ffi::client::Intent` now says the shell carries it.

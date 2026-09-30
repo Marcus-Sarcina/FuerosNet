@@ -3574,7 +3574,12 @@ tconfirm = e_arr([e_uint(1), e_bstr(pc_demo)])
 intent_x = e_arr([e_uint(1), e_bstr(pc_a),
                   e_arr([e_bstr(carol.keyhash)]),
                   e_arr([pc1_env]),
-                  e_uint(TS_REC), e_uint(2), b'\xf5'])
+                  e_uint(TS_REC), e_uint(2), b'\xf5', e_uint(0)])
+
+# a bundle past its first carriage: the first continuation, one entry,
+# anchored to the ceremony-id both screens fixed (§14.3.2; the bundle has no
+# ceiling, §5.4, and the carriage has)
+cont_x = e_arr([e_uint(1), e_bstr(pc_demo), e_uint(1), e_arr([pc1_env])])
 
 # the outcomes that crossed are the channels the record's own proximity
 # disclosure carries, byte-for-byte (NFC pass, optical pass)
@@ -3640,10 +3645,17 @@ computed; a receiver checks it equals its own)** ({len(tconfirm)} bytes):
 
 **IntentExchange — alice's, echoing her optical contribution; carol
 nominated, one prior record carried as its envelope, retention 2,
-initiator true** ({len(intent_x)} bytes):
+initiator true, no continuations** ({len(intent_x)} bytes):
 
 ```
 {hexblock(intent_x)}
+```
+
+**BundleContinuation — the first continuation of a larger bundle, one
+entry, anchored to the ceremony-id** ({len(cont_x)} bytes):
+
+```
+{hexblock(cont_x)}
 ```
 
 ## The anchored exchanges (§14.3.2)
@@ -3693,6 +3705,7 @@ for fid, by, kind, note in [
     ('P-optical-contribution-bob', oc_bob, 'OpticalContribution', "bob's"),
     ('P-transcript-confirm', tconfirm, 'TranscriptConfirm', "the ceremony-id both derive; records.md's known answer"),
     ('P-intent-exchange', intent_x, 'IntentExchange', 'echoes the optical contribution; bundle entry is the §7.9 envelope form'),
+    ('P-bundle-continuation', cont_x, 'BundleContinuation', 'the bundle past its first carriage, anchored and numbered from one'),
     ('P-proximity-outcomes', prox_x, 'ProximityOutcomes', "the record's own channels, anchored"),
     ('P-candidates-bare', cands_bare, 'Candidates', 'the payload path form; both address families'),
     ('P-candidate-handover', cand_handover, 'CandidateHandover', 'the same candidates, anchored'),
@@ -3727,7 +3740,17 @@ reg('N-intent-nominees-65', 'bytes',
     REJ('IntentExchange', 'schema', 'nominees bound at 64'),
     e_arr([e_uint(1), e_bstr(pc_a),
            e_arr([e_bstr(H(b'rhtn-test-vectors:nominee:' + bytes([i]))) for i in range(65)]),
-           e_arr([]), e_uint(TS_REC), e_uint(2), b'\xf5']))
+           e_arr([]), e_uint(TS_REC), e_uint(2), b'\xf5', e_uint(0)]))
+reg('N-intent-continuations-missing', 'bytes',
+    REJ('IntentExchange', 'schema', 'an intent says how many continuations follow, even none'),
+    e_arr([e_uint(1), e_bstr(pc_a), e_arr([e_bstr(carol.keyhash)]), e_arr([pc1_env]),
+           e_uint(TS_REC), e_uint(2), b'\xf5']))
+reg('N-continuation-index-0', 'bytes',
+    REJ('BundleContinuation', 'schema', "a continuation's index starts at one"),
+    e_arr([e_uint(1), e_bstr(pc_demo), e_uint(0), e_arr([pc1_env])]))
+reg('N-continuation-empty', 'bytes',
+    REJ('BundleContinuation', 'schema', 'a continuation carries at least one entry'),
+    e_arr([e_uint(1), e_bstr(pc_demo), e_uint(1), e_arr([])]))
 reg('B-outcomes-channels-8', 'bytes', ACC('ProximityOutcomes', 'eight channels, the ceiling'),
     e_arr([e_uint(1), e_bstr(pc_demo), e_arr(prox_channels * 4)]))
 reg('N-outcomes-channels-9', 'bytes',
@@ -3751,9 +3774,10 @@ for fid, by, why in [
 ]:
     reg(fid, 'bytes', REJ('any', 'cbor', why), by)
 reg('U-intent-bundle-257', 'unit',
-    REJ('IntentExchange', 'schema', 'a bundle of 257 entries exceeds the ceiling of 256'),
+    REJ('IntentExchange', 'schema', 'a carriage of 257 entries exceeds the ceiling of 256; the bundle continues instead'),
     note='recipe: any IntentExchange whose field-4 array holds 257 ArchiveEntry values; '
-         'materialising one exceeds the corpus size discipline (257 hybrid-signed envelopes)')
+         'materialising one exceeds the corpus size discipline (257 hybrid-signed envelopes). '
+         'The same holds of a BundleContinuation whose field-4 array holds 257')
 
 # ---------------------------------------------------------------- write files
 

@@ -211,6 +211,8 @@ malformed, not merely unusual.
 | Proximity channels per record | 8 |
 | Explicit-scope keyhash list | 256 |
 | NetworkPoint entries per anchor entry or endpoint record (§7.2, §7.6) | 8 — this row is the anchor entry's and the endpoint record's alone; **peering carries exactly one `NetworkPoint` or `Locator` per endpoint** (§4.4) |
+| Nominees per `IntentExchange` (§14.3.2) | 64 |
+| `ArchiveEntry` entries per `IntentExchange` or `BundleContinuation` (§14.3.2) | 256 — a bound on the carriage; the bundle itself has none (§5.4) |
 | `Channel` entries per `ProximityOutcomes` (§14.3.2) | 8 — the same ceiling as proximity channels per record, above |
 | `Candidate` entries per `CandidateHandover` or per payload-path candidate exchange (§14.3.2) | 8 |
 | Delegations per `DeviceCredential` (§14.3.3) | 45 — the run an instance is provisioned with, 90 days end to end (design §12.6.5) |
@@ -2033,10 +2035,16 @@ another party's archive (design §8.1.2), and nothing requires the handed
 records to connect. A record that fails its checks contributes nothing; with
 no completeness to protect, it is simply not in the pool.
 
-**The bundle has no protocol ceiling** [2026-09-02]. It rides the ceremony
-channel and is retained nowhere, so what a client will hold is local resource
-policy, and truncation is a local act with a visible price, since it changes
-*n* and the candidate pool.
+**The bundle has no protocol ceiling; its carriage does** [2026-09-02;
+author, 2026-09-30]. It rides the ceremony channel and is retained nowhere,
+so what a client will hold is local resource policy, and truncation is a
+local act with a visible price, since it changes *n* and the candidate pool.
+What is bounded is each message that carries it: §14.3.2's `IntentExchange`
+holds the first 256 entries and says how many `BundleContinuation` messages
+follow, each holding up to 256 more, so a bundle of any size crosses in as
+many carriages as it needs. A sender that hands fewer than it holds has
+truncated, visibly, as a smaller *n*; a receiver that stops reading
+continuations has truncated, and its *n* is what it holds.
 
 **Understatement is free, and self-defeating rather than dangerous.** A subject
 who hands fewer records gets a smaller *n*, a smaller sample, and a record that
@@ -4800,19 +4808,39 @@ IntentExchange = [             ; carried by the bearer (§14.3.1), not optical
                                ;   disagrees with the screen is caught
   [ * keyhash ],               ; nominees, from the counterparty's
                                ;   neighbourhood (design §7.1); 0..64
-  [ * ArchiveEntry ],          ; the evidence bundle: prior presented records
-                               ;   for verifier selection (§7.9's entry type),
-                               ;   0..256 as everything else
+  [ * ArchiveEntry ],          ; the evidence bundle's first carriage: prior
+                               ;   presented records for verifier selection
+                               ;   (§7.9's entry type), 0..256 as everything
+                               ;   else
   timestamp,                   ; started_at
   uint,                        ; retention_years the sender commits to
   bool,                        ; initiator
+  uint,                        ; continuations: how many BundleContinuation
+                               ;   messages follow with the rest of the
+                               ;   bundle; 0 where it fits in one carriage
+]
+
+BundleContinuation = [         ; the bundle past its first carriage
+  uint,                        ; version, 1
+  bstr .size 32,               ; the ceremony-id (§14.3.1); the receiver
+                               ;   checks it equals its own, and stops where
+                               ;   it does not
+  uint,                        ; index: 1 for the first continuation, then
+                               ;   consecutive, up to IntentExchange's count
+  [ 1*256 ArchiveEntry ],      ; the next entries, in the sender's order
 ]
 ```
 
 **The bundle is `ArchiveEntry` (§7.9), reused not reinvented**: a prior
 presented record is exactly what a verifier-selection bundle holds, and the
-256-entry bound is the array bound the rest of the document carries. A
-receiver checks the echoed contribution in field 2 against the
+256-entry bound is the array bound the rest of the document carries — on
+the carriage, not the bundle (§5.4). A bundle larger than one carriage
+follows in `BundleContinuation` messages, anchored to the ceremony-id like
+the exchanges below and numbered so a receiver can tell a missing one from
+the end; the bundle a receiver evaluates is the entries it accepted in
+order, and a continuation that fails its checks, or that the receiver's
+local policy declines to read, ends the bundle there with the *n* it has.
+A receiver checks the echoed contribution in field 2 against the
 `OpticalContribution` it read optically before trusting anything
 bearer-carried; a mismatch is a bearer that does not agree with the screen,
 and the ceremony does not continue over it. **The check is not

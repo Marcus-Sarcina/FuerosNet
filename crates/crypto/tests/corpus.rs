@@ -268,6 +268,7 @@ fn implemented_kind(kind: &str) -> bool {
             | "OpticalContribution"
             | "TranscriptConfirm"
             | "IntentExchange"
+            | "BundleContinuation"
             | "ProximityOutcomes"
             | "Candidates"
             | "CandidateHandover"

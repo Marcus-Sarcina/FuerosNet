@@ -1121,8 +1121,8 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             let Item::Array(a) = item else {
                 return Err(Error("not array"));
             };
-            if a.len() != 7 {
-                return Err(Error("seven fields"));
+            if a.len() != 8 {
+                return Err(Error("eight fields"));
             }
             if as_uint(&a[0]) != Some(1) {
                 return Err(Error("version 1"));
@@ -1147,14 +1147,43 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
                 return Err(Error("bundle not array"));
             };
             if bundle.len() > INTENT_BUNDLE_ENTRIES {
-                return Err(Error("bundle over 256"));
+                return Err(Error("bundle carriage over 256"));
             }
             as_uint(&a[4]).ok_or(Error("started_at"))?;
             as_uint(&a[5]).ok_or(Error("retention"))?;
             match &a[6] {
-                Item::Bool(_) => Ok(()),
-                _ => Err(Error("initiator is a bool")),
+                Item::Bool(_) => {}
+                _ => return Err(Error("initiator is a bool")),
             }
+            // the bundle itself has no ceiling (§5.4); its carriage does,
+            // and the rest follows in numbered continuations
+            as_uint(&a[7]).ok_or(Error("continuations is a count"))?;
+            Ok(())
+        }
+        "BundleContinuation" => {
+            let Item::Array(a) = item else {
+                return Err(Error("not array"));
+            };
+            if a.len() != 4 {
+                return Err(Error("four fields"));
+            }
+            if as_uint(&a[0]) != Some(1) {
+                return Err(Error("version 1"));
+            }
+            match &a[1] {
+                Item::Bytes(r) if r.len() == 32 => {}
+                _ => return Err(Error("a ceremony-id is 32 bytes")),
+            }
+            if as_uint(&a[2]).is_none_or(|i| i == 0) {
+                return Err(Error("a continuation's index starts at one"));
+            }
+            let Item::Array(bundle) = &a[3] else {
+                return Err(Error("bundle not array"));
+            };
+            if bundle.is_empty() || bundle.len() > INTENT_BUNDLE_ENTRIES {
+                return Err(Error("a continuation carries one to 256 entries"));
+            }
+            Ok(())
         }
         "ProximityOutcomes" => {
             let Item::Array(a) = item else {

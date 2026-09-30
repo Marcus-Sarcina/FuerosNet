@@ -4965,21 +4965,27 @@ where reachability and trust are already local and policy-determined.
 | **Infra node, subtree above threshold** | Large enough that other nodes' caching policies will generally retain it (§12.7.3), so it continues operating as a root with the subordinate network reachable. Note this is *other nodes deciding to cache it*, not a status it acquires (§12.2) |
 
 #### 12.7.5 Peering as reachability insurance, and why it stays optional
-Cross-tree peering (§6.3) gives a patronless infra node routes into the wider
+Cross-tree peering (§6.3) gives a patronless node routes into the wider
 network with no patron at all. This is a **third justification for peering**,
 after fault independence (§3.4) and trust attestation (§16.3), and it creates a
-sensible incentive for infra operators to maintain peering edges they might
+sensible incentive for operators to maintain peering edges they might
 otherwise skip.
 
-**Peering must nevertheless remain optional.** *Creating an identity or
-establishing an ordinary authority relationship must not depend on first obtaining
-cooperation from an unrelated infrastructure operator; relationships whose purpose
-is additional cross-tree redundancy or connectivity remain optional.* Concretely:
-an identity must be able to exist disconnected, and a disconnected node must be
-able to adopt or be adopted before it has any peers. The ordering resolves this structurally. Peering is an
-**infra-tier** operation (§6.3) while bootstrap happens before a node has
-infrastructure at all, so the ordinary growth sequence is identity → adoption → grow
-to infra → peering, and a new node could not peer even if peering were mandatory.
+**Peering is nevertheless optional, and was made so as a corrective** [author,
+2026-09-30]. The high-level design assumes about two cross-tree peers per
+infra node (§3.4; §21's table has it as "≥2 recommended"). That figure is
+an estimate of typical peering, used to characterise the global network; it
+was being read as a requirement, and a requirement it cannot be, since two
+parties each waiting on the other's peering before they will act is a lock
+with no resolution. The underlying reason is that mandatory peering would be
+an awkward and restrictive behaviour to enforce: peering is priced in a
+meeting with one specific counterparty (§6.3), so a mandate would gate a
+subject's participation on a second party's presence and consent. *Creating
+an identity or establishing an ordinary authority relationship does not
+depend on first obtaining cooperation from an unrelated party; relationships
+whose purpose is additional cross-tree redundancy or connectivity remain
+optional.* Concretely: an identity can exist disconnected, and a disconnected
+node can adopt or be adopted before it has any peers.
 **Subnet formation is the exception** (§13.1). *When participants create a new
 disconnected authority domain rather than joining an existing one, they must
 establish at least one externally reachable serving participant before creating

@@ -182,11 +182,13 @@ pub struct Achieved {
 
 /// What two devices tell each other when a ceremony opens (design §7.1).
 ///
-/// **The wire does not carry this.** The ceremony's own conversation
-/// happens between two devices in each other's presence, over whatever
-/// channel they have, and no document fixes an encoding for it. It crosses
-/// as fields so the shell can carry it however the two devices manage, and
-/// reconstruct it on the other side.
+/// **The network does not carry this.** The ceremony's own conversation
+/// happens between two devices in each other's presence, over a bearer the
+/// shell chooses; `wire-format.md` §14.3.2 fixes its encoding as
+/// `IntentExchange`, with a bundle past 256 entries following in
+/// `BundleContinuation` messages. It crosses this boundary as fields, and
+/// the shell carries it in that encoding and reconstructs it on the other
+/// side.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Intent {
     pub contribution: Vec<u8>,
