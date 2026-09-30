@@ -312,7 +312,49 @@ fn check_map_with(b: &[u8], at: usize, schema: Fields, signed: bool) -> Result<(
             return Err(Error("required field absent"));
         }
     }
-    Ok(())
+    key_material_names_its_party(b, at, schema)
+}
+
+/// §3.4: **carried `KeyMaterial` hashes to the keyhash of the party it
+/// describes.**  Every schema here that carries key material carries it
+/// beside that party's keyhash in field 1 — a sibling reference, a
+/// referral, a `ServingInfra` — and each exists so a recipient holding no
+/// pin can authenticate the party from the material. Unchecked, a sender
+/// presents one identity's keyhash beside another's key and the recipient
+/// pins the wrong key, which is the one thing the field is for.
+///
+/// Stated over the schema rather than per message, so a map that gains a
+/// `KeyMaterial` field gets the rule with it [2026-09-30].
+fn key_material_names_its_party(b: &[u8], at: usize, schema: Fields) -> Result<(), Error> {
+    let carries_km = schema.iter().any(|(_, _, t)| matches!(t, KeyMaterial));
+    if !carries_km {
+        return Ok(());
+    }
+    let entries = map_entry_ranges(b, at).ok_or(Error("map walk"))?;
+    let p = Parser { b };
+    let mut named: Option<&[u8]> = None;
+    let mut material: Option<&[u8]> = None;
+    for (kr, vr) in &entries {
+        let (Item::Uint(key), _) = p.item(kr.start)? else {
+            continue;
+        };
+        let Some((_, _, t)) = schema.iter().find(|(sk, _, _)| *sk == key) else {
+            continue;
+        };
+        match t {
+            Keyhash if key == 1 => named = bs(b, &p.item(vr.start)?.0),
+            KeyMaterial => material = Some(&b[vr.clone()]),
+            _ => {}
+        }
+    }
+    match (named, material) {
+        (Some(kh), Some(km)) if crate::cose::sha256(km) != kh => Err(Error(
+            "carried key material does not hash to the keyhash beside it",
+        )),
+        // material with no keyhash to check it against is not this rule's
+        // to refuse: the schema's own required-field check covers it
+        _ => Ok(()),
+    }
 }
 
 /// The shape of a `COSE_Sign1` (§1): protected header bytes, an empty
@@ -873,6 +915,15 @@ fn channels_ok(ch: &[Item]) -> Result<(), Error> {
         match map_get(cm, 2).and_then(as_uint) {
             Some(0..=2) => {}
             _ => return Err(Error("channel outcome out of range")),
+        }
+        // field 3 is `? uint` with no presence condition (§4.5): whether a
+        // kind carries a claimed resolution is the client's claim and
+        // policy weighs it, but what is carried is a uint or the field is
+        // malformed -- it was the one `Channel` field nothing checked
+        // [2026-09-30]
+        match map_get(cm, 3) {
+            Some(Item::Uint(_)) | None => {}
+            _ => return Err(Error("channel resolution is a uint")),
         }
         match map_get(cm, 4) {
             Some(Item::Bytes(r)) if !r.is_empty() && r.len() <= 128 => {}
@@ -1585,6 +1636,20 @@ pub fn check_body_of_type(b: &[u8], item: &Item, tx_type: u64) -> Result<(), Err
         if a == p {
             return Err(Error("the two parties are one identity"));
         }
+    }
+    // §3.4, the rule's own example: an adoption carrying the adopted
+    // node's key material in field 5 names that node in field 1, and the
+    // material MUST hash to it.  Otherwise a sender presents one
+    // identity's keyhash beside another's key and a recipient pinning from
+    // the transaction pins the wrong key [2026-09-30].
+    if tx_type == 1
+        && let Some(r5) = value_slice(b, 5)
+        && let Some(adopted) = keyhash_at(b, m, 1)
+        && crate::cose::sha256(&b[r5]) != adopted
+    {
+        return Err(Error(
+            "the adopted node's key material does not hash to field 1",
+        ));
     }
     match tx_type {
         1 => {

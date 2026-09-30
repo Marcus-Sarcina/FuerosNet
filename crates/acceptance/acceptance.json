@@ -12948,6 +12948,32 @@
     "interpretation": null
   },
   {
+    "id": "ARC-29",
+    "area": "archive",
+    "gap": "archive",
+    "title": "Store the checkpoint, so a prune survives a restart",
+    "milestone": 4,
+    "kind": "positive",
+    "spec": [
+      "design §10.1"
+    ],
+    "rule": [
+      {
+        "where": "design §10.1",
+        "text": "**A series reissue is also an archive checkpoint, and this is what makes pruning\npossible at all.**"
+      },
+      {
+        "where": "design §10.1",
+        "text": "the chain before it need not be retained or presented"
+      }
+    ],
+    "given": "An archive pruned at a checkpoint past the retention window, then stored and read back.",
+    "when": "It is loaded again.",
+    "then": "The chain comes back pruned: the records the prune released are not served by it, what followed the checkpoint is, and the checkpoint itself is what the chain is rooted at. The released records' files are not deleted, being retained as evidence by txid, so releasing that storage is a separate act. A record of this archive's that will not append is reported rather than dropped, since a swallowed refusal returns a short archive as though it were whole.",
+    "oracle": "behaviour",
+    "interpretation": "Before this the prune was a change to memory alone: nothing stored the checkpoint, so a load admitted every released record back into the chain [2026-09-30]."
+  },
+  {
     "id": "PRD-10",
     "area": "product",
     "gap": "product",

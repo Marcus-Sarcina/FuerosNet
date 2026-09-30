@@ -1,0 +1,125 @@
+{
+  "results": {
+    "CurrencyEscalation.txt": {
+      "tla/CurrencyEscalation.cfg": "11aa6daba5187545148680ce3a5c3095a40ce8c92d4f315682b6d9ca76c421c8",
+      "tla/CurrencyEscalation.tla": "fc1e085d08231ddd72e58716f49a09550ad953e71f927084485a398f3d38c125"
+    },
+    "CurrencyEscalation_Mutation.txt": {
+      "tla/CurrencyEscalation.tla": "fc1e085d08231ddd72e58716f49a09550ad953e71f927084485a398f3d38c125",
+      "tla/CurrencyEscalation_Mutation.cfg": "5b29e7d8bf1275829b02d2b99b293d04fb697800eb9c58886f888fbcec2f2cb7"
+    },
+    "CycleDetection.txt": {
+      "tla/CycleDetection.cfg": "c862fc45661dd58f7de166162a550ac8583ff76eb7631daf1333a2afc8b811f9",
+      "tla/CycleDetection.tla": "2139a0edbad79b94b136c3352301476e0371cd6c6e521eee1bfe506d89d5a446"
+    },
+    "CycleDetection_FourNodes.txt": {
+      "tla/CycleDetection.tla": "2139a0edbad79b94b136c3352301476e0371cd6c6e521eee1bfe506d89d5a446",
+      "tla/CycleDetection_FourNodes.cfg": "2461201339f71df752201e2dc9657ed65459551ee9b95d396024b302e143865d"
+    },
+    "CycleDetection_Mutation.txt": {
+      "tla/CycleDetection.tla": "2139a0edbad79b94b136c3352301476e0371cd6c6e521eee1bfe506d89d5a446",
+      "tla/CycleDetection_Mutation.cfg": "3f2cde0594cd73091de5c467b1c623741500d2ce631f5f3d248ff3d47a48b0af"
+    },
+    "IssuerAuthorisation.txt": {
+      "tla/IssuerAuthorisation.cfg": "470536c73cd9512048cfc109fc7443c74af2c7993d28266f3d77663074bc6580",
+      "tla/IssuerAuthorisation.tla": "122acdaabdadc1fb145f61bae7cacc84d181f4e3074751c0825214d9611b9594"
+    },
+    "IssuerAuthorisation_Mutation.txt": {
+      "tla/IssuerAuthorisation.tla": "122acdaabdadc1fb145f61bae7cacc84d181f4e3074751c0825214d9611b9594",
+      "tla/IssuerAuthorisation_Mutation.cfg": "1397333cd3189a229a91cc63c39d145c99c7f4ce4a8027d668ab34bc921b44d2"
+    },
+    "PartitionMerge.txt": {
+      "tla/PartitionMerge.cfg": "44836c36f03578d3cfa60a51bd63abe326877483e3aa8caa61ad82547e82d9f1",
+      "tla/PartitionMerge.tla": "3158c1fc83286b01b24254772f9b02c6f4a465212b9e46b31d914cbcb2954627"
+    },
+    "SupersessionDiscipline.txt": {
+      "tla/SupersessionDiscipline.cfg": "304c3f6bd6b63ae23c227f52451e65ee7122cf201fca0916aa51de03bb0676e0",
+      "tla/SupersessionDiscipline.tla": "56ea6fe82bb51db20ce9b8c68b525b1ac6c57132099f2d76902242c0f7d4b49c"
+    },
+    "SupersessionDiscipline_Mutation.txt": {
+      "tla/SupersessionDiscipline.tla": "56ea6fe82bb51db20ce9b8c68b525b1ac6c57132099f2d76902242c0f7d4b49c",
+      "tla/SupersessionDiscipline_Mutation.cfg": "28248c65b2d582cde0f79edba633f5acfb3300e75408d21ad1163ab3b3f20ad7"
+    },
+    "SupersessionDiscipline_OrderMutation.txt": {
+      "tla/SupersessionDiscipline.tla": "56ea6fe82bb51db20ce9b8c68b525b1ac6c57132099f2d76902242c0f7d4b49c",
+      "tla/SupersessionDiscipline_OrderMutation.cfg": "111d0b7d1f33b4c847c7ebcc493d206a5b43d19c62170b7ef2b6f2d330d5db48"
+    },
+    "bounded-attach.txt": {
+      "tamarin/compliant/attach.bounded": "6d236277e02ad0e56d8652a6545fdbed8356c8cfcfcc2f934a1cb1aa38b4a237",
+      "tamarin/compliant/attach.spthy": "9e337b30868bea526b4158717324ec69136e7dc4e9dd1cc1e3530a7da44c5258"
+    },
+    "bounded-currency.txt": {
+      "tamarin/compliant/currency.bounded": "6c0eaf78981886b35601de49e63c1b026bfa784f9f40e97b45055e102d809aef",
+      "tamarin/compliant/currency.spthy": "dc6bfa57dc6ef6495a12c8a93e0476931551f4eb2c681b850d9de71507cc46ff"
+    },
+    "compliant-attach.txt": {
+      "tamarin/compliant/attach.spthy": "9e337b30868bea526b4158717324ec69136e7dc4e9dd1cc1e3530a7da44c5258"
+    },
+    "compliant-ceremony.txt": {
+      "tamarin/compliant/ceremony.spthy": "167b9940de06de78d86150aed325f9111b31117aafee44cfaef38b83542aa9ab"
+    },
+    "compliant-currency.txt": {
+      "tamarin/compliant/currency.spthy": "dc6bfa57dc6ef6495a12c8a93e0476931551f4eb2c681b850d9de71507cc46ff"
+    },
+    "compliant-recovery.txt": {
+      "tamarin/compliant/recovery.spthy": "3f2d1bd4c27768c0196ca2766923da897b98269371ea8930c7f755b2fbf39e8c"
+    },
+    "flow_metric.txt": {
+      "simulation/flow_metric.py": "88c1d05f946aa6cd2f9d69da3fa73c19e543eba3779266a9939ac64116632a5a"
+    },
+    "local-exchange.txt": {
+      "tamarin/local/exchange.spthy": "c7232b618d445d11c5b3baaadb9275226cbc9ea7a32b7680745721eda9c9305a"
+    },
+    "mutant-1-wire-only-recovery-successor_statement_binds_the_patron.txt": {
+      "tamarin/wire-only/recovery.spthy": "4f466425054ef301b0ec1a756dfd53666f2908df517434c7e023bf8e05d67640"
+    },
+    "mutant-10-wire-only-attach-a_delegated_bind_names_a_key_the_identity_delegated.txt": {
+      "tamarin/wire-only/attach.spthy": "4dee963df4af6726f85e40119538dbcedc2de8d5952d6aef38afb37866f7e0fc"
+    },
+    "mutant-11-local-exchange-an_accepted_anchor_was_derived_by_both.txt": {
+      "tamarin/local/exchange.spthy": "c7232b618d445d11c5b3baaadb9275226cbc9ea7a32b7680745721eda9c9305a"
+    },
+    "mutant-12-wire-only-query-an_answer_had_the_subjects_consent_for_this_verifier.txt": {
+      "tamarin/wire-only/query.spthy": "41e269893bc88e99ae1d8ab4bd4cde0e08284808d15d5064f1f8e285cc5f5e3a"
+    },
+    "mutant-2-wire-only-recovery-recognition_binds_the_successor.txt": {
+      "tamarin/wire-only/recovery.spthy": "4f466425054ef301b0ec1a756dfd53666f2908df517434c7e023bf8e05d67640"
+    },
+    "mutant-3-wire-only-recovery-transfer_statement_binds_the_destination.txt": {
+      "tamarin/wire-only/recovery.spthy": "4f466425054ef301b0ec1a756dfd53666f2908df517434c7e023bf8e05d67640"
+    },
+    "mutant-4-compliant-attach-a_conforming_server_binds_only_after_the_handshake.txt": {
+      "tamarin/compliant/attach.spthy": "9e337b30868bea526b4158717324ec69136e7dc4e9dd1cc1e3530a7da44c5258"
+    },
+    "mutant-5-compliant-attach-delivery_is_to_the_credential_it_was_queued_for.txt": {
+      "tamarin/compliant/attach.spthy": "9e337b30868bea526b4158717324ec69136e7dc4e9dd1cc1e3530a7da44c5258"
+    },
+    "mutant-6-compliant-attach-no_attach_after_supersession.txt": {
+      "tamarin/compliant/attach.spthy": "9e337b30868bea526b4158717324ec69136e7dc4e9dd1cc1e3530a7da44c5258"
+    },
+    "mutant-7-compliant-ceremony-no_signature_over_a_misattributed_nominee.txt": {
+      "tamarin/compliant/ceremony.spthy": "167b9940de06de78d86150aed325f9111b31117aafee44cfaef38b83542aa9ab"
+    },
+    "mutant-8-wire-only-attach-a_delegated_bind_names_a_key_the_identity_delegated.txt": {
+      "tamarin/wire-only/attach.spthy": "4dee963df4af6726f85e40119538dbcedc2de8d5952d6aef38afb37866f7e0fc"
+    },
+    "mutant-9-wire-only-attach-a_delegated_bind_names_a_key_the_identity_delegated.txt": {
+      "tamarin/wire-only/attach.spthy": "4dee963df4af6726f85e40119538dbcedc2de8d5952d6aef38afb37866f7e0fc"
+    },
+    "wire-only-attach.txt": {
+      "tamarin/wire-only/attach.spthy": "4dee963df4af6726f85e40119538dbcedc2de8d5952d6aef38afb37866f7e0fc"
+    },
+    "wire-only-ceremony.txt": {
+      "tamarin/wire-only/ceremony.spthy": "8980dbe8ec4baa4ee97845b8dfadaab3a8aec7523b011034eaf841214c69132b"
+    },
+    "wire-only-currency.txt": {
+      "tamarin/wire-only/currency.spthy": "7f25e9b59f93435670ec39c77442b9db7fb2da460b8047c8ff1dd776e809124f"
+    },
+    "wire-only-query.txt": {
+      "tamarin/wire-only/query.spthy": "41e269893bc88e99ae1d8ab4bd4cde0e08284808d15d5064f1f8e285cc5f5e3a"
+    },
+    "wire-only-recovery.txt": {
+      "tamarin/wire-only/recovery.spthy": "4f466425054ef301b0ec1a756dfd53666f2908df517434c7e023bf8e05d67640"
+    }
+  }
+}

@@ -1,5 +1,5 @@
 TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
-Running breadth-first search Model-Checking with fp 94 and seed 6052306260053251272 with 4 workers on 32 cores with 21461MB heap and 64MB offheap memory [pid: 756116] (Linux 7.0.0-31-generic amd64, Eclipse Adoptium 21.0.12.1 x86_64, MSBDiskFPSet, DiskStateQueue).
+Running breadth-first search Model-Checking with fp 1 and seed -2617261158807469000 with 4 workers on 32 cores with 21461MB heap and 64MB offheap memory [pid: 1487872] (Linux 7.0.0-31-generic amd64, Eclipse Adoptium 21.0.12.1 x86_64, MSBDiskFPSet, DiskStateQueue).
 Parsing file /home/aspiringsavage/Documents/FuerosNet/models/tla/CurrencyEscalation.tla
 Parsing file /tmp/Naturals.tla
 Parsing file /tmp/FiniteSets.tla
@@ -8,9 +8,9 @@ Semantic processing of module Naturals
 Semantic processing of module Sequences
 Semantic processing of module FiniteSets
 Semantic processing of module CurrencyEscalation
-Starting... (2026-09-29 14:21:46)
+Starting... (2026-09-30 17:56:52)
 Computing initial states...
-Finished computing initial states: 1 distinct state generated at 2026-09-29 14:21:46.
+Finished computing initial states: 1 distinct state generated at 2026-09-30 17:56:52.
 Error: Action property FreshOnly is violated.
 Error: The behavior up to this point is:
 State 1: <Initial predicate>
@@ -23,22 +23,17 @@ State 2: <Tick line 124, col 3 to line 126, col 33 of module CurrencyEscalation>
 /\ att = [issuer |-> p0, secondhand |-> FALSE]
 /\ reachable = (p0 :> TRUE @@ b1 :> TRUE @@ b2 :> TRUE @@ g0 :> TRUE)
 
-State 3: <Tick line 124, col 3 to line 126, col 33 of module CurrencyEscalation>
-/\ age = 2
-/\ att = [issuer |-> p0, secondhand |-> FALSE]
-/\ reachable = (p0 :> TRUE @@ b1 :> TRUE @@ b2 :> TRUE @@ g0 :> TRUE)
-
-State 4: <GoDown line 134, col 3 to line 136, col 27 of module CurrencyEscalation>
-/\ age = 2
+State 3: <GoDown line 134, col 3 to line 136, col 27 of module CurrencyEscalation>
+/\ age = 1
 /\ att = [issuer |-> p0, secondhand |-> FALSE]
 /\ reachable = (p0 :> FALSE @@ b1 :> TRUE @@ b2 :> TRUE @@ g0 :> TRUE)
 
-State 5: <GracePeriod line 188, col 3 to line 191, col 33 of module CurrencyEscalation>
+State 4: <GracePeriod line 188, col 3 to line 191, col 33 of module CurrencyEscalation>
 /\ age = 0
 /\ att = [issuer |-> p0, secondhand |-> FALSE]
 /\ reachable = (p0 :> FALSE @@ b1 :> TRUE @@ b2 :> TRUE @@ g0 :> TRUE)
 
-112 states generated, 46 distinct states found, 28 states left on queue.
+131 states generated, 49 distinct states found, 28 states left on queue.
 The depth of the complete state graph search is 6.
 The average outdegree of the complete state graph is 2 (minimum is 0, the maximum 5 and the 95th percentile is 5).
-Finished in 00s at (2026-09-29 14:21:46)
+Finished in 00s at (2026-09-30 17:56:52)

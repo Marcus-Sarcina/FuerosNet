@@ -222,6 +222,19 @@ impl Archive {
                 std::fs::write(p, &rec.bytes)?;
             }
         }
+        // **The checkpoint is part of the stored archive** [2026-09-30].
+        // Without it a prune did not survive a restart: the records it
+        // released are still the files they were -- they are retained as
+        // evidence by txid (§10.1), so nothing deletes them -- and a load
+        // that knew of no checkpoint admitted every one of them back into
+        // the chain and reported a whole archive. The prune had been a
+        // change to memory alone.
+        let cp = root.join("checkpoint");
+        match self.checkpoint {
+            Some(at) => std::fs::write(cp, hex(&at))?,
+            None if cp.exists() => std::fs::remove_file(cp)?,
+            None => {}
+        }
         Ok(())
     }
 
@@ -239,8 +252,16 @@ impl Archive {
             return Ok(a);
         };
         let mut records: Vec<Record> = Vec::new();
+        let mut stored_checkpoint: Option<Txid> = None;
         for e in rd.flatten() {
-            if let Ok(bytes) = std::fs::read(e.path())
+            let path = e.path();
+            if path.file_name().is_some_and(|n| n == "checkpoint") {
+                stored_checkpoint = std::fs::read_to_string(&path)
+                    .ok()
+                    .and_then(|h| unhex(h.trim()));
+                continue;
+            }
+            if let Ok(bytes) = std::fs::read(&path)
                 && let Ok(rec) = Record::parse(&bytes)
                 && rec.signers.contains(&key)
             {
@@ -248,8 +269,34 @@ impl Archive {
             }
         }
         records.sort_by_key(|r| (r.effective, r.txid));
+        // **A record of this archive's that will not append is reported,
+        // not dropped** [2026-09-30]. A file that does not parse or that
+        // this key did not sign is somebody else's and was skipped above;
+        // one that got this far is ours, and swallowing its refusal
+        // returned a short archive as though it were whole.
+        let mut refused: Vec<(Txid, String)> = Vec::new();
         for rec in records {
-            let _ = a.append(rec);
+            let txid = rec.txid;
+            if let Err(why) = a.append(rec) {
+                refused.push((txid, why));
+            }
+        }
+        // the prune is re-applied, so the chain comes back as it was left
+        // rather than as it was before the prune.  The window was checked
+        // when the prune was made; re-checking it here would refuse to
+        // restore a state the archive is already in.
+        if let Some(at) = stored_checkpoint
+            && a.records.contains_key(&at)
+        {
+            a.prune_at(&at);
+        }
+        if let Some((txid, why)) = refused.into_iter().next() {
+            return Err(std::io::Error::other(format!(
+                "{} of this archive's records would not append, the first \
+                 {} because its {why}",
+                1,
+                hex(&txid)
+            )));
         }
         Ok(a)
     }
@@ -529,6 +576,14 @@ impl Archive {
         if cp.effective.saturating_add(WINDOW_SECONDS) > now {
             return Err("inside the 730-day window".into());
         }
+        Ok(self.prune_at(at))
+    }
+
+    /// The prune itself, without the checks `prune` makes: the records
+    /// before `at` leave the chain, `at` becomes the root, and the count
+    /// released comes back.  Used to restore a stored checkpoint on load,
+    /// where the window was checked when the prune was first made.
+    fn prune_at(&mut self, at: &Txid) -> usize {
         let before: Vec<Txid> = self.walk_from(&[*at]).into_iter().skip(1).collect();
         let n = before.len();
         for t in &before {
@@ -536,7 +591,7 @@ impl Archive {
             self.heads.remove(t);
         }
         self.checkpoint = Some(*at);
-        Ok(n)
+        n
     }
 }
 
@@ -544,6 +599,20 @@ impl Fetch for Archive {
     fn fetch(&self, txid: &Txid) -> Option<Vec<u8>> {
         self.records.get(txid).map(|r| r.bytes.clone())
     }
+}
+
+/// The checkpoint file's 64 hex characters back to a txid, or nothing: a
+/// checkpoint that does not read is no checkpoint, and the load reports a
+/// whole archive rather than refusing to open at all.
+fn unhex(h: &str) -> Option<Txid> {
+    if h.len() != 64 {
+        return None;
+    }
+    let mut out = [0u8; 32];
+    for (i, b) in out.iter_mut().enumerate() {
+        *b = u8::from_str_radix(h.get(i * 2..i * 2 + 2)?, 16).ok()?;
+    }
+    Some(out)
 }
 
 fn hex(b: &[u8; 32]) -> String {

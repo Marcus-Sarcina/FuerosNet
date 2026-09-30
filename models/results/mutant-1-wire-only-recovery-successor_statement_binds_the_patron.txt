@@ -126,7 +126,7 @@ rule (modulo E) Patron_Accept_Recovery_One_Response:
              snd(kmOld)),
       true
   ),
-  Eq( stmtNew, adoptNew ), Eq( stmtPat, $P ), Distinct( khV, adoptNew ),
+  Eq( stmtNew, adoptNew ), Eq( $P, $P ), Distinct( khV, adoptNew ),
   Eq( claimKh, khV ), ResponseNames( $V, claimKh ), Eq( priorKh, khOld ),
   Eq( respNew1, adoptNew ),
   Eq( verify(provBc,
@@ -156,7 +156,7 @@ rule (modulo E) Patron_Accept_Recovery_One_Response:
      ]
     --[
     Eq( h(kmOld), khOld ), Eq( h(kmV), khV ), Eq( z, true ), Eq( z.1, true ),
-    Eq( stmtNew, adoptNew ), Eq( stmtPat, $P ), Distinct( khV, adoptNew ),
+    Eq( stmtNew, adoptNew ), Eq( $P, $P ), Distinct( khV, adoptNew ),
     Eq( claimKh, khV ), ResponseNames( $V, claimKh ), Eq( priorKh, khOld ),
     Eq( respNew1, adoptNew ), Eq( z.2, true ), Eq( z.3, true ),
     Eq( result, 'match' ), Distinct( $V, $S ), Distinct( $P, $S ),
@@ -1097,7 +1097,7 @@ rule (modulo E) Patron_Accept_Transfer:
              snd(kmOldT)),
       true
   ),
-  Eq( stmtNode, adoptNode ), Eq( stmtOld, mapOld ), Eq( $New, $New ),
+  Eq( stmtNode, adoptNode ), Eq( stmtOld, mapOld ), Eq( stmtNew, $New ),
   Distinct( $Old, $New ),
   PatronAcceptedTransferEvidence( $New, $Old, adoptNode )
   ]->
@@ -1112,7 +1112,7 @@ rule (modulo E) Patron_Accept_Transfer:
     --[
     Eq( h(kmOldT), khOldT ), Eq( mapOld, $Old ), Eq( z, true ),
     Eq( z.1, true ), Eq( stmtNode, adoptNode ), Eq( stmtOld, mapOld ),
-    Eq( $New, $New ), Distinct( $Old, $New ),
+    Eq( stmtNew, $New ), Distinct( $Old, $New ),
     PatronAcceptedTransferEvidence( $New, $Old, adoptNode )
     ]->
      [ Out( sign(<'adopted', adoptNode, $New>, ~nsk) ) ]
@@ -1227,7 +1227,7 @@ rule (modulo E) Patron_Accept_Recovery:
              snd(kmOld)),
       true
   ),
-  Eq( stmtNew, adoptNew ), Eq( stmtPat, $P ), Distinct( khV, adoptNew ),
+  Eq( stmtNew, adoptNew ), Eq( $P, $P ), Distinct( khV, adoptNew ),
   Eq( claimKh, khV ), ResponseNames( $V, claimKh ), Eq( priorKh, khOld ),
   Eq( respNew1, adoptNew ),
   Eq( verify(provBc,
@@ -1267,7 +1267,7 @@ rule (modulo E) Patron_Accept_Recovery:
     Distinct( khV2, adoptNew ), Eq( claimKh2, khV2 ),
     ResponseNames( $V2, claimKh2 ), Eq( priorKh2, khOld ), Eq( z, true ),
     Eq( z.1, true ), Eq( z.2, true ), Eq( z.3, true ),
-    Eq( stmtNew, adoptNew ), Eq( stmtPat, $P ), Distinct( khV, adoptNew ),
+    Eq( stmtNew, adoptNew ), Eq( $P, $P ), Distinct( khV, adoptNew ),
     Eq( claimKh, khV ), ResponseNames( $V, claimKh ), Eq( priorKh, khOld ),
     Eq( respNew1, adoptNew ), Eq( z.4, true ), Eq( z.5, true ),
     BlockResults( result, result2 ), Distinct( $V, $S ), Distinct( $V2, $S ),
@@ -8505,7 +8505,105 @@ guarded formula characterizing all counter-examples:
   (((∀ #x. (CompromisedClassical( P ) @ #x) ⇒ ¬(#x < #i)) ∨
     (∀ #y. (CompromisedPQ( P ) @ #y) ⇒ ¬(#y < #i))))"
 */
-by sorry
+simplify
+solve( (∀ #x. (CompromisedClassical( S ) @ #x) ⇒ ¬(#x < #i))  ∥
+       (∀ #y. (CompromisedPQ( S ) @ #y) ⇒ ¬(#y < #i)) )
+  case case_1
+  solve( (∀ #x. (CompromisedClassical( P ) @ #x) ⇒ ¬(#x < #i))  ∥
+         (∀ #y. (CompromisedPQ( P ) @ #y) ⇒ ¬(#y < #i)) )
+    case case_1
+    solve( PatronAcceptedRecoveryEvidence( P, S, newkey ) @ #i )
+      case Patron_Accept_Recovery
+      solve( (result = 'match')  ∥ (result2 = 'match') )
+        case case_1
+        solve( !LtkC( $P, ~psk ) ▶₀ #i )
+          case Register
+          solve( !Kh( $S, h(<pk(x), pk(x.1)>) ) ▶₁ #i )
+            case Register
+            solve( !Kh( $V, h(<pk(x), pk(x.1)>) ) ▶₂ #i )
+              case Register
+              solve( !Kh( $V2, h(<pk(x), pk(x.1)>) ) ▶₃ #i )
+                case Register
+                solve( !KU( sign(<'rhtn/1:successor', succ_stmt($S, newkey, stmtPat)>,
+                                 ~skc)
+                       ) @ #vk.20 )
+                  case Old_Key_Proof
+                  solve( !KU( sign(<'rhtn/1:verifier', 
+                                    vresp(h(<pk(~skc.1), pk(~skp.1)>), h(<pk(~skc), pk(~skp)>), newkey,
+                                          'match')
+                                   >,
+                                   ~skc.1)
+                         ) @ #vk.33 )
+                    case Recognise
+                    solve( !KU( sign(<'rhtn/1:verifier', 
+                                      vresp(h(<pk(~skc.2), pk(~skp.2)>), h(<pk(~skc), pk(~skp)>), ~nk,
+                                            result2)
+                                     >,
+                                     ~skc.2)
+                           ) @ #vk.38 )
+                      case Recognise_Without_Meeting
+                      solve( !KU( h(<pk(~skc.2), pk(~skp.2)>) ) @ #vk.38 )
+                        case Recognise_Without_Meeting
+                        solve( !KU( ~nk ) @ #vk.22 )
+                          case Recognise
+                          solve( !KU( sign(<'rhtn/1:successor', succ_stmt($S, ~nk, $P.1)>, ~skp)
+                                 ) @ #vk.34 )
+                            case Old_Key_Proof
+                            solve( !KU( sign(<'rhtn/1:verifier', 
+                                              vresp(h(<pk(~skc.1), pk(~skp.1)>), h(<pk(~skc), pk(~skp)>), ~nk,
+                                                    'match')
+                                             >,
+                                             ~skp.1)
+                                   ) @ #vk.39 )
+                              case Recognise
+                              solve( !KU( sign(<'rhtn/1:verifier', 
+                                                vresp(h(<pk(~skc.2), pk(~skp.2)>), h(<pk(~skc), pk(~skp)>),
+                                                      ~nk, result2)
+                                               >,
+                                               ~skp.2)
+                                     ) @ #vk.41 )
+                                case Recognise_Without_Meeting
+                                solve( !KU( pk(~skc) ) @ #vk.42 )
+                                  case Register
+                                  solve( !KU( pk(~skp) ) @ #vk.43 )
+                                    case Register
+                                    solve( !KU( pk(~skc.1) ) @ #vk.44 )
+                                      case Register
+                                      solve( !KU( pk(~skp.1) ) @ #vk.45 )
+                                        case Register
+                                        solve( !KU( pk(~skc.2) ) @ #vk.46 )
+                                          case Register
+                                          solve( !KU( pk(~skp.2) ) @ #vk.47 )
+                                            case Register
+                                            solve( !KU( h(<pk(~skc.1), pk(~skp.1)>) ) @ #vk.45 )
+                                              case Recognise_Without_Meeting
+                                              solve( !KU( h(<pk(~skc), pk(~skp)>) ) @ #vk.46 )
+                                                case Recognise_Without_Meeting
+                                                SOLVED // trace found
+                                              qed
+                                            qed
+                                          qed
+                                        qed
+                                      qed
+                                    qed
+                                  qed
+                                qed
+                              qed
+                            qed
+                          qed
+                        qed
+                      qed
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
 
 lemma transfer_statement_binds_the_destination:
   all-traces
@@ -8523,32 +8621,7 @@ guarded formula characterizing all counter-examples:
   (((∀ #x. (CompromisedClassical( Old ) @ #x) ⇒ ¬(#x < #i)) ∨
     (∀ #y. (CompromisedPQ( Old ) @ #y) ⇒ ¬(#y < #i))))"
 */
-simplify
-solve( (∀ #x. (CompromisedClassical( $Old ) @ #x) ⇒ ¬(#x < #i))  ∥
-       (∀ #y. (CompromisedPQ( $Old ) @ #y) ⇒ ¬(#y < #i)) )
-  case case_1
-  solve( !LtkC( $New, ~nsk ) ▶₀ #i )
-    case Register
-    solve( !Kh( $Old, h(<pk(x), pk(x.1)>) ) ▶₁ #i )
-      case Register
-      solve( !KU( sign(<'rhtn/1:transfer', nodekey, $Old, stmtNew>, ~skc)
-             ) @ #vk.11 )
-        case Transfer_Countersign
-        solve( !KU( sign(<'rhtn/1:transfer', nodekey, $Old, $New.1>, ~skp)
-               ) @ #vk.12 )
-          case Transfer_Countersign
-          solve( !KU( pk(~skc) ) @ #vk.13 )
-            case Register
-            solve( !KU( pk(~skp) ) @ #vk.14 )
-              case Register
-              SOLVED // trace found
-            qed
-          qed
-        qed
-      qed
-    qed
-  qed
-qed
+by sorry
 
 /* All wellformedness checks were successful. */
 
@@ -8565,9 +8638,9 @@ end
 ==============================================================================
 summary of summaries:
 
-analyzed: /home/aspiringsavage/Documents/FuerosNet/models/results/mutant-wire-only-recovery-transfer_statement_binds_the_destination.spthy
+analyzed: /home/aspiringsavage/Documents/FuerosNet/models/results/mutant-1-wire-only-recovery-successor_statement_binds_the_patron.spthy
 
-  processing time: 55.00s
+  processing time: 284.28s
   
   forging_a_recognition_needs_both_verifier_halves (all-traces): analysis incomplete (1 steps)
   no_relied_on_verifier_is_the_subject (all-traces): analysis incomplete (1 steps)
@@ -8581,7 +8654,7 @@ analyzed: /home/aspiringsavage/Documents/FuerosNet/models/results/mutant-wire-on
   recovery_is_executable (exists-trace): analysis incomplete (1 steps)
   recognition_alone_insufficient (all-traces): analysis incomplete (1 steps)
   recognition_binds_the_successor (all-traces): analysis incomplete (1 steps)
-  successor_statement_binds_the_patron (all-traces): analysis incomplete (1 steps)
-  transfer_statement_binds_the_destination (all-traces): falsified - found trace (9 steps)
+  successor_statement_binds_the_patron (all-traces): falsified - found trace (26 steps)
+  transfer_statement_binds_the_destination (all-traces): analysis incomplete (1 steps)
 
 ==============================================================================

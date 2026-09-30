@@ -837,3 +837,76 @@ fn pruning_is_refused_except_at_a_series_reissue_beyond_the_window() {
     );
     assert_eq!(w.archive("bob").checkpoint(), Some(r_c.txid));
 }
+
+// acceptance: ARC-29
+#[test]
+fn a_prune_survives_a_restart_and_the_chain_comes_back_pruned() {
+    // The defect this pins was the other way round from how two reviews
+    // and one assistant recorded it: a prune did not lose the chain on
+    // restart, it did not survive the restart at all. The records it
+    // released stay on disk -- they are retained as evidence by txid
+    // (design §10.1), so nothing deletes them -- and a load that knew of
+    // no checkpoint admitted every one back into the chain and reported a
+    // whole archive. The storage was never released and the prune was a
+    // change to memory alone.
+    let mut w = World::new(&["alice", "bob", "carol"]);
+    let f1 = w.meet("alice", "bob");
+    let _a1 = w.adopt("bob", "alice", f1.txid, 11);
+    let r_c = w.reissue(
+        "bob",
+        "alice",
+        Seqno {
+            series: 5,
+            counter: 0,
+        },
+        6,
+    );
+    let after = w.depart(
+        "bob",
+        "alice",
+        Seqno {
+            series: 6,
+            counter: 1,
+        },
+    );
+    let bob = w.kh("bob");
+    let dir = std::env::temp_dir().join(format!("rhtn-prune-restart-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    w.archive("bob")
+        .save(&dir)
+        .expect("the whole archive stores");
+    let whole = rhtn_archive::chain::Archive::load(&dir, bob).expect("and loads");
+    assert_eq!(whole.len(), w.archive("bob").len(), "control: unpruned");
+    assert_eq!(whole.checkpoint(), None);
+
+    let now = r_c.effective + WINDOW_SECONDS + 1;
+    let released = w.archive_mut("bob").prune(&r_c.txid, now).unwrap();
+    assert_eq!(released, 2);
+    let held = w.archive("bob").len();
+    w.archive("bob")
+        .save(&dir)
+        .expect("the pruned archive stores");
+
+    let back = rhtn_archive::chain::Archive::load(&dir, bob).expect("and loads");
+    assert_eq!(back.len(), held, "the chain comes back pruned, not whole");
+    assert_eq!(
+        back.checkpoint(),
+        Some(r_c.txid),
+        "the checkpoint is part of what was stored"
+    );
+    assert!(
+        walk::Fetch::fetch(&back, &f1.txid).is_none(),
+        "a released record is not served by the chain again"
+    );
+    assert!(
+        walk::Fetch::fetch(&back, &after.txid).is_some(),
+        "and what came after the checkpoint is still there"
+    );
+    // the released records are still the files they were: evidence keeps
+    // them, and releasing the storage is a separate question (recorded)
+    assert!(
+        std::fs::read_dir(dir.join("archive")).unwrap().count() > held,
+        "the files were not deleted"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

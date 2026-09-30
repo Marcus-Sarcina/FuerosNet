@@ -64,10 +64,36 @@ rule (modulo E) Compromise_Instance:
 
 rule (modulo E) Client_Holds_Delegation:
    [ !PinnedFor( $C, $S, km ), In( <k, del> ) ]
-  --[ Eq( true, true ), Held( $C, $S, k ) ]->
+  --[
+  Eq( verify(del, <'delegation', k, $S>, fst(km)), true ),
+  Held( $C, $S, k )
+  ]->
    [ !HeldDelegation( $C, $S, k ) ]
 
-  /* has exactly the trivial AC variant */
+  /*
+  rule (modulo AC) Client_Holds_Delegation:
+     [ !PinnedFor( $C, $S, km ), In( <k, del> ) ]
+    --[ Eq( z, true ), Held( $C, $S, k ) ]->
+     [ !HeldDelegation( $C, $S, k ) ]
+    variants (modulo AC)
+    1. $S    = $S.7
+       del   = del.7
+       k     = k.7
+       km    = km.7
+       z     = verify(del.7, <'delegation', k.7, $S.7>, fst(km.7))
+    
+    2. $S    = $x.7
+       del   = sign(<'delegation', x.8, $x.7>, x.9)
+       k     = x.8
+       km    = <pk(x.9), x.10>
+       z     = true
+    
+    3. $S    = $S.9
+       del   = del.9
+       k     = k.9
+       km    = <x.7, x.8>
+       z     = verify(del.9, <'delegation', k.9, $S.9>, x.7)
+  */
 
 rule (modulo E) Client_Hello:
    [ Fr( ~nc ) ]
@@ -185,7 +211,7 @@ rule (modulo E) Client_Finish_Delegated:
    ]
   --[
   Eq( verify(del, <'delegation', named, $S>, fst(km)), true ),
-  Eq( named, presented ),
+  Eq( presented, presented ),
   Eq( verify(sig, <'attach', $C, $S, ~nc>, presented), true ),
   ClientFinish( $C, $S, ~nc ), BoundByDelegation( $C, $S, presented ),
   Claims( $C, $S, $Claim ), ClientAuthSigned( $C, $S, ns, $Claim )
@@ -203,7 +229,7 @@ rule (modulo E) Client_Finish_Delegated:
      !PinnedFor( $C, $S, km ), !PinnedFor( $C, $C, kmSelf ), !Ltk( $C, ~skc )
      ]
     --[
-    Eq( z, true ), Eq( named, presented ), Eq( z.1, true ),
+    Eq( z, true ), Eq( presented, presented ), Eq( z.1, true ),
     ClientFinish( $C, $S, ~nc ), BoundByDelegation( $C, $S, presented ),
     Claims( $C, $S, $Claim ), ClientAuthSigned( $C, $S, ns, $Claim )
     ]->
@@ -655,28 +681,34 @@ guarded formula characterizing all counter-examples:
 */
 simplify
 solve( BoundByDelegation( X, Y, k ) @ #i )
-  case Client_Finish_Held
+  case Client_Finish_Delegated
   solve( St_Client_1( $C, $S, ~nc ) ▶₀ #i )
     case Client_Hello
-    solve( !HeldDelegation( $C, $S, pk(x) ) ▶₂ #i )
-      case Client_Holds_Delegation
+    solve( !PinnedFor( $C, $S, <pk(x.1), x.2> ) ▶₂ #i )
+      case Client_Learns_KeyMaterial
       solve( !PinnedFor( $C, $C, kmSelf ) ▶₃ #i )
         case Client_Learns_KeyMaterial
-        solve( !Ltk( $C, ~skc.1 ) ▶₄ #i )
+        solve( !Ltk( $C, ~skc.2 ) ▶₄ #i )
           case Register_Node
           solve( !KU( sign(<'attach', $C, $S, ~nc>, x) ) @ #vk.5 )
             case Server_Respond
-            solve( !KU( ~nc ) @ #vk.16 )
-              case Client_Hello
-              solve( !KU( pk(~skc) ) @ #vk.4 )
-                case Register_Node
-                solve( !KU( pk(~skp.1) ) @ #vk.11 )
+            solve( !KU( sign(<'delegation', named, $S>, ~skc) ) @ #vk.9 )
+              case Delegate
+              solve( !KU( ~nc ) @ #vk.18 )
+                case Client_Hello
+                solve( !KU( pk(~skc) ) @ #vk.7 )
                   case Register_Node
-                  solve( !KU( pk(~skc.1) ) @ #vk.13 )
+                  solve( !KU( pk(~skp) ) @ #vk.13 )
                     case Register_Node
-                    solve( !KU( pk(~skp) ) @ #vk.14 )
+                    solve( !KU( pk(~skc.1) ) @ #vk.15 )
                       case Register_Node
-                      SOLVED // trace found
+                      solve( !KU( pk(~skp.1) ) @ #vk.16 )
+                        case Register_Node
+                        solve( !KU( pk(~skd) ) @ #vk.16 )
+                          case Delegate
+                          SOLVED // trace found
+                        qed
+                      qed
                     qed
                   qed
                 qed
@@ -831,14 +863,14 @@ end
 ==============================================================================
 summary of summaries:
 
-analyzed: /home/aspiringsavage/Documents/FuerosNet/models/results/mutant-wire-only-attach-a_delegated_bind_names_a_key_the_identity_delegated.spthy
+analyzed: /home/aspiringsavage/Documents/FuerosNet/models/results/mutant-8-wire-only-attach-a_delegated_bind_names_a_key_the_identity_delegated.spthy
 
-  processing time: 5.03s
+  processing time: 5.37s
   
   attach_completes_honestly (exists-trace): analysis incomplete (1 steps)
   attach_is_executable (exists-trace): analysis incomplete (1 steps)
   server_authentication (all-traces): analysis incomplete (1 steps)
-  a_delegated_bind_names_a_key_the_identity_delegated (all-traces): falsified - found trace (13 steps)
+  a_delegated_bind_names_a_key_the_identity_delegated (all-traces): falsified - found trace (15 steps)
   a_delegated_attach_completes_honestly (exists-trace): analysis incomplete (1 steps)
   a_held_delegation_binds (exists-trace): analysis incomplete (1 steps)
   a_delegated_client_is_bound (exists-trace): analysis incomplete (1 steps)

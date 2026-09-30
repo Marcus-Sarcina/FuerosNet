@@ -4677,8 +4677,15 @@ to filter. A filter enumerates what its author thought of.
 
 ## 12. Size estimates
 
-**All archive-retained transactions are post-quantum** (design §5.1), so the
-classical column applies only to session-layer traffic.
+**All archive-retained transactions are post-quantum** (design §5.1). Two
+kinds of row therefore carry a classical figure, and they mean different
+things [2026-09-30]: for an object whose signature §5.1 makes **classical
+only** — a currency attestation (§7.1), an anchor entry (§7.2) — the
+classical column is the object's actual size and the post-quantum column is
+`—`, there being no post-quantum form of it. For a presence record the
+classical figure is the **counterfactual**, shown because the ~17×
+multiplier is the point of the table; what travels is the post-quantum
+column.
 
 | Object | Classical | Post-quantum |
 |---|---|---|
@@ -4690,8 +4697,8 @@ classical column applies only to session-layer traffic.
 | Peering | — | **~8 KB** |
 | Presence record (typical, ~10 signers) | ~2 KB | **~35 KB** at ML-DSA-65. Includes ~112 B of disclosure salts, **0.3%** (§4.5.1) |
 | Presence record (maximum signers) | ~5 KB | **~65 KB** — 18 logical signers × (64 + 3,309), plus 32 verifier responses at 2 classical signatures each |
-| Currency attestation | ~150 B, plus field 8's hybrid delegation at 3,373 B where carried (§7.1) | ~2.6 KB, plus the same |
-| Anchor entry | ~60 B | ~60 B (hashes only) |
+| Currency attestation | ~150 B, plus field 8's hybrid delegation at 3,373 B where carried (§7.1) | **—** — the attestation's own signature is classical only (§7.1): its relevance expires in ~10 h, well inside design §5.1's horizon. The delegation it carries is the hybrid part, and it is counted in the classical column because it is what travels |
+| Anchor entry | ~60 B (hashes only, and the entry's signature is classical only — §7.2) | **—** |
 
 **Selective disclosure does not reduce a presentation.** A minimised record replaces
 each withheld field with a 32-byte digest, at most 224 B, against ~34 KB of signatures

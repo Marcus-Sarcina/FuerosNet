@@ -36,7 +36,28 @@ RESULTS="$HERE/results"
 mkdir -p "$RESULTS"
 fail=0
 
+# FRESHNESS EVIDENCE FOR THE RESULTS [2026-09-30].  `results/` holds each
+# tool's verdict and nothing said which source it was the verdict ON, so a
+# result outliving an edit to its theory read exactly like a current one and
+# "the results match the sources" was checkable only by reading them.  Each
+# run now records the source it proved and that source's hash; the manifest
+# is `results/sources.json`, and `Robot/modelpincheck.py` says whether any
+# result is stale.
+MANIFEST="$RESULTS/.sources"
+: > "$MANIFEST"
+stamp() {  # stamp <result file> <source file...>
+  local out="$1"; shift
+  local src
+  for src in "$@"; do
+    [ -f "$src" ] || continue
+    printf '%s\t%s\t%s\n' "$(basename "$out")" \
+      "$(python3 -c 'import os,sys; print(os.path.relpath(sys.argv[1], sys.argv[2]))' "$src" "$HERE")" \
+      "$(sha256sum "$src" | cut -d" " -f1)" >> "$MANIFEST"
+  done
+}
+
 echo "=== 1. Trust-metric simulation (Python stdlib) ==="
+stamp "$RESULTS/flow_metric.txt" "$HERE/simulation/flow_metric.py"
 if python3 "$HERE/simulation/flow_metric.py" > "$RESULTS/flow_metric.txt" 2>&1; then
   echo "  flow_metric.py: all assertions passed"
 else
@@ -49,6 +70,7 @@ echo "=== 2. TLA+ distributed-systems models (TLC) ==="
 # invariants and temporal properties, checked regardless.
 for m in PartitionMerge CurrencyEscalation CycleDetection SupersessionDiscipline IssuerAuthorisation; do
   out="$RESULTS/$m.txt"
+  stamp "$out" "$HERE/tla/$m.tla" "$HERE/tla/$m.cfg"
   "$JAVA" -XX:+UseParallelGC -cp "$TLA_JAR" tlc2.TLC \
       -workers 4 -deadlock -metadir "/tmp/tlc_$m" \
       "$HERE/tla/$m.tla" > "$out" 2>&1
@@ -66,6 +88,7 @@ done
 for pair in "CycleDetection:CycleDetection_FourNodes"; do
   m="${pair%%:*}"; cfg="${pair##*:}"
   out="$RESULTS/$cfg.txt"
+  stamp "$out" "$HERE/tla/$m.tla" "$HERE/tla/$cfg.cfg"
   "$JAVA" -XX:+UseParallelGC -cp "$TLA_JAR" tlc2.TLC \
       -workers 4 -deadlock -metadir "/tmp/tlc_$cfg" \
       -config "$HERE/tla/$cfg.cfg" "$HERE/tla/$m.tla" > "$out" 2>&1
@@ -123,6 +146,7 @@ for mut in "SupersessionDiscipline:SupersessionDiscipline_Mutation:NeverIssuedFo
            "CycleDetection:CycleDetection_Mutation:Temporal"; do
   IFS=: read -r mm cfg inv <<< "$mut"
   mout="$RESULTS/$cfg.txt"
+  stamp "$mout" "$HERE/tla/$mm.tla" "$HERE/tla/$cfg.cfg"
   "$JAVA" -XX:+UseParallelGC -cp "$TLA_JAR" tlc2.TLC \
       -workers 4 -deadlock -metadir "/tmp/tlc_$cfg" \
       -config "$HERE/tla/$cfg.cfg" \
@@ -147,11 +171,13 @@ echo "=== 3. Tamarin symbolic protocol models ==="
 #                  physical premise.  Neither tree above fits: there is no
 #                  third party checking bytes, and no single-party obligation.
 for spec in wire-only/attach wire-only/currency wire-only/recovery wire-only/ceremony \
+            wire-only/query \
             compliant/currency compliant/attach compliant/ceremony compliant/recovery \
             local/exchange; do
   t="${spec%%/*}-${spec##*/}"
   [ -f "$HERE/tamarin/$spec.spthy" ] || continue
   out="$RESULTS/$t.txt"
+  stamp "$out" "$HERE/tamarin/$spec.spthy"
   # A TIMEOUT, because a theory whose search does not converge would
   # otherwise hang this gate forever -- which happened while rebuilding the
   # currency model on 2026-09-05.  A proof needing longer than this needs a
@@ -201,6 +227,10 @@ for spec in compliant/currency compliant/attach; do
   t="bounded-${spec##*/}"
   out="$RESULTS/$t.txt"
   tmp="$RESULTS/$t.spthy"
+  # the theory AND the fragment: a companion is the verdict on both, and
+  # an edit to either stales it (this site is the one modelpincheck.py
+  # caught unstamped on its first run, 2026-09-30)
+  stamp "$out" "$HERE/tamarin/$spec.spthy" "$frag"
   # theory minus its LAST `end` line, then the fragment, then `end`
   awk '{lines[NR]=$0} END{for(i=NR;i>=1;i--) if(lines[i]=="end"){last=i;break}
        for(i=1;i<=NR;i++) if(i!=last) print lines[i]}' "$HERE/tamarin/$spec.spthy" > "$tmp"
@@ -278,6 +308,11 @@ MUTATIONS=(
   # nobody derived.  The check is the whole of what §14.3.2 buys, the anchor
   # being public; with it gone the exchange keeps no binding at all.
   'local/exchange|an_accepted_anchor_was_derived_by_both|Eq(anchor, cid)                 // the anchor|Eq(cid, cid)                     // the anchor'
+  # wire-only/query -- drop the field-7 comparison, which is the whole of
+  # what makes a consent an authorization rather than bearer paper (s5.6):
+  # one consented query then reaches every verifier the selector cares to
+  # try, which is the attack that sentence names.
+  'wire-only/query|an_answer_had_the_subjects_consent_for_this_verifier|Eq(addressed, $V)                  // (a) addressed to this verifier|Eq($V, $V)                          // (a) addressed to this verifier'
 )
 
 echo "=== 3c. Theory mutations: each must FALSIFY ==="
@@ -293,6 +328,7 @@ for m in "${MUTATIONS[@]}"; do
   frag="$HERE/tamarin/$spec.bounded"
   mfile="$RESULTS/mutant-${mi}-${t}-${lem}.spthy"
   mout="$RESULTS/mutant-${mi}-${t}-${lem}.txt"
+  stamp "$mout" "$src"
   # The substitution is literal and MUST land: a mutation that matched nothing
   # would prove the unmutated theory and report a clean pass.
   if ! python3 -c '
@@ -321,6 +357,20 @@ open(dst, "w").write(s)
     echo "  ${lem}: DID NOT FALSIFY (see results/$(basename "$mout"))"; fail=1
   fi
 done
+
+# The manifest, from what each run stamped: result file, source proved, and
+# that source's hash at the moment it was proved.
+python3 - "$MANIFEST" "$RESULTS/sources.json" <<'PY'
+import json, sys
+rows = {}
+for line in open(sys.argv[1]):
+    out, src, h = line.rstrip('\n').split('\t')
+    rows.setdefault(out, {})[src] = h
+json.dump({'results': rows}, open(sys.argv[2], 'w'), indent=2, sort_keys=True)
+open(sys.argv[2], 'a').write('\n')
+PY
+rm -f "$MANIFEST"
+echo "  results/sources.json: $(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["results"]))' "$RESULTS/sources.json") results stamped with the sources they prove"
 
 echo
 if [ "$fail" -eq 0 ]; then

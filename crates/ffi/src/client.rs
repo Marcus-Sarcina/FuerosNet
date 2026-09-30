@@ -21,6 +21,21 @@ use rhtn_transport::tls::Party;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+impl Drop for Participant {
+    /// The seeds go with the participant [2026-09-30]. They are held for
+    /// the backup alone (design §13.7.1) and only on the ceremony device;
+    /// on the way out they are wiped, for the reason `OwnSeed` is wiped in
+    /// the client: freed memory keeps no keys (design §3).
+    fn drop(&mut self) {
+        use zeroize::Zeroize;
+        if let Some(seeds) = &mut self.seeds {
+            for s in seeds {
+                s.zeroize();
+            }
+        }
+    }
+}
+
 /// A participant client, running on a thread of its own.
 ///
 /// Every method is blocking and short: the work happens on the client's
@@ -591,6 +606,15 @@ impl Participant {
             seeds[..32].try_into().unwrap(),
             seeds[32..].try_into().unwrap(),
         );
+        // the crossing copy goes as soon as it is read [2026-09-30]: it is
+        // the identity, and freed memory keeps no keys (design §3). What
+        // the caller holds is the caller's; this side's copy is not left
+        // in the heap for whatever allocates next
+        {
+            use zeroize::Zeroize;
+            let mut seeds = seeds;
+            seeds.zeroize();
+        }
         let ids: Result<Vec<rhtn_crypto::Identity>, Refused> = known
             .iter()
             .map(|k| {

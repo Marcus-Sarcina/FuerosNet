@@ -1,0 +1,237 @@
+maude tool: 'maude'
+ checking version: 3.5.1. OK.
+ checking installation: OK.
+[Theory RHTNVerificationQuery] Theory loaded
+[Theory RHTNVerificationQuery] Theory translated
+[Theory RHTNVerificationQuery] Derivation checks started
+[Theory RHTNVerificationQuery] Derivation checks ended
+[Theory RHTNVerificationQuery] Theory closed
+[Saturating Sources] Step 1 (Max 5)
+[Saturating Sources] Done
+theory RHTNVerificationQuery
+
+begin
+
+// Function signature and definition of the equational theory E
+
+functions: fst/1, h/1, pair/2, pk/1, sign/2, snd/1, true/0, verify/3
+equations:
+    fst(<x.1, x.2>) = x.1,
+    snd(<x.1, x.2>) = x.2,
+    verify(sign(x.1, x.2), x.1, pk(x.2)) = true
+
+restriction Equality:
+  "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
+  // safety formula
+
+  /*
+  expanded formula:
+  "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
+  */
+
+rule (modulo E) Register_Identity:
+   [ Fr( ~sk ) ]
+  --[ Registered( $X ) ]->
+   [ !Ltk( $X, ~sk ), !Pk( $X, pk(~sk) ), Out( pk(~sk) ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Reveal_Ltk:
+   [ !Ltk( $X, ~sk ) ] --[ Compromised( $X ) ]-> [ Out( ~sk ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Subject_Consents:
+   [ Fr( ~pc ), Fr( ~profile ), !Ltk( $S, ~skS ) ]
+  --[
+  Consented( $S, h(<'query', $S, $Q, ~pc, ~profile, 'v1', $V>), $V ),
+  ConsentedFor( $S, $Q, $V, h(<'query', $S, $Q, ~pc, ~profile, 'v1', $V>) )
+  ]->
+   [
+   Out( <'query', $S, $Q, ~pc, ~profile, 'v1', $V> ),
+   Out( sign(h(<'query', $S, $Q, ~pc, ~profile, 'v1', $V>), ~skS) ),
+   Consent( $S, $Q, $V, <'query', $S, $Q, ~pc, ~profile, 'v1', $V>,
+            sign(h(<'query', $S, $Q, ~pc, ~profile, 'v1', $V>), ~skS),
+            h(<'query', $S, $Q, ~pc, ~profile, 'v1', $V>)
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Querier_Sends:
+   [ Consent( $S, $Q, $V, query, consent, qid ) ]
+  --[ Sent( $Q, $V, qid ) ]->
+   [ Out( <query, consent, '0'> ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Verifier_Answers:
+   [
+   In( <<'query', S, Q, pc, profile, tplv, addressed>, consent, sb> ),
+   !Pk( S, pkS ), !Ltk( $V, ~skV )
+   ]
+  --[
+  Answered( $V, h(<'query', S, Q, pc, profile, tplv, addressed>), S, Q ),
+  Eq( $V, $V ),
+  Eq( verify(consent, h(<'query', S, Q, pc, profile, tplv, addressed>),
+             pkS),
+      true
+  )
+  ]->
+   [
+   Out( <'response', $V, S, 
+         h(<'query', S, Q, pc, profile, tplv, addressed>), 'match', 
+         sign(<'response', $V, S, h(<'query', S, Q, pc, profile, tplv, addressed>)
+              >,
+              ~skV)
+        >
+   )
+   ]
+
+  /*
+  rule (modulo AC) Verifier_Answers:
+     [
+     In( <<'query', S, Q, pc, profile, tplv, addressed>, consent, sb> ),
+     !Pk( S, pkS ), !Ltk( $V, ~skV )
+     ]
+    --[
+    Answered( $V, h(<'query', S, Q, pc, profile, tplv, addressed>), S, Q ),
+    Eq( $V, $V ), Eq( z, true )
+    ]->
+     [
+     Out( <'response', $V, S, 
+           h(<'query', S, Q, pc, profile, tplv, addressed>), 'match', 
+           sign(<'response', $V, S, h(<'query', S, Q, pc, profile, tplv, addressed>)
+                >,
+                ~skV)
+          >
+     )
+     ]
+    variants (modulo AC)
+    1. Q     = Q.25
+       S     = S.26
+       addressed
+             = addressed.27
+       consent
+             = consent.28
+       pc    = pc.29
+       pkS   = pkS.30
+       profile
+             = profile.31
+       tplv  = tplv.33
+       z     = verify(consent.28,
+                      h(<'query', S.26, Q.25, pc.29, profile.31, tplv.33, addressed.27>),
+                      pkS.30)
+    
+    2. Q     = Q.49
+       S     = S.50
+       addressed
+             = addressed.51
+       consent
+             = sign(h(<'query', S.50, Q.49, pc.53, profile.55, tplv.57, addressed.51
+                      >),
+                    x.94)
+       pc    = pc.53
+       pkS   = pk(x.94)
+       profile
+             = profile.55
+       tplv  = tplv.57
+       z     = true
+  */
+
+lemma a_query_is_answered:
+  exists-trace "∃ V qid S Q #i. Answered( V, qid, S, Q ) @ #i"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ V qid S Q #i. (Answered( V, qid, S, Q ) @ #i)"
+*/
+by sorry
+
+lemma an_answer_had_the_subjects_consent_for_this_verifier:
+  all-traces
+  "∀ V qid S Q #i.
+    (Answered( V, qid, S, Q ) @ #i) ⇒
+    ((∃ #j. (Consented( S, qid, V ) @ #j) ∧ (#j < #i)) ∨
+     (∃ #k. Compromised( S ) @ #k))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ V qid S Q #i.
+  (Answered( V, qid, S, Q ) @ #i)
+ ∧
+  (∀ #j. (Consented( S, qid, V ) @ #j) ⇒ ¬(#j < #i)) ∧
+  (∀ #k. (Compromised( S ) @ #k) ⇒ ⊥)"
+*/
+simplify
+solve( !Pk( S, pk(x) ) ▶₁ #i )
+  case Register_Identity
+  solve( !Ltk( $V, ~skV ) ▶₂ #i )
+    case Register_Identity
+    solve( !KU( sign(h(<'query', $X, Q, pc, profile, tplv, addressed>), ~sk)
+           ) @ #vk.15 )
+      case Querier_Sends
+      solve( !KU( ~pc ) @ #vk.9 )
+        case Querier_Sends
+        solve( !KU( ~profile ) @ #vk.12 )
+          case Querier_Sends
+          SOLVED // trace found
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma an_answer_names_the_query_it_answers:
+  all-traces
+  "∀ V qid S Q #i.
+    (Answered( V, qid, S, Q ) @ #i) ⇒
+    (∃ Sx Qx pc profile tplv.
+      qid = h(<'query', Sx, Qx, pc, profile, tplv, V>))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ V qid S Q #i.
+  (Answered( V, qid, S, Q ) @ #i)
+ ∧
+  ∀ Sx Qx pc profile tplv.
+   (qid = h(<'query', Sx, Qx, pc, profile, tplv, V>)) ⇒ ⊥"
+*/
+by sorry
+
+lemma a_query_can_be_replayed_to_its_own_verifier:
+  exists-trace
+  "∃ V qid S Q #i #j.
+    ((Answered( V, qid, S, Q ) @ #i) ∧ (Answered( V, qid, S, Q ) @ #j)) ∧
+    (¬(#i = #j))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ V qid S Q #i #j.
+  (Answered( V, qid, S, Q ) @ #i) ∧ (Answered( V, qid, S, Q ) @ #j)
+ ∧
+  ¬(#i = #j)"
+*/
+by sorry
+
+/* All wellformedness checks were successful. */
+
+/*
+Generated from:
+Tamarin version 1.12.0
+Maude version 3.5.1
+Git revision: 82780bbaf3328a45f624ddb41e51bf75425f851c (with uncommited changes), branch: master
+Compiled at: 2026-03-07 14:22:39.174278293 UTC
+*/
+
+end
+
+==============================================================================
+summary of summaries:
+
+analyzed: /home/aspiringsavage/Documents/FuerosNet/models/results/mutant-12-wire-only-query-an_answer_had_the_subjects_consent_for_this_verifier.spthy
+
+  processing time: 1.99s
+  
+  a_query_is_answered (exists-trace): analysis incomplete (1 steps)
+  an_answer_had_the_subjects_consent_for_this_verifier (all-traces): falsified - found trace (7 steps)
+  an_answer_names_the_query_it_answers (all-traces): analysis incomplete (1 steps)
+  a_query_can_be_replayed_to_its_own_verifier (exists-trace): analysis incomplete (1 steps)
+
+==============================================================================

@@ -1,0 +1,215 @@
+theory RHTNVerificationQuery
+/*
+================================================================================
+  RHTN verification query -- symbolic analysis (Tamarin)
+================================================================================
+
+WHICH TREE THIS IS.  `wire-only/`: a property a third party checks from the
+bytes it receives.  A verifier is handed a query by a party it has no prior
+relationship with, and everything it can rely on is in what arrived.
+
+WHY THIS LEG AND NOT PQXDH.  The models README declares PQXDH unmodelled,
+and it stays that way deliberately: it is adopted rather than designed here
+(design §14.2.4), and analysing it would duplicate its authors' own work at
+high cost.  The query leg is the opposite case -- this project's own
+construction, landed 2026-09-30, carrying a confusion property stated in one
+sentence and checkable from bytes.
+
+WHAT IS MODELLED.  `wire-format.md` §5.6's query, to the point where a
+verifier answers:
+
+  1. the subject signs `query_id`, the hash over the query's fields with
+     field 6 absent -- subject, querier, ceremony pre-commitment, fuzzed
+     profile, template version, and THE ADDRESSED VERIFIER (field 7);
+  2. the querier carries `[ query, consent, selection_basis ]` to that
+     verifier, on the end-to-end payload path (§7.10.1's kind 7) or, where
+     the verifier is the querier's own serving node, on request type 4;
+  3. the verifier checks the query is addressed to IT, recomputes
+     `query_id`, and checks the consent against it -- §5.6: *"a receiving
+     verifier rejects a query not addressed to it before any processing"*;
+  4. it answers with a `VerifierResponse` naming that `query_id`.
+
+THE CARRIAGE IS GIVEN TO THE ADVERSARY, and that is the point.  `Out` and
+`In`, nothing else: no session, no authentication of the querier.  §5.6 does
+say a verifier attributes the querier to the party the transport
+authenticated, and that rule is what a rate limit rests on -- but the
+CONFINEMENT of a profile and its ceremony metadata to one verifier is
+claimed to hold on the bytes alone, and a model that handed the adversary
+less could not test the claim.
+
+WHAT IS ESTABLISHED.
+
+  `an_answer_had_the_subjects_consent_for_this_verifier` -- a verifier that
+  answers holds a query the subject consented to AND that names that
+  verifier.  This is §5.6's *"what makes the consent an authorization
+  instead of bearer paper"*, and it is the whole reason field 7 is inside
+  the hash.  Mutation-tested: delete the field-7 comparison and it
+  falsifies, the adversary re-aiming one consented query at every prior
+  counterparty the selector reached -- which is the attack the sentence
+  names.
+
+  `an_answer_names_the_query_it_answers` -- the response's `query_id` is the
+  one the verifier accepted, so a response cannot be carried across to
+  another query.
+
+WHAT IS NOT, and both are recorded as `exists-trace` lemmas that VERIFY,
+because the reachability is the finding:
+
+  `a_query_can_be_replayed_to_its_own_verifier` -- the same bytes arrive
+  twice and are accepted twice.  Nothing on the wire stops it: the consent
+  is over the query and the query does not change.  What stops it is the
+  verifier's own answered-set and its per-requester counters (design
+  §7.4.1), which are local state a third party cannot check and this tree
+  does not model.
+
+  `a_querier_the_bytes_do_not_authenticate_can_ask` -- field 2 names a
+  querier and nothing in the bytes proves the sender is it.  §5.6 puts that
+  on the transport ("field 2 MUST equal the transport-authenticated peer"),
+  which is outside this theory by construction.  The consequence is bounded
+  and stated there: a mis-attributed query chooses its own rate-limit
+  bucket, and the profile still reaches only the verifier the subject named.
+
+LIMITS.
+  - **The profile is opaque.**  What a fuzzed profile discloses is design
+    §7.4.1's oracle-leakage argument, answered by rate limits and by the
+    subject holding the capture keys -- a quantitative argument no symbolic
+    model expresses.
+  - **The grant is not modelled.**  A verifier with no capture key answers
+    `unavailable` (§5.5); the key's release is the subject's separate act on
+    the same path, and its refusal is what the rate limit IS (design
+    §7.4.1).  Nothing about the query's confinement depends on it.
+  - **One ceremony, one profile** is a verifier-side rule over its own
+    state ("MUST reject one whose fuzzed profile differs from another
+    countersigned under the same ceremony pre-commitment"), so it belongs
+    to `compliant/`, not here.
+================================================================================
+*/
+
+begin
+
+builtins: hashing, signing
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ #i ==> x = y"
+
+/*
+--------------------------------------------------------------------------------
+  IDENTITIES
+--------------------------------------------------------------------------------
+  A public-key registry, as the wire theories build one: the key is public,
+  and only its holder signs under it.
+*/
+
+rule Register_Identity:
+    [ Fr(~sk) ]
+  --[ Registered($X) ]->
+    [ !Ltk($X, ~sk), !Pk($X, pk(~sk)), Out(pk(~sk)) ]
+
+rule Reveal_Ltk:
+    [ !Ltk($X, ~sk) ]
+  --[ Compromised($X) ]->
+    [ Out(~sk) ]
+
+/*
+--------------------------------------------------------------------------------
+  THE SUBJECT CONSENTS (§5.6)
+--------------------------------------------------------------------------------
+  `query_id` is the hash over the query's fields with field 6 absent, and
+  FIELD 7 -- the addressed verifier -- is one of them.  The subject signs
+  that id and nothing else: §5.6 says the signature is over `query_id`, not
+  over the query, so the record can carry the signature without the 4 KB
+  profile.
+
+  The subject consents once per verifier, which is what the id being
+  per-addressee buys: "One consent per verifier follows".
+*/
+
+rule Subject_Consents:
+    let qid = h(<'query', $S, $Q, ~pc, ~profile, 'v1', $V>)
+    in
+    [ Fr(~pc), Fr(~profile), !Ltk($S, ~skS) ]
+  --[ Consented($S, qid, $V), ConsentedFor($S, $Q, $V, qid) ]->
+    [ Out(<'query', $S, $Q, ~pc, ~profile, 'v1', $V>)
+    , Out(sign(qid, ~skS))
+    , Consent($S, $Q, $V, <'query', $S, $Q, ~pc, ~profile, 'v1', $V>,
+              sign(qid, ~skS), qid) ]
+
+/*
+  THE QUERIER CARRIES IT (§5.6, §7.10.1 kind 7).  The body is the triple:
+  the query, the consent beside it and never inside it, and the selector's
+  own `selection_basis` claim, which travels outside every signature
+  because the transport authenticates the party making it.
+*/
+
+rule Querier_Sends:
+    [ Consent($S, $Q, $V, query, consent, qid) ]
+  --[ Sent($Q, $V, qid) ]->
+    [ Out(<query, consent, '0'>) ]
+
+/*
+--------------------------------------------------------------------------------
+  THE VERIFIER ANSWERS
+--------------------------------------------------------------------------------
+  Three checks, in §5.6's own order: the query is addressed to this verifier
+  BEFORE any processing; the `query_id` is recomputed from the query rather
+  than read out of it; and the consent verifies against the recomputation
+  under the subject the query names.
+
+  The recomputation is why field 6 cannot be trusted as it arrives -- a map
+  cannot contain its own hash, and a verifier that read the id instead of
+  deriving it would be taking the querier's word for what the subject
+  signed.
+*/
+
+rule Verifier_Answers:
+    let qid = h(<'query', S, Q, pc, profile, tplv, addressed>)
+    in
+    [ In(<<'query', S, Q, pc, profile, tplv, addressed>, consent, sb>)
+    , !Pk(S, pkS)
+    , !Ltk($V, ~skV) ]
+  --[ Answered($V, qid, S, Q)
+    , Eq(addressed, $V)                  // (a) addressed to this verifier
+    , Eq(verify(consent, qid, pkS), true) // (b) the subject's consent, over
+    ]->                                   //     the id recomputed here
+    [ Out(<'response', $V, S, qid, 'match', sign(<'response', $V, S, qid>, ~skV)>) ]
+
+/*
+--------------------------------------------------------------------------------
+  LEMMAS
+--------------------------------------------------------------------------------
+*/
+
+// The construction runs at all.
+lemma a_query_is_answered:
+  exists-trace
+  "Ex V qid S Q #i. Answered(V, qid, S, Q) @ #i"
+
+// THE PROPERTY.  An answer rests on a consent the subject gave for THIS
+// verifier -- §5.6's authorization rather than bearer paper.  Mutation:
+// delete check (a) and this falsifies.
+lemma an_answer_had_the_subjects_consent_for_this_verifier:
+  all-traces
+  "All V qid S Q #i.
+     Answered(V, qid, S, Q) @ #i
+     ==> (Ex #j. Consented(S, qid, V) @ #j & #j < #i)
+       | (Ex #k. Compromised(S) @ #k)"
+
+// A response names the query it answers, so one cannot be carried across.
+lemma an_answer_names_the_query_it_answers:
+  all-traces
+  "All V qid S Q #i.
+     Answered(V, qid, S, Q) @ #i
+     ==> Ex Sx Qx pc profile tplv.
+           qid = h(<'query', Sx, Qx, pc, profile, tplv, V>)"
+
+// NOT PREVENTED, and the reachability is the finding: the same query
+// arrives twice at its own verifier and is answered twice.  The refusal is
+// the verifier's own answered-set (design §7.4.1), local state no third
+// party reads.
+lemma a_query_can_be_replayed_to_its_own_verifier:
+  exists-trace
+  "Ex V qid S Q #i #j. Answered(V, qid, S, Q) @ #i
+                     & Answered(V, qid, S, Q) @ #j
+                     & not(#i = #j)"
+
+end

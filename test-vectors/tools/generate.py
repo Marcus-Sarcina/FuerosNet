@@ -1053,6 +1053,65 @@ fin_nm_body = e_map([
 fin_nm_txid = H(fin_nm_body)
 fin_nm_env, _ = envelope(1, 5, fin_nm_body, fin_nm_signers)
 
+# --- The two must-accepts of class D that had no fixture (D14, D15).  Both
+# are over-strictness traps: a decoder that refuses either is
+# non-conforming, and neither had bytes anyone could run until now
+# [2026-09-30].
+#
+# D14: ONE IDENTITY IN TWO CAPACITIES.  w1 witnesses the ceremony (an
+# envelope signer, s3.2) and also answers as a verifier (an embedded
+# response, s4.5).  The roles are different objects and the overlap is
+# legal: one logical signer per capacity.
+d14_precommit = H(b'rhtn-test-vectors:d14-precommitment')
+d14_q, _ = vquery(alice, bob, d14_precommit, b'rhtn-test-vectors:d14-profile', 3, IDS['w1'])
+d14_resp = classical_response(IDS['w1'], alice, d14_q, consent_over(d14_q, alice),
+                              0, basis=0, tplv=3, sb=0)
+d14_slots, d14_root = disclosure_set('d14-dual-capacity', npr_values)
+d14_signers = [n_hi, n_lo, IDS['w1']]
+d14_body = e_map([
+    (e_uint(0), backptrs(*[_npr_head(x) if x in (alice, bob) else [genesis(x.keyhash)]
+                           for x in d14_signers])),
+    (e_uint(1), e_uint(TS_C2 + 5 * 86400)),
+    (e_uint(2), e_uint(TS_C2 + 5 * 86400 + 1800)),
+    (e_uint(3), e_arr([participant(n_hi), participant(n_lo)])),
+    (e_uint(4), e_arr([witness_entry(IDS['w1'], alice, 3)])),
+    (e_uint(5), e_arr([d14_resp])),
+    (e_uint(6), e_uint(0)),
+    (e_uint(8), e_bstr(d14_root)),
+])
+d14_env, _ = envelope(1, 5, d14_body, d14_signers)
+
+# D15: ONE VERIFIER, BOTH PARTICIPANTS.  c4 met alice and bob both, and
+# answers once about each -- two (subject, verifier) slots, which s5.5
+# permits: only DUPLICATE slots are malformed.  The pair sorts by ascending
+# subject keyhash, the verifier being equal (s4.5).
+d15_precommit = H(b'rhtn-test-vectors:d15-precommitment')
+d15_qa, _ = vquery(alice, bob, d15_precommit, b'rhtn-test-vectors:d15-profile-a', 3, IDS['c4'])
+d15_qb, _ = vquery(bob, alice, d15_precommit, b'rhtn-test-vectors:d15-profile-b', 3, IDS['c4'])
+d15_about = {
+    alice.keyhash: classical_response(IDS['c4'], alice, d15_qa,
+                                      consent_over(d15_qa, alice),
+                                      0, basis=0, tplv=3, sb=0),
+    bob.keyhash: classical_response(IDS['c4'], bob, d15_qb,
+                                    consent_over(d15_qb, bob),
+                                    0, basis=0, tplv=3, sb=0),
+}
+d15_responses = [d15_about[k] for k in sorted(d15_about)]
+d15_slots, d15_root = disclosure_set('d15-both-participants', npr_values)
+d15_signers = [n_hi, n_lo, IDS['w2']]
+d15_body = e_map([
+    (e_uint(0), backptrs(*[_npr_head(x) if x in (alice, bob) else [genesis(x.keyhash)]
+                           for x in d15_signers])),
+    (e_uint(1), e_uint(TS_C2 + 6 * 86400)),
+    (e_uint(2), e_uint(TS_C2 + 6 * 86400 + 1800)),
+    (e_uint(3), e_arr([participant(n_hi), participant(n_lo)])),
+    (e_uint(4), e_arr([witness_entry(IDS['w2'], alice, 3)])),
+    (e_uint(5), e_arr(d15_responses)),
+    (e_uint(6), e_uint(0)),
+    (e_uint(8), e_bstr(d15_root)),
+])
+d15_env, _ = envelope(1, 5, d15_body, d15_signers)
+
 fin_ab_slots, fin_ab_root = disclosure_set('fin-absent', npr_values)
 fin_ab_signers = [n_hi, n_lo, IDS['w2']]
 fin_ab_body = e_map([
@@ -2884,6 +2943,7 @@ for fid, by, kind in [
     ('P-disavowal-code40', code40_body, 'body'), ('P-peering', peer_body, 'body'), ('P-peering-light', peer_light_body, 'body'),
     ('P-reissue', reissue_body, 'body'), ('P-formation', formation_env, 'envelope'),
     ('P-normal-record', npr_env, 'envelope'), ('P-fin-nomatch', fin_nm_env, 'envelope'),
+    ('P-dual-capacity', d14_env, 'envelope'), ('P-verifier-both-participants', d15_env, 'envelope'),
     ('P-fin-absent', fin_ab_env, 'envelope'), ('P-ac1', ac1_env, 'envelope'),
     ('P-ac2', ac2_env, 'envelope'), ('P-recovery-adoption', rec_env, 'envelope'),
     ('P-transfer-adoption', xfer_env, 'envelope'),
@@ -2987,6 +3047,17 @@ reg('N-enum-result', 'bytes', REJ('VerifierResponse', 'schema', 'result 9 outsid
     classical_response(IDS['c1'], alice, npr_q0, consent_over(npr_q0, alice), 9, basis=0, tplv=3, sb=0))
 reg('N-enum-basis', 'bytes', REJ('VerifierResponse', 'schema', 'basis 9 outside 0-2'),
     classical_response(IDS['c1'], alice, npr_q0, consent_over(npr_q0, alice), 0, basis=9, tplv=3, sb=0))
+# s3.4: carried KeyMaterial hashes to the keyhash of the party it describes,
+# or a recipient with nothing pinned pins the wrong key -- which is the one
+# thing the field exists for
+reg('N-serving-infra-km-mismatch', 'bytes',
+    REJ('ResolveReply', 'schema', "carried key material does not hash to the keyhash beside it"),
+    e_map([(e_uint(1), e_bstr(NONCE(b'resolve'))),
+           (e_uint(2), e_uint(0)),
+           (e_uint(3), e_map([(e_uint(1), e_bstr(bob.keyhash)),
+                              (e_uint(2), e_arr([np1])),
+                              (e_uint(3), path([])),
+                              (e_uint(4), carol.key_material)]))]))
 reg('N-response-inconclusive-personal', 'bytes',
     REJ('VerifierResponse', 'schema', 'an inconclusive carries the photo basis (s5.5)'),
     classical_response(IDS['c1'], alice, npr_q0, consent_over(npr_q0, alice),
@@ -3243,6 +3314,35 @@ reg('N-scope-unordered', 'bytes', REJ('Scope', 'schema', 'the list must ascend')
 reg('N-scope-duplicate', 'bytes', REJ('Scope', 'schema', 'duplicates are malformed'), _scope_list(4, dupe=True))
 reg('P-scope-down2', 'bytes', ACC('Scope', 'down(2), the [tag, n] form'), e_arr([e_uint(1), e_uint(2)]))
 reg('P-scope-self', 'bytes', ACC('Scope', 'the bare-uint form'), e_uint(0))
+# the remaining Scope tags, each a legal form nothing instantiated
+# [2026-09-30]: a decoder that knows only the tags a fixture exercises
+# refuses the rest, and every one of these is in s4's enumeration
+reg('P-scope-up2', 'bytes', ACC('Scope', 'up(2), tag 2 in the [tag, n] form'),
+    e_arr([e_uint(2), e_uint(2)]))
+reg('P-scope-siblings', 'bytes', ACC('Scope', 'siblings, tag 4, the bare-uint form'),
+    e_uint(4))
+reg('P-scope-dunbar', 'bytes', ACC('Scope', 'dunbar, tag 5, the bare-uint form'),
+    e_uint(5))
+# ResourceResponse's refusal codes 2 to 5, the four the corpus never
+# carried: field 2 is absent for every one of them, present only for 0
+for _code, _why in ((2, 'resource unavailable'), (3, 'malformed request'),
+                    (4, 'no subtree acknowledgement'), (5, 'no matching role')):
+    reg(f'P-resource-status-{_code}', 'bytes',
+        ACC('ResourceResponse', f'status {_code}, {_why}; field 2 absent'),
+        e_map([(e_uint(1), e_uint(_code))]))
+# a CatalogQuery with no filter: s6.4's "absent means everything the asker
+# may see", which is a different request from a filter that matches nothing
+reg('P-catalog-query-unfiltered', 'bytes',
+    ACC('CatalogQuery', 'no field 1: everything the asker may see'),
+    e_map([(e_uint(2), e_bstr(NONCE(b'catalog-all')))]))
+# a Referral carrying KeyMaterial -- s7.7.3's option, and the positive side
+# of s3.4's rule that carried material hashes to the keyhash beside it
+reg('P-referral-with-key-material', 'bytes',
+    ACC('Referral', 'field 4 carried, and it hashes to field 1 (s3.4)'),
+    e_map([(e_uint(1), e_bstr(carol.keyhash)),
+           (e_uint(2), e_arr([np1])),
+           (e_uint(3), e_uint(2)),
+           (e_uint(4), carol.key_material)]))
 reg('B-caps-64', 'bytes', ACC('Capabilities', 'sixty-four parameters, the ceiling'),
     e_map(sorted([(e_uint(int.from_bytes(H(b'cap%d' % i)[:8], 'big')), e_bstr(b'v')) for i in range(64)],
                  key=lambda p: p[0])))

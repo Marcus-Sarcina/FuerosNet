@@ -15,8 +15,8 @@ verification result comes from the tool." Re-run everything with
 ```
 
 Current status: 3 Python assertion families, 5 TLA+ models (invariants +
-temporal properties), and **9 Tamarin theories in three trees** —
-`wire-only/` (38 lemmas), `compliant/` (33) and `local/` (4). Counted from
+temporal properties), and **10 Tamarin theories in three trees** —
+`wire-only/` (42 lemmas), `compliant/` (33) and `local/` (4). Counted from
 what the tool reported in `results/`, not from the source: the
 `compliant/` figure had stood at 29 since before `attach.spthy` and
 `recovery.spthy` grew, and is corrected here [2026-09-29].
@@ -117,12 +117,32 @@ walk-back is perfectly well formed, and no relying party can see the history.
 
 ---
 
+## Before quoting a result
+
+`results/` is a record of what the tools said, not evidence that they said
+it about the sources as they are now. `run-all.sh` stamps every run into
+`results/sources.json` — the result file, each source it proved, and that
+source's hash at the moment it was proved — and
+
+```
+python3 ../Robot/modelpincheck.py
+```
+
+reports any result whose source has moved since (STALE), any result with no
+source recorded (UNSTAMPED), and any stamped source that is gone (MISSING).
+Run it before citing a green lemma in a document; a stale result reads
+exactly like a current one [2026-09-30]. It is not in `crates/check.sh`,
+which does not run the models and would fail on a machine that has not.
+
 ## What is not modelled
 
 Named so the green results are read at their size. **The PQXDH payload
 session and the ratchet beneath it** have no symbolic model — the most
 conspicuous gap, the construction being checked byte-for-byte against
-Signal's rather than proved. Also unmodelled: archive mechanics (the chain,
+Signal's rather than proved, and one we are **not** closing by preference
+[2026-09-30]: analysing an adopted construction duplicates its authors'
+work, and the reviewer who named the gap recommended this project's own
+constructions ahead of it. `wire-only/query` is the first of those. Also unmodelled: archive mechanics (the chain,
 merge and prune), sibling replication consistency, competing-successor forks,
 the memo's ancillary rules, and decay. Social and economic claims are out of
 scope by design, not by omission.
@@ -302,6 +322,24 @@ the honest protocol and so proves every security lemma vacuously.
   it follows from linear-fact consumption rather than from the signature —
   measured by deleting the signature check, which falsifies
   `server_authentication` and leaves this one verifying.
+
+- **`wire-only/query`** (`wire-format.md` §5.6, §7.10.1; design §7.3, §7.4.1)
+  — the verification query, added 2026-09-30 with the leg that carries it.
+  A verifier that answers holds a query **the subject consented to and that
+  names that verifier**: `query_id` hashes field 7, so the consent is an
+  authorization rather than bearer paper, and the mutation that drops the
+  field-7 comparison falsifies it — one consented query then reaching every
+  prior counterparty the selector cares to try, which is the attack §5.6
+  names. The carriage is given wholly to the adversary, because the
+  confinement is claimed to hold on the bytes alone. **Two things it does
+  not establish, both `exists-trace` lemmas that verify because the
+  reachability is the finding**: the same query replayed to its own verifier
+  is answered twice, refused only by the verifier's own answered-set and
+  counters (design §7.4.1), which are local state no third party reads; and
+  a sender the bytes do not authenticate can present a query naming somebody
+  else as querier, which §5.6 puts on the transport and whose consequence it
+  bounds — a mis-attributed query chooses its own rate-limit bucket, and the
+  profile still reaches only the verifier the subject named.
 
 - **`wire-only/currency`** (design §12.6.5) — currency attestation + stapling.
   A relying party takes a key as current only on an unexpired issuance for

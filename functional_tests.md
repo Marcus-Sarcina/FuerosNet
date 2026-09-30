@@ -160,6 +160,7 @@ The Cargo workspace has **16 crates**. Components below follow responsibilities 
 | ARC-015 | C | Reject stale updates from an abandoned series even if their counters are enormous. Admit no endpoint state or forwarding until the corresponding series is proven current; keep independent proven bindings separate. | W §§4.6.1, 7.6, 10.1 |
 | ARC-016 | C | The subject serves archive requests for its own archive over the peer-to-peer channel; no infrastructure node serves it on a subject's behalf, and a request naming another subject is answered empty. The fetcher verifies the structure itself and order is no part of it: every returned record is named either by the requested frontier or by a back-pointer of another record in the batch, every back-pointer naming nothing in the batch comes back as the continuation frontier, and every signature is checked before anything is kept. Where no frontier was requested — the recovery case — there is no head to match, and the chain verifies internally while its newestness stays the holder's claim. An attestation delivery carrying no nonce the fetcher issued is not taken. | L §2; W §7.9; D §15 |
 | ARC-017 | C | A participant's own store persists beside its archive with the lifetimes its contents have: records, sealed captures and seeds written once, and material that grows against a record rewritten. The seed that releases a capture key is the only secret among them and is not world-readable; ciphertext the holder cannot open needs no such care. Positions are re-derived from the archive rather than stored, so a restored archive reaches the same answer. | D §§13.7.1, 7.5.2; L §2 |
+| ARC-018 | C | Store the pruning checkpoint with the archive, so a prune survives a restart: a reloaded archive is rooted at the checkpoint, does not serve the records the prune released, and still serves what followed it. The released records' files are retained as evidence by txid, so releasing that storage is a separate act. A record of the archive's own that will not append on load is reported, not dropped — a swallowed refusal returns a short archive as though it were whole. | D §10.1 |
 
 ## 3.2 Infrastructure topology, propagation, addressing and currency
 
@@ -950,14 +951,14 @@ Open local parameters are not all specification defects: cache TTLs, queue cap, 
 
 ## 10. Document baseline and coverage totals
 
-This specification contains **478 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
+This specification contains **479 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
 
 | Prefix | Families |
 |---|---:|
 | ENC | 13 |
 | SIG | 13 |
 | TX | 31 |
-| ARC | 17 |
+| ARC | 18 |
 | TOP | 36 |
 | RES | 15 |
 | CUR | 12 |

@@ -11651,3 +11651,46 @@ claims only absolute-rank predicates depend on others, structural being
 population-independent; §10's hash table is not rebaselined; the generator's
 drift gate covers `corpus.json`; and each theory mutation writes its own
 result file.
+
+### 2026-09-30 (the owed list, worked off)
+
+**A prune did not survive a restart, which is the reverse of what was
+recorded.** Two reviews and one assistant had it as prune-then-restart
+losing the chain. A probe took a minute and said otherwise: the files stay,
+the reload returns every record, and the checkpoint is forgotten — so the
+prune was a change to memory alone and the storage it was meant to release
+was never released. The checkpoint is now part of the stored archive, a load
+restores the prune at it, and a record of the archive's own that will not
+append is reported rather than dropped. The released records' files stay,
+being evidence by txid (design §10.1); releasing that storage is a separate
+act, and stated as one.
+
+**The KeyMaterial rule, stated once.** §3.4 requires carried key material to
+hash to the keyhash of the party it describes, and four maps carry it —
+`SiblingRef`, `Referral`, `ServingInfra`, and an adoption's field 5, which is
+the rule's own example. The check now sits on the schema walk, so a map that
+gains such a field gets the rule with it. `AnchorEntry` was never one of
+them: §12.2 is keyhashes by design.
+
+**Also closed**: the FFI's identity seeds, wiped at both copies; the
+`Channel`'s claimed resolution, the one field of that map nothing checked;
+the §12 size table's two classical-only objects, whose post-quantum column
+named nothing, with the header now saying what each column means; D14 and
+D15 instantiated as must-accepts the decoder accepts; nine missing enum
+variants. Corpus 277 → 289.
+
+**Two pieces of tooling.** `models/run-all.sh` stamps each result with the
+source it proved and that source's hash, and `modelpincheck.py` beside it
+says whether any result is stale — before this, "the results match the sources"
+was checkable only by reading them.
+
+**A tenth Tamarin theory**, on the reviewer's recommendation and in
+preference to PQXDH: `wire-only/query`, the verification-query leg landed
+the same day. It establishes that a verifier which answers holds a query the
+subject consented to **and that names that verifier** — §5.6's authorization
+rather than bearer paper — and the mutation dropping the field-7 comparison
+falsifies it, one consented query reaching every counterparty the selector
+tries. Two lemmas verify because the reachability is the finding: a replay
+to the same verifier is answered twice, and a sender the bytes do not
+authenticate can name another querier. Both are where §5.6 and design
+§7.4.1 already put them, in local state and in the transport.
