@@ -4618,10 +4618,10 @@
       },
       {
         "where": "design §3.4",
-        "text": "The peering record carries the ASN for both endpoints"
+        "text": "The peering record carries the ASN for each endpoint that runs an instance"
       }
     ],
-    "given": "Infra nodes A and B, in different subtrees and both carrying ASNs, have peered; observer O is in A's horizon and has stored the peering record.",
+    "given": "Users A and B, each running an instance, in different subtrees and both carrying ASNs, have peered; observer O is in A's horizon and has stored the peering record.",
     "when": "O's client reads A's peering relationships.",
     "then": "The stored record yields A's and B's keyhashes, both IPv4 addresses and both ASNs as decoded from the record's NetworkPoints, with nothing withheld or derived.",
     "oracle": "behaviour",
@@ -4803,7 +4803,7 @@
         "text": "Peering edges do not count (§6.3): a peering edge is ungoverned and carries none of the subnet's authority, so it contributes flow without conferring scope."
       }
     ],
-    "given": "Infra nodes A and B, in different subtrees, have peered. Light client L attaches to A and light client M to B; without the peering edge they are outside each other's horizon; both online; no override.",
+    "given": "Users A and B, each running an instance, in different subtrees, have peered. Light client L attaches to A and light client M to B; without the peering edge they are outside each other's horizon; both online; no override.",
     "when": "L sends payload to M.",
     "then": "The payload is relayed through A and B; M is absent from L's h=2 topology store and no direct connection is attempted.",
     "oracle": "behaviour",

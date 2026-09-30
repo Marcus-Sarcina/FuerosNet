@@ -213,7 +213,7 @@ malformed, not merely unusual.
 | NetworkPoint entries per anchor entry or endpoint record (§7.2, §7.6) | 8 — this row is the anchor entry's and the endpoint record's alone; **peering carries exactly one `NetworkPoint` or `Locator` per endpoint** (§4.4) |
 | `Channel` entries per `ProximityOutcomes` (§14.3.2) | 8 — the same ceiling as proximity channels per record, above |
 | `Candidate` entries per `CandidateHandover` or per payload-path candidate exchange (§14.3.2) | 8 |
-| Delegations per `DeviceCredential` (§14.3.3) | 16 — sixteen 48-hour windows is 32 days |
+| Delegations per `DeviceCredential` (§14.3.3) | 45 — the run an instance is provisioned with, 90 days end to end (design §12.6.5) |
 | `CatalogEntry`, total encoded bytes | 2048 |
 | `CatalogReply` entries | 111 — an answering node answers for **itself plus the ≤110 users it serves** (§6.4, design §11.5). Not the trust horizon population, which is larger (design §15.1) and irrelevant here: the bound is per *answering node*, not per horizon. The frame bound caps this at 127 |
 | Unknown extension keys per map | 16 |
@@ -1656,7 +1656,9 @@ root         = SHA-256( 0x01 || concatenation of all digests, ascending by label
 `root` is body field 8. **Labels are the field's path**, so a decoder knows what it
 is looking at without a table. **Exactly seven, in ascending byte order**:
 `capture`, `location`, `p0.integrity`, `p0.retention`, `p1.integrity`,
-`p1.retention`, `proximity`. A label outside this set is malformed.
+`p1.retention`, `proximity`. A label outside this set is malformed. **`pN` is the
+participant at index N of field 3**, which §3.2 orders by ascending keyhash, so
+both clients compute the root over one labelling without a table.
 
 **Each label's value is the CBOR the field carried when it lived in the body**, stated because the move otherwise orphans the schemas:
 
@@ -1774,7 +1776,7 @@ separately here.
 | Late verifier response (§7.4) | **None.** References `txid` |
 | Capture key grant (§7.3) | **None.** References `txid` |
 
-**Nine of eleven exchanges need none of it**, which is what makes the mechanism worth
+**Nine of eleven exchanges need none of it** (ten, for location alone — design §8.1.1), which is what makes the mechanism worth
 its 0.3%. **A conforming client withholds by default and reveals on the holder's
 instruction**, rather than the reverse.
 
@@ -2821,8 +2823,8 @@ defer for any signer whose key it lacks.
 carry identity. A verifier that treats a `SubtreeAck` as evidence about who someone
 *is* has misread it.
 
-**Acceptance by other nodes is policy, not obligation.** A grandpatron's siblings
-and the great-grandpatron may accept this in place of evaluating the node
+**Acceptance by other nodes is policy, not obligation.** The patron's siblings, who hold it, may accept this — a grandpatron's
+sibling or the great-grandpatron never holds it (design §11.2.1.1) — in place of evaluating the node
 themselves, which is the point of it existing, and nothing here requires them to.
 Where accepted, the default is to allocate roles as to any subordinate in that
 network position — **positional grants only**, never roles bound to named
@@ -4701,8 +4703,8 @@ holds it, which is what the rest of the design already depends on.
 
 | What | Between | Where it is stated | Encoding |
 |---|---|---|---|
-| The ceremony's intent exchange — the contribution, the nominees, the evidence bundle, the timing and who initiated | Two participants' devices | design §7.1, design §13.2 | `IntentExchange` (§14.3.2), carried by the shell's chosen bearer (§14.3.1) and bound to the pre-commitment. The CBOR is specified; two vendors' clients compute the same ceremony-id (design §13.2) either way |
-| The optical transcript — each device's contribution, then the derived ceremony-id, screen to camera | Two participants' devices | design §1.3 item 3, design §13.2 | `OpticalContribution` then `TranscriptConfirm` (§14.3.2): the contribution is the key-exchange input, the ceremony-id is the transcript hash both display and check |
+| The ceremony's intent exchange — the contribution, the nominees, the evidence bundle, the timing and who initiated | Two participants' devices | design §7.1, design §7.5.2 | `IntentExchange` (§14.3.2), carried by the shell's chosen bearer (§14.3.1) and bound to the pre-commitment. The CBOR is specified; two vendors' clients compute the same ceremony-id (design §13.2) either way |
+| The optical transcript — each device's contribution, then the derived ceremony-id, screen to camera | Two participants' devices | design §1.3 item 3, design §7.5.2 | `OpticalContribution` then `TranscriptConfirm` (§14.3.2): the contribution is the key-exchange input, the ceremony-id is the transcript hash both display and check |
 | Proximity channel outcomes — the UWB, NFC or optical result and its ranking | Two participants' devices | §3.2, design §1.3 item 4 | `ProximityOutcomes` (§14.3.2): the §4.5 `Channel` maps as measured, anchored to the ceremony-id. The record's `strongest` (§3.2) is not carried — each device computes it from the outcomes, as each computes the ceremony-id |
 | Traversal candidates | Two participants' devices | design §12.6.3 [author, 2026-09-25] | `CandidateHandover` (§14.3.2), carrying the `Candidate` structure this document now defines; the same candidates travel the end-to-end payload path when a direct connection is set up remotely (design §12.6.3, §14.1.1) |
 | A delegated device's payload material, and the ceremony device's signature over it | Two devices of one identity | design §23.3, §7.8 | `DeviceIntroduction` then `DeviceCredential` (§14.3.3): §7.8's bundle unsigned and then signed, beside §8.2's delegations |
@@ -4743,11 +4745,11 @@ barred.
 item 3), and neither is secret. First each device shows its 16-byte
 contribution. From the two, both devices compute the ceremony's
 pre-commitment — `SHA-256` of `rhtn/1:ceremony` and the two contributions in
-ascending participant-keyhash order (design §13.2). Then each device shows
+ascending participant-keyhash order (design §7.5.2). Then each device shows
 that 32-byte **ceremony-id**, and each checks the other's against its own: a
 mismatch is where a man in the middle shows, and the ceremony stops. That
 value is the transcript hash the rest of the exchange binds to — consents
-and capture keys already bind to it (design §13.2), and everything the
+and capture keys already bind to it (design §7.5.2), and everything the
 bearer carries is checked against it. **Each party reads both values off a
 screen it is looking at**, which is the whole of the man-in-the-middle
 resistance and the reason this step is close-range: a QR of this size
@@ -4771,20 +4773,21 @@ costs being there, which is the cost design §1 meters.
 #### 14.3.2 The encodings
 
 Every one is deterministic CBOR under §1, versioned, with the array bounds
-§1 requires.
+§1 requires; **a version a decoder does not know is refused** [2026-09-30], as
+§3 has an unknown transaction version refused.
 
 ```
 OpticalContribution = [        ; the first QR each device shows
   uint,                        ; version, 1
   keyhash,                     ; this device's identity (§2.2), for ordering
                                ;   the contributions and naming the party
-  bstr .size 16,               ; this device's contribution (design §13.2)
+  bstr .size 16,               ; this device's contribution (design §7.5.2)
 ]
 
 TranscriptConfirm = [          ; the second QR, once both contributions are in
   uint,                        ; version, 1
   bstr .size 32,               ; the ceremony-id this device computed
-                               ;   (design §13.2); the other checks it equals
+                               ;   (design §7.5.2); the other checks it equals
                                ;   its own, and stops where it does not
 ]
 ```
@@ -4903,13 +4906,14 @@ DeviceIntroduction = [         ; the new device offers what it minted
 
 DeviceCredential = [           ; the ceremony device answers
   uint,                        ; version, 1
-  [ 1*16 bstr .size (1..4096) ],
+  [ 1*45 bstr .size (1..4096) ],
                                ; Delegations (§8.2), contiguous 48-hour
                                ;   windows — the run an instance or a
                                ;   desktop is provisioned with
                                ;   (`infra-client-requirements.md` §7).
-                               ;   Sixteen windows is 32 days, a chosen
-                               ;   ceiling (§1.3); 4096 bounds a hybrid
+                               ;   Forty-five windows is the run an instance is
+                               ;   provisioned with, 90 days end to end
+                               ;   (design §12.6.5); 4096 bounds a hybrid
                                ;   signature and its fields with room
   bstr .size (1..5120),        ; the same PrekeyBundle, field 6 PRESENT:
                                ;   signed by the identity on the ceremony

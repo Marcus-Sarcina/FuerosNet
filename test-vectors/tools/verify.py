@@ -736,6 +736,9 @@ check(rej_up_ok == n_up,
 check(n_cbor == rej_cbor_ok, f'corpus: all {n_cbor} cbor-layer rejects fail the byte-level scanner')
 byid = {e['id']: e for e in corpus['entries']}
 _npr_hexes = re.findall(r'```\n([0-9a-f\n]+?)```', tx[tx.index('## Normal presence record'):])
+_pb = canonical(bytes.fromhex(byid['P-peering']['hex']))
+check(isinstance(_pb, dict) and 8 in _pb,
+      'peering: field 8, the presence record between the peers, is present (§4.4, unconditionally)')
 check(byid['P-normal-record']['hex'] ==
       [h for h in _npr_hexes if len(h) > 60000][0].replace('\n', ''),
       'corpus: P-normal-record is byte-identical to the transactions.md envelope')

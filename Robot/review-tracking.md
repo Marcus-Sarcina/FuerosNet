@@ -13000,3 +13000,92 @@ check, FIXED as the subject's** (the light-client bullet). The tally in
 `rhtn-policy` reports counts and weighs nothing: the reliability channel's
 magnitude is the observer's policy, published nowhere, so no §21.1
 parameter was added. Rows POL-022 and CER-021; 476 families.
+
+## reviewer2 — whole-project assessment, implementation emphasis (2026-09-30)
+
+Nine review threads consolidated; run during an earlier editing session, so
+the author warned findings might be stale. Every one was checked against the
+current tree before disposition. Three findings the review states most
+sharply were **mine, from this session** — the credential cap of 16 against
+a decision of 45, nine `design §13.2` citations for a construction in
+§7.5.2, and the un-swept "peering between infra nodes" statements — which is
+the project's first-listed failure mode ("fixing the instance rather than
+the claim") and is recorded as such.
+
+**Already invalidated by later passes**: stale pins (0 stale), the
+uncommitted model and §14 additions (committed, renumbered), the README
+artefact count (removed).
+
+| # | Finding | Disposition |
+|---|---|---|
+| S1 | Peering re-scoping applied to §6.3 and not swept (§1.1, glossary, §3.4, §6.4, §9.2, §12.7.5, §15.2) | **FIXED at five sites** — the glossary entry, "peerless infra", the ASN "for both endpoints", "a pragmatic infrastructure arrangement", "two infra nodes". **§12.7.5 PROPOSED, not edited**: its optionality argument rests on ordering (identity → adoption → infra → peering) and needs re-deriving; the draft is below and the justification is the author's |
+| S2 | §6.4's "witnessless, verifierless ceremony is valid" contradicts §7.1.1 / wire §3.2 | **NOT-A-FINDING, clarified.** design §13.2 defines a formation by shape and restricts nobody; wire §3.2 says a witnessless record *is* a formation and nothing else — which is what §6.4 invokes. One clause added naming the subtype |
+| S3 | §1.1 says two adoption-evidence alternatives; §6.1.1 and wire §4.1 have three | **FIXED** — three, fields 6, 8 and 9 |
+| S4 | "~18×" anchor-table figure | **FIXED** — 120,000 × 1,984 B ≈ 238 MB: ~9.5× the budget, ~40× the index (both sites) |
+| S4 | f^(L+1) "matches neither 110 nor 99" | **NOT-A-FINDING** — the text says it is the packing ratio, not the user count; 10³ reproduces the ~1/1000 figure exactly |
+| S4 | A25's ~400 KB "matches no computed object" | **NOT-A-FINDING** — A25 is an assumption-register threshold, tested by benchmark, not a computed size; the largest object is ~65 KB (wire §12) |
+| S4 | "ten of eleven" vs "nine of eleven" | **NOT-A-FINDING, clarified** — different objects: ten for location alone (§8.1.1's table), nine for the whole disclosable set (structural verification reads proximity). A clause at each "nine" site |
+| S5 | P39 before P38; §18.5 cites wire §2 for a §3.3 rule; preface:42, §7.6.3:2305 garbled | **FIXED** rows swapped; cite → §3.3. The two "garbled" lines **NOT VERIFIABLE** — no specifics, and both read |
+| W1 | `DeviceCredential` caps 16 windows; the run is 45 | **FIXED, mine** — 45 in the CDDL, the bounds row, `bounds.rs`, SCH-024, the two fixtures (B-45 / N-46). I chose "a ceiling" without checking a decision that existed (design §12.6.5, infra §7) |
+| W2 | §5.4 "no protocol ceiling" vs §14.3.2's 256-entry bundle | **OPEN — the author's.** Two rulings conflict; question below |
+| W3 | `p0`/`p1` never bound to array position | **FIXED** — `pN` is field 3's index N, ascending keyhash (§3.2), which is what the client does (`participants()` ascending) |
+| W4 | Five sites cite design §13.2 for the ceremony-id | **FIXED, mine** — nine, in fact: seven in wire §14, NET-015, the model's three comments. §13.2 is formation records; the construction is §7.5.2 (records.md had it right) |
+| W4 | §12 size table: PQ figures for classical-only objects, empty fence, bad §1.3 cites | **PARTLY VERIFIED, owed** — the currency-attestation row carries a post-quantum column figure for a classical-only object; no empty fence found; the §1.3-row cites not audited |
+| R1 | SubtreeAck acceptor claim (wire 2824, infra 569) contradicts design §11.2.1.1 | **FIXED** both — the patron's siblings, who hold it; a grandpatron's sibling or the great-grandpatron never does |
+| R2 | MAIL-010 "2 unknown" | **FIXED** — "2 over a bound" |
+| R3 | TOP-027 cites withdrawn reason code 5 | **FIXED, swept** — TOP-027, the generated TR22 trace, five CycleDetection.tla comments, the models README: cycle repair is a removal without a transaction (wire §10.2.4). TLC re-run: 370 states, no error; the mutation still violates |
+| R4 | functional_tests §10 hash table stale | **FIXED** — labelled as the record it is; the live pins named |
+| R5 | light-client §8's "only predicates" false per resource §7.2.1 | **FIXED** — the line that *moves*; structural and absolute-rank also depend on others |
+| M1 | PQXDH unmodelled, and others | **FIXED** — a "What is not modelled" section in the README |
+| M2 | CycleDetection cites reason-5 | **FIXED** (with R3) |
+| M3 | Four orphaned result files | **FIXED** — removed |
+| V1 | LateResponse fixture: c4 answers c1's query; `inconclusive` with `personal_knowledge` | **FIXED the first** — its own query addressed to c4. **The second is the reviewer's error**: TX-025 permits a personal-knowledge basis on an inconclusive; §5.5 requires a template version only for photo bases |
+| V2 | Zero machine-instantiable CBOR-layer rejects | **FIXED** — five (non-shortest uint, unsorted keys, duplicate key, indefinite array, trailing bytes); the workspace decoder refuses all five |
+| V3 | Duplicate ids S24, T25–T31 | **FIXED** — the second of each renumbered forward, never reused; the one corpus note citing T31 follows it to T52 |
+| V4 | verify.py: peering field 8 unchecked; corpus.json unpinned; envelope signature count unasserted | **FIXED two**, the signature-count assertion **owed** |
+| V5 | Coverage gaps (D14, D15, enum variants) | **DEFERRED** |
+| I1 | `ml-dsa` without `zeroize` | **FIXED** — the feature enabled, as ml-kem's already was |
+| I2 | Reachable panic in `verify::presentation` on a malformed field 8 | **FIXED at both layers** — width checked before the slice; `check_presence` requires a 32-byte digest |
+| I3 | Lock-order inversion in `LiveNode::originate` | **FIXED** — view before ids, as every other site |
+| I4 | Unbounded: heartbeat counter set; topology pending list; archive pending endings | **FIXED** — a 4,096-counter window (a gap still counts, TR12); held objects capped at 256 through one `hold()` all three sites call, oldest evicted; the "archive" list is the same list |
+| I5 | Initial-message replay overwrites a live session | **FIXED** — a 256-entry cache of initials' ephemeral keys; a repeat is `PayloadError::Replayed` and the live ratchet stands. Not persisted, by design. Test added |
+| I6 | Seed in `Debug`; FFI seeds unwiped; no AttachAck deadline; ack sibling list unchecked | **FIXED three** — `OwnSeed` redacts and zeroizes on drop; a 15 s deadline, tested against a dark peer; the ack's list under the same §8.2 validity as the update path. **FFI identity seeds owed** |
+| I7 | `prune` + restart loses the chain (`load` swallows append errors) | **OWED, confirmed latent** — `let _ = a.append(rec)`. A checkpoint-aware load is design work; no production caller prunes |
+| I8 | Schema strictness (~11) | **FIXED six**: unknown version refused on the seven §14.3 kinds (plus a wire sentence and a fixture); witness distinctness; NetworkPoint duplicates; `prior_key` on a presence response; seqno narrowing refused (8 sites). **NOT-A-FINDING**: Scope's retired tag was already refused. **OWED**: the KeyMaterial-hash check (ServingInfra via the frame-family checker; AnchorEntry) |
+| I9 | Key files written then chmodded; FFI nonce zero-pad; u64→u32 truncation | **FIXED** — created 0600 (cli, daemon; the daemon's ignored error now propagates); narrowing refused (with I8). **FFI nonce pad CONFIRMED, FIXED** — the two submission-nonce closures in `ffi/src/client.rs` padded a short draw with zeroes while the seed path (`device.rs`) refused one; both now refuse through one helper, the same assertion the seed path carries |
+| P1 | In-flight edits across spec, vectors, code and models at once | **ACCEPTED** — this pass's sharpest findings were that fallout |
+| P2 | An AGENTS.md-level sweep checklist | **For the author** — AGENTS.md is ignored by ruling; the rule already lives in CLAUDE.md, momentarily not followed |
+
+**§12.7.5, re-derived for the author's judgement, not applied.** As written
+the section argues optionality from ordering: an identity is adopted, then
+infra, then peers, "so a new node could not peer even if peering were
+mandatory." With peering between users, a new identity can peer as soon as
+it has met someone, and the ordering no longer carries the conclusion. What
+still does: peering is priced in a meeting with one specific counterparty
+(§6.3), so mandating it would gate participation on a second party's presence
+and consent — the class of requirement §1 refuses; the reachability-insurance
+function stays the instance-specific third justification, unchanged; and
+"zero peers is a supported configuration" (§3.4) stands. Proposed: keep the
+heading and the degradation table, replace the ordering sentence with the
+consent-and-presence argument.
+
+**The one decision needed (W2).** `wire-format.md` §5.4 [2026-09-02]: "the
+bundle has no protocol ceiling… what a client will hold is local resource
+policy, and truncation is a local act with a visible price." `wire-format.md`
+§14.3.2 [2026-09-28]: `IntentExchange` carries the bundle at 0..256, §1's
+bounded arrays. Either (a) **the carriage is bounded and the bundle is not**
+— §5.4 amended to say a bundle larger than one exchange carries is truncated
+by the sender, visible as a smaller *n*, or carried in several — or (b) the
+cap goes, against §1. (a) is recommended; a subject reaches 256 at about one
+meeting every three days across the 730-day window.
+
+**Numbers.** Four tests added (replay, heartbeat window, ack sibling
+validity, dark-peer deadline) and one rewritten to keep both of its claims;
+corpus 266 → 272; pins 21, 0 stale; refcheck 0 flags at the sweep;
+client 110, transport 67, node 148, crypto 27 all passing; clippy and fmt
+clean; TLC CycleDetection clean with its mutation violating. Full gate
+(`crates/check.sh`) run on the finished tree: one flag, REP-06's catalogue
+quote of the §3.4 sentence the peering sweep reworded — the quote and two
+"infra nodes A and B" premises (REP-06, REP-13)
+refreshed; catalogue 0 flags, stubs match; fuzz five targets no crash;
+Kotlin round trip ok; Android 24 run, 0 failed.

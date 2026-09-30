@@ -955,8 +955,14 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             if pts.is_empty() || pts.len() > NETWORK_POINTS_PER_RECORD {
                 return Err(Error("network point count"));
             }
+            let mut seen: std::collections::BTreeSet<&[u8]> = std::collections::BTreeSet::new();
             for r in pts {
                 network_point_at(b, r.start, true)?;
+                // §7.6's distinct-entries rule: one destination listed twice
+                // is malformed, not merely redundant
+                if !seen.insert(&b[r.clone()]) {
+                    return Err(Error("network point listed twice"));
+                }
             }
             Ok(())
         }
@@ -1082,7 +1088,9 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             if a.len() != 3 {
                 return Err(Error("three fields"));
             }
-            as_uint(&a[0]).ok_or(Error("version"))?;
+            if as_uint(&a[0]) != Some(1) {
+                return Err(Error("version 1"));
+            }
             match &a[1] {
                 Item::Bytes(r) if r.len() == 32 => {}
                 _ => return Err(Error("a keyhash is 32 bytes")),
@@ -1100,7 +1108,9 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             if a.len() != 2 {
                 return Err(Error("two fields"));
             }
-            as_uint(&a[0]).ok_or(Error("version"))?;
+            if as_uint(&a[0]) != Some(1) {
+                return Err(Error("version 1"));
+            }
             match &a[1] {
                 Item::Bytes(r) if r.len() == 32 => {}
                 _ => return Err(Error("a ceremony-id is 32 bytes")),
@@ -1114,7 +1124,9 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             if a.len() != 7 {
                 return Err(Error("seven fields"));
             }
-            as_uint(&a[0]).ok_or(Error("version"))?;
+            if as_uint(&a[0]) != Some(1) {
+                return Err(Error("version 1"));
+            }
             match &a[1] {
                 Item::Bytes(r) if r.len() == 16 => {}
                 _ => return Err(Error("an echoed contribution is 16 bytes")),
@@ -1151,7 +1163,9 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             if a.len() != 3 {
                 return Err(Error("three fields"));
             }
-            as_uint(&a[0]).ok_or(Error("version"))?;
+            if as_uint(&a[0]) != Some(1) {
+                return Err(Error("version 1"));
+            }
             match &a[1] {
                 Item::Bytes(r) if r.len() == 32 => {}
                 _ => return Err(Error("a ceremony-id is 32 bytes")),
@@ -1172,7 +1186,9 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             if a.len() != 3 {
                 return Err(Error("three fields"));
             }
-            as_uint(&a[0]).ok_or(Error("version"))?;
+            if as_uint(&a[0]) != Some(1) {
+                return Err(Error("version 1"));
+            }
             match &a[1] {
                 Item::Bytes(r) if r.len() == 32 => {}
                 _ => return Err(Error("a ceremony-id is 32 bytes")),
@@ -1186,7 +1202,9 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             if a.len() != 3 {
                 return Err(Error("three fields"));
             }
-            as_uint(&a[0]).ok_or(Error("version"))?;
+            if as_uint(&a[0]) != Some(1) {
+                return Err(Error("version 1"));
+            }
             match &a[1] {
                 Item::Bytes(r) if r.len() == 32 => {}
                 _ => return Err(Error("a device key is 32 bytes")),
@@ -1200,7 +1218,9 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             if a.len() != 3 {
                 return Err(Error("three fields"));
             }
-            as_uint(&a[0]).ok_or(Error("version"))?;
+            if as_uint(&a[0]) != Some(1) {
+                return Err(Error("version 1"));
+            }
             let Item::Array(dels) = &a[1] else {
                 return Err(Error("delegations not array"));
             };
@@ -1798,6 +1818,10 @@ fn check_presence(b: &[u8], m: &[(Item, Item)], lists: &[Item]) -> Result<(), Er
         return Err(Error("retired body key 7"));
     }
     map_get(m, 8).ok_or(Error("presence field 8 required"))?;
+    // and it is a 32-byte digest, the width the verifier will slice
+    if keyhash_at(b, m, 8).is_none() {
+        return Err(Error("presence field 8 is a 32-byte digest"));
+    }
     let Some(Item::Array(parts)) = map_get(m, 3) else {
         return Err(Error("participants not array"));
     };
@@ -1863,6 +1887,8 @@ fn check_presence(b: &[u8], m: &[(Item, Item)], lists: &[Item]) -> Result<(), Er
         return Err(Error("witnesses out of 1..=16"));
     }
     let mut affirmative = false;
+    // §3.2: a witness is named once, and is neither participant
+    let mut seen_witnesses: std::collections::BTreeSet<_> = std::collections::BTreeSet::new();
     for w in ws {
         let Item::Map(wm) = w else {
             return Err(Error("witness not map"));
@@ -1870,8 +1896,12 @@ fn check_presence(b: &[u8], m: &[(Item, Item)], lists: &[Item]) -> Result<(), Er
         if map_get(wm, 4).is_some() || map_get(wm, 5).is_some() {
             return Err(Error("retired witness key"));
         }
-        if keyhash_at(b, wm, 1).is_none() {
-            return Err(Error("witness keyhash"));
+        let wk = keyhash_at(b, wm, 1).ok_or(Error("witness keyhash"))?;
+        if keys.contains(&wk) {
+            return Err(Error("a witness is one of the participants"));
+        }
+        if !seen_witnesses.insert(wk) {
+            return Err(Error("a witness is named twice"));
         }
         // the nominator is one of the two participants (§3.2)
         match keyhash_at(b, wm, 2) {
@@ -1906,6 +1936,11 @@ fn check_presence(b: &[u8], m: &[(Item, Item)], lists: &[Item]) -> Result<(), Er
             check_kind(b, "VerifierResponse", r)?;
             let verifier = keyhash_at(b, x, 1).ok_or(Error("response verifier"))?;
             let subject = keyhash_at(b, x, 2).ok_or(Error("response subject"))?;
+            // field 8 is `prior_key`, confined to a recovery (§4.1, §5.5):
+            // on a presence record's response it is malformed
+            if map_get(x, 8).is_some() {
+                return Err(Error("a presence response carries no prior_key"));
+            }
             if !keys.contains(&subject) {
                 return Err(Error("a response names a subject who is not a participant"));
             }

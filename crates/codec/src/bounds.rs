@@ -28,7 +28,7 @@ pub const PEERING_AUDIT_HISTORY: usize = 8;
 pub const INTENT_NOMINEES: usize = 64;
 pub const INTENT_BUNDLE_ENTRIES: usize = 256;
 pub const CANDIDATES_PER_EXCHANGE: usize = 8;
-pub const DELEGATIONS_PER_CREDENTIAL: usize = 16;
+pub const DELEGATIONS_PER_CREDENTIAL: usize = 45;
 /// A `DeviceCredential` delegation entry: a hybrid signature and its
 /// fields, bounded with room (§14.3.3).
 pub const DELEGATION_ENTRY_BYTES: usize = 4096;

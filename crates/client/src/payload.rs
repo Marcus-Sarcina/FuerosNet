@@ -633,6 +633,9 @@ pub enum PayloadError {
     /// An initial message whose identity key is not the one bound to the
     /// sender it names (design §14.2.4.2).
     NotTheSender,
+    /// An initial message received before: opening it again would replace
+    /// the session it already opened.
+    Replayed,
     Malformed(String),
     Crypto(String),
 }
@@ -648,6 +651,7 @@ impl std::fmt::Display for PayloadError {
             ),
             PayloadError::Malformed(s) => write!(f, "malformed: {s}"),
             PayloadError::Crypto(s) => write!(f, "{s}"),
+            PayloadError::Replayed => write!(f, "an initial message already received"),
         }
     }
 }
@@ -665,7 +669,18 @@ pub type PerDevice = Vec<([u8; 32], Vec<u8>)>;
 pub struct Sessions {
     pub ratchets: BTreeMap<PeerDevice, Ratchet>,
     pub prefetched: BTreeMap<PeerDevice, Prefetched>,
+    /// The ephemeral keys of initial messages already received, most
+    /// recent last.  A one-time key spends itself, but an initial opened
+    /// on the reusable prekey alone can be captured and re-sent, and
+    /// accepting it again replaced a live session with a fresh one —
+    /// Signal's weak-replay caveat turned into session takeover.  Not
+    /// persisted: it bounds what one process will accept, and a session
+    /// survives a restart on its own state.
+    pub seen_initials: std::collections::VecDeque<[u8; 32]>,
 }
+
+/// How many initial messages' ephemeral keys are remembered.
+const SEEN_INITIALS: usize = 256;
 
 impl Sessions {
     /// The sessions as they go to the device's own storage: every ratchet
@@ -706,6 +721,7 @@ impl Sessions {
             prefetched.insert((p.subject, p.device), p);
         }
         Some(Sessions {
+            seen_initials: std::collections::VecDeque::new(),
             ratchets,
             prefetched,
         })
@@ -909,6 +925,15 @@ impl Sessions {
                 if let Some(o) = &one_time {
                     keys.take_one_time(o.id);
                 }
+                // authenticated, and seen before: the session it opened is
+                // the live one, and this copy replaces nothing
+                if self.seen_initials.contains(&m.ek.0) {
+                    return Err(PayloadError::Replayed);
+                }
+                if self.seen_initials.len() >= SEEN_INITIALS {
+                    self.seen_initials.pop_front();
+                }
+                self.seen_initials.push_back(m.ek.0);
                 self.ratchets.insert((from, device), r);
                 Ok(pt)
             }

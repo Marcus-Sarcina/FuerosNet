@@ -631,8 +631,9 @@ only party who can tell them is their own client.
   beside it, never instead of it.
 - **For a relative rank predicate (a percentile, a median, any quantile), show the
   population it is a fraction of, and say that the line moves when the org does.**
-  These are the only predicates whose result depends on somebody other than the
-  member being granted (`resource-requirements.md` §7.2.1), and an operator reading
+  These are the predicates whose *line* moves when others join — structural and
+  absolute-rank predicates also depend on others (`resource-requirements.md`
+  §7.2.1), but their cutoffs do not shift with the population — and an operator reading
   *"top 20%"* has no reason to expect that admitting members at the bottom promotes
   someone at the cutoff. An absolute *top-k* does not behave this way, and the
   client should offer it as the plainer alternative when the operator's intent looks

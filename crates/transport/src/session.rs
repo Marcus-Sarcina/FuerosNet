@@ -29,6 +29,10 @@ use tokio::time::{Duration, Instant, sleep_until};
 pub const CLOSE_REFUSED: u32 = 1;
 pub const FRAME_ATTACH: u64 = 1;
 pub const FRAME_ATTACH_ACK: u64 = 2;
+/// How long an attach waits for its acknowledgement.  A dark endpoint
+/// that accepts the connection and answers nothing otherwise held the
+/// attach forever.
+pub const ATTACH_ACK_TIMEOUT: Duration = Duration::from_secs(15);
 /// A delegated peer's first frame on a connection that opens no session
 /// (`wire-format.md` §8.0, §8.2).
 pub const FRAME_DELEGATION: u64 = 7;
@@ -335,6 +339,26 @@ fn encode_sibling_list(out: &mut Vec<u8>, key: u64, refs: &[SiblingRef]) {
     }
 }
 
+/// How far behind the highest counter seen a heartbeat still counts.
+const HEARTBEAT_WINDOW: u64 = 4096;
+
+/// Accept a heartbeat counter once, inside a window behind the highest
+/// seen.  The set of counters is bounded by the window and not by the
+/// session's life — a peer sending fast could otherwise grow it without
+/// limit — and a counter behind the window is stale rather than a beat.
+/// A gap is still accepted (TR12): the window is about age, not sequence.
+fn fresh_counter(seen: &mut HashSet<u64>, max_seen: &mut u64, c: u64) -> bool {
+    if c.saturating_add(HEARTBEAT_WINDOW) < *max_seen || !seen.insert(c) {
+        return false;
+    }
+    if c > *max_seen {
+        *max_seen = c;
+        let floor = max_seen.saturating_sub(HEARTBEAT_WINDOW);
+        seen.retain(|&s| s >= floor);
+    }
+    true
+}
+
 fn decode_sibling_list(b: &[u8], it: Option<&Item>) -> Option<Vec<SiblingRef>> {
     match it {
         None => Some(Vec::new()),
@@ -383,7 +407,9 @@ impl AttachAck {
         let Item::Map(m) = it else { return None };
         Some(AttachAck {
             mode: map_get(m, 1).and_then(as_uint)?,
-            siblings: decode_sibling_list(b, map_get(m, 2))?,
+            // the same §8.2 validity the SiblingUpdate path enforces
+            siblings: decode_sibling_list(b, map_get(m, 2))
+                .filter(|l| valid_sibling_list(l, &[0u8; 32]))?,
             interval: map_get(m, 3).and_then(as_uint)?,
             queued: map_get(m, 4).and_then(as_uint)?,
             capabilities: decode_capabilities(b, map_get(m, 5)?),
@@ -666,6 +692,7 @@ async fn control_loop(
     let mut counter: u64 = 0;
     let mut last_valid = start;
     let mut seen: HashSet<u64> = HashSet::new();
+    let mut max_seen: u64 = 0;
     loop {
         // misses are elapsed full intervals on the local monotonic clock
         let deadline = last_valid + interval * 3;
@@ -702,7 +729,7 @@ async fn control_loop(
                         log.push(Event::Received { frame_type: FRAME_HEARTBEAT });
                         if let Item::Map(m) = &item
                             && let Some(c) = map_get(m, 1).and_then(as_uint)
-                                && seen.insert(c) {
+                                && fresh_counter(&mut seen, &mut max_seen, c) {
                                     last_valid = Instant::now();
                                     let was = std::mem::replace(&mut *reach.lock().unwrap(), Reachability::Reachable);
                                     if was == Reachability::Unreachable
@@ -1892,7 +1919,19 @@ async fn attach_on(
     }
     // wait for the ack: unknown frames skipped, any other known frame fails the attempt
     let ack = loop {
-        match read_frame(&mut recv, bounds::CONTROL_FRAME_BYTES).await {
+        let read = match tokio::time::timeout(
+            ATTACH_ACK_TIMEOUT,
+            read_frame(&mut recv, bounds::CONTROL_FRAME_BYTES),
+        )
+        .await
+        {
+            Ok(read) => read,
+            Err(_) => {
+                conn.close(VarInt::from_u32(0), b"no attach ack");
+                return AttachOutcome::EndpointFailure("no AttachAck within the deadline".into());
+            }
+        };
+        match read {
             FrameRead::Closed(Some(e)) if close_code(&e) == Some(CLOSE_REFUSED as u64) => {
                 // the node's refusal of the bind on its side, named so the
                 // dialler retries a window refusal (§8.2)
@@ -2307,5 +2346,65 @@ impl Session {
             }
         }
         last
+    }
+}
+
+#[cfg(test)]
+mod bounds_and_validity {
+    use super::*;
+
+    #[test]
+    fn a_heartbeat_counter_counts_once_inside_a_window_and_the_set_stays_bounded() {
+        let (mut seen, mut max) = (HashSet::new(), 0u64);
+        assert!(fresh_counter(&mut seen, &mut max, 0));
+        assert!(
+            !fresh_counter(&mut seen, &mut max, 0),
+            "a replayed beat is not a beat"
+        );
+        assert!(
+            fresh_counter(&mut seen, &mut max, 2),
+            "a gap is a beat (TR12)"
+        );
+        assert!(
+            fresh_counter(&mut seen, &mut max, 1),
+            "late, inside the window"
+        );
+        assert!(fresh_counter(&mut seen, &mut max, 10 * HEARTBEAT_WINDOW));
+        assert!(
+            !fresh_counter(&mut seen, &mut max, 1),
+            "behind the window: stale, not a beat"
+        );
+        assert!(
+            seen.len() <= 2,
+            "the set holds the window, not the session: {}",
+            seen.len()
+        );
+    }
+
+    #[test]
+    fn an_attach_ack_naming_one_sibling_twice_does_not_decode() {
+        let point = NetworkPoint {
+            ip: [10, 0, 0, 1],
+            asn: None,
+            port: None,
+        };
+        let sib = |k: u8| SiblingRef {
+            keyhash: [k; 32],
+            endpoints: vec![point.clone()],
+            key_material: None,
+        };
+        let ack = |siblings: Vec<SiblingRef>| AttachAck {
+            mode: 0,
+            siblings,
+            interval: 300,
+            queued: 0,
+            capabilities: BTreeMap::new(),
+            delegation: None,
+        };
+        let ok = ack(vec![sib(1), sib(2)]).encode();
+        assert!(AttachAck::decode(&ok, 0, &parse_all(&ok).unwrap()).is_some());
+        // the validity the SiblingUpdate path already enforced (§8.2)
+        let dup = ack(vec![sib(1), sib(1)]).encode();
+        assert!(AttachAck::decode(&dup, 0, &parse_all(&dup).unwrap()).is_none());
     }
 }

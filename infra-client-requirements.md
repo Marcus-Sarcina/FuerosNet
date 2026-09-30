@@ -566,8 +566,9 @@ resources you host (design §11.2.1).
   in that network position.** That is the default, and it reaches **positional
   grants only.** A resource whose roles are bound to named individuals (`resource-requirements.md` §7.1.2) is
   untouched, since those were decisions about particular people.
-- **Accepting one at all is your choice.** A grandpatron's siblings and the
-  great-grandpatron may take one in place of evaluating a stranger themselves,
+- **Accepting one at all is your choice.** The patron's siblings, who hold it, may take one — a
+  grandpatron's sibling or the great-grandpatron never holds it (design
+  §11.2.1.1) — in place of evaluating a stranger themselves,
   which is the saving it offers. Nothing obliges you, and an operator wanting a
   stricter policy sets one.
 - **Treat it as lapsed when the relationship it describes ends**, without waiting

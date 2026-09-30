@@ -199,13 +199,28 @@ pub fn transport_credential(
         }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             let seed = rhtn_transport::tls::random_bytes::<32>();
-            std::fs::write(path, seed)
-                .map_err(|e| Startup::Identity(format!("{}: {e}", path.display())))?;
+            // created 0600 and never wider, and a failure to narrow it is
+            // a failure, not a shrug
             #[cfg(unix)]
             {
+                use std::io::Write;
+                use std::os::unix::fs::OpenOptionsExt;
                 use std::os::unix::fs::PermissionsExt;
-                let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
+                let mut f = std::fs::OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .truncate(true)
+                    .mode(0o600)
+                    .open(path)
+                    .map_err(|e| Startup::Identity(format!("{}: {e}", path.display())))?;
+                f.write_all(&seed)
+                    .map_err(|e| Startup::Identity(format!("{}: {e}", path.display())))?;
+                std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))
+                    .map_err(|e| Startup::Identity(format!("{}: {e}", path.display())))?;
             }
+            #[cfg(not(unix))]
+            std::fs::write(path, seed)
+                .map_err(|e| Startup::Identity(format!("{}: {e}", path.display())))?;
             Credential::from_seed(&seed, operator.keyhash)
         }
         Err(e) => return Err(Startup::Identity(format!("{}: {e}", path.display()))),

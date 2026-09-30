@@ -110,6 +110,10 @@ pub struct Pending {
 }
 
 /// What the store decided about an arriving object.
+/// How many objects a node holds for a prerequisite at once.  A DoS
+/// ceiling, not a capacity figure (`wire-format.md` §1.3's posture).
+pub const PENDING_HELD: usize = 256;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Decision {
     /// Stored, and to be forwarded on every adjacency but the arrival one.
@@ -460,7 +464,7 @@ impl TopologyStore {
                     unproved_series: None,
                 };
                 if !self.pending.contains(&p) {
-                    self.pending.push(p.clone());
+                    self.hold(p.clone());
                 }
                 return Decision::Held(p);
             }
@@ -509,7 +513,7 @@ impl TopologyStore {
                     unproved_series: None,
                 };
                 if !self.pending.contains(&p) {
-                    self.pending.push(p.clone());
+                    self.hold(p.clone());
                 }
                 return Decision::Held(p);
             }
@@ -521,6 +525,17 @@ impl TopologyStore {
         self.seen.insert(rec.txid, rec.effective);
         self.transactions.insert(rec.txid, rec);
         Decision::Stored
+    }
+
+    /// Hold `p` for a prerequisite, bounded: past the ceiling the oldest
+    /// goes, an item held for a key that never arrived being the least
+    /// worth keeping.  A peer's unverifiable traffic otherwise grew this
+    /// list for the node's life.
+    fn hold(&mut self, p: Pending) {
+        if self.pending.len() >= PENDING_HELD {
+            self.pending.remove(0);
+        }
+        self.pending.push(p);
     }
 
     fn accept_endpoint<L: Lookup + ?Sized>(
@@ -575,7 +590,7 @@ impl TopologyStore {
                     unproved_series: Some((er.node, er.seqno.series)),
                 };
                 if !self.pending.contains(&p) {
-                    self.pending.push(p.clone());
+                    self.hold(p.clone());
                 }
                 return Decision::Held(p);
             }

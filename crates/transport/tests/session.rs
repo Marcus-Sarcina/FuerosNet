@@ -1233,3 +1233,40 @@ fn a_pin_takes_only_key_material_of_the_profiles_shape() {
         "nothing entered the pins"
     );
 }
+
+/// A dark endpoint: it completes the handshake and then says nothing.
+/// Before the deadline, an attach against one never returned.
+#[tokio::test]
+async fn an_endpoint_that_accepts_and_never_answers_does_not_hold_the_attach_forever() {
+    let ep = tls::server_endpoint(test_identity("bob"), loopback()).unwrap();
+    let addr = ep.local_addr().unwrap();
+    tokio::spawn(async move {
+        while let Some(inc) = ep.accept().await {
+            tokio::spawn(async move {
+                if let Ok(conn) = inc.await {
+                    sleep(Duration::from_secs(60)).await;
+                    drop(conn);
+                }
+            });
+        }
+    });
+    let ccfg = client_cfg("alice");
+    let t0 = Instant::now();
+    let outcome = attach_any(
+        &ccfg,
+        &client_ep(),
+        test_identity("bob").public.keyhash,
+        &[addr],
+        false,
+    )
+    .await;
+    assert!(
+        matches!(outcome, AttachOutcome::EndpointFailure(ref e) if e.contains("deadline")),
+        "{outcome:?}"
+    );
+    let waited = t0.elapsed();
+    assert!(
+        waited >= ATTACH_ACK_TIMEOUT && waited < ATTACH_ACK_TIMEOUT + Duration::from_secs(5),
+        "returned at the deadline, not before and not long after: {waited:?}"
+    );
+}

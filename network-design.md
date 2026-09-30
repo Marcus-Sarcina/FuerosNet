@@ -190,10 +190,10 @@ before the principle was stated:
 
 | Cannot be enforced | Made visible instead |
 |---|---|
-| Peering, since a node may simply not peer | Peering transactions are public; peerless infra is observable and policy-discountable (§12.7.5) |
+| Peering, since a node may simply not peer | Peering transactions are public; a node without peers is observable and policy-discountable (§12.7.5) |
 | Retention promises, since local storage is beyond reach | Retention is committed in the record, and §7.5.2 converts the commitment into a structural consequence for compliant clients, so an honest client's obligation is public. **Against a hostile client this is neither enforceable nor detectable.** See P13 and §13.7.1. An honest example of the limit of visibility-in-place-of-enforcement |
 | Client integrity, since attestation would mean trusting a manufacturer | Carried as a record attribute for policies to weight, not a requirement (§7.8) |
-| **What an adoption's evidence is worth**, since no object can show that a meeting really happened or that a countersigner really was the patron | §6.1.1 requires one of two named alternatives and they are **different objects** (`wire-format.md` §4.1 fields 8 and 9), so an observer sees which was offered and weighs it (§16.1). *That some evidence is present is enforced; which, and how good, is made visible* |
+| **What an adoption's evidence is worth**, since no object can show that a meeting really happened or that a countersigner really was the patron | §6.1.1 requires one of three named alternatives and they are **different objects** (`wire-format.md` §4.1 fields 6, 8 and 9), so an observer sees which was offered and weighs it (§16.1). *That some evidence is present is enforced; which, and how good, is made visible* |
 
 The network is intended to **formalize real-world relationships**, not replace
 them. It assumes and depends on a significant face-to-face human component.
@@ -458,7 +458,7 @@ latency for a stranger's key**, not bandwidth.
 | **Sibling** | A node sharing the same direct patron |
 | **Infra node** | A node running the server software on a statically routed device |
 | **Light client** | The participant-facing client software, and by extension a node with no infrastructure of its own (§3.3). **Every user runs the client software, infra operators included**; it is where user actions happen, so the term names software, or a node's lack of a static device. It is never a tier and never a class of person |
-| **Peer** | Cross-tree infrastructure partner (voluntary, see §6.3) |
+| **Peer** | A user joined to this one by a peering record (§6.3): voluntary, cross-tree, carrying an encrypted backup and, where both run instances, a topology edge |
 | **Anchor** | An ancestor a node names in its locator so a recipient can route to it, or itself: **a root self-anchors**, with an empty path (`wire-format.md` §2.1). Not a status a node holds — relative to whoever is resolving, and subject to that party's caching policy (§12.2, §12.7.3) |
 | **Trust horizon** | Every node within a **two-edge walk** over adoption and sibling edges, centred on the observer. At f = 10, **221** (§15.1). Not a subtree, not a tier band, and not a fixed set — every user's horizon is different and centred on themselves. **The operative term in mechanical text** [author, 2026-09-01]; *Dunbar Org* names the same set where the thesis and theory chapters speak of it as a team |
 | **Dunbar Org** | The introductory and theory name for a trust horizon — the framing *a team you have joined* (§1.4). Same set, same walk |
@@ -637,7 +637,7 @@ payload, so apex load scales with churn and introductions, not with usage.
   voluntary (§6.3), zero peers is a supported configuration, and a node with none
   simply does not have the property. §21 records the same figure as a
   recommendation for that reason.
-- **The peering record carries the ASN for both endpoints** (§6.3), so an
+- **The peering record carries the ASN for each endpoint that runs an instance** (§6.3), so an
   observer can see whether two peers are *concentrated*, not whether they are
   independent, which ASN cannot show (§17.3). **Independence is
   adversarial, not only operational**: a party with legal compulsion over one
@@ -773,7 +773,9 @@ stores already holding the photo archive (§7.5). A transaction envelope is
 roughly 8 KB.
 
 **Consequence for the anchor table (§12.2):** it stores *key hashes*, not full
-public keys. PQ key sizes would exceed the 25 MB budget by ~18×.
+public keys. Full material — 1,984 B per anchor, ML-DSA-65 beside its classical
+member — runs to ~238 MB for 120,000 anchors: ~9.5× the 25 MB budget, and
+~40× the keyhash-only index.
 
 ### 5.1 Hybrid identity, and what must be signed with both components
 
@@ -1278,7 +1280,8 @@ actually has is not intended behaviour under any reading of this design.**
 accepted risk is eclipse of a **new joiner**, whose view is controlled from day
 one. A new joiner has no prior counterparties, so `min(floor(n/2), 10, |candidates|)`
 is zero (§8.1)
-and a **witnessless, verifierless ceremony is valid.** The formation path of
+and a **witnessless, verifierless ceremony is valid** — as a formation record, subtype 1, the one witnessless shape
+`wire-format.md` §3.2 admits. The formation path of
 §13.2. They can therefore memorialise a meeting with anyone they physically
 encounter, and the eclipsing patron cannot suppress it. **The false social
 universe is permeable wherever the victim meets a human being.**
@@ -1311,7 +1314,7 @@ Deliberately costly transactions attesting that two users met in person.
 
 **A presence record upgrades any relationship it attaches to**, not only peering:
 
-- **Peering** (§6.3), turns a pragmatic infrastructure arrangement into a
+- **Peering** (§6.3), turns a pragmatic arrangement between two users into a
   trust-bearing one.
 - **Adoption** (§6.1.1), distinguishes a patron who has met their subordinate
   from one who took the former patron's countersignature instead. Both are
@@ -3149,7 +3152,7 @@ window during which a patron could block fails §1.1's test: **a patron shares n
 state with a subordinate's client.**
 Nothing stops that client forming a transaction, signing it, replicating it, or
 acting on it, and nothing makes it wait. An adoption is signed by node and patron;
-a peering by two infra nodes. A third party asserting a veto over either has no
+a peering by two users. A third party asserting a veto over either has no
 mechanism to exercise it.
 
 **What a patron actually holds is refusal and repudiation**, both of which are
@@ -7180,7 +7183,7 @@ several at once, not one per acquisition.
   code (`wire-format.md` §4.3) and propagate it first, and **nothing orders the
   two**: a departure advances the departing node's counter, a disavowal advances the
   patron's and carries no subject counter, and timestamps are signer-controlled and
-  never checked against a clock (`wire-format.md` §2). The stated cost (losing a subordinate) is
+  never checked against a clock (`wire-format.md` §3.3). The stated cost (losing a subordinate) is
   **zero in exactly this case**, because the subordinate is already leaving and the
   slot refills.
 
@@ -7446,7 +7449,8 @@ recipient still verifies against the same signature.
 
 **What it covers:** location evidence, retention, client integrity, capture
 parameters, proximity channels. Nine of the eleven exchanges that
-transmit or evaluate a record read none of them (§8.1.1).
+transmit or evaluate a record read none of them — ten, counting location
+alone (§8.1.1).
 
 **What it does not cover, and this is the part to keep in view.** It cannot hide the
 signer set, because `kid` is on the envelope rather than in the body, and because
@@ -7504,8 +7508,8 @@ and a citation to a missing number resolves there.
 | **P35** | **An ancestor accumulates a key→position index for its whole subtree** (§15.2.1), so a subnet's root can look up any member without an introduction | Medium | **Accepted, with the boundary stated.** The disclosure content is unchanged — §12.1 already has a locator disclosing patron, depth and subtree to anyone you introduce yourself to, and what changes is that an ancestor stops needing the introduction. **Joining a subnet is a choice to be structurally visible to it**; the property defended is that this never crosses a subnet boundary, which §3.1.1 guarantees by construction. **The memo carries no address**, and that depends on peering being excluded from rootward travel (§15.2) |
 | **P36** | **`seqno` gaps disclose out-of-subnet activity** (`wire-format.md` §2.3) | Low–Medium, **largely answered** by the `{series, counter}` split | The threat was that a node sharing **one** counter across two bindings advances it in both, so an observer in one subnet sees jumps it cannot account for and learns the node is active elsewhere. **Distinct from P3**, which needs an observer present in both subnets; this works from inside one. **The `{series, counter}` split answers it** by giving each patron relationship its own series and so its own counter (`wire-format.md` §2.3, `wire-format.md` §4.6): a per-binding counter, which was previously rejected as breaking `seqno`'s double duty as freshness test and stale-cache detector — until the series tag made within-series the only comparison and cross-series unrankable, which is what removes the breakage. **Residuals**: a node that has not yet reissued since binding elsewhere still shares a line, and the *number* of reissues it has taken is itself visible in the chain. See C19 for what sharpens the pre-split case |
 | **P37** | **A ceremony counterparty is handed a bundle of the subject's presence records, and credibility pushes that bundle wide** (§8.1.2, §19.2) | Medium | Selecting the other's verifiers needs a candidate set, and the subject supplies it as records rather than names, since `wire-format.md` §5.4 counts only what verifies. **The disclosure is elective, not compelled** — nobody walks another party's archive, but the incentive runs one way: a bundle holding nobody the selector recognises is worth nothing to them (§16.1), so being believed means showing counterparties in common, and each record shows its witnesses, verifiers and time. **Distinct from P19**, which is the *adoption* disclosure a prospective patron drives by fetching and walking; this one the subject hands over. **Distinct from P2/C2**, which price the verifier set carried *in the record* rather than the pool it was drawn from. Bounded by what the subject retains (§10.2) and by what they elect to include — at any point: a fishing proposal is a bundle augmentation under the same curation (§8.1.2) [2026-09-03], and **the floor is a real choice**, since what a ceremony gives its participants is a face they will know again (§7), which no bundle affects. Disclosing narrowly costs third-party weight and the counterparty's continuity assurance, not the relationship |
-| **P39** | **A prekey fetch reveals how many devices a subject has** (`wire-format.md` §7.8): a reply carries one bundle per device, where it carried one | Low | **A consequence of a session being with a device** (§23.3, §14.2.4), stated rather than hidden. The audience is the horizon that could open a session with the subject at all, the count is held near three by construction (§23.3), and what it reveals is that a person has a phone and a desktop, which the resource types the desktop exists for reveal anyway. **Residual**: the count changes when a device is added or lost, and a party sweeping on schedule sees when |
 | **P38** | **A filtered catalog query reveals what kind of service the asker seeks** (`wire-format.md` §6.4), to the answering node, whether or not any connection follows — P26's shape at the catalog: interest disclosed before contact | Low–Medium | **The reference client already blunts it** (`light-client-requirements.md` §8): sweep the horizon, cache, refresh on schedule — a browsing click is answered from cache, so no per-interaction query exists to observe. **Residual**: a targeted type-filtered query from any client remains a dated, authenticated statement of interest in a service class — clinical, employment, family, and repetition makes it a history |
+| **P39** | **A prekey fetch reveals how many devices a subject has** (`wire-format.md` §7.8): a reply carries one bundle per device, where it carried one | Low | **A consequence of a session being with a device** (§23.3, §14.2.4), stated rather than hidden. The audience is the horizon that could open a session with the subject at all, the count is held near three by construction (§23.3), and what it reveals is that a person has a phone and a desktop, which the resource types the desktop exists for reveal anyway. **Residual**: the count changes when a device is added or lost, and a party sweeping on schedule sees when |
 | **P40** | **Offering traversal candidates at a ceremony discloses an IP to the counterparty, and not within the horizon bound P17 rests on** (§12.6.3) | Low–Medium | New with the 2026-09-25 ruling that a ceremony in person overrides the gate. **The exposure is chosen rather than bounded**, which inverts P17: the counterparty is a party the user decided to meet and §14.1's interfaces put them in the room, but no horizon limits the set, and a first ceremony may be with somebody the user has no standing with at all. Residual: §7.6 makes an IP a coarse location signal, so a counterparty met once holds an ongoing one for as long as the address lasts and nothing obliges them to discard it. **The location it yields is not new** — the counterparty was in the room — so C1 is untouched and C24 records why; what the address can add is the carrier behind it. **The disclosure is the price of the exit right** §12.6.3 states — a route no patron carried is a route the counterparty knows — and it is refusable: the ceremony completes without candidates, and `light-client-requirements.md` §4 requires the client to offer it as the disclosure it is |
 
 ### 19.5 Queue policy had to settle more than size
@@ -7897,7 +7901,7 @@ not derived.
 | — | Default transport port | 7431/udp | Overridable per `NetworkPoint` (`wire-format.md` §9.2) |
 | — | Delegated transport credential | 48 h each, a run of 45 | 90 days end to end. The run is what lets an instance serve while its operator's device is asleep, and is the horizon a seized store inherits (§12.6.5). Chosen, not derived |
 | — | Anchor hysteresis | promote at S, demote at S/2 | So a boundary node does not flap (§12.2). The ratio is chosen |
-| — | Anchor index budget | 25 MB | Sizes the keyhash-only index at ~6 MB for 120,000 anchors and rules out full keys at ~18× (§12.2). Chosen |
+| — | Anchor index budget | 25 MB | Sizes the keyhash-only index at ~6 MB for 120,000 anchors and rules out full keys at ~40× that, ~9.5× the budget (§12.2). Chosen |
 | — | Maximum `finalized_at` − `started_at` | **24 hours** | Bounds chronology poisoning: every envelope signer's chain must clear a record's `finalized_at`, so an unbounded one freezes the victim and every witness. Structural, since it compares two fields in the record rather than either against a clock (`wire-format.md` §3.2) |
 
 ### 21.1 Unset parameters, the implementation checklist

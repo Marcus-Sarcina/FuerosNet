@@ -43,6 +43,19 @@ pub const STATE: &str = "client";
 /// (`light-client-requirements.md` §4: persisted across restarts).
 pub const SIBLINGS: &str = "siblings";
 
+/// A submission nonce drawn from the platform's randomness, in full or
+/// not at all: short measure is refused rather than padded, as the seed
+/// path refuses it, because a nonce completed with zeroes is not random.
+fn nonce_drawn(random: &dyn crate::device::Random) -> [u8; 16] {
+    let drawn = random.fill(16);
+    <[u8; 16]>::try_from(drawn.as_slice()).unwrap_or_else(|_| {
+        panic!(
+            "the platform's randomness returned {} bytes of 16",
+            drawn.len()
+        )
+    })
+}
+
 /// The storage seam with the kernel's sealing on it
 /// (`light-client-requirements.md` §9): what goes down is sealed under the
 /// key the platform's custody returned, what comes up is opened, and a blob
@@ -583,13 +596,8 @@ impl Participant {
         // the nonces this client's submissions carry come from the
         // platform's random source, which is the only one there is
         let random = platform.random.clone();
-        let nonce: Arc<dyn Fn() -> [u8; 16] + Send + Sync> = Arc::new(move || {
-            let mut n = [0u8; 16];
-            let drawn = random.fill(16);
-            let take = drawn.len().min(16);
-            n[..take].copy_from_slice(&drawn[..take]);
-            n
-        });
+        let nonce: Arc<dyn Fn() -> [u8; 16] + Send + Sync> =
+            Arc::new(move || nonce_drawn(random.as_ref()));
         let net = Net::new(Party::of(me), pins_for(&ids), nonce)?;
         let known = ids.clone();
         // the storage this run persists through: the platform's, with the
@@ -765,13 +773,8 @@ impl Participant {
         let credential = Arc::new(credential);
         let presented = credential.public();
         let random = platform.random.clone();
-        let nonce: Arc<dyn Fn() -> [u8; 16] + Send + Sync> = Arc::new(move || {
-            let mut n = [0u8; 16];
-            let drawn = random.fill(16);
-            let take = drawn.len().min(16);
-            n[..take].copy_from_slice(&drawn[..take]);
-            n
-        });
+        let nonce: Arc<dyn Fn() -> [u8; 16] + Send + Sync> =
+            Arc::new(move || nonce_drawn(random.as_ref()));
         let net = Net::new(Party::of(credential), pins_for(&ids), nonce)?;
         let known = ids.clone();
         let storage = SealedStore::over(&platform)?;

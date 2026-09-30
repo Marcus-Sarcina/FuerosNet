@@ -53,8 +53,10 @@ impl EndpointRecord {
             return Err("field 3".into());
         };
         let seqno = Seqno {
-            series: as_uint(sq.first().ok_or("series")?).ok_or("series")? as u32,
-            counter: as_uint(sq.get(1).ok_or("counter")?).ok_or("counter")? as u32,
+            series: u32::try_from(as_uint(sq.first().ok_or("series")?).ok_or("series")?)
+                .map_err(|_| "series out of u32 range")?,
+            counter: u32::try_from(as_uint(sq.get(1).ok_or("counter")?).ok_or("counter")?)
+                .map_err(|_| "counter out of u32 range")?,
         };
         Ok(EndpointRecord {
             node,

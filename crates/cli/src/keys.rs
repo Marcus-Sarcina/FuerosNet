@@ -37,6 +37,23 @@ pub fn mint(path: &Path, seeds: [[u8; 32]; 2]) -> Result<Identity, String> {
 }
 
 fn write_private(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    // created 0600, never wider even for an instant; the chmod below then
+    // narrows a file that already existed wider
+    #[cfg(unix)]
+    {
+        use std::io::Write;
+        use std::os::unix::fs::OpenOptionsExt;
+        let mut f = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(path)
+            .map_err(|e| format!("{}: {e}", path.display()))?;
+        f.write_all(bytes)
+            .map_err(|e| format!("{}: {e}", path.display()))?;
+    }
+    #[cfg(not(unix))]
     std::fs::write(path, bytes).map_err(|e| format!("{}: {e}", path.display()))?;
     #[cfg(unix)]
     {

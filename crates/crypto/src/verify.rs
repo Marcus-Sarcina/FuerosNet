@@ -596,6 +596,13 @@ pub fn presentation<L: Lookup + ?Sized>(ids: &L, pres: &[u8]) -> Result<(), Fail
     let body_range = value_slice(env_bytes, 3).ok_or("env body")?;
     let body = &env_bytes[body_range];
     let r8 = value_slice(body, 8).ok_or("no field 8")?;
+    // a 32-byte bstr and nothing else: a two-byte head (0x58 0x20) and the
+    // digest.  The slice below assumed that width, and a shorter field 8
+    // — two colluding signers can mint one — panicked a verifier; a parser
+    // never panics
+    if r8.len() != 34 || body[r8.start] != 0x58 || body[r8.start + 1] != 32 {
+        return Err("field 8 is not a 32-byte digest".into());
+    }
     if body[r8.start + 2..r8.end] != root {
         return Err("root mismatch".into());
     }

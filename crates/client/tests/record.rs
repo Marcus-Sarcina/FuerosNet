@@ -735,8 +735,24 @@ fn a_presence_record_takes_classical_response_signatures_and_a_recovery_takes_hy
                 flags: 7,
             },
         ],
-        responses: vec![hybrid],
+        responses: vec![hybrid.clone()],
         root: disclosure_root(&set),
+    };
+    // a recovery-shaped response carries field 8, which a presence response
+    // never does (`wire-format.md` §5.5): refused there first, before its
+    // signature is looked at
+    let e = Record::parse(&w.loose(TYPE_PRESENCE, &p.body(&back), &["alice", "bob", "w1", "w2"]))
+        .expect_err("a recovery-shaped response does not belong here");
+    assert!(
+        e.contains("carries no prior_key"),
+        "refused for the prior key: {e}"
+    );
+    // and with field 8 stripped, the hybrid signature is what refuses it
+    let hybrid_no_prior =
+        rhtn_codec::cbor::map_without_key(&hybrid, 8).expect("a map less one key");
+    let p = Proposal {
+        responses: vec![hybrid_no_prior],
+        ..p
     };
     let e = Record::parse(&w.loose(TYPE_PRESENCE, &p.body(&back), &["alice", "bob", "w1", "w2"]))
         .expect_err("a hybrid verifier signature does not belong here");

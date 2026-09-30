@@ -1423,3 +1423,48 @@ fn a_client_restarts_from_its_own_storage_with_its_sessions_intact() {
     assert!(alice2.restore_durable(b"not a state").is_err());
     assert_eq!(alice2.durable(), before);
 }
+
+#[test]
+fn a_replayed_initial_message_is_refused_and_the_live_session_stands() {
+    let mut n = net(&["w1"], &[("alice", "w1"), ("carol", "w1"), ("bob", "w1")]);
+    n.attach("bob");
+    n.attach("carol");
+    n.sweep("bob");
+    n.sweep("carol");
+    n.s.handles["carol"].reach.0.set(false);
+    n.send("carol", "bob", "first");
+    let (sender, initial) = n.queued("bob");
+    assert_eq!(sender, kh("carol"));
+    let d =
+        n.s.client("bob")
+            .receive_payload(kh("carol"), &initial)
+            .expect("the initial opens a session");
+    assert!(matches!(&d, Dispatched::Application(b) if b == b"first"));
+    let live = n.s.client("bob").payload.sessions.encode();
+    // the same bytes again — a captured initial re-sent.  Refused, and the
+    // session it opened is untouched: accepting it replaced the live
+    // ratchet with a fresh one, Signal's weak-replay caveat turned into a
+    // session takeover.  A one-time key spends itself; the reusable-prekey
+    // path is what the replay cache is for, and either refusal will do
+    let e =
+        n.s.client("bob")
+            .receive_payload(kh("carol"), &initial)
+            .unwrap_err();
+    assert!(
+        e.contains("already received") || e.contains("one-time"),
+        "{e}"
+    );
+    assert_eq!(
+        n.s.client("bob").payload.sessions.encode(),
+        live,
+        "the live session stands as it was"
+    );
+    // and the next message rides that session, not a reset one
+    n.send("carol", "bob", "second");
+    let (_, next) = n.queued("bob");
+    let d =
+        n.s.client("bob")
+            .receive_payload(kh("carol"), &next)
+            .expect("the session continues");
+    assert!(matches!(&d, Dispatched::Application(b) if b == b"second"));
+}

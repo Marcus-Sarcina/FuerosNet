@@ -117,6 +117,16 @@ walk-back is perfectly well formed, and no relying party can see the history.
 
 ---
 
+## What is not modelled
+
+Named so the green results are read at their size. **The PQXDH payload
+session and the ratchet beneath it** have no symbolic model — the most
+conspicuous gap, the construction being checked byte-for-byte against
+Signal's rather than proved. Also unmodelled: archive mechanics (the chain,
+merge and prune), sibling replication consistency, competing-successor forks,
+the memo's ancillary rules, and decay. Social and economic claims are out of
+scope by design, not by omission.
+
 ## What each model checks, and against what
 
 ### 1. `simulation/flow_metric.py` — the trust metric (design §16.2, §16.3.1, §17.3)
@@ -215,7 +225,8 @@ constants and lists the invariants and temporal properties.
 - **`CycleDetection`** — rootward-memo cycle detection (design §15.2) under
   *concurrent* adoptions that each look legal against a stale local view.
   Checks that a patron cycle never persists forever (`CyclesResolve`): the
-  memo reaches the node it names as its own ancestor and a reason-5 disavowal
+  memo reaches the node it names as its own ancestor and a removal without a
+  transaction — once a reason-5 disavowal (`wire-format.md` §10.2.4) —
   breaks the loop, even with message loss repaired only by replay. The memo
   carries the node that handed it over and repair cuts that subordinate
   (`wire-format.md` §10.2.4), after confirming the memo's stated patron

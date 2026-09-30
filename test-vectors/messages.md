@@ -1,6 +1,6 @@
 # Unsigned message families (`wire-format.md` §§6–11)
 
-Generated against `wire-format.md` `008eb1c8a111a3fb…`, `network-design.md` `f267afc8e2ff1cca…` and `light-client-requirements.md` `bd79ceac26cdd7eb…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `5d86bf63dfcc2bca…`, `network-design.md` `a3199c25ebea2ff8…` and `light-client-requirements.md` `1189cb3245613677…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Draft. Spec-derived, unverified by an implementation.** Canonical bar 9:
 one positive known-answer encoding per framed message family. Framing is
@@ -3919,13 +3919,13 @@ a3015820b5b6227510ef730eccc3a3d9e256b30e48898bde156c29eead5e394b
 c3f350de0258208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a
 0c8dcfc852aa6a03a80158204384a2cc10f2d505660a16118457e9aeddee9438
 9abd9c4d0dffb610ef0342a20258208410def778a5de3a25991aba399716bc8e
-ccfda9ad57d4ea8a0c8dcfc852aa6a0358206e8929881f4fef5cac9185fdc78a
-bf443ddd8cc21e5186fd008a8614b0742edb04020501078443a10127a0f65840
-bf72169ab988b519ba77230c05eedbac0faec83b9c7f053e74f77b17a211c5a7
-6aa83df4874c84986a03478c752a58e5aae3142b9bb6eebe8f30f171214b5806
-098443a10127a0f658407cfad931463df064a2152cbdadbc5b72e734cb47f726
-f57dbae8cfa98f39521bdb4e2b756e7e37d6e4195e502f57073f30ce6039e34a
-321e4353f7025c53270d0a00
+ccfda9ad57d4ea8a0c8dcfc852aa6a035820215ac766a26664442b850fb190bf
+ff7312d4cfbd898b57a18d3e6e9f9b34706904020501078443a10127a0f65840
+19062fe53ac3bcddb4f7b9a1676832b19b6e8053476efdf9761f96543a73a3ef
+e6394c0d79b0e18efb499760f493bab34e5112b175656d11583f718121c62801
+098443a10127a0f658408ba528fba7f69041401958c6b2848559d04dbf0579be
+7b4df81882e4a9ebc53072db898fd6a32995d9ed4dc4564d09d24615a3b1cbfc
+e272ba925946929575090a00
 ```
 
 ## Session traces (canonical bar 9's trace class)
@@ -3956,7 +3956,7 @@ a sequence of events with the required actions.
 | TR19 | a stored topology transaction arrives again through a peering cycle | drop the duplicate, forward nothing, session survives (§10.1) — the store is the seen-set; no dedicated suppression cache exists and none may be added |
 | TR20 | a memo arrives naming the receiver in field 1, but its own records do not confirm the change | reject the hint: no disavowal, nothing severed (§10.2) — a memo is unsigned and never evidence; acting on it alone manufactures the false positive design §6.2.5 ranks as the worse failure |
 | TR21 | an ordinary memo from below arrives; the receiver's position is a prefix of the field-2 path | forward rootward, no cycle (§10.2) — the cycle test is field-1 identity, never path containment: a memo reaches you *because* you are an ancestor, so your path is a prefix on every legitimate hop and a containment test fires on all of them |
-| TR22 | a memo names the receiver in field 1, its own records confirm the change and the current slot state, and no live disambiguation is available | disavow the direct subordinate on the ingress branch, reason 5, without prejudice; the memo terminates here (§10.2, §4.3) — the confirmed complement of TR20: the detector cuts the one edge it has authority over, and the disavowal is an ordinary transaction, not a memo field |
+| TR22 | a memo names the receiver in field 1, its own records confirm the change and the current slot state, and no live disambiguation is available | remove the direct subordinate on the ingress branch — a removal without a transaction, not a disavowal, code 5 being withdrawn (§10.2.4, §4.3); the memo terminates here (§10.2) — the confirmed complement of TR20: the detector cuts the one edge it has authority over |
 | TR23 | a memo arrives whose field-2 anchor is not a subnet the receiver holds a line in | drop it — no table write, no forwarding (§10.2) — a memo never leaves its subnet, and the privacy property only holds if every receiver enforces it: forwarding would carry the memo across the boundary the argument rests on |
 | TR24 | a type-4 request arrives whose query field 7 names a different verifier | close the stream: no response, no processing (§5.6) — the subject's consent confines the query to the one verifier field 7 names, and a verifier processing a query not addressed to it turns the consent back into bearer paper |
 

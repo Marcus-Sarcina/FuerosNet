@@ -2701,10 +2701,13 @@ demo_k = hkdf_sha256(demo_seed, b'rhtn/1:capture' + alice.keyhash
 kg = e_map([(e_uint(1), e_bstr(pc1_txid)),
             (e_uint(2), e_bstr(npr_q0)),
             (e_uint(3), e_bstr(demo_k))])
+# the late verifier answers a query addressed to IT (§5.5 field 7; TR24): its
+# own, under the same ceremony and profile as the record's three
+npr_q_late, _ = vquery(alice, bob, npr_precommit, b'rhtn-test-vectors:npr-profile', 3, IDS['c4'])
 late = e_map([(e_uint(1), e_bstr(npr_txid)),
               (e_uint(2), e_bstr(alice.keyhash)),
-              (e_uint(3), classical_response(IDS['c4'], alice, npr_q0,
-                                             consent_over(npr_q0, alice),
+              (e_uint(3), classical_response(IDS['c4'], alice, npr_q_late,
+                                             consent_over(npr_q_late, alice),
                                              2, basis=1, sb=0))])
 r_reg = e_map([(e_uint(1), e_bstr(NONCE(b'register'))), (e_uint(2), e_uint(0))])
 
@@ -2839,7 +2842,7 @@ a sequence of events with the required actions.
 | TR19 | a stored topology transaction arrives again through a peering cycle | drop the duplicate, forward nothing, session survives (§10.1) — the store is the seen-set; no dedicated suppression cache exists and none may be added |
 | TR20 | a memo arrives naming the receiver in field 1, but its own records do not confirm the change | reject the hint: no disavowal, nothing severed (§10.2) — a memo is unsigned and never evidence; acting on it alone manufactures the false positive design §6.2.5 ranks as the worse failure |
 | TR21 | an ordinary memo from below arrives; the receiver's position is a prefix of the field-2 path | forward rootward, no cycle (§10.2) — the cycle test is field-1 identity, never path containment: a memo reaches you *because* you are an ancestor, so your path is a prefix on every legitimate hop and a containment test fires on all of them |
-| TR22 | a memo names the receiver in field 1, its own records confirm the change and the current slot state, and no live disambiguation is available | disavow the direct subordinate on the ingress branch, reason 5, without prejudice; the memo terminates here (§10.2, §4.3) — the confirmed complement of TR20: the detector cuts the one edge it has authority over, and the disavowal is an ordinary transaction, not a memo field |
+| TR22 | a memo names the receiver in field 1, its own records confirm the change and the current slot state, and no live disambiguation is available | remove the direct subordinate on the ingress branch — a removal without a transaction, not a disavowal, code 5 being withdrawn (§10.2.4, §4.3); the memo terminates here (§10.2) — the confirmed complement of TR20: the detector cuts the one edge it has authority over |
 | TR23 | a memo arrives whose field-2 anchor is not a subnet the receiver holds a line in | drop it — no table write, no forwarding (§10.2) — a memo never leaves its subnet, and the privacy property only holds if every receiver enforces it: forwarding would carry the memo across the boundary the argument rests on |
 | TR24 | a type-4 request arrives whose query field 7 names a different verifier | close the stream: no response, no processing (§5.6) — the subject's consent confines the query to the one verifier field 7 names, and a verifier processing a query not addressed to it turns the consent back into bearer paper |
 """)
@@ -2963,7 +2966,7 @@ reg('N-retired-witness-key-4', 'bytes',
 reg('U-witness-no-affirmative', 'unit',
     REJ('body', 'schema',
         'a normal record none of whose witnesses set both protocol_ran and both_responsive fails the witness floor'),
-    note='recipe: any normal record where no field-4 entry has attestation bits 0 and 1 both set; such entries are partial evidence, not corroboration (s3.2, T31, 2026-09-03)')
+    note='recipe: any normal record where no field-4 entry has attestation bits 0 and 1 both set; such entries are partial evidence, not corroboration (s3.2, T52, 2026-09-03)')
 
 reg('U-corroboration-non-witness', 'unit',
     REJ('presentation', 'semantic',
@@ -3711,6 +3714,9 @@ reg('N-candidate-port-zero', 'bytes',
 reg('N-candidate-addr-8-bytes', 'bytes',
     REJ('Candidates', 'schema', 'an address is 4 bytes or 16, nothing between'),
     e_arr([candidate(0, [192, 0, 2, 7, 0, 0, 0, 7], 4443)]))
+reg('N-optical-contribution-version-2', 'bytes',
+    REJ('OpticalContribution', 'schema', 'a version the decoder does not know is refused'),
+    e_arr([e_uint(2), e_bstr(alice.keyhash), e_bstr(pc_a)]))
 reg('N-optical-contribution-15', 'bytes',
     REJ('OpticalContribution', 'schema', 'a contribution is 16 bytes'),
     e_arr([e_uint(1), e_bstr(alice.keyhash), e_bstr(pc_a[:15])]))
@@ -3730,12 +3736,20 @@ reg('N-outcomes-channels-9', 'bytes',
 reg('N-outcomes-channels-empty', 'bytes',
     REJ('ProximityOutcomes', 'schema', 'an outcome exchange carries at least one channel'),
     e_arr([e_uint(1), e_bstr(pc_demo), e_arr([])]))
-reg('B-credential-delegations-16', 'bytes',
-    ACC('DeviceCredential', 'sixteen delegations, 32 days, the ceiling'),
-    e_arr([e_uint(1), e_arr([e_bstr(deleg_alice_desktop)] * 16), e_bstr(prekey_desktop)]))
-reg('N-credential-delegations-17', 'bytes',
-    REJ('DeviceCredential', 'schema', 'seventeen delegations exceed the ceiling of sixteen'),
-    e_arr([e_uint(1), e_arr([e_bstr(deleg_alice_desktop)] * 17), e_bstr(prekey_desktop)]))
+reg('B-credential-delegations-45', 'bytes',
+    ACC('DeviceCredential', 'forty-five delegations, the 90-day run, the ceiling'),
+    e_arr([e_uint(1), e_arr([e_bstr(deleg_alice_desktop)] * 45), e_bstr(prekey_desktop)]))
+reg('N-credential-delegations-46', 'bytes',
+    REJ('DeviceCredential', 'schema', 'forty-six delegations exceed the run of forty-five'),
+    e_arr([e_uint(1), e_arr([e_bstr(deleg_alice_desktop)] * 46), e_bstr(prekey_desktop)]))
+for fid, by, why in [
+    ('N-cbor-uint-not-shortest', b'\x81\x18\x05', 'a uint encoded above its shortest form (RFC 8949 §4.2.1)'),
+    ('N-cbor-map-keys-unsorted', b'\xa2\x02\x00\x01\x00', 'map keys not in ascending bytewise order'),
+    ('N-cbor-map-key-duplicate', b'\xa2\x01\x00\x01\x00', 'a duplicate map key'),
+    ('N-cbor-indefinite-array', b'\x9f\x00\xff', 'an indefinite-length array'),
+    ('N-cbor-trailing-bytes', b'\x00\x00', 'bytes after the one item'),
+]:
+    reg(fid, 'bytes', REJ('any', 'cbor', why), by)
 reg('U-intent-bundle-257', 'unit',
     REJ('IntentExchange', 'schema', 'a bundle of 257 entries exceeds the ceiling of 256'),
     note='recipe: any IntentExchange whose field-4 array holds 257 ArchiveEntry values; '
@@ -3799,5 +3813,6 @@ _repin_hand_file('negative-vectors.md')
 for name in ('README.md', 'negative-vectors.md'):
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', name)
     _outputs[name] = hashlib.sha256(open(path, 'rb').read()).hexdigest()
+_outputs['corpus.json'] = hashlib.sha256(open('corpus.json', 'rb').read()).hexdigest()
 _write_pins(_outputs)
-print("repinned README.md, negative-vectors.md; pins written")
+print("repinned README.md, negative-vectors.md; corpus.json pinned; pins written")

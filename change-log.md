@@ -11493,3 +11493,65 @@ CER-021 (476 families), and `rhtn-policy`'s evidence: an `Observation` per
 held response, a `Conduct` tally keeping answered, unavailable-from-an-
 instance and unavailable-from-a-light-client apart, with the holding window
 as the only decay; two tests.
+
+### 2026-09-30 (a whole-project review, and what it was right about)
+
+**A new reviewer family's consolidated assessment, checked finding by
+finding against the tree.** Its verdict — that the defects are un-swept
+edits, edge-of-schema strictness and unbounded structures reachable by
+peers — held, and three of its sharpest findings were this session's own:
+the device-credential cap of 16 against a run the design fixes at **45**
+(design §12.6.5), nine citations of design §13.2 for a construction that
+lives in **§7.5.2**, and "peering between infra nodes" surviving at five
+sites after §6.3 changed. All corrected.
+
+**In the code, security-relevant, all fixed.** The post-quantum signing key
+is now wiped (`ml-dsa`'s `zeroize`, as `ml-kem`'s already was). A malformed
+field 8 no longer panics `verify::presentation`, and the codec requires the
+32-byte digest. `originate` takes the view lock before the identity lock, as
+every other site does — the one AB-BA pair in the node. The heartbeat counter
+set is a 4,096-wide window rather than the session's life; objects held for a
+prerequisite are capped at 256 through one helper; a replayed initial
+message is refused and the live session stands, where before it was
+silently replaced. A subject's seed no longer prints from `Debug` and is
+zeroized on drop; an attach waits fifteen seconds for its acknowledgement
+and no longer forever; the acknowledgement's sibling list gets the validity
+the update path already had; private key files are created 0600 rather than
+narrowed after writing; eight `as u32` narrowings refuse rather than
+truncate; a submission nonce the platform draws short is refused, as a
+short seed already was, rather than completed with zeroes. Four tests
+added, one rewritten.
+
+**In the codec, six rules its own citations required**: a version the
+§14.3 encodings do not know is refused, as §3 refuses an unknown transaction
+version — stated in `wire-format.md` §14.3.2 and fixtured; witnesses distinct
+and neither participant; a network point listed once; `prior_key` confined
+to a recovery's responses; the narrowings above.
+
+**In the documents.** §6.4 names the formation subtype its witnessless
+ceremony is; §1.1 counts three adoption-evidence alternatives; the
+anchor-table arithmetic is shown (~9.5× the budget, ~40× the index); the
+"nine of eleven" sites say ten counts location alone; P38 precedes P39;
+§18.5 cites §3.3; `pN` is bound to field 3's index; the SubtreeAck acceptors
+match design §11.2.1.1 in both `wire-format.md` and
+`infra-client-requirements.md`; MAIL-010's code 2 reads "over a bound";
+TOP-027, the generated TR22 trace, five CycleDetection comments and the
+models README say cycle repair is a removal without a transaction, code 5
+being withdrawn; light-client §8 names the predicates whose line moves;
+functional_tests §10's hashes are labelled the record they are. The models
+README names what is not modelled, PQXDH first. Four orphaned result files
+removed.
+
+**In the vectors.** The late response answers a query addressed to its own
+verifier; the byte-level negative layer has five machine fixtures where it
+had none, and the workspace decoder refuses every one; duplicate ids in the
+hand-authored negatives are renumbered forward; the harness checks a
+peering's field 8 and `corpus.json` is pinned. Corpus 266 → 272.
+
+**Left for the author**: `wire-format.md` §5.4's "no protocol ceiling"
+against §14.3.2's 256-entry bundle, two rulings in conflict; and §12.7.5's
+optionality argument, which rested on peering being an infra-tier operation
+and needs re-deriving rather than rewording. **Owed**: the KeyMaterial-hash
+check in the codec, a checkpoint-aware archive load, the FFI's identity
+seeds unwiped, the verify harness's envelope-signature count, the §12 size
+table's classical-only rows.

@@ -10,7 +10,7 @@
 (* "cycle detection under concurrent adoptions" is correct.  The property: *)
 (* whenever the patron graph actually contains a cycle, a memo eventually   *)
 (* reaches a node it names as its own ancestor, which fires the check and  *)
-(* (after confirming against its own records) issues a reason-5 disavowal  *)
+(* (after confirming against its own records) makes the removal           *)
 (* that breaks the cycle -- even under message loss, with reconciliation   *)
 (* (replay) as the only repair.                                            *)
 (*                                                                         *)
@@ -72,7 +72,7 @@
 (* The consequence is design Section 18.2's accepted case, now reachable   *)
 (* here: a memo matching the current row can sever an edge that is on no   *)
 (* cycle, bounded rather than prevented -- "the edge severed is the one    *)
-(* that handed the memo over, and the disavowal is reason code 5 with      *)
+(* that handed the memo over, and the removal is no disavowal and leaves   *)
 (* re-adoption available".                                                 *)
 (*                                                                         *)
 (* WHAT IS NOT CLAIMED.  That every edge cut lies on a live cycle; see     *)
@@ -121,10 +121,11 @@ VARIABLES
                \* omits.
                \* Rootward travel is modelled by the memo's `at` moving up
                \* patron edges (the Forward action).
-  disavowed,   \* set of {patron, child} edges cut by cycle-repair (reason
-               \* 5).  A cut edge is removed from the patron relation.  It is
-               \* a RECORD OF WHAT WAS CUT and nothing more: reason 5 is
-               \* "without prejudice" (wire Section 10.2.4) and design
+  disavowed,   \* set of {patron, child} edges cut by cycle-repair -- a
+               \* removal without a transaction since 2026-09-21 (wire
+               \* Section 10.2.4; reason code 5 is a withdrawn tombstone).
+               \* A cut edge is removed from the patron relation.  It is a
+               \* RECORD OF WHAT WAS CUT and nothing more, and design
                \* Section 18.2 bounds the replay case partly ON re-adoption
                \* remaining available, so nothing here refuses to remake a
                \* cut edge.  An earlier version made this a permanent
@@ -236,9 +237,9 @@ Forward(m) ==
 (* 10.2.1: "If field 1 is you, a memo you originated has come back to you  *)
 (* from below").  The detector confirms the memo against its OWN slot row  *)
 (* -- it still holds that occupant -- and cuts the edge on the arrival     *)
-(* branch with a reason-5 disavowal.                                       *)
+(* branch, a removal without a transaction (wire Section 10.2.4).          *)
 (*                                                                         *)
-(* Which edge is cut: the detector disavows the direct subordinate that    *)
+(* Which edge is cut: the detector removes the direct subordinate that     *)
 (* forwarded the memo to it (wire Section 10.2.4) -- `from`, the arrival    *)
 (* branch.  The memo climbed patron edges from the detector's own patron   *)
 (* back to the detector, so the nodes it passed lie on that walk, `from`   *)
@@ -263,7 +264,7 @@ DetectAndRepair(m) ==
   /\ \E child \in Nodes :
         /\ patron[child] = m.pat
         /\ CutAnyChild \/ child = m.from   \* the arrival branch, and only it
-        /\ patron' = [patron EXCEPT ![child] = None]  \* reason-5 disavowal
+        /\ patron' = [patron EXCEPT ![child] = None]  \* the cycle-repair removal
         /\ disavowed' = disavowed \cup {{m.pat, child}}
   \* The memo terminates here (wire Section 10.2.1: the check "fires at any
   \* depth, on the memo alone, and terminates the memo there").

@@ -950,12 +950,13 @@ impl LiveNode {
     /// Originate a topology object this node is a party to.  A recovery or
     /// reissue it stores ends the old credential's service at once.
     pub fn originate(&self, kind: u64, object: &[u8]) -> Decision {
+        // view before ids, the order every other site in this node takes:
+        // the reverse here was the one AB-BA pair, needing no adversary to
+        // deadlock against a concurrent fold
+        let mut view = self.view.lock().unwrap();
         let ids = self.ids.lock().unwrap();
-        let decision =
-            self.view
-                .lock()
-                .unwrap()
-                .originate_push(&self.adjacency, kind, object, &*ids);
+        let decision = view.originate_push(&self.adjacency, kind, object, &*ids);
+        drop(view);
         if decision == Decision::Stored {
             carry_supersession(&self.adjacency.node, &ids, kind, object);
         }

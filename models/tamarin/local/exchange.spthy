@@ -18,7 +18,7 @@ message is accepted:
 
   1. each device shows its 16-byte contribution optically;
   2. both derive the ceremony-id, SHA-256 over the tag and the two
-     contributions (design §13.2), and each shows it;
+     contributions (design §7.5.2), and each shows it;
   3. each checks the other's ceremony-id against its own -- §14.3.1's
      "a mismatch is where a man in the middle shows";
   4. a bearer carries an anchored message, whose anchor and echoed
@@ -74,7 +74,7 @@ it falsifies.
   nothing can verify.
 
 LIMITS, stated as the ceremony theories state theirs.
-  - **The contribution ordering is a projection.**  design §13.2 orders the
+  - **The contribution ordering is a projection.**  design §7.5.2 orders the
     two contributions by ascending participant keyhash; the model fixes the
     initiator's first.  That is what the ordering rule achieves -- one
     canonical term both sides compute -- and an implementation getting the
@@ -126,7 +126,7 @@ rule Responder_Shows_Contribution:
     , Resp1($B, $A, ~cb) ]
 
 /*
-  THE CEREMONY-ID, derived and then shown (design §13.2, §14.3.1).  Both
+  THE CEREMONY-ID, derived and then shown (design §7.5.2, §14.3.1).  Both
   rules build the identical term -- the initiator's contribution first -- for
   the reason the document orders by keyhash: the two devices must compute one
   value, not two.

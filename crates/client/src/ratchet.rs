@@ -246,8 +246,10 @@ fn parse_header(h: &[u8]) -> Result<(DhPublic, u32, u32, Vec<u8>), String> {
         }
         _ => return Err("header dh".into()),
     };
-    let pn = map_get(m, 2).and_then(as_uint).ok_or("header pn")? as u32;
-    let n = map_get(m, 3).and_then(as_uint).ok_or("header n")? as u32;
+    let pn = u32::try_from(map_get(m, 2).and_then(as_uint).ok_or("header pn")?)
+        .map_err(|_| "header pn out of range")?;
+    let n = u32::try_from(map_get(m, 3).and_then(as_uint).ok_or("header n")?)
+        .map_err(|_| "header n out of range")?;
     // key 4 where the sender's post-quantum ratchet had something to carry
     let pq = match map_get(m, 4) {
         Some(Item::Bytes(r)) => h[r.clone()].to_vec(),
@@ -506,7 +508,10 @@ impl<P: PostQuantumRatchet + Clone + Default> Ratchet<P> {
             let [pk, n, mk] = array(s)?.as_slice() else {
                 return None;
             };
-            skipped.insert((fixed::<32>(b, pk)?, uint(n)? as u32), fixed::<32>(b, mk)?);
+            skipped.insert(
+                (fixed::<32>(b, pk)?, u32::try_from(uint(n)?).ok()?),
+                fixed::<32>(b, mk)?,
+            );
         }
         if skipped.len() > MAX_SKIPPED_KEYS {
             return None;
@@ -517,9 +522,9 @@ impl<P: PostQuantumRatchet + Clone + Default> Ratchet<P> {
             rk: fixed::<32>(b, &f[2])?,
             cks: optional(&f[3], |it| fixed::<32>(b, it))?,
             ckr: optional(&f[4], |it| fixed::<32>(b, it))?,
-            ns: uint(&f[5])? as u32,
-            nr: uint(&f[6])? as u32,
-            pn: uint(&f[7])? as u32,
+            ns: u32::try_from(uint(&f[5])?).ok()?,
+            nr: u32::try_from(uint(&f[6])?).ok()?,
+            pn: u32::try_from(uint(&f[7])?).ok()?,
             skipped,
             pq,
             ad: bytes(b, &f[9])?,

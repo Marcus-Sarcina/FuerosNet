@@ -228,12 +228,31 @@ pub fn open(
 /// A subject's own seed for one of its records (design §7.5.2, §7.5.2.9):
 /// what unlocks its likeness on that counterparty's device, with what a
 /// grant needs to name the capture and derive its key.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct OwnSeed {
     pub seed: [u8; 32],
     pub counterparty: Keyhash,
     pub ceremony_id: [u8; 32],
     pub finalized_at: u64,
+}
+
+// the seed is the one secret in a store, and a derived Debug put all 32
+// bytes of it into any log line that ever formatted one
+impl std::fmt::Debug for OwnSeed {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OwnSeed")
+            .field("seed", &"<32 bytes, not shown>")
+            .field("counterparty", &self.counterparty)
+            .field("ceremony_id", &self.ceremony_id)
+            .field("finalized_at", &self.finalized_at)
+            .finish()
+    }
+}
+
+impl Drop for OwnSeed {
+    fn drop(&mut self) {
+        zeroize::Zeroize::zeroize(&mut self.seed);
+    }
 }
 
 /// A compliant client's persistent state (design §7.5.2, §7.5.2.9;
