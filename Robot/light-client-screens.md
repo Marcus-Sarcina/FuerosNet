@@ -99,6 +99,25 @@ and the transaction type is chosen at D1a by the initiator, before the
 responder has seen anything, so the responder's D1.5 is the first place they
 can refuse it.
 
+**Built 2026-10-01.** `Meet.Step.INTENT` now completes on `crossBootstrap()`
+and not on an intent; `Meet.Role` says which side of the bootstrap a device
+is on and therefore which camera it uses; `Meet.Kind` carries the author's
+dialogue — a regular meeting by default, the *"ask this person to backup my
+user data"* checkbox, and patronage in a named direction. The brief's
+contents and the pre-sign warnings are **inventories the model computes
+from the ceremony's own facts** (`Meet.brief()`, `Meet.presign()`), so a
+screen cannot show a reassurance it has not earned and a test can say which
+items a given ceremony owes. **The rows these answer**: UX-001 and UX-002 at
+D1.5, PRD-02 where D1a chose an adoption, UX-003 at D6, PRD-05 at D7.
+
+The **bootstrap object is the shell's own** and deliberately not a
+`wire-format.md` §14.3 one: that section fixes the *anchored* exchange, and
+the bootstrap carries only
+design §7.1.1's basics between two people who have not yet exchanged a
+contribution. Version byte, kind, backup flag, identifier — thirty-five
+bytes, and the shell reads it because there is nothing in it for the kernel
+to check.
+
 **The checkbox is peering, and peering carries the backup** — I had this
 wrong on first reading and the author corrected it [2026-09-29].
 `network-design.md` §6.3 rules it [author, 2026-09-04]: a peer persists the

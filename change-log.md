@@ -11769,3 +11769,51 @@ not built**: it needs the counterparty reachable and a session this very
 exchange establishes. And Bluetooth as a bearer is not Bluetooth as
 proximity evidence — design §1.3's bar on signal strength as distance
 evidence is untouched, and nothing here is offered as a channel.
+
+### 2026-10-01 (the Meet screens, with their rows)
+
+**The author's handshake ruling is now the state machine.** D1 completes on
+the bootstrap crossing rather than on an intent arriving — the sequencing
+error the ruling existed to correct, an `IntentExchange` echoing a
+contribution D2 has not yet shown. `Meet.Role` decides which camera a
+device uses, and `Meet.Kind` carries the dialogue as specified: a regular
+meeting by default with the *ask this person to backup my user data*
+checkbox, patronage as a separate option that then asks the direction.
+
+**D1 and D2 are real screens.** The bootstrap QR is rendered and read with
+the rear camera; the anchor exchange is rendered and read with the selfie
+cameras behind the turn-the-phone instruction; and the intent then crosses
+on the BLE bearer. The kernel decides which QR to show, because only it
+knows whether it has read the other side's contribution yet.
+
+**The rows the Meet screens owe are inventories the model computes**, not
+templates a screen prints — so a screen cannot show a reassurance it has not
+earned, and a test can say which items a given ceremony owes. UX-001 and
+UX-002 at the brief: what becomes durable and who may read it, no image in
+the record, a stated retention, and that the device stops taking input from
+the next screen on. PRD-02 where an adoption was chosen: the authority it
+moves and which way, the resources reaching upward named, the cascade
+downward named as *their* risk — **and nothing of it on a regular meeting**,
+which is the half a template would get wrong. UX-003 before signing: each
+weakness only where it is true, and the words *malformed* and *invalid*
+appear nowhere, a degraded ceremony being shown as degraded. PRD-05 after:
+two people who each chose to be the patron are not a protocol failure, and
+the screen asks the two to choose a direction, *neither* being one of the
+three answers.
+
+**The bootstrap object is the shell's own.** §14.3 fixes the anchored
+exchange; the bootstrap carries only design §7.1.1's basics between two
+people who have not yet exchanged a contribution — version, kind, backup
+flag, identifier, thirty-five bytes. The shell reads it because there is
+nothing in it for the kernel to check, and the kind it carries is the
+initiator's choice and the responder's to refuse.
+
+**One addition to the bearer removes a second place to be lied to.** A
+carriage set is as long as the bundle makes it (§5.4), so a receiver told
+how many messages to expect would take the sender's word for it twice. The
+header now flags the last message of a set: a truncated set is incomplete
+rather than short, which a test asserts by withholding that message's
+packets.
+
+Android unit tests 37 → 51. Proximity and capture are still not real and
+the screens still say so.

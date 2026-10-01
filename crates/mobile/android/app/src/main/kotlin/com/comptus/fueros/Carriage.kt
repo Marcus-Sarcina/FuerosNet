@@ -52,12 +52,10 @@ class Carriage(private val radio: Bearer.Link?) {
     }
 
     /**
-     * The counterparty's carriage set once `count` messages are whole, or
-     * null while they are not.
-     *
-     * `count` comes from the kernel, which reads it out of the
-     * `IntentExchange`'s continuation field — so the number of messages to
-     * expect is the sender's claim, checked by whether they assemble.
+     * The counterparty's carriage set once it is whole, or null while it is
+     * not. **Nobody is told how many messages to expect**: the sender flags
+     * its last one, and a set missing that flag is incomplete rather than
+     * short.
      */
-    fun received(count: Int): List<ByteArray>? = inward.carriage(count)
+    fun received(): List<ByteArray>? = inward.carriage()
 }

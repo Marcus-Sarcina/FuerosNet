@@ -3,6 +3,7 @@ package com.comptus.fueros
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -42,10 +43,12 @@ class CarriageTest {
             ByteArray(4000) { (it * 3).toByte() },
             ByteArray(1200) { (it * 5).toByte() },
         )
+        assertNull("nothing sent is nothing to take", far.received())
         assertTrue(near.send(set))
-        assertNull("two of three is not a set", far.received(4))
-        val back = far.received(3)
-        for (i in set.indices) assertArrayEquals("message $i", set[i], back!![i])
+        val back = far.received()
+        assertNotNull("the sender flagged its last message", back)
+        assertEquals(set.size, back!!.size)
+        for (i in set.indices) assertArrayEquals("message $i", set[i], back[i])
     }
 
     @Test
@@ -55,6 +58,6 @@ class CarriageTest {
         pipe.other = far
         pipe.dead = true
         assertFalse(Carriage(pipe).send(listOf(ByteArray(100))))
-        assertNull(far.received(1))
+        assertNull(far.received())
     }
 }

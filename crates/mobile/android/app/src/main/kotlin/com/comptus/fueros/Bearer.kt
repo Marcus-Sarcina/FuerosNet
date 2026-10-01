@@ -59,6 +59,7 @@ object Bearer {
      * ```
      * byte 0      message index, 0..=MESSAGES_BOUND-1
      * byte 1      flags: bit 0 set on the LAST packet of a message
+     *                    bit 1 set on the last packet of the LAST message
      * bytes 2..3  the slice's index within its message, big-endian
      * bytes 4..   the slice
      * ```
@@ -67,10 +68,19 @@ object Bearer {
      * delivers packets, and the last one says so. A header this small keeps
      * the slice large on a link whose MTU is twenty-odd bytes, which is
      * what Bluetooth LE gives before negotiation.
+     *
+     * **Bit 1 is why the receiver need not be told the count.** A carriage
+     * set is as long as the bundle makes it (`wire-format.md` §5.4), and a
+     * receiver that had to be told how many messages to expect would be
+     * taking the sender's word for it in a second place. The end flag says
+     * *this was the last*, and a set is complete when that message and
+     * every message before it is whole — so a truncated set is an
+     * incomplete one rather than a short one mistaken for all of it.
      */
     const val HEADER = 4
 
     private const val LAST = 1
+    private const val END = 2
 
     /** Cut `messages` into packets for a link of `mtu`. */
     fun packets(messages: List<ByteArray>, mtu: Int): List<ByteArray> {
@@ -87,7 +97,13 @@ object Bearer {
                 val slice = message.copyOfRange(from, to)
                 val packet = ByteArray(HEADER + slice.size)
                 packet[0] = m.toByte()
-                packet[1] = if (s == slices - 1) LAST.toByte() else 0
+                val lastSlice = s == slices - 1
+                val lastMessage = m == messages.size - 1
+                packet[1] = when {
+                    lastSlice && lastMessage -> (LAST or END).toByte()
+                    lastSlice -> LAST.toByte()
+                    else -> 0
+                }
                 packet[2] = (s ushr 8).toByte()
                 packet[3] = s.toByte()
                 slice.copyInto(packet, HEADER)
@@ -111,6 +127,7 @@ object Bearer {
         private val slices = HashMap<Int, HashMap<Int, ByteArray>>()
         private val last = HashMap<Int, Int>()
         private var held = 0
+        private var end: Int? = null
 
         /** Why a packet was not taken, or null where it was. */
         fun take(packet: ByteArray): String? {
@@ -126,12 +143,26 @@ object Bearer {
             // a repeat is dropped, not counted twice: a link may retry
             if (into.put(s, slice) == null) held += slice.size
             if (packet[1].toInt() and LAST != 0) last[m] = s
+            if (packet[1].toInt() and END != 0) end = m
             return null
         }
 
         /**
-         * The carriage set, or null while it is incomplete: `count`
-         * messages, each whole, handed over in index order.
+         * The whole carriage set, or null while it is incomplete: every
+         * message up to and including the one flagged as last, each whole,
+         * in index order.
+         *
+         * **Nobody says how many to expect.** The sender flags its last
+         * message and this waits for that one and everything before it.
+         */
+        fun carriage(): List<ByteArray>? {
+            val last = end ?: return null
+            return carriage(last + 1)
+        }
+
+        /**
+         * The same, for a count known another way. A set whose length the
+         * caller already knows is checked against it.
          */
         fun carriage(count: Int): List<ByteArray>? {
             if (count <= 0 || count > MESSAGES_BOUND) return null

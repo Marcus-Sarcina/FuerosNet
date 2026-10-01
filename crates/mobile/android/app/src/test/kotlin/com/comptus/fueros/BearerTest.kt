@@ -113,6 +113,24 @@ class BearerTest {
     }
 
     @Test
+    fun a_truncated_set_is_incomplete_rather_than_short() {
+        // the last message's packets never arrive, so the end flag never
+        // does: a receiver told nothing about the count cannot mistake what
+        // it has for all of it
+        val wire = Wire(20)
+        val messages = carriage(40, 40, 40)
+        Bearer.carry(wire, messages)
+        val r = Bearer.Reassembly()
+        val lastMessage = wire.sent.filter { (it[0].toInt() and 0xff) == 2 }
+        for (p in wire.sent - lastMessage.toSet()) assertNull(r.take(p))
+        assertNull("two of three is not the set", r.carriage())
+        for (p in lastMessage) assertNull(r.take(p))
+        val back = r.carriage()!!
+        assertEquals(3, back.size)
+        for (i in messages.indices) assertArrayEquals(messages[i], back[i])
+    }
+
+    @Test
     fun a_link_that_will_not_send_is_reported_rather_than_assumed() {
         val dead = object : Bearer.Link {
             override fun mtu() = 20

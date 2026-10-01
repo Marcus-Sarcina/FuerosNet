@@ -40,6 +40,17 @@ object Kernel {
      *  connection: a font change mid-ceremony must not lose it. */
     @Volatile private var meet: Meet? = null
 
+    /** Whether the counterparty's contribution has been read off their
+     *  screen, which is what decides the second QR from the first. */
+    @Volatile private var opticalTaken = false
+
+    /** The radio and the carriage over it, once the meeting opens one. */
+    @Volatile private var ble: BleBearer? = null
+    @Volatile private var carriage: Carriage? = null
+
+    /** The application's context, kept for the radio the bearer needs. */
+    @Volatile private var appContext: Context? = null
+
     /** Bind a screen: it is rendered against the state so far, then on
      *  every change. */
     fun bind(u: Front.Ui) = front.bind(u)
@@ -52,17 +63,17 @@ object Kernel {
      * Begin a ceremony with the one provisioned peer, meeting or adopting
      * as chosen. The kernel prepares the local half; the optical handshake
      * and the bearer that carries the intent are specified now
-     * (`wire-format.md` §14.3) but not yet wired in this shell, so this
-     * stands the flow up rather than completing it. A ceremony already live
-     * is returned as-is.
+     * (`wire-format.md` §14.3) and carried from here: the two QRs on the
+     * cameras and the intent over a Bluetooth LE bearer. A ceremony already
+     * live is returned as-is.
      */
-    fun startMeet(adopt: Meet.Adopt): Meet? {
+    fun startMeet(kind: Meet.Kind, role: Meet.Role): Meet? {
         val p = participant ?: return null
         val to = peer ?: return null
         val key = peerKey ?: return null
         synchronized(lock) {
             meet?.let { return it }
-            meet = Meet(key, peerName, adopt)
+            meet = Meet(key, peerName, kind, role)
         }
         val m = meet!!
         Thread {
@@ -71,21 +82,114 @@ object Kernel {
                 // neighbourhood (design §7.1); with no horizon yet the
                 // nomination is empty and the ceremony is that much weaker,
                 // which the record carries honestly rather than hiding
-                p.begin(to, listOf(), true)
-                // The ENCODING is the kernel's since 2026-10-01: every
-                // §14.3 object crosses this boundary as bytes, and the
-                // checks against the screen are made behind it. What this
-                // build still lacks is a BEARER to move them on -- a camera
-                // for the two QRs and a local radio for the bulk -- which
-                // is platform work and not protocol.
-                m.note("ceremony open. The two QRs and the bearer-carried")
-                m.note("intent are encoded by the kernel (wire-format §14.3);")
-                m.note("this build has no camera or radio to carry them.")
+                p.begin(to, listOf(), role == Meet.Role.INITIATOR)
+                m.note("ceremony open; the two codes are ready to cross.")
             } catch (e: Refused.Reason) {
                 m.stop("begin refused: ${e.reason}")
             }
         }.start()
         return m
+    }
+
+    // ---- the bootstrap, which is the shell's own object ----------------
+
+    /**
+     * **The bootstrap QR's payload** (D1a): this device's identifier and
+     * the kind of transaction, and nothing of the ceremony's own anchor.
+     *
+     * **This one is not a §14.3 object and the shell owns it.** §14.3 fixes
+     * the ANCHORED exchange, which is D2's; the bootstrap carries only what
+     * design §7.1.1 needs to start a conversation between two people who
+     * have not yet exchanged a contribution, so there is nothing here for
+     * the kernel to check and nothing for it to encode. The shell's own
+     * framing, versioned so a later one can differ.
+     */
+    fun bootstrap(): ByteArray? {
+        val m = meet ?: return null
+        val me = participant?.me() ?: return null
+        val kind = when (m.adopt) {
+            Meet.Adopt.NONE -> 0
+            Meet.Adopt.THEM_UNDER_ME -> 1
+            Meet.Adopt.ME_UNDER_THEM -> 2
+        }
+        val backup = if (m.kind.askBackup) 1 else 0
+        return byteArrayOf(1, kind.toByte(), backup.toByte()) + me
+    }
+
+    /**
+     * The counterparty's bootstrap. Null where it was taken; a reason
+     * otherwise.
+     *
+     * **The kind it carries is the initiator's choice and the responder's
+     * to refuse**, which is what the brief after this is for — so this
+     * takes the choice without agreeing to it.
+     */
+    fun takeBootstrap(bytes: ByteArray): String? {
+        if (bytes.size != 35 || bytes[0] != 1.toByte()) {
+            return "that code is not a meeting invitation this build knows"
+        }
+        val m = meet ?: return "no meeting is open here"
+        val theirs = bytes.copyOfRange(3, 35)
+        if (hex(theirs) != m.counterpartyKey) {
+            return "that code is someone else's, not ${m.counterpartyName}'s"
+        }
+        m.theirAdopt(
+            when (bytes[1].toInt()) {
+                1 -> Meet.Adopt.THEM_UNDER_ME
+                2 -> Meet.Adopt.ME_UNDER_THEM
+                else -> Meet.Adopt.NONE
+            },
+        )
+        return null
+    }
+
+    // ---- the optical exchange, which is the kernel's ------------------
+
+    /**
+     * What to show on the screen at D2: the contribution first, then the
+     * meeting id once the counterparty's contribution is in
+     * (`wire-format.md` §14.3.1's two steps, in order).
+     *
+     * **The kernel decides which**, because only it knows whether it has
+     * read the other side's contribution yet.
+     */
+    fun optical(): ByteArray? {
+        val p = participant ?: return null
+        return try {
+            if (opticalTaken) p.transcriptConfirm() else p.opticalContribution()
+        } catch (e: Refused.Reason) {
+            null
+        }
+    }
+
+    /**
+     * Bytes the selfie camera read. Null where they were taken, a reason
+     * otherwise — and a reason here stops the ceremony, because every
+     * refusal at this step is either a bearer disagreeing with a screen or
+     * a party who is not the one in front of you.
+     */
+    fun takeOptical(bytes: ByteArray): String? {
+        val p = participant ?: return "the kernel is not running"
+        val m = meet ?: return "no meeting is open here"
+        return try {
+            if (!opticalTaken) {
+                p.takeOptical(bytes)
+                opticalTaken = true
+                m.note("their contribution is in; showing the meeting id.")
+                null
+            } else {
+                val id = p.takeTranscript(bytes)
+                m.note("the two meeting ids agree: ${hex(id).take(16)}…")
+                // THE BEARER'S TURN. The optical step is what the integrity
+                // rests on (§14.3.1); from here a radio carries the bulk,
+                // and everything it carries is checked against what the
+                // screens showed.
+                carryIntent(m)
+                null
+            }
+        } catch (e: Refused.Reason) {
+            e.reason
+        }
     }
 
     /**
@@ -181,7 +285,78 @@ object Kernel {
     /** End the ceremony in progress. */
     fun stopMeet(reason: String) {
         meet?.stop(reason)
-        synchronized(lock) { meet = null }
+        synchronized(lock) {
+            meet = null
+            opticalTaken = false
+            ble?.close()
+            ble = null
+            carriage = null
+        }
+    }
+
+    /**
+     * **The bearer's load** (`wire-format.md` §14.3.2): this device's
+     * intent carriage out, the counterparty's in, over the best bearer the
+     * two share.
+     *
+     * The radio is opened here rather than earlier because there is nothing
+     * to carry until the anchor is agreed — and because a radio advertising
+     * through a meeting nobody accepted is a beacon the person did not ask
+     * for.
+     *
+     * **Who advertises and who scans carries no meaning.** §14.3.1 leaves
+     * the bearer to the shell, so this uses the bootstrap's own asymmetry:
+     * the party that showed the QR offers, the party that read it seeks.
+     */
+    private fun carryIntent(m: Meet) {
+        val p = participant ?: return
+        val to = peer ?: return
+        val radio = BleBearer(appContext ?: return)
+        val inbound = BleBearer.Inbound { packet ->
+            val live = carriage ?: return@Inbound
+            live.packet(packet)?.let { why -> m.note("a packet was refused: $why") }
+            live.received()?.let { set ->
+                try {
+                    val taken = p.takeIntentCarriage(to, set)
+                    m.note("their intent is in, with $taken continuation(s).")
+                    m.opticalDone()
+                } catch (e: Refused.Reason) {
+                    // every refusal here is the kernel catching a bearer
+                    // that disagrees with the screens (§14.3.2), which is
+                    // the one thing the anchor is for
+                    m.stop("the carried intent was refused: ${e.reason}")
+                }
+            }
+        }
+        val why = when (m.role) {
+            Meet.Role.INITIATOR -> radio.offer(inbound)
+            Meet.Role.RESPONDER -> radio.seek(inbound)
+        }
+        if (why != null) {
+            // §14.3.1's last resort is a network fetch, which this build
+            // does not carry: said plainly rather than left to look like a
+            // protocol failure
+            m.note("no bearer: $why.")
+            m.note("the network fetch §14.3.1 allows last is not built,")
+            m.note("so the intent cannot cross from here.")
+            return
+        }
+        synchronized(lock) {
+            ble = radio
+            carriage = Carriage(radio.link())
+        }
+        Thread {
+            try {
+                val mine = p.intentCarriage()
+                if (carriage?.send(mine) == true) {
+                    m.note("intent sent: ${mine.size} message(s) over the radio.")
+                } else {
+                    m.note("the radio would not take the intent; nothing was sent.")
+                }
+            } catch (e: Refused.Reason) {
+                m.stop("the intent could not be built: ${e.reason}")
+            }
+        }.start()
     }
 
     /** The one peer this device was provisioned to talk to, or null while
@@ -200,6 +375,7 @@ object Kernel {
         synchronized(lock) {
             if (started) return
             started = true
+            appContext = app
         }
         Thread({ bringUp(AndroidShell(app)) }, "fueros-kernel").start()
     }

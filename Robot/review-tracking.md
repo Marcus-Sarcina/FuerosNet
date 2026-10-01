@@ -13442,3 +13442,76 @@ today's ruling: a preview surface, the rear-camera bootstrap at D1 and the
 selfie-camera anchor exchange at D2, and the advertise-or-seek choice. The
 backends are reachable from `Carriage` and nothing in the flow calls them
 yet.
+
+### The Meet screens, with their rows (2026-10-01)
+
+**The author's handshake ruling, built.** D1 completes on the bootstrap
+crossing and not on an intent arriving — which was the sequencing error the
+ruling existed to correct, since an `IntentExchange` echoes a contribution
+D2 has not yet shown. `Meet.Role` decides which camera a device uses;
+`Meet.Kind` carries the dialogue as specified: a regular meeting by default
+with the backup checkbox beside it, and patronage as a separate option that
+then asks the direction.
+
+**The rows, and how each is held.** The brief and the pre-sign warnings are
+**inventories the model computes from the ceremony's facts**, not templates
+a screen prints. That shape is what makes them testable and what stops a
+screen reassuring where it has not earned the right.
+
+| Row | Where | What the test asserts |
+|---|---|---|
+| UX-001 | D1.5 | What becomes durable and **who may later read it**, at the action: identity, time, the fact of meeting, the disclosed fields chosen *here and not later*, and withheld-is-not-absent |
+| UX-002 | D1.5 | No image enters the record; each capture is sealed under a key only its subject derives, for a stated retention; and that the device stops taking input from the next screen on |
+| PRD-02 | D1.5, where D1a chose an adoption | The authority it moves and **which way**: a patron named, the resources whose access reaches upward named, or — the other direction — that this side's outage cascades to them and theirs, *their* risk and not only this one's. **And that a regular meeting carries none of it**, which is the half a template would get wrong |
+| UX-003 | D6 | Each weakness only where it is true — no familiar verifier, unavailable answers, witness imbalance, a channel weaker than UWB, no channel at all, no witness at all — and that **"malformed" and "invalid" appear nowhere**, a degraded ceremony being presented as degraded |
+| PRD-05 | D7 | Two people who each chose to be the patron are **not** a protocol failure: nothing is stopped, no reason is set, and the screen asks the two to choose a direction. Agreeing directions are no opposition at all, and *"neither — just the meeting"* is one of the three answers |
+
+**D1 and D2 are now real screens.** The bootstrap QR is rendered and read
+with the rear camera; the anchor exchange is rendered and read with the
+selfie cameras, behind the turn-the-phone instruction the ruling made
+explicit; and the intent then crosses on the BLE bearer. The kernel decides
+which QR to show — contribution first, then the meeting id — because only it
+knows whether it has read the other side's contribution.
+
+**The bootstrap object is the shell's own, and that is a decision.** §14.3
+fixes the *anchored* exchange; the bootstrap carries only design §7.1.1's
+basics between two people who have not yet exchanged a contribution. Thirty
+five bytes: version, kind, backup flag, identifier. The shell reads it
+because there is nothing in it for the kernel to check — and the kind it
+carries is the initiator's choice and **the responder's to refuse**, which
+is what their brief is for.
+
+**One addition to the bearer, and it removes a second place to be lied to.**
+A carriage set is as long as the bundle makes it (§5.4), and a receiver told
+how many messages to expect would be taking the sender's word for it twice.
+The header's bit 1 now flags the last message of a set, so a set is complete
+when that message and every one before it is whole — **a truncated set is an
+incomplete one rather than a short one mistaken for all of it**, which a
+test asserts by withholding the last message's packets.
+
+**Still not real, and the screens say so**: proximity needs radios this
+shell does not drive, and capture needs a camera pipeline for faces rather
+than symbols. Nothing in D1 or D2 has run on hardware.
+
+**What the row tests do and do not close.** The catalogue's scanner counts
+Kotlin markers — *"a product entry closes on a screen, and its marker sits
+beside the screen's test"* — so the question is live, and the answer is that
+**neither PRD row is marked**:
+
+- **PRD-02 is half-built.** Its `then` has two clauses: *"the departure flow
+  warns and names the resources that will be lost before confirmation; the
+  adoption flow lists resources whose predicates reach upward."* The
+  departure flow is the E screens and is not built. The adoption half shows
+  the warning and then says plainly that **no upward-reaching resources are
+  known to this device yet and a release build names each one here** — which
+  is the truth and is not the row.
+- **PRD-05's `given` is two release-build clients in one ceremony.** The
+  model presents the three answers and reports no error, and a test asserts
+  it; one side's model in a unit test is not two clients in a meeting. Its
+  milestone is `manual` for that reason.
+
+So the JVM tests are a **precondition** these rows now have and did not: the
+inventory each screen must show is computed and asserted, so a physical run
+is checking a screen against a specification rather than against a reading
+of one. Both rows stay owed, and what closes them is two devices and a
+person — which is the same run that closes TRV-12, TRV-13 and MET-12.

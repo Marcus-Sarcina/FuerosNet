@@ -1,11 +1,16 @@
 package com.comptus.fueros
 
+import android.Manifest
 import android.app.Activity
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
 import android.view.Gravity
 import android.widget.Button
+import android.widget.CheckBox
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -18,13 +23,14 @@ import android.widget.TextView
  *
  * **What this build carries and what it cannot.** The flow, its front-
  * loaded brief, its hands-off phase and its review-before-sign gate are all
- * here and enforced by [Meet]. The steps that need the world are not
- * faked: the optical exchange needs a counterparty's screen in the camera,
- * and the bearer that carries the intent past the handshake is the shell's
- * to build (`wire-format.md` §14.3 fixed the encoding; the carriage is not
- * yet wired here); proximity needs the radios; capture needs a face in front
- * of the camera. Where a step needs reality, the screen says so. A dim
- * **walkthrough** control advances the flow for inspection — it is
+ * here and enforced by [Meet]. **D1 and D2 are real**: the bootstrap QR is
+ * rendered and read with the rear camera, the anchor exchange is rendered
+ * and read with the selfie cameras, and the intent then crosses on a
+ * Bluetooth LE bearer — none of it verified on hardware, and the files
+ * behind each say so. What is still not real: proximity needs radios this
+ * shell does not drive, and capture needs a camera pipeline for faces
+ * rather than symbols. Where a step needs reality, the screen says so. A
+ * dim **walkthrough** control advances the flow for inspection — it is
  * scaffolding, not the ceremony, and it is labelled as standing in for a
  * signal a real device would raise.
  */
@@ -32,6 +38,7 @@ class MeetActivity : Activity() {
 
     private lateinit var body: LinearLayout
     private lateinit var scroll: ScrollView
+    private var camera: QrCamera? = null
 
     private val sink = object : Meet.Ui {
         override fun render() = runOnUiThread { redraw() }
@@ -66,6 +73,11 @@ class MeetActivity : Activity() {
     override fun onStop() {
         Consent.release(this)
         Kernel.meet()?.unbind(sink)
+        // the camera goes back the moment this screen stops: holding one
+        // behind a screen nobody is looking at is a camera nobody consented
+        // to
+        camera?.close()
+        camera = null
         super.onStop()
     }
 
@@ -92,7 +104,7 @@ class MeetActivity : Activity() {
         when (m.step()) {
             Meet.Step.INTENT -> intent(m)
             Meet.Step.BRIEF -> brief(m)
-            Meet.Step.OPTICAL -> handsOff(m, "the optical channel", "a counterparty's screen in the camera", m::opticalDone)
+            Meet.Step.OPTICAL -> optical(m)
             Meet.Step.PROXIMITY -> handsOff(m, "the proximity radios", "UWB or NFC hardware", m::proximityDone)
             // leaving capture is what asks for the selection: once, at the
             // transition, so a recreated screen redraws without re-running it
@@ -116,40 +128,149 @@ class MeetActivity : Activity() {
             para("A ceremony is with someone you are provisioned to. None yet.")
             return
         }
-        para("A meeting establishes a presence record with the other person, in person. Choose what this meeting is for — it cannot be changed once it begins.")
-        button("Meet only") { start(Meet.Adopt.NONE) }
-        button("Meet and adopt them under me") { start(Meet.Adopt.THEM_UNDER_ME) }
-        button("Meet and be adopted under them") { start(Meet.Adopt.ME_UNDER_THEM) }
+        // D1a, the initiator's dialogue, as the author specified it: a
+        // regular meeting is the DEFAULT, with the backup checkbox beside
+        // it, and patronage a separate option that then asks the direction.
+        para("A meeting establishes a presence record with the other person, in person. What this meeting is for is chosen now and cannot change once it begins.")
+        heading("Regular meeting")
+        val backup = CheckBox(this).apply {
+            text = "Ask this person to backup my user data"
+            setTextColor(Color.DKGRAY)
+        }
+        body.addView(backup)
+        button("Show my code") {
+            start(Meet.Kind(Meet.Adopt.NONE, backup.isChecked), Meet.Role.INITIATOR)
+        }
+        heading("Patronage")
+        para("An adoption moves authority. What it costs is listed before either of you agrees.")
+        button("I will be the Patron") {
+            start(Meet.Kind(Meet.Adopt.THEM_UNDER_ME), Meet.Role.INITIATOR)
+        }
+        button("I will be the Client") {
+            start(Meet.Kind(Meet.Adopt.ME_UNDER_THEM), Meet.Role.INITIATOR)
+        }
+        heading("Or join theirs")
+        para("The other person has shown you a code. Their choice of transaction is in it, and the next screen is where you accept or refuse it.")
+        button("Scan a QR code") { start(Meet.Kind(), Meet.Role.RESPONDER) }
     }
 
-    private fun start(adopt: Meet.Adopt) {
-        Kernel.startMeet(adopt)?.bind(sink) ?: para("could not begin: unprovisioned")
+    private fun start(kind: Meet.Kind, role: Meet.Role) {
+        Kernel.startMeet(kind, role)?.bind(sink) ?: para("could not begin: unprovisioned")
         redraw()
     }
 
     // ---- D1 intent -----------------------------------------------------
 
     private fun intent(m: Meet) {
-        para("A short code goes screen-to-screen with ${m.counterpartyName} — each phone's contribution, then the ceremony id both compute and check. That handshake is what a person verifies by looking.")
-        para("The intent and the records behind it then cross on a bearer the shell picks (wire-format §14.3: a direct radio first, a network fetch last). The encoding is fixed; the carriage is not wired in this build.")
-        walkthrough("the counterparty's intent arrived") { m.intentExchanged() }
+        when (m.role) {
+            Meet.Role.INITIATOR -> {
+                para("Hold this up for ${m.counterpartyName} to scan with their REAR camera. It carries who you are and what kind of meeting this is — nothing of the meeting's own anchor, which comes later and goes both ways.")
+                val code = Kernel.bootstrap()
+                if (code == null) {
+                    para("The code needs the kernel's identifier, which this device has not got yet.")
+                } else {
+                    qr(code)
+                }
+                para("When they have scanned it, both of you will be shown what is about to happen.")
+                button("They have scanned it") { m.crossBootstrap() }
+            }
+            Meet.Role.RESPONDER -> {
+                para("Point the back of your phone at ${m.counterpartyName}'s screen. Their code carries who they are and the kind of meeting they chose; the next screen is where you accept or refuse it.")
+                scan(QrCamera.Facing.REAR) { bytes ->
+                    // the bootstrap is the shell's own object and carries no
+                    // anchor, so the shell reads it (`wire-format.md` §14.3
+                    // fixes the ANCHORED objects and this is not one)
+                    val read = Kernel.takeBootstrap(bytes)
+                    runOnUiThread {
+                        if (read == null) m.crossBootstrap() else m.stop(read)
+                    }
+                }
+            }
+        }
+    }
+
+    /** A QR on the screen, large enough to scan across a table. */
+    private fun qr(bytes: ByteArray) {
+        val m = Optical.matrix(bytes)
+        val scale = 8
+        val w = m.width * scale
+        val px = IntArray(w * w)
+        for (y in 0 until w) {
+            for (x in 0 until w) {
+                px[y * w + x] = if (m.get(x / scale, y / scale)) Color.BLACK else Color.WHITE
+            }
+        }
+        body.addView(
+            ImageView(this).apply {
+                setImageBitmap(Bitmap.createBitmap(px, w, w, Bitmap.Config.ARGB_8888))
+                layoutParams = LinearLayout.LayoutParams(w, w).apply { topMargin = 24 }
+            },
+        )
+    }
+
+    /**
+     * Read one QR with the named camera. The permission is asked for here
+     * and a refusal stops the ceremony with a reason rather than silently:
+     * a camera this shell does not hold is a meeting it cannot carry.
+     */
+    private fun scan(facing: QrCamera.Facing, found: (ByteArray) -> Unit) {
+        if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            para("This step needs the camera. Nothing is read until you allow it.")
+            button("Allow the camera") {
+                requestPermissions(arrayOf(Manifest.permission.CAMERA), 1)
+            }
+            return
+        }
+        para("Scanning…")
+        val cam = camera ?: QrCamera(this).also { camera = it }
+        cam.readOne(facing, null) { bytes -> found(bytes) }?.let { why -> para(why) }
     }
 
     // ---- D1.5 the brief: everything front-loaded -----------------------
 
     private fun brief(m: Meet) {
-        para("From here the phone faces ${m.counterpartyName} and takes nothing from you until the capture is done. Read this now.")
-        heading("What the record will hold")
-        para("• Your identity, the time, and that you met — durable and readable by those you show it to.")
-        para("• The fields you disclose (chosen here, not later). What you withhold is visible as withheld, never as absent.")
-        para("• No image. Captures stay on each device, sealed under the other's key, for a stated retention and then deleted.")
+        para("This is what is about to happen. Both of you are being shown it, and both of you answer.")
+        heading(
+            when (m.adopt) {
+                Meet.Adopt.NONE -> "A regular meeting with ${m.counterpartyName}"
+                Meet.Adopt.ME_UNDER_THEM -> "${m.counterpartyName} as your patron"
+                Meet.Adopt.THEM_UNDER_ME -> "You as ${m.counterpartyName}'s patron"
+            },
+        )
+        // every item the model says this ceremony earns, and no reassurance
+        // it has not earned
+        m.brief().forEach { para("• ${it.text}") }
         heading("What may be weak in this meeting")
         para("• Nominated witnesses: none, until your horizon can offer them. The record carries that it had none.")
         para("• Verifiers and proximity are weighed, not required; a thin meeting is honest, not malformed.")
-        button("I have read this — begin") { m.acknowledgeBrief() }
+        button("Accept — begin") { m.accept() }
+        button("Refuse") { m.refuse() }
     }
 
-    // ---- D2–D4 hands-off ------------------------------------------------
+    // ---- D2 the optical exchange, mutual and on the selfie cameras -----
+
+    /**
+     * **Turn the phone to face the counterparty** [author, 2026-09-29].
+     * This is the moment the device stops being its user's: from here it
+     * shows its code to the other person and reads theirs, and takes no
+     * input until the capture is done.
+     */
+    private fun optical(m: Meet) {
+        para("↻  TURN YOUR PHONE AROUND so the screen faces ${m.counterpartyName}, and let them do the same. Each phone reads the other's code with its SELFIE camera.")
+        para("Two codes cross, in order: each phone's contribution, then the meeting id both compute from the pair. If the two ids differ, something is between you and the meeting stops — that check is the whole of what looking at each other's screen buys.")
+        val code = Kernel.optical()
+        if (code == null) {
+            para("The code needs an open ceremony, which this device has lost.")
+            return
+        }
+        qr(code)
+        scan(QrCamera.Facing.SELFIE) { bytes ->
+            val why = Kernel.takeOptical(bytes)
+            runOnUiThread { if (why != null) m.stop(why) else redraw() }
+        }
+    }
+
+    // ---- D3–D4 hands-off ------------------------------------------------
 
     private fun handsOff(m: Meet, what: String, needs: String, advance: () -> Unit) {
         para("$what is running. The phone is facing ${m.counterpartyName}; there is nothing to do here.")
@@ -182,7 +303,7 @@ class MeetActivity : Activity() {
                 }
                 para("• ${c.key.take(16)}… — ${basisWords(c.basis)}; $answer")
             }
-            para("Each query waits on the counterparty's consent, which crosses the local bearer this build does not yet carry. Once consented, the kernel carries it to its verifier over the network and the answer lands above.")
+            para("Each query waits on the counterparty's consent, which crosses the same local bearer the intent did. Once consented, the kernel carries the query to its verifier over the network and the answer lands above.")
         }
         val mine = m.queriesAboutMe()
         if (mine.isNotEmpty()) {
@@ -206,7 +327,16 @@ class MeetActivity : Activity() {
 
     private fun review(m: Meet) {
         para("You review ${m.counterpartyName}'s selection of your verifiers before signing — a party who signs unseen may be vouching for strangers.")
-        para("Warnings would appear here: missing familiar verifiers, witness imbalance, weak proximity. A degraded meeting is shown as degraded, never as broken.")
+        val warnings = m.presign()
+        if (warnings.isEmpty()) {
+            heading("Nothing to flag")
+            para("Every check this screen makes came back unremarkable. That is not a guarantee about the person in front of you; it is the absence of the specific weaknesses listed at D6.")
+        } else {
+            heading("What is thin about this meeting")
+            warnings.forEach { para("• ${it.text}") }
+            // UX-003's whole point, said where the person reads it
+            para("None of the above makes the record broken. Each is something a reader of the record can see for themselves, and a meeting that says less is still a meeting that happened.")
+        }
         para("Signing needs the artifacts the steps above would have produced; this build has none, so it cannot finalize a real record.")
         walkthrough("signed (no real record)") { m.signed("(walkthrough, no record)") }
     }
@@ -215,8 +345,24 @@ class MeetActivity : Activity() {
 
     private fun done(m: Meet) {
         para("The record: ${m.recordTxid()}")
-        if (m.adopt != Meet.Adopt.NONE) {
-            para("The adoption you chose at the start would now be proposed and taken.")
+        when {
+            // PRD-05: two people who each chose to be the patron have not
+            // hit a protocol failure, and the screen must not say they have
+            m.opposedAdoptions() && m.direction() == null -> {
+                heading("You both offered to be the patron")
+                para("Each of you chose a direction before seeing the other's, so this is two intentions rather than a fault — nothing malformed has happened, and the meeting itself stands whichever way this goes.")
+                para("Choose a direction between you, or leave the authority question alone.")
+                button("I will be the patron") { m.chooseDirection(Meet.Adopt.THEM_UNDER_ME) }
+                button("${m.counterpartyName} will be the patron") {
+                    m.chooseDirection(Meet.Adopt.ME_UNDER_THEM)
+                }
+                button("Neither — just the meeting") { m.chooseDirection(Meet.Adopt.NONE) }
+                return
+            }
+            m.direction() == Meet.Adopt.NONE ->
+                para("You left the authority question alone. The meeting stands on its own, which costs neither of you anything you had.")
+            m.direction() != null || m.adopt != Meet.Adopt.NONE ->
+                para("The adoption would now be proposed and taken in the direction settled here.")
         }
         button("Done") { Kernel.stopMeet("done"); finish() }
     }
