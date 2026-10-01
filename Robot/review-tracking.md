@@ -13281,3 +13281,77 @@ reasoning had got it wrong twice.
 author's: the participant/witness array ordering (recommendation: leave both
 unordered, as §3.2 now states), and `wire-format.md` §5.4's bundle carriage,
 already ruled.
+
+## The bearer carriage, behind the FFI (2026-10-01)
+
+The owed item from the query-carriage work: *"the client hands the intent
+across the FFI as fields and the shell is left to produce `IntentExchange`
+bytes and split the bundle into continuations — the encode/decode belongs
+behind the FFI."*
+
+**`rhtn-client`'s new `local` module** encodes and decodes all six §14.3
+objects: `OpticalContribution`, `TranscriptConfirm`, `IntentExchange`,
+`BundleContinuation`, `ProximityOutcomes`, `CandidateHandover`. Each
+`decode` runs the bytes through **the codec's own `check_kind`** for that
+kind, so what the module accepts is exactly what the schema accepts — an
+encoder and a validator that disagree are two definitions of the object.
+
+**Two things that had to be got right, and one of them was wrong first.**
+An `ArchiveEntry` is *a CBOR item, not a byte string* (§7.9: an envelope is
+a map and a presentation an array, "so the two need no discriminator"). The
+first implementation re-wrapped each bundle entry as a `bstr` and the
+canonical intent would not decode. Entries are now carried **by byte
+range** and never re-encoded, which is also the only safe thing to do with
+an object whose signature covers its own bytes (§5.3 requires each to
+verify alone).
+
+**The sequencing follows the author's D1/D2 ruling.** §14.3 puts the
+contribution on the *optical* channel and has the intent **echo** it, so
+`Active` now holds the counterparty's contribution as read off their
+screen, and the ceremony-id is fixed by the mutual `TranscriptConfirm`
+rather than by the intent. `begin` keeps its one question to the person;
+`intent()` builds the intent from the ceremony rather than from the call,
+so the carriage and the call cannot disagree about what this device said.
+
+**The FFI moves bytes.** `optical_contribution` / `take_optical`,
+`transcript_confirm` / `take_transcript`, `intent_carriage` /
+`take_intent_carriage`, `proximity_carriage` / `take_proximity`,
+`candidate_carriage` / `take_candidate_carriage`, and `achieved()` for what
+the screen draws — read from the ceremony rather than by measuring again, so
+the chips and the carriage cannot disagree. **The `Intent` record is gone
+from the boundary**: when clippy reported its conversions dead, that was the
+deliverable rather than a loose end.
+
+**Where the checks live now.** Every refusal §14.3.1 and §14.3.2 require is
+made inside the client, against state only it holds: a QR naming another
+party, a ceremony-id that is not this device's, an intent echoing a
+contribution the screen did not show, an anchored message from another
+ceremony (in both anchored kinds), and bytes that are no §14.3 object at
+all. The shell previously had the echo check to make and no way to make it.
+
+**Evidence.** `client/tests/local.rs` holds every §14.3 encoding to the
+**canonical corpus bytes** — decode, re-encode, compare — the corpus being
+generated from the specification by a tool that shares no code with the
+crate, so a mismatch convicts one of the two and neither gets to say which.
+A 600-entry bundle splits into an exchange at 256 and two continuations of
+256 and 88, and reads back entry for entry; a continuation anchored
+elsewhere or out of order ends the bundle with the entries held and does
+**not** fail the ceremony (§5.4). `client/tests/carriage.rs` drives the
+whole opening between two live clients and every refusal above with a third
+running its own ceremony, so the wrong anchors are real rather than
+malformed. Catalogue DEC-36 and CER-44; functional_tests NET-019, SCH-023
+amended (480 families).
+
+**`rhtn-participant`'s CLI is the manual driver for the physical run**, and
+it now carries hex blobs: `optical`, `take-optical`, `transcript`,
+`take-transcript`, `intent`, `intent <from> <list>`, `proximity`,
+`take-proximity`, `candidates`, `take-candidates`, `achieved`. Two of these
+side by side are what two phones will do, with a person copying the lines.
+
+**What is left, and it is platform work rather than protocol**: a bearer to
+move the bytes on — a camera for the two QRs and a local radio for the bulk
+(§14.3.1 ranks them by locality and relies on none for integrity). The
+shell says exactly that now instead of implying the carriage was missing.
+The consent exchange still rides no bearer for the same reason, so a
+prepared query still waits on a consent that cannot arrive; nothing further
+is owed in the kernel for it.

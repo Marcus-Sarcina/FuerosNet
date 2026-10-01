@@ -202,55 +202,6 @@ pub struct Achieved {
     pub resolution_m: Option<u64>,
 }
 
-/// What two devices tell each other when a ceremony opens (design §7.1).
-///
-/// **The network does not carry this.** The ceremony's own conversation
-/// happens between two devices in each other's presence, over a bearer the
-/// shell chooses; `wire-format.md` §14.3.2 fixes its encoding as
-/// `IntentExchange`, with a bundle past 256 entries following in
-/// `BundleContinuation` messages. It crosses this boundary as fields, and
-/// the shell carries it in that encoding and reconstructs it on the other
-/// side.
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct Intent {
-    pub contribution: Vec<u8>,
-    pub nominees: Vec<Id>,
-    pub bundle: Vec<Vec<u8>>,
-    pub started_at: u64,
-    pub retention_years: u64,
-    pub initiator: bool,
-}
-
-impl Intent {
-    fn of(i: &rhtn_client::ceremony::Intent) -> Intent {
-        Intent {
-            contribution: i.contribution.to_vec(),
-            nominees: i.nominees.iter().map(id_of).collect(),
-            bundle: i.bundle.clone(),
-            started_at: i.started_at,
-            retention_years: i.retention_years,
-            initiator: i.initiator,
-        }
-    }
-
-    fn inward(&self) -> Result<rhtn_client::ceremony::Intent, Refused> {
-        let contribution: [u8; 16] = self
-            .contribution
-            .as_slice()
-            .try_into()
-            .map_err(|_| Refused::new("a contribution is 16 bytes"))?;
-        let nominees: Option<Vec<Keyhash>> = self.nominees.iter().map(|n| keyhash(n)).collect();
-        Ok(rhtn_client::ceremony::Intent {
-            contribution,
-            nominees: nominees.ok_or_else(|| Refused::new("a nominee is 32 bytes"))?,
-            bundle: self.bundle.clone(),
-            started_at: self.started_at,
-            retention_years: self.retention_years,
-            initiator: self.initiator,
-        })
-    }
-}
-
 /// A verifier the client selected, and why it was eligible.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Selected {
@@ -278,7 +229,8 @@ pub struct Witnessing {
 
 /// What a nominee is asked to witness.
 ///
-/// Like [`Intent`], the wire does not carry this: a nominee is asked over
+/// Like the ceremony's own exchange, the network does not carry this: a
+/// nominee is asked over
 /// whatever the three devices have between them, and no document fixes an
 /// encoding for the asking.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -970,44 +922,132 @@ impl Participant {
         counterparty: Id,
         nominees: Vec<Id>,
         initiator: bool,
-    ) -> Result<Intent, Refused> {
+    ) -> Result<(), Refused> {
         let cp =
             keyhash(&counterparty).ok_or_else(|| Refused::new("a counterparty is 32 bytes"))?;
         let noms: Option<Vec<Keyhash>> = nominees.iter().map(|n| keyhash(n)).collect();
         let noms = noms.ok_or_else(|| Refused::new("a nominee is 32 bytes"))?;
         self.handle
-            .with_blocking(move |c| c.begin(cp, noms, initiator).map(|i| Intent::of(&i)))
+            .with_blocking(move |c| c.begin(cp, noms, initiator).map(|_| ()))
             .map_err(|a| Refused::new(format!("{a:?}")))
     }
 
-    /// Take the counterparty's intent.  The ceremony's id comes back,
-    /// which is what both devices name it by from here on.
-    pub fn take_intent(&self, from: Id, intent: Intent) -> Result<Id, Refused> {
-        let f = keyhash(&from).ok_or_else(|| Refused::new("a party is 32 bytes"))?;
-        let i = intent.inward()?;
+    /// **The first QR this device shows** (`wire-format.md` §14.3.1): its
+    /// identity and its contribution, as the bytes to put on the screen.
+    ///
+    /// Neither value is secret, and the section says so. What the optical
+    /// channel buys is that each party read it off a screen it was looking
+    /// at, which costs being there — the cost design §1 meters.
+    pub fn optical_contribution(&self) -> Result<Vec<u8>, Refused> {
+        self.handle
+            .with_blocking(|c| c.optical_contribution())
+            .map_err(|a| Refused::new(format!("{a:?}")))
+    }
+
+    /// The counterparty's first QR, as the camera read it. Who showed it
+    /// comes back; a QR naming anybody but this ceremony's counterparty is
+    /// refused.
+    pub fn take_optical(&self, bytes: Vec<u8>) -> Result<Id, Refused> {
         self.handle.with_blocking(move |c| {
-            c.take_intent(f, &i)
+            c.take_optical(&bytes)
+                .map(|k| k.to_vec())
+                .map_err(|a| Refused::new(format!("{a:?}")))
+        })
+    }
+
+    /// **The second QR**: the ceremony-id this device computed from the two
+    /// contributions (§14.3.1, design §7.5.2).
+    pub fn transcript_confirm(&self) -> Result<Vec<u8>, Refused> {
+        self.handle
+            .with_blocking(|c| c.transcript_confirm())
+            .map_err(|a| Refused::new(format!("{a:?}")))
+    }
+
+    /// The counterparty's second QR, checked against this device's own:
+    /// *"a mismatch is where a man in the middle shows, and the ceremony
+    /// stops"*. The agreed ceremony-id comes back, which is what both
+    /// devices name the ceremony by from here on.
+    pub fn take_transcript(&self, bytes: Vec<u8>) -> Result<Id, Refused> {
+        self.handle.with_blocking(move |c| {
+            c.take_transcript(&bytes)
                 .map(|id| id.to_vec())
                 .map_err(|a| Refused::new(format!("{a:?}")))
         })
     }
 
-    /// Run every channel the hardware has, strongest first, and report
-    /// what was achieved.  Nothing is promoted
-    /// (`light-client-requirements.md` §1.3).
-    pub fn proximity(&self) -> Result<Vec<Achieved>, Refused> {
+    /// **What the bearer carries** (§14.3.2): this device's intent as its
+    /// carriage set — the exchange, then one continuation per 256 bundle
+    /// entries beyond the first (§5.4).
+    ///
+    /// Each is an opaque string to move on whatever bearer the two devices
+    /// have, in the order given. A shell reads none of them.
+    pub fn intent_carriage(&self) -> Result<Vec<Vec<u8>>, Refused> {
         self.handle
-            .with_blocking(|c| c.proximity())
-            .map(|outs| {
-                outs.into_iter()
-                    .map(|o| Achieved {
-                        channel: Channel::of(o.kind),
-                        outcome: outcome_of(o.result),
-                        resolution_m: o.resolution_m,
-                    })
-                    .collect()
-            })
+            .with_blocking(|c| c.intent_carriage())
             .map_err(|a| Refused::new(format!("{a:?}")))
+    }
+
+    /// The counterparty's carriage set, in the order it arrived. How many
+    /// continuations were accepted comes back: fewer than were sent is a
+    /// shorter bundle and a smaller *n*, never a failed ceremony (§5.4).
+    pub fn take_intent_carriage(&self, from: Id, carriage: Vec<Vec<u8>>) -> Result<u32, Refused> {
+        let f = keyhash(&from).ok_or_else(|| Refused::new("a party is 32 bytes"))?;
+        self.handle.with_blocking(move |c| {
+            c.take_intent_carriage(f, &carriage)
+                .map(|n| n as u32)
+                .map_err(|a| Refused::new(format!("{a:?}")))
+        })
+    }
+
+    /// Run every channel the hardware has, strongest first, and hand back
+    /// the anchored outcomes for the bearer (§14.3.2). Nothing is promoted
+    /// (`light-client-requirements.md` §1.3), and what to draw comes from
+    /// [`Participant::achieved`] rather than from running them again.
+    pub fn proximity_carriage(&self) -> Result<Vec<u8>, Refused> {
+        self.handle
+            .with_blocking(|c| c.proximity_carriage())
+            .map_err(|a| Refused::new(format!("{a:?}")))
+    }
+
+    /// The counterparty's outcomes, anchored to this ceremony or refused.
+    /// What they measured is their claim and this side weighs it (design
+    /// §1.3 item 4).
+    pub fn take_proximity(&self, bytes: Vec<u8>) -> Result<(), Refused> {
+        self.handle
+            .with_blocking(move |c| c.take_proximity(&bytes))
+            .map_err(|a| Refused::new(format!("{a:?}")))
+    }
+
+    /// Candidates for the direct path on the ceremony's channels
+    /// (§14.3.2, design §12.6.3), anchored.
+    pub fn candidate_carriage(&self, candidates: Vec<u8>) -> Result<Vec<u8>, Refused> {
+        self.handle
+            .with_blocking(move |c| c.candidate_carriage(candidates))
+            .map_err(|a| Refused::new(format!("{a:?}")))
+    }
+
+    /// The counterparty's candidates, anchored or refused. An address to
+    /// dial comes back, not evidence of anything.
+    pub fn take_candidate_carriage(&self, bytes: Vec<u8>) -> Result<Vec<u8>, Refused> {
+        self.handle
+            .with_blocking(move |c| c.take_candidate_carriage(&bytes))
+            .map_err(|a| Refused::new(format!("{a:?}")))
+    }
+
+    /// What the channels achieved, for the screen: read from the ceremony,
+    /// not measured again.
+    #[must_use]
+    pub fn achieved(&self) -> Vec<Achieved> {
+        self.handle.with_blocking(|c| {
+            c.achieved()
+                .into_iter()
+                .map(|o| Achieved {
+                    channel: Channel::of(o.kind),
+                    outcome: outcome_of(o.result),
+                    resolution_m: o.resolution_m,
+                })
+                .collect()
+        })
     }
 
     /// The verifiers this client selected of the counterparty's pool, and

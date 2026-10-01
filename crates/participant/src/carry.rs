@@ -17,7 +17,7 @@
 //! lists, and `-` is an empty list. Nothing in it is binary — an
 //! instrument is read by a person as often as by a script.
 
-use rhtn_ffi::client::{Achieved, Intent, Proposed, Revealed, WitnessAsk, Witnessing};
+use rhtn_ffi::client::{Achieved, Proposed, Revealed, WitnessAsk, Witnessing};
 use rhtn_ffi::types::{Channel, ChannelOutcome};
 
 use crate::terminal::{hex, unhex};
@@ -49,6 +49,12 @@ fn num(s: &str, what: &str) -> Result<u64, String> {
     s.parse().map_err(|_| format!("`{s}` is not a {what}"))
 }
 
+/// One hex blob from the command line: a §14.3 message as the bearer
+/// carried it, which this driver never reads.
+pub fn blob(s: &str) -> Result<Vec<u8>, String> {
+    bytes(s, "a carried message")
+}
+
 fn bytes(s: &str, what: &str) -> Result<Vec<u8>, String> {
     unhex(s).ok_or_else(|| format!("{what} is not hex: `{s}`"))
 }
@@ -57,30 +63,21 @@ fn ids(s: &str, what: &str) -> Result<Vec<Vec<u8>>, String> {
     unlist(s).iter().map(|x| bytes(x, what)).collect()
 }
 
-// ------------------------------------------------------------- intent
+// ---------------------------------------------- the local carriage (§14.3)
 
-pub fn pack_intent(i: &Intent) -> String {
-    format!(
-        "{}|{}|{}|{}|{}|{}",
-        hex(&i.contribution),
-        list(i.nominees.iter().map(|n| hex(n)).collect()),
-        list(i.bundle.iter().map(|b| hex(b)).collect()),
-        i.started_at,
-        i.retention_years,
-        u8::from(i.initiator)
-    )
+/// A carriage set as one line to copy between two of these: the messages
+/// in the order the bearer must move them, hex, comma-separated.
+///
+/// **There is nothing to unpack into fields.** `wire-format.md` §14.3 fixes
+/// the encoding of every object two present devices exchange, and the
+/// kernel does it — so this driver, like a shell, moves opaque strings and
+/// reads none of them.
+pub fn pack_carriage(c: &[Vec<u8>]) -> String {
+    list(c.iter().map(|m| hex(m)).collect())
 }
 
-pub fn take_intent(s: &str) -> Result<Intent, String> {
-    let f: Vec<&str> = s.split('|').collect();
-    Ok(Intent {
-        contribution: bytes(field(&f, 0, "an intent")?, "a contribution")?,
-        nominees: ids(field(&f, 1, "an intent")?, "a nominee")?,
-        bundle: ids(field(&f, 2, "an intent")?, "a bundle entry")?,
-        started_at: num(field(&f, 3, "an intent")?, "time")?,
-        retention_years: num(field(&f, 4, "an intent")?, "count of years")?,
-        initiator: field(&f, 5, "an intent")? == "1",
-    })
+pub fn take_carriage(s: &str) -> Result<Vec<Vec<u8>>, String> {
+    ids(s, "a carriage message")
 }
 
 // ----------------------------------------------------------- channels

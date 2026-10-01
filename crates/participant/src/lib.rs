@@ -301,17 +301,45 @@ impl Instrument {
                     [n, "initiator"] => (carry_ids(n)?, true),
                     _ => return Err("begin <counterparty> [<nominee>,...] [initiator]".into()),
                 };
-                let i = c
-                    .begin(id(counterparty)?, nominees, initiator)
+                c.begin(id(counterparty)?, nominees, initiator)
                     .map_err(|e| e.reason().to_string())?;
-                Ok(vec![format!("intent {}", carry::pack_intent(&i))])
+                Ok(vec!["begun".into()])
             }
-            ["intent", from, blob] => {
-                let i = carry::take_intent(blob)?;
+            // THE OPTICAL EXCHANGE (`wire-format.md` §14.3.1): two QRs each
+            // way, and the ceremony-id both devices compute.  Each command
+            // prints bytes to carry and takes bytes carried.
+            ["optical"] => Ok(vec![format!(
+                "optical {}",
+                hex(&c
+                    .optical_contribution()
+                    .map_err(|e| e.reason().to_string())?)
+            )]),
+            ["take-optical", blob] => {
+                let who = c
+                    .take_optical(carry::blob(blob)?)
+                    .map_err(|e| e.reason().to_string())?;
+                Ok(vec![format!("showed-by {}", hex(&who))])
+            }
+            ["transcript"] => Ok(vec![format!(
+                "transcript {}",
+                hex(&c.transcript_confirm().map_err(|e| e.reason().to_string())?)
+            )]),
+            ["take-transcript", blob] => {
                 let id = c
-                    .take_intent(id(from)?, i)
+                    .take_transcript(carry::blob(blob)?)
                     .map_err(|e| e.reason().to_string())?;
                 Ok(vec![format!("ceremony {}", hex(&id))])
+            }
+            // and the bearer's own load (§14.3.2)
+            ["intent"] => Ok(vec![format!(
+                "intent {}",
+                carry::pack_carriage(&c.intent_carriage().map_err(|e| e.reason().to_string())?)
+            )]),
+            ["intent", from, blob] => {
+                let n = c
+                    .take_intent_carriage(id(from)?, carry::take_carriage(blob)?)
+                    .map_err(|e| e.reason().to_string())?;
+                Ok(vec![format!("continuations-taken {n}")])
             }
             ["ceremony"] => {
                 Ok(vec![c.ceremony().map_or("ceremony none".into(), |i| {
@@ -320,14 +348,38 @@ impl Instrument {
             }
 
             ["proximity"] => {
-                let a = c.proximity().map_err(|e| e.reason().to_string())?;
-                Ok(vec![format!("channels {}", carry::pack_channels(&a))])
+                let bytes = c.proximity_carriage().map_err(|e| e.reason().to_string())?;
+                Ok(vec![
+                    format!("channels {}", carry::pack_channels(&c.achieved())),
+                    format!("proximity {}", hex(&bytes)),
+                ])
+            }
+            ["achieved"] => Ok(vec![format!(
+                "channels {}",
+                carry::pack_channels(&c.achieved())
+            )]),
+            ["take-proximity", blob] => {
+                c.take_proximity(carry::blob(blob)?)
+                    .map_err(|e| e.reason().to_string())?;
+                Ok(vec!["proximity taken".into()])
             }
             ["take-channels", blob] => {
                 c.take_channels(carry::take_channels(blob)?)
                     .map_err(|e| e.reason().to_string())?;
                 Ok(vec!["channels taken".into()])
             }
+            ["candidates", blob] => Ok(vec![format!(
+                "handover {}",
+                hex(&c
+                    .candidate_carriage(carry::blob(blob)?)
+                    .map_err(|e| e.reason().to_string())?)
+            )]),
+            ["take-candidates", blob] => Ok(vec![format!(
+                "candidates {}",
+                hex(&c
+                    .take_candidate_carriage(carry::blob(blob)?)
+                    .map_err(|e| e.reason().to_string())?)
+            )]),
 
             ["capture-key"] => Ok(vec![format!(
                 "capture-key {}",

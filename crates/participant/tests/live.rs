@@ -299,20 +299,41 @@ fn ceremony(
     for n in cast {
         set.get(n).must("answer yes");
     }
-    let ia = line(
-        set.get(one)
-            .must(&format!("begin {b} {} initiator", hex(&kh(wa)))),
-        "intent ",
+    set.get(one)
+        .must(&format!("begin {b} {} initiator", hex(&kh(wa))));
+    set.get(two).must(&format!("begin {a} {}", hex(&kh(wb))));
+    // THE OPTICAL EXCHANGE, as two people holding up two screens
+    // (`wire-format.md` §14.3.1): each copies the other's QR across, and
+    // nothing in this driver reads one.
+    let oa = line(set.get(one).must("optical"), "optical ");
+    let ob = line(set.get(two).must("optical"), "optical ");
+    assert_eq!(
+        line(
+            set.get(one).must(&format!("take-optical {ob}")),
+            "showed-by "
+        ),
+        b.to_string(),
+        "the QR names who showed it"
     );
-    let ib = line(
-        set.get(two).must(&format!("begin {a} {}", hex(&kh(wb)))),
-        "intent ",
+    set.get(two).must(&format!("take-optical {oa}"));
+    let ta = line(set.get(one).must("transcript"), "transcript ");
+    let tb = line(set.get(two).must("transcript"), "transcript ");
+    let ca = line(
+        set.get(one).must(&format!("take-transcript {tb}")),
+        "ceremony ",
     );
-    let ca = line(set.get(two).must(&format!("intent {a} {ia}")), "ceremony ");
-    let cb = line(set.get(one).must(&format!("intent {b} {ib}")), "ceremony ");
+    let cb = line(
+        set.get(two).must(&format!("take-transcript {ta}")),
+        "ceremony ",
+    );
     assert_eq!(ca, cb, "both devices name the ceremony the same thing");
-    let ch = line(set.get(one).must("proximity"), "channels ");
-    set.get(two).must(&format!("take-channels {ch}"));
+    // then the bearer's own load, which this driver carries as one line
+    let ia = line(set.get(one).must("intent"), "intent ");
+    let ib = line(set.get(two).must("intent"), "intent ");
+    set.get(two).must(&format!("intent {a} {ia}"));
+    set.get(one).must(&format!("intent {b} {ib}"));
+    let pa = line(set.get(one).must("proximity"), "proximity ");
+    set.get(two).must(&format!("take-proximity {pa}"));
     let ka = line(set.get(one).must("capture-key"), "capture-key ");
     let kb = line(set.get(two).must("capture-key"), "capture-key ");
     set.get(two).must(&format!("capture {ka}"));
@@ -532,28 +553,32 @@ fn a_verifier_in_a_third_process_answers_and_the_record_carries_it() {
     // until here
     set.get("carol").must("channel latency pass 30");
     let (a, b, c) = (hex(&kh("alice")), hex(&kh("bob")), hex(&kh("carol")));
-    let ia = line(
-        set.get("alice")
-            .must(&format!("begin {c} {} initiator", hex(&kh("w1")))),
-        "intent ",
-    );
-    let ic = line(
-        set.get("carol")
-            .must(&format!("begin {a} {}", hex(&kh("w2")))),
-        "intent ",
-    );
+    set.get("alice")
+        .must(&format!("begin {c} {} initiator", hex(&kh("w1"))));
+    set.get("carol")
+        .must(&format!("begin {a} {}", hex(&kh("w2"))));
+    let oa = line(set.get("alice").must("optical"), "optical ");
+    let oc = line(set.get("carol").must("optical"), "optical ");
+    set.get("alice").must(&format!("take-optical {oc}"));
+    set.get("carol").must(&format!("take-optical {oa}"));
+    let ta = line(set.get("alice").must("transcript"), "transcript ");
+    let tc = line(set.get("carol").must("transcript"), "transcript ");
     assert_eq!(
         line(
-            set.get("carol").must(&format!("intent {a} {ia}")),
+            set.get("alice").must(&format!("take-transcript {tc}")),
             "ceremony "
         ),
         line(
-            set.get("alice").must(&format!("intent {c} {ic}")),
+            set.get("carol").must(&format!("take-transcript {ta}")),
             "ceremony "
         ),
     );
-    let ch = line(set.get("alice").must("proximity"), "channels ");
-    set.get("carol").must(&format!("take-channels {ch}"));
+    let ia = line(set.get("alice").must("intent"), "intent ");
+    let ic = line(set.get("carol").must("intent"), "intent ");
+    set.get("carol").must(&format!("intent {a} {ia}"));
+    set.get("alice").must(&format!("intent {c} {ic}"));
+    let pa = line(set.get("alice").must("proximity"), "proximity ");
+    set.get("carol").must(&format!("take-proximity {pa}"));
     let ka = line(set.get("alice").must("capture-key"), "capture-key ");
     let kc = line(set.get("carol").must("capture-key"), "capture-key ");
     set.get("carol").must(&format!("capture {ka}"));

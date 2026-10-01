@@ -72,9 +72,15 @@ object Kernel {
                 // nomination is empty and the ceremony is that much weaker,
                 // which the record carries honestly rather than hiding
                 p.begin(to, listOf(), true)
-                m.note("intent prepared. A handshake goes screen-to-screen and")
-                m.note("the intent rides a bearer the shell picks (wire-format")
-                m.note("§14.3); the carriage is not wired in this build.")
+                // The ENCODING is the kernel's since 2026-10-01: every
+                // §14.3 object crosses this boundary as bytes, and the
+                // checks against the screen are made behind it. What this
+                // build still lacks is a BEARER to move them on -- a camera
+                // for the two QRs and a local radio for the bulk -- which
+                // is platform work and not protocol.
+                m.note("ceremony open. The two QRs and the bearer-carried")
+                m.note("intent are encoded by the kernel (wire-format §14.3);")
+                m.note("this build has no camera or radio to carry them.")
             } catch (e: Refused.Reason) {
                 m.stop("begin refused: ${e.reason}")
             }

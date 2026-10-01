@@ -11180,6 +11180,36 @@
     "interpretation": ""
   },
   {
+    "id": "CER-44",
+    "area": "ceremony",
+    "gap": "ceremony",
+    "title": "Carry the ceremony's opening as bytes, and make every anchor check behind the boundary",
+    "milestone": 4,
+    "kind": "positive",
+    "spec": [
+      "wire-format.md §14.3",
+      "wire-format.md §14.3.1",
+      "wire-format.md §14.3.2",
+      "design §14.1.0",
+      "design §7.5.2"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §14.3.1",
+        "text": "a\nmismatch is where a man in the middle shows, and the ceremony stops"
+      },
+      {
+        "where": "wire-format.md §14.3.2",
+        "text": "a mismatch is a bearer that does not agree with the screen,\nand the ceremony does not continue over it"
+      }
+    ],
+    "given": "Two clients beginning a ceremony with each other, and a third running its own with one of them.",
+    "when": "The opening runs: each shows its contribution, each reads the other's, each shows the ceremony-id it computed, and the bearer then carries the intent, the proximity outcomes and the candidates.",
+    "then": "Every object crosses the client boundary as opaque bytes and nothing above it parses one. The ceremony-ids agree and that is what fixes the id. A QR naming a party this ceremony is not with is refused; a ceremony-id that is not this device's is refused; an intent echoing a contribution the screen did not show is refused; an anchored message from the third party's ceremony is refused in both anchored kinds; and bytes that are no §14.3 object are refused as malformed. The checks are made where the ceremony's state is, which is the only place that holds what they check against.",
+    "oracle": "behaviour",
+    "interpretation": "The anchor authenticates nobody (§14.3.1): every value is public, so these catch a bearer contradicting the screens and never one quoting them. What stands in their place is §14.1's property, and it is physical."
+  },
+  {
     "id": "RSC-38",
     "area": "resources",
     "gap": "resources",
@@ -12699,6 +12729,34 @@
     "then": "The envelope fails signature verification: the delegated key is not the identity's key material and a held delegation does not stand in for it; the transaction is not stored and not forwarded.",
     "oracle": "behaviour",
     "interpretation": null
+  },
+  {
+    "id": "DEC-36",
+    "area": "decoder",
+    "gap": "decoder",
+    "title": "Encode and decode the ceremony's local interfaces to the canonical bytes",
+    "milestone": 4,
+    "kind": "positive",
+    "spec": [
+      "wire-format.md §14.3",
+      "wire-format.md §14.3.2",
+      "wire-format.md §5.4"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §14.3.2",
+        "text": "Every one is deterministic CBOR under §1, versioned, with the array bounds\n§1 requires; **a version a decoder does not know is refused**"
+      },
+      {
+        "where": "wire-format.md §14.3.2",
+        "text": "the\n256-entry bound is the array bound the rest of the document carries — on\nthe carriage, not the bundle (§5.4)"
+      }
+    ],
+    "given": "The canonical vectors for §14.3's objects: the two optical QRs, the bearer-carried intent and a continuation of its bundle, the anchored proximity outcomes and the candidate handover.",
+    "when": "Each is decoded and re-encoded by the implementation the shell depends on.",
+    "then": "Every one decodes, and re-encodes to the same bytes the corpus holds — the corpus being generated from the specification by a tool sharing no code with the implementation, so a mismatch convicts one of the two and neither gets to say which. A bundle larger than one carriage splits into an exchange at the 256 ceiling and consecutive continuations, and reads back entry for entry. A continuation anchored to another ceremony, or arriving out of order, ends the bundle with the entries held rather than failing the ceremony. An unknown version, a short contribution, and an object presented as the wrong kind are all refused.",
+    "oracle": "fixture",
+    "interpretation": ""
   },
   {
     "id": "PRP-28",

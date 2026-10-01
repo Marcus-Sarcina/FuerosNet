@@ -11694,3 +11694,46 @@ tries. Two lemmas verify because the reachability is the finding: a replay
 to the same verifier is answered twice, and a sender the bytes do not
 authenticate can name another querier. Both are where §5.6 and design
 §7.4.1 already put them, in local state and in the transport.
+
+### 2026-10-01 (the bearer carriage moves behind the boundary)
+
+**The shell no longer builds wire bytes, and no longer could.** A new
+`local` module in `rhtn-client` encodes and decodes all six of
+`wire-format.md` §14.3's objects — the two optical QRs, the bearer-carried
+intent, a continuation of its bundle, the anchored proximity outcomes and
+the candidate handover — and every `decode` runs the bytes through the
+codec's own checker for that kind, so the encoder and the validator cannot
+drift into two definitions of one object.
+
+**The opening now follows §14.3's own sequencing**, which is the author's
+D1/D2 ruling: the contribution travels on the optical channel, the
+ceremony-id is fixed by the mutual `TranscriptConfirm`, and the intent
+**echoes** the contribution for the receiver to check against the screen it
+read. The client holds the counterparty's contribution from the moment it
+reads it, and every anchor check is made there — against state nothing above
+the boundary has. The shell had been left the echo check and no way to make
+it.
+
+**The FFI moves bytes**: `optical_contribution`, `take_optical`,
+`transcript_confirm`, `take_transcript`, `intent_carriage`,
+`take_intent_carriage`, `proximity_carriage`, `take_proximity`,
+`candidate_carriage`, `take_candidate_carriage`, and `achieved()` for the
+chips — read from the ceremony rather than measured again. The `Intent`
+record is gone from the boundary, and the lint reporting its conversions
+dead was the deliverable.
+
+**An `ArchiveEntry` is a CBOR item, not a byte string** (§7.9), which the
+first implementation got wrong and the canonical vectors caught at once.
+Entries are carried by byte range and never re-encoded — the only safe
+handling of an object whose signature covers its own bytes.
+
+**Held to the corpus byte for byte.** Every encoding is decoded, re-encoded
+and compared against vectors generated from the specification by a tool
+sharing no code with the crate. A 600-entry bundle splits into 256 + 256 +
+88 and comes back whole; a continuation anchored elsewhere ends the bundle
+with what was held rather than failing the ceremony. The CLI driver carries
+hex blobs, which is what two phones and a person copying lines will do.
+
+**What remains is platform work**: a camera for the QRs and a local radio
+for the bulk. §14.3.1 ranks bearers by locality and relies on none of them
+for integrity, which is why this half could be finished without them.

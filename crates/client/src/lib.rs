@@ -44,6 +44,7 @@ pub mod device;
 pub mod durable;
 pub mod horizon;
 pub mod keys;
+pub mod local;
 pub mod notice;
 pub mod payload;
 pub mod query;

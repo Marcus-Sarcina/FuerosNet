@@ -53,8 +53,15 @@ fn b01_named_ceremony_passthrough_preserves_consent_binding() {
     let alice=Participant::start(seeds("alice"),known.clone(),platform()).unwrap();
     let bob=Participant::start(seeds("bob"),known,platform()).unwrap();
     alice.begin(ids[1].keyhash.to_vec(),vec![ids[2].keyhash.to_vec()],true).unwrap();
-    let theirs=bob.begin(ids[0].keyhash.to_vec(),vec![ids[2].keyhash.to_vec()],false).unwrap();
-    let cid=alice.take_intent(ids[1].keyhash.to_vec(),theirs).unwrap();
+    bob.begin(ids[0].keyhash.to_vec(),vec![ids[2].keyhash.to_vec()],false).unwrap();
+    // the opening crosses as bytes since 2026-10-01 (W 14.3): two QRs each
+    // way, then the bearer's load, and the kernel checks each against the
+    // ceremony's own state
+    let (oa,ob)=(alice.optical_contribution().unwrap(),bob.optical_contribution().unwrap());
+    alice.take_optical(ob).unwrap(); bob.take_optical(oa).unwrap();
+    let (ta,tb)=(alice.transcript_confirm().unwrap(),bob.transcript_confirm().unwrap());
+    let cid=alice.take_transcript(tb).unwrap(); bob.take_transcript(ta).unwrap();
+    alice.take_intent_carriage(ids[1].keyhash.to_vec(),bob.intent_carriage().unwrap()).unwrap();
     let query=VerificationQuery {subject:ids[0].keyhash,querier:ids[1].keyhash,ceremony_id:cid.try_into().unwrap(),profile:vec![1],template_version:1,verifier:ids[2].keyhash};
     let out=alice.consent(query.encode()).unwrap();
     let exported=out.as_ref().is_some_and(|b|consent_verifies(&ids[0],&b.consent,&query.query_id()));

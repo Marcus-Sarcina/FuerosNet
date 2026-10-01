@@ -85,6 +85,15 @@ pub enum Abort {
     NoProximity,
     /// The two devices disagree on what was achieved.
     ChannelDisagreement,
+    /// A bearer-carried message echoes a contribution this device did not
+    /// read off the counterparty's screen (`wire-format.md` §14.3.1): the
+    /// bearer disagrees with the screen, and the ceremony stops.
+    ContributionMismatch,
+    /// The counterparty's ceremony-id is not the one this device computed
+    /// (§14.3.1): where a man in the middle shows.
+    CeremonyIdMismatch,
+    /// A §14.3 object did not decode, or decoded as the wrong kind.
+    Malformed(String),
     /// The engine produced a template of the wrong length.
     TemplateLength,
     /// A party refused to sign.
@@ -295,6 +304,10 @@ struct Active {
     initiator: bool,
     started_at: u64,
     contribution: [u8; 16],
+    /// The counterparty's, as this device read it **off their screen**
+    /// (`wire-format.md` §14.3.1).  Everything the bearer then carries is
+    /// checked against it, which is the whole of what the anchor buys.
+    their_contribution: Option<[u8; 16]>,
     ceremony_id: Option<[u8; 32]>,
     my_nominees: BTreeSet<Keyhash>,
     their_nominees: Vec<Keyhash>,
@@ -572,6 +585,7 @@ impl Client {
             initiator,
             started_at,
             contribution,
+            their_contribution: None,
             ceremony_id: None,
             my_nominees: nominees.iter().copied().collect(),
             their_nominees: vec![],
@@ -586,14 +600,222 @@ impl Client {
             issued: BTreeSet::new(),
             responses: vec![],
         });
+        self.intent()
+    }
+
+    /// This device's intent over the active ceremony: the same fields
+    /// [`Client::begin`] returns, built from the ceremony rather than from
+    /// the call, so the carriage and the call cannot disagree about what
+    /// this device said.
+    ///
+    /// **The bundle is everything held** — curating it is the subject's act
+    /// through the interface above (`light-client-requirements.md` §1.4),
+    /// and truncation is visible as a smaller *n* (`wire-format.md` §5.4).
+    pub fn intent(&self) -> Result<Intent, Abort> {
+        let a = self.active.as_ref().ok_or(Abort::NotActive)?;
         Ok(Intent {
-            contribution,
-            nominees,
+            contribution: a.contribution,
+            nominees: a.my_nominees.iter().copied().collect(),
             bundle: self.store.records.values().cloned().collect(),
-            started_at,
+            started_at: a.started_at,
             retention_years: self.cfg.retention_years,
-            initiator,
+            initiator: a.initiator,
         })
+    }
+
+    /// **Step 1 of the optical exchange** (`wire-format.md` §14.3.1): the
+    /// first QR this device shows, its identity and its contribution.
+    ///
+    /// Public, both of them, and the section says so: what the optical
+    /// channel buys is not secrecy but that each party read the value off a
+    /// screen it was looking at, which costs being there.
+    pub fn optical_contribution(&self) -> Result<Vec<u8>, Abort> {
+        let a = self.active.as_ref().ok_or(Abort::NotActive)?;
+        Ok(crate::local::OpticalContribution {
+            device: self.keyhash(),
+            contribution: a.contribution,
+        }
+        .encode())
+    }
+
+    /// The counterparty's first QR, read off their screen.  Their
+    /// contribution is held from here on, and every bearer-carried message
+    /// is checked against it.
+    pub fn take_optical(&mut self, bytes: &[u8]) -> Result<Keyhash, Abort> {
+        let read = crate::local::OpticalContribution::decode(bytes).map_err(Abort::Malformed)?;
+        let a = self.active()?;
+        if read.device != a.counterparty {
+            return Err(Abort::NotActive);
+        }
+        a.their_contribution = Some(read.contribution);
+        Ok(read.device)
+    }
+
+    /// **Step 2**: the ceremony-id this device computed, as the second QR
+    /// (§14.3.1, design §7.5.2).  Both contributions must be in.
+    pub fn transcript_confirm(&mut self) -> Result<Vec<u8>, Abort> {
+        let me = self.keyhash();
+        let a = self.active()?;
+        let theirs = a.their_contribution.ok_or(Abort::NotActive)?;
+        let cid = pre_commitment((&me, &a.contribution), (&a.counterparty, &theirs));
+        Ok(crate::local::TranscriptConfirm { ceremony_id: cid }.encode())
+    }
+
+    /// The counterparty's second QR, checked against this device's own:
+    /// *"a mismatch is where a man in the middle shows, and the ceremony
+    /// stops"* (§14.3.1).  Agreeing fixes the ceremony-id and opens the
+    /// subject's window.
+    pub fn take_transcript(&mut self, bytes: &[u8]) -> Result<[u8; 32], Abort> {
+        let read = crate::local::TranscriptConfirm::decode(bytes).map_err(Abort::Malformed)?;
+        let mine = crate::local::TranscriptConfirm::decode(&self.transcript_confirm()?)
+            .map_err(Abort::Malformed)?
+            .ceremony_id;
+        if read.ceremony_id != mine {
+            return Err(Abort::CeremonyIdMismatch);
+        }
+        self.active()?.ceremony_id = Some(mine);
+        self.subject.open_window(mine);
+        Ok(mine)
+    }
+
+    /// **What the bearer carries first** (§14.3.2): this device's intent as
+    /// its carriage set — the `IntentExchange`, then one
+    /// `BundleContinuation` per 256 entries beyond the first (§5.4).
+    ///
+    /// The shell moves these as opaque strings on whatever bearer the two
+    /// devices have and reads none of them.
+    pub fn intent_carriage(&mut self) -> Result<Vec<Vec<u8>>, Abort> {
+        let intent = self.intent()?;
+        let cid = self
+            .active
+            .as_ref()
+            .and_then(|a| a.ceremony_id)
+            .ok_or(Abort::NotActive)?;
+        Ok(crate::local::intent_carriage(
+            &crate::local::IntentExchange {
+                contribution: intent.contribution,
+                nominees: intent.nominees,
+                bundle: intent.bundle,
+                started_at: intent.started_at,
+                retention_years: intent.retention_years,
+                initiator: intent.initiator,
+                continuations: 0,
+            },
+            &cid,
+        ))
+    }
+
+    /// The counterparty's carriage set.  The echoed contribution is checked
+    /// against the one read optically — *"a bearer that does not agree with
+    /// the screen, and the ceremony does not continue over it"* (§14.3.2) —
+    /// and the bundle is what the accepted continuations carried.
+    ///
+    /// **The check is not authentication** (§14.3.1): the contribution is
+    /// public, so this catches a bearer contradicting the screen and never
+    /// one quoting it.
+    pub fn take_intent_carriage(
+        &mut self,
+        from: Keyhash,
+        carriage: &[Vec<u8>],
+    ) -> Result<usize, Abort> {
+        let cid = self
+            .active
+            .as_ref()
+            .and_then(|a| a.ceremony_id)
+            .ok_or(Abort::NotActive)?;
+        let theirs = self
+            .active
+            .as_ref()
+            .and_then(|a| a.their_contribution)
+            .ok_or(Abort::NotActive)?;
+        let (read, taken) = crate::local::read_intent(carriage, &cid).map_err(Abort::Malformed)?;
+        if read.contribution != theirs {
+            return Err(Abort::ContributionMismatch);
+        }
+        self.take_intent(
+            from,
+            &Intent {
+                contribution: read.contribution,
+                nominees: read.nominees,
+                bundle: read.bundle,
+                started_at: read.started_at,
+                retention_years: read.retention_years,
+                initiator: read.initiator,
+            },
+        )?;
+        Ok(taken)
+    }
+
+    /// What the channels achieved, as the screen draws it: read from the
+    /// ceremony rather than measured again, so the carriage and the chips
+    /// cannot disagree (`light-client-requirements.md` §1.3).
+    pub fn achieved(&self) -> Vec<ChannelOutcome> {
+        self.active
+            .as_ref()
+            .map(|a| a.channels.clone())
+            .unwrap_or_default()
+    }
+
+    /// What the distance channels measured, anchored (§14.3.2).
+    pub fn proximity_carriage(&mut self) -> Result<Vec<u8>, Abort> {
+        let outcomes = self.proximity()?;
+        let cid = self
+            .active
+            .as_ref()
+            .and_then(|a| a.ceremony_id)
+            .ok_or(Abort::NotActive)?;
+        Ok(crate::local::ProximityOutcomes {
+            ceremony_id: cid,
+            channels: outcomes,
+        }
+        .encode())
+    }
+
+    /// The counterparty's outcomes, anchored to this ceremony or refused.
+    /// What they measured is their claim, and this side weighs it (design
+    /// §1.3 item 4) — which is what [`Client::take_channels`] does.
+    pub fn take_proximity(&mut self, bytes: &[u8]) -> Result<(), Abort> {
+        let read = crate::local::ProximityOutcomes::decode(bytes).map_err(Abort::Malformed)?;
+        self.anchored(read.ceremony_id)?;
+        self.take_channels(&read.channels)
+    }
+
+    /// Candidates for the direct path, on the ceremony's own channels
+    /// (§14.3.2, design §12.6.3): the bare array the payload path carries,
+    /// with the anchor this carriage adds.
+    pub fn candidate_carriage(&self, candidates: Vec<u8>) -> Result<Vec<u8>, Abort> {
+        let cid = self
+            .active
+            .as_ref()
+            .and_then(|a| a.ceremony_id)
+            .ok_or(Abort::NotActive)?;
+        Ok(crate::local::CandidateHandover {
+            ceremony_id: cid,
+            candidates,
+        }
+        .encode())
+    }
+
+    /// The counterparty's candidates, anchored or refused.  What comes back
+    /// is the bare array for the transport to dial: an address, not
+    /// evidence of anything.
+    pub fn take_candidate_carriage(&mut self, bytes: &[u8]) -> Result<Vec<u8>, Abort> {
+        let read = crate::local::CandidateHandover::decode(bytes).map_err(Abort::Malformed)?;
+        self.anchored(read.ceremony_id)?;
+        Ok(read.candidates)
+    }
+
+    /// An anchored message's ceremony-id against this device's own.
+    fn anchored(&mut self, theirs: [u8; 32]) -> Result<(), Abort> {
+        let mine = self
+            .active
+            .as_ref()
+            .and_then(|a| a.ceremony_id)
+            .ok_or(Abort::NotActive)?;
+        if theirs != mine {
+            return Err(Abort::CeremonyIdMismatch);
+        }
+        Ok(())
     }
 
     /// Take the counterparty's intent: its contribution fixes the

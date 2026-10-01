@@ -2,7 +2,7 @@
 //! the platform's objects handed over once, the client running on a thread
 //! of its own behind them, and every answer a value.
 
-use rhtn_ffi::client::{Intent, Participant};
+use rhtn_ffi::client::Participant;
 use rhtn_ffi::device::*;
 use rhtn_ffi::net::{Event, Wake};
 use rhtn_ffi::types::KIND_APPLICATION;
@@ -187,15 +187,17 @@ fn a_shell_drives_the_client_through_the_boundary_and_gets_values_back() {
         "the identity it was given, derived on its own thread"
     );
 
-    // the ceremony opens: the intent crosses as fields, since no document
-    // fixes an encoding for what two present devices tell each other
-    let i: Intent = p.begin(id("bob"), vec![id("carol")], true).expect("begins");
-    assert_eq!(i.contribution.len(), 16);
-    assert_eq!(i.nominees, vec![id("carol")]);
-    assert!(i.initiator);
+    // THE CEREMONY OPENS, AND WHAT CROSSES IS BYTES.  §14.3 fixes an
+    // encoding for every object two present devices exchange, so the shell
+    // moves opaque strings on whatever bearer it has and parses none of
+    // them -- the second parser above the kernel being the hazard design
+    // §11.2 names.
+    p.begin(id("bob"), vec![id("carol")], true).expect("begins");
+    let optical = p.optical_contribution().expect("the first QR");
     assert_eq!(
-        i.started_at, 1_800_000_000,
-        "the platform's clock, in seconds"
+        optical.len(),
+        53,
+        "array head 1, version 1, keyhash 2+32, contribution 1+16"
     );
 
     // the hardware is asked through the boundary, strongest first, and
@@ -212,12 +214,33 @@ fn a_shell_drives_the_client_through_the_boundary_and_gets_values_back() {
         })),
     )
     .unwrap();
-    let theirs = bob
-        .begin(id("alice"), vec![id("carol")], false)
+    bob.begin(id("alice"), vec![id("carol")], false)
         .expect("begins");
-    p.take_intent(id("bob"), theirs)
-        .expect("takes the counterparty's intent");
-    let achieved = p.proximity().expect("runs the channels");
+    // each reads the other's QR off the screen, then the ceremony-id each
+    // computed; agreement is what fixes it
+    let theirs = bob.optical_contribution().unwrap();
+    assert_eq!(
+        p.take_optical(theirs).expect("alice reads bob's QR"),
+        id("bob"),
+        "the QR names who showed it"
+    );
+    bob.take_optical(optical).expect("and bob reads alice's");
+    let tb = bob.transcript_confirm().unwrap();
+    let ta = p.transcript_confirm().unwrap();
+    let cid = p.take_transcript(tb).expect("the ids agree");
+    assert_eq!(bob.take_transcript(ta).unwrap(), cid, "one ceremony");
+    assert_eq!(p.ceremony(), Some(cid));
+    // and the bearer carries the intent, which the kernel checks against
+    // the contribution it read off the screen
+    let carriage = bob.intent_carriage().expect("bob's carriage");
+    assert_eq!(carriage.len(), 1, "an empty bundle fits in one");
+    assert_eq!(
+        p.take_intent_carriage(id("bob"), carriage).unwrap(),
+        0,
+        "no continuations followed"
+    );
+    p.proximity_carriage().expect("runs the channels");
+    let achieved = p.achieved();
     assert_eq!(
         achieved.iter().map(|a| a.channel).collect::<Vec<_>>(),
         vec![Channel::Uwb, Channel::Nfc],
@@ -233,6 +256,8 @@ fn a_shell_drives_the_client_through_the_boundary_and_gets_values_back() {
 
     // a refusal is a value carrying its reason, not a failure the shell
     // has to guess at
+    let e = p.take_optical(vec![0x00]).unwrap_err();
+    assert!(e.reason().contains("Malformed"), "{e}");
     let e = p.begin(vec![1, 2, 3], vec![], true).unwrap_err();
     assert!(e.reason().contains("32 bytes"), "{e}");
     let Err(e) = Participant::start(vec![0; 10], vec![], platform_of(shell)) else {
