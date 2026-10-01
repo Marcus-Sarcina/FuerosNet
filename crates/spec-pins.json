@@ -5,7 +5,7 @@
   "light-client-requirements.md": "85bb59fee95600e946052fd4f8dd8f00a8b5a824c1e3c4e5e05edaafa26bc45b",
   "infra-client-requirements.md": "04b464306e05791d60e0286f9f5c8d49f56217d94c860a24f354a864fc50633f",
   "resource-requirements.md": "54edf8e85eacee7b68e69c0f8b971ae83c19b05e284ae3187bf14d6846ee6f8d",
-  "functional_tests.md": "43237abc6bcec08dd3ed036132e73a3c87bbb66143b0b10b1381d45a00fd5562"
+  "functional_tests.md": "37b031c18230f8387d1268a6171790a80b34cc1c9fcf0788ebdba693a8b307c7"
  },
  "accepted": "2026-10-01",
  "note": "the documents crates/check.sh last passed against; rewritten only by tools/pincheck.py --accept"

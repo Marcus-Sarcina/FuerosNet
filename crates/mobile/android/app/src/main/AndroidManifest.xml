@@ -4,6 +4,26 @@
     <!-- The kernel dials the serving node itself; nothing else here talks
          to the network. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- The optical channel's two QRs (`wire-format.md` §14.3.1): the
+         bootstrap one read rear-camera, the anchor exchange selfie-camera. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Bluetooth LE as a bearer, first in §14.3.1's hierarchy. The
+         neverForLocation flag is the truthful one: this derives no location
+         and offers Bluetooth as no proximity channel (design §1.3 bars
+         RSSI from the distance channel, and that bar stands). API 31 is
+         this app's floor, so the legacy location permission is not
+         needed. -->
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!-- Neither is required to install: a device without one carries the
+         exchange another way, and `light-client-requirements.md` §1.3 has a
+         missing capability reported unavailable rather than absent. -->
+    <uses-feature android:name="android.hardware.camera.any"
+        android:required="false" />
+    <uses-feature android:name="android.hardware.bluetooth_le"
+        android:required="false" />
 
     <application
         android:label="Fueros"

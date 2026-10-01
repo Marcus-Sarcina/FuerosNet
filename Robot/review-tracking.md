@@ -13355,3 +13355,90 @@ shell says exactly that now instead of implying the carriage was missing.
 The consent exchange still rides no bearer for the same reason, so a
 prepared query still waits on a consent that cannot arrive; nothing further
 is owed in the kernel for it.
+
+## Three rulings (author, 2026-10-01)
+
+**The participant and witness arrays are unordered.** As recommended and as
+`wire-format.md` §3.2 already states since 2026-09-30: the order of field 3
+and of field 4 is the proposer's. **No change follows** — the spec, the
+codec and the vectors are already in that position, and the earlier attempt
+to canonicalise either was reverted before it shipped. What this closes is
+the open question, not an edit. The reasons the section gives stand: one
+ceremony yields one proposed body which the counterparty signs or refuses,
+so nothing derives a record twice; field 3's order fixes the back-pointer
+list order (§3.1) independently of the envelope's ascending `kid` order
+(§3.5), and the canonical vectors reverse it on purpose to catch a decoder
+reading one from the other.
+
+**The PRD rows go with screen development**, not as a block. Twelve rows of
+shell warnings and disclosures with no protocol content; each lands with
+the screen it belongs to. Recorded so a later pass does not read them as
+neglected.
+
+**Build the camera and BLE bearer backends** — the work below.
+
+### The camera and BLE bearer backends (2026-10-01)
+
+**Four files in the shell, and the split between them is what can be
+verified here.** The protocol halves are pure Kotlin and tested on the JVM;
+the platform halves compile against the Android API and **have never run on
+hardware**, which the files say at the top rather than in a commit message.
+
+| File | What it is | Verified how |
+|---|---|---|
+| `Optical.kt` | The optical channel's carriage: the kernel's bytes to a QR payload and the symbol for it | **JVM round trip** — bytes → base64url → ZXing symbol → decode → identical bytes, at every length 0..200, plus the module-count bound that keeps §14.3.1's arm's-length claim true |
+| `Bearer.kt` | The framing: a 4-byte header, chunking to an MTU, and reassembly in order | **JVM, against a hostile link** — a 20-byte MTU, every packet reversed and sent twice, a gap in the middle, a missing last packet, and a peer asking for memory |
+| `Carriage.kt` | The composition the Meet flow calls: bearer choice, send, receive | **JVM, two carriages over a pipe** |
+| `QrCamera.kt`, `BleBearer.kt` | camera2 + ZXing; BLE GATT advertise/scan/write/notify | **Compiles only.** Every callback compiles against the platform's signatures, which is what a compiler can say and the limit of it |
+
+**Decisions that were mine and are recorded as such.**
+
+- **base64url, not QR byte mode.** A QR carries raw bytes, but every layer
+  between a camera and the decoder is a place where binary meets a charset
+  nobody chose — ZXing's byte mode decodes through ISO-8859-1 by convention
+  and another shell's scanner may not. The price on objects of 36 and 53
+  bytes is 46 and 71 characters, which is nothing. **This is a shell
+  encoding and not protocol**: §14.3.2 fixes the bytes and leaves the
+  carriage to whatever means the two devices have, so a counterparty
+  running another shell agrees on this or uses another bearer.
+- **Error correction M.** L makes a smaller, less forgiving symbol; Q and H
+  cost modules that make the symbol *denser* at the same physical size,
+  which is the wrong trade at arm's length — the limit there is the
+  camera's resolution of fine modules, not smudges.
+- **256 messages per carriage set, because the header indexes them in one
+  byte.** 256 carriages × 256 entries is 65,536 bundle entries, against
+  §5.4's own arithmetic of a subject reaching 256 at one meeting every
+  three days over 730 days. A second header byte would come out of the
+  slice on a link whose MTU is twenty. **This was a bug first**: the bound
+  was 4,097 against a one-byte index, and the test for the out-of-range
+  index is what found it.
+- **Fixed service and characteristic UUIDs** identify *this shell's*
+  carriage and nothing more, the protocol naming no bearer.
+- **The advertisement carries the service UUID and nothing else** — no name,
+  no identifier. An advertisement is broadcast to the room, and a beacon is
+  not what this ceremony needs.
+
+**Three bugs the tests found, all mine.** An empty payload decoded as null
+rather than as an empty array; the message bound above; and a QR rendered at
+one pixel per module, whose finder patterns are three pixels wide and which
+no binarizer resolves — the test now renders at eight, which is what a
+screen does.
+
+**What is NOT built, and named rather than implied.** §14.3.1's last resort,
+a fetch over FuerosNet, is `Chosen.NONE`: a fetch needs the counterparty
+reachable through the network, which before a ceremony they may not be, and
+the kernel's payload path needs a session this very exchange establishes.
+`Carriage.chosen` reports it rather than claiming a bearer it does not have.
+
+**Bluetooth here is not Bluetooth as proximity evidence**, and both files
+say so where a reader will meet it. §14.3.1 settles it: design §1.3 bars
+RSSI from the *distance* channel because signal strength is
+attacker-controllable, and that bar is about evidence of nearness — data
+already bound to the optical anchor needs no distance guarantee of its own.
+Nothing here is ever offered as a proximity channel.
+
+**The seam left open is the screens**, which is where the PRD rows go by
+today's ruling: a preview surface, the rear-camera bootstrap at D1 and the
+selfie-camera anchor exchange at D2, and the advertise-or-seek choice. The
+backends are reachable from `Carriage` and nothing in the flow calls them
+yet.

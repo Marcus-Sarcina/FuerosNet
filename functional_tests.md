@@ -282,6 +282,7 @@ The Cargo workspace has **16 crates**. Components below follow responsibilities 
 | NET-017 | C | A bundle larger than one carriage crosses in `BundleContinuation` messages: the `IntentExchange` states how many follow, each is anchored to the ceremony-id and numbered consecutively from one, and the receiver evaluates the entries it accepted in order — a continuation that fails its anchor or index, or that local resource policy declines to read, ends the bundle there with *n* as held, never a protocol rejection of the ceremony (`wire-format.md` §5.4, §14.3.2). | W §§5.4, 14.3 |
 | NET-018 | C | Carry a verification query to its verifier on the end-to-end payload path and take the answer back on it: direct where a path to the verifier is held, through the serving nodes as relay otherwise, queued where the verifier is offline; the response returns the way the query came and the subject's copy goes to the subject. Nothing descends past a serving node to a client it serves, and a verifier that is the querier's own serving node is asked on the session as request type 4. | W §§5.6, 7.7.2, 7.10; D §12.6.3 |
 | NET-019 | C | Encode and decode every `wire-format.md` §14.3 object inside the client, and hand the boundary above it opaque bytes: the two optical QRs, the bearer-carried intent with its bundle continuations, the anchored proximity outcomes and the candidate handover. The application moves them on whatever bearer it has, in the order given, and parses none of them — a second parser above the kernel is the hazard. Every check `wire-format.md` §14.3.1 requires is made where the ceremony's state is: a QR naming another party, a ceremony-id that is not this device's, an intent echoing a contribution the screen did not show, and an anchored message from another ceremony are each refused there. | W §14.3; D §§14.1.0, 11.2 |
+| NET-020 | E | Carry a ceremony's local exchange over a bearer the application chooses, ranked by locality: a direct local radio before a network fetch (`wire-format.md` §14.3.1). The carriage assembles the messages that were sent, in the order they were sent, or none — a gap is not assembled across, a repeat is not counted twice, and a peer announcing more than the bound is refused rather than allocated for. A bearer is offered as no proximity channel, whatever radio it uses: design §1.3's bar on signal strength as distance evidence is untouched by it. The optical objects survive the symbol that carries them and come back byte-identical. | W §14.3.1; D §§1.3, 14.1 |
 
 ### Attach, sibling state, heartbeat and failover
 
@@ -952,7 +953,7 @@ Open local parameters are not all specification defects: cache TTLs, queue cap, 
 
 ## 10. Document baseline and coverage totals
 
-This specification contains **480 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
+This specification contains **481 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
 
 | Prefix | Families |
 |---|---:|
@@ -963,7 +964,7 @@ This specification contains **480 numbered requirement/test families** across **
 | TOP | 36 |
 | RES | 15 |
 | CUR | 12 |
-| NET | 19 |
+| NET | 20 |
 | SES | 15 |
 | MAIL | 27 |
 | CER | 21 |

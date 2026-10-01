@@ -32,6 +32,11 @@ dependencies {
     // The generated binding speaks JNA and nothing else; the @aar carries
     // libjnidispatch.so for each ABI.
     implementation("net.java.dev.jna:jna:5.17.0@aar")
+    // The QR symbol for the optical channel (`wire-format.md` §14.3.1).
+    // Pure Java and Apache-2.0, so the whole bytes-to-symbol-and-back path
+    // runs in the unit tests below; what needs a camera does not.
+    implementation("com.google.zxing:core:3.5.3")
+    testImplementation("com.google.zxing:core:3.5.3")
     // Unit tests hold the shell's own logic on the JVM; what needs a
     // device stays on the device.
     testImplementation("junit:junit:4.13.2")

@@ -11737,3 +11737,35 @@ hex blobs, which is what two phones and a person copying lines will do.
 **What remains is platform work**: a camera for the QRs and a local radio
 for the bulk. §14.3.1 ranks bearers by locality and relies on none of them
 for integrity, which is why this half could be finished without them.
+
+### 2026-10-01 (the bearer backends, and three rulings)
+
+**The participant and witness arrays are unordered** [author]. As
+`wire-format.md` §3.2 already states: the order of both is the proposer's.
+No edit follows — what this closes is the question.
+
+**The PRD rows go with screen development** [author], not as a block.
+
+**The camera and BLE bearer backends** [author's instruction], four files in
+the Android shell, split by what can be verified without a device.
+`Optical.kt` carries the kernel's bytes as a QR payload and renders the
+symbol; its whole path is round-tripped on the JVM, bytes to symbol to
+identical bytes, at every length to 200. `Bearer.kt` frames a carriage into
+packets for an MTU of twenty and reassembles it in order; it is tested
+against a link that reverses every packet, sends each twice, drops one in
+the middle, withholds a last packet, and asks for memory. `Carriage.kt`
+composes them and reports which bearer it chose. `QrCamera.kt` (camera2 +
+ZXing) and `BleBearer.kt` (BLE GATT) **compile and have never run on
+hardware**, which the files say at the top.
+
+Three bugs the tests found: an empty payload decoding as null, a QR
+rendered too small for any binarizer to find its finder patterns, and a
+message bound of 4,097 against a one-byte index — the last a design error
+the out-of-range test caught. The bound is now 256, which is 65,536 bundle
+entries against §5.4's arithmetic of 256 at one meeting every three days.
+
+§14.3.1's last resort, a fetch over FuerosNet, is **not built and named as
+not built**: it needs the counterparty reachable and a session this very
+exchange establishes. And Bluetooth as a bearer is not Bluetooth as
+proximity evidence — design §1.3's bar on signal strength as distance
+evidence is untouched, and nothing here is offered as a channel.
