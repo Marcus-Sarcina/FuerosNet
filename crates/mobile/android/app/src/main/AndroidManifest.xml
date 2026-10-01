@@ -17,12 +17,19 @@
         android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <!-- The NFC tap, design §7.6.3's second channel. Friction, not a
+         distance guarantee: the exchange carries only the public
+         ceremony-id, and the tap is physical-range evidence weighed by the
+         counterparty rather than relied on. -->
+    <uses-permission android:name="android.permission.NFC" />
     <!-- Neither is required to install: a device without one carries the
          exchange another way, and `light-client-requirements.md` §1.3 has a
          missing capability reported unavailable rather than absent. -->
     <uses-feature android:name="android.hardware.camera.any"
         android:required="false" />
     <uses-feature android:name="android.hardware.bluetooth_le"
+        android:required="false" />
+    <uses-feature android:name="android.hardware.nfc.hce"
         android:required="false" />
 
     <application
@@ -44,5 +51,21 @@
         <activity android:name=".MeetActivity" android:exported="false" />
         <activity android:name=".ConversationActivity" android:exported="false" />
         <activity android:name=".PlaceholderActivity" android:exported="false" />
+
+        <!-- The tap's card side (D3). exported because the NFC stack, a
+             system service, binds it when a reader selects the AID; it
+             carries only the public ceremony-id and answers unknown with
+             no ceremony open. -->
+        <service
+            android:name=".NfcCeremonyService"
+            android:exported="true"
+            android:permission="android.permission.BIND_NFC_SERVICE">
+            <intent-filter>
+                <action android:name="android.nfc.cardemulation.action.HOST_APDU_SERVICE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.nfc.cardemulation.host_apdu_service"
+                android:resource="@xml/apduservice" />
+        </service>
     </application>
 </manifest>

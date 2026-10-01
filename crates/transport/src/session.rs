@@ -283,10 +283,20 @@ impl NetworkPoint {
             Some(Item::Bytes(r)) => b[r.clone()].try_into().ok()?,
             _ => return None,
         };
+        // a present port out of the u16 range makes the whole point
+        // malformed rather than silently truncating in `socket()`
+        // [2026-10-01].  The codec's `network_point_at` already rejects
+        // this on the validated paths; this defends the decoder itself, so
+        // no caller can reach the `as u16` below with an out-of-range
+        // value whether or not it was codec-checked first.
+        let port = match map_get(m, 3).and_then(as_uint) {
+            Some(p) if p == 0 || p > u16::MAX as u64 => return None,
+            other => other,
+        };
         Some(NetworkPoint {
             ip,
             asn: map_get(m, 2).and_then(as_uint),
-            port: map_get(m, 3).and_then(as_uint),
+            port,
         })
     }
 }

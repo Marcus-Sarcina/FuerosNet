@@ -1314,7 +1314,7 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
                 return Err(Error("delegations not array"));
             };
             if dels.is_empty() || dels.len() > DELEGATIONS_PER_CREDENTIAL {
-                return Err(Error("one to sixteen delegations"));
+                return Err(Error("one to forty-five delegations"));
             }
             for d in dels {
                 match d {

@@ -787,10 +787,14 @@ impl LiveNode {
                 // patron accepted a session and holds nothing this node
                 // has, including the endpoint record that says this node
                 // is infrastructure (`wire-format.md` §7.6, §10.1.3)
-                self.view
-                    .lock()
-                    .unwrap()
-                    .replay_to(&self.adjacency, &serving);
+                // snapshot under the lock, send outside it — the same
+                // discipline the accept-hook replay uses (2026-10-01): a
+                // store-sized replay must not hold the view for its length
+                let frames = self.view.lock().unwrap().replay_frames();
+                for frame in frames {
+                    self.adjacency
+                        .send(&serving, crate::propagation::FRAME_TOPOLOGY_PUSH, &frame);
+                }
                 let (_, dummy) = mpsc::unbounded_channel();
                 let mut frames = std::mem::replace(&mut session.frames, dummy);
                 let (v, i, a, s) = (
@@ -1069,8 +1073,10 @@ pub fn reconcile_every(
                 if !adjacency.has_session(&peer) {
                     continue;
                 }
-                let v = view.lock().unwrap();
-                v.replay_to(&adjacency, &peer);
+                let frames = view.lock().unwrap().replay_frames();
+                for frame in frames {
+                    adjacency.send(&peer, crate::propagation::FRAME_TOPOLOGY_PUSH, &frame);
+                }
             }
         }
     })

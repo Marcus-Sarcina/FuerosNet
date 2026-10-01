@@ -95,6 +95,13 @@ fn split_name(name: &str) -> Option<(u64, u64, [u8; 32])> {
     Some((a, s, device))
 }
 
+/// Flush a directory's own entry, so a file just created in it survives a
+/// crash and not only the file's contents (`fsync` of a file does not
+/// durably record that the file exists in its directory).
+fn sync_dir(dir: &std::path::Path) -> std::io::Result<()> {
+    std::fs::File::open(dir)?.sync_all()
+}
+
 impl QueueStore for DirStore {
     fn push(&self, item: Queued) -> bool {
         use std::io::Write;
@@ -117,11 +124,21 @@ impl QueueStore for DirStore {
                 Ok(mut f) => {
                     // written AND flushed before this returns true: an
                     // item counts as queued once it is on the disk, not
-                    // once it is in a buffer the process may not outlive
-                    return f
+                    // once it is in a buffer the process may not outlive.
+                    // The directory entry is flushed too, so the newly
+                    // created file survives a crash rather than the content
+                    // alone [2026-10-01].
+                    let ok = f
                         .write_all(&item.ciphertext)
                         .and_then(|()| f.sync_all())
+                        .and_then(|()| sync_dir(&dir))
                         .is_ok();
+                    if !ok {
+                        // a half-written file would be read back and
+                        // delivered once as a garbage message: leave none
+                        let _ = std::fs::remove_file(&path);
+                    }
+                    return ok;
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
                 Err(_) => return false,

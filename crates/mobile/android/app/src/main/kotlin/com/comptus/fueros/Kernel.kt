@@ -180,6 +180,10 @@ object Kernel {
             } else {
                 val id = p.takeTranscript(bytes)
                 m.note("the two meeting ids agree: ${hex(id).take(16)}…")
+                // D3 can now run: the tap carries this agreed ceremony-id,
+                // and the reader/card side follows the bootstrap's own
+                // asymmetry — the party that showed the bootstrap reads.
+                ProximityChannels.ceremony(id, m.role == Meet.Role.INITIATOR, true)
                 // THE BEARER'S TURN. The optical step is what the integrity
                 // rests on (§14.3.1); from here a radio carries the bulk,
                 // and everything it carries is checked against what the
@@ -292,6 +296,11 @@ object Kernel {
             ble = null
             carriage = null
         }
+        // the hardware goes back with the meeting: a camera held behind a
+        // dead ceremony and a channel bound to a stale id are both the kind
+        // of thing nobody consented to
+        ProximityChannels.ceremony(null, false, false)
+        shell?.endCapture()
     }
 
     /**
@@ -312,21 +321,15 @@ object Kernel {
         val p = participant ?: return
         val to = peer ?: return
         val radio = BleBearer(appContext ?: return)
+        // ONE inbound handler for the whole conversation. Each phase is
+        // apart in the carriage (`Carriage.Phase`), so a packet arriving
+        // is just dropped into its phase and the step waiting on that phase
+        // is attempted — a late proximity packet cannot complete the intent
+        // and a replayed intent packet cannot complete the capture.
         val inbound = BleBearer.Inbound { packet ->
             val live = carriage ?: return@Inbound
             live.packet(packet)?.let { why -> m.note("a packet was refused: $why") }
-            live.received()?.let { set ->
-                try {
-                    val taken = p.takeIntentCarriage(to, set)
-                    m.note("their intent is in, with $taken continuation(s).")
-                    m.opticalDone()
-                } catch (e: Refused.Reason) {
-                    // every refusal here is the kernel catching a bearer
-                    // that disagrees with the screens (§14.3.2), which is
-                    // the one thing the anchor is for
-                    m.stop("the carried intent was refused: ${e.reason}")
-                }
-            }
+            drainBearer(p, to, m)
         }
         val why = when (m.role) {
             Meet.Role.INITIATOR -> radio.offer(inbound)
@@ -348,7 +351,7 @@ object Kernel {
         Thread {
             try {
                 val mine = p.intentCarriage()
-                if (carriage?.send(mine) == true) {
+                if (carriage?.send(mine, Carriage.Phase.INTENT) == true) {
                     m.note("intent sent: ${mine.size} message(s) over the radio.")
                 } else {
                     m.note("the radio would not take the intent; nothing was sent.")
@@ -357,6 +360,105 @@ object Kernel {
                 m.stop("the intent could not be built: ${e.reason}")
             }
         }.start()
+    }
+
+    /**
+     * Take whatever phase has arrived whole, for the step the ceremony is
+     * on. **Idempotent and order-free**: a phase already taken is not taken
+     * twice (the step has moved on), and a phase not yet whole is left for
+     * the next packet. This is called after every inbound packet and from
+     * the step drivers, so a set that completed before its step was reached
+     * is taken the moment it is.
+     */
+    private fun drainBearer(p: Participant, to: ByteArray, m: Meet): Unit = synchronized(bearerLock) {
+        // SERIALIZED, because two threads reach here: the BLE inbound
+        // callback when the counterparty's packets land, and the step
+        // driver (runProximity/runCapture) right after it sends. received()
+        // is non-destructive, so without this both could read one completed
+        // phase, both take it, and the second advance() would throw on a
+        // callback thread (step has already moved). The lock makes the
+        // second entry see the advanced step and do nothing.
+        val live = carriage ?: return
+        when (m.step()) {
+            Meet.Step.OPTICAL -> live.received(Carriage.Phase.INTENT)?.let { set ->
+                try {
+                    val taken = p.takeIntentCarriage(to, set)
+                    m.note("their intent is in, with $taken continuation(s).")
+                    m.opticalDone()
+                } catch (e: Refused.Reason) {
+                    // every refusal here is the kernel catching a bearer
+                    // that disagrees with the screens (§14.3.2), which is
+                    // the one thing the anchor is for
+                    m.stop("the carried intent was refused: ${e.reason}")
+                }
+            }
+            Meet.Step.PROXIMITY -> live.received(Carriage.Phase.PROXIMITY)?.let { set ->
+                set.firstOrNull()?.let { bytes ->
+                    try {
+                        p.takeProximity(bytes)
+                        m.note("their channel outcomes are in.")
+                        m.proximityDone()
+                    } catch (e: Refused.Reason) {
+                        m.stop("the carried outcomes were refused: ${e.reason}")
+                    }
+                }
+            }
+            Meet.Step.CAPTURE -> live.received(Carriage.Phase.CAPTURE_KEY)?.let { set ->
+                set.firstOrNull()?.let { theirKey ->
+                    try {
+                        // their key seals MY capture of them; the capture
+                        // ran on this device's camera at D4 and is sealed
+                        // beneath, silently (design §7.5.2.6)
+                        p.capture(theirKey)
+                        m.note("captures sealed; the meeting can be proposed.")
+                        m.captureDone()
+                    } catch (e: Refused.Reason) {
+                        m.stop("the capture could not be sealed: ${e.reason}")
+                    }
+                }
+            }
+            else -> {}
+        }
+    }
+
+    /**
+     * D3: run the channel ladder, send this device's outcomes, and take the
+     * counterparty's. The outcomes cross as `ProximityOutcomes` (phase
+     * PROXIMITY); the kernel weighs what they measured (design §1.3 item 4).
+     */
+    fun runProximity(m: Meet) {
+        val p = participant ?: return
+        val to = peer ?: return
+        try {
+            val mine = p.proximityCarriage()
+            carriage?.send(listOf(mine), Carriage.Phase.PROXIMITY)
+            m.note("channels run; the strongest that passed is recorded.")
+            drainBearer(p, to, m)
+        } catch (e: Refused.Reason) {
+            m.stop("proximity: ${e.reason}")
+        }
+    }
+
+    /**
+     * D4: hand the counterparty the key that seals its captures of me, and
+     * take theirs. **The capture key has no §14.3 encoding** — the §14.2
+     * table never listed the handover design §7.5.2.6 requires (raised
+     * 2026-10-01, `review-tracking.md`) — so the raw 32 bytes cross as the
+     * one message of the CAPTURE_KEY phase. The capture itself ran on this
+     * device's camera as the kernel drove [AndroidShell.capture]; this is
+     * only the keys crossing.
+     */
+    fun runCapture(m: Meet) {
+        val p = participant ?: return
+        val to = peer ?: return
+        try {
+            val mine = p.captureKey()
+            carriage?.send(listOf(mine), Carriage.Phase.CAPTURE_KEY)
+            m.note("my capture key is sent; capturing the counterparty.")
+            drainBearer(p, to, m)
+        } catch (e: Refused.Reason) {
+            m.stop("capture: ${e.reason}")
+        }
     }
 
     /** The one peer this device was provisioned to talk to, or null while
@@ -424,7 +526,13 @@ object Kernel {
     }
 
     /** Start the participant, attach where provisioned, and pump its events. */
+    @Volatile private var shell: AndroidShell? = null
+
+    /** Serializes [drainBearer] against its two caller threads. */
+    private val bearerLock = Any()
+
     private fun bringUp(shell: AndroidShell) {
+        this.shell = shell
         val provision = shell.read("provision")?.let {
             try { JSONObject(String(it)) } catch (_: Exception) { null }
         }

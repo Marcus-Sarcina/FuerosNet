@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The tap's card side (D3): the AID NfcApdu fixes, served without
+     device unlock because the phone is in the counterparty's hand side of
+     a table, not its owner's. -->
+<host-apdu-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/app_name"
+    android:requireDeviceUnlock="false">
+    <aid-group android:category="other"
+        android:description="@string/app_name">
+        <aid-filter android:name="F0465545524F53" />
+    </aid-group>
+</host-apdu-service>

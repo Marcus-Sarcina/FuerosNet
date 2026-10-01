@@ -34,17 +34,46 @@ import uniffi.rhtn_ffi.Told
  * question nobody was shown is answered no.  Storage is the application's
  * private files directory; the kernel's state file names contain no path.
  */
-class AndroidShell(context: Context) :
+class AndroidShell(private val context: Context) :
     Proximity, Camera, Clock, Random, Operator, Notices, Storage, Custody {
 
     private val dir: File = File(context.filesDir, "kernel").apply { mkdirs() }
     private val rng = SecureRandom()
 
-    override fun supported(): List<Channel> = listOf()
-    override fun run(channel: Channel, peer: ByteArray): ChannelOutcome = ChannelOutcome.UNAVAILABLE
+    /** The selfie camera for D4, opened on first frame and closed when the
+     *  meeting ends. Held here because the kernel calls [capture] on its
+     *  own thread and this side owns the camera's lifecycle. */
+    @Volatile private var face: FaceCamera? = null
+
+    // D3: the channels this shell can run (design §7.6.3). UWB is present
+    // on some hardware but this shell cannot drive 802.15.4z ranging, so it
+    // is NOT listed — the strongest recorded is the strongest attemptable,
+    // which is the rule's wording (`light-client-requirements.md` §1.3).
+    override fun supported(): List<Channel> = ProximityChannels.supported(context)
+
+    override fun run(channel: Channel, peer: ByteArray): ChannelOutcome =
+        ProximityChannels.run(context, channel)
+
     override fun resolutionM(channel: Channel): ULong? = null
 
-    override fun capture(ask: Ask): ByteArray = ByteArray(0)
+    // D4: one frame of the counterparty per prompt, on the selfie camera.
+    // The camera opens on the first prompt of the sequence and the meeting
+    // closes it; an empty frame is a capture that did not happen, which the
+    // kernel's template-length check fails rather than seals.
+    override fun capture(ask: Ask): ByteArray {
+        val cam = face ?: FaceCamera(context).also {
+            face = it
+            it.open()?.let { why -> Log.w("fueros", "face camera: $why") }
+        }
+        return cam.frame()
+    }
+
+    /** The meeting is over: give the camera back. Called by the Kernel when
+     *  a ceremony stops or finishes. */
+    fun endCapture() {
+        face?.close()
+        face = null
+    }
 
     override fun nowMs(): ULong = System.currentTimeMillis().toULong()
     override fun waitMs(ms: ULong) = Thread.sleep(ms.toLong())

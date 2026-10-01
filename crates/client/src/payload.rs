@@ -688,9 +688,12 @@ pub struct Sessions {
     /// recent last.  A one-time key spends itself, but an initial opened
     /// on the reusable prekey alone can be captured and re-sent, and
     /// accepting it again replaced a live session with a fresh one —
-    /// Signal's weak-replay caveat turned into session takeover.  Not
-    /// persisted: it bounds what one process will accept, and a session
-    /// survives a restart on its own state.
+    /// Signal's weak-replay caveat turned into session takeover.
+    /// **Persisted with the sessions** [2026-09-30]: held only in memory
+    /// it emptied on every restart, reopening the window it closes, so a
+    /// captured initial replayed after a restart took the session over
+    /// again.  Capped at [`SEEN_INITIALS`] on both the accept path and
+    /// decode, so a corrupt or oversized blob cannot grow it without bound.
     pub seen_initials: std::collections::VecDeque<[u8; 32]>,
 }
 
@@ -746,6 +749,12 @@ impl Sessions {
         let mut seen_initials = std::collections::VecDeque::new();
         for ek in array(&f[2])? {
             seen_initials.push_back(fixed::<32>(b, ek)?);
+            // the accept path caps this, but a stored blob is not trusted
+            // to have: drop the oldest past the cap rather than hold an
+            // unbounded list a corrupt file could grow
+            if seen_initials.len() > SEEN_INITIALS {
+                seen_initials.pop_front();
+            }
         }
         Some(Sessions {
             seen_initials,

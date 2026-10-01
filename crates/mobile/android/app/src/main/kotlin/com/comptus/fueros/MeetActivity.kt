@@ -23,22 +23,26 @@ import android.widget.TextView
  *
  * **What this build carries and what it cannot.** The flow, its front-
  * loaded brief, its hands-off phase and its review-before-sign gate are all
- * here and enforced by [Meet]. **D1 and D2 are real**: the bootstrap QR is
- * rendered and read with the rear camera, the anchor exchange is rendered
- * and read with the selfie cameras, and the intent then crosses on a
- * Bluetooth LE bearer — none of it verified on hardware, and the files
- * behind each say so. What is still not real: proximity needs radios this
- * shell does not drive, and capture needs a camera pipeline for faces
- * rather than symbols. Where a step needs reality, the screen says so. A
- * dim **walkthrough** control advances the flow for inspection — it is
- * scaffolding, not the ceremony, and it is labelled as standing in for a
- * signal a real device would raise.
+ * here and enforced by [Meet]. **D1 through D4 are wired to hardware**: the
+ * bootstrap and anchor QRs on the rear and selfie cameras, the intent over
+ * a Bluetooth LE bearer, the proximity tap over NFC (with the optical pass
+ * D2 already made), and the guided capture on the selfie camera — every
+ * radio and camera half compiling against the platform's API and **none of
+ * it run on a device**, which the files behind each say at the top. What is
+ * still not real is D6: signing needs the record artifacts the steps
+ * produce, which a single process has no second party to complete, so a
+ * dim **walkthrough** control stands in there — scaffolding, labelled as
+ * standing in for a signal a real pair of devices would raise.
  */
 class MeetActivity : Activity() {
 
     private lateinit var body: LinearLayout
     private lateinit var scroll: ScrollView
     private var camera: QrCamera? = null
+
+    /** Hands-off steps started this screen's life: so a redraw rejoins a
+     *  running step rather than starting it again. */
+    private val started = java.util.Collections.synchronizedSet(mutableSetOf<String>())
 
     private val sink = object : Meet.Ui {
         override fun render() = runOnUiThread { redraw() }
@@ -67,11 +71,14 @@ class MeetActivity : Activity() {
     override fun onStart() {
         super.onStart()
         Consent.host(this)
+        // the NFC reader side needs a foreground activity (D3); this is it
+        ProximityChannels.host(this)
         Kernel.meet()?.bind(sink) ?: redraw()
     }
 
     override fun onStop() {
         Consent.release(this)
+        ProximityChannels.release(this)
         Kernel.meet()?.unbind(sink)
         // the camera goes back the moment this screen stops: holding one
         // behind a screen nobody is looking at is a camera nobody consented
@@ -105,13 +112,8 @@ class MeetActivity : Activity() {
             Meet.Step.INTENT -> intent(m)
             Meet.Step.BRIEF -> brief(m)
             Meet.Step.OPTICAL -> optical(m)
-            Meet.Step.PROXIMITY -> handsOff(m, "the proximity radios", "UWB or NFC hardware", m::proximityDone)
-            // leaving capture is what asks for the selection: once, at the
-            // transition, so a recreated screen redraws without re-running it
-            Meet.Step.CAPTURE -> handsOff(m, "the guided capture", "a face in front of the camera") {
-                m.captureDone()
-                Kernel.selectVerifiers()
-            }
+            Meet.Step.PROXIMITY -> proximity(m)
+            Meet.Step.CAPTURE -> capture(m)
             Meet.Step.VERIFIERS -> verifiers(m)
             Meet.Step.REVIEW -> review(m)
             Meet.Step.DONE -> done(m)
@@ -270,12 +272,57 @@ class MeetActivity : Activity() {
         }
     }
 
-    // ---- D3–D4 hands-off ------------------------------------------------
+    // ---- D3 proximity: the tap, and the optical pass D2 already made ---
 
-    private fun handsOff(m: Meet, what: String, needs: String, advance: () -> Unit) {
-        para("$what is running. The phone is facing ${m.counterpartyName}; there is nothing to do here.")
-        para("This step needs $needs, which this device does not provide, so it cannot truly complete here.")
-        walkthrough("$what finished") { advance() }
+    /**
+     * The kernel runs the channel ladder (design §7.6.3) off the UI thread
+     * and the screen follows. **The phone still faces the counterparty**,
+     * so there is nothing to tap here: the NFC tap is two phones touching,
+     * and the optical channel already passed when the two screens agreed at
+     * D2. The strongest that passed is what the record carries.
+     */
+    private fun proximity(m: Meet) {
+        para("Ranging with ${m.counterpartyName}. Hold the phones together for the tap; the screen-to-screen check at the last step is itself the weakest channel, so this cannot come back with nothing.")
+        para("UWB is not among the channels this build can run, so the strongest here is a tap. The record carries the strongest that passed and no more — a weaker channel is never shown as a stronger one.")
+        once(m, "proximity") {
+            Kernel.runProximity(m)
+        }
+    }
+
+    // ---- D4 capture: the counterparty's face ---------------------------
+
+    /**
+     * The guided capture runs on the kernel's thread, one frame per prompt,
+     * on the selfie camera the phone is already pointing at the
+     * counterparty. The disclosures were read at D1.5 and the device faces
+     * away, so this shows a progress line and takes nothing.
+     */
+    private fun capture(m: Meet) {
+        para("Capturing ${m.counterpartyName}: a few frames over a few seconds, with spoken or toned prompts for them. Nothing is shown to you and nothing is asked — you read what this holds and who may see it before the phone turned around.")
+        if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            para("The capture needs the camera, which is not yet allowed.")
+            button("Allow the camera") {
+                requestPermissions(arrayOf(Manifest.permission.CAMERA), 2)
+            }
+            return
+        }
+        once(m, "capture") {
+            Kernel.runCapture(m)
+            Kernel.selectVerifiers()
+        }
+    }
+
+    /**
+     * Run `work` once as the flow enters a hands-off step, off the UI
+     * thread, and never again on a redraw. A recreated screen rejoins a
+     * step already running rather than starting it twice — the same
+     * discipline the verifier selection uses.
+     */
+    private fun once(m: Meet, tag: String, work: () -> Unit) {
+        para("Working…")
+        if (started.add("${m.counterpartyKey}:$tag")) {
+            Thread { work() }.start()
+        }
     }
 
     // ---- D5 verifiers --------------------------------------------------

@@ -13515,3 +13515,123 @@ inventory each screen must show is computed and asserted, so a physical run
 is checking a screen against a specification rather than against a reading
 of one. Both rows stay owed, and what closes them is two devices and a
 person — which is the same run that closes TRV-12, TRV-13 and MET-12.
+
+### D3 proximity and D4 capture, wired to hardware (2026-10-01)
+
+The two hands-off steps the Meet screens had left as walkthroughs. Split
+the same way the bearer backends were: the pure parts are JVM-tested, the
+radio and camera halves compile against the platform API and **have not run
+on a device**, said at the top of each file.
+
+| File | What | Verified |
+|---|---|---|
+| `NfcApdu.kt` | The tap's two APDUs (ISO 7816-4), both roles | **JVM**: a tap in one ceremony passes both sides; across two ceremonies passes neither and leaks no id; a phone with no ceremony answers unknown; junk is answered, not thrown at |
+| `ProximityChannels.kt` | D3's ladder: NFC reader/card by the bootstrap's asymmetry, and the optical pass read from D2's agreement | compiles; the cache that keeps the ladder's two kernel runs to one tap is plain logic |
+| `NfcCeremonyService.kt` + `apduservice.xml` | the tap's card side, host-card emulation on the fixed AID | compiles; registered, unlock-free because the phone is in the other person's hand |
+| `FaceCamera.kt` | D4's guided capture: one selfie frame per prompt, the Y plane alone | compiles |
+
+**Decisions that were mine.**
+
+- **UWB is not listed, and that is the honest reading of the rule.** Some
+  test phones have UWB, but this shell cannot drive 802.15.4z ranging — it
+  needs the androidx UWB stack and an out-of-band parameter exchange not
+  built. `light-client-requirements.md` §1.3 says a channel the hardware
+  *supports* is offered and the strongest that passed is recorded; a channel
+  the shell cannot *run* is the same case, so NFC is the strongest offered
+  and the record says so. **Owed**, below.
+- **The optical channel at D3 is reported, not re-run.** design §7.6.3 ranks
+  optical third, and the anchor exchange at D2 — two selfie cameras agreeing
+  on a ceremony-id — *is* that channel's evidence. Re-running it would be
+  asking the same question twice, so D3 reports PASS from the agreement that
+  already happened on this ceremony's own anchor.
+- **The NFC exchange carries only the public ceremony-id.** A tap is
+  *friction, not a distance guarantee* (design §7.6.3: a relay pair defeats
+  it), so like the optical anchor it catches a tap against the wrong
+  ceremony and never an adversary quoting the public value. A tap with no
+  ceremony open answers unknown rather than confirming one exists in time.
+
+**A spec gap this surfaced, for the author.** The **capture-key handover
+has no §14.3 encoding**. design §7.5.2.6 requires each party to hand the
+other the key that seals captures of itself, and the §14.2 table
+("What travels on them today") lists the intent, the optical transcript,
+the proximity outcomes, the candidates and the device credential — **not
+the capture key**. So the one object D4 must move across the local
+interface is the one the encoding work never covered. The shell moves the
+raw 32 bytes as its own carriage phase meanwhile, which is honest but
+unspecified: a counterparty on another shell has nothing to agree with.
+**This wants a §14.3 encoding and a §14.2 row** — recommended as a small
+`CaptureKeyHandover = [ version, ceremony-id, bstr .size 32 ]`, anchored
+like the other local messages so a tap-era bearer cannot misroute it
+between ceremonies. Raised, not built: the encoding is the author's to
+rule, as the others were.
+
+**The bearer grew a phase nibble.** The conversation is now three exchanges
+over one radio — intent, proximity outcomes, capture key — and a late
+packet of one must not assemble into another. The packet header spends four
+bits on a phase, `Bearer.Reassembly` keeps each phase's state apart, and a
+JVM test sends two phases with identical message indices and confirms each
+completes its own and only its own.
+
+**Owed, carried forward**: a UWB channel (the androidx stack and its
+parameter exchange); the capture-key encoding above; and D6 signing, which
+needs the record artifacts a single process has no second party to produce.
+Nothing in D3 or D4 has run on hardware, which the two-phone run is what
+closes — along with the compile-only halves of the bearer backends.
+
+### Correctness review of the last two days (2026-10-01)
+
+A pass over everything since `58974be` — the query carriage, the bounded
+bundle, the whole-project and follow-up review fixes, the owed list, the
+bearer backends, the Meet screens, and D3/D4 — split three ways: I took the
+shell and the kernel's ceremony side, and two agents took the codec/crypto
+and the node/archive/transport Rust. Every finding was verified against the
+code and the spec before acting; two turned out to be false alarms and are
+recorded as such.
+
+**Found and fixed.**
+
+| Where | Finding | Fix |
+|---|---|---|
+| `Kernel.kt` `drainBearer` | **A real race, mine.** Reachable from the BLE callback thread and the step-driver thread at once; `received()` is non-destructive and `advance()` throws if the step already moved, so a concurrent double-take crashed the second call on a callback thread | Serialized on a lock, so the second entry sees the advanced step and does nothing |
+| `schema.rs:1317` | The DeviceCredential over-bound error read "one to sixteen" against a bound of 45 — a string copied from the witness ceiling | "one to forty-five" |
+| `chain.rs` load | **A regression I introduced.** The "report, don't drop" change turned a silently-short load into a hard failure for an honest archive whose same-second records sort (by `effective, txid`) with a successor ahead of its predecessor | Append to a **fixpoint**: re-pass while a pass makes progress, refuse only what still will not append after a pass that appended nothing. The refusal count was also hardcoded to `1`; now `refused.len()` |
+| `runtime.rs:793, 1072` | **Fixed the instance, missed the claim.** `replay_to` was swept to snapshot-then-send at the accept hook but left holding the view lock across a store-sized send at the attach-accept and the periodic-reconcile sites | Both now `replay_frames()` then drop then send |
+| `queue.rs` push | The fsync fix flushed the file's contents but not the directory entry, and left a half-written orphan file (delivered once as garbage) when a write failed | `sync_dir` after the file sync; `remove_file` on the failure path |
+| `payload.rs` | The `seen_initials` field doc still said "Not persisted" after the persist fix, directly contradicting the code; and decode did not clamp to `SEEN_INITIALS`, so a corrupt blob could grow it unbounded | Doc corrected; decode `pop_front`s past the cap |
+| `session.rs` `NetworkPoint::decode` | **Hardening, not a live bug** — see below | A present port outside the u16 range now makes the point malformed rather than reaching the `as u16` in `socket()` |
+
+**Verified as false alarms.**
+
+- **NetworkPoint port truncation** (the node agent's F6): the codec's
+  `network_point_at` already rejects `port == 0 || port > 65535 || port ==
+  7431` on every validated path, so an out-of-range port never reaches the
+  `as u16`. Not a live bug. I added the decoder-level bound anyway as
+  defence in depth, so the `socket()` narrowing cannot be reached whether or
+  not a caller codec-checked first — which completes the narrowing sweep's
+  intent.
+- **Bundle entries not recursed** and **adoption field-5 shape unchecked**
+  (codec agent): both correct by design — a bundle entry that fails its own
+  checks truncates the bundle at evaluation (§14.3.2), and a field-5 that is
+  not a `KeyMaterial` cannot hash to field 1's keyhash without a preimage
+  break, so it is refused as a mismatch rather than needing a shape error.
+
+**Noted, left as the deliberate behaviour it is.**
+
+- The bearer's `held` byte cap is cumulative across a ceremony's three
+  phases, not per message. It still bounds a hostile peer's memory, which is
+  its only job; the Reassembly is per-ceremony, so nothing leaks across.
+- D2 opens the subject's window twice — at `take_transcript` and again at
+  `take_intent`. The two `pre_commitment` computations are guaranteed equal
+  (the echo check gates the intent against the screen-read contribution),
+  and no query touches the window between them, so the second open resets an
+  already-empty window. Redundant, not wrong; `take_intent` keeps its own
+  open for the harness path that does not run `take_transcript`.
+
+**Raised for the author, not fixed** (also in the D3/D4 entry above): the
+topology pending-vec eviction is FIFO per list, and its safety direction is
+toward over-trust (an evicted pending disavowal leaves a relationship open).
+A peer can flood >256 not-yet-applicable disavowals to evict a legitimate
+one. The bound is necessary (§1.1: you cannot enforce against a flooder, you
+bound the memory); the question is whether trust-reducing pendings deserve
+retention priority over reissues. And the capture-key handover still has no
+§14.3 encoding (the §14.2 gap raised 2026-10-01). Both are the author's.

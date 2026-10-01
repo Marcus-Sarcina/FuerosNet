@@ -38,7 +38,7 @@ class BearerTest {
         assertTrue(Bearer.carry(wire, messages))
         val r = Bearer.Reassembly()
         for (p in wire.sent) assertNull(r.take(p))
-        val back = r.carriage(messages.size)
+        val back = r.carriage(0)
         assertNotNull(back)
         assertEquals(messages.size, back!!.size)
         for (i in messages.indices) {
@@ -55,7 +55,7 @@ class BearerTest {
         // every packet, backwards, and twice: a link may reorder and retry
         for (p in wire.sent.reversed()) assertNull(r.take(p))
         for (p in wire.sent.reversed()) assertNull(r.take(p))
-        val back = r.carriage(messages.size)!!
+        val back = r.carriage(0)!!
         assertArrayEquals(messages[0], back[0])
         assertArrayEquals(messages[1], back[1])
     }
@@ -68,10 +68,10 @@ class BearerTest {
         val r = Bearer.Reassembly()
         // everything but one slice in the middle
         for ((i, p) in wire.sent.withIndex()) if (i != 3) assertNull(r.take(p))
-        assertNull("a gap is not assembled across", r.carriage(1))
+        assertNull("a gap is not assembled across", r.carriage(0, 1))
         // and the moment it arrives, the message is whole
         assertNull(r.take(wire.sent[3]))
-        assertArrayEquals(messages[0], r.carriage(1)!![0])
+        assertArrayEquals(messages[0], r.carriage(0, 1)!![0])
     }
 
     @Test
@@ -80,7 +80,7 @@ class BearerTest {
         Bearer.carry(wire, carriage(200))
         val r = Bearer.Reassembly()
         for (p in wire.sent.dropLast(1)) assertNull(r.take(p))
-        assertNull("no last packet, no message", r.carriage(1))
+        assertNull("no last packet, no message", r.carriage(0, 1))
     }
 
     @Test
@@ -128,6 +128,27 @@ class BearerTest {
         val back = r.carriage()!!
         assertEquals(3, back.size)
         for (i in messages.indices) assertArrayEquals(messages[i], back[i])
+    }
+
+    @Test
+    fun one_phase_cannot_complete_another_whatever_the_indices_say() {
+        // two phases carry message 0 with identical indices: the nibble is
+        // the only thing telling them apart, which is the point of it
+        val wire = Wire(20)
+        val intent = carriage(120)
+        val outcomes = carriage(60)
+        Bearer.carry(wire, intent, 0)
+        val boundary = wire.sent.size
+        Bearer.carry(wire, outcomes, 1)
+        val r = Bearer.Reassembly()
+        // only the second phase's packets arrive
+        for (p in wire.sent.drop(boundary)) assertNull(r.take(p))
+        assertNull("phase 0 never arrived", r.carriage(0))
+        assertArrayEquals(outcomes[0], r.carriage(1)!![0])
+        // and the first phase's, late: each completes its own and only its own
+        for (p in wire.sent.take(boundary)) assertNull(r.take(p))
+        assertArrayEquals(intent[0], r.carriage(0)!![0])
+        assertEquals(1, r.carriage(1)!!.size)
     }
 
     @Test

@@ -274,12 +274,40 @@ impl Archive {
         // this key did not sign is somebody else's and was skipped above;
         // one that got this far is ours, and swallowing its refusal
         // returned a short archive as though it were whole.
+        //
+        // **Append to a fixpoint, because the sort is not a topology**
+        // [2026-10-01]. Records are ordered by `(effective, txid)`, and
+        // `append` allows equal effective times (§3.3 forbids only an
+        // earlier one), so two same-second records can sort with a
+        // successor ahead of the predecessor its back-pointer names — its
+        // append then fails for a record that IS held, just not yet. A
+        // single pass would report that honest archive as refused; instead
+        // we re-pass while any refusal cleared on the last pass, and only
+        // what still will not append after a pass that made no progress is
+        // genuinely refused.
+        let mut pending: Vec<Record> = records;
         let mut refused: Vec<(Txid, String)> = Vec::new();
-        for rec in records {
-            let txid = rec.txid;
-            if let Err(why) = a.append(rec) {
-                refused.push((txid, why));
+        loop {
+            let before = pending.len();
+            let mut again = Vec::new();
+            refused.clear();
+            for rec in pending {
+                let txid = rec.txid;
+                match a.append(rec.clone()) {
+                    Ok(_) => {}
+                    Err(why) => {
+                        refused.push((txid, why));
+                        again.push(rec);
+                    }
+                }
             }
+            // stop when a pass made no progress: either everything
+            // appended, or what is left could not append this pass and so
+            // never will, its predecessor not being among the records held
+            if again.is_empty() || again.len() == before {
+                break;
+            }
+            pending = again;
         }
         // the prune is re-applied, so the chain comes back as it was left
         // rather than as it was before the prune.  The window was checked
@@ -290,12 +318,12 @@ impl Archive {
         {
             a.prune_at(&at);
         }
-        if let Some((txid, why)) = refused.into_iter().next() {
+        if let Some((txid, why)) = refused.first() {
             return Err(std::io::Error::other(format!(
                 "{} of this archive's records would not append, the first \
                  {} because its {why}",
-                1,
-                hex(&txid)
+                refused.len(),
+                hex(txid)
             )));
         }
         Ok(a)

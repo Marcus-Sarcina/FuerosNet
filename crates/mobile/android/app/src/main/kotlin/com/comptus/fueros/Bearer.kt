@@ -58,11 +58,19 @@ object Bearer {
      *
      * ```
      * byte 0      message index, 0..=MESSAGES_BOUND-1
-     * byte 1      flags: bit 0 set on the LAST packet of a message
-     *                    bit 1 set on the last packet of the LAST message
+     * byte 1      bits 0..3 flags: bit 0 set on the LAST packet of a message
+     *                              bit 1 set on the last packet of the LAST
+     *                              message
+     *             bits 4..7 the PHASE this packet belongs to, 0..=15
      * bytes 2..3  the slice's index within its message, big-endian
      * bytes 4..   the slice
      * ```
+     *
+     * **A phase is one exchange of the ceremony's conversation** — the
+     * intent carriage, then the proximity outcomes, then the capture key —
+     * and the phase bits are what keep a late packet of one from being
+     * assembled into another. The phases' *meaning* is fixed by [Carriage],
+     * not here: this file moves packets and reads nothing.
      *
      * **The length is not carried and does not need to be**: the link
      * delivers packets, and the last one says so. A header this small keeps
@@ -82,10 +90,14 @@ object Bearer {
     private const val LAST = 1
     private const val END = 2
 
-    /** Cut `messages` into packets for a link of `mtu`. */
-    fun packets(messages: List<ByteArray>, mtu: Int): List<ByteArray> {
+    /** Phases one link can tell apart: the header spends a nibble. */
+    const val PHASES = 16
+
+    /** Cut `messages` into packets for a link of `mtu`, as `phase`. */
+    fun packets(messages: List<ByteArray>, mtu: Int, phase: Int = 0): List<ByteArray> {
         require(mtu > HEADER) { "an MTU of $mtu carries no payload" }
         require(messages.size <= MESSAGES_BOUND) { "too many messages" }
+        require(phase in 0 until PHASES) { "a phase is one nibble" }
         val room = mtu - HEADER
         val out = ArrayList<ByteArray>()
         for ((m, message) in messages.withIndex()) {
@@ -99,11 +111,12 @@ object Bearer {
                 packet[0] = m.toByte()
                 val lastSlice = s == slices - 1
                 val lastMessage = m == messages.size - 1
-                packet[1] = when {
-                    lastSlice && lastMessage -> (LAST or END).toByte()
-                    lastSlice -> LAST.toByte()
+                val flags = when {
+                    lastSlice && lastMessage -> LAST or END
+                    lastSlice -> LAST
                     else -> 0
                 }
+                packet[1] = (flags or (phase shl 4)).toByte()
                 packet[2] = (s ushr 8).toByte()
                 packet[3] = s.toByte()
                 slice.copyInto(packet, HEADER)
@@ -124,26 +137,33 @@ object Bearer {
      * as the counterparty's fault.
      */
     class Reassembly {
-        private val slices = HashMap<Int, HashMap<Int, ByteArray>>()
-        private val last = HashMap<Int, Int>()
+        /** One phase's assembly state, apart from every other's. */
+        private class Phase {
+            val slices = HashMap<Int, HashMap<Int, ByteArray>>()
+            val last = HashMap<Int, Int>()
+            var end: Int? = null
+        }
+
+        private val phases = HashMap<Int, Phase>()
         private var held = 0
-        private var end: Int? = null
 
         /** Why a packet was not taken, or null where it was. */
         fun take(packet: ByteArray): String? {
             if (packet.size < HEADER) return "a packet shorter than its header"
             // the index is one byte and MESSAGES_BOUND is 256, so every
             // value it can hold is a message this will assemble: there is
-            // no out-of-range index to refuse, by construction
+            // no out-of-range index to refuse, by construction — and the
+            // phase is a nibble, bounded the same way
             val m = packet[0].toInt() and 0xff
             val s = ((packet[2].toInt() and 0xff) shl 8) or (packet[3].toInt() and 0xff)
+            val ph = phases.getOrPut((packet[1].toInt() ushr 4) and 0x0f) { Phase() }
             val slice = packet.copyOfRange(HEADER, packet.size)
             if (held + slice.size > MESSAGE_BOUND) return "more bytes than the bound allows"
-            val into = slices.getOrPut(m) { HashMap() }
+            val into = ph.slices.getOrPut(m) { HashMap() }
             // a repeat is dropped, not counted twice: a link may retry
             if (into.put(s, slice) == null) held += slice.size
-            if (packet[1].toInt() and LAST != 0) last[m] = s
-            if (packet[1].toInt() and END != 0) end = m
+            if (packet[1].toInt() and LAST != 0) ph.last[m] = s
+            if (packet[1].toInt() and END != 0) ph.end = m
             return null
         }
 
@@ -155,21 +175,23 @@ object Bearer {
          * **Nobody says how many to expect.** The sender flags its last
          * message and this waits for that one and everything before it.
          */
-        fun carriage(): List<ByteArray>? {
-            val last = end ?: return null
-            return carriage(last + 1)
+        fun carriage(phase: Int = 0): List<ByteArray>? {
+            val ph = phases[phase] ?: return null
+            val last = ph.end ?: return null
+            return carriage(phase, last + 1)
         }
 
         /**
          * The same, for a count known another way. A set whose length the
          * caller already knows is checked against it.
          */
-        fun carriage(count: Int): List<ByteArray>? {
+        fun carriage(phase: Int, count: Int): List<ByteArray>? {
             if (count <= 0 || count > MESSAGES_BOUND) return null
+            val ph = phases[phase] ?: return null
             val out = ArrayList<ByteArray>(count)
             for (m in 0 until count) {
-                val end = last[m] ?: return null
-                val into = slices[m] ?: return null
+                val end = ph.last[m] ?: return null
+                val into = ph.slices[m] ?: return null
                 if (into.size != end + 1) return null
                 val whole = ArrayList<Byte>()
                 for (s in 0..end) {
@@ -183,6 +205,6 @@ object Bearer {
     }
 
     /** Move a whole carriage set over `link`. False where a packet failed. */
-    fun carry(link: Link, messages: List<ByteArray>): Boolean =
-        packets(messages, link.mtu()).all { link.send(it) }
+    fun carry(link: Link, messages: List<ByteArray>, phase: Int = 0): Boolean =
+        packets(messages, link.mtu(), phase).all { link.send(it) }
 }

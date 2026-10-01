@@ -24,6 +24,27 @@ package com.comptus.fueros
  */
 class Carriage(private val radio: Bearer.Link?) {
 
+    /**
+     * **The phases, named once.** Each is one exchange of the ceremony's
+     * conversation over the bearer, and the number is what the packet
+     * header carries — so a late packet of one phase cannot be assembled
+     * into another, and a receiver needs no guesswork about what a set of
+     * bytes was.
+     *
+     * The INTENT and PROXIMITY phases carry `wire-format.md` §14.3.2's
+     * encodings, opaque here. **CAPTURE_KEY carries the kernel's raw
+     * 32 bytes and has no §14.3 encoding to carry**, because none exists:
+     * the §14.2 table never listed the capture-key handover design §7.5.2
+     * requires, so it was never encoded — raised 2026-10-01, in
+     * `review-tracking.md`. The phase number is the whole of this shell's
+     * framing of it.
+     */
+    object Phase {
+        const val INTENT = 0
+        const val PROXIMITY = 1
+        const val CAPTURE_KEY = 2
+    }
+
     enum class Chosen { RADIO, FETCH, NONE }
 
     /** Which bearer this would use, given what is to hand. */
@@ -43,12 +64,12 @@ class Carriage(private val radio: Bearer.Link?) {
     fun packet(bytes: ByteArray): String? = inward.take(bytes)
 
     /**
-     * Send `messages` in the order given. False where a packet did not go,
-     * which is unsent work and not a delivery.
+     * Send `messages` in the order given, as `phase`. False where a packet
+     * did not go, which is unsent work and not a delivery.
      */
-    fun send(messages: List<ByteArray>): Boolean {
+    fun send(messages: List<ByteArray>, phase: Int = Phase.INTENT): Boolean {
         val link = radio ?: return false
-        return Bearer.carry(link, messages)
+        return Bearer.carry(link, messages, phase)
     }
 
     /**
@@ -57,5 +78,5 @@ class Carriage(private val radio: Bearer.Link?) {
      * its last one, and a set missing that flag is incomplete rather than
      * short.
      */
-    fun received(): List<ByteArray>? = inward.carriage()
+    fun received(phase: Int = Phase.INTENT): List<ByteArray>? = inward.carriage(phase)
 }

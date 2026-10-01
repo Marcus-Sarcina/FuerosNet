@@ -11817,3 +11817,56 @@ packets.
 
 Android unit tests 37 → 51. Proximity and capture are still not real and
 the screens still say so.
+
+### 2026-10-01 (D3 proximity and D4 capture)
+
+The two hands-off steps that had been walkthroughs are wired to the
+platform, split like the bearer backends: the pure parts JVM-tested, the
+radio and camera halves compiling against the API and not run on a device.
+`NfcApdu.kt` is the tap's two APDUs with both roles tested — one ceremony
+passes both sides, two ceremonies pass neither and leak no id, a phone with
+nothing open answers unknown. `ProximityChannels.kt` runs the ladder (NFC
+by the bootstrap's asymmetry, the optical channel reported from D2's
+agreement rather than re-run), `NfcCeremonyService.kt` is its card side,
+and `FaceCamera.kt` takes one selfie frame per kernel prompt.
+
+UWB is not listed: this shell cannot drive 802.15.4z, and
+`light-client-requirements.md` §1.3's "strongest that passed" reads the
+same for a channel the shell cannot run as for one the hardware lacks. The
+tap carries only the public ceremony-id, friction rather than a distance
+guarantee (design §7.6.3).
+
+The bearer grew a four-bit phase in its packet header, because the
+conversation is now three exchanges over one radio — intent, proximity
+outcomes, capture key — and a late packet of one must not assemble into
+another. A test sends two phases with identical message indices and
+confirms each completes only its own.
+
+A spec gap this surfaced, raised for the author in review-tracking: the
+capture-key handover design §7.5.2.6 requires has no §14.3 encoding and no
+§14.2 row, so the one object D4 moves across the local interface is the one
+the encoding work never covered. The shell carries the raw 32 bytes as its
+own carriage phase meanwhile — honest but unspecified, with nothing for a
+counterparty on another shell to agree with.
+
+Android unit tests 51 → 56. Nothing in D3 or D4 has run on hardware.
+
+### 2026-10-01 (a correctness pass over the two days, and what it caught)
+
+A review of everything since the engine was chosen, split across the shell,
+the kernel's ceremony side, and two agents on the Rust codec and node tiers.
+It caught one real concurrency bug of mine — the D3/D4 bearer's `drainBearer`
+was reachable from the BLE callback and the step driver at once and would
+crash the second on a double-take; now serialized — and one regression I had
+introduced: the archive's "report a refused record rather than drop it"
+change turned an honest same-second-ordered archive into a hard load
+failure, now an append-to-fixpoint that re-passes while it makes progress.
+The rest were smaller: `replay_to` still held the view lock at two sites the
+first sweep missed; the mailbox fsync left the directory entry unflushed and
+an orphan file on a failed write; the replay cache's field doc still said
+"not persisted" and decode did not clamp it; a DeviceCredential error said
+"sixteen" for a bound of 45. Two agent findings were false alarms, verified
+and recorded: a NetworkPoint port truncation the codec already bounds (a
+defensive decoder bound added regardless), and two codec "gaps" that are
+correct by design. Nothing in the two days' work was found wrong in its
+logic beyond these; the gate stays green.
