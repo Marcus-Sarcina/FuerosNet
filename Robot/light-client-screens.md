@@ -97,7 +97,9 @@ now explicit rather than implied.
 being scanned and both descriptions being shown, not on an intent arriving;
 and the transaction type is chosen at D1a by the initiator, before the
 responder has seen anything, so the responder's D1.5 is the first place they
-can refuse it.
+can refuse it. **Either party may be the initiator** [author, 2026-10-02]: the
+shell offers both controls, and which one a user chose has no bearing on the
+outcome or on the polarity of an adoption; design §7.1 says so.
 
 **Built 2026-10-01.** `Meet.Step.INTENT` now completes on `crossBootstrap()`
 and not on an intent; `Meet.Role` says which side of the bootstrap a device

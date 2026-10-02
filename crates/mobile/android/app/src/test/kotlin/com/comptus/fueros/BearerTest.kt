@@ -211,3 +211,49 @@ class BearerTest {
         assertArrayEquals(carriage(40)[0], r.carriage(0)!![0])
     }
 }
+
+/** What a wiped carry and a discarded phase leave behind: nothing. */
+class BearerWipeTest {
+
+    /** A link that assembles as it goes and keeps every packet reference. */
+    private class Tapped(val mtu: Int) : Bearer.Link {
+        val assembly = Bearer.Reassembly()
+        val sent = ArrayList<ByteArray>()
+        override fun mtu() = mtu
+        override fun send(packet: ByteArray): Boolean {
+            assembly.take(packet)
+            return sent.add(packet)
+        }
+    }
+
+    @Test
+    fun a_wiped_carry_arrives_whole_and_leaves_the_sender_zeroed_packets() {
+        val wire = Tapped(20)
+        val handover = ByteArray(70) { (it * 7 + 1).toByte() }
+        assertTrue(Bearer.carry(wire, listOf(handover), 2, wipe = true))
+        val back = wire.assembly.carriage(2)
+        assertNotNull("the receiver copied each slice as it came", back)
+        assertArrayEquals(handover, back!![0])
+        assertTrue("more than one packet, so the wipe covered a set", wire.sent.size > 1)
+        for (p in wire.sent) assertTrue("a packet left zeroed", p.all { it == 0.toByte() })
+        // the messages themselves are the caller's, and untouched
+        assertEquals(1, handover[0].toInt())
+    }
+
+    @Test
+    fun a_discarded_phase_is_gone_and_its_slices_are_zeroed() {
+        val wire = Tapped(20)
+        Bearer.carry(wire, listOf(ByteArray(50) { 3 }), 2)
+        Bearer.carry(wire, listOf(ByteArray(50) { 4 }), 1)
+        val taken = wire.assembly.carriage(2)!!
+        wire.assembly.discard(2)
+        assertNull("the phase is forgotten", wire.assembly.carriage(2))
+        assertNotNull("another phase is not", wire.assembly.carriage(1))
+        assertTrue("what was taken out is the caller's", taken[0].all { it == 3.toByte() })
+        // the slices the assembly held are the packets' payloads, copied
+        // on take: the originals on the wire were never the assembly's to
+        // wipe, and a fresh carriage of the same phase assembles again
+        Bearer.carry(wire, listOf(ByteArray(50) { 5 }), 2)
+        assertTrue(wire.assembly.carriage(2)!![0].all { it == 5.toByte() })
+    }
+}

@@ -356,6 +356,10 @@ impl SigningReply {
 /// of it unseen.
 pub fn proposal_from_body(body: &[u8]) -> Result<(Proposal, Vec<Vec<Txid>>), String> {
     let it = parse_all(body).map_err(|e| e.0)?;
+    // the body is checked as every archive will check it before anything
+    // is read out of it, so this side is at least as strict as the schema
+    // (the bargain `checked` below makes for every other kind)
+    schema::check_body_of_type(body, &it, rhtn_archive::tx::TYPE_PRESENCE).map_err(|e| e.0)?;
     let Item::Map(m) = &it else {
         return Err("body is not a map".into());
     };

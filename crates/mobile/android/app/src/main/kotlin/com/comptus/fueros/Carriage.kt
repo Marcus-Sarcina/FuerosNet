@@ -65,12 +65,21 @@ class Carriage(private val radio: Bearer.Link?) {
 
     /**
      * Send `messages` in the order given, as `phase`. False where a packet
-     * did not go, which is unsent work and not a delivery.
+     * did not go, which is unsent work and not a delivery. With `wipe`,
+     * the packets cut from `messages` are zeroed once sent: what the
+     * CAPTURE_KEY phase carries is not kept anywhere on this side.
      */
-    fun send(messages: List<ByteArray>, phase: Int = Phase.INTENT): Boolean {
+    fun send(messages: List<ByteArray>, phase: Int = Phase.INTENT, wipe: Boolean = false): Boolean {
         val link = radio ?: return false
-        return Bearer.carry(link, messages, phase)
+        return Bearer.carry(link, messages, phase, wipe)
     }
+
+    /**
+     * Forget what `phase` carried, wiped. [received] copies out of the
+     * assembly and leaves it standing; once a phase has been taken, this
+     * is how the assembly's own copy goes too.
+     */
+    fun discard(phase: Int) = inward.discard(phase)
 
     /**
      * The counterparty's carriage set once it is whole, or null while it is

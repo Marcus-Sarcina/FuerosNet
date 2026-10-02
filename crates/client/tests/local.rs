@@ -104,7 +104,7 @@ fn the_optical_objects_encode_to_the_canonical_bytes_and_read_back() {
         &fx[fx.len() - 32..],
         "the key is the last 32 bytes, as design §7.5.2.6 derives it"
     );
-    assert_eq!(read.encode(), fx);
+    assert_eq!(*read.encode(), fx);
 }
 
 // acceptance: DEC-36

@@ -207,6 +207,20 @@ object Bearer {
         }
 
         /**
+         * Forget one phase's slices, each wiped first. What a phase carried
+         * is the caller's once taken, and a key among it is not kept here:
+         * the CAPTURE_KEY phase carries one, and this is how the shell lets
+         * it go (design §7.5.2).
+         */
+        fun discard(phase: Int) {
+            val ph = phases.remove(phase) ?: return
+            for (into in ph.slices.values) for (slice in into.values) {
+                slice.fill(0)
+                held -= slice.size + ENTRY_COST
+            }
+        }
+
+        /**
          * The same, for a count known another way. A set whose length the
          * caller already knows is checked against it.
          */
@@ -229,7 +243,18 @@ object Bearer {
         }
     }
 
-    /** Move a whole carriage set over `link`. False where a packet failed. */
-    fun carry(link: Link, messages: List<ByteArray>, phase: Int = 0): Boolean =
-        packets(messages, link.mtu(), phase).all { link.send(it) }
+    /**
+     * Move a whole carriage set over `link`. False where a packet failed.
+     * With `wipe`, every packet is zeroed once the link has had it: a
+     * packet is this file's own copy of what it carries, and a carriage
+     * that carries a key leaves no copy behind here.
+     */
+    fun carry(link: Link, messages: List<ByteArray>, phase: Int = 0, wipe: Boolean = false): Boolean {
+        val out = packets(messages, link.mtu(), phase)
+        return try {
+            out.all { link.send(it) }
+        } finally {
+            if (wipe) out.forEach { it.fill(0) }
+        }
+    }
 }

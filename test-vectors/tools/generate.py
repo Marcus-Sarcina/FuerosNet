@@ -2383,6 +2383,11 @@ cat_pairs = [(e_uint(1), e_bstr(res.keyhash)),
              (e_uint(9), e_uint(1))]
 catalog = sign1_slot(cat_pairs, 8, AAD_CATALOG, bob)
 catalog_wrong = sign1_slot(cat_pairs, 8, AAD_CATALOG, carol)
+# data_practice 4: a value s6.1's table does not define. Retained and
+# surfaced, never rejected, so a future value is not a flag day (s6.1)
+catalog_dp4 = sign1_slot(sorted([q for q in cat_pairs if q[0] != e_uint(9)]
+                                + [(e_uint(9), e_uint(4))], key=lambda q: q[0]),
+                         8, AAD_CATALOG, bob)
 
 abuse_pairs = [(e_uint(1), e_bstr(res.keyhash)),
                (e_uint(2), e_uint(TS_REC + 3600)),
@@ -2466,6 +2471,15 @@ prediction offered), `data_practice` 1; the endpoint is the SRV analogue
 
 ```
 {hexblock(catalog_wrong)}
+```
+
+The same entry declaring `data_practice` 4, a value §6.1's table does not
+define ({len(catalog_dp4)} bytes): an unknown value is retained and surfaced,
+never rejected, so the entry is accepted and the declaration shown as
+unrecognised (§6.1).
+
+```
+{hexblock(catalog_dp4)}
 ```
 
 **Abuse report** — the resource c5 reports excessive load to its own owner;
@@ -2688,6 +2702,9 @@ f_wake = frame(12, e_map([(e_uint(1), e_bstr(NONCE(b'wake'))),
 f_wake_off = frame(12, e_map([(e_uint(1), e_bstr(NONCE(b'wake-withdraw')))]))
 r_sub = e_map([(e_uint(1), e_bstr(NONCE(b'publication'))), (e_uint(2), e_uint(0))])
 r_sub_bound = e_map([(e_uint(1), e_bstr(NONCE(b'deposit'))), (e_uint(2), e_uint(2))])
+# 1 refused: a relay for a recipient this node holds no record of (s7.10);
+# the reply names no reason, since every reason is about somebody else
+r_sub_refused = e_map([(e_uint(1), e_bstr(NONCE(b'relay'))), (e_uint(2), e_uint(1))])
 # what the node then delivers for a relay submission: the submitter in
 # front of the ciphertext, an array and not a map
 relayed = e_arr([e_bstr(alice.keyhash), e_bstr(H(b'rhtn-test-vectors:relayed-ciphertext'))])
@@ -2708,6 +2725,12 @@ f_ack_deleg = frame(2, e_map([(e_uint(1), e_uint(0)),
                               (e_uint(5), caps_server),
                               (e_uint(6), deleg_bob)]))
 f_deleg = frame(7, deleg_bob)
+# field 2 absent: the serving node has no siblings, a single-child topology
+# that s1's no-empty-array rule makes optional rather than empty (s8.2)
+f_ack_nosib = frame(2, e_map([(e_uint(1), e_uint(0)),
+                              (e_uint(3), e_uint(300)),
+                              (e_uint(4), e_uint(0)),
+                              (e_uint(5), caps_server)]))
 f_push_deleg = frame(5, e_map([(e_uint(1), e_uint(2)), (e_uint(2), e_bstr(deleg_bob))]))
 f_push_ack = frame(5, e_map([(e_uint(1), e_uint(3)), (e_uint(2), e_bstr(ack))]))
 
@@ -2740,6 +2763,8 @@ _msg_pairs = [
     ('Delegation (frame 7) — a delegated peer\'s first frame on a connection that opens no session (§8.0, §8.2)', f_deleg),
     ('TopologyPush — kind 2, carrying bob\'s delegation byte-for-byte: an instance pushes each credential as it comes into force (§10.1, §8.2)', f_push_deleg),
     ('TopologyPush — kind 3, carrying the subtree acknowledgement byte-for-byte: the grandpatron\'s node pushes it as it issues it (§10.1, §7.5)', f_push_ack),
+    # appended 2026-10-02
+    ('AttachAck (NO SIBLINGS): field 2 absent, the single-child topology; absence means none, and an empty list is unencodable (§8.2, §1)', f_ack_nosib),
 ]
 CONTROL_NAMES = ('Attach', 'Heartbeat', 'SiblingUpdate', 'TopologyPush', 'TopologyMemo', 'Delegation')
 def hkdf_sha256(ikm, info, length=32):
@@ -2792,6 +2817,8 @@ _reply_pairs = [
     # appended 2026-09-22
     ('PrekeyReply — every device\'s bundle, alice\'s phone and desktop, for a request naming no device (§7.8)', r_pk_all),
     ('ArchiveReply — one PRESENTED presence record, the holder\'s disclosure choice carried (§7.9)', r_archive_presented),
+    # appended 2026-10-02
+    ('SubmissionReply (1 refused): echoing the relay submission\'s nonce, a recipient this node holds no record of, and no reason given (§7.10)', r_sub_refused),
 ]
 # the ceremony's conversation (s7.10.1 kinds 9-18; the structures are
 # s7.10.2): what the two participants and their witnesses say to one another
@@ -2806,7 +2833,7 @@ consent_reply = e_arr([e_bstr(npr_q0), consent_over(npr_q0, alice)])
 fishing_proposal = e_arr([pc1_env])
 witness_request = e_map([(e_uint(1), e_bstr(npr_precommit)),
                          (e_uint(2), e_arr([e_bstr(i.keyhash) for i in conv_parts])),
-                         (e_uint(3), e_uint(TS_REC)),
+                         (e_uint(3), e_uint(TS_C2)),
                          (e_uint(4), e_arr(conv_channels))])
 witness_answer_yes = e_map([(e_uint(1), b'\xf5'), (e_uint(2), e_uint(7))])
 witness_answer_no = e_map([(e_uint(1), b'\xf4')])
@@ -3140,6 +3167,9 @@ reg('D-enum-location-method', 'bytes', ACC('LocationEvidence', 'method 9: the re
            (e_uint(2), e_arr([]))]))
 reg('D-enum-witness-reserved-bits', 'bytes', ACC('Witness', 'bits 3+ retained, 0-2 interpreted (D4)'),
     witness_entry(IDS['w1'], alice, 0b1111))
+reg('D-enum-data-practice', 'bytes',
+    ACC('CatalogEntry', 'data_practice 4, outside the defined 0-3: retained and surfaced, never rejected (s6.1)'),
+    catalog_dp4)
 
 # ---- bar 13b: consistency rules a validator checks from the object alone
 #      (s3.2, s3.5, s4.1, s4.4) [conformance review F01-F03, 2026-09-11].  Each
@@ -3921,6 +3951,9 @@ reg('N-transcript-confirm-31', 'bytes',
 reg('N-capture-key-handover-31', 'bytes',
     REJ('CaptureKeyHandover', 'schema', 'a capture key is 32 bytes'),
     e_arr([e_uint(1), e_bstr(pc_demo), e_bstr(ck_alice_to_bob[:31])]))
+reg('N-capture-key-handover-anchor-31', 'bytes',
+    REJ('CaptureKeyHandover', 'schema', 'a ceremony-id is 32 bytes'),
+    e_arr([e_uint(1), e_bstr(pc_demo[:31]), e_bstr(ck_alice_to_bob)]))
 reg('N-capture-key-handover-version-2', 'bytes',
     REJ('CaptureKeyHandover', 'schema', 'a version the decoder does not know is refused'),
     e_arr([e_uint(2), e_bstr(pc_demo), e_bstr(ck_alice_to_bob)]))
@@ -3948,6 +3981,21 @@ reg('N-back-pointers-empty', 'bytes',
 reg('N-witness-answer-bits-while-declining', 'bytes',
     REJ('WitnessAnswer', 'schema', 'the attestation bits are present only when witnessing'),
     e_map([(e_uint(1), b'\xf4'), (e_uint(2), e_uint(7))]))
+reg('B-witness-request-channels-8', 'bytes',
+    ACC('WitnessRequest', 'eight channels, the proximity-channel ceiling'),
+    e_map([(e_uint(1), e_bstr(npr_precommit)),
+           (e_uint(2), e_arr([e_bstr(i.keyhash) for i in conv_parts])),
+           (e_uint(3), e_uint(TS_C2)),
+           (e_uint(4), e_arr(conv_channels * 4))]))
+reg('B-witness-request-channels-9', 'bytes',
+    REJ('WitnessRequest', 'schema', 'nine channels exceed the ceiling of eight'),
+    e_map([(e_uint(1), e_bstr(npr_precommit)),
+           (e_uint(2), e_arr([e_bstr(i.keyhash) for i in conv_parts])),
+           (e_uint(3), e_uint(TS_C2)),
+           (e_uint(4), e_arr(conv_channels * 4 + conv_channels[:1]))]))
+reg('B-gathered-responses-32', 'bytes',
+    ACC('GatheredResponses', "thirty-two responses, the per-record ceiling: the normal record's first, repeated"),
+    e_arr([npr_responses[0]] * 32))
 reg('N-gathered-responses-33', 'bytes',
     REJ('GatheredResponses', 'schema', 'thirty-three responses exceed the per-record bound of 32'),
     e_arr([npr_responses[0]] * 33))
@@ -4002,6 +4050,13 @@ reg('U-intent-bundle-257', 'unit',
     note='recipe: any IntentExchange whose field-4 array holds 257 ArchiveEntry values; '
          'materialising one exceeds the corpus size discipline (257 hybrid-signed envelopes). '
          'The same holds of a BundleContinuation whose field-4 array holds 257')
+reg('U-fishing-proposal-256', 'unit',
+    ACC('FishingProposal', 'a carriage of 256 entries, the ceiling, is accepted'),
+    note='recipe: a FishingProposal of 256 ArchiveEntry values, each P-alice-c1-record; '
+         'materialising one exceeds the corpus size discipline (256 hybrid-signed envelopes, about 2.7 MB)')
+reg('U-fishing-proposal-257', 'unit',
+    REJ('FishingProposal', 'schema', 'a carriage of 257 entries exceeds the ceiling of 256'),
+    note='recipe: the 256-entry proposal above with P-alice-c1-record appended once more')
 
 # ---------------------------------------------------------------- write files
 

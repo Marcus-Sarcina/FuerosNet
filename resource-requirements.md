@@ -664,7 +664,7 @@ principal with any role.**
 
 This is the same trust a corporate gateway holds, and it is expected. But it is a
 **new** concentration and it should be named: previously a compromised patron could
-eclipse and observe (design §11.4). It can now also **impersonate its subordinates to
+eclipse and observe (design §18.4). It can now also **impersonate its subordinates to
 every resource they use.**
 
 The design states carefully that a patron cannot forge its subordinates'

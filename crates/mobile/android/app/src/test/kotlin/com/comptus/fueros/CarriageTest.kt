@@ -79,3 +79,34 @@ class CarriageTest {
         assertNull(far.received())
     }
 }
+
+/** The capture key phase is let go of, on both sides of the carriage. */
+class CarriageWipeTest {
+
+    private class Pipe(val mtu: Int = 23 - 3) : Bearer.Link {
+        var other: Carriage? = null
+        val sent = ArrayList<ByteArray>()
+        override fun mtu() = mtu
+        override fun send(packet: ByteArray): Boolean {
+            other?.packet(packet)
+            return sent.add(packet)
+        }
+    }
+
+    @Test
+    fun the_capture_key_phase_is_wiped_once_sent_and_discarded_once_taken() {
+        val pipe = Pipe()
+        val near = Carriage(pipe)
+        val far = Carriage(Pipe())
+        pipe.other = far
+        val handover = ByteArray(70) { (it * 7 + 1).toByte() }
+        assertTrue(near.send(listOf(handover), Carriage.Phase.CAPTURE_KEY, wipe = true))
+        for (p in pipe.sent) assertTrue("sent packets are zeroed", p.all { it == 0.toByte() })
+        val back = far.received(Carriage.Phase.CAPTURE_KEY)
+        assertNotNull(back)
+        assertArrayEquals(handover, back!![0])
+        far.discard(Carriage.Phase.CAPTURE_KEY)
+        assertNull("nothing of the phase remains to take", far.received(Carriage.Phase.CAPTURE_KEY))
+        assertArrayEquals("what was taken is the taker's to wipe", handover, back[0])
+    }
+}

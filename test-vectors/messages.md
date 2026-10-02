@@ -1,6 +1,6 @@
 # Unsigned message families (`wire-format.md` §§6–11)
 
-Generated against `wire-format.md` `fb8a1a9f8ae1cef0…`, `network-design.md` `6f135ebf287fafdb…` and `light-client-requirements.md` `dcfd240c8f431c37…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `7e7742c9ee401ad6…`, `network-design.md` `b4578223e3151f25…` and `light-client-requirements.md` `4109bc46e3981443…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Canonical. Spec-derived, reproduced by the independent harness.** Canonical bar 9:
 one positive known-answer encoding per framed message family. Framing is
@@ -1175,6 +1175,11 @@ f8196daabb21145f697536f16c393ed26d696e5799ba17546f2d428abc03649b
 0127a0f658408fac292d08a649c335e8aaff268f842bfb34ca8c8574b0db1321
 6918c25207ad999056f8643d2ae0ec338301592a5bb8bc388cc7e7ceff1a6723
 3d3c9b53c607
+```
+**AttachAck (NO SIBLINGS): field 2 absent, the single-child topology; absence means none, and an empty list is unencodable (§8.2, §1)** (29 bytes, length prefix included):
+
+```
+000000198202a401000319012c040005a11b2dfcc247d11b765f420040
 ```
 
 ## Requests (bidirectional streams)
@@ -3897,6 +3902,11 @@ fafedc7c91cc0203030583508a6ad1de9735bae1b2c8bea1809c775e6c70302e
 c7df43596c70312e726574656e74696f6e0383505d0f320add7262c5a3ac2ec1
 ce9a4bee6970726f78696d697479a20182a201020200a201030200020203f4
 ```
+**SubmissionReply (1 refused): echoing the relay submission's nonce, a recipient this node holds no record of, and no reason given (§7.10)** (21 bytes — replies carry no type tag and no length prefix here; on the wire the same u32-be prefix applies):
+
+```
+a20150eee185c6d2aaa010d92f3b656634ca910201
+```
 
 ## End-to-end payloads
 
@@ -4291,7 +4301,7 @@ c0e3eaea5f0a4d409d5b7ff7e65254a94d2a6f6c417ffd15bed112b4e8f90f0f
 a4015820e583bc9b190ee9eff334cb1d21a75e128105cbcaf366e955766750a0
 9bcb0ba5028258208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea
 8a0c8dcfc852aa6a58206bcf8a3e8899fc206bc603744414d58b01db857986d8
-2f611b0794ac9c32c375031a6a4315100482a201020200a201030200
+2f611b0794ac9c32c375031a6a35e6100482a201020200a201030200
 ```
 **WitnessAnswer, kind 13 — witnessing, with the attestation bits it will set (7: protocol ran, both responsive, latency bound)** (5 bytes — an END-TO-END PAYLOAD, not a stream reply: the bytes are the object alone; on the channel a `uint` kind tag precedes them, §7.10.1's registry — kind 13 for this object — and no prefix is included below):
 

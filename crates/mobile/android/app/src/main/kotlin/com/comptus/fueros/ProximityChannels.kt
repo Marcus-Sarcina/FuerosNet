@@ -56,12 +56,17 @@ object ProximityChannels {
         if (host === a) host = null
     }
 
-    /** The ceremony this device is in, and which side of the tap it is. */
+    /**
+     * The ceremony this device is in, and which side of the tap it is. A
+     * cached tap is evidence for one ceremony-id: another id, or none,
+     * starts from nothing, and the same id again keeps what it earned.
+     */
     fun ceremony(id: ByteArray?, readerSide: Boolean, agreed: Boolean) {
+        val same = id != null && ceremonyId?.contentEquals(id) == true
+        if (!same) cachedTap.set(null)
         ceremonyId = id
         reader = readerSide
         anchorAgreed = agreed
-        if (id == null) cachedTap.set(null)
     }
 
     /** What the HCE service answers with: this device's ceremony-id. */

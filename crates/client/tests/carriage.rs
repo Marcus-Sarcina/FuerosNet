@@ -206,7 +206,7 @@ fn a_bearer_that_disagrees_with_the_screen_stops_the_ceremony() {
     // less than an invented one (§14.3.2)
     let stray = rhtn_client::local::CaptureKeyHandover {
         ceremony_id: cid_c,
-        key: [5u8; 32],
+        key: [5u8; 32].into(),
     }
     .encode();
     assert!(matches!(
@@ -219,4 +219,55 @@ fn a_bearer_that_disagrees_with_the_screen_stops_the_ceremony() {
         s.client("alice").take_proximity(&[0x00]),
         Err(Abort::Malformed(_))
     ));
+}
+
+/// Two different refusals for two different states: no ceremony, and a
+/// ceremony whose id the counterparty's contribution has not fixed yet.
+/// A carriage taken before the screens have agreed is the second, and a
+/// shell that reads it as the first would be told its live meeting is
+/// not there.
+#[test]
+fn an_anchor_asked_for_before_the_id_is_fixed_is_its_own_refusal() {
+    let mut s = setup(&["alice", "bob"], &[ChannelKind::Nfc]);
+    assert!(matches!(
+        s.client("alice").capture_key_carriage(),
+        Err(Abort::NotActive)
+    ));
+    s.face_off("alice", "bob");
+    s.client("alice").begin(kh("bob"), vec![], true).unwrap();
+    s.client("bob").begin(kh("alice"), vec![], false).unwrap();
+    // begun, and the id not yet fixed: the contributions have not crossed
+    assert!(matches!(
+        s.client("alice").capture_key_carriage(),
+        Err(Abort::NoCeremonyId)
+    ));
+    assert!(matches!(
+        s.client("alice").capture_key(),
+        Err(Abort::NoCeremonyId)
+    ));
+    let stray = rhtn_client::local::CaptureKeyHandover {
+        ceremony_id: [7u8; 32],
+        key: [5u8; 32].into(),
+    }
+    .encode();
+    assert!(matches!(
+        s.client("alice").take_capture_key_carriage(&stray),
+        Err(Abort::NoCeremonyId)
+    ));
+    // the contributions cross, and the id is still not fixed: agreement on
+    // the second QR is what fixes it (§14.3.1), not the first
+    let oa = s.client("alice").optical_contribution().unwrap();
+    let ob = s.client("bob").optical_contribution().unwrap();
+    s.client("alice").take_optical(&ob).unwrap();
+    s.client("bob").take_optical(&oa).unwrap();
+    assert!(matches!(
+        s.client("alice").capture_key_carriage(),
+        Err(Abort::NoCeremonyId)
+    ));
+    let ta = s.client("alice").transcript_confirm().unwrap();
+    let tb = s.client("bob").transcript_confirm().unwrap();
+    s.client("alice").take_transcript(&tb).unwrap();
+    s.client("bob").take_transcript(&ta).unwrap();
+    // fixed: the same calls answer
+    assert!(s.client("alice").capture_key_carriage().is_ok());
 }

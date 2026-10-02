@@ -6,14 +6,22 @@ own Sig_structure reconstruction, no shared code — so agreement between the tw
 is evidence, not tautology. Reads the generated markdown, re-derives and checks
 every claim it can reach:
 
-  - all eleven identities' keyhashes, from the stated seeds (ML-DSA public keys
-    re-derived via dilithium-py, and cross-checked via pyca `cryptography`'s
-    independent ML-DSA implementation where importable);
+  - all twenty-five identities' keyhashes, from the stated seeds (ML-DSA public
+    keys re-derived via dilithium-py, and cross-checked via pyca
+    `cryptography`'s independent ML-DSA implementation where importable);
   - every transaction body: canonical parse (sorted unique keys, definite
     lengths, shortest forms via re-encode comparison) and txid;
-  - every envelope: entry order, header profile, and every signature under
-    both algorithms — ML-DSA verified with pyca where importable, else
-    dilithium-py;
+  - every envelope: entry order, header profile, every signature under
+    both algorithms (ML-DSA verified with pyca where importable, else
+    dilithium-py), and the entry count, exactly twice the logical signers
+    and never zero (wire s1.3, s3.5), over transactions.md and the corpus;
+  - the ceremony's conversation (wire s7.10.1 kinds 9 to 18): the consent
+    verifies over the query_id, the proposed body is the normal record's and
+    its seven slots recompute the root, the signing reply's two entries verify
+    under the record's lowest-keyhash signer, the witness request and the
+    gathered responses are the record's;
+  - the capture-key handover: HKDF-SHA-256 from the stated seed recipe over
+    alice, bob and the demo pre-commitment;
   - the standalone COSE_Sign1 objects (SignedLocator ×2, EndpointRecord ×3)
     and the wrong-signer negative (must NOT verify under the named subject);
   - the extension-coverage mutations: E10 (top-level and nested) and E13 must
@@ -192,7 +200,8 @@ SCHEMAS = {  # type: (required {field: predicate}, signer-role fields)
     2: ({1: is_h32, 2: is_h32, 3: is_seq, 4: lambda v: isinstance(v, int)}, (1,)),
     3: ({1: is_h32, 2: is_h32, 3: lambda v: isinstance(v, int)}, (1,)),
     4: ({1: is_h32, 2: is_h32, 3: lambda v: isinstance(v, dict),
-         4: lambda v: isinstance(v, dict), 5: lambda v: isinstance(v, int)}, (1, 2)),
+         4: lambda v: isinstance(v, dict), 5: lambda v: isinstance(v, int),
+         8: is_h32}, (1, 2)),   # field 8 REQUIRED, unconditionally (s4.4)
     7: ({1: is_h32, 2: is_h32, 3: is_seq, 4: is_seq,
          5: lambda v: isinstance(v, int)}, (1, 2)),
     5: ({1: lambda v: isinstance(v, int), 2: lambda v: isinstance(v, int),
@@ -215,6 +224,13 @@ def validate_body(t, obj):
         if not pred(obj[f]): return f'field {f} wrong shape'
     return None
 
+def logical_signers(t, body):
+    """The signer set a body names by role (s3.5): fixed per type, or the
+    participants plus witnesses of a presence record."""
+    if SCHEMAS[t][1] is None:
+        return {pp[1] for pp in body[3]} | {w[1] for w in body.get(4, [])}
+    return {body[f] for f in SCHEMAS[t][1]}
+
 # ---------------------------------------------------------------- bodies + envelopes
 tx = read('transactions.md')
 bodies = re.findall(r'```\n([0-9a-f\n]+?)```\n\ntxid: `([0-9a-f]{64})`', tx)
@@ -226,6 +242,7 @@ for hexs, txid in bodies:
 check(ok == len(bodies), f'bodies: {ok}/{len(bodies)} canonical with matching txid')
 
 envs = 0; sigs = 0; sig_ok = 0; ext_env = None
+count_bad = []   # (type, entries, logical signers) where the count is off
 for m in re.finditer(r'```\n(a4[0-9a-f\n]+?)```', tx):
     b = bytes.fromhex(m.group(1).replace('\n', ''))
     try:
@@ -240,11 +257,15 @@ for m in re.finditer(r'```\n(a4[0-9a-f\n]+?)```', tx):
     assert err is None, f'type-{t} body schema: {err}'
     if t == 1:
         assert obj[3][3][3][1] == 0, 'adoption locator must open its series at counter 0 (s4.1)'
-    if SCHEMAS[t][1] is None:  # presence: participants + witnesses
-        derived = {pp[1] for pp in obj[3][3]}
-        derived |= {w[1] for w in obj[3].get(4, [])}
-    else:
-        derived = {obj[3][f] for f in SCHEMAS[t][1]}
+    derived = logical_signers(t, obj[3])
+    # s1.3 and s3.5: the COSE_Signature array holds exactly twice the logical
+    # signers, one classical and one post-quantum entry each. An envelope
+    # with no entries at all is reported by the named check below, not by
+    # a Python exception out of the signer matching [owed since 2026-09-26]
+    if len(obj[4][3]) != 2 * len(derived) or not obj[4][3]:
+        count_bad.append((t, len(obj[4][3]), len(derived)))
+        if not obj[4][3]:
+            continue
     kids = {parse(bytes.fromhex(e[0]))[0][4] for e in obj[4][3]}
     assert kids == derived, f'type-{t} envelope signers != body roles'
     if isinstance(obj[3], dict) and 99 in obj[3]: ext_env = (obj, body)
@@ -258,6 +279,9 @@ for m in re.finditer(r'```\n(a4[0-9a-f\n]+?)```', tx):
         assert prev is None or key > prev, 'entry order violated'
         prev = key
 check(sig_ok == sigs, f'envelopes: {envs} found, {sig_ok}/{sigs} signatures verify (both algorithms)')
+check(not count_bad,
+      f'envelopes: all {envs} carry exactly twice their logical signers in COSE_Signature '
+      f'entries, none empty (s1.3, s3.5)' + (f': off in {count_bad}' if count_bad else ''))
 
 # E10: both extension mutations break all four signatures
 obj, body = ext_env
@@ -606,7 +630,10 @@ e2e = section_blocks('End-to-end payloads')
 check(len(blocks) == len(control) + len(requests) + len(relayed_blocks) + len(replies) + len(e2e),
       'messages: every fixture block belongs to a named section')
 
-EXPECT_FRAMES = [1, 2, 3, 4, 4, 5, 6, 6, 1, 2, 7, 5, 5, 1, 2, 3, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 12]
+# control frames first, as messages.md sections them; the no-siblings
+# AttachAck is the last control frame [2026-10-02]
+EXPECT_FRAMES = [1, 2, 3, 4, 4, 5, 6, 6, 1, 2, 7, 5, 5, 2,
+                 1, 2, 3, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 12]
 framed = control + requests
 check(len(framed) == len(EXPECT_FRAMES),
       f'messages: {len(EXPECT_FRAMES)} framed fixtures, one per family and variant')
@@ -905,6 +932,160 @@ check(len(f_bodies) == 2 and f_bodies[0][5][0][4] == 1,
       'finalization: the lone no-match record is a positive vector')
 check(5 not in f_bodies[1] and f_bodies[1][6] == 0 and 4 in f_bodies[1],
       'finalization: zero responses encode as an ABSENT key 5 on a normal record')
+
+# ---------------------------------- the envelope entry count, over the corpus
+# The transactions.md loop above checks what that document carries; the
+# corpus's accept-class envelopes are swept too, since a fixture can live in
+# the corpus alone.
+env_bad, n_env_c = [], 0
+for e in corpus['entries']:
+    if (e['class'] != 'bytes' or e['expect'].get('kind') != 'envelope'
+            or e['expect']['outcome'] != 'accept'):
+        continue
+    o = canonical(bytes.fromhex(e['hex'])); n_env_c += 1
+    if o is None or not isinstance(o.get(4), list) or len(o[4]) != 4:
+        env_bad.append(e['id']); continue
+    if not o[4][3] or len(o[4][3]) != 2 * len(logical_signers(o[2], o[3])):
+        env_bad.append(e['id'])
+check(n_env_c >= 16 and not env_bad,
+      f'corpus: all {n_env_c} accept-class envelopes carry exactly twice their logical '
+      f'signers, none empty' + (f': off in {env_bad}' if env_bad else ''))
+
+# -------------------- the ceremony's conversation (s7.10.1 kinds 9 to 18, s7.10.2)
+# Everything after the local exchanges, and every one of it is the normal
+# alice-bob record's own material: the query, the consent, the body, the
+# disclosure set, the responses, and one signer's envelope entries.
+def _sig_env(prot, payload):
+    return hd(4, 5) + ts('Signature') + bs(b'') + bs(prot) + bs(b'rhtn/1:envelope') + bs(payload)
+CONV = ['P-consent-reply', 'P-fishing-proposal', 'P-witness-request',
+        'P-witness-answer-witnessing', 'P-witness-answer-declining',
+        'P-gathered-responses', 'P-back-pointers', 'P-proposed-body',
+        'P-signing-reply-signed', 'P-signing-reply-refused']
+conv_blocks = [h.replace('\n', '') for h in e2e[2:]]
+check(len(conv_blocks) == 1 + len(CONV) and conv_blocks[1:] == [byid[f]['hex'] for f in CONV],
+      'conversation: the ten typed corpus entries are byte-identical to the messages.md '
+      'blocks, kinds 10 to 17 in order after the kind-9 query')
+check(conv_blocks[0] == enc(n_query).hex(),
+      "conversation kind 9: the query sent for consent is the normal record's first worked query")
+npr_c = canonical(bytes.fromhex(byid['P-normal-record']['hex']))
+npr_c_body = enc(npr_c[3])
+# ConsentReply: [query_id, COSE_Sign1]; the subject (query field 1) signs
+# the raw query_id under rhtn/1:consent, and the response carries it onward
+cr = canonical(bytes.fromhex(byid['P-consent-reply']['hex']))
+subj = BY[n_query[1]]
+check(isinstance(cr, list) and len(cr) == 2 and cr[0] == n_query[6] and subj == 'alice',
+      "ConsentReply: [query_id, COSE_Sign1] over the normal record's first query_id; the subject is alice")
+check(verify_sig(subj, -8, bytes.fromhex(cr[1][3]),
+                 sig_sign1(bytes.fromhex(cr[1][0]), b'rhtn/1:consent', bytes.fromhex(cr[0]))),
+      'ConsentReply: the consent verifies under alice, Ed25519 over the 32-byte query_id, '
+      'external_aad rhtn/1:consent')
+check(cr[1] == [r[7] for r in npr_c[3][5] if r[3] == cr[0]][0],
+      "ConsentReply: the COSE_Sign1 is the one the record's matching VerifierResponse field 7 carries")
+# WitnessRequest: the record's ceremony, participants in body order, claimed
+# start, channels as measured
+wr = canonical(bytes.fromhex(byid['P-witness-request']['hex']))
+check(wr[1] == n_query[3],
+      "WitnessRequest: the ceremony-id is the normal record's pre-commitment (query field 3)")
+check(wr[2] == [pp[1] for pp in npr_c[3][3]] and wr[3] == npr_c[3][1],
+      "WitnessRequest: the participants are the record's, in body field 3's order, and started_at is body field 1")
+# ProposedBody: the body as signed, and all seven slots revealed
+pb = canonical(bytes.fromhex(byid['P-proposed-body']['hex']))
+pb_body = bytes.fromhex(pb[1])
+check(pb_body == npr_c_body, "ProposedBody: field 1 is P-normal-record's body byte-for-byte")
+pb_obj = canonical(pb_body)
+pb_ds, pb_lab = [], True
+for i, slot in enumerate(pb[2]):
+    pb_lab &= (isinstance(slot, list) and len(slot) == 3
+               and len(bytes.fromhex(slot[0])) == 16 and slot[1] == ('tstr', LABELS[i]))
+    pb_ds.append(H(b'\x00' + enc(slot)))
+check(len(pb[2]) == 7 and pb_lab and H(b'\x01' + b''.join(pb_ds)).hex() == pb_obj[8],
+      'ProposedBody: seven revealed Disclosure slots, labels in position, 16-byte salts, '
+      'and the root recomputes to body field 8 (s4.5.1)')
+prox_val = pb[2][LABELS.index('proximity')][2]
+check(wr[4] == prox_val[1] and 1 <= len(wr[4]) <= 8,
+      "WitnessRequest: the channels are the record's proximity channels, as the disclosure reveals them")
+# GatheredResponses: the record's responses, in the body's order
+gr = canonical(bytes.fromhex(byid['P-gathered-responses']['hex']))
+check(gr == npr_c[3][5] and len(gr) == 3,
+      "GatheredResponses: the normal record's three responses, in body order")
+# BackPointers: one signer's list, 1 to 8 txids
+bp = canonical(bytes.fromhex(byid['P-back-pointers']['hex']))
+check(isinstance(bp, list) and 1 <= len(bp) <= 8 and all(is_h32(x) for x in bp) and len(set(bp)) == len(bp),
+      'BackPointers: one to eight distinct 32-byte txids')
+# SigningReply: the lowest-keyhash signer's two entries, classical then
+# post-quantum, over the body under rhtn/1:envelope; they are the entries
+# the finalised envelope carries first
+sr = canonical(bytes.fromhex(byid['P-signing-reply-signed']['hex']))
+low = min(parse(bytes.fromhex(e[0]))[0][4] for e in npr_c[4][3])
+sr_prot = [parse(bytes.fromhex(e[0]))[0] for e in sr[1]]
+sr_ok = (set(sr) == {1} and len(sr[1]) == 2
+         and [p_[1] for p_ in sr_prot] == [-8, -49]
+         and {p_[4] for p_ in sr_prot} == {low}
+         and all(e[1] == {} for e in sr[1]))
+sr_ok = sr_ok and all(verify_sig(BY[low], p_[1], bytes.fromhex(e[2]), _sig_env(bytes.fromhex(e[0]), pb_body))
+                      for p_, e in zip(sr_prot, sr[1]))
+check(sr_ok, "SigningReply: two entries, classical then ML-DSA, kid the normal record's lowest-keyhash "
+             "signer, both verify over the proposed body under rhtn/1:envelope")
+check(sr[1] == npr_c[4][3][:2],
+      'SigningReply: the two entries are the first two of the finalised envelope byte-for-byte')
+sr2 = canonical(bytes.fromhex(byid['P-signing-reply-refused']['hex']))
+check(set(sr2) == {2, 3} and sr2[2] == 1 and sr2[3] in {w[1] for w in npr_c[3][4]},
+      "SigningReply refused: code 1 with a witness keyhash from the record, and no entries")
+wa_y = canonical(bytes.fromhex(byid['P-witness-answer-witnessing']['hex']))
+wa_n = canonical(bytes.fromhex(byid['P-witness-answer-declining']['hex']))
+check(wa_y == {1: True, 2: 7} and wa_n == {1: False},
+      'WitnessAnswer: witnessing carries the bits it will set; declining carries none')
+# the conversation's bounds (s1.3), at and past
+check(len(canonical(bytes.fromhex(byid['B-gathered-responses-32']['hex']))) == 32
+      and len(canonical(bytes.fromhex(byid['N-gathered-responses-33']['hex']))) == 33,
+      'GatheredResponses bound: 32 at the ceiling, 33 past it')
+check(len(canonical(bytes.fromhex(byid['B-witness-request-channels-8']['hex']))[4]) == 8
+      and len(canonical(bytes.fromhex(byid['B-witness-request-channels-9']['hex']))[4]) == 9,
+      'WitnessRequest channel bound: 8 at the ceiling, 9 past it')
+
+# ------------------------------- the capture-key handover (s14.3, design s7.5.2)
+# Recomputed from the stated recipe, never from the generator: the seed is
+# SHA-256 of its label, the pre-commitment the contributory known answer,
+# and the key HKDF-SHA-256 with an empty salt over tag, subject, holder and
+# ceremony.
+_demo_seed = H(b'rhtn-test-vectors:capture-seed:alice:c1')
+check(_demo_seed == _seed, "capture-key handover: records.md's seed is SHA-256 of its stated label")
+_pc_a, _pc_b = bytes.fromhex(pcm.group(1)), bytes.fromhex(pcm.group(2))
+_pc_demo = H(b'rhtn/1:ceremony' + ((_pc_a + _pc_b) if KH['alice'] < KH['bob'] else (_pc_b + _pc_a)))
+_ckh = canonical(bytes.fromhex(byid['P-capture-key-handover']['hex']))
+_want = _hkdf(_demo_seed, b'rhtn/1:capture' + bytes.fromhex(KH['alice'])
+              + bytes.fromhex(KH['bob']) + _pc_demo)
+check(_ckh == [1, _pc_demo.hex(), _want.hex()],
+      'capture-key handover: HKDF-SHA-256(seed; rhtn/1:capture || alice || bob || demo '
+      'pre-commitment) recomputes the handed key, anchored to that pre-commitment')
+check(len(bytes.fromhex(canonical(bytes.fromhex(byid['N-capture-key-handover-anchor-31']['hex']))[1])) == 31,
+      'capture-key handover: the 31-byte ceremony-id negative carries 31 bytes')
+
+# ------------------------------ enum variants carried from an earlier round
+# SubmissionReply: the three codes, each echoing its request's nonce
+_subs = [canonical(bytes.fromhex(e['hex'])) for e in corpus['entries']
+         if e.get('family') == 'SubmissionReply']
+_req_nonce = {9: frame_objs[EXPECT_FRAMES.index(9)][1][2],
+              10: frame_objs[EXPECT_FRAMES.index(10)][1][2],
+              11: frame_objs[EXPECT_FRAMES.index(11)][1][3]}
+check(sorted(r_[2] for r_ in _subs) == [0, 1, 2]
+      and {r_[1] for r_ in _subs} == set(_req_nonce.values())
+      and all(set(r_) == {1, 2} for r_ in _subs),
+      'SubmissionReply: codes 0, 1 and 2 each present, each echoing a request nonce, nothing further')
+# AttachAck with no siblings: field 2 absent, never an empty list
+_nosib = canonical(bytes.fromhex(byid['P-frame-28']['hex'])[4:])
+check(_nosib[0] == 2 and 2 not in _nosib[1] and {1, 3, 4, 5} <= set(_nosib[1]),
+      'AttachAck without siblings: field 2 absent, fields 1, 3, 4 and 5 present')
+# an unknown data_practice: signed by the owner, accepted, the value surfaced
+_dp = canonical(bytes.fromhex(byid['D-enum-data-practice']['hex']))
+_cat = canonical(bytes.fromhex(byid['P-catalog']['hex']))
+check(_dp[9] == 4 and {k: v for k, v in _dp.items() if k not in (8, 9)}
+      == {k: v for k, v in _cat.items() if k not in (8, 9)},
+      'data_practice 4: the P-catalog entry with field 9 outside the defined 0-3, otherwise identical')
+check(verify_sig(BY[_dp[2]], -8, bytes.fromhex(_dp[8][3]),
+                 sig_sign1(bytes.fromhex(_dp[8][0]), b'rhtn/1:catalog', payload_without(_dp, 8)))
+      and byid['D-enum-data-practice']['expect']['outcome'] == 'accept',
+      "data_practice 4: the owner's signature covers the unknown value and the expectation is accept")
 
 print()
 if FAILURES:

@@ -442,10 +442,11 @@ fn check_value(label: &str, b: &[u8], item: &Item) -> Result<(), String> {
             {
                 return Err("integrity shape".into());
             }
+            // field 3 is `? bstr .size (1..1024)` (`wire-format.md` §4.5):
+            // the evidence, where it is carried, is one to 1024 bytes
             match map_get(m, 3) {
-                None | Some(Item::Bytes(_)) if m.len() == 2 + map_get(m, 3).is_some() as usize => {
-                    Ok(())
-                }
+                None if m.len() == 2 => Ok(()),
+                Some(Item::Bytes(r)) if m.len() == 3 && !r.is_empty() && r.len() <= 1024 => Ok(()),
                 _ => Err("integrity evidence".into()),
             }
         }

@@ -20,6 +20,7 @@ use crate::device::{ChannelKind, ChannelOutcome, ChannelResult};
 use rhtn_codec::cbor::*;
 use rhtn_codec::encode::*;
 use rhtn_codec::schema;
+use zeroize::Zeroizing;
 
 /// The first QR each device shows (§14.3.2): who is showing it, and the
 /// 16-byte contribution the ceremony-id is derived from.
@@ -288,22 +289,25 @@ impl CandidateHandover {
 /// One crosses each way, and the receiver seals its captures beneath it
 /// and lets it go once sealed (design §7.5.2).
 ///
+/// **The key decrypts a likeness of a person, so nothing here keeps it**:
+/// the key, and the encoded bytes that carry it, are wiped when dropped.
+///
 /// The anchor buys this what it buys the others and no more: a key from
 /// another ceremony is refused here, and a co-present party quoting the
 /// public ceremony-id is excluded by §14.1's property, not by this check.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CaptureKeyHandover {
     pub ceremony_id: [u8; 32],
-    pub key: [u8; 32],
+    pub key: Zeroizing<[u8; 32]>,
 }
 
 impl CaptureKeyHandover {
-    pub fn encode(&self) -> Vec<u8> {
-        let mut out = Vec::new();
+    pub fn encode(&self) -> Zeroizing<Vec<u8>> {
+        let mut out = Zeroizing::new(Vec::new());
         emit_array_head(&mut out, 3);
         emit_uint(&mut out, 1);
         emit_bstr(&mut out, &self.ceremony_id);
-        emit_bstr(&mut out, &self.key);
+        emit_bstr(&mut out, &self.key[..]);
         out
     }
 
@@ -312,7 +316,7 @@ impl CaptureKeyHandover {
         let a = fields(&it);
         Ok(CaptureKeyHandover {
             ceremony_id: fixed32(b, &a[1])?,
-            key: fixed32(b, &a[2])?,
+            key: Zeroizing::new(fixed32(b, &a[2])?),
         })
     }
 }

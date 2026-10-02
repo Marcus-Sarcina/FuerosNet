@@ -234,7 +234,7 @@ fn a_grant_naming_a_record_i_do_not_hold_yields_unavailable() {
     let g = KeyGrant {
         record: [99; 32],
         query_id: q.query_id(),
-        key: [5; 32],
+        key: [5; 32].into(),
     }
     .encode();
     let GrantOutcome::Answered(a) = v.take_grant(&cx, kh("alice"), &g, 1) else {
@@ -388,10 +388,10 @@ fn no_released_key_is_retained_after_answering() {
         panic!("answered")
     };
     // the key is nowhere: not in the store, not in the verifier's state
-    assert!(!s.b_store.holds_bytes(&key));
+    assert!(!s.b_store.holds_bytes(&key[..]));
     assert!(v.buffered().is_empty() && v.awaiting().is_empty());
     assert!(
-        !format!("{v:?}").contains(&hex::encode(key))
+        !format!("{v:?}").contains(&hex::encode(*key))
             && !format!("{v:?}").contains(&format!("{key:?}"))
     );
     // a second consented query about the same record with no new grant:

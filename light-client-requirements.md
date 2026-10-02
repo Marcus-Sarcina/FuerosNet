@@ -31,6 +31,12 @@ documents. Where a requirement leaves a visible artifact, that is noted in place
 
 ## 1. Ceremony
 
+**Either party may begin.** Offer both ways in: a control that shows an invite
+for the counterparty to read, and a control that reads one. Which the user chose
+settles nothing (design §7.1): not the record, and not who adopts whom if an
+adoption follows; the pair takes only a start time from whoever began, within
+clock tolerance (`wire-format.md` §14.3.2).
+
 ### 1.1 Nomination
 
 - **Nominate witnesses only from the counterparty's neighbourhood, never from your
@@ -58,6 +64,15 @@ documents. Where a requirement leaves a visible artifact, that is noted in place
   (`nominated_by` is a recorded claim); you can, and you are the only party
   who can.
 
+- **Send each message of the ceremony's conversation to your counterparty and
+  to every witness either of you nominated** (`wire-format.md` §7.10.1, kinds 9
+  to 18): the consent each query needs, the fishing proposals, the witness
+  request and answer, the responses you gathered, your back-pointers, the
+  proposed body, your signature entry and the finalised record. The consent
+  request alone goes to its subject only: it carries the fuzzed profile, which
+  reaches the one verifier the query names and nobody else (`wire-format.md`
+  §5.6).
+
 ### 1.2 Acting as a witness
 
 - **Decline to witness a ceremony whose claimed `started_at` is far from the
@@ -65,6 +80,12 @@ documents. Where a requirement leaves a visible artifact, that is noted in place
   and the chronology bound (`wire-format.md` §3.3) is worth nothing unless
   witnesses apply it. No later validator can check that you did: set the
   tolerance you can defend and refuse outside it.
+- **Attest from what reached you.** The ceremony's conversation is sent to you
+  as it runs (`wire-format.md` §7.10.1, kinds 12 to 18 and the rest): the
+  request, the proposed body and the finalised record among them. What you sign
+  is that the protocol ran and both parties were responsive as the sequence you
+  received shows (design §7.1), without asking your operator, who saw none of
+  it (design Appendix A.3).
 
 ### 1.3 Capture
 

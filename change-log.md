@@ -12019,7 +12019,7 @@ either nominated, the consent request alone excepted: it carries the fuzzed
 profile, which §5.5 and §5.6 already confine to the one verifier the query
 names. §1.3 gains four bound rows, §13's open item closes, design §22.2 and
 §22.4 and the §7.1 carriage paragraph say so, NET-022 is amended and SCH-026
-added. Corpus 294 → 312: ten positives, two bounds and seven negatives, with
+added. Corpus 294 → 312: ten positives, two bounds and six negatives, with
 the eleven conversation payloads captioned by kind in `messages.md`; the
 harness now selects the late response by position rather than as the last
 payload. Code: eight codec arms and four bounds, kind constants 9 to 18, a
@@ -12040,3 +12040,45 @@ and Stage 3 say so. Load tests ran once today and passed in four minutes.
 now counts five anchored messages, and the whole model gate re-proved and
 re-stamped clean. Functional families 486 → 487. Witnesses seeing fishing
 proposals that did not land is not priced, by ruling.
+
+### 2026-10-02 (the fourth-round re-review)
+
+Reviewer2's fourth pass, on the day's two commits. **The capture key is now
+wiped everywhere it is held**: `Zeroizing` from derivation through the
+handover object, the kernel's capture step and the key grant, the FFI's own
+copies, and every Kotlin array in the shell, the bearer and the reassembly;
+the FFI's claim that the key is discarded once the capture is sealed is true
+in memory. The lapse, on the key that decrypts a person's sealed likeness in
+the change that otherwise propagated best, is now a standing checklist item.
+**The proposed body is schema-checked** at decode, in the codec and the
+client, so a signer is never shown a body an archive would refuse; the
+signing reply's particular is 32 bytes in CDDL, codec and client alike.
+**Five codec residuals carried from earlier rounds are closed**: a
+`SubtreeAck` arm, the integrity field's size, the device handover's bundle
+validated, unknown keys in a channel map kept in a signed record and refused
+in an unsigned message, and one shape helper for a `COSE_Sign1`. The kernel
+tells "no meeting" from "the id is not fixed yet", and the shell's cached tap
+clears on a ceremony-id change. **The harness grew 27 named checks**: the
+envelope signature-count assertion owed since September, the conversation's
+semantics (consent verified over the query id, the proposed body's root
+recomputed, the signing reply's entries verified under the lowest-keyhash
+signer), the handover key recomputed from its HKDF recipe, and the three
+enum-variant vectors carried from earlier rounds; nine fixtures, corpus 312
+→ 321; and the new checks caught the generator's own witness request
+carrying a start ten days late. **The documents' three enumerations of the
+conversation name all ten legs**, the light client gains its participant and
+witness bullets, four counts and four citations are corrected, §7.10.2 cites
+§4.5 for the record's fields, and the envelope, the query and the archive
+entry each name the payload kind that carries them. Grab-bag items without a
+claim stay as they were. For the author: the design never says who initiates
+or proposes a ceremony, while the intent exchange carries an initiator flag;
+and whether prose citations should carry quotes so a checker can test them.
+Also today, from the gate rather than the review: three Wasmtime advisories
+published against the pinned 48.0.3 (GHSA-cfhf-m2cr-62wj, GHSA-hw8m-q44c-ggrf,
+GHSA-32h6-97mm-8q3c); the sandbox's runtime moves to 48.0.5 by `cargo update`,
+the lockfile alone changing, and `cargo deny` is clean again.
+**Ruled the same day**: either party may begin a ceremony, by showing an
+invite or reading one, and which did has no bearing on the outcome or on the
+polarity of any adoption that follows. Design §7.1 item 3, the initiator
+field's comment in `wire-format.md` §14.3.2, the opening of
+`light-client-requirements.md` §1, and CER-022; families 487 → 488.

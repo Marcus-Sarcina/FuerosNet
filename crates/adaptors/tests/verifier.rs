@@ -233,7 +233,7 @@ async fn a_grant_on_the_payload_channel_answers_the_waiting_stream_of_a_hosted_l
     let grant = KeyGrant {
         record: [5; 32],
         query_id: qid,
-        key: [1; 32],
+        key: [1; 32].into(),
     }
     .encode();
     w1.courier
@@ -331,7 +331,7 @@ async fn a_query_from_the_wrong_requester_leaves_a_waiting_request_where_it_was(
     let grant = KeyGrant {
         record: [5; 32],
         query_id: qid,
-        key: [1; 32],
+        key: [1; 32].into(),
     }
     .encode();
     w1.courier

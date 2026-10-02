@@ -13733,7 +13733,7 @@ citations and 8 fixture names, 0 flags; 36 model results over 49 sources,
 targets, no crash; Kotlin round trip ok; 58 Android units, 0 failed.
 **CODE GATE PASSES**, the fourth run, 22:36.
 
-## Eight rulings (author, 2026-10-02)
+## Nine rulings (author, 2026-10-02)
 
 The author answered the ruling queue listed from the state-of-completion
 assessment. Each is applied below or recorded as closed.
@@ -13795,3 +13795,37 @@ next proving run.
 | 4 | The two slow eviction tests | **Test-only ceiling for the gate; keep the production-size runs as load tests, noted in the test suite and the pre-deployment stage, run when the code changes and before any release** | Runtime-configurable ceilings for tests, production defaults unchanged; production-size tests `#[ignore]`d with the rule in the reason string; `crates/tools/load-tests.sh` runs them; README says when (agent, this session). A TOP row and the review plan's Stage 2 and Stage 3 carry the note (below) |
 | 5 | "Tamarin was running before, what changed?" | **Nothing changed.** The prover is at `~/tools/tamarin-prover` and `models/run-all.sh` has always named it there (`TAMARIN=${TAMARIN:-$HOME/tools/tamarin-prover}`); my earlier check looked only on `PATH`, where it never was. `exchange.spthy`'s comment now names five anchored messages at both sites; `run-all.sh` is re-proving and re-stamping everything in this session |
 | 6 | `crates/node/tests/held.rs` untracked | Staged with `git add` |
+
+## Fourth-round re-review (reviewer2, 2026-10-02)
+
+Pasted by the author. Every finding checked against the text or the code
+before disposition.
+
+| # | Finding | Disposition |
+|---|---|---|
+| P1 | Three exhaustive enumerations of the conversation name seven legs and not kinds 13, 14, 15 (wire §14.2, design §7.1, NET-022) | **CONFIRMED, FIXED at all three**: each now names the ten legs and cites kinds 9 to 18 |
+| P2 | Ruling 2 never reached `light-client-requirements.md` | **CONFIRMED, FIXED**: a participant bullet in §1.1 (send each message to the counterparty and every witness; the consent request to its subject only) and a witness bullet in §1.2 (attest from what reached you) |
+| P3 | Count drift: "seven negatives" (six), "Eight rulings" over nine rows, "Ten" in the commit title; "five integration decisions" at design :65 and :675 against four at §14.2.4.6 and §22.2 | **CONFIRMED, FIXED** where editable: six, nine, four at both sites. The commit title stands as pushed |
+| P4 | §7.10.2 cites §3.2 for fields §4.5 defines; `SigningReply` field 3 a bare `bstr`; NET-022 "either nominated" elliptical | **CONFIRMED, all three FIXED**: §4.5 at four sites, `.size 32`, "either party nominated" |
+| D1 | The capture key is never zeroized on its path, while the FFI doc claims it is discarded | **CONFIRMED, FIXED end to end**: `Zeroizing` through `keys.rs`, `local.rs`, `ceremony.rs` (including `Msg::CaptureKey` and `capture()`), `query.rs`'s `KeyGrant.key`; the FFI wraps what it holds and documents the shell's copies as the shell's; Kotlin `fill(0)` in `finally` on every held array, the bearer wipes cut packets and the reassembly discards retained slices. Tests in six Rust files and two Kotlin files. Recorded as a standing checklist item |
+| D2 | `ProposedBody`'s enclosed body never schema-checked | **CONFIRMED, FIXED** in the codec arm (`check_body_of_type`, type 5) and in `proposal_from_body` |
+| D3 | Schema, decoder and CDDL disagree on `SigningReply` field 3 | **CONFIRMED, FIXED**: all three say 32 bytes |
+| D4 | verify.py not extended for the new objects; bounds asymmetric | **CONFIRMED, FIXED**: 27 named checks added (113 to 140), among them the envelope signature-count assertion owed since 2026-09-26 (V4), which fails cleanly on zero entries; semantic checks for kinds 9 to 18; the HKDF recompute for the handover key; nine fixtures (corpus 312 → 321) including the 31-byte anchor SCH-025 names and the three enum-variant vectors carried from earlier rounds. The new checks caught a generator defect of their own: `WitnessRequest` field 3 carried a date ten days after the record's start; corrected |
+| C1 | Carried codec residuals: `SubtreeAck` without an arm; `ClientIntegrity` size unchecked; `device_bundle_ok` not validating the bundle; `channels_ok` and unknown keys; `is_sign1` vs `sign1_shape` | **All five CONFIRMED and FIXED.** `channels_ok` now applies §1's rule per caller: unknown keys kept in a signed record, refused in the unsigned messages |
+| C2 | `Abort::NotActive` conflation | **CONFIRMED, FIXED**: `Abort::NoCeremonyId` split out, so a shell can tell no meeting from wait for the second QR |
+| C3 | `cachedTap` not cleared on a ceremony-id change | **CONFIRMED, FIXED**: cleared whenever the id differs |
+| C4 | Four stale citations: wire :1019 (§7.3 for a §5 sentence), :1198 (§12 for design §15's pull rule), :4868 (the intent row), resource :667 (§11.4 for §18.4's eclipse) | **CONFIRMED, FIXED.** The intent row now cites design §7.1, §7.5.2 and §8.1.2 for what it carries. **For the author**: the design states nowhere who initiates or proposes, while `IntentExchange` carries an `initiator` flag and §8.1.2 speaks of the proposer; one sentence in §7.1 would close it, and the choice is his |
+| C5 | §7.10.1 kind back-references | **FIXED for the objects defined elsewhere**: §3 names kind 18, §5.6 kinds 9 and 10, §7.9 kind 11 |
+| C6 | "eleven identities", `SCHEMAS[4]` field 8 | **CONFIRMED, FIXED**: twenty-five identities; field 8 added to the type-4 table |
+| C7 | The grab-bag: `RHTN_FUZZ_SEED=0`, snapshot-slot downgrade, cli probe panic, sim truncation, transport lib.rs doc | **As before**: not reproduced (the seed is clock-derived) or named without a claim; nothing checked this round found one. A claim with a line number is what moves these |
+| A5 | Make citecheck catch "real but wrong section" citations by quoting | **For the author.** The acceptance catalogue verifies quoted sentences against their cited sections; prose citations carry no quote to verify. Extending them means quoting beside every citation, which is a style decision, or a heuristic the stale checker already half-attempts (its misdirected-citation class). Not built |
+
+**Round totals**: Rust tests 156 → 166 across the four client-side crates,
+node 150, archive 64; Android 59 → 62; corpus 312 → 321; harness checks 113
+→ 140; references 4502, 0 flags; pins 21, 0 stale.
+
+**From the gate, not the review** (2026-10-02): `cargo deny` failed on three
+Wasmtime advisories published today against 48.0.3; `cargo update -p wasmtime`
+takes 48.0.5 within the declared `"48"`, lockfile only. Advisories clean after.
+
+**C4's open question, ruled** [author, 2026-10-02]: either party can initiate; a light-client control generates an invite QR or another triggers a camera read; who generated the first invite has no bearing on the outcome or on the polarity of any resulting adoption. Applied: design §7.1 item 3, the `initiator` field's comment in `wire-format.md` §14.3.2 (its one reader is the responder's start-time adoption), a paragraph opening `light-client-requirements.md` §1, CER-022 (488 families), and the screens note.

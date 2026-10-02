@@ -405,6 +405,7 @@ object Kernel {
             }
             Meet.Step.CAPTURE -> live.received(Carriage.Phase.CAPTURE_KEY)?.let { set ->
                 set.firstOrNull()?.let { bytes ->
+                    var theirKey: ByteArray? = null
                     try {
                         // the carried `CaptureKeyHandover` is checked
                         // against this ceremony's id in the kernel, and
@@ -412,12 +413,21 @@ object Kernel {
                         // capture of them: the capture ran on this
                         // device's camera at D4 and is sealed beneath,
                         // silently (design §7.5.2.6)
-                        val theirKey = p.takeCaptureKeyCarriage(bytes)
+                        theirKey = p.takeCaptureKeyCarriage(bytes)
                         p.capture(theirKey)
                         m.note("captures sealed; the meeting can be proposed.")
                         m.captureDone()
                     } catch (e: Refused.Reason) {
                         m.stop("the capture could not be sealed: ${e.reason}")
+                    } finally {
+                        // THE KEY IS LET GO HERE, sealed or not: it opens
+                        // a likeness of a person, and the kernel wiped its
+                        // own copies as the calls returned (design §7.5.2).
+                        // Every byte of it this shell holds is zeroed, the
+                        // bearer's assembly included
+                        theirKey?.fill(0)
+                        set.forEach { it.fill(0) }
+                        live.discard(Carriage.Phase.CAPTURE_KEY)
                     }
                 }
             }
@@ -456,8 +466,15 @@ object Kernel {
         val p = participant ?: return
         val to = peer ?: return
         try {
+            // the handover carries my key in clear: once the bearer has
+            // had it, this shell keeps no copy, the packets it was cut
+            // into included (design §7.5.2)
             val mine = p.captureKeyCarriage()
-            carriage?.send(listOf(mine), Carriage.Phase.CAPTURE_KEY)
+            try {
+                carriage?.send(listOf(mine), Carriage.Phase.CAPTURE_KEY, wipe = true)
+            } finally {
+                mine.fill(0)
+            }
             m.note("my capture key is sent; capturing the counterparty.")
             drainBearer(p, to, m)
         } catch (e: Refused.Reason) {

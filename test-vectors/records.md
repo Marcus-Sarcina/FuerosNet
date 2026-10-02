@@ -1,6 +1,6 @@
 # Standalone signed records (`wire-format.md` §7)
 
-Generated against `wire-format.md` `fb8a1a9f8ae1cef0…`, `network-design.md` `6f135ebf287fafdb…` and `light-client-requirements.md` `dcfd240c8f431c37…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `7e7742c9ee401ad6…`, `network-design.md` `b4578223e3151f25…` and `light-client-requirements.md` `4109bc46e3981443…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Canonical. Spec-derived, reproduced by the independent harness.** See
 [README.md](README.md). Each **signed** §7 object is a standalone `COSE_Sign1`
@@ -287,6 +287,21 @@ a8015820f2d688318409d89353636efb04014ae130f282e207d4d7f9146a3316
 0743763d31088443a10127a0f658409a439f4990d90a9a2bfabf78f5b02a48da
 68d8a6f155d843a17bbe20323c9b1b2508ddde29b3d5ec010869e9dd4be3487c
 084f8def7e484160572b491bbba6000901
+```
+
+The same entry declaring `data_practice` 4, a value §6.1's table does not
+define (209 bytes): an unknown value is retained and surfaced,
+never rejected, so the entry is accepted and the declaration shown as
+unrecognised (§6.1).
+
+```
+a8015820f2d688318409d89353636efb04014ae130f282e207d4d7f9146a3316
+125790ea0258206bcf8a3e8899fc206bc603744414d58b01db857986d82f611b
+0794ac9c32c375036a7268746e2d666f72756d04705468652052656164696e67
+20526f6f6d055818717569633a2f2f3139382e35312e3130302e373a34343333
+0743763d31088443a10127a0f65840127fe66a1bfa853938a6857206a8f80d70
+dfce13dcbd242ac58d99552482b94575d7409d7f91ff42936b9e211df2f13b54
+b4387eb8311e992a12b2a40903eb090904
 ```
 
 **Abuse report** — the resource c5 reports excessive load to its own owner;

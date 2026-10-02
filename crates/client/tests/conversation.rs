@@ -301,3 +301,61 @@ fn a_message_crosses_as_its_kind_and_comes_back_the_same() {
     assert!(conversation_from(KIND_FISHING_PROPOSAL, &fixture("P-fishing-proposal")).is_err());
     assert!(conversation_from(KIND_APPLICATION, b"hello").is_err());
 }
+
+/// A proposed body is checked as every archive will check it, before
+/// anything is read out of it: a body this client would re-emit the same
+/// way is still refused where the archives would refuse it.
+#[test]
+fn a_proposed_body_the_archives_would_refuse_is_refused_before_it_is_read() {
+    let fx = fixture("P-proposed-body");
+    let read = ProposedBody::decode(&fx).expect("decodes");
+    let (proposal, back) = proposal_from_body(&read.body).expect("the body reads back");
+    // the same proposal over a merge list that repeats a txid re-emits to
+    // the same bytes it was built from, and is a body no archive takes:
+    // a merge list is sorted and repeats nothing (§3.1).  An unsorted
+    // list would not do here, since the emitter sorts what it is given
+    let mut repeated = back.clone();
+    repeated[0] = vec![[0x11u8; 32], [0x11u8; 32]];
+    let body = proposal.body(&repeated);
+    assert!(
+        proposal_from_body(&body).is_err(),
+        "a repeated back-pointer is refused as the archives refuse it"
+    );
+    // and the codec refuses the body inside the ProposedBody itself
+    let shown = ProposedBody {
+        body: vec![0xa0],
+        set: read.set.clone(),
+    }
+    .encode();
+    assert!(
+        ProposedBody::decode(&shown).is_err(),
+        "an empty map is a byte string and no presence body"
+    );
+    let shown = ProposedBody {
+        body,
+        set: read.set,
+    }
+    .encode();
+    assert!(ProposedBody::decode(&shown).is_err());
+}
+
+/// A refusal's particular is exactly 32 bytes (`wire-format.md` §7.10.2):
+/// a witness keyhash or a query id, and nothing of another width.
+#[test]
+fn a_signing_reply_particular_of_another_width_is_refused() {
+    let mut short = vec![0xa2, 0x02, 0x01, 0x03, 0x58, 0x1f];
+    short.extend_from_slice(&[9u8; 31]);
+    assert!(SigningReply::decode(&short).is_err(), "31 bytes");
+    let mut long = vec![0xa2, 0x02, 0x01, 0x03, 0x58, 0x21];
+    long.extend_from_slice(&[9u8; 33]);
+    assert!(SigningReply::decode(&long).is_err(), "33 bytes");
+    let mut exact = vec![0xa2, 0x02, 0x01, 0x03, 0x58, 0x20];
+    exact.extend_from_slice(&[9u8; 32]);
+    assert!(
+        matches!(
+            SigningReply::decode(&exact).map(|r| r.reply),
+            Ok(Err(Refusal::NomineeNotMine(k))) if k == [9u8; 32]
+        ),
+        "32 bytes, the witness keyhash"
+    );
+}

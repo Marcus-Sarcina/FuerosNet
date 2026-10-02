@@ -512,6 +512,10 @@ Envelope = {
 }
 ```
 
+**A finalised presence record also travels as payload**: the proposer sends
+the envelope to every signer as plaintext kind 18 (§7.10.1), which is how each
+signer comes to hold what it signed.
+
 **Signature coverage is the body map only.** Never the envelope, or signatures
 would not survive the addition of a signer. The COSE payload is therefore the
 deterministic CBOR of field 3, and the signed input is the `Sig_structure` COSE
@@ -1016,7 +1020,7 @@ untagged detached `COSE_Sign` carrying one Ed25519 and one ML-DSA-65 entry (§4.
   party attests something else.
 - **Every response's verifier MUST differ from its subject** — field 1 from
   field 2 [author, 2026-09-08]. A successor cannot supply its own continuity
-  attestation: §7.3 already holds that the party being established "is never a
+  attestation: §5 already holds that the party being established "is never a
   candidate for their own verification", and design §9.1 has the subject meet
   *someone they have met before*, which a key generated for this rotation is
   not. Stated here because it is the half of that principle a **patron can
@@ -1195,7 +1199,7 @@ extending credit decides how much evidence it wants.
 | **Merkle proof** | Largest body, highest complexity, and needs a tree imposed on a native DAG. It buys verification without fetching, but the patron **needs the contents anyway** to recognise counterparties, so it optimises a cost this use case does not have |
 
 References rather than contents remains right, and is consistent with attestation
-being pull (§12): the patron fetches what it wants to verify rather than receiving a
+being pull (design §15): the patron fetches what it wants to verify rather than receiving a
 bulk push.
 
 ### 4.2 Departure (type 2)
@@ -2233,6 +2237,11 @@ and the bindings of §5.5, and can weigh nothing**, because weight comes from
 recognising responders (design §16.1), which no distant audience can do. That
 is not a shortfall; it is the design's statement of who presence evidence is
 *for*: the people connected enough to recognise the people in it.
+
+**The query also travels to its subject**, as plaintext kind 9 (§7.10.1),
+for the consent it needs before it is sent, and to no witness: the profile it
+carries is for the one verifier field 7 names. The consent returns as kind 10
+(§7.10.2), and the same `COSE_Sign1` then rides to the verifier inside kind 7.
 
 ## 6. Resource registration, the catalog, and abuse reports
 
@@ -3291,6 +3300,10 @@ ArchiveEntry = PresentedRecord / Envelope
                        ;   presentation, so the two need no discriminator
 ```
 
+**A list of them is also a fishing proposal** (design §8.1.2): one to 256
+`ArchiveEntry` items travel as plaintext kind 11 between the participants'
+devices during a ceremony (§7.10.1, §7.10.2).
+
 **Paginate by re-requesting with field 2 set to the previous reply's field 4.**
 A holder may refuse a request or return fewer records than asked for; **a short
 reply is not evidence of a short archive**, and a patron must not treat it as
@@ -3511,8 +3524,8 @@ FishingProposal = [ 1*256 ArchiveEntry ]   ; §7.9; §5.4's carriage bound
 
 WitnessRequest = {
   1: bstr .size 32,    ; the ceremony-id (§14.3.1)
-  2: [ 2 keyhash ],    ; the participants, in body field 3's order (§3.2)
-  3: uint,             ; started_at, the claimed start (§3.2 field 1)
+  2: [ 2 keyhash ],    ; the participants, in body field 3's order (§4.5)
+  3: uint,             ; started_at, the claimed start (§4.5 field 1)
   4: [ 0*8 Channel ]   ; the proximity channels as measured (§4.5)
 }
 
@@ -3520,7 +3533,7 @@ WitnessAnswer = {
   1: bool,             ; witnessing, or declining
                        ;   (`light-client-requirements.md` §1.2's clock check)
   ? 2: uint            ; present only when witnessing: the attestation bits
-                       ;   this witness will set (Witness field 3, §3.2)
+                       ;   this witness will set (Witness field 3, §4.5)
 }
 
 GatheredResponses = [ 0*32 VerifierResponse ]   ; §4.5 field 5's bound, in
@@ -3529,7 +3542,7 @@ GatheredResponses = [ 0*32 VerifierResponse ]   ; §4.5 field 5's bound, in
 BackPointers = [ 1*8 bstr .size 32 ]   ; one signer's list (§3.1)
 
 ProposedBody = {
-  1: bstr,             ; the record body, §3.2's map as every signer will
+  1: bstr,             ; the record body, §4.5's map as every signer will
                        ;   sign it, back-pointers in place
   2: [ 7*7 Disclosure ]  ; the set the body's root commits to (§4.5.1),
                          ;   every slot revealed, so a signer recomputes the
@@ -3543,7 +3556,7 @@ SigningReply = {
                               ;   party that it did not nominate; 2 a response
                               ;   this subject holds that the body omits; 3
                               ;   the claimed start far from this clock
-  ? 3: bstr                   ; the refusal's particular: the witness keyhash
+  ? 3: bstr .size 32          ; the refusal's particular: the witness keyhash
                               ;   (1), the query_id (2); absent for 3
 }
 ; exactly one of keys 1 and 2 is present, and key 3 only beside key 2
@@ -4865,7 +4878,7 @@ design already depends on.
 
 | What | Between | Where it is stated | Encoding |
 |---|---|---|---|
-| The ceremony's intent exchange — the contribution, the nominees, the evidence bundle, the timing and who initiated | Two participants' devices | design §7.1, design §7.5.2 | `IntentExchange` (§14.3.2), carried by the shell's chosen bearer (§14.3.1) and bound to the pre-commitment. The CBOR is specified; two vendors' clients compute the same ceremony-id (design §13.2) either way |
+| The ceremony's intent exchange — the contribution, the nominees, the evidence bundle, the timing and who initiated | Two participants' devices | design §7.1, §7.5.2, §8.1.2 | `IntentExchange` (§14.3.2), carried by the shell's chosen bearer (§14.3.1) and bound to the pre-commitment. The CBOR is specified; two vendors' clients compute the same ceremony-id (design §13.2) either way |
 | The optical transcript — each device's contribution, then the derived ceremony-id, screen to camera | Two participants' devices | design §7.1 item 3, design §7.5.2 | `OpticalContribution` then `TranscriptConfirm` (§14.3.2): the contribution is the key-exchange input, the ceremony-id is the transcript hash both display and check |
 | Proximity channel outcomes — the UWB, NFC or optical result and its ranking | Two participants' devices | §3.2, design §7.1 item 4 | `ProximityOutcomes` (§14.3.2): the §4.5 `Channel` maps as measured, anchored to the ceremony-id. The record's `strongest` (§3.2) is not carried — each device computes it from the outcomes, as each computes the ceremony-id |
 | Traversal candidates | Two participants' devices | design §12.6.3 [author, 2026-09-25] | `CandidateHandover` (§14.3.2), carrying the `Candidate` structure this document now defines; the same candidates travel the end-to-end payload path when a direct connection is set up remotely (design §12.6.3, §14.1.1) |
@@ -4879,12 +4892,13 @@ care whether the parties either side of a local interface are two people or
 one person's two devices.
 
 **The inventory is complete** [author, 2026-10-02]. The rest of the
-ceremony's conversation — which verifiers each party selected, the fishing
-proposals, the consent each query needs before it is sent, the witness
-request, the proposed body, each signer's signature entry and the finalised
-record — crosses no local interface. It travels the end-to-end payload path
-between the participants' devices and is sent to each nominated witness as
-well (§7.10.1, design §7.1).
+ceremony's conversation, kinds 9 to 18 of §7.10.1 — the consent each query
+needs, which also tells the subject who was selected, the fishing proposals,
+the witness request and the witness's answer, the responses one party
+gathered for the proposer, each signer's back-pointers, the proposed body,
+each signer's signature entry and the finalised record — crosses no local
+interface. It travels the end-to-end payload path between the participants'
+devices and is sent to each nominated witness as well (§7.10.1, design §7.1).
 
 ### 14.3 Carriage, and the encodings it moves
 
@@ -4977,7 +4991,13 @@ IntentExchange = [             ; carried by the bearer (§14.3.1), not optical
                                ;   else
   timestamp,                   ; started_at
   uint,                        ; retention_years the sender commits to
-  bool,                        ; initiator
+  bool,                        ; initiator: this device showed the invite the
+                               ;   other read. Either party may (design §7.1);
+                               ;   the flag settles only whose start the pair
+                               ;   adopts, the responder taking the initiator's
+                               ;   within its clock tolerance, and nothing
+                               ;   about the record or any adoption follows
+                               ;   from it
   uint,                        ; continuations: how many BundleContinuation
                                ;   messages follow with the rest of the
                                ;   bundle; 0 where it fits in one carriage

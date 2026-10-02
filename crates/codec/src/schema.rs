@@ -903,11 +903,24 @@ fn record_extension_bounds(b: &[u8], kind: &str, item: &Item) -> Result<(), Erro
 /// `ProximityOutcomes` exchange (`wire-format.md` §14.3.2) both carry
 /// them.  Each channel's kind and outcome are closed enumerations, and
 /// §1.2 rejects an unknown value in a known enumerated field.
-fn channels_ok(ch: &[Item]) -> Result<(), Error> {
+///
+/// `signed` picks which of §1's two rules an unknown key falls under:
+/// inside a signed record it is an extension the holder preserves, and
+/// the caller bounds it; on an unsigned message it is refused.
+fn channels_ok(ch: &[Item], signed: bool) -> Result<(), Error> {
     for c in ch {
         let Item::Map(cm) = c else {
             return Err(Error("channel not map"));
         };
+        if !signed {
+            let known = cm
+                .iter()
+                .filter(|(k, _)| matches!(k, Item::Uint(1..=4)))
+                .count();
+            if known != cm.len() {
+                return Err(Error("unknown key on an unsigned message"));
+            }
+        }
         match map_get(cm, 1).and_then(as_uint) {
             Some(1..=4) => {}
             _ => return Err(Error("channel kind out of range")),
@@ -984,9 +997,38 @@ fn cose_signature_shape(it: &Item) -> Result<(), Error> {
     }
 }
 
+/// A `PrekeyBundle`'s payload, fields 1 to 5 (`wire-format.md` §7.8): the
+/// subject and the device each 32 bytes, the construction and the
+/// publication time uints, the reusable material a byte string within the
+/// blob bound.  Its signature slot is the business of whoever knows
+/// whether the bundle in hand is signed yet.
+fn prekey_bundle_payload_ok(b: &[u8], m: &[(Item, Item)]) -> Result<(), Error> {
+    if keyhash_at(b, m, 1).is_none() {
+        return Err(Error("subject keyhash width"));
+    }
+    map_get(m, 2)
+        .and_then(as_uint)
+        .ok_or(Error("construction required"))?;
+    match map_get(m, 3) {
+        Some(Item::Bytes(r)) if r.len() <= PREKEY_BUNDLE_BLOB => {}
+        Some(Item::Bytes(_)) => return Err(Error("blob over 4KB")),
+        _ => return Err(Error("material required")),
+    }
+    map_get(m, 4)
+        .and_then(as_uint)
+        .ok_or(Error("published_at required"))?;
+    // field 5, the device, under the signature (§7.8)
+    if keyhash_at(b, m, 5).is_none() {
+        return Err(Error("device key width"));
+    }
+    Ok(())
+}
+
 /// A carried `PrekeyBundle` blob (`wire-format.md` §14.3.3): parses as a
 /// map, within the ceiling, its signature slot present or absent as the
-/// carriage requires.
+/// carriage requires, and its payload a `PrekeyBundle`'s on either side
+/// of the signature: a credential's is the whole signed record, an
+/// introduction's the same map before the identity signs it.
 fn device_bundle_ok(b: &[u8], f: &Item, signed: bool) -> Result<(), Error> {
     let Item::Bytes(r) = f else {
         return Err(Error("bundle not bstr"));
@@ -994,14 +1036,21 @@ fn device_bundle_ok(b: &[u8], f: &Item, signed: bool) -> Result<(), Error> {
     if r.is_empty() || r.len() > DEVICE_BUNDLE_BYTES {
         return Err(Error("bundle over the ceiling"));
     }
-    let inner = parse_all(&b[r.clone()]).map_err(|_| Error("bundle does not parse"))?;
+    let bundle = &b[r.clone()];
+    let inner = parse_all(bundle).map_err(|_| Error("bundle does not parse"))?;
     let Item::Map(m) = &inner else {
         return Err(Error("bundle not a map"));
     };
     match (signed, map_get(m, 6).is_some()) {
-        (true, true) | (false, false) => Ok(()),
-        (true, false) => Err(Error("a credential's bundle carries field 6")),
-        (false, true) => Err(Error("an introduction's bundle omits field 6")),
+        (true, true) | (false, false) => {}
+        (true, false) => return Err(Error("a credential's bundle carries field 6")),
+        (false, true) => return Err(Error("an introduction's bundle omits field 6")),
+    }
+    if signed {
+        check_kind(bundle, "PrekeyBundle", &inner)
+    } else {
+        record_extension_bounds(bundle, "PrekeyBundle", &inner)?;
+        prekey_bundle_payload_ok(bundle, m)
     }
 }
 
@@ -1167,7 +1216,10 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             if ch.is_empty() || ch.len() > PROXIMITY_CHANNELS_PER_RECORD {
                 return Err(Error("channel count"));
             }
-            channels_ok(ch)?;
+            // a record's channels are under its signature, so their unknown
+            // keys are kept and bounded like any signed map's (§1.3)
+            nested_extension_bounds(b, 0, 1, &|k| (1..=4).contains(&k))?;
+            channels_ok(ch, true)?;
             match map_get(m, 2).and_then(as_uint) {
                 Some(1..=4) => {}
                 _ => return Err(Error("strongest channel out of range")),
@@ -1299,7 +1351,7 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             if ch.is_empty() || ch.len() > PROXIMITY_CHANNELS_PER_RECORD {
                 return Err(Error("one to eight channels"));
             }
-            channels_ok(ch)
+            channels_ok(ch, false)
         }
         "Candidates" => candidates_ok(item),
         "CandidateHandover" => {
@@ -1436,7 +1488,7 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             if ch.len() > WITNESS_REQUEST_CHANNELS {
                 return Err(Error("channels over eight"));
             }
-            channels_ok(ch)
+            channels_ok(ch, false)
         }
         "WitnessAnswer" => {
             let Item::Map(m) = item else {
@@ -1494,10 +1546,15 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             if m.len() != 2 {
                 return Err(Error("keys 1 and 2"));
             }
-            match map_get(m, 1) {
-                Some(Item::Bytes(r)) if !r.is_empty() => {}
-                _ => return Err(Error("the body is a byte string")),
-            }
+            let Some(Item::Bytes(r)) = map_get(m, 1) else {
+                return Err(Error("the body is a byte string"));
+            };
+            // the body is §4.5's map as every signer will sign it, so it is
+            // checked here as every archive will check it: a signer shown
+            // a body the archives refuse has nothing to sign
+            let body = &b[r.clone()];
+            let inner = parse_all(body).map_err(|_| Error("the body does not parse"))?;
+            check_body_of_type(body, &inner, 5)?;
             let Some(Item::Array(set)) = map_get(m, 2) else {
                 return Err(Error("disclosures not array"));
             };
@@ -1554,8 +1611,9 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
                 }
             }
             match (refusal.is_some(), particular) {
-                (true, Some(Item::Bytes(_))) | (_, None) => {}
-                (true, Some(_)) => return Err(Error("a particular is a byte string")),
+                (true, Some(Item::Bytes(r))) if r.len() == 32 => {}
+                (_, None) => {}
+                (true, Some(_)) => return Err(Error("a particular is 32 bytes")),
                 (false, Some(_)) => {
                     return Err(Error("a particular accompanies a refusal and nothing else"));
                 }
@@ -1706,20 +1764,33 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
         "PrekeyReply" => check_unsigned(Family::PrekeyReply, b, 0),
         "PrekeyBatchRequest" => check_unsigned(Family::PrekeyRequestOrBatch, b, 0),
         "CatalogReply" => check_unsigned(Family::CatalogReply, b, 0),
+        "SubtreeAck" => {
+            let Item::Map(m) = item else {
+                return Err(Error("not map"));
+            };
+            // fields 1 to 4 (`wire-format.md` §7.5): the adoption's txid,
+            // the acknowledging grandpatron and the node admitted, each 32
+            // bytes, then a timestamp.  Field 5's shape is the profile's
+            // business above
+            for (f, what) in [
+                (1u64, "an adoption txid is 32 bytes"),
+                (2, "a grandpatron keyhash is 32 bytes"),
+                (3, "an admitted node's keyhash is 32 bytes"),
+            ] {
+                if keyhash_at(b, m, f).is_none() {
+                    return Err(Error(what));
+                }
+            }
+            map_get(m, 4)
+                .and_then(as_uint)
+                .ok_or(Error("a subtree ack carries its timestamp"))?;
+            Ok(())
+        }
         "PrekeyBundle" => {
             let Item::Map(m) = item else {
                 return Err(Error("not map"));
             };
-            if let Some(Item::Bytes(r)) = map_get(m, 3)
-                && r.len() > PREKEY_BUNDLE_BLOB
-            {
-                return Err(Error("blob over 4KB"));
-            }
-            // field 5, the device, under the signature (§7.8)
-            if bs(b, map_get(m, 5).ok_or(Error("device required"))?).map(|s| s.len()) != Some(32) {
-                return Err(Error("device key width"));
-            }
-            Ok(())
+            prekey_bundle_payload_ok(b, m)
         }
         "VerificationQuery" => {
             let Item::Map(m) = item else {
@@ -2060,23 +2131,30 @@ fn check_transfer(b: &[u8], m: &[(Item, Item)], tm: &[(Item, Item)]) -> Result<(
     Ok(())
 }
 
-/// The consistency rules of a `Recovery` block (§4.1), each checkable
-/// from the adoption alone: the prior key differs from the new one; every
 /// Whether a signature object is a `COSE_Sign1` — one signature, and in
 /// this profile therefore classical — rather than a `COSE_Sign` carrying
 /// an entries array.
 ///
 /// **Both are four-element arrays and the fourth element tells them
 /// apart**: a `bstr` is the one signature of a `Sign1`, an array is a
-/// `Sign`'s entries.
+/// `Sign`'s entries.  The shape asked of the `Sign1` is [`sign1_shape`]'s,
+/// the one every signature slot is held to, so the two never disagree.
 fn is_sign1(it: Option<&Item>) -> bool {
-    matches!(it, Some(Item::Array(a)) if a.len() == 4 && matches!(a[3], Item::Bytes(_)))
+    it.is_some_and(|x| sign1_shape(x).is_ok())
 }
 
-/// Whether it is a hybrid `COSE_Sign`: an entries array, two of them, one
-/// classical and one post-quantum (§3.5).
+/// Whether it is a hybrid `COSE_Sign` in the envelope's shape (§1, §3.5):
+/// protected header bytes, an empty unprotected header, a nil payload,
+/// and an entries array of two `COSE_Signature`s, one classical and one
+/// post-quantum.
 fn is_hybrid_sign(it: Option<&Item>) -> bool {
-    matches!(it, Some(Item::Array(a)) if a.len() == 4 && matches!(&a[3], Item::Array(e) if e.len() == 2))
+    matches!(it, Some(Item::Array(a))
+        if a.len() == 4
+            && matches!(a[0], Item::Bytes(_))
+            && matches!(&a[1], Item::Map(u) if u.is_empty())
+            && matches!(a[2], Item::Null)
+            && matches!(&a[3], Item::Array(e)
+                if e.len() == 2 && e.iter().all(|x| cose_signature_shape(x).is_ok())))
 }
 
 /// §4.5's rule for one verifier response, which depends on where the
@@ -2106,6 +2184,8 @@ fn check_response_signatures(x: &[(Item, Item)], in_recovery: bool) -> Result<()
     }
 }
 
+/// The consistency rules of a `Recovery` block (§4.1), each checkable
+/// from the adoption alone: the prior key differs from the new one; every
 /// response names the new key as its subject and the prior key in field 8;
 /// no verifier is its own subject; responses sort by verifier with no
 /// repeat; each claims the met basis; and at least one is a match.
@@ -2314,4 +2394,271 @@ fn check_presence(b: &[u8], m: &[(Item, Item)], lists: &[Item]) -> Result<(), Er
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod shapes {
+    //! The shapes the kinds above are held to, each built by hand so a
+    //! test says exactly which byte it is about.  Nothing here is signed:
+    //! a signature slot carries the profile's shape and arbitrary bytes.
+    use super::*;
+    use crate::encode::*;
+
+    fn checked(kind: &str, b: &[u8]) -> Result<(), Error> {
+        check_kind(b, kind, &parse_all(b)?)
+    }
+
+    fn bstr(out: &mut Vec<u8>, n: usize, fill: u8) {
+        emit_bstr(out, &vec![fill; n]);
+    }
+
+    /// A `COSE_Sign1` in the profile's shape, with `unprotected` keys in
+    /// its unprotected header: zero is the shape, anything else is not.
+    fn sign1(out: &mut Vec<u8>, unprotected: usize) {
+        emit_array_head(out, 4);
+        emit_bstr(out, &[0xa0]);
+        emit_map_head(out, unprotected);
+        for k in 0..unprotected {
+            emit_uint(out, k as u64 + 1);
+            emit_uint(out, 0);
+        }
+        emit_null(out);
+        emit_bstr(out, &[7u8; 64]);
+    }
+
+    /// One `COSE_Signature` entry as an envelope carries it.
+    fn signature(out: &mut Vec<u8>) {
+        emit_array_head(out, 3);
+        emit_bstr(out, &[0xa0]);
+        emit_map_head(out, 0);
+        emit_bstr(out, &[7u8; 64]);
+    }
+
+    fn subtree_ack(node_width: usize, timestamp_as_text: bool) -> Vec<u8> {
+        let mut o = Vec::new();
+        emit_map_head(&mut o, 5);
+        emit_uint(&mut o, 1);
+        bstr(&mut o, 32, 1);
+        emit_uint(&mut o, 2);
+        bstr(&mut o, 32, 2);
+        emit_uint(&mut o, 3);
+        bstr(&mut o, node_width, 3);
+        emit_uint(&mut o, 4);
+        if timestamp_as_text {
+            emit_tstr(&mut o, "now");
+        } else {
+            emit_uint(&mut o, 1_700_000_000);
+        }
+        emit_uint(&mut o, 5);
+        sign1(&mut o, 0);
+        o
+    }
+
+    #[test]
+    fn a_subtree_ack_is_held_to_its_fields() {
+        assert!(checked("SubtreeAck", &subtree_ack(32, false)).is_ok());
+        assert!(
+            checked("SubtreeAck", &subtree_ack(31, false)).is_err(),
+            "the admitted node's keyhash is 32 bytes"
+        );
+        assert!(
+            checked("SubtreeAck", &subtree_ack(32, true)).is_err(),
+            "a timestamp is a uint"
+        );
+    }
+
+    fn refusal(particular: usize) -> Vec<u8> {
+        let mut o = Vec::new();
+        emit_map_head(&mut o, 2);
+        emit_uint(&mut o, 2);
+        emit_uint(&mut o, 1);
+        emit_uint(&mut o, 3);
+        bstr(&mut o, particular, 9);
+        o
+    }
+
+    #[test]
+    fn a_signing_reply_particular_is_exactly_32_bytes() {
+        assert!(checked("SigningReply", &refusal(32)).is_ok());
+        assert!(checked("SigningReply", &refusal(31)).is_err());
+        assert!(checked("SigningReply", &refusal(33)).is_err());
+    }
+
+    fn proposed_body(body: &[u8]) -> Vec<u8> {
+        let mut o = Vec::new();
+        emit_map_head(&mut o, 2);
+        emit_uint(&mut o, 1);
+        emit_bstr(&mut o, body);
+        emit_uint(&mut o, 2);
+        emit_array_head(&mut o, 7);
+        for label in [
+            "capture",
+            "location",
+            "p0.integrity",
+            "p0.retention",
+            "p1.integrity",
+            "p1.retention",
+            "proximity",
+        ] {
+            emit_array_head(&mut o, 3);
+            bstr(&mut o, 16, 4);
+            emit_tstr(&mut o, label);
+            emit_uint(&mut o, 0);
+        }
+        o
+    }
+
+    #[test]
+    fn a_proposed_body_carries_a_body_the_archives_would_take() {
+        // an empty map is a byte string, and no presence body; the
+        // corpus's `P-proposed-body` is the one that passes
+        assert!(checked("ProposedBody", &proposed_body(&[0xa0])).is_err());
+        assert!(checked("ProposedBody", &proposed_body(&[])).is_err());
+    }
+
+    /// A `PrekeyBundle` with fields 1 to 5, 6 as well when `signed`, less
+    /// the one `drop` names.
+    fn bundle(signed: bool, drop: Option<u64>) -> Vec<u8> {
+        let last = if signed { 6 } else { 5 };
+        let keys: Vec<u64> = (1..=last).filter(|k| Some(*k) != drop).collect();
+        let mut o = Vec::new();
+        emit_map_head(&mut o, keys.len());
+        for k in keys {
+            emit_uint(&mut o, k);
+            match k {
+                1 | 5 => bstr(&mut o, 32, k as u8),
+                2 => emit_uint(&mut o, 1),
+                3 => bstr(&mut o, 100, 3),
+                4 => emit_uint(&mut o, 1_700_000_000),
+                _ => sign1(&mut o, 0),
+            }
+        }
+        o
+    }
+
+    fn introduction(bundle: &[u8]) -> Vec<u8> {
+        let mut o = Vec::new();
+        emit_array_head(&mut o, 3);
+        emit_uint(&mut o, 1);
+        bstr(&mut o, 32, 8);
+        emit_bstr(&mut o, bundle);
+        o
+    }
+
+    fn credential(bundle: &[u8]) -> Vec<u8> {
+        let mut o = Vec::new();
+        emit_array_head(&mut o, 3);
+        emit_uint(&mut o, 1);
+        emit_array_head(&mut o, 1);
+        bstr(&mut o, 40, 9);
+        emit_bstr(&mut o, bundle);
+        o
+    }
+
+    #[test]
+    fn a_carried_bundle_is_a_prekey_bundle_on_either_side_of_its_signature() {
+        assert!(checked("DeviceIntroduction", &introduction(&bundle(false, None))).is_ok());
+        assert!(checked("DeviceCredential", &credential(&bundle(true, None))).is_ok());
+        // an empty map parses and carries no field 6, and is no bundle
+        assert!(checked("DeviceIntroduction", &introduction(&[0xa0])).is_err());
+        for k in 1..=5 {
+            assert!(
+                checked("DeviceIntroduction", &introduction(&bundle(false, Some(k)))).is_err(),
+                "an introduction's bundle without field {k}"
+            );
+            assert!(
+                checked("DeviceCredential", &credential(&bundle(true, Some(k)))).is_err(),
+                "a credential's bundle without field {k}"
+            );
+        }
+        // the signature slot stays on the side the carriage puts it
+        assert!(checked("DeviceIntroduction", &introduction(&bundle(true, None))).is_err());
+        assert!(checked("DeviceCredential", &credential(&bundle(false, None))).is_err());
+    }
+
+    fn channel(unknown_key: bool) -> Vec<u8> {
+        let mut o = Vec::new();
+        emit_map_head(&mut o, if unknown_key { 3 } else { 2 });
+        emit_uint(&mut o, 1);
+        emit_uint(&mut o, 2);
+        emit_uint(&mut o, 2);
+        emit_uint(&mut o, 0);
+        if unknown_key {
+            emit_uint(&mut o, 9);
+            emit_uint(&mut o, 1);
+        }
+        o
+    }
+
+    fn outcomes(ch: &[u8]) -> Vec<u8> {
+        let mut o = Vec::new();
+        emit_array_head(&mut o, 3);
+        emit_uint(&mut o, 1);
+        bstr(&mut o, 32, 5);
+        emit_array_head(&mut o, 1);
+        o.extend_from_slice(ch);
+        o
+    }
+
+    fn witness_request(ch: &[u8]) -> Vec<u8> {
+        let mut o = Vec::new();
+        emit_map_head(&mut o, 4);
+        emit_uint(&mut o, 1);
+        bstr(&mut o, 32, 5);
+        emit_uint(&mut o, 2);
+        emit_array_head(&mut o, 2);
+        bstr(&mut o, 32, 6);
+        bstr(&mut o, 32, 7);
+        emit_uint(&mut o, 3);
+        emit_uint(&mut o, 1_700_000_000);
+        emit_uint(&mut o, 4);
+        emit_array_head(&mut o, 1);
+        o.extend_from_slice(ch);
+        o
+    }
+
+    fn proximity(ch: &[u8]) -> Vec<u8> {
+        let mut o = Vec::new();
+        emit_map_head(&mut o, 2);
+        emit_uint(&mut o, 1);
+        emit_array_head(&mut o, 1);
+        o.extend_from_slice(ch);
+        emit_uint(&mut o, 2);
+        emit_uint(&mut o, 2);
+        o
+    }
+
+    #[test]
+    fn an_unknown_channel_key_is_refused_unsigned_and_kept_signed() {
+        assert!(checked("ProximityOutcomes", &outcomes(&channel(false))).is_ok());
+        assert!(checked("ProximityOutcomes", &outcomes(&channel(true))).is_err());
+        assert!(checked("WitnessRequest", &witness_request(&channel(false))).is_ok());
+        assert!(checked("WitnessRequest", &witness_request(&channel(true))).is_err());
+        // a record's proximity is under its signature: the key is kept
+        assert!(checked("Proximity", &proximity(&channel(false))).is_ok());
+        assert!(checked("Proximity", &proximity(&channel(true))).is_ok());
+    }
+
+    #[test]
+    fn one_notion_of_a_sign1_for_the_slots_and_the_responses() {
+        let mut ok = Vec::new();
+        sign1(&mut ok, 0);
+        let mut bad = Vec::new();
+        sign1(&mut bad, 1);
+        let ok = parse_all(&ok).unwrap();
+        let bad = parse_all(&bad).unwrap();
+        assert!(is_sign1(Some(&ok)) && sign1_shape(&ok).is_ok());
+        assert!(!is_sign1(Some(&bad)) && sign1_shape(&bad).is_err());
+        let mut hybrid = Vec::new();
+        emit_array_head(&mut hybrid, 4);
+        emit_bstr(&mut hybrid, &[]);
+        emit_map_head(&mut hybrid, 0);
+        emit_null(&mut hybrid);
+        emit_array_head(&mut hybrid, 2);
+        signature(&mut hybrid);
+        signature(&mut hybrid);
+        let hybrid = parse_all(&hybrid).unwrap();
+        assert!(is_hybrid_sign(Some(&hybrid)) && !is_sign1(Some(&hybrid)));
+        assert!(!is_hybrid_sign(Some(&ok)));
+    }
 }

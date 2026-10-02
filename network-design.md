@@ -61,7 +61,7 @@ operations. Encoding for all of it is in
 `wire-format.md`.
 
 **Not specified.** Nothing currently blocks a subsystem (§22.1). End-to-end payload encryption is *adopt PQXDH and
-the Triple Ratchet* (§14.2.4) rather than designed here, with five integration
+the Triple Ratchet* (§14.2.4) rather than designed here, with four integration
 decisions open. **Eleven parameters
 remain unset** (§21.1), sorted by how provisional they actually are in §21.1.1, and
 none of them currently hardens on first deployment. **The test vectors are
@@ -672,7 +672,7 @@ payload, so apex load scales with churn and introductions, not with usage.
   `wire-format.md` §4.6)
 - **End-to-end payload encryption** to the addressed endpoint (§14.2). The
   endpoint may be another leaf, the patron, or a resource. Requirements sketched
-  §14.2.4 adopts PQXDH and the Triple Ratchet; five integration decisions open
+  §14.2.4 adopts PQXDH and the Triple Ratchet; four integration decisions open
 - **Resources** (§11): object, permission scopes, service catalog, abuse
   reporting and the interaction protocol specified (§22.1, `wire-format.md` §11);
   the owner-movement rule stated (§11.2)
@@ -1379,7 +1379,10 @@ end node, starting from its own local records of people it has met.
    no topology rule can be (§17.2). Procedure and residual: §7.1.1.
 2. Route-latency plausibility check (§7.6), weak evidence, modest weight.
 3. Optical channel: QR codes exchanged screen-to-camera. Carries key exchange
-   and the transcript hash. Inherently short-range and line-of-sight.
+   and the transcript hash. Inherently short-range and line-of-sight. **Either
+   party may begin** [author, 2026-10-02]: one device shows an invite and the
+   other reads it, and which did has no bearing on the ceremony's outcome or
+   on the polarity of any adoption that follows.
 4. **Proximity channel: UWB secure ranging (802.15.4z) where available, NFC tap
    as fallback.** UWB is the **strongest** channel but **not categorically
    relay-resistant.** Deployed 802.15.4z HRP implementations have been defeated by
@@ -1441,10 +1444,12 @@ asking its operator about something the operator did not see.
 What the two devices must fix between themselves while facing each other — the
 optical anchor, the intent, the proximity outcomes, traversal candidates and
 the capture key — crosses the local interface between them (§14.1.0,
-`wire-format.md` §14). Everything else the ceremony says — which verifiers
-each party selected, the fishing proposals, the consent each query needs, the
-witness request, the proposed body, each signer's signature entry and the
-finalised record — travels the end-to-end payload path between the
+`wire-format.md` §14). Everything else the ceremony says, kinds 9 to 18 of
+`wire-format.md` §7.10.1 — the consent each query needs, which also tells the
+subject who was selected, the fishing proposals, the witness request and the
+witness's answer, the responses one party gathered for the proposer, each
+signer's back-pointers, the proposed body, each signer's signature entry and
+the finalised record — travels the end-to-end payload path between the
 participants' devices and is sent to each nominated witness as well, the
 consent request alone excepted: the fuzzed profile it carries reaches the
 subject and the one verifier the query names, and nobody who holds no capture

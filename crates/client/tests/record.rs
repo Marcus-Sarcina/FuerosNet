@@ -1032,3 +1032,55 @@ fn a_client_saves_its_archive_and_its_store_and_comes_back_the_same_participant(
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// A `ClientIntegrity` value (`wire-format.md` §4.5): attested, scheme, and
+/// evidence of `n` bytes where `Some`.
+fn integrity_with_evidence(evidence: Option<usize>) -> Vec<u8> {
+    use rhtn_codec::encode::*;
+    let mut out = Vec::new();
+    emit_map_head(&mut out, 2 + usize::from(evidence.is_some()));
+    emit_uint(&mut out, 1);
+    emit_bool(&mut out, true);
+    emit_uint(&mut out, 2);
+    emit_uint(&mut out, 1);
+    if let Some(n) = evidence {
+        emit_uint(&mut out, 3);
+        emit_bstr(&mut out, &vec![0x5a; n]);
+    }
+    out
+}
+
+/// A revealed integrity slot is held to its schema, evidence width
+/// included: `? bstr .size (1..1024)`, so none, one and 1024 bytes read,
+/// and zero or 1025 are malformed.
+#[test]
+fn a_revealed_integrity_value_is_held_to_its_evidence_width() {
+    let mut w = world();
+    for (evidence, ok) in [
+        (None, true),
+        (Some(1), true),
+        (Some(1024), true),
+        (Some(0), false),
+        (Some(1025), false),
+    ] {
+        let values = [
+            capture_value(0, 4, 0, 2),
+            empty_location_value(),
+            integrity_with_evidence(evidence),
+            retention_value(2),
+            integrity_value(false, 0),
+            retention_value(2),
+            proximity_value(&[(2, 0, Some(1)), (3, 0, None)], 2),
+        ];
+        let set = disclosures(values, std::array::from_fn(|i| [i as u8 + 1; 16]));
+        let rec = signed_record(&mut w, &set, vec![]);
+        let shown = present(&rec.bytes, &set, &["p0.integrity"]);
+        assert_eq!(
+            read_presentation(&ids(), &shown).is_ok(),
+            ok,
+            "evidence {evidence:?}"
+        );
+        // withheld, the value is not read and the presentation stands
+        assert!(read_presentation(&ids(), &present(&rec.bytes, &set, &[])).is_ok());
+    }
+}

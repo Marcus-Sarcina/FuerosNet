@@ -11,6 +11,7 @@ use rhtn_codec::cose::{self, aad};
 use rhtn_codec::encode::*;
 use rhtn_codec::schema::{self, Family};
 use rhtn_crypto::{Identity, SigningIdentity};
+use zeroize::Zeroizing;
 
 fn bytes32(b: &[u8], m: &[(Item, Item)], key: u64) -> Option<[u8; 32]> {
     match map_get(m, key) {
@@ -355,7 +356,8 @@ fn bytes_of_value(b: &[u8], key: u64) -> Option<Vec<u8>> {
 pub struct KeyGrant {
     pub record: Txid,
     pub query_id: [u8; 32],
-    pub key: [u8; 32],
+    /// The capture key, wiped when the grant is dropped.
+    pub key: Zeroizing<[u8; 32]>,
 }
 
 impl KeyGrant {
@@ -367,7 +369,7 @@ impl KeyGrant {
         emit_uint(&mut out, 2);
         emit_bstr(&mut out, &self.query_id);
         emit_uint(&mut out, 3);
-        emit_bstr(&mut out, &self.key);
+        emit_bstr(&mut out, &self.key[..]);
         out
     }
 
@@ -380,7 +382,7 @@ impl KeyGrant {
         Ok(KeyGrant {
             record: bytes32(b, m, 1).ok_or("record")?,
             query_id: bytes32(b, m, 2).ok_or("query_id")?,
-            key: bytes32(b, m, 3).ok_or("key")?,
+            key: Zeroizing::new(bytes32(b, m, 3).ok_or("key")?),
         })
     }
 }

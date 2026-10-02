@@ -157,7 +157,7 @@ fn a_client_holds_no_decryptable_likeness_and_no_sealing_key() {
         "no plaintext template"
     );
     assert!(
-        !bob.store.holds_bytes(&k_capture),
+        !bob.store.holds_bytes(&k_capture[..]),
         "no k_capture for alice's capture"
     );
     assert!(!bob.store.holds_bytes(&a_seed.seed), "no seed of alice's");
@@ -248,7 +248,7 @@ fn the_capture_key_goes_directly_to_the_selected_verifier_and_nowhere_else() {
         if m.to == kh("carol") || m.to == kh("w2") || m.to == kh("w3") {
             let p = m.msg.payload();
             assert!(
-                !p.windows(32).any(|w| w == g.key),
+                !p.windows(32).any(|w| w == &g.key[..]),
                 "the key reached {} on a {:?}",
                 if m.to == kh("carol") {
                     "carol"

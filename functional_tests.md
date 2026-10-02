@@ -286,7 +286,7 @@ The Cargo workspace has **16 crates**. Components below follow responsibilities 
 | NET-019 | C | Encode and decode every `wire-format.md` §14.3 object inside the client, and hand the boundary above it opaque bytes: the two optical QRs, the bearer-carried intent with its bundle continuations, the anchored proximity outcomes, the candidate handover and the capture-key handover. The application moves them on whatever bearer it has, in the order given, and parses none of them — a second parser above the kernel is the hazard. Every check `wire-format.md` §14.3.1 requires is made where the ceremony's state is: a QR naming another party, a ceremony-id that is not this device's, an intent echoing a contribution the screen did not show, and an anchored message from another ceremony are each refused there. | W §14.3; D §§14.1.0, 11.2 |
 | NET-020 | E | Carry a ceremony's local exchange over a bearer the application chooses, ranked by locality: a direct local radio before a network fetch (`wire-format.md` §14.3.1). The carriage assembles the messages that were sent, in the order they were sent, or none — a gap is not assembled across, a repeat is not counted twice, and a peer announcing more than the bound is refused rather than allocated for. A bearer is offered as no proximity channel, whatever radio it uses: design §7.1 item 4's bar on signal strength as distance evidence is untouched by it. The optical objects survive the symbol that carries them and come back byte-identical. | W §14.3.1; D §§7.1, 14.1 |
 | NET-021 | E | Run the proximity ladder and the guided capture at a ceremony's D3 and D4 over the local interfaces (design §7.6.3, §7.5): the NFC tap carries the public ceremony-id and passes only where both sides hold the same one; the optical channel is reported from the anchor exchange D2 already agreed; the strongest channel that passed is the one recorded and no stronger (`light-client-requirements.md` §1.3). The capture keys cross each way as `CaptureKeyHandover` (`wire-format.md` §14.3.2), anchored and checked like the proximity outcomes, and each device seals its capture of the other beneath them (design §7.5.2.6). A channel the shell cannot run is not listed, and a tap against another ceremony passes neither side and leaks no ceremony-id. | W §§14.2, 14.3.2; D §§7.5.2.6, 7.6.3 |
-| NET-022 | C | After the local exchanges, the ceremony's conversation crosses no local interface: which verifiers each party selected, the fishing proposals, the consent each query needs, the witness request, the proposed body, each signer's signature entry and the finalised record travel the end-to-end payload path between the participants' devices and are sent to each nominated witness as well, which is how a witness observes the sequence it attests. They are payload kinds 9 to 18 (`wire-format.md` §7.10.1, §7.10.2); every one a participant sends goes to the counterparty and to every witness either nominated, the consent request alone excepted, which reaches the subject only since it carries the fuzzed profile (`wire-format.md` §5.6). | W §§7.10.1, 7.10.2, 5.6, 14.2; D §7.1 |
+| NET-022 | C | After the local exchanges, the ceremony's conversation crosses no local interface: the consent each query needs, which also tells the subject who was selected, the fishing proposals, the witness request and the witness's answer, the responses one party gathered for the proposer, each signer's back-pointers, the proposed body, each signer's signature entry and the finalised record travel the end-to-end payload path between the participants' devices and are sent to each nominated witness as well, which is how a witness observes the sequence it attests. They are payload kinds 9 to 18 (`wire-format.md` §7.10.1, §7.10.2); every one a participant sends goes to the counterparty and to every witness either party nominated, the consent request alone excepted, which reaches the subject only since it carries the fuzzed profile (`wire-format.md` §5.6). | W §§7.10.1, 7.10.2, 5.6, 14.2; D §7.1 |
 
 ### Attach, sibling state, heartbeat and failover
 
@@ -387,6 +387,7 @@ The Cargo workspace has **16 crates**. Components below follow responsibilities 
 | CER-019 | C | Show the actual selected verifiers, bases, coverage and absence of familiar candidates before signing. Sparse evidence may lower third-party weight while still yielding a valid personally meaningful relationship. | D §§8.1.2, 16.1; L §§1.4, 6 |
 | CER-020 | C | Do not invent a protocol byte/count cap for the entire off-record curated bundle. Any local operational truncation is explicit to the user and selector and must not misstate n or completeness. | W §5.4 |
 | CER-021 | C | As subject, check each response copy against the retention that verifier declared in the prior record you granted against: an unavailable inside that window is your private signal about the verifier's caching compliance, attributable by you alone, since only you know which prior meeting it should reference. Nothing of it enters the record or reaches the counterparty, and a response names no prior record. | D §§7.4.2, 7.4.3, 7.5.1; W §5.6; L §1 |
+| CER-022 | C | Either participant may begin a ceremony, by showing an invite or by reading one, and the client offers both. The record produced, and the polarity of any adoption that follows, are identical whichever party showed the first invite; the only thing the pair takes from whoever began is a start time within clock tolerance. | D §7.1; W §14.3.2; L §1 |
 
 ### VerifierQuery, consent, key grants and response processing
 
@@ -959,7 +960,7 @@ Open local parameters are not all specification defects: cache TTLs, queue cap, 
 
 ## 10. Document baseline and coverage totals
 
-This specification contains **487 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
+This specification contains **488 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
 
 | Prefix | Families |
 |---|---:|
@@ -973,7 +974,7 @@ This specification contains **487 numbered requirement/test families** across **
 | NET | 22 |
 | SES | 15 |
 | MAIL | 27 |
-| CER | 21 |
+| CER | 22 |
 | VER | 18 |
 | CAP | 16 |
 | REC | 12 |

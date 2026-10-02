@@ -34,6 +34,7 @@ use rhtn_codec::cose::aad;
 use rhtn_crypto::verify;
 use rhtn_crypto::{Identity, SigningIdentity};
 use std::collections::{BTreeMap, BTreeSet};
+use zeroize::Zeroizing;
 
 /// A client's own numbers for the ceremony.
 #[derive(Clone)]
@@ -79,6 +80,10 @@ pub enum Abort {
     Declined,
     /// No ceremony is under way with this counterparty.
     NotActive,
+    /// A ceremony is under way but its id is not fixed yet: the
+    /// counterparty's contribution has not been taken (§14.3.1), so
+    /// nothing can be anchored to it or derived from it.
+    NoCeremonyId,
     /// The counterparty's claimed start is far from this clock.
     ClockFar,
     /// No proximity channel passed.
@@ -155,7 +160,8 @@ pub struct Restored {
 pub enum Msg {
     Intent(Intent),
     Channels(Vec<ChannelOutcome>),
-    CaptureKey([u8; 32]),
+    /// The capture key, wiped wherever a copy is dropped.
+    CaptureKey(Zeroizing<[u8; 32]>),
     ConsentRequest(VerificationQuery),
     Consent {
         query_id: [u8; 32],
@@ -686,11 +692,7 @@ impl Client {
     /// devices have and reads none of them.
     pub fn intent_carriage(&mut self) -> Result<Vec<Vec<u8>>, Abort> {
         let intent = self.intent()?;
-        let cid = self
-            .active
-            .as_ref()
-            .and_then(|a| a.ceremony_id)
-            .ok_or(Abort::NotActive)?;
+        let cid = self.anchored_id()?;
         Ok(crate::local::intent_carriage(
             &crate::local::IntentExchange {
                 contribution: intent.contribution,
@@ -718,11 +720,7 @@ impl Client {
         from: Keyhash,
         carriage: &[Vec<u8>],
     ) -> Result<usize, Abort> {
-        let cid = self
-            .active
-            .as_ref()
-            .and_then(|a| a.ceremony_id)
-            .ok_or(Abort::NotActive)?;
+        let cid = self.anchored_id()?;
         let theirs = self
             .active
             .as_ref()
@@ -759,11 +757,7 @@ impl Client {
     /// What the distance channels measured, anchored (§14.3.2).
     pub fn proximity_carriage(&mut self) -> Result<Vec<u8>, Abort> {
         let outcomes = self.proximity()?;
-        let cid = self
-            .active
-            .as_ref()
-            .and_then(|a| a.ceremony_id)
-            .ok_or(Abort::NotActive)?;
+        let cid = self.anchored_id()?;
         Ok(crate::local::ProximityOutcomes {
             ceremony_id: cid,
             channels: outcomes,
@@ -784,11 +778,7 @@ impl Client {
     /// (§14.3.2, design §12.6.3): the bare array the payload path carries,
     /// with the anchor this carriage adds.
     pub fn candidate_carriage(&self, candidates: Vec<u8>) -> Result<Vec<u8>, Abort> {
-        let cid = self
-            .active
-            .as_ref()
-            .and_then(|a| a.ceremony_id)
-            .ok_or(Abort::NotActive)?;
+        let cid = self.anchored_id()?;
         Ok(crate::local::CandidateHandover {
             ceremony_id: cid,
             candidates,
@@ -808,12 +798,9 @@ impl Client {
     /// The key the counterparty seals its captures of me under, as the
     /// anchored message the bearer carries at capture time (§14.3.2,
     /// design §7.5.2.6): [`Client::capture_key`] under this ceremony's id.
-    pub fn capture_key_carriage(&self) -> Result<Vec<u8>, Abort> {
-        let cid = self
-            .active
-            .as_ref()
-            .and_then(|a| a.ceremony_id)
-            .ok_or(Abort::NotActive)?;
+    /// The bytes are wiped when dropped, as the key in them is.
+    pub fn capture_key_carriage(&self) -> Result<Zeroizing<Vec<u8>>, Abort> {
+        let cid = self.anchored_id()?;
         Ok(crate::local::CaptureKeyHandover {
             ceremony_id: cid,
             key: self.capture_key()?,
@@ -823,8 +810,12 @@ impl Client {
 
     /// The counterparty's capture key, anchored to this ceremony or
     /// refused.  What comes back is the key [`Client::capture`] seals my
-    /// captures of them beneath, and nothing is held once that is done.
-    pub fn take_capture_key_carriage(&mut self, bytes: &[u8]) -> Result<[u8; 32], Abort> {
+    /// captures of them beneath, wiped when dropped, and nothing is held
+    /// once that is done.
+    pub fn take_capture_key_carriage(
+        &mut self,
+        bytes: &[u8],
+    ) -> Result<Zeroizing<[u8; 32]>, Abort> {
         let read = crate::local::CaptureKeyHandover::decode(bytes).map_err(Abort::Malformed)?;
         self.anchored(read.ceremony_id)?;
         Ok(read.key)
@@ -832,15 +823,21 @@ impl Client {
 
     /// An anchored message's ceremony-id against this device's own.
     fn anchored(&mut self, theirs: [u8; 32]) -> Result<(), Abort> {
-        let mine = self
-            .active
-            .as_ref()
-            .and_then(|a| a.ceremony_id)
-            .ok_or(Abort::NotActive)?;
+        let mine = self.anchored_id()?;
         if theirs != mine {
             return Err(Abort::CeremonyIdMismatch);
         }
         Ok(())
+    }
+
+    /// This ceremony's id, or why there is none: no ceremony under way,
+    /// or one whose id the counterparty's contribution has not fixed yet.
+    fn anchored_id(&self) -> Result<[u8; 32], Abort> {
+        self.active
+            .as_ref()
+            .ok_or(Abort::NotActive)?
+            .ceremony_id
+            .ok_or(Abort::NoCeremonyId)
     }
 
     /// Take the counterparty's intent: its contribution fixes the
@@ -905,21 +902,21 @@ impl Client {
 
     /// The key the counterparty seals its captures of me under (design
     /// §7.5.2.6), derived from my seed for this ceremony.
-    pub fn capture_key(&self) -> Result<[u8; 32], Abort> {
+    pub fn capture_key(&self) -> Result<Zeroizing<[u8; 32]>, Abort> {
+        let cid = self.anchored_id()?;
         let a = self.active.as_ref().ok_or(Abort::NotActive)?;
-        let cid = a.ceremony_id.ok_or(Abort::NotActive)?;
         Ok(capture_key(&a.seed, &self.keyhash(), &a.counterparty, &cid))
     }
 
     /// Step 5: tell the person what the record will contain and who can
     /// read it, run the guided capture of the counterparty, derive the
     /// template, seal both under the key the counterparty supplied, and
-    /// let that key go.
-    pub fn capture(&mut self, their_key: [u8; 32]) -> Result<(), Abort> {
+    /// let that key go: it is wiped here, and this side holds no copy.
+    pub fn capture(&mut self, their_key: Zeroizing<[u8; 32]>) -> Result<(), Abort> {
         let me = self.keyhash();
         let (peer, cid) = {
             let a = self.active()?;
-            (a.counterparty, a.ceremony_id.ok_or(Abort::NotActive)?)
+            (a.counterparty, a.ceremony_id.ok_or(Abort::NoCeremonyId)?)
         };
         self.device.notifier.notify(Notice::RecordDisclosure {
             role: Role::Participant,
@@ -941,6 +938,7 @@ impl Client {
             frames,
         };
         let sealed = seal(&self.cfg.seal, &their_key, peer, me, cid, &capture);
+        drop(their_key);
         let a = self.active()?;
         a.image_count = capture.frames.len() as u64;
         a.sealed = Some(sealed);
@@ -976,7 +974,7 @@ impl Client {
             let a = self.active.as_ref().ok_or(Abort::NotActive)?;
             (
                 a.counterparty,
-                a.ceremony_id.ok_or(Abort::NotActive)?,
+                a.ceremony_id.ok_or(Abort::NoCeremonyId)?,
                 a.template.clone().ok_or(Abort::NotActive)?,
             )
         };
@@ -1117,7 +1115,7 @@ impl Client {
     pub fn witness_request(&self) -> Result<WitnessRequest, Abort> {
         let a = self.active.as_ref().ok_or(Abort::NotActive)?;
         Ok(WitnessRequest {
-            ceremony_id: a.ceremony_id.ok_or(Abort::NotActive)?,
+            ceremony_id: a.ceremony_id.ok_or(Abort::NoCeremonyId)?,
             participants: participants(self.keyhash(), a.counterparty),
             started_at: a.started_at,
             channels: a.channels.clone(),
@@ -2916,8 +2914,8 @@ impl Harness {
         // 5. capture keys cross, then each captures the other
         let ka = self.client(&a).capture_key()?;
         let kb = self.client(&b).capture_key()?;
-        self.send(a, b, Msg::CaptureKey(ka));
-        self.send(b, a, Msg::CaptureKey(kb));
+        self.send(a, b, Msg::CaptureKey(ka.clone()));
+        self.send(b, a, Msg::CaptureKey(kb.clone()));
         self.client(&b).capture(ka)?;
         self.client(&a).capture(kb)?;
         // 6. each selects the other's verifiers and queries them
@@ -3078,8 +3076,8 @@ impl Harness {
         self.client(&verifier).take_channels(ch)?;
         let ks = self.client(&subject).capture_key()?;
         let kv = self.client(&verifier).capture_key()?;
-        self.send(subject, verifier, Msg::CaptureKey(ks));
-        self.send(verifier, subject, Msg::CaptureKey(kv));
+        self.send(subject, verifier, Msg::CaptureKey(ks.clone()));
+        self.send(verifier, subject, Msg::CaptureKey(kv.clone()));
         self.client(&verifier).capture(ks)?;
         self.client(&subject).capture(kv)?;
         // the claim, the query, the consent, the recognition

@@ -8,6 +8,7 @@ use crate::Keyhash;
 use aws_lc_rs::hkdf;
 use aws_lc_rs::rand::{SecureRandom, SystemRandom};
 use rhtn_codec::cose::sha256;
+use zeroize::Zeroizing;
 
 /// The ASCII tag the pre-commitment hashes first.
 pub const CEREMONY_TAG: &[u8] = b"rhtn/1:ceremony";
@@ -37,17 +38,19 @@ pub fn capture_key(
     subject: &Keyhash,
     holder: &Keyhash,
     ceremony_id: &[u8; 32],
-) -> [u8; 32] {
+) -> Zeroizing<[u8; 32]> {
     let mut info = Vec::with_capacity(CAPTURE_TAG.len() + 96);
     info.extend_from_slice(CAPTURE_TAG);
     info.extend_from_slice(subject);
     info.extend_from_slice(holder);
     info.extend_from_slice(ceremony_id);
     let prk = hkdf::Salt::new(hkdf::HKDF_SHA256, &[]).extract(seed);
-    let mut out = [0u8; 32];
+    // wiped when dropped, wherever it is carried to: the key decrypts a
+    // likeness of a person, and no holder keeps it past its use
+    let mut out = Zeroizing::new([0u8; 32]);
     prk.expand(&[&info], hkdf::HKDF_SHA256)
         .expect("32 bytes is within HKDF's bound")
-        .fill(&mut out)
+        .fill(&mut out[..])
         .expect("filled");
     out
 }

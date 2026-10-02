@@ -1039,15 +1039,22 @@ impl Participant {
     /// This client's capture key as the anchored message the bearer
     /// carries at capture time (`wire-format.md` §14.3.2, design
     /// §7.5.2.6): [`Participant::capture_key`] under the ceremony's id.
+    ///
+    /// **The key crosses this boundary as bytes the shell owns**: what the
+    /// kernel held of it is wiped as the call returns, and the shell wipes
+    /// its copy once the bearer has carried it.
     pub fn capture_key_carriage(&self) -> Result<Vec<u8>, Refused> {
         self.handle
-            .with_blocking(|c| c.capture_key_carriage())
+            .with_blocking(|c| c.capture_key_carriage().map(|k| k.to_vec()))
             .map_err(|a| Refused::new(format!("{a:?}")))
     }
 
     /// The counterparty's capture key, anchored to this ceremony or
-    /// refused: the 32 bytes to hand [`Participant::capture`].
+    /// refused: the 32 bytes to hand [`Participant::capture`].  The
+    /// carried bytes are wiped here once read; the shell wipes the key it
+    /// is handed once the capture has taken it.
     pub fn take_capture_key_carriage(&self, bytes: Vec<u8>) -> Result<Vec<u8>, Refused> {
+        let bytes = zeroize::Zeroizing::new(bytes);
         self.handle
             .with_blocking(move |c| c.take_capture_key_carriage(&bytes).map(|k| k.to_vec()))
             .map_err(|a| Refused::new(format!("{a:?}")))
@@ -1335,7 +1342,9 @@ impl Participant {
     }
 
     /// The key this client's own captures will be sealed under, for the
-    /// counterparty to capture with (design §7.5.2).
+    /// counterparty to capture with (design §7.5.2).  The kernel's copy is
+    /// wiped as the call returns; the bytes handed across are the shell's
+    /// to wipe.
     pub fn capture_key(&self) -> Result<Vec<u8>, Refused> {
         self.handle.with_blocking(|c| {
             c.capture_key()
@@ -1346,11 +1355,16 @@ impl Participant {
 
     /// Run the guided capture of the counterparty, sealed under the key
     /// they supplied.  **The key is discarded once the capture is sealed**,
-    /// so this client holds no decryptable likeness of them.
+    /// and discarded means wiped: every copy the kernel made of it is
+    /// zeroed by the time this returns, so this client holds no
+    /// decryptable likeness of them.  The bytes the shell handed in are
+    /// the shell's to wipe.
     pub fn capture(&self, their_key: Vec<u8>) -> Result<(), Refused> {
-        let k: [u8; 32] = their_key
+        let their_key = zeroize::Zeroizing::new(their_key);
+        let k = their_key
             .as_slice()
             .try_into()
+            .map(zeroize::Zeroizing::<[u8; 32]>::new)
             .map_err(|_| Refused::new("a capture key is 32 bytes"))?;
         self.handle
             .with_blocking(move |c| c.capture(k).map_err(|a| Refused::new(format!("{a:?}"))))

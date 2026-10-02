@@ -71,10 +71,10 @@ fn the_capture_key_is_hkdf_sha256_over_the_stated_info() {
     );
     assert_eq!(holder, test_identity("c1").public.keyhash, "holder c1");
     let want = h32("6157379db20e9b35da24fbab9ab4c8bc8676dc8f8c22c89d2b1fe2fea7b2985c");
-    assert_eq!(capture_key(&seed, &subject, &holder, &ceremony), want);
+    assert_eq!(*capture_key(&seed, &subject, &holder, &ceremony), want);
     // a different holder or ceremony yields a different key
     assert_ne!(
-        capture_key(
+        *capture_key(
             &seed,
             &subject,
             &test_identity("bob").public.keyhash,
@@ -84,9 +84,9 @@ fn the_capture_key_is_hkdf_sha256_over_the_stated_info() {
     );
     let mut other = ceremony;
     other[31] ^= 1;
-    assert_ne!(capture_key(&seed, &subject, &holder, &other), want);
+    assert_ne!(*capture_key(&seed, &subject, &holder, &other), want);
     assert_ne!(
-        capture_key(&seed, &holder, &subject, &ceremony),
+        *capture_key(&seed, &holder, &subject, &ceremony),
         want,
         "subject and holder are not interchangeable"
     );
