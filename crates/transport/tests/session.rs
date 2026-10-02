@@ -317,6 +317,57 @@ fn unknown_frame_at_bound() -> Vec<u8> {
     f
 }
 
+// acceptance: SES-29
+#[tokio::test]
+async fn ses_29_junk_before_the_ack_does_not_hold_the_attach_open() {
+    // a peer that accepts, reads the Attach, and then sends only unknown
+    // frames -- one every 100 ms, forever.  Each is skipped as §8.2 says;
+    // what must not happen is each one re-arming the wait
+    let sep = tls::server_endpoint(test_identity("bob"), loopback()).unwrap();
+    let saddr = sep.local_addr().unwrap();
+    let sent = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let counter = sent.clone();
+    let server = tokio::spawn(async move {
+        let (_c, mut s, mut r) = raw_accept(&sep).await;
+        let FrameRead::Payload(_) = read_frame(&mut r, 65536).await else {
+            panic!("attach")
+        };
+        let mut body = Vec::new();
+        emit_bstr(&mut body, b"junk");
+        let junk = control_frame(99, &body);
+        while s.write_all(&junk).await.is_ok() {
+            counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            sleep(Duration::from_millis(100)).await;
+        }
+    });
+    let cfg = client_cfg("alice");
+    let started = Instant::now();
+    let outcome = attach_within(
+        &cfg,
+        &client_ep(),
+        test_identity("bob").public.keyhash,
+        saddr,
+        false,
+        Duration::from_secs(1),
+    )
+    .await;
+    let elapsed = started.elapsed();
+    let AttachOutcome::EndpointFailure(why) = outcome else {
+        panic!("attached, or refused, on junk alone: {outcome:?}")
+    };
+    assert!(why.contains("deadline"), "{why}");
+    let n = sent.load(std::sync::atomic::Ordering::SeqCst);
+    assert!(
+        n >= 5,
+        "the junk kept coming ({n} frames) and the wait did not re-arm on it"
+    );
+    assert!(
+        elapsed < Duration::from_secs(3),
+        "one deadline from the Attach, not one per frame: {elapsed:?}"
+    );
+    server.abort();
+}
+
 // acceptance: TRN-07
 #[tokio::test]
 async fn trn_07_unknown_frame_at_the_bound_is_skipped_before_the_ack_and_mid_session() {

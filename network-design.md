@@ -38,7 +38,7 @@ mere hours or days to produce, but since popularity was itself earned by people'
 appreciation of a certain thing, it remained true on balance that the human attention
 devoted to a work was tethered to its ability to deliver some positive value.
 
-Today though, it is possible for a person lacking skill or insight or even interest
+Today though, a person lacking skill or insight or even interest
 can, with a few sentences of prompt, generate a firehose of content costing an
 audience more to dismiss than it cost to produce. That is why, of all the ideas for
 distributed systems bouncing around in my head, each with varying rules and
@@ -866,6 +866,16 @@ plainly: **the design's post-quantum choices depend on unaudited implementations
 Browser wasm additionally needs `getrandom` / Web Crypto integration for entropy,
 which is target-specific work to be tested rather than assumed.
 
+**Constant time is an implementation requirement, not a property assumed of a
+crate.** The ceremony keeps a counterparty's camera within arm's length of the
+device for minutes and the record is signed before the two part, and IEEE S&P 2024
+recovered ECDSA and SIKE keys from ordinary video of a power LED coupled to a
+device's supply, from implementations whose running time depended on the key.
+Signing, key agreement and capture-key derivation therefore run in constant time
+on every target, and a primitive that does not is a regression whatever else it
+offers. The coupling a phone display offers is assumed small and is unmeasured,
+and the requirement does not wait on measuring it.
+
 ### 5.3 The hybrid key is pre-positioned, and what that buys later
 
 **Carrying both components everywhere is provisioning, not only protection**
@@ -939,8 +949,7 @@ distinction is entirely its own business, the published apps are reference
 implementations and any number of alternative UIs should be expected.
 
 ### 6.1 Adoption
-Patron accepts a new subordinate. Also implicitly authorises sibling peering
-among that patron's children.
+Patron accepts a new subordinate.
 
 #### 6.1.1 Proof of presence and adoption
 
@@ -1857,9 +1866,10 @@ person in front of them as continuous with a history.
   - **Watch for hub concentration.** Weighting infra participation more heavily
     on the reliability axis creates a gradient toward meeting infra operators,
     which will make the presence graph hub-structured around infra operators. (Note
-    the ~1/1000 figure elsewhere is the *packing ratio* f^(L+1), how many
-    non-infra nodes one infra node can span, **not** a forecast of how many users
-    will choose to run one. Actual operator density is unknown.) Those become high-capacity on the **reliability** axis only —
+    that the users-per-infra-node figures — 110 for one node's span, 99
+    asymptotically (Appendix B.2) — are *packing ratios*, how many non-infra
+    nodes the structure places under one infra node, **not** a forecast of how
+    many users will choose to run one. Actual operator density is unknown.) Those become high-capacity on the **reliability** axis only —
     §16.6 forbids the same weighting on the social-trust axis, and if an
     implementation collapses the two scalars this becomes a genuine
     re-privileging of a paying class. Check the metric against that.
@@ -2340,7 +2350,12 @@ Strongest first:
    **NOT anti-relay.** Relay attacks against NFC are a well-documented class;
    short physical range does not prevent a relay pair with a fast link. NFC
    supplies *physical-range friction*, not a distance-bounding guarantee.
-3. **Optical (QR) channel.** Short-range and line-of-sight, but relayable
+3. **Optical (QR) channel.** Short-range and line-of-sight, but relayable: a
+   confederate's screen shows whatever a remote client instructs. A bound on the
+   screen-to-camera round trip would constrain only the latency a relay adds,
+   measured against a camera-and-display floor that is device-specific and
+   unknown to the party measuring, so it supplies friction of NFC's kind, not a
+   distance bound.
 4. **Route latency.** Continental resolution only; plausibility filter
 
 **Consequence: proximity evidence bounds an attacker's cost; it never establishes
@@ -2650,7 +2665,7 @@ evaluate a presence record, and what each actually reads decides what may be wit
 | Archive presentation to a prospective patron (§16.7) | signatures, and counterparties the patron already knows (§10.1) | **benefits** |
 | Trust metric (§16.2) | graph edges — adoptions, and the acquaintance edges a presence record or peering establishes (§16.2.1). **That an edge exists, never the record's disclosable contents** | no |
 | Presence-based recovery (§9.1) | verifier responses | no |
-| Late response, capture key grant (`wire-format.md` §7.3–b) | `txid` | no |
+| Late response, capture key grant (`wire-format.md` §7.3, §7.4) | `txid` | no |
 
 **Ten of eleven have no use for it.** The mechanism exists because a record currently
 reaches all of them whole.
@@ -6081,8 +6096,8 @@ the subtree's point of view when that authority is withdrawn.
 Adoption, departure and disavowal travel rootward; **peering does not.** The
 memo summarises only changes to the membership slots this chain governs; a
 relationship formed outside its authority is not its business to summarise. A peering
-record carries each endpoint's network point plus ASN (§6.3), and
-C8 maps that composition to a natural person. A memo carries keys and positions, so
+record names each peer by network point and ASN where it runs an instance and by
+locator otherwise (§6.3), and C8 maps that composition to a natural person. A memo carries keys and positions, so
 an ancestor accumulating them holds structure and no routable or identifying
 information, and adding peering for symmetry would silently remove that property.
 **It is a constraint on what may travel rootward, not a scoping convenience.**
@@ -7485,7 +7500,7 @@ and a citation to a missing number resolves there.
 | P1 | Presence-record composition — durable correlatable tuple of identity, time, social graph and geography | **Medium, reduced** | **Graph position is gone**: the participant locator is removed (§8.1), so records no longer trace a trajectory. **Geography is withholdable** from ten of eleven exchanges (§8.1.1). **Identity, time and the social graph remain by construction** — `kid` is on the envelope and signer role is inferred from body fields, so no field-level measure reaches them. See P2 and C2 |
 | P2 | Verifier/witness graph leakage | High | §19.2 — open, genuine tension |
 | P3 | **A single-identity client** correlates across subnets: anyone present in two of a user's subnets links them | High for such a client, **absent for a multi-identity one** | **Not a protocol limitation.** The protocol permits multiple identities already (§13.7); v1 clients omit the key management and interface work, so this ships as a **client** scope decision rather than a design defect. No wire change separates the two cases |
-| P4 | Patron metadata plus mailbox queue | High | **Queue policy settled** (§14.1.6): indefinite retention at the serving node, no sibling replication, ceiling refuses the newest, no copy outlives delivery, metadata bounded to ciphertext, recipient keyhash and arrival time. The residual is queue *metadata* held while a message waits, which encryption does not touch, operator logging, which §1.1 cannot reach — and, below everything, a compelled provider retaining what the guest deleted (§18.1, §14.1.6): deletion bounds the node, never the hypervisor [2026-09-03] |
+| P4 | Patron metadata plus mailbox queue | High | **Queue policy settled** (§14.1.6): indefinite retention at the serving node, no sibling replication, ceiling refuses the newest, no copy outlives delivery, metadata bounded to ciphertext, recipient keyhash and device, and arrival time. The residual is queue *metadata* held while a message waits, which encryption does not touch, operator logging, which §1.1 cannot reach — and, below everything, a compelled provider retaining what the guest deleted (§18.1, §14.1.6): deletion bounds the node, never the hypervisor [2026-09-03] |
 | P5 | Endpoint and backup aggregation | Critical on compromise | Acknowledged (§13.7, §13.7.1). The device is the global correlation point the network architecture otherwise avoids |
 | P11 | Heartbeat patterns reveal sleep, work and travel routines | Medium | Process-and-discard (§15) materially helps; the residual risk is implementations that log what the protocol discards |
 | **P12** | **End-to-end payload encryption is adopted rather than designed here, and an implementation shipping hop encryption alone leaks payload to both serving nodes** | **Critical for any implementation without it** | §14.2.4 adopts PQXDH and the Triple Ratchet; four integration decisions remain (§22.2). The patron was accepted as a metadata chokepoint, never a content one |
@@ -7527,7 +7542,7 @@ privacy measure**:
 | Whether patron siblings receive queue state | §14.1.6; they do not |
 | Deletion semantics after delivery | §14.1.6 — immediate, nothing recoverable |
 | Crash-recovery copies beyond deletion | §14.1.6 — none |
-| Queue metadata minimisation | §14.1.6 — ciphertext, recipient keyhash, arrival time |
+| Queue metadata minimisation | §14.1.6 — ciphertext, recipient keyhash and device, arrival time |
 | What infra operators may log | §14.1.6 — a commitment, not a rule (§1.1) |
 
 **The point the section was making stands and is why it is kept**: every one of these

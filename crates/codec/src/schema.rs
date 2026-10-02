@@ -1015,6 +1015,23 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
                     return Err(Error("network point listed twice"));
                 }
             }
+            // the signer's keyhash is 32 bytes and the counters are §2.3's
+            // seqno pair: the fields beside the network points, which were
+            // the only ones read [2026-10-01]
+            let Item::Map(m) = item else {
+                return Err(Error("not map"));
+            };
+            if keyhash_at(b, m, 1).map(|k| k.len()) != Some(32) {
+                return Err(Error("signer keyhash width"));
+            }
+            if kind == "AnchorEntry" {
+                map_get(m, 3)
+                    .and_then(as_uint)
+                    .ok_or(Error("subtree size is a uint"))?;
+                seqno_of(map_get(m, 4))?;
+            } else {
+                seqno_of(map_get(m, 3))?;
+            }
             Ok(())
         }
         "VerifierResponse" => {
@@ -1377,6 +1394,18 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
                     None if !required => {}
                     _ => return Err(Error("catalog entry byte string out of range")),
                 }
+            }
+            // field 6, where present, is a `Scope` (§6.1) and is checked as
+            // one -- the one field of the entry nothing read [2026-10-01];
+            // field 9 is `? uint` whose unknown values are retained (§6.1),
+            // so its type alone is checked
+            if let Some(r6) = value_slice(b, 6) {
+                let sc = &b[r6.clone()];
+                check_kind(sc, "Scope", &parse_all(sc)?)?;
+            }
+            match map_get(m, 9) {
+                Some(Item::Uint(_)) | None => {}
+                _ => return Err(Error("data_practice is a uint")),
             }
             Ok(())
         }

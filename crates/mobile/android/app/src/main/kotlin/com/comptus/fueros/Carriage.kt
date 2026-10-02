@@ -33,11 +33,12 @@ class Carriage(private val radio: Bearer.Link?) {
      *
      * The INTENT and PROXIMITY phases carry `wire-format.md` §14.3.2's
      * encodings, opaque here. **CAPTURE_KEY carries the kernel's raw
-     * 32 bytes and has no §14.3 encoding to carry**, because none exists:
-     * the §14.2 table never listed the capture-key handover design §7.5.2
-     * requires, so it was never encoded — raised 2026-10-01, in
-     * `review-tracking.md`. The phase number is the whole of this shell's
-     * framing of it.
+     * 32 bytes and has no §14.3 encoding to carry**, because none exists
+     * yet: `wire-format.md` §14.2's table now lists the handover design
+     * §7.5.2 requires with its encoding owed. Until it lands the phase
+     * number is the whole of this shell's framing, and the key crosses
+     * without the anchor the other two phases carry — which is why a
+     * second client has nothing here to agree with.
      */
     object Phase {
         const val INTENT = 0

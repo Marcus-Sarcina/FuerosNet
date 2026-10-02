@@ -11870,3 +11870,63 @@ and recorded: a NetworkPoint port truncation the codec already bounds (a
 defensive decoder bound added regardless), and two codec "gaps" that are
 correct by design. Nothing in the two days' work was found wrong in its
 logic beyond these; the gate stays green.
+
+### 2026-10-01 (the third-round re-review)
+
+Reviewer2's third pass. Of its findings on the newest code, both
+denial-of-service holes were real and are closed: the bearer's reassembly
+now charges each held slice an entry cost beside its bytes and refuses the
+two slice shapes a sender never produces, and the kernel's `read_intent`
+stops at the exchange's declared continuation count, which was on the wire
+for exactly that and unread. The capture-key handover the reviewer pressed
+on is now in `wire-format.md` §14.2's inventory as a row whose encoding is
+owed, the intro no longer claims every row's encoding is owed, and NET-021
+says so too; the encoding itself waits on the author. The carried list is
+worked off: the attach wait has one deadline from the Attach rather than
+one per frame; PQXDH's key material and the backup's seed copies are
+wiped on every path; an envelope signer that names no keyhash is refused
+rather than dropped; `citecheck.py` reads the rows it had been stripping
+whole and checks fixture names, and the three stale citations are
+retargeted (R14 → T50, D5 → T55, D25 → `P-reply-16`); the queue-metadata
+list says "and device" at all four of its sites; `CatalogEntry` field 6 and
+`AnchorEntry`'s identifier and counters are checked (T58, T59; corpus 289 →
+291); the §1.3 bounds table gains the prekey-reply row its own rule
+required; two citations to §1.3 for things not in it move to §2.2 and §12;
+§8.2's empty code fence, §6.1's stale "sibling peering" sentence, the
+"§7.3–b" citation, the peering record's composition under the memo rule,
+and the preface's grammar are corrected; the hub-concentration note cites
+Appendix B.2's figures in place of one the design stated nowhere.
+`modelpincheck.py` now gates both `run-all.sh` and `check.sh`. Two
+catalogue entries pin what the reviewer asked for and I had declined last
+round: TOP-46 (the held-list ceiling, oldest-first) and SES-29 (the attach
+deadline). One carried item was not reproduced (the fuzz seed is clock-
+derived and printed) and four were named without a claim; the tracking file
+says what was checked for each. The stricter `CatalogEntry` check exposed a
+latent fixture error: `B-catalog-2048`, the accept vector at the entry's
+byte ceiling, padded its connect-scope list in hash order rather than
+ascending, which §6.4 makes malformed; the generator sorts it now. Two
+paragraphs entered `network-design.md` in the same hour from outside this
+review — a constant-time requirement on the signing, agreement and
+capture-key primitives under §4's post-quantum caveat, and an expanded
+optical-channel item in §7.6.3 on why a screen-to-camera round-trip bound
+is friction rather than distance — and the pins were accepted with them in.
+
+### 2026-10-01 (the flicker question)
+
+The author asked whether the power-LED video side channel (Nassi et al.,
+IEEE S&P 2024) could be run cooperatively during the ceremony to check the
+counterparty's client build from screen flicker under a cryptographic
+challenge, and relayed Reviewer2's exchange on the same idea. Not adopted:
+a phone display is a regulated, software-driven load, so the coupling the
+attack reads is absent, and the measured party owns the emitter and holds
+the genuine code, which is the software-attestation ceiling. Reviewer2's
+counter-proposal, a deliberately modulated optical nonce, is largely what
+the QR anchor already is; its one new ingredient, a round-trip timing bound,
+has §7.6's shape with a smaller ratio. Two sentences land: §5.2 requires
+constant-time signing, key agreement and capture-key derivation on every
+target, with the threat window named and the display coupling marked
+unmeasured; §7.6.3's optical row says what a round-trip bound would and
+would not constrain. No new functionality, so no functional row. Six stale
+citations to design §1.3 for §7.1's items 3 and 4 were found in
+`wire-format.md` and `functional_tests.md` and spun off to their own
+session.

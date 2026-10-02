@@ -3,7 +3,7 @@
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md).
 
-**Pinned**: wire-format.md `34ab49b592be7241d3559fc15a896399bd9f8d01917b9f77e47fa8ae31352d02` · network-design.md `839e5ba7e8bdccb291781de717ada0e246a6d12ca03e570e6d55d51345836136`
+**Pinned**: wire-format.md `988b75c34c810e8dc9a4da5a928c62f4a6bef376731ed9c18ab9eeaf119b170e` · network-design.md `a5cd2d0f8310dbc73977ba36eb6a9381b869c6b8dd3fdff2166bf0effb3273d9`
 
 ## The result model is structured, not a single status
 
@@ -128,7 +128,7 @@ works, not inputs.
 | R8 | A formation record whose key 0 is not exactly `[SHA-256(signer keyhash)]` per signer | Structural genesis rule |
 | R12 | A formation-subtype record carrying a witness array | Formation records omit fields 4 and 5 entirely (§3.2); their absence is half of what separates a bootstrap from an ordinary meeting |
 | R13 | A formation-subtype record carrying verifier responses | Same rule, field 5 |
-| R14 | ~~window-ordinal mismatch~~ | **Retired 2026-09-01** with body key 7 and deterministic selection; the id is not reused. *The note this row briefly carried — key 7 as a preserved unknown extension — was superseded 2026-09-02 by the tombstone ruling*: a decoder meeting a retired number REJECTS (§4.5, T29) |
+| R14 | ~~window-ordinal mismatch~~ | **Retired 2026-09-01** with body key 7 and deterministic selection; the id is not reused. *The note this row briefly carried — key 7 as a preserved unknown extension — was superseded 2026-09-02 by the tombstone ruling*: a decoder meeting a retired number REJECTS (§4.5, T50) |
 | R11 | A revealed `proximity` whose `strongest` lacks `result = pass`, or with a higher-ranked passing channel | **Revealed and violated → `structural = malformed`** — it is a structural rule like any other, and §3.2 now says so explicitly. Withheld → `checks[strongest] = unverifiable(withheld)`, never valid and never malformed. *An earlier revision of this row said the revealed case was a failed check rather than malformed — the sixth review caught the drift* |
 
 ### Transaction and record bindings (§4)
@@ -177,6 +177,8 @@ photo comparison without its template version is unverifiable as evidence:
 | T49 | A response whose `selection_basis` (field 10) is absent, or carries a value outside 0–3 | §5.5: required, closed enumeration — the selector's claim of met / in-horizon / reachable / discretionary. Tier-aligned renumbering 2026-09-03: met and merely-in-horizon are different security facts (A23) and the record retains the difference |
 | T56 | A response whose `result` is **2 (inconclusive)** with `basis` 1 (personal knowledge) | §5.5 [2026-09-02]: an `inconclusive` is a capture in hand that could not be read, and it carries **basis 0 and the query's template version** — the attempted mechanism, not a claim that comparison ran. Personal knowledge cannot be inconclusive: nothing was attempted that could fail to be read. §4.5's conditional-field matrix admits the pair on its own, so this is the narrowing the matrix does not carry |
 | T57 | A `ServingInfra`, `Referral`, `SiblingRef` or adoption carrying `KeyMaterial` that does **not** hash to the keyhash in the field beside it | §3.4: *"If `KeyMaterial` is carried, its hash MUST equal the keyhash of the party it describes"*. Each of these fields exists so a recipient holding no pin can authenticate the party from the material; unchecked, a sender presents one identity's keyhash beside another's key and the recipient pins the wrong key. The fixture is a `ServingInfra` naming bob with carol's material |
+| T58 | A `CatalogEntry` whose field 6 is present and is not a `Scope` (`N-catalog-scope-shape`) | §6.1: `connect_scope` is `? Scope`, and a `Scope` is a uint, a `[tag, n]` pair or `[6, [ + keyhash ]]` (§6.4) — a text string is none of these. The field was the one in the entry a decoder had not been reading [2026-10-01] |
+| T59 | An `AnchorEntry` whose field 1 is not 32 bytes (`N-anchor-keyhash-width`) | §7.2: field 1 is a `keyhash`, 32 bytes by §2.2; the network points beside it were checked for shape and the signer's own identifier was not [2026-10-01] |
 | T50 | A presence body carrying retired key 7, or a `Witness` carrying retired key 4 or 5 | §4.5 [2026-09-02]: retired numbers are tombstones, not extension space — a decoder meeting one rejects, the §4 type-6 rule. An unknown key is one the schema never assigned; a retired key is one it remembers |
 | T51 | A normal presence record whose key 5 is an **empty array** | §4.5 [2026-09-02]: zero responses omit the key — the empty-array spelling gives one logical record two encodings. The over-strictness complement: an implementation reading field 5 as required-with-empty emits this and rejects the valid absent spelling |
 | T52 | A normal presence record none of whose witnesses set both `protocol_ran` and `both_responsive` | §3.2 [author, 2026-09-03]: the witness floor counts only entries with bits 0 and 1 both set — a witness attesting nothing (or latency alone) is partial evidence, present but not corroborating, and a normal record with no affirmative witness fails. The uncorroborated meeting remains expressible as a formation record, visible as what it is. `latency_bound` (bit 2) stays genuinely optional: the existing bits-3 fixtures are positives |
@@ -267,7 +269,7 @@ admits and another refuses propagates rather than stopping where it arrived:
 | D2 | The adoption carrying unknown key `99: h'c0ffee'`, with its full envelope (`transactions.md`) | §1: preserved, re-serialised, and covered — `structural = valid` and **all four signatures** verify over bytes including the unknown key. E10 is the mutation complement |
 | D3 | A `LocationEvidence` method value of 9 | The location-method registry is deliberately open (§4.5) |
 | D4 | A `Witness.attestation` with a reserved bit (3+) set | Reserved bits retained; interpret only 0–2 (§4.5) |
-| D5 | ~~Verifier responses in any array order~~ | **Retired 2026-09-02**: responses sort ascending by verifier keyhash — the witness rule (§4.5, §4.1) — so arbitrary order is now T28's malformed case. The §5.5 citation was also an overreach: no such non-canonicalisation sentence existed. The id is not reused |
+| D5 | ~~Verifier responses in any array order~~ | **Retired 2026-09-02**: responses sort ascending by verifier keyhash — the witness rule (§4.5, §4.1) — so arbitrary order is now T55's malformed case. The §5.5 citation was also an overreach: no such non-canonicalisation sentence existed. The id is not reused |
 | D6 | The counter-jump `SignedLocator` pair, `[5, 42]` → `[5, 100]` (`primitives.md`) | Strictly greater, **not** previous+1 (§2.3) — contiguity checks reject valid supersessions |
 | D7 | The reissue to a numerically smaller series, `0xDEADBEEF` → `2` (`transactions.md`) | `series` is an arbitrary label, never ordered (§2.3) — generation-counter implementations fail here |
 | D8 | The `EndpointRecord` carrying unknown key `99: h'c0ffee'` (`records.md`) | §1: preserved and **covered on the standalone `COSE_Sign1` path** — the signature verifies over the payload including the unknown key. E13 is the mutation complement |
@@ -286,7 +288,7 @@ admits and another refuses propagates rather than stopping where it arrived:
 | D22 | A `CurrencyAttestation` whose field 2 differs from field 1 (`P-currency-successor`) | §7.1 [author, 2026-09-18]: field 2 is what the issuer vouches is live, a rotation-or-fork signal, never a redirect; a decoder that required equality would remove fork detection from the currency path (CUR-20) |
 | D23 | A `CurrencyAttestation` signed under the issuer's identity with no field 8 (`records.md`) | §7.1: field 8 is present iff the signature is under a delegated key; an issuer holding its seed carries none |
 | D24 | An `Attach` with field 4 absent, or an `AttachAck` with field 6 absent | §8.2: the seed-holding device presents its identity's classical member and owes no delegation |
-| D25 | An `ArchiveReply` whose field 2 holds an array beside maps (`P-archive-reply-presented`) | §7.9: a presence record arrives presented; a map is an envelope and an array a presentation, no discriminator |
+| D25 | An `ArchiveReply` whose field 2 holds an array beside maps (`P-reply-16`) | §7.9: a presence record arrives presented; a map is an envelope and an array a presentation, no discriminator |
 | D20 | An adoption carrying a valid field 9 `Transfer` and **no** field 8 (`transactions.md`) | design §6.1.1: the countersignature is a required alternative, not a lesser one. A decoder that demands a presence record on every adoption rejects every lateral and vertical shift (§6.2.3) |
 
 ## Resolved: the seed sentence is a writer commitment

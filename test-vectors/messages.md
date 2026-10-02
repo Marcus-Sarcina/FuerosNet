@@ -1,6 +1,6 @@
 # Unsigned message families (`wire-format.md` §§6–11)
 
-Generated against `wire-format.md` `34ab49b592be7241…`, `network-design.md` `839e5ba7e8bdccb2…` and `light-client-requirements.md` `85bb59fee95600e9…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `988b75c34c810e8d…`, `network-design.md` `a5cd2d0f8310dbc7…` and `light-client-requirements.md` `85bb59fee95600e9…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Draft. Spec-derived, unverified by an implementation.** Canonical bar 9:
 one positive known-answer encoding per framed message family. Framing is
@@ -3904,7 +3904,7 @@ Objects that ride the encrypted end-to-end channel (design §14.2.4), never a
 request/reply stream. On the channel each is preceded by a `uint` kind tag
 (§7.10.1's registry); the bytes below are the objects alone, without it.
 
-**KeyGrant — the key sealing the capture c1 holds of alice from their PRIOR meeting (field 1 names that record), released against the normal record's first query** (106 bytes — an END-TO-END PAYLOAD, not a stream reply: the bytes are the object alone; on the channel a `uint` kind tag precedes them, §7.10.1's registry — kind 2 for this object — and no prefix is included below):
+**KeyGrant — the key sealing the capture c1 holds of alice from their PRIOR meeting (field 1 names that record), released against the normal record's first query** (106 bytes — an END-TO-END PAYLOAD, not a stream reply: the bytes are the object alone; on the channel a `uint` kind tag precedes them, §7.10.1's registry — kind 1 for this object — and no prefix is included below):
 
 ```
 a30158203bba204761228f945e43fc8d366d194b6191aa9031478f894df886a1

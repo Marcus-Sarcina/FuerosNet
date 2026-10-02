@@ -523,7 +523,8 @@ impl Instrument {
                 hex(&rhtn_ffi::client::presence_envelope(
                     bytes(body)?,
                     carry::take_entries(entries)?
-                ))
+                )
+                .map_err(|e| e.reason().to_string())?)
             )]),
 
             // the adoption, on the record the ceremony produced
@@ -560,7 +561,8 @@ impl Instrument {
                 hex(&rhtn_ffi::client::adoption_envelope(
                     bytes(body)?,
                     carry::take_entries(entries)?
-                ))
+                )
+                .map_err(|e| e.reason().to_string())?)
             )]),
             ["take-adoption", envelope] => Ok(vec![format!(
                 "adopted {}",

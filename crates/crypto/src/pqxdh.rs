@@ -14,6 +14,7 @@ use hkdf::Hkdf;
 use ml_kem::{B32, Decapsulate, DecapsulationKey, EncapsulationKey, KeyExport, MlKem768, Seed};
 use sha2::Sha256;
 use x25519_dalek::{PublicKey, StaticSecret};
+use zeroize::Zeroizing;
 
 /// The KDF's info string, in the specification's shape:
 /// application, curve, hash, KEM.
@@ -154,7 +155,9 @@ pub fn initiate(
     their: &TheirBundle,
     kem_m: [u8; 32],
 ) -> Result<Initiated, String> {
-    let mut km = Vec::with_capacity(5 * 32);
+    // wiped on every exit, the error ones included: a short KEM ciphertext
+    // from the peer must not leave three DH outputs in freed memory
+    let mut km = Zeroizing::new(Vec::with_capacity(5 * 32));
     km.extend_from_slice(&ik_a.agree(their.spk));
     km.extend_from_slice(&ek_a.agree(their.ik));
     km.extend_from_slice(&ek_a.agree(their.spk));
@@ -164,10 +167,6 @@ pub fn initiate(
     let (ct, ss) = their.pqopk.unwrap_or(their.pqspk).encapsulate(kem_m)?;
     km.extend_from_slice(&ss);
     let sk = kdf(&km);
-    {
-        use zeroize::Zeroize;
-        km.zeroize();
-    }
     Ok(Initiated {
         sk,
         ek: ek_a.public(),
@@ -191,7 +190,7 @@ pub fn respond(
     ek_a: &DhPublic,
     kem_ciphertext: &[u8],
 ) -> Result<[u8; 32], String> {
-    let mut km = Vec::with_capacity(5 * 32);
+    let mut km = Zeroizing::new(Vec::with_capacity(5 * 32));
     km.extend_from_slice(&me.spk.agree(ik_a));
     km.extend_from_slice(&me.ik.agree(ek_a));
     km.extend_from_slice(&me.spk.agree(ek_a));
@@ -201,10 +200,6 @@ pub fn respond(
     let ss = me.pqopk.unwrap_or(me.pqspk).decapsulate(kem_ciphertext)?;
     km.extend_from_slice(&ss);
     let sk = kdf(&km);
-    {
-        use zeroize::Zeroize;
-        km.zeroize();
-    }
     Ok(sk)
 }
 

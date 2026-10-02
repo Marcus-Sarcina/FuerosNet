@@ -13635,3 +13635,100 @@ one. The bound is necessary (§1.1: you cannot enforce against a flooder, you
 bound the memory); the question is whether trust-reducing pendings deserve
 retention priority over reissues. And the capture-key handover still has no
 §14.3 encoding (the §14.2 gap raised 2026-10-01). Both are the author's.
+
+## Third-round re-review (2026-10-01)
+
+Reviewer2's third pass, over the fixes from the second and the bearer/Meet
+code that had had one review. The adjudications it opens with needed no
+action: it upheld the participant/witness non-canonicity (my counter stood),
+withdrew its IssuerAuthorisation "tautology", and confirmed the
+inconclusive-with-personal-knowledge fix at its four layers. Every finding
+below was verified against the text or the code before anything was done;
+one carried item was not reproduced and four were named without a claim,
+and all five say what was checked.
+
+### New findings in the bearer/Meet code
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | `Bearer.Reassembly` counts bytes alone; zero-length slices add map entries free (16 phases × 256 messages × 65,536 slots) | **CONFIRMED, FIXED.** Each held slice is charged an `ENTRY_COST` of 64 bytes beside its payload — the map entry and array header a JVM spends on it — and the bound is raised to 24 MiB so a 17 MB carriage still fits at a negotiated MTU. Two shapes the sender never produces are refused outright: an empty slice that is not a message's last, and a slice past a message's known last (or a second, different last). The new test walks one-byte slices across every phase, message and slot and is refused after ≤ 24 MiB / 64 entries; a second pins the past-the-last refusals. 58 Android units, from 56 |
+| 2 | `read_intent` never consults the exchange's declared `continuations` count | **CONFIRMED, FIXED.** A continuation past the declared count ends the bundle, as §14.3.2's "up to IntentExchange's count" says. The existing carriage test gains the case: an exchange re-encoded to declare one continuation is read with one of the two, 512 entries, the rest not this bundle's. On the Android path the bearer's bounds already held the memory; the Rust path had no bound at all |
+| 3 | The capture-key handover is the ceremony's one unanchored local object | **CONFIRMED as the gap raised 2026-10-01, now in the spec's own inventory.** `wire-format.md` §14.2's table has the row, encoding **owed**; its intro no longer says every row's encoding is owed when five of six are specified. NET-021 says the handover's encoding is owed rather than letting its §14.3.2 citation read as covering it. **Not built**: the encoding is the author's to rule (below), and the reviewer's interim `key ‖ H(key ‖ ceremony-id)` is a second framing to remove when it lands — the ruling is one line |
+| 4 | Drift from the fixes: `messages.md` captions KeyGrant "kind 2" (the registry says 1); §14.2's intro; NET-021's citation | **CONFIRMED, all three FIXED.** The generator hardcoded "kind 2" for every end-to-end object; each now carries its §7.10.1 kind (KeyGrant 1, LateResponse 2) and `messages.md` regenerates right. The other two are item 3's |
+
+### Carried from the second round
+
+| Item | Disposition |
+|---|---|
+| Attach wait has no absolute deadline (`session.rs`): the per-read timeout re-arms on every junk frame | **CONFIRMED, FIXED.** One deadline from the Attach, `timeout_at`, nothing restarts it; `attach_within` exposes the duration and `attach` passes `ATTACH_ACK_TIMEOUT`. Test: a peer sending an unknown frame every 100 ms, a 1 s deadline, the attach ends as an endpoint failure after ≥ 5 frames and under 3 s. Catalogue **SES-29**, quoting §8.2's "timeout, no valid `AttachAck` — is an endpoint failure" and "Timeout and backoff are local policy" |
+| `pqxdh.rs` error paths drop `km` unwiped (a short KEM ciphertext triggers it) | **CONFIRMED, FIXED.** `km` is `Zeroizing` on both sides; the explicit wipe blocks go, since they ran only on the success path. The second round's "`km` NOT REPRODUCED" looked in the client crate; the reviewer's line numbers were in the crypto crate |
+| `export_backup`'s seed copy unwiped | **CONFIRMED, FIXED at both copies.** The closure's copy is `Zeroizing`; `backup::Contents` wipes its seeds on drop, which covers the export's own copy and the import path. `install` takes its fields out rather than moving them, since a type that drops cannot be moved out of piecemeal |
+| Envelope builders `filter_map` away a signer whose keyhash does not parse | **CONFIRMED, FIXED.** `presence_envelope`/`adoption_envelope` return `Result` and refuse, naming the signer's index. No shell code calls them yet; the generated binding regenerates with the native build |
+| The nonce panic | **Retained, as before**: a `Random` that cannot fill 16 bytes is a device this must not run on. The reviewer agrees it is defensible and would prefer a startup preflight — recorded, not built |
+| Three stale citations survive and `citecheck.py` cannot see them (strips the whole row; no fixture names) | **CONFIRMED, FIXED, and the reviewer's remedy was half right.** The checker did strip the whole row — `ROW.sub` matched the line — so nothing inside `negative-vectors.md` was ever read; it now strips the id column alone, and checks every backticked `P-`/`N-`/`B-` name against `corpus.json`. **But the existence check flags only one of the three**: `P-archive-reply-presented` names no fixture (it is `P-reply-16`). R14 → T29 and D5 → T28 resolve to real rows about transfers, and only reading catches that: R14 now cites **T50** (retired numbers reject) and D5 **T55** (unsorted responses). The `--overlap` heuristic then lists 14; I read all 14 and each is a range (`S10–S14`), a pair, or a true match. 84 id citations, 8 fixture names, 0 flags |
+| Queue-metadata drift: §14.1.6's four items vs three at P4, §19.5, infra:78 | **CONFIRMED, FIXED at four sites** — P4, §19.5, infra §2, and functional_tests MAIL-012, which the reviewer did not list. QUE-05's catalogue quote moved with the infra text. The 2026-09-22 per-device amendment is now stated everywhere the list is |
+| Editorial tail | **Seven of seven verified; six FIXED, one FLAGGED.** Empty code fence at wire §8.2 — **real, and I had recorded "no empty fence exists"**; removed. "Phantom §1.3 rows" — three citations to §1.3 for things not in its table: the prekey-reply bundle ceiling (**a row §1.3's own rule required and lacked; added**, matching `bounds.rs`), "the identity is hybrid" (now §2.2), "3,373 bytes" (now §12). "§7.3–b" → §7.3, §7.4. design §6.1's "implicitly authorises sibling peering" — stale against §6.3's re-scoping, the site S1's sweep missed; sentence removed, TOP-01's quote moved. §12.x's "each endpoint's network point plus ASN" → by network point and ASN where it runs an instance, by locator otherwise (§6.3). The f^(L+1) note referred to a "~1/1000 figure elsewhere" that **appears nowhere else** — S4 was wrong to pass it; it now names Appendix B.2's 110 and 99 as the packing ratios, which is what the design states. **Preface grammar — real** ("it is possible for a person … can"), S5 wrong to call it unverifiable; the minimal fix is applied to the author's signed text and **flagged for him to reword** |
+| `RHTN_FUZZ_SEED=0` | **NOT REPRODUCED.** `crypto/tests/fuzz.rs` derives the seed from the clock (`| 1`) and prints it; nothing in the tree sets 0, and the gate's libFuzzer smoke carries no seed flag |
+| "-slot downgrade", "cli probe panic", "sim truncation" | **Named without a claim, not verified either way.** What I checked: the CLI's indexing sites all follow length checks (`keys.rs`, `main.rs`) or `windows(2)`; `inspect.rs`'s hex unwrap is guarded by an all-hex-digits test; nothing in `crates/sim/src` truncates. Whatever each names, it needs the sentence |
+| Codec strictness residuals | **Two FIXED, two NOT REPRODUCED.** `CatalogEntry` field 6 was unchecked — a `Scope` now, with field 9's type (`N-catalog-scope-shape`, **T58**). `AnchorEntry` widths: field 1's keyhash, field 3's uint and field 4's seqno were unread beside the network points that were; `EndpointRecord`'s fields 1 and 3 the same (`N-anchor-keyhash-width`, **T59**). "Envelope alg": the algorithm **is** enforced, in `rhtn-crypto`'s verify path (standalone `alg = -8` only; embedded entries `[-8, -49]` in order), pinned by S20–S22; the codec's shape check leaves algorithm identity to the verifier that holds the key. `channels_ok`: all four fields are checked since the second round; nothing remains |
+
+### The six recommendations
+
+1. Capture-key encoding or NET-021 scoping, interim hash-bind — **row and scoping done; encoding and interim await the ruling** (below).
+2. The two new-code DoS — **done**, with tests.
+3. `citecheck.py` — **done**, and the three citations; one of the three it could flag, two needed reading.
+4. Attach deadline, pqxdh wipes, `export_backup` wipe — **done**.
+5. `modelpincheck.py` at the end of `run-all.sh` — **done, and in `check.sh` too**: a model edited and not re-proved fails the commit gate, where the second round left it to whoever remembered.
+6. Catalogue entries for the pending cap and the attach deadline — **done: TOP-46 and SES-29**, with the tests under their markers. I had declined these last round as "internal bounds no document states"; the reviewer was right to press — design §21.1 and wire §1.3 state the principle, and §8.2 states that a timeout is an endpoint failure. The pending cap had **no test at all** until now: a flood of 256 disavowals evicts an earlier held one and the adoption stands; 255 does not.
+
+### For the author
+
+- **The capture-key handover's encoding.** Raised 2026-10-01, now pressed by the reviewer independently with the same shape I recommended: `CaptureKeyHandover = [ uint version, bstr .size 32 ceremony-id, bstr .size 32 key ]`, anchored like the other local messages, §14.3.2 plus a §14.2 cell and a §7.10.1-style note that it rides the bearer as its own phase. Until then a BLE-range party who never defeated the optical anchor can substitute the counterparty's key and the capture of them seals under it. One line settles it.
+- **The §14.2 inventory may be short by more than one row.** Checking the reviewer's claim against design §7.1 and §7.5.2 rather than the one instance: the direct channel also carries, by the design's own words, *which verifier the counterparty selected* (§7.5.2), the fishing proposals (§7.1, "a conversation over the direct channel"), and whatever the signing step moves between devices — the proposed body, each party's and witness's signature entries. None has a §14.3 encoding; whether each crosses a local interface in the sense of §14.1 is yours to say before rows are added.
+- **Eviction order in the held lists** (TOP-46 pins oldest-first): still open from the correctness pass.
+- **Two edits to your own words, to reword if you prefer**: the preface's "it is possible for a person … can" lost "it is possible for"; and the hub-concentration note now cites Appendix B.2's 110 and 99 in place of a ~1/1000 figure the design states nowhere.
+
+## reviewer2 — power-flicker attestation (author relay, 2026-10-01)
+
+The author raised the idea himself from Nassi et al., IEEE S&P 2024, and
+relayed Reviewer2's two-round response. Verified against the design, the
+wire format and `crates/*/Cargo.toml`.
+
+| # | Finding | Disposition |
+|---|---|---|
+| F1 | Observe a counterparty's screen flicker under a cryptographic challenge to check its client build | **REJECTED.** The paper's only phone result read the LED of USB-connected speakers, not the phone: a display is a regulated, software-driven load and the coupling is absent. The measured party owns the emitter and holds the genuine source, so the challenge handler runs faithfully beside a hooked camera path (the SWATT ceiling). No reference trace without shared state about the counterparty's hardware. Time of check is not time of use. Cost lands on honest handsets, §7.8's gradient by another route. Reviewer2 reached the same verdict |
+| F2 | Reviewer2's counter-proposal: the verifier's screen emits a modulated nonce the prover's camera decodes and signs | **NOT-A-FINDING, largely in place.** The QR anchor is already a deliberate cryptographic optical signal (`wire-format.md` §14.3.1): a fresh contribution, then the ceremony-id, each read off the other's actual screen. Pre-recording shows the wrong ceremony-id. Modulation is a worse carrier for 16 and 32 bytes (anti-banding, PWM, ambient light, global shutter). The one new ingredient, a round-trip timing bound, constrains a relay's added latency against a device-specific floor the verifier cannot know, which is §7.6's argument at a smaller ratio. **Applied as a characterisation, not a mechanism**: one sentence on §7.6.3's optical row. Reviewer2's claim that it kills screen-replacement relays is wrong: a confederate's screen shows what a remote client instructs |
+| F3 | "Outsourcing hole": phone as terminal for a laptop in the bag, which flicker would close | **ILL-FOUNDED.** §14.1.0 separates kernel from device, §23.3 gives desktops and instances delegated credentials, and `wire-format.md` §14.3's table says the protocol should not care whether a local interface joins two people or one person's two devices. Whose silicon hashed has no bearing on the record |
+| F4 | Defensive register note: screen content carries no key-dependent modulation; constant-time signing | **APPLIED, narrowed, re-homed.** Nothing is signed during the QR phase and the counterparty's camera is on a face during capture; the exposure is the signing at the end with the camera still at arm's length. Crates checked: ed25519-dalek, x25519-dalek, ml-dsa, ml-kem, aws-lc-rs via rustls. Landed in §5.2 (implementation constraints), not §18 (accepted risks) or §19.8 (correlation register), neither of which is a threat register. Display coupling marked assumed small and unmeasured |
+| F5 | Citations in Reviewer2's text | §14.4 does not exist (the optical exchange is design §7.1 item 3 and `wire-format.md` §14.3); the field is `ClientIntegrity`, not `Client.scheme`; `OpticalContribution` is `wire-format.md` §14.3.2 |
+| S1 | Side finding while checking F2: `wire-format.md` and `functional_tests.md` cite design §1.3 (items 3 and 4) six times for the optical channel and the Bluetooth bar; design §1.3 is the adoption-path section | **SPUN OFF** to a separate session with the six locations listed; target is §7.1 items 3 and 4, and §7.6.3 where the bar is the point |
+
+No functional row: neither sentence defines behaviour a test could exercise.
+
+### What the gate said, and what it caught on the way
+
+Four runs to green, each failing on one thing the previous had not reached.
+Formatting (six hunks of mine). The participant terminal's two envelope
+call sites, which my sweep for callers had missed — it looked in the shell,
+the FFI and the CLI and not in `rhtn-participant`. Two conformance tests
+building `Contents` by struct update from a default, which a type that drops
+cannot do; spelled out. And **a latent fixture error the stricter codec
+exposed**: `B-catalog-2048`, the accept vector at the entry's byte ceiling,
+padded its connect-scope list with keyhashes in hash order rather than
+ascending, which §6.4 makes malformed — nothing had read field 6 before, so
+nothing had noticed. The generator sorts the list now; the fixture was
+wrong, not the check.
+
+**`network-design.md` changed under this pass**, at 21:48, after my edits
+and before the pins were accepted: a constant-time paragraph under §4's
+post-quantum caveat and an expanded optical-channel item in §7.6.3, neither
+mine. Left as found; `refcheck` and `countcheck` ran over them clean, and
+the vector and code pins were accepted at 21:49 and 22:08 against the text
+with them in. If they are the author's draft, the pins already carry it.
+
+Numbers from the passing run: 21 pins, 0 stale; catalogue 474 entries,
+453 of 470 live implemented, 0 flags; 482 families, 0 flags; 84 id
+citations and 8 fixture names, 0 flags; 36 model results over 49 sources,
+0 flags; fmt, clippy and deny clean; cargo test ok (673 tests across the workspace); fuzz 5
+targets, no crash; Kotlin round trip ok; 58 Android units, 0 failed.
+**CODE GATE PASSES**, the fourth run, 22:36.

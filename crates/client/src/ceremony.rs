@@ -1718,7 +1718,7 @@ impl Client {
     /// installed, positions re-derived.  **Refused on a client with an
     /// archive**: what a client does with contents that would replace an
     /// intact identity is a decision, not a side effect of opening a file.
-    pub fn install(&mut self, contents: backup::Contents) -> Result<usize, String> {
+    pub fn install(&mut self, mut contents: backup::Contents) -> Result<usize, String> {
         if !self.archive.is_empty() {
             return Err("this client already holds an archive".into());
         }
@@ -1753,8 +1753,10 @@ impl Client {
         }
         let n = archive.len();
         self.archive = archive;
-        self.store = contents.store;
-        self.provider_credential = contents.provider;
+        // taken out rather than moved out: the contents wipe their seeds
+        // on drop, and a type that drops cannot be moved out of piecemeal
+        self.store = std::mem::take(&mut contents.store);
+        self.provider_credential = contents.provider.take();
         self.positions.clear();
         self.adopt_own_positions();
         Ok(n)

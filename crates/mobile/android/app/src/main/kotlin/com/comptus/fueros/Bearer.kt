@@ -22,14 +22,28 @@ package com.comptus.fueros
  */
 object Bearer {
     /**
-     * The largest message this will assemble. A carriage message is an
-     * `IntentExchange` at the 256-entry ceiling or a `BundleContinuation`
-     * of the same (`wire-format.md` §5.4), and a presented record runs to
-     * ~65 KB (§12), so 256 of them is the bound that matters. **A peer that
-     * announces more than this is refused rather than allocated for**: the
-     * one thing a bearer can do to this side is ask it for memory.
+     * The most this will hold for one ceremony's carriages: the slices'
+     * bytes **plus what holding each one costs** ([ENTRY_COST]). A carriage
+     * message is an `IntentExchange` at the 256-entry ceiling or a
+     * `BundleContinuation` of the same (`wire-format.md` §5.4), and a
+     * presented record runs to ~65 KB (§12), so 256 of them — some 17 MB —
+     * is the payload that matters, and the rest is room for the entries
+     * that index it at a negotiated MTU. **A peer that asks for more is
+     * refused rather than allocated for**: the one thing a bearer can do
+     * to this side is ask it for memory.
      */
-    const val MESSAGE_BOUND = 20 * 1024 * 1024
+    const val MESSAGE_BOUND = 24 * 1024 * 1024
+
+    /**
+     * What one held slice costs beyond its bytes: the map entry that
+     * indexes it and the array that holds it, as a JVM carries them.
+     * **Counted because a slice of no bytes is not free.** A peer sending
+     * empty or one-byte slices at fresh indices — 16 phases, 256 messages,
+     * 65,536 slots each — would otherwise grow the maps without touching a
+     * bound that counted bytes alone. The figure is an estimate; what
+     * matters is that it is not zero.
+     */
+    const val ENTRY_COST = 64
 
     /**
      * Messages in one carriage set: an exchange and its continuations.
@@ -156,14 +170,25 @@ object Bearer {
             // phase is a nibble, bounded the same way
             val m = packet[0].toInt() and 0xff
             val s = ((packet[2].toInt() and 0xff) shl 8) or (packet[3].toInt() and 0xff)
-            val ph = phases.getOrPut((packet[1].toInt() ushr 4) and 0x0f) { Phase() }
+            val flags = packet[1].toInt()
+            val last = flags and LAST != 0
             val slice = packet.copyOfRange(HEADER, packet.size)
-            if (held + slice.size > MESSAGE_BOUND) return "more bytes than the bound allows"
+            // [packets] cuts a message into full slices and one last one, so
+            // an empty slice that ends nothing was never sent: it is refused
+            // before it can cost an entry
+            if (slice.isEmpty() && !last) return "an empty slice that ends nothing"
+            val ph = phases.getOrPut((flags ushr 4) and 0x0f) { Phase() }
+            // nothing follows a message's last slice, and a message has one
+            ph.last[m]?.let { end ->
+                if (s > end) return "a slice past the message's last"
+                if (last && s != end) return "a second last slice"
+            }
+            if (held + slice.size + ENTRY_COST > MESSAGE_BOUND) return "more bytes than the bound allows"
             val into = ph.slices.getOrPut(m) { HashMap() }
             // a repeat is dropped, not counted twice: a link may retry
-            if (into.put(s, slice) == null) held += slice.size
-            if (packet[1].toInt() and LAST != 0) ph.last[m] = s
-            if (packet[1].toInt() and END != 0) ph.end = m
+            if (into.put(s, slice) == null) held += slice.size + ENTRY_COST
+            if (last) ph.last[m] = s
+            if (flags and END != 0) ph.end = m
             return null
         }
 

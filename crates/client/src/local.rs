@@ -309,15 +309,24 @@ pub fn intent_carriage(intent: &IntentExchange, ceremony_id: &[u8; 32]) -> Vec<V
 /// continuations in order.  **The bundle a receiver evaluates is what it
 /// accepted** (§5.4): a continuation whose anchor or index is wrong, or one
 /// that never came, ends the bundle there with the entries held, and the
-/// ceremony is not refused over it.
+/// ceremony is not refused over it.  **And the exchange says how many
+/// follow** (§14.3.2's `continuations`): a message past that count is not
+/// this bundle's, whatever it carries, so a sender cannot stream
+/// continuations for as long as the receiver's memory lasts -- the count
+/// was on the wire for exactly this, and a receiver that did not consult it
+/// had no bound at all.
 pub fn read_intent(
     carriage: &[Vec<u8>],
     ceremony_id: &[u8; 32],
 ) -> Result<(IntentExchange, usize), String> {
     let (first, rest) = carriage.split_first().ok_or("no intent in the carriage")?;
     let mut intent = IntentExchange::decode(first)?;
+    let declared = intent.continuations;
     let mut taken = 0usize;
     for (i, bytes) in rest.iter().enumerate() {
+        if i as u64 >= declared {
+            break;
+        }
         let Ok(c) = BundleContinuation::decode(bytes) else {
             break;
         };

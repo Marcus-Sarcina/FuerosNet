@@ -1135,3 +1135,48 @@ fn a_filled_slot_refuses_a_second_occupant_and_keeps_the_one_it_holds() {
         "the slot its occupant left takes the next one"
     );
 }
+
+// acceptance: TOP-46
+#[test]
+fn what_is_held_for_a_prerequisite_that_never_came_is_bounded_and_the_oldest_goes() {
+    // a disavowal of carol arrives before her adoption and is held for it;
+    // then another patron floods disavowals of a node nobody will ever
+    // adopt.  The held list has a ceiling and the oldest item is what goes
+    // past it, so the flood evicts carol's disavowal and her adoption then
+    // stands (`wire-format.md` §1.3's reason: a stranger must not grow a
+    // holder's memory for the archive's life).  One fewer in the flood and
+    // it is still held, and ends the binding as the adoption lands.
+    //
+    // A disavowal is ordered within the slot by the patron's clock
+    // (TOP-06), so one arriving ahead of its adoption applies only if dated
+    // no earlier than it: both carry the same later stamp, and alice's own
+    // chain stays monotonic
+    fn run(flood: usize) -> bool {
+        let mut w = World::new(&["alice", "bob", "carol", "dave"]);
+        let mut t = Table::new();
+        let f = w.meet("alice", "carol");
+        apply(&mut t, &w, &f);
+        let later = w.clock + 7 * 86_400;
+        let early = w.disavow_at("alice", "carol", Some(0), later);
+        assert_eq!(
+            apply(&mut t, &w, &early).applied,
+            Applied::Nothing,
+            "nothing to end yet: held"
+        );
+        for _ in 0..flood {
+            let d = w.disavow("dave", "bob", Some(0));
+            assert_eq!(apply(&mut t, &w, &d).applied, Applied::Nothing);
+        }
+        let a = w.adopt_at("carol", "alice", f.txid, 1, later);
+        apply(&mut t, &w, &a);
+        t.subordinates(&w.kh("alice")).contains(&w.kh("carol"))
+    }
+    assert!(
+        run(256),
+        "256 later disavowals pushed carol's out, so her adoption stands"
+    );
+    assert!(
+        !run(255),
+        "255 left carol's held, and it ended the binding as the adoption arrived"
+    );
+}

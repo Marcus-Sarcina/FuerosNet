@@ -159,4 +159,55 @@ class BearerTest {
         }
         assertTrue(!Bearer.carry(dead, carriage(100)))
     }
+
+    @Test
+    fun a_slice_of_no_bytes_is_not_free() {
+        // the entries that index slices cost memory whether or not the
+        // slices carry bytes, and a peer sending one-byte slices at fresh
+        // indices is asking for entries: the bound counts them
+        val r = Bearer.Reassembly()
+        val packet = ByteArray(Bearer.HEADER + 1)
+        var refused: String? = null
+        var n = 0
+        while (refused == null && n < Bearer.MESSAGE_BOUND) {
+            // 16 phases x 256 messages x 65,536 slots, walked in order
+            packet[0] = (n / 65_536 % 256).toByte()
+            packet[1] = ((n / 65_536 / 256) shl 4).toByte()
+            packet[2] = (n ushr 8).toByte()
+            packet[3] = n.toByte()
+            refused = r.take(packet.copyOf())
+            n++
+        }
+        assertEquals("more bytes than the bound allows", refused)
+        assertTrue(
+            "refused after $n entries, not after a payload byte each",
+            n <= Bearer.MESSAGE_BOUND / Bearer.ENTRY_COST + 1,
+        )
+        // and an empty slice that is not a message's last was never sent
+        val empty = ByteArray(Bearer.HEADER)
+        assertEquals("an empty slice that ends nothing", Bearer.Reassembly().take(empty))
+        // where it is the last, it is the one way a zero-length message
+        // arrives, and it is taken
+        empty[1] = 1
+        assertNull(Bearer.Reassembly().take(empty))
+    }
+
+    @Test
+    fun nothing_follows_a_message_whose_last_slice_is_known() {
+        val wire = Wire(20)
+        Bearer.carry(wire, carriage(40))
+        val r = Bearer.Reassembly()
+        for (p in wire.sent) assertNull(r.take(p))
+        // a slice past the last: index 9 on a message that ended at 2
+        val past = ByteArray(Bearer.HEADER + 3)
+        past[3] = 9
+        assertEquals("a slice past the message's last", r.take(past))
+        // a second, different last
+        val second = ByteArray(Bearer.HEADER + 3)
+        second[1] = 1
+        second[3] = 1
+        assertEquals("a second last slice", r.take(second))
+        // the message itself is whole and unchanged
+        assertArrayEquals(carriage(40)[0], r.carriage(0)!![0])
+    }
 }

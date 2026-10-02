@@ -216,6 +216,7 @@ malformed, not merely unusual.
 | `Channel` entries per `ProximityOutcomes` (§14.3.2) | 8 — the same ceiling as proximity channels per record, above |
 | `Candidate` entries per `CandidateHandover` or per payload-path candidate exchange (§14.3.2) | 8 |
 | Delegations per `DeviceCredential` (§14.3.3) | 45 — the run an instance is provisioned with, 90 days end to end (design §12.6.5) |
+| `PrekeyBundle` entries per prekey reply (§7.8) | 8 — one per device the node holds for the subject; design §23.3 holds the count near three |
 | `CatalogEntry`, total encoded bytes | 2048 |
 | `CatalogReply` entries | 111 — an answering node answers for **itself plus the ≤110 users it serves** (§6.4, design §11.5). Not the trust horizon population, which is larger (design §15.1) and irrelevant here: the bound is per *answering node*, not per horizon. The frame bound caps this at 127 |
 | Unknown extension keys per map | 16 |
@@ -3715,7 +3716,7 @@ Delegation = {
                        ;   the box under another name
   5: COSE_Sign        ; HYBRID, over fields 1 to 4, external_aad
                        ;   `rhtn/1:delegation`. Hybrid because the delegating
-                       ;   identity is (§1.3), and a classical-only delegation
+                       ;   identity is (§2.2), and a classical-only delegation
                        ;   would be the one forgeable link in an otherwise
                        ;   hybrid chain
 }
@@ -3758,7 +3759,7 @@ which is what makes a receiver's cache against the transport key good for the
 run's length.
 
 **A verified delegation is cached against its transport key.** It is hybrid and
-so costs 3,373 bytes (§1.3), and it arrives on every handshake of a window that
+so costs 3,373 bytes (§12), and it arrives on every handshake of a window that
 is measured in months, so a receiver that re-verifies per connection pays that
 repeatedly for an answer that cannot have changed.
 
@@ -3876,9 +3877,6 @@ expected to try in order.
 from a failover sibling — its list is the correct one for the node the client is
 now attached to. Retaining the primary's list through a degraded session would
 send the next failover to peers of a node the client is not talking to.
-
-```
-```
 
 `AttachAck` carries the sibling list **when there is one**: a
 client cannot discover failover targets after its serving node is already dark.
@@ -4771,9 +4769,10 @@ is stated as the obligation it is rather than dressed as a guarantee.
 
 ### 14.2 What travels on them today
 
-Recorded as it stands, so the set is visible before it is encoded. **Each
-row's encoding is owed**; the column says what the interface carries and who
-holds it, which is what the rest of the design already depends on.
+Recorded as it stands, so the set is visible beside its encodings. **Each
+row names its encoding in §14.3, or says that one is owed**; the column says
+what the interface carries and who holds it, which is what the rest of the
+design already depends on.
 
 | What | Between | Where it is stated | Encoding |
 |---|---|---|---|
@@ -4781,6 +4780,7 @@ holds it, which is what the rest of the design already depends on.
 | The optical transcript — each device's contribution, then the derived ceremony-id, screen to camera | Two participants' devices | design §1.3 item 3, design §7.5.2 | `OpticalContribution` then `TranscriptConfirm` (§14.3.2): the contribution is the key-exchange input, the ceremony-id is the transcript hash both display and check |
 | Proximity channel outcomes — the UWB, NFC or optical result and its ranking | Two participants' devices | §3.2, design §1.3 item 4 | `ProximityOutcomes` (§14.3.2): the §4.5 `Channel` maps as measured, anchored to the ceremony-id. The record's `strongest` (§3.2) is not carried — each device computes it from the outcomes, as each computes the ceremony-id |
 | Traversal candidates | Two participants' devices | design §12.6.3 [author, 2026-09-25] | `CandidateHandover` (§14.3.2), carrying the `Candidate` structure this document now defines; the same candidates travel the end-to-end payload path when a direct connection is set up remotely (design §12.6.3, §14.1.1) |
+| The capture-key handover — the key each participant derived for the captures the other holds of them, handed across at capture time | Two participants' devices | design §7.5.2, design §7.5.2.6 | **Owed** [2026-10-01]: 32 bytes a device derives (design §7.5.2.6) and hands across this interface; §14.3 carries nothing for it yet, so two clients have nothing to agree with, and the bearer carries it without the anchor the exchanges above have |
 | A delegated device's payload material, and the ceremony device's signature over it | Two devices of one identity | design §23.3, §7.8 | `DeviceIntroduction` then `DeviceCredential` (§14.3.3): §7.8's bundle unsigned and then signed, beside §8.2's delegations |
 
 **The last row is the one that is not between two people.** A phone

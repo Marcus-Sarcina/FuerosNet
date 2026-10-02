@@ -416,6 +416,15 @@ pub struct Discarded {
     pub seeds: usize,
 }
 
+/// The seeds go with the contents: a backup assembled and then dropped,
+/// on either side of the envelope, leaves no copy of them behind.
+impl Drop for Contents {
+    fn drop(&mut self) {
+        use zeroize::Zeroize;
+        self.seeds.zeroize();
+    }
+}
+
 impl Contents {
     /// Discard what is past its retention window, before any of it lands.
     ///

@@ -3741,7 +3741,7 @@
     "rule": [
       {
         "where": "infra-client-requirements.md §2",
-        "text": "Hold the minimum while a message waits: ciphertext, recipient keyhash, arrival time. Nothing further."
+        "text": "Hold the minimum while a message waits: ciphertext, recipient keyhash and device, arrival time. Nothing further."
       },
       {
         "where": "design §14.1.6",
@@ -6394,7 +6394,7 @@
     "rule": [
       {
         "where": "design §6.1",
-        "text": "Patron accepts a new subordinate. Also implicitly authorises sibling peering among that patron's children."
+        "text": "Patron accepts a new subordinate."
       },
       {
         "where": "design §3.4",
@@ -13140,5 +13140,58 @@
     "then": "It is malformed: not verified, not cached, and the session or connection it arrived on is refused as one on which nothing binds the presented key.",
     "oracle": "behaviour",
     "interpretation": null
+  },
+  {
+    "id": "TOP-46",
+    "area": "topology",
+    "gap": "topology",
+    "title": "Bound what is held for a prerequisite that has not arrived, and let the oldest go first",
+    "milestone": 3,
+    "kind": "robustness",
+    "spec": [
+      "design §21.1",
+      "wire-format.md §1.3"
+    ],
+    "rule": [
+      {
+        "where": "design §21.1",
+        "text": "A bound that is optional or local\npolicy for a single component — a client's clock tolerance or cache lifetimes,\na node's rate-limit values or retry backoff, a buffer bound — lives with its\nmechanism in that component's document"
+      },
+      {
+        "where": "wire-format.md §1.3",
+        "text": "They are conservative\nceilings chosen to bound a decoder's exposure to a hostile peer"
+      }
+    ],
+    "given": "A holder's table that has received a disavowal of a node whose adoption it has not yet seen — dated by the patron's clock no earlier than that adoption, as a disavowal arriving ahead of its adoption must be to apply — so the disavowal is held for the adoption; and then 256 further disavowals from another patron, each of a node the holder will never see adopted.",
+    "when": "The adoption the first disavowal was held for arrives.",
+    "then": "What the holder keeps for items awaiting a prerequisite did not grow past the ceiling under the flood. The first disavowal, the oldest held item, was let go to make room, so the adoption stands in the holder's view; with one fewer flooding record it is still held, and ends the binding as the adoption arrives.",
+    "oracle": "behaviour",
+    "interpretation": "No document sets the ceiling or the eviction order; 256 and oldest-first are the implementation's. Whether a held disavowal or departure should outlast a held reissue, rather than go in arrival order, is open for the author [2026-10-01]."
+  },
+  {
+    "id": "SES-29",
+    "area": "session",
+    "gap": "session",
+    "title": "End an attach that receives no acknowledgement within the deadline, however many other frames arrive",
+    "milestone": 4,
+    "kind": "robustness",
+    "spec": [
+      "wire-format.md §8.2"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §8.2",
+        "text": "Every other outcome — any other close code,\nreset, timeout, no valid `AttachAck` — is an **endpoint** failure: the client tries\nthe remaining candidates in the order received"
+      },
+      {
+        "where": "wire-format.md §8.2",
+        "text": "Timeout and backoff are\nlocal policy"
+      }
+    ],
+    "given": "A client attaching to an endpoint that accepts the connection, reads the Attach, and then sends only control frames of an unknown type, one every few hundred milliseconds, for as long as the connection lasts.",
+    "when": "The client waits for the acknowledgement.",
+    "then": "The wait ends as an endpoint failure once one deadline from the Attach has passed, after several unknown frames were received and skipped; no frame restarts it, and the client goes on to its remaining candidates.",
+    "oracle": "behaviour",
+    "interpretation": "The deadline's length is local policy; what is tested is that one bounds the wait as a whole rather than the gap between frames [2026-10-01]."
   }
 ]

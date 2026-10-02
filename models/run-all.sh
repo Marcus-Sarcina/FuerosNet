@@ -371,6 +371,11 @@ open(sys.argv[2], 'a').write('\n')
 PY
 rm -f "$MANIFEST"
 echo "  results/sources.json: $(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["results"]))' "$RESULTS/sources.json") results stamped with the sources they prove"
+# And the freshness check over what was just stamped, so a run that left a
+# stale or unstamped result -- a source edited while the prover ran, a
+# result file nothing stamped -- fails this gate rather than waiting for
+# someone to run the checker [2026-10-01].
+if python3 "$HERE/../Robot/modelpincheck.py"; then :; else fail=1; fi
 
 echo
 if [ "$fail" -eq 0 ]; then

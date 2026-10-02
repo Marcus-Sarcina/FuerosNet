@@ -75,8 +75,8 @@ documents. Where a requirement leaves a visible artifact, that is noted in place
   (design §14.1.6, design §18.1) [2026-09-03]: a provider snapshotting below your guest
   keeps what you deleted, and your deletion is hygiene against that party — the
   real bound against everyone above the hypervisor.
-- **Hold the minimum while a message waits**: ciphertext, recipient keyhash, arrival
-  time. Nothing further.
+- **Hold the minimum while a message waits**: ciphertext, recipient keyhash and
+  device, arrival time. Nothing further.
 - **Stop serving a binding you have verified superseded** (design §12.6.5)
   [2026-09-03]: authenticated supersession evidence — a verified reissue chain,
   a validated recovery — ends the old credential's service. Terminate its

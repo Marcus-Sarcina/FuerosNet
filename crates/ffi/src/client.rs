@@ -680,9 +680,11 @@ impl Participant {
     /// credential.  The payload material and the sessions are this
     /// device's own and do not travel.
     pub fn export_backup(&self, secret: Vec<u8>) -> Result<Vec<u8>, Refused> {
-        let seeds = self.seeds;
+        // the copy that crosses into the closure is wiped with it; the one
+        // the backup assembles is wiped when its contents drop
+        let seeds = zeroize::Zeroizing::new(self.seeds);
         self.handle
-            .with_blocking(move |c| c.export(seeds, rhtn_client::backup::Cost::default(), &secret))
+            .with_blocking(move |c| c.export(*seeds, rhtn_client::backup::Cost::default(), &secret))
             .map_err(|e| Refused::new(format!("{e:?}")))
     }
 
@@ -1626,26 +1628,41 @@ pub struct Placed {
 }
 
 /// The envelope a presence record travels in, from the body every signer
-/// signed and each signer's entry (`wire-format.md` §3.2).
-#[must_use]
+/// signed and each signer's entry (`wire-format.md` §3.2).  **A signer
+/// that does not name a keyhash is refused, not dropped**: an envelope
+/// quietly built without one would be refused by every archive it reached
+/// as a record short a signature, with nothing to say which.
 #[uniffi::export]
-pub fn presence_envelope(body: Vec<u8>, entries: Vec<SignedEntries>) -> Vec<u8> {
-    let e: Vec<(Keyhash, Vec<u8>)> = entries
-        .into_iter()
-        .filter_map(|s| keyhash(&s.signer).map(|k| (k, s.entries)))
-        .collect();
-    rhtn_archive::tx::envelope_from_entries(rhtn_archive::tx::TYPE_PRESENCE, &body, &e)
+pub fn presence_envelope(body: Vec<u8>, entries: Vec<SignedEntries>) -> Result<Vec<u8>, Refused> {
+    let e = signer_entries(entries)?;
+    Ok(rhtn_archive::tx::envelope_from_entries(
+        rhtn_archive::tx::TYPE_PRESENCE,
+        &body,
+        &e,
+    ))
 }
 
 /// The envelope an adoption travels in.
-#[must_use]
 #[uniffi::export]
-pub fn adoption_envelope(body: Vec<u8>, entries: Vec<SignedEntries>) -> Vec<u8> {
-    let e: Vec<(Keyhash, Vec<u8>)> = entries
+pub fn adoption_envelope(body: Vec<u8>, entries: Vec<SignedEntries>) -> Result<Vec<u8>, Refused> {
+    let e = signer_entries(entries)?;
+    Ok(rhtn_archive::tx::envelope_from_entries(
+        rhtn_archive::tx::TYPE_ADOPTION,
+        &body,
+        &e,
+    ))
+}
+
+fn signer_entries(entries: Vec<SignedEntries>) -> Result<Vec<(Keyhash, Vec<u8>)>, Refused> {
+    entries
         .into_iter()
-        .filter_map(|s| keyhash(&s.signer).map(|k| (k, s.entries)))
-        .collect();
-    rhtn_archive::tx::envelope_from_entries(rhtn_archive::tx::TYPE_ADOPTION, &body, &e)
+        .enumerate()
+        .map(|(i, s)| {
+            keyhash(&s.signer)
+                .map(|k| (k, s.entries))
+                .ok_or_else(|| Refused::new(format!("signer {i} is not a 32-byte keyhash")))
+        })
+        .collect()
 }
 
 fn basis_of(b: u32) -> Result<rhtn_client::selection::SelectionBasis, Refused> {

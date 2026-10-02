@@ -164,6 +164,25 @@ fn a_bundle_past_one_carriage_is_split_and_put_back_together() {
     gap.swap(1, 2);
     let (short, taken) = read_intent(&gap, &cid).expect("still a ceremony");
     assert_eq!((short.bundle.len(), taken), (256, 0));
+
+    // THE DECLARED COUNT IS THE CAP (§14.3.2): an exchange that says one
+    // continuation follows is read with one, and a second -- however well
+    // anchored and numbered -- is not this bundle's.  Without this a
+    // counterparty could stream continuations for as long as the
+    // receiver's memory lasted
+    let mut declared_one = carriage.clone();
+    declared_one[0] = IntentExchange {
+        continuations: 1,
+        ..first
+    }
+    .encode();
+    let (capped, taken) = read_intent(&declared_one, &cid).expect("still a ceremony");
+    assert_eq!(
+        (capped.bundle.len(), taken),
+        (512, 1),
+        "the second continuation is not read"
+    );
+    assert_eq!(&capped.bundle[..], &intent.bundle[..512]);
 }
 
 // acceptance: DEC-36

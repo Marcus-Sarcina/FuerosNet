@@ -63,6 +63,10 @@ echo "=== 1b. Counts and citations stated in the documents ==="
 # existence check only; its `--overlap` sweep is for a human to read.
 if python3 "$HERE/../Robot/countcheck.py"; then :; else fail=1; fi
 if python3 "$HERE/../test-vectors/tools/citecheck.py"; then :; else fail=1; fi
+# A model result whose source changed after it was proved is a claim the
+# tree no longer makes: stale results fail the gate here, where every
+# commit meets it, as well as at the end of models/run-all.sh (2026-10-01).
+if python3 "$HERE/../Robot/modelpincheck.py"; then :; else fail=1; fi
 
 echo "=== 2. Generated stubs in sync ==="
 tmp="$(mktemp -d)"

@@ -2793,9 +2793,12 @@ _reply_pairs = [
     ('PrekeyReply — every device\'s bundle, alice\'s phone and desktop, for a request naming no device (§7.8)', r_pk_all),
     ('ArchiveReply — one PRESENTED presence record, the holder\'s disclosure choice carried (§7.9)', r_archive_presented),
 ]
+# (caption, bytes, the s7.10.1 kind tag that precedes the object on the
+# channel) -- the kind is per object, and an earlier version of this list
+# captioned every one as kind 2 [2026-10-01]
 _e2e_pairs = [
-    ('KeyGrant — the key sealing the capture c1 holds of alice from their PRIOR meeting (field 1 names that record), released against the normal record\'s first query', kg),
-    ('LateResponse — the normal record supplemented by a late `inconclusive` from a fourth verifier; private information for the participants, never part of the record', late),
+    ('KeyGrant — the key sealing the capture c1 holds of alice from their PRIOR meeting (field 1 names that record), released against the normal record\'s first query', kg, 1),
+    ('LateResponse — the normal record supplemented by a late `inconclusive` from a fourth verifier; private information for the participants, never part of the record', late, 2),
 ]
 _ctrl_md, _req_md, _msg_md = [], [], []
 for cap, by in _msg_pairs:
@@ -2811,8 +2814,8 @@ for cap, by in _reply_pairs:
 ```
 {hexblock(by)}
 ```""")
-for cap, by in _e2e_pairs:
-    _msg_md.append(f"""**{cap}** ({len(by)} bytes — an END-TO-END PAYLOAD, not a stream reply: the bytes are the object alone; on the channel a `uint` kind tag precedes them, §7.10.1's registry — kind 2 for this object — and no prefix is included below):
+for cap, by, kind in _e2e_pairs:
+    _msg_md.append(f"""**{cap}** ({len(by)} bytes — an END-TO-END PAYLOAD, not a stream reply: the bytes are the object alone; on the channel a `uint` kind tag precedes them, §7.10.1's registry — kind {kind} for this object — and no prefix is included below):
 
 ```
 {hexblock(by)}
@@ -2972,7 +2975,7 @@ for i, (cap, by) in enumerate(_msg_pairs):
 for i, (cap, by) in enumerate(_reply_pairs):
     # the reply family, so a consumer need not infer it from the fixture id
     reg(f'P-reply-{i+1:02d}', 'bytes', ACC('reply'), by, note=cap, family=cap.split(' ')[0])
-for i, (cap, by) in enumerate(_e2e_pairs):
+for i, (cap, by, _kind) in enumerate(_e2e_pairs):
     reg(f'P-e2e-{i+1:02d}', 'bytes', ACC('e2e-payload'), by, note=cap)
 for fid, by, why in [
     ('N-wrong-signer-catalog', catalog_wrong, 'CatalogEntry'),
@@ -3058,6 +3061,16 @@ reg('N-serving-infra-km-mismatch', 'bytes',
                               (e_uint(2), e_arr([np1])),
                               (e_uint(3), path([])),
                               (e_uint(4), carol.key_material)]))]))
+# a CatalogEntry's connect_scope (field 6) is a Scope and is checked as one:
+# it was the one field of the entry nothing read [2026-10-01]
+reg('N-catalog-scope-shape', 'bytes',
+    REJ('CatalogEntry', 'schema', 'field 6 is a Scope: a text string is no scope'),
+    sign1_slot(sorted(cat_pairs + [(e_uint(6), e_tstr('dunbar'))], key=lambda p: p[0]), 8, AAD_CATALOG, bob))
+# an AnchorEntry's field 1 is a 32-byte keyhash; its width went unchecked
+# beside the network points whose shape was [2026-10-01]
+reg('N-anchor-keyhash-width', 'bytes',
+    REJ('AnchorEntry', 'schema', 'field 1 is a 32-byte keyhash'),
+    sign1_slot([(e_uint(1), e_bstr(bob.keyhash[:31]))] + anchor_pairs[1:], 5, AAD_ANCHOR, bob))
 reg('N-response-inconclusive-personal', 'bytes',
     REJ('VerifierResponse', 'schema', 'an inconclusive carries the photo basis (s5.5)'),
     classical_response(IDS['c1'], alice, npr_q0, consent_over(npr_q0, alice),
@@ -3366,10 +3379,13 @@ reg('B-siblings-10', 'bytes', REJ('frame', 'schema', 'AttachAck with ten Sibling
 def _catalog_padded(target):
     # Reach the exact total via a legal connect_scope keyhash list (coarse,
     # 33 bytes per entry) plus metadata padding (fine, 1 byte per byte) — the
-    # metadata field's own 1024-byte bound cannot reach 2048 alone.
+    # metadata field's own 1024-byte bound cannot reach 2048 alone.  Legal
+    # means ASCENDING AND DISTINCT (s6.4): the list was unsorted until the
+    # decoder began reading field 6 and refused its own ceiling fixture
+    # [2026-10-01]
     for k in range(2, 40):
-        scope = e_arr([e_uint(6), e_arr([e_bstr(H(b'rhtn-test-vectors:pad:%d' % i))
-                                         for i in range(k)])])
+        hashes = sorted(H(b'rhtn-test-vectors:pad:%d' % i) for i in range(k))
+        scope = e_arr([e_uint(6), e_arr([e_bstr(h) for h in hashes])])
         for pad in range(0, 700):
             pairs = sorted([p for p in cat_pairs if p[0] != e_uint(7)]
                            + [(e_uint(6), scope), (e_uint(7), e_bstr(b'v=1' + b'.' * pad))],

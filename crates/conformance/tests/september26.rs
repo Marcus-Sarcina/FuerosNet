@@ -665,10 +665,14 @@ fn r07_client_archive_fetch_must_keep_every_valid_merge_branch() {
 fn r02_backup_install_must_not_accept_another_identitys_seeds() {
     use rhtn_client::backup::{self, Contents, Cost, Wrap};
     let mut b = client("bob");
+    // spelled out: `Contents` wipes its seeds on drop, and a type that
+    // drops cannot be built by struct update from a default
     let contents = Contents {
+        owner: None,
         seeds: Some([[71; 32], [72; 32]]),
+        records: Vec::new(),
+        store: Default::default(),
         provider: Some(b"foreign-provider-secret".to_vec()),
-        ..Default::default()
     };
     let donor = rhtn_crypto::SigningIdentity::from_seeds(&[71; 32], &[72; 32]);
     assert_ne!(b.keyhash(), donor.public.keyhash);
@@ -785,9 +789,11 @@ fn r02_seedless_backup_must_still_be_bound_to_its_identity() {
     // omitting the seeds cannot make the envelope transferable to any empty
     // client that knows its passphrase.
     let foreign = Contents {
+        owner: None,
         seeds: None,
+        records: Vec::new(),
+        store: Default::default(),
         provider: Some(b"alice-provider-secret".to_vec()),
-        ..Default::default()
     };
     let blob = backup::export(
         &foreign,

@@ -29,9 +29,12 @@ use tokio::time::{Duration, Instant, sleep_until};
 pub const CLOSE_REFUSED: u32 = 1;
 pub const FRAME_ATTACH: u64 = 1;
 pub const FRAME_ATTACH_ACK: u64 = 2;
-/// How long an attach waits for its acknowledgement.  A dark endpoint
-/// that accepts the connection and answers nothing otherwise held the
-/// attach forever.
+/// How long an attach waits for its acknowledgement, **as a whole**.  A
+/// dark endpoint that accepts the connection and answers nothing otherwise
+/// held the attach forever; and a peer that answered with a stream of
+/// unknown frames held it as long as it liked while the wait was re-armed
+/// per frame [2026-10-01].  The deadline runs from the Attach and nothing
+/// restarts it.
 pub const ATTACH_ACK_TIMEOUT: Duration = Duration::from_secs(15);
 /// A delegated peer's first frame on a connection that opens no session
 /// (`wire-format.md` §8.0, §8.2).
@@ -1851,13 +1854,27 @@ fn close_reason(e: &quinn::ConnectionError) -> Option<&[u8]> {
 
 /// Dial `target` at `addr` and attach on stream 0.  With `early`, the Attach
 /// rides 0-RTT early data when a resumption ticket is held; the node acts on
-/// it only after the handshake (§8.2).
+/// it only after the handshake (§8.2).  The acknowledgement is waited for
+/// [`ATTACH_ACK_TIMEOUT`] in all.
 pub async fn attach(
     cfg: &ClientConfig,
     endpoint: &quinn::Endpoint,
     target: [u8; 32],
     addr: std::net::SocketAddr,
     early: bool,
+) -> AttachOutcome {
+    attach_within(cfg, endpoint, target, addr, early, ATTACH_ACK_TIMEOUT).await
+}
+
+/// [`attach`], waiting `within` for the acknowledgement: one deadline from
+/// the Attach, which no frame received before the ack restarts.
+pub async fn attach_within(
+    cfg: &ClientConfig,
+    endpoint: &quinn::Endpoint,
+    target: [u8; 32],
+    addr: std::net::SocketAddr,
+    early: bool,
+    within: Duration,
 ) -> AttachOutcome {
     let Some(tls_cfg) = cfg.tls_for(&target) else {
         return AttachOutcome::EndpointFailure("NotPinned".into());
@@ -1901,7 +1918,7 @@ pub async fn attach(
             Err(_) => return AttachOutcome::EndpointFailure("dial timed out".into()),
         }
     };
-    attach_on(cfg, conn, log, target).await
+    attach_on(cfg, conn, log, target, within).await
 }
 
 async fn attach_on(
@@ -1909,6 +1926,7 @@ async fn attach_on(
     conn: Connection,
     log: Log,
     target: [u8; 32],
+    within: Duration,
 ) -> AttachOutcome {
     let (send, mut recv) = match conn.open_bi().await {
         Ok(s) => s,
@@ -1933,10 +1951,14 @@ async fn attach_on(
     if let Err(e) = sender.frame(FRAME_ATTACH, &body).await {
         return AttachOutcome::EndpointFailure(e.to_string());
     }
-    // wait for the ack: unknown frames skipped, any other known frame fails the attempt
+    // wait for the ack: unknown frames skipped, any other known frame fails
+    // the attempt -- and the deadline is one, from here, not one per frame:
+    // a peer feeding unknown frames every few seconds otherwise held the
+    // attach open indefinitely
+    let deadline = Instant::now() + within;
     let ack = loop {
-        let read = match tokio::time::timeout(
-            ATTACH_ACK_TIMEOUT,
+        let read = match tokio::time::timeout_at(
+            deadline,
             read_frame(&mut recv, bounds::CONTROL_FRAME_BYTES),
         )
         .await
