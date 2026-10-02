@@ -4777,8 +4777,8 @@ design already depends on.
 | What | Between | Where it is stated | Encoding |
 |---|---|---|---|
 | The ceremony's intent exchange — the contribution, the nominees, the evidence bundle, the timing and who initiated | Two participants' devices | design §7.1, design §7.5.2 | `IntentExchange` (§14.3.2), carried by the shell's chosen bearer (§14.3.1) and bound to the pre-commitment. The CBOR is specified; two vendors' clients compute the same ceremony-id (design §13.2) either way |
-| The optical transcript — each device's contribution, then the derived ceremony-id, screen to camera | Two participants' devices | design §1.3 item 3, design §7.5.2 | `OpticalContribution` then `TranscriptConfirm` (§14.3.2): the contribution is the key-exchange input, the ceremony-id is the transcript hash both display and check |
-| Proximity channel outcomes — the UWB, NFC or optical result and its ranking | Two participants' devices | §3.2, design §1.3 item 4 | `ProximityOutcomes` (§14.3.2): the §4.5 `Channel` maps as measured, anchored to the ceremony-id. The record's `strongest` (§3.2) is not carried — each device computes it from the outcomes, as each computes the ceremony-id |
+| The optical transcript — each device's contribution, then the derived ceremony-id, screen to camera | Two participants' devices | design §7.1 item 3, design §7.5.2 | `OpticalContribution` then `TranscriptConfirm` (§14.3.2): the contribution is the key-exchange input, the ceremony-id is the transcript hash both display and check |
+| Proximity channel outcomes — the UWB, NFC or optical result and its ranking | Two participants' devices | §3.2, design §7.1 item 4 | `ProximityOutcomes` (§14.3.2): the §4.5 `Channel` maps as measured, anchored to the ceremony-id. The record's `strongest` (§3.2) is not carried — each device computes it from the outcomes, as each computes the ceremony-id |
 | Traversal candidates | Two participants' devices | design §12.6.3 [author, 2026-09-25] | `CandidateHandover` (§14.3.2), carrying the `Candidate` structure this document now defines; the same candidates travel the end-to-end payload path when a direct connection is set up remotely (design §12.6.3, §14.1.1) |
 | The capture-key handover — the key each participant derived for the captures the other holds of them, handed across at capture time | Two participants' devices | design §7.5.2, design §7.5.2.6 | **Owed** [2026-10-01]: 32 bytes a device derives (design §7.5.2.6) and hands across this interface; §14.3 carries nothing for it yet, so two clients have nothing to agree with, and the bearer carries it without the anchor the exchanges above have |
 | A delegated device's payload material, and the ceremony device's signature over it | Two devices of one identity | design §23.3, §7.8 | `DeviceIntroduction` then `DeviceCredential` (§14.3.3): §7.8's bundle unsigned and then signed, beside §8.2's delegations |
@@ -4804,7 +4804,7 @@ the protocol does not name which, the way design §7.1 already leaves the
 carriage to *whatever means the two have*.
 
 **Bluetooth as a bearer is not Bluetooth as proximity evidence.** design
-§1.3 item 4 bars Bluetooth RSSI from the *distance* channel because signal
+§7.1 item 4 bars Bluetooth RSSI from the *distance* channel because signal
 strength is attacker-controllable (design §7.6.3). That bar is about evidence of
 nearness. A bearer moving data that is already bound to the optical anchor
 needs no distance guarantee of its own: a *remote* man in the middle of the
@@ -4815,7 +4815,7 @@ barred.
 
 #### 14.3.1 What the anchor is, and what it binds
 
-**The optical channel carries two things across the exchange** (design §1.3
+**The optical channel carries two things across the exchange** (design §7.1
 item 3), and neither is secret. First each device shows its 16-byte
 contribution. From the two, both devices compute the ceremony's
 pre-commitment — `SHA-256` of `rhtn/1:ceremony` and the two contributions in
@@ -4931,7 +4931,7 @@ ProximityOutcomes = [          ; what the distance channels measured
 
 The device that drove the channels reports what they measured, and the
 counterparty weighs it — the outcome is each device's claim, as everywhere
-(design §1.3 item 4). The record's `strongest` (§3.2) is no part of the
+(design §7.1 item 4). The record's `strongest` (§3.2) is no part of the
 exchange: each device computes it from the same outcomes, and a value both
 sides derive needs no carriage.
 

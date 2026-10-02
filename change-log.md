@@ -11907,7 +11907,7 @@ byte ceiling, padded its connect-scope list in hash order rather than
 ascending, which §6.4 makes malformed; the generator sorts it now. Two
 paragraphs entered `network-design.md` in the same hour from outside this
 review — a constant-time requirement on the signing, agreement and
-capture-key primitives under §4's post-quantum caveat, and an expanded
+capture-key primitives under §5.2's post-quantum caveat, and an expanded
 optical-channel item in §7.6.3 on why a screen-to-camera round-trip bound
 is friction rather than distance — and the pins were accepted with them in.
 
@@ -11930,3 +11930,33 @@ would not constrain. No new functionality, so no functional row. Six stale
 citations to design §1.3 for §7.1's items 3 and 4 were found in
 `wire-format.md` and `functional_tests.md` and spun off to their own
 session.
+
+### 2026-10-01 (nine citations of design §1.3 that meant §7.1)
+
+**The ceremony's optical channel and its bar on Bluetooth RSSI were being
+cited to the adoption-path argument.** `wire-format.md` §14.2's optical and
+proximity rows, §14.3's bearer paragraph, §14.3.1's opening sentence and the
+`ProximityOutcomes` commentary, and `functional_tests.md` NET-015 and NET-020
+all cited design §1.3 item 3 for the optical channel and §1.3 item 4 for the
+proximity channel. Design §1.3 is the single sign-on argument and has no
+numbered items; the items are design §7.1's, where item 3 is the optical
+channel and item 4 the proximity channel with the RSSI bar. All nine now
+cite §7.1, item numbers kept; the surrounding text was not changed.
+
+**A real but wrong section is the class the checker cannot see**, and it
+passed all nine. It did catch the one thing the fix introduced: with
+*item 4* between them, `(design §7.1 item 4, §7.6.3)` is two markers rather
+than one list, so the second lost its qualifier and fell through to
+`functional_tests.md`, which has no §7.6.3. Written as `design §7.6.3`.
+4,589 references checked before and after, 0 flags both times.
+
+**§7.6.3 does not state the bar.** The design bars Bluetooth RSSI once, at
+§7.1 item 4; §7.6.3 ranks the channels and says that any channel can be
+defeated by an adversary able to manipulate the physical layer it measures,
+which is the principle and not the ruling. The §7.6.3 citations that already
+sat beside the bar are kept for what they are; none were added.
+
+Three earlier entries in this log and three places in the review-tracking
+file carry the citation as it was written, and are left: both are
+as-of-filing. Every `light-client-requirements.md` §1.3 citation in the set
+is to that document's capture section and is correct.
