@@ -11,3 +11,10 @@ models/results/*.spthy
 # 2026-09-29]: the seven root documents plus CLAUDE.md are what the
 # repository carries, and Robot/ holds everything else process-facing
 AGENTS.md
+
+# Conformance and acceptance run output, gigabytes of it, kept beside the
+# repository and never part of it
+conformance-review/
+
+# Build marker written by the crate sweep
+crates/sweep.timestamp
