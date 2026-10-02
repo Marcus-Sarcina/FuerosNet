@@ -187,7 +187,7 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/results/mutant-11-local-exchange-an_accepted_anchor_was_derived_by_both.spthy
 
-  processing time: 1.16s
+  processing time: 1.09s
   
   exchange_is_executable (exists-trace): analysis incomplete (1 steps)
   an_accepted_anchor_was_derived_by_both (all-traces): falsified - found trace (5 steps)

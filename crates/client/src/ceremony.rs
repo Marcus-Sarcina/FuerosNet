@@ -805,6 +805,31 @@ impl Client {
         Ok(read.candidates)
     }
 
+    /// The key the counterparty seals its captures of me under, as the
+    /// anchored message the bearer carries at capture time (§14.3.2,
+    /// design §7.5.2.6): [`Client::capture_key`] under this ceremony's id.
+    pub fn capture_key_carriage(&self) -> Result<Vec<u8>, Abort> {
+        let cid = self
+            .active
+            .as_ref()
+            .and_then(|a| a.ceremony_id)
+            .ok_or(Abort::NotActive)?;
+        Ok(crate::local::CaptureKeyHandover {
+            ceremony_id: cid,
+            key: self.capture_key()?,
+        }
+        .encode())
+    }
+
+    /// The counterparty's capture key, anchored to this ceremony or
+    /// refused.  What comes back is the key [`Client::capture`] seals my
+    /// captures of them beneath, and nothing is held once that is done.
+    pub fn take_capture_key_carriage(&mut self, bytes: &[u8]) -> Result<[u8; 32], Abort> {
+        let read = crate::local::CaptureKeyHandover::decode(bytes).map_err(Abort::Malformed)?;
+        self.anchored(read.ceremony_id)?;
+        Ok(read.key)
+    }
+
     /// An anchored message's ceremony-id against this device's own.
     fn anchored(&mut self, theirs: [u8; 32]) -> Result<(), Abort> {
         let mine = self
@@ -2693,6 +2718,131 @@ impl Client {
 /// The two participants in body order: ascending keyhash.
 pub fn participants(a: Keyhash, b: Keyhash) -> [Keyhash; 2] {
     if a < b { [a, b] } else { [b, a] }
+}
+
+/// A conversation message as the end-to-end channel carries it
+/// (`wire-format.md` §7.10.1): its kind and the bytes of its §7.10.2
+/// structure.  `None` for a message that is not the conversation's, which
+/// is every one the local exchanges (§14.3), the verifier path, the
+/// serving node or the transport carry instead.
+///
+/// A proposal whose back-pointer lists do not match its signers is not one
+/// this client built, and is `None` rather than a body with a signer's
+/// list missing.
+pub fn conversation_payload(msg: &Msg) -> Option<(u64, Vec<u8>)> {
+    use crate::conversation::*;
+    Some(match msg {
+        Msg::ConsentRequest(q) => (payload::KIND_CONSENT_REQUEST, q.encode()),
+        Msg::Consent { query_id, consent } => (
+            payload::KIND_CONSENT_REPLY,
+            ConsentReply {
+                query_id: *query_id,
+                consent: consent.clone(),
+            }
+            .encode(),
+        ),
+        Msg::WitnessRequest(r) => (payload::KIND_WITNESS_REQUEST, r.encode()),
+        Msg::WitnessAnswer(bits) => (
+            payload::KIND_WITNESS_ANSWER,
+            WitnessAnswer { bits: *bits }.encode(),
+        ),
+        Msg::Responses(responses) => (
+            payload::KIND_GATHERED_RESPONSES,
+            GatheredResponses {
+                responses: responses.clone(),
+            }
+            .encode(),
+        ),
+        Msg::BackPointers(txids) => (
+            payload::KIND_BACK_POINTERS,
+            BackPointers {
+                txids: txids.clone(),
+            }
+            .encode(),
+        ),
+        Msg::Proposal(p) => {
+            if p.back.len() != p.proposal.signers().len() {
+                return None;
+            }
+            (
+                payload::KIND_PROPOSED_BODY,
+                ProposedBody {
+                    body: p.proposal.body(&p.back),
+                    set: p.set.clone(),
+                }
+                .encode(),
+            )
+        }
+        Msg::Signed(reply) => (
+            payload::KIND_SIGNING_REPLY,
+            SigningReply {
+                reply: reply.clone(),
+            }
+            .encode(),
+        ),
+        Msg::Record(envelope) => (payload::KIND_RECORD, envelope.clone()),
+        _ => return None,
+    })
+}
+
+/// The reverse: a kind and its bytes, read back as the message, or why
+/// they do not read.  A body that does not decode is dropped by the
+/// recipient that opened it (§7.10.1), and `Malformed` is that verdict.
+///
+/// Kind 11, the fishing proposal, decodes through
+/// [`crate::conversation::FishingProposal`] and has no `Msg` yet: the
+/// ceremony does not carry a bundle augmentation in process today, so it
+/// falls through here until it does.
+pub fn conversation_from(kind: u64, bytes: &[u8]) -> Result<Msg, Abort> {
+    use crate::conversation::*;
+    let malformed = Abort::Malformed;
+    Ok(match kind {
+        payload::KIND_CONSENT_REQUEST => {
+            Msg::ConsentRequest(VerificationQuery::decode(bytes).map_err(malformed)?)
+        }
+        payload::KIND_CONSENT_REPLY => {
+            let r = ConsentReply::decode(bytes).map_err(malformed)?;
+            Msg::Consent {
+                query_id: r.query_id,
+                consent: r.consent,
+            }
+        }
+        payload::KIND_WITNESS_REQUEST => {
+            Msg::WitnessRequest(WitnessRequest::decode(bytes).map_err(malformed)?)
+        }
+        payload::KIND_WITNESS_ANSWER => {
+            Msg::WitnessAnswer(WitnessAnswer::decode(bytes).map_err(malformed)?.bits)
+        }
+        payload::KIND_GATHERED_RESPONSES => Msg::Responses(
+            GatheredResponses::decode(bytes)
+                .map_err(malformed)?
+                .responses,
+        ),
+        payload::KIND_BACK_POINTERS => {
+            Msg::BackPointers(BackPointers::decode(bytes).map_err(malformed)?.txids)
+        }
+        payload::KIND_PROPOSED_BODY => {
+            let pb = ProposedBody::decode(bytes).map_err(malformed)?;
+            let (proposal, back) = proposal_from_body(&pb.body).map_err(malformed)?;
+            Msg::Proposal(Box::new(Proposed {
+                proposal,
+                set: pb.set,
+                back,
+            }))
+        }
+        payload::KIND_SIGNING_REPLY => {
+            Msg::Signed(SigningReply::decode(bytes).map_err(malformed)?.reply)
+        }
+        payload::KIND_RECORD => {
+            Record::parse(bytes).map_err(malformed)?;
+            Msg::Record(bytes.to_vec())
+        }
+        _ => {
+            return Err(malformed(format!(
+                "kind {kind} is not one the conversation reads"
+            )));
+        }
+    })
 }
 
 /// One message on one path.

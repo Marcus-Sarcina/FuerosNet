@@ -13,7 +13,8 @@
 #  3c. Licences and advisories under cargo-deny, against deny.toml.
 #  3. The workspace compiles and its live tests pass.  Stubs are #[ignore] and
 #     are not run: they are the tests still owed, and `cargo test -- --ignored`
-#     lists them by failing each one.
+#     lists them by failing each one.  The production-size load tests are
+#     #[ignore] too and are not stubs: tools/load-tests.sh runs them.
 #  4. A bounded fuzz run on the decoders, under nightly where present.
 #  5. The build cache swept of what this pass did not build (cargo-sweep,
 #     stamped before step 0): cargo names artifacts by hash and deletes

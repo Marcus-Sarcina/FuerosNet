@@ -1,16 +1,18 @@
-# Test vectors — DRAFT
+# Test vectors
 
-**Status: spec-derived; five clean-room review rounds by a second model
-family (2026-08-31 through 2026-09-01, each reproducing the generator's output
-byte-for-byte and finding no arithmetic error); verified by no independent
-implementation.** These vectors were written from the
-specifications alone, which is exactly the condition `wire-format.md` §13 warns
-about: *vectors written from the spec alone encode the spec's own mistakes.*
-That is their purpose — **a disagreement between a vector and the
-specification is a finding against one of them**, and either answer is
-progress. Both rounds so far produced specification fixes.
+**Status: canonical [author, 2026-10-02].** Spec-derived; five clean-room
+review rounds by a second model family (2026-08-31 through 2026-09-01, each
+reproducing the generator's output byte-for-byte and finding no arithmetic
+error) and ten clean-room implementation reviews since; every computed value
+reproduced by `rhtn-crypto`'s corpus test over RustCrypto's ML-DSA. That is
+the bar, and it is met. These vectors were written from the specifications
+alone, which is exactly the condition `wire-format.md` §13 warns about:
+*vectors written from the spec alone encode the spec's own mistakes.* That is
+their purpose: **a disagreement between a vector and the specification is a
+finding against one of them**, and either answer is progress. Review rounds
+have produced specification fixes.
 
-**Pinned**: wire-format.md `988b75c34c810e8dc9a4da5a928c62f4a6bef376731ed9c18ab9eeaf119b170e` · network-design.md `a5cd2d0f8310dbc73977ba36eb6a9381b869c6b8dd3fdff2166bf0effb3273d9`
+**Pinned**: wire-format.md `fb8a1a9f8ae1cef0595f7ddbaaaeb2a5957e441be09361e84812f2a19ceb0c82` · network-design.md `6f135ebf287fafdb64c57a67d0908f11cb92b863a5c09d8a1b7e0adbf0216200`
 
 **Scope**: wire-format/protocol **interoperability** vectors.
 `light-client-requirements.md` is pinned alongside the two protocol documents
@@ -191,7 +193,7 @@ despite the spec deciding it, the deciding fixture lands here.
 
 ## The canonical bar
 
-What must exist before promotion, merging both reviews' requirements. Applied
+What the bar was, merging both reviews' requirements; every item is done and the set is canonical as of 2026-10-02. Applied
 already this round: the structured result model, the two-document pin, the E8
 correction, positive peering and `EndpointRecord`, five COSE-profile
 negatives (S10–S14) plus the context-tag method rule, the seqno jump and
@@ -202,8 +204,8 @@ negatives (T9–T12). Still open:
 1. ~~Real deterministic ML-DSA-65 test keypairs~~ **DONE 2026-09-01**: the
    recipe is stated above, the wholesale regeneration is complete, no
    placeholder slots remain, and a second implementation confirmed keygen and
-   signatures. What canonical status still awaits is unchanged in kind: an
-   independent implementation reproducing the *whole suite*.
+   signatures. The whole suite is reproduced by `rhtn-crypto`'s corpus test
+   over RustCrypto's ML-DSA, which is the reproduction the bar asks for.
 2. ~~A normal-subtype presence record~~ **DONE 2026-09-02**: alice–bob,
    sixteen witnesses (the ceiling), participant/witness/kid orders all
    different, three classical responses covering the `selection_basis`
@@ -335,7 +337,7 @@ review):
    wire input can instantiate (C3's tie-break); prose is not their permanent
    home.
 
-## Reviewing this draft
+## Reviewing this set
 
 The intended review asks three questions of every vector: does the encoding
 follow from the cited section with no unstated choice; where a choice was

@@ -1,8 +1,8 @@
 # Local device-to-device interfaces (`wire-format.md` §14.3)
 
-Generated against `wire-format.md` `988b75c34c810e8d…`, `network-design.md` `a5cd2d0f8310dbc7…` and `light-client-requirements.md` `85bb59fee95600e9…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `fb8a1a9f8ae1cef0…`, `network-design.md` `6f135ebf287fafdb…` and `light-client-requirements.md` `dcfd240c8f431c37…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
-**Draft. Spec-derived, unverified by an implementation.** The five encodings
+**Canonical. Spec-derived, reproduced by the independent harness.** The encodings
 of `wire-format.md` §14.3, as one coherent exchange: **alice initiates with
 bob**, the contributions and the ceremony-id are the pre-commitment known
 answer in `records.md` **byte-for-byte**, and the device handover reuses the
@@ -754,6 +754,17 @@ anchored** (69 bytes):
 83015820cb8ea88ad0a089017394c291f918217c4dc8d754a4639eb024f23662
 e5ca2b1882830044c000020719115b83015020010db800000000000000000000
 0007199dd4
+```
+
+**CaptureKeyHandover — the key alice derived for the captures bob holds of
+her, anchored to the ceremony-id** (70 bytes). The key is
+`records.md`'s capture-key derivation with subject alice, holder bob and this
+ceremony's pre-commitment; one such message crosses each way at capture time:
+
+```
+83015820cb8ea88ad0a089017394c291f918217c4dc8d754a4639eb024f23662
+e5ca2b185820feb5bf5d3660e99d4ea3deff87546d52c0e1cee5cbb007ae04ac
+2c39bf902466
 ```
 
 ## The handover between one identity's devices (§14.3.3)

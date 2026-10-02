@@ -7,9 +7,7 @@ states/
 *.st
 models/results/*.spthy
 
-# Assistant-facing guidance that is not part of the design set [author,
-# 2026-09-29]: the seven root documents plus CLAUDE.md are what the
-# repository carries, and Robot/ holds everything else process-facing
+# Reviewer2's file, managed by them and not read here [author, 2026-10-02]
 AGENTS.md
 
 # Conformance and acceptance run output, gigabytes of it, kept beside the

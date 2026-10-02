@@ -323,6 +323,11 @@ job.
   A holder may refuse, rate-limit, or return less than asked for any reason; none
   of it says anything about what exists. Concretely: a short archive reply is not
   a short archive.
+- **Hold what awaits a prerequisite under a bound, and let the reconstructible go
+  first** (`wire-format.md` §10): a reissue or an endpoint record returns through
+  gossip or a later locator distribution; a disavowal or departure held for the
+  adoption it precedes does not, and outlasts them at the ceiling, oldest first
+  among themselves.
 
 ---
 

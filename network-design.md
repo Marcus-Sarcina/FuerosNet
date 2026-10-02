@@ -64,8 +64,9 @@ operations. Encoding for all of it is in
 the Triple Ratchet* (§14.2.4) rather than designed here, with five integration
 decisions open. **Eleven parameters
 remain unset** (§21.1), sorted by how provisional they actually are in §21.1.1, and
-none of them currently hardens on first deployment. **Canonical test vectors are
-deferred by decision** until the encoding stops moving.
+none of them currently hardens on first deployment. **The test vectors are
+canonical** (§23.4): regenerated under the specification pins whenever the
+encoding changes, and what an implementation is held to byte for byte.
 
 **Everything currently open is consolidated at §22**, classified by what it
 blocks.
@@ -89,7 +90,7 @@ and what a client does without asking.
 | `infra-client-requirements.md` | What an operator's software must do, including package hosting and sandboxing |
 | `resource-requirements.md` | What a resource must do to conform, and the credential and request framing it receives |
 | `change-log.md` | History. How the design reached its current form |
-| `test-vectors/` | Draft canonical vectors: encodings, hashes, signatures, selection arithmetic. Spec-derived and unverified by an implementation — a disagreement with the specifications is a finding against one of them (§23.4, `wire-format.md` §13) |
+| `test-vectors/` | Canonical vectors: encodings, hashes, signatures, selection arithmetic. Spec-derived, reproduced by an independent harness, regenerated under the specification pins; a disagreement with the specifications is a finding against one of them (§23.4, `wire-format.md` §13) |
 
 **Requirements documents contain no protocol facts.** They cite sections here
 rather than restating them, because a restated fact is one that will drift.
@@ -1107,6 +1108,12 @@ statement and nothing stops them signing it whenever they choose, so an effectiv
 date would state the issuer's intentions rather than anything a recipient can check
 (§1.1).
 
+**A disavowal that arrives ahead of the adoption it ends is held for it**, and
+a holder whose memory for such things is bounded keeps it in preference to
+anything gossip or a later locator distribution rebuilds [author, 2026-10-02]:
+a reissue or an endpoint record returns on its own, where a disavowal let go
+leaves open a relationship its patron closed (`wire-format.md` §10).
+
 #### 6.2.3 Lateral and vertical shifts
 Moving to a grandpatron or a patron's sibling is an **ordinary adoption whose
 counterparty happens to be nearby.** Still no separate type: it is a transfer
@@ -1429,6 +1436,21 @@ asking the person who owns it, who is very likely unaware of the ceremony or of 
 was in it. **Witnessing resembles a human act and is not one** (Appendix A): what a witness
 attests is what its client observed, and a client that stopped to ask would be
 asking its operator about something the operator did not see.
+
+**Two carriages, by what has to be agreed in the room** [author, 2026-10-02].
+What the two devices must fix between themselves while facing each other — the
+optical anchor, the intent, the proximity outcomes, traversal candidates and
+the capture key — crosses the local interface between them (§14.1.0,
+`wire-format.md` §14). Everything else the ceremony says — which verifiers
+each party selected, the fishing proposals, the consent each query needs, the
+witness request, the proposed body, each signer's signature entry and the
+finalised record — travels the end-to-end payload path between the
+participants' devices and is sent to each nominated witness as well, the
+consent request alone excepted: the fuzzed profile it carries reaches the
+subject and the one verifier the query names, and nobody who holds no capture
+to compare it against (`wire-format.md` §5.6). That is what a witness observes: the sequence as it ran, proposals that did not land
+included, which is what lets it attest that the protocol ran and both parties
+were responsive, and nothing beyond that.
 
 Ceremony duration is deliberately minutes, not seconds. It meters human time,
 which is the scarce resource the attack must consume; a per-identity cooldown
@@ -1994,11 +2016,12 @@ more PII — rely on §7.4.3's subject-set retention policy and expect elevated
 **Each participant derives a per-ceremony capture key from a seed only they hold,
 and hands the other that key at capture time; each seals its captures of the
 other party under the key that party supplied, discarding it once the capture is
-sealed.** The handover rides the ceremony's **direct channel**: like every
-ceremony conversation it is carried by no wire object (§8.1.2's rule), and the
-same channel tells the subject **which verifier the counterparty selected**,
-which the key-release step and the client's review duty both need
-[2026-09-02].
+sealed.** The handover crosses the local interface between the two devices as
+an anchored object of its own (`wire-format.md` §14.3.2) [author, 2026-10-02].
+**Which verifier the counterparty selected** reaches the subject on the
+end-to-end path between the two devices, as every other part of the
+ceremony's conversation does (§7.1); the key-release step and the client's
+review duty both need it.
 
 So A's images sit on B's device sealed under keys **only A can derive**. B
 stores ciphertext. A stores the seed, privately, in its own record of the
@@ -2144,7 +2167,7 @@ parties and the witnesses, and is unique per ceremony: everything the binding
 needed, available when the binding is made.
 
 **Its construction is contributory** [2026-09-02]: each participant contributes
-16 random bytes over the direct channel, and the pre-commitment is the SHA-256
+16 random bytes across the optical exchange (`wire-format.md` §14.3.1), and the pre-commitment is the SHA-256
 of the ASCII tag `rhtn/1:ceremony` followed by the two contributions in
 ascending participant-keyhash order. Either party's honest randomness makes
 the value unique, so **neither party can force a repeat**, and a forced repeat
@@ -2748,8 +2771,8 @@ same counterparty. Selection now serves exactly that property:
   condition.
 - **Where the bundles surface no common acquaintance, the parties go
   fishing**: either proposes further candidates from its own history for the
-  other to test against its own knowledge — a conversation over the direct
-  channel, recorded nowhere. **Each proposal is a bundle augmentation**
+  other to test against its own knowledge — a conversation on the end-to-end
+  path between the two devices, seen by the witnesses and recorded nowhere. **Each proposal is a bundle augmentation**
   [author, 2026-09-03] — the same disclosure decision, made through the same
   curation the bundle got, and it stops at a locally adjustable count of
   responsive candidates. After the bundle, acceptance is the rule: every
@@ -8038,7 +8061,8 @@ order and refusal behaviour, with the role row consulted as a lookup.
   identity; whether prekeys are served only by the patron or also by siblings; prekey
   rotation cadence and last-resort policy; and §5.2's crate-maturity caveat.
   **Payload-type demultiplexing is settled** [2026-09-30]: `wire-format.md`
-  §7.10.1 registers the kind tag and its nine values.
+  §7.10.1 registers the kind tag and its nineteen values, the ceremony's own
+  conversation (§7.1) among them.
 - **The canonical biometric profile** (§7.5): extractor, template format and
   fixed length per modality version, fuzzing algorithm, matcher and version
   registry, plus the sealed store's AEAD parameters — cipher, nonce derivation,
@@ -8106,7 +8130,7 @@ order and refusal behaviour, with the role row consulted as a lookup.
 **Not absorbed, because each belongs to its own document's authority** (Appendix A).
 This chapter names them; the obligations stay where the party bound by them will look.
 
-- **`wire-format.md` §13** — encoding items, chiefly the canonical test vectors deferred at §23.4.
+- **`wire-format.md` §13** — encoding items: the queue cap value, which §21.1.1 classes as freely tunable.
 - **`light-client-requirements.md` §10** — participant-client behaviour still to settle.
 - **`infra-client-requirements.md` §12** — operator-side behaviour still to settle.
 
@@ -8127,8 +8151,6 @@ line here says *this is not being built yet*.
 
 - **Autonomous participation** and the attention question depending on it (§22). Not to
   be implemented in this or any intervening version.
-- **Canonical test vectors** (`wire-format.md` §13), until the encoding stops moving
-  and someone other than the author writes them.
 - **Transaction types beyond the current six** (seven numbers allocated; type 6 is a tombstone), and **multiple identities per client** (§4) —
   a v1 client-scope exclusion, not a protocol limit.
 - **IPv6 endpoints and prefix-based reputation** (§4). v1 demands IPv4; the
@@ -8263,17 +8285,17 @@ delegation; an identity with several devices has a prekey bundle per device
 
 ### 23.4 Test vectors, and what a test suite would add
 
-**Canonical test vectors are deferred by decision; draft vectors exist**
-(`test-vectors/`, `wire-format.md` §13). Vectors do not block *building*; they
-block **demonstrating** that two implementations agree, which is a later and
-different thing. Vectors written against a design still in motion become a second
-artefact to keep in sync, and cross-artefact drift is this project's dominant
-failure mode. They are also better produced by someone other than the designer,
-for the same reason review is: **tests written by the author encode the author's
-misunderstandings**, which is why the draft set states every interpretation it
-had to take and exists to be attacked before an implementation exists to confirm
-it. Canonical status waits on an independent implementation reproducing every
-computed value.
+**The test vectors are canonical** (`test-vectors/`, `wire-format.md` §13)
+[author, 2026-10-02]. They are spec-derived, reproduced by an independent
+harness over independent cryptographic implementations, traced by clean-room
+review, and regenerated under the specification pins whenever the encoding
+changes. Cross-artefact drift is this project's dominant failure mode, and the
+pins are what hold the vectors to the specification rather than freezing
+either. Vectors do not block *building*; they are what **demonstrating** that
+two implementations agree rests on. **Tests written by the author encode the
+author's misunderstandings**, which is why the set states every interpretation
+it had to take, and why the reproduction and the reviews are the bar rather than
+the author's own confidence.
 
 **A test suite is the natural successor to §22.** Implementing a mechanism asks
 *can this be written?* and stubs the error paths; a test suite asks *what should happen when the input is wrong?*, which is exactly where those

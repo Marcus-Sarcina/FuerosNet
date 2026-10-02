@@ -1036,6 +1036,23 @@ impl Participant {
             .map_err(|a| Refused::new(format!("{a:?}")))
     }
 
+    /// This client's capture key as the anchored message the bearer
+    /// carries at capture time (`wire-format.md` §14.3.2, design
+    /// §7.5.2.6): [`Participant::capture_key`] under the ceremony's id.
+    pub fn capture_key_carriage(&self) -> Result<Vec<u8>, Refused> {
+        self.handle
+            .with_blocking(|c| c.capture_key_carriage())
+            .map_err(|a| Refused::new(format!("{a:?}")))
+    }
+
+    /// The counterparty's capture key, anchored to this ceremony or
+    /// refused: the 32 bytes to hand [`Participant::capture`].
+    pub fn take_capture_key_carriage(&self, bytes: Vec<u8>) -> Result<Vec<u8>, Refused> {
+        self.handle
+            .with_blocking(move |c| c.take_capture_key_carriage(&bytes).map(|k| k.to_vec()))
+            .map_err(|a| Refused::new(format!("{a:?}")))
+    }
+
     /// What the channels achieved, for the screen: read from the ceremony,
     /// not measured again.
     #[must_use]

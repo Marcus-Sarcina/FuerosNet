@@ -604,8 +604,8 @@ self-anchors by definition, `Locator::root` is a constructor in
 **Order.** Milestones 11 and 12 are independent of each other and of 13; 13
 gates 14, and 13 and 15 finish together. None of them gates what the library still owes, and what it owed
 was then one item, PAY-13, which waits on the licence decision (section 7);
-`Robot/outstanding-work-2026-09-21.md` section 6 lists what the survey of
-2026-09-21 found owed beyond it.
+the survey of 2026-09-21, a working note since pruned, listed what was owed
+beyond it; `review-tracking.md` carries what remains.
 
 **`rhtn-resources`, built (2026-09-13).** The sandbox and the daemon's
 hosting, in one commit each. `Sandbox::admit` compiles a component and

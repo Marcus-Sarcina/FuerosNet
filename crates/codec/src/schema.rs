@@ -967,6 +967,23 @@ fn candidates_ok(item: &Item) -> Result<(), Error> {
     Ok(())
 }
 
+/// One `COSE_Signature` entry as an envelope carries it (§3.5):
+/// `[protected, unprotected, signature]`, the headers a byte string and an
+/// empty map, the signature a byte string.
+fn cose_signature_shape(it: &Item) -> Result<(), Error> {
+    match it {
+        Item::Array(a)
+            if a.len() == 3
+                && matches!(a[0], Item::Bytes(_))
+                && matches!(&a[1], Item::Map(u) if u.is_empty())
+                && matches!(a[2], Item::Bytes(_)) =>
+        {
+            Ok(())
+        }
+        _ => Err(Error("an entry is not a COSE_Signature")),
+    }
+}
+
 /// A carried `PrekeyBundle` blob (`wire-format.md` §14.3.3): parses as a
 /// map, within the ceiling, its signature slot present or absent as the
 /// carriage requires.
@@ -1301,6 +1318,26 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             }
             candidates_ok(&a[2])
         }
+        "CaptureKeyHandover" => {
+            let Item::Array(a) = item else {
+                return Err(Error("not array"));
+            };
+            if a.len() != 3 {
+                return Err(Error("three fields"));
+            }
+            if as_uint(&a[0]) != Some(1) {
+                return Err(Error("version 1"));
+            }
+            match &a[1] {
+                Item::Bytes(r) if r.len() == 32 => {}
+                _ => return Err(Error("a ceremony-id is 32 bytes")),
+            }
+            match &a[2] {
+                Item::Bytes(r) if r.len() == 32 => {}
+                _ => return Err(Error("a capture key is 32 bytes")),
+            }
+            Ok(())
+        }
         "DeviceIntroduction" => {
             let Item::Array(a) = item else {
                 return Err(Error("not array"));
@@ -1340,6 +1377,194 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
                 }
             }
             device_bundle_ok(b, &a[2], true)
+        }
+        // ---- the ceremony's conversation (`wire-format.md` §7.10.2)
+        "ConsentReply" => {
+            let Item::Array(a) = item else {
+                return Err(Error("not array"));
+            };
+            if a.len() != 2 {
+                return Err(Error("two fields"));
+            }
+            match &a[0] {
+                Item::Bytes(r) if r.len() == 32 => {}
+                _ => return Err(Error("a query_id is 32 bytes")),
+            }
+            sign1_shape(&a[1])
+        }
+        "FishingProposal" => {
+            let Item::Array(entries) = item else {
+                return Err(Error("not array"));
+            };
+            if entries.is_empty() || entries.len() > FISHING_PROPOSAL_ENTRIES {
+                return Err(Error("a fishing proposal carries one to 256 entries"));
+            }
+            // an entry is an envelope map or a presentation array (§7.9)
+            for e in entries {
+                if !matches!(e, Item::Map(_) | Item::Array(_)) {
+                    return Err(Error("an archive entry is a map or an array"));
+                }
+            }
+            Ok(())
+        }
+        "WitnessRequest" => {
+            let Item::Map(m) = item else {
+                return Err(Error("not map"));
+            };
+            if m.len() != 4 || !(1..=4).all(|k| map_get(m, k).is_some()) {
+                return Err(Error("keys 1 to 4"));
+            }
+            if keyhash_at(b, m, 1).map(|k| k.len()) != Some(32) {
+                return Err(Error("a ceremony-id is 32 bytes"));
+            }
+            let Some(Item::Array(parts)) = map_get(m, 2) else {
+                return Err(Error("participants not array"));
+            };
+            if parts.len() != 2 {
+                return Err(Error("two participants"));
+            }
+            for p in parts {
+                match p {
+                    Item::Bytes(r) if r.len() == 32 => {}
+                    _ => return Err(Error("a participant is a keyhash")),
+                }
+            }
+            map_get(m, 3).and_then(as_uint).ok_or(Error("started_at"))?;
+            let Some(Item::Array(ch)) = map_get(m, 4) else {
+                return Err(Error("channels not array"));
+            };
+            if ch.len() > WITNESS_REQUEST_CHANNELS {
+                return Err(Error("channels over eight"));
+            }
+            channels_ok(ch)
+        }
+        "WitnessAnswer" => {
+            let Item::Map(m) = item else {
+                return Err(Error("not map"));
+            };
+            let witnessing = match map_get(m, 1) {
+                Some(Item::Bool(w)) => *w,
+                _ => return Err(Error("witnessing is a bool")),
+            };
+            // the bits travel only with an acceptance: a declining answer
+            // that carries them is malformed, not merely odd
+            match (witnessing, map_get(m, 2)) {
+                (true, Some(Item::Uint(_))) | (false, None) => {}
+                (true, _) => return Err(Error("a witnessing answer carries its bits")),
+                (false, _) => return Err(Error("a declining answer carries no bits")),
+            }
+            if m.len() != 1 + usize::from(witnessing) {
+                return Err(Error("keys 1 and 2 only"));
+            }
+            Ok(())
+        }
+        "GatheredResponses" => {
+            let Item::Array(rs) = item else {
+                return Err(Error("not array"));
+            };
+            if rs.len() > GATHERED_RESPONSES {
+                return Err(Error("responses over 32"));
+            }
+            for r in rs {
+                if !matches!(r, Item::Map(_)) {
+                    return Err(Error("a response is a map"));
+                }
+            }
+            Ok(())
+        }
+        "BackPointers" => {
+            let Item::Array(hs) = item else {
+                return Err(Error("not array"));
+            };
+            if hs.is_empty() || hs.len() > MERGE_BACK_POINTERS_PER_SIGNER {
+                return Err(Error("a signer sends one to eight back-pointers"));
+            }
+            for h in hs {
+                match h {
+                    Item::Bytes(r) if r.len() == 32 => {}
+                    _ => return Err(Error("a back-pointer is 32 bytes")),
+                }
+            }
+            Ok(())
+        }
+        "ProposedBody" => {
+            let Item::Map(m) = item else {
+                return Err(Error("not map"));
+            };
+            if m.len() != 2 {
+                return Err(Error("keys 1 and 2"));
+            }
+            match map_get(m, 1) {
+                Some(Item::Bytes(r)) if !r.is_empty() => {}
+                _ => return Err(Error("the body is a byte string")),
+            }
+            let Some(Item::Array(set)) = map_get(m, 2) else {
+                return Err(Error("disclosures not array"));
+            };
+            // every slot revealed, so a signer recomputes the root (§4.5.1)
+            if set.len() != 7 {
+                return Err(Error("exactly seven disclosures"));
+            }
+            for d in set {
+                let Item::Array(f) = d else {
+                    return Err(Error("a disclosure is an array"));
+                };
+                if f.len() != 3 {
+                    return Err(Error("a disclosure has three fields"));
+                }
+                match &f[0] {
+                    Item::Bytes(r) if r.len() == 16 => {}
+                    _ => return Err(Error("a salt is 16 bytes")),
+                }
+                if !matches!(f[1], Item::Text(_)) {
+                    return Err(Error("a label is a text string"));
+                }
+            }
+            Ok(())
+        }
+        "SigningReply" => {
+            let Item::Map(m) = item else {
+                return Err(Error("not map"));
+            };
+            let entries = map_get(m, 1);
+            let refusal = map_get(m, 2);
+            let particular = map_get(m, 3);
+            // exactly one of the entries and the refusal, and the
+            // particular only beside the refusal
+            match (entries, refusal) {
+                (Some(_), Some(_)) => return Err(Error("entries or a refusal, never both")),
+                (None, None) => return Err(Error("entries or a refusal")),
+                _ => {}
+            }
+            if let Some(e) = entries {
+                let Item::Array(es) = e else {
+                    return Err(Error("entries not array"));
+                };
+                if es.len() != SIGNING_REPLY_ENTRIES {
+                    return Err(Error("a signer's two entries"));
+                }
+                for x in es {
+                    cose_signature_shape(x)?;
+                }
+            }
+            if let Some(r) = refusal {
+                match as_uint(r) {
+                    Some(1..=3) => {}
+                    _ => return Err(Error("refusal out of range")),
+                }
+            }
+            match (refusal.is_some(), particular) {
+                (true, Some(Item::Bytes(_))) | (_, None) => {}
+                (true, Some(_)) => return Err(Error("a particular is a byte string")),
+                (false, Some(_)) => {
+                    return Err(Error("a particular accompanies a refusal and nothing else"));
+                }
+            }
+            let expected = 1 + usize::from(particular.is_some());
+            if m.len() != expected {
+                return Err(Error("keys 1 to 3 only"));
+            }
+            Ok(())
         }
         "Scope" => match item {
             Item::Uint(3) => Err(Error("retired tag")),

@@ -11960,3 +11960,83 @@ Three earlier entries in this log and three places in the review-tracking
 file carry the citation as it was written, and are left: both are
 as-of-filing. Every `light-client-requirements.md` §1.3 citation in the set
 is to that document's capture section and is correct.
+
+### 2026-10-02 (eight rulings, and what they moved)
+
+The author answered the ruling queue from the state-of-completion
+assessment. **The capture-key handover has its encoding**:
+`CaptureKeyHandover = [ version, ceremony-id, key ]`, anchored like the
+proximity outcomes and the candidates, in `wire-format.md` §14.3.2 with the
+§14.2 row no longer owed; design §7.5.2 says so; NET-016, NET-019 and NET-021
+amended and SCH-025 added; corpus 291 → 294 with the positive and two
+negatives; CER-44's scenario carries the key; codec, client, FFI and the
+shell's CAPTURE_KEY phase carry the object, with the Kotlin binding
+regenerated and the Android tests at 59. **The rest of the ceremony's
+conversation is end-to-end payload, sent to each nominated witness as well**:
+which verifiers each party selected, the fishing proposals, the consent each
+query needs, the witness request, the proposed body, the signature entries
+and the finalised record cross no local interface. Design §7.1 states the two
+carriages, §7.5.2 and §8.1.2 no longer speak of a "direct channel" (the term
+is gone from the set), `wire-format.md` §14.2 calls its inventory complete,
+§7.10.1 says the kinds are owed, and NET-022 holds the requirement; a
+proposed kind table waits in the tracking file. **Held items evict in an
+order**: what gossip or a later locator distribution reconstructs goes
+before anything that ends or reduces a relationship, oldest first among the
+latter. `wire-format.md` §10 carries the rule, design §6.2.2 the consequence,
+the two requirements documents a bullet each, TOP-037 the row; TOP-46 is
+retitled with the new rule quoted; the archive table moves to a shared
+ceiling of 768 across its three lists with reissues going first, and the node
+store's mixed list evicts the oldest reconstructible item first. Node tests
+148 → 150. **Kept**: the bundle-continuation shape and the `SignedLocator`
+alternative in the peering endpoint update; the §7.4.4 packing-ratio
+citation; the preface as it stands until the author's own pass. **The
+test-vector bar is restated as what has been done**: canonical means
+reproduced by the independent harness over independent cryptography, traced
+by clean-room review and regenerated under the pins whenever the encoding
+changes; the outside-implementation condition descended from a suggested
+paid audit the author never intended for an unfunded solo project. Stated in
+`wire-format.md` §13, the design's status block, document set, §22.4, §23.1
+and §23.4, the vectors' README and generated headers, VAL-006 and CLAUDE.md.
+**The working files are the assistant's workspace**: five non-operational files pruned
+(the 2026-08-12 checkpoint, the resource-interaction brief, the biometric
+survey, the third-run brief, the 2026-09-21 outstanding-work note), CLAUDE.md
+says so, and the reference checker now covers 14 documents at 0 flags.
+`AGENTS.md` is Reviewer2's and is ignored. Functional families 482 → 485.
+
+### 2026-10-02 (the conversation's kinds, and a ceiling for the gate)
+
+**The ceremony's conversation has its payload kinds.** `wire-format.md`
+§7.10.1 registers kinds 9 to 18, in the order a ceremony uses them, and a
+new §7.10.2 states the structures that are new: `ConsentReply`,
+`FishingProposal`, `WitnessRequest`, `WitnessAnswer`, `GatheredResponses`,
+`BackPointers`, `ProposedBody` and `SigningReply`; the consent request is
+the `VerificationQuery` itself and the finalised record the `Envelope`.
+Three legs the proposed table had missed, found by reading the kernel's own
+harness, are registered with the rest: the witness's answer, the responses
+one party gathers for the proposer, and each signer's back-pointers. Every
+message a participant sends goes to the counterparty and to every witness
+either nominated, the consent request alone excepted: it carries the fuzzed
+profile, which §5.5 and §5.6 already confine to the one verifier the query
+names. §1.3 gains four bound rows, §13's open item closes, design §22.2 and
+§22.4 and the §7.1 carriage paragraph say so, NET-022 is amended and SCH-026
+added. Corpus 294 → 312: ten positives, two bounds and seven negatives, with
+the eleven conversation payloads captioned by kind in `messages.md`; the
+harness now selects the late response by position rather than as the last
+payload. Code: eight codec arms and four bounds, kind constants 9 to 18, a
+`conversation` module in the client with typed encode and decode for every
+structure and a mapping from the in-process ceremony messages to kind and
+bytes and back; client tests 116 → 119, corpus agreement 263 → 270. The
+courier wiring, sending these to the counterparty and the witnesses, is the
+next step. The witness function of the kernel already held the sequence as
+state checks and the message types as an enum moved by hand; today they have
+a wire form. **The slow eviction tests move behind a test-only ceiling**: the
+archive table and the node store take a reduced ceiling for the gate's tests,
+which now run in seconds, while the production-size runs stay as ignored
+load tests under `crates/tools/load-tests.sh`, to run whenever the eviction
+code changes and before any release; TOP-038 and the review plan's Stage 2
+and Stage 3 say so. Load tests ran once today and passed in four minutes.
+**Tamarin never left**: the prover lives under `~/tools`, where
+`models/run-all.sh` has always named it; the local-exchange theory's comment
+now counts five anchored messages, and the whole model gate re-proved and
+re-stamped clean. Functional families 486 → 487. Witnesses seeing fishing
+proposals that did not land is not priced, by ruling.

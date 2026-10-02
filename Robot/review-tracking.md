@@ -13732,3 +13732,66 @@ citations and 8 fixture names, 0 flags; 36 model results over 49 sources,
 0 flags; fmt, clippy and deny clean; cargo test ok (673 tests across the workspace); fuzz 5
 targets, no crash; Kotlin round trip ok; 58 Android units, 0 failed.
 **CODE GATE PASSES**, the fourth run, 22:36.
+
+## Eight rulings (author, 2026-10-02)
+
+The author answered the ruling queue listed from the state-of-completion
+assessment. Each is applied below or recorded as closed.
+
+| # | Item | Ruling | Applied |
+|---|---|---|---|
+| 1 | Capture-key handover encoding | **Adopted** as recommended: `CaptureKeyHandover = [ uint version, bstr .size 32 ceremony-id, bstr .size 32 key ]` | `wire-format.md` §14.3.2 CDDL and prose, §14.2 row (no longer owed), §14.2 intro; design §7.5.2 sentence; NET-016, NET-019, NET-021 amended, SCH-025 added; corpus 291 → 294 (`P-capture-key-handover`, `N-capture-key-handover-31`, `N-capture-key-handover-version-2`); CER-44 when/then; code through codec, client, ffi and the shell's CAPTURE_KEY phase (agent, this session) |
+| 2 | Whether verifier selection, fishing, consent and the signing artifacts cross a local interface | **No: all are end-to-end payload, multicast to the witnesses**, who observe the sequence | Design §7.1 new paragraph (two carriages), §7.5.2 and §8.1.2 reworded (the term "direct channel" is gone from the set); `wire-format.md` §14.2 "the inventory is complete", §7.10.1 paragraph: **kinds owed**; NET-022 added. Proposed kinds below, for a ruling |
+| 3 | Eviction order in the pending lists | **Trust-reducing pendings get retention priority; reissues are lazily reconstructed from gossip or a later locator distribution** | `wire-format.md` §10 paragraph; design §6.2.2 sentence; infra §4.3 and light §2 bullets; TOP-037 added; TOP-46 retitled with a new rule quote, given/then and interpretation; archive table moves to a shared ceiling of 768 with reissue-first eviction, node store gains a trust-reducing flag (agent, this session) |
+| 4 | Bundle-continuation shape | **Keep** | Nothing to change; the flag is closed |
+| 5 | `SignedLocator` alternative in the peering endpoint-update field | **Correct** | Nothing to change; the flag is closed |
+| 6 | Frozen working files | **Robot/ is the assistant's workspace**: not trusted as history, prune non-operational files, do not spend tokens correcting obsolete ones | Pruned: `network-design-checkpoint-2026-08-12.md`, `resource-interaction-requirements.md`, `biometric-engine-options.md`, `conformance-run-3-brief.md`, `outstanding-work-2026-09-21.md` (git keeps them). Kept: the plan (code cites its milestones), the matrix, the screens, the app notes, the device profile, the drafting notes, the checkers. Two pointer sentences adjusted; CLAUDE.md's closed-records paragraph replaced with the policy; refcheck now covers 14 documents, 0 flags |
+| 7 | Sweep checklist at the agent-instructions level | **Ignore AGENTS.md entirely; it is Reviewer2's file, managed by them** | `.gitignore` comment and CLAUDE.md say so; P2 closed |
+| 8 | Two rewords of the author's text | **Preface left** (the author edits it before release); **§7.4.4 kept** as more accurate | Nothing to change |
+| 9 | Canonical-vector bar | **Restate as what has been done.** The outside-implementation condition descended from a suggested third-party security audit the author never intended, this being an unfunded solo side project | `wire-format.md` §13 item 2 (canonical, not open); design Status, Document set row, §22.4, §23.1 (bullet removed), §23.4; `test-vectors/README.md` title and status; generator headers (7) and docstring; VAL-006; CLAUDE.md. Review plan gains a status paragraph |
+
+**Closed on inspection**: the first-message race was ruled 2026-09-24
+(the delivering node carries the binding); the 21:48 edits were this
+assistant's flicker sentences.
+
+### Proposed payload kinds for the ceremony's conversation (my drafting, for the author)
+
+Ruling 2 leaves the kinds owed. Every object but one already has an encoding;
+registering them is a table edit. Proposed, in the order the ceremony uses them:
+
+| Kind | Carries | Between |
+|---|---|---|
+| 9 | `VerificationQuery` to consent to (§5.5) | Querier to the subject |
+| 10 | `[ bstr .size 32 query-id, COSE_Sign1 consent ]` (§5.5 field 7's object) | Subject to querier |
+| 11 | `[ 1*256 ArchiveEntry ]`, a fishing proposal as bundle augmentation (§7.9, §5.4) | Participant to participant |
+| 12 | Witness request: the ceremony-id, the two participants, `started_at`, the channels claimed (`rhtn-client`'s `WitnessRequest`, no wire shape yet) | Participant to each nominated witness |
+| 13 | The proposed record body (§3.2 body bytes) | Proposer to every signer, witnesses included |
+| 14 | A signer's `COSE_Signature` entry, or a refusal | Signer to proposer |
+| 15 | The finalised envelope (§3) | Proposer to every signer |
+
+Kind 12 is the only new structure. "Which verifier was selected" needs no kind
+of its own: the subject learns it from kind 9. The multicast is the sender's
+duty, not a message: each of 9–15 is sent to the counterparty and to every
+witness. **A privacy consequence for the author**: witnesses thereby see the
+fishing proposals, including candidates that did not land, which the record
+never carries; §19.2 (the verifier and witness social graph) does not yet
+price it.
+
+**Not done this session**: `models/tamarin/local/exchange.spthy` enumerates
+four anchored messages (line 28) and says three at line 169; the rule pair
+covers the fifth by the same argument, but Tamarin is not installed here and an
+edited model with a stale stamp fails the gate, so the comment waits for the
+next proving run.
+
+## Second round of rulings (author, 2026-10-02)
+
+| # | Item | Ruling | Applied |
+|---|---|---|---|
+| 1 | The proposed payload-kind table | **Adopted** | `wire-format.md` §7.10.1 registers kinds 9 to 18 and §7.10.2 states the structures; §1.3 gains four bound rows; §13's open item is removed. Design §22.2 and §22.4 pointers updated; §7.1's carriage paragraph carries the kind-9 exception. NET-022 amended, SCH-026 added (486 families). Corpus 294 → 312: ten positives, two bounds, seven negatives; `messages.md` captions the eleven conversation payloads with their kinds. `verify.py` now selects the LateResponse by position rather than as the last payload. Code: codec arms, kind constants, a `conversation` module and tests (agent, this session) |
+| 1a | **Three legs the proposal missed**, found by reading the kernel's harness: the witness's answer, the responses one party gathered for the proposer, and each signer's back-pointers. Without them the conversation cannot be carried | Registered as kinds 13, 14 and 15. **Drafter's additions; the author may strike** |
+| 1b | **Kind 9 goes to the subject only, not to witnesses.** The consent request carries the fuzzed profile (field 4, up to 4 KB), which §5.5 field 7 and §5.6 already confine to the one verifier the query names; witnesses hold no capture to compare it against and the sequence event they observe is the consent itself (kind 10) | **Drafter's exception, stated in §7.10.1's row and design §7.1; the author may widen it** |
+| 2 | Is the sequence and the message types built into the kernel's witness function? | Answered in the session: the sequence exists as state checks (`take_witness_request` keeps the accepted request; `witness_sign` refuses a proposal whose start or participants differ from it; `review_and_sign` checks root and back-pointers) and the types exist as the in-process `Msg` enum moved by hand in the harness. Until today they had no wire form; kinds 9 to 18 give them one. **Not yet done**: carrying them over the courier to the counterparty and the witnesses, which is the next implementation step |
+| 3 | Witnesses seeing fishing proposals that did not land | **Do not price it** | Nothing added to §19.2 |
+| 4 | The two slow eviction tests | **Test-only ceiling for the gate; keep the production-size runs as load tests, noted in the test suite and the pre-deployment stage, run when the code changes and before any release** | Runtime-configurable ceilings for tests, production defaults unchanged; production-size tests `#[ignore]`d with the rule in the reason string; `crates/tools/load-tests.sh` runs them; README says when (agent, this session). A TOP row and the review plan's Stage 2 and Stage 3 carry the note (below) |
+| 5 | "Tamarin was running before, what changed?" | **Nothing changed.** The prover is at `~/tools/tamarin-prover` and `models/run-all.sh` has always named it there (`TAMARIN=${TAMARIN:-$HOME/tools/tamarin-prover}`); my earlier check looked only on `PATH`, where it never was. `exchange.spthy`'s comment now names five anchored messages at both sites; `run-all.sh` is re-proving and re-stamping everything in this session |
+| 6 | `crates/node/tests/held.rs` untracked | Staged with `git add` |

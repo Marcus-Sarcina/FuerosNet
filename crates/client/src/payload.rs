@@ -520,6 +520,34 @@ pub const KIND_ARCHIVE_REPLY: u64 = 6;
 /// otherwise (design §12.6.3) — and the `VerifierResponse` the other way.
 pub const KIND_QUERY: u64 = 7;
 pub const KIND_RESPONSE: u64 = 8;
+/// The ceremony's conversation after the local exchanges
+/// (`wire-format.md` §7.10.1, kinds 9 to 18, in the order a ceremony uses
+/// them).  Each one a participant sends goes to its counterparty and to
+/// every witness either nominated, so a witness observes the sequence it
+/// attests; the consent request is the one exception, to the subject
+/// alone, since the fuzzed profile it carries reaches nobody who holds no
+/// capture to compare it against.
+///
+/// A `VerificationQuery` (§5.5) for the subject to consent to.
+pub const KIND_CONSENT_REQUEST: u64 = 9;
+/// The `ConsentReply` (§7.10.2) back: the query id and the consent over it.
+pub const KIND_CONSENT_REPLY: u64 = 10;
+/// A `FishingProposal` (§7.10.2), a bundle augmentation (design §8.1.2).
+pub const KIND_FISHING_PROPOSAL: u64 = 11;
+/// A `WitnessRequest` (§7.10.2) to a nominee, and its `WitnessAnswer`.
+pub const KIND_WITNESS_REQUEST: u64 = 12;
+pub const KIND_WITNESS_ANSWER: u64 = 13;
+/// The `GatheredResponses` (§7.10.2) of the participant that did not
+/// propose, to the proposer.
+pub const KIND_GATHERED_RESPONSES: u64 = 14;
+/// One signer's `BackPointers` (§7.10.2, §3.1), to the proposer.
+pub const KIND_BACK_POINTERS: u64 = 15;
+/// The `ProposedBody` (§7.10.2) every signer reviews, and each signer's
+/// `SigningReply`: its two entries or its refusal.
+pub const KIND_PROPOSED_BODY: u64 = 16;
+pub const KIND_SIGNING_REPLY: u64 = 17;
+/// The finalised `Envelope` (§3), proposer to every signer.
+pub const KIND_RECORD: u64 = 18;
 
 /// A plaintext with its kind in front.
 pub fn wrap(kind: u64, bytes: &[u8]) -> Vec<u8> {

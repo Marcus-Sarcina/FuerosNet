@@ -970,6 +970,7 @@ and none has been run.
 | **Fuzzing the decoder** | The CBOR parser is the highest-value target: deterministic-encoding enforcement, duplicate keys, indefinite-length rejection, unknown-field preservation. Malformed input arriving from strangers is the design's largest untrusted surface |
 | **Property-based testing** | Canonical encoding round-trips; signature verification invariants under field reordering; locator truncation at nibble boundaries |
 | **Differential testing** | Two independent implementations disagreeing on canonical encoding is the failure that breaks every signature in the network |
+| **Load tests at production ceilings** | `crates/tools/load-tests.sh`: the held-list eviction tests at the real ceilings (TOP-037, TOP-038), ignored by the commit gate, which runs them against a reduced test-only ceiling. Run whenever `crates/archive/src/topology.rs` or `crates/node/src/store.rs` change [author, 2026-10-02] |
 
 ---
 
@@ -981,6 +982,7 @@ and none has been run.
 | **Scale simulation** | The parameters explicitly deferred "to tune under load": cache placement, TTLs, anchor caching thresholds, heartbeat intervals |
 | **Ceremony UX and accessibility review** | The presence ceremony assumes camera use, guided head movement, and several minutes of cooperation. Consider users with visual, motor, or cognitive impairments, and what the fallback is |
 | **Red team against a running system** | Repeat 0.8 with the implementation available |
+| **Load tests at production ceilings** | `crates/tools/load-tests.sh` before any release, whatever the gate said [author, 2026-10-02] |
 
 ---
 
@@ -1012,6 +1014,15 @@ Stated plainly so it is not over-trusted:
 ---
 
 # Suggested order
+
+**Status, 2026-10-02.** Stage 1 has run in substance: `models/README.md`
+records five TLA+ models, ten Tamarin theories and the flow-metric simulation,
+all stamped against their sources. Stage 2 is proceeding as Reviewer2's code
+rounds, three to date, dispositions in `review-tracking.md`; the cryptographic
+audit stays uncommissioned by ruling. The test-vector bar no longer names an
+outside implementation: `wire-format.md` §13 states what it is. Cycle 3's
+document passes have not been run, and the standing practice is to close open
+work first.
 
 **Working order as of 2026-08-12** (0.1–0.5.1 complete):
 

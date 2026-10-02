@@ -272,7 +272,16 @@ fn implemented_kind(kind: &str) -> bool {
             | "ProximityOutcomes"
             | "Candidates"
             | "CandidateHandover"
+            | "CaptureKeyHandover"
             | "DeviceIntroduction"
             | "DeviceCredential"
+            | "ConsentReply"
+            | "FishingProposal"
+            | "WitnessRequest"
+            | "WitnessAnswer"
+            | "GatheredResponses"
+            | "BackPointers"
+            | "ProposedBody"
+            | "SigningReply"
     )
 }

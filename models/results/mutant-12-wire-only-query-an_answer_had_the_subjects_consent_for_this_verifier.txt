@@ -227,7 +227,7 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/results/mutant-12-wire-only-query-an_answer_had_the_subjects_consent_for_this_verifier.spthy
 
-  processing time: 1.99s
+  processing time: 1.93s
   
   a_query_is_answered (exists-trace): analysis incomplete (1 steps)
   an_answer_had_the_subjects_consent_for_this_verifier (all-traces): falsified - found trace (7 steps)

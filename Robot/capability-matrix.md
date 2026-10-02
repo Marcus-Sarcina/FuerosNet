@@ -1,7 +1,7 @@
 # Capability matrix: what a shell does, and what the kernel gives it
 
-Working document, 2026-09-22. What `Robot/outstanding-work-2026-09-21.md`
-section 7 asked for: each intended screen or action of the light client,
+Working document, 2026-09-22. What a working note of 2026-09-21, since
+pruned, asked for: each intended screen or action of the light client,
 the kernel operation it calls (`crates/ffi/src/client.rs`, `Participant`),
 the adaptor beneath it, what comes back, and the acceptance entry that
 closes it. **Owed** marks a row the kernel does not yet carry. The row is
@@ -83,7 +83,7 @@ credential in the envelope. Issuance and the credential slot are on the
 kernel (`delegate`, `export_backup`); **the mode itself is not read
 anywhere**: a kernel query *does this identity run an instance* is owed,
 and the operator's frame waits on the administration-channel decision
-(section 7 of the outstanding-work note), which is the author's.
+which is the author's.
 
 ## 7. What crosses inward
 

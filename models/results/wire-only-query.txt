@@ -278,7 +278,7 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/wire-only/query.spthy
 
-  processing time: 2.03s
+  processing time: 1.69s
   
   a_query_is_answered (exists-trace): verified (7 steps)
   an_answer_had_the_subjects_consent_for_this_verifier (all-traces): verified (8 steps)

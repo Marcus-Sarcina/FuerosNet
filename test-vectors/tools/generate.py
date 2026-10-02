@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the draft canonical test vectors for the RHTN wire format.
+"""Generate the canonical test vectors for the RHTN wire format.
 
 Everything computable is computed; nothing is hand-transcribed. Re-running this
 script regenerates keys.md, primitives.md, transactions.md, records.md,
@@ -327,7 +327,7 @@ emit('keys.md', f"""# Test identities
 
 {PIN}
 
-**Draft. Spec-derived, unverified by an implementation.** Derivation rules and
+**Canonical. Spec-derived, reproduced by the independent harness.** Derivation rules and
 status are in [README.md](README.md); regenerate with `tools/generate.py`.
 
 Every identity is synthetic, deterministic, and **real for both components**:
@@ -493,7 +493,7 @@ emit('primitives.md', f"""# Primitives
 
 {PIN}
 
-**Draft. Spec-derived, unverified by an implementation.** See
+**Canonical. Spec-derived, reproduced by the independent harness.** See
 [README.md](README.md).
 
 ## Deterministic CBOR atoms (`wire-format.md` §1)
@@ -1321,7 +1321,7 @@ emit('transactions.md', f"""# Transaction bodies, txids, and one full envelope
 
 {PIN}
 
-**Draft. Spec-derived, unverified by an implementation.** See
+**Canonical. Spec-derived, reproduced by the independent harness.** See
 [README.md](README.md).
 
 `txid = SHA-256(deterministic CBOR of the body map)`, signature array excluded
@@ -2129,7 +2129,7 @@ emit('records.md', f"""# Standalone signed records (`wire-format.md` §7)
 
 {PIN}
 
-**Draft. Spec-derived, unverified by an implementation.** See
+**Canonical. Spec-derived, reproduced by the independent harness.** See
 [README.md](README.md). Each **signed** §7 object is a standalone `COSE_Sign1`
 under its own domain-separation tag (§1.1) — this file grows toward one
 known-answer vector per signing context, and the unsigned §7 encodings are
@@ -2225,7 +2225,7 @@ emit('verifier-selection.md', f"""# Verifier selection — the reasonableness cr
 
 {PIN}
 
-**Draft. Spec-derived, unverified by an implementation.** See
+**Canonical. Spec-derived, reproduced by the independent harness.** See
 [README.md](README.md). *The nonce-commitment, seed and hash-rank vectors that
 lived here were retired 2026-09-01 with deterministic selection
 (`wire-format.md` §5): selection is by recognition — the selector's own
@@ -2793,6 +2793,31 @@ _reply_pairs = [
     ('PrekeyReply — every device\'s bundle, alice\'s phone and desktop, for a request naming no device (§7.8)', r_pk_all),
     ('ArchiveReply — one PRESENTED presence record, the holder\'s disclosure choice carried (§7.9)', r_archive_presented),
 ]
+# the ceremony's conversation (s7.10.1 kinds 9-18; the structures are
+# s7.10.2): what the two participants and their witnesses say to one another
+# after the local exchanges, on the end-to-end path. The normal alice-bob
+# record supplies the query, the body, its responses, its disclosure set and
+# one signer's envelope entries; the ceremony-id is that record's
+# pre-commitment, which VerificationQuery field 3 also carries.
+conv_parts = sorted([alice, bob], key=lambda i: i.keyhash, reverse=True)
+conv_channels = [e_map([(e_uint(1), e_uint(2)), (e_uint(2), e_uint(0))]),
+                 e_map([(e_uint(1), e_uint(3)), (e_uint(2), e_uint(0))])]
+consent_reply = e_arr([e_bstr(npr_q0), consent_over(npr_q0, alice)])
+fishing_proposal = e_arr([pc1_env])
+witness_request = e_map([(e_uint(1), e_bstr(npr_precommit)),
+                         (e_uint(2), e_arr([e_bstr(i.keyhash) for i in conv_parts])),
+                         (e_uint(3), e_uint(TS_REC)),
+                         (e_uint(4), e_arr(conv_channels))])
+witness_answer_yes = e_map([(e_uint(1), b'\xf5'), (e_uint(2), e_uint(7))])
+witness_answer_no = e_map([(e_uint(1), b'\xf4')])
+gathered_responses = e_arr(npr_responses)
+back_pointers = e_arr([e_bstr(npr_txid), e_bstr(pc1_txid)])
+proposed_slots = [npr_slots[lab][0] for lab in LABELS]
+proposed_body = e_map([(e_uint(1), e_bstr(npr_body)), (e_uint(2), e_arr(proposed_slots))])
+signer_entries = e_arr([cose_signature_entry(p, s) for _, _, p, _, s in npr_entries[:2]])
+signing_reply_signed = e_map([(e_uint(1), signer_entries)])
+signing_reply_refused = e_map([(e_uint(2), e_uint(1)), (e_uint(3), e_bstr(IDS['w1'].keyhash))])
+
 # (caption, bytes, the s7.10.1 kind tag that precedes the object on the
 # channel) -- the kind is per object, and an earlier version of this list
 # captioned every one as kind 2 [2026-10-01]
@@ -2800,6 +2825,22 @@ _e2e_pairs = [
     ('KeyGrant — the key sealing the capture c1 holds of alice from their PRIOR meeting (field 1 names that record), released against the normal record\'s first query', kg, 1),
     ('LateResponse — the normal record supplemented by a late `inconclusive` from a fourth verifier; private information for the participants, never part of the record', late, 2),
 ]
+# the conversation's kinds, captioned with the two above but registered under
+# their own typed ids (below), not as P-e2e entries
+_conv_pairs = [
+    ('VerificationQuery, kind 9 — the normal record\'s first query as the querier sends it to the subject for consent; to the subject alone, never to a witness (§5.6)', npr_query0, 9),
+    ('ConsentReply, kind 10 — the subject\'s consent over that query_id', consent_reply, 10),
+    ('FishingProposal, kind 11 — one prior record offered as a bundle augmentation', fishing_proposal, 11),
+    ('WitnessRequest, kind 12 — the normal record\'s ceremony put to a nominee: its pre-commitment as ceremony-id, the participants in body order, the claimed start, NFC and optical passing', witness_request, 12),
+    ('WitnessAnswer, kind 13 — witnessing, with the attestation bits it will set (7: protocol ran, both responsive, latency bound)', witness_answer_yes, 13),
+    ('WitnessAnswer, kind 13 — declining; no bits', witness_answer_no, 13),
+    ('GatheredResponses, kind 14 — the normal record\'s three responses in body order, for the proposer', gathered_responses, 14),
+    ('BackPointers, kind 15 — one signer\'s two back-pointers', back_pointers, 15),
+    ('ProposedBody, kind 16 — the normal record\'s body with its seven revealed disclosure slots', proposed_body, 16),
+    ('SigningReply, kind 17 — the lowest-keyhash signer\'s two envelope entries over that body', signing_reply_signed, 17),
+    ('SigningReply, kind 17 — a refusal: a witness attributed to this party that it did not nominate, with the witness keyhash', signing_reply_refused, 17),
+]
+# kind 18 is the finalised Envelope, `P-normal-record` in records.md
 _ctrl_md, _req_md, _msg_md = [], [], []
 for cap, by in _msg_pairs:
     block = f"""**{cap}** ({len(by)} bytes, length prefix included):
@@ -2814,7 +2855,7 @@ for cap, by in _reply_pairs:
 ```
 {hexblock(by)}
 ```""")
-for cap, by, kind in _e2e_pairs:
+for cap, by, kind in _e2e_pairs + _conv_pairs:
     _msg_md.append(f"""**{cap}** ({len(by)} bytes — an END-TO-END PAYLOAD, not a stream reply: the bytes are the object alone; on the channel a `uint` kind tag precedes them, §7.10.1's registry — kind {kind} for this object — and no prefix is included below):
 
 ```
@@ -2825,7 +2866,7 @@ emit('messages.md', f"""# Unsigned message families (`wire-format.md` §§6–11
 
 {PIN}
 
-**Draft. Spec-derived, unverified by an implementation.** Canonical bar 9:
+**Canonical. Spec-derived, reproduced by the independent harness.** Canonical bar 9:
 one positive known-answer encoding per framed message family. Framing is
 `u32-be length || deterministic CBOR of [type, body]`; stream 0 frames bound
 at 64 KiB (65,536 B), bidirectional request streams at 256 KiB (262,144 B).
@@ -3718,6 +3759,13 @@ cand_v6 = candidate(1, [0x20, 0x01, 0x0d, 0xb8] + [0] * 11 + [7], 40404)
 cands_bare = e_arr([cand_host, cand_v6])
 cand_handover = e_arr([e_uint(1), e_bstr(pc_demo), cands_bare])
 
+# the capture-key handover: alice hands bob the key for the captures bob holds
+# of her from THIS ceremony -- subject alice, holder bob, this pre-commitment;
+# the derivation is records.md's known answer with the holder and ceremony
+# swapped in
+ck_alice_to_bob = hkdf_sha256(demo_seed, b'rhtn/1:capture' + alice.keyhash + bob.keyhash + pc_demo)
+ck_handover = e_arr([e_uint(1), e_bstr(pc_demo), e_bstr(ck_alice_to_bob)])
+
 # the handover between alice's two devices: the desktop's transport key and
 # its bundle payload (the PrekeyBundle map with field 6 absent — exactly
 # what alice's identity signs), answered by the delegation and the signed
@@ -3730,7 +3778,7 @@ emit('local-interfaces.md', f"""# Local device-to-device interfaces (`wire-forma
 
 {PIN}
 
-**Draft. Spec-derived, unverified by an implementation.** The five encodings
+**Canonical. Spec-derived, reproduced by the independent harness.** The encodings
 of `wire-format.md` §14.3, as one coherent exchange: **alice initiates with
 bob**, the contributions and the ceremony-id are the pre-commitment known
 answer in `records.md` **byte-for-byte**, and the device handover reuses the
@@ -3806,6 +3854,15 @@ anchored** ({len(cand_handover)} bytes):
 {hexblock(cand_handover)}
 ```
 
+**CaptureKeyHandover — the key alice derived for the captures bob holds of
+her, anchored to the ceremony-id** ({len(ck_handover)} bytes). The key is
+`records.md`'s capture-key derivation with subject alice, holder bob and this
+ceremony's pre-commitment; one such message crosses each way at capture time:
+
+```
+{hexblock(ck_handover)}
+```
+
 ## The handover between one identity's devices (§14.3.3)
 
 **DeviceIntroduction — alice's desktop offers its transport key and its
@@ -3833,6 +3890,7 @@ for fid, by, kind, note in [
     ('P-proximity-outcomes', prox_x, 'ProximityOutcomes', "the record's own channels, anchored"),
     ('P-candidates-bare', cands_bare, 'Candidates', 'the payload path form; both address families'),
     ('P-candidate-handover', cand_handover, 'CandidateHandover', 'the same candidates, anchored'),
+    ('P-capture-key-handover', ck_handover, 'CaptureKeyHandover', "alice's key for bob's captures of her, anchored"),
     ('P-device-introduction', dev_intro, 'DeviceIntroduction', 'field 3 is the PrekeyBundle map, field 6 absent'),
     ('P-device-credential', dev_cred, 'DeviceCredential', 'delegation and signed bundle, byte-identical to records.md'),
 ]:
@@ -3860,6 +3918,48 @@ reg('N-optical-contribution-15', 'bytes',
 reg('N-transcript-confirm-31', 'bytes',
     REJ('TranscriptConfirm', 'schema', 'a ceremony-id is 32 bytes'),
     e_arr([e_uint(1), e_bstr(pc_demo[:31])]))
+reg('N-capture-key-handover-31', 'bytes',
+    REJ('CaptureKeyHandover', 'schema', 'a capture key is 32 bytes'),
+    e_arr([e_uint(1), e_bstr(pc_demo), e_bstr(ck_alice_to_bob[:31])]))
+reg('N-capture-key-handover-version-2', 'bytes',
+    REJ('CaptureKeyHandover', 'schema', 'a version the decoder does not know is refused'),
+    e_arr([e_uint(2), e_bstr(pc_demo), e_bstr(ck_alice_to_bob)]))
+
+# the ceremony conversation's structures (s7.10.2), kinds 9-18 in messages.md
+for fid, by, kind, note in [
+    ('P-consent-reply', consent_reply, 'ConsentReply', "the subject's consent over the normal record's first query_id"),
+    ('P-fishing-proposal', fishing_proposal, 'FishingProposal', 'one ArchiveEntry, the envelope form'),
+    ('P-witness-request', witness_request, 'WitnessRequest', "the normal record's ceremony; NFC and optical passing"),
+    ('P-witness-answer-witnessing', witness_answer_yes, 'WitnessAnswer', 'bits 7: protocol ran, both responsive, latency bound'),
+    ('P-witness-answer-declining', witness_answer_no, 'WitnessAnswer', 'declining carries no bits'),
+    ('P-gathered-responses', gathered_responses, 'GatheredResponses', "the normal record's three responses in body order"),
+    ('P-back-pointers', back_pointers, 'BackPointers', 'two txids'),
+    ('P-proposed-body', proposed_body, 'ProposedBody', "the normal record's body and its seven revealed slots"),
+    ('P-signing-reply-signed', signing_reply_signed, 'SigningReply', "the lowest-keyhash signer's two entries"),
+    ('P-signing-reply-refused', signing_reply_refused, 'SigningReply', 'refusal 1 with the witness keyhash'),
+]:
+    reg(fid, 'bytes', ACC(kind, note), by)
+_bp9 = [e_bstr(H(b'rhtn-test-vectors:back-pointer:' + bytes([i]))) for i in range(9)]
+reg('B-back-pointers-8', 'bytes', ACC('BackPointers', 'eight, the per-signer ceiling'), e_arr(_bp9[:8]))
+reg('B-back-pointers-9', 'bytes',
+    REJ('BackPointers', 'schema', 'nine back-pointers exceed the per-signer ceiling of eight'), e_arr(_bp9))
+reg('N-back-pointers-empty', 'bytes',
+    REJ('BackPointers', 'schema', 'a signer sends at least one back-pointer'), e_arr([]))
+reg('N-witness-answer-bits-while-declining', 'bytes',
+    REJ('WitnessAnswer', 'schema', 'the attestation bits are present only when witnessing'),
+    e_map([(e_uint(1), b'\xf4'), (e_uint(2), e_uint(7))]))
+reg('N-gathered-responses-33', 'bytes',
+    REJ('GatheredResponses', 'schema', 'thirty-three responses exceed the per-record bound of 32'),
+    e_arr([npr_responses[0]] * 33))
+reg('N-proposed-body-six-slots', 'bytes',
+    REJ('ProposedBody', 'schema', 'exactly seven slots, every one revealed'),
+    e_map([(e_uint(1), e_bstr(npr_body)), (e_uint(2), e_arr(proposed_slots[:6]))]))
+reg('N-signing-reply-both', 'bytes',
+    REJ('SigningReply', 'schema', 'entries or a refusal, never both'),
+    e_map([(e_uint(1), signer_entries), (e_uint(2), e_uint(1))]))
+reg('N-signing-reply-particular-alone', 'bytes',
+    REJ('SigningReply', 'schema', 'the particular accompanies a refusal and nothing else'),
+    e_map([(e_uint(1), signer_entries), (e_uint(3), e_bstr(IDS['w1'].keyhash))]))
 reg('N-intent-nominees-65', 'bytes',
     REJ('IntentExchange', 'schema', 'nominees bound at 64'),
     e_arr([e_uint(1), e_bstr(pc_a),

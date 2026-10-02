@@ -404,11 +404,15 @@ object Kernel {
                 }
             }
             Meet.Step.CAPTURE -> live.received(Carriage.Phase.CAPTURE_KEY)?.let { set ->
-                set.firstOrNull()?.let { theirKey ->
+                set.firstOrNull()?.let { bytes ->
                     try {
-                        // their key seals MY capture of them; the capture
-                        // ran on this device's camera at D4 and is sealed
-                        // beneath, silently (design §7.5.2.6)
+                        // the carried `CaptureKeyHandover` is checked
+                        // against this ceremony's id in the kernel, and
+                        // their key is what comes back. It seals MY
+                        // capture of them: the capture ran on this
+                        // device's camera at D4 and is sealed beneath,
+                        // silently (design §7.5.2.6)
+                        val theirKey = p.takeCaptureKeyCarriage(bytes)
                         p.capture(theirKey)
                         m.note("captures sealed; the meeting can be proposed.")
                         m.captureDone()
@@ -441,18 +445,18 @@ object Kernel {
 
     /**
      * D4: hand the counterparty the key that seals its captures of me, and
-     * take theirs. **The capture key has no §14.3 encoding** — the §14.2
-     * table never listed the handover design §7.5.2.6 requires (raised
-     * 2026-10-01, `review-tracking.md`) — so the raw 32 bytes cross as the
-     * one message of the CAPTURE_KEY phase. The capture itself ran on this
-     * device's camera as the kernel drove [AndroidShell.capture]; this is
-     * only the keys crossing.
+     * take theirs. The keys cross as `CaptureKeyHandover` (`wire-format.md`
+     * §14.3.2), one each way as the one message of the CAPTURE_KEY phase,
+     * anchored to the ceremony-id like the outcomes and checked against it
+     * in the kernel when taken. The capture itself ran on this device's
+     * camera as the kernel drove [AndroidShell.capture]; this is only the
+     * keys crossing.
      */
     fun runCapture(m: Meet) {
         val p = participant ?: return
         val to = peer ?: return
         try {
-            val mine = p.captureKey()
+            val mine = p.captureKeyCarriage()
             carriage?.send(listOf(mine), Carriage.Phase.CAPTURE_KEY)
             m.note("my capture key is sent; capturing the counterparty.")
             drainBearer(p, to, m)

@@ -174,54 +174,65 @@ impl ProximityOutcomes {
         emit_array_head(&mut out, 3);
         emit_uint(&mut out, 1);
         emit_bstr(&mut out, &self.ceremony_id);
-        emit_array_head(&mut out, self.channels.len());
-        for c in &self.channels {
-            // the record's own Channel map (§4.5): kind, result, and the
-            // claimed resolution only where the client claims one
-            let n = 2 + usize::from(c.resolution_m.is_some());
-            emit_map_head(&mut out, n);
-            emit_uint(&mut out, 1);
-            emit_uint(&mut out, c.kind.code());
-            emit_uint(&mut out, 2);
-            emit_uint(&mut out, c.result as u64);
-            if let Some(m) = c.resolution_m {
-                emit_uint(&mut out, 3);
-                emit_uint(&mut out, m);
-            }
-        }
+        emit_channels(&mut out, &self.channels);
         out
     }
 
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         let it = checked(b, "ProximityOutcomes")?;
         let a = fields(&it);
-        let Item::Array(cs) = &a[2] else {
-            return Err("channels not an array".into());
-        };
-        let mut channels = Vec::new();
-        for c in cs {
-            let Item::Map(m) = c else {
-                return Err("channel not a map".into());
-            };
-            channels.push(ChannelOutcome {
-                kind: map_get(m, 1)
-                    .and_then(as_uint)
-                    .and_then(ChannelKind::from_code)
-                    .ok_or("channel kind")?,
-                result: match map_get(m, 2).and_then(as_uint) {
-                    Some(0) => ChannelResult::Pass,
-                    Some(1) => ChannelResult::Fail,
-                    Some(2) => ChannelResult::Unavailable,
-                    _ => return Err("channel result".into()),
-                },
-                resolution_m: map_get(m, 3).and_then(as_uint),
-            });
-        }
         Ok(ProximityOutcomes {
             ceremony_id: fixed32(b, &a[1])?,
-            channels,
+            channels: read_channels(&a[2])?,
         })
     }
+}
+
+/// The record's own `Channel` maps (§4.5) as an array: kind, result, and
+/// the claimed resolution only where the client claims one.  One emitter
+/// for every object that carries the channels as measured, here and on the
+/// conversation (§7.10.2), so the two cannot drift apart.
+pub(crate) fn emit_channels(out: &mut Vec<u8>, channels: &[ChannelOutcome]) {
+    emit_array_head(out, channels.len());
+    for c in channels {
+        let n = 2 + usize::from(c.resolution_m.is_some());
+        emit_map_head(out, n);
+        emit_uint(out, 1);
+        emit_uint(out, c.kind.code());
+        emit_uint(out, 2);
+        emit_uint(out, c.result as u64);
+        if let Some(m) = c.resolution_m {
+            emit_uint(out, 3);
+            emit_uint(out, m);
+        }
+    }
+}
+
+/// The channels back from their array.
+pub(crate) fn read_channels(it: &Item) -> Result<Vec<ChannelOutcome>, String> {
+    let Item::Array(cs) = it else {
+        return Err("channels not an array".into());
+    };
+    let mut channels = Vec::new();
+    for c in cs {
+        let Item::Map(m) = c else {
+            return Err("channel not a map".into());
+        };
+        channels.push(ChannelOutcome {
+            kind: map_get(m, 1)
+                .and_then(as_uint)
+                .and_then(ChannelKind::from_code)
+                .ok_or("channel kind")?,
+            result: match map_get(m, 2).and_then(as_uint) {
+                Some(0) => ChannelResult::Pass,
+                Some(1) => ChannelResult::Fail,
+                Some(2) => ChannelResult::Unavailable,
+                _ => return Err("channel result".into()),
+            },
+            resolution_m: map_get(m, 3).and_then(as_uint),
+        });
+    }
+    Ok(channels)
 }
 
 /// Candidates on the ceremony's channels (§14.3.2, design §12.6.3): the
@@ -267,6 +278,41 @@ impl CandidateHandover {
         Ok(CandidateHandover {
             ceremony_id: fixed32(b, &a[1])?,
             candidates,
+        })
+    }
+}
+
+/// The capture key, handed across at capture time (§14.3.2, design
+/// §7.5.2.6): the 32 bytes the sender derived for the captures the
+/// receiver holds of it, under the anchor the other local objects carry.
+/// One crosses each way, and the receiver seals its captures beneath it
+/// and lets it go once sealed (design §7.5.2).
+///
+/// The anchor buys this what it buys the others and no more: a key from
+/// another ceremony is refused here, and a co-present party quoting the
+/// public ceremony-id is excluded by §14.1's property, not by this check.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CaptureKeyHandover {
+    pub ceremony_id: [u8; 32],
+    pub key: [u8; 32],
+}
+
+impl CaptureKeyHandover {
+    pub fn encode(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        emit_array_head(&mut out, 3);
+        emit_uint(&mut out, 1);
+        emit_bstr(&mut out, &self.ceremony_id);
+        emit_bstr(&mut out, &self.key);
+        out
+    }
+
+    pub fn decode(b: &[u8]) -> Result<Self, String> {
+        let it = checked(b, "CaptureKeyHandover")?;
+        let a = fields(&it);
+        Ok(CaptureKeyHandover {
+            ceremony_id: fixed32(b, &a[1])?,
+            key: fixed32(b, &a[2])?,
         })
     }
 }
@@ -363,7 +409,7 @@ fn fields(it: &Item) -> &[Item] {
     }
 }
 
-fn fixed32(b: &[u8], it: &Item) -> Result<[u8; 32], String> {
+pub(crate) fn fixed32(b: &[u8], it: &Item) -> Result<[u8; 32], String> {
     bs(b, it)
         .and_then(|s| <[u8; 32]>::try_from(s.as_slice()).ok())
         .ok_or_else(|| "a 32-byte field is not 32 bytes".into())
@@ -375,7 +421,7 @@ fn fixed16(b: &[u8], it: &Item) -> Result<[u8; 16], String> {
         .ok_or_else(|| "a 16-byte field is not 16 bytes".into())
 }
 
-fn bs(b: &[u8], it: &Item) -> Option<Vec<u8>> {
+pub(crate) fn bs(b: &[u8], it: &Item) -> Option<Vec<u8>> {
     match it {
         Item::Bytes(r) => Some(b[r.clone()].to_vec()),
         _ => None,

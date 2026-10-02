@@ -95,6 +95,16 @@ fn the_optical_objects_encode_to_the_canonical_bytes_and_read_back() {
         "the anchor comes off and the bare payload-path array is what is left"
     );
     assert_eq!(read.encode(), fx);
+
+    let fx = fixture("P-capture-key-handover");
+    let read = CaptureKeyHandover::decode(&fx).expect("decodes");
+    assert_eq!(read.ceremony_id, cid, "anchored to the same ceremony");
+    assert_eq!(
+        &read.key[..],
+        &fx[fx.len() - 32..],
+        "the key is the last 32 bytes, as design §7.5.2.6 derives it"
+    );
+    assert_eq!(read.encode(), fx);
 }
 
 // acceptance: DEC-36
@@ -197,9 +207,22 @@ fn an_object_the_schema_refuses_does_not_decode_here_either() {
         OpticalContribution::decode(&fixture("N-optical-contribution-15")).is_err(),
         "a 15-byte contribution"
     );
+    // the capture key: short by a byte, and under a version nobody knows
+    assert!(
+        CaptureKeyHandover::decode(&fixture("N-capture-key-handover-31")).is_err(),
+        "a 31-byte capture key"
+    );
+    assert!(
+        CaptureKeyHandover::decode(&fixture("N-capture-key-handover-version-2")).is_err(),
+        "version 2 of the capture-key handover"
+    );
     // and the anchored kinds are not interchangeable, each checking against
     // its own rule
     assert!(ProximityOutcomes::decode(&fixture("P-candidate-handover")).is_err());
     assert!(CandidateHandover::decode(&fixture("P-proximity-outcomes")).is_err());
     assert!(BundleContinuation::decode(&fixture("P-intent-exchange")).is_err());
+    assert!(CaptureKeyHandover::decode(&fixture("P-transcript-confirm")).is_err());
+    assert!(CaptureKeyHandover::decode(&fixture("P-candidate-handover")).is_err());
+    assert!(TranscriptConfirm::decode(&fixture("P-capture-key-handover")).is_err());
+    assert!(CandidateHandover::decode(&fixture("P-capture-key-handover")).is_err());
 }

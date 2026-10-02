@@ -29,6 +29,15 @@ pub const INTENT_NOMINEES: usize = 64;
 pub const INTENT_BUNDLE_ENTRIES: usize = 256;
 pub const CANDIDATES_PER_EXCHANGE: usize = 8;
 pub const DELEGATIONS_PER_CREDENTIAL: usize = 45;
+/// The ceremony's conversation on the end-to-end channel (§7.10.2).
+/// `ArchiveEntry` entries per `FishingProposal`: §5.4's carriage bound.
+pub const FISHING_PROPOSAL_ENTRIES: usize = 256;
+/// `Channel` entries per `WitnessRequest`: the proximity-channel ceiling.
+pub const WITNESS_REQUEST_CHANNELS: usize = 8;
+/// `VerifierResponse` entries per `GatheredResponses`: the per-record bound.
+pub const GATHERED_RESPONSES: usize = 32;
+/// `COSE_Signature` entries per `SigningReply`: one logical signer (§3.5).
+pub const SIGNING_REPLY_ENTRIES: usize = 2;
 /// A `DeviceCredential` delegation entry: a hybrid signature and its
 /// fields, bounded with room (§14.3.3).
 pub const DELEGATION_ENTRY_BYTES: usize = 4096;

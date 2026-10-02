@@ -215,6 +215,10 @@ malformed, not merely unusual.
 | `ArchiveEntry` entries per `IntentExchange` or `BundleContinuation` (§14.3.2) | 256 — a bound on the carriage; the bundle itself has none (§5.4) |
 | `Channel` entries per `ProximityOutcomes` (§14.3.2) | 8 — the same ceiling as proximity channels per record, above |
 | `Candidate` entries per `CandidateHandover` or per payload-path candidate exchange (§14.3.2) | 8 |
+| `ArchiveEntry` entries per `FishingProposal` (§7.10.2) | 256 — §5.4's carriage bound |
+| `Channel` entries per `WitnessRequest` (§7.10.2) | 8 — the proximity-channel ceiling above |
+| `VerifierResponse` entries per `GatheredResponses` (§7.10.2) | 32 — the per-record bound above |
+| `COSE_Signature` entries per `SigningReply` (§7.10.2) | 2 — one logical signer (§3.5) |
 | Delegations per `DeviceCredential` (§14.3.3) | 45 — the run an instance is provisioned with, 90 days end to end (design §12.6.5) |
 | `PrekeyBundle` entries per prekey reply (§7.8) | 8 — one per device the node holds for the subject; design §23.3 holds the count near three |
 | `CatalogEntry`, total encoded bytes | 2048 |
@@ -971,8 +975,9 @@ halves, the old key's signature and a prior counterparty's `match` (below).
 
 **Keystream seeds are local, private and never on the wire.** A participant's
 seed for a counterparty's captures lives in that participant's own record of the
-transaction (design §7.5.2) and is exchanged only over the direct channel during
-a ceremony. **It is not a field here, and no conforming client writes one anywhere in a
+transaction (design §7.5.2); only the key derived from it for one ceremony
+crosses to the counterparty, on the local interface between the two devices
+(§14.3.2). **It is not a field here, and no conforming client writes one anywhere in a
 record — extension keys included, where no validator could recognise one** (§1
 preserves unknown keys; Appendix A states the force of client rules). Nothing in
 the evidence a third party evaluates depends on it, and placing it in a signed
@@ -3464,10 +3469,85 @@ attribute it; here nothing is read before attribution.
 | 6 | `ArchiveReply` (§7.9) | The subject back to the reader |
 | 7 | `[ VerificationQuery, COSE_Sign1, uint ]` (§5.6) | Querier to verifier |
 | 8 | `VerifierResponse` (§5.6) | Verifier to querier |
+| 9 | `VerificationQuery` (§5.5), to be consented to | Querier to the subject it is about, and to no witness: the fuzzed profile in field 4 reaches the one verifier field 7 names and nobody who holds no capture to compare it against (§5.6) |
+| 10 | `ConsentReply` (§7.10.2) | Subject to querier |
+| 11 | `FishingProposal` (§7.10.2), a bundle augmentation (design §8.1.2) | Participant to participant |
+| 12 | `WitnessRequest` (§7.10.2) | A participant to a witness it nominated |
+| 13 | `WitnessAnswer` (§7.10.2) | The witness back |
+| 14 | `GatheredResponses` (§7.10.2) | The participant that did not propose, to the proposer |
+| 15 | `BackPointers` (§7.10.2) | Each signer to the proposer (§3.1) |
+| 16 | `ProposedBody` (§7.10.2) | Proposer to every signer |
+| 17 | `SigningReply` (§7.10.2) | Each signer to the proposer |
+| 18 | `Envelope` (§3), the finalised record | Proposer to every signer |
 
 An unknown kind is application payload to a recipient that does not know it,
 and a kind whose body does not decode is dropped by the recipient that
 opened it: the sender is attributed, and the message is not evidence.
+
+**Kinds 9 to 18 are the ceremony's conversation** [author, 2026-10-02], in
+the order a ceremony uses them: everything the two participants and their
+witnesses say to one another after the local exchanges (§14.3). **Each one a
+participant sends goes to its counterparty and to every witness either of
+them nominated**, which is how a witness observes the sequence it attests
+(design §7.1); the one exception is kind 9, stated in its row, and kinds 12
+and 13 are between a participant and one witness but are sent to the rest the
+same way, so the proposer learns which witnesses accepted. Which verifier
+was selected needs no kind of its own: the subject learns it from kind 9.
+
+#### 7.10.2 The conversation's structures
+
+Every structure here is deterministic CBOR under §1 with the bounds §1.3
+states; a kind whose body does not decode is dropped as §7.10.1 says. Those
+that reuse an object defined elsewhere carry it unchanged.
+
+```
+ConsentReply = [
+  bstr .size 32,       ; query_id (§5.5 field 6)
+  COSE_Sign1           ; the subject's consent over it (§5.6), the object
+                       ;   VerifierResponse field 7 carries onward
+]
+
+FishingProposal = [ 1*256 ArchiveEntry ]   ; §7.9; §5.4's carriage bound
+
+WitnessRequest = {
+  1: bstr .size 32,    ; the ceremony-id (§14.3.1)
+  2: [ 2 keyhash ],    ; the participants, in body field 3's order (§3.2)
+  3: uint,             ; started_at, the claimed start (§3.2 field 1)
+  4: [ 0*8 Channel ]   ; the proximity channels as measured (§4.5)
+}
+
+WitnessAnswer = {
+  1: bool,             ; witnessing, or declining
+                       ;   (`light-client-requirements.md` §1.2's clock check)
+  ? 2: uint            ; present only when witnessing: the attestation bits
+                       ;   this witness will set (Witness field 3, §3.2)
+}
+
+GatheredResponses = [ 0*32 VerifierResponse ]   ; §4.5 field 5's bound, in
+                                                ;   the order the body sorts them
+
+BackPointers = [ 1*8 bstr .size 32 ]   ; one signer's list (§3.1)
+
+ProposedBody = {
+  1: bstr,             ; the record body, §3.2's map as every signer will
+                       ;   sign it, back-pointers in place
+  2: [ 7*7 Disclosure ]  ; the set the body's root commits to (§4.5.1),
+                         ;   every slot revealed, so a signer recomputes the
+                         ;   root before signing
+}
+
+SigningReply = {
+  ? 1: [ 2 COSE_Signature ],  ; the signer's two envelope entries over the
+                              ;   body (§3.5), classical then post-quantum
+  ? 2: uint,                  ; a refusal: 1 a witness attributed to this
+                              ;   party that it did not nominate; 2 a response
+                              ;   this subject holds that the body omits; 3
+                              ;   the claimed start far from this clock
+  ? 3: bstr                   ; the refusal's particular: the witness keyhash
+                              ;   (1), the query_id (2); absent for 3
+}
+; exactly one of keys 1 and 2 is present, and key 3 only beside key 2
+```
 
 ## 8. Session messages
 
@@ -4262,6 +4342,14 @@ lets reconciliation replay it is local; the wire-visible rule is only that an
 unproved series never floods onward, since a forwarding node vouches with its
 storage decision and this one it could not make.
 
+**What a holder keeps while it waits is bounded, and the bound has an order**
+[author, 2026-10-02]: at the ceiling, what gossip or a later locator
+distribution reconstructs — a reissue, an endpoint record, a delegation — goes
+before anything that ends or reduces a relationship, and among those the
+oldest goes first. A flood of the reconstructible kind therefore never
+displaces a held disavowal or departure while any of its own kind remains;
+the ceiling itself stays the holder's (§1.3's posture, design §21.1).
+
 **No dedicated suppression cache exists**, and none should be added. It would be a
 second copy of a fact the store already holds, with its own expiry parameter to leave
 unset.
@@ -4712,19 +4800,20 @@ verifiable for decades. A few hundred per user per decade is under 10 MB lifetim
 
 1. **Queue cap value.** A per-node policy value; design §21.1.1 classifies it
    *freely tunable, forever*, and nothing here fixes one.
-2. **Canonical test vectors.** A draft set exists at `test-vectors/` —
-   spec-derived and generated, with every computed value now reproduced by a
-   second harness in a different language over independent cryptographic
-   implementations (`rhtn-crypto`'s corpus test, RustCrypto ML-DSA against the
-   generator's dilithium-py) [2026-09-03; the standalone Rust runner it
-   descends from was retired 2026-09-22]. That is cross-language and
-   cross-crypto validation, not independence: both sides share an author, so
-   an interpretation both encode would pass both. The draft's README states
-   every interpretation taken so that each is a review target rather than a
-   silent choice; ten clean-room implementation reviews have since traced the
-   fixtures against independently written code. **Canonical status still waits
-   on an independent party's implementation reproducing every computed
-   value.**
+2. **Test vectors: canonical, not open** [author, 2026-10-02]. The set at
+   `test-vectors/` is spec-derived and generated, every computed value
+   reproduced by a second harness in a different language over independent
+   cryptographic implementations (`rhtn-crypto`'s corpus test, RustCrypto
+   ML-DSA against the generator's dilithium-py), and traced by ten clean-room
+   implementation reviews against independently written code. That is the
+   whole of the bar. An implementation is held to the corpus byte for byte
+   (`functional_tests.md` SCH-023); a disagreement between a vector and a
+   specification is a finding against one of them; and the set is regenerated
+   under the specification pins whenever the encoding changes, so it follows
+   the specification rather than freezing it. Both sides of the reproduction
+   share an author, so an interpretation both encode would pass both, which is
+   what the README's stated interpretations and the clean-room reviews exist
+   to catch. Kept here because this is where the vectors' status is stated.
 
 ---
 
@@ -4770,7 +4859,7 @@ is stated as the obligation it is rather than dressed as a guarantee.
 ### 14.2 What travels on them today
 
 Recorded as it stands, so the set is visible beside its encodings. **Each
-row names its encoding in §14.3, or says that one is owed**; the column says
+row names its encoding in §14.3**; the column says
 what the interface carries and who holds it, which is what the rest of the
 design already depends on.
 
@@ -4780,7 +4869,7 @@ design already depends on.
 | The optical transcript — each device's contribution, then the derived ceremony-id, screen to camera | Two participants' devices | design §7.1 item 3, design §7.5.2 | `OpticalContribution` then `TranscriptConfirm` (§14.3.2): the contribution is the key-exchange input, the ceremony-id is the transcript hash both display and check |
 | Proximity channel outcomes — the UWB, NFC or optical result and its ranking | Two participants' devices | §3.2, design §7.1 item 4 | `ProximityOutcomes` (§14.3.2): the §4.5 `Channel` maps as measured, anchored to the ceremony-id. The record's `strongest` (§3.2) is not carried — each device computes it from the outcomes, as each computes the ceremony-id |
 | Traversal candidates | Two participants' devices | design §12.6.3 [author, 2026-09-25] | `CandidateHandover` (§14.3.2), carrying the `Candidate` structure this document now defines; the same candidates travel the end-to-end payload path when a direct connection is set up remotely (design §12.6.3, §14.1.1) |
-| The capture-key handover — the key each participant derived for the captures the other holds of them, handed across at capture time | Two participants' devices | design §7.5.2, design §7.5.2.6 | **Owed** [2026-10-01]: 32 bytes a device derives (design §7.5.2.6) and hands across this interface; §14.3 carries nothing for it yet, so two clients have nothing to agree with, and the bearer carries it without the anchor the exchanges above have |
+| The capture-key handover — the key each participant derived for the captures the other holds of them, handed across at capture time | Two participants' devices | design §7.5.2, design §7.5.2.6 | `CaptureKeyHandover` (§14.3.2): the 32-byte key design §7.5.2.6 derives, anchored to the ceremony-id like the proximity outcomes and the candidates [author, 2026-10-02] |
 | A delegated device's payload material, and the ceremony device's signature over it | Two devices of one identity | design §23.3, §7.8 | `DeviceIntroduction` then `DeviceCredential` (§14.3.3): §7.8's bundle unsigned and then signed, beside §8.2's delegations |
 
 **The last row is the one that is not between two people.** A phone
@@ -4788,6 +4877,14 @@ provisioning a desktop it owns is the same class of interface and the same
 property: the two devices are in one place, and the protocol should not
 care whether the parties either side of a local interface are two people or
 one person's two devices.
+
+**The inventory is complete** [author, 2026-10-02]. The rest of the
+ceremony's conversation — which verifiers each party selected, the fishing
+proposals, the consent each query needs before it is sent, the witness
+request, the proposed body, each signer's signature entry and the finalised
+record — crosses no local interface. It travels the end-to-end payload path
+between the participants' devices and is sent to each nominated witness as
+well (§7.10.1, design §7.1).
 
 ### 14.3 Carriage, and the encodings it moves
 
@@ -4962,6 +5059,27 @@ CandidateHandover = [          ; candidates on the ceremony's channels
   [ 1*8 Candidate ],           ; eight, the NetworkPoint rows' ceiling (§1.3)
 ]
 ```
+
+```
+CaptureKeyHandover = [         ; the key that seals captures of the sender
+  uint,                        ; version, 1
+  bstr .size 32,               ; the ceremony-id (§14.3.1), checked as above
+  bstr .size 32,               ; the capture key design §7.5.2.6 derives for
+                               ;   this ceremony, handed across at capture
+                               ;   time; the receiver seals its captures of
+                               ;   the sender beneath it and discards it once
+                               ;   sealed (design §7.5.2)
+]
+```
+
+**The capture key crosses as an anchored message of its own** [author,
+2026-10-02], one each way at capture time (design §7.5.2.6). The anchor buys
+it what it buys the other anchored messages and no more: a key from another
+ceremony, or a bearer that disagrees with the screens, is refused; a
+co-present party quoting the public ceremony-id is not caught here, and
+§14.1's property is what excludes them. A bearer carrying it as a phase of
+its own, so a late packet of one exchange cannot assemble into another, is
+the shell's framing and no part of this document.
 
 **The same `[ 1*8 Candidate ]` array, bare, is the end-to-end payload path's
 candidate exchange** when a direct connection is set up remotely (design

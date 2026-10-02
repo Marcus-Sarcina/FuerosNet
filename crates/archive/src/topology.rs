@@ -11,20 +11,27 @@ use rhtn_codec::encode::*;
 use rhtn_crypto::signer::Sign1;
 use rhtn_crypto::verify::{self, Lookup};
 
-/// How many records are held for a prerequisite that has not arrived, per
-/// list.  Each of the three lists below holds what arrived out of order and
-/// settles when its prerequisite lands; a peer that floods records whose
-/// prerequisites never come otherwise grows them for the archive's life.
-/// Past the ceiling the oldest goes, an item held for something that never
-/// arrived being the least worth keeping -- the rule `rhtn-node`'s own
-/// held list follows.
-const PENDING_HELD: usize = 256;
+/// How many records are held for a prerequisite that has not arrived,
+/// across the three lists below together.  Each list holds what arrived
+/// out of order and settles when its prerequisite lands; a peer that
+/// floods records whose prerequisites never come otherwise grows them for
+/// the archive's life.  The ceiling is this holder's own (design §21.1);
+/// the order at the ceiling is ruled (`wire-format.md` §10): a reissue,
+/// which gossip or a later locator distribution reconstructs, goes before
+/// anything that ends or reduces a relationship, and among those the
+/// oldest by arrival goes first.  A flood of reissues therefore never
+/// displaces a held disavowal or departure while a reissue remains.
+pub const PENDING_HELD_TOTAL: usize = 768;
 
-fn hold<T>(list: &mut Vec<T>, item: T) {
-    if list.len() >= PENDING_HELD {
-        list.remove(0);
-    }
-    list.push(item);
+/// An item held for a prerequisite, with the order it arrived in.  The
+/// sequence is this process's own and is not persisted: a decoded table
+/// numbers what it reads in decode order, which keeps each kind's own
+/// order but ranks every held disavowal as older than every held
+/// departure, the persisted shape not recording their interleaving.
+#[derive(Debug, Clone)]
+struct Arrival<T> {
+    seq: u64,
+    item: T,
 }
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -243,10 +250,16 @@ pub struct Table {
     attached: BTreeMap<Keyhash, Vec<Keyhash>>,
     /// prior key -> (successor, its patron), every recovery seen
     lineage: BTreeMap<Keyhash, Vec<(Keyhash, Keyhash)>>,
-    pending_disavowals: Vec<PendingDisavowal>,
-    pending_departures: Vec<PendingDeparture>,
+    pending_disavowals: Vec<Arrival<PendingDisavowal>>,
+    pending_departures: Vec<Arrival<PendingDeparture>>,
     /// Reissues whose binding has not arrived: `(node, patron, left, entered)`.
     pending_reissues: Vec<(Keyhash, Keyhash, u32, u32)>,
+    /// The next arrival sequence for the two lists that carry one.
+    pending_seq: u64,
+    /// A ceiling in place of `PENDING_HELD_TOTAL`, set only by
+    /// `with_pending_ceiling_for_tests`; `None` is the production
+    /// ceiling.  Not persisted: a decoded table holds the constant.
+    pending_ceiling: Option<usize>,
     pub prefer: Option<Preference>,
 }
 
@@ -262,6 +275,20 @@ impl Table {
         };
         t.nodes.insert(me);
         t
+    }
+
+    /// A table whose pending ceiling is `n` in place of
+    /// `PENDING_HELD_TOTAL`.  **For the gate's tests only**: the order at
+    /// the ceiling is the same at twelve as at 768, and a test that
+    /// fills the production ceiling signs two thousand records to reach
+    /// it.  Never for a deployment, whose ceiling is the constant; the
+    /// production-size tests stay in the suite as ignored load tests.
+    pub fn with_pending_ceiling_for_tests(n: usize) -> Self {
+        assert!(n > 0, "a pending ceiling of zero holds nothing");
+        Table {
+            pending_ceiling: Some(n),
+            ..Default::default()
+        }
     }
 
     /// The same bindings, read as another node's own table.  Every node's
@@ -281,6 +308,8 @@ impl Table {
             pending_disavowals: self.pending_disavowals.clone(),
             pending_departures: self.pending_departures.clone(),
             pending_reissues: self.pending_reissues.clone(),
+            pending_seq: self.pending_seq,
+            pending_ceiling: self.pending_ceiling,
             prefer: self.prefer.clone(),
         }
     }
@@ -301,6 +330,18 @@ impl Table {
 
     pub fn holds(&self, txid: &Txid) -> bool {
         self.held.contains(txid)
+    }
+
+    /// What is held for a prerequisite that has not arrived, across the
+    /// three lists together: never more than `pending_ceiling()`.
+    pub fn pending_held(&self) -> usize {
+        self.pending_disavowals.len() + self.pending_departures.len() + self.pending_reissues.len()
+    }
+
+    /// The ceiling on what is held: `PENDING_HELD_TOTAL`, unless the table
+    /// was built by `with_pending_ceiling_for_tests`.
+    pub fn pending_ceiling(&self) -> usize {
+        self.pending_ceiling.unwrap_or(PENDING_HELD_TOTAL)
     }
 
     pub fn is_node(&self, k: &Keyhash) -> bool {
@@ -763,7 +804,7 @@ impl Table {
                         // held for the adoption it advances, as a departure is:
                         // arrival order cannot lose a series change
                         None => {
-                            hold(&mut self.pending_reissues, (node, patron, left, entered));
+                            self.hold_reissue((node, patron, left, entered));
                             false
                         }
                     };
@@ -805,10 +846,7 @@ impl Table {
                     None,
                 );
                 if !ended {
-                    hold(
-                        &mut self.pending_departures,
-                        (node, patron, series, rec.txid, rec.time),
-                    );
+                    self.hold_departure((node, patron, series, rec.txid, rec.time));
                 }
                 self.nodes.insert(node);
                 Outcome {
@@ -832,10 +870,7 @@ impl Table {
                     Some(rec.time),
                 );
                 if !ended {
-                    hold(
-                        &mut self.pending_disavowals,
-                        (patron, node, rec.time, rec.txid, code),
-                    );
+                    self.hold_disavowal((patron, node, rec.time, rec.txid, code));
                 }
                 Outcome {
                     applied: if ended {
@@ -905,6 +940,59 @@ impl Table {
         true
     }
 
+    fn next_seq(&mut self) -> u64 {
+        let seq = self.pending_seq;
+        self.pending_seq += 1;
+        seq
+    }
+
+    /// Make room for one more held item where the three lists together
+    /// stand at the ceiling (`wire-format.md` §10): a reissue goes first,
+    /// being what gossip or a later locator distribution reconstructs;
+    /// with none left, the oldest disavowal or departure by arrival.
+    /// Settling never comes through here: what settles re-enters its list
+    /// unevicted.
+    fn make_room(&mut self) {
+        if self.pending_held() < self.pending_ceiling() {
+            return;
+        }
+        if !self.pending_reissues.is_empty() {
+            self.pending_reissues.remove(0);
+            return;
+        }
+        let disavowal = self.pending_disavowals.first().map(|a| a.seq);
+        let departure = self.pending_departures.first().map(|a| a.seq);
+        match (disavowal, departure) {
+            (Some(d), Some(p)) if p < d => {
+                self.pending_departures.remove(0);
+            }
+            (Some(_), _) => {
+                self.pending_disavowals.remove(0);
+            }
+            (None, Some(_)) => {
+                self.pending_departures.remove(0);
+            }
+            (None, None) => {}
+        }
+    }
+
+    fn hold_reissue(&mut self, item: (Keyhash, Keyhash, u32, u32)) {
+        self.make_room();
+        self.pending_reissues.push(item);
+    }
+
+    fn hold_departure(&mut self, item: PendingDeparture) {
+        self.make_room();
+        let seq = self.next_seq();
+        self.pending_departures.push(Arrival { seq, item });
+    }
+
+    fn hold_disavowal(&mut self, item: PendingDisavowal) {
+        self.make_room();
+        let seq = self.next_seq();
+        self.pending_disavowals.push(Arrival { seq, item });
+    }
+
     /// Apply reissues held for a binding that has since arrived.  Run
     /// before the departures, since a departure may name the series a
     /// reissue is about to enter.  Repeated until nothing moves, a chain
@@ -934,7 +1022,8 @@ impl Table {
 
     fn settle_pending_departures(&mut self) {
         let pending = std::mem::take(&mut self.pending_departures);
-        for (node, patron, series, txid, t) in pending {
+        for held in pending {
+            let (node, patron, series, txid, t) = held.item;
             if !self.end_binding(
                 &node,
                 &patron,
@@ -942,15 +1031,15 @@ impl Table {
                 (txid, t, End::Departure),
                 None,
             ) {
-                self.pending_departures
-                    .push((node, patron, series, txid, t));
+                self.pending_departures.push(held);
             }
         }
     }
 
     fn settle_pending_disavowals(&mut self) {
         let pending = std::mem::take(&mut self.pending_disavowals);
-        for (patron, node, t, txid, code) in pending {
+        for held in pending {
+            let (patron, node, t, txid, code) = held.item;
             if !self.end_binding(
                 &node,
                 &patron,
@@ -958,7 +1047,7 @@ impl Table {
                 (txid, t, End::Disavowal(code)),
                 Some(t),
             ) {
-                self.pending_disavowals.push((patron, node, t, txid, code));
+                self.pending_disavowals.push(held);
             }
         }
     }
@@ -1422,7 +1511,8 @@ impl Table {
             &mut out,
             self.pending_disavowals.len() + self.pending_departures.len(),
         );
-        for (p, n, at, txid, code) in &self.pending_disavowals {
+        for held in &self.pending_disavowals {
+            let (p, n, at, txid, code) = &held.item;
             emit_array_head(&mut out, 6);
             emit_uint(&mut out, 0);
             emit_bstr(&mut out, p);
@@ -1437,7 +1527,8 @@ impl Table {
                 None => emit_array_head(&mut out, 0),
             }
         }
-        for (n, p, series, txid, at) in &self.pending_departures {
+        for held in &self.pending_departures {
+            let (n, p, series, txid, at) = &held.item;
             emit_array_head(&mut out, 6);
             emit_uint(&mut out, 1);
             emit_bstr(&mut out, n);
@@ -1580,6 +1671,8 @@ impl Table {
         let Item::Array(pending) = map_get(m, 9)? else {
             return None;
         };
+        // the arrival sequence is not persisted: each item is numbered in
+        // decode order, every disavowal before every departure
         for row in pending {
             let Item::Array(f) = row else { return None };
             if f.len() != 6 {
@@ -1599,12 +1692,17 @@ impl Table {
                         [c] => Some(uint_of(c)?),
                         _ => return None,
                     };
-                    t.pending_disavowals.push((a, c, at, txid, code));
+                    let seq = t.next_seq();
+                    t.pending_disavowals.push(Arrival {
+                        seq,
+                        item: (a, c, at, txid, code),
+                    });
                 }
                 1 => {
                     let [s] = arg.as_slice() else { return None };
-                    t.pending_departures
-                        .push((a, c, uint_of(s)?.try_into().ok()?, txid, at));
+                    let item = (a, c, uint_of(s)?.try_into().ok()?, txid, at);
+                    let seq = t.next_seq();
+                    t.pending_departures.push(Arrival { seq, item });
                 }
                 _ => return None,
             }

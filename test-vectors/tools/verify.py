@@ -645,7 +645,9 @@ wake_off = frame_objs[len(EXPECT_FRAMES) - 1][1]
 check(2 in wake_on and 3 in wake_on, 'WakeRegistration: an endpoint arrives with its key')
 check(set(wake_off) == {1}, 'WakeRegistration: a withdrawal is the nonce alone')
 
-late_obj = canonical(bytes.fromhex(e2e[-1].replace('\n', '')))
+# the second end-to-end block is the LateResponse; the conversation's kinds
+# follow it [2026-10-02]
+late_obj = canonical(bytes.fromhex(e2e[1].replace('\n', '')))
 lr = late_obj[3]
 lp = enc({k: lr[k] for k in (1, 2, 3, 4, 5, 6, 7, 10) if k in lr})
 check(verify_sig(BY[lr[1]], -8, bytes.fromhex(lr[9][3]),

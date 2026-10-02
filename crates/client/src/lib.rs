@@ -32,6 +32,9 @@
 //! - [`ceremony`] is the ceremony itself (design §7.1): each party's steps
 //!   and refusals, and an in-process harness that carries the direct
 //!   channel and logs every path.
+//! - [`conversation`] is that conversation as bytes (`wire-format.md`
+//!   §7.10.2): the structures the participants and their witnesses send
+//!   one another on the end-to-end channel after the local exchanges.
 //!
 //! Every decision here is the client's own, taken against what the client
 //! holds.  The device — camera, proximity channels, clock, the person — is
@@ -40,6 +43,7 @@
 pub mod backup;
 pub mod catalog;
 pub mod ceremony;
+pub mod conversation;
 pub mod device;
 pub mod durable;
 pub mod horizon;

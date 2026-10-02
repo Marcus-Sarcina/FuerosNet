@@ -31,14 +31,13 @@ class Carriage(private val radio: Bearer.Link?) {
      * into another, and a receiver needs no guesswork about what a set of
      * bytes was.
      *
-     * The INTENT and PROXIMITY phases carry `wire-format.md` §14.3.2's
-     * encodings, opaque here. **CAPTURE_KEY carries the kernel's raw
-     * 32 bytes and has no §14.3 encoding to carry**, because none exists
-     * yet: `wire-format.md` §14.2's table now lists the handover design
-     * §7.5.2 requires with its encoding owed. Until it lands the phase
-     * number is the whole of this shell's framing, and the key crosses
-     * without the anchor the other two phases carry — which is why a
-     * second client has nothing here to agree with.
+     * Every phase carries `wire-format.md` §14.3.2's encodings, opaque
+     * here: INTENT the intent and its continuations, PROXIMITY the
+     * `ProximityOutcomes`, CAPTURE_KEY the `CaptureKeyHandover` design
+     * §7.5.2.6 requires. Each is anchored to the ceremony-id and the
+     * kernel checks the anchor when it takes the bytes back; the phase
+     * number is only this shell's framing, and keeps one phase's packets
+     * out of another's assembly.
      */
     object Phase {
         const val INTENT = 0

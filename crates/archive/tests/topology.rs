@@ -1136,24 +1136,39 @@ fn a_filled_slot_refuses_a_second_occupant_and_keeps_the_one_it_holds() {
     );
 }
 
-// acceptance: TOP-46
-#[test]
-fn what_is_held_for_a_prerequisite_that_never_came_is_bounded_and_the_oldest_goes() {
-    // a disavowal of carol arrives before her adoption and is held for it;
-    // then another patron floods disavowals of a node nobody will ever
-    // adopt.  The held list has a ceiling and the oldest item is what goes
-    // past it, so the flood evicts carol's disavowal and her adoption then
-    // stands (`wire-format.md` §1.3's reason: a stranger must not grow a
-    // holder's memory for the archive's life).  One fewer in the flood and
-    // it is still held, and ends the binding as the adoption lands.
+/// The gate's table: a ceiling of twelve, enough to show the order at it
+/// in seconds.
+fn gate_table() -> Table {
+    Table::with_pending_ceiling_for_tests(12)
+}
+
+/// TOP-46's property, over tables `new` builds: what is held for a
+/// prerequisite is bounded at the table's ceiling, and the reconstructible
+/// goes first.  The gate runs it at a reduced ceiling and the load test at
+/// the production one; the ceiling is read from the table, never assumed.
+fn held_is_bounded_and_the_reconstructible_goes_first(new: fn() -> Table) {
+    // a disavowal of carol arrives before her adoption and is held for it.
+    // What a holder keeps while it waits has a ceiling, and the order at
+    // the ceiling is ruled (`wire-format.md` §10): a reissue, which gossip
+    // or a later locator distribution reconstructs, goes before anything
+    // that ends or reduces a relationship, and among those the oldest
+    // goes first.  So a flood of reissues for a node nobody adopts fills
+    // the ceiling without displacing carol's disavowal, the oldest held
+    // item, which ends the binding as her adoption lands; a flood of
+    // disavowals from another patron, with nothing reconstructible left,
+    // pushes hers out as the oldest of its kind, and her adoption then
+    // stands.  One fewer in that flood and it is still held.
     //
     // A disavowal is ordered within the slot by the patron's clock
     // (TOP-06), so one arriving ahead of its adoption applies only if dated
     // no earlier than it: both carry the same later stamp, and alice's own
     // chain stays monotonic
-    fn run(flood: usize) -> bool {
+    let n = new().pending_ceiling();
+    /// A table holding carol's early disavowal, and the presence record
+    /// and stamp her adoption will carry.
+    fn holding(new: fn() -> Table) -> (World, Table, Record, u64) {
         let mut w = World::new(&["alice", "bob", "carol", "dave"]);
-        let mut t = Table::new();
+        let mut t = new();
         let f = w.meet("alice", "carol");
         apply(&mut t, &w, &f);
         let later = w.clock + 7 * 86_400;
@@ -1163,20 +1178,75 @@ fn what_is_held_for_a_prerequisite_that_never_came_is_bounded_and_the_oldest_goe
             Applied::Nothing,
             "nothing to end yet: held"
         );
-        for _ in 0..flood {
-            let d = w.disavow("dave", "bob", Some(0));
-            assert_eq!(apply(&mut t, &w, &d).applied, Applied::Nothing);
-        }
-        let a = w.adopt_at("carol", "alice", f.txid, 1, later);
-        apply(&mut t, &w, &a);
+        (w, t, f, later)
+    }
+    /// Apply one flooding record, which nothing in the table applies, and
+    /// check the ceiling.
+    fn flood(t: &mut Table, w: &World, d: &Record) {
+        assert_eq!(apply(t, w, d).applied, Applied::Nothing);
+        assert!(
+            t.pending_held() <= t.pending_ceiling(),
+            "never past the ceiling"
+        );
+    }
+    /// Whether carol's binding stands once her adoption arrives.
+    fn stands(t: &mut Table, w: &World, a: &Record) -> bool {
+        apply(t, w, a);
         t.subordinates(&w.kh("alice")).contains(&w.kh("carol"))
     }
+
+    // dave reissues under bob, whose adoption of him the holder never
+    // sees: each is held for a binding that never comes
+    let (mut w, mut t, f, later) = holding(new);
+    for i in 0..n {
+        let series = u32::try_from(i).unwrap() + 1;
+        let d = w.reissue("dave", "bob", Seqno { series, counter: 1 }, series + 1);
+        flood(&mut t, &w, &d);
+    }
+    assert_eq!(t.pending_held(), n, "the ceiling holds");
+    let a = w.adopt_at("carol", "alice", f.txid, 1, later);
     assert!(
-        run(256),
-        "256 later disavowals pushed carol's out, so her adoption stands"
+        !stands(&mut t, &w, &a),
+        "a reissue went instead of carol's disavowal, which ended the binding as the adoption arrived"
+    );
+
+    // dave disavows bob over and over: nothing reconstructible among them
+    let (mut w, mut t, f, later) = holding(new);
+    for _ in 0..n - 1 {
+        let d = w.disavow("dave", "bob", Some(0));
+        flood(&mut t, &w, &d);
+    }
+    assert_eq!(t.pending_held(), n, "one short of the ceiling: full");
+    let a = w.adopt_at("carol", "alice", f.txid, 1, later);
+    // the same table read twice: one more flooding record for one copy
+    let mut one_more = t.clone_for(w.kh("witness"));
+    let d = w.disavow("dave", "bob", Some(0));
+    flood(&mut one_more, &w, &d);
+    assert_eq!(one_more.pending_held(), n, "the ceiling holds");
+    assert!(
+        stands(&mut one_more, &w, &a),
+        "with nothing reconstructible left, carol's disavowal went as the oldest of its kind, so her adoption stands"
     );
     assert!(
-        !run(255),
-        "255 left carol's held, and it ended the binding as the adoption arrived"
+        !stands(&mut t, &w, &a),
+        "one fewer left carol's held, and it ended the binding as the adoption arrived"
     );
+}
+
+// acceptance: TOP-46
+#[test]
+fn what_is_held_for_a_prerequisite_is_bounded_and_the_reconstructible_goes_first() {
+    // the gate's run, at a reduced ceiling: the order at the ceiling does
+    // not depend on where the ceiling stands, and the production figure
+    // takes two thousand signed records to reach.  The default is checked
+    // here and exercised by the ignored load test below
+    assert_eq!(Table::new().pending_ceiling(), PENDING_HELD_TOTAL);
+    held_is_bounded_and_the_reconstructible_goes_first(gate_table);
+}
+
+// acceptance: TOP-46
+#[test]
+#[ignore = "load: production-size ceiling, about two minutes in debug; run with --ignored when topology.rs or store.rs change and before any release"]
+fn what_is_held_for_a_prerequisite_is_bounded_at_the_production_ceiling() {
+    held_is_bounded_and_the_reconstructible_goes_first(Table::new);
 }

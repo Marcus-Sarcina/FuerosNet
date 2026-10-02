@@ -155,6 +155,11 @@ guarantee, which is a floor rather than a ceiling.
 
 - **Remove a child on departure or disavowal.** A stale entry refers requesters to
   a node that will not answer for that path.
+- **Hold what awaits a prerequisite under a bound, and let the reconstructible go
+  first** (`wire-format.md` §10). A reissue, an endpoint record or a delegation
+  returns through gossip or a later locator distribution; a disavowal or departure
+  held for the adoption it precedes does not, and outlasts them at the ceiling.
+  Among the latter the oldest goes first.
 - **Replace an endpoint set when you receive an endpoint record with a strictly
   greater `seqno`** for a node you hold (`wire-format.md` §7.6, ordered as
   `wire-format.md` §2.3 orders every series).

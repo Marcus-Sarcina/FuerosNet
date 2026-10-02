@@ -40,6 +40,18 @@ fences cargo the same way that script fences the prover.  The reformat of
 `git config blame.ignoreRevsFile .git-blame-ignore-revs` once and blame reads
 through it.
 
+**Load tests.** TOP-46 fills what a holder keeps for a prerequisite that
+has not arrived and checks the order at the ceiling. The production
+ceilings (768 in `archive/src/topology.rs`, 256 in `node/src/store.rs`)
+take about two thousand signed and verified records and about two minutes
+each in debug to reach, so the gate runs the three tests at a reduced
+ceiling, set by `Table::with_pending_ceiling_for_tests` and
+`TopologyStore::with_pending_ceiling_for_tests` and never by a deployment,
+and skips the production-size runs, which stay in the suite under
+`#[ignore]`. `tools/load-tests.sh` runs exactly those: run it whenever
+`archive/src/topology.rs` or `node/src/store.rs` changes and before any
+release. `check.sh` does not run it.
+
 **Robustness.** The gate runs DEC-01 and DEC-02: every proper prefix of every
 accepted fixture, and 48 seeded mutations per fixture. The hours-long run is
 `RHTN_FUZZ_SECONDS=3600 cargo test -p rhtn-crypto --test fuzz -- --nocapture`,

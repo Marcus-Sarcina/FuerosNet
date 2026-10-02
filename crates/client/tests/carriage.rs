@@ -1,7 +1,7 @@
 //! The ceremony's opening over the bearer, between two live clients
 //! (`wire-format.md` §14.3): the optical exchange, then the intent, the
-//! proximity outcomes and the candidates, every one of them as the bytes
-//! the shell carries and none of them as fields.
+//! proximity outcomes, the candidates and the capture keys, every one of
+//! them as the bytes the shell carries and none of them as fields.
 
 mod common;
 
@@ -89,6 +89,33 @@ fn the_opening_crosses_as_bytes_and_each_check_is_made_on_this_side() {
         bare,
         "what comes out is the bare array the payload path carries"
     );
+
+    // AT CAPTURE TIME THE KEYS CROSS, one each way (design §7.5.2.6): the
+    // anchor comes off at the check and what is left is the key this side
+    // seals its captures of the other beneath
+    let ka = s.client("alice").capture_key_carriage().unwrap();
+    let kb = s.client("bob").capture_key_carriage().unwrap();
+    let bobs = s
+        .client("alice")
+        .take_capture_key_carriage(&carry(&kb))
+        .unwrap();
+    assert_eq!(
+        bobs,
+        s.client("bob").capture_key().unwrap(),
+        "bob's key, as bob derived it"
+    );
+    let alices = s
+        .client("bob")
+        .take_capture_key_carriage(&carry(&ka))
+        .unwrap();
+    assert_eq!(alices, s.client("alice").capture_key().unwrap());
+    assert_ne!(bobs, alices, "each key is its holder's own");
+    s.client("alice")
+        .capture(bobs)
+        .expect("alice seals under bob's key");
+    s.client("bob")
+        .capture(alices)
+        .expect("bob seals under alice's key");
 }
 
 // acceptance: CER-44
@@ -148,7 +175,7 @@ fn a_bearer_that_disagrees_with_the_screen_stops_the_ceremony() {
         "the echo does not match what alice read off bob's screen"
     );
 
-    // AN ANCHORED MESSAGE FROM ANOTHER CEREMONY, in both anchored kinds.
+    // AN ANCHORED MESSAGE FROM ANOTHER CEREMONY, in every anchored kind.
     s.client("carol").take_transcript(&tb).unwrap_err();
     let cid_c = rhtn_client::local::TranscriptConfirm::decode(&tc)
         .unwrap()
@@ -173,6 +200,17 @@ fn a_bearer_that_disagrees_with_the_screen_stops_the_ceremony() {
     .encode();
     assert!(matches!(
         s.client("alice").take_candidate_carriage(&stray),
+        Err(Abort::CeremonyIdMismatch)
+    ));
+    // a key from another ceremony is refused, and carol's real one no
+    // less than an invented one (§14.3.2)
+    let stray = rhtn_client::local::CaptureKeyHandover {
+        ceremony_id: cid_c,
+        key: [5u8; 32],
+    }
+    .encode();
+    assert!(matches!(
+        s.client("alice").take_capture_key_carriage(&stray),
         Err(Abort::CeremonyIdMismatch)
     ));
 

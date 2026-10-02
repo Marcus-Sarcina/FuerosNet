@@ -449,6 +449,7 @@ impl NodeView {
                 from: *from,
                 missing_key: None,
                 unproved_series: None,
+                trust_reducing: false,
             }),
             Ok(AckTaken::NoOpenBinding) => {
                 Decision::Refused("no open binding for the adoption it acknowledges".into())

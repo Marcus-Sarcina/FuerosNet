@@ -107,13 +107,21 @@ pub struct Pending {
     pub missing_key: Option<Keyhash>,
     /// The series the receiver cannot prove current, where that is the want.
     pub unproved_series: Option<(Keyhash, u32)>,
+    /// Whether what is held ends or reduces a relationship, a departure or
+    /// a disavowal: what outlasts the reconstructible at the ceiling
+    /// (`wire-format.md` §10).
+    pub trust_reducing: bool,
 }
 
-/// What the store decided about an arriving object.
 /// How many objects a node holds for a prerequisite at once.  A DoS
-/// ceiling, not a capacity figure (`wire-format.md` §1.3's posture).
+/// ceiling, not a capacity figure (`wire-format.md` §1.3's posture).  The
+/// order at the ceiling is ruled (`wire-format.md` §10): an endpoint
+/// record, a delegation or a reissue, which gossip or a later locator
+/// distribution reconstructs, goes before a departure or a disavowal, and
+/// among those the oldest goes first.
 pub const PENDING_HELD: usize = 256;
 
+/// What the store decided about an arriving object.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Decision {
     /// Stored, and to be forwarded on every adjacency but the arrival one.
@@ -192,11 +200,35 @@ pub struct TopologyStore {
     /// The acknowledgements held, by (adoption, grandpatron): what is
     /// forwarded and replayed, kept while the table holds them.
     acks: BTreeMap<(Txid, Keyhash), Vec<u8>>,
+    /// A ceiling in place of `PENDING_HELD`, set only by
+    /// `with_pending_ceiling_for_tests`; `None` is the production
+    /// ceiling.  Not persisted: a loaded store holds the constant.
+    pending_ceiling: Option<usize>,
 }
 
 impl TopologyStore {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// A store whose pending ceiling is `n` in place of `PENDING_HELD`.
+    /// **For the gate's tests only**: the order at the ceiling is the
+    /// same at eight as at 256, and a test that fills the production
+    /// ceiling signs and verifies hundreds of records to reach it.  Never
+    /// for a deployment, whose ceiling is the constant; the
+    /// production-size tests stay in the suite as ignored load tests.
+    pub fn with_pending_ceiling_for_tests(n: usize) -> Self {
+        assert!(n > 0, "a pending ceiling of zero holds nothing");
+        TopologyStore {
+            pending_ceiling: Some(n),
+            ..Default::default()
+        }
+    }
+
+    /// The ceiling on what is held for a prerequisite: `PENDING_HELD`,
+    /// unless the store was built by `with_pending_ceiling_for_tests`.
+    pub fn pending_ceiling(&self) -> usize {
+        self.pending_ceiling.unwrap_or(PENDING_HELD)
     }
 
     pub fn holds_txid(&self, t: &Txid) -> bool {
@@ -462,6 +494,7 @@ impl TopologyStore {
                     from: *from,
                     missing_key: k.try_into().ok(),
                     unproved_series: None,
+                    trust_reducing: false,
                 };
                 if !self.pending.contains(&p) {
                     self.hold(p.clone());
@@ -511,6 +544,7 @@ impl TopologyStore {
                     from: *from,
                     missing_key: Some(missing),
                     unproved_series: None,
+                    trust_reducing: matches!(rec.tx_type, TYPE_DEPARTURE | TYPE_DISAVOWAL),
                 };
                 if !self.pending.contains(&p) {
                     self.hold(p.clone());
@@ -527,13 +561,22 @@ impl TopologyStore {
         Decision::Stored
     }
 
-    /// Hold `p` for a prerequisite, bounded: past the ceiling the oldest
-    /// goes, an item held for a key that never arrived being the least
-    /// worth keeping.  A peer's unverifiable traffic otherwise grew this
+    /// Hold `p` for a prerequisite, bounded.  Past the ceiling the oldest
+    /// reconstructible item goes: an endpoint record, a delegation or a
+    /// reissue held for something that never arrived is what gossip or a
+    /// later locator distribution rebuilds.  Only with none left does the
+    /// oldest departure or disavowal go (`wire-format.md` §10), so a flood
+    /// of the reconstructible kind never displaces what ends a
+    /// relationship.  A peer's unverifiable traffic otherwise grew this
     /// list for the node's life.
     fn hold(&mut self, p: Pending) {
-        if self.pending.len() >= PENDING_HELD {
-            self.pending.remove(0);
+        if self.pending.len() >= self.pending_ceiling() {
+            let gone = self
+                .pending
+                .iter()
+                .position(|q| !q.trust_reducing)
+                .unwrap_or(0);
+            self.pending.remove(gone);
         }
         self.pending.push(p);
     }
@@ -588,6 +631,7 @@ impl TopologyStore {
                     from: *from,
                     missing_key: None,
                     unproved_series: Some((er.node, er.seqno.series)),
+                    trust_reducing: false,
                 };
                 if !self.pending.contains(&p) {
                     self.hold(p.clone());

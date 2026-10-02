@@ -52,6 +52,24 @@ class CarriageTest {
     }
 
     @Test
+    fun the_capture_key_phase_is_assembled_apart_from_the_others() {
+        val pipe = Pipe()
+        val near = Carriage(pipe)
+        val far = Carriage(Pipe())
+        pipe.other = far
+        // the shape of a `CaptureKeyHandover`: an array head, a version,
+        // and two 32-byte strings, 70 bytes of which this file reads none
+        val handover = ByteArray(70) { (it * 7).toByte() }
+        assertTrue(near.send(listOf(handover), Carriage.Phase.CAPTURE_KEY))
+        assertNull("not the intent's", far.received(Carriage.Phase.INTENT))
+        assertNull("not the outcomes'", far.received(Carriage.Phase.PROXIMITY))
+        val back = far.received(Carriage.Phase.CAPTURE_KEY)
+        assertNotNull("the one message of its phase", back)
+        assertEquals(1, back!!.size)
+        assertArrayEquals(handover, back[0])
+    }
+
+    @Test
     fun a_link_that_stops_mid_carriage_leaves_unsent_work_reported() {
         val pipe = Pipe()
         val far = Carriage(Pipe())
