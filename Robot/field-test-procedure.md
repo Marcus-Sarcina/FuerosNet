@@ -88,7 +88,7 @@ private directory. A release-signed APK would leave only the share sheet.
 ## One run
 
 1. On each phone, launch the app and open Conversations. While the device is
-   unprovisioned that screen shows its public key material, about 2,400 hex
+   unprovisioned that screen shows its public key material, about 4,000 hex
    characters. `field-setup.sh` has read it already; by hand, read it over
    adb rather than by eye:
 
