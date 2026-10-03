@@ -15,7 +15,11 @@
 #                            it, the witnesses list it, and the phone is
 #                            provisioned over adb to attach here, with the
 #                            other phone as its peer (the first witness when
-#                            it is alone). Repeatable.
+#                            it is alone). Repeatable. Given none, the
+#                            phones come from crates/tools/phones.conf
+#                            (<serial>=<material> per line, written by
+#                            field-setup.sh); a line with no material is
+#                            skipped and said.
 #    --level <level>         the daemon's [log] level: off, error, warn, info,
 #                            debug (default) or trace.
 #    --stream-port <port>    where the phones stream their diagnostic lines
@@ -147,7 +151,7 @@ while [ $# -gt 0 ]; do
         *) say "--phone takes <serial>=<hex material>"; exit 2 ;;
       esac
       shift 2 ;;
-    -h | --help) awk '/^# =+$/ {n++; if (n == 2) exit; next} {sub(/^# ?/, ""); print}' "$0"; exit 0 ;;
+    -h | --help) awk '/^# =+$/ {n++; if (n == 2) exit; next} n == 1 {sub(/^# ?/, ""); print}' "$0"; exit 0 ;;
     -*) say "unknown option $1"; exit 2 ;;
     *)
       if [ -n "$LABEL" ]; then say "one label only"; exit 2; fi
@@ -155,6 +159,19 @@ while [ $# -gt 0 ]; do
   esac
 done
 [ -n "$LABEL" ] || { say "usage: field-run.sh [options] <label> | field-run.sh stop"; exit 2; }
+# no --phone: the phones file field-setup.sh writes
+if [ ${#PHONE_SERIALS[@]} -eq 0 ] && [ -f "$HERE/phones.conf" ]; then
+  while IFS= read -r line; do
+    line="${line%%#*}"; line="$(printf '%s' "$line" | tr -d ' \t\r')"
+    [ -n "$line" ] || continue
+    case "$line" in
+      *=) say "phones.conf: ${line%=} has no material yet (run field-setup.sh); skipped" ;;
+      *=*) PHONE_SERIALS+=("${line%%=*}"); PHONE_MATERIALS+=("$(printf '%s' "${line#*=}" | tr 'A-F' 'a-f')") ;;
+      *) say "phones.conf: '$line' is not <serial>=<material>; skipped" ;;
+    esac
+  done < "$HERE/phones.conf"
+  [ ${#PHONE_SERIALS[@]} -eq 0 ] || say "phones from phones.conf: ${PHONE_SERIALS[*]}"
+fi
 case "$LABEL" in
   *[!A-Za-z0-9_.-]*) say "the label is letters, digits, '.', '_' and '-'"; exit 2 ;;
 esac

@@ -12209,3 +12209,14 @@ the field-test run script carries a figure in the provision, the kernel
 takes it at start, and the brief states it. Android tests 108 → 112; the
 participant harness prints the new field; both native flavours and the
 binding rebuilt.
+
+### 2026-10-03 (the phones' setup)
+
+A setup script for the test phones: it builds everything field-test, wipes
+and reinstalls the app on each phone named in a phones file, launches it,
+asks the tester to open Conversations, reads the public key material off
+that screen over adb every five seconds until it is there, and writes it
+back to the file, which the run script now reads when given no phones. The
+procedure gains a section on what a phone needs: Android 12, a camera and
+Bluetooth LE in practice, NFC optional as the design ranks it, and nothing
+else installed.

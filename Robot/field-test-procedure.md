@@ -21,13 +21,61 @@ are on USB with debugging enabled, because the script provisions them,
 follows their logcat and pulls their files over adb; `adb devices` must list
 both as `device`.
 
+## The phones
+
+What a test phone needs, and what it does not:
+
+- **Android 12 or later** (the app's `minSdk` is 31).
+- **A camera**, for the optical anchor and the capture. Not demanded at
+  install, but a ceremony cannot begin without one.
+- **Bluetooth LE**, which is this shell's bearer for the intent, proximity
+  and capture-key carriages. The protocol names no bearer
+  (`wire-format.md` §14.3.1 leaves it to the shell), so this is the shell's
+  practical requirement and not the design's: a phone without BLE installs
+  and attaches, and the Meet flow stops at the bearer with the reason
+  named.
+- **NFC is optional.** The design ranks it as one proximity channel among
+  several (design §7.6.3) and the light client obtains the strongest the
+  hardware has (`light-client-requirements.md` §1.3). A phone without NFC
+  runs the ceremony on the optical pass alone; the proximity screen shows
+  NFC as unavailable, the record carries the channel that was achieved, and
+  the pre-sign warning that the channel was weaker than UWB is a true
+  statement and not a fault. The manifest declares the camera, BLE and NFC
+  with `required="false"` for this reason. **A pair with and without NFC is
+  a useful first pair**: the unavailable path has not run on hardware.
+- **UWB is not driven** by this shell whether or not the phone has it.
+- **USB debugging** on, with the laptop authorised: `adb devices` must list
+  the phone as `device`, not `unauthorized`. The script provisions, follows
+  and pulls over adb.
+- **Runtime permissions** for the camera, Bluetooth and NFC are asked for
+  by the Meet screen when it first needs them; grant them on the phone.
+  Nothing is granted over adb.
+
+Nothing else is installed on a phone. The node, the witnesses and the
+collector are the laptop's.
+
 ## Build and install
 
 The laptop's binaries are built by the script on first use (cargo, into
 `crates/target/fieldtest`, so the releasable binaries elsewhere are
 untouched); `--no-build` skips that step.
 
-The shell, once per commit, from `crates/mobile/android`:
+The phones, once per commit or per wipe, from the repository root:
+
+    crates/tools/field-setup.sh
+
+builds everything field-test (the laptop's binaries, the native library and
+binding, the fieldtest debug APK), uninstalls the app from each phone named
+in `crates/tools/phones.conf`, which wipes its data, installs the fresh APK
+and launches it, asks the tester to open Conversations on each phone, reads
+the public key material off that screen through uiautomator every 5 s until
+it is there, and writes `<serial>=<material>` back into `phones.conf`.
+`field-run.sh` reads that file when given no `--phone`, so step 1 and the
+`--phone` arguments of step 2 below are done. `--no-build` installs what is
+already built; serials on the command line override the file. The two
+Galaxy S21+ testers are in the file [author, 2026-10-03].
+
+By hand, the same from `crates/mobile/android`:
 
     tools/build-native.sh --fieldtest
     ./gradlew assembleFieldtestDebug
@@ -41,14 +89,17 @@ private directory. A release-signed APK would leave only the share sheet.
 
 1. On each phone, launch the app and open Conversations. While the device is
    unprovisioned that screen shows its public key material, about 2,400 hex
-   characters. Read it over adb rather than by eye:
+   characters. `field-setup.sh` has read it already; by hand, read it over
+   adb rather than by eye:
 
         adb -s <serial> exec-out uiautomator dump /dev/tty | grep -oE '[0-9a-f]{400,}' | head -1
 
    The material is public; nothing secret is on that screen.
 
-2. Start the run from the repository root, naming the run and both phones:
+2. Start the run from the repository root, naming the run; the phones come
+   from `phones.conf`, or name them:
 
+        crates/tools/field-run.sh <label>
         crates/tools/field-run.sh --phone <serial-A>=<material-A> --phone <serial-B>=<material-B> <label>
 
    The script mints identities for the node and the witnesses, lists both
@@ -95,7 +146,7 @@ private directory. A release-signed APK would leave only the share sheet.
    and prints the run directory.
 
 A second run needs step 2 again (new node identity, new provision), and
-after a wipe step 1 as well (new material).
+after a wipe `field-setup.sh` again, or step 1 by hand (new material).
 
 ## When a run fails
 
@@ -157,6 +208,8 @@ is what bounds the captures on the bench.
 ## The wipe between testers
 
 On both phones, since each holds a capture of the other tester:
+`crates/tools/field-setup.sh --no-build` uninstalls, reinstalls and reads the
+new material; by hand,
 
     adb -s <serial> shell pm clear com.comptus.fueros
 
