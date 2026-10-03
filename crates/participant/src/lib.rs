@@ -24,7 +24,14 @@
 //! beginning with a word that says what it is. Everything a script needs
 //! to tell the two apart is in that first word.
 
+#[cfg(all(feature = "releasable", feature = "fieldtest"))]
+compile_error!(
+    "rhtn-participant: `releasable` and `fieldtest` are two flavours of one build; \
+     build the field-test flavour with `--no-default-features --features fieldtest`"
+);
+
 pub mod carry;
+pub mod diag;
 pub mod terminal;
 
 use rhtn_ffi::client::Participant;
@@ -62,7 +69,11 @@ impl Instrument {
     /// missing runs under an identity nobody has met, and the person
     /// running it would not know. `rhtn keys mint` is where one comes
     /// from.
-    pub fn start(identity: &Path, peers: Option<&Path>) -> Result<Instrument, String> {
+    pub fn start(
+        identity: &Path,
+        peers: Option<&Path>,
+        log: Option<&Path>,
+    ) -> Result<Instrument, String> {
         let seeds = read_identity(identity)?;
         // **this participant's own key is in the lookup, and not because
         // the peers file listed it.**  A participant signs the records it
@@ -84,9 +95,10 @@ impl Instrument {
             known.extend(read_peers(p)?);
         }
         let shell = Arc::new(Terminal::default());
-        // the ninth object, diagnostics, hears nothing from this instrument
-        // until milestone M2 of Robot/field-test-diagnostics.md gives it
-        // `--log <path>`
+        // the ninth object, diagnostics: the file `--log` named, in a
+        // field-test build, and nothing otherwise
+        // (Robot/field-test-diagnostics.md, section 4)
+        let sink = diag::sink(log)?;
         let p = platform(
             shell.clone(),
             shell.clone(),
@@ -96,10 +108,13 @@ impl Instrument {
             shell.clone(),
             shell.clone(),
             shell.clone(),
-            Arc::new(rhtn_ffi::device::Silent),
+            sink,
         );
         let client =
             Participant::start(seeds, known, Arc::new(p)).map_err(|e| e.reason().to_string())?;
+        // the wall-clock anchor the merge tool places this file by, raised
+        // once the FFI has installed its renderer
+        diag::anchor();
         Ok(Instrument { client, shell })
     }
 

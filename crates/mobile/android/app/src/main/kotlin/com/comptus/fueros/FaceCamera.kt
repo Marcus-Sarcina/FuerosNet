@@ -10,9 +10,9 @@ import android.hardware.camera2.CaptureRequest
 import android.media.ImageReader
 import android.os.Handler
 import android.os.HandlerThread
-import android.util.Log
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
 /**
@@ -52,6 +52,15 @@ class FaceCamera(private val context: Context) {
     private var reader: ImageReader? = null
     private val latest = AtomicReference<ByteArray?>(null)
 
+    /** For the `face.frames` event: frames the sensor delivered, frames
+     *  handed to the kernel, waits that ran out, and the frame's size.
+     *  Never a pixel. */
+    private val delivered = AtomicInteger(0)
+    private val served = AtomicInteger(0)
+    private val frameTimeouts = AtomicInteger(0)
+    private var openTimedOut = false
+    @Volatile private var frameBytes = 0
+
     /** Open the selfie camera and begin delivering frames. Idempotent. */
     @Synchronized
     fun open(): String? {
@@ -78,12 +87,15 @@ class FaceCamera(private val context: Context) {
                 val bytes = ByteArray(y.remaining())
                 y.get(bytes)
                 latest.set(bytes)
+                delivered.incrementAndGet()
+                frameBytes = bytes.size
             } finally {
                 image.close()
             }
         }, h)
         val opened = CountDownLatch(1)
         val why = AtomicReference<String?>("the camera did not open")
+        val startedMs = Diag.ms()
         return try {
             manager.openCamera(
                 id,
@@ -105,6 +117,15 @@ class FaceCamera(private val context: Context) {
                                             CaptureRequest.CONTROL_AF_MODE,
                                             CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE,
                                         )
+                                        Diag.event(
+                                            "camera",
+                                            "which" to "face",
+                                            "op" to "request",
+                                            "template" to "preview",
+                                            "af" to "continuous_picture",
+                                            "exposure" to "auto",
+                                            "antibanding" to "default",
+                                        )
                                         s.setRepeatingRequest(b.build(), null, h)
                                         why.set(null)
                                         opened.countDown()
@@ -124,12 +145,14 @@ class FaceCamera(private val context: Context) {
                     }
 
                     override fun onDisconnected(camera: CameraDevice) {
+                        Diag.warn("camera", "which" to "face", "op" to "disconnected")
                         why.set("the camera disconnected")
                         opened.countDown()
                         close()
                     }
 
                     override fun onError(camera: CameraDevice, error: Int) {
+                        Diag.warn("camera", "which" to "face", "op" to "error", "error" to error)
                         why.set("the camera errored: $error")
                         opened.countDown()
                         close()
@@ -137,13 +160,30 @@ class FaceCamera(private val context: Context) {
                 },
                 h,
             )
-            opened.await(5, TimeUnit.SECONDS)
-            why.get()
+            // the 5 s is the open timeout the plan's `face.frames` row counts
+            openTimedOut = !opened.await(5, TimeUnit.SECONDS)
+            val out = if (openTimedOut) "the camera did not open in time" else why.get()
+            if (out == null) {
+                Diag.event(
+                    "camera",
+                    "which" to "face",
+                    "op" to "open",
+                    "facing" to "SELFIE",
+                    "width" to width,
+                    "height" to height,
+                    "ms" to (Diag.ms() - startedMs),
+                )
+            } else {
+                Diag.warn("camera", "which" to "face", "op" to "open", "error" to out, "ms" to (Diag.ms() - startedMs))
+            }
+            out
         } catch (e: SecurityException) {
             close()
+            Diag.warn("camera", "which" to "face", "op" to "open", "error" to "permission")
             "the camera permission is not held"
         } catch (e: Exception) {
             close()
+            Diag.warn("camera", "which" to "face", "op" to "open", "error" to e.toString())
             "the camera would not open: $e"
         }
     }
@@ -159,11 +199,32 @@ class FaceCamera(private val context: Context) {
         while (latest.get() == null && System.currentTimeMillis() < deadline) {
             Thread.sleep(50)
         }
-        return latest.get() ?: ByteArray(0)
+        val f = latest.get()
+        if (f == null) {
+            // the 2 s frame wait the plan's `face.frames` row counts
+            frameTimeouts.incrementAndGet()
+            Diag.warn("face.timeout", "waited_ms" to 2_000, "delivered" to delivered.get())
+            return ByteArray(0)
+        }
+        served.incrementAndGet()
+        return f
     }
 
     @Synchronized
     fun close() {
+        if (device != null || delivered.get() > 0 || frameTimeouts.get() > 0) {
+            Diag.event(
+                "face.frames",
+                "delivered" to delivered.get(),
+                "served" to served.get(),
+                "frame_timeouts" to frameTimeouts.get(),
+                "open_timed_out" to openTimedOut,
+                "frame_bytes" to frameBytes,
+                "width" to width,
+                "height" to height,
+            )
+            Diag.event("camera", "which" to "face", "op" to "close")
+        }
         runCatching { session?.close() }
         runCatching { device?.close() }
         runCatching { reader?.close() }

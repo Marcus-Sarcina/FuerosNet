@@ -60,8 +60,70 @@ class Carriage(private val radio: Bearer.Link?) {
 
     private val inward = Bearer.Reassembly()
 
+    /**
+     * One phase's traffic, for the diagnostics (`Robot/field-test-
+     * diagnostics.md`, section 3.6, `bearer.packets`): what was sent and
+     * what arrived, the repeats, the refusals by reason, and the time from
+     * the first packet to the set being whole. Counts, sizes and durations;
+     * nothing of what the packets carried.
+     */
+    class Counters {
+        var sent = 0
+        var sentBytes = 0
+        var sendFailed = 0
+        var received = 0
+        var receivedBytes = 0
+        var duplicates = 0
+        val refused = linkedMapOf<String, Int>()
+        var firstMs: Long? = null
+        var wholeMs: Long? = null
+        var reported = false
+
+        fun refusals(): Int = refused.values.sum()
+
+        /** The event's fields. */
+        fun fields(phase: Int): List<Pair<String, Any?>> = listOf(
+            "phase" to phase,
+            "sent" to sent,
+            "sent_bytes" to sentBytes,
+            "send_failed" to sendFailed,
+            "received" to received,
+            "received_bytes" to receivedBytes,
+            "duplicates" to duplicates,
+            "refused" to refusals(),
+            "refused_why" to refused.takeIf { it.isNotEmpty() },
+            "assembly_ms" to firstMs?.let { f -> wholeMs?.let { it - f } },
+        )
+    }
+
+    private val counters = HashMap<Int, Counters>()
+
+    /** The traffic one phase has seen so far. */
+    fun counters(phase: Int): Counters = synchronized(counters) { counters.getOrPut(phase) { Counters() } }
+
     /** What the radio delivered, packet by packet. */
-    fun packet(bytes: ByteArray): String? = inward.take(bytes)
+    fun packet(bytes: ByteArray): String? {
+        // the phase nibble, read here only to file the count: a packet too
+        // short to carry one is refused below and counted against none
+        val phase = if (bytes.size >= Bearer.HEADER) (bytes[1].toInt() ushr 4) and 0x0f else -1
+        val before = inward.taken
+        val dup = inward.duplicates
+        val why = inward.take(bytes)
+        val c = counters(phase)
+        synchronized(c) {
+            if (c.firstMs == null) c.firstMs = Diag.ms()
+            if (why != null) {
+                c.refused[why] = (c.refused[why] ?: 0) + 1
+                Diag.warn("bearer.refused", "phase" to phase, "reason" to why)
+            } else if (inward.duplicates > dup) {
+                c.duplicates += 1
+            } else if (inward.taken > before) {
+                c.received += 1
+                c.receivedBytes += bytes.size - Bearer.HEADER
+            }
+        }
+        return why
+    }
 
     /**
      * Send `messages` in the order given, as `phase`. False where a packet
@@ -71,7 +133,36 @@ class Carriage(private val radio: Bearer.Link?) {
      */
     fun send(messages: List<ByteArray>, phase: Int = Phase.INTENT, wipe: Boolean = false): Boolean {
         val link = radio ?: return false
-        return Bearer.carry(link, messages, phase, wipe)
+        val c = counters(phase)
+        val counting = object : Bearer.Link {
+            override fun mtu(): Int = link.mtu()
+            override fun send(packet: ByteArray): Boolean {
+                val ok = link.send(packet)
+                synchronized(c) {
+                    if (ok) {
+                        c.sent += 1
+                        c.sentBytes += packet.size - Bearer.HEADER
+                    } else {
+                        c.sendFailed += 1
+                    }
+                }
+                return ok
+            }
+        }
+        val started = Diag.ms()
+        val ok = Bearer.carry(counting, messages, phase, wipe)
+        Diag.event(
+            "bearer.packets",
+            "dir" to "sent",
+            "phase" to phase,
+            "messages" to messages.size,
+            "packets" to c.sent,
+            "bytes" to c.sentBytes,
+            "failed" to c.sendFailed,
+            "ok" to ok,
+            "ms" to (Diag.ms() - started),
+        )
+        return ok
     }
 
     /**
@@ -79,7 +170,22 @@ class Carriage(private val radio: Bearer.Link?) {
      * assembly and leaves it standing; once a phase has been taken, this
      * is how the assembly's own copy goes too.
      */
-    fun discard(phase: Int) = inward.discard(phase)
+    fun discard(phase: Int) {
+        report(phase)
+        inward.discard(phase)
+    }
+
+    /** The phase's inbound tally, once: when its set is whole, or when it
+     *  is discarded without ever being. */
+    private fun report(phase: Int) {
+        val c = counters(phase)
+        val fields = synchronized(c) {
+            if (c.reported) return
+            c.reported = true
+            c.fields(phase)
+        }
+        Diag.event("bearer.packets", *(listOf("dir" to "received") + fields).toTypedArray())
+    }
 
     /**
      * The counterparty's carriage set once it is whole, or null while it is
@@ -87,5 +193,11 @@ class Carriage(private val radio: Bearer.Link?) {
      * its last one, and a set missing that flag is incomplete rather than
      * short.
      */
-    fun received(phase: Int = Phase.INTENT): List<ByteArray>? = inward.carriage(phase)
+    fun received(phase: Int = Phase.INTENT): List<ByteArray>? {
+        val set = inward.carriage(phase) ?: return null
+        val c = counters(phase)
+        synchronized(c) { if (c.wholeMs == null) c.wholeMs = Diag.ms() }
+        report(phase)
+        return set
+    }
 }

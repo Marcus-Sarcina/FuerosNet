@@ -32,7 +32,10 @@
     <uses-feature android:name="android.hardware.nfc.hce"
         android:required="false" />
 
+    <!-- `FuerosApp` plants the log trees, the event sink and the crash
+         handler, each only in the fieldtest flavour (`FuerosApp.kt`). -->
     <application
+        android:name=".FuerosApp"
         android:label="Fueros"
         android:allowBackup="false">
 

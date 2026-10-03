@@ -59,6 +59,10 @@ object Kernel {
 
     fun meet(): Meet? = meet
 
+    /** Whether the counterparty's contribution is in, which is what the
+     *  screen's second QR at D2 is: the meeting id rather than ours. */
+    fun opticalTaken(): Boolean = opticalTaken
+
     /**
      * Begin a ceremony with the one provisioned peer, meeting or adopting
      * as chosen. The kernel prepares the local half; the optical handshake
@@ -77,18 +81,48 @@ object Kernel {
         }
         val m = meet!!
         Thread {
-            try {
+            call("begin", { e -> m.stop("begin refused: ${e.reason}") }) {
                 // witnesses are nominated from the counterparty's
                 // neighbourhood (design §7.1); with no horizon yet the
                 // nomination is empty and the ceremony is that much weaker,
                 // which the record carries honestly rather than hiding
                 p.begin(to, listOf(), role == Meet.Role.INITIATOR)
                 m.note("ceremony open; the two codes are ready to cross.")
-            } catch (e: Refused.Reason) {
-                m.stop("begin refused: ${e.reason}")
             }
         }.start()
         return m
+    }
+
+    /**
+     * One call into the kernel, bracketed for the diagnostics
+     * (`Robot/field-test-diagnostics.md`, section 3.6): `shell.call`
+     * before, `shell.return` after with the elapsed milliseconds and,
+     * where the kernel refused, its reason. The refusal is then handled
+     * as it was: `onRefused` is the catch block, and returns what the
+     * body does. In the releasable flavour the events go nowhere and the
+     * try is what it was.
+     */
+    private inline fun <T> call(
+        method: String,
+        onRefused: (Refused.Reason) -> T,
+        body: () -> T,
+    ): T {
+        Diag.event("shell.call", "method" to method)
+        val started = Diag.ms()
+        return try {
+            val out = body()
+            Diag.event("shell.return", "method" to method, "ms" to (Diag.ms() - started), "ok" to true)
+            out
+        } catch (e: Refused.Reason) {
+            Diag.warn(
+                "shell.return",
+                "method" to method,
+                "ms" to (Diag.ms() - started),
+                "ok" to false,
+                "refused" to Diag.scrub(e.reason),
+            )
+            onRefused(e)
+        }
     }
 
     // ---- the bootstrap, which is the shell's own object ----------------
@@ -155,10 +189,8 @@ object Kernel {
      */
     fun optical(): ByteArray? {
         val p = participant ?: return null
-        return try {
+        return call(if (opticalTaken) "transcriptConfirm" else "opticalContribution", { null }) {
             if (opticalTaken) p.transcriptConfirm() else p.opticalContribution()
-        } catch (e: Refused.Reason) {
-            null
         }
     }
 
@@ -171,29 +203,28 @@ object Kernel {
     fun takeOptical(bytes: ByteArray): String? {
         val p = participant ?: return "the kernel is not running"
         val m = meet ?: return "no meeting is open here"
-        return try {
-            if (!opticalTaken) {
+        if (!opticalTaken) {
+            return call("takeOptical", { it.reason }) {
                 p.takeOptical(bytes)
                 opticalTaken = true
                 m.note("their contribution is in; showing the meeting id.")
                 null
-            } else {
-                val id = p.takeTranscript(bytes)
-                m.note("the two meeting ids agree: ${hex(id).take(16)}…")
-                // D3 can now run: the tap carries this agreed ceremony-id,
-                // and the reader/card side follows the bootstrap's own
-                // asymmetry — the party that showed the bootstrap reads.
-                ProximityChannels.ceremony(id, m.role == Meet.Role.INITIATOR, true)
-                // THE BEARER'S TURN. The optical step is what the integrity
-                // rests on (§14.3.1); from here a radio carries the bulk,
-                // and everything it carries is checked against what the
-                // screens showed.
-                carryIntent(m)
-                null
             }
-        } catch (e: Refused.Reason) {
-            e.reason
         }
+        var refused: String? = null
+        val id = call("takeTranscript", { refused = it.reason; null }) { p.takeTranscript(bytes) }
+            ?: return refused ?: "the transcript was refused"
+        m.note("the two meeting ids agree: ${hex(id).take(16)}…")
+        // D3 can now run: the tap carries this agreed ceremony-id,
+        // and the reader/card side follows the bootstrap's own
+        // asymmetry — the party that showed the bootstrap reads.
+        ProximityChannels.ceremony(id, m.role == Meet.Role.INITIATOR, true)
+        // THE BEARER'S TURN. The optical step is what the integrity
+        // rests on (§14.3.1); from here a radio carries the bulk,
+        // and everything it carries is checked against what the
+        // screens showed.
+        carryIntent(m)
+        return null
     }
 
     /**
@@ -222,29 +253,29 @@ object Kernel {
         // selection is not a thing to re-run on a recreated screen
         if (m.selectionRun()) return
         Thread {
-            try {
-                val picked = p.selectVerifiers()
-                m.selected(
-                    picked.map {
-                        Meet.Chosen(hex(it.verifier), basisOf(it.basis))
-                    },
-                )
-                if (picked.isEmpty()) {
-                    m.note("no verifier is required: the counterparty handed")
-                    m.note("over no records, so its pool is empty and")
-                    m.note("wire-format §5.2 obliges none.")
-                } else {
-                    // prepared, to show the call sequence is whole even
-                    // where the carriage is not
+            val refused = { e: Refused.Reason -> m.note("selection refused: ${e.reason}") }
+            val picked = call("selectVerifiers", { refused(it); null }) { p.selectVerifiers() }
+                ?: return@Thread
+            m.selected(
+                picked.map {
+                    Meet.Chosen(hex(it.verifier), basisOf(it.basis))
+                },
+            )
+            if (picked.isEmpty()) {
+                m.note("no verifier is required: the counterparty handed")
+                m.note("over no records, so its pool is empty and")
+                m.note("wire-format §5.2 obliges none.")
+            } else {
+                // prepared, to show the call sequence is whole even
+                // where the carriage is not
+                call("queryFor", refused) {
                     for (s in picked) {
                         p.queryFor(s.verifier)
                     }
-                    m.note("${picked.size} query/queries prepared. Each waits on the")
-                    m.note("counterparty's consent, which crosses the local bearer")
-                    m.note("this build does not carry; consented, it is sent.")
                 }
-            } catch (e: Refused.Reason) {
-                m.note("selection refused: ${e.reason}")
+                m.note("${picked.size} query/queries prepared. Each waits on the")
+                m.note("counterparty's consent, which crosses the local bearer")
+                m.note("this build does not carry; consented, it is sent.")
             }
         }.start()
     }
@@ -349,15 +380,14 @@ object Kernel {
             carriage = Carriage(radio.link())
         }
         Thread {
-            try {
-                val mine = p.intentCarriage()
-                if (carriage?.send(mine, Carriage.Phase.INTENT) == true) {
-                    m.note("intent sent: ${mine.size} message(s) over the radio.")
-                } else {
-                    m.note("the radio would not take the intent; nothing was sent.")
-                }
-            } catch (e: Refused.Reason) {
+            val mine = call("intentCarriage", { e ->
                 m.stop("the intent could not be built: ${e.reason}")
+                null
+            }) { p.intentCarriage() } ?: return@Thread
+            if (carriage?.send(mine, Carriage.Phase.INTENT) == true) {
+                m.note("intent sent: ${mine.size} message(s) over the radio.")
+            } else {
+                m.note("the radio would not take the intent; nothing was sent.")
             }
         }.start()
     }
@@ -381,25 +411,21 @@ object Kernel {
         val live = carriage ?: return
         when (m.step()) {
             Meet.Step.OPTICAL -> live.received(Carriage.Phase.INTENT)?.let { set ->
-                try {
+                // every refusal here is the kernel catching a bearer
+                // that disagrees with the screens (§14.3.2), which is
+                // the one thing the anchor is for
+                call("takeIntentCarriage", { e -> m.stop("the carried intent was refused: ${e.reason}") }) {
                     val taken = p.takeIntentCarriage(to, set)
                     m.note("their intent is in, with $taken continuation(s).")
                     m.opticalDone()
-                } catch (e: Refused.Reason) {
-                    // every refusal here is the kernel catching a bearer
-                    // that disagrees with the screens (§14.3.2), which is
-                    // the one thing the anchor is for
-                    m.stop("the carried intent was refused: ${e.reason}")
                 }
             }
             Meet.Step.PROXIMITY -> live.received(Carriage.Phase.PROXIMITY)?.let { set ->
                 set.firstOrNull()?.let { bytes ->
-                    try {
+                    call("takeProximity", { e -> m.stop("the carried outcomes were refused: ${e.reason}") }) {
                         p.takeProximity(bytes)
                         m.note("their channel outcomes are in.")
                         m.proximityDone()
-                    } catch (e: Refused.Reason) {
-                        m.stop("the carried outcomes were refused: ${e.reason}")
                     }
                 }
             }
@@ -413,12 +439,20 @@ object Kernel {
                         // capture of them: the capture ran on this
                         // device's camera at D4 and is sealed beneath,
                         // silently (design §7.5.2.6)
-                        theirKey = p.takeCaptureKeyCarriage(bytes)
-                        p.capture(theirKey)
-                        m.note("captures sealed; the meeting can be proposed.")
-                        m.captureDone()
-                    } catch (e: Refused.Reason) {
-                        m.stop("the capture could not be sealed: ${e.reason}")
+                        val sealed = { e: Refused.Reason ->
+                            m.stop("the capture could not be sealed: ${e.reason}")
+                        }
+                        val k = call("takeCaptureKeyCarriage", { sealed(it); null }) {
+                            p.takeCaptureKeyCarriage(bytes)
+                        }
+                        if (k != null) {
+                            theirKey = k
+                            call("capture", sealed) {
+                                p.capture(k)
+                                m.note("captures sealed; the meeting can be proposed.")
+                                m.captureDone()
+                            }
+                        }
                     } finally {
                         // THE KEY IS LET GO HERE, sealed or not: it opens
                         // a likeness of a person, and the kernel wiped its
@@ -443,14 +477,12 @@ object Kernel {
     fun runProximity(m: Meet) {
         val p = participant ?: return
         val to = peer ?: return
-        try {
-            val mine = p.proximityCarriage()
-            carriage?.send(listOf(mine), Carriage.Phase.PROXIMITY)
-            m.note("channels run; the strongest that passed is recorded.")
-            drainBearer(p, to, m)
-        } catch (e: Refused.Reason) {
-            m.stop("proximity: ${e.reason}")
-        }
+        val mine = call("proximityCarriage", { e -> m.stop("proximity: ${e.reason}"); null }) {
+            p.proximityCarriage()
+        } ?: return
+        carriage?.send(listOf(mine), Carriage.Phase.PROXIMITY)
+        m.note("channels run; the strongest that passed is recorded.")
+        drainBearer(p, to, m)
     }
 
     /**
@@ -465,21 +497,19 @@ object Kernel {
     fun runCapture(m: Meet) {
         val p = participant ?: return
         val to = peer ?: return
+        // the handover carries my key in clear: once the bearer has
+        // had it, this shell keeps no copy, the packets it was cut
+        // into included (design §7.5.2)
+        val mine = call("captureKeyCarriage", { e -> m.stop("capture: ${e.reason}"); null }) {
+            p.captureKeyCarriage()
+        } ?: return
         try {
-            // the handover carries my key in clear: once the bearer has
-            // had it, this shell keeps no copy, the packets it was cut
-            // into included (design §7.5.2)
-            val mine = p.captureKeyCarriage()
-            try {
-                carriage?.send(listOf(mine), Carriage.Phase.CAPTURE_KEY, wipe = true)
-            } finally {
-                mine.fill(0)
-            }
-            m.note("my capture key is sent; capturing the counterparty.")
-            drainBearer(p, to, m)
-        } catch (e: Refused.Reason) {
-            m.stop("capture: ${e.reason}")
+            carriage?.send(listOf(mine), Carriage.Phase.CAPTURE_KEY, wipe = true)
+        } finally {
+            mine.fill(0)
         }
+        m.note("my capture key is sent; capturing the counterparty.")
+        drainBearer(p, to, m)
     }
 
     /** The one peer this device was provisioned to talk to, or null while
@@ -537,11 +567,9 @@ object Kernel {
         }
         val id = front.outgoing(key, text)
         Thread {
-            try {
+            call("send", { e -> front.settle(key, id, Front.Delivery.UNSENT, e.reason) }) {
                 p.send(to, kindApplication(), text.toByteArray())
                 front.settle(key, id, Front.Delivery.SENT, null)
-            } catch (e: Refused.Reason) {
-                front.settle(key, id, Front.Delivery.UNSENT, e.reason)
             }
         }.start()
     }
@@ -564,42 +592,63 @@ object Kernel {
         val known = provision?.getJSONArray("known")
             ?.let { a -> (0 until a.length()).map { unhex(a.getString(it)) } }
             ?: listOf()
-        val p: Participant
-        try {
-            p = Participant.start(mintedSeeds(shell), known, platformOf(shell))
-            participant = p
-            show(p, Status.Detached)
-        } catch (e: Refused.Reason) {
-            front.setStatus("kernel refused: ${e.reason}")
-            return
-        }
+        val p = call("Participant.start", { e -> front.setStatus("kernel refused: ${e.reason}"); null }) {
+            Participant.start(mintedSeeds(shell), known, platformOf(shell))
+        } ?: return
+        participant = p
+        show(p, Status.Detached)
 
         val material = p.material().joinToString("") { "%02x".format(it) }
 
         if (provision == null) {
-            front.note("· unprovisioned. On the workstation:")
-            front.note("    adb logcat -d -s fueros | grep material")
+            // the material is this device's public identity, shown here
+            // because nothing else exposes it: no flavour logs it and the
+            // Report bundle carries identities as eight characters only
+            front.note("· unprovisioned. This device's public key material:")
+            front.note("    $material")
+            front.note("· on the workstation, with that material copied off the screen:")
             front.note("    cargo run -p rhtn-ffi --features harness \\")
             front.note("      --bin payload-peer -- <that material>")
             front.note("· then hand its PROVISION line back as the `provision` extra.")
             return
         }
 
-        try {
-            val to = unhex(provision.getString("peer"))
-            peer = to
-            peerName = provision.optString("peer_name", "peer")
-            peerKey = hex(to)
-            front.peerKnown(peerKey!!, peerName)
-            val node = unhex(provision.getString("node"))
-            val a = p.attach(node, listOf(provision.getString("addr")), listOf(to))
-            show(p, Status.Attached(node, a.primary))
-        } catch (e: Refused.Reason) {
-            front.setStatus("attach refused: ${e.reason}")
-            return
-        }
+        val to = unhex(provision.getString("peer"))
+        peer = to
+        peerName = provision.optString("peer_name", "peer")
+        peerKey = hex(to)
+        front.peerKnown(peerKey!!, peerName)
+        val node = unhex(provision.getString("node"))
+        val a = call("attach", { e -> front.setStatus("attach refused: ${e.reason}"); null }) {
+            p.attach(node, listOf(provision.getString("addr")), listOf(to))
+        } ?: return
+        show(p, Status.Attached(node, a.primary))
         while (true) {
-            when (val e = p.nextEvent(2000UL)) {
+            val e = p.nextEvent(2000UL)
+            // the kind of thing that arrived and who from, as eight hex
+            // characters; a payload's bytes are counted, never shown
+            if (e != null && Diag.enabled()) {
+                Diag.event(
+                    "shell.event",
+                    "kind" to e::class.simpleName,
+                    "from" to when (e) {
+                        is Event.Payload -> Diag.id8(e.from)
+                        is Event.Answered -> Diag.id8(e.from)
+                        is Event.ResponseCopy -> Diag.id8(e.from)
+                        is Event.Late -> Diag.id8(e.from)
+                        is Event.Conversed -> Diag.id8(e.from)
+                        else -> null
+                    },
+                    "bytes" to (e as? Event.Payload)?.bytes?.size,
+                    "refused" to when (e) {
+                        is Event.Answered -> e.refused
+                        is Event.ResponseCopy -> e.refused
+                        is Event.Late -> e.refused
+                        else -> null
+                    },
+                )
+            }
+            when (e) {
                 is Event.Payload -> {
                     val from = hex(e.from)
                     val who = if (from == peerKey) peerName else from.take(16)

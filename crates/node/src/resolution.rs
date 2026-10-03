@@ -481,19 +481,37 @@ impl AnchorTable {
     /// Take a gossiped entry.  Below the node's own threshold it is not
     /// retained; within a series a strictly greater counter replaces.
     pub fn offer<L: Lookup + ?Sized>(&mut self, entry: AnchorEntry, ids: &L) -> bool {
+        let anchor8 = crate::diag::id8(&entry.anchor);
+        let (taken, why) = self.consider(entry, ids);
+        tracing::debug!(target: "node", anchor8 = %anchor8, taken, why, "node.anchor");
+        taken
+    }
+
+    /// The decision behind [`offer`](Self::offer), and the reason where it
+    /// is a refusal: below the threshold, a signature that does not check,
+    /// or a seqno no newer than the one held.
+    fn consider<L: Lookup + ?Sized>(
+        &mut self,
+        entry: AnchorEntry,
+        ids: &L,
+    ) -> (bool, &'static str) {
         if entry.subtree_size < self.threshold {
-            return false;
+            return (false, "threshold");
         }
         if self.ingestion == Ingestion::VerifiedOnAcceptance
             && entry.signature_checks(ids) != Some(true)
         {
-            return false;
+            return (false, "signature");
         }
         match self.entries.get(&entry.anchor) {
-            Some(held) if compare(held.seqno, entry.seqno) != Order::Newer => false,
-            _ => {
+            Some(held) if compare(held.seqno, entry.seqno) != Order::Newer => (false, "seqno"),
+            Some(_) => {
                 self.entries.insert(entry.anchor, entry);
-                true
+                (true, "replaced")
+            }
+            None => {
+                self.entries.insert(entry.anchor, entry);
+                (true, "new")
             }
         }
     }
@@ -607,11 +625,32 @@ impl NodeView {
                 endpoints: Vec::new(),
                 arrived: None,
             };
+            tracing::debug!(
+                target: "node",
+                subject8 = %crate::diag::id8(&subject),
+                step = %format!("Begun(delegated to {})", crate::diag::id8(&serving)),
+                "node.resolve"
+            );
             return Ok((r, Carried::Delegated(serving)));
         }
-        let r = Resolution::begin(anchors, subject, anchor, path, nonce)?;
+        let begun = Resolution::begin(anchors, subject, anchor, path, nonce);
+        if let Err(NotResolvable::AnchorAbsent(a)) = &begun {
+            tracing::debug!(
+                target: "node",
+                subject8 = %crate::diag::id8(&subject),
+                step = %format!("NotResolvable(anchor {} absent)", crate::diag::id8(a)),
+                "node.resolve"
+            );
+        }
+        let r = begun?;
         let on_session =
             adj.has_session(&anchor) && adj.request(&anchor, REQUEST_RESOLVE, &r.request.encode());
+        tracing::debug!(
+            target: "node",
+            subject8 = %crate::diag::id8(&subject),
+            step = %format!("Begun(direct, sent_on_session {on_session})"),
+            "node.resolve"
+        );
         Ok((
             r,
             Carried::Direct {
@@ -664,6 +703,27 @@ impl NodeView {
     /// Answer a resolution from this node's own position and tables.
     /// Nothing about the requester is retained (design §12.6.5).
     pub fn answer_resolution(&self, req: &ResolveRequest) -> ResolveReply {
+        let reply = self.answer_from_tables(req);
+        tracing::debug!(
+            target: "node",
+            subject8 = %crate::diag::id8(&req.subject),
+            step = %match &reply {
+                ResolveReply::Serving { serving, .. } => {
+                    format!("Answered(serving {})", crate::diag::id8(&serving.node))
+                }
+                ResolveReply::Referral { referral, .. } => {
+                    format!("Answered(referral to {})", crate::diag::id8(&referral.next))
+                }
+                ResolveReply::Failure { code, .. } => {
+                    format!("Answered(failure {code}, {:?})", disposition(*code))
+                }
+            },
+            "node.resolve"
+        );
+        reply
+    }
+
+    fn answer_from_tables(&self, req: &ResolveRequest) -> ResolveReply {
         let nonce = req.nonce;
         // a node bound in several subnets has a position in each
         let Some(pos) = self.position_in(&req.anchor) else {
@@ -977,6 +1037,12 @@ impl LocatorStore {
 
     /// Offer a signed locator; it must verify under its own subject.
     pub fn offer<L: Lookup + ?Sized>(&mut self, bytes: &[u8], ids: &L) -> LocatorOutcome {
+        let outcome = self.consider(bytes, ids);
+        tracing::debug!(target: "node", bytes = bytes.len(), outcome = ?outcome, "node.locator");
+        outcome
+    }
+
+    fn consider<L: Lookup + ?Sized>(&mut self, bytes: &[u8], ids: &L) -> LocatorOutcome {
         let sl = match SignedLocator::parse(bytes) {
             Ok(s) => s,
             Err(e) => return LocatorOutcome::Malformed(e),

@@ -215,6 +215,12 @@ impl NodeView {
     /// history go; payload queues do not, because the mailbox is one node
     /// (design §3.4, §14.1.6).
     pub fn replicate(&self, siblings: &[&dyn Replica], item: &Replicated) {
+        tracing::debug!(
+            target: "node",
+            siblings = siblings.len(),
+            item = %crate::diag::replicated(item),
+            "node.replicate"
+        );
         for s in siblings {
             s.take(item);
         }
@@ -272,6 +278,23 @@ impl NodeView {
     /// §12.6.3's check, taken against this node's own store; where it is
     /// relayed, this node's serving node is the first carrier.
     pub fn send_payload(
+        &self,
+        peer: &Keyhash,
+        online: bool,
+        sink: &dyn PayloadSink,
+        bytes: &[u8],
+    ) -> Delivery {
+        let delivery = self.carry_payload(peer, online, sink, bytes);
+        tracing::debug!(
+            target: "node",
+            bytes = bytes.len(),
+            delivery = %crate::diag::delivery(&delivery),
+            "node.replicate.payload"
+        );
+        delivery
+    }
+
+    fn carry_payload(
         &self,
         peer: &Keyhash,
         online: bool,

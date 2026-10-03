@@ -833,7 +833,17 @@ impl LiveNode {
     /// reports, asked of the STUN server at the address it attached to.
     pub async fn gather(&self) -> Vec<rhtn_transport::traversal::Candidate> {
         let stun = *self.upstream_addr.lock().unwrap();
-        self.traversal.gather(stun, Duration::from_secs(2)).await
+        let found = self.traversal.gather(stun, Duration::from_secs(2)).await;
+        tracing::debug!(
+            target: "node",
+            candidates = found.len(),
+            reflexive = found
+                .iter()
+                .any(|c| c.kind == rhtn_transport::traversal::CandidateKind::ServerReflexive),
+            stun = stun.is_some(),
+            "node.gather"
+        );
+        found
     }
 
     /// Prepare the direct path to `peer`: candidates gathered only where
@@ -946,11 +956,23 @@ impl LiveNode {
             Some(DirectState::Connected(c)) => Some(c.clone()),
             _ => None,
         };
+        let had_direct = conn.is_some();
         if let Some(c) = conn
             && rhtn_transport::session::deliver(&c, bytes.clone()).await
         {
+            tracing::debug!(target: "node", to8 = %crate::diag::id8(&peer), bytes = bytes.len(), path = "direct", "node.payload");
             return LiveDelivery::Direct;
         }
+        // relayed: either no direct path was held, or the one held failed
+        // the send and the bytes fall back to the serving node
+        tracing::debug!(
+            target: "node",
+            to8 = %crate::diag::id8(&peer),
+            bytes = bytes.len(),
+            path = "relayed",
+            direct_failed = had_direct,
+            "node.payload"
+        );
         relay(bytes);
         LiveDelivery::Relayed
     }
@@ -1026,6 +1048,13 @@ async fn drive(
             break;
         };
         let step = r.take(&reply);
+        tracing::debug!(
+            target: "node",
+            subject8 = %crate::diag::id8(&r.request.subject),
+            step = %crate::diag::step(&step),
+            hops = r.hops.len(),
+            "node.resolve"
+        );
         last = Some(reply);
         match step {
             Step::Continue(_) => continue,

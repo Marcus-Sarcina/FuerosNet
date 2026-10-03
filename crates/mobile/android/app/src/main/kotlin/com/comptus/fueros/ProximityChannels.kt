@@ -4,12 +4,12 @@ import android.app.Activity
 import android.content.Context
 import android.nfc.NfcAdapter
 import android.nfc.tech.IsoDep
-import android.util.Log
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import uniffi.rhtn_ffi.Channel
 import uniffi.rhtn_ffi.ChannelOutcome
+import timber.log.Timber
 
 /**
  * The proximity channels this shell can actually run (D3; design §7.6.3,
@@ -63,10 +63,20 @@ object ProximityChannels {
      */
     fun ceremony(id: ByteArray?, readerSide: Boolean, agreed: Boolean) {
         val same = id != null && ceremonyId?.contentEquals(id) == true
+        if (!same && cachedTap.get() != null) {
+            Diag.event("nfc", "op" to "cache", "state" to "cleared")
+        }
         if (!same) cachedTap.set(null)
         ceremonyId = id
         reader = readerSide
         anchorAgreed = agreed
+        Diag.event(
+            "nfc",
+            "op" to "ceremony",
+            "id" to Diag.id8(id),
+            "side" to if (id == null) null else if (readerSide) "reader" else "card",
+            "anchor_agreed" to agreed,
+        )
     }
 
     /** What the HCE service answers with: this device's ceremony-id. */
@@ -74,6 +84,7 @@ object ProximityChannels {
 
     /** The HCE side passed: a reader in this ceremony exchanged with us. */
     fun tapServed() {
+        Diag.event("nfc", "op" to "hce", "state" to "served")
         cachedTap.set(ChannelOutcome.PASS)
     }
 
@@ -95,14 +106,30 @@ object ProximityChannels {
     }
 
     private fun tap(context: Context): ChannelOutcome {
-        cachedTap.get()?.let { return it }
-        val cid = ceremonyId ?: return ChannelOutcome.UNAVAILABLE
+        cachedTap.get()?.let {
+            Diag.event("nfc", "op" to "tap", "outcome" to it, "cached" to true)
+            return it
+        }
+        val cid = ceremonyId ?: return unavailable("no ceremony")
         val adapter = NfcAdapter.getDefaultAdapter(context)
-            ?: return ChannelOutcome.UNAVAILABLE
-        if (!adapter.isEnabled) return ChannelOutcome.UNAVAILABLE
+            ?: return unavailable("no adapter")
+        if (!adapter.isEnabled) return unavailable("adapter off")
+        val started = Diag.ms()
         val outcome = if (reader) read(adapter, cid) else serve()
+        Diag.event(
+            "nfc",
+            "op" to "tap",
+            "side" to if (reader) "reader" else "card",
+            "outcome" to outcome,
+            "ms" to (Diag.ms() - started),
+        )
         cachedTap.set(outcome)
         return outcome
+    }
+
+    private fun unavailable(why: String): ChannelOutcome {
+        Diag.warn("nfc", "op" to "tap", "outcome" to ChannelOutcome.UNAVAILABLE, "reason" to why)
+        return ChannelOutcome.UNAVAILABLE
     }
 
     /**
@@ -112,22 +139,32 @@ object ProximityChannels {
      * hardware was there and the tap did not happen.
      */
     private fun read(adapter: NfcAdapter, cid: ByteArray): ChannelOutcome {
-        val a = host ?: return ChannelOutcome.UNAVAILABLE
+        val a = host ?: return unavailable("no foreground screen to read from")
         val done = CountDownLatch(1)
         val result = AtomicReference(ChannelOutcome.FAIL)
+        val apdus = java.util.concurrent.atomic.AtomicInteger(0)
         val cb = NfcAdapter.ReaderCallback { tag ->
             try {
-                val iso = IsoDep.get(tag) ?: return@ReaderCallback
+                val iso = IsoDep.get(tag) ?: run {
+                    Diag.warn("nfc", "op" to "tag", "outcome" to "not IsoDep")
+                    return@ReaderCallback
+                }
                 iso.connect()
                 iso.transceive(NfcApdu.select())
+                apdus.incrementAndGet()
                 val resp = iso.transceive(NfcApdu.exchange(cid))
+                apdus.incrementAndGet()
+                // the status word says which way it went, by the codec's
+                // own vocabulary: pass, refused 6985, unknown 6D00
+                Diag.event("nfc", "op" to "exchange", "status" to NfcApdu.status(resp), "apdus" to apdus.get())
                 if (NfcApdu.passed(resp, cid)) {
                     result.set(ChannelOutcome.PASS)
                     done.countDown()
                 }
                 iso.close()
             } catch (e: Exception) {
-                Log.w("fueros", "nfc read: $e")
+                Timber.w(e, "nfc read")
+                Diag.warn("nfc", "op" to "exchange", "error" to e.toString())
             }
         }
         return try {
@@ -140,13 +177,16 @@ object ProximityChannels {
                     null,
                 )
             }
-            done.await(30, TimeUnit.SECONDS)
+            Diag.event("nfc", "op" to "reader_mode", "state" to "on")
+            val tapped = done.await(30, TimeUnit.SECONDS)
+            if (!tapped) Diag.warn("nfc", "op" to "latch", "outcome" to "timeout", "waited_ms" to 30_000)
             result.get()
         } catch (e: Exception) {
-            Log.w("fueros", "nfc reader mode: $e")
-            ChannelOutcome.UNAVAILABLE
+            Timber.w(e, "nfc reader mode")
+            unavailable("reader mode: $e")
         } finally {
             a.runOnUiThread { runCatching { adapter.disableReaderMode(a) } }
+            Diag.event("nfc", "op" to "reader_mode", "state" to "off")
         }
     }
 
@@ -157,6 +197,7 @@ object ProximityChannels {
             cachedTap.get()?.let { return it }
             Thread.sleep(200)
         }
+        Diag.warn("nfc", "op" to "latch", "side" to "card", "outcome" to "timeout", "waited_ms" to 30_000)
         return ChannelOutcome.FAIL
     }
 }

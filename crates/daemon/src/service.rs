@@ -54,6 +54,19 @@ impl std::fmt::Display for Startup {
 
 impl std::error::Error for Startup {}
 
+impl Startup {
+    /// The variant's name, for a diagnostic field: which of the four
+    /// refusals it was, without the path or the message.
+    pub fn variant(&self) -> &'static str {
+        match self {
+            Startup::Identity(_) => "Identity",
+            Startup::Peers(_) => "Peers",
+            Startup::State(_) => "State",
+            Startup::Hosting(_) => "Hosting",
+        }
+    }
+}
+
 /// The two seeds an identity is derived from, in order: the classical one
 /// and the post-quantum one (design §5.1).  Sixty-four bytes, and a file
 /// of any other length is refused rather than padded or truncated.
@@ -274,6 +287,14 @@ impl Service {
     /// its topology store replays a forwarding wave into every cycle in
     /// its horizon (`infra-client-requirements.md` §4.3).
     pub async fn start(cfg: &Config, peers: &Path) -> Result<Service, Startup> {
+        tracing::info!(
+            target: "daemon",
+            step = "start",
+            delegated = cfg.identity.is_none(),
+            listen = %cfg.listen,
+            upstream = cfg.upstream.is_some(),
+            "daemon.lifecycle"
+        );
         // the seed, or the credential an instance holds instead of it
         // (design §23.3)
         let (public, signer, credential) = match (&cfg.identity, &cfg.operator) {
@@ -326,8 +347,16 @@ impl Service {
         // those records unverifiable for want of a key it is holding
         // (`wire-format.md` §3.4).  Asking an operator to list themselves
         // would make a working configuration depend on remembering to.
+        tracing::info!(
+            target: "daemon",
+            step = "identity_loaded",
+            me8 = %rhtn_node::diag::id8(&public.keyhash),
+            delegated = credential.is_some(),
+            "daemon.lifecycle"
+        );
         let mut known = vec![public.clone()];
         known.extend(read_peers(peers)?);
+        tracing::info!(target: "daemon", step = "peers_read", known = known.len(), "daemon.lifecycle");
         let pins = Pins::new();
         pins.pin_identity(&public);
         for id in &known {
@@ -386,7 +415,19 @@ impl Service {
         let snap = std::fs::read(cfg.topology.join(DERIVED))
             .ok()
             .and_then(|b| Snapshot::decode(&b));
-        match view.restore_materialised(snap.as_ref(), &known) {
+        let restored = view.restore_materialised(snap.as_ref(), &known);
+        tracing::info!(
+            target: "daemon",
+            step = "replayed",
+            snapshot = snap.is_some(),
+            restored = %match &restored {
+                Restored::Current => "Current".to_string(),
+                Restored::Extended { folded } => format!("Extended({folded})"),
+                Restored::Replayed { replayed } => format!("Replayed({replayed})"),
+            },
+            "daemon.lifecycle"
+        );
+        match restored {
             Restored::Replayed { replayed } if snap.is_some() => {
                 crate::say!(
                     "rhtnd: the derived state did not match the store; replayed {replayed} records"
@@ -414,6 +455,7 @@ impl Service {
                 };
                 let bound = crate::hosting::apply(&mut view.resources, path, limits)
                     .map_err(|e| Startup::Hosting(format!("{}: {e}", path.display())))?;
+                tracing::info!(target: "daemon", step = "hosting", bound, "daemon.lifecycle");
                 bound > 0
             }
         };
@@ -513,11 +555,28 @@ impl Service {
             Some((patron, addrs)) => {
                 let ccfg = client_config(party.clone(), pins, addrs, patron);
                 match node.attach_upstream(&ccfg, *patron).await {
-                    rhtn_transport::session::AttachOutcome::Attached(s) => Some(s),
+                    rhtn_transport::session::AttachOutcome::Attached(s) => {
+                        tracing::info!(
+                            target: "daemon",
+                            step = "upstream",
+                            patron8 = %hex8(patron),
+                            attached = true,
+                            "daemon.lifecycle"
+                        );
+                        Some(s)
+                    }
                     // an upstream that will not have us is reported and not
                     // fatal: the node still serves what it holds, and a
                     // later attach is the operator's to make
                     other => {
+                        tracing::warn!(
+                            target: "daemon",
+                            step = "upstream",
+                            patron8 = %hex8(patron),
+                            attached = false,
+                            outcome = ?other,
+                            "daemon.lifecycle"
+                        );
                         crate::say!("rhtnd: upstream {}: {other:?}", hex8(patron));
                         None
                     }
@@ -557,6 +616,13 @@ impl Service {
             .push_credential(&self.node.adjacency, ids.as_slice());
         let now = self.node.view.lock().unwrap().now();
         let remaining = credentials_remaining(cred, now);
+        tracing::info!(
+            target: "daemon",
+            step = "credentials",
+            remaining,
+            run_end = cred.run_end().unwrap_or(0),
+            "daemon.lifecycle"
+        );
         let mut noticed = self.noticed.lock().unwrap();
         if remaining <= NOTICE_AT_CREDENTIALS && *noticed != Some(remaining) {
             *noticed = Some(remaining);
@@ -601,6 +667,17 @@ impl Service {
     /// Write back what a restart must find.  Called on the way out, and
     /// safe to call more than once.
     pub fn persist(&self) -> Result<(), std::io::Error> {
+        let written = self.write_back();
+        tracing::info!(
+            target: "daemon",
+            step = "persist",
+            ok = written.is_ok(),
+            "daemon.lifecycle"
+        );
+        written
+    }
+
+    fn write_back(&self) -> Result<(), std::io::Error> {
         let view = self.node.view.lock().unwrap();
         view.prekeys.save(&self.prekeys)?;
         view.archive.save(&self.archive)?;
@@ -624,8 +701,14 @@ impl Service {
         tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         loop {
             tokio::select! {
-                _ = tokio::signal::ctrl_c() => break,
-                _ = term.recv() => break,
+                _ = tokio::signal::ctrl_c() => {
+                    tracing::info!(target: "daemon", step = "signalled", signal = "SIGINT", "daemon.lifecycle");
+                    break;
+                }
+                _ = term.recv() => {
+                    tracing::info!(target: "daemon", step = "signalled", signal = "SIGTERM", "daemon.lifecycle");
+                    break;
+                }
                 _ = tick.tick() => {
                     self.mind_the_run();
                     for dry in self.maintain() {

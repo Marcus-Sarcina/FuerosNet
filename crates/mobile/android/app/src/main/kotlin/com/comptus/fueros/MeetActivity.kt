@@ -93,6 +93,7 @@ class MeetActivity : Activity() {
         val m = Kernel.meet()
         if (m == null) {
             entry()
+            report()
             return
         }
         title(
@@ -120,7 +121,51 @@ class MeetActivity : Activity() {
             Meet.Step.STOPPED -> stopped(m)
         }
         logLines(m)
+        report()
     }
+
+    /** The Report action (`Robot/field-test-diagnostics.md`, section 4):
+     *  the run's events and a header, zipped and offered to the share
+     *  sheet. Fieldtest flavour only; the releasable flavour has no button
+     *  and nothing it would send. */
+    private fun report() {
+        if (!BuildConfig.FIELD_TEST) return
+        button("Send diagnostics (field test)") { Report.send(this) }
+    }
+
+    /**
+     * Every permission asked for is an event, and so is each answer
+     * (`Robot/field-test-diagnostics.md`, section 3.6, `permission`).
+     */
+    private fun ask(code: Int, vararg permissions: String) {
+        for (p in permissions) {
+            Diag.event("permission", "which" to short(p), "state" to "requested")
+        }
+        requestPermissions(arrayOf(*permissions), code)
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        for (i in permissions.indices) {
+            val granted = grantResults.getOrNull(i) == PackageManager.PERMISSION_GRANTED
+            Diag.event("permission", "which" to short(permissions[i]), "state" to if (granted) "granted" else "denied")
+        }
+        redraw()
+    }
+
+    private fun short(permission: String) = permission.substringAfterLast('.').lowercase()
+
+    private fun held(permission: String) =
+        checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
+
+    /** The three Bluetooth permissions the bearer needs at API 31 and up;
+     *  asked for before the hands-off phase, since a radio refused there
+     *  would only be caught, not asked for. */
+    private val bluetooth = arrayOf(
+        Manifest.permission.BLUETOOTH_SCAN,
+        Manifest.permission.BLUETOOTH_ADVERTISE,
+        Manifest.permission.BLUETOOTH_CONNECT,
+    )
 
     // ---- the entry, before a ceremony is live --------------------------
 
@@ -171,14 +216,14 @@ class MeetActivity : Activity() {
                 if (code == null) {
                     para("The code needs the kernel's identifier, which this device has not got yet.")
                 } else {
-                    qr(code)
+                    qr(code, "bootstrap")
                 }
                 para("When they have scanned it, both of you will be shown what is about to happen.")
                 button("They have scanned it") { m.crossBootstrap() }
             }
             Meet.Role.RESPONDER -> {
                 para("Point the back of your phone at ${m.counterpartyName}'s screen. Their code carries who they are and the kind of meeting they chose; the next screen is where you accept or refuse it.")
-                scan(QrCamera.Facing.REAR) { bytes ->
+                scan(QrCamera.Facing.REAR, "bootstrap") { bytes ->
                     // the bootstrap is the shell's own object and carries no
                     // anchor, so the shell reads it (`wire-format.md` §14.3
                     // fixes the ANCHORED objects and this is not one)
@@ -192,8 +237,9 @@ class MeetActivity : Activity() {
     }
 
     /** A QR on the screen, large enough to scan across a table. */
-    private fun qr(bytes: ByteArray) {
+    private fun qr(bytes: ByteArray, which: String) {
         val m = Optical.matrix(bytes)
+        Diag.event("qr.shown", "which" to which, "bytes" to bytes.size, "modules" to m.width)
         val scale = 8
         val w = m.width * scale
         val px = IntArray(w * w)
@@ -215,17 +261,15 @@ class MeetActivity : Activity() {
      * and a refusal stops the ceremony with a reason rather than silently:
      * a camera this shell does not hold is a meeting it cannot carry.
      */
-    private fun scan(facing: QrCamera.Facing, found: (ByteArray) -> Unit) {
-        if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+    private fun scan(facing: QrCamera.Facing, which: String, found: (ByteArray) -> Unit) {
+        if (!held(Manifest.permission.CAMERA)) {
             para("This step needs the camera. Nothing is read until you allow it.")
-            button("Allow the camera") {
-                requestPermissions(arrayOf(Manifest.permission.CAMERA), 1)
-            }
+            button("Allow the camera") { ask(1, Manifest.permission.CAMERA) }
             return
         }
         para("Scanning…")
         val cam = camera ?: QrCamera(this).also { camera = it }
-        cam.readOne(facing, null) { bytes -> found(bytes) }?.let { why -> para(why) }
+        cam.readOne(facing, null, which) { bytes -> found(bytes) }?.let { why -> para(why) }
     }
 
     // ---- D1.5 the brief: everything front-loaded -----------------------
@@ -245,6 +289,13 @@ class MeetActivity : Activity() {
         heading("What may be weak in this meeting")
         para("• Nominated witnesses: none, until your horizon can offer them. The record carries that it had none.")
         para("• Verifiers and proximity are weighed, not required; a thin meeting is honest, not malformed.")
+        if (bluetooth.any { !held(it) }) {
+            // the bearer that carries the intent is Bluetooth LE; without
+            // the permissions the exchange stops at the radio, said here
+            // where the person can still act rather than caught there
+            para("The intent crosses over Bluetooth, which this app is not yet allowed to use. Without it the meeting will stop at the exchange.")
+            button("Allow Bluetooth") { ask(3, *bluetooth) }
+        }
         button("Accept — begin") { m.accept() }
         button("Refuse") { m.refuse() }
     }
@@ -265,8 +316,9 @@ class MeetActivity : Activity() {
             para("The code needs an open ceremony, which this device has lost.")
             return
         }
-        qr(code)
-        scan(QrCamera.Facing.SELFIE) { bytes ->
+        val which = if (Kernel.opticalTaken()) "transcript" else "contribution"
+        qr(code, which)
+        scan(QrCamera.Facing.SELFIE, which) { bytes ->
             val why = Kernel.takeOptical(bytes)
             runOnUiThread { if (why != null) m.stop(why) else redraw() }
         }
@@ -299,11 +351,9 @@ class MeetActivity : Activity() {
      */
     private fun capture(m: Meet) {
         para("Capturing ${m.counterpartyName}: a few frames over a few seconds, with spoken or toned prompts for them. Nothing is shown to you and nothing is asked — you read what this holds and who may see it before the phone turned around.")
-        if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+        if (!held(Manifest.permission.CAMERA)) {
             para("The capture needs the camera, which is not yet allowed.")
-            button("Allow the camera") {
-                requestPermissions(arrayOf(Manifest.permission.CAMERA), 2)
-            }
+            button("Allow the camera") { ask(2, Manifest.permission.CAMERA) }
             return
         }
         once(m, "capture") {

@@ -1,0 +1,9 @@
+{"ms":2,"level":"info","layer":"diag","event":"diag.anchor","unix_ms":1700000010000,"pid":4242,"process":"rhtnd"}
+{"ms":3,"level":"info","layer":"daemon","event":"daemon.lifecycle","step":"config_read","config":"/tmp/alice/rhtnd.conf","log_level":"debug"}
+{"ms":5,"level":"info","layer":"daemon","event":"daemon.lifecycle","step":"start","delegated":false,"listen":"127.0.0.1:0","upstream":false}
+{"ms":40,"level":"info","layer":"daemon","event":"daemon.lifecycle","step":"serving","addr":"127.0.0.1:41000"}
+{"ms":1200,"level":"debug","layer":"transport","event":"transport.session","what":"Attached(mode 0)"}
+{"ms":1250,"level":"debug","layer":"node","event":"node.object","kind":"endpoint_record","from8":"0b0b0b0b","bytes":180,"decision":"OutOfStore"}
+{"ms":1260,"level":"debug","layer":"node","event":"node.object","kind":"transaction","from8":"0b0b0b0b","bytes":410,"decision":"Refused(NotASlot)"}
+this line is not JSON and is skipped
+{"ms":9000,"level":"info","layer":"daemon","event":"daemon.lifecycle","step":"shutdown","ok":true}

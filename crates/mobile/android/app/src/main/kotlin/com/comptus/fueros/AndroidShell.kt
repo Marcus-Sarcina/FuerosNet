@@ -3,7 +3,6 @@ package com.comptus.fueros
 import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
-import android.util.Log
 import java.io.File
 import java.security.KeyStore
 import java.security.SecureRandom
@@ -25,6 +24,7 @@ import uniffi.rhtn_ffi.Proximity
 import uniffi.rhtn_ffi.Random
 import uniffi.rhtn_ffi.Storage
 import uniffi.rhtn_ffi.Told
+import timber.log.Timber
 
 /**
  * The platform the kernel runs on, as this device provides it.
@@ -64,7 +64,7 @@ class AndroidShell(private val context: Context) :
     override fun capture(ask: Ask): ByteArray {
         val cam = face ?: FaceCamera(context).also {
             face = it
-            it.open()?.let { why -> Log.w("fueros", "face camera: $why") }
+            it.open()?.let { why -> Timber.w("face camera: %s", why) }
         }
         return cam.frame()
     }
@@ -90,7 +90,7 @@ class AndroidShell(private val context: Context) :
     // §7.4.2), the rest on the conversation's notice line.  Logged as well,
     // because a notice nobody was looking at is still evidence
     override fun told(notice: Told) {
-        Log.i("fueros", "notice: ${notice::class.simpleName}")
+        Timber.i("notice: %s", notice::class.simpleName)
         Kernel.told(notice)
     }
 
@@ -106,31 +106,50 @@ class AndroidShell(private val context: Context) :
     // recoverable from a backup or from the app's files on their own.
     override fun read(name: String): ByteArray? {
         val f = File(dir, name)
-        if (!f.isFile) return null
+        if (!f.isFile) {
+            Diag.event("storage", "op" to "read", "name" to name, "bytes" to 0, "ok" to false)
+            return null
+        }
         val whole = f.readBytes()
         // written by this shell before the kernel sealed, or by [seal]:
         // Keystore-wrapped, and opened here.  Anything else is the
         // kernel's, as written; a wrapped blob that fails to open falls
         // through as bytes the kernel will refuse for what they are
-        return unwrap(whole) ?: whole
+        val out = unwrap(whole) ?: whole
+        Diag.event("storage", "op" to "read", "name" to name, "bytes" to out.size, "ok" to true)
+        return out
     }
 
-    override fun write(name: String, bytes: ByteArray): Boolean = land(name, bytes)
+    // the name, the size and whether it landed: never the bytes, which
+    // are the kernel's sealed state
+    override fun write(name: String, bytes: ByteArray): Boolean {
+        val ok = land(name, bytes)
+        Diag.event("storage", "op" to "write", "name" to name, "bytes" to bytes.size, "ok" to ok)
+        return ok
+    }
 
     /** The kernel's storage key, where one is kept (`Custody`). */
-    override fun key(): ByteArray? = unseal(CUSTODY)?.takeIf { it.size == 32 }
+    override fun key(): ByteArray? {
+        val k = unseal(CUSTODY)?.takeIf { it.size == 32 }
+        Diag.event("custody", "op" to "key", "present" to (k != null))
+        return k
+    }
 
     /** Keep the key the kernel minted, wrapped under the Keystore. */
-    override fun keep(key: ByteArray): Boolean = seal(CUSTODY, key)
+    override fun keep(key: ByteArray): Boolean {
+        val ok = seal(CUSTODY, key)
+        Diag.event("custody", "op" to "keep", "ok" to ok)
+        return ok
+    }
 
     /** This platform keeps keys; unsealed is for platforms that cannot. */
     override fun unsealed(): Boolean = false
 
-    /** The field-test build's diagnostic lines (`Robot/field-test-diagnostics.md`).
-     *  A releasable build calls this never; the file writer and the
-     *  flavour that enables it are milestone M3, so for now the line is
-     *  dropped. */
-    override fun event(line: String) {}
+    /** The field-test build's diagnostic lines (`Robot/field-test-diagnostics.md`):
+     *  one JSON object each, rendered by the kernel, queued to the run's
+     *  file by [Diag] without waiting on the disk. A releasable build
+     *  calls this never, and its [Diag] has no sink in any case. */
+    override fun event(line: String) = Diag.kernel(line)
 
     /** Write `bytes` under `name` Keystore-wrapped: the shell's own secrets. */
     fun seal(name: String, bytes: ByteArray): Boolean {

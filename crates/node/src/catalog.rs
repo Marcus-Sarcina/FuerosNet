@@ -105,23 +105,41 @@ impl CatalogService {
         peer: &Keyhash,
         body: &[u8],
     ) -> Option<Vec<u8>> {
-        let reg = ResourceRegistration::decode(body).ok()?;
+        let Ok(reg) = ResourceRegistration::decode(body) else {
+            tracing::debug!(target: "node", peer8 = %crate::diag::id8(peer), outcome = "NotARegistration", "node.catalog");
+            return None;
+        };
         let refused = RegistrationReply {
             nonce: reg.nonce,
             code: REGISTRATION_REFUSED,
         }
         .encode();
+        // the four refusals, told apart here since the reply carries one code
         let Ok(entry) = CatalogEntry::parse(&reg.entry) else {
+            tracing::debug!(target: "node", peer8 = %crate::diag::id8(peer), outcome = "Refused(entry does not parse)", "node.catalog");
             return Some(refused);
         };
-        if entry.owner != *peer || entry.verify(ids).is_err() {
+        if entry.owner != *peer {
+            tracing::debug!(target: "node", peer8 = %crate::diag::id8(peer), outcome = "Refused(owner is not the peer)", "node.catalog");
+            return Some(refused);
+        }
+        if entry.verify(ids).is_err() {
+            tracing::debug!(target: "node", peer8 = %crate::diag::id8(peer), outcome = "Refused(signature fails)", "node.catalog");
             return Some(refused);
         }
         if let Some(held) = self.entries.get(&entry.resource)
             && held.owner != entry.owner
         {
+            tracing::debug!(target: "node", peer8 = %crate::diag::id8(peer), outcome = "Refused(resource held under another owner)", "node.catalog");
             return Some(refused);
         }
+        tracing::debug!(
+            target: "node",
+            peer8 = %crate::diag::id8(peer),
+            resource8 = %crate::diag::id8(&entry.resource),
+            outcome = "Recorded",
+            "node.catalog"
+        );
         // the requested scope is honoured as asked; absent, the existing
         // rule stands, and on a first registration that is `self`
         let discover = match reg.scope {
@@ -214,6 +232,23 @@ impl CatalogService {
     /// be signed by the resource it names.  Stored for that resource's
     /// owner; nothing carries it further.
     pub fn take_report<L: Lookup + ?Sized>(
+        &mut self,
+        ids: &L,
+        bytes: &[u8],
+    ) -> Result<Keyhash, String> {
+        let taken = self.file_report(ids, bytes);
+        tracing::debug!(
+            target: "node",
+            outcome = %match &taken {
+                Ok(owner) => format!("ReportFiled(owner {})", crate::diag::id8(owner)),
+                Err(e) => format!("ReportRefused({e})"),
+            },
+            "node.catalog"
+        );
+        taken
+    }
+
+    fn file_report<L: Lookup + ?Sized>(
         &mut self,
         ids: &L,
         bytes: &[u8],

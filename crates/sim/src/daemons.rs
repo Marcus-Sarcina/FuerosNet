@@ -79,6 +79,10 @@ pub struct Daemons {
     /// that gives a daemon packages writes them first, because the daemon
     /// admits them before it serves.
     hosting: Vec<String>,
+    /// Daemons given a `[log]` table, by name, with the level: the
+    /// field-test file at [`Daemons::log_path`].  A releasable `rhtnd`
+    /// accepts the table and writes nothing there.
+    logs: Vec<(String, String)>,
 }
 
 impl Daemons {
@@ -94,7 +98,21 @@ impl Daemons {
             root,
             daemons: Vec::new(),
             hosting: Vec::new(),
+            logs: Vec::new(),
         }
+    }
+
+    /// Give `name` a `[log]` table at `level` (off, error, warn, info,
+    /// debug or trace), written when it starts.  Called before `start`.
+    /// Returns where the file will be.
+    pub fn log_to(&mut self, name: &str, level: &str) -> PathBuf {
+        self.logs.push((name.to_string(), level.to_string()));
+        self.log_path(name)
+    }
+
+    /// Where `name`'s field-test file is, given a `[log]` table.
+    pub fn log_path(&self, name: &str) -> PathBuf {
+        self.root.join(name).join("diag.jsonl")
     }
 
     /// The directory `name`'s files live in, made if it is not there yet,
@@ -154,6 +172,12 @@ impl Daemons {
         if let Some((key, addr)) = up {
             text.push_str(&format!(
                 "\n[upstream]\nnode = \"{key}\"\naddresses = [\"{addr}\"]\n"
+            ));
+        }
+        if let Some((_, level)) = self.logs.iter().find(|(n, _)| n == name) {
+            text.push_str(&format!(
+                "\n[log]\npath = \"{}\"\nlevel = \"{level}\"\n",
+                dir.join("diag.jsonl").display()
             ));
         }
         std::fs::write(&config, text).expect("the configuration");

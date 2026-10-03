@@ -161,6 +161,19 @@ object Bearer {
         private val phases = HashMap<Int, Phase>()
         private var held = 0
 
+        /**
+         * What has passed through, for the diagnostics: packets taken,
+         * their slice bytes, and repeats dropped (`Robot/field-test-
+         * diagnostics.md`, section 3.6, `bearer.packets`). Counts and
+         * sizes, never contents.
+         */
+        var taken = 0
+            private set
+        var takenBytes = 0
+            private set
+        var duplicates = 0
+            private set
+
         /** Why a packet was not taken, or null where it was. */
         fun take(packet: ByteArray): String? {
             if (packet.size < HEADER) return "a packet shorter than its header"
@@ -186,7 +199,13 @@ object Bearer {
             if (held + slice.size + ENTRY_COST > MESSAGE_BOUND) return "more bytes than the bound allows"
             val into = ph.slices.getOrPut(m) { HashMap() }
             // a repeat is dropped, not counted twice: a link may retry
-            if (into.put(s, slice) == null) held += slice.size + ENTRY_COST
+            if (into.put(s, slice) == null) {
+                held += slice.size + ENTRY_COST
+                taken += 1
+                takenBytes += slice.size
+            } else {
+                duplicates += 1
+            }
             if (last) ph.last[m] = s
             if (flags and END != 0) ph.end = m
             return null

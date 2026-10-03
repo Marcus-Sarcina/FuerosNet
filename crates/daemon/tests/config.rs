@@ -27,6 +27,57 @@ fn with(from: &str, to: &str) -> String {
 }
 
 #[test]
+fn the_log_table_names_a_file_and_a_level_and_refuses_a_level_it_does_not_know() {
+    use rhtn_daemon::config::{LogConfig, LogLevel};
+    let c = Config::parse(GOOD).expect("a complete configuration");
+    assert_eq!(c.log, None, "absent logs nothing");
+
+    let text = format!("{GOOD}\n[log]\npath = \"/var/log/rhtnd.jsonl\"\nlevel = \"debug\"\n");
+    let c = Config::parse(&text).expect("a [log] table reads in every build");
+    assert_eq!(
+        c.log,
+        Some(LogConfig {
+            path: "/var/log/rhtnd.jsonl".into(),
+            level: LogLevel::Debug,
+        })
+    );
+    for (word, level) in [
+        ("off", LogLevel::Off),
+        ("error", LogLevel::Error),
+        ("warn", LogLevel::Warn),
+        ("info", LogLevel::Info),
+        ("trace", LogLevel::Trace),
+    ] {
+        let t = text.replace("\"debug\"", &format!("\"{word}\""));
+        assert_eq!(Config::parse(&t).unwrap().log.unwrap().level, level);
+        assert_eq!(level.as_str(), word);
+    }
+
+    // a level that is not one of the six is refused on its line, never
+    // read as "off"
+    let bad = text.replace("\"debug\"", "\"verbose\"");
+    let e = Config::parse(&bad).unwrap_err();
+    assert!(e.what.contains("`log.level`"), "{e}");
+    // the line reported is the table's header, where the span of a table
+    // begins
+    let header = bad.lines().position(|l| l == "[log]").unwrap() + 1;
+    assert_eq!(e.line, header, "the table's line: {e}");
+
+    // and a key the table does not have is an unknown key, as everywhere
+    let extra = format!("{text}rotate = true\n");
+    assert!(
+        Config::parse(&extra).is_err(),
+        "`rotate` is not a [log] key"
+    );
+    // the path has no default
+    let no_path = text.replace("path = \"/var/log/rhtnd.jsonl\"\n", "");
+    assert!(
+        Config::parse(&no_path).is_err(),
+        "`log.path` has no default"
+    );
+}
+
+#[test]
 fn a_complete_configuration_reads_and_a_missing_key_has_no_default() {
     let c = Config::parse(GOOD).expect("a complete configuration");
     assert_eq!(c.listen, "127.0.0.1:7431".parse().unwrap());

@@ -138,7 +138,44 @@ pub(crate) fn install(sink: Arc<dyn crate::device::Diagnostics>) {
         });
         // another subscriber already set (a test's, say) keeps its place
         let _ = tracing::subscriber::set_global_default(tracing_subscriber::registry().with(layer));
+        panic_hook();
     });
+}
+
+/// The Rust side's crash handler (plan, section 3.6, the `crash` row): a
+/// panic's message and location as one event through the same layer,
+/// before the hook that was there prints it and the process dies.  The
+/// message is what the panicking code wrote, a reason string by the plan's
+/// redaction classes.  Guarded against a panic raised while the sink
+/// itself runs, which would otherwise re-enter this hook without end.
+#[cfg(feature = "fieldtest")]
+fn panic_hook() {
+    use std::cell::Cell;
+    thread_local! {
+        static IN_HOOK: Cell<bool> = const { Cell::new(false) };
+    }
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        if !IN_HOOK.with(|f| f.replace(true)) {
+            let payload = info.payload();
+            let message = payload
+                .downcast_ref::<&str>()
+                .map(|s| (*s).to_string())
+                .or_else(|| payload.downcast_ref::<String>().cloned())
+                .unwrap_or_default();
+            let (file, line) = info.location().map_or(("", 0), |l| (l.file(), l.line()));
+            tracing::error!(
+                target: "ffi",
+                kind = "panic",
+                message = %message,
+                file,
+                line,
+                "crash"
+            );
+            IN_HOOK.with(|f| f.set(false));
+        }
+        previous(info);
+    }));
 }
 
 #[cfg(not(feature = "fieldtest"))]

@@ -13873,3 +13873,19 @@ a `Diagnostics` platform trait, and a redaction test over a whole harness
 ceremony).
 
 **M1 landed 2026-10-03**: see `field-test-diagnostics.md` for the mechanism and the numbers; nothing committed.
+
+## Diagnostics M2 and M3, and two shell defects (2026-10-03)
+
+M2 and M3 landed as the plan records (`field-test-diagnostics.md`). Found in
+passing and **fixed**: the BLE client never subscribed to `OUTBOUND`'s
+notifications and the server carried no CCCD to answer, so server-to-client
+packets would never have arrived on hardware (both sides now gate `send` on a
+confirmed subscription; six JVM tests); the provisioning note pointed at the
+removed material log line and now shows the public material on screen.
+**Open, for the shell wiring step**: `Kernel.carryIntent` sends the intent
+right after `offer`/`seek`, before a link can be ready; and
+`ffi/src/bin/payload-peer.rs`'s usage text still says the phone prints its
+material to logcat. The M2 agent ran `git stash`/`pop` over the whole tree
+for a second while the M3 agent had uncommitted edits; nothing was lost (the
+untracked files were never stashed, the pop was clean), recorded so the next
+brief forbids it.

@@ -255,6 +255,7 @@ class Meet(
 
     /** A line for the screen to show as the flow moves. */
     fun note(line: String) {
+        Diag.event("meet.note", "line" to Diag.scrub(line))
         synchronized(lock) {
             log.add(line)
             changed()
@@ -422,7 +423,7 @@ class Meet(
         synchronized(lock) {
             check(step == Step.BRIEF) { "the brief is accepted from the brief, not $step" }
             briefAcknowledged = true
-            step = Step.OPTICAL
+            stepped(Step.BRIEF, Step.OPTICAL, "tap")
             changed()
         }
     }
@@ -441,20 +442,21 @@ class Meet(
         synchronized(lock) {
             bootstrapCrossed = true
         }
-        advance(Step.INTENT, Step.BRIEF)
+        // the initiator taps that it was read; the responder's camera read it
+        advance(Step.INTENT, Step.BRIEF, if (role == Role.INITIATOR) "tap" else "camera")
     }
 
     fun bootstrapCrossed(): Boolean = synchronized(lock) { bootstrapCrossed }
 
-    fun opticalDone() = advance(Step.OPTICAL, Step.PROXIMITY)
+    fun opticalDone() = advance(Step.OPTICAL, Step.PROXIMITY, "kernel")
 
-    fun proximityDone() = advance(Step.PROXIMITY, Step.CAPTURE)
+    fun proximityDone() = advance(Step.PROXIMITY, Step.CAPTURE, "kernel")
 
     /** Capture is the last hands-off step; the device comes back to the
      *  user for the verifier selection. */
-    fun captureDone() = advance(Step.CAPTURE, Step.VERIFIERS)
+    fun captureDone() = advance(Step.CAPTURE, Step.VERIFIERS, "kernel")
 
-    fun verifiersDone() = advance(Step.VERIFIERS, Step.REVIEW)
+    fun verifiersDone() = advance(Step.VERIFIERS, Step.REVIEW, "tap")
 
     /**
      * **Two people proposing to adopt each other** (D7; PRD-05).
@@ -505,7 +507,7 @@ class Meet(
         synchronized(lock) {
             check(step == Step.REVIEW) { "a record is signed from review, not $step" }
             recordTxid = txid
-            step = Step.DONE
+            stepped(Step.REVIEW, Step.DONE, "tap")
             changed()
         }
     }
@@ -515,17 +517,25 @@ class Meet(
     fun stop(reason: String) {
         synchronized(lock) {
             if (step == Step.DONE || step == Step.STOPPED) return
+            Diag.warn("meet.stop", "from" to step, "reason" to Diag.scrub(reason))
             stopReason = reason
             step = Step.STOPPED
             changed()
         }
     }
 
-    private fun advance(from: Step, to: Step) {
+    /** `trigger` is who moved it: a tap, the camera, or the kernel. */
+    private fun advance(from: Step, to: Step, trigger: String) {
         synchronized(lock) {
             check(step == from) { "cannot go $from -> $to from $step" }
-            step = to
+            stepped(from, to, trigger)
             changed()
         }
+    }
+
+    /** Under [lock]: every transition, as the diagnostics see it. */
+    private fun stepped(from: Step, to: Step, trigger: String) {
+        step = to
+        Diag.event("meet.step", "from" to from, "to" to to, "trigger" to trigger)
     }
 }

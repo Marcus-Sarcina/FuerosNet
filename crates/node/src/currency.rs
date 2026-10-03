@@ -388,6 +388,17 @@ impl NodeView {
     /// key (`infra-client-requirements.md` §3).  Never an extension of an
     /// earlier one: there is no extend operation and no field for one.
     pub fn issue_currency(&self, cur: &CurrencyState, subject: &Keyhash) -> Option<Vec<u8>> {
+        let issued = self.attest(cur, subject);
+        tracing::debug!(
+            target: "node",
+            subject8 = %crate::diag::id8(subject),
+            step = if issued.is_some() { "Issued" } else { "CannotIssue" },
+            "node.currency"
+        );
+        issued
+    }
+
+    fn attest(&self, cur: &CurrencyState, subject: &Keyhash) -> Option<Vec<u8>> {
         let rung = self.rung_for(cur, subject)?;
         let current = self.table.current_key(subject);
         // an instance signs under its delegated key and staples the
@@ -479,6 +490,13 @@ impl NodeView {
         if att.is_some() && state != Staple::WrongSubject {
             self.staples.insert(*subject, bytes.to_vec());
         }
+        tracing::debug!(
+            target: "node",
+            subject8 = %crate::diag::id8(subject),
+            step = %format!("Staple({state:?})"),
+            kept = att.is_some() && state != Staple::WrongSubject,
+            "node.currency"
+        );
         state
     }
 
@@ -534,7 +552,17 @@ impl NodeView {
             .into_iter()
             .chain(patron)
             .filter(|p| adj.has_session(p))
-            .find(|p| adj.request(p, crate::resolution::REQUEST_CURRENCY, &request))?;
+            .find(|p| adj.request(p, crate::resolution::REQUEST_CURRENCY, &request));
+        tracing::debug!(
+            target: "node",
+            subject8 = %crate::diag::id8(&subject),
+            step = %match &to {
+                Some(p) => format!("Asked({})", crate::diag::id8(p)),
+                None => "NobodyToAsk".to_string(),
+            },
+            "node.currency"
+        );
+        let to = to?;
         ask.asked.push(to);
         self.asks.insert(nonce, ask.clone());
         Some(ask)
@@ -562,6 +590,26 @@ impl NodeView {
     /// moves the question to the patron; code 1 from the patron exhausts
     /// it, and the caller concludes nothing.
     pub fn on_currency_reply<L: Lookup + ?Sized>(
+        &mut self,
+        adj: &dyn Adjacency,
+        ids: &L,
+        ask: &mut CurrencyAsk,
+        reply: &CurrencyReply,
+    ) -> AskStep {
+        let step = self.settle_reply(adj, ids, ask, reply);
+        tracing::debug!(
+            target: "node",
+            subject8 = %crate::diag::id8(&ask.subject),
+            step = %match &step {
+                AskStep::AskedNext(p) => format!("AskedNext({})", crate::diag::id8(p)),
+                other => format!("{other:?}"),
+            },
+            "node.currency"
+        );
+        step
+    }
+
+    fn settle_reply<L: Lookup + ?Sized>(
         &mut self,
         adj: &dyn Adjacency,
         ids: &L,

@@ -598,6 +598,50 @@ pub struct Log {
     recording: bool,
 }
 
+/// The first eight hex characters of a keyhash, for a diagnostic field.
+fn hex8(k: &[u8; 32]) -> String {
+    k[..4].iter().map(|b| format!("{b:02x}")).collect()
+}
+
+impl Event {
+    /// The event as a diagnostic field: its variant, a frame type, a
+    /// refusal, a mode, an address, or a byte count where the event carries
+    /// bytes.  Never the bytes: `Sent` and `Delivered` carry a frame or a
+    /// ciphertext whole, and `Debug` would print it.
+    #[must_use]
+    pub fn summary(&self) -> String {
+        match self {
+            Event::Sent { frame_type, bytes } => {
+                format!("Sent(type {frame_type}, {} bytes)", bytes.len())
+            }
+            Event::Received { frame_type } => format!("Received(type {frame_type})"),
+            Event::Skipped { frame_type } => format!("Skipped(type {frame_type})"),
+            Event::Discarded => "Discarded".into(),
+            Event::OverBound => "OverBound".into(),
+            Event::Attached { mode } => format!("Attached(mode {mode})"),
+            Event::Refused => "Refused".into(),
+            Event::PeerUnreachable => "PeerUnreachable".into(),
+            Event::Failover { to } => format!("Failover({})", hex8(to)),
+            Event::Delivered { bytes } => format!("Delivered({} bytes)", bytes.len()),
+            Event::EarlyDataSent => "EarlyDataSent".into(),
+            Event::DirectOpened => "DirectOpened".into(),
+            Event::HandshakeDone { early_accepted } => {
+                format!("HandshakeDone(early_accepted {early_accepted})")
+            }
+            Event::Closed => "Closed".into(),
+            Event::Superseded => "Superseded".into(),
+            Event::Bound { how } => format!("Bound({how:?})"),
+            Event::Unbound { why } => format!("Unbound({why:?})"),
+            Event::DelegationPresented => "DelegationPresented".into(),
+            Event::RequestOnly => "RequestOnly".into(),
+            Event::Dialled { addr, at_ms } => format!("Dialled({addr}, at {at_ms} ms)"),
+            Event::DialDone { addr, at_ms, ok } => {
+                format!("DialDone({addr}, at {at_ms} ms, ok {ok})")
+            }
+        }
+    }
+}
+
 impl Log {
     /// A log that keeps every event: the test facility.
     pub fn recording() -> Self {
@@ -618,7 +662,13 @@ impl Log {
     pub fn is_recording(&self) -> bool {
         self.recording
     }
+    /// Record `e`, where this log records; and in every case raise it as
+    /// a diagnostic event, which a field-test build renders and a
+    /// releasable build compiles out.  The session log needs no recording
+    /// for a daemon to see its events, which matters because a recording
+    /// log keeps every event for the session's life.
     pub fn push(&self, e: Event) {
+        tracing::debug!(target: "transport", what = %e.summary(), "transport.session");
         if self.recording {
             self.events.lock().unwrap().push((Instant::now(), e));
         }
@@ -1008,6 +1058,27 @@ impl Node {
     /// the one it is delivered on (design §14.1.6).  `ANY_DEVICE` is
     /// delivered on whichever of the recipient's sessions drains first.
     pub fn enqueue_for(
+        self: &Arc<Self>,
+        keyhash: [u8; 32],
+        device: [u8; 32],
+        bytes: Vec<u8>,
+    ) -> Result<(), queue::Refusal> {
+        let size = bytes.len();
+        let r = self.store_for(keyhash, device, bytes);
+        tracing::debug!(
+            target: "transport",
+            recipient8 = %hex8(&keyhash),
+            bytes = size,
+            outcome = %match &r {
+                Ok(()) => "Stored".to_string(),
+                Err(why) => format!("Refused({why:?})"),
+            },
+            "node.mailbox"
+        );
+        r
+    }
+
+    fn store_for(
         self: &Arc<Self>,
         keyhash: [u8; 32],
         device: [u8; 32],
@@ -1659,6 +1730,13 @@ async fn drain(node: Arc<Node>, recipient: [u8; 32], device: [u8; 32], conn: Con
             ok = deliver(&conn, item.ciphertext.clone()) => ok,
             _ = node.until_stale(&peer, &conn) => false,
         };
+        tracing::debug!(
+            target: "transport",
+            recipient8 = %hex8(&recipient),
+            bytes = item.ciphertext.len(),
+            outcome = if delivered { "Delivered" } else { "Kept(session ended)" },
+            "node.mailbox"
+        );
         if !delivered {
             return;
         }
@@ -2288,6 +2366,12 @@ pub async fn fresh_attach(
         _ => {}
     }
     let siblings = cfg.sibling_cache.lock().unwrap().clone();
+    tracing::debug!(
+        target: "transport",
+        siblings = siblings.len(),
+        no_target = siblings.is_empty(),
+        "transport.failover.fresh"
+    );
     let mut last = AttachOutcome::EndpointFailure(
         "serving node unreachable and no cached sibling answered".into(),
     );
@@ -2359,6 +2443,14 @@ impl Session {
         }
         self.conn.close(VarInt::from_u32(0), b"failover");
         let siblings = cfg.sibling_cache.lock().unwrap().clone();
+        // begun, and with no target where the cache is empty: the outcome
+        // carries the none case, and this says it at the moment it is known
+        tracing::debug!(
+            target: "transport",
+            siblings = siblings.len(),
+            no_target = siblings.is_empty(),
+            "transport.failover.begun"
+        );
         let mut last = AttachOutcome::EndpointFailure("no cached siblings".into());
         for s in siblings {
             if let Some(km) = &s.key_material {

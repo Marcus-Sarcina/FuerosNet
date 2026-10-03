@@ -38,15 +38,38 @@ async fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+    // the sink first, so the configuration's own reading is the first
+    // event in the file; a refused `[log]` path is a refused configuration
+    if let Some(log) = &cfg.log
+        && let Err(e) = rhtn_daemon::diag::install(log)
+    {
+        rhtn_daemon::say!("rhtnd: [log]: {e}");
+        return ExitCode::FAILURE;
+    }
+    tracing::info!(
+        target: "daemon",
+        step = "config_read",
+        config = %cfg_path.display(),
+        log_level = cfg.log.as_ref().map(|l| l.level.as_str()).unwrap_or("none"),
+        "daemon.lifecycle"
+    );
     let service = match Service::start(&cfg, &peers_path).await {
         Ok(s) => s,
         Err(e) => {
+            tracing::warn!(
+                target: "daemon",
+                step = "refused",
+                startup = e.variant(),
+                why = %e,
+                "daemon.lifecycle"
+            );
             rhtn_daemon::say!("rhtnd: {e}");
             return ExitCode::FAILURE;
         }
     };
     // the address it actually bound, which an operator needs when the
     // configuration named port 0, and a test needs to dial it
+    tracing::info!(target: "daemon", step = "serving", addr = %service.node.addr, "daemon.lifecycle");
     rhtn_daemon::tell!("rhtnd: serving on {}", service.node.addr);
     // §8's disclosure, at the one moment an operator is certainly watching;
     // a stdout that closed between the two lines ends nothing here
@@ -56,8 +79,12 @@ async fn main() -> ExitCode {
         let _ = std::io::stdout().flush();
     }
     match service.run().await {
-        Ok(()) => ExitCode::SUCCESS,
+        Ok(()) => {
+            tracing::info!(target: "daemon", step = "shutdown", ok = true, "daemon.lifecycle");
+            ExitCode::SUCCESS
+        }
         Err(e) => {
+            tracing::warn!(target: "daemon", step = "shutdown", ok = false, why = %e, "daemon.lifecycle");
             rhtn_daemon::say!("rhtnd: writing state back: {e}");
             ExitCode::FAILURE
         }

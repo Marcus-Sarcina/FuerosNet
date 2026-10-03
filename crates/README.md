@@ -109,3 +109,37 @@ workspace with defaults and so gates the releasable flavour. The
 `Diagnostics` object is handed over in both flavours, for one `Platform`
 shape and one generated binding; `rhtn_ffi::device::Silent` is the no-op.
 
+*The daemon and the instrument are leaves of the same kind* (milestone M2).
+`rhtn-daemon` and `rhtn-participant` carry the same `default =
+["releasable"]` and the same caps, and `rhtn-participant` names `rhtn-ffi`
+with `default-features = false` so that the leaf decides; `rhtn-node` and
+`rhtn-transport` take `tracing` unconditionally and inherit the choice.
+`rhtn_node::diag` is the node-side copy of the client's constructors
+(`id8`, counts, sizes, milliseconds, and the renderers for `Decision`,
+`MemoOutcome`, `Step`, `Replicated`, `Delivery` and `AckTaken`, written
+out because their `Debug` prints whole keyhashes or the object itself);
+`transport::session::Event::summary` does the same for the session log,
+whose `Log::push` raises every event as `transport.session` whether or not
+the log records, so a daemon needs no recording log, which would keep
+every event for the session's life. The daemon's `[log]` table (`path`,
+`level` in off, error, warn, info, debug, trace) is read by every build;
+under `fieldtest` `rhtn_daemon::diag::install` opens the file for append,
+writes the anchor line and installs `rhtn_daemon::diag::JsonLines` (the
+client renderer, copied, with the level answered from `enabled`); under
+`releasable` it says once on stderr that the build logs nothing. `rhtnp
+--log <file>` is the same for the instrument, through the FFI's
+`Diagnostics` object. **The anchor**: each file carries one `diag.anchor`
+event whose `unix_ms` field is the wall clock at the `ms` it carries (the
+daemon writes it as the file's first line; the instrument raises it once
+the FFI's renderer is up, so it follows the first `ffi.call`), and `rhtn
+diag merge <file>...` places every line of a file at `unix_ms + (line.ms
+- anchor.ms)`, orders the files' lines together, prints the timeline, and
+summarises: sources and anchors, the `cer` and `meet` layers' steps with
+the time between them, every refusal and abort (by level, by name, or by a
+field whose value begins `Refused`, `Malformed`, `Failed`, `Unbound`,
+`Conflict` or `Abort`), and counts per layer and per event. A file with no
+anchor is placed by its own `ms`, which sorts it first, and the summary
+says so. `cli/tests/diag.rs` merges two fixture files;
+`daemon/tests/fieldtest.rs`, under the feature, runs two `rhtnd` processes
+with `[log]` tables and merges their files with every `Decision` visible.
+

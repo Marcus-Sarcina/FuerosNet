@@ -10,10 +10,33 @@ description = "rhtnp: a participant driven from a terminal, so the chain from a 
 name = "rhtnp"
 path = "src/main.rs"
 
+[features]
+# The releasable flavour is the default, and this leaf decides it for
+# `rhtn-ffi` and `rhtn-client` beneath it (`crates/README.md`, the gating
+# section): every diagnostic hook in the graph is compiled out.
+default = ["releasable"]
+releasable = [
+    "rhtn-ffi/releasable",
+    "tracing/max_level_off",
+    "tracing/release_max_level_off",
+    "log/max_level_off",
+    "log/release_max_level_off",
+]
+# The field-test flavour: `--log <path>` appends every event as one JSON
+# line.  Built with `--no-default-features --features fieldtest`; the two
+# together are a compile error (`lib.rs`).
+fieldtest = ["rhtn-ffi/fieldtest"]
+
 [dependencies]
-rhtn-ffi = { path = "../ffi" }
+# the flavour is chosen here, by this crate's features, never by the FFI's
+# own default
+rhtn-ffi = { path = "../ffi", default-features = false }
 rhtn-crypto = { path = "../crypto" }
 rhtn-transport = { path = "../transport" }
+# MIT; the anchor event `--log` writes, and the cap `releasable` sets
+tracing = { version = "0.1", default-features = false, features = ["std"] }
+# MIT OR Apache-2.0; named so `releasable` can cap its static level
+log = { version = "0.4", default-features = false }
 
 [dev-dependencies]
 rhtn-sim = { path = "../sim" }

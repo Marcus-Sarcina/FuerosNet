@@ -17,11 +17,25 @@ import android.os.Bundle
  */
 class NfcCeremonyService : HostApduService() {
 
+    private var apdus = 0
+
     override fun processCommandApdu(command: ByteArray, extras: Bundle?): ByteArray {
         val (response, passed) = NfcApdu.respond(command, ProximityChannels.current())
+        apdus += 1
+        Diag.event(
+            "nfc",
+            "op" to "hce",
+            "command" to NfcApdu.kind(command),
+            "status" to NfcApdu.status(response),
+            "passed" to passed,
+            "apdus" to apdus,
+        )
         if (passed) ProximityChannels.tapServed()
         return response
     }
 
-    override fun onDeactivated(reason: Int) {}
+    override fun onDeactivated(reason: Int) {
+        Diag.event("nfc", "op" to "hce", "state" to "deactivated", "reason" to reason, "apdus" to apdus)
+        apdus = 0
+    }
 }

@@ -18,6 +18,7 @@
 
 pub mod catalog;
 pub mod currency;
+pub mod diag;
 pub mod http;
 pub mod peering;
 pub mod prekeys;

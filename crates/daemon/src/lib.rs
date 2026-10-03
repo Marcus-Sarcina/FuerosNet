@@ -11,7 +11,14 @@
 //! obligations, and adds no protocol of its own: everything on the wire is
 //! decided in the crates beneath.
 
+#[cfg(all(feature = "releasable", feature = "fieldtest"))]
+compile_error!(
+    "rhtn-daemon: `releasable` and `fieldtest` are two flavours of one build; \
+     build the field-test flavour with `--no-default-features --features fieldtest`"
+);
+
 pub mod config;
+pub mod diag;
 pub mod hosting;
 pub mod operator;
 pub mod service;

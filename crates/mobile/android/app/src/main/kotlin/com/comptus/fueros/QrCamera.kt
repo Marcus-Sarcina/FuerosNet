@@ -10,12 +10,12 @@ import android.hardware.camera2.CaptureRequest
 import android.media.ImageReader
 import android.os.Handler
 import android.os.HandlerThread
-import android.util.Log
 import android.view.Surface
 import com.google.zxing.BinaryBitmap
 import com.google.zxing.PlanarYUVLuminanceSource
 import com.google.zxing.common.HybridBinarizer
 import com.google.zxing.qrcode.QRCodeReader
+import timber.log.Timber
 
 /**
  * The camera, reading one QR (`wire-format.md` §14.3.1).
@@ -52,6 +52,13 @@ class QrCamera(private val context: Context) {
     private var reader: ImageReader? = null
     private val reading = java.util.concurrent.atomic.AtomicBoolean(false)
 
+    /** For the `qr.read` event: which symbol this read is for, the frames
+     *  tried, and when the read began. */
+    private var which: String = "?"
+    private var facing: Facing? = null
+    private val attempts = java.util.concurrent.atomic.AtomicInteger(0)
+    private var startedMs: Long = 0
+
     /**
      * Read one QR and stop. `found` is called once, on the camera's own
      * thread, with the bytes the symbol carried; `preview` is where the
@@ -60,10 +67,14 @@ class QrCamera(private val context: Context) {
      * A permission this shell does not hold is a refusal, not a crash: the
      * caller is told and the person is asked for it elsewhere.
      */
-    fun readOne(facing: Facing, preview: Surface?, found: (ByteArray) -> Unit): String? {
+    fun readOne(facing: Facing, preview: Surface?, which: String = "qr", found: (ByteArray) -> Unit): String? {
+        this.which = which
+        this.facing = facing
+        attempts.set(0)
+        startedMs = Diag.ms()
         val manager = context.getSystemService(Context.CAMERA_SERVICE) as? CameraManager
-            ?: return "this device exposes no camera service"
-        val id = pick(manager, facing) ?: return "no ${facing.name.lowercase()} camera"
+            ?: return cameraRefused("this device exposes no camera service")
+        val id = pick(manager, facing) ?: return cameraRefused("no ${facing.name.lowercase()} camera")
         val t = HandlerThread("qr").also { it.start() }
         thread = t
         val h = Handler(t.looper)
@@ -82,15 +93,25 @@ class QrCamera(private val context: Context) {
                     val buf = y.buffer
                     val bytes = ByteArray(buf.remaining())
                     buf.get(bytes)
+                    attempts.incrementAndGet()
                     decode(bytes, row, image.width, image.height)?.let {
                         if (reading.compareAndSet(true, false)) {
+                            Diag.event(
+                                "qr.read",
+                                "which" to which,
+                                "bytes" to it.size,
+                                "facing" to facing,
+                                "attempts" to attempts.get(),
+                                "decode_ms" to (Diag.ms() - startedMs),
+                            )
                             found(it)
                             close()
                         }
                     }
                 }
             } catch (e: Exception) {
-                Log.w("fueros", "qr frame: $e")
+                Timber.w(e, "qr frame")
+                Diag.warn("camera", "which" to "qr", "op" to "frame", "error" to e.toString())
             } finally {
                 image.close()
             }
@@ -100,11 +121,16 @@ class QrCamera(private val context: Context) {
             null
         } catch (e: SecurityException) {
             close()
-            "the camera permission is not held"
+            cameraRefused("the camera permission is not held")
         } catch (e: Exception) {
             close()
-            "the camera would not open: $e"
+            cameraRefused("the camera would not open: $e")
         }
+    }
+
+    private fun cameraRefused(why: String): String {
+        Diag.warn("camera", "which" to "qr", "op" to "open", "facing" to facing, "error" to why)
+        return why
     }
 
     /** A frame to bytes, or null where there was no symbol in it. */
@@ -143,6 +169,15 @@ class QrCamera(private val context: Context) {
             object : CameraDevice.StateCallback() {
                 override fun onOpened(camera: CameraDevice) {
                     device = camera
+                    Diag.event(
+                        "camera",
+                        "which" to "qr",
+                        "op" to "open",
+                        "facing" to facing,
+                        "width" to width,
+                        "height" to height,
+                        "ms" to (Diag.ms() - startedMs),
+                    )
                     val surfaces = listOfNotNull(reader.surface, preview)
                     @Suppress("DEPRECATION")
                     camera.createCaptureSession(
@@ -158,11 +193,23 @@ class QrCamera(private val context: Context) {
                                     CaptureRequest.CONTROL_AF_MODE,
                                     CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE,
                                 )
+                                // the request as set: no exposure or
+                                // anti-banding choice is made here yet
+                                Diag.event(
+                                    "camera",
+                                    "which" to "qr",
+                                    "op" to "request",
+                                    "template" to "preview",
+                                    "af" to "continuous_picture",
+                                    "exposure" to "auto",
+                                    "antibanding" to "default",
+                                )
                                 s.setRepeatingRequest(b.build(), null, h)
                             }
 
                             override fun onConfigureFailed(s: CameraCaptureSession) {
-                                Log.w("fueros", "qr session would not configure")
+                                Timber.w("qr session would not configure")
+                                Diag.warn("camera", "which" to "qr", "op" to "configure", "error" to "failed")
                                 close()
                             }
                         },
@@ -170,10 +217,14 @@ class QrCamera(private val context: Context) {
                     )
                 }
 
-                override fun onDisconnected(camera: CameraDevice) = close()
+                override fun onDisconnected(camera: CameraDevice) {
+                    Diag.warn("camera", "which" to "qr", "op" to "disconnected")
+                    close()
+                }
 
                 override fun onError(camera: CameraDevice, error: Int) {
-                    Log.w("fueros", "qr camera error $error")
+                    Timber.w("qr camera error %d", error)
+                    Diag.warn("camera", "which" to "qr", "op" to "error", "error" to error)
                     close()
                 }
             },
@@ -184,6 +235,9 @@ class QrCamera(private val context: Context) {
     /** Stop and give the camera back. Safe to call twice. */
     fun close() {
         reading.set(false)
+        if (device != null) {
+            Diag.event("camera", "which" to "qr", "op" to "close", "attempts" to attempts.get())
+        }
         runCatching { session?.close() }
         runCatching { device?.close() }
         runCatching { reader?.close() }

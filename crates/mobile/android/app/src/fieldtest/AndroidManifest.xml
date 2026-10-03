@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The fieldtest flavour's additions, merged over `main`'s manifest. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- The diagnostics bundle leaves the device through the share
+             sheet (`Report.kt`): this provider serves the one zip under
+             app-private storage to the application the tester picks, by a
+             URI granted for that send alone. Only this flavour has it. -->
+        <provider
+            android:name=".ReportProvider"
+            android:authorities="${applicationId}.report"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+    </application>
+</manifest>

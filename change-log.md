@@ -12126,3 +12126,21 @@ and a recovery under a collecting subscriber and finds no secret byte run in
 218 events. Two shell lines that logged the public material and whole notices
 are fixed. The gate passes on the releasable flavour. The plan for the rest is a
 working note of the assistant's.
+
+### 2026-10-03 (field-test diagnostics, milestones two and three)
+
+The daemon takes a `[log]` table and, in the field-test flavour, writes JSON
+lines to its file; the node gains 34 event sites across every decision it
+makes, the transport six, the daemon sixteen, with the sandbox's refusal
+reason logged before it collapses to "unavailable" and the catalog's four
+refusal branches told apart. The participant instrument takes `--log`. A
+`rhtn diag merge` command merges any number of files by their wall-clock
+anchors into one timeline with the ceremony's steps, every refusal and
+abort, and counts. The Android shell gains two flavours with their own
+native libraries, Timber in the field-test flavour only, a bounded file sink,
+72 event sites, both crash handlers, and a Report action that zips the
+events with a header naming the commit, the pins and the device. Bluetooth
+permissions are requested rather than caught. Two defects found on the way
+are fixed: the BLE client never subscribed to the server's notifications,
+and a provisioning note pointed at a removed log line. Android tests 62 →
+85. The gate runs on the releasable flavour.

@@ -1,0 +1,6 @@
+{"ms":10,"level":"info","layer":"ffi","event":"ffi.call","method":"start","span":{"name":"ffi.call","method":"start"}}
+{"ms":12,"level":"info","layer":"diag","event":"diag.anchor","unix_ms":1700000011000,"pid":777,"process":"rhtnp"}
+{"ms":150,"level":"info","layer":"cer","event":"cer.begin","counterparty":"0b0b0b0b","initiator":true,"nominees":2}
+{"ms":400,"level":"info","layer":"cer","event":"cer.id_fixed","ceremony":"c0ffee00"}
+{"ms":1800,"level":"info","layer":"cer","event":"cer.capture","bytes":4096}
+{"ms":2100,"level":"warn","layer":"cer","event":"cer.abort","step":"capture","abort":"NoProximity"}

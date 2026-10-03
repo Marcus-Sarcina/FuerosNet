@@ -4,4 +4,4 @@ build/
 local.properties
 # tools/build-native.sh writes both; the Rust workspace is their source
 app/src/generated/
-app/src/main/jniLibs/
+app/src/*/jniLibs/

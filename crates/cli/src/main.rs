@@ -1,6 +1,6 @@
 //! The command line's entry point.
 
-use rhtn_cli::{inspect, keys, probe};
+use rhtn_cli::{diag, inspect, keys, probe};
 use rhtn_codec::frame::Stream;
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -28,6 +28,12 @@ usage: rhtn <command> [...]
           catalog [<service-type>]
         --peer <keyhash>:<material> pins another identity; repeatable.
 
+  diag merge <file>...
+        Merge field-test diagnostic files (one JSON object a line, as a
+        daemon's [log], rhtnp --log or a phone's bundle writes them) into
+        one timeline by wall clock, and summarise: ceremony steps with
+        durations, every refusal and abort, counts per layer and event.
+
 Nothing here sends a request that changes state or spends a budget.
 ";
 
@@ -38,6 +44,10 @@ fn main() -> ExitCode {
         Some((&"inspect", rest)) => do_inspect(rest),
         Some((&"keys", rest)) => do_keys(rest),
         Some((&"probe", rest)) => do_probe(rest),
+        Some((&"diag", rest)) => match rest.split_first() {
+            Some((&"merge", files)) => diag::merge_files(files),
+            _ => Err("diag merge <file>...".into()),
+        },
         _ => {
             eprint!("{USAGE}");
             return ExitCode::from(2);

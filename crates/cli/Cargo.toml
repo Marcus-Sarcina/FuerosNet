@@ -21,5 +21,7 @@ rhtn-crypto = { path = "../crypto" }
 rhtn-archive = { path = "../archive" }
 rhtn-node = { path = "../node" }
 rhtn-transport = { path = "../transport" }
+# MIT OR Apache-2.0; `diag merge` reads the field-test files' JSON lines
+serde_json = { workspace = true }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "sync", "io-util"] }
 quinn = { version = "0.11", default-features = false, features = ["runtime-tokio", "rustls-aws-lc-rs", "log"] }

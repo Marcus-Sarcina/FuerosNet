@@ -36,12 +36,15 @@ class HomeActivity : Activity() {
      *  slices; they lead to an honest placeholder rather than pretending.
      *  Operator is absent by design until the kernel can say an identity
      *  runs an instance (the mode query is owed). */
-    private val destinations = listOf(
+    private val destinations = listOfNotNull(
         "Conversations" to { open(ConversationsActivity::class.java) },
         "Meet" to { open(MeetActivity::class.java) },
         "People" to { placeholder("People", "Your horizon — later.") },
         "Catalog" to { placeholder("Catalog", "Resources your node serves — later.") },
         "Settings" to { placeholder("Settings", "Wake endpoint, backup — later.") },
+        // the diagnostics bundle, fieldtest flavour only
+        // (`Robot/field-test-diagnostics.md`, section 4)
+        if (BuildConfig.FIELD_TEST) "Send diagnostics (field test)" to { Report.send(this) } else null,
     )
 
     override fun onCreate(savedInstanceState: Bundle?) {

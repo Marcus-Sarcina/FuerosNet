@@ -16,6 +16,10 @@ rustls-pki-types = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "sync", "io-util"] }
 ed25519-dalek = { workspace = true, features = ["pkcs8", "alloc"] }
 sha2 = { workspace = true }
+# MIT; the session log's events and the traversal's counts as diagnostic
+# events, compiled out by the leaf binary's `releasable` feature
+# (Robot/field-test-diagnostics.md, section 3.4)
+tracing = { version = "0.1", default-features = false, features = ["std"] }
 
 [dev-dependencies]
 hex = { workspace = true }

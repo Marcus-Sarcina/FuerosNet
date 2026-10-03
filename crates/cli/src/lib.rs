@@ -1,8 +1,9 @@
 //! `rhtn`: the developer command line.
 //!
-//! Three things, none of them a protocol participant's job: read what the
-//! wire carries ([`inspect`]), make and examine identities ([`keys`]), and
-//! ask a running node the questions that change nothing ([`probe`]).
+//! Four things, none of them a protocol participant's job: read what the
+//! wire carries ([`inspect`]), make and examine identities ([`keys`]), ask
+//! a running node the questions that change nothing ([`probe`]), and read
+//! the field-test builds' diagnostic files into one timeline ([`diag`]).
 //!
 //! **It answers to no obligation document.** No section requires a command
 //! line, and nothing here may become the only way to do something a
@@ -14,6 +15,7 @@
 //! becomes a participant by being adopted, which takes two parties present
 //! to each other and cannot be done from a terminal.
 
+pub mod diag;
 pub mod inspect;
 pub mod keys;
 pub mod probe;

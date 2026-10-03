@@ -6,20 +6,34 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 const USAGE: &str = "\
-usage: rhtnp <identity> [<peers>]
+usage: rhtnp [--log <file>] <identity> [<peers>]
 
   <identity>  the two seeds an identity is derived from, owner-readable
               only, as `rhtn keys mint` writes one
   <peers>     hex KeyMaterial, one a line, for the parties this
               participant authenticates; defaults to `peers` beside the
               identity
+  --log       append every diagnostic event to <file> as one JSON line
+              (a field-test build; a releasable build says so and writes
+              nothing)
 
 Commands are read from standard input, one a line:
 
 ";
 
 fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    let mut args: Vec<String> = std::env::args().skip(1).collect();
+    let log = match args.iter().position(|a| a == "--log") {
+        Some(i) if i + 1 < args.len() => {
+            args.remove(i);
+            Some(PathBuf::from(args.remove(i)))
+        }
+        Some(_) => {
+            eprintln!("{USAGE}{HELP}");
+            return ExitCode::from(2);
+        }
+        None => None,
+    };
     let (identity, peers) = match args.as_slice() {
         [i] => (
             PathBuf::from(i),
@@ -35,7 +49,7 @@ fn main() -> ExitCode {
         }
     };
     let peers = peers.exists().then_some(peers);
-    let instrument = match Instrument::start(&identity, peers.as_deref()) {
+    let instrument = match Instrument::start(&identity, peers.as_deref(), log.as_deref()) {
         Ok(i) => i,
         Err(e) => {
             eprintln!("rhtnp: {e}");

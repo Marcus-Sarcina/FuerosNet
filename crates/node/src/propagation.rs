@@ -286,6 +286,26 @@ impl NodeView {
         object: &[u8],
         ids: &L,
     ) -> Decision {
+        let decision = self.decide_object(adj, from, kind, object, ids);
+        tracing::debug!(
+            target: "node",
+            kind = crate::diag::kind_name(kind),
+            from8 = %crate::diag::id8(from),
+            bytes = object.len(),
+            decision = %crate::diag::decision(&decision),
+            "node.object"
+        );
+        decision
+    }
+
+    fn decide_object<L: Lookup + ?Sized>(
+        &mut self,
+        adj: &dyn Adjacency,
+        from: &Keyhash,
+        kind: u64,
+        object: &[u8],
+        ids: &L,
+    ) -> Decision {
         // the storage question is answered against this node's own view,
         // taken now rather than when the object was sent (§10.1.1)
         let me = self.me();
@@ -385,6 +405,12 @@ impl NodeView {
                         store: &self.store,
                     };
                     let released = self.table.release_deferred_acks(&known);
+                    tracing::debug!(
+                        target: "node",
+                        released = released.len(),
+                        deferred = self.table.deferred_acks(),
+                        "node.ack.released"
+                    );
                     for (taken, bytes) in released {
                         if taken == AckTaken::Taken
                             && let Some((a, g)) = ack_pair(&bytes)
@@ -434,6 +460,18 @@ impl NodeView {
             store: &self.store,
         };
         let taken = self.table.take_ack(&known, object);
+        // the deferred list is capped (`rhtn_archive::topology`); a
+        // deferral that did not grow it was dropped at the cap
+        tracing::debug!(
+            target: "node",
+            from8 = %crate::diag::id8(from),
+            taken = %match &taken {
+                Ok(t) => crate::diag::ack_taken(t),
+                Err(e) => format!("Malformed({e})"),
+            },
+            deferred = self.table.deferred_acks(),
+            "node.ack"
+        );
         match taken {
             Ok(AckTaken::Taken) => {
                 self.store.keep_ack(adoption, grandpatron, object.to_vec());
@@ -766,6 +804,13 @@ impl NodeView {
         let reply = crate::resolution::ResolveReply::decode(bytes).ok()?;
         let mut r = self.repairs.remove(&reply.nonce())?;
         let step = r.take(&reply);
+        tracing::debug!(
+            target: "node",
+            subject8 = %crate::diag::id8(&r.request.subject),
+            step = %crate::diag::step(&step),
+            hops = r.hops.len(),
+            "node.resolve"
+        );
         if let crate::resolution::Step::Continue(referral) = &step
             && adj.has_session(&referral.next)
             && adj.request(
@@ -787,6 +832,12 @@ impl NodeView {
         ids: &L,
     ) -> Vec<Decision> {
         let ready = self.store.release_pending(ids);
+        tracing::debug!(
+            target: "node",
+            released = ready.len(),
+            still_held = self.store.pending().len(),
+            "node.release"
+        );
         ready
             .iter()
             .map(|p| self.take_object(adj, &p.from.clone(), p.kind, &p.bytes.clone(), ids))
@@ -913,6 +964,17 @@ impl NodeView {
         from: &Keyhash,
         body: &[u8],
     ) -> MemoOutcome {
+        let outcome = self.route_memo(adj, from, body);
+        tracing::debug!(
+            target: "node",
+            from8 = %crate::diag::id8(from),
+            outcome = %crate::diag::memo(&outcome),
+            "node.memo"
+        );
+        outcome
+    }
+
+    fn route_memo(&mut self, adj: &dyn Adjacency, from: &Keyhash, body: &[u8]) -> MemoOutcome {
         let memo = match Memo::decode(body) {
             Ok(m) => m,
             Err(e) => return MemoOutcome::Malformed(e),

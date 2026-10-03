@@ -127,6 +127,56 @@ pub struct Config {
     /// bytes and an instruction budget.  The values are the operator's; no
     /// document fixes either.
     pub resource_limits: Option<(usize, u64)>,
+    /// Where a field-test build writes its diagnostic events, and down to
+    /// which level (`Robot/field-test-diagnostics.md`).  Accepted by every
+    /// build so one configuration serves both flavours; a releasable build
+    /// says once that it logs nothing and goes on.  Absent logs nothing.
+    pub log: Option<LogConfig>,
+}
+
+/// The `[log]` table: a file of JSON lines, one event each, and the least
+/// severe level written.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LogConfig {
+    pub path: PathBuf,
+    pub level: LogLevel,
+}
+
+/// The levels `[log] level` takes, from nothing to everything.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LogLevel {
+    Off,
+    Error,
+    Warn,
+    Info,
+    Debug,
+    Trace,
+}
+
+impl LogLevel {
+    fn parse(s: &str) -> Option<LogLevel> {
+        Some(match s {
+            "off" => LogLevel::Off,
+            "error" => LogLevel::Error,
+            "warn" => LogLevel::Warn,
+            "info" => LogLevel::Info,
+            "debug" => LogLevel::Debug,
+            "trace" => LogLevel::Trace,
+            _ => return None,
+        })
+    }
+
+    /// The level as the configuration spells it.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            LogLevel::Off => "off",
+            LogLevel::Error => "error",
+            LogLevel::Warn => "warn",
+            LogLevel::Info => "info",
+            LogLevel::Debug => "debug",
+            LogLevel::Trace => "trace",
+        }
+    }
 }
 
 /// Why a configuration was refused: the line it was on, and what was wrong
@@ -209,6 +259,14 @@ struct File {
     resources: Option<PathBuf>,
     #[serde(rename = "resource-limits")]
     resource_limits: Option<Spanned<Limits>>,
+    log: Option<Spanned<LogTable>>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LogTable {
+    path: PathBuf,
+    level: String,
 }
 
 #[derive(serde::Deserialize)]
@@ -334,6 +392,22 @@ impl Config {
             }
         };
 
+        let log = match &f.log {
+            None => None,
+            Some(l) => {
+                let level = LogLevel::parse(&l.get_ref().level).ok_or_else(|| {
+                    at(
+                        line_at(text, l),
+                        "`log.level` is off, error, warn, info, debug or trace",
+                    )
+                })?;
+                Some(LogConfig {
+                    path: l.get_ref().path.clone(),
+                    level,
+                })
+            }
+        };
+
         // the seed, or the whole of what an instance runs on instead
         match (&f.identity, &f.operator, &f.transport_key, &f.delegations) {
             (Some(_), None, None, None) => {}
@@ -373,6 +447,7 @@ impl Config {
             archive: f.archive,
             resources: f.resources,
             resource_limits,
+            log,
         })
     }
 }

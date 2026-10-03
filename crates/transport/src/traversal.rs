@@ -442,15 +442,26 @@ impl TraversalSocket {
                 addr: host,
             });
         }
-        if let Some(server) = stun
-            && let Ok(seen) = self.reflexive(server, timeout).await
-            && !out.iter().any(|c| c.addr == seen)
-        {
-            out.push(Candidate {
-                kind: CandidateKind::ServerReflexive,
-                addr: seen,
-            });
+        let mut reflexive = "not asked";
+        if let Some(server) = stun {
+            reflexive = match self.reflexive(server, timeout).await {
+                Ok(seen) if out.iter().any(|c| c.addr == seen) => "same as host",
+                Ok(seen) => {
+                    out.push(Candidate {
+                        kind: CandidateKind::ServerReflexive,
+                        addr: seen,
+                    });
+                    "found"
+                }
+                Err(_) => "no answer",
+            };
         }
+        tracing::debug!(
+            target: "transport",
+            candidates = out.len(),
+            reflexive,
+            "transport.gather"
+        );
         out
     }
 }

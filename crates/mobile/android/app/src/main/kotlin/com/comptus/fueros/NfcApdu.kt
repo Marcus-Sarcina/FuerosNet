@@ -66,6 +66,29 @@ object NfcApdu {
         return UNKNOWN to false
     }
 
+    /** Which of the two commands this is, for the diagnostics: `select`,
+     *  `exchange`, or `unknown`. */
+    fun kind(command: ByteArray): String = when {
+        command.size >= 5 + AID.size && command[1] == 0xA4.toByte() -> "select"
+        command.size >= 5 + 32 && command[1] == 0xCE.toByte() -> "exchange"
+        else -> "unknown"
+    }
+
+    /** A response's status word as the diagnostics name it: `pass` for
+     *  9000 with the id, `ok` for 9000 alone, `refused` for 6985, `unknown`
+     *  for 6D00, or the two bytes in hex. */
+    fun status(response: ByteArray): String {
+        if (response.size < 2) return "short"
+        val sw = response.copyOfRange(response.size - 2, response.size)
+        return when {
+            sw.contentEquals(OK) && response.size == 34 -> "pass"
+            sw.contentEquals(OK) -> "ok"
+            sw.contentEquals(REFUSED) -> "refused"
+            sw.contentEquals(UNKNOWN) -> "unknown"
+            else -> sw.joinToString("") { "%02x".format(it) }
+        }
+    }
+
     /** The reader's side: whether the card's response is a pass. */
     fun passed(response: ByteArray, ours: ByteArray): Boolean =
         response.size == 34 &&

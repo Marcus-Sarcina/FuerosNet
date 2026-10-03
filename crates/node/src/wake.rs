@@ -125,6 +125,25 @@ impl WakeRegister {
         key: Option<Vec<u8>>,
         lapses_at: Option<u64>,
     ) -> Registered {
+        let rung = self.hold(client, device, url, key, lapses_at);
+        tracing::debug!(
+            target: "node",
+            client8 = %crate::diag::id8(&client),
+            registered = ?rung,
+            held = self.endpoints.len(),
+            "node.wake"
+        );
+        rung
+    }
+
+    fn hold(
+        &mut self,
+        client: Keyhash,
+        device: [u8; 32],
+        url: Option<String>,
+        key: Option<Vec<u8>>,
+        lapses_at: Option<u64>,
+    ) -> Registered {
         let Some(url) = url else {
             self.forget_device(&client, &device);
             return Registered::Withdrawn;

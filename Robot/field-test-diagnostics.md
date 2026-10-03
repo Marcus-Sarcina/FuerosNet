@@ -283,3 +283,29 @@ The gate passes on the releasable default. Next: M2 (daemon `[log]`, node
 events, the merge tool) and M3 (the shell's writer, flavour, counters, crash
 handlers, Report action), independent of each other.
 
+**M2 and M3 done 2026-10-03**, run as two parallel tasks on disjoint files.
+M2: `[log]` table (`path`, `level`) in the daemon's config, accepted and
+ignored with one line under `releasable`, installing the JSON-lines
+subscriber under `fieldtest`; hooks node 1 → 35, transport 0 → 6, daemon 0 →
+16; the transport's existing session log raises a tracing event on every
+push, so it is not switched to recording (which would hold every event in
+memory for the session's life). `rhtnp --log`. `rhtn diag merge` merges files
+by a `diag.anchor` event carrying `unix_ms`, prints the timeline, the
+ceremony steps with inter-step ms, every refusal and abort, and counts per
+layer and event; a fieldtest daemon test runs two `rhtnd` processes and
+merges them. M3: Gradle flavours `releasable` and `fieldtest` (one
+dimension; AGP forbids a flavour named `release`), each with its own native
+library under `app/src/<flavour>/jniLibs/`, `build-native.sh --fieldtest`;
+`BuildConfig.FIELD_TEST`, `GIT_COMMIT`, `SPEC_PINS`; Timber planted only in
+`fieldtest`; the sink is a 4,096-entry queue drained by one writer thread to
+`filesDir/diag/<run>.jsonl`, 16 MB rotation, three runs kept, drops counted;
+72 shell event sites across every file in the inventory; both crash
+handlers; the Report zip with `header.json` and `ACTION_SEND` through an
+in-house provider; Bluetooth permissions now requested rather than caught.
+Android suite 62 → 85. Found in passing and fixed after: the BLE client never
+subscribed to the server's notifications, so server-to-client packets would
+not have arrived on hardware; and the provisioning note still pointed at the
+removed material log line. Costs: M2 48 min and about 275k tokens, M3 34 min
+and about 240k, against M1's 105 min and 480k, as predicted. Next: M4, the
+bench script, the checklist from the product rows and the run procedure.
+

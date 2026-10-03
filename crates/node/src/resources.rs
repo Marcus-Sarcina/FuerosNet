@@ -226,6 +226,12 @@ impl Gateway {
     /// operator set is left alone — the standing grant is a floor under
     /// the table, not a thing that overwrites it.
     pub fn refresh(&mut self, table: &Table) -> (usize, usize) {
+        let (granted, dropped) = self.rescore(table);
+        tracing::debug!(target: "node", granted, dropped, "node.resource.refreshed");
+        (granted, dropped)
+    }
+
+    fn rescore(&mut self, table: &Table) -> (usize, usize) {
         let (mut granted, mut dropped) = (0, 0);
         let standing: Vec<(Keyhash, Row)> =
             self.standing.iter().map(|(k, r)| (*k, r.clone())).collect();
@@ -332,6 +338,23 @@ impl Gateway {
         requester: &Keyhash,
         body: &[u8],
     ) -> ResourceResponse {
+        let response = self.evaluate(me, table, requester, body);
+        tracing::debug!(
+            target: "node",
+            requester8 = %crate::diag::id8(requester),
+            status = response.status,
+            "node.resource"
+        );
+        response
+    }
+
+    fn evaluate(
+        &mut self,
+        me: &Keyhash,
+        table: &Table,
+        requester: &Keyhash,
+        body: &[u8],
+    ) -> ResourceResponse {
         let Ok(req) = ResourceRequest::decode(body) else {
             return ResourceResponse::code(STATUS_MALFORMED);
         };
@@ -386,8 +409,19 @@ impl Gateway {
                 status: STATUS_DELIVERED,
                 body: Some(resp),
             },
-            // one attempt, never a retry: the requester decides
-            Err(_) => ResourceResponse::code(STATUS_UNAVAILABLE),
+            // one attempt, never a retry: the requester decides.  The
+            // sandbox's refusal (exhausted, trapped, oversized) is known
+            // here and nowhere later, since the wire carries one code
+            Err(refusal) => {
+                tracing::debug!(
+                    target: "node",
+                    requester8 = %crate::diag::id8(requester),
+                    resource8 = %crate::diag::id8(&req.resource),
+                    refusal = %refusal,
+                    "node.resource.refused"
+                );
+                ResourceResponse::code(STATUS_UNAVAILABLE)
+            }
         }
     }
 

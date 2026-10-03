@@ -10,6 +10,25 @@ description = "rhtnd: a node run from an operator's configuration, and the opera
 name = "rhtnd"
 path = "src/main.rs"
 
+[features]
+# The releasable flavour is the default, and it is this leaf that decides
+# for `rhtn-node` and `rhtn-transport` beneath it: `tracing/max_level_off`
+# fixes the macros' static level at OFF across the build graph, so every
+# diagnostic event in the daemon and the crates below it is removed by the
+# optimiser (`rhtn-client`'s manifest and `crates/README.md` say how, and
+# why `log` is capped too).
+default = ["releasable"]
+releasable = [
+    "tracing/max_level_off",
+    "tracing/release_max_level_off",
+    "log/max_level_off",
+    "log/release_max_level_off",
+]
+# The field-test flavour: the hooks stay in, and the `[log]` table installs
+# `diag::JsonLines` on a file.  Built with `--no-default-features --features
+# fieldtest`; the two together are a compile error (`lib.rs`).
+fieldtest = ["dep:tracing-subscriber", "dep:serde_json"]
+
 [dependencies]
 rhtn-archive = { path = "../archive" }
 rhtn-node = { path = "../node" }
@@ -20,7 +39,18 @@ rhtn-resources = { path = "../resources" }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "sync", "io-util", "signal"] }
 serde = { version = "1", features = ["derive"] }
 toml = "1"
+# MIT; the lifecycle events, and the cap the `releasable` feature sets
+tracing = { version = "0.1", default-features = false, features = ["std"] }
+# MIT OR Apache-2.0; already in the graph through tracing, named so
+# `releasable` can cap its static level (rhtn-client's manifest says why)
+log = { version = "0.4", default-features = false }
+# MIT; the registry the field-test renderer is installed on
+tracing-subscriber = { version = "0.3", default-features = false, features = ["std", "registry"], optional = true }
+serde_json = { workspace = true, optional = true }
 
 [dev-dependencies]
 rhtn-sim = { path = "../sim" }
 rhtn-resources = { path = "../resources" }
+# the merge tool, for the field-test test that reads two daemons' files
+# into one timeline
+rhtn-cli = { path = "../cli" }

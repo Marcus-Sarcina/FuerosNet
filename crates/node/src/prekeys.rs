@@ -331,7 +331,11 @@ impl PrekeyService {
     /// node tells each of them.  No wire object carries it; the session
     /// does.
     pub fn take_exhausted(&mut self) -> Vec<Keyhash> {
-        std::mem::take(&mut self.exhausted)
+        let dry = std::mem::take(&mut self.exhausted);
+        for whom in &dry {
+            tracing::debug!(target: "node", whom8 = %crate::diag::id8(whom), "node.prekeys.exhausted");
+        }
+        dry
     }
 
     /// Drop rate-limit windows that have closed.
