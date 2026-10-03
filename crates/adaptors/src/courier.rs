@@ -131,15 +131,22 @@ impl Courier {
         // message from a peer this client has never held one for is
         // attributable on arrival rather than a message too late
         // (`wire-format.md` §7.10).
-        let d = self
+        let (d, owed) = self
             .handle
             .with(move |c| {
                 if let Some(b) = binding {
                     c.take_binding(&b);
                 }
-                c.receive_payload(from, &bytes)
+                let d = c.receive_payload(from, &bytes);
+                // what the client owes in answer goes now, on this courier:
+                // the conversation's replies (`wire-format.md` §7.10.1), an
+                // archive reply, a record to propagate
+                (d, c.outbox())
             })
             .await;
+        if !owed.is_empty() {
+            self.carry(owed).await;
+        }
         match d {
             Ok(Dispatched::Candidates(b)) => {
                 if let Ok(cands) = decode_candidates(&b) {

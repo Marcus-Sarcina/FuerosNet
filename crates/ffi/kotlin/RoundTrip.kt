@@ -5,7 +5,7 @@
 // facade's `harness` feature, which a shell never builds.
 import uniffi.rhtn_ffi.*
 
-class Shell : Proximity, Camera, Clock, Random, Operator, Notices, Storage, Custody {
+class Shell : Proximity, Camera, Clock, Random, Operator, Notices, Storage, Custody, Diagnostics {
     private val kept = HashMap<String, ByteArray>()
     private var custody: ByteArray? = null
     private val rng = java.security.SecureRandom()
@@ -25,9 +25,12 @@ class Shell : Proximity, Camera, Clock, Random, Operator, Notices, Storage, Cust
     override fun `key`(): ByteArray? = custody
     override fun `keep`(`key`: ByteArray): Boolean { custody = `key`; return true }
     override fun `unsealed`(): Boolean = false
+    // the diagnostics sink: a releasable build calls it never, and this
+    // round trip wants nothing from a field build
+    override fun `event`(`line`: String) {}
 }
 
-fun platformOf(): Platform { val s = Shell(); return Platform(s, s, s, s, s, s, s, s) }
+fun platformOf(): Platform { val s = Shell(); return Platform(s, s, s, s, s, s, s, s, s) }
 
 fun main() {
     val node = TestNode.start("bob", listOf("alice", "carol"))

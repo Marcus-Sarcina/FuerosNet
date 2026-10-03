@@ -287,6 +287,7 @@ The Cargo workspace has **16 crates**. Components below follow responsibilities 
 | NET-020 | E | Carry a ceremony's local exchange over a bearer the application chooses, ranked by locality: a direct local radio before a network fetch (`wire-format.md` §14.3.1). The carriage assembles the messages that were sent, in the order they were sent, or none — a gap is not assembled across, a repeat is not counted twice, and a peer announcing more than the bound is refused rather than allocated for. A bearer is offered as no proximity channel, whatever radio it uses: design §7.1 item 4's bar on signal strength as distance evidence is untouched by it. The optical objects survive the symbol that carries them and come back byte-identical. | W §14.3.1; D §§7.1, 14.1 |
 | NET-021 | E | Run the proximity ladder and the guided capture at a ceremony's D3 and D4 over the local interfaces (design §7.6.3, §7.5): the NFC tap carries the public ceremony-id and passes only where both sides hold the same one; the optical channel is reported from the anchor exchange D2 already agreed; the strongest channel that passed is the one recorded and no stronger (`light-client-requirements.md` §1.3). The capture keys cross each way as `CaptureKeyHandover` (`wire-format.md` §14.3.2), anchored and checked like the proximity outcomes, and each device seals its capture of the other beneath them (design §7.5.2.6). A channel the shell cannot run is not listed, and a tap against another ceremony passes neither side and leaks no ceremony-id. | W §§14.2, 14.3.2; D §§7.5.2.6, 7.6.3 |
 | NET-022 | C | After the local exchanges, the ceremony's conversation crosses no local interface: the consent each query needs, which also tells the subject who was selected, the fishing proposals, the witness request and the witness's answer, the responses one party gathered for the proposer, each signer's back-pointers, the proposed body, each signer's signature entry and the finalised record travel the end-to-end payload path between the participants' devices and are sent to each nominated witness as well, which is how a witness observes the sequence it attests. They are payload kinds 9 to 18 (`wire-format.md` §7.10.1, §7.10.2); every one a participant sends goes to the counterparty and to every witness either party nominated, the consent request alone excepted, which reaches the subject only since it carries the fuzzed profile (`wire-format.md` §5.6). | W §§7.10.1, 7.10.2, 5.6, 14.2; D §7.1 |
+| NET-023 | E | Run the ceremony's conversation over the courier between two participants and at least two witnesses with no message moved by hand: the witness request and back-pointers go first; every signer ends holding the same record; a witness that declined is absent from it and refuses later kinds; a message from a party that is neither counterparty nor nominated witness is refused; and two initial messages crossing leave the lower keyhash's session standing (`wire-format.md` §7.10.1, §7.10). | W §§7.10.1, 7.10.2, 7.10; D §§7.1, 14.2.2 |
 
 ### Attach, sibling state, heartbeat and failover
 
@@ -960,7 +961,7 @@ Open local parameters are not all specification defects: cache TTLs, queue cap, 
 
 ## 10. Document baseline and coverage totals
 
-This specification contains **488 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
+This specification contains **489 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
 
 | Prefix | Families |
 |---|---:|
@@ -971,7 +972,7 @@ This specification contains **488 numbered requirement/test families** across **
 | TOP | 38 |
 | RES | 15 |
 | CUR | 12 |
-| NET | 22 |
+| NET | 23 |
 | SES | 15 |
 | MAIL | 27 |
 | CER | 22 |

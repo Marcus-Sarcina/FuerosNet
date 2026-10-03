@@ -958,22 +958,29 @@ impl Table {
         }
         if !self.pending_reissues.is_empty() {
             self.pending_reissues.remove(0);
+            tracing::debug!(target: "topology", evicted = "reissue", held = self.pending_held(), "topology.held.evicted");
             return;
         }
         let disavowal = self.pending_disavowals.first().map(|a| a.seq);
         let departure = self.pending_departures.first().map(|a| a.seq);
-        match (disavowal, departure) {
+        let evicted = match (disavowal, departure) {
             (Some(d), Some(p)) if p < d => {
                 self.pending_departures.remove(0);
+                "departure"
             }
             (Some(_), _) => {
                 self.pending_disavowals.remove(0);
+                "disavowal"
             }
             (None, Some(_)) => {
                 self.pending_departures.remove(0);
+                "departure"
             }
-            (None, None) => {}
-        }
+            (None, None) => return,
+        };
+        // a silent drop until 2026-10-02: what the held list let go, and
+        // how full it stood, for the field-test build alone
+        tracing::debug!(target: "topology", evicted, held = self.pending_held(), "topology.held.evicted");
     }
 
     fn hold_reissue(&mut self, item: (Keyhash, Keyhash, u32, u32)) {

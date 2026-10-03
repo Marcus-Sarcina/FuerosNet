@@ -7,6 +7,7 @@
 
 use crate::backup;
 use crate::device::{ChannelKind, ChannelOutcome, ChannelResult, Device, guided_capture};
+use crate::diag::id8;
 use crate::horizon::Horizon;
 use crate::keys::{capture_key, pre_commitment};
 use crate::notice::{Notice, Role};
@@ -131,6 +132,14 @@ pub enum Abort {
     /// The patron's check of the evidence against the adoption's own
     /// fields failed, or it holds no position to adopt under.
     PatronRefused(String),
+    /// The conversation's next step waits on something that has not
+    /// arrived (`wire-format.md` §7.10.1): what, in words.
+    Waiting(&'static str),
+    /// Proposing is the initiator's; this side is shown the body.
+    NotProposer,
+    /// A message of the conversation could not be sent to the
+    /// counterparty: the payload path's reason.
+    Payload(String),
 }
 
 /// One archive fetch under way with a party: the nonce the next reply must
@@ -305,18 +314,21 @@ pub struct Adopting {
 }
 
 /// The state of the one ceremony this client is a participant in.
-struct Active {
-    counterparty: Keyhash,
-    initiator: bool,
+pub(crate) struct Active {
+    pub(crate) counterparty: Keyhash,
+    pub(crate) initiator: bool,
     started_at: u64,
+    /// The device's clock when `begin` ran, for the durations the
+    /// diagnostic events carry.
+    began_ms: u64,
     contribution: [u8; 16],
     /// The counterparty's, as this device read it **off their screen**
     /// (`wire-format.md` §14.3.1).  Everything the bearer then carries is
     /// checked against it, which is the whole of what the anchor buys.
     their_contribution: Option<[u8; 16]>,
     ceremony_id: Option<[u8; 32]>,
-    my_nominees: BTreeSet<Keyhash>,
-    their_nominees: Vec<Keyhash>,
+    pub(crate) my_nominees: BTreeSet<Keyhash>,
+    pub(crate) their_nominees: Vec<Keyhash>,
     their_bundle: Vec<Vec<u8>>,
     their_retention: u64,
     seed: [u8; 32],
@@ -327,8 +339,11 @@ struct Active {
     /// gone with the ceremony.
     template: Option<Vec<u8>>,
     image_count: u64,
-    issued: BTreeSet<[u8; 32]>,
-    responses: Vec<Vec<u8>>,
+    pub(crate) issued: BTreeSet<[u8; 32]>,
+    pub(crate) responses: Vec<Vec<u8>>,
+    /// The conversation on the end-to-end path (`crate::sequence`): what
+    /// this side put out and what came back.
+    pub(crate) conversation: crate::sequence::Conversation,
 }
 
 /// A participant client: its identity, archive and store, its two query
@@ -394,7 +409,7 @@ pub struct Client {
     /// the call that made the record, because the call that made it is the
     /// ceremony's and the carrying is the adaptors', and the two happen on
     /// different sides of the boundary.
-    outbox: Vec<Msg>,
+    pub(crate) outbox: Vec<Msg>,
     /// As a recovering subject: the responses gathered at recovery
     /// meetings, verified, awaiting the block.
     pub recovery_responses: Vec<Vec<u8>>,
@@ -404,8 +419,11 @@ pub struct Client {
     /// of what its serving node propagated, kept so a patron that is not
     /// answering can be routed around.
     pub horizon: Horizon,
-    active: Option<Active>,
-    witnessing: Option<WitnessRequest>,
+    pub(crate) active: Option<Active>,
+    /// The ceremonies this client was asked to witness and accepted, by
+    /// ceremony-id, at most [`crate::sequence::PENDING_WITNESS_REQUESTS`]
+    /// of them.
+    pub(crate) witnessing: BTreeMap<[u8; 32], crate::sequence::Witnessing>,
 }
 
 /// What arrived on the end-to-end channel, delivered where it belongs
@@ -441,6 +459,10 @@ pub enum Dispatched {
     /// A reply to a fetch this client made: the records it verified into
     /// its own store, or why it took none of them.
     Fetched(Result<usize, String>),
+    /// A message of the ceremony's conversation (`wire-format.md` §7.10.1,
+    /// kinds 9 to 18): what it came to, as a participant or a witness.
+    /// What the step owes in answer is in the outbox.
+    Conversation(crate::sequence::Conversed),
 }
 
 /// The refusal a device holding no seed gives to an act of the identity
@@ -449,6 +471,22 @@ const NO_SEED: &str = "this device holds no seed";
 
 fn hex8(k: &Keyhash) -> String {
     k[..4].iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// An abort on its way out of a step: the step and the variant are the
+/// event, and the abort is returned as it was, so `return Err(abort(..))`
+/// reads as the `return Err(..)` it replaces.  Compiled out of a
+/// releasable build with every other hook (`crate::diag`).
+pub(crate) fn abort(step: &'static str, e: Abort) -> Abort {
+    tracing::warn!(target: "cer", step, abort = %crate::diag::abort(&e), "cer.abort");
+    e
+}
+
+/// An anchored carriage refused: which message, and why
+/// (`ContributionMismatch`, `CeremonyIdMismatch` or `ClockFar`).
+fn anchor_refused(which: &'static str, e: Abort) -> Abort {
+    tracing::warn!(target: "cer", which, why = %crate::diag::abort(&e), "cer.anchor.refused");
+    e
 }
 
 impl Client {
@@ -522,7 +560,7 @@ impl Client {
             rotation: None,
             recovery_responses: Vec::new(),
             active: None,
-            witnessing: None,
+            witnessing: BTreeMap::new(),
         }
     }
 
@@ -544,7 +582,16 @@ impl Client {
         self.device.clock.now_ms() / 1000
     }
 
-    fn active(&mut self) -> Result<&mut Active, Abort> {
+    /// Milliseconds since `begin` by the device's clock, for the events;
+    /// zero outside a ceremony.
+    fn since_begin_ms(&self) -> u64 {
+        self.active
+            .as_ref()
+            .map(|a| self.device.clock.now_ms().saturating_sub(a.began_ms))
+            .unwrap_or(0)
+    }
+
+    pub(crate) fn active(&mut self) -> Result<&mut Active, Abort> {
         self.active.as_mut().ok_or(Abort::NotActive)
     }
 
@@ -581,15 +628,27 @@ impl Client {
             "Start a presence ceremony with {}?",
             hex8(&counterparty)
         )) {
-            return Err(Abort::Declined);
+            return Err(abort("begin", Abort::Declined));
         }
         let contribution = self.random::<16>();
         let seed = self.random::<32>();
         let started_at = self.now_s();
+        let began_ms = self.device.clock.now_ms();
+        tracing::info!(
+            target: "cer",
+            counterparty = %id8(&counterparty),
+            initiator,
+            started_at,
+            nominees = nominees.len(),
+            bundle = self.store.records.len(),
+            retention = self.cfg.retention_years,
+            "cer.begin"
+        );
         self.active = Some(Active {
             counterparty,
             initiator,
             started_at,
+            began_ms,
             contribution,
             their_contribution: None,
             ceremony_id: None,
@@ -605,6 +664,7 @@ impl Client {
             image_count: 0,
             issued: BTreeSet::new(),
             responses: vec![],
+            conversation: Default::default(),
         });
         self.intent()
     }
@@ -637,11 +697,13 @@ impl Client {
     /// screen it was looking at, which costs being there.
     pub fn optical_contribution(&self) -> Result<Vec<u8>, Abort> {
         let a = self.active.as_ref().ok_or(Abort::NotActive)?;
-        Ok(crate::local::OpticalContribution {
+        let bytes = crate::local::OpticalContribution {
             device: self.keyhash(),
             contribution: a.contribution,
         }
-        .encode())
+        .encode();
+        tracing::info!(target: "cer", which = "contribution", bytes = bytes.len(), "cer.optical.shown");
+        Ok(bytes)
     }
 
     /// The counterparty's first QR, read off their screen.  Their
@@ -651,20 +713,38 @@ impl Client {
         let read = crate::local::OpticalContribution::decode(bytes).map_err(Abort::Malformed)?;
         let a = self.active()?;
         if read.device != a.counterparty {
-            return Err(Abort::NotActive);
+            return Err(abort("take_optical", Abort::NotActive));
         }
         a.their_contribution = Some(read.contribution);
+        tracing::info!(
+            target: "cer",
+            which = "contribution",
+            bytes = bytes.len(),
+            from = %id8(&read.device),
+            "cer.optical.read"
+        );
         Ok(read.device)
     }
 
     /// **Step 2**: the ceremony-id this device computed, as the second QR
     /// (§14.3.1, design §7.5.2).  Both contributions must be in.
     pub fn transcript_confirm(&mut self) -> Result<Vec<u8>, Abort> {
+        let cid = self.my_transcript()?;
+        let bytes = crate::local::TranscriptConfirm { ceremony_id: cid }.encode();
+        tracing::info!(target: "cer", which = "confirm", bytes = bytes.len(), "cer.optical.shown");
+        Ok(bytes)
+    }
+
+    /// The ceremony-id this device computes from the two contributions,
+    /// once both are in.
+    fn my_transcript(&mut self) -> Result<[u8; 32], Abort> {
         let me = self.keyhash();
         let a = self.active()?;
         let theirs = a.their_contribution.ok_or(Abort::NotActive)?;
-        let cid = pre_commitment((&me, &a.contribution), (&a.counterparty, &theirs));
-        Ok(crate::local::TranscriptConfirm { ceremony_id: cid }.encode())
+        Ok(pre_commitment(
+            (&me, &a.contribution),
+            (&a.counterparty, &theirs),
+        ))
     }
 
     /// The counterparty's second QR, checked against this device's own:
@@ -673,13 +753,18 @@ impl Client {
     /// subject's window.
     pub fn take_transcript(&mut self, bytes: &[u8]) -> Result<[u8; 32], Abort> {
         let read = crate::local::TranscriptConfirm::decode(bytes).map_err(Abort::Malformed)?;
-        let mine = crate::local::TranscriptConfirm::decode(&self.transcript_confirm()?)
-            .map_err(Abort::Malformed)?
-            .ceremony_id;
+        let mine = self.my_transcript()?;
         if read.ceremony_id != mine {
-            return Err(Abort::CeremonyIdMismatch);
+            return Err(anchor_refused("confirm", Abort::CeremonyIdMismatch));
         }
+        tracing::info!(target: "cer", which = "confirm", bytes = bytes.len(), "cer.optical.read");
         self.active()?.ceremony_id = Some(mine);
+        tracing::info!(
+            target: "cer",
+            ceremony = %id8(&mine),
+            ms = self.since_begin_ms(),
+            "cer.id_fixed"
+        );
         self.subject.open_window(mine);
         Ok(mine)
     }
@@ -693,7 +778,8 @@ impl Client {
     pub fn intent_carriage(&mut self) -> Result<Vec<Vec<u8>>, Abort> {
         let intent = self.intent()?;
         let cid = self.anchored_id()?;
-        Ok(crate::local::intent_carriage(
+        let (nominees, entries) = (intent.nominees.len(), intent.bundle.len());
+        let out = crate::local::intent_carriage(
             &crate::local::IntentExchange {
                 contribution: intent.contribution,
                 nominees: intent.nominees,
@@ -704,7 +790,17 @@ impl Client {
                 continuations: 0,
             },
             &cid,
-        ))
+        );
+        tracing::info!(
+            target: "cer",
+            nominees,
+            entries,
+            continuations = out.len().saturating_sub(1),
+            retention = intent.retention_years,
+            initiator = intent.initiator,
+            "cer.intent.sent"
+        );
+        Ok(out)
     }
 
     /// The counterparty's carriage set.  The echoed contribution is checked
@@ -728,7 +824,7 @@ impl Client {
             .ok_or(Abort::NotActive)?;
         let (read, taken) = crate::local::read_intent(carriage, &cid).map_err(Abort::Malformed)?;
         if read.contribution != theirs {
-            return Err(Abort::ContributionMismatch);
+            return Err(anchor_refused("intent", Abort::ContributionMismatch));
         }
         self.take_intent(
             from,
@@ -770,7 +866,7 @@ impl Client {
     /// §1.3 item 4) — which is what [`Client::take_channels`] does.
     pub fn take_proximity(&mut self, bytes: &[u8]) -> Result<(), Abort> {
         let read = crate::local::ProximityOutcomes::decode(bytes).map_err(Abort::Malformed)?;
-        self.anchored(read.ceremony_id)?;
+        self.anchored("proximity", read.ceremony_id)?;
         self.take_channels(&read.channels)
     }
 
@@ -791,7 +887,7 @@ impl Client {
     /// evidence of anything.
     pub fn take_candidate_carriage(&mut self, bytes: &[u8]) -> Result<Vec<u8>, Abort> {
         let read = crate::local::CandidateHandover::decode(bytes).map_err(Abort::Malformed)?;
-        self.anchored(read.ceremony_id)?;
+        self.anchored("candidates", read.ceremony_id)?;
         Ok(read.candidates)
     }
 
@@ -801,11 +897,13 @@ impl Client {
     /// The bytes are wiped when dropped, as the key in them is.
     pub fn capture_key_carriage(&self) -> Result<Zeroizing<Vec<u8>>, Abort> {
         let cid = self.anchored_id()?;
-        Ok(crate::local::CaptureKeyHandover {
+        let out = crate::local::CaptureKeyHandover {
             ceremony_id: cid,
             key: self.capture_key()?,
         }
-        .encode())
+        .encode();
+        tracing::info!(target: "cer", direction = "sent", "cer.capture_key");
+        Ok(out)
     }
 
     /// The counterparty's capture key, anchored to this ceremony or
@@ -817,15 +915,17 @@ impl Client {
         bytes: &[u8],
     ) -> Result<Zeroizing<[u8; 32]>, Abort> {
         let read = crate::local::CaptureKeyHandover::decode(bytes).map_err(Abort::Malformed)?;
-        self.anchored(read.ceremony_id)?;
+        self.anchored("capture_key", read.ceremony_id)?;
+        tracing::info!(target: "cer", direction = "received", "cer.capture_key");
         Ok(read.key)
     }
 
-    /// An anchored message's ceremony-id against this device's own.
-    fn anchored(&mut self, theirs: [u8; 32]) -> Result<(), Abort> {
+    /// An anchored message's ceremony-id against this device's own;
+    /// `which` names the message for the event a refusal raises.
+    fn anchored(&mut self, which: &'static str, theirs: [u8; 32]) -> Result<(), Abort> {
         let mine = self.anchored_id()?;
         if theirs != mine {
-            return Err(Abort::CeremonyIdMismatch);
+            return Err(anchor_refused(which, Abort::CeremonyIdMismatch));
         }
         Ok(())
     }
@@ -848,10 +948,10 @@ impl Client {
         let tolerance = self.cfg.clock_tolerance_s;
         let a = self.active()?;
         if a.counterparty != from {
-            return Err(Abort::NotActive);
+            return Err(abort("take_intent", Abort::NotActive));
         }
         if intent.started_at.abs_diff(a.started_at) > tolerance {
-            return Err(Abort::ClockFar);
+            return Err(anchor_refused("intent", Abort::ClockFar));
         }
         if intent.initiator && !a.initiator {
             a.started_at = intent.started_at;
@@ -861,6 +961,21 @@ impl Client {
         a.their_nominees = intent.nominees.clone();
         a.their_bundle = intent.bundle.clone();
         a.their_retention = intent.retention_years;
+        tracing::info!(
+            target: "cer",
+            from = %id8(&from),
+            nominees = intent.nominees.len(),
+            entries = intent.bundle.len(),
+            retention = intent.retention_years,
+            initiator = intent.initiator,
+            "cer.intent.received"
+        );
+        tracing::info!(
+            target: "cer",
+            ceremony = %id8(&cid),
+            ms = self.since_begin_ms(),
+            "cer.id_fixed"
+        );
         self.subject.open_window(cid);
         Ok(cid)
     }
@@ -873,13 +988,31 @@ impl Client {
     /// what was achieved.
     pub fn proximity(&mut self) -> Result<Vec<ChannelOutcome>, Abort> {
         let peer = self.active()?.counterparty;
+        let t0 = self.device.clock.now_ms();
         let (outcomes, strongest) =
             crate::device::run_channels(self.device.proximity.as_ref(), &peer);
+        let ms = self.device.clock.now_ms().saturating_sub(t0);
+        for o in &outcomes {
+            tracing::info!(
+                target: "cer",
+                channel = ?o.kind,
+                outcome = ?o.result,
+                resolution_m = o.resolution_m,
+                "cer.proximity"
+            );
+        }
+        tracing::info!(
+            target: "cer",
+            channels = outcomes.len(),
+            strongest = ?strongest,
+            ms,
+            "cer.proximity.done"
+        );
         let a = self.active()?;
         a.channels = outcomes.clone();
         a.strongest = strongest;
         if strongest.is_none() {
-            return Err(Abort::NoProximity);
+            return Err(abort("proximity", Abort::NoProximity));
         }
         Ok(outcomes)
     }
@@ -894,7 +1027,7 @@ impl Client {
                 .map(|o| o.kind)
         };
         if strongest(&mine) != strongest(theirs) {
-            return Err(Abort::ChannelDisagreement);
+            return Err(abort("take_channels", Abort::ChannelDisagreement));
         }
         self.active()?.channels = theirs.to_vec();
         Ok(())
@@ -921,15 +1054,26 @@ impl Client {
         self.device.notifier.notify(Notice::RecordDisclosure {
             role: Role::Participant,
         });
+        let t0 = self.device.clock.now_ms();
         let (frames, _prompts) = guided_capture(
             self.device.camera.as_ref(),
             self.device.clock.as_ref(),
             self.device.random.as_ref(),
             &self.cfg.capture,
         );
+        let ms = self.device.clock.now_ms().saturating_sub(t0);
         let template = self.device.engine.template(&frames);
+        // the count and the version, never a frame or the template
+        tracing::info!(
+            target: "cer",
+            image_count = frames.len(),
+            template_version = self.cfg.template_version,
+            ms,
+            ok = template.len() == self.cfg.seal.template_len,
+            "cer.capture"
+        );
         if template.len() != self.cfg.seal.template_len {
-            return Err(Abort::TemplateLength);
+            return Err(abort("capture", Abort::TemplateLength));
         }
         let capture = Capture {
             modality: 0,
@@ -959,10 +1103,21 @@ impl Client {
             a.started_at,
         );
         if !pool.candidates.is_empty() && !self.acquaintance.recognises_any(&pool) {
+            tracing::warn!(target: "cer", pool = pool.candidates.len(), "cer.select.none_recognised");
             self.device.notifier.notify(Notice::NoCandidateRecognised);
         }
         let need = required(pool.n, pool.candidates.len());
-        Ok(selection::select(&pool, &self.acquaintance, need, true))
+        let picked = selection::select(&pool, &self.acquaintance, need, true);
+        tracing::info!(
+            target: "cer",
+            n = pool.n,
+            pool = pool.candidates.len(),
+            required = need,
+            selected = picked.len(),
+            bases = ?picked.iter().map(|(_, b)| *b as u64).collect::<Vec<_>>(),
+            "cer.select"
+        );
+        Ok(picked)
     }
 
     /// The query to `verifier` about the counterparty: the fuzzed profile of
@@ -987,7 +1142,15 @@ impl Client {
             template_version: version,
             verifier,
         };
-        self.active()?.issued.insert(q.query_id());
+        let qid = q.query_id();
+        self.active()?.issued.insert(qid);
+        tracing::info!(
+            target: "cer",
+            query = %id8(&qid),
+            verifier = %id8(&verifier),
+            subject = %id8(&subject),
+            "cer.query.issued"
+        );
         Ok(q)
     }
 
@@ -1021,6 +1184,14 @@ impl Client {
         let grant =
             self.subject
                 .grant_for(me, &self.store, &q.verifier, q.query_id(), self.now_s());
+        // whether a key was released, never the key
+        tracing::info!(
+            target: "sub",
+            query = %id8(&q.query_id()),
+            verifier = %id8(&q.verifier),
+            granted = grant.is_some(),
+            "sub.grant"
+        );
         Some((consent, grant))
     }
 
@@ -1075,6 +1246,22 @@ impl Client {
     /// As querier: a response to a query I issued, verified under its
     /// verifier.  The query it answers and the verdict.
     pub fn take_response(&mut self, bytes: &[u8]) -> Result<([u8; 32], Verdict), String> {
+        let out = self.take_response_in(bytes);
+        if tracing::event_enabled!(target: "cer", tracing::Level::INFO) {
+            match &out {
+                Ok((q, v)) => {
+                    let verifier = Response::read(bytes)
+                        .map(|r| id8(&r.verifier))
+                        .unwrap_or_default();
+                    tracing::info!(target: "cer", query = %id8(q), %verifier, verdict = ?v, "cer.response");
+                }
+                Err(why) => tracing::warn!(target: "cer", %why, "cer.response.refused"),
+            }
+        }
+        out
+    }
+
+    fn take_response_in(&mut self, bytes: &[u8]) -> Result<([u8; 32], Verdict), String> {
         let r = Response::read(bytes)?;
         verify::response(&self.known, bytes, false).map_err(|e| e.to_string())?;
         let a = self.active.as_mut().ok_or("no ceremony")?;
@@ -1088,7 +1275,12 @@ impl Client {
     /// As subject: the copy of a response about me.
     pub fn take_response_copy(&mut self, bytes: &[u8]) -> Result<[u8; 32], String> {
         let me = self.signer.as_deref().ok_or(NO_SEED)?;
-        self.subject.take_response_copy(me, &self.known, bytes)
+        let out = self.subject.take_response_copy(me, &self.known, bytes);
+        match &out {
+            Ok(q) => tracing::info!(target: "sub", query = %id8(q), "sub.response_copy"),
+            Err(why) => tracing::warn!(target: "sub", %why, "sub.response_copy.refused"),
+        }
+        out
     }
 
     /// The responses I gathered about the counterparty.
@@ -1114,12 +1306,20 @@ impl Client {
     /// What a nominee is asked to witness.
     pub fn witness_request(&self) -> Result<WitnessRequest, Abort> {
         let a = self.active.as_ref().ok_or(Abort::NotActive)?;
-        Ok(WitnessRequest {
+        let req = WitnessRequest {
             ceremony_id: a.ceremony_id.ok_or(Abort::NoCeremonyId)?,
             participants: participants(self.keyhash(), a.counterparty),
             started_at: a.started_at,
             channels: a.channels.clone(),
-        })
+        };
+        tracing::info!(
+            target: "cer",
+            ceremony = %id8(&req.ceremony_id),
+            nominees = a.my_nominees.len(),
+            channels = req.channels.len(),
+            "cer.witness.asked"
+        );
+        Ok(req)
     }
 
     /// As nominee: witness, or decline.  The claimed start must be within
@@ -1127,18 +1327,65 @@ impl Client {
     /// person is told, not asked (design Appendix A.3).  The flags attest
     /// what was observed: the protocol ran, both were responsive, and the
     /// latency bound where a latency channel passed.
+    ///
+    /// Asked again for a ceremony already held, by the other participant
+    /// or as a repeat, the answer given stands.  At most
+    /// [`crate::sequence::PENDING_WITNESS_REQUESTS`] ceremonies are held
+    /// at once, the holder's own bound as the other bounds are: past it
+    /// the one with the oldest claimed start goes.
     pub fn take_witness_request(&mut self, req: &WitnessRequest) -> Option<u64> {
-        witness_check(req.started_at, self.now_s(), self.cfg.clock_tolerance_s).ok()?;
+        if let Some(w) = self.witnessing.get(&req.ceremony_id) {
+            return Some(w.flags);
+        }
+        if witness_check(req.started_at, self.now_s(), self.cfg.clock_tolerance_s).is_err() {
+            tracing::warn!(
+                target: "cer",
+                ceremony = %id8(&req.ceremony_id),
+                why = "the claimed start is outside this clock's tolerance",
+                "cer.witness.declined"
+            );
+            return None;
+        }
         let latency = req
             .channels
             .iter()
             .any(|c| c.kind == ChannelKind::Latency && c.result == ChannelResult::Pass);
-        self.witnessing = Some(req.clone());
-        Some(3 | if latency { 4 } else { 0 })
+        let flags = 3 | if latency { 4 } else { 0 };
+        let mut evicted = false;
+        if self.witnessing.len() >= crate::sequence::PENDING_WITNESS_REQUESTS {
+            let oldest = self
+                .witnessing
+                .iter()
+                .min_by_key(|(_, w)| w.request.started_at)
+                .map(|(k, _)| *k);
+            if let Some(k) = oldest {
+                self.witnessing.remove(&k);
+                evicted = true;
+            }
+        }
+        tracing::info!(
+            target: "cer",
+            ceremony = %id8(&req.ceremony_id),
+            flags,
+            evicted,
+            held = self.witnessing.len() + 1,
+            "cer.witness.answered"
+        );
+        self.witnessing.insert(
+            req.ceremony_id,
+            crate::sequence::Witnessing {
+                request: req.clone(),
+                flags,
+                observed: Vec::new(),
+            },
+        );
+        Some(flags)
     }
 
     pub fn back_pointers(&self) -> Vec<Txid> {
-        self.archive.next_back_pointers()
+        let back = self.archive.next_back_pointers();
+        tracing::debug!(target: "cer", count = back.len(), "cer.back_pointers");
+        back
     }
 
     /// Step 7, as proposer: the body everyone will sign.  Responses from
@@ -1173,7 +1420,12 @@ impl Client {
             record::retention_value(r0),
             record::integrity_value(false, 0),
             record::retention_value(r1),
-            record::proximity_value(&channels, a.strongest.ok_or(Abort::NoProximity)?.code()),
+            record::proximity_value(
+                &channels,
+                a.strongest
+                    .ok_or_else(|| abort("propose", Abort::NoProximity))?
+                    .code(),
+            ),
         ];
         let set = disclosures(values, salts);
         let mut responses = a.responses.clone();
@@ -1187,6 +1439,13 @@ impl Client {
             responses,
             root: disclosure_root(&set),
         };
+        tracing::info!(
+            target: "cer",
+            witnesses = proposal.witnesses.len(),
+            responses = proposal.responses.len(),
+            ms = self.since_begin_ms(),
+            "cer.propose"
+        );
         Ok((proposal, set))
     }
 
@@ -1203,7 +1462,7 @@ impl Client {
     ) -> Result<Vec<u8>, Abort> {
         let me = self.keyhash();
         if proposal.root != disclosure_root(set) {
-            return Err(Abort::RootMismatch);
+            return Err(abort("review_and_sign", Abort::RootMismatch));
         }
         self.check_back(proposal, back)?;
         let held = self.subject.responses.clone();
@@ -1213,10 +1472,17 @@ impl Client {
             .map(|a| a.my_nominees.clone())
             .unwrap_or_default();
         participant_check(&me, proposal, &mine, &held, self.device.notifier.as_ref())
-            .map_err(Abort::Refused)?;
-        Ok(self
+            .map_err(|r| abort("review_and_sign", Abort::Refused(r)))?;
+        let entries = self
             .signer()?
-            .sign_entries(aad::ENVELOPE, &proposal.body(back)))
+            .sign_entries(aad::ENVELOPE, &proposal.body(back));
+        tracing::info!(
+            target: "cer",
+            role = "participant",
+            signers = proposal.signers().len(),
+            "cer.review"
+        );
+        Ok(entries)
     }
 
     /// As witness: sign the ceremony I accepted, and only that one.
@@ -1225,14 +1491,23 @@ impl Client {
         proposal: &Proposal,
         back: &[Vec<Txid>],
     ) -> Result<Vec<u8>, Abort> {
-        let w = self.witnessing.as_ref().ok_or(Abort::NotActive)?;
-        if w.started_at != proposal.started_at || w.participants != proposal.participants {
-            return Err(Abort::NotActive);
+        if !self.witnessing.values().any(|w| {
+            w.request.started_at == proposal.started_at
+                && w.request.participants == proposal.participants
+        }) {
+            return Err(abort("witness_sign", Abort::NotActive));
         }
         self.check_back(proposal, back)?;
-        Ok(self
+        let entries = self
             .signer()?
-            .sign_entries(aad::ENVELOPE, &proposal.body(back)))
+            .sign_entries(aad::ENVELOPE, &proposal.body(back));
+        tracing::info!(
+            target: "cer",
+            role = "witness",
+            signers = proposal.signers().len(),
+            "cer.review"
+        );
+        Ok(entries)
     }
 
     fn check_back(&self, proposal: &Proposal, back: &[Vec<Txid>]) -> Result<(), Abort> {
@@ -1243,7 +1518,7 @@ impl Client {
             .position(|s| *s == me)
             .ok_or(Abort::NotActive)?;
         if back.get(pos) != Some(&self.archive.next_back_pointers()) {
-            return Err(Abort::BackPointers);
+            return Err(abort("check_back", Abort::BackPointers));
         }
         Ok(())
     }
@@ -1251,6 +1526,12 @@ impl Client {
     /// Drop the ceremony under way without a record: nothing sealed is
     /// filed, the seed is gone with it.
     pub fn abandon(&mut self) {
+        tracing::info!(
+            target: "cer",
+            active = self.active.is_some(),
+            ms = self.since_begin_ms(),
+            "cer.abandon"
+        );
         self.active = None;
         self.subject.responses.clear();
     }
@@ -1264,13 +1545,29 @@ impl Client {
         envelope: &[u8],
         set: Option<&DisclosureSet>,
     ) -> Result<Txid, Abort> {
-        let rec = Record::parse(envelope).map_err(Abort::Record)?;
-        verify::envelope(&self.known, envelope).map_err(|e| Abort::Record(e.to_string()))?;
+        let rec = Record::parse(envelope).map_err(|e| abort("finalize", Abort::Record(e)))?;
+        verify::envelope(&self.known, envelope)
+            .map_err(|e| abort("finalize", Abort::Record(e.to_string())))?;
         let txid = rec.txid;
         let finalized_at = rec.effective;
-        self.archive.append(rec.clone()).map_err(Abort::Record)?;
+        let parts = rec.participants();
+        let signers = rec.signers.len();
+        self.archive
+            .append(rec.clone())
+            .map_err(|e| abort("finalize", Abort::Record(e)))?;
         self.store.records.insert(txid, envelope.to_vec());
-        if let Some(a) = self.active.take() {
+        // the ceremony closes only where this record is its own: a witness
+        // in a ceremony of its own at the same time keeps that one
+        let mine = parts.contains(&self.keyhash());
+        tracing::info!(
+            target: "cer",
+            txid = %id8(&txid),
+            signers,
+            mine,
+            ms = self.since_begin_ms(),
+            "cer.finalize"
+        );
+        if let Some(a) = self.active.take_if(|_| mine) {
             if let Some(sealed) = a.sealed {
                 self.store.sealed.insert(txid, sealed);
             }
@@ -1290,7 +1587,10 @@ impl Client {
             self.subject.responses.clear();
             self.refresh_acquaintance();
         }
-        self.witnessing = None;
+        // witnessed and done: the ceremony this record closes is no
+        // longer pending
+        self.witnessing
+            .retain(|_, w| !w.request.participants.iter().all(|p| parts.contains(p)));
         // the record goes up to be flooded, whether this client was a
         // participant or a witness: a witness holds it and its signature
         // is in it, so it is as much the witness's to propagate
@@ -2301,12 +2601,18 @@ impl Client {
         }
         let keys = self.payload.keys.one_time_keys(n, &mut fresh);
         self.payload.pool_reported += n;
+        tracing::info!(target: "pay", minted = n, "pay.bundle.restock");
         vec![Msg::StockOneTime(keys)]
     }
 
     /// The serving node reports how many one-time keys remain, or that
     /// none do: below the threshold the pool is replenished at once.
     pub fn on_pool_report(&mut self, remaining: usize) -> Vec<Msg> {
+        if remaining == 0 {
+            tracing::warn!(target: "pay", "pay.bundle.pool_exhausted");
+        } else {
+            tracing::debug!(target: "pay", remaining, "pay.bundle.pool");
+        }
         self.payload.pool_reported = remaining;
         if remaining < self.payload.cfg.replenish_below {
             self.restock()
@@ -2326,6 +2632,14 @@ impl Client {
         bytes: &[u8],
     ) -> Result<Vec<Msg>, PayloadError> {
         if Some(to) == self.payload.serving {
+            tracing::debug!(
+                target: "pay",
+                kind = crate::diag::kind_name(kind),
+                to = %id8(&to),
+                path = "transport",
+                bytes = bytes.len(),
+                "pay.send"
+            );
             return Ok(vec![Msg::Transport(bytes.to_vec())]);
         }
         let plaintext = payload::wrap(kind, bytes);
@@ -2367,6 +2681,21 @@ impl Client {
                 to, device, nonce,
             )));
         }
+        if tracing::event_enabled!(target: "pay", tracing::Level::DEBUG) {
+            let requested = out
+                .iter()
+                .filter(|m| matches!(m, Msg::PrekeyRequest(_)))
+                .count();
+            tracing::debug!(
+                target: "pay",
+                kind = crate::diag::kind_name(kind),
+                to = %id8(&to),
+                bytes = bytes.len(),
+                sent = out.len() - requested,
+                requested,
+                "pay.send"
+            );
+        }
         Ok(out)
     }
 
@@ -2386,7 +2715,16 @@ impl Client {
     }
 
     fn route(&self, to: Keyhash, bytes: Vec<u8>, device: [u8; 32]) -> Msg {
-        if self.device.direct.reachable(&to) {
+        let direct = self.device.direct.reachable(&to);
+        tracing::debug!(
+            target: "pay",
+            to = %id8(&to),
+            device = %id8(&device),
+            path = if direct { "direct" } else { "relay" },
+            bytes = bytes.len(),
+            "pay.route"
+        );
+        if direct {
             Msg::Payload { to, bytes, device }
         } else {
             Msg::Relay { to, bytes, device }
@@ -2443,27 +2781,49 @@ impl Client {
     /// sends what was waiting.
     pub fn take_prekey_reply(&mut self, bytes: &[u8]) -> Result<Vec<Msg>, String> {
         if let Ok(replies) = decode_batch_reply(bytes) {
+            let (mut offered, mut kept) = (0usize, 0usize);
             for r in replies {
                 // one bundle per device (`wire-format.md` §7.8), each kept
                 // under the device it names
                 for b in &r.bundles {
+                    offered += 1;
                     if let Ok(p) = payload::read_bundle(&self.known, b) {
                         self.payload.sessions.prefetch(p);
+                        kept += 1;
                     }
                 }
             }
+            tracing::info!(target: "pay", reply = "batch", offered, kept, "pay.bundle");
             return Ok(Vec::new());
         }
         let r = PrekeyReply::decode(bytes)?;
         let Some((to, device)) = self.payload.outstanding.remove(&r.nonce) else {
             // a reusable-only reply: the bundles are kept, and nothing opens
+            let mut kept = 0usize;
             for b in &r.bundles {
                 if let Ok(p) = payload::read_bundle(&self.known, b) {
                     self.payload.sessions.prefetch(p);
+                    kept += 1;
                 }
             }
+            tracing::info!(
+                target: "pay",
+                reply = "reusable",
+                offered = r.bundles.len(),
+                kept,
+                "pay.bundle"
+            );
             return Ok(Vec::new());
         };
+        tracing::info!(
+            target: "pay",
+            reply = "one_time",
+            to = %id8(&to),
+            device = %id8(&device),
+            bundle = !r.bundles.is_empty(),
+            one_time = r.one_time.is_some(),
+            "pay.bundle"
+        );
         let their = match r.bundles.first() {
             Some(b) => {
                 let p = payload::read_bundle(&self.known, b)?;
@@ -2653,34 +3013,57 @@ impl Client {
     /// a key grant to the grant handler, a late response beside its record,
     /// application payload to the application.
     pub fn receive_payload(&mut self, from: Keyhash, bytes: &[u8]) -> Result<Dispatched, String> {
+        let out = self.receive_payload_in(from, bytes);
+        match &out {
+            Ok(d) => tracing::info!(
+                target: "pay",
+                from = %id8(&from),
+                bytes = bytes.len(),
+                dispatched = %crate::diag::dispatched(d),
+                "pay.receive"
+            ),
+            Err(why) => tracing::warn!(
+                target: "pay",
+                from = %id8(&from),
+                bytes = bytes.len(),
+                %why,
+                "pay.error"
+            ),
+        }
+        out
+    }
+
+    fn receive_payload_in(&mut self, from: Keyhash, bytes: &[u8]) -> Result<Dispatched, String> {
         let random = self.device.random.clone();
         let mut fresh = |out: &mut [u8]| random.fill(out);
-        let plaintext =
-            match self
-                .payload
-                .sessions
-                .receive(&mut self.payload.keys, from, bytes, &mut fresh)
-            {
-                Ok(p) => p,
-                Err(e) => {
-                    // Nothing is opened and nothing dispatched under a name
-                    // this client cannot give the message.  Where the binding
-                    // is merely absent, it is asked for: the peer's next
-                    // attempt is attributable, and this one is not recovered.
-                    if matches!(e, payload::PayloadError::NoBundle) {
-                        self.payload.wanted.insert(from);
-                    }
-                    if matches!(
-                        e,
-                        payload::PayloadError::NotTheSender | payload::PayloadError::NoBundle
-                    ) {
-                        self.device
-                            .notifier
-                            .notify(Notice::PayloadUnattributable { from });
-                    }
-                    return Err(e.to_string());
+        let me = self.keyhash();
+        let plaintext = match self.payload.sessions.receive(
+            &mut self.payload.keys,
+            &me,
+            from,
+            bytes,
+            &mut fresh,
+        ) {
+            Ok(p) => p,
+            Err(e) => {
+                // Nothing is opened and nothing dispatched under a name
+                // this client cannot give the message.  Where the binding
+                // is merely absent, it is asked for: the peer's next
+                // attempt is attributable, and this one is not recovered.
+                if matches!(e, payload::PayloadError::NoBundle) {
+                    self.payload.wanted.insert(from);
                 }
-            };
+                if matches!(
+                    e,
+                    payload::PayloadError::NotTheSender | payload::PayloadError::NoBundle
+                ) {
+                    self.device
+                        .notifier
+                        .notify(Notice::PayloadUnattributable { from });
+                }
+                return Err(e.to_string());
+            }
+        };
         let (kind, inner) = payload::unwrap(&plaintext)?;
         Ok(match kind {
             payload::KIND_KEY_GRANT => Dispatched::Grant(self.take_grant(from, &inner)),
@@ -2707,6 +3090,12 @@ impl Client {
             payload::KIND_ARCHIVE_REQUEST => self.serve_archive(from, &inner),
             payload::KIND_ARCHIVE_REPLY => {
                 Dispatched::Fetched(self.take_archive_reply(from, &inner))
+            }
+            // the ceremony's conversation (`wire-format.md` §7.10.1): into
+            // the ceremony's own state, as a participant or a witness, with
+            // what the step owes in answer put in the outbox
+            k @ payload::KIND_CONSENT_REQUEST..=payload::KIND_RECORD => {
+                Dispatched::Conversation(self.converse_in(from, k, &inner))
             }
             _ => Dispatched::Application(inner),
         })
@@ -2872,6 +3261,18 @@ impl Harness {
     }
 
     fn send(&mut self, from: Keyhash, to: Keyhash, msg: Msg) -> Msg {
+        // the event names what moved and how much of it, never the bytes.
+        // The log beneath keeps the message itself for the tests' path
+        // assertions (which bytes reached whom): harness state, in process,
+        // and rendered by nothing.
+        tracing::debug!(
+            target: "harness",
+            from = %id8(&from),
+            to = %id8(&to),
+            msg = crate::diag::msg(&msg),
+            bytes = msg.payload().len(),
+            "harness.send"
+        );
         self.log.push(Sent {
             from,
             to,

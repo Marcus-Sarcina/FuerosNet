@@ -96,13 +96,22 @@ impl SealedStore {
     /// start**; falling quietly to plaintext is the one thing this must
     /// never do.
     fn over(platform: &Platform) -> Result<Arc<dyn crate::device::Storage>, Refused> {
+        // the platform's storage with the diagnostic events on it: name,
+        // size and outcome of each read and write, never the bytes
+        let under: Arc<dyn crate::device::Storage> =
+            Arc::new(crate::diag::TracedStorage(platform.storage.clone()));
         if platform.custody.unsealed() {
-            return Ok(platform.storage.clone());
+            tracing::info!(target: "platform", state = "unsealed", "platform.custody");
+            return Ok(under);
         }
         let key: [u8; 32] = match platform.custody.key() {
-            Some(k) => k.try_into().map_err(|k: Vec<u8>| {
-                Refused::new(format!("a storage key is 32 bytes, not {}", k.len()))
-            })?,
+            Some(k) => {
+                // present or not, and never the key
+                tracing::info!(target: "platform", state = "present", "platform.custody");
+                k.try_into().map_err(|k: Vec<u8>| {
+                    Refused::new(format!("a storage key is 32 bytes, not {}", k.len()))
+                })?
+            }
             None => {
                 let mut drawn = platform.random.fill(32);
                 let minted = <[u8; 32]>::try_from(drawn.as_slice());
@@ -112,6 +121,7 @@ impl SealedStore {
                     use zeroize::Zeroize;
                     let kept = minted.is_ok() && platform.custody.keep(drawn.clone());
                     drawn.zeroize();
+                    tracing::info!(target: "platform", state = "created", kept, "platform.custody");
                     let Ok(k) = minted else {
                         return Err(Refused::new("the platform's random source came up short"));
                     };
@@ -125,10 +135,7 @@ impl SealedStore {
                 }
             }
         };
-        Ok(Arc::new(SealedStore {
-            under: platform.storage.clone(),
-            key,
-        }))
+        Ok(Arc::new(SealedStore { under, key }))
     }
 }
 
@@ -295,6 +302,57 @@ pub struct Consented {
 pub struct Nominees {
     pub mine: Vec<Id>,
     pub theirs: Vec<Id>,
+}
+
+/// Where the ceremony's conversation stands on the end-to-end path
+/// (`wire-format.md` §7.10.1), for the shell to decide its next step.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct Progress {
+    /// Whether this side proposes: the initiator does.
+    pub proposer: bool,
+    /// Queries issued and not yet answered.
+    pub queries_outstanding: u32,
+    /// Nominees that will attest.
+    pub attesting: Vec<Id>,
+    /// Nominees that declined.
+    pub declined: Vec<Id>,
+    /// Signers whose back-pointers are held.
+    pub back_from: Vec<Id>,
+    /// Whether the counterparty's gathered responses are held.
+    pub their_responses: bool,
+    /// Whether the body is out, or has been shown.
+    pub proposed: bool,
+    /// Signers whose entries are held, at the proposer.
+    pub signed: Vec<Id>,
+    /// Signers that refused, at the proposer.
+    pub refused: Vec<Id>,
+}
+
+impl Progress {
+    fn of(p: &rhtn_client::sequence::Progress) -> Progress {
+        let ids = |v: &[Keyhash]| v.iter().map(id_of).collect();
+        Progress {
+            proposer: p.proposer,
+            queries_outstanding: p.queries_outstanding as u32,
+            attesting: p
+                .answered
+                .iter()
+                .filter(|(_, f)| f.is_some())
+                .map(|(k, _)| id_of(k))
+                .collect(),
+            declined: p
+                .answered
+                .iter()
+                .filter(|(_, f)| f.is_none())
+                .map(|(k, _)| id_of(k))
+                .collect(),
+            back_from: ids(&p.back_from),
+            their_responses: p.their_responses,
+            proposed: p.proposed,
+            signed: ids(&p.signed),
+            refused: ids(&p.refused),
+        }
+    }
 }
 
 /// An infrastructure node this client can reach directly, with the
@@ -522,6 +580,29 @@ impl Participant {
 }
 
 impl Participant {
+    /// One step of the conversation (`wire-format.md` §7.10.1): taken on
+    /// the client, carried by the courier, and the state written, since
+    /// the ratchets advanced and a restart that lost them could not read
+    /// the replies.
+    fn converse<F>(&self, step: F) -> Result<(), Refused>
+    where
+        F: FnOnce(
+                &mut rhtn_client::ceremony::Client,
+            )
+                -> Result<Vec<rhtn_client::ceremony::Msg>, rhtn_client::ceremony::Abort>
+            + Send
+            + 'static,
+    {
+        let msgs = self
+            .handle
+            .with_blocking(step)
+            .map_err(|a| Refused::new(format!("{a:?}")))?;
+        self.net.carry(msgs)?;
+        self.save()
+    }
+}
+
+impl Participant {
     /// Start the kernel's own maintenance clock ([`MAINTAIN_EVERY`]).
     fn schedule(&self) {
         let (h, st) = (self.handle.clone(), self.storage.clone());
@@ -548,63 +629,66 @@ impl Participant {
         known: Vec<Vec<u8>>,
         platform: Arc<Platform>,
     ) -> Result<Participant, Refused> {
-        if seeds.len() != 64 {
-            return Err(Refused::new(format!(
-                "an identity is 64 bytes of seed, not {}",
-                seeds.len()
-            )));
-        }
-        let (ed, pq): ([u8; 32], [u8; 32]) = (
-            seeds[..32].try_into().unwrap(),
-            seeds[32..].try_into().unwrap(),
-        );
-        // the crossing copy goes as soon as it is read [2026-09-30]: it is
-        // the identity, and freed memory keeps no keys (design §3). What
-        // the caller holds is the caller's; this side's copy is not left
-        // in the heap for whatever allocates next
-        {
-            use zeroize::Zeroize;
-            let mut seeds = seeds;
-            seeds.zeroize();
-        }
-        let ids: Result<Vec<rhtn_crypto::Identity>, Refused> = known
-            .iter()
-            .map(|k| {
-                rhtn_crypto::Identity::from_key_material(k)
-                    .ok_or_else(|| Refused::new("a known identity is not a KeyMaterial array"))
+        crate::diag::install(platform.diagnostics.clone());
+        crate::diag::call("start", || {
+            if seeds.len() != 64 {
+                return Err(Refused::new(format!(
+                    "an identity is 64 bytes of seed, not {}",
+                    seeds.len()
+                )));
+            }
+            let (ed, pq): ([u8; 32], [u8; 32]) = (
+                seeds[..32].try_into().unwrap(),
+                seeds[32..].try_into().unwrap(),
+            );
+            // the crossing copy goes as soon as it is read [2026-09-30]: it is
+            // the identity, and freed memory keeps no keys (design §3). What
+            // the caller holds is the caller's; this side's copy is not left
+            // in the heap for whatever allocates next
+            {
+                use zeroize::Zeroize;
+                let mut seeds = seeds;
+                seeds.zeroize();
+            }
+            let ids: Result<Vec<rhtn_crypto::Identity>, Refused> = known
+                .iter()
+                .map(|k| {
+                    rhtn_crypto::Identity::from_key_material(k)
+                        .ok_or_else(|| Refused::new("a known identity is not a KeyMaterial array"))
+                })
+                .collect();
+            let ids = ids?;
+            // this key twice, from the same seeds: the transport needs one and
+            // the client never leaves the thread that holds the other
+            let me = Arc::new(rhtn_crypto::SigningIdentity::from_seeds(&ed, &pq));
+            // the nonces this client's submissions carry come from the
+            // platform's random source, which is the only one there is
+            let random = platform.random.clone();
+            let nonce: Arc<dyn Fn() -> [u8; 16] + Send + Sync> =
+                Arc::new(move || nonce_drawn(random.as_ref()));
+            let net = Net::new(Party::of(me), pins_for(&ids), nonce)?;
+            let known = ids.clone();
+            // the storage this run persists through: the platform's, with the
+            // kernel's sealing on it per the platform's declared custody
+            let storage = SealedStore::over(&platform)?;
+            let reachable = net.reachable();
+            let handle = Handle::spawn(move || {
+                let me = rhtn_crypto::SigningIdentity::from_seeds(&ed, &pq);
+                // the client's route reads the same set the direct socket fills
+                let direct: std::rc::Rc<dyn DirectPath> = std::rc::Rc::new(reachable);
+                Client::new(me, known, Config::default(), platform.device(direct))
             })
-            .collect();
-        let ids = ids?;
-        // this key twice, from the same seeds: the transport needs one and
-        // the client never leaves the thread that holds the other
-        let me = Arc::new(rhtn_crypto::SigningIdentity::from_seeds(&ed, &pq));
-        // the nonces this client's submissions carry come from the
-        // platform's random source, which is the only one there is
-        let random = platform.random.clone();
-        let nonce: Arc<dyn Fn() -> [u8; 16] + Send + Sync> =
-            Arc::new(move || nonce_drawn(random.as_ref()));
-        let net = Net::new(Party::of(me), pins_for(&ids), nonce)?;
-        let known = ids.clone();
-        // the storage this run persists through: the platform's, with the
-        // kernel's sealing on it per the platform's declared custody
-        let storage = SealedStore::over(&platform)?;
-        let reachable = net.reachable();
-        let handle = Handle::spawn(move || {
-            let me = rhtn_crypto::SigningIdentity::from_seeds(&ed, &pq);
-            // the client's route reads the same set the direct socket fills
-            let direct: std::rc::Rc<dyn DirectPath> = std::rc::Rc::new(reachable);
-            Client::new(me, known, Config::default(), platform.device(direct))
+            .map_err(Refused::new)?;
+            let p = Participant {
+                handle,
+                net,
+                storage,
+                seeds: Some([ed, pq]),
+            };
+            p.open()?;
+            p.schedule();
+            Ok(p)
         })
-        .map_err(Refused::new)?;
-        let p = Participant {
-            handle,
-            net,
-            storage,
-            seeds: Some([ed, pq]),
-        };
-        p.open()?;
-        p.schedule();
-        Ok(p)
     }
 
     /// The connection as a screen shows it: detached, attached to the
@@ -612,21 +696,25 @@ impl Participant {
     /// Changes also arrive as [`Event::Connection`].
     #[must_use]
     pub fn status(&self) -> Status {
-        self.net.status()
+        crate::diag::call_plain("status", || self.net.status())
     }
 
     /// Whether a direct path to `peer` is held now: status a screen may
     /// show, never a choice — the path order is fixed (design §12.6.3).
     #[must_use]
     pub fn direct_to(&self, peer: Id) -> bool {
-        keyhash(&peer).is_some_and(|k| self.net.direct_to(&k))
+        crate::diag::call_plain("direct_to", || {
+            keyhash(&peer).is_some_and(|k| self.net.direct_to(&k))
+        })
     }
 
     /// Sweep the serving node's catalog (`light-client-requirements.md`
     /// §8) and keep what it served; [`Participant::catalog`] shows it.
     pub fn browse(&self) -> Result<(), Refused> {
-        self.net.browse(&self.handle)?;
-        self.save()
+        crate::diag::call("browse", || {
+            self.net.browse(&self.handle)?;
+            self.save()
+        })
     }
 
     /// The catalog as this client holds it: every entry served, with the
@@ -634,27 +722,29 @@ impl Participant {
     /// incomplete or stale.
     #[must_use]
     pub fn catalog(&self) -> Vec<CatalogItem> {
-        self.handle.with_blocking(|c| {
-            c.catalog
-                .portions
-                .iter()
-                .flat_map(|(node, p)| {
-                    p.entries.values().filter_map(move |b| {
-                        let e = rhtn_archive::catalog::CatalogEntry::parse(b).ok()?;
-                        Some(CatalogItem {
-                            node: id_of(node),
-                            resource: id_of(&e.resource),
-                            owner: id_of(&e.owner),
-                            service_type: e.service_type,
-                            instance: e.instance,
-                            endpoint: e.endpoint,
-                            data_practice: e.data_practice,
-                            truncated: p.truncated,
-                            stale: p.stale,
+        crate::diag::call_plain("catalog", || {
+            self.handle.with_blocking(|c| {
+                c.catalog
+                    .portions
+                    .iter()
+                    .flat_map(|(node, p)| {
+                        p.entries.values().filter_map(move |b| {
+                            let e = rhtn_archive::catalog::CatalogEntry::parse(b).ok()?;
+                            Some(CatalogItem {
+                                node: id_of(node),
+                                resource: id_of(&e.resource),
+                                owner: id_of(&e.owner),
+                                service_type: e.service_type,
+                                instance: e.instance,
+                                endpoint: e.endpoint,
+                                data_practice: e.data_practice,
+                                truncated: p.truncated,
+                                stale: p.stale,
+                            })
                         })
                     })
-                })
-                .collect()
+                    .collect()
+            })
         })
     }
 
@@ -662,16 +752,18 @@ impl Participant {
     /// kernel after every step that changes what a restart would need,
     /// and by a shell at any point it is about to be suspended.
     pub fn save(&self) -> Result<(), Refused> {
-        let bytes = self.handle.with_blocking(|c| c.durable());
-        let took = self.storage.write(STATE.into(), bytes)
-            && self.storage.write(SIBLINGS.into(), self.net.siblings());
-        if took {
-            Ok(())
-        } else {
-            Err(Refused::new(
-                "the platform's storage did not take the state",
-            ))
-        }
+        crate::diag::call("save", || {
+            let bytes = self.handle.with_blocking(|c| c.durable());
+            let took = self.storage.write(STATE.into(), bytes)
+                && self.storage.write(SIBLINGS.into(), self.net.siblings());
+            if took {
+                Ok(())
+            } else {
+                Err(Refused::new(
+                    "the platform's storage did not take the state",
+                ))
+            }
+        })
     }
 
     /// Everything a device loss would take away, enveloped under a key
@@ -680,12 +772,16 @@ impl Participant {
     /// credential.  The payload material and the sessions are this
     /// device's own and do not travel.
     pub fn export_backup(&self, secret: Vec<u8>) -> Result<Vec<u8>, Refused> {
-        // the copy that crosses into the closure is wiped with it; the one
-        // the backup assembles is wiped when its contents drop
-        let seeds = zeroize::Zeroizing::new(self.seeds);
-        self.handle
-            .with_blocking(move |c| c.export(*seeds, rhtn_client::backup::Cost::default(), &secret))
-            .map_err(|e| Refused::new(format!("{e:?}")))
+        crate::diag::call("export_backup", || {
+            // the copy that crosses into the closure is wiped with it; the one
+            // the backup assembles is wiped when its contents drop
+            let seeds = zeroize::Zeroizing::new(self.seeds);
+            self.handle
+                .with_blocking(move |c| {
+                    c.export(*seeds, rhtn_client::backup::Cost::default(), &secret)
+                })
+                .map_err(|e| Refused::new(format!("{e:?}")))
+        })
     }
 
     /// Open a backup, scan it, and install it into a client that holds
@@ -693,20 +789,22 @@ impl Participant {
     /// client already has an archive, or where the backup does not
     /// authenticate whole.
     pub fn restore_backup(&self, blob: Vec<u8>, secret: Vec<u8>) -> Result<Restored, Refused> {
-        let r = self
-            .handle
-            .with_blocking(move |c| {
-                let (contents, discarded) =
-                    c.import(&blob, &secret).map_err(|e| format!("{e:?}"))?;
-                let records = c.install(contents)?;
-                Ok::<_, String>(Restored {
-                    records: records as u64,
-                    discarded: (discarded.captures + discarded.seeds) as u64,
+        crate::diag::call("restore_backup", || {
+            let r = self
+                .handle
+                .with_blocking(move |c| {
+                    let (contents, discarded) =
+                        c.import(&blob, &secret).map_err(|e| format!("{e:?}"))?;
+                    let records = c.install(contents)?;
+                    Ok::<_, String>(Restored {
+                        records: records as u64,
+                        discarded: (discarded.captures + discarded.seeds) as u64,
+                    })
                 })
-            })
-            .map_err(Refused::new)?;
-        self.save()?;
-        Ok(r)
+                .map_err(Refused::new)?;
+            self.save()?;
+            Ok(r)
+        })
     }
 
     /// Start as a device that holds no seed (design §23.3): a desktop or a
@@ -727,65 +825,68 @@ impl Participant {
         known: Vec<Vec<u8>>,
         platform: Arc<Platform>,
     ) -> Result<Participant, Refused> {
-        let public = rhtn_crypto::Identity::from_key_material(&key_material)
-            .ok_or_else(|| Refused::new("the identity is not a KeyMaterial array"))?;
-        let seed: [u8; 32] = transport_seed
-            .as_slice()
-            .try_into()
-            .map_err(|_| Refused::new("a transport key is 32 bytes of seed"))?;
-        let ids: Result<Vec<rhtn_crypto::Identity>, Refused> = known
-            .iter()
-            .map(|k| {
-                rhtn_crypto::Identity::from_key_material(k)
-                    .ok_or_else(|| Refused::new("a known identity is not a KeyMaterial array"))
+        crate::diag::install(platform.diagnostics.clone());
+        crate::diag::call("start_delegated", || {
+            let public = rhtn_crypto::Identity::from_key_material(&key_material)
+                .ok_or_else(|| Refused::new("the identity is not a KeyMaterial array"))?;
+            let seed: [u8; 32] = transport_seed
+                .as_slice()
+                .try_into()
+                .map_err(|_| Refused::new("a transport key is 32 bytes of seed"))?;
+            let ids: Result<Vec<rhtn_crypto::Identity>, Refused> = known
+                .iter()
+                .map(|k| {
+                    rhtn_crypto::Identity::from_key_material(k)
+                        .ok_or_else(|| Refused::new("a known identity is not a KeyMaterial array"))
+                })
+                .collect();
+            let mut ids = ids?;
+            if !ids.iter().any(|i| i.keyhash == public.keyhash) {
+                ids.push(public.clone());
+            }
+            let clock = platform.clock.clone();
+            let credential = rhtn_transport::tls::Credential::from_seed(&seed, public.keyhash)
+                .with_clock(Arc::new(move || clock.now_ms() / 1000));
+            if delegations.is_empty() {
+                return Err(Refused::new(
+                    "a delegated device starts with at least one delegation",
+                ));
+            }
+            for d in &delegations {
+                credential
+                    .add(&ids, d)
+                    .map_err(|e| Refused::new(format!("delegation refused: {e}")))?;
+            }
+            let credential = Arc::new(credential);
+            let presented = credential.public();
+            let random = platform.random.clone();
+            let nonce: Arc<dyn Fn() -> [u8; 16] + Send + Sync> =
+                Arc::new(move || nonce_drawn(random.as_ref()));
+            let net = Net::new(Party::of(credential), pins_for(&ids), nonce)?;
+            let known = ids.clone();
+            let storage = SealedStore::over(&platform)?;
+            let reachable = net.reachable();
+            let handle = Handle::spawn(move || {
+                let direct: std::rc::Rc<dyn DirectPath> = std::rc::Rc::new(reachable);
+                Client::delegated(
+                    public,
+                    presented,
+                    known,
+                    Config::default(),
+                    platform.device(direct),
+                )
             })
-            .collect();
-        let mut ids = ids?;
-        if !ids.iter().any(|i| i.keyhash == public.keyhash) {
-            ids.push(public.clone());
-        }
-        let clock = platform.clock.clone();
-        let credential = rhtn_transport::tls::Credential::from_seed(&seed, public.keyhash)
-            .with_clock(Arc::new(move || clock.now_ms() / 1000));
-        if delegations.is_empty() {
-            return Err(Refused::new(
-                "a delegated device starts with at least one delegation",
-            ));
-        }
-        for d in &delegations {
-            credential
-                .add(&ids, d)
-                .map_err(|e| Refused::new(format!("delegation refused: {e}")))?;
-        }
-        let credential = Arc::new(credential);
-        let presented = credential.public();
-        let random = platform.random.clone();
-        let nonce: Arc<dyn Fn() -> [u8; 16] + Send + Sync> =
-            Arc::new(move || nonce_drawn(random.as_ref()));
-        let net = Net::new(Party::of(credential), pins_for(&ids), nonce)?;
-        let known = ids.clone();
-        let storage = SealedStore::over(&platform)?;
-        let reachable = net.reachable();
-        let handle = Handle::spawn(move || {
-            let direct: std::rc::Rc<dyn DirectPath> = std::rc::Rc::new(reachable);
-            Client::delegated(
-                public,
-                presented,
-                known,
-                Config::default(),
-                platform.device(direct),
-            )
+            .map_err(Refused::new)?;
+            let p = Participant {
+                handle,
+                net,
+                storage,
+                seeds: None,
+            };
+            p.open()?;
+            p.schedule();
+            Ok(p)
         })
-        .map_err(Refused::new)?;
-        let p = Participant {
-            handle,
-            net,
-            storage,
-            seeds: None,
-        };
-        p.open()?;
-        p.schedule();
-        Ok(p)
     }
 
     /// Start from a backup and its passphrase alone, on a replacement
@@ -802,29 +903,33 @@ impl Participant {
         known: Vec<Vec<u8>>,
         platform: Arc<Platform>,
     ) -> Result<Participant, Refused> {
-        if platform.storage.read(STATE.into()).is_some() {
-            return Err(Refused::new(
-                "this device already holds a state; a restore replaces nothing",
-            ));
-        }
-        let contents = rhtn_client::backup::import(&blob, &secret)
-            .map_err(|e| Refused::new(format!("the backup does not open: {e:?}")))?;
-        let Some([ed, pq]) = contents.seeds else {
-            return Err(Refused::new(
-                "the backup carries no seeds: it was made on a device holding none",
-            ));
-        };
-        let mut seeds = ed.to_vec();
-        seeds.extend_from_slice(&pq);
-        let p = Participant::start(seeds, known, platform)?;
-        p.restore_backup(blob, secret)?;
-        Ok(p)
+        crate::diag::call("start_from_backup", || {
+            if platform.storage.read(STATE.into()).is_some() {
+                return Err(Refused::new(
+                    "this device already holds a state; a restore replaces nothing",
+                ));
+            }
+            let contents = rhtn_client::backup::import(&blob, &secret)
+                .map_err(|e| Refused::new(format!("the backup does not open: {e:?}")))?;
+            let Some([ed, pq]) = contents.seeds else {
+                return Err(Refused::new(
+                    "the backup carries no seeds: it was made on a device holding none",
+                ));
+            };
+            let mut seeds = ed.to_vec();
+            seeds.extend_from_slice(&pq);
+            let p = Participant::start(seeds, known, platform)?;
+            p.restore_backup(blob, secret)?;
+            Ok(p)
+        })
     }
 
     /// Whether this device holds the seed.
     #[must_use]
     pub fn holds_seed(&self) -> bool {
-        self.handle.with_blocking(|c| c.holds_seed())
+        crate::diag::call_plain("holds_seed", || {
+            self.handle.with_blocking(|c| c.holds_seed())
+        })
     }
 
     /// On the ceremony device: a run of `count` contiguous 48-hour
@@ -836,16 +941,18 @@ impl Participant {
         not_before: u64,
         count: u32,
     ) -> Result<Vec<Vec<u8>>, Refused> {
-        let key: [u8; 32] = transport_key
-            .as_slice()
-            .try_into()
-            .map_err(|_| Refused::new("a transport key is 32 bytes"))?;
-        if count == 0 {
-            return Err(Refused::new("a run is at least one delegation"));
-        }
-        self.handle
-            .with_blocking(move |c| c.delegate_run(&key, not_before, count as usize))
-            .map_err(|e| Refused::new(format!("{e:?}")))
+        crate::diag::call("delegate", || {
+            let key: [u8; 32] = transport_key
+                .as_slice()
+                .try_into()
+                .map_err(|_| Refused::new("a transport key is 32 bytes"))?;
+            if count == 0 {
+                return Err(Refused::new("a run is at least one delegation"));
+            }
+            self.handle
+                .with_blocking(move |c| c.delegate_run(&key, not_before, count as usize))
+                .map_err(|e| Refused::new(format!("{e:?}")))
+        })
     }
 
     /// The transport key this device presents: the public half the
@@ -853,7 +960,7 @@ impl Participant {
     /// the identity's classical member.
     #[must_use]
     pub fn presented_key(&self) -> Vec<u8> {
-        self.net.presented_key().to_vec()
+        crate::diag::call_plain("presented_key", || self.net.presented_key().to_vec())
     }
 
     /// On a device holding no seed: the unsigned bundle over its own
@@ -862,33 +969,39 @@ impl Participant {
     /// holds the seed.
     #[must_use]
     pub fn bundle_to_sign(&self) -> Option<Vec<u8>> {
-        self.handle.with_blocking(|c| c.bundle_to_sign())
+        crate::diag::call_plain("bundle_to_sign", || {
+            self.handle.with_blocking(|c| c.bundle_to_sign())
+        })
     }
 
     /// On the ceremony device: sign a bundle payload another device of
     /// this identity made.
     pub fn sign_device_bundle(&self, payload: Vec<u8>) -> Result<Vec<u8>, Refused> {
-        self.handle
-            .with_blocking(move |c| c.sign_device_bundle(&payload))
-            .map_err(|e| Refused::new(format!("{e:?}")))
+        crate::diag::call("sign_device_bundle", || {
+            self.handle
+                .with_blocking(move |c| c.sign_device_bundle(&payload))
+                .map_err(|e| Refused::new(format!("{e:?}")))
+        })
     }
 
     /// On a device holding no seed: take the bundle the ceremony device
     /// signed, and publish it where a serving node is attached.
     pub fn take_signed_bundle(&self, signed: Vec<u8>) -> Result<(), Refused> {
-        let msg = self
-            .handle
-            .with_blocking(move |c| c.take_signed_bundle(&signed))
-            .map_err(|e| Refused::new(format!("{e:?}")))?;
-        if let Some(m) = msg {
-            self.net.carry(vec![m])?;
-        }
-        self.save()
+        crate::diag::call("take_signed_bundle", || {
+            let msg = self
+                .handle
+                .with_blocking(move |c| c.take_signed_bundle(&signed))
+                .map_err(|e| Refused::new(format!("{e:?}")))?;
+            if let Some(m) = msg {
+                self.net.carry(vec![m])?;
+            }
+            self.save()
+        })
     }
 
     /// This client's own identity.
     pub fn me(&self) -> Id {
-        id_of(&self.handle.me())
+        crate::diag::call_plain("me", || id_of(&self.handle.me()))
     }
 
     /// This client's own public identity as `KeyMaterial`
@@ -900,7 +1013,9 @@ impl Participant {
     /// this returns being that keyhash (`wire-format.md` §3.4). Public in
     /// its entirety: it is the half of the identity meant to travel.
     pub fn material(&self) -> Vec<u8> {
-        self.handle.with_blocking(|c| c.public.key_material())
+        crate::diag::call_plain("material", || {
+            self.handle.with_blocking(|c| c.public.key_material())
+        })
     }
 
     /// Which payload construction this build runs, for the shell to show
@@ -908,9 +1023,11 @@ impl Participant {
     /// wording is the shell's, in its user's own language.
     #[must_use]
     pub fn payload_construction(&self) -> crate::types::Construction {
-        self.handle
-            .with_blocking(|c| c.payload_construction())
-            .into()
+        crate::diag::call_plain("payload_construction", || {
+            self.handle
+                .with_blocking(|c| c.payload_construction())
+                .into()
+        })
     }
 
     /// Begin a ceremony with `counterparty`, nominating witnesses from
@@ -925,13 +1042,15 @@ impl Participant {
         nominees: Vec<Id>,
         initiator: bool,
     ) -> Result<(), Refused> {
-        let cp =
-            keyhash(&counterparty).ok_or_else(|| Refused::new("a counterparty is 32 bytes"))?;
-        let noms: Option<Vec<Keyhash>> = nominees.iter().map(|n| keyhash(n)).collect();
-        let noms = noms.ok_or_else(|| Refused::new("a nominee is 32 bytes"))?;
-        self.handle
-            .with_blocking(move |c| c.begin(cp, noms, initiator).map(|_| ()))
-            .map_err(|a| Refused::new(format!("{a:?}")))
+        crate::diag::call("begin", || {
+            let cp =
+                keyhash(&counterparty).ok_or_else(|| Refused::new("a counterparty is 32 bytes"))?;
+            let noms: Option<Vec<Keyhash>> = nominees.iter().map(|n| keyhash(n)).collect();
+            let noms = noms.ok_or_else(|| Refused::new("a nominee is 32 bytes"))?;
+            self.handle
+                .with_blocking(move |c| c.begin(cp, noms, initiator).map(|_| ()))
+                .map_err(|a| Refused::new(format!("{a:?}")))
+        })
     }
 
     /// **The first QR this device shows** (`wire-format.md` §14.3.1): its
@@ -941,28 +1060,34 @@ impl Participant {
     /// channel buys is that each party read it off a screen it was looking
     /// at, which costs being there — the cost design §1 meters.
     pub fn optical_contribution(&self) -> Result<Vec<u8>, Refused> {
-        self.handle
-            .with_blocking(|c| c.optical_contribution())
-            .map_err(|a| Refused::new(format!("{a:?}")))
+        crate::diag::call("optical_contribution", || {
+            self.handle
+                .with_blocking(|c| c.optical_contribution())
+                .map_err(|a| Refused::new(format!("{a:?}")))
+        })
     }
 
     /// The counterparty's first QR, as the camera read it. Who showed it
     /// comes back; a QR naming anybody but this ceremony's counterparty is
     /// refused.
     pub fn take_optical(&self, bytes: Vec<u8>) -> Result<Id, Refused> {
-        self.handle.with_blocking(move |c| {
-            c.take_optical(&bytes)
-                .map(|k| k.to_vec())
-                .map_err(|a| Refused::new(format!("{a:?}")))
+        crate::diag::call("take_optical", || {
+            self.handle.with_blocking(move |c| {
+                c.take_optical(&bytes)
+                    .map(|k| k.to_vec())
+                    .map_err(|a| Refused::new(format!("{a:?}")))
+            })
         })
     }
 
     /// **The second QR**: the ceremony-id this device computed from the two
     /// contributions (§14.3.1, design §7.5.2).
     pub fn transcript_confirm(&self) -> Result<Vec<u8>, Refused> {
-        self.handle
-            .with_blocking(|c| c.transcript_confirm())
-            .map_err(|a| Refused::new(format!("{a:?}")))
+        crate::diag::call("transcript_confirm", || {
+            self.handle
+                .with_blocking(|c| c.transcript_confirm())
+                .map_err(|a| Refused::new(format!("{a:?}")))
+        })
     }
 
     /// The counterparty's second QR, checked against this device's own:
@@ -970,10 +1095,12 @@ impl Participant {
     /// stops"*. The agreed ceremony-id comes back, which is what both
     /// devices name the ceremony by from here on.
     pub fn take_transcript(&self, bytes: Vec<u8>) -> Result<Id, Refused> {
-        self.handle.with_blocking(move |c| {
-            c.take_transcript(&bytes)
-                .map(|id| id.to_vec())
-                .map_err(|a| Refused::new(format!("{a:?}")))
+        crate::diag::call("take_transcript", || {
+            self.handle.with_blocking(move |c| {
+                c.take_transcript(&bytes)
+                    .map(|id| id.to_vec())
+                    .map_err(|a| Refused::new(format!("{a:?}")))
+            })
         })
     }
 
@@ -984,20 +1111,24 @@ impl Participant {
     /// Each is an opaque string to move on whatever bearer the two devices
     /// have, in the order given. A shell reads none of them.
     pub fn intent_carriage(&self) -> Result<Vec<Vec<u8>>, Refused> {
-        self.handle
-            .with_blocking(|c| c.intent_carriage())
-            .map_err(|a| Refused::new(format!("{a:?}")))
+        crate::diag::call("intent_carriage", || {
+            self.handle
+                .with_blocking(|c| c.intent_carriage())
+                .map_err(|a| Refused::new(format!("{a:?}")))
+        })
     }
 
     /// The counterparty's carriage set, in the order it arrived. How many
     /// continuations were accepted comes back: fewer than were sent is a
     /// shorter bundle and a smaller *n*, never a failed ceremony (§5.4).
     pub fn take_intent_carriage(&self, from: Id, carriage: Vec<Vec<u8>>) -> Result<u32, Refused> {
-        let f = keyhash(&from).ok_or_else(|| Refused::new("a party is 32 bytes"))?;
-        self.handle.with_blocking(move |c| {
-            c.take_intent_carriage(f, &carriage)
-                .map(|n| n as u32)
-                .map_err(|a| Refused::new(format!("{a:?}")))
+        crate::diag::call("take_intent_carriage", || {
+            let f = keyhash(&from).ok_or_else(|| Refused::new("a party is 32 bytes"))?;
+            self.handle.with_blocking(move |c| {
+                c.take_intent_carriage(f, &carriage)
+                    .map(|n| n as u32)
+                    .map_err(|a| Refused::new(format!("{a:?}")))
+            })
         })
     }
 
@@ -1006,34 +1137,42 @@ impl Participant {
     /// (`light-client-requirements.md` §1.3), and what to draw comes from
     /// [`Participant::achieved`] rather than from running them again.
     pub fn proximity_carriage(&self) -> Result<Vec<u8>, Refused> {
-        self.handle
-            .with_blocking(|c| c.proximity_carriage())
-            .map_err(|a| Refused::new(format!("{a:?}")))
+        crate::diag::call("proximity_carriage", || {
+            self.handle
+                .with_blocking(|c| c.proximity_carriage())
+                .map_err(|a| Refused::new(format!("{a:?}")))
+        })
     }
 
     /// The counterparty's outcomes, anchored to this ceremony or refused.
     /// What they measured is their claim and this side weighs it (design
     /// §1.3 item 4).
     pub fn take_proximity(&self, bytes: Vec<u8>) -> Result<(), Refused> {
-        self.handle
-            .with_blocking(move |c| c.take_proximity(&bytes))
-            .map_err(|a| Refused::new(format!("{a:?}")))
+        crate::diag::call("take_proximity", || {
+            self.handle
+                .with_blocking(move |c| c.take_proximity(&bytes))
+                .map_err(|a| Refused::new(format!("{a:?}")))
+        })
     }
 
     /// Candidates for the direct path on the ceremony's channels
     /// (§14.3.2, design §12.6.3), anchored.
     pub fn candidate_carriage(&self, candidates: Vec<u8>) -> Result<Vec<u8>, Refused> {
-        self.handle
-            .with_blocking(move |c| c.candidate_carriage(candidates))
-            .map_err(|a| Refused::new(format!("{a:?}")))
+        crate::diag::call("candidate_carriage", || {
+            self.handle
+                .with_blocking(move |c| c.candidate_carriage(candidates))
+                .map_err(|a| Refused::new(format!("{a:?}")))
+        })
     }
 
     /// The counterparty's candidates, anchored or refused. An address to
     /// dial comes back, not evidence of anything.
     pub fn take_candidate_carriage(&self, bytes: Vec<u8>) -> Result<Vec<u8>, Refused> {
-        self.handle
-            .with_blocking(move |c| c.take_candidate_carriage(&bytes))
-            .map_err(|a| Refused::new(format!("{a:?}")))
+        crate::diag::call("take_candidate_carriage", || {
+            self.handle
+                .with_blocking(move |c| c.take_candidate_carriage(&bytes))
+                .map_err(|a| Refused::new(format!("{a:?}")))
+        })
     }
 
     /// This client's capture key as the anchored message the bearer
@@ -1044,9 +1183,11 @@ impl Participant {
     /// kernel held of it is wiped as the call returns, and the shell wipes
     /// its copy once the bearer has carried it.
     pub fn capture_key_carriage(&self) -> Result<Vec<u8>, Refused> {
-        self.handle
-            .with_blocking(|c| c.capture_key_carriage().map(|k| k.to_vec()))
-            .map_err(|a| Refused::new(format!("{a:?}")))
+        crate::diag::call("capture_key_carriage", || {
+            self.handle
+                .with_blocking(|c| c.capture_key_carriage().map(|k| k.to_vec()))
+                .map_err(|a| Refused::new(format!("{a:?}")))
+        })
     }
 
     /// The counterparty's capture key, anchored to this ceremony or
@@ -1054,58 +1195,66 @@ impl Participant {
     /// carried bytes are wiped here once read; the shell wipes the key it
     /// is handed once the capture has taken it.
     pub fn take_capture_key_carriage(&self, bytes: Vec<u8>) -> Result<Vec<u8>, Refused> {
-        let bytes = zeroize::Zeroizing::new(bytes);
-        self.handle
-            .with_blocking(move |c| c.take_capture_key_carriage(&bytes).map(|k| k.to_vec()))
-            .map_err(|a| Refused::new(format!("{a:?}")))
+        crate::diag::call("take_capture_key_carriage", || {
+            let bytes = zeroize::Zeroizing::new(bytes);
+            self.handle
+                .with_blocking(move |c| c.take_capture_key_carriage(&bytes).map(|k| k.to_vec()))
+                .map_err(|a| Refused::new(format!("{a:?}")))
+        })
     }
 
     /// What the channels achieved, for the screen: read from the ceremony,
     /// not measured again.
     #[must_use]
     pub fn achieved(&self) -> Vec<Achieved> {
-        self.handle.with_blocking(|c| {
-            c.achieved()
-                .into_iter()
-                .map(|o| Achieved {
-                    channel: Channel::of(o.kind),
-                    outcome: outcome_of(o.result),
-                    resolution_m: o.resolution_m,
-                })
-                .collect()
+        crate::diag::call_plain("achieved", || {
+            self.handle.with_blocking(|c| {
+                c.achieved()
+                    .into_iter()
+                    .map(|o| Achieved {
+                        channel: Channel::of(o.kind),
+                        outcome: outcome_of(o.result),
+                        resolution_m: o.resolution_m,
+                    })
+                    .collect()
+            })
         })
     }
 
     /// The verifiers this client selected of the counterparty's pool, and
     /// the basis each was eligible on (`wire-format.md` §5.5).
     pub fn select_verifiers(&self) -> Result<Vec<Selected>, Refused> {
-        self.handle
-            .with_blocking(|c| c.select_verifiers())
-            .map(|picked| {
-                picked
-                    .into_iter()
-                    .map(|(v, b)| Selected {
-                        verifier: id_of(&v),
-                        basis: b as u32,
-                    })
-                    .collect()
-            })
-            .map_err(|a| Refused::new(format!("{a:?}")))
+        crate::diag::call("select_verifiers", || {
+            self.handle
+                .with_blocking(|c| c.select_verifiers())
+                .map(|picked| {
+                    picked
+                        .into_iter()
+                        .map(|(v, b)| Selected {
+                            verifier: id_of(&v),
+                            basis: b as u32,
+                        })
+                        .collect()
+                })
+                .map_err(|a| Refused::new(format!("{a:?}")))
+        })
     }
 
     /// The responses gathered about the counterparty so far, as a screen
     /// shows them.
     pub fn responses(&self) -> Vec<Response> {
-        self.handle.with_blocking(|c| {
-            c.responses()
-                .iter()
-                .filter_map(|r| rhtn_client::query::Response::read(r).ok())
-                .map(|r| Response {
-                    verifier: id_of(&r.verifier),
-                    subject: id_of(&r.subject),
-                    answer: Answer::of(r.verdict),
-                })
-                .collect()
+        crate::diag::call_plain("responses", || {
+            self.handle.with_blocking(|c| {
+                c.responses()
+                    .iter()
+                    .filter_map(|r| rhtn_client::query::Response::read(r).ok())
+                    .map(|r| Response {
+                        verifier: id_of(&r.verifier),
+                        subject: id_of(&r.subject),
+                        answer: Answer::of(r.verdict),
+                    })
+                    .collect()
+            })
         })
     }
 
@@ -1117,12 +1266,15 @@ impl Participant {
     /// Consenting is also what mints the grant, where one is owed: the
     /// two are one act of the subject, so they leave together.
     pub fn consent(&self, query: Vec<u8>) -> Result<Option<Consented>, Refused> {
-        self.handle.with_blocking(move |c| {
-            let q = rhtn_client::query::VerificationQuery::decode(&query).map_err(Refused::new)?;
-            Ok(c.consent(&q).map(|(consent, grant)| Consented {
-                consent,
-                grant: grant.map(|g| g.encode()),
-            }))
+        crate::diag::call("consent", || {
+            self.handle.with_blocking(move |c| {
+                let q =
+                    rhtn_client::query::VerificationQuery::decode(&query).map_err(Refused::new)?;
+                Ok(c.consent(&q).map(|(consent, grant)| Consented {
+                    consent,
+                    grant: grant.map(|g| g.encode()),
+                }))
+            })
         })
     }
 
@@ -1142,23 +1294,26 @@ impl Participant {
         addresses: Vec<String>,
         population: Vec<Id>,
     ) -> Result<Attached, Refused> {
-        let node = keyhash(&serving).ok_or_else(|| Refused::new("a serving node is 32 bytes"))?;
-        let pop: Option<Vec<Keyhash>> = population.iter().map(|p| keyhash(p)).collect();
-        let pop = pop.ok_or_else(|| Refused::new("a population member is 32 bytes"))?;
-        let addrs: Result<Vec<SocketAddr>, Refused> = addresses
-            .iter()
-            .map(|a| {
-                a.parse::<SocketAddr>()
-                    .map_err(|_| Refused::new(format!("{a} is not an address")))
-            })
-            .collect();
-        let addrs = addrs?;
-        if addrs.is_empty() {
-            return Err(Refused::new("a serving node needs at least one address"));
-        }
-        let a = self.net.attach(&self.handle, node, &addrs, pop)?;
-        self.save()?;
-        Ok(a)
+        crate::diag::call("attach", || {
+            let node =
+                keyhash(&serving).ok_or_else(|| Refused::new("a serving node is 32 bytes"))?;
+            let pop: Option<Vec<Keyhash>> = population.iter().map(|p| keyhash(p)).collect();
+            let pop = pop.ok_or_else(|| Refused::new("a population member is 32 bytes"))?;
+            let addrs: Result<Vec<SocketAddr>, Refused> = addresses
+                .iter()
+                .map(|a| {
+                    a.parse::<SocketAddr>()
+                        .map_err(|_| Refused::new(format!("{a} is not an address")))
+                })
+                .collect();
+            let addrs = addrs?;
+            if addrs.is_empty() {
+                return Err(Refused::new("a serving node needs at least one address"));
+            }
+            let a = self.net.attach(&self.handle, node, &addrs, pop)?;
+            self.save()?;
+            Ok(a)
+        })
     }
 
     /// Close the session cleanly and keep everything else: what a shell
@@ -1166,9 +1321,11 @@ impl Participant {
     /// for this device from now rather than after three missed intervals.
     /// The state is written first.
     pub fn detach(&self) -> Result<(), Refused> {
-        self.save()?;
-        self.net.detach();
-        Ok(())
+        crate::diag::call("detach", || {
+            self.save()?;
+            self.net.detach();
+            Ok(())
+        })
     }
 
     /// Routine maintenance: rotate a prekey whose interval has elapsed,
@@ -1179,8 +1336,10 @@ impl Participant {
     /// Refused where nothing is attached: maintenance is a conversation
     /// with a node, and there is no node.
     pub fn maintain(&self) -> Result<(), Refused> {
-        self.net.maintain(&self.handle)?;
-        self.save()
+        crate::diag::call("maintain", || {
+            self.net.maintain(&self.handle)?;
+            self.save()
+        })
     }
 
     /// Send `bytes` of `kind` to `to`, over the direct path where one is
@@ -1190,11 +1349,13 @@ impl Participant {
     /// other kinds are the client's own and the adaptors answer them
     /// without a shell seeing them (design §14.2.4.6).
     pub fn send(&self, to: Id, kind: u64, bytes: Vec<u8>) -> Result<(), Refused> {
-        let peer = keyhash(&to).ok_or_else(|| Refused::new("a recipient is 32 bytes"))?;
-        self.net.send(peer, kind, bytes)?;
-        // the ratchet advanced: a restart that lost this could not read
-        // the reply
-        self.save()
+        crate::diag::call("send", || {
+            let peer = keyhash(&to).ok_or_else(|| Refused::new("a recipient is 32 bytes"))?;
+            self.net.send(peer, kind, bytes)?;
+            // the ratchet advanced: a restart that lost this could not read
+            // the reply
+            self.save()
+        })
     }
 
     /// Where this client asks to be rung when something is waiting
@@ -1203,7 +1364,7 @@ impl Participant {
     /// **The endpoint is the user's choice** and this side never obtains
     /// one: the shell hands over what the person's own service gave it.
     pub fn wake(&self, endpoint: Option<Wake>) -> Result<(), Refused> {
-        self.net.wake(endpoint)
+        crate::diag::call("wake", || self.net.wake(endpoint))
     }
 
     /// The next thing that arrived, or nothing within `timeout_ms`.
@@ -1211,12 +1372,14 @@ impl Participant {
     /// **What crosses outward is what to draw.** Payload has already been
     /// decrypted here and the ciphertext never leaves.
     pub fn next_event(&self, timeout_ms: u64) -> Option<Event> {
-        let e = self.net.next_event(timeout_ms)?;
-        // what arrived advanced a ratchet; the event is the shell's either
-        // way, and a storage that did not take the state is reported at
-        // the next call that can carry a refusal
-        let _ = self.save();
-        Some(e)
+        crate::diag::call_plain("next_event", || {
+            let e = self.net.next_event(timeout_ms)?;
+            // what arrived advanced a ratchet; the event is the shell's either
+            // way, and a storage that did not take the state is reported at
+            // the next call that can carry a refusal
+            let _ = self.save();
+            Some(e)
+        })
     }
 
     /// What this client holds of its own neighbourhood, and what it can
@@ -1228,23 +1391,25 @@ impl Participant {
     /// either (`light-client-requirements.md` §4.2).
     #[must_use]
     pub fn places(&self) -> Vec<Placed> {
-        self.handle.with_blocking(|c| {
-            c.horizon
-                .resolvable()
-                .into_iter()
-                .flat_map(|n| {
-                    c.horizon
-                        .places_of(&n)
-                        .into_iter()
-                        .map(move |p| Placed {
-                            node: id_of(&n),
-                            anchor: id_of(&p.anchor),
-                            path: p.path.clone(),
-                            nibbles: p.nibbles,
-                        })
-                        .collect::<Vec<_>>()
-                })
-                .collect()
+        crate::diag::call_plain("places", || {
+            self.handle.with_blocking(|c| {
+                c.horizon
+                    .resolvable()
+                    .into_iter()
+                    .flat_map(|n| {
+                        c.horizon
+                            .places_of(&n)
+                            .into_iter()
+                            .map(move |p| Placed {
+                                node: id_of(&n),
+                                anchor: id_of(&p.anchor),
+                                path: p.path.clone(),
+                                nibbles: p.nibbles,
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .collect()
+            })
         })
     }
 
@@ -1257,74 +1422,90 @@ impl Participant {
     /// patron is what is down (`light-client-requirements.md` §4.2).
     #[must_use]
     pub fn reachable(&self) -> Vec<ReachableNode> {
-        self.handle.with_blocking(|c| {
-            c.horizon
-                .reachable_infra()
-                .into_iter()
-                .map(|(n, points)| {
-                    let addrs = points
-                        .iter()
-                        .filter_map(|p| rhtn_transport::session::NetworkPoint::decode_bytes(p).ok())
-                        .map(|p| p.socket().to_string())
-                        .collect();
-                    ReachableNode {
-                        node: id_of(&n),
-                        addresses: addrs,
-                    }
-                })
-                .collect()
+        crate::diag::call_plain("reachable", || {
+            self.handle.with_blocking(|c| {
+                c.horizon
+                    .reachable_infra()
+                    .into_iter()
+                    .map(|(n, points)| {
+                        let addrs = points
+                            .iter()
+                            .filter_map(|p| {
+                                rhtn_transport::session::NetworkPoint::decode_bytes(p).ok()
+                            })
+                            .map(|p| p.socket().to_string())
+                            .collect();
+                        ReachableNode {
+                            node: id_of(&n),
+                            addresses: addrs,
+                        }
+                    })
+                    .collect()
+            })
         })
     }
 
     /// Everybody this client can place without asking anyone.
     #[must_use]
     pub fn resolvable(&self) -> Vec<Id> {
-        self.handle
-            .with_blocking(|c| c.horizon.resolvable().iter().map(id_of).collect())
+        crate::diag::call_plain("resolvable", || {
+            self.handle
+                .with_blocking(|c| c.horizon.resolvable().iter().map(id_of).collect())
+        })
     }
 
     /// How many adoption or sibling edges away a party is, or nothing
     /// beyond the horizon.
     #[must_use]
     pub fn distance(&self, node: Id) -> Option<u32> {
-        let k = keyhash(&node)?;
-        self.handle
-            .with_blocking(move |c| c.horizon.distance(&k).map(|d| d as u32))
+        crate::diag::call_plain("distance", || {
+            let k = keyhash(&node)?;
+            self.handle
+                .with_blocking(move |c| c.horizon.distance(&k).map(|d| d as u32))
+        })
     }
 
     /// Whether this client holds the transaction `txid` names, in its own
     /// archive or in what its patron propagated.
     #[must_use]
     pub fn holds(&self, txid: Id) -> bool {
-        let Some(t) = keyhash(&txid) else {
-            return false;
-        };
-        self.handle
-            .with_blocking(move |c| c.horizon.holds(&t) || c.archive.get(&t).is_some())
+        crate::diag::call_plain("holds", || {
+            let Some(t) = keyhash(&txid) else {
+                return false;
+            };
+            self.handle
+                .with_blocking(move |c| c.horizon.holds(&t) || c.archive.get(&t).is_some())
+        })
     }
 
     /// How many records the copy is a fold over.
     #[must_use]
     pub fn records(&self) -> u64 {
-        self.handle.with_blocking(|c| c.horizon.records() as u64)
+        crate::diag::call_plain("records", || {
+            self.handle.with_blocking(|c| c.horizon.records() as u64)
+        })
     }
 
     /// Drop what has left the horizon, and say how many parties were
     /// forgotten (`light-client-requirements.md` §4.2).
     pub fn prune(&self) -> u64 {
-        self.handle.with_blocking(|c| c.horizon.prune() as u64)
+        crate::diag::call_plain("prune", || {
+            self.handle.with_blocking(|c| c.horizon.prune() as u64)
+        })
     }
 
     /// Whether a session with a serving node is held right now.
     pub fn attached(&self) -> bool {
-        self.net.session().is_some()
+        crate::diag::call_plain("attached", || self.net.session().is_some())
     }
 
     /// The ceremony this client is in, once both intents have crossed.
     #[must_use]
     pub fn ceremony(&self) -> Option<Id> {
-        self.handle
-            .with_blocking(|c| c.ceremony_id().map(|i| i.to_vec()))
+        crate::diag::call_plain("ceremony", || {
+            self.handle
+                .with_blocking(|c| c.ceremony_id().map(|i| i.to_vec()))
+        })
     }
 
     /// Take what the counterparty's hardware achieved.
@@ -1334,10 +1515,12 @@ impl Participant {
     /// device passed and the other did not is a disagreement the record
     /// has to settle (`light-client-requirements.md` §1.3).
     pub fn take_channels(&self, theirs: Vec<Achieved>) -> Result<(), Refused> {
-        let ch: Vec<_> = theirs.iter().map(inward_channel).collect();
-        self.handle.with_blocking(move |c| {
-            c.take_channels(&ch)
-                .map_err(|a| Refused::new(format!("{a:?}")))
+        crate::diag::call("take_channels", || {
+            let ch: Vec<_> = theirs.iter().map(inward_channel).collect();
+            self.handle.with_blocking(move |c| {
+                c.take_channels(&ch)
+                    .map_err(|a| Refused::new(format!("{a:?}")))
+            })
         })
     }
 
@@ -1346,10 +1529,12 @@ impl Participant {
     /// wiped as the call returns; the bytes handed across are the shell's
     /// to wipe.
     pub fn capture_key(&self) -> Result<Vec<u8>, Refused> {
-        self.handle.with_blocking(|c| {
-            c.capture_key()
-                .map(|k| k.to_vec())
-                .map_err(|a| Refused::new(format!("{a:?}")))
+        crate::diag::call("capture_key", || {
+            self.handle.with_blocking(|c| {
+                c.capture_key()
+                    .map(|k| k.to_vec())
+                    .map_err(|a| Refused::new(format!("{a:?}")))
+            })
         })
     }
 
@@ -1360,24 +1545,28 @@ impl Participant {
     /// decryptable likeness of them.  The bytes the shell handed in are
     /// the shell's to wipe.
     pub fn capture(&self, their_key: Vec<u8>) -> Result<(), Refused> {
-        let their_key = zeroize::Zeroizing::new(their_key);
-        let k = their_key
-            .as_slice()
-            .try_into()
-            .map(zeroize::Zeroizing::<[u8; 32]>::new)
-            .map_err(|_| Refused::new("a capture key is 32 bytes"))?;
-        self.handle
-            .with_blocking(move |c| c.capture(k).map_err(|a| Refused::new(format!("{a:?}"))))
+        crate::diag::call("capture", || {
+            let their_key = zeroize::Zeroizing::new(their_key);
+            let k = their_key
+                .as_slice()
+                .try_into()
+                .map(zeroize::Zeroizing::<[u8; 32]>::new)
+                .map_err(|_| Refused::new("a capture key is 32 bytes"))?;
+            self.handle
+                .with_blocking(move |c| c.capture(k).map_err(|a| Refused::new(format!("{a:?}"))))
+        })
     }
 
     /// The query to put to one selected verifier (`wire-format.md` §5.5),
     /// encoded as the verifier will read it.
     pub fn query_for(&self, verifier: Id) -> Result<Vec<u8>, Refused> {
-        let v = keyhash(&verifier).ok_or_else(|| Refused::new("a verifier is 32 bytes"))?;
-        self.handle.with_blocking(move |c| {
-            c.query_for(v)
-                .map(|q| q.encode())
-                .map_err(|a| Refused::new(format!("{a:?}")))
+        crate::diag::call("query_for", || {
+            let v = keyhash(&verifier).ok_or_else(|| Refused::new("a verifier is 32 bytes"))?;
+            self.handle.with_blocking(move |c| {
+                c.query_for(v)
+                    .map(|q| q.encode())
+                    .map_err(|a| Refused::new(format!("{a:?}")))
+            })
         })
     }
 
@@ -1389,10 +1578,13 @@ impl Participant {
         consent: Vec<u8>,
         basis: u32,
     ) -> Result<Vec<u8>, Refused> {
-        let b = basis_of(basis)?;
-        self.handle.with_blocking(move |c| {
-            let q = rhtn_client::query::VerificationQuery::decode(&query).map_err(Refused::new)?;
-            Ok(c.request(&q, consent, b))
+        crate::diag::call("request", || {
+            let b = basis_of(basis)?;
+            self.handle.with_blocking(move |c| {
+                let q =
+                    rhtn_client::query::VerificationQuery::decode(&query).map_err(Refused::new)?;
+                Ok(c.request(&q, consent, b))
+            })
         })
     }
 
@@ -1402,33 +1594,39 @@ impl Participant {
     /// — and a refusal where the input is not evidence, since **no signed
     /// response is fabricated** for one.
     pub fn take_query(&self, from: Id, bytes: Vec<u8>) -> Result<Option<Answered>, Refused> {
-        let f = keyhash(&from).ok_or_else(|| Refused::new("a requester is 32 bytes"))?;
-        self.handle
-            .with_blocking(move |c| match c.take_query(f, &bytes) {
-                rhtn_client::verifier::QueryOutcome::Answered(a) => Ok(Some(answered_of(&a))),
-                rhtn_client::verifier::QueryOutcome::AwaitingGrant => Ok(None),
-                rhtn_client::verifier::QueryOutcome::Closed(why) => Err(Refused::new(why)),
-            })
+        crate::diag::call("take_query", || {
+            let f = keyhash(&from).ok_or_else(|| Refused::new("a requester is 32 bytes"))?;
+            self.handle
+                .with_blocking(move |c| match c.take_query(f, &bytes) {
+                    rhtn_client::verifier::QueryOutcome::Answered(a) => Ok(Some(answered_of(&a))),
+                    rhtn_client::verifier::QueryOutcome::AwaitingGrant => Ok(None),
+                    rhtn_client::verifier::QueryOutcome::Closed(why) => Err(Refused::new(why)),
+                })
+        })
     }
 
     /// Take a capture key released to this client as a verifier.
     pub fn take_grant(&self, from: Id, bytes: Vec<u8>) -> Result<Option<Answered>, Refused> {
-        let f = keyhash(&from).ok_or_else(|| Refused::new("a subject is 32 bytes"))?;
-        self.handle
-            .with_blocking(move |c| match c.take_grant(f, &bytes) {
-                rhtn_client::verifier::GrantOutcome::Answered(a) => Ok(Some(answered_of(&a))),
-                rhtn_client::verifier::GrantOutcome::Buffered
-                | rhtn_client::verifier::GrantOutcome::Ignored => Ok(None),
-                rhtn_client::verifier::GrantOutcome::Rejected(why) => Err(Refused::new(why)),
-            })
+        crate::diag::call("take_grant", || {
+            let f = keyhash(&from).ok_or_else(|| Refused::new("a subject is 32 bytes"))?;
+            self.handle
+                .with_blocking(move |c| match c.take_grant(f, &bytes) {
+                    rhtn_client::verifier::GrantOutcome::Answered(a) => Ok(Some(answered_of(&a))),
+                    rhtn_client::verifier::GrantOutcome::Buffered
+                    | rhtn_client::verifier::GrantOutcome::Ignored => Ok(None),
+                    rhtn_client::verifier::GrantOutcome::Rejected(why) => Err(Refused::new(why)),
+                })
+        })
     }
 
     /// Take a verifier's response about the counterparty, handed in by
     /// the shell; one that arrives on the end-to-end path is taken by the
     /// kernel and surfaces as [`crate::net::Event::Answered`].
     pub fn take_response(&self, bytes: Vec<u8>) -> Result<(), Refused> {
-        self.handle
-            .with_blocking(move |c| c.take_response(&bytes).map(|_| ()).map_err(Refused::new))
+        crate::diag::call("take_response", || {
+            self.handle
+                .with_blocking(move |c| c.take_response(&bytes).map(|_| ()).map_err(Refused::new))
+        })
     }
 
     /// Put a consented query to its verifier (`wire-format.md` §5.6): the
@@ -1437,34 +1635,40 @@ impl Participant {
     /// §12.6.3) — and the answer comes back as
     /// [`crate::net::Event::Answered`].
     pub fn put_query(&self, query: Vec<u8>, consent: Vec<u8>, basis: u32) -> Result<(), Refused> {
-        let req = self.request(query, consent, basis)?;
-        self.net.carry(vec![rhtn_client::ceremony::Msg::Query(req)])
+        crate::diag::call("put_query", || {
+            let req = self.request(query, consent, basis)?;
+            self.net.carry(vec![rhtn_client::ceremony::Msg::Query(req)])
+        })
     }
 
     /// The responses gathered so far, as they will sit in the body.
     #[must_use]
     pub fn gathered(&self) -> Vec<Vec<u8>> {
-        self.handle.with_blocking(|c| c.responses())
+        crate::diag::call_plain("gathered", || self.handle.with_blocking(|c| c.responses()))
     }
 
     /// Who each side nominated: this client's, then the counterparty's.
     #[must_use]
     pub fn nominees(&self) -> Nominees {
-        self.handle.with_blocking(|c| {
-            let (mine, theirs) = c.nominees();
-            Nominees {
-                mine: mine.iter().map(id_of).collect(),
-                theirs: theirs.iter().map(id_of).collect(),
-            }
+        crate::diag::call_plain("nominees", || {
+            self.handle.with_blocking(|c| {
+                let (mine, theirs) = c.nominees();
+                Nominees {
+                    mine: mine.iter().map(id_of).collect(),
+                    theirs: theirs.iter().map(id_of).collect(),
+                }
+            })
         })
     }
 
     /// What this client asks its nominees to witness.
     pub fn witness_ask(&self) -> Result<WitnessAsk, Refused> {
-        self.handle.with_blocking(|c| {
-            c.witness_request()
-                .map(|r| WitnessAsk::of(&r))
-                .map_err(|a| Refused::new(format!("{a:?}")))
+        crate::diag::call("witness_ask", || {
+            self.handle.with_blocking(|c| {
+                c.witness_request()
+                    .map(|r| WitnessAsk::of(&r))
+                    .map_err(|a| Refused::new(format!("{a:?}")))
+            })
         })
     }
 
@@ -1472,17 +1676,21 @@ impl Participant {
     /// sign under, or nothing where it declines.
     #[must_use]
     pub fn take_witness_ask(&self, ask: WitnessAsk) -> Option<u64> {
-        let Ok(r) = ask.inward() else { return None };
-        self.handle
-            .with_blocking(move |c| c.take_witness_request(&r))
+        crate::diag::call_plain("take_witness_ask", || {
+            let Ok(r) = ask.inward() else { return None };
+            self.handle
+                .with_blocking(move |c| c.take_witness_request(&r))
+        })
     }
 
     /// The back-pointers this client will put in its own signer entry
     /// (`wire-format.md` §3.1).
     #[must_use]
     pub fn back_pointers(&self) -> Vec<Vec<u8>> {
-        self.handle
-            .with_blocking(|c| c.back_pointers().iter().map(|t| t.to_vec()).collect())
+        crate::diag::call_plain("back_pointers", || {
+            self.handle
+                .with_blocking(|c| c.back_pointers().iter().map(|t| t.to_vec()).collect())
+        })
     }
 
     /// Propose the record, given the counterparty's responses and the
@@ -1493,24 +1701,28 @@ impl Participant {
         theirs: Vec<Vec<u8>>,
         witnesses: Vec<Witnessing>,
     ) -> Result<Proposal, Refused> {
-        let w: Result<Vec<_>, Refused> = witnesses.iter().map(|x| x.inward()).collect();
-        let w = w?;
-        self.handle.with_blocking(move |c| {
-            c.propose(theirs, w)
-                .map(|(p, set)| Proposal {
-                    proposed: Proposed::of(&p),
-                    revealed: revealed_of(&set),
-                })
-                .map_err(|a| Refused::new(format!("{a:?}")))
+        crate::diag::call("propose", || {
+            let w: Result<Vec<_>, Refused> = witnesses.iter().map(|x| x.inward()).collect();
+            let w = w?;
+            self.handle.with_blocking(move |c| {
+                c.propose(theirs, w)
+                    .map(|(p, set)| Proposal {
+                        proposed: Proposed::of(&p),
+                        revealed: revealed_of(&set),
+                    })
+                    .map_err(|a| Refused::new(format!("{a:?}")))
+            })
         })
     }
 
     /// The body every signer signs over, given each signer's back-pointers
     /// in signer order.
     pub fn body(&self, proposal: Proposed, back: Vec<Vec<Vec<u8>>>) -> Result<Vec<u8>, Refused> {
-        let p = proposal.inward()?;
-        let b = back_inward(&back)?;
-        Ok(p.body(&b))
+        crate::diag::call("body", || {
+            let p = proposal.inward()?;
+            let b = back_inward(&back)?;
+            Ok(p.body(&b))
+        })
     }
 
     /// Review a proposal as a participant and sign it, or refuse.
@@ -1524,12 +1736,14 @@ impl Participant {
         set: Vec<Revealed>,
         back: Vec<Vec<Vec<u8>>>,
     ) -> Result<Vec<u8>, Refused> {
-        let p = proposal.inward()?;
-        let d = revealed_inward(&set)?;
-        let b = back_inward(&back)?;
-        self.handle.with_blocking(move |c| {
-            c.review_and_sign(&p, &d, &b)
-                .map_err(|a| Refused::new(format!("{a:?}")))
+        crate::diag::call("review_and_sign", || {
+            let p = proposal.inward()?;
+            let d = revealed_inward(&set)?;
+            let b = back_inward(&back)?;
+            self.handle.with_blocking(move |c| {
+                c.review_and_sign(&p, &d, &b)
+                    .map_err(|a| Refused::new(format!("{a:?}")))
+            })
         })
     }
 
@@ -1539,11 +1753,61 @@ impl Participant {
         proposal: Proposed,
         back: Vec<Vec<Vec<u8>>>,
     ) -> Result<Vec<u8>, Refused> {
-        let p = proposal.inward()?;
-        let b = back_inward(&back)?;
-        self.handle.with_blocking(move |c| {
-            c.witness_sign(&p, &b)
-                .map_err(|a| Refused::new(format!("{a:?}")))
+        crate::diag::call("witness_sign", || {
+            let p = proposal.inward()?;
+            let b = back_inward(&back)?;
+            self.handle.with_blocking(move |c| {
+                c.witness_sign(&p, &b)
+                    .map_err(|a| Refused::new(format!("{a:?}")))
+            })
+        })
+    }
+
+    /// Open the ceremony's conversation on the end-to-end path
+    /// (`wire-format.md` §7.10.1): ask every nominee to witness and hand
+    /// over this signer's back-pointers, to the counterparty and every
+    /// witness either side nominated.  First after the capture, so the
+    /// witnesses observe what follows.
+    pub fn converse_open(&self) -> Result<(), Refused> {
+        crate::diag::call("converse_open", || self.converse(|c| c.converse_open()))
+    }
+
+    /// Select the counterparty's verifiers and put each query to the
+    /// counterparty for consent, kind 9 to the subject alone.  Consented,
+    /// each goes to its verifier from here and the answer arrives as
+    /// [`Event::Answered`].
+    pub fn converse_queries(&self) -> Result<(), Refused> {
+        crate::diag::call("converse_queries", || {
+            self.converse(|c| c.converse_queries())
+        })
+    }
+
+    /// Hand the proposer the responses gathered, kind 14: the side that
+    /// did not begin calls this once its queries are answered, or as many
+    /// as will be.  The proposer's call sends nothing.
+    pub fn converse_gathered(&self) -> Result<(), Refused> {
+        crate::diag::call("converse_gathered", || {
+            self.converse(|c| c.converse_gathered())
+        })
+    }
+
+    /// Propose the body from what arrived and show every signer, kind 16:
+    /// the initiator's call, once the counterparty's responses and the
+    /// witnesses' answers are in.  Refused, naming what is awaited, while
+    /// they are not; the signatures come back and the record goes out to
+    /// every signer from here.
+    pub fn converse_propose(&self) -> Result<(), Refused> {
+        crate::diag::call("converse_propose", || {
+            self.converse(|c| c.converse_propose())
+        })
+    }
+
+    /// Where the conversation stands, or nothing outside a ceremony.
+    #[must_use]
+    pub fn progress(&self) -> Option<Progress> {
+        crate::diag::call_plain("progress", || {
+            self.handle
+                .with_blocking(|c| c.progress().as_ref().map(Progress::of))
         })
     }
 
@@ -1553,12 +1817,14 @@ impl Participant {
     /// (`wire-format.md` §2.1).
     #[must_use]
     pub fn position_in(&self, anchor: Id) -> Option<Vec<u8>> {
-        let a = keyhash(&anchor)?;
-        self.handle.with_blocking(move |c| {
-            c.position_in(&a).map(|p| {
-                let mut out = Vec::new();
-                p.emit(&mut out);
-                out
+        crate::diag::call_plain("position_in", || {
+            let a = keyhash(&anchor)?;
+            self.handle.with_blocking(move |c| {
+                c.position_in(&a).map(|p| {
+                    let mut out = Vec::new();
+                    p.emit(&mut out);
+                    out
+                })
             })
         })
     }
@@ -1566,8 +1832,10 @@ impl Participant {
     /// Every subnet this client has a position in, its own first.
     #[must_use]
     pub fn anchors(&self) -> Vec<Id> {
-        self.handle
-            .with_blocking(|c| c.anchors().iter().map(id_of).collect())
+        crate::diag::call_plain("anchors", || {
+            self.handle
+                .with_blocking(|c| c.anchors().iter().map(id_of).collect())
+        })
     }
 
     /// As a patron: the adoption body putting `node` one hop below this
@@ -1584,67 +1852,75 @@ impl Participant {
         series: u32,
         node_back: Vec<Vec<u8>>,
     ) -> Result<Vec<u8>, Refused> {
-        let a = keyhash(&anchor).ok_or_else(|| Refused::new("an anchor is 32 bytes"))?;
-        let n = keyhash(&node).ok_or_else(|| Refused::new("a subordinate is 32 bytes"))?;
-        let p = keyhash(&presence)
-            .ok_or_else(|| Refused::new("a presence record is named by a 32-byte txid"))?;
-        let back = back_inward(&[node_back])?.remove(0);
-        self.handle.with_blocking(move |c| {
-            c.propose_adoption_in(
-                a,
-                n,
-                &back,
-                rhtn_client::ceremony::Adopting {
-                    evidence: rhtn_archive::tx::Evidence::Presence(p),
-                    series,
-                    presented_head: None,
-                    key_material: None,
-                },
-            )
-            .map_err(|e| Refused::new(format!("{e:?}")))
+        crate::diag::call("propose_adoption", || {
+            let a = keyhash(&anchor).ok_or_else(|| Refused::new("an anchor is 32 bytes"))?;
+            let n = keyhash(&node).ok_or_else(|| Refused::new("a subordinate is 32 bytes"))?;
+            let p = keyhash(&presence)
+                .ok_or_else(|| Refused::new("a presence record is named by a 32-byte txid"))?;
+            let back = back_inward(&[node_back])?.remove(0);
+            self.handle.with_blocking(move |c| {
+                c.propose_adoption_in(
+                    a,
+                    n,
+                    &back,
+                    rhtn_client::ceremony::Adopting {
+                        evidence: rhtn_archive::tx::Evidence::Presence(p),
+                        series,
+                        presented_head: None,
+                        key_material: None,
+                    },
+                )
+                .map_err(|e| Refused::new(format!("{e:?}")))
+            })
         })
     }
 
     /// Sign a body this client proposed or was shown, as its subject or
     /// its patron.
     pub fn sign_body(&self, body: Vec<u8>) -> Result<Vec<u8>, Refused> {
-        self.handle
-            .with_blocking(move |c| c.sign_body(&body))
-            .map_err(|e| Refused::new(format!("{e:?}")))
+        crate::diag::call("sign_body", || {
+            self.handle
+                .with_blocking(move |c| c.sign_body(&body))
+                .map_err(|e| Refused::new(format!("{e:?}")))
+        })
     }
 
     /// Take a finalized adoption this client signed.  Where it is an
     /// adoption of this client, it is also what tells it where it now
     /// sits.
     pub fn take_adoption(&self, envelope: Vec<u8>) -> Result<Id, Refused> {
-        let t = self.handle.with_blocking(move |c| {
-            c.take_adoption(&envelope)
-                .map(|t| t.to_vec())
-                .map_err(|e| Refused::new(format!("{e:?}")))
-        })?;
-        self.net.carry_outbox(&self.handle)?;
-        self.save()?;
-        Ok(t)
+        crate::diag::call("take_adoption", || {
+            let t = self.handle.with_blocking(move |c| {
+                c.take_adoption(&envelope)
+                    .map(|t| t.to_vec())
+                    .map_err(|e| Refused::new(format!("{e:?}")))
+            })?;
+            self.net.carry_outbox(&self.handle)?;
+            self.save()?;
+            Ok(t)
+        })
     }
 
     /// Take the finished record.  A participant is given the disclosures
     /// with it; a witness is not, and holds the record without them.
     pub fn finalize(&self, envelope: Vec<u8>, set: Option<Vec<Revealed>>) -> Result<Id, Refused> {
-        let d = match set {
-            None => None,
-            Some(s) => Some(revealed_inward(&s)?),
-        };
-        let t = self.handle.with_blocking(move |c| {
-            c.finalize(&envelope, d.as_ref())
-                .map(|t| t.to_vec())
-                .map_err(|a| Refused::new(format!("{a:?}")))
-        })?;
-        // **the record goes up as soon as it exists.** A ceremony that
-        // ended in a record nobody else will ever see did the work and
-        // none of the good.
-        self.net.carry_outbox(&self.handle)?;
-        self.save()?;
-        Ok(t)
+        crate::diag::call("finalize", || {
+            let d = match set {
+                None => None,
+                Some(s) => Some(revealed_inward(&s)?),
+            };
+            let t = self.handle.with_blocking(move |c| {
+                c.finalize(&envelope, d.as_ref())
+                    .map(|t| t.to_vec())
+                    .map_err(|a| Refused::new(format!("{a:?}")))
+            })?;
+            // **the record goes up as soon as it exists.** A ceremony that
+            // ended in a record nobody else will ever see did the work and
+            // none of the good.
+            self.net.carry_outbox(&self.handle)?;
+            self.save()?;
+            Ok(t)
+        })
     }
 }
 
@@ -1718,7 +1994,8 @@ fn outcome_of(r: rhtn_client::device::ChannelResult) -> ChannelOutcome {
 
 #[uniffi::export]
 impl Platform {
-    /// The platform's eight objects, handed over once.
+    /// The platform's nine objects, handed over once.  The ninth,
+    /// diagnostics, hears nothing from a releasable build.
     #[uniffi::constructor]
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -1730,9 +2007,18 @@ impl Platform {
         notices: Arc<dyn crate::device::Notices>,
         storage: Arc<dyn crate::device::Storage>,
         custody: Arc<dyn crate::device::Custody>,
+        diagnostics: Arc<dyn crate::device::Diagnostics>,
     ) -> Platform {
         platform(
-            proximity, camera, clock, random, operator, notices, storage, custody,
+            proximity,
+            camera,
+            clock,
+            random,
+            operator,
+            notices,
+            storage,
+            custody,
+            diagnostics,
         )
     }
 }
@@ -1748,6 +2034,7 @@ pub fn platform(
     notices: Arc<dyn crate::device::Notices>,
     storage: Arc<dyn crate::device::Storage>,
     custody: Arc<dyn crate::device::Custody>,
+    diagnostics: Arc<dyn crate::device::Diagnostics>,
 ) -> Platform {
     Platform {
         proximity,
@@ -1758,5 +2045,6 @@ pub fn platform(
         notices,
         storage,
         custody,
+        diagnostics,
     }
 }

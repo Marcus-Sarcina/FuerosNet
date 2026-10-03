@@ -81,6 +81,7 @@ fn describe(d: &Dispatched) -> String {
         Dispatched::Fetched(r) => format!("Fetched({r:?})"),
         Dispatched::Query { query, outcome } => format!("Query({query:?}, {outcome:?})"),
         Dispatched::Response(r) => format!("Response({r:?})"),
+        Dispatched::Conversation(c) => format!("Conversation({c})"),
     }
 }
 
@@ -1486,4 +1487,59 @@ fn a_replayed_initial_message_is_refused_and_the_live_session_stands() {
         e.contains("already received") || e.contains("one-time"),
         "a replay after a restart is refused too: {e}"
     );
+}
+
+/// Two peers open toward each other before either has read anything: each
+/// receives an initial while holding a fresh open of its own.  The session
+/// the lower keyhash opened stands at both ends, what either sent on the
+/// other before learning so still opens, and from then on one session
+/// carries both directions.
+// acceptance: SES-30
+#[test]
+fn two_opens_that_cross_settle_on_one_session_and_nothing_sent_meanwhile_is_lost() {
+    let mut n = net(&["w1"], &[("alice", "w1"), ("carol", "w1"), ("bob", "w1")]);
+    n.attach("bob");
+    n.attach("carol");
+    n.sweep("bob");
+    n.sweep("carol");
+    // no direct path either way, so everything queues at the node and
+    // each side reads the other's only when it collects
+    n.s.handles["carol"].reach.0.set(false);
+    n.s.handles["bob"].reach.0.set(false);
+    n.send("carol", "bob", "from carol, first");
+    n.send("bob", "carol", "from bob, first");
+    // and each says more on the session it opened, still unaware
+    n.send("carol", "bob", "from carol, second");
+    n.send("bob", "carol", "from bob, second");
+    // each reads the other's initial, which crosses its own open, and the
+    // message sent after it on the session that may not stand
+    assert_eq!(
+        n.collect("bob"),
+        vec![
+            "Application(from carol, first)",
+            "Application(from carol, second)"
+        ]
+    );
+    assert_eq!(
+        n.collect("carol"),
+        vec![
+            "Application(from bob, first)",
+            "Application(from bob, second)"
+        ]
+    );
+    // one session stands at both ends: with the displaced one forgotten,
+    // what each sends now still opens, in both directions
+    for c in ["bob", "carol"] {
+        let s = &mut n.s.client(c).payload.sessions;
+        assert_eq!(s.ratchets.len(), 1, "{c} holds one session");
+        s.previous.clear();
+    }
+    n.send("carol", "bob", "from carol, third");
+    n.send("bob", "carol", "from bob, third");
+    assert_eq!(n.collect("bob"), vec!["Application(from carol, third)"]);
+    assert_eq!(n.collect("carol"), vec!["Application(from bob, third)"]);
+    n.send("bob", "carol", "from bob, fourth");
+    n.send("carol", "bob", "from carol, fourth");
+    assert_eq!(n.collect("carol"), vec!["Application(from bob, fourth)"]);
+    assert_eq!(n.collect("bob"), vec!["Application(from carol, fourth)"]);
 }

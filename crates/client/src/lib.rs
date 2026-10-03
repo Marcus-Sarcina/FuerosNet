@@ -35,16 +35,34 @@
 //! - [`conversation`] is that conversation as bytes (`wire-format.md`
 //!   §7.10.2): the structures the participants and their witnesses send
 //!   one another on the end-to-end channel after the local exchanges.
+//! - [`sequence`] is that conversation driven over the end-to-end path
+//!   (`wire-format.md` §7.10.1): the steps a participant takes, what each
+//!   arriving kind is answered with, and the witness's side of it.
+//!
+//! - [`diag`] is the field-test diagnostics' helpers: the redacting
+//!   constructors every `tracing` event's fields are built from, and the
+//!   JSON renderer of the field-test flavour. The hooks are compiled out of
+//!   the releasable flavour, which is the default.
 //!
 //! Every decision here is the client's own, taken against what the client
 //! holds.  The device — camera, proximity channels, clock, the person — is
 //! behind an interface, so the same client runs on a harness.
+
+// Two flavours of one build, never both: `releasable` compiles every hook
+// out, `fieldtest` keeps them and renders them.  Built together they would
+// render nothing and claim to be a field build.
+#[cfg(all(feature = "releasable", feature = "fieldtest"))]
+compile_error!(
+    "rhtn-client: `releasable` and `fieldtest` are two flavours of one build; \
+     build the field-test flavour with `--no-default-features --features fieldtest`"
+);
 
 pub mod backup;
 pub mod catalog;
 pub mod ceremony;
 pub mod conversation;
 pub mod device;
+pub mod diag;
 pub mod durable;
 pub mod horizon;
 pub mod keys;
@@ -57,6 +75,7 @@ pub mod record;
 pub mod rotation;
 pub mod sealed;
 pub mod selection;
+pub mod sequence;
 pub mod store;
 pub mod subject;
 pub mod trust;

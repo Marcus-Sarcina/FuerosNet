@@ -6,6 +6,31 @@ license.workspace = true
 authors.workspace = true
 description = "RHTN participant client: verifier selection, consent and key grants, the sealed capture store, and the presence ceremony over device I/O behind an interface"
 
+[features]
+# The releasable flavour is the default.  `tracing/max_level_off` fixes
+# the macros' static level at OFF for every crate in the build graph, since
+# cargo unifies the one `tracing` crate's features: each `event!` becomes a
+# comparison against a constant and the optimiser removes the body and the
+# callsite with it [author, 2026-10-02: compiled out, never switched off].
+# `release_max_level_off` is the same under `not(debug_assertions)`, listed
+# so the choice is stated for both profiles.
+default = ["releasable"]
+# `log` is capped too: the workspace enables quinn's `log` feature, which is
+# `tracing/log`, and under it every `event!` keeps a second branch that
+# forwards to the `log` crate at runtime and so keeps the callsite in the
+# binary.  Capping `log`'s own static level makes that branch a constant
+# false as well, and nothing in the workspace installs a `log` consumer.
+releasable = [
+    "tracing/max_level_off",
+    "tracing/release_max_level_off",
+    "log/max_level_off",
+    "log/release_max_level_off",
+]
+# The field-test flavour: the hooks stay compiled in and `diag::json`
+# renders them.  Built with `--no-default-features --features fieldtest`;
+# the two features together are refused at compile time (`lib.rs`).
+fieldtest = ["dep:tracing-subscriber", "dep:serde_json"]
+
 [dependencies]
 zeroize = { workspace = true }
 rhtn-codec = { path = "../codec" }
@@ -14,6 +39,14 @@ rhtn-archive = { path = "../archive" }
 rhtn-policy = { path = "../policy" }
 aws-lc-rs = "1.18"
 argon2 = "0.6.0"
+# MIT; already in the graph through quinn.  No `attributes`, no `log`.
+tracing = { version = "0.1", default-features = false, features = ["std"] }
+# MIT OR Apache-2.0; already in the graph through tracing.  Named here only
+# so `releasable` can cap its static level (see the feature's comment).
+log = { version = "0.4", default-features = false }
+# MIT; the registry alone, for the field-test renderer in `diag::json`
+tracing-subscriber = { version = "0.3", default-features = false, features = ["std", "registry"], optional = true }
+serde_json = { workspace = true, optional = true }
 
 [dev-dependencies]
 hex = { workspace = true }

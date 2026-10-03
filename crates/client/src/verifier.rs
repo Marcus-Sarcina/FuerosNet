@@ -157,6 +157,39 @@ impl VerifierState {
         body: &[u8],
         now_ms: u64,
     ) -> QueryOutcome {
+        let outcome = self.take_query_in(cx, peer, body, now_ms);
+        // the query id is read again for the event alone, and only in a
+        // build that has events
+        if tracing::event_enabled!(target: "ver", tracing::Level::INFO) {
+            use crate::diag::id8;
+            let query = QueryRequest::decode(body)
+                .map(|r| id8(&r.query.query_id()))
+                .unwrap_or_default();
+            match &outcome {
+                QueryOutcome::Answered(a) => {
+                    let verdict = Response::read(&a.to_querier)
+                        .map(|r| format!("{:?}", r.verdict))
+                        .unwrap_or_default();
+                    tracing::info!(target: "ver", %query, from = %id8(&peer), verdict, "ver.query.answered");
+                }
+                QueryOutcome::AwaitingGrant => {
+                    tracing::info!(target: "ver", %query, from = %id8(&peer), "ver.query.awaiting_grant");
+                }
+                QueryOutcome::Closed(why) => {
+                    tracing::warn!(target: "ver", %query, from = %id8(&peer), why, "ver.query.closed");
+                }
+            }
+        }
+        outcome
+    }
+
+    fn take_query_in<L: Lookup + ?Sized>(
+        &mut self,
+        cx: &Verifying<L>,
+        peer: Keyhash,
+        body: &[u8],
+        now_ms: u64,
+    ) -> QueryOutcome {
         let Ok(req) = QueryRequest::decode(body) else {
             return QueryOutcome::Closed("malformed request");
         };
@@ -245,6 +278,35 @@ impl VerifierState {
         bytes: &[u8],
         now_ms: u64,
     ) -> GrantOutcome {
+        let outcome = self.take_grant_in(cx, sender, bytes, now_ms);
+        if tracing::event_enabled!(target: "ver", tracing::Level::INFO) {
+            use crate::diag::id8;
+            // the grant's query id, never its key
+            let query = KeyGrant::decode(bytes)
+                .map(|g| id8(&g.query_id))
+                .unwrap_or_default();
+            let outcome_name = match &outcome {
+                GrantOutcome::Answered(_) => "answered",
+                GrantOutcome::Buffered => "buffered",
+                GrantOutcome::Ignored => "ignored",
+                GrantOutcome::Rejected(_) => "rejected",
+            };
+            let why = match &outcome {
+                GrantOutcome::Rejected(why) => why,
+                _ => "",
+            };
+            tracing::info!(target: "ver", %query, from = %id8(&sender), outcome = outcome_name, why, "ver.grant");
+        }
+        outcome
+    }
+
+    fn take_grant_in<L: Lookup + ?Sized>(
+        &mut self,
+        cx: &Verifying<L>,
+        sender: Keyhash,
+        bytes: &[u8],
+        now_ms: u64,
+    ) -> GrantOutcome {
         let Ok(grant) = KeyGrant::decode(bytes) else {
             return GrantOutcome::Rejected("malformed grant");
         };
@@ -290,6 +352,7 @@ impl VerifierState {
         let mut out = Vec::new();
         for qid in due {
             let p = self.pending_queries.remove(&qid).expect("present");
+            tracing::info!(target: "ver", query = %crate::diag::id8(&qid), "ver.query.expired");
             out.push(self.answer(cx, &p.query, &p.consent, p.selection_basis, None));
         }
         out

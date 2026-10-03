@@ -432,3 +432,51 @@ fn the_records_disclosable_fields_are_all_present_and_withheld_by_default() {
     assert_eq!(p.withheld.len(), 7);
     let _ = all(&EVERYONE);
 }
+
+/// A witness holds at most `PENDING_WITNESS_REQUESTS` ceremonies at once,
+/// the holder's own bound: one more displaces the one with the oldest
+/// claimed start, which it then cannot sign; asked twice for one ceremony,
+/// it answers the same.
+#[test]
+fn a_witness_holds_a_bounded_number_of_pending_requests_and_the_oldest_goes_first() {
+    use rhtn_archive::tx::Witness;
+    use rhtn_client::record::Proposal;
+    use rhtn_client::sequence::PENDING_WITNESS_REQUESTS;
+    let mut s = setup(&EVERYONE, &[ChannelKind::Nfc]);
+    let now = s.clock.get() / 1000;
+    let bound = PENDING_WITNESS_REQUESTS as u64;
+    let w = s.client("w1");
+    let req = |i: u64| WitnessRequest {
+        ceremony_id: [i as u8; 32],
+        participants: participants(kh("alice"), kh("bob")),
+        started_at: now - 100 + i,
+        channels: vec![],
+    };
+    for i in 0..bound {
+        assert_eq!(w.take_witness_request(&req(i)), Some(3));
+    }
+    // asked again for the first: the same answer, and nothing displaced
+    assert_eq!(w.take_witness_request(&req(0)), Some(3));
+    // one past the bound: taken, and the oldest claimed start is gone
+    assert_eq!(w.take_witness_request(&req(bound)), Some(3));
+    let proposal = |i: u64| Proposal {
+        started_at: now - 100 + i,
+        finalized_at: now,
+        participants: participants(kh("alice"), kh("bob")),
+        witnesses: vec![Witness {
+            keyhash: kh("w1"),
+            nominated_by: kh("alice"),
+            flags: 3,
+        }],
+        responses: vec![],
+        root: [0; 32],
+    };
+    let back = vec![w.back_pointers(); 3];
+    assert_eq!(
+        w.witness_sign(&proposal(0), &back).map(|_| ()),
+        Err(Abort::NotActive),
+        "the oldest is no longer held"
+    );
+    assert!(w.witness_sign(&proposal(1), &back).is_ok());
+    assert!(w.witness_sign(&proposal(bound), &back).is_ok());
+}

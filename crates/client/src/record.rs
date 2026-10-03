@@ -246,6 +246,10 @@ pub enum Refusal {
     /// A claimed start far from the witness's own clock
     /// (`light-client-requirements.md` §1.2).
     ClockFar { claimed: u64, observed: u64 },
+    /// The body does not verify against what this signer holds: its
+    /// root, its back-pointers, or a ceremony it is not holding
+    /// (`wire-format.md` §7.10.2, refusal 4).
+    NotVerified,
 }
 
 /// What a participant checks before signing: every witness attributed to

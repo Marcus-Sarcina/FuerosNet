@@ -574,9 +574,7 @@ object Kernel {
             return
         }
 
-        // the public half, for whoever must admit this device
         val material = p.material().joinToString("") { "%02x".format(it) }
-        android.util.Log.i("fueros", "material $material")
 
         if (provision == null) {
             front.note("· unprovisioned. On the workstation:")

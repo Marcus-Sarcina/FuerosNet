@@ -89,6 +89,7 @@ fn client(name: &str) -> Client {
         notices: s.clone(),
         storage: s.clone(),
         custody: s,
+        diagnostics: Arc::new(rhtn_ffi::device::Silent),
     };
     Client::new(
         test_identity(name),
@@ -180,6 +181,7 @@ async fn r08_failover_must_update_the_kernel_serving_identity() {
             notices: s.clone(),
             storage: s.clone(),
             custody: s,
+            diagnostics: Arc::new(rhtn_ffi::device::Silent),
         });
         let mut seeds = rhtn_codec::cose::sha256(b"rhtn-test-vectors:alice:ed25519-seed").to_vec();
         seeds.extend_from_slice(&rhtn_codec::cose::sha256(
@@ -380,7 +382,7 @@ fn open_message(relabel: bool) -> (Result<Vec<u8>, PayloadError>, bool) {
         }
         wire = edited;
     }
-    let result = receiver.receive(&mut bk, a.public.keyhash, &wire, &mut fresh);
+    let result = receiver.receive(&mut bk, &b.public.keyhash, a.public.keyhash, &wire, &mut fresh);
     (result, receiver.has_session_with(&a.public.keyhash, &fake))
 }
 #[test]
@@ -889,7 +891,7 @@ fn n02_archive_reply_rejection_must_not_commit_a_verified_prefix() {
         .expect("payload state clones");
     let plain = probe
         .sessions
-        .receive(&mut probe.keys, asker.keyhash(), &wire, &mut fresh)
+        .receive(&mut probe.keys, &subject.keyhash(), asker.keyhash(), &wire, &mut fresh)
         .unwrap();
     let (kind, inner) = rhtn_client::payload::unwrap(&plain).unwrap();
     assert_eq!(kind, rhtn_client::payload::KIND_ARCHIVE_REQUEST);
@@ -1025,6 +1027,7 @@ fn control_start_from_backup_restores_the_identity_and_writes_current_state() {
         notices: shell.clone(),
         storage: shell.clone(),
         custody: shell.clone(),
+        diagnostics: Arc::new(rhtn_ffi::device::Silent),
     });
     let restored = Participant::start_from_backup(
         blob,
@@ -1255,6 +1258,7 @@ fn control_carried_binding_authenticates_first_message_and_invalid_binding_is_ig
             .sessions
             .receive(
                 &mut receiver.payload.keys,
+                &bob.public.keyhash,
                 signer.public.keyhash,
                 &first,
                 &mut fresh

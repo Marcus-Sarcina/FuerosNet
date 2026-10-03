@@ -102,6 +102,15 @@ pub enum Event {
         answer: Option<crate::types::Answer>,
         refused: Option<String>,
     },
+    /// The ceremony's conversation moved (`wire-format.md` §7.10.1): what
+    /// arrived from `from` came to this, in words for the notice line, and
+    /// the record where it finalized.  What the step owed in answer went
+    /// out from here.
+    Conversed {
+        from: Id,
+        what: String,
+        record: Option<Id>,
+    },
 }
 
 /// The session and everything hung off it, replaced whole on each attach;
@@ -785,6 +794,14 @@ fn event_of(from: Keyhash, d: Dispatched) -> Option<Event> {
             query: None,
             answer: None,
             refused: Some(why),
+        }),
+        Dispatched::Conversation(c) => Some(Event::Conversed {
+            from,
+            record: match &c {
+                rhtn_client::sequence::Conversed::Finalized { txid } => Some(id_of(txid)),
+                _ => None,
+            },
+            what: c.to_string(),
         }),
         // answered by the kernel on the path it came, or waiting on a grant
         Dispatched::Query { .. }

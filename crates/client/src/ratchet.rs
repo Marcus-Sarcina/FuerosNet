@@ -338,6 +338,13 @@ impl<P: PostQuantumRatchet + Clone + Default> Ratchet<P> {
         }
     }
 
+    /// Whether this side opened the session and has read nothing on it
+    /// yet: a sending chain and no receiving one.  What tells an open that
+    /// crossed the peer's from a session the peer held and opened past.
+    pub fn opened_unanswered(&self) -> bool {
+        self.cks.is_some() && self.ckr.is_none()
+    }
+
     /// Encrypt one message: the sending chain advances, the message key is
     /// used once, and the header carries this party's ratchet key and
     /// counters.  `[header, ciphertext]`.
@@ -422,9 +429,18 @@ impl<P: PostQuantumRatchet + Clone + Default> Ratchet<P> {
 
     fn skip(&mut self, until: u32) -> Result<(), String> {
         if self.nr.saturating_add(MAX_SKIP) < until {
+            tracing::warn!(
+                target: "pay",
+                skipped = until.saturating_sub(self.nr),
+                max_skip = MAX_SKIP,
+                "pay.ratchet.over_max_skip"
+            );
             return Err("too many messages skipped".into());
         }
         if let (Some(mut ckr), Some(dhr)) = (self.ckr, self.dhr) {
+            if until > self.nr {
+                tracing::debug!(target: "pay", skipped = until - self.nr, "pay.ratchet.skip");
+            }
             while self.nr < until {
                 let (ck, mk) = kdf_ck(&ckr);
                 ckr = ck;

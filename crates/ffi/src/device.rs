@@ -113,6 +113,27 @@ pub trait Custody: Send + Sync {
     fn unsealed(&self) -> bool;
 }
 
+/// Where the field-test build's diagnostic events go
+/// (`Robot/field-test-diagnostics.md`): one JSON line per event, handed over
+/// as it happens on the kernel's threads, the contract [`Notices`] has.
+/// The shell appends it to its own file; nothing here keeps it.
+///
+/// **A releasable build calls this never.** Its hooks are compiled out, so
+/// the object is handed over for the one `Platform` shape both flavours
+/// share and hears nothing; [`Silent`] is the Rust-side no-op.
+#[uniffi::export(with_foreign)]
+pub trait Diagnostics: Send + Sync {
+    fn event(&self, line: String);
+}
+
+/// A diagnostics sink that drops every line: what a test or a tool that
+/// wants no diagnostics hands over.
+pub struct Silent;
+
+impl Diagnostics for Silent {
+    fn event(&self, _: String) {}
+}
+
 /// Everything a shell supplies, in one object it hands over once.
 #[derive(Clone, uniffi::Object)]
 pub struct Platform {
@@ -124,6 +145,7 @@ pub struct Platform {
     pub notices: Arc<dyn Notices>,
     pub storage: Arc<dyn Storage>,
     pub custody: Arc<dyn Custody>,
+    pub diagnostics: Arc<dyn Diagnostics>,
 }
 
 impl Platform {
@@ -156,14 +178,24 @@ impl dev::Proximity for ProximityIn {
 
     fn run(&self, kind: dev::ChannelKind, peer: &Keyhash) -> dev::ChannelOutcome {
         let c = Channel::of(kind);
+        let started = std::time::Instant::now();
         let result = self.0.run(c, peer.to_vec()).result();
         // the channel asked for is the channel reported: a shell that
         // answered about another would silently move what was measured
-        dev::ChannelOutcome {
+        let out = dev::ChannelOutcome {
             kind,
             result,
             resolution_m: self.0.resolution_m(c),
-        }
+        };
+        tracing::info!(
+            target: "platform",
+            channel = ?kind,
+            outcome = ?result,
+            resolution_m = out.resolution_m,
+            ms = started.elapsed().as_millis() as u64,
+            "platform.proximity"
+        );
+        out
     }
 }
 
@@ -171,10 +203,20 @@ struct CameraIn(Arc<dyn Camera>);
 
 impl dev::Camera for CameraIn {
     fn capture(&self, prompt: dev::Prompt) -> dev::RawFrame {
+        let started = std::time::Instant::now();
+        let pixels = self.0.capture(Ask::of(prompt));
+        // the frame's size and the prompt it answered, never a pixel
+        tracing::info!(
+            target: "platform",
+            prompt = ?prompt,
+            bytes = pixels.len(),
+            ms = started.elapsed().as_millis() as u64,
+            "platform.camera"
+        );
         // metadata is empty because none crosses: there is nothing to
         // strip that was not already left on the platform's side
         dev::RawFrame {
-            pixels: self.0.capture(Ask::of(prompt)),
+            pixels,
             metadata: Default::default(),
         }
     }
@@ -213,7 +255,18 @@ struct OperatorIn(Arc<dyn Operator>);
 
 impl dev::Operator for OperatorIn {
     fn ask(&self, question: &str) -> bool {
-        self.0.ask(question.to_string())
+        let started = std::time::Instant::now();
+        let answer = self.0.ask(question.to_string());
+        // the kernel's questions name a party by its first eight hex
+        // characters and nothing else, so the text is the question's id
+        tracing::info!(
+            target: "platform",
+            question,
+            answer,
+            ms = started.elapsed().as_millis() as u64,
+            "platform.operator"
+        );
+        answer
     }
 }
 
@@ -221,6 +274,12 @@ struct NoticesIn(Arc<dyn Notices>);
 
 impl Notifier for NoticesIn {
     fn notify(&self, notice: Notice) {
+        // the variant alone: the identities some notices carry stay out
+        tracing::info!(
+            target: "platform",
+            notice = rhtn_client::diag::notice(&notice),
+            "platform.notice"
+        );
         self.0.told(Told::of(&notice));
     }
 }

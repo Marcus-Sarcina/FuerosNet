@@ -143,6 +143,7 @@ fn platform_of(shell: Arc<Shell>) -> Arc<Platform> {
         notices: shell.clone(),
         storage: shell.clone(),
         custody: shell,
+        diagnostics: Arc::new(Silent),
     })
 }
 

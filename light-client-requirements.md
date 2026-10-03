@@ -86,6 +86,10 @@ clock tolerance (`wire-format.md` §14.3.2).
   is that the protocol ran and both parties were responsive as the sequence you
   received shows (design §7.1), without asking your operator, who saw none of
   it (design Appendix A.3).
+- **Hold only a few ceremonies as a witness at once.** The bound is yours; the
+  reference client holds eight, and past it the request with the oldest claimed
+  start goes. A request for a ceremony you already hold gets the answer you
+  gave. **Having declined, take nothing further of that ceremony.**
 
 ### 1.3 Capture
 

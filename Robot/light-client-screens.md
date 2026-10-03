@@ -221,3 +221,20 @@ administration channel is the author's open decision.
 - **The horizon shows users, never devices**: one representation per
   person, all endpoints behind it, infra/non-infra an icon state read from
   current topology.
+
+## The conversation on the courier: what the shell calls next (2026-10-02)
+
+The kernel now drives the ceremony's conversation over the payload path
+(`crates/client/src/sequence.rs`); the shell's VERIFIERS, REVIEW and DONE
+steps still run the old in-process path and need rewiring. The FFI offers
+`converseOpen()`, `converseQueries()`, `converseGathered()`,
+`conversePropose()`, `progress()` and `Event.Conversed { from, what, record }`.
+Suggested wiring: on entering VERIFIERS call `converseOpen` then
+`converseQueries`; when `progress().queriesOutstanding == 0` the responder
+calls `converseGathered` and the initiator `conversePropose`, retrying the
+latter while it refuses with *waiting*; REVIEW shows the body when the
+`Event.Conversed` for kind 16 arrives and signs through the existing call;
+DONE on the event that carries `record`. No timer runs in the kernel: when
+to propose is the shell's, and a witness that has not answered by then is
+left out.
+

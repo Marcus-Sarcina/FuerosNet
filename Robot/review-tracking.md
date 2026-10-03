@@ -13829,3 +13829,47 @@ Wasmtime advisories published today against 48.0.3; `cargo update -p wasmtime`
 takes 48.0.5 within the declared `"48"`, lockfile only. Advisories clean after.
 
 **C4's open question, ruled** [author, 2026-10-02]: either party can initiate; a light-client control generates an invite QR or another triggers a camera read; who generated the first invite has no bearing on the outcome or on the polarity of any resulting adoption. Applied: design §7.1 item 3, the `initiator` field's comment in `wire-format.md` §14.3.2 (its one reader is the responder's start-time adoption), a paragraph opening `light-client-requirements.md` §1, CER-022 (488 families), and the screens note.
+
+## The conversation on the courier (2026-10-02)
+
+The author's instruction after the fourth round: wire the ceremony's
+conversation over the courier next. Done in `crates/client/src/sequence.rs`
+beside the in-process harness, which the existing tests keep.
+
+**What the code decided that the documents did not say**, each now stated,
+and each the drafter's until the author rules otherwise:
+
+| # | Decision in code | Where stated |
+|---|---|---|
+| 1 | The witness request and the sender's back-pointers (kinds 12, 15) go first, before any query, so a witness holds the ceremony before anything else of it arrives and can attribute what follows. The design's step order put witnesses last; the wire's kind numbers run 9 to 18 | `wire-format.md` §7.10.1; design §7.1 |
+| 2 | A witness's answer (13) goes to the two participants the request named; it knows no other witness until the body names them. The proposer attributes each answer to the side whose nominee list names the witness, the answer naming nobody | `wire-format.md` §7.10.1 |
+| 3 | The body and the record (16, 18) go to every signer: the counterparty and the witnesses that answered yes | `wire-format.md` §7.10.1 |
+| 4 | **The initiator proposes.** Both intents carry which side began, so the two agree without a message. A tie-break with no bearing on the outcome, consistent with the initiation ruling | `wire-format.md` §7.10.1 and the initiator field; design §7.1 item 3 |
+| 5 | A participant takes the conversation only from its counterparty and its witnesses; a witness only from the request's two participants; anyone else's is a stranger's application payload | `wire-format.md` §7.10.1; CER-47 |
+| 6 | `SigningReply` refusal code 4: the body does not verify against what this signer holds (root, back-pointers, or a ceremony it is not holding). Without it a signer that could not sign was silent and the proposer waited forever | `wire-format.md` §7.10.2; fixtures `P-signing-reply-refused-4`, `N-signing-reply-code-5`; codec, client and sequence |
+| 7 | When two initial messages cross, the session the lower keyhash opened stands and the other is held, bounded at two, for what was already sent on it. Found when both participants asked their witnesses at once and each replaced the other's ratchet | `wire-format.md` §7.10; design §14.2.2; SES-30 |
+| 8 | A witness holds at most eight pending ceremonies, the oldest claimed start going first; a repeat request for a held ceremony gets the same answer; having declined, it takes nothing further | `light-client-requirements.md` §1.2 |
+| 9 | `finalize` took the active ceremony even on a witness, which would have destroyed a witness's own concurrent ceremony; now only when the record names it | code only |
+
+Also: NET-023 (489 families); catalogue CER-45, CER-46, CER-47 and SES-30
+(478 entries, 457 implemented); the shell's next wiring recorded in the
+screens note. The shell's VERIFIERS, REVIEW and DONE steps still run the
+in-process path and are the next shell work.
+
+**Numbers**: client, adaptors, ffi and node tests 301 → 307; codec 7 → 8;
+corpus 321 → 323; Android 62 unchanged (the binding regenerated, untracked).
+
+## Field-test diagnostics (author, 2026-10-02)
+
+Rulings on the evaluation in `field-test-diagnostics.md`: the specification
+describes the released product and is irrelevant to development tooling, so no
+requirements sentence is proposed for logging; use an existing framework
+(`tracing`, Timber), hook generously, compile the hooks out of releasable
+builds, and keep the gate on the releasable flavour. Applied: the plan rewritten
+to the ruling; the two over-logging shell lines fixed (the public material at
+info level removed; a notice logs its variant name and no identity); M1 started
+(tracing in client and FFI with releasable/fieldtest gating, the boundary span,
+a `Diagnostics` platform trait, and a redaction test over a whole harness
+ceremony).
+
+**M1 landed 2026-10-03**: see `field-test-diagnostics.md` for the mechanism and the numbers; nothing committed.

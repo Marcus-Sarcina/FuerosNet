@@ -1382,7 +1382,8 @@ end node, starting from its own local records of people it has met.
    and the transcript hash. Inherently short-range and line-of-sight. **Either
    party may begin** [author, 2026-10-02]: one device shows an invite and the
    other reads it, and which did has no bearing on the ceremony's outcome or
-   on the polarity of any adoption that follows.
+   on the polarity of any adoption that follows, beyond that the one who began
+   proposes the body for signature (§8.1.2).
 4. **Proximity channel: UWB secure ranging (802.15.4z) where available, NFC tap
    as fallback.** UWB is the **strongest** channel but **not categorically
    relay-resistant.** Deployed 802.15.4z HRP implementations have been defeated by
@@ -1453,7 +1454,9 @@ the finalised record — travels the end-to-end payload path between the
 participants' devices and is sent to each nominated witness as well, the
 consent request alone excepted: the fuzzed profile it carries reaches the
 subject and the one verifier the query names, and nobody who holds no capture
-to compare it against (`wire-format.md` §5.6). That is what a witness observes: the sequence as it ran, proposals that did not land
+to compare it against (`wire-format.md` §5.6). The witness request goes first,
+so a witness holds the ceremony before the rest of it arrives. That is what a
+witness observes: the sequence as it ran, proposals that did not land
 included, which is what lets it attest that the protocol ran and both parties
 were responsive, and nothing beyond that.
 
@@ -5695,6 +5698,10 @@ not there.** Therefore:
   that bundle already. It is not trusted with it — the bundle carries the
   submitter's own signature, so a substituted one does not verify — and it can
   withhold it, which is the authority it already holds over delivery.
+- **Two initial messages can cross** when both sides open a session to each
+  other at once, as a ceremony's two participants do. The session the lower
+  keyhash opened stands, and the other side's is held only for what was
+  already sent on it (`wire-format.md` §7.10) [2026-10-02].
 - **Prekey exhaustion degrades forward secrecy rather than blocking messaging**: an
   attacker drains a target's one-time prekeys, after which sessions open from
   reusable or last-resort material and the first message loses one-time-key forward

@@ -12082,3 +12082,47 @@ invite or reading one, and which did has no bearing on the outcome or on the
 polarity of any adoption that follows. Design §7.1 item 3, the initiator
 field's comment in `wire-format.md` §14.3.2, the opening of
 `light-client-requirements.md` §1, and CER-022; families 487 → 488.
+
+### 2026-10-02 (the conversation on the courier)
+
+The ceremony's conversation now runs over the end-to-end path. A sequence
+module beside the in-process harness drives the participant's four steps,
+asking the witnesses and handing over back-pointers first, putting the
+consent requests to the subject, handing the proposer what was gathered, and
+proposing the body, and answers everything that arrives from the counterparty
+or a witness through the same sessions and courier the query path uses. A
+witness receives the request, answers both participants, signs the body it is
+shown and stores the record, holding at most eight ceremonies at once. Nine
+things the code had to decide are stated where they belong: the witness
+request goes first; a witness's answer names nobody and the proposer
+attributes it from the nominee lists; the body and the record go to signers
+only; the initiator proposes; a participant takes the conversation only from
+its counterparty and witnesses; a signer that cannot verify the body answers
+refusal code 4 rather than staying silent; two initial messages crossing
+leave the lower keyhash's session standing; a witness that declined takes
+nothing further; and finalising never takes a witness's own ceremony. Wire
+§7.10.1, §7.10.2 and §7.10, design §7.1 and §14.2.2, the light client's §1.2,
+NET-023 and four catalogue entries carry them; corpus 321 → 323. The
+end-to-end test runs two participants and two witnesses over the adaptors'
+courier with no message moved by hand: every signer holds the same record,
+the witness that declined is absent from it, a stranger's message is
+dropped, and a flipped root draws refusal 4 instead of a wait. The shell's
+verifier, review and done steps still drive the old path; the screens note
+says what they call next.
+
+### 2026-10-03 (field-test diagnostics, milestone one)
+
+Tooling, not specification: the author ruled that the design documents
+describe the released product and have nothing to say about development
+logging, so nothing lands in the root documents for this. `tracing` enters the
+client, the FFI, the archive and the node with 83 hook sites across the
+ceremony, the conversation, the payload path, the verifier and the horizon,
+and every exported FFI method and platform callback. The releasable default
+compiles every hook out by pinning the framework's static level to off, which
+`strings` on the release library confirms; a `fieldtest` feature keeps them
+and renders each as one JSON line to a ninth platform trait the shell
+implements. A redaction test runs ceremonies, an adoption, a payload session
+and a recovery under a collecting subscriber and finds no secret byte run in
+218 events. Two shell lines that logged the public material and whole notices
+are fixed. The gate passes on the releasable flavour. The plan for the rest is a
+working note of the assistant's.

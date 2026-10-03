@@ -27,8 +27,16 @@
 
 uniffi::setup_scaffolding!();
 
+// Two flavours of one build, never both (see `rhtn-client`'s manifest).
+#[cfg(all(feature = "releasable", feature = "fieldtest"))]
+compile_error!(
+    "rhtn-ffi: `releasable` and `fieldtest` are two flavours of one build; \
+     build the field-test flavour with `--no-default-features --features fieldtest`"
+);
+
 pub mod client;
 pub mod device;
+pub(crate) mod diag;
 #[cfg(feature = "harness")]
 pub mod harness;
 pub mod net;

@@ -28,7 +28,7 @@
 
 use rhtn_ffi::client::Participant;
 use rhtn_ffi::device::{
-    Camera, Clock, Custody, Notices, Operator, Platform, Proximity, Random, Storage,
+    Camera, Clock, Custody, Notices, Operator, Platform, Proximity, Random, Silent, Storage,
 };
 use rhtn_ffi::harness::{TestNode, test_identity};
 use rhtn_ffi::types::{Ask, Channel, ChannelOutcome, Told};
@@ -219,6 +219,7 @@ fn main() {
         notices: s.clone(),
         storage: s.clone(),
         custody: s,
+        diagnostics: Arc::new(Silent),
     });
     let known = vec![bob.material.clone(), carol.material.clone(), phone.clone()];
     let me = Participant::start(carol.seeds.clone(), known, platform).expect("carol starts");

@@ -32,10 +32,10 @@ fn r02_initial_payload_must_match_the_named_senders_bound_identity() {
     let initial=sender_sessions.open(&sender_keys,sender.public.ed.as_bytes(),recipient.public.keyhash,&recipient_bundle,None,&mut fresh,b"message from Carol").unwrap();
     let mut control=Sessions::default();
     control.prefetch(read_bundle(&ids,&sender_keys.bundle(&sender,sender.public.ed.as_bytes(),100)).unwrap());
-    assert_eq!(control.receive(&mut recipient_keys.clone(),sender.public.keyhash,&initial,&mut fresh).unwrap(),b"message from Carol");
+    assert_eq!(control.receive(&mut recipient_keys.clone(),&recipient.public.keyhash,sender.public.keyhash,&initial,&mut fresh).unwrap(),b"message from Carol");
     let mut receiver=Sessions::default();
     receiver.prefetch(victim_bundle);
-    assert!(receiver.receive(&mut recipient_keys,victim.public.keyhash,&initial,&mut fresh).is_err(),"design §14.2: a relay must not turn Carol's initial message into an authenticated session with Alice");
+    assert!(receiver.receive(&mut recipient_keys,&recipient.public.keyhash,victim.public.keyhash,&initial,&mut fresh).is_err(),"design §14.2: a relay must not turn Carol's initial message into an authenticated session with Alice");
 }
 
 #[test]
@@ -51,11 +51,11 @@ fn r03_failed_initial_message_must_not_consume_the_private_one_time_key() {
     receiver.prefetch(read_bundle(&ids,&sender_keys.bundle(&sender,sender.public.ed.as_bytes(),100)).unwrap());
     let mut control=Sessions::default();
     control.prefetched=receiver.prefetched.clone();
-    assert_eq!(control.receive(&mut recipient_keys.clone(),sender.public.keyhash,&initial,&mut fresh).unwrap(),b"valid message");
+    assert_eq!(control.receive(&mut recipient_keys.clone(),&recipient.public.keyhash,sender.public.keyhash,&initial,&mut fresh).unwrap(),b"valid message");
     let mut corrupt=initial.clone();*corrupt.last_mut().unwrap()^=1;
     let mut rx=receiver;
-    assert!(rx.receive(&mut recipient_keys,sender.public.keyhash,&corrupt,&mut fresh).is_err());
-    assert_eq!(rx.receive(&mut recipient_keys,sender.public.keyhash,&initial,&mut fresh).ok(),Some(b"valid message".to_vec()),"design §14.2: an unauthenticated packet must not destroy the key needed for the valid queued initial message");
+    assert!(rx.receive(&mut recipient_keys,&recipient.public.keyhash,sender.public.keyhash,&corrupt,&mut fresh).is_err());
+    assert_eq!(rx.receive(&mut recipient_keys,&recipient.public.keyhash,sender.public.keyhash,&initial,&mut fresh).ok(),Some(b"valid message".to_vec()),"design §14.2: an unauthenticated packet must not destroy the key needed for the valid queued initial message");
 }
 
 #[tokio::test]

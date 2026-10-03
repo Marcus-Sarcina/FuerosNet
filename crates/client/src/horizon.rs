@@ -201,6 +201,12 @@ impl Horizon {
     /// material and that keyhash is a party this client can place, the
     /// newest per keyhash kept and the rest dropped.
     pub fn ingest_delegation<L: Lookup + ?Sized>(&mut self, bytes: &[u8], ids: &L) -> Took {
+        let took = self.ingest_delegation_in(bytes, ids);
+        tracing::debug!(target: "hz", kind = "delegation", took = ?took, "hz.took");
+        took
+    }
+
+    fn ingest_delegation_in<L: Lookup + ?Sized>(&mut self, bytes: &[u8], ids: &L) -> Took {
         let Ok(d) = verify::delegation(ids, bytes) else {
             return Took::Refused;
         };
@@ -279,6 +285,12 @@ impl Horizon {
     /// client cannot place is not a party it has any use for an address
     /// of.
     pub fn ingest_endpoint<L: Lookup + ?Sized>(&mut self, bytes: &[u8], ids: &L) -> Took {
+        let took = self.ingest_endpoint_in(bytes, ids);
+        tracing::debug!(target: "hz", kind = "endpoint", took = ?took, "hz.took");
+        took
+    }
+
+    fn ingest_endpoint_in<L: Lookup + ?Sized>(&mut self, bytes: &[u8], ids: &L) -> Took {
         let Ok(er) = EndpointRecord::parse(bytes) else {
             return Took::Refused;
         };
@@ -416,6 +428,18 @@ impl Horizon {
     /// that refused every adoption whose presence record it does not hold
     /// would hold almost no horizon at all.
     pub fn ingest<L: Lookup + ?Sized>(&mut self, bytes: &[u8], ids: &L) -> Took {
+        let took = self.ingest_in(bytes, ids);
+        // parsed again for the event alone, in a build that has events
+        if tracing::event_enabled!(target: "hz", tracing::Level::DEBUG) {
+            let txid = Record::parse(bytes)
+                .map(|r| crate::diag::id8(&r.txid))
+                .unwrap_or_default();
+            tracing::debug!(target: "hz", kind = "record", %txid, took = ?took, "hz.took");
+        }
+        took
+    }
+
+    fn ingest_in<L: Lookup + ?Sized>(&mut self, bytes: &[u8], ids: &L) -> Took {
         let Ok(rec) = Record::parse(bytes) else {
             return Took::Refused;
         };
@@ -685,7 +709,9 @@ impl Horizon {
                     || r.field_hash(2).is_some_and(|k| inside.contains(&k))
             })
         });
-        before - parties(&self.places)
+        let forgotten = before - parties(&self.places);
+        tracing::info!(target: "hz", forgotten, kept = parties(&self.places), "hz.pruned");
+        forgotten
     }
 
     /// The derived shape as it goes to local storage, with the watermark
@@ -724,6 +750,12 @@ impl Horizon {
     /// be squared with what is held, all land on the same answer a fold
     /// from nothing gives.
     pub fn wake<L: Lookup + ?Sized>(&mut self, snap: Option<&Snapshot>, ids: &L) -> Woke {
+        let woke = self.wake_in(snap, ids);
+        tracing::info!(target: "hz", snapshot = snap.is_some(), seen = self.seen.len(), woke = ?woke, "hz.woke");
+        woke
+    }
+
+    fn wake_in<L: Lookup + ?Sized>(&mut self, snap: Option<&Snapshot>, ids: &L) -> Woke {
         // **the watermark is taken over the seen-set**, which survives a
         // wake where the acts do not; what it cannot account for it cannot
         // be caught up with either, and the copy is discarded whole

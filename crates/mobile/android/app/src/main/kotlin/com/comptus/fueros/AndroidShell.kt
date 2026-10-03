@@ -17,6 +17,7 @@ import uniffi.rhtn_ffi.ChannelOutcome
 import uniffi.rhtn_ffi.Camera
 import uniffi.rhtn_ffi.Clock
 import uniffi.rhtn_ffi.Custody
+import uniffi.rhtn_ffi.Diagnostics
 import uniffi.rhtn_ffi.Notices
 import uniffi.rhtn_ffi.Operator
 import uniffi.rhtn_ffi.Platform
@@ -35,7 +36,7 @@ import uniffi.rhtn_ffi.Told
  * private files directory; the kernel's state file names contain no path.
  */
 class AndroidShell(private val context: Context) :
-    Proximity, Camera, Clock, Random, Operator, Notices, Storage, Custody {
+    Proximity, Camera, Clock, Random, Operator, Notices, Storage, Custody, Diagnostics {
 
     private val dir: File = File(context.filesDir, "kernel").apply { mkdirs() }
     private val rng = SecureRandom()
@@ -89,7 +90,7 @@ class AndroidShell(private val context: Context) :
     // §7.4.2), the rest on the conversation's notice line.  Logged as well,
     // because a notice nobody was looking at is still evidence
     override fun told(notice: Told) {
-        Log.i("fueros", "notice: $notice")
+        Log.i("fueros", "notice: ${notice::class.simpleName}")
         Kernel.told(notice)
     }
 
@@ -124,6 +125,12 @@ class AndroidShell(private val context: Context) :
 
     /** This platform keeps keys; unsealed is for platforms that cannot. */
     override fun unsealed(): Boolean = false
+
+    /** The field-test build's diagnostic lines (`Robot/field-test-diagnostics.md`).
+     *  A releasable build calls this never; the file writer and the
+     *  flavour that enables it are milestone M3, so for now the line is
+     *  dropped. */
+    override fun event(line: String) {}
 
     /** Write `bytes` under `name` Keystore-wrapped: the shell's own secrets. */
     fun seal(name: String, bytes: ByteArray): Boolean {
@@ -203,4 +210,4 @@ class AndroidShell(private val context: Context) :
  * and one shell answering every interface is one answer per question.
  */
 fun platformOf(shell: AndroidShell): Platform =
-    Platform(shell, shell, shell, shell, shell, shell, shell, shell)
+    Platform(shell, shell, shell, shell, shell, shell, shell, shell, shell)

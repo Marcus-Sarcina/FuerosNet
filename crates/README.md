@@ -63,3 +63,49 @@ are present, and the long run is `cargo +nightly fuzz run <target>` in
 `codec/`. Neither replaces the seeded runs, which are what the entries
 specify; the guided search adds coverage on top.
 
+**Field-test diagnostics** (`Robot/field-test-diagnostics.md`, milestone
+M1). The kernel, the facade and the archive's held list raise `tracing`
+events at the sites the plan's section 3 lists: the ceremony step by step,
+the payload path, the verifier's and the subject's sides, the horizon, the
+platform's callbacks, and one span with an `ffi.call`/`ffi.return` pair per
+exported `Participant` method. Every field is built by `rhtn_client::diag`'s
+constructors (`id8` truncates an identifier to eight hex characters; counts,
+sizes and milliseconds are numbers; variants are names), and
+`client/tests/diag.rs` runs a whole harness ceremony, a payload session and
+a recovery under a collector and asserts that no eight-byte run of any seed,
+capture key, consent, profile or session key it produced appears in any
+rendered event.
+
+*Two flavours, chosen by cargo features, and the releasable one is the
+default.* `rhtn-client` and `rhtn-ffi` carry `default = ["releasable"]`,
+and `releasable` enables `tracing/max_level_off` (and
+`release_max_level_off`) together with `log/max_level_off` (and
+`release_max_level_off`). In `tracing` 0.1.44 `STATIC_MAX_LEVEL` is chosen
+by the most restrictive `max_level_*` feature set anywhere in the build
+graph, since cargo unifies the one `tracing` crate's features across it;
+with it at `OFF`, every `event!` is a comparison against a constant. The
+`log` cap is needed because the workspace enables quinn's `log` feature,
+which is `tracing/log`, and under it each `event!` keeps a second branch
+that forwards to the `log` crate at runtime, gated by `log::max_level()`,
+which is not a constant; capping `log`'s static level makes that branch
+constant too, and nothing in the workspace installs a `log` consumer. The
+one span, the facade's per-method `ffi.call`, is created only under
+`span_enabled!`, since a disabled span made by the macro keeps its callsite
+metadata by design. With all three in place the optimiser removes the
+bodies, the field expressions and the callsite strings: a release build of
+`librhtn_ffi.so` carries no event name (`strings
+target/release/librhtn_ffi.so | grep -cE 'cer\.begin|ffi\.return'` is 0);
+a debug build keeps the dead branches, as debug builds do, and is not the
+releasable artifact. The field-test flavour is built with
+`--no-default-features --features fieldtest` on `rhtn-ffi` (or
+`rhtn-client`); it keeps the hooks, and `rhtn-ffi` installs
+`rhtn_client::diag::json::JsonLines`, which renders each event as one JSON
+line and hands it to the platform's ninth object, `Diagnostics`, as it
+happens. The two features together are a compile error. Because feature
+unification is what carries the choice, every workspace crate that depends
+on `rhtn-client` other than a leaf (`rhtn-adaptors`, `rhtn-ffi`) declares it
+with `default-features = false`, so the leaf decides; `check.sh` builds the
+workspace with defaults and so gates the releasable flavour. The
+`Diagnostics` object is handed over in both flavours, for one `Platform`
+shape and one generated binding; `rhtn_ffi::device::Silent` is the no-op.
+

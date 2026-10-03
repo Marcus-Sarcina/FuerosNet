@@ -281,7 +281,8 @@ impl ProposedBody {
 ///
 /// A refusal's particular is the witness keyhash or the query id; a clock
 /// refusal carries none, so what the refusing party observed stays with
-/// it and the particulars read back as zero.
+/// it and the particulars read back as zero; a verification refusal
+/// carries none either.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SigningReply {
     pub reply: Result<Vec<u8>, Refusal>,
@@ -302,6 +303,7 @@ impl SigningReply {
                     Refusal::NomineeNotMine(k) => (1, Some(k)),
                     Refusal::OmittedResponse(q) => (2, Some(q)),
                     Refusal::ClockFar { .. } => (3, None),
+                    Refusal::NotVerified => (4, None),
                 };
                 emit_map_head(&mut out, 1 + usize::from(particular.is_some()));
                 emit_uint(&mut out, 2);
@@ -337,8 +339,9 @@ impl SigningReply {
                 claimed: 0,
                 observed: 0,
             },
+            (4, None) => Refusal::NotVerified,
             (1 | 2, None) => return Err("refusals 1 and 2 name their particular".into()),
-            (3, Some(_)) => return Err("refusal 3 carries no particular".into()),
+            (3 | 4, Some(_)) => return Err("refusals 3 and 4 carry no particular".into()),
             _ => return Err("refusal out of range".into()),
         };
         Ok(SigningReply {

@@ -126,6 +126,15 @@ fn the_conversation_objects_encode_to_the_canonical_bytes_and_read_back() {
         "refusal 1 names the witness"
     );
     assert_eq!(read.encode(), fx);
+
+    let fx = fixture("P-signing-reply-refused-4");
+    let read = SigningReply::decode(&fx).expect("decodes");
+    assert_eq!(
+        read.reply,
+        Err(Refusal::NotVerified),
+        "refusal 4 names nothing"
+    );
+    assert_eq!(read.encode(), fx);
 }
 
 // acceptance: DEC-36
@@ -158,6 +167,10 @@ fn an_object_the_schema_refuses_does_not_decode_here_either() {
     assert!(
         SigningReply::decode(&fixture("N-signing-reply-particular-alone")).is_err(),
         "a particular beside the entries"
+    );
+    assert!(
+        SigningReply::decode(&fixture("N-signing-reply-code-5")).is_err(),
+        "refusal codes run 1 to 4"
     );
     // and the kinds are not interchangeable, each checking against its own
     // rule
@@ -251,6 +264,11 @@ fn a_message_crosses_as_its_kind_and_comes_back_the_same() {
             Msg::Signed(Err(Refusal::NomineeNotMine(last32(&fixture(
                 "P-signing-reply-refused",
             ))))),
+        ),
+        (
+            "P-signing-reply-refused-4",
+            KIND_SIGNING_REPLY,
+            Msg::Signed(Err(Refusal::NotVerified)),
         ),
         (
             "P-normal-record",
@@ -357,5 +375,35 @@ fn a_signing_reply_particular_of_another_width_is_refused() {
             Ok(Err(Refusal::NomineeNotMine(k))) if k == [9u8; 32]
         ),
         "32 bytes, the witness keyhash"
+    );
+}
+
+/// A refusal names its particular where it has one and nowhere else
+/// (`wire-format.md` §7.10.2): 1 and 2 carry it, 3 and 4 do not, and the
+/// codes run 1 to 4.
+#[test]
+fn a_refusal_carries_its_particular_only_where_it_names_one() {
+    assert!(
+        SigningReply::decode(&[0xa1, 0x02, 0x01]).is_err(),
+        "refusal 1 without its witness"
+    );
+    assert!(
+        SigningReply::decode(&[0xa1, 0x02, 0x02]).is_err(),
+        "refusal 2 without its query"
+    );
+    let mut with = vec![0xa2, 0x02, 0x04, 0x03, 0x58, 0x20];
+    with.extend_from_slice(&[9u8; 32]);
+    assert!(
+        SigningReply::decode(&with).is_err(),
+        "refusal 4 with a particular"
+    );
+    assert_eq!(
+        SigningReply::decode(&[0xa1, 0x02, 0x04]).map(|r| r.reply),
+        Ok(Err(Refusal::NotVerified)),
+        "refusal 4 and nothing beside it"
+    );
+    assert!(
+        SigningReply::decode(&[0xa1, 0x02, 0x05]).is_err(),
+        "no refusal 5"
     );
 }

@@ -576,7 +576,12 @@ impl TopologyStore {
                 .iter()
                 .position(|q| !q.trust_reducing)
                 .unwrap_or(0);
+            let trust_reducing = self.pending[gone].trust_reducing;
             self.pending.remove(gone);
+            // a silent drop until 2026-10-02: the one diagnostic event the
+            // node raises before milestone M2, compiled out of a releasable
+            // build with the client's (Robot/field-test-diagnostics.md)
+            tracing::debug!(target: "node", trust_reducing, held = self.pending.len(), "node.hold.evicted");
         }
         self.pending.push(p);
     }

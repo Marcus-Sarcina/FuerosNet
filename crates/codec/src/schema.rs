@@ -1604,19 +1604,24 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
                     cose_signature_shape(x)?;
                 }
             }
-            if let Some(r) = refusal {
-                match as_uint(r) {
-                    Some(1..=3) => {}
-                    _ => return Err(Error("refusal out of range")),
+            let code = match refusal.map(as_uint) {
+                None => None,
+                Some(Some(c @ 1..=4)) => Some(c),
+                Some(_) => return Err(Error("refusal out of range")),
+            };
+            // the particular names refusal 1's witness or refusal 2's
+            // query, and nothing else carries one
+            match (code, particular) {
+                (Some(1 | 2), Some(Item::Bytes(r))) if r.len() == 32 => {}
+                (Some(1 | 2), Some(_)) => return Err(Error("a particular is 32 bytes")),
+                (Some(1 | 2), None) => {
+                    return Err(Error("refusals 1 and 2 name their particular"));
                 }
-            }
-            match (refusal.is_some(), particular) {
-                (true, Some(Item::Bytes(r))) if r.len() == 32 => {}
-                (_, None) => {}
-                (true, Some(_)) => return Err(Error("a particular is 32 bytes")),
-                (false, Some(_)) => {
+                (Some(_), Some(_)) => return Err(Error("refusals 3 and 4 carry no particular")),
+                (None, Some(_)) => {
                     return Err(Error("a particular accompanies a refusal and nothing else"));
                 }
+                (_, None) => {}
             }
             let expected = 1 + usize::from(particular.is_some());
             if m.len() != expected {
@@ -2482,6 +2487,34 @@ mod shapes {
         assert!(checked("SigningReply", &refusal(32)).is_ok());
         assert!(checked("SigningReply", &refusal(31)).is_err());
         assert!(checked("SigningReply", &refusal(33)).is_err());
+    }
+
+    fn refusal_code(code: u64, particular: Option<usize>) -> Vec<u8> {
+        let mut o = Vec::new();
+        emit_map_head(&mut o, 1 + usize::from(particular.is_some()));
+        emit_uint(&mut o, 2);
+        emit_uint(&mut o, code);
+        if let Some(n) = particular {
+            emit_uint(&mut o, 3);
+            bstr(&mut o, n, 9);
+        }
+        o
+    }
+
+    /// Refusals 1 and 2 name a witness or a query; 3 and 4 name nothing;
+    /// and the codes run 1 to 4 (`wire-format.md` §7.10.2).
+    #[test]
+    fn a_signing_reply_refusal_carries_its_particular_only_where_it_names_one() {
+        for code in [1, 2] {
+            assert!(checked("SigningReply", &refusal_code(code, Some(32))).is_ok());
+            assert!(checked("SigningReply", &refusal_code(code, None)).is_err());
+        }
+        for code in [3, 4] {
+            assert!(checked("SigningReply", &refusal_code(code, None)).is_ok());
+            assert!(checked("SigningReply", &refusal_code(code, Some(32))).is_err());
+        }
+        assert!(checked("SigningReply", &refusal_code(0, None)).is_err());
+        assert!(checked("SigningReply", &refusal_code(5, None)).is_err());
     }
 
     fn proposed_body(body: &[u8]) -> Vec<u8> {

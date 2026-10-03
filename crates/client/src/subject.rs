@@ -115,29 +115,60 @@ impl SubjectState {
         q: &VerificationQuery,
         notifier: &dyn Notifier,
     ) -> Option<Vec<u8>> {
+        use crate::diag::id8;
+        let qid = q.query_id();
+        // the query's id and its parties, never its profile
+        let refused = |why: &'static str| {
+            tracing::warn!(
+                target: "sub",
+                query = %id8(&qid),
+                querier = %id8(&q.querier),
+                verifier = %id8(&q.verifier),
+                why,
+                "sub.consent.refused"
+            );
+        };
         if q.subject != me.public.keyhash {
+            refused("not about this subject");
             return None;
         }
         let limit = self.cfg.per_requester_limit;
-        let w = self.window.as_mut()?;
+        let Some(w) = self.window.as_mut() else {
+            refused("no window open");
+            return None;
+        };
         if w.ceremony_id != q.ceremony_id {
+            refused("another ceremony");
             return None;
         }
         let digest = sha256(&q.profile);
         match w.profile_digest {
-            Some(d) if d != digest => return None,
+            Some(d) if d != digest => {
+                refused("a second profile within one ceremony");
+                return None;
+            }
             Some(_) => {}
             None => w.profile_digest = Some(digest),
         }
         let count = w.counters.entry(q.querier).or_insert(0);
         if *count >= limit {
+            // the anti-oracle lock closing (design §7.4.1): the count, and
+            // never a history of who probed
+            refused("over the requester's allowance");
             notifier.notify(Notice::ProbingRefused {
                 requester: q.querier,
             });
             return None;
         }
         *count += 1;
-        let qid = q.query_id();
+        tracing::info!(
+            target: "sub",
+            query = %id8(&qid),
+            querier = %id8(&q.querier),
+            verifier = %id8(&q.verifier),
+            nth = *count,
+            "sub.consented"
+        );
         self.consented.entry(q.ceremony_id).or_default().insert(qid);
         notifier.notify(Notice::QuerySurfaced {
             verifier: q.verifier,

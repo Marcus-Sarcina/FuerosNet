@@ -10,7 +10,9 @@ description = "RHTN adaptors: the participant client bound to what is local to i
 rhtn-codec = { path = "../codec" }
 rhtn-crypto = { path = "../crypto" }
 rhtn-archive = { path = "../archive" }
-rhtn-client = { path = "../client" }
+# no default: the diagnostics flavour is the leaf crate's choice (rhtn-ffi),
+# and a default taken here would be unified into every build above it
+rhtn-client = { path = "../client", default-features = false }
 rhtn-node = { path = "../node" }
 rhtn-transport = { path = "../transport" }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "sync", "io-util"] }

@@ -84,6 +84,9 @@ impl Instrument {
             known.extend(read_peers(p)?);
         }
         let shell = Arc::new(Terminal::default());
+        // the ninth object, diagnostics, hears nothing from this instrument
+        // until milestone M2 of Robot/field-test-diagnostics.md gives it
+        // `--log <path>`
         let p = platform(
             shell.clone(),
             shell.clone(),
@@ -93,6 +96,7 @@ impl Instrument {
             shell.clone(),
             shell.clone(),
             shell.clone(),
+            Arc::new(rhtn_ffi::device::Silent),
         );
         let client =
             Participant::start(seeds, known, Arc::new(p)).map_err(|e| e.reason().to_string())?;
@@ -635,6 +639,13 @@ impl Instrument {
                         hex(&from),
                         record.map_or("-".into(), |r| hex(&r)),
                         refused.unwrap_or_else(|| "-".into())
+                    )
+                }
+                rhtn_ffi::net::Event::Conversed { from, what, record } => {
+                    format!(
+                        "conversed from={} what={what} record={}",
+                        hex(&from),
+                        record.map_or("-".into(), |r| hex(&r))
                     )
                 }
                 rhtn_ffi::net::Event::Answered {

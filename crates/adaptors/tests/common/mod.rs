@@ -138,11 +138,18 @@ impl Default for Scene {
 
 impl Scene {
     pub fn new() -> Scene {
+        Self::starting(1_800_000_000)
+    }
+
+    /// A scene whose first record is an hour after `clock`: what a bundle
+    /// handed to a selector needs, since only a record finalized before
+    /// the ceremony qualifies (`wire-format.md` §5.3).
+    pub fn starting(clock: u64) -> Scene {
         Scene {
             archives: NAMES.iter().map(|n| (kh(n), Archive::new(kh(n)))).collect(),
             store: BTreeMap::new(),
             records: Vec::new(),
-            clock: 1_800_000_000,
+            clock,
         }
     }
 
@@ -236,21 +243,6 @@ impl Scene {
 
 // ----------------------------------------------------------------- device
 
-struct NoChannels;
-
-impl Proximity for NoChannels {
-    fn supported(&self) -> Vec<ChannelKind> {
-        Vec::new()
-    }
-    fn run(&self, kind: ChannelKind, _: &Keyhash) -> ChannelOutcome {
-        ChannelOutcome {
-            kind,
-            result: ChannelResult::Unavailable,
-            resolution_m: None,
-        }
-    }
-}
-
 struct Cam;
 
 impl Camera for Cam {
@@ -296,13 +288,52 @@ impl Operator for Yes {
     }
 }
 
+/// Proximity hardware with a fixed set of channels, all of which pass.
+pub struct Passing(pub Vec<ChannelKind>);
+
+impl Proximity for Passing {
+    fn supported(&self) -> Vec<ChannelKind> {
+        self.0.clone()
+    }
+    fn run(&self, kind: ChannelKind, _: &Keyhash) -> ChannelOutcome {
+        ChannelOutcome {
+            kind,
+            result: ChannelResult::Pass,
+            resolution_m: None,
+        }
+    }
+}
+
+/// The wall clock a fixed offset away: a witness whose clock is far.
+pub struct SkewedClock(pub i64);
+
+impl Clock for SkewedClock {
+    fn now_ms(&self) -> u64 {
+        (SystemClock.now_ms() as i64 + self.0 * 1000) as u64
+    }
+    fn wait_ms(&self, ms: u64) {
+        SystemClock.wait_ms(ms);
+    }
+}
+
 /// A device with nothing to run a ceremony on, a wall clock, and the
 /// direct path the adaptors report.
 pub fn device(direct: Rc<dyn DirectPath>) -> Device {
+    device_with(direct, Vec::new(), 0)
+}
+
+/// A device whose proximity hardware has `channels`, all passing, and
+/// whose clock is `skew_s` from the wall.
+pub fn device_with(direct: Rc<dyn DirectPath>, channels: Vec<ChannelKind>, skew_s: i64) -> Device {
+    let clock: Rc<dyn Clock> = if skew_s == 0 {
+        Rc::new(SystemClock)
+    } else {
+        Rc::new(SkewedClock(skew_s))
+    };
     Device {
-        proximity: Rc::new(NoChannels),
+        proximity: Rc::new(Passing(channels)),
         camera: Rc::new(Cam),
-        clock: Rc::new(SystemClock),
+        clock,
         random: Rc::new(OsRandom),
         operator: Rc::new(Yes),
         notifier: Rc::new(Silent),
@@ -314,6 +345,25 @@ pub fn device(direct: Rc<dyn DirectPath>) -> Device {
 /// A client for `name` on a thread of its own, its route choice reading
 /// `reachable`.
 pub fn spawn_client(name: &'static str, cfg: Config, reachable: Reachable) -> Handle {
-    Handle::spawn(move || Client::new(id(name), ids(), cfg, device(Rc::new(reachable))))
-        .expect("the client builds")
+    spawn_client_with(name, cfg, reachable, Vec::new(), 0)
+}
+
+/// The same, on a device with `channels` and a clock `skew_s` from the
+/// wall.
+pub fn spawn_client_with(
+    name: &'static str,
+    cfg: Config,
+    reachable: Reachable,
+    channels: Vec<ChannelKind>,
+    skew_s: i64,
+) -> Handle {
+    Handle::spawn(move || {
+        Client::new(
+            id(name),
+            ids(),
+            cfg,
+            device_with(Rc::new(reachable), channels, skew_s),
+        )
+    })
+    .expect("the client builds")
 }

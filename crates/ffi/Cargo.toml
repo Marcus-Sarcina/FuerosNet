@@ -10,6 +10,22 @@ description = "The boundary the mobile shells bind to: one facade over rhtn-clie
 crate-type = ["lib", "cdylib"]
 
 [features]
+# The releasable flavour is the default: every diagnostic hook in this
+# crate and below it is compiled out through `tracing/max_level_off`, which
+# cargo's feature unification applies to the whole build graph (see
+# `rhtn-client`'s manifest and `crates/README.md`).
+default = ["releasable"]
+releasable = [
+    "rhtn-client/releasable",
+    "tracing/max_level_off",
+    "tracing/release_max_level_off",
+    "log/max_level_off",
+    "log/release_max_level_off",
+]
+# The field-test flavour: the hooks stay in and each event reaches the
+# platform's `Diagnostics` object as one JSON line.  Built with
+# `--no-default-features --features fieldtest`; never shipped.
+fieldtest = ["rhtn-client/fieldtest", "dep:tracing-subscriber"]
 # the binding generator's command line, for `cargo run --features cli --bin uniffi-bindgen`
 cli = ["uniffi/cli"]
 # a serving node and test identities exported to a binding's round trip;
@@ -34,11 +50,20 @@ rhtn-node = { path = "../node", optional = true }
 rhtn-codec = { path = "../codec", optional = true }
 rhtn-adaptors = { path = "../adaptors" }
 rhtn-archive = { path = "../archive" }
-rhtn-client = { path = "../client" }
+# the flavour is chosen here, by this crate's features, and never by the
+# client's own default
+rhtn-client = { path = "../client", default-features = false }
 rhtn-crypto = { path = "../crypto" }
 rhtn-transport = { path = "../transport" }
 tokio = { version = "1", features = ["rt-multi-thread", "time", "sync"] }
 quinn = { version = "0.11", default-features = false, features = ["runtime-tokio", "rustls-aws-lc-rs", "log"] }
+# MIT; already in the graph through quinn
+tracing = { version = "0.1", default-features = false, features = ["std"] }
+# MIT OR Apache-2.0; already in the graph through tracing, named so
+# `releasable` can cap its static level (rhtn-client's manifest says why)
+log = { version = "0.4", default-features = false }
+# MIT; the registry the field-test renderer is installed on
+tracing-subscriber = { version = "0.3", default-features = false, features = ["std", "registry"], optional = true }
 
 [dev-dependencies]
 rhtn-codec = { path = "../codec" }

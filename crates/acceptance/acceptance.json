@@ -11210,6 +11210,84 @@
     "interpretation": "The anchor authenticates nobody (§14.3.1): every value is public, so these catch a bearer contradicting the screens and never one quoting them. What stands in their place is §14.1's property, and it is physical."
   },
   {
+    "id": "CER-45",
+    "area": "ceremony",
+    "gap": "ceremony",
+    "title": "Carry the ceremony's conversation over the end-to-end path to a record every signer holds",
+    "milestone": 4,
+    "kind": "positive",
+    "spec": [
+      "wire-format.md §7.10.1",
+      "wire-format.md §7.10.2",
+      "design §7.1"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §7.10.1",
+        "text": "Each one a participant sends\ngoes to its counterparty and to every witness either of them nominated, which\nis how a witness observes the sequence it attests"
+      }
+    ],
+    "given": "Two participants past the local exchanges, each having nominated witnesses from the other's neighbourhood, every party reachable only through its serving node, and no message moved by hand.",
+    "when": "The initiator and the responder each open the conversation, put their queries, hand over what they gathered, and the initiator proposes.",
+    "then": "Every message rides the payload path as its kind, 9 to 18, to the counterparty and to every witness either nominated, the consent request to the subject alone; the proposer's body reaches every signer and every signer's entries return; the finalised record reaches every signer and each holds the same one.",
+    "oracle": "behaviour",
+    "interpretation": "The in-process harness remains for tests that move messages by hand; this is the path a device runs."
+  },
+  {
+    "id": "CER-46",
+    "area": "ceremony",
+    "gap": "ceremony",
+    "title": "Ask the witnesses first, and attribute each answer from the nominee lists",
+    "milestone": 4,
+    "kind": "positive",
+    "spec": [
+      "wire-format.md §7.10.1",
+      "wire-format.md §7.10.2"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §7.10.1",
+        "text": "The witness request and the sender's back-pointers (kinds 12 and 15)\ngo first, before any query, so a witness holds the ceremony before anything\nelse of it arrives and can attribute what follows"
+      },
+      {
+        "where": "wire-format.md §7.10.1",
+        "text": "the proposer attributes each answer\nto the side whose nominee list names that witness, the answer itself naming\nnobody"
+      }
+    ],
+    "given": "A participant with nominees named, before any query has been put.",
+    "when": "The conversation opens.",
+    "then": "The witness request and this signer's back-pointers go before the first consent request, so each witness holds the ceremony before anything else of it arrives; a witness's answer names nobody, and the proposer lists it under the side whose nominee list carries that witness.",
+    "oracle": "behaviour",
+    "interpretation": "A witness that receives a kind before the request cannot attribute it; the ordering is what makes the rest of the sequence evidence to it."
+  },
+  {
+    "id": "CER-47",
+    "area": "ceremony",
+    "gap": "ceremony",
+    "title": "Refuse the conversation from a stranger, and take nothing further from a ceremony declined",
+    "milestone": 4,
+    "kind": "negative",
+    "spec": [
+      "wire-format.md §7.10.1",
+      "light-client-requirements.md §1.2"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §7.10.1",
+        "text": "**A participant takes\nthe conversation only from its counterparty and its ceremony's witnesses, and\na witness only from the two participants the request named**; from anyone\nelse these kinds are application payload from a stranger, and are dropped"
+      },
+      {
+        "where": "light-client-requirements.md §1.2",
+        "text": "**Having declined, take nothing further of that ceremony.**"
+      }
+    ],
+    "given": "A ceremony under way with its two participants and nominated witnesses, a third identity that is neither, and one nominee whose clock puts the claimed start outside its tolerance.",
+    "when": "The third identity sends a kind 9 to 18 to a participant; the far-clock nominee declines and is later sent the proposed body.",
+    "then": "The participant drops the stranger's message as application payload and the ceremony is unchanged; the nominee that declined answers with its refusal and takes nothing further, and the finalised record does not name it.",
+    "oracle": "behaviour",
+    "interpretation": ""
+  },
+  {
     "id": "RSC-38",
     "area": "resources",
     "gap": "resources",
@@ -13198,5 +13276,28 @@
     "then": "The wait ends as an endpoint failure once one deadline from the Attach has passed, after several unknown frames were received and skipped; no frame restarts it, and the client goes on to its remaining candidates.",
     "oracle": "behaviour",
     "interpretation": "The deadline's length is local policy; what is tested is that one bounds the wait as a whole rather than the gap between frames [2026-10-01]."
+  },
+  {
+    "id": "SES-30",
+    "area": "session",
+    "gap": "session",
+    "title": "When two initial messages cross, the lower keyhash's session stands",
+    "milestone": 4,
+    "kind": "positive",
+    "spec": [
+      "wire-format.md §7.10",
+      "design §14.2.2"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §7.10",
+        "text": "The session the lower keyhash opened stands; the other is held only for what\nwas already sent on it, bounded (the reference client holds two), and then let\ngo"
+      }
+    ],
+    "given": "Two devices that hold no session with each other, each opening one to the other at the same moment, as a ceremony's two participants do when they ask their witnesses.",
+    "when": "Both initial messages are delivered.",
+    "then": "Each side keeps the session the lower keyhash opened; the message the other side sent on its own opening is still read, since that session is held for what was already sent on it, bounded, and then let go; nothing sent on either is lost.",
+    "oracle": "behaviour",
+    "interpretation": "The reference client holds two displaced sessions; the bound is the holder's."
   }
 ]

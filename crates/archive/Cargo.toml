@@ -10,6 +10,9 @@ description = "RHTN archive chain and local topology: transaction construction, 
 rhtn-codec = { path = "../codec" }
 rhtn-crypto = { path = "../crypto" }
 sha2 = { workspace = true }
+# MIT; one diagnostic event at the held-list eviction, compiled out in a
+# releasable build by the leaf crate's `tracing/max_level_off`
+tracing = { version = "0.1", default-features = false, features = ["std"] }
 
 [dev-dependencies]
 hex = { workspace = true }

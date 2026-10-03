@@ -723,10 +723,23 @@ pub struct Sessions {
     /// again.  Capped at [`SEEN_INITIALS`] on both the accept path and
     /// decode, so a corrupt or oversized blob cannot grow it without bound.
     pub seen_initials: std::collections::VecDeque<[u8; 32]>,
+    /// Sessions a newer one displaced, per peer device, newest first and
+    /// at most [`PREVIOUS_SESSIONS`] of them: what a message the peer
+    /// encrypted before it learned of the newer session still opens on.
+    /// **Two opens that cross** are where this is needed (design §22.2:
+    /// the construction's own): each side opened toward the other before
+    /// either's initial arrived, and each would otherwise replace the
+    /// session it had just sent on with one the other side does not hold
+    /// for sending.  Held in memory only: once both sides are on the one
+    /// session that stands, nothing more is sent on the other.
+    pub previous: BTreeMap<PeerDevice, Vec<Ratchet>>,
 }
 
 /// How many initial messages' ephemeral keys are remembered.
 const SEEN_INITIALS: usize = 256;
+
+/// How many displaced sessions are kept per peer device.
+const PREVIOUS_SESSIONS: usize = 2;
 
 impl Sessions {
     /// The sessions as they go to the device's own storage: every ratchet
@@ -788,7 +801,15 @@ impl Sessions {
             seen_initials,
             ratchets,
             prefetched,
+            previous: BTreeMap::new(),
         })
+    }
+
+    /// Hold a session a newer one displaced, newest first, bounded.
+    fn keep_previous(&mut self, peer: PeerDevice, r: Ratchet) {
+        let held = self.previous.entry(peer).or_default();
+        held.insert(0, r);
+        held.truncate(PREVIOUS_SESSIONS);
     }
 
     /// Keep a bundle under the device it names.
@@ -852,6 +873,14 @@ impl Sessions {
             ad,
         );
         let first = r.encrypt(plaintext).map_err(PayloadError::Crypto)?;
+        tracing::info!(
+            target: "pay",
+            state = "opened",
+            peer = %crate::diag::id8(&to),
+            device = %crate::diag::id8(&their.device),
+            one_time = one_time.is_some(),
+            "pay.session"
+        );
         self.ratchets.insert((to, their.device), r);
         let msg = InitialMessage {
             ik: keys.ik.public(),
@@ -905,12 +934,23 @@ impl Sessions {
         self.ratchets.contains_key(&(*peer, *device))
     }
 
-    /// Read what arrived on the channel from `from`: an initial message
-    /// opens a session on this client's prekeys, consuming the one-time
-    /// pair it names; a message decrypts on the session held.
+    /// Read what arrived on the channel from `from`, at `holder`: an initial
+    /// message opens a session on this client's prekeys, consuming the
+    /// one-time pair it names; a message decrypts on the session held, or
+    /// on one a newer session displaced.
+    ///
+    /// **Two opens that cross** (this construction's call, design §22.2):
+    /// an initial from a peer this side has itself opened toward, and read
+    /// nothing from, is the peer's open crossing this side's.  The session
+    /// the lower keyhash opened stands at both ends, since both apply the
+    /// same rule, and the other is held a while for what was sent on it
+    /// before this was known.  A session this side has read on is one the
+    /// peer held and has since opened past: the new one is taken, and the
+    /// old held the same way.
     pub fn receive(
         &mut self,
         keys: &mut PayloadKeys,
+        holder: &Keyhash,
         from: Keyhash,
         bytes: &[u8],
         fresh: Fresh,
@@ -998,20 +1038,68 @@ impl Sessions {
                     self.seen_initials.pop_front();
                 }
                 self.seen_initials.push_back(m.ek.0);
-                self.ratchets.insert((from, device), r);
+                let state = match self.ratchets.remove(&(from, device)) {
+                    // crossed, and mine stands: theirs opens what they sent
+                    // before they learned so
+                    Some(held) if held.opened_unanswered() && *holder < from => {
+                        self.ratchets.insert((from, device), held);
+                        self.keep_previous((from, device), r);
+                        "kept"
+                    }
+                    // crossed and theirs stands, or they opened past the
+                    // one held: what was sent on the old one still opens
+                    Some(held) => {
+                        self.keep_previous((from, device), held);
+                        self.ratchets.insert((from, device), r);
+                        "displaced"
+                    }
+                    None => {
+                        self.ratchets.insert((from, device), r);
+                        "opened"
+                    }
+                };
+                tracing::info!(
+                    target: "pay",
+                    state,
+                    peer = %crate::diag::id8(&from),
+                    device = %crate::diag::id8(&device),
+                    one_time = m.opk_id.is_some(),
+                    "pay.session"
+                );
                 Ok(pt)
             }
             CHANNEL_MESSAGE => {
-                let r = self
-                    .ratchets
-                    .get_mut(&(from, device))
-                    .ok_or(PayloadError::NoSession)?;
                 let mut seed = || {
                     let mut s = [0u8; 32];
                     next(&mut s);
                     s
                 };
-                r.decrypt(&inner, &mut seed).map_err(PayloadError::Crypto)
+                let on_current = match self.ratchets.get_mut(&(from, device)) {
+                    Some(r) => r.decrypt(&inner, &mut seed),
+                    None => return Err(PayloadError::NoSession),
+                };
+                match on_current {
+                    Ok(pt) => Ok(pt),
+                    Err(e) => {
+                        // a message from before the peer took the session
+                        // that stands opens on the one it displaced; the
+                        // ratchet leaves itself as it was on a failure, so
+                        // each is tried in turn
+                        for held in self.previous.get_mut(&(from, device)).into_iter().flatten() {
+                            if let Ok(pt) = held.decrypt(&inner, &mut seed) {
+                                tracing::debug!(
+                                    target: "pay",
+                                    state = "on_previous",
+                                    peer = %crate::diag::id8(&from),
+                                    device = %crate::diag::id8(&device),
+                                    "pay.session"
+                                );
+                                return Ok(pt);
+                            }
+                        }
+                        Err(PayloadError::Crypto(e))
+                    }
+                }
             }
             _ => Err(PayloadError::Malformed("unknown channel tag".into())),
         }

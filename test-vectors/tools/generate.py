@@ -2844,6 +2844,7 @@ proposed_body = e_map([(e_uint(1), e_bstr(npr_body)), (e_uint(2), e_arr(proposed
 signer_entries = e_arr([cose_signature_entry(p, s) for _, _, p, _, s in npr_entries[:2]])
 signing_reply_signed = e_map([(e_uint(1), signer_entries)])
 signing_reply_refused = e_map([(e_uint(2), e_uint(1)), (e_uint(3), e_bstr(IDS['w1'].keyhash))])
+signing_reply_refused_4 = e_map([(e_uint(2), e_uint(4))])
 
 # (caption, bytes, the s7.10.1 kind tag that precedes the object on the
 # channel) -- the kind is per object, and an earlier version of this list
@@ -3970,6 +3971,7 @@ for fid, by, kind, note in [
     ('P-proposed-body', proposed_body, 'ProposedBody', "the normal record's body and its seven revealed slots"),
     ('P-signing-reply-signed', signing_reply_signed, 'SigningReply', "the lowest-keyhash signer's two entries"),
     ('P-signing-reply-refused', signing_reply_refused, 'SigningReply', 'refusal 1 with the witness keyhash'),
+    ('P-signing-reply-refused-4', signing_reply_refused_4, 'SigningReply', 'refusal 4, the body does not verify against what this signer holds; no particular'),
 ]:
     reg(fid, 'bytes', ACC(kind, note), by)
 _bp9 = [e_bstr(H(b'rhtn-test-vectors:back-pointer:' + bytes([i]))) for i in range(9)]
@@ -4002,6 +4004,9 @@ reg('N-gathered-responses-33', 'bytes',
 reg('N-proposed-body-six-slots', 'bytes',
     REJ('ProposedBody', 'schema', 'exactly seven slots, every one revealed'),
     e_map([(e_uint(1), e_bstr(npr_body)), (e_uint(2), e_arr(proposed_slots[:6]))]))
+reg('N-signing-reply-code-5', 'bytes',
+    REJ('SigningReply', 'schema', 'refusal codes run 1 to 4'),
+    e_map([(e_uint(2), e_uint(5))]))
 reg('N-signing-reply-both', 'bytes',
     REJ('SigningReply', 'schema', 'entries or a refusal, never both'),
     e_map([(e_uint(1), signer_entries), (e_uint(2), e_uint(1))]))

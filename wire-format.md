@@ -3440,6 +3440,12 @@ authorship would be letting its own node say who wrote to it; what a message
 is attributed to is decided by the material it opens under (§7.8, design
 §14.2.4).
 
+**Two initial messages can cross**, each side opening a session to the other
+at once, as both participants of a ceremony do when they ask their witnesses.
+The session the lower keyhash opened stands; the other is held only for what
+was already sent on it, bounded (the reference client holds two), and then let
+go [2026-10-02].
+
 **The third element is what the recipient opens it under, and the node is not
 trusted for it.** Attribution needs the submitter's bundle, and a recipient
 cannot have asked for the bundle of a party who has not written to it yet:
@@ -3497,15 +3503,26 @@ An unknown kind is application payload to a recipient that does not know it,
 and a kind whose body does not decode is dropped by the recipient that
 opened it: the sender is attributed, and the message is not evidence.
 
-**Kinds 9 to 18 are the ceremony's conversation** [author, 2026-10-02], in
-the order a ceremony uses them: everything the two participants and their
-witnesses say to one another after the local exchanges (§14.3). **Each one a
-participant sends goes to its counterparty and to every witness either of
-them nominated**, which is how a witness observes the sequence it attests
-(design §7.1); the one exception is kind 9, stated in its row, and kinds 12
-and 13 are between a participant and one witness but are sent to the rest the
-same way, so the proposer learns which witnesses accepted. Which verifier
-was selected needs no kind of its own: the subject learns it from kind 9.
+**Kinds 9 to 18 are the ceremony's conversation** [author, 2026-10-02]:
+everything the two participants and their witnesses say to one another after
+the local exchanges (§14.3). **Who hears what.** Each one a participant sends
+goes to its counterparty and to every witness either of them nominated, which
+is how a witness observes the sequence it attests (design §7.1), with these
+particulars. The consent request (kind 9) goes to its subject alone, stated in
+its row. The witness request and the sender's back-pointers (kinds 12 and 15)
+go first, before any query, so a witness holds the ceremony before anything
+else of it arrives and can attribute what follows. A witness's answer (kind
+13) goes to the two participants the request named, since a witness knows no
+other witness until the body names them; the proposer attributes each answer
+to the side whose nominee list names that witness, the answer itself naming
+nobody. The proposed body and the finalised record (kinds 16 and 18) go to
+every signer: the counterparty and the witnesses that answered yes. **The
+initiator proposes**: both intents carry which side began (§14.3.2), so the
+two agree on the proposer without a message. Which verifier was selected needs
+no kind of its own: the subject learns it from kind 9. **A participant takes
+the conversation only from its counterparty and its ceremony's witnesses, and
+a witness only from the two participants the request named**; from anyone
+else these kinds are application payload from a stranger, and are dropped.
 
 #### 7.10.2 The conversation's structures
 
@@ -3555,9 +3572,12 @@ SigningReply = {
   ? 2: uint,                  ; a refusal: 1 a witness attributed to this
                               ;   party that it did not nominate; 2 a response
                               ;   this subject holds that the body omits; 3
-                              ;   the claimed start far from this clock
+                              ;   the claimed start far from this clock; 4 the
+                              ;   body does not verify against what this
+                              ;   signer holds, its root, its back-pointers,
+                              ;   or a ceremony it is not holding
   ? 3: bstr .size 32          ; the refusal's particular: the witness keyhash
-                              ;   (1), the query_id (2); absent for 3
+                              ;   (1), the query_id (2); absent for 3 and 4
 }
 ; exactly one of keys 1 and 2 is present, and key 3 only beside key 2
 ```
@@ -4993,11 +5013,11 @@ IntentExchange = [             ; carried by the bearer (§14.3.1), not optical
   uint,                        ; retention_years the sender commits to
   bool,                        ; initiator: this device showed the invite the
                                ;   other read. Either party may (design §7.1);
-                               ;   the flag settles only whose start the pair
+                               ;   the flag settles whose start the pair
                                ;   adopts, the responder taking the initiator's
-                               ;   within its clock tolerance, and nothing
-                               ;   about the record or any adoption follows
-                               ;   from it
+                               ;   within its clock tolerance, and which side
+                               ;   proposes the body (§7.10.1); nothing about
+                               ;   the record or any adoption follows from it
   uint,                        ; continuations: how many BundleContinuation
                                ;   messages follow with the rest of the
                                ;   bundle; 0 where it fits in one carriage
