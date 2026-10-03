@@ -12144,3 +12144,18 @@ permissions are requested rather than caught. Two defects found on the way
 are fixed: the BLE client never subscribed to the server's notifications,
 and a provisioning note pointed at a removed log line. Android tests 62 →
 85. The gate runs on the releasable flavour.
+
+### 2026-10-03 (field-test diagnostics, milestone four)
+
+The bench. A run script starts the field-test daemon and two witness
+instruments on the laptop, provisions and tails every attached phone, and on
+stop pulls each phone's event files and report, merges everything into one
+timeline and summary, and writes the run's identity: commit, pins, devices,
+times. A generator turns the catalogue's manual product rows and the three
+two-device rows into a fifteen-row tester checklist, with a test, now a gate
+step. The daemon's log keeps dependencies' events to warnings and above,
+since a QUIC library's debug lines carry reset tokens. A dry run on this
+machine with an emulator installed the field-test build, provisioned,
+attached, pressed Report and pulled the files. One thing the procedure note
+states plainly: no retention declaration exists in the field-test build; the
+client's default of two years stands until a figure and a knob exist.

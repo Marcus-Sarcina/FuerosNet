@@ -5,6 +5,9 @@
 #  0. The specification pins: the code's and the vectors', non-mutating.
 #  1. The acceptance catalogue: fields, ids, citations, verbatim quotes,
 #     gap coverage (tools/check.py; exit 1 on any flag).
+#  1b. Counts and citations stated in the documents, and model results
+#      against their sources.
+#  1c. The field-test checklist generator's test (tools/field-checklist.py).
 #  2. The generated stubs are in sync with the catalogue: regenerate into a
 #     temporary directory and diff.  A hand edit to tests/ fails here.
 #  3a. Every crate is rustfmt-clean at the default width, non-mutating; the
@@ -68,6 +71,12 @@ if python3 "$HERE/../test-vectors/tools/citecheck.py"; then :; else fail=1; fi
 # tree no longer makes: stale results fail the gate here, where every
 # commit meets it, as well as at the end of models/run-all.sh (2026-10-01).
 if python3 "$HERE/../Robot/modelpincheck.py"; then :; else fail=1; fi
+
+echo "=== 1c. The field-test checklist generator ==="
+# tools/field-checklist.py writes the tester's form into every run directory
+# from the catalogue's manual rows; its test runs it against the catalogue in
+# the tree and against a synthetic one (2026-10-03).  Standard library only.
+if python3 "$HERE/tools/test_field_checklist.py" 2>&1 | tail -2 | sed 's/^/  /'; then :; else fail=1; fi
 
 echo "=== 2. Generated stubs in sync ==="
 tmp="$(mktemp -d)"

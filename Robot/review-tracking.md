@@ -13889,3 +13889,10 @@ material to logcat. The M2 agent ran `git stash`/`pop` over the whole tree
 for a second while the M3 agent had uncommitted edits; nothing was lost (the
 untracked files were never stashed, the pop was clean), recorded so the next
 brief forbids it.
+
+**M4 landed 2026-10-03** (`field-test-diagnostics.md`, `field-test-procedure.md`).
+**For the author**: the field-test build declares no retention; the client
+defaults to two years in whole years and the FFI has no knob. A figure and
+whether the test build should differ are his. Also: the daemon's log now caps
+foreign targets at warn after quinn's debug lines were found to carry QUIC
+reset tokens (329 of 420 events in the dry run were quinn's).

@@ -16,3 +16,7 @@ conformance-review/
 
 # Build marker written by the crate sweep
 crates/sweep.timestamp
+
+# Field-test runs: every run directory the bench script writes
+# (crates/tools/field-run.sh), bundles from the phones included
+runs/

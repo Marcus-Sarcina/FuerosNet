@@ -309,3 +309,38 @@ removed material log line. Costs: M2 48 min and about 275k tokens, M3 34 min
 and about 240k, against M1's 105 min and 480k, as predicted. Next: M4, the
 bench script, the checklist from the product rows and the run procedure.
 
+
+**M4 done 2026-10-03.** `crates/tools/field-run.sh [--addr ip[:port]]
+[--phone serial=material]... <label>` names the run `<commit>-<label>-<n>`,
+builds the field-test `rhtnd`, `rhtnp` and `rhtn` into
+`crates/target/fieldtest` (the releasable binaries elsewhere untouched),
+mints a node identity and two witness identities, writes the peers files so
+the node admits the phones named, starts the node on the laptop's routed
+address (port 7447), attaches the two witnesses, provisions each named phone
+over adb (the other phone as peer; the first witness when alone), follows
+`adb logcat -s fueros.diag` per device, and on Ctrl-C, SIGTERM or
+`field-run.sh stop` pulls every event file and report zip through `run-as`,
+merges, and writes `timeline.txt`, `summary.txt`, `checklist.md` and
+`run.json` into `runs/<run>/` (ignored). A phone's file carries no
+`diag.anchor` of its own, so the merge copy under `merge/` gains one built
+from `shell.start`'s `wall_ms`. `crates/tools/field-checklist.py` writes the
+tester's form from the catalogue's twelve `kind: manual` rows (PRD-02 to
+PRD-13; PRD-01 is a tombstone) plus TRV-12, TRV-13 and MET-12: 15 rows, each
+with id, title, the `when`, the `then`, three boxes and a notes line; its
+eight-case test is gate step 1c. `Robot/field-test-procedure.md` (1,197
+words) carries the bench, the build and install commands, the run sequence,
+the failure reading order, consent, the retention declaration and the wipe.
+Dry runs: one without phones (3 sources, 420 events) and three on the
+`fueros` AVD (x86_64, Android 16), the last of which installed the fieldtest
+APK, read the material off the Conversations screen, provisioned, attached
+(`attached · presents ...` on the status line), pressed Report, and pulled
+three event files and the zip (header.json and one event file); 6 sources,
+947 events. Found on the way: the retention the plan asks the flavour to
+declare (one day) has no knob, `Participant.start` takes
+`ceremony::Config::default()` with `retention_years = 2`, the unit is whole
+years, and the brief's capture item refers to a retention "stated here" that
+the screen does not state; at `[log] level = "debug"` quinn's own targets
+are 329 of the daemon's 420 events in the first dry run, and its
+`NewConnectionId` lines carry QUIC reset tokens; the emulator's quinn
+reports `sendmsg` I/O errors (GSO) once per attach and still attaches; the
+AVD has no front camera, so the capture step cannot run there. Next: M5.

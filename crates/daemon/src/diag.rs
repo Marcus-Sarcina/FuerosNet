@@ -184,7 +184,20 @@ pub mod json {
         F: Fn(String) + Send + Sync + 'static,
     {
         fn enabled(&self, meta: &Metadata<'_>, _: Context<'_, S>) -> bool {
-            self.max >= *meta.level()
+            // Foreign crates (quinn, rustls) chatter at debug and quinn's
+            // connection-id lines carry QUIC reset tokens; the file is for
+            // this project's events, so other targets pass only at warn
+            // and above whatever the configured level.
+            // This project's events name a layer as their target (`node`,
+            // `daemon`, `transport`, `cer`, `pay`); a dependency's events
+            // carry its module path, which has `::` in it.
+            let ours = !meta.target().contains("::");
+            let cap = if ours {
+                self.max
+            } else {
+                self.max.min(LevelFilter::WARN)
+            };
+            cap >= *meta.level()
         }
 
         fn max_level_hint(&self) -> Option<LevelFilter> {
