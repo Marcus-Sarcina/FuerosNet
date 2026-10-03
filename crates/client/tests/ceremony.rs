@@ -215,6 +215,33 @@ fn three_meetings(channels: &[ChannelKind]) -> (Setup, [u8; 32], [u8; 32], [u8; 
     (s, cb, ab, ac)
 }
 
+/// The retention a client declares is its own to set (design §7.5.1;
+/// `light-client-requirements.md` §1.3), in whole years, before a ceremony
+/// and not during one, whose intent has already stated it.
+#[test]
+fn the_declared_retention_is_the_persons_to_set_between_ceremonies() {
+    let mut s = setup(&["alice", "bob"], &[ChannelKind::Nfc]);
+    let a = s.client("alice");
+    assert_eq!(a.retention_years(), 2, "the default");
+    assert_eq!(
+        a.set_retention_years(0),
+        Err("a retention is at least one year")
+    );
+    a.set_retention_years(1).expect("one year is a retention");
+    assert_eq!(a.retention_years(), 1);
+    let intent = a.begin(kh("bob"), vec![], true).expect("alice begins");
+    assert_eq!(intent.retention_years, 1, "the intent carries what was set");
+    assert!(
+        a.set_retention_years(3).is_err(),
+        "not while a ceremony is under way"
+    );
+    assert_eq!(a.retention_years(), 1);
+    a.abandon();
+    a.set_retention_years(3).expect("and again once it is over");
+    assert_eq!(a.intent().err(), Some(Abort::NotActive));
+    assert_eq!(a.retention_years(), 3);
+}
+
 // acceptance: CER-24
 #[test]
 fn the_capture_key_goes_directly_to_the_selected_verifier_and_nowhere_else() {

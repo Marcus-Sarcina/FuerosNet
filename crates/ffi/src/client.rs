@@ -1499,6 +1499,40 @@ impl Participant {
         crate::diag::call_plain("attached", || self.net.session().is_some())
     }
 
+    /// Drop the ceremony under way without a record: the shell's Stop,
+    /// told to the kernel so that nothing of the conversation is answered
+    /// after it.  Nothing sealed is filed and the seed goes with it; the
+    /// counterparty and the witnesses hear nothing, there being no message
+    /// for it (`wire-format.md` §7.10.1), and read the silence.  Outside a
+    /// ceremony it does nothing.
+    pub fn abandon(&self) -> Result<(), Refused> {
+        crate::diag::call("abandon", || {
+            self.handle.with_blocking(|c| c.abandon());
+            self.save()
+        })
+    }
+
+    /// The retention this device declares at its next intent, in whole
+    /// years (design §7.5.1).
+    #[must_use]
+    pub fn retention_years(&self) -> u64 {
+        crate::diag::call_plain("retention_years", || {
+            self.handle.with_blocking(|c| c.retention_years())
+        })
+    }
+
+    /// Declare the retention for the ceremonies from here on, in whole
+    /// years (design §7.5.1).  Refused at zero and while a ceremony is
+    /// under way, its intent having stated the figure.
+    pub fn set_retention_years(&self, years: u64) -> Result<(), Refused> {
+        crate::diag::call("set_retention_years", || {
+            self.handle
+                .with_blocking(move |c| c.set_retention_years(years))
+                .map_err(Refused::new)?;
+            self.save()
+        })
+    }
+
     /// The ceremony this client is in, once both intents have crossed.
     #[must_use]
     pub fn ceremony(&self) -> Option<Id> {

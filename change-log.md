@@ -12159,3 +12159,53 @@ machine with an emulator installed the field-test build, provisioned,
 attached, pressed Report and pulled the files. One thing the procedure note
 states plainly: no retention declaration exists in the field-test build; the
 client's default of two years stands until a figure and a knob exist.
+
+### 2026-10-03 (the live diagnostic stream)
+
+Beside the file sink, the field-test shell streams each event line over
+plain TCP to the laptop, with a hello carrying the run and the device, a
+bounded backlog that counts its drops, and reconnection; the address and the
+bench's serial reach the phone through the same provisioning intent the run
+script already sends, and the releasable flavour reads neither. A collector
+command writes each connection to its own file and a watch command follows a
+directory and prints every ceremony step, refusal and abort as it lands,
+placed by the file's anchor. The run script starts the collector and passes
+the address; the stop-time pull stays the record of truth, the stream being
+plaintext on the tester's own network and lossy by design. Android tests 91
+→ 95, CLI 9 → 12.
+
+### 2026-10-03 (the shell's conversation steps)
+
+The Android shell's verifier, review and done steps now drive the kernel's
+courier path. When the captures seal, the shell opens the conversation and
+puts the queries; it polls progress on its event loop, shows verifiers and
+witnesses as they answer, and when no query is outstanding the responder
+hands over what it gathered and the initiator proposes, retrying while the
+kernel says it is waiting and surfacing a missing witness to the person.
+Review shows the signers and the warnings once the body has gone or arrived
+and been signed; done follows the event that carries the record. The
+walkthrough control is gone. Every bearer phase, the intent, the proximity
+outcomes and the capture key, now waits up to thirty seconds for the
+Bluetooth link to be ready before sending, with a diagnostic event and a
+named stop on timeout. A race in the opening guard that let a concurrent
+poll propose early was found and fixed. Android tests 95 → 108; the
+releasable native libraries rebuilt to match the FFI.
+
+### 2026-10-03 (the pre-phone closure)
+
+The four items the shell wiring left open for the kernel are closed. The
+conversation event now carries the kernel's move as a structured value
+beside its words, with a signing refusal's wire code and reason, and the
+shell switches on it rather than reading display strings. A Stop from any
+live step abandons the kernel's ceremony through a new kernel call, so
+nothing of the conversation is answered after the person has left it; a
+finished meeting is not abandoned. A verifier that never answers no longer
+holds two people at the verifiers step: the kernel runs no timer and the
+design asks for none, so the shell goes on without the unanswered queries
+after sixty seconds from the last answer, or when the person says to, and
+the pre-sign warnings say how many did not answer. The retention a device
+declares is settable, in whole years, between ceremonies and not during one;
+the field-test run script carries a figure in the provision, the kernel
+takes it at start, and the brief states it. Android tests 108 → 112; the
+participant harness prints the new field; both native flavours and the
+binding rebuilt.

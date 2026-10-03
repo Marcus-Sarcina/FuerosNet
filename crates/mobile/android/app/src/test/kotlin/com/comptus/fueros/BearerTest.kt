@@ -30,6 +30,38 @@ class BearerTest {
         sizes.mapIndexed { m, n -> ByteArray(n) { (it * 13 + m).toByte() } }
 
     @Test
+    fun a_link_that_comes_ready_is_waited_for_and_no_longer() {
+        var clock = 0L
+        var asked = 0
+        val paused = mutableListOf<Long>()
+        val ok = Bearer.awaitReady(
+            budgetMs = 1000,
+            stepMs = 100,
+            now = { clock },
+            pause = { paused += it; clock += it },
+        ) { ++asked >= 3 }
+        assertTrue(ok)
+        assertEquals(3, asked)
+        assertEquals(listOf(100L, 100L), paused)
+    }
+
+    @Test
+    fun a_link_that_never_comes_ready_is_given_up_on_at_the_budget() {
+        var clock = 0L
+        var asked = 0
+        val ok = Bearer.awaitReady(
+            budgetMs = 1000,
+            stepMs = 250,
+            now = { clock },
+            pause = { clock += it },
+        ) { asked++; false }
+        assertTrue(!ok)
+        // asked at 0, 250, 500, 750 and 1000, then the budget is spent
+        assertEquals(5, asked)
+        assertEquals(1000L, clock)
+    }
+
+    @Test
     fun a_carriage_crosses_a_twenty_byte_link_and_arrives_in_order() {
         // twenty is what Bluetooth LE gives before any negotiation, and
         // the header leaves sixteen bytes of slice

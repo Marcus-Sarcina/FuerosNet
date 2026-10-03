@@ -299,11 +299,11 @@ impl SigningReply {
                 out.extend_from_slice(entries);
             }
             Err(r) => {
-                let (code, particular): (u64, Option<&[u8; 32]>) = match r {
-                    Refusal::NomineeNotMine(k) => (1, Some(k)),
-                    Refusal::OmittedResponse(q) => (2, Some(q)),
-                    Refusal::ClockFar { .. } => (3, None),
-                    Refusal::NotVerified => (4, None),
+                let code = r.code();
+                let particular: Option<&[u8; 32]> = match r {
+                    Refusal::NomineeNotMine(k) => Some(k),
+                    Refusal::OmittedResponse(q) => Some(q),
+                    Refusal::ClockFar { .. } | Refusal::NotVerified => None,
                 };
                 emit_map_head(&mut out, 1 + usize::from(particular.is_some()));
                 emit_uint(&mut out, 2);

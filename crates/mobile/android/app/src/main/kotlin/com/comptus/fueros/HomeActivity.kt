@@ -76,6 +76,13 @@ class HomeActivity : Activity() {
         // where a provision arrives, and where the kernel is brought up:
         // both are the launcher's, once
         intent.getStringExtra("provision")?.let { Kernel.provision(this, it) }
+        // the bench's live stream target, taken in the fieldtest flavour
+        // alone (`FuerosApp.streamTo`); the releasable never reads it
+        if (BuildConfig.FIELD_TEST) {
+            intent.getStringExtra("diag_stream")?.let {
+                FuerosApp.streamTo(this, it, intent.getStringExtra("diag_serial"))
+            }
+        }
         Kernel.start(this)
     }
 

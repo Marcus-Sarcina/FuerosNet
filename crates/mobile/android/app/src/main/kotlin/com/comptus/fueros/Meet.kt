@@ -27,6 +27,18 @@ package com.comptus.fueros
  *    selection and the pre-sign warnings; only from there is the record
  *    signed.
  *
+ * **From the capture on, the kernel drives and this flow follows.** The
+ * ceremony's conversation runs on the end-to-end path (`wire-format.md`
+ * §7.10.1; `crates/client/src/sequence.rs`), and the four steps a
+ * participant takes are the [Courier]'s: open, the queries, the gathered
+ * responses, the body. This flow decides *when*, from the kernel's
+ * [Progress] as the shell polls it, and the kernel holds no timer: the
+ * proposer proposes when its queries are answered, and a witness that has
+ * not answered by then is left out (design §7.1). The kernel reviews and
+ * signs the body as it arrives, so by [Step.REVIEW] this device's
+ * signature has gone; what the screen owes there is to show what was
+ * signed and let the person stop watching.
+ *
  * The passive roles — witness, verifier — have no place in this flow at
  * all: they are asked nothing and warned of nothing (design §19.6), and the
  * kernel answers them in its event loop, off any screen.
@@ -40,7 +52,21 @@ class Meet(
     /** Which side of the bootstrap: the initiator shows it, the responder
      *  reads it. */
     val role: Role = Role.INITIATOR,
+    /** The retention this device declares at its intent, in whole years
+     *  (design §7.5.1), as the kernel holds it: the brief states it. */
+    val retentionYears: Long = 2,
+    /** How long the flow waits on an unanswered query before going on
+     *  without it, from the last answer or from the queries going out.
+     *  The kernel runs no timer: when to propose is the proposer's own
+     *  call (`crates/client/src/sequence.rs`), and this is it. */
+    val patienceMs: Long = PATIENCE_MS,
 ) {
+    companion object {
+        /** One minute: long enough for a verifier two hops away to be
+         *  reached and to answer, short enough to hold two people standing
+         *  with their phones. */
+        const val PATIENCE_MS = 60_000L
+    }
     /** The adoption this meeting carries, as chosen at D1a. */
     val adopt: Adopt get() = kind.adopt
 
@@ -133,6 +159,76 @@ class Meet(
         fun render()
     }
 
+    /**
+     * The kernel's conversation on the courier, as this flow drives it:
+     * the four steps a participant takes (`crates/client/src/sequence.rs`)
+     * and where the conversation stands. Each step answers null where it
+     * went and the kernel's refusal otherwise, in the kernel's own words
+     * (`Abort`'s debug form: `Waiting("...")`, `NoWitness`, and so on),
+     * which this flow reads and the screen shows. **No binding here**: the
+     * kernel implements this over `Participant`, and a test with a fake.
+     */
+    interface Courier {
+        /** Ask every nominee to witness and hand over the back-pointers. */
+        fun open(): String?
+
+        /** Select the verifiers and put each query to the subject. */
+        fun queries(): String?
+
+        /** The responder hands the proposer its gathered responses. */
+        fun gathered(): String?
+
+        /** The initiator proposes the body to every signer. */
+        fun propose(): String?
+
+        /** Where the conversation stands, or null outside a ceremony. */
+        fun progress(): Progress?
+    }
+
+    /** The kernel's `Progress`, with identifiers as hex. */
+    data class Progress(
+        val proposer: Boolean,
+        val queriesOutstanding: Int,
+        val attesting: List<String> = listOf(),
+        val declined: List<String> = listOf(),
+        val backFrom: List<String> = listOf(),
+        val theirResponses: Boolean = false,
+        val proposed: Boolean = false,
+        val signed: List<String> = listOf(),
+        val refused: List<String> = listOf(),
+    )
+
+    /** A nominee's answer to the request to witness, as it lands. */
+    enum class Answer {
+        ATTESTS,
+        DECLINED,
+    }
+
+    /** One nominee, whose it was, and what it answered so far. */
+    data class Nominee(val key: String, val mine: Boolean, val answer: Answer? = null)
+
+    /**
+     * One move of the conversation, as the kernel names it
+     * (`Event.Conversed.step`, from `sequence.rs`'s `Conversed`): the
+     * three the flow acts on, and the rest, which is the notice line's.
+     * The code is `wire-format.md` §7.10.2's `SigningReply` field 2, 1 to
+     * 4, and the words are the kernel's.
+     */
+    sealed class Turn {
+        /** This device was shown the body and refused to sign it. */
+        data class BodyRefused(val code: Int, val why: String) : Turn()
+
+        /** A signer refused the body this device proposed. */
+        data class SignerRefused(val signer: String, val code: Int, val why: String) : Turn()
+
+        /** The record is finalized and held. */
+        data class Finalized(val txid: String) : Turn()
+
+        /** Everything else: consent, witness answers, back-pointers, a
+         *  stranger's message refused. */
+        object Other : Turn()
+    }
+
     private val lock = Any()
     private var ui: Ui? = null
     private var step = Step.INTENT
@@ -152,6 +248,32 @@ class Meet(
     private var chosen: List<Chosen> = listOf()
     private var selectionRun = false
     private val queriesAboutMe = mutableListOf<String>()
+    /** The conversation on the courier, as far as this side has taken it:
+     *  `opening` guards the one entry, `opened` is set once the queries are
+     *  out, and nothing is polled before that, since a poll between the
+     *  two would read no query outstanding and move too early. */
+    private var opening = false
+    private var opened = false
+    private var gathered = false
+    private var nomineesMine: List<String> = listOf()
+    private var nomineesTheirs: List<String> = listOf()
+    private var progress: Progress? = null
+    /** What the kernel said it waits on, the last time it refused to
+     *  propose; cleared once it does not. */
+    private var waitingOn: String? = null
+    /** The kernel would propose and no nominee has agreed to attest. */
+    private var noWitness = false
+    /** When the queries went out and when the last answer landed, on the
+     *  caller's clock; what the patience is measured from. */
+    private var queriesOutAt = 0L
+    private var lastAnswerAt = 0L
+    /** The person said to go on without the unanswered queries. */
+    private var goOn = false
+    /** The flow went on with queries unanswered, and said so once. */
+    private var wentOnWithout = 0
+    /** Told when the meeting stops, from any live step: the kernel's, so
+     *  its ceremony is abandoned the moment the screen's is. */
+    var onStopped: (() -> Unit)? = null
 
     // ---- binding, same lifecycle discipline as Front --------------------
 
@@ -210,6 +332,75 @@ class Meet(
      *  (design §7.4.2) and the verifier is not (design §19.6). */
     fun queriesAboutMe(): List<String> = synchronized(lock) { queriesAboutMe.toList() }
 
+    // ---- the conversation on the courier --------------------------------
+
+    /** Where the kernel last said the conversation stood. */
+    fun progress(): Progress? = synchronized(lock) { progress }
+
+    /** Whether the conversation is open on the courier: the request to
+     *  witness and the queries are out, and the flow polls from here. */
+    fun opened(): Boolean = synchronized(lock) { opened }
+
+    /** What the kernel waits on before it will propose, or null. */
+    fun waitingOn(): String? = synchronized(lock) { waitingOn }
+
+    /**
+     * How long, on the caller's clock, before the flow goes on without the
+     * queries still unanswered; zero once it would, or where the person
+     * said to. Null while no query is outstanding or the flow is not open.
+     */
+    fun patienceLeftMs(nowMs: Long = System.currentTimeMillis()): Long? = synchronized(lock) {
+        val p = progress ?: return null
+        if (!opened || p.queriesOutstanding == 0) return null
+        if (goOn) return 0L
+        (maxOf(queriesOutAt, lastAnswerAt) + patienceMs - nowMs).coerceAtLeast(0L)
+    }
+
+    /** How many queries the flow went on without, or zero. */
+    fun wentOnWithout(): Int = synchronized(lock) { wentOnWithout }
+
+    /**
+     * **Go on without the unanswered queries**, the person's control at the
+     * verifiers: the next poll hands over or proposes with what has
+     * answered. A verifier that has not answered by then does not appear
+     * in the record (design §7.1), and the pre-sign warnings say how many.
+     */
+    fun goOn() {
+        synchronized(lock) {
+            if (step != Step.VERIFIERS) return
+            goOn = true
+            changed()
+        }
+    }
+
+    /** Whether the kernel would propose and no nominee has agreed to
+     *  attest: surfaced, because the person decides whether to wait. */
+    fun noWitness(): Boolean = synchronized(lock) { noWitness }
+
+    /** Every nominee, either side's, with what it has answered. */
+    fun witnesses(): List<Nominee> = synchronized(lock) {
+        val p = progress
+        (nomineesMine.map { Nominee(it, true) } + nomineesTheirs.map { Nominee(it, false) })
+            .map { n ->
+                when {
+                    p == null -> n
+                    p.attesting.contains(n.key) -> n.copy(answer = Answer.ATTESTS)
+                    p.declined.contains(n.key) -> n.copy(answer = Answer.DECLINED)
+                    else -> n
+                }
+            }
+    }
+
+    /** The two nominee lists, as the kernel holds them: each side's from
+     *  the other's neighbourhood (design §7.1). */
+    fun nominated(mine: List<String>, theirs: List<String>) {
+        synchronized(lock) {
+            nomineesMine = mine.toList()
+            nomineesTheirs = theirs.toList()
+            changed()
+        }
+    }
+
     /**
      * The selection the kernel computed, in the order it returned. Empty is
      * a real answer and not a failure: `wire-format.md` §5.2 requires a
@@ -229,11 +420,12 @@ class Meet(
      * ignored where that verifier was never selected here — a response to
      * a query this device did not issue is not this ceremony's business.
      */
-    fun responded(key: String, verdict: Verdict) {
+    fun responded(key: String, verdict: Verdict, nowMs: Long = System.currentTimeMillis()) {
         synchronized(lock) {
             val i = chosen.indexOfFirst { it.key == key }
             if (i < 0) return
             chosen = chosen.toMutableList().also { it[i] = it[i].copy(verdict = verdict) }
+            lastAnswerAt = nowMs
             changed()
         }
     }
@@ -291,8 +483,9 @@ class Meet(
         out += Item(
             "UX-002",
             "No image goes into the record. Each phone keeps its own capture of " +
-                "the other, sealed under a key only that person can derive, for the " +
-                "retention stated here and then deleted.",
+                "the other, sealed under a key only that person can derive, for " +
+                "the retention this phone declares, $retentionYears " +
+                "${if (retentionYears == 1L) "year" else "years"}, and then deleted.",
         )
         out += Item(
             "UX-002",
@@ -368,6 +561,14 @@ class Meet(
                 "UX-003",
                 "$unavailable of ${chosen.size} verifiers answered nothing. Silence " +
                     "counts neither for nor against, and the record shows the slot empty.",
+            )
+        }
+        if (wentOnWithout > 0) {
+            out += Item(
+                "UX-003",
+                "$wentOnWithout of ${chosen.size} verifiers had not answered when this " +
+                    "device went on. They do not appear in the record, which carries " +
+                    "that many fewer responses.",
             )
         }
         if (witnessesMine == 0 && witnessesTheirs == 0) {
@@ -456,7 +657,147 @@ class Meet(
      *  user for the verifier selection. */
     fun captureDone() = advance(Step.CAPTURE, Step.VERIFIERS, "kernel")
 
-    fun verifiersDone() = advance(Step.VERIFIERS, Step.REVIEW, "tap")
+    /**
+     * **Open the conversation** (design §7.1 step 6 and step 8), once, on
+     * entering [Step.VERIFIERS]: the request to witness and the
+     * back-pointers first, so a witness is holding the ceremony before
+     * anything else of it arrives, then the queries to the subject. A
+     * refusal of either stops the meeting with the kernel's reason: there
+     * is no conversation to continue. Ends with one [poll], so a
+     * conversation that has nothing to wait on moves at once.
+     */
+    fun converse(c: Courier, nowMs: Long = System.currentTimeMillis()) {
+        synchronized(lock) {
+            if (step != Step.VERIFIERS || opening) return
+            opening = true
+        }
+        c.open()?.let { return stop("the conversation could not open: $it") }
+        note("the nominees are asked to witness; back-pointers sent.")
+        c.queries()?.let { return stop("the queries could not be put: $it") }
+        note("the queries are with $counterpartyName for consent.")
+        synchronized(lock) {
+            opened = true
+            queriesOutAt = nowMs
+        }
+        poll(c, nowMs)
+    }
+
+    /**
+     * **Where the conversation stands, and the step it earns.** Called on
+     * the kernel's event loop, every tick and after every message of the
+     * conversation, while the flow is at [Step.VERIFIERS] or [Step.REVIEW].
+     *
+     * At the verifiers, once no query is outstanding, or once the person
+     * said to go on or the patience ran out with some still out: the
+     * responder hands over what it gathered, once; the initiator proposes,
+     * and is refused while the kernel waits on something (`Waiting`),
+     * which is retried next poll, or because no nominee will attest
+     * (`NoWitness`), which is the person's to wait out or stop. Any other
+     * refusal stops the meeting with its code. The body out, or shown, is
+     * what moves to review; a signer's refusal at the proposer arrives as
+     * a message, in [conversed].
+     *
+     * **A verifier that never answers must not hold two people on a
+     * step.** The kernel has no path by which an unanswered query becomes
+     * `unavailable` at the one who issued it, and the design asks for none:
+     * a verifier that does not answer within the ceremony simply does not
+     * appear (design §7.1). So the wait is the flow's, measured on
+     * `nowMs` from the queries going out or the last answer landing.
+     */
+    fun poll(c: Courier, nowMs: Long = System.currentTimeMillis()) {
+        val live = synchronized(lock) { opened && (step == Step.VERIFIERS || step == Step.REVIEW) }
+        if (!live) return
+        val p = c.progress() ?: return
+        synchronized(lock) {
+            progress = p
+            witnessesMine = p.attesting.count { nomineesMine.contains(it) }
+            witnessesTheirs = p.attesting.count { nomineesTheirs.contains(it) }
+            changed()
+        }
+        if (step() != Step.VERIFIERS) return
+        if (p.proposed) {
+            // the body is out, or has been shown and signed here
+            moved(Step.VERIFIERS, Step.REVIEW)
+            return
+        }
+        if (p.queriesOutstanding > 0) {
+            val why = synchronized(lock) {
+                val patient = nowMs - maxOf(queriesOutAt, lastAnswerAt) < patienceMs
+                if (!goOn && patient) return
+                val first = wentOnWithout == 0
+                wentOnWithout = p.queriesOutstanding
+                when {
+                    !first -> null
+                    goOn -> "you said to go on"
+                    else -> "${patienceMs / 1000} s passed with no answer"
+                }
+            }
+            if (why != null) {
+                note("going on with ${p.queriesOutstanding} queries unanswered: $why; a verifier that has not answered does not appear.")
+            }
+        }
+        if (!p.proposer) {
+            val send = synchronized(lock) { if (gathered) false else { gathered = true; true } }
+            if (send) {
+                c.gathered()?.let { return stop("the responses could not be handed over: $it") }
+                note("my gathered responses are with the proposer.")
+            }
+            return
+        }
+        val refused = c.propose()
+        when {
+            refused == null -> {
+                synchronized(lock) { waitingOn = null; noWitness = false }
+                note("the body is proposed and shown to every signer.")
+                moved(Step.VERIFIERS, Step.REVIEW)
+            }
+            refused.startsWith("Waiting(") -> {
+                val on = refused.removePrefix("Waiting(").removeSuffix(")").trim('"')
+                val fresh = synchronized(lock) { (waitingOn != on).also { waitingOn = on } }
+                if (fresh) note("not yet proposed: waiting on $on.")
+            }
+            refused == "NoWitness" -> {
+                val fresh = synchronized(lock) { (!noWitness).also { noWitness = true; changed() } }
+                if (fresh) note("no nominee has agreed to attest; the body waits on one.")
+            }
+            else -> stop("the body could not be proposed: $refused")
+        }
+    }
+
+    /**
+     * **A message of the conversation arrived**: the move the kernel names
+     * ([Turn], from `Event.Conversed.step`) and its words for the notice
+     * line. The record is what ends the flow. A refusal of the body, by
+     * this device of the one shown it or by a signer of the one this
+     * device proposed, ends the ceremony and the code is shown: a body one
+     * signer refuses is a record that will not finalize. The rest is the
+     * notice line's.
+     */
+    fun conversed(what: String, turn: Turn) {
+        when (turn) {
+            is Turn.Finalized -> finalized(turn.txid)
+            is Turn.BodyRefused ->
+                stop("this device refused the body: ${turn.why} (refusal ${turn.code})")
+            is Turn.SignerRefused ->
+                stop("${turn.signer.take(8)} refused to sign: ${turn.why} (refusal ${turn.code})")
+            Turn.Other -> note(what)
+        }
+    }
+
+    /**
+     * **The record is finalized and held**: the flow is done. From the
+     * verifiers or the review, since the body and the record can land in
+     * one tick; ignored once stopped, which is terminal.
+     */
+    fun finalized(txid: String) {
+        synchronized(lock) {
+            if (step == Step.DONE || step == Step.STOPPED) return
+            check(step == Step.VERIFIERS || step == Step.REVIEW) { "a record finalizes from the conversation, not $step" }
+            recordTxid = txid
+            stepped(step, Step.DONE, "kernel")
+            changed()
+        }
+    }
 
     /**
      * **Two people proposing to adopt each other** (D7; PRD-05).
@@ -502,26 +843,19 @@ class Meet(
         }
     }
 
-    /** Signed and finalized: the record's id, and the flow is done. */
-    fun signed(txid: String) {
-        synchronized(lock) {
-            check(step == Step.REVIEW) { "a record is signed from review, not $step" }
-            recordTxid = txid
-            stepped(Step.REVIEW, Step.DONE, "tap")
-            changed()
-        }
-    }
-
     /** Stop for a reason — a refusal, a denial, the counterparty leaving.
      *  Honest and terminal, from any live step. */
     fun stop(reason: String) {
-        synchronized(lock) {
+        val hook = synchronized(lock) {
             if (step == Step.DONE || step == Step.STOPPED) return
             Diag.warn("meet.stop", "from" to step, "reason" to Diag.scrub(reason))
             stopReason = reason
             step = Step.STOPPED
             changed()
+            onStopped
         }
+        // outside the lock: the kernel's abandon crosses a thread
+        hook?.invoke()
     }
 
     /** `trigger` is who moved it: a tap, the camera, or the kernel. */
@@ -531,6 +865,18 @@ class Meet(
             stepped(from, to, trigger)
             changed()
         }
+    }
+
+    /**
+     * The kernel's move, from its own thread: taken where the flow is at
+     * `from`, and nothing otherwise, since a person may have stopped the
+     * meeting from the screen between the kernel's reading and its move.
+     */
+    private fun moved(from: Step, to: Step): Boolean = synchronized(lock) {
+        if (step != from) return false
+        stepped(from, to, "kernel")
+        changed()
+        true
     }
 
     /** Under [lock]: every transition, as the diagnostics see it. */

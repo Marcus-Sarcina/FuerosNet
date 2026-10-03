@@ -1,6 +1,6 @@
 //! The command line's entry point.
 
-use rhtn_cli::{diag, inspect, keys, probe};
+use rhtn_cli::{diag, inspect, keys, live, probe};
 use rhtn_codec::frame::Stream;
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -33,6 +33,16 @@ usage: rhtn <command> [...]
         daemon's [log], rhtnp --log or a phone's bundle writes them) into
         one timeline by wall clock, and summarise: ceremony steps with
         durations, every refusal and abort, counts per layer and event.
+  diag collect --listen <addr> --into <dir>
+        Take the phones' live streams (field-test shell, plaintext TCP on
+        the bench's own network) and append each to <dir>/<serial>.jsonl,
+        the hello kept once per run; one line per connect and disconnect.
+        Runs until killed. Lossy by design: the file pulled from the phone
+        is the record.
+  diag watch <dir>
+        Follow every .jsonl under <dir> and print each ceremony step,
+        refusal and abort as it is appended, with its source and ms.
+        Runs until killed.
 
 Nothing here sends a request that changes state or spends a budget.
 ";
@@ -46,7 +56,17 @@ fn main() -> ExitCode {
         Some((&"probe", rest)) => do_probe(rest),
         Some((&"diag", rest)) => match rest.split_first() {
             Some((&"merge", files)) => diag::merge_files(files),
-            _ => Err("diag merge <file>...".into()),
+            Some((&"collect", opts)) => {
+                let mut args = opts.to_vec();
+                let listen = flag(&mut args, "--listen");
+                let into = flag(&mut args, "--into");
+                match (listen, into, args.is_empty()) {
+                    (Some(l), Some(d), true) => live::collect_main(l, d),
+                    _ => Err("diag collect --listen <addr> --into <dir>".into()),
+                }
+            }
+            Some((&"watch", [dir])) => live::watch_main(dir),
+            _ => Err("diag merge <file>... | diag collect --listen <addr> --into <dir> | diag watch <dir>".into()),
         },
         _ => {
             eprint!("{USAGE}");

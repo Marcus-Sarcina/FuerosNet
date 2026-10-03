@@ -72,14 +72,15 @@ class MeetTest {
     }
 
     @Test
-    fun a_record_is_signed_only_from_review() {
+    fun a_record_finalizes_only_out_of_the_conversation() {
         val m = meet()
-        assertThrows(IllegalStateException::class.java) { m.signed("tx") }
+        assertThrows(IllegalStateException::class.java) { m.finalized("tx") }
         m.crossBootstrap(); m.accept()
         m.opticalDone(); m.proximityDone(); m.captureDone()
-        m.verifiersDone()
+        val c = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0))
+        m.converse(c)
         assertEquals(Meet.Step.REVIEW, m.step())
-        m.signed("tx01")
+        m.finalized("tx01")
         assertEquals(Meet.Step.DONE, m.step())
         assertEquals("tx01", m.recordTxid())
     }
@@ -165,12 +166,13 @@ class MeetTest {
     }
 
     @Test
-    fun the_verifier_step_still_takes_input_and_hands_on_to_review() {
+    fun the_verifier_step_still_takes_input_and_the_kernel_hands_it_on_to_review() {
         val m = atVerifiers()
         assertTrue(m.acceptsInput())
         assertFalse(m.handsOff())
         m.selected(listOf())
-        m.verifiersDone()
+        // no tap moves to review: the body going out does
+        m.converse(FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0)))
         assertEquals(Meet.Step.REVIEW, m.step())
     }
 
@@ -187,6 +189,315 @@ class MeetTest {
         // a response against nobody changes nothing, so it renders nothing
         m.responded("zz", Meet.Verdict.MATCH)
         assertEquals(atBind + 3, renders)
+    }
+}
+
+/**
+ * A kernel that answers what it is told to: the four steps record that
+ * they were called and refuse as scripted, and the progress is whatever
+ * the test last set.
+ */
+class FakeCourier(var progress: Meet.Progress? = null) : Meet.Courier {
+    val calls = mutableListOf<String>()
+    var openRefusal: String? = null
+    var queriesRefusal: String? = null
+    var gatheredRefusal: String? = null
+    /** Each propose's answer in turn; null is success. Exhausted, it succeeds. */
+    val proposeAnswers = ArrayDeque<String?>()
+
+    override fun open(): String? { calls += "open"; return openRefusal }
+    override fun queries(): String? { calls += "queries"; return queriesRefusal }
+    override fun gathered(): String? { calls += "gathered"; return gatheredRefusal }
+    override fun propose(): String? { calls += "propose"; return proposeAnswers.removeFirstOrNull() }
+    override fun progress(): Meet.Progress? = progress
+
+    fun count(call: String) = calls.count { it == call }
+}
+
+/**
+ * The conversation on the courier, as the flow drives it against a fake
+ * kernel: the kernel's four steps and its progress are the whole of what
+ * the flow sees, so the gating is testable to the step.
+ */
+class MeetConversationTest {
+
+    private fun atVerifiers(role: Meet.Role = Meet.Role.INITIATOR): Meet =
+        Meet("aa", "carol", Meet.Kind(), role).apply {
+            crossBootstrap(); accept(); opticalDone(); proximityDone(); captureDone()
+        }
+
+    @Test
+    fun the_conversation_opens_once_on_the_verifiers_step_and_not_before() {
+        val c = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 2))
+        val early = Meet("aa", "carol", Meet.Kind())
+        early.converse(c)
+        assertTrue("nothing before the verifiers", c.calls.isEmpty())
+        val m = atVerifiers()
+        m.converse(c)
+        assertEquals(listOf("open", "queries"), c.calls)
+        assertTrue(m.opened())
+        // a recreated screen or a second tick does not open it again
+        m.converse(c)
+        assertEquals(listOf("open", "queries"), c.calls)
+        assertEquals(Meet.Step.VERIFIERS, m.step())
+    }
+
+    @Test
+    fun the_initiator_proposes_when_no_query_is_outstanding_and_the_record_ends_it() {
+        val m = atVerifiers()
+        val c = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 2))
+        m.converse(c)
+        m.poll(c)
+        assertEquals("queries outstanding: no proposal yet", 0, c.count("propose"))
+        assertEquals(0, c.count("gathered"))
+        c.progress = Meet.Progress(proposer = true, queriesOutstanding = 0, attesting = listOf("w1"))
+        m.poll(c)
+        assertEquals(1, c.count("propose"))
+        assertEquals(Meet.Step.REVIEW, m.step())
+        // the kernel's word on the record is what ends the flow
+        m.conversed("the record is finalised: 0a0b0c0d", Meet.Turn.Finalized("0a0b0c0d0e0f"))
+        assertEquals(Meet.Step.DONE, m.step())
+        assertEquals("0a0b0c0d0e0f", m.recordTxid())
+    }
+
+    @Test
+    fun the_responder_hands_over_once_and_reviews_when_the_body_is_shown() {
+        val m = atVerifiers(Meet.Role.RESPONDER)
+        val c = FakeCourier(Meet.Progress(proposer = false, queriesOutstanding = 1))
+        m.converse(c)
+        assertEquals(0, c.count("gathered"))
+        c.progress = Meet.Progress(proposer = false, queriesOutstanding = 0)
+        m.poll(c)
+        m.poll(c)
+        assertEquals("gathered goes once, not per tick", 1, c.count("gathered"))
+        assertEquals("the responder never proposes", 0, c.count("propose"))
+        assertEquals(Meet.Step.VERIFIERS, m.step())
+        // the body arrives, is reviewed and signed in the kernel, and the
+        // progress says so
+        m.conversed("the body reviewed and signed", Meet.Turn.Other)
+        c.progress = Meet.Progress(proposer = false, queriesOutstanding = 0, proposed = true)
+        m.poll(c)
+        assertEquals(Meet.Step.REVIEW, m.step())
+        m.conversed("the record is finalised: 0a0b0c0d", Meet.Turn.Finalized("0a0b0c0d"))
+        assertEquals(Meet.Step.DONE, m.step())
+    }
+
+    @Test
+    fun a_proposal_refused_as_waiting_is_retried_and_the_wait_is_said_once() {
+        val m = atVerifiers()
+        val c = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0))
+        c.proposeAnswers += "Waiting(\"the counterparty's responses\")"
+        c.proposeAnswers += "Waiting(\"the counterparty's responses\")"
+        c.proposeAnswers += null
+        m.converse(c)
+        assertEquals(Meet.Step.VERIFIERS, m.step())
+        assertEquals("the counterparty's responses", m.waitingOn())
+        m.poll(c)
+        assertEquals(Meet.Step.VERIFIERS, m.step())
+        assertEquals(1, m.log().count { it.contains("waiting on the counterparty's responses") })
+        m.poll(c)
+        assertEquals(3, c.count("propose"))
+        assertEquals(Meet.Step.REVIEW, m.step())
+        assertNull(m.waitingOn())
+    }
+
+    @Test
+    fun a_witness_that_declined_is_shown_as_declined_and_weighed_in_the_warnings() {
+        val m = atVerifiers()
+        m.nominated(mine = listOf("w1"), theirs = listOf("w2", "w3"))
+        val c = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 1, attesting = listOf("w2"), declined = listOf("w1")))
+        m.converse(c)
+        val w = m.witnesses().associate { it.key to it }
+        assertEquals(Meet.Answer.DECLINED, w["w1"]?.answer)
+        assertEquals(Meet.Answer.ATTESTS, w["w2"]?.answer)
+        assertNull("not yet answered", w["w3"]?.answer)
+        assertTrue(w["w1"]!!.mine)
+        assertFalse(w["w2"]!!.mine)
+        // the pre-sign warning reads the same facts: none of mine attest
+        m.selected(listOf())
+        m.learned(channel = "UWB", familiar = true)
+        val text = m.presign().joinToString(" ") { it.text }
+        assertTrue(text.contains("one-sided"))
+        assertTrue(text.contains("0 nominated by you"))
+    }
+
+    @Test
+    fun no_witness_is_surfaced_to_the_person_and_the_proposal_kept_trying() {
+        val m = atVerifiers()
+        val c = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0))
+        c.proposeAnswers += "NoWitness"
+        c.proposeAnswers += "NoWitness"
+        m.converse(c)
+        assertEquals(Meet.Step.VERIFIERS, m.step())
+        assertTrue(m.noWitness())
+        assertNull("not a stop: the person decides", m.stopReason())
+        m.poll(c)
+        assertEquals(2, c.count("propose"))
+        // a late nominee answers and the next attempt goes
+        c.progress = Meet.Progress(proposer = true, queriesOutstanding = 0, attesting = listOf("w1"))
+        m.poll(c)
+        assertEquals(Meet.Step.REVIEW, m.step())
+        assertFalse(m.noWitness())
+    }
+
+    @Test
+    fun any_other_refusal_stops_the_meeting_with_its_code_shown() {
+        val m = atVerifiers()
+        val c = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0))
+        c.proposeAnswers += "RootMismatch"
+        m.converse(c)
+        assertEquals(Meet.Step.STOPPED, m.step())
+        assertTrue(m.stopReason()!!.contains("RootMismatch"))
+        // an open or queries refusal is terminal too, with its reason
+        val m2 = atVerifiers()
+        val c2 = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0))
+        c2.openRefusal = "Payload(\"no session to 1a2b3c4d\")"
+        m2.converse(c2)
+        assertEquals(Meet.Step.STOPPED, m2.step())
+        assertTrue(m2.stopReason()!!.contains("no session"))
+        assertEquals("nothing after a refused open", listOf("open"), c2.calls)
+        assertFalse("never open, so never polled", m2.opened())
+    }
+
+    @Test
+    fun nothing_is_polled_until_the_queries_are_out() {
+        // a poll between the open and the queries would read no query
+        // outstanding and move too early; the flow is not open until both
+        // calls went
+        val m = atVerifiers(Meet.Role.RESPONDER)
+        val c = object : Meet.Courier {
+            val calls = mutableListOf<String>()
+            override fun open(): String? { calls += "open"; m.poll(this); return null }
+            override fun queries(): String? { calls += "queries"; return null }
+            override fun gathered(): String? { calls += "gathered"; return null }
+            override fun propose(): String? { calls += "propose"; return null }
+            override fun progress() = Meet.Progress(proposer = false, queriesOutstanding = 0)
+        }
+        m.converse(c)
+        assertEquals(listOf("open", "queries", "gathered"), c.calls)
+    }
+
+    @Test
+    fun a_refused_body_is_a_stopped_meeting_with_the_code_and_a_stray_refusal_is_a_line() {
+        // the responder's kernel refused the body it was shown
+        val m = atVerifiers(Meet.Role.RESPONDER)
+        m.converse(FakeCourier(Meet.Progress(proposer = false, queriesOutstanding = 0)))
+        m.conversed("kind 12 refused: from no party to a ceremony this client is in or witnesses", Meet.Turn.Other)
+        assertEquals("a stranger's message is not this meeting's failure", Meet.Step.VERIFIERS, m.step())
+        assertTrue(m.log().any { it.contains("kind 12 refused") })
+        m.conversed("the body refused: NotVerified", Meet.Turn.BodyRefused(4, "NotVerified"))
+        assertEquals(Meet.Step.STOPPED, m.step())
+        assertTrue(m.stopReason()!!.contains("NotVerified"))
+        assertTrue("the wire code is shown", m.stopReason()!!.contains("refusal 4"))
+        // the proposer, told a signer refused: the record will not finalize
+        val p = atVerifiers()
+        p.converse(FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0)))
+        assertEquals(Meet.Step.REVIEW, p.step())
+        p.conversed("1a2b3c4d refused: NotVerified", Meet.Turn.SignerRefused("1a2b3c4d5e6f7a8b", 4, "NotVerified"))
+        assertEquals(Meet.Step.STOPPED, p.step())
+        assertTrue(p.stopReason()!!.contains("1a2b3c4d"))
+        assertTrue(p.stopReason()!!.contains("NotVerified"))
+    }
+
+    @Test
+    fun a_person_may_stop_at_review_and_the_record_no_longer_moves_the_flow() {
+        val m = atVerifiers()
+        val c = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0))
+        m.converse(c)
+        assertEquals(Meet.Step.REVIEW, m.step())
+        assertTrue(m.acceptsInput())
+        m.stop("you stopped at review")
+        assertEquals(Meet.Step.STOPPED, m.step())
+        // the kernel goes on without the screen: its word is not an error here
+        m.conversed("the record is finalised: 0a0b0c0d", Meet.Turn.Finalized("0a0b0c0d"))
+        m.poll(c)
+        assertEquals(Meet.Step.STOPPED, m.step())
+        assertNull(m.recordTxid())
+        assertEquals("you stopped at review", m.stopReason())
+    }
+
+    @Test
+    fun the_patience_runs_out_and_the_initiator_proposes_with_queries_unanswered() {
+        val m = Meet("aa", "carol", Meet.Kind(), Meet.Role.INITIATOR, patienceMs = 1_000).apply {
+            crossBootstrap(); accept(); opticalDone(); proximityDone(); captureDone()
+        }
+        m.selected(listOf(Meet.Chosen("v1", Meet.Basis.MET), Meet.Chosen("v2", Meet.Basis.MET)))
+        val c = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 2))
+        m.converse(c, nowMs = 10_000)
+        assertEquals(0, c.count("propose"))
+        assertEquals(1_000L, m.patienceLeftMs(10_000))
+        m.poll(c, nowMs = 10_900)
+        assertEquals("still patient", 0, c.count("propose"))
+        // an answer landing resets the wait: the other may be a moment behind
+        c.progress = Meet.Progress(proposer = true, queriesOutstanding = 1)
+        m.responded("v1", Meet.Verdict.MATCH, nowMs = 10_950)
+        m.poll(c, nowMs = 11_000)
+        assertEquals("the answer bought another second", 0, c.count("propose"))
+        assertEquals(950L, m.patienceLeftMs(11_000))
+        m.poll(c, nowMs = 11_950)
+        assertEquals(1, c.count("propose"))
+        assertEquals(Meet.Step.REVIEW, m.step())
+        assertEquals(1, m.wentOnWithout())
+        assertEquals(1, m.log().count { it.contains("going on with 1 queries unanswered") })
+        assertTrue("the thinness is a pre-sign warning", m.presign().any { it.text.contains("had not answered") })
+    }
+
+    @Test
+    fun the_person_may_go_on_without_the_unanswered_queries_and_the_responder_hands_over() {
+        val m = atVerifiers(Meet.Role.RESPONDER)
+        val c = FakeCourier(Meet.Progress(proposer = false, queriesOutstanding = 3))
+        m.converse(c, nowMs = 0)
+        m.poll(c, nowMs = 5_000)
+        assertEquals(0, c.count("gathered"))
+        assertNull("nothing to go on without before the flow is open", Meet("aa", "carol", Meet.Kind()).patienceLeftMs(0))
+        m.goOn()
+        assertEquals(0L, m.patienceLeftMs(5_000))
+        m.poll(c, nowMs = 5_001)
+        assertEquals(1, c.count("gathered"))
+        assertEquals(3, m.wentOnWithout())
+        assertTrue(m.log().any { it.contains("you said to go on") })
+        // and no second note on the next tick
+        m.poll(c, nowMs = 5_002)
+        assertEquals(1, m.log().count { it.contains("going on with") })
+    }
+
+    @Test
+    fun a_stop_from_any_live_step_tells_the_kernel_once() {
+        val m = atVerifiers()
+        var told = 0
+        m.onStopped = { told++ }
+        m.stop("you stopped at the verifiers")
+        m.stop("again")
+        assertEquals(1, told)
+        // a finished meeting is not abandoned
+        val done = atVerifiers()
+        done.onStopped = { told++ }
+        done.converse(FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0)))
+        done.finalized("tx")
+        done.stop("late")
+        assertEquals(1, told)
+    }
+
+    @Test
+    fun the_brief_states_the_retention_this_device_declares() {
+        val m = Meet("aa", "carol", Meet.Kind(), retentionYears = 3).apply { crossBootstrap() }
+        assertTrue(m.brief().any { it.text.contains("this phone declares, 3 years,") })
+        val one = Meet("aa", "carol", Meet.Kind(), retentionYears = 1).apply { crossBootstrap() }
+        assertTrue(one.brief().any { it.text.contains("this phone declares, 1 year,") })
+    }
+
+    @Test
+    fun every_kernel_move_renders_the_bound_screen() {
+        val m = atVerifiers()
+        var renders = 0
+        m.bind(object : Meet.Ui { override fun render() { renders++ } })
+        val atBind = renders
+        val c = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0))
+        m.converse(c)
+        assertTrue("the notes, the progress and the step each render", renders > atBind)
+        val atReview = renders
+        m.finalized("tx")
+        assertEquals(atReview + 1, renders)
     }
 }
 
@@ -287,7 +598,8 @@ class MeetRowsTest {
 
     private fun atReview(m: Meet): Meet {
         m.crossBootstrap(); m.accept(); m.opticalDone(); m.proximityDone(); m.captureDone()
-        m.verifiersDone()
+        m.converse(FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0)))
+        check(m.step() == Meet.Step.REVIEW)
         return m
     }
 

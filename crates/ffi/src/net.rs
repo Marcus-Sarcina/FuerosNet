@@ -103,14 +103,107 @@ pub enum Event {
         refused: Option<String>,
     },
     /// The ceremony's conversation moved (`wire-format.md` §7.10.1): what
-    /// arrived from `from` came to this, in words for the notice line, and
-    /// the record where it finalized.  What the step owed in answer went
-    /// out from here.
+    /// arrived from `from` came to this, as a [`Conversation`] the shell
+    /// switches on and in words for the notice line, and the record where
+    /// it finalized.  What the step owed in answer went out from here.
     Conversed {
         from: Id,
+        step: Conversation,
         what: String,
         record: Option<Id>,
     },
+}
+
+/// A party's refusal to sign a proposed body (`wire-format.md` §7.10.2,
+/// `SigningReply` field 2): the code on the wire, 1 to 4, and the
+/// kernel's words for it.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SigningRefusal {
+    pub code: u32,
+    pub why: String,
+}
+
+impl SigningRefusal {
+    fn of(r: &rhtn_client::record::Refusal) -> SigningRefusal {
+        SigningRefusal {
+            code: r.code() as u32,
+            why: format!("{r:?}"),
+        }
+    }
+}
+
+/// One move of the ceremony's conversation, as the kernel's `Conversed`
+/// names it (`crates/client/src/sequence.rs`), for a shell to switch on
+/// rather than read the words of.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum Conversation {
+    /// A consent request about me: consented and answered, or declined.
+    Consent { query: Id, consented: bool },
+    /// The subject consented to a query I issued: it went to its verifier.
+    Consented { query: Id },
+    /// A nominee answered the request to witness: it attests, or declined.
+    WitnessAnswer { witness: Id, attests: bool },
+    /// Asked to witness: this device will, or declined.
+    Asked { attests: bool },
+    /// The counterparty's gathered responses arrived, at the proposer.
+    Gathered { responses: u32 },
+    /// A signer's back-pointers arrived, at the proposer.
+    BackPointers { signer: Id },
+    /// Shown the body: signed, or refused; the reply went either way.
+    Reviewed { refused: Option<SigningRefusal> },
+    /// A signer replied, at the proposer: its entries, or its refusal.
+    Signed {
+        signer: Id,
+        refused: Option<SigningRefusal>,
+    },
+    /// The record finalized and held.
+    Finalized { txid: Id },
+    /// Observed and kept, as a witness or the counterparty; nothing owed.
+    Observed { kind: u64 },
+    /// Not taken: from no party to a ceremony this client is in or
+    /// witnesses, a body that does not read, or a step it cannot take.
+    Refused { kind: u64, why: String },
+}
+
+impl Conversation {
+    fn of(c: &rhtn_client::sequence::Conversed) -> Conversation {
+        use rhtn_client::sequence::Conversed as C;
+        match c {
+            C::Consent { query, consented } => Conversation::Consent {
+                query: query.to_vec(),
+                consented: *consented,
+            },
+            C::Consented { query } => Conversation::Consented {
+                query: query.to_vec(),
+            },
+            C::WitnessAnswer { witness, flags } => Conversation::WitnessAnswer {
+                witness: id_of(witness),
+                attests: flags.is_some(),
+            },
+            C::Asked { flags, .. } => Conversation::Asked {
+                attests: flags.is_some(),
+            },
+            C::Gathered { responses } => Conversation::Gathered {
+                responses: *responses as u32,
+            },
+            C::BackPointers { signer } => Conversation::BackPointers {
+                signer: id_of(signer),
+            },
+            C::Reviewed { refused } => Conversation::Reviewed {
+                refused: refused.as_ref().map(SigningRefusal::of),
+            },
+            C::Signed { signer, refused } => Conversation::Signed {
+                signer: id_of(signer),
+                refused: refused.as_ref().map(SigningRefusal::of),
+            },
+            C::Finalized { txid } => Conversation::Finalized { txid: id_of(txid) },
+            C::Observed { kind } => Conversation::Observed { kind: *kind },
+            C::Refused { kind, why } => Conversation::Refused {
+                kind: *kind,
+                why: why.clone(),
+            },
+        }
+    }
 }
 
 /// The session and everything hung off it, replaced whole on each attach;
@@ -797,6 +890,7 @@ fn event_of(from: Keyhash, d: Dispatched) -> Option<Event> {
         }),
         Dispatched::Conversation(c) => Some(Event::Conversed {
             from,
+            step: Conversation::of(&c),
             record: match &c {
                 rhtn_client::sequence::Conversed::Finalized { txid } => Some(id_of(txid)),
                 _ => None,

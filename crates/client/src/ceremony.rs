@@ -1523,6 +1523,33 @@ impl Client {
         Ok(())
     }
 
+    /// The retention this client declares at its next intent, in whole
+    /// years (design §7.5.1).
+    pub fn retention_years(&self) -> u64 {
+        self.cfg.retention_years
+    }
+
+    /// Declare a retention for the ceremonies from here on, in whole years
+    /// (design §7.5.1; `light-client-requirements.md` §1.3: the person's
+    /// own horizon).  Refused at zero, and while a ceremony is under way, whose
+    /// intent already carries the figure the body will state.
+    pub fn set_retention_years(&mut self, years: u64) -> Result<(), &'static str> {
+        if years == 0 {
+            return Err("a retention is at least one year");
+        }
+        if self.active.is_some() {
+            return Err("a ceremony is under way and has declared its retention");
+        }
+        tracing::info!(
+            target: "cer",
+            from = self.cfg.retention_years,
+            to = years,
+            "cer.retention"
+        );
+        self.cfg.retention_years = years;
+        Ok(())
+    }
+
     /// Drop the ceremony under way without a record: nothing sealed is
     /// filed, the seed is gone with it.
     pub fn abandon(&mut self) {

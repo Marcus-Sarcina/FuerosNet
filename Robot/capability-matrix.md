@@ -25,7 +25,8 @@ shell through the platform's `Notices` object as `Told`; events through
 | Backup | `export_backup(secret)` | `Client::export` with the seeds this device holds | the envelope | ARC-23, ARC-28 |
 | Restore onto a fresh install | `restore_backup(blob, secret)` | `Client::import` (scanned) then `install`; refused into a client with an archive | records, discarded | ARC-24, ARC-28 |
 | Who am I | `me`, `holds_seed`, `signers` | | ids | |
-| **Settings: retention, verifier limits, seal cost** | **Owed.** `Config::default()` is fixed at start | | | |
+| **Settings: retention** | `retention_years`, `set_retention_years` (whole years, refused during a ceremony) [2026-10-03] | | | |
+| **Settings: verifier limits, seal cost** | **Owed.** `Config::default()` is fixed at start | | | |
 | **Biometric engine** | **Owed.** `HashEngine` is fixed in `device.rs`; a platform `Matcher` object is the seam | | | CER-37, CER-38 |
 | **Platform key storage for the seed** | **Owed by design decision**: the shell supplies the seed at every start; the seal stays in memory (CER-39 deferred) | | | CER-39 |
 

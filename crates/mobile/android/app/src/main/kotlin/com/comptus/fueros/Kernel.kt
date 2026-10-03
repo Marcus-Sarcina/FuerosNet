@@ -5,6 +5,7 @@ import java.security.SecureRandom
 import org.json.JSONObject
 import uniffi.rhtn_ffi.Answer
 import uniffi.rhtn_ffi.Construction
+import uniffi.rhtn_ffi.Conversation
 import uniffi.rhtn_ffi.Event
 import uniffi.rhtn_ffi.Participant
 import uniffi.rhtn_ffi.Refused
@@ -75,9 +76,15 @@ object Kernel {
         val p = participant ?: return null
         val to = peer ?: return null
         val key = peerKey ?: return null
+        val retention = call("retention_years", { 2UL }) { p.retentionYears() }
         synchronized(lock) {
             meet?.let { return it }
-            meet = Meet(key, peerName, kind, role)
+            meet = Meet(key, peerName, kind, role, retentionYears = retention.toLong()).also { m ->
+                // the kernel's ceremony ends with the screen's: a Stop from
+                // any live step abandons it, so nothing of the conversation
+                // is answered after the person has left it
+                m.onStopped = { call("abandon", { }) { p.abandon() } }
+            }
         }
         val m = meet!!
         Thread {
@@ -228,55 +235,74 @@ object Kernel {
     }
 
     /**
-     * Select the counterparty's verifiers and put this device's queries to
-     * them (design §8.1.2; `wire-format.md` §5.1–5.5).
+     * **The conversation on the courier** (design §7.1 steps 6 to 8;
+     * `wire-format.md` §7.10.1), from the capture on. The kernel takes the
+     * four steps a participant takes and answers everything that arrives
+     * in its own event loop; the flow decides *when*, from the kernel's
+     * progress as [bringUp]'s loop polls it every tick. Every call crosses
+     * [call], so the diagnostics bracket each.
      *
-     * **The selection is the kernel's and not a choice on a screen**: the
-     * tiers are computed from what this device knows and the pool from the
-     * records the counterparty handed over, so the screen shows who was
-     * picked and why, never a list to choose from.
-     *
-     * A query reaches its verifier on the end-to-end path once the
-     * counterparty has consented to it (`wire-format.md` §5.6): the kernel
-     * carries it, direct or through the serving nodes, and the answer lands
-     * here as [Event.Answered]. What this build does not carry is the
-     * consent exchange itself — the query to the counterparty's device and
-     * the consent back — which is the ceremony's own local conversation
-     * over a bearer the shell does not yet have. So the queries are
-     * prepared and the selection is real; each waits on a consent that
-     * cannot yet arrive.
+     * The verifier rows the screen shows are [Participant.selectVerifiers]'s,
+     * asked for once here before `converseQueries` selects the same set
+     * for itself: the selection is a sort over the pool and a fill, with
+     * nothing random in it (`crates/client/src/selection.rs`), so the two
+     * agree. **The selection is the kernel's and not a choice on a
+     * screen**: the tiers are computed from what this device knows and the
+     * pool from the records the counterparty handed over, so the screen
+     * shows who was picked and why, never a list to choose from. Each
+     * query reaches its verifier once the counterparty has consented to it
+     * on the same path (`wire-format.md` §5.6), and the answer lands here
+     * as [Event.Answered].
      */
-    fun selectVerifiers() {
-        val p = participant ?: return
-        val m = meet ?: return
-        // once per ceremony: a query issued twice is two queries, and the
-        // selection is not a thing to re-run on a recreated screen
-        if (m.selectionRun()) return
-        Thread {
-            val refused = { e: Refused.Reason -> m.note("selection refused: ${e.reason}") }
-            val picked = call("selectVerifiers", { refused(it); null }) { p.selectVerifiers() }
-                ?: return@Thread
-            m.selected(
-                picked.map {
-                    Meet.Chosen(hex(it.verifier), basisOf(it.basis))
-                },
-            )
-            if (picked.isEmpty()) {
-                m.note("no verifier is required: the counterparty handed")
-                m.note("over no records, so its pool is empty and")
-                m.note("wire-format §5.2 obliges none.")
-            } else {
-                // prepared, to show the call sequence is whole even
-                // where the carriage is not
-                call("queryFor", refused) {
-                    for (s in picked) {
-                        p.queryFor(s.verifier)
-                    }
-                }
-                m.note("${picked.size} query/queries prepared. Each waits on the")
-                m.note("counterparty's consent, which crosses the local bearer")
-                m.note("this build does not carry; consented, it is sent.")
+    private fun courier(p: Participant): Meet.Courier = object : Meet.Courier {
+        override fun open(): String? = refusal("converseOpen") { p.converseOpen() }
+        override fun queries(): String? = refusal("converseQueries") { p.converseQueries() }
+        override fun gathered(): String? = refusal("converseGathered") { p.converseGathered() }
+        override fun propose(): String? = refusal("conversePropose") { p.conversePropose() }
+        override fun progress(): Meet.Progress? =
+            call("progress", { null }) { p.progress() }?.let { pr ->
+                Meet.Progress(
+                    proposer = pr.proposer,
+                    queriesOutstanding = pr.queriesOutstanding.toInt(),
+                    attesting = pr.attesting.map { hex(it) },
+                    declined = pr.declined.map { hex(it) },
+                    backFrom = pr.backFrom.map { hex(it) },
+                    theirResponses = pr.theirResponses,
+                    proposed = pr.proposed,
+                    signed = pr.signed.map { hex(it) },
+                    refused = pr.refused.map { hex(it) },
+                )
             }
+    }
+
+    /** One step of the conversation: null where it went, the kernel's
+     *  reason where it refused. */
+    private inline fun refusal(method: String, body: () -> Unit): String? =
+        call(method, { it.reason }) { body(); null }
+
+    /**
+     * Enter the conversation as the captures seal: the nominees and the
+     * verifier rows for the screen first, then the kernel's open and its
+     * queries, off the thread the bearer's packet arrived on, since each
+     * sends over the network. The flow opens once; a second entry is its
+     * own no-op.
+     */
+    private fun startConversation(p: Participant, m: Meet) {
+        Thread {
+            call("nominees", { null }) { p.nominees() }?.let { n ->
+                m.nominated(n.mine.map { hex(it) }, n.theirs.map { hex(it) })
+            }
+            val picked = call("selectVerifiers", { e -> m.note("selection refused: ${e.reason}"); null }) {
+                p.selectVerifiers()
+            }
+            if (picked != null) {
+                m.selected(picked.map { Meet.Chosen(hex(it.verifier), basisOf(it.basis)) })
+                if (picked.isEmpty()) {
+                    m.note("no verifier is required: the counterparty handed over")
+                    m.note("no records, so wire-format §5.2 obliges none.")
+                }
+            }
+            m.converse(courier(p))
         }.start()
     }
 
@@ -288,6 +314,26 @@ object Kernel {
         Answer.NO_MATCH -> Meet.Verdict.NO_MATCH
         Answer.INCONCLUSIVE -> Meet.Verdict.INCONCLUSIVE
         Answer.UNAVAILABLE -> Meet.Verdict.UNAVAILABLE
+    }
+
+    /** The kernel's move of the conversation, as the flow switches on it:
+     *  the three it acts on, and the rest. */
+    private fun turnOf(c: Conversation): Meet.Turn = when (c) {
+        is Conversation.Finalized -> Meet.Turn.Finalized(hex(c.txid))
+        is Conversation.Reviewed ->
+            c.refused?.let { Meet.Turn.BodyRefused(it.code.toInt(), it.why) } ?: Meet.Turn.Other
+        is Conversation.Signed ->
+            c.refused?.let { Meet.Turn.SignerRefused(hex(c.signer), it.code.toInt(), it.why) } ?: Meet.Turn.Other
+        else -> Meet.Turn.Other
+    }
+
+    /** What a conversation event refused, for the diagnostics: a signing
+     *  refusal's code and words, or a stranger's message's reason. */
+    private fun refusalIn(c: Conversation): String? = when (c) {
+        is Conversation.Reviewed -> c.refused?.let { "${it.code}: ${it.why}" }
+        is Conversation.Signed -> c.refused?.let { "${it.code}: ${it.why}" }
+        is Conversation.Refused -> "kind ${c.kind}: ${c.why}"
+        else -> null
     }
 
     private fun basisOf(basis: UInt): Meet.Basis = when (basis.toInt()) {
@@ -380,6 +426,13 @@ object Kernel {
             carriage = Carriage(radio.link())
         }
         Thread {
+            // THE LINK FIRST. offer and seek return as the radio starts,
+            // not as a peer connects and subscribes, and a packet sent
+            // before the subscription goes nowhere while reporting success
+            // (BleBearer). So the intent waits, bounded, on the link coming
+            // ready; a link that does not is a stopped meeting with a
+            // reason, never an intent that silently did not cross.
+            if (!awaitLink(radio, m, "intent")) return@Thread
             val mine = call("intentCarriage", { e ->
                 m.stop("the intent could not be built: ${e.reason}")
                 null
@@ -387,9 +440,36 @@ object Kernel {
             if (carriage?.send(mine, Carriage.Phase.INTENT) == true) {
                 m.note("intent sent: ${mine.size} message(s) over the radio.")
             } else {
-                m.note("the radio would not take the intent; nothing was sent.")
+                m.stop("the radio would not take the intent; nothing crossed")
             }
         }.start()
+    }
+
+    /** How long a phase waits on the Bluetooth link before the meeting
+     *  stops: a scan, a connection, the MTU, discovery and the subscription,
+     *  on two phones' stacks. */
+    private const val LINK_READY_MS = 30_000L
+
+    /**
+     * Wait for the link `radio` presents to come ready, for `phase`, or
+     * stop the meeting. Each phase waits here, not only the intent: a
+     * disconnect between phases clears the subscription and the next phase
+     * would otherwise send into the gap. A meeting stopped meanwhile ends
+     * the wait without a second reason. The wait and its outcome are one
+     * `ble` event each (`Robot/field-test-diagnostics.md`, section 3.6).
+     */
+    private fun awaitLink(radio: BleBearer, m: Meet, phase: String): Boolean {
+        if (radio.ready()) return true
+        val started = Diag.ms()
+        val ready = Bearer.awaitReady(LINK_READY_MS) { radio.ready() || m.step() == Meet.Step.STOPPED }
+        if (m.step() == Meet.Step.STOPPED) return false
+        if (!ready) {
+            Diag.warn("ble", "op" to "link", "phase" to phase, "state" to "timeout", "ms" to (Diag.ms() - started))
+            m.stop("the Bluetooth link did not come ready within ${LINK_READY_MS / 1000} s, so the $phase could not cross")
+            return false
+        }
+        Diag.event("ble", "op" to "link", "phase" to phase, "state" to "awaited", "ms" to (Diag.ms() - started))
+        return true
     }
 
     /**
@@ -449,8 +529,11 @@ object Kernel {
                             theirKey = k
                             call("capture", sealed) {
                                 p.capture(k)
-                                m.note("captures sealed; the meeting can be proposed.")
+                                m.note("captures sealed; the conversation opens.")
                                 m.captureDone()
+                                // from here the courier carries the
+                                // ceremony, and the kernel's loop drives
+                                startConversation(p, m)
                             }
                         }
                     } finally {
@@ -477,10 +560,14 @@ object Kernel {
     fun runProximity(m: Meet) {
         val p = participant ?: return
         val to = peer ?: return
+        val radio = ble ?: return m.stop("no radio carries the channel outcomes")
+        if (!awaitLink(radio, m, "proximity")) return
         val mine = call("proximityCarriage", { e -> m.stop("proximity: ${e.reason}"); null }) {
             p.proximityCarriage()
         } ?: return
-        carriage?.send(listOf(mine), Carriage.Phase.PROXIMITY)
+        if (carriage?.send(listOf(mine), Carriage.Phase.PROXIMITY) != true) {
+            return m.stop("the radio would not take the channel outcomes; nothing crossed")
+        }
         m.note("channels run; the strongest that passed is recorded.")
         drainBearer(p, to, m)
     }
@@ -500,14 +587,17 @@ object Kernel {
         // the handover carries my key in clear: once the bearer has
         // had it, this shell keeps no copy, the packets it was cut
         // into included (design §7.5.2)
+        val radio = ble ?: return m.stop("no radio carries the capture key")
+        if (!awaitLink(radio, m, "capture key")) return
         val mine = call("captureKeyCarriage", { e -> m.stop("capture: ${e.reason}"); null }) {
             p.captureKeyCarriage()
         } ?: return
-        try {
-            carriage?.send(listOf(mine), Carriage.Phase.CAPTURE_KEY, wipe = true)
+        val sent = try {
+            carriage?.send(listOf(mine), Carriage.Phase.CAPTURE_KEY, wipe = true) == true
         } finally {
             mine.fill(0)
         }
+        if (!sent) return m.stop("the radio would not take the capture key; nothing crossed")
         m.note("my capture key is sent; capturing the counterparty.")
         drainBearer(p, to, m)
     }
@@ -613,6 +703,14 @@ object Kernel {
             return
         }
 
+        // the retention this device declares (design §7.5.1), where the
+        // provision names one; the kernel's own default otherwise
+        val retention = provision.optLong("retention_years", 0L)
+        if (retention > 0L) {
+            call("set_retention_years", { e -> front.note("· retention refused: ${e.reason}") }) {
+                p.setRetentionYears(retention.toULong())
+            }
+        }
         val to = unhex(provision.getString("peer"))
         peer = to
         peerName = provision.optString("peer_name", "peer")
@@ -644,6 +742,7 @@ object Kernel {
                         is Event.Answered -> e.refused
                         is Event.ResponseCopy -> e.refused
                         is Event.Late -> e.refused
+                        is Event.Conversed -> refusalIn(e.step)
                         else -> null
                     },
                 )
@@ -666,9 +765,23 @@ object Kernel {
                         front.note("· a response was refused: ${e.refused}")
                     }
                 }
+                // a message of the ceremony's conversation, in the kernel's
+                // words, and the record where it finalized: the flow reads
+                // both; outside a meeting it is this device witnessing
+                // somebody else's, which the notice line carries
+                is Event.Conversed -> {
+                    val m = meet
+                    if (m != null) m.conversed(e.what, turnOf(e.step)) else front.note("· ${e.what}")
+                }
                 null -> {}
                 else -> front.note("· $e")
             }
+            // THE FLOW'S CLOCK. The conversation is polled every tick while
+            // it is open, after whatever arrived: this is where the
+            // proposer learns its queries are answered and proposes, where
+            // the responder hands over, and where the body's arrival moves
+            // to review. The poll is nothing outside those steps.
+            meet?.let { m -> if (m.opened()) m.poll(courier(p)) }
         }
     }
 

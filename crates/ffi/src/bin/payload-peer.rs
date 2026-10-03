@@ -138,9 +138,10 @@ fn main() {
     if phones.is_empty() || phones.len() > 2 || args.len() > phones.len() + 1 {
         eprintln!(
             "usage: payload-peer <phone-material-hex> [phone-b-material-hex] [bind-addr]\n\n\
-             An unprovisioned phone prints its key material to logcat under\n\
-             the `fueros` tag:\n\n    \
-             adb logcat -d -s fueros | grep material\n\n\
+             An unprovisioned phone shows its key material on screen, in the\n\
+             provisioning note on its home screen.  Copy it from there: no\n\
+             flavour logs it, and the field-test Report bundle carries\n\
+             identities as eight characters only.\n\n\
              One material: the node plus carol, who echoes.  Two: the node\n\
              alone, each phone provisioned with the other as its peer.\n"
         );

@@ -656,9 +656,14 @@ impl Instrument {
                         refused.unwrap_or_else(|| "-".into())
                     )
                 }
-                rhtn_ffi::net::Event::Conversed { from, what, record } => {
+                rhtn_ffi::net::Event::Conversed {
+                    from,
+                    step,
+                    what,
+                    record,
+                } => {
                     format!(
-                        "conversed from={} what={what} record={}",
+                        "conversed from={} step={step:?} what={what} record={}",
                         hex(&from),
                         record.map_or("-".into(), |r| hex(&r))
                     )

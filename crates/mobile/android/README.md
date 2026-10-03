@@ -90,3 +90,28 @@ version, the wall-clock anchor) under `filesDir/diag/report/` and offers
 it with `ACTION_SEND` through `ReportProvider`, a one-directory read-only
 content provider declared in the fieldtest manifest. The tester's checklist
 and the run naming are M4's.
+
+**The live stream** (`DiagStream.kt`, fieldtest only). Beside the file,
+the same lines go to the bench over one plaintext TCP connection on the
+tester's own LAN, where `rhtn diag collect` appends them to
+`phones/<serial>.jsonl` and `rhtn diag watch` prints each step, refusal
+and abort as it arrives. The first line of every connection is a
+`diag.hello` event: the header's fields, the serial the bench gave the
+phone, and `unix_ms`, so the collector's file carries its own anchor. The
+backlog is 4,096 lines; when full the oldest is dropped and the count is
+sent as `diag.dropped` with `sink: stream` where the gap is; the sink
+reconnects with a growing backoff (1 s to 30 s) and says hello again. The
+kernel's thread never waits on the socket. The stream is lossy by design
+and the file pulled at the end of the run is the record.
+
+The target arrives through the provisioning step
+(`crates/tools/field-run.sh`), as two more extras on the same `am start`
+that carries `provision`: `--es diag_stream <host:port>` and `--es
+diag_serial <adb serial>`. `HomeActivity` hands them to
+`FuerosApp.streamTo`, which keeps them in `filesDir/diag/stream.target`
+(two lines: address, serial) and switches the stream at once; every later
+cold start reads that file in `FuerosApp.onCreate` before the first event.
+`diag_stream off` (or blank) deletes the file. In the releasable flavour
+the extras are never read, nothing constructs a `DiagStream`, and no
+target file is read or written; `pm clear` removes a kept target with the
+rest of the app's storage.

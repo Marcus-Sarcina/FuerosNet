@@ -406,4 +406,22 @@ fn a_refusal_carries_its_particular_only_where_it_names_one() {
         SigningReply::decode(&[0xa1, 0x02, 0x05]).is_err(),
         "no refusal 5"
     );
+    // the code each refusal carries is the one its encoding writes, which
+    // is what a shell is handed beside the words
+    for (r, code) in [
+        (Refusal::NomineeNotMine([7u8; 32]), 1u64),
+        (Refusal::OmittedResponse([8u8; 32]), 2),
+        (
+            Refusal::ClockFar {
+                claimed: 1,
+                observed: 2,
+            },
+            3,
+        ),
+        (Refusal::NotVerified, 4),
+    ] {
+        assert_eq!(r.code(), code);
+        let bytes = SigningReply { reply: Err(r) }.encode();
+        assert_eq!(bytes[2] as u64, code, "field 2 of the map is the code");
+    }
 }

@@ -113,7 +113,8 @@ anchor.
 | `cer.review` | ok or `RootMismatch` / `BackPointers` / `Refused(variant)` | `review_and_sign`, `witness_sign` |
 | `cer.signed` | signer8, or refusal code 1 to 4 | `Signed`, kind 17 in |
 | `cer.finalize` | txid8, signers, ms since begin | `finalize` |
-| `cer.abandon` | `Abort` variant | `abandon`, every `Err(Abort)` |
+| `cer.abandon` | `Abort` variant | `abandon`, every `Err(Abort)`; the shell's Stop reaches it through `Participant.abandon` |
+| `cer.retention` | from, to (years) | `set_retention_years` |
 
 ### 3.3 The conversation and the payload path
 
@@ -344,3 +345,47 @@ are 329 of the daemon's 420 events in the first dry run, and its
 `NewConnectionId` lines carry QUIC reset tokens; the emulator's quinn
 reports `sendmsg` I/O errors (GSO) once per attach and still attaches; the
 AVD has no front camera, so the capture step cannot run there. Next: M5.
+
+**M4b done 2026-10-03.** A live stream beside the file, fieldtest only.
+Shell: `DiagStream.kt` (no Android in it), a TCP client to the bench with
+a 4,096-line backlog that drops its oldest and sends the count as
+`diag.dropped` (`sink: stream`) where the gap is, reconnecting with a
+backoff of 1 s to 30 s and saying hello again; the hello is a
+`diag.hello` event carrying `Report.headerFields` (the `header.json`
+fields, now one list for both), the adb serial the bench gave the phone,
+and `unix_ms`, so the collector's file anchors itself. The bench gone is
+noticed by a reader thread seeing EOF, not by the next write, which a
+closed socket may still accept. The target arrives as two extras on the
+provisioning `am start` (`diag_stream host:port`, `diag_serial`), is kept
+in `filesDir/diag/stream.target` and read at the next cold start before
+the first event; `FuerosApp` alone constructs the class, and the
+releasable flavour reads neither extra nor file. Laptop: `rhtn diag
+collect --listen <addr> --into <dir>` (std threads, one per connection,
+no feature) appends each connection to `<dir>/<serial>.jsonl`, the hello
+kept once per run and written again for a new run from the same phone,
+one stdout line per connect and disconnect; `rhtn diag watch <dir>`
+follows every `.jsonl` under a directory except `merge/` and `report/`,
+prints each ceremony step, refusal and abort as its newline lands, placed
+by its file's anchor (`diag.anchor` or `diag.hello`, which
+`diag::parse_line` now treats alike) and shown with source and ms. The
+parsing moved into `parse_line`, used by `parse`, the collector and the
+watch. `field-run.sh --stream-port <port>` (7448; 0 for none) starts the
+collector into `runs/<run>/phones/` after the witnesses, passes the target
+in the provisioning step, stops the collector before the pull, and leaves
+the streamed files out of the merge: the pull is the record. Tests: four
+JVM tests over a loopback server (hello first and order; drop-oldest with
+the count sent in place; reconnect with a line kept across the gap; the
+target parsed, kept and forgotten), Android suite 91 to 95; three Rust
+tests (two concurrent connections with one reconnect and a second run;
+a connection without a hello filed by its address; a watch catching a
+step appended with its newline, skipping `merge/`, and the loop form), CLI
+suite 9 to 12. Verified: both flavours' debug APKs build, fmt and clippy
+clean, and a loopback run of the collector with two fake phones and a
+reconnect, a watch over the directory, a hand-appended refusal in a
+daemon file, and a merge of the resulting files. Found on the way: the
+first reconnect test hung the whole Gradle run because the accepted
+sockets had no read timeout, and the stream raced the test's poll of its
+own connected flag; a `Timeout` rule and socket timeouts make such a
+failure visible in 30 s. Not done: `Build.getSerial()` needs a privileged
+permission on API 29 and later, so the serial is the bench's, not the
+phone's; a phone provisioned without `--phone` gets no stream.

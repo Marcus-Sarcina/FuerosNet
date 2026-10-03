@@ -53,11 +53,31 @@ private directory. A release-signed APK would leave only the share sheet.
 
    The script mints identities for the node and the witnesses, lists both
    phones in the node's peers file (the node admits only identities it
-   knows), starts the node and the witnesses, provisions each phone with the
-   other as its peer (the app is stopped and started twice; the second start
-   is the one that attaches), starts the logcat captures, writes
-   `checklist.md` and `run.json`, and holds. The run is named
+   knows), starts the node and the witnesses, starts the collector for the
+   phones' live streams (TCP port 7448 on the same address; `--stream-port
+   0` for none), provisions each phone with the other as its peer and the
+   collector as its stream target (the app is stopped and started twice;
+   the second start is the one that attaches), starts the logcat captures,
+   writes `checklist.md` and `run.json`, and holds. The run is named
    `<commit>-<label>-<n>`; its directory is `runs/<run>/`.
+
+   While it holds, a second terminal can follow the run:
+
+        crates/target/fieldtest/release/rhtn diag watch runs/<run>
+
+   prints each ceremony step, refusal and abort from every file under the
+   run directory (the phones' streams, the node's and the witnesses' logs)
+   as it is appended, with its source and ms. **The stream is a view, not
+   the record.** It is plaintext TCP on the tester's own LAN, so the bench
+   must be a network the tester controls (the lines carry what the event
+   file carries: identities as eight hex characters, never a frame, key or
+   capture); and it is lossy: the phone keeps a backlog of 4,096 lines
+   while the laptop is out of reach, drops the oldest beyond that and says
+   so with a `diag.dropped` event, and anything that happens between the
+   last line sent and a crash may not arrive. The file pulled from the
+   phone at stop is complete, and where the two differ the file wins. The
+   streamed files sit at `phones/<serial>.jsonl` beside the pulled
+   `phones/<serial>/` directories and are not merged into the timeline.
 
 3. Check that each phone's status line reads attached. Run the ceremony from
    Meet: one phone meets, the other scans the bootstrap QR, both read the
@@ -89,10 +109,13 @@ before it: the second column names the source (node, witness or phone), the
 fourth the layer (`cer`, `meet`, `shell`, `ffi`, `transport`, `node`,
 `daemon`), which says where to look.
 
-If a phone's pull failed, `phones/<serial>/logcat.txt` is the live mirror of
-the same lines. The phone's file carries no anchor of its own; the script
-builds one from the `shell.start` event, and a file without that event sits
-at the head of the timeline by its own clock, which the summary says. The
+If a phone's pull failed, `phones/<serial>.jsonl` (the stream as the
+collector received it, lossy) and `phones/<serial>/logcat.txt` (the logcat
+mirror) hold the same lines; the stream's file carries its own anchor in
+its hello and merges as it is. The pulled file carries no anchor of its
+own; the script builds one from the `shell.start` event, and a file without
+that event sits at the head of the timeline by its own clock, which the
+summary says. The
 kernel's lines on a phone count from `Participant.start` and sit early by
 that offset, which the `shell.call` for `Participant.start` gives.
 
@@ -121,16 +144,15 @@ tester's device by eight hex characters.
 ## The retention declaration
 
 Every record declares a retention period at the ceremony's intent (design
-§7.5.1: whole years of 365 days, two by default). The plan asks the
-fieldtest flavour to declare one day. It does not today. `Participant.start`
-(`crates/ffi/src/client.rs`) builds the kernel's `ceremony::Config::default()`,
-whose `retention_years` is 2 (`crates/client/src/ceremony.rs`), and the
-shell has no knob; the field is whole years on the wire, so one day is not
-expressible without a decision from the author (the unit, a flavour-only
-override, or neither). The brief's capture item (`Meet.kt`, UX-002) refers to
-"the retention stated here" and the screen states no figure. Until both are
-settled, a field-test record declares two years and the wipe below is what
-bounds the captures on the bench.
+§7.5.1: whole years of 365 days, two by default). The figure is settable
+since 2026-10-03: `field-run.sh --retention <years>` puts a
+`retention_years` field in each phone's provision, the kernel takes it at
+start (`Participant.set_retention_years`, refused during a ceremony), and
+the brief states the figure the device will declare. The unit is whole
+years on the wire, so the plan's one day is not expressible; **what a
+field-test record should declare is the author's call**, and until he makes
+it a run without `--retention` declares two years. Either way the wipe below
+is what bounds the captures on the bench.
 
 ## The wipe between testers
 

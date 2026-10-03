@@ -7,7 +7,6 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
-import android.view.Gravity
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.ImageView
@@ -26,13 +25,15 @@ import android.widget.TextView
  * here and enforced by [Meet]. **D1 through D4 are wired to hardware**: the
  * bootstrap and anchor QRs on the rear and selfie cameras, the intent over
  * a Bluetooth LE bearer, the proximity tap over NFC (with the optical pass
- * D2 already made), and the guided capture on the selfie camera — every
+ * D2 already made), and the guided capture on the selfie camera, every
  * radio and camera half compiling against the platform's API and **none of
- * it run on a device**, which the files behind each say at the top. What is
- * still not real is D6: signing needs the record artifacts the steps
- * produce, which a single process has no second party to complete, so a
- * dim **walkthrough** control stands in there — scaffolding, labelled as
- * standing in for a signal a real pair of devices would raise.
+ * it run on a device**, which the files behind each say at the top. **D5
+ * through D7 run on the kernel's courier**: the request to witness, the
+ * queries and their consent, the gathered responses, the body and the
+ * record cross the end-to-end path (`wire-format.md` §7.10.1), the kernel
+ * reviews and signs as the body arrives, and the flow moves on what the
+ * kernel reports. The screens from D5 on show and let the person stop;
+ * nothing there is a control over the protocol.
  */
 class MeetActivity : Activity() {
 
@@ -357,16 +358,16 @@ class MeetActivity : Activity() {
             return
         }
         once(m, "capture") {
+            // the conversation on the courier opens from the kernel as
+            // the captures seal; nothing here starts it
             Kernel.runCapture(m)
-            Kernel.selectVerifiers()
         }
     }
 
     /**
      * Run `work` once as the flow enters a hands-off step, off the UI
      * thread, and never again on a redraw. A recreated screen rejoins a
-     * step already running rather than starting it twice — the same
-     * discipline the verifier selection uses.
+     * step already running rather than starting it twice.
      */
     private fun once(m: Meet, tag: String, work: () -> Unit) {
         para("Working…")
@@ -380,15 +381,15 @@ class MeetActivity : Activity() {
     private fun verifiers(m: Meet) {
         para("Your device picks ${m.counterpartyName}'s verifiers from the records they handed over, preferring people you have met. The choice is computed, not offered: there is nothing here to pick.")
         if (!m.selectionRun()) {
-            // the selection is asked for once, when the flow enters this
-            // step, and never from inside a draw
+            // the selection is the kernel's, asked for once as the flow
+            // enters this step, and never from inside a draw
             para("Selecting…")
             return
         }
         val chosen = m.chosen()
         heading("Selected")
         if (chosen.isEmpty()) {
-            para("• None required. ${m.counterpartyName} handed over no records, so there is no pool to draw from and none is owed — a meeting with fewer verifiers is thinner, not malformed.")
+            para("• None required. ${m.counterpartyName} handed over no records, so there is no pool to draw from and none is owed; a meeting with fewer verifiers is thinner, not malformed.")
         } else {
             chosen.forEach { c ->
                 val answer = when (c.verdict) {
@@ -396,19 +397,57 @@ class MeetActivity : Activity() {
                     Meet.Verdict.MATCH -> "answered: a match"
                     Meet.Verdict.NO_MATCH -> "answered: no match"
                     Meet.Verdict.INCONCLUSIVE -> "answered: inconclusive"
-                    Meet.Verdict.UNAVAILABLE -> "unavailable — silence counts for nothing either way"
+                    Meet.Verdict.UNAVAILABLE -> "unavailable; silence counts for nothing either way"
                 }
-                para("• ${c.key.take(16)}… — ${basisWords(c.basis)}; $answer")
+                para("• ${c.key.take(16)}…  ${basisWords(c.basis)}; $answer")
             }
-            para("Each query waits on the counterparty's consent, which crosses the same local bearer the intent did. Once consented, the kernel carries the query to its verifier over the network and the answer lands above.")
+            para("Each query goes to ${m.counterpartyName}'s device for consent on the same end-to-end path the rest of this conversation uses. Consented, the kernel carries it to its verifier and the answer lands above.")
         }
         val mine = m.queriesAboutMe()
         if (mine.isNotEmpty()) {
             heading("Queries about you")
-            para("${m.counterpartyName} asked these verifiers about you. Your device consented on each — consent is bound to the ceremony you are standing in, so it is given without stopping to ask, and you are told instead.")
+            para("${m.counterpartyName} asked these verifiers about you. Your device consented on each: consent is bound to the ceremony you are standing in, so it is given without stopping to ask, and you are told instead.")
             mine.forEach { para("• $it…") }
         }
-        button("Continue to review") { m.verifiersDone() }
+        witnesses(m)
+        heading("The conversation")
+        val p = m.progress()
+        when {
+            !m.opened() -> para("Opening: the nominees are being asked to witness, and the back-pointers are going out.")
+            p == null -> para("Waiting on the kernel's first word of where it stands.")
+            p.queriesOutstanding > 0 -> {
+                val left = (m.patienceLeftMs() ?: 0L) / 1000
+                para("${p.queriesOutstanding} of the queries have no answer yet. A verifier that never answers does not appear in the record; this device goes on without it in $left s, or now if you say so.")
+                button("Go on without them") { m.goOn() }
+            }
+            p.proposer && m.noWitness() ->
+                para("No nominee has agreed to attest, and the body cannot be proposed without one. Your device keeps asking as the answers land. Wait for one, or stop and leave this meeting unrecorded.")
+            p.proposer && m.waitingOn() != null -> para("Not yet proposed: waiting on ${m.waitingOn()}.")
+            p.proposer -> para("Proposing the body to every signer.")
+            else -> para("Your gathered responses are with ${m.counterpartyName}, whose device proposes the body. It is shown here when it arrives, reviewed and signed by this device as it does.")
+        }
+        button("Stop") { m.stop("you stopped at the verifiers") }
+    }
+
+    /** Every nominee, whose it was and what it answered: a witness that
+     *  declined is shown as declined, not dropped, since the record will
+     *  show the slot it leaves (design §7.1). */
+    private fun witnesses(m: Meet) {
+        heading("Witnesses")
+        val w = m.witnesses()
+        if (w.isEmpty()) {
+            para("• None nominated. With no horizon to draw from, neither side had anyone to ask; the record carries that it had none.")
+            return
+        }
+        w.forEach { n ->
+            val by = if (n.mine) "nominated by you" else "nominated by ${m.counterpartyName}"
+            val answer = when (n.answer) {
+                null -> "not yet answered"
+                Meet.Answer.ATTESTS -> "will attest"
+                Meet.Answer.DECLINED -> "declined"
+            }
+            para("• ${n.key.take(16)}…  $by; $answer")
+        }
     }
 
     /** `wire-format.md` §5.5's basis, in words, and each says whose claim
@@ -422,8 +461,36 @@ class MeetActivity : Activity() {
 
     // ---- D6 review and sign --------------------------------------------
 
+    /**
+     * **The body, as signed.** The kernel reviews the body against what
+     * this device holds and signs it as it arrives, or refuses it with a
+     * code (`wire-format.md` §7.10.2), so by this screen the signature has
+     * gone: what is owed here is to show what was signed, and the
+     * weaknesses UX-003 names, and to let the person stop watching.
+     */
     private fun review(m: Meet) {
-        para("You review ${m.counterpartyName}'s selection of your verifiers before signing — a party who signs unseen may be vouching for strangers.")
+        val p = m.progress()
+        val proposer = p?.proposer == true
+        para(
+            if (proposer) {
+                "Your device proposed the body and signed it. Every other signer is shown it now and answers with a signature or a refusal."
+            } else {
+                "${m.counterpartyName}'s device proposed the body. Yours checked it against what it holds, the root, the back-pointers and the disclosures, and signed it; a body that did not check would have been refused with its code and this meeting stopped."
+            },
+        )
+        heading("Signers")
+        para("• You")
+        para("• ${m.counterpartyName}")
+        m.witnesses().filter { it.answer == Meet.Answer.ATTESTS }.forEach { n ->
+            para("• ${n.key.take(16)}…  witness, nominated by ${if (n.mine) "you" else m.counterpartyName}")
+        }
+        heading("Signatures")
+        if (proposer && p != null) {
+            para("${p.signed.size} of the signers have signed so far, this device among them. The record is finalized here when every one has, and goes to each of them.")
+            p.refused.forEach { para("• ${it.take(16)}…  refused to sign") }
+        } else {
+            para("The record arrives from ${m.counterpartyName} once every signer has signed, is checked against this body, and is held.")
+        }
         val warnings = m.presign()
         if (warnings.isEmpty()) {
             heading("Nothing to flag")
@@ -434,8 +501,8 @@ class MeetActivity : Activity() {
             // UX-003's whole point, said where the person reads it
             para("None of the above makes the record broken. Each is something a reader of the record can see for themselves, and a meeting that says less is still a meeting that happened.")
         }
-        para("Signing needs the artifacts the steps above would have produced; this build has none, so it cannot finalize a real record.")
-        walkthrough("signed (no real record)") { m.signed("(walkthrough, no record)") }
+        para("Your signature has gone and is not withdrawn from here. Stopping leaves the record to finalize, or not, without this screen.")
+        button("Stop") { m.stop("you stopped at review") }
     }
 
     // ---- D7 after ------------------------------------------------------
@@ -501,20 +568,6 @@ class MeetActivity : Activity() {
         Button(this).apply {
             text = label
             setPadding(0, 16, 0, 16)
-            setOnClickListener { onClick() }
-        },
-    )
-
-    /** A scaffold control, not the ceremony: it stands in for a signal a
-     *  real device would raise, and is dim and labelled so. */
-    private fun walkthrough(label: String, onClick: () -> Unit) = body.addView(
-        TextView(this).apply {
-            text = "▸ walkthrough: $label"
-            textSize = 13f
-            setTextColor(Color.GRAY)
-            gravity = Gravity.END
-            setPadding(0, 28, 0, 12)
-            isClickable = true
             setOnClickListener { onClick() }
         },
     )

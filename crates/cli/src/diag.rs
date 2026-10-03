@@ -10,8 +10,8 @@
 //!
 //! **The anchor.** Each process's clock starts at zero, so a file is placed
 //! on the wall clock by its anchor: the first line whose `event` is
-//! `diag.anchor`, whose `unix_ms` field is the wall clock at the `ms` that
-//! line carries.  Every line of the file sits at `unix_ms + (line.ms -
+//! `diag.anchor` (or a streamed file's `diag.hello`), whose `unix_ms` field
+//! is the wall clock at the `ms` that line carries.  Every line of the file sits at `unix_ms + (line.ms -
 //! anchor.ms)`, before the anchor as well as after it, since the arithmetic
 //! does not care where in the file the anchor fell (the daemon writes it
 //! first; an instrument raises it once its renderer is up).  A file with no
@@ -62,6 +62,54 @@ pub struct Source {
 /// The name of the anchor event and its wall-clock field.
 pub const ANCHOR_EVENT: &str = "diag.anchor";
 pub const ANCHOR_FIELD: &str = "unix_ms";
+/// A phone's live stream opens with this event, which carries `unix_ms`
+/// too and so anchors the collector's file (`live.rs`).
+pub const HELLO_EVENT: &str = "diag.hello";
+
+/// One raw line, read back: the [`Line`] and, where the line is an anchor
+/// (a `diag.anchor`, or a stream's `diag.hello`, carrying `unix_ms`), the
+/// anchor `(ms, unix_ms)`.  `None` for a line that is not a JSON object
+/// with the four fields.  `wall` is `ms`; the caller places it.
+pub fn parse_line(source: &str, n: usize, raw: &str) -> Option<(Line, Option<(u64, u64)>)> {
+    let raw = raw.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    let Value::Object(map) = serde_json::from_str::<Value>(raw).ok()? else {
+        return None;
+    };
+    let (ms, level, layer, event) = (
+        map.get("ms").and_then(Value::as_u64)?,
+        map.get("level").and_then(Value::as_str)?,
+        map.get("layer").and_then(Value::as_str)?,
+        map.get("event").and_then(Value::as_str)?,
+    );
+    let anchor = if event == ANCHOR_EVENT || event == HELLO_EVENT {
+        map.get(ANCHOR_FIELD)
+            .and_then(Value::as_u64)
+            .map(|unix_ms| (ms, unix_ms))
+    } else {
+        None
+    };
+    let fields = map
+        .iter()
+        .filter(|(k, _)| !matches!(k.as_str(), "ms" | "level" | "layer" | "event"))
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+    Some((
+        Line {
+            source: source.to_string(),
+            n,
+            ms,
+            level: level.to_string(),
+            layer: layer.to_string(),
+            event: event.to_string(),
+            fields,
+            wall: ms,
+        },
+        anchor,
+    ))
+}
 
 /// Parse one file's text.  `wall` is filled in by [`merge`].
 pub fn parse(name: &str, text: &str) -> Source {
@@ -69,44 +117,17 @@ pub fn parse(name: &str, text: &str) -> Source {
     let mut skipped = 0;
     let mut anchor = None;
     for (i, raw) in text.lines().enumerate() {
-        let raw = raw.trim();
-        if raw.is_empty() {
+        if raw.trim().is_empty() {
             continue;
         }
-        let Ok(Value::Object(map)) = serde_json::from_str::<Value>(raw) else {
+        let Some((line, at)) = parse_line(name, i + 1, raw) else {
             skipped += 1;
             continue;
         };
-        let (Some(ms), Some(level), Some(layer), Some(event)) = (
-            map.get("ms").and_then(Value::as_u64),
-            map.get("level").and_then(Value::as_str),
-            map.get("layer").and_then(Value::as_str),
-            map.get("event").and_then(Value::as_str),
-        ) else {
-            skipped += 1;
-            continue;
-        };
-        if anchor.is_none()
-            && event == ANCHOR_EVENT
-            && let Some(unix_ms) = map.get(ANCHOR_FIELD).and_then(Value::as_u64)
-        {
-            anchor = Some((ms, unix_ms));
+        if anchor.is_none() && at.is_some() {
+            anchor = at;
         }
-        let fields = map
-            .iter()
-            .filter(|(k, _)| !matches!(k.as_str(), "ms" | "level" | "layer" | "event"))
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect();
-        lines.push(Line {
-            source: name.to_string(),
-            n: i + 1,
-            ms,
-            level: level.to_string(),
-            layer: layer.to_string(),
-            event: event.to_string(),
-            fields,
-            wall: ms,
-        });
+        lines.push(line);
     }
     Source {
         name: name.to_string(),

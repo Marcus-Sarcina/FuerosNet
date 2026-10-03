@@ -18,6 +18,14 @@
 #                            it is alone). Repeatable.
 #    --level <level>         the daemon's [log] level: off, error, warn, info,
 #                            debug (default) or trace.
+#    --stream-port <port>    where the phones stream their diagnostic lines
+#                            live (`rhtn diag collect`), on the same address
+#                            rhtnd serves; default 7448, 0 for no stream.
+#                            Plaintext TCP on the tester's own network, and
+#                            lossy: the pull at stop is the record.
+#    --retention <years>     the retention each phone declares at its intent,
+#                            in whole years (design §7.5.1), carried in the
+#                            provision; default: the kernel's own, 2.
 #    --no-build              do not run cargo; the binaries must exist.
 #
 #  The run is named <short commit>-<label>-<n> and everything it produces
@@ -30,6 +38,12 @@
 #                               provisioned, every event file pulled from the
 #                               app's private directory, any report zip and
 #                               its contents under report/
+#    phones/<serial>.jsonl      the live stream as the collector received it
+#                               (its hello first, anchoring the file), and
+#                               phones/collector.txt, one line per connect
+#                               and disconnect. While the run holds,
+#                               `rhtn diag watch runs/<run>` prints each
+#                               step, refusal and abort as it arrives
 #    merge/                     the files the merge read, one per source; a
 #                               phone's copy gains a synthetic anchor built
 #                               from its shell.start event when the file has
@@ -111,6 +125,8 @@ fi
 # ------------------------------------------------------------- arguments -----
 ADDR=""
 LEVEL=debug
+STREAM_PORT=7448
+RETENTION=""
 BUILD=yes
 PHONE_SERIALS=()
 PHONE_MATERIALS=()
@@ -119,6 +135,8 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --addr) ADDR="${2:-}"; shift 2 ;;
     --level) LEVEL="${2:-}"; shift 2 ;;
+    --stream-port) STREAM_PORT="${2:-}"; shift 2 ;;
+    --retention) RETENTION="${2:-}"; shift 2 ;;
     --no-build) BUILD=no; shift ;;
     --phone)
       p="${2:-}"
@@ -141,6 +159,10 @@ case "$LABEL" in
   *[!A-Za-z0-9_.-]*) say "the label is letters, digits, '.', '_' and '-'"; exit 2 ;;
 esac
 case "$LEVEL" in off | error | warn | info | debug | trace) ;; *) say "--level is off, error, warn, info, debug or trace"; exit 2 ;; esac
+case "$STREAM_PORT" in '' | *[!0-9]*) say "--stream-port is a port number, 0 for none"; exit 2 ;; esac
+[ "$STREAM_PORT" -le 65535 ] || { say "--stream-port is at most 65535"; exit 2; }
+case "$RETENTION" in '' | [1-9]*) ;; *) say "--retention is a whole number of years, at least 1"; exit 2 ;; esac
+case "$RETENTION" in *[!0-9]*) say "--retention is a whole number of years, at least 1"; exit 2 ;; esac
 for m in ${PHONE_MATERIALS[@]+"${PHONE_MATERIALS[@]}"}; do
   case "$m" in *[!0-9a-f]*) say "a phone's material is lower-case hex"; exit 2 ;; esac
 done
@@ -148,6 +170,7 @@ done
 # ------------------------------------------------------- what is running -----
 LOGCAT_PIDS=()
 DAEMON_PID=""
+COLLECTOR_PID=""
 W_PID=("" "" "")
 W_FD=("" "" "")
 STOPPING=no
@@ -312,6 +335,22 @@ start_witness() { # n
 start_witness 1
 start_witness 2
 
+# -------------------------------------------------------- the collector -----
+# the phones' live streams land here while the run holds; the pull at stop
+# is still the record (`Robot/field-test-procedure.md`)
+STREAM_ADDR=""
+if [ "$STREAM_PORT" != 0 ]; then
+  STREAM_ADDR="${ADDR%:*}:$STREAM_PORT"
+  "$TARGET/rhtn" diag collect --listen "0.0.0.0:$STREAM_PORT" --into "$RUN/phones" > "$RUN/phones/collector.txt" 2>&1 &
+  COLLECTOR_PID=$!
+  PIDS+=("$COLLECTOR_PID")
+  if ! await_text "$RUN/phones/collector.txt" "listening on" 20 "$COLLECTOR_PID"; then
+    cat "$RUN/phones/collector.txt" >&2
+    die "rhtn diag collect did not come up on port $STREAM_PORT"
+  fi
+  say "collector: the phones stream to $STREAM_ADDR -> phones/<serial>.jsonl (rhtn diag watch $RUN)"
+fi
+
 # --------------------------------------------------------------- phones ------
 mapfile -t DEVICES < <("$ADB" devices 2> /dev/null | awk 'NR > 1 && $2 == "device" {print $1}')
 DEVICE_MODELS=()
@@ -349,23 +388,29 @@ for s in ${DEVICES[@]+"${DEVICES[@]}"}; do
       else
         peer_material="$W_MATERIAL1"; peer_keyhash="$W_KEYHASH1"; peer_name="witness-1"
       fi
-      python3 - "$DAEMON_MATERIAL" "$peer_material" "${PHONE_MATERIALS[i]}" "$DAEMON_KEYHASH" "$ADDR" "$peer_keyhash" "$peer_name" > "$RUN/phones/$s/provision.json" <<'PY'
+      python3 - "$DAEMON_MATERIAL" "$peer_material" "${PHONE_MATERIALS[i]}" "$DAEMON_KEYHASH" "$ADDR" "$peer_keyhash" "$peer_name" "$RETENTION" > "$RUN/phones/$s/provision.json" <<'PY'
 import json, sys
-node_m, peer_m, own_m, node, addr, peer, name = sys.argv[1:8]
-print(json.dumps({"known": [node_m, peer_m, own_m], "node": node, "addr": addr,
-                  "peer": peer, "peer_name": name}, separators=(",", ":")))
+node_m, peer_m, own_m, node, addr, peer, name, retention = sys.argv[1:9]
+blob = {"known": [node_m, peer_m, own_m], "node": node, "addr": addr,
+        "peer": peer, "peer_name": name}
+if retention:
+    blob["retention_years"] = int(retention)
+print(json.dumps(blob, separators=(",", ":")))
 PY
       blob="$(cat "$RUN/phones/$s/provision.json")"
-      # the launcher stores the extra and the kernel reads it on its next
-      # cold start, so: stop, start with the extra, stop, start
+      # the launcher stores the extras and the kernel reads them on its
+      # next cold start, so: stop, start with the extras, stop, start. The
+      # stream target (diag_stream, diag_serial) is stored the same way and
+      # read by the fieldtest flavour alone; `off` forgets an earlier one
       "$ADB" -s "$s" shell am force-stop "$APP"
-      "$ADB" -s "$s" shell am start -W -n "$APP/.HomeActivity" --es provision "'$blob'" > /dev/null 2>&1 \
+      "$ADB" -s "$s" shell am start -W -n "$APP/.HomeActivity" --es provision "'$blob'" \
+        --es diag_stream "${STREAM_ADDR:-off}" --es diag_serial "$s" > /dev/null 2>&1 \
         || say "$s: am start with the provision failed"
       sleep 3
       "$ADB" -s "$s" shell am force-stop "$APP"
       "$ADB" -s "$s" shell am start -W -n "$APP/.HomeActivity" > /dev/null 2>&1 || say "$s: am start failed"
       provisioned=true
-      say "$s: provisioned to attach at $ADDR with peer $peer_name"
+      say "$s: provisioned to attach at $ADDR with peer $peer_name${STREAM_ADDR:+, streaming to $STREAM_ADDR}"
     fi
   fi
   DEVICE_PROVISIONED+=("$provisioned")
@@ -397,6 +442,7 @@ out = {
     "spec_pins": pins.get("specs", {}), "pins_accepted": pins.get("accepted"),
     "started_at": env["STARTED_AT"], "stopped_at": env["STOPPED_AT"] or None,
     "daemon": {"addr": env["ADDR"], "keyhash": env["DAEMON_KEYHASH"], "log_level": env["LEVEL"]},
+    "stream": {"addr": env["STREAM_ADDR"] or None, "lossy": True, "record": "phones/<serial>/"},
     "witnesses": [{"name": "witness-1", "keyhash": env["W_KEYHASH1"]},
                   {"name": "witness-2", "keyhash": env["W_KEYHASH2"]}],
     "devices": devices,
@@ -405,7 +451,7 @@ json.dump(out, open(sys.argv[1], "w", encoding="utf-8"), indent=1)
 PY
 }
 export_run_json_env() {
-  export SPEC_PINS="$CRATES/spec-pins.json" RUN_NAME LABEL N COMMIT DIRTY STARTED_AT ADDR DAEMON_KEYHASH LEVEL W_KEYHASH1 W_KEYHASH2
+  export SPEC_PINS="$CRATES/spec-pins.json" RUN_NAME LABEL N COMMIT DIRTY STARTED_AT ADDR DAEMON_KEYHASH LEVEL W_KEYHASH1 W_KEYHASH2 STREAM_ADDR
   export STOPPED_AT="${1:-}"
   D_SERIALS="$(printf '%s\n' ${DEVICES[@]+"${DEVICES[@]}"})"; export D_SERIALS
   D_MODELS="$(printf '%s\n' ${DEVICE_MODELS[@]+"${DEVICE_MODELS[@]}"})"; export D_MODELS
@@ -494,6 +540,16 @@ stop_run() {
     if ! await_exit "$DAEMON_PID" 30; then say "rhtnd did not stop on SIGTERM; killed"; kill -KILL "$DAEMON_PID" 2> /dev/null || true; fi
   fi
   for p in ${LOGCAT_PIDS[@]+"${LOGCAT_PIDS[@]}"}; do kill -TERM "$p" 2> /dev/null || true; done
+  # the collector: what it received stays in phones/<serial>.jsonl; the
+  # pull below is the record
+  if [ -n "$COLLECTOR_PID" ]; then
+    kill -TERM "$COLLECTOR_PID" 2> /dev/null || true
+    await_exit "$COLLECTOR_PID" 10 || kill -KILL "$COLLECTOR_PID" 2> /dev/null || true
+    for f in "$RUN"/phones/*.jsonl; do
+      [ -f "$f" ] || continue
+      say "stream: $(basename "$f") ($(wc -l < "$f") lines received live)"
+    done
+  fi
   # the phones
   for s in ${DEVICES[@]+"${DEVICES[@]}"}; do pull_phone "$s"; done
   # the merge
@@ -530,7 +586,7 @@ stop_run() {
 }
 trap stop_run INT TERM
 
-say "holding; Ctrl-C or 'field-run.sh stop' ends the run and collects it"
+say "holding; Ctrl-C or 'field-run.sh stop' ends the run and collects it${STREAM_ADDR:+; '$TARGET/rhtn diag watch $RUN' follows it live}"
 while :; do
   sleep 1
   if [ -n "$DAEMON_PID" ] && ! kill -0 "$DAEMON_PID" 2> /dev/null; then

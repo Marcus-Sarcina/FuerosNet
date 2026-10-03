@@ -3,7 +3,8 @@
 //! Four things, none of them a protocol participant's job: read what the
 //! wire carries ([`inspect`]), make and examine identities ([`keys`]), ask
 //! a running node the questions that change nothing ([`probe`]), and read
-//! the field-test builds' diagnostic files into one timeline ([`diag`]).
+//! the field-test builds' diagnostic files into one timeline ([`diag`]) or
+//! follow them as they are written ([`live`]).
 //!
 //! **It answers to no obligation document.** No section requires a command
 //! line, and nothing here may become the only way to do something a
@@ -18,4 +19,5 @@
 pub mod diag;
 pub mod inspect;
 pub mod keys;
+pub mod live;
 pub mod probe;

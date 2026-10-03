@@ -21,6 +21,30 @@ package com.comptus.fueros
  * order of would make it refuse a bundle that was whole.
  */
 object Bearer {
+
+    /**
+     * Wait, bounded, for a link to come ready: `ready` is asked every
+     * `stepMs` until it says so or `budgetMs` has passed, and the answer is
+     * whether it did. A radio's offer or seek returns as the radio starts,
+     * not as a peer connects and subscribes, and a packet sent before then
+     * goes nowhere and reports success; so every phase waits here first.
+     * The clock and the pause are parameters so a test can run it without
+     * sleeping.
+     */
+    fun awaitReady(
+        budgetMs: Long,
+        stepMs: Long = 100,
+        now: () -> Long = { System.nanoTime() / 1_000_000 },
+        pause: (Long) -> Unit = { Thread.sleep(it) },
+        ready: () -> Boolean,
+    ): Boolean {
+        val deadline = now() + budgetMs
+        while (true) {
+            if (ready()) return true
+            if (now() >= deadline) return false
+            pause(stepMs)
+        }
+    }
     /**
      * The most this will hold for one ceremony's carriages: the slices'
      * bytes **plus what holding each one costs** ([ENTRY_COST]). A carriage

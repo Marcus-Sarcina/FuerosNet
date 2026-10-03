@@ -63,28 +63,30 @@ object Report {
     }
 
     /** `header.json`. */
-    fun header(context: Context): String {
+    fun header(context: Context): String = Diag.obj(headerFields(context))
+
+    /** The header's fields, in order: `header.json`'s body, and what the
+     *  live stream's hello carries (`DiagStream`). */
+    fun headerFields(context: Context): List<Pair<String, Any?>> {
         val pm = context.packageManager
-        return Diag.obj(
-            listOf(
-                "run" to Diag.runId,
-                "commit" to BuildConfig.GIT_COMMIT,
-                "spec_pins" to pins(BuildConfig.SPEC_PINS),
-                "flavour" to BuildConfig.FLAVOR,
-                "app_version" to BuildConfig.VERSION_NAME,
-                "app_version_code" to BuildConfig.VERSION_CODE,
-                "device" to "${Build.MANUFACTURER} ${Build.MODEL}",
-                "android" to Build.VERSION.RELEASE,
-                "sdk" to Build.VERSION.SDK_INT,
-                "radios" to mapOf(
-                    "nfc" to (NfcAdapter.getDefaultAdapter(context) != null),
-                    "ble" to pm.hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE),
-                    "uwb" to pm.hasSystemFeature(PackageManager.FEATURE_UWB),
-                ),
-                "started_wall_ms" to Diag.startedWallMs,
-                "reported_wall_ms" to System.currentTimeMillis(),
-                "reported_ms" to Diag.ms(),
+        return listOf(
+            "run" to Diag.runId,
+            "commit" to BuildConfig.GIT_COMMIT,
+            "spec_pins" to pins(BuildConfig.SPEC_PINS),
+            "flavour" to BuildConfig.FLAVOR,
+            "app_version" to BuildConfig.VERSION_NAME,
+            "app_version_code" to BuildConfig.VERSION_CODE,
+            "device" to "${Build.MANUFACTURER} ${Build.MODEL}",
+            "android" to Build.VERSION.RELEASE,
+            "sdk" to Build.VERSION.SDK_INT,
+            "radios" to mapOf(
+                "nfc" to (NfcAdapter.getDefaultAdapter(context) != null),
+                "ble" to pm.hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE),
+                "uwb" to pm.hasSystemFeature(PackageManager.FEATURE_UWB),
             ),
+            "started_wall_ms" to Diag.startedWallMs,
+            "reported_wall_ms" to System.currentTimeMillis(),
+            "reported_ms" to Diag.ms(),
         )
     }
 

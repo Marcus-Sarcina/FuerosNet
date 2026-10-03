@@ -252,6 +252,20 @@ pub enum Refusal {
     NotVerified,
 }
 
+impl Refusal {
+    /// The refusal's code on the wire (`wire-format.md` §7.10.2,
+    /// `SigningReply` field 2): 1 to 4, in the order the variants are
+    /// declared.
+    pub fn code(&self) -> u64 {
+        match self {
+            Refusal::NomineeNotMine(_) => 1,
+            Refusal::OmittedResponse(_) => 2,
+            Refusal::ClockFar { .. } => 3,
+            Refusal::NotVerified => 4,
+        }
+    }
+}
+
 /// What a participant checks before signing: every witness attributed to
 /// it is one it nominated; every response it holds about itself is in the
 /// body; and the person is told when its own nominees are absent or

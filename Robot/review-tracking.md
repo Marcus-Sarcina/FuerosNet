@@ -13896,3 +13896,37 @@ defaults to two years in whole years and the FFI has no knob. A figure and
 whether the test build should differ are his. Also: the daemon's log now caps
 foreign targets at warn after quinn's debug lines were found to carry QUIC
 reset tokens (329 of 420 events in the dry run were quinn's).
+
+**M4b landed 2026-10-03** (the stream, collector and watch; `field-test-diagnostics.md`). The shell's verifier, review and done steps are being wired to the courier path next, with the intent held until the BLE link is ready.
+
+**Shell steps wired 2026-10-03** (`light-client-screens.md` says what is wired
+and what remains). Open from the wiring: no kernel call abandons a ceremony
+on Stop; refusal detection in the shell reads the conversed event's display
+string, where a structured field would serve; the proposer waits for every
+query to resolve, relying on the kernel's unavailable path; UWB and iOS as
+before; and no two-phone pass has run, the emulator having neither BLE nor
+NFC. The phones are the next instrument.
+
+## The pre-phone closure (2026-10-03)
+
+The author: "Proceed with all remaining pre-phone implementation." Of the
+open list, UWB and iOS are hardware and platform, the two-phone run needs
+the phones, and the retention *figure* is his; the rest is code and is done.
+
+| Item | Done |
+|---|---|
+| Refusal detection read `Conversed`'s display strings | `Event::Conversed` carries `step: Conversation`, a UniFFI enum mirroring the kernel's `Conversed`, with `SigningRefusal { code, why }` where a body was refused (`record::Refusal::code()`, now also what the encoder writes). `Meet.conversed(what, Turn)` switches on it; `Kernel.turnOf` maps. The `what` string stays for the notice line |
+| No kernel call abandoned a ceremony on Stop | `Participant.abandon()` over `Client::abandon`. `Meet.onStopped` fires once from any live step, outside the lock; the kernel sets it at `startMeet`. A finished meeting is not abandoned (the kernel closed its own at `finalize`). Nobody is told: §7.10.1 has no message for it, by design |
+| The proposer waited for every query, "relying on the kernel's unavailable path" | **There is no such path at the issuer**, and the design asks for none: a verifier that does not answer within the ceremony does not appear (design §7.1), and `sequence.rs` says when to propose is the proposer's own call. The shell's patience: 60 s from the queries going out or the last answer landing (`Meet.PATIENCE_MS`), or the person's *Go on without them*; the note is said once, the count becomes a UX-003 pre-sign warning, and the verifiers screen no longer claims that silence "answers as unavailable", which was false |
+| The field-test build declared no retention and the FFI had no knob | `Client::set_retention_years` / `retention_years` (whole years; refused at zero and during a ceremony, whose intent already states the figure; `cer.retention` event); `Participant.set_retention_years`; the provision's optional `retention_years`, which `field-run.sh --retention <years>` writes and `Kernel.bringUp` applies before any ceremony; the brief states the figure. **The figure itself is still the author's**: a run without the option declares two years |
+
+Tests: Android 108 → 112 (patience runs out and resets on an answer; the
+person goes on and the responder hands over; a stop tells the kernel once
+and a finished meeting does not; the brief states the retention);
+`client/tests/ceremony.rs` gains the retention test, `conversation.rs` pins
+the four codes against the encoder. `rhtn-participant`'s event printer
+carries the new field. Both native flavours and the binding rebuilt;
+`refcheck` clean after one qualification.
+
+Still open, as before: UWB; iOS; the retention figure for the field-test
+build; `Event::Conversed.from` unused by the shell; and no two-phone pass.
