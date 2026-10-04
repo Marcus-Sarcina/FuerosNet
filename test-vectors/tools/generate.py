@@ -2838,7 +2838,11 @@ witness_request = e_map([(e_uint(1), e_bstr(npr_precommit)),
 witness_answer_yes = e_map([(e_uint(1), b'\xf5'), (e_uint(2), e_uint(7))])
 witness_answer_no = e_map([(e_uint(1), b'\xf4')])
 gathered_responses = e_arr(npr_responses)
-back_pointers = e_arr([e_bstr(npr_txid), e_bstr(pc1_txid)])
+# alice's own back-pointers for the normal record, as its body's key 0 names
+# them for her: one head, the merge she continues. A kind-15 list is one
+# signer's heads at the moment of signing, so it can name nothing the record
+# itself will be, and it is sorted ascending where longer than one (§3.1)
+back_pointers = e_arr([e_bstr(h) for h in sorted(_npr_head(alice))])
 proposed_slots = [npr_slots[lab][0] for lab in LABELS]
 proposed_body = e_map([(e_uint(1), e_bstr(npr_body)), (e_uint(2), e_arr(proposed_slots))])
 signer_entries = e_arr([cose_signature_entry(p, s) for _, _, p, _, s in npr_entries[:2]])
@@ -2863,7 +2867,7 @@ _conv_pairs = [
     ('WitnessAnswer, kind 13 — witnessing, with the attestation bits it will set (7: protocol ran, both responsive, latency bound)', witness_answer_yes, 13),
     ('WitnessAnswer, kind 13 — declining; no bits', witness_answer_no, 13),
     ('GatheredResponses, kind 14 — the normal record\'s three responses in body order, for the proposer', gathered_responses, 14),
-    ('BackPointers, kind 15 — one signer\'s two back-pointers', back_pointers, 15),
+    ('BackPointers, kind 15 — alice\'s back-pointers for the normal record: the one head, her merge, that the body\'s key 0 names for her', back_pointers, 15),
     ('ProposedBody, kind 16 — the normal record\'s body with its seven revealed disclosure slots', proposed_body, 16),
     ('SigningReply, kind 17 — the lowest-keyhash signer\'s two envelope entries over that body', signing_reply_signed, 17),
     ('SigningReply, kind 17 — a refusal: a witness attributed to this party that it did not nominate, with the witness keyhash', signing_reply_refused, 17),
@@ -3772,6 +3776,15 @@ intent_x = e_arr([e_uint(1), e_bstr(pc_a),
                   e_arr([pc1_env]),
                   e_uint(TS_REC), e_uint(2), b'\xf5', e_uint(0)])
 
+# the intent bob's bearer carries back, the responder's: his echoed
+# contribution, one nominee from alice's neighbourhood, no prior record (a
+# bundle may be empty, §5.4), the same start, his retention, and initiator
+# false. The two flags differ, which is what both devices check (§14.3.2)
+intent_r = e_arr([e_uint(1), e_bstr(pc_b),
+                  e_arr([e_bstr(W16[0].keyhash)]),
+                  e_arr([]),
+                  e_uint(TS_REC), e_uint(3), b'\xf4', e_uint(0)])
+
 # a bundle past its first carriage: the first continuation, one entry,
 # anchored to the ceremony-id both screens fixed (§14.3.2; the bundle has no
 # ceiling, §5.4, and the carriage has)
@@ -3854,6 +3867,15 @@ initiator true, no continuations** ({len(intent_x)} bytes):
 {hexblock(intent_x)}
 ```
 
+**IntentExchange — bob's, the responder's: echoing his optical
+contribution, one nominee from alice's neighbourhood, an empty bundle,
+retention 3, initiator false, no continuations** ({len(intent_r)} bytes).
+The two flags differ; a device refuses an intent carrying its own value:
+
+```
+{hexblock(intent_r)}
+```
+
 **BundleContinuation — the first continuation of a larger bundle, one
 entry, anchored to the ceremony-id** ({len(cont_x)} bytes):
 
@@ -3917,6 +3939,7 @@ for fid, by, kind, note in [
     ('P-optical-contribution-bob', oc_bob, 'OpticalContribution', "bob's"),
     ('P-transcript-confirm', tconfirm, 'TranscriptConfirm', "the ceremony-id both derive; records.md's known answer"),
     ('P-intent-exchange', intent_x, 'IntentExchange', 'echoes the optical contribution; bundle entry is the §7.9 envelope form'),
+    ('P-intent-exchange-responder', intent_r, 'IntentExchange', "the responder's: echoes bob's contribution, an empty bundle, initiator false; the flags of the pair differ"),
     ('P-bundle-continuation', cont_x, 'BundleContinuation', 'the bundle past its first carriage, anchored and numbered from one'),
     ('P-proximity-outcomes', prox_x, 'ProximityOutcomes', "the record's own channels, anchored"),
     ('P-candidates-bare', cands_bare, 'Candidates', 'the payload path form; both address families'),
@@ -3967,14 +3990,15 @@ for fid, by, kind, note in [
     ('P-witness-answer-witnessing', witness_answer_yes, 'WitnessAnswer', 'bits 7: protocol ran, both responsive, latency bound'),
     ('P-witness-answer-declining', witness_answer_no, 'WitnessAnswer', 'declining carries no bits'),
     ('P-gathered-responses', gathered_responses, 'GatheredResponses', "the normal record's three responses in body order"),
-    ('P-back-pointers', back_pointers, 'BackPointers', 'two txids'),
+    ('P-back-pointers', back_pointers, 'BackPointers', "alice's one head for the normal record, the merge; what the body's key 0 names for her"),
     ('P-proposed-body', proposed_body, 'ProposedBody', "the normal record's body and its seven revealed slots"),
     ('P-signing-reply-signed', signing_reply_signed, 'SigningReply', "the lowest-keyhash signer's two entries"),
     ('P-signing-reply-refused', signing_reply_refused, 'SigningReply', 'refusal 1 with the witness keyhash'),
     ('P-signing-reply-refused-4', signing_reply_refused_4, 'SigningReply', 'refusal 4, the body does not verify against what this signer holds; no particular'),
 ]:
     reg(fid, 'bytes', ACC(kind, note), by)
-_bp9 = [e_bstr(H(b'rhtn-test-vectors:back-pointer:' + bytes([i]))) for i in range(9)]
+# sorted ascending bytewise, as a list longer than one is (§3.1)
+_bp9 = [e_bstr(h) for h in sorted(H(b'rhtn-test-vectors:back-pointer:' + bytes([i])) for i in range(9))]
 reg('B-back-pointers-8', 'bytes', ACC('BackPointers', 'eight, the per-signer ceiling'), e_arr(_bp9[:8]))
 reg('B-back-pointers-9', 'bytes',
     REJ('BackPointers', 'schema', 'nine back-pointers exceed the per-signer ceiling of eight'), e_arr(_bp9))

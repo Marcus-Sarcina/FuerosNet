@@ -73,7 +73,48 @@ pub struct Courier {
     /// Queries that arrived on the end-to-end path and wait for their
     /// grant, by id: who asked, so the answer goes back the way the query
     /// came.
-    awaiting: Mutex<HashMap<[u8; 32], Keyhash>>,
+    awaiting: Mutex<Awaiting>,
+}
+
+/// How many queries may wait for their grant at once.  A session peer can
+/// put queries faster than grants arrive, and each waiting one holds a map
+/// entry and a timer; past the bound the oldest is forgotten, and its
+/// querier hears nothing, as it would have from a verifier that was never
+/// reached.  Generous beside the client's own grant buffer, which bounds
+/// the wait in time.
+pub const AWAITING_QUERIES: usize = 256;
+
+/// The waiting queries, oldest evicted at the bound.
+#[derive(Default)]
+struct Awaiting {
+    by_id: HashMap<[u8; 32], (Keyhash, u64)>,
+    next: u64,
+}
+
+impl Awaiting {
+    fn insert(&mut self, qid: [u8; 32], querier: Keyhash) {
+        if self.by_id.len() >= AWAITING_QUERIES && !self.by_id.contains_key(&qid) {
+            let oldest = self
+                .by_id
+                .iter()
+                .min_by_key(|(_, (_, seq))| *seq)
+                .map(|(k, _)| *k);
+            if let Some(oldest) = oldest {
+                self.by_id.remove(&oldest);
+            }
+        }
+        self.next += 1;
+        self.by_id.insert(qid, (querier, self.next));
+    }
+
+    fn remove(&mut self, qid: &[u8; 32]) -> Option<Keyhash> {
+        self.by_id.remove(qid).map(|(q, _)| q)
+    }
+
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        self.by_id.len()
+    }
 }
 
 impl Courier {
@@ -93,7 +134,7 @@ impl Courier {
                 app,
                 verifiers: Mutex::new(None),
                 offered: Mutex::new(HashSet::new()),
-                awaiting: Mutex::new(HashMap::new()),
+                awaiting: Mutex::new(Awaiting::default()),
             }),
             rx,
         )
@@ -196,10 +237,37 @@ impl Courier {
     /// A verifier's answer, back to the querier on the end-to-end path and
     /// its copy to the subject over the association the grant established
     /// (`wire-format.md` §5.6, design §7.4.2).
+    ///
+    /// A send that fails is said, since the querier is left waiting for an
+    /// answer this side gave: nothing more can be done for it from here,
+    /// the path being the only one there is, but a run's record should
+    /// show the answer went nowhere rather than that none was given.
     async fn answer_back(self: &Arc<Self>, querier: Keyhash, a: Answer) {
         let (subject, copy) = a.to_subject.clone();
-        let _ = self.send(querier, KIND_RESPONSE, a.to_querier).await;
-        let _ = self.send(subject, KIND_RESPONSE_COPY, copy).await;
+        let qid = a.query_id;
+        for (to, kind, bytes, leg) in [
+            (querier, KIND_RESPONSE, a.to_querier, "querier"),
+            (subject, KIND_RESPONSE_COPY, copy, "subject"),
+        ] {
+            match self.send(to, kind, bytes).await {
+                Ok(c) if c.complete() => {}
+                Ok(c) => tracing::warn!(
+                    target: "pay",
+                    qid = %hex8(&qid),
+                    leg,
+                    left = c.left.len(),
+                    refused = c.refused.len(),
+                    "pay.answer.unsent"
+                ),
+                Err(why) => tracing::warn!(
+                    target: "pay",
+                    qid = %hex8(&qid),
+                    leg,
+                    why = %why,
+                    "pay.answer.unsent"
+                ),
+            }
+        }
     }
 
     /// Let the grant buffer's bound pass for a waiting query: past it the
@@ -388,5 +456,42 @@ impl Courier {
             }
             out
         })
+    }
+}
+
+/// Eight hex characters of an identifier, for a diagnostic line.
+fn hex8(b: &[u8]) -> String {
+    b.iter().take(4).map(|x| format!("{x:02x}")).collect()
+}
+
+#[cfg(test)]
+mod awaiting_tests {
+    use super::*;
+
+    /// The waiting queries are bounded, the oldest forgotten first, and a
+    /// query asked again keeps its place rather than evicting another.
+    #[test]
+    fn the_waiting_queries_are_bounded_and_the_oldest_goes_first() {
+        let mut w = Awaiting::default();
+        let qid = |i: u32| {
+            let mut q = [0u8; 32];
+            q[..4].copy_from_slice(&i.to_be_bytes());
+            q
+        };
+        let who = [7u8; 32];
+        for i in 0..AWAITING_QUERIES as u32 {
+            w.insert(qid(i), who);
+        }
+        assert_eq!(w.len(), AWAITING_QUERIES);
+        w.insert(qid(0), who);
+        assert_eq!(w.len(), AWAITING_QUERIES, "a repeat keeps its slot");
+        w.insert(qid(AWAITING_QUERIES as u32), who);
+        assert_eq!(w.len(), AWAITING_QUERIES);
+        assert!(w.remove(&qid(1)).is_none(), "the oldest is gone");
+        assert!(
+            w.remove(&qid(0)).is_some(),
+            "the repeat was refreshed and stays"
+        );
+        assert!(w.remove(&qid(AWAITING_QUERIES as u32)).is_some());
     }
 }

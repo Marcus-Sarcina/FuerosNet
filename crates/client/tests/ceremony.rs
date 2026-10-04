@@ -242,6 +242,60 @@ fn the_declared_retention_is_the_persons_to_set_between_ceremonies() {
     assert_eq!(a.retention_years(), 3);
 }
 
+/// Either party may begin (design §7.1): the same pair, the other one
+/// beginning, reaches a record, and the participants are the keyhash
+/// order of this implementation either way.  Both claiming to have begun,
+/// or neither, is refused where the intent is read.
+// acceptance: CER-48
+#[test]
+fn either_party_may_begin_and_an_intent_claiming_this_devices_own_side_is_refused() {
+    let mut s = setup(&EVERYONE, &[ChannelKind::Nfc]);
+    let forward = s
+        .run("alice", "bob", &["w1"], &["w2"])
+        .expect("alice begins");
+    let swapped = s.run("bob", "alice", &["w2"], &["w1"]).expect("bob begins");
+    assert_ne!(forward, swapped, "two meetings, two records");
+    for txid in [forward, swapped] {
+        let env = s.client("alice").store.records[&txid].clone();
+        let rec = rhtn_archive::record::Record::parse(&env).expect("a record");
+        assert_eq!(
+            rec.participants(),
+            participants(kh("alice"), kh("bob")).to_vec(),
+            "the participants sit in keyhash order whichever party began"
+        );
+    }
+    // both claim to have begun
+    let ia = s.client("alice").begin(kh("bob"), vec![], true).unwrap();
+    let ib = s.client("bob").begin(kh("alice"), vec![], true).unwrap();
+    assert_eq!(
+        s.client("bob").take_intent(kh("alice"), &ia),
+        Err(Abort::InitiatorClaim)
+    );
+    assert_eq!(
+        s.client("alice").take_intent(kh("bob"), &ib),
+        Err(Abort::InitiatorClaim)
+    );
+    assert_eq!(
+        s.client("alice").ceremony_id(),
+        None,
+        "no ceremony-id is fixed"
+    );
+    // neither claims
+    s.client("alice").abandon();
+    s.client("bob").abandon();
+    let ia = s.client("alice").begin(kh("bob"), vec![], false).unwrap();
+    assert_eq!(
+        s.client("bob")
+            .begin(kh("alice"), vec![], false)
+            .map(|_| ()),
+        Ok(())
+    );
+    assert_eq!(
+        s.client("bob").take_intent(kh("alice"), &ia),
+        Err(Abort::InitiatorClaim)
+    );
+}
+
 // acceptance: CER-24
 #[test]
 fn the_capture_key_goes_directly_to_the_selected_verifier_and_nowhere_else() {

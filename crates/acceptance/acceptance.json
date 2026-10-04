@@ -11288,6 +11288,33 @@
     "interpretation": ""
   },
   {
+    "id": "CER-48",
+    "area": "ceremony",
+    "gap": "ceremony",
+    "title": "Refuse an intent that claims this device's own side, both having begun or neither",
+    "milestone": 4,
+    "kind": "negative",
+    "spec": [
+      "wire-format.md §14.3.2",
+      "light-client-requirements.md §1"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §14.3.2",
+        "text": "**a device\nrefuses an intent whose `initiator` equals its own**"
+      },
+      {
+        "where": "light-client-requirements.md §1",
+        "text": "refuse one that claims your own side"
+      }
+    ],
+    "given": "Two clients, each having begun a ceremony with the other and each claiming to be the initiator; and two others each claiming not to be.",
+    "when": "Each takes the counterparty's intent.",
+    "then": "The intent is refused as an anchor refusal naming the initiator claim, no ceremony-id is fixed, and the window does not open; the ceremony in the ordinary direction, and in the swapped direction with the other party beginning, finalizes.",
+    "oracle": "behaviour",
+    "interpretation": ""
+  },
+  {
     "id": "RSC-38",
     "area": "resources",
     "gap": "resources",

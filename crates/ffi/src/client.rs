@@ -1272,7 +1272,9 @@ impl Participant {
                     rhtn_client::query::VerificationQuery::decode(&query).map_err(Refused::new)?;
                 Ok(c.consent(&q).map(|(consent, grant)| Consented {
                     consent,
-                    grant: grant.map(|g| g.encode()),
+                    // the grant carries the capture key; the client's copy
+                    // is wiped with it and the crossing copy is the shell's
+                    grant: grant.map(|g| g.encode().to_vec()),
                 }))
             })
         })

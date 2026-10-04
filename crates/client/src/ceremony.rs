@@ -132,6 +132,11 @@ pub enum Abort {
     /// The patron's check of the evidence against the adoption's own
     /// fields failed, or it holds no position to adopt under.
     PatronRefused(String),
+    /// The counterparty's intent claims the same side as this device's
+    /// own, both having begun or neither (`wire-format.md` §14.3.2): with
+    /// two proposers or none the conversation cannot run, so the intent is
+    /// refused where it is read.
+    InitiatorClaim,
     /// The conversation's next step waits on something that has not
     /// arrived (`wire-format.md` §7.10.1): what, in words.
     Waiting(&'static str),
@@ -953,6 +958,11 @@ impl Client {
         if intent.started_at.abs_diff(a.started_at) > tolerance {
             return Err(anchor_refused("intent", Abort::ClockFar));
         }
+        // the flag is self-reported; the one check that converts two
+        // silent deadlocks, both proposing and neither, into a refusal
+        if intent.initiator == a.initiator {
+            return Err(anchor_refused("intent", Abort::InitiatorClaim));
+        }
         if intent.initiator && !a.initiator {
             a.started_at = intent.started_at;
         }
@@ -1376,7 +1386,7 @@ impl Client {
             crate::sequence::Witnessing {
                 request: req.clone(),
                 flags,
-                observed: Vec::new(),
+                observed: BTreeSet::new(),
             },
         );
         Some(flags)
@@ -3625,7 +3635,7 @@ impl Harness {
                 continue;
             };
             if let Some(g) = grant {
-                let m = self.send(subject, v, Msg::Grant(g.encode()));
+                let m = self.send(subject, v, Msg::Grant(g.encode().to_vec()));
                 let Msg::Grant(bytes) = m else { unreachable!() };
                 self.client(&v).take_grant(subject, &bytes);
             }

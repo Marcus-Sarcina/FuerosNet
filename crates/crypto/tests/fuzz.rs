@@ -38,9 +38,19 @@ fn mutate_until_the_budget_runs_out() {
         eprintln!("fuzz: RHTN_FUZZ_SECONDS unset, skipping");
         return;
     };
+    // zero is xorshift's fixed point: a seed given as 0 runs as 1, and says
+    // so, rather than drawing the same value for the whole budget
     let seed = std::env::var("RHTN_FUZZ_SEED")
         .ok()
         .and_then(|s| s.parse::<u64>().ok())
+        .map(|s| {
+            if s == 0 {
+                eprintln!("fuzz: RHTN_FUZZ_SEED=0 is xorshift's fixed point; running as 1");
+                1
+            } else {
+                s
+            }
+        })
         .unwrap_or_else(|| {
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)

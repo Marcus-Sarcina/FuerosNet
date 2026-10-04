@@ -72,8 +72,10 @@ pub(crate) struct Witnessing {
     /// The attestation bits answered with (Witness field 3).
     pub(crate) flags: u64,
     /// The conversation as it reached this witness: each sender and the
-    /// kind it sent, in arrival order.
-    pub(crate) observed: Vec<(Keyhash, u64)>,
+    /// kinds it sent.  A set, since what is attested is that a kind
+    /// arrived from a party and not how often, and so bounded by the two
+    /// participants and the ten kinds whatever a participant repeats.
+    pub(crate) observed: BTreeSet<(Keyhash, u64)>,
 }
 
 /// What a message of the conversation came to at the client that opened
@@ -740,7 +742,7 @@ impl Client {
 
     fn observe(&mut self, cid: [u8; 32], from: Keyhash, kind: u64) {
         if let Some(w) = self.witnessing.get_mut(&cid) {
-            w.observed.push((from, kind));
+            w.observed.insert((from, kind));
         }
     }
 

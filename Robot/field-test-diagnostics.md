@@ -99,7 +99,7 @@ anchor.
 | `cer.intent.sent` / `.received` | nominees, bundle entries, continuations, retention, initiator | `intent`, `take_intent`, `take_intent_carriage` |
 | `cer.optical.shown` / `.read` | which QR (contribution or confirm), bytes | `optical_contribution`, `take_optical`, `transcript_confirm`, `take_transcript` |
 | `cer.id_fixed` | cid8, ms since begin | `take_intent` via `anchored_id` |
-| `cer.anchor.refused` | which message, `ContributionMismatch` / `CeremonyIdMismatch` / `ClockFar` | every anchored take |
+| `cer.anchor.refused` | which message, `ContributionMismatch` / `CeremonyIdMismatch` / `ClockFar` / `InitiatorClaim` | every anchored take |
 | `cer.proximity` | channel, outcome, resolution, duration; then strongest | `take_channels`, `achieved` |
 | `cer.capture_key` | sent or received, ok; never the key | `capture_key_carriage`, `take_capture_key_carriage` |
 | `cer.capture` | start, end, image_count, template version, duration, `TemplateLength` | `capture`, `guided_capture` |
@@ -123,6 +123,7 @@ anchor.
 | `pay.send` | kind, to8, device8, direct or relay, bytes | `send_payload`, `route` |
 | `pay.receive` | kind, from8, `Dispatched` variant, `Conversed` variant | `receive_payload`, `converse_in` |
 | `pay.error` | `PayloadError` variant (`NoSession`, `NoBundle`, `NotTheSender`, `Replayed`, `Malformed`, `Crypto`) | `receive_payload` |
+| `pay.answer.unsent` | qid8, leg (querier or subject), what was left or refused, or the send's reason | the courier's `answer_back`, where a verifier's answer went nowhere |
 | `pay.session` | opened / displaced / kept (lower keyhash), peer8, device8 | `Sessions::open/receive` |
 | `pay.ratchet` | skipped n, over `MAX_SKIP` | `Ratchet::skip/decrypt` |
 | `pay.bundle` | fetched, prefetched, pool exhausted | `take_prekey_reply`, `on_pool_report`, `restock` |

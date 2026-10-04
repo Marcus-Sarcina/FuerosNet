@@ -157,6 +157,7 @@ pub fn variant(a: &crate::ceremony::Abort) -> &'static str {
         CounterExhausted => "CounterExhausted",
         NotRecognised => "NotRecognised",
         PatronRefused(_) => "PatronRefused",
+        InitiatorClaim => "InitiatorClaim",
         Waiting(_) => "Waiting",
         NotProposer => "NotProposer",
         Payload(_) => "Payload",

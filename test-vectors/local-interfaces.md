@@ -1,6 +1,6 @@
 # Local device-to-device interfaces (`wire-format.md` §14.3)
 
-Generated against `wire-format.md` `683db42970babc97…`, `network-design.md` `61663b6c74ef73b2…` and `light-client-requirements.md` `13e13ac87adb9116…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `e23db4c7082c3e99…`, `network-design.md` `61663b6c74ef73b2…` and `light-client-requirements.md` `cc768f7250d458af…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Canonical. Spec-derived, reproduced by the independent harness.** The encodings
 of `wire-format.md` §14.3, as one coherent exchange: **alice initiates with
@@ -384,6 +384,16 @@ a6eedfe92bfff664886d4645c62b6ecf5d0143a7be221770c30594995ed66f51
 1fd27b4a4b89f7c0edb8aa05820b1f7ea4fe0d3c011c28408997cbe62e9399ce
 f79193b7e9fc0000000000000000000000000000000000000000000000000000
 000000000005070f14191a6a43151002f500
+```
+
+**IntentExchange — bob's, the responder's: echoing his optical
+contribution, one nominee from alice's neighbourhood, an empty bundle,
+retention 3, initiator false, no continuations** (63 bytes).
+The two flags differ; a device refuses an intent carrying its own value:
+
+```
+880150d43a0b07379cf934c8b7e4b54629f95c81582000511331b14dfd14aa36
+7a79e3896c8d5ac89838549b563effb7fafedc7c91cc801a6a43151003f400
 ```
 
 **BundleContinuation — the first continuation of a larger bundle, one

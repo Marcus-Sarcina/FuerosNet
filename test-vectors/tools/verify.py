@@ -799,6 +799,11 @@ check(_ix[1] == _oc_a[2],
       "s14.3: the intent echoes alice's optical contribution byte-for-byte")
 check(enc(_ix[3][0]).hex() == byid['P-alice-c1-record']['hex'],
       "s14.3: the intent's bundle entry is the alice-c1 envelope byte-for-byte")
+_ixr = canonical(bytes.fromhex(byid['P-intent-exchange-responder']['hex']))
+check(_ixr[1] == _oc_b[2] and _ixr[3] == [] and _ixr[4] == _ix[4],
+      "s14.3: the responder's intent echoes bob's contribution, carries an empty bundle and the same start")
+check(_ix[6] is True and _ixr[6] is False,
+      's14.3: the pair of intents disagree on who began, the initiator true and the responder false')
 for _fid in ('P-proximity-outcomes', 'P-candidate-handover'):
     check(canonical(bytes.fromhex(byid[_fid]['hex']))[1] == _cid,
           f's14.3: {_fid} is anchored to the derived ceremony-id')
@@ -1012,6 +1017,20 @@ check(gr == npr_c[3][5] and len(gr) == 3,
 bp = canonical(bytes.fromhex(byid['P-back-pointers']['hex']))
 check(isinstance(bp, list) and 1 <= len(bp) <= 8 and all(is_h32(x) for x in bp) and len(set(bp)) == len(bp),
       'BackPointers: one to eight distinct 32-byte txids')
+# a kind-15 list is one signer's heads at signing: it is one of the lists
+# the proposed body's key 0 carries, names nothing that the record itself
+# will be, and is sorted ascending where longer than one (s3.1)
+_npr_txid = H(enc(npr_c[3])).hex()
+check(bp in npr_c[3][0] and _npr_txid not in bp,
+      "BackPointers: one signer's key-0 list of the normal record, naming nothing self-referential")
+check(bp == sorted(bp), 'BackPointers: ascending bytewise where longer than one (s3.1)')
+_bp8 = canonical(bytes.fromhex(byid['B-back-pointers-8']['hex']))
+check(len(_bp8) == 8 and _bp8 == sorted(_bp8), 'BackPointers: the eight-entry ceiling fixture is sorted ascending (s3.1)')
+# the peering between a server and a light client (s4.4): the server named
+# by a network point in field 3, the light client by its locator in field 4
+_pl = canonical(bytes.fromhex(byid['P-peering-light']['hex']))
+check(isinstance(_pl[3], dict) and 1 in _pl[3] and isinstance(_pl[4], dict) and set(_pl[4]) == {1, 2, 3},
+      's4.4: P-peering-light names the server by network point and the light client by locator')
 # SigningReply: the lowest-keyhash signer's two entries, classical then
 # post-quantum, over the body under rhtn/1:envelope; they are the entries
 # the finalised envelope carries first

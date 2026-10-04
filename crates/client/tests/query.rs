@@ -67,7 +67,7 @@ fn the_grant_and_the_late_response_decode_and_round_trip() {
         rhtn_codec::cose::txid(&body_of(&fixture("P-alice-c1-record"))),
         "names the prior alice-c1 record"
     );
-    assert_eq!(g.encode(), fixture("P-e2e-01"));
+    assert_eq!(g.encode().to_vec(), fixture("P-e2e-01"));
     let l = LateResponse::decode(&fixture("P-e2e-02")).unwrap();
     assert_eq!(
         l.record,

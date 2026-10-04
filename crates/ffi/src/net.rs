@@ -595,6 +595,12 @@ impl Net {
         if !carried.refused.is_empty() {
             return Err(Refused::new("the serving node refused the publication"));
         }
+        if !carried.left.is_empty() {
+            return Err(Refused::new(format!(
+                "no path carried {} of the messages: unsent",
+                carried.left.len()
+            )));
+        }
         Ok(())
     }
 

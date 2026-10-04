@@ -1,6 +1,6 @@
 # Unsigned message families (`wire-format.md` §§6–11)
 
-Generated against `wire-format.md` `683db42970babc97…`, `network-design.md` `61663b6c74ef73b2…` and `light-client-requirements.md` `13e13ac87adb9116…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `e23db4c7082c3e99…`, `network-design.md` `61663b6c74ef73b2…` and `light-client-requirements.md` `cc768f7250d458af…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Canonical. Spec-derived, reproduced by the independent harness.** Canonical bar 9:
 one positive known-answer encoding per framed message family. Framing is
@@ -4342,12 +4342,11 @@ f370ca829b20d32e5879c22e1c94ec575b5112872682222ab4ee9844f9eb202a
 9069c2cf4a91a9abd62781cd121ab5886f89b14e838bfb5402bb6b01e47905c0
 3f6c80d43e70db559489040a03
 ```
-**BackPointers, kind 15 — one signer's two back-pointers** (69 bytes — an END-TO-END PAYLOAD, not a stream reply: the bytes are the object alone; on the channel a `uint` kind tag precedes them, §7.10.1's registry — kind 15 for this object — and no prefix is included below):
+**BackPointers, kind 15 — alice's back-pointers for the normal record: the one head, her merge, that the body's key 0 names for her** (35 bytes — an END-TO-END PAYLOAD, not a stream reply: the bytes are the object alone; on the channel a `uint` kind tag precedes them, §7.10.1's registry — kind 15 for this object — and no prefix is included below):
 
 ```
-825820b5b6227510ef730eccc3a3d9e256b30e48898bde156c29eead5e394bc3
-f350de58203bba204761228f945e43fc8d366d194b6191aa9031478f894df886
-a1707b1d9e
+815820ce1b5b8939602fa59262b48bd9555affab1c1d2ddbb42cb152cbd10f36
+b57eaf
 ```
 **ProposedBody, kind 16 — the normal record's body with its seven revealed disclosure slots** (3010 bytes — an END-TO-END PAYLOAD, not a stream reply: the bytes are the object alone; on the channel a `uint` kind tag precedes them, §7.10.1's registry — kind 16 for this object — and no prefix is included below):
 

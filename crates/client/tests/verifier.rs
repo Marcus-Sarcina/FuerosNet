@@ -121,6 +121,7 @@ fn grant(s: &Setup, record: [u8; 32], ceremony: [u8; 32], qid: [u8; 32]) -> Vec<
         key: capture_key(&seed, &kh("alice"), &kh("bob"), &ceremony),
     }
     .encode()
+    .to_vec()
 }
 
 fn verdict_of(bytes: &[u8]) -> (Verdict, Option<Basis>, Option<u64>) {

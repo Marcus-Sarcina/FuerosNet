@@ -221,6 +221,14 @@ fn an_object_the_schema_refuses_does_not_decode_here_either() {
     assert!(ProximityOutcomes::decode(&fixture("P-candidate-handover")).is_err());
     assert!(CandidateHandover::decode(&fixture("P-proximity-outcomes")).is_err());
     assert!(BundleContinuation::decode(&fixture("P-intent-exchange")).is_err());
+    // the responder's intent of the pair: the other flag, an empty bundle
+    let r = IntentExchange::decode(&fixture("P-intent-exchange-responder")).expect("decodes");
+    let i = IntentExchange::decode(&fixture("P-intent-exchange")).expect("decodes");
+    assert!(
+        i.initiator && !r.initiator,
+        "the pair disagree on who began"
+    );
+    assert!(r.bundle.is_empty());
     assert!(CaptureKeyHandover::decode(&fixture("P-transcript-confirm")).is_err());
     assert!(CaptureKeyHandover::decode(&fixture("P-candidate-handover")).is_err());
     assert!(TranscriptConfirm::decode(&fixture("P-capture-key-handover")).is_err());

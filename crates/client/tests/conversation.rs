@@ -73,13 +73,25 @@ fn the_conversation_objects_encode_to_the_canonical_bytes_and_read_back() {
     assert_eq!(read.responses.len(), 3, "the normal record's three");
     assert_eq!(read.encode(), fx);
 
+    // alice's one head for the normal record: what its body's key 0 names
+    // for her, and nothing the record itself will be
     let fx = fixture("P-back-pointers");
     let read = BackPointers::decode(&fx).expect("decodes");
-    assert_eq!(read.txids.len(), 2);
+    assert_eq!(read.txids.len(), 1);
+    let npr = rhtn_archive::record::Record::parse(&fixture("P-normal-record")).expect("the record");
+    assert!(
+        npr.back.contains(&read.txids),
+        "one signer's key-0 list of the record"
+    );
+    assert!(!read.txids.contains(&npr.txid), "nothing self-referential");
     assert_eq!(read.encode(), fx);
     let fx = fixture("B-back-pointers-8");
     let read = BackPointers::decode(&fx).expect("eight, the ceiling, decodes");
     assert_eq!(read.txids.len(), 8);
+    assert!(
+        read.txids.windows(2).all(|w| w[0] < w[1]),
+        "ascending bytewise (s3.1)"
+    );
     assert_eq!(read.encode(), fx);
 
     let fx = fixture("P-proposed-body");

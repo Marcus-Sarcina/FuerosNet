@@ -33,9 +33,11 @@ documents. Where a requirement leaves a visible artifact, that is noted in place
 
 **Either party may begin.** Offer both ways in: a control that shows an invite
 for the counterparty to read, and a control that reads one. Which the user chose
-settles nothing (design §7.1): not the record, and not who adopts whom if an
-adoption follows; the pair takes only a start time from whoever began, within
-clock tolerance (`wire-format.md` §14.3.2).
+has no bearing on the ceremony's outcome or on who adopts whom if an adoption
+follows (design §7.1); the pair takes a start time from whoever began, within
+clock tolerance, and the one who began proposes the body for signature
+(`wire-format.md` §14.3.2, §7.10.1). The two intents say which side began
+and must disagree; refuse one that claims your own side.
 
 ### 1.1 Nomination
 

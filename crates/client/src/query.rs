@@ -361,8 +361,10 @@ pub struct KeyGrant {
 }
 
 impl KeyGrant {
-    pub fn encode(&self) -> Vec<u8> {
-        let mut out = Vec::new();
+    /// The grant's bytes carry the capture key, so they are wiped with the
+    /// value that holds them, as the key itself is.
+    pub fn encode(&self) -> Zeroizing<Vec<u8>> {
+        let mut out = Zeroizing::new(Vec::new());
         emit_map_head(&mut out, 3);
         emit_uint(&mut out, 1);
         emit_bstr(&mut out, &self.record);

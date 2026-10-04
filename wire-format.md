@@ -2761,7 +2761,8 @@ Which anchors a node caches is **per-node policy, never a protocol constant**.
 
 **The message by which a subject releases a capture key to a holder**
 (design §7.5.2). It exists because nothing else in this profile carries one, and
-three implementations would otherwise invent three.
+three implementations would otherwise invent three. On the end-to-end payload
+path it is kind 1 (§7.10.1).
 
 ```
 KeyGrant = {
@@ -2804,7 +2805,8 @@ posture as every other absence.
 
 **A verifier response that arrives after finalization is carried as a standalone
 signed object referring to the record it supplements.** It is not an
-amendment — the record it names is immutable.
+amendment — the record it names is immutable. On the end-to-end payload path
+it is kind 2 (§7.10.1).
 
 ```
 LateResponse = {
@@ -4898,7 +4900,7 @@ design already depends on.
 
 | What | Between | Where it is stated | Encoding |
 |---|---|---|---|
-| The ceremony's intent exchange — the contribution, the nominees, the evidence bundle, the timing and who initiated | Two participants' devices | design §7.1, §7.5.2, §8.1.2 | `IntentExchange` (§14.3.2), carried by the shell's chosen bearer (§14.3.1) and bound to the pre-commitment. The CBOR is specified; two vendors' clients compute the same ceremony-id (design §13.2) either way |
+| The ceremony's intent exchange — the contribution, the nominees, the evidence bundle, the timing and who initiated | Two participants' devices | design §7.1, §7.5.2, §8.1.2 | `IntentExchange` (§14.3.2), carried by the shell's chosen bearer (§14.3.1) and bound to the pre-commitment. The CBOR is specified; two vendors' clients compute the same pre-commitment, the ceremony-id (design §7.5.2.6), either way |
 | The optical transcript — each device's contribution, then the derived ceremony-id, screen to camera | Two participants' devices | design §7.1 item 3, design §7.5.2 | `OpticalContribution` then `TranscriptConfirm` (§14.3.2): the contribution is the key-exchange input, the ceremony-id is the transcript hash both display and check |
 | Proximity channel outcomes — the UWB, NFC or optical result and its ranking | Two participants' devices | §3.2, design §7.1 item 4 | `ProximityOutcomes` (§14.3.2): the §4.5 `Channel` maps as measured, anchored to the ceremony-id. The record's `strongest` (§3.2) is not carried — each device computes it from the outcomes, as each computes the ceremony-id |
 | Traversal candidates | Two participants' devices | design §12.6.3 [author, 2026-09-25] | `CandidateHandover` (§14.3.2), carrying the `Candidate` structure this document now defines; the same candidates travel the end-to-end payload path when a direct connection is set up remotely (design §12.6.3, §14.1.1) |
@@ -4997,6 +4999,13 @@ TranscriptConfirm = [          ; the second QR, once both contributions are in
 ]
 ```
 
+**The two intents disagree on who began**, one `initiator` true and the
+other false, and that is checked where the intent is read: **a device
+refuses an intent whose `initiator` equals its own**, since with both
+claiming to have begun, or neither, no side proposes the body (§7.10.1) and
+the conversation would wait on nobody. The flag is self-reported, so the
+check is what turns the two silent deadlocks into a refusal.
+
 ```
 IntentExchange = [             ; carried by the bearer (§14.3.1), not optical
   uint,                        ; version, 1
@@ -5016,8 +5025,11 @@ IntentExchange = [             ; carried by the bearer (§14.3.1), not optical
                                ;   the flag settles whose start the pair
                                ;   adopts, the responder taking the initiator's
                                ;   within its clock tolerance, and which side
-                               ;   proposes the body (§7.10.1); nothing about
-                               ;   the record or any adoption follows from it
+                               ;   proposes the body (§7.10.1). It has no
+                               ;   bearing on the ceremony's outcome or on the
+                               ;   polarity of any adoption (design §7.1); the
+                               ;   two flags differ, and an intent carrying
+                               ;   this device's own value is refused (below)
   uint,                        ; continuations: how many BundleContinuation
                                ;   messages follow with the rest of the
                                ;   bundle; 0 where it fits in one carriage

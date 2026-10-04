@@ -11961,7 +11961,7 @@ file carry the citation as it was written, and are left: both are
 as-of-filing. Every `light-client-requirements.md` §1.3 citation in the set
 is to that document's capture section and is correct.
 
-### 2026-10-02 (eight rulings, and what they moved)
+### 2026-10-02 (ten rulings, and what they moved)
 
 The author answered the ruling queue from the state-of-completion
 assessment. **The capture-key handover has its encoding**:
@@ -12230,3 +12230,20 @@ phone that is not on USB over Wi-Fi at that address and keeps every name and
 directory by serial. Found on the way: the run script lowercased the whole
 phone argument, serial included, and adb's serials are case-sensitive; now
 the material alone.
+
+### 2026-10-04 (the fifth-round re-review)
+
+The back-pointers fixture named the record under construction and an
+unrelated transaction; it is now one signer's own heads as the body's key 0
+names them, sorted, and the harness checks membership, sortedness and that
+nothing is self-referential. An intent claiming this device's own side, both
+having begun or neither, is now refused where it is read, stated in the wire
+format and the light-client requirements and tested both ways round with a
+new functional test row. The courier bounds its waiting queries at 256 with
+the oldest evicted, says where a verifier's answer went nowhere, keeps a
+witness's observation as a set, and reports what no path carried. A
+responder's intent joins the vectors. Editorial: the ceremony-id's citation
+now points at the pre-commitment's section, the §7.3 and §7.4 objects name
+their kinds, NET-019 names the device handover, the rulings entry counts
+ten, and an explicit zero fuzz seed no longer sits at xorshift's fixed point.
+Corpus 323 → 324; functional tests 489 → 490; catalogue 478 → 479.

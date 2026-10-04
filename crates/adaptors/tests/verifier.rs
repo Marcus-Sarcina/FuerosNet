@@ -237,7 +237,7 @@ async fn a_grant_on_the_payload_channel_answers_the_waiting_stream_of_a_hosted_l
     }
     .encode();
     w1.courier
-        .send(kh("alice"), KIND_KEY_GRANT, grant)
+        .send(kh("alice"), KIND_KEY_GRANT, grant.to_vec())
         .await
         .expect("sent");
     let reply = tokio::time::timeout(Duration::from_secs(3), stream)
@@ -335,7 +335,7 @@ async fn a_query_from_the_wrong_requester_leaves_a_waiting_request_where_it_was(
     }
     .encode();
     w1.courier
-        .send(kh("alice"), KIND_KEY_GRANT, grant)
+        .send(kh("alice"), KIND_KEY_GRANT, grant.to_vec())
         .await
         .expect("sent");
     let reply = tokio::time::timeout(Duration::from_secs(3), stream)

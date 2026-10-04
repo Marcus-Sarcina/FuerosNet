@@ -13930,3 +13930,30 @@ carries the new field. Both native flavours and the binding rebuilt;
 
 Still open, as before: UWB; iOS; the retention figure for the field-test
 build; `Event::Conversed.from` unused by the shell; and no two-phone pass.
+
+## Fifth-round re-review (2026-10-04)
+
+Every finding verified against the text or code before anything moved.
+
+| Finding | Disposition |
+|---|---|
+| `P-back-pointers` self-referential, unsorted, matching no signer's key-0 list | **CONFIRMED, FIXED.** It was `[npr_txid, pc1_txid]`: the txid of the record under construction and an unrelated one. The normal record's signers each have one head (alice her merge, bob his adoption, the witnesses genesis), so the fixture is now alice's list as the body's key 0 names it, one entry; `B-back-pointers-8` and `-9` sorted ascending (§3.1). `verify.py` gains four checks: membership in the proposed body's key 0, nothing self-referential, sorted, the ceiling fixture sorted. `client/tests/conversation.rs` pins the same. The reviewer's point stands: the check that would have caught this was recommended last round and not written |
+| No initiator-agreement check in `take_intent` | **CONFIRMED, FIXED.** `Abort::InitiatorClaim`: an intent whose flag equals this device's own is an anchor refusal, both having begun or neither. `wire-format.md` §14.3.2 states the rule in prose (quoted by **CER-48**) and the flag's comment; `light-client-requirements.md` §1 says to refuse one claiming your own side; **CER-023** added (490 families, CER 23). **Drafter addition for the author to confirm**: the rule follows from "the initiator proposes" (§7.10.1), since two proposers or none deadlocks, but the documents did not state it before |
+| Every test ceremony runs one way | **CONFIRMED, FIXED.** `either_party_may_begin_and_an_intent_claiming_this_devices_own_side_is_refused` runs the pair both ways and checks the participants sit in keyhash order either way (this implementation's choice; the wire leaves the order to the proposer, §3.2), then both-claim and neither-claim refused |
+| CER-022 overclaims "identical records"; the flag comment contradicts §7.10.1 | **HALF RIGHT.** "Identical" overclaimed: the wire leaves participant order, and so the `pN` labels, to the proposer (§3.2, §1.3's disclosure labels), so the bytes may differ; the design claims no bearing on the *outcome* or the *polarity*, and CER-022, light §1 and the flag's comment now say that. The comment did **not** say "settles only the start": it named the proposer already. Reworded anyway to carry the design's own words |
+| Vectors single-direction | **FIXED.** `P-intent-exchange-responder`: bob's intent, his contribution echoed, an empty bundle, initiator false; `verify.py` checks the pair's flags differ and the start agrees; `local.rs` the same. Corpus 323 → 324 |
+| Courier: unbounded `awaiting`, one task per waiting query | **CONFIRMED, FIXED.** `AWAITING_QUERIES = 256`, oldest evicted, a repeat keeping its slot; the timer per entry is thereby bounded too. Unit test. The client's grant buffer already bounded the wait in time; this bounds it in count |
+| `answer_back` discards delivery | **CONFIRMED, FIXED as a diagnostic.** `pay.answer.unsent` (qid8, leg, what was left or refused, or the reason). Nothing more can be done for the remote querier from here, the path being the only one; what was wrong is that the run's record would show an answer given where none travelled. `tracing` added to `rhtn-adaptors` (compiled out by the leaf's flavour as everywhere) |
+| Witness `observed` log unbounded | **CONFIRMED, FIXED by shape.** A `BTreeSet<(Keyhash, u64)>`: what is attested is that a kind arrived from a party, not how often, so the set is bounded by two participants and ten kinds whatever a participant repeats. It was never read; it is kept for the attestation it documents |
+| `Carried.left` unchecked on the carry paths | **CONFIRMED, FIXED.** `Net::carry` refuses as `send` does where anything was left. No caller produces `left` today (the conversation's steps are `Payload`, which is refused rather than left), so this is a guard |
+| `change-log.md:11964` "eight rulings" | **FIXED** → ten, the number the commit of that day names |
+| wire 4901's `(design §13.2)` for the ceremony-id | **CONFIRMED, FIXED.** §13.2 is "Formation records are permanently distinct"; the computation is design §7.5.2.6, and the design calls the value the pre-commitment, never "ceremony-id". Now "the same pre-commitment, the ceremony-id (design §7.5.2.6)" |
+| NET-019 omits §14.3.3 | **FIXED**: the device handover named |
+| Kind back-references at §7.3/§7.4/§7.9 | **§7.9 had one; §7.3 and §7.4 FIXED** with one sentence each naming their kind (1 and 2) |
+| `KeyGrant::encode` → `Zeroizing` | **FIXED**; the FFI's crossing copy stays the shell's, as for the capture key |
+| `RHTN_FUZZ_SEED=0` | **CONFIRMED, FIXED.** Zero is xorshift's fixed point, so the explicit seed drew one value for the whole budget; it now runs as 1 and says so. Last round's "not reproduced" was wrong: the clock path masked it with `\| 1` and the explicit path did not |
+| `P-peering-light` unasserted | **FIXED**: field 3 a network point, field 4 a locator |
+| Scope arm's four checks; nonce preflight; snapshot-slot; sim truncation; `take_optical` `NotActive`; departure reason-code semantics; scope list vs `CatalogEntry` bounds | **As before** (rounds 3 and 4): retained or not reproduced, each with its row above; a claim with a line number is what moves them |
+| Phone identities real-random, not synthetic | **NOT A FINDING.** "Synthetic" is `test-vectors/keys.md`'s convention for the canonical vectors, whose identities must be reproducible from stated seeds. A field-test phone is a device under test, not a vector; only its public half leaves it, and the phones file says so |
+
+Gate: see the change-log entry for the numbers.
