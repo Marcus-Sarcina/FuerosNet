@@ -17,13 +17,20 @@
 #    4. asks the tester to open Conversations, where an unprovisioned
 #       device shows its public key material, then reads that material
 #       through uiautomator every 5 s until it is there;
-#    5. writes <serial>=<material> into phones.conf, which field-run.sh
-#       reads when it is given no --phone.
+#    5. reads the phone's Wi-Fi address and switches its adb to TCP as well
+#       as USB (`adb tcpip 5555`; a reboot undoes it), so a run can reach
+#       the phone with the cable off;
+#    6. writes <serial>=<material>@<ip:5555> into phones.conf, which
+#       field-run.sh reads when it is given no --phone.
 #
 #  Options:
-#    --no-build      install what is already built; the APK must exist.
-#    --conf <file>   the phones file to read and write (default:
-#                    crates/tools/phones.conf).
+#    --no-build       install what is already built; the APK must exist.
+#    --address-only   steps 5 and 6 alone: no build, wipe, install or read;
+#                     the material in the file stays. For a phone that was
+#                     rebooted, or whose address changed.
+#    --no-wifi        skip step 5; the file keeps whatever address it had.
+#    --conf <file>    the phones file to read and write (default:
+#                     crates/tools/phones.conf).
 #
 #  Needs adb with every phone on USB, debugging enabled and the laptop
 #  authorised (`adb devices` lists each as `device`); cargo, cargo-ndk and
@@ -41,7 +48,10 @@ APK="$ANDROID/app/build/outputs/apk/fieldtest/debug/app-fieldtest-debug.apk"
 APP=com.comptus.fueros
 CONF="$HERE/phones.conf"
 BUILD=yes
+WIFI=yes
+ADDRESS_ONLY=no
 INTERVAL=5
+ADB_PORT=5555
 
 say() { echo "field-setup: $*" >&2; }
 die() { say "$*"; exit 1; }
@@ -60,6 +70,8 @@ SERIALS=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --no-build) BUILD=no; shift ;;
+    --address-only) ADDRESS_ONLY=yes; BUILD=no; shift ;;
+    --no-wifi) WIFI=no; shift ;;
     --conf) CONF="${2:-}"; shift 2 ;;
     -h | --help) awk '/^# =+$/ {n++; if (n == 2) exit; next} n == 1 {sub(/^# ?/, ""); print}' "$0"; exit 0 ;;
     -*) die "unknown option $1" ;;
@@ -88,6 +100,58 @@ for s in "${SERIALS[@]}"; do
   esac
 done
 say "phones: ${SERIALS[*]}"
+
+# ------------------------------------------------------------ the wifi -----
+# the phone's address on its Wi-Fi, or nothing where it is not on one
+wifi_of() {
+  "$ADB" -s "$1" shell ip -4 -o addr show wlan0 2> /dev/null | awk '{print $4}' | cut -d/ -f1 | head -1 | tr -d '\r'
+}
+# switch adbd to listen on TCP beside USB; the phone keeps it until a reboot
+wifi_adb() {
+  local s="$1" ip
+  ip="$(wifi_of "$s")"
+  if [ -z "$ip" ]; then say "$s: not on a Wi-Fi network; no address recorded"; return 1; fi
+  "$ADB" -s "$s" tcpip "$ADB_PORT" > /dev/null 2>&1 || { say "$s: adb tcpip $ADB_PORT failed; no address recorded"; return 1; }
+  sleep 2
+  echo "$ip:$ADB_PORT"
+}
+# one serial's line in the conf: material and address each kept from the
+# existing line where the new value is empty; appended where absent
+put_line() {
+  local s="$1" m="$2" a="$3" tmp
+  tmp="$(mktemp)"
+  if [ -f "$CONF" ]; then
+    awk -v s="$s" -v m="$m" -v a="$a" '
+      BEGIN { done = 0 }
+      { line = $0; sub(/^[[:space:]]+/, "", line) }
+      index(line, s "=") == 1 {
+        if (!done) {
+          rest = substr(line, length(s) + 2)
+          om = rest; oa = ""
+          if (i = index(rest, "@")) { om = substr(rest, 1, i - 1); oa = substr(rest, i + 1) }
+          if (m == "") m = om
+          if (a == "") a = oa
+          print s "=" m (a == "" ? "" : "@" a)
+        }
+        done = 1; next
+      }
+      { print }
+      END { if (!done) print s "=" m (a == "" ? "" : "@" a) }' "$CONF" > "$tmp"
+  else
+    printf '# Test phones for field-run.sh: <adb serial>=<public key material, hex>[@<wifi ip:port>].\n# Written by field-setup.sh; the material changes with every wipe.\n%s=%s%s\n' "$s" "$m" "${a:+@$a}" > "$tmp"
+  fi
+  mv "$tmp" "$CONF"
+}
+
+if [ "$ADDRESS_ONLY" = yes ]; then
+  for s in "${SERIALS[@]}"; do
+    if a="$(wifi_adb "$s")"; then
+      put_line "$s" "" "$a"
+      say "$s: adb over Wi-Fi at $a, recorded in $CONF"
+    fi
+  done
+  exit 0
+fi
 
 # ----------------------------------------------------------------- build -----
 if [ "$BUILD" = yes ]; then
@@ -127,24 +191,6 @@ read_material() {
   "$ADB" -s "$1" exec-out uiautomator dump /dev/tty 2> /dev/null \
     | grep -oE '[0-9a-f]{400,}' | head -1
 }
-# rewrite one serial's line in the conf (every line naming it, should a
-# hand edit have left two), appending where absent
-put_material() {
-  local s="$1" m="$2" tmp
-  tmp="$(mktemp)"
-  if [ -f "$CONF" ]; then
-    awk -v s="$s" -v m="$m" '
-      BEGIN { done = 0 }
-      { line = $0; sub(/^[[:space:]]+/, "", line) }
-      index(line, s "=") == 1 { if (!done) print s "=" m; done = 1; next }
-      { print }
-      END { if (!done) print s "=" m }' "$CONF" > "$tmp"
-  else
-    printf '# Test phones for field-run.sh: <adb serial>=<public key material, hex>.\n# Written by field-setup.sh; the material changes with every wipe.\n%s=%s\n' "$s" "$m" > "$tmp"
-  fi
-  mv "$tmp" "$CONF"
-}
-
 declare -A MATERIAL=()
 for s in "${SERIALS[@]}"; do
   model="$("$ADB" -s "$s" shell getprop ro.product.model 2> /dev/null | tr -d '\r')"
@@ -166,9 +212,15 @@ for s in "${SERIALS[@]}"; do
   done
 done
 
-for s in "${SERIALS[@]}"; do put_material "$s" "${MATERIAL[$s]}"; done
+declare -A WIFI_ADDR=()
+if [ "$WIFI" = yes ]; then
+  for s in "${SERIALS[@]}"; do
+    if a="$(wifi_adb "$s")"; then WIFI_ADDR["$s"]="$a"; say "$s: adb over Wi-Fi at $a (until the phone reboots)"; fi
+  done
+fi
+for s in "${SERIALS[@]}"; do put_line "$s" "${MATERIAL[$s]}" "${WIFI_ADDR[$s]:-}"; done
 say "written to $CONF:"
-for s in "${SERIALS[@]}"; do echo "  $s=${MATERIAL[$s]:0:16}…" >&2; done
+for s in "${SERIALS[@]}"; do echo "  $s=${MATERIAL[$s]:0:16}…${WIFI_ADDR[$s]:+@${WIFI_ADDR[$s]}}" >&2; done
 echo
 echo "Next, from the repository root (the phones are read from $CONF):"
 echo

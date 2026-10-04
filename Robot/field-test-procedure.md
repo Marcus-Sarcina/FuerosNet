@@ -17,9 +17,10 @@ on their own channels.
 The script takes the laptop's address from its default route and serves UDP
 on port 7447; `--addr <ip[:port]>` overrides both. The access point must not
 isolate its clients, and a laptop firewall must admit UDP 7447. Both phones
-are on USB with debugging enabled, because the script provisions them,
-follows their logcat and pulls their files over adb; `adb devices` must list
-both as `device`.
+are reachable by adb, on USB or over Wi-Fi at the address `phones.conf`
+records (see *The phones*), because the script provisions them, follows
+their logcat and pulls their files over adb; `adb devices` must list both
+as `device` once connected.
 
 ## The phones
 
@@ -45,8 +46,15 @@ What a test phone needs, and what it does not:
   a useful first pair**: the unavailable path has not run on hardware.
 - **UWB is not driven** by this shell whether or not the phone has it.
 - **USB debugging** on, with the laptop authorised: `adb devices` must list
-  the phone as `device`, not `unauthorized`. The script provisions, follows
-  and pulls over adb.
+  the phone as `device`, not `unauthorized`. The scripts provision, follow
+  and pull over adb. **The cable is needed only for setup**: `field-setup.sh`
+  switches the phone's adb to TCP as well (`adb tcpip 5555`) and records its
+  Wi-Fi address in `phones.conf`, and `field-run.sh` reaches a phone that
+  is not on USB over Wi-Fi at that address, naming it by serial as before.
+  A reboot undoes the TCP switch; `field-setup.sh --address-only` redoes
+  it and refreshes the address without a wipe. On Samsung, accept the USB
+  debugging prompt with *Always allow from this computer*, or every replug
+  asks again.
 - **Runtime permissions** for the camera, Bluetooth and NFC are asked for
   by the Meet screen when it first needs them; grant them on the phone.
   Nothing is granted over adb.

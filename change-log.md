@@ -12220,3 +12220,13 @@ back to the file, which the run script now reads when given no phones. The
 procedure gains a section on what a phone needs: Android 12, a camera and
 Bluetooth LE in practice, NFC optional as the design ranks it, and nothing
 else installed.
+
+### 2026-10-03 (the phones over Wi-Fi)
+
+The cable is needed only for setup. The setup script switches each phone's
+adb to TCP beside USB and records its Wi-Fi address in the phones file, with
+an address-only mode for a phone that rebooted; the run script reaches a
+phone that is not on USB over Wi-Fi at that address and keeps every name and
+directory by serial. Found on the way: the run script lowercased the whole
+phone argument, serial included, and adb's serials are case-sensitive; now
+the material alone.

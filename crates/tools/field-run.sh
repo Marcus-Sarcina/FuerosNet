@@ -10,16 +10,24 @@
 #  Options:
 #    --addr <ip[:port]>      where rhtnd serves. Default: the address this
 #                            machine routes out of, port 7447.
-#    --phone <serial>=<hex>  a phone's public key material, as its screen
-#                            shows it while unprovisioned. The daemon admits
+#    --phone <serial>=<hex>[@<ip[:port]>]
+#                            a phone's public key material, as its screen
+#                            shows it while unprovisioned, and optionally
+#                            its Wi-Fi address for adb. The daemon admits
 #                            it, the witnesses list it, and the phone is
 #                            provisioned over adb to attach here, with the
 #                            other phone as its peer (the first witness when
 #                            it is alone). Repeatable. Given none, the
 #                            phones come from crates/tools/phones.conf
-#                            (<serial>=<material> per line, written by
-#                            field-setup.sh); a line with no material is
-#                            skipped and said.
+#                            (<serial>=<material>[@<ip:port>] per line,
+#                            written by field-setup.sh); a line with no
+#                            material is skipped and said.
+#                            A phone not on USB is reached over Wi-Fi where
+#                            an address is given (`adb connect`; the phone
+#                            must have been switched to TCP adb by
+#                            field-setup.sh, which `adb tcpip` does and a
+#                            reboot undoes). Directories and names stay by
+#                            serial either way.
 #    --level <level>         the daemon's [log] level: off, error, warn, info,
 #                            debug (default) or trace.
 #    --stream-port <port>    where the phones stream their diagnostic lines
@@ -134,7 +142,19 @@ RETENTION=""
 BUILD=yes
 PHONE_SERIALS=()
 PHONE_MATERIALS=()
+PHONE_ADDRS=()
 LABEL=""
+# <serial>=<material>[@<ip[:port]>] -> the three arrays; port 5555 by default
+add_phone() {
+  local spec="$1" serial rest material addr=""
+  serial="${spec%%=*}"; rest="${spec#*=}"
+  case "$rest" in *@*) material="${rest%%@*}"; addr="${rest#*@}" ;; *) material="$rest" ;; esac
+  case "$addr" in '' | *:*) ;; *) addr="$addr:5555" ;; esac
+  # the material is hex and a copy with upper-case hex is forgiven; the
+  # serial is adb's and case matters to it
+  material="$(printf '%s' "$material" | tr 'A-F' 'a-f')"
+  PHONE_SERIALS+=("$serial"); PHONE_MATERIALS+=("$material"); PHONE_ADDRS+=("$addr")
+}
 while [ $# -gt 0 ]; do
   case "$1" in
     --addr) ADDR="${2:-}"; shift 2 ;;
@@ -144,11 +164,11 @@ while [ $# -gt 0 ]; do
     --no-build) BUILD=no; shift ;;
     --phone)
       p="${2:-}"
-      # a trailing newline or a copy with upper-case hex is forgiven here
-      p="$(printf '%s' "$p" | tr -d '\r\n' | tr 'A-F' 'a-f')"
+      # a trailing newline is forgiven here
+      p="$(printf '%s' "$p" | tr -d '\r\n')"
       case "$p" in
-        *=*) PHONE_SERIALS+=("${p%%=*}"); PHONE_MATERIALS+=("${p#*=}") ;;
-        *) say "--phone takes <serial>=<hex material>"; exit 2 ;;
+        *=*) add_phone "$p" ;;
+        *) say "--phone takes <serial>=<hex material>[@<ip[:port]>]"; exit 2 ;;
       esac
       shift 2 ;;
     -h | --help) awk '/^# =+$/ {n++; if (n == 2) exit; next} n == 1 {sub(/^# ?/, ""); print}' "$0"; exit 0 ;;
@@ -165,9 +185,9 @@ if [ ${#PHONE_SERIALS[@]} -eq 0 ] && [ -f "$HERE/phones.conf" ]; then
     line="${line%%#*}"; line="$(printf '%s' "$line" | tr -d ' \t\r')"
     [ -n "$line" ] || continue
     case "$line" in
-      *=) say "phones.conf: ${line%=} has no material yet (run field-setup.sh); skipped" ;;
-      *=*) PHONE_SERIALS+=("${line%%=*}"); PHONE_MATERIALS+=("$(printf '%s' "${line#*=}" | tr 'A-F' 'a-f')") ;;
-      *) say "phones.conf: '$line' is not <serial>=<material>; skipped" ;;
+      *= | *=@*) say "phones.conf: ${line%%=*} has no material yet (run field-setup.sh); skipped" ;;
+      *=*) add_phone "$line" ;;
+      *) say "phones.conf: '$line' is not <serial>=<material>[@<ip:port>]; skipped" ;;
     esac
   done < "$HERE/phones.conf"
   [ ${#PHONE_SERIALS[@]} -eq 0 ] || say "phones from phones.conf: ${PHONE_SERIALS[*]}"
@@ -369,7 +389,34 @@ if [ "$STREAM_PORT" != 0 ]; then
 fi
 
 # --------------------------------------------------------------- phones ------
-mapfile -t DEVICES < <("$ADB" devices 2> /dev/null | awk 'NR > 1 && $2 == "device" {print $1}')
+# A phone given with an address and not on USB is reached over Wi-Fi.
+# Whatever the transport, DEVICES holds serials and ADB_ID maps each to
+# the id adb knows it by (the serial on USB, ip:port over Wi-Fi), so the
+# run directory and every name read the same either way.
+usb_now() { "$ADB" devices 2> /dev/null | awk 'NR > 1 && $2 == "device" {print $1}'; }
+i=0
+while [ "$i" -lt "${#PHONE_SERIALS[@]}" ]; do
+  s="${PHONE_SERIALS[i]}"; a="${PHONE_ADDRS[i]}"
+  if [ -n "$a" ] && ! usb_now | grep -qx "$s"; then
+    say "$s: not on USB; connecting over Wi-Fi at $a"
+    out="$(timeout 8 "$ADB" connect "$a" 2>&1 || true)"
+    case "$out" in *connected*) ;; *) say "$s: adb connect $a: ${out:-no answer} (is the phone on, on the Wi-Fi, and switched to TCP adb by field-setup.sh since its last reboot?)" ;; esac
+  fi
+  i=$((i + 1))
+done
+declare -A ADB_ID=()
+DEVICES=()
+# USB ids first, so a phone seen both ways is driven over the cable
+while IFS= read -r id; do
+  [ -n "$id" ] || continue
+  case "$id" in
+    *:*) serial="$("$ADB" -s "$id" shell getprop ro.serialno 2> /dev/null | tr -d '\r')"; [ -n "$serial" ] || serial="$id" ;;
+    *) serial="$id" ;;
+  esac
+  [ -n "${ADB_ID[$serial]:-}" ] && continue
+  ADB_ID["$serial"]="$id"
+  DEVICES+=("$serial")
+done < <(usb_now | awk '{print (index($0, ":") ? 1 : 0) "\t" $0}' | sort -s -k1,1n | cut -f2-)
 DEVICE_MODELS=()
 DEVICE_ANDROID=()
 DEVICE_PROVISIONED=()
@@ -384,17 +431,20 @@ material_of() { # serial -> its index among the --phone arguments
 for s in ${PHONE_SERIALS[@]+"${PHONE_SERIALS[@]}"}; do
   found=no
   for d in ${DEVICES[@]+"${DEVICES[@]}"}; do [ "$d" = "$s" ] && found=yes; done
-  [ "$found" = yes ] || die "--phone $s: no such device in 'adb devices'"
+  [ "$found" = yes ] || die "--phone $s: no such device in 'adb devices' (on USB, or over Wi-Fi at its address)"
+done
+for s in ${DEVICES[@]+"${DEVICES[@]}"}; do
+  case "${ADB_ID[$s]}" in *:*) say "$s: over Wi-Fi (${ADB_ID[$s]})" ;; esac
 done
 for s in ${DEVICES[@]+"${DEVICES[@]}"}; do
   mkdir -p "$RUN/phones/$s"
-  model="$("$ADB" -s "$s" shell getprop ro.product.manufacturer 2> /dev/null | tr -d '\r') $("$ADB" -s "$s" shell getprop ro.product.model 2> /dev/null | tr -d '\r')"
-  android="$("$ADB" -s "$s" shell getprop ro.build.version.release 2> /dev/null | tr -d '\r')"
+  model="$("$ADB" -s "${ADB_ID[$s]}" shell getprop ro.product.manufacturer 2> /dev/null | tr -d '\r') $("$ADB" -s "${ADB_ID[$s]}" shell getprop ro.product.model 2> /dev/null | tr -d '\r')"
+  android="$("$ADB" -s "${ADB_ID[$s]}" shell getprop ro.build.version.release 2> /dev/null | tr -d '\r')"
   DEVICE_MODELS+=("$model")
   DEVICE_ANDROID+=("$android")
   provisioned=false
   if i="$(material_of "$s")"; then
-    if ! "$ADB" -s "$s" shell pm path "$APP" 2> /dev/null | grep -q package:; then
+    if ! "$ADB" -s "${ADB_ID[$s]}" shell pm path "$APP" 2> /dev/null | grep -q package:; then
       say "$s: $APP is not installed; not provisioned (install the fieldtest APK first)"
     else
       # the peer: the next phone given, or the first witness when alone
@@ -419,20 +469,20 @@ PY
       # next cold start, so: stop, start with the extras, stop, start. The
       # stream target (diag_stream, diag_serial) is stored the same way and
       # read by the fieldtest flavour alone; `off` forgets an earlier one
-      "$ADB" -s "$s" shell am force-stop "$APP"
-      "$ADB" -s "$s" shell am start -W -n "$APP/.HomeActivity" --es provision "'$blob'" \
+      "$ADB" -s "${ADB_ID[$s]}" shell am force-stop "$APP"
+      "$ADB" -s "${ADB_ID[$s]}" shell am start -W -n "$APP/.HomeActivity" --es provision "'$blob'" \
         --es diag_stream "${STREAM_ADDR:-off}" --es diag_serial "$s" > /dev/null 2>&1 \
         || say "$s: am start with the provision failed"
       sleep 3
-      "$ADB" -s "$s" shell am force-stop "$APP"
-      "$ADB" -s "$s" shell am start -W -n "$APP/.HomeActivity" > /dev/null 2>&1 || say "$s: am start failed"
+      "$ADB" -s "${ADB_ID[$s]}" shell am force-stop "$APP"
+      "$ADB" -s "${ADB_ID[$s]}" shell am start -W -n "$APP/.HomeActivity" > /dev/null 2>&1 || say "$s: am start failed"
       provisioned=true
       say "$s: provisioned to attach at $ADDR with peer $peer_name${STREAM_ADDR:+, streaming to $STREAM_ADDR}"
     fi
   fi
   DEVICE_PROVISIONED+=("$provisioned")
-  "$ADB" -s "$s" logcat -c 2> /dev/null || true
-  "$ADB" -s "$s" logcat -s fueros.diag > "$RUN/phones/$s/logcat.txt" 2>&1 &
+  "$ADB" -s "${ADB_ID[$s]}" logcat -c 2> /dev/null || true
+  "$ADB" -s "${ADB_ID[$s]}" logcat -s fueros.diag > "$RUN/phones/$s/logcat.txt" 2>&1 &
   LOGCAT_PIDS+=("$!")
   PIDS+=("$!")
   say "$s ($model, Android $android): logcat fueros.diag -> phones/$s/logcat.txt"
@@ -483,21 +533,21 @@ pull_phone() { # serial
   local s="$1" dir="$RUN/phones/$1" f
   mkdir -p "$dir"
   # the app's private directory, readable through run-as on a debug build
-  if ! "$ADB" -s "$s" shell run-as "$APP" ls files/diag > "$dir/ls.txt" 2>&1; then
+  if ! "$ADB" -s "${ADB_ID[$s]}" shell run-as "$APP" ls files/diag > "$dir/ls.txt" 2>&1; then
     say "$s: run-as $APP failed ($(tr -d '\r' < "$dir/ls.txt" | head -1)); nothing pulled"
     return
   fi
   while IFS= read -r f; do
     f="${f%$'\r'}"
     case "$f" in
-      *.jsonl) "$ADB" -s "$s" exec-out run-as "$APP" cat "files/diag/$f" > "$dir/$f" 2> /dev/null \
+      *.jsonl) "$ADB" -s "${ADB_ID[$s]}" exec-out run-as "$APP" cat "files/diag/$f" > "$dir/$f" 2> /dev/null \
         && say "$s: pulled $f ($(wc -l < "$dir/$f") lines)" ;;
     esac
   done < "$dir/ls.txt"
-  "$ADB" -s "$s" shell run-as "$APP" ls files/diag/report 2> /dev/null | tr -d '\r' | while IFS= read -r f; do
+  "$ADB" -s "${ADB_ID[$s]}" shell run-as "$APP" ls files/diag/report 2> /dev/null | tr -d '\r' | while IFS= read -r f; do
     case "$f" in
       *.zip)
-        "$ADB" -s "$s" exec-out run-as "$APP" cat "files/diag/report/$f" > "$dir/$f" 2> /dev/null || continue
+        "$ADB" -s "${ADB_ID[$s]}" exec-out run-as "$APP" cat "files/diag/report/$f" > "$dir/$f" 2> /dev/null || continue
         mkdir -p "$dir/report"
         python3 -c 'import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' "$dir/$f" "$dir/report" \
           && say "$s: pulled report $f ($(ls "$dir/report/events" 2> /dev/null | wc -l) event files)" ;;
