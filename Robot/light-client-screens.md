@@ -310,3 +310,38 @@ per tick while the flow is open, including at review.
   has no BLE or NFC, so D2's bearer, D3 and everything after are out of
   its reach; the first pass through the courier needs two phones on the
   bench (`Robot/field-test-procedure.md`).
+
+
+## The codes name the counterparty (2026-10-04)
+
+The first field run showed the meeting bound to the provision's peer: the
+kernel's *start a ceremony with X?* fired as Meet opened, before any code
+had crossed, and the bootstrap was merely checked against the provision
+[author, 2026-10-04: "these phone identities are hard-coded into the meeting
+logic, not discovered through the QR offer"]. Beneath it the kernel's known
+identities were fixed at start, so two phones not provisioned for each
+other could not have met at all, against design §12.3's first contact,
+where the key travels in the QR at the meeting and is pinned there.
+
+**Now.** The first optical code carries the device's full `KeyMaterial`
+(`wire-format.md` §14.3.1–.2; the author chose the key in the QR over a
+hash-on-screen, bytes-on-bearer split, the code being shown as large as
+the screen allows). `Client::begin` takes an optional counterparty: the
+responder names the initiator from the bootstrap it read, the initiator
+names nobody, and `take_optical` fixes the counterparty from the first code,
+pins its identity into the client's known set and the transport's pins, and
+refuses a later code naming anyone else (`Abort::NotActive`, as before). The
+shell's `Meet` starts with no counterparty; `Meet.counterparty(key)` learns
+it from the bootstrap (responder) or the first optical code (initiator) and
+refuses a second, different key; `counterpartyName` reads *the other
+person* until then. The kernel's `begin` moved from `startMeet` to the
+brief's Accept (`Meet.onAccepted`), and `AndroidShell.ask` answers the
+kernel's one question yes where the brief was accepted, so the person is
+asked once, at D1.5. The optical screen waits on `Meet.begun()` for the
+code. The QR payload is base45 (RFC 9285), QR's alphanumeric mode, so the
+2 KB first code fits at error correction M (177 modules); the symbol scales
+to the screen's width. The provision's peer stays the payload demo's.
+
+Not yet: design §12.3 has the locator travel with the key; the first code
+carries no `SignedLocator`, the phones having none. Reading a 177-module
+code on the selfie camera at arm's length is untested on hardware.

@@ -193,12 +193,13 @@ fn a_shell_drives_the_client_through_the_boundary_and_gets_values_back() {
     // moves opaque strings on whatever bearer it has and parses none of
     // them -- the second parser above the kernel being the hazard design
     // §11.2 names.
-    p.begin(id("bob"), vec![id("carol")], true).expect("begins");
+    p.begin(Some(id("bob")), vec![id("carol")], true)
+        .expect("begins");
     let optical = p.optical_contribution().expect("the first QR");
     assert_eq!(
         optical.len(),
-        53,
-        "array head 1, version 1, keyhash 2+32, contribution 1+16"
+        2022,
+        "array head 1, version 1, the full KeyMaterial 2003, contribution 1+16"
     );
 
     // the hardware is asked through the boundary, strongest first, and
@@ -215,7 +216,7 @@ fn a_shell_drives_the_client_through_the_boundary_and_gets_values_back() {
         })),
     )
     .unwrap();
-    bob.begin(id("alice"), vec![id("carol")], false)
+    bob.begin(Some(id("alice")), vec![id("carol")], false)
         .expect("begins");
     // each reads the other's QR off the screen, then the ceremony-id each
     // computed; agreement is what fixes it
@@ -259,7 +260,7 @@ fn a_shell_drives_the_client_through_the_boundary_and_gets_values_back() {
     // has to guess at
     let e = p.take_optical(vec![0x00]).unwrap_err();
     assert!(e.reason().contains("Malformed"), "{e}");
-    let e = p.begin(vec![1, 2, 3], vec![], true).unwrap_err();
+    let e = p.begin(Some(vec![1, 2, 3]), vec![], true).unwrap_err();
     assert!(e.reason().contains("32 bytes"), "{e}");
     let Err(e) = Participant::start(vec![0; 10], vec![], platform_of(shell)) else {
         panic!("ten bytes is not an identity")

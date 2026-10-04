@@ -52,7 +52,16 @@ const ALICE: &str = "8410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8dcfc85
 fn the_optical_objects_encode_to_the_canonical_bytes_and_read_back() {
     let fx = fixture("P-optical-contribution-alice");
     let read = OpticalContribution::decode(&fx).expect("the canonical bytes decode");
-    assert_eq!(read.device, kh(ALICE), "alice's keyhash, field 2");
+    assert_eq!(
+        read.device,
+        kh(ALICE),
+        "alice's keyhash is the hash of the key material in field 2"
+    );
+    assert_eq!(
+        rhtn_crypto::Identity::from_key_material(&read.material).map(|i| i.keyhash),
+        Some(kh(ALICE)),
+        "the first QR carries the full key material (design s12.3)"
+    );
     assert_eq!(
         read.encode(),
         fx,

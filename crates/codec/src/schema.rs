@@ -1237,14 +1237,17 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             if as_uint(&a[0]) != Some(1) {
                 return Err(Error("version 1"));
             }
-            match &a[1] {
-                Item::Bytes(r) if r.len() == 32 => {}
-                _ => return Err(Error("a keyhash is 32 bytes")),
-            }
-            match &a[2] {
-                Item::Bytes(r) if r.len() == 16 => {}
+            // the contribution is the last field, so the key material is
+            // everything between the version and it
+            let end = match &a[2] {
+                Item::Bytes(r) if r.len() == 16 && r.end == b.len() => r.start - 1,
                 _ => return Err(Error("a contribution is 16 bytes")),
+            };
+            if !matches!(a[1], Item::Array(_)) || end <= 2 {
+                return Err(Error("the key material is a KeyMaterial array"));
             }
+            // §2.2 fixes the shape exactly: the first contact pins from it
+            crate::cose::check_key_material(&b[2..end])?;
             Ok(())
         }
         "TranscriptConfirm" => {

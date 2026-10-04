@@ -320,7 +320,7 @@ impl Instrument {
                     [n, "initiator"] => (carry_ids(n)?, true),
                     _ => return Err("begin <counterparty> [<nominee>,...] [initiator]".into()),
                 };
-                c.begin(id(counterparty)?, nominees, initiator)
+                c.begin(Some(id(counterparty)?), nominees, initiator)
                     .map_err(|e| e.reason().to_string())?;
                 Ok(vec!["begun".into()])
             }

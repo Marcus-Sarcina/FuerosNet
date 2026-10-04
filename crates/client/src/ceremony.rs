@@ -132,6 +132,9 @@ pub enum Abort {
     /// The patron's check of the evidence against the adoption's own
     /// fields failed, or it holds no position to adopt under.
     PatronRefused(String),
+    /// No code has been read yet, so the counterparty is not known: the
+    /// step needs the first QR (`wire-format.md` §14.3.1).
+    NoCounterparty,
     /// The counterparty's intent claims the same side as this device's
     /// own, both having begun or neither (`wire-format.md` §14.3.2): with
     /// two proposers or none the conversation cannot run, so the intent is
@@ -320,7 +323,10 @@ pub struct Adopting {
 
 /// The state of the one ceremony this client is a participant in.
 pub(crate) struct Active {
-    pub(crate) counterparty: Keyhash,
+    /// Who is in front of me: fixed by the first QR read, which carries
+    /// their key material (`wire-format.md` §14.3.1; design §12.3's first
+    /// contact), or given at `begin` where a prior code already named them.
+    pub(crate) counterparty: Option<Keyhash>,
     pub(crate) initiator: bool,
     started_at: u64,
     /// The device's clock when `begin` ran, for the durations the
@@ -349,6 +355,13 @@ pub(crate) struct Active {
     /// The conversation on the end-to-end path (`crate::sequence`): what
     /// this side put out and what came back.
     pub(crate) conversation: crate::sequence::Conversation,
+}
+
+impl Active {
+    /// The counterparty, once a code has named them.
+    pub(crate) fn peer(&self) -> Result<Keyhash, Abort> {
+        self.counterparty.ok_or(Abort::NoCounterparty)
+    }
 }
 
 /// A participant client: its identity, archive and store, its two query
@@ -620,19 +633,23 @@ impl Client {
         }
     }
 
-    /// Step 1: announce intent to `counterparty`, nominating `nominees`
-    /// from its neighbourhood.  The one question a ceremony asks the
-    /// person is whether to start it.
+    /// Step 1: open a ceremony, nominating `nominees` from the
+    /// counterparty's neighbourhood.  The counterparty may be named where
+    /// a prior code already did, or left for the first QR read to fix
+    /// (`wire-format.md` §14.3.1): the one who shows the first invite
+    /// knows nobody yet.  The one question a ceremony asks the person is
+    /// whether to start it.
     pub fn begin(
         &mut self,
-        counterparty: Keyhash,
+        counterparty: Option<Keyhash>,
         nominees: Vec<Keyhash>,
         initiator: bool,
     ) -> Result<Intent, Abort> {
-        if !self.device.operator.ask(&format!(
-            "Start a presence ceremony with {}?",
-            hex8(&counterparty)
-        )) {
+        let question = match &counterparty {
+            Some(k) => format!("Start a presence ceremony with {}?", hex8(k)),
+            None => "Start a presence ceremony with the person in front of you?".to_string(),
+        };
+        if !self.device.operator.ask(&question) {
             return Err(abort("begin", Abort::Declined));
         }
         let contribution = self.random::<16>();
@@ -641,7 +658,7 @@ impl Client {
         let began_ms = self.device.clock.now_ms();
         tracing::info!(
             target: "cer",
-            counterparty = %id8(&counterparty),
+            counterparty = %counterparty.as_ref().map(|k| id8(k).to_string()).unwrap_or_else(|| "-".into()),
             initiator,
             started_at,
             nominees = nominees.len(),
@@ -703,6 +720,7 @@ impl Client {
     pub fn optical_contribution(&self) -> Result<Vec<u8>, Abort> {
         let a = self.active.as_ref().ok_or(Abort::NotActive)?;
         let bytes = crate::local::OpticalContribution {
+            material: self.public.key_material(),
             device: self.keyhash(),
             contribution: a.contribution,
         }
@@ -716,16 +734,31 @@ impl Client {
     /// is checked against it.
     pub fn take_optical(&mut self, bytes: &[u8]) -> Result<Keyhash, Abort> {
         let read = crate::local::OpticalContribution::decode(bytes).map_err(Abort::Malformed)?;
+        let identity = rhtn_crypto::Identity::from_key_material(&read.material)
+            .ok_or_else(|| Abort::Malformed("the QR's key material does not read".into()))?;
         let a = self.active()?;
-        if read.device != a.counterparty {
-            return Err(abort("take_optical", Abort::NotActive));
+        // the first code fixes who is in front of me; a later one naming
+        // anyone else is a party who is not the one in front of me
+        match a.counterparty {
+            None => a.counterparty = Some(read.device),
+            Some(k) if k == read.device => {}
+            Some(_) => return Err(abort("take_optical", Abort::NotActive)),
         }
         a.their_contribution = Some(read.contribution);
+        // first contact pins the full key (design §12.3); met before, the
+        // same material is already held and nothing changes
+        let pinned = if self.known.iter().any(|k| k.keyhash == read.device) {
+            false
+        } else {
+            self.known.push(identity);
+            true
+        };
         tracing::info!(
             target: "cer",
             which = "contribution",
             bytes = bytes.len(),
             from = %id8(&read.device),
+            pinned,
             "cer.optical.read"
         );
         Ok(read.device)
@@ -748,7 +781,7 @@ impl Client {
         let theirs = a.their_contribution.ok_or(Abort::NotActive)?;
         Ok(pre_commitment(
             (&me, &a.contribution),
-            (&a.counterparty, &theirs),
+            (&a.peer()?, &theirs),
         ))
     }
 
@@ -952,7 +985,7 @@ impl Client {
         let me = self.keyhash();
         let tolerance = self.cfg.clock_tolerance_s;
         let a = self.active()?;
-        if a.counterparty != from {
+        if a.counterparty != Some(from) {
             return Err(abort("take_intent", Abort::NotActive));
         }
         if intent.started_at.abs_diff(a.started_at) > tolerance {
@@ -997,7 +1030,7 @@ impl Client {
     /// Steps 3–4: run the proximity channels, strongest first, and keep
     /// what was achieved.
     pub fn proximity(&mut self) -> Result<Vec<ChannelOutcome>, Abort> {
-        let peer = self.active()?.counterparty;
+        let peer = self.active()?.peer()?;
         let t0 = self.device.clock.now_ms();
         let (outcomes, strongest) =
             crate::device::run_channels(self.device.proximity.as_ref(), &peer);
@@ -1048,7 +1081,7 @@ impl Client {
     pub fn capture_key(&self) -> Result<Zeroizing<[u8; 32]>, Abort> {
         let cid = self.anchored_id()?;
         let a = self.active.as_ref().ok_or(Abort::NotActive)?;
-        Ok(capture_key(&a.seed, &self.keyhash(), &a.counterparty, &cid))
+        Ok(capture_key(&a.seed, &self.keyhash(), &a.peer()?, &cid))
     }
 
     /// Step 5: tell the person what the record will contain and who can
@@ -1059,7 +1092,7 @@ impl Client {
         let me = self.keyhash();
         let (peer, cid) = {
             let a = self.active()?;
-            (a.counterparty, a.ceremony_id.ok_or(Abort::NoCeremonyId)?)
+            (a.peer()?, a.ceremony_id.ok_or(Abort::NoCeremonyId)?)
         };
         self.device.notifier.notify(Notice::RecordDisclosure {
             role: Role::Participant,
@@ -1105,13 +1138,7 @@ impl Client {
     pub fn select_verifiers(&mut self) -> Result<Vec<(Keyhash, SelectionBasis)>, Abort> {
         let me = self.keyhash();
         let a = self.active.as_ref().ok_or(Abort::NotActive)?;
-        let pool = selection::pool(
-            &self.known,
-            &a.their_bundle,
-            &a.counterparty,
-            &me,
-            a.started_at,
-        );
+        let pool = selection::pool(&self.known, &a.their_bundle, &a.peer()?, &me, a.started_at);
         if !pool.candidates.is_empty() && !self.acquaintance.recognises_any(&pool) {
             tracing::warn!(target: "cer", pool = pool.candidates.len(), "cer.select.none_recognised");
             self.device.notifier.notify(Notice::NoCandidateRecognised);
@@ -1138,7 +1165,7 @@ impl Client {
         let (subject, cid, template) = {
             let a = self.active.as_ref().ok_or(Abort::NotActive)?;
             (
-                a.counterparty,
+                a.peer()?,
                 a.ceremony_id.ok_or(Abort::NoCeremonyId)?,
                 a.template.clone().ok_or(Abort::NotActive)?,
             )
@@ -1318,7 +1345,7 @@ impl Client {
         let a = self.active.as_ref().ok_or(Abort::NotActive)?;
         let req = WitnessRequest {
             ceremony_id: a.ceremony_id.ok_or(Abort::NoCeremonyId)?,
-            participants: participants(self.keyhash(), a.counterparty),
+            participants: participants(self.keyhash(), a.peer()?),
             started_at: a.started_at,
             channels: a.channels.clone(),
         };
@@ -1412,7 +1439,7 @@ impl Client {
         let (retention, their_retention) =
             (self.cfg.retention_years, self.active()?.their_retention);
         let a = self.active()?;
-        let parts = participants(me, a.counterparty);
+        let parts = participants(me, a.peer()?);
         let (r0, r1) = if parts[0] == me {
             (retention, their_retention)
         } else {
@@ -1605,6 +1632,7 @@ impl Client {
             "cer.finalize"
         );
         if let Some(a) = self.active.take_if(|_| mine) {
+            let peer = a.peer()?;
             if let Some(sealed) = a.sealed {
                 self.store.sealed.insert(txid, sealed);
             }
@@ -1612,7 +1640,7 @@ impl Client {
                 txid,
                 OwnSeed {
                     seed: a.seed,
-                    counterparty: a.counterparty,
+                    counterparty: peer,
                     ceremony_id: a.ceremony_id.unwrap_or([0; 32]),
                     finalized_at,
                 },
@@ -3334,8 +3362,8 @@ impl Harness {
         b_nominees: Vec<Keyhash>,
     ) -> Result<Txid, Abort> {
         // 1. intent
-        let ia = self.client(&a).begin(b, a_nominees.clone(), true)?;
-        let ib = self.client(&b).begin(a, b_nominees.clone(), false)?;
+        let ia = self.client(&a).begin(Some(b), a_nominees.clone(), true)?;
+        let ib = self.client(&b).begin(Some(a), b_nominees.clone(), false)?;
         let m = self.send(a, b, Msg::Intent(ia));
         let Msg::Intent(i) = &m else { unreachable!() };
         self.client(&b).take_intent(a, i)?;
@@ -3498,8 +3526,8 @@ impl Harness {
         verifier: Keyhash,
     ) -> Result<Vec<u8>, Abort> {
         let prior = self.client(&subject).prior_key().ok_or(Abort::NoPriorKey)?;
-        let ia = self.client(&subject).begin(verifier, vec![], true)?;
-        let ib = self.client(&verifier).begin(subject, vec![], false)?;
+        let ia = self.client(&subject).begin(Some(verifier), vec![], true)?;
+        let ib = self.client(&verifier).begin(Some(subject), vec![], false)?;
         let m = self.send(subject, verifier, Msg::Intent(ia));
         let Msg::Intent(i) = &m else { unreachable!() };
         self.client(&verifier).take_intent(subject, i)?;

@@ -212,9 +212,9 @@ impl Client {
             .iter()
             .chain(a.their_nominees.iter())
             .copied()
-            .filter(|k| *k != me && *k != a.counterparty)
+            .filter(|k| *k != me && Some(*k) != a.counterparty)
             .collect();
-        Ok((a.counterparty, witnesses.into_iter().collect()))
+        Ok((a.peer()?, witnesses.into_iter().collect()))
     }
 
     /// One message of the conversation to each of `to`, through the
@@ -456,7 +456,7 @@ impl Client {
             }
         };
         let party = match self.active.as_ref() {
-            Some(a) if from == a.counterparty => From::Counterparty,
+            Some(a) if a.counterparty == Some(from) => From::Counterparty,
             Some(a) if a.my_nominees.contains(&from) || a.their_nominees.contains(&from) => {
                 From::Witness
             }

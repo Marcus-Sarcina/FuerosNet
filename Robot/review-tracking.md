@@ -13957,3 +13957,21 @@ Every finding verified against the text or code before anything moved.
 | Phone identities real-random, not synthetic | **NOT A FINDING.** "Synthetic" is `test-vectors/keys.md`'s convention for the canonical vectors, whose identities must be reproducible from stated seeds. A field-test phone is a device under test, not a vector; only its public half leaves it, and the phones file says so |
 
 Gate: see the change-log entry for the numbers.
+
+
+## The first field run, and the counterparty from the codes (2026-10-04)
+
+Run `af72cc1-first-1`: both phones attached over Wi-Fi and kept the session;
+the ceremony stopped at the author's first finding and the run was stopped.
+
+| Finding | Disposition |
+|---|---|
+| The meeting named the provisioned peer before any code crossed ("hard-coded… not discovered through the QR offer") | **CONFIRMED, FIXED** across the stack; `light-client-screens.md`, *The codes name the counterparty*. The wire had the first QR carry a keyhash where design §12.3 has the key travel in the QR at the meeting and be pinned: a wire-against-design gap, the design winning. `OpticalContribution` now carries `KeyMaterial`; `Client::begin(Option<Keyhash>)`; `take_optical` fixes and pins; **CER-024** and **CER-49**; corpus 324 → 325 (`N-optical-contribution-keyhash`); functional tests 490 → 491. The author chose the key in the QR over a hash-and-bearer split: a 2.5-inch code is twenty times the 0.6-inch one at the same density |
+| The kernel asked "start a ceremony with X?" as a second dialog | **FIXED**: the brief's Accept answers it (D1.5 front-loads every decision); `begin` moved to the accept |
+| Each phone and each witness logged `hz.took kind=endpoint took=Refused` at attach | **NOT A DEFECT, by the horizon rule.** `Horizon::ingest_endpoint_in` refuses an endpoint record for a node not within two hops of the holder's own topology (`light-client-requirements.md` §4.2: a client keeps its horizon's endpoints, not the world's). The bench's node has no relationship with either phone or either witness, so each refuses its record while attaching to it anyway, the attach needing no horizon. A real serving node is a patron's infra and inside the horizon. The event stays, since it would mean something on a real topology |
+| quinn `sendmsg` EIO at start, one EPERM on a keepalive | **NOTED**: the GSO probe falling back, and Android's socket during a network change; the handshakes completed. Watch whether the EPERM repeats |
+| The phones ran the APK of 174b182, three commits behind | The pins the stream reports are the old ones, by design; the next setup rebuilds |
+
+Owed from this: the first code carries no locator (design §12.3 says it
+travels with the key; the phones have none yet); the 177-module read on
+hardware.

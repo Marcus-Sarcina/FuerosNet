@@ -24,10 +24,10 @@ fn the_opening_crosses_as_bytes_and_each_check_is_made_on_this_side() {
     let mut s = setup(&["alice", "bob"], &[ChannelKind::Nfc]);
     s.face_off("alice", "bob");
     s.client("alice")
-        .begin(kh("bob"), vec![], true)
+        .begin(Some(kh("bob")), vec![], true)
         .expect("alice begins");
     s.client("bob")
-        .begin(kh("alice"), vec![], false)
+        .begin(Some(kh("alice")), vec![], false)
         .expect("bob begins");
 
     // STEP 1: each shows its contribution, each reads the other's off the
@@ -123,11 +123,17 @@ fn the_opening_crosses_as_bytes_and_each_check_is_made_on_this_side() {
 fn a_bearer_that_disagrees_with_the_screen_stops_the_ceremony() {
     let mut s = setup(&["alice", "bob", "carol"], &[ChannelKind::Nfc]);
     s.face_off("alice", "bob");
-    s.client("alice").begin(kh("bob"), vec![], true).unwrap();
-    s.client("bob").begin(kh("alice"), vec![], false).unwrap();
+    s.client("alice")
+        .begin(Some(kh("bob")), vec![], true)
+        .unwrap();
+    s.client("bob")
+        .begin(Some(kh("alice")), vec![], false)
+        .unwrap();
     // carol runs her own ceremony with bob, so her carriage is real and
     // wrong rather than malformed
-    s.client("carol").begin(kh("bob"), vec![], true).unwrap();
+    s.client("carol")
+        .begin(Some(kh("bob")), vec![], true)
+        .unwrap();
 
     let oa = s.client("alice").optical_contribution().unwrap();
     let ob = s.client("bob").optical_contribution().unwrap();
@@ -234,8 +240,12 @@ fn an_anchor_asked_for_before_the_id_is_fixed_is_its_own_refusal() {
         Err(Abort::NotActive)
     ));
     s.face_off("alice", "bob");
-    s.client("alice").begin(kh("bob"), vec![], true).unwrap();
-    s.client("bob").begin(kh("alice"), vec![], false).unwrap();
+    s.client("alice")
+        .begin(Some(kh("bob")), vec![], true)
+        .unwrap();
+    s.client("bob")
+        .begin(Some(kh("alice")), vec![], false)
+        .unwrap();
     // begun, and the id not yet fixed: the contributions have not crossed
     assert!(matches!(
         s.client("alice").capture_key_carriage(),

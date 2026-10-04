@@ -786,8 +786,10 @@ check(byid['P-normal-record']['hex'] ==
 _cid = pcm.group(3).replace('\n', '')
 _oc_a = canonical(bytes.fromhex(byid['P-optical-contribution-alice']['hex']))
 _oc_b = canonical(bytes.fromhex(byid['P-optical-contribution-bob']['hex']))
-check(_oc_a[1] == KH['alice'] and _oc_b[1] == KH['bob'],
-      's14.3: each OpticalContribution names its device by keyhash')
+check(H(enc(_oc_a[1])).hex() == KH['alice'] and H(enc(_oc_b[1])).hex() == KH['bob'],
+      "s14.3: each OpticalContribution carries its device's full KeyMaterial, whose hash is its keyhash (first contact pins it)")
+check(isinstance(_oc_a[1], list) and len(_oc_a[1]) == 2,
+      's14.3: the key material is the two-member KeyMaterial array (s2.2)')
 _pair = (_oc_a[2], _oc_b[2]) if KH['alice'] < KH['bob'] else (_oc_b[2], _oc_a[2])
 check(H(b'rhtn/1:ceremony' + bytes.fromhex(_pair[0]) + bytes.fromhex(_pair[1])).hex() == _cid,
       's14.3: the two contributions derive the pre-commitment known answer')

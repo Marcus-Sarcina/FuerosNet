@@ -85,12 +85,12 @@ async fn a_query_reaches_its_verifier_on_the_end_to_end_path_and_the_answer_come
     // query about w2 for w1
     let ia = alice
         .handle
-        .with(|c| c.begin(kh("w2"), vec![], true))
+        .with(|c| c.begin(Some(kh("w2")), vec![], true))
         .await
         .expect("alice begins");
     let iw = w2
         .handle
-        .with(|c| c.begin(kh("alice"), vec![], false))
+        .with(|c| c.begin(Some(kh("alice")), vec![], false))
         .await
         .expect("w2 begins");
     let iw2 = iw.clone();

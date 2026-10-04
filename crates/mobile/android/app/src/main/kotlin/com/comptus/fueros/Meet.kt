@@ -44,8 +44,13 @@ package com.comptus.fueros
  * kernel answers them in its event loop, off any screen.
  */
 class Meet(
-    val counterpartyKey: String,
-    val counterpartyName: String,
+    /** Who is being met, as the codes say it and not before: the responder
+     *  learns it from the bootstrap, the initiator from the first optical
+     *  code (`wire-format.md` §14.3.1; design §12.3). Null until then. */
+    counterpartyKey: String? = null,
+    /** A name for them where one is known; the key's first characters, or
+     *  "the other person", otherwise. */
+    counterpartyName: String? = null,
     /** Chosen with the intent, never later: meet only, or adopt in a
      *  direction, and whether a backup is being asked for. */
     val kind: Kind,
@@ -69,6 +74,47 @@ class Meet(
     }
     /** The adoption this meeting carries, as chosen at D1a. */
     val adopt: Adopt get() = kind.adopt
+
+    private var knownKey: String? = counterpartyKey
+    private val givenName: String? = counterpartyName
+
+    /** The counterparty's keyhash as hex, once a code has named them. */
+    val counterpartyKey: String? get() = synchronized(lock) { knownKey }
+
+    /** How the screens name the counterparty: a given name, the key's
+     *  first eight characters once known, or *the other person*. */
+    val counterpartyName: String
+        get() = givenName ?: synchronized(lock) { knownKey?.take(8) } ?: "the other person"
+
+    /**
+     * **A code named the counterparty.** The first one fixes them; a later
+     * one naming anyone else is a party who is not the one in front of
+     * you, and is refused with the reason. Null where it was taken.
+     */
+    fun counterparty(key: String): String? {
+        synchronized(lock) {
+            val k = knownKey
+            if (k != null && k != key) return "that code is someone else's, not ${k.take(8)}'s"
+            knownKey = key
+            changed()
+        }
+        return null
+    }
+
+    /** Told when the person accepts the brief: the kernel's, so the
+     *  ceremony begins there, which is the one question it asks. */
+    var onAccepted: (() -> Unit)? = null
+    private var begun = false
+
+    /** The kernel's ceremony is open: the first code can be shown. */
+    fun begun(): Boolean = synchronized(lock) { begun }
+
+    fun begunCeremony() {
+        synchronized(lock) {
+            begun = true
+            changed()
+        }
+    }
 
     enum class Step {
         INTENT,
@@ -621,12 +667,15 @@ class Meet(
      * turn-the-phone instruction [author, 2026-09-29].
      */
     fun accept() {
-        synchronized(lock) {
+        val hook = synchronized(lock) {
             check(step == Step.BRIEF) { "the brief is accepted from the brief, not $step" }
             briefAcknowledged = true
             stepped(Step.BRIEF, Step.OPTICAL, "tap")
             changed()
+            onAccepted
         }
+        // outside the lock: the kernel's begin crosses a thread
+        hook?.invoke()
     }
 
     /** Refuse, from the brief, which is where a person may. */

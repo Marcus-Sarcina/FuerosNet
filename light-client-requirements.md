@@ -37,7 +37,11 @@ has no bearing on the ceremony's outcome or on who adopts whom if an adoption
 follows (design §7.1); the pair takes a start time from whoever began, within
 clock tolerance, and the one who began proposes the body for signature
 (`wire-format.md` §14.3.2, §7.10.1). The two intents say which side began
-and must disagree; refuse one that claims your own side.
+and must disagree; refuse one that claims your own side. **The first code
+you read is who you are meeting**: it carries their full key, which you pin
+at this first contact (design §12.3; `wire-format.md` §14.3.1), and a later
+code naming anyone else is refused. Nothing you were told beforehand names
+the counterparty; the code does.
 
 ### 1.1 Nomination
 

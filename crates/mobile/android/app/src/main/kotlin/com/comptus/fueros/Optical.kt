@@ -27,8 +27,16 @@ import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
  * on a modest selfie camera"*, and the sizes below are what keep that true.
  */
 object Optical {
-    /** The alphabet, RFC 4648 §5, and no padding: `=` buys nothing here. */
-    private const val A = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+    /**
+     * **Base45 (RFC 9285)**, whose alphabet is exactly QR's alphanumeric
+     * set, so the symbol encodes in alphanumeric mode: 2 bytes become 3
+     * characters of 5.5 bits each, 1.5× the bytes, where base64 in byte
+     * mode would be 1.33× the bytes at 8 bits each — a third fewer modules
+     * for the same payload. The first optical code carries a full key,
+     * about 2 KB, which in base64 would not fit a QR at error correction M
+     * at all and does here with room.
+     */
+    private const val A = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ \$%*+-./:"
 
     /**
      * **Error correction M, 15%.** L would make a smaller symbol and a
@@ -40,21 +48,25 @@ object Optical {
     private val HINTS = mapOf<EncodeHintType, Any>(
         EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.M,
         EncodeHintType.MARGIN to 2,
-        EncodeHintType.CHARACTER_SET to "US-ASCII",
+        EncodeHintType.CHARACTER_SET to "US-ASCII", // alphanumeric mode is what the alphabet earns
     )
 
     fun payload(bytes: ByteArray): String {
-        val out = StringBuilder((bytes.size * 4 + 2) / 3)
+        val out = StringBuilder((bytes.size + 1) / 2 * 3)
         var i = 0
-        while (i < bytes.size) {
-            val b0 = bytes[i].toInt() and 0xff
-            val b1 = if (i + 1 < bytes.size) bytes[i + 1].toInt() and 0xff else 0
-            val b2 = if (i + 2 < bytes.size) bytes[i + 2].toInt() and 0xff else 0
-            val n = (b0 shl 16) or (b1 shl 8) or b2
-            out.append(A[n ushr 18 and 63]).append(A[n ushr 12 and 63])
-            if (i + 1 < bytes.size) out.append(A[n ushr 6 and 63])
-            if (i + 2 < bytes.size) out.append(A[n and 63])
-            i += 3
+        while (i + 1 < bytes.size) {
+            // two bytes, little-endian base 45: c + 45 d + 45² e
+            var n = ((bytes[i].toInt() and 0xff) shl 8) or (bytes[i + 1].toInt() and 0xff)
+            out.append(A[n % 45]); n /= 45
+            out.append(A[n % 45]); n /= 45
+            out.append(A[n])
+            i += 2
+        }
+        if (i < bytes.size) {
+            // one byte left: two characters
+            var n = bytes[i].toInt() and 0xff
+            out.append(A[n % 45]); n /= 45
+            out.append(A[n])
         }
         return out.toString()
     }
@@ -62,25 +74,32 @@ object Optical {
     /** The bytes back, or null: a QR that is not one of ours reads as one. */
     fun bytes(payload: String): ByteArray? {
         if (payload.isEmpty()) return ByteArray(0)
-        // one leftover character cannot be a byte: base64url's lengths are
-        // 4k, 4k+2 and 4k+3, never 4k+1
-        if (payload.length % 4 == 1) return null
+        // one leftover character cannot be a byte: base45's lengths are 3k
+        // and 3k+2, never 3k+1
         val n = payload.length
-        val out = ByteArray(n / 4 * 3 + maxOf(0, n % 4 - 1))
+        if (n % 3 == 1) return null
+        val out = ByteArray(n / 3 * 2 + if (n % 3 == 2) 1 else 0)
         var o = 0
         var i = 0
         while (i < n) {
-            val take = minOf(4, n - i)
+            val take = minOf(3, n - i)
             var acc = 0
-            for (k in 0 until 4) {
-                val c = if (k < take) A.indexOf(payload[i + k]) else 0
-                if (k < take && c < 0) return null
-                acc = (acc shl 6) or c
+            var w = 1
+            for (k in 0 until take) {
+                val c = A.indexOf(payload[i + k])
+                if (c < 0) return null
+                acc += c * w
+                w *= 45
             }
-            out[o++] = (acc ushr 16).toByte()
-            if (take > 2) out[o++] = (acc ushr 8 and 0xff).toByte()
-            if (take > 3) out[o++] = (acc and 0xff).toByte()
-            i += 4
+            if (take == 3) {
+                if (acc > 0xffff) return null
+                out[o++] = (acc ushr 8).toByte()
+                out[o++] = (acc and 0xff).toByte()
+            } else {
+                if (acc > 0xff) return null
+                out[o++] = acc.toByte()
+            }
+            i += take
         }
         return out
     }

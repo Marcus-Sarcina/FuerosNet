@@ -52,8 +52,8 @@ fn b01_named_ceremony_passthrough_preserves_consent_binding() {
     let known=ids.iter().map(|i|i.key_material()).collect::<Vec<_>>();
     let alice=Participant::start(seeds("alice"),known.clone(),platform()).unwrap();
     let bob=Participant::start(seeds("bob"),known,platform()).unwrap();
-    alice.begin(ids[1].keyhash.to_vec(),vec![ids[2].keyhash.to_vec()],true).unwrap();
-    bob.begin(ids[0].keyhash.to_vec(),vec![ids[2].keyhash.to_vec()],false).unwrap();
+    alice.begin(Some(ids[1].keyhash.to_vec()),vec![ids[2].keyhash.to_vec()],true).unwrap();
+    bob.begin(Some(ids[0].keyhash.to_vec()),vec![ids[2].keyhash.to_vec()],false).unwrap();
     // the opening crosses as bytes since 2026-10-01 (W 14.3): two QRs each
     // way, then the bearer's load, and the kernel checks each against the
     // ceremony's own state

@@ -82,8 +82,14 @@ class AndroidShell(private val context: Context) :
     override fun fill(n: UInt): ByteArray = ByteArray(n.toInt()).also { rng.nextBytes(it) }
 
     // the person is asked, on whatever screen is foreground; a question
-    // nobody is shown is answered no (`light-client-requirements.md` §1.4)
-    override fun ask(question: String): Boolean = Consent.ask(question)
+    // nobody is shown is answered no (`light-client-requirements.md` §1.4).
+    // The ceremony's one question, whether to start it, is the brief's
+    // Accept (D1.5, where every decision is front-loaded): a meeting whose
+    // brief the person accepted answers the kernel yes without asking twice
+    override fun ask(question: String): Boolean {
+        if (Kernel.meet()?.briefAcknowledged() == true) return true
+        return Consent.ask(question)
+    }
 
     // a notice has an audience, and the kernel knows which: a query about
     // this person belongs on the ceremony they are standing in (design

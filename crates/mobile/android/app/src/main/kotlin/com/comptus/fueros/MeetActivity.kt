@@ -203,7 +203,7 @@ class MeetActivity : Activity() {
     }
 
     private fun start(kind: Meet.Kind, role: Meet.Role) {
-        Kernel.startMeet(kind, role)?.bind(sink) ?: para("could not begin: unprovisioned")
+        Kernel.startMeet(kind, role)?.bind(sink) ?: para("could not begin: the kernel is not running")
         redraw()
     }
 
@@ -240,8 +240,12 @@ class MeetActivity : Activity() {
     /** A QR on the screen, large enough to scan across a table. */
     private fun qr(bytes: ByteArray, which: String) {
         val m = Optical.matrix(bytes)
-        Diag.event("qr.shown", "which" to which, "bytes" to bytes.size, "modules" to m.width)
-        val scale = 8
+        // as large as the screen allows: the first optical code carries a
+        // full key, about 2 KB and 177 modules, and the limit at arm's
+        // length is the camera's resolution of a module, so every pixel
+        // of width is bought here (`wire-format.md` §14.3.1)
+        val scale = maxOf(1, minOf(8, (resources.displayMetrics.widthPixels - 48) / m.width))
+        Diag.event("qr.shown", "which" to which, "bytes" to bytes.size, "modules" to m.width, "scale" to scale)
         val w = m.width * scale
         val px = IntArray(w * w)
         for (y in 0 until w) {
@@ -312,6 +316,10 @@ class MeetActivity : Activity() {
     private fun optical(m: Meet) {
         para("↻  TURN YOUR PHONE AROUND so the screen faces ${m.counterpartyName}, and let them do the same. Each phone reads the other's code with its SELFIE camera.")
         para("Two codes cross, in order: each phone's contribution, then the meeting id both compute from the pair. If the two ids differ, something is between you and the meeting stops — that check is the whole of what looking at each other's screen buys.")
+        if (!m.begun()) {
+            para("Opening the ceremony…")
+            return
+        }
         val code = Kernel.optical()
         if (code == null) {
             para("The code needs an open ceremony, which this device has lost.")

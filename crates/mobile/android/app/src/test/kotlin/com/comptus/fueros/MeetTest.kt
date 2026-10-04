@@ -487,6 +487,36 @@ class MeetConversationTest {
     }
 
     @Test
+    fun the_codes_name_the_counterparty_and_a_second_name_is_refused() {
+        val m = Meet(kind = Meet.Kind())
+        assertNull(m.counterpartyKey)
+        assertEquals("the other person", m.counterpartyName)
+        assertNull("the first code names them", m.counterparty("ab12cd34ef"))
+        assertEquals("ab12cd34ef", m.counterpartyKey)
+        assertEquals("ab12cd34", m.counterpartyName)
+        assertNull("the same party again is fine", m.counterparty("ab12cd34ef"))
+        val refused = m.counterparty("ffffffff00")
+        assertTrue(refused != null && refused.contains("someone else's"))
+        assertEquals("ab12cd34ef", m.counterpartyKey)
+        // a name given beforehand stays the name
+        assertEquals("carol", Meet("aa", "carol", Meet.Kind()).counterpartyName)
+    }
+
+    @Test
+    fun accepting_the_brief_begins_the_ceremony_once_and_the_first_code_waits_for_it() {
+        val m = Meet(kind = Meet.Kind()).apply { crossBootstrap() }
+        var begun = 0
+        m.onAccepted = { begun++ }
+        assertFalse(m.begun())
+        m.accept()
+        assertEquals(1, begun)
+        assertEquals(Meet.Step.OPTICAL, m.step())
+        assertFalse("the kernel has not said so yet", m.begun())
+        m.begunCeremony()
+        assertTrue(m.begun())
+    }
+
+    @Test
     fun every_kernel_move_renders_the_bound_screen() {
         val m = atVerifiers()
         var renders = 0

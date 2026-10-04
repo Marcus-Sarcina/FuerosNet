@@ -203,11 +203,11 @@ async fn the_conversation_runs_over_the_payload_path_to_a_record_every_signer_ho
 
     // the local exchanges, by hand (§14.3): intent, proximity, capture
     let ia = alice
-        .with(|c| c.begin(kh("bob"), vec![kh("w1")], true))
+        .with(|c| c.begin(Some(kh("bob")), vec![kh("w1")], true))
         .await
         .expect("alice begins");
     let ib = bob
-        .with(|c| c.begin(kh("alice"), vec![kh("w2")], false))
+        .with(|c| c.begin(Some(kh("alice")), vec![kh("w2")], false))
         .await
         .expect("bob begins");
     let cid = alice
@@ -498,11 +498,11 @@ async fn a_signer_whose_root_check_fails_answers_and_the_proposer_records_it() {
     // the local exchanges, by hand (§14.3); w1 alice's nominee, bob
     // nominating nobody
     let ia = alice
-        .with(|c| c.begin(kh("bob"), vec![kh("w1")], true))
+        .with(|c| c.begin(Some(kh("bob")), vec![kh("w1")], true))
         .await
         .expect("alice begins");
     let ib = bob
-        .with(|c| c.begin(kh("alice"), vec![], false))
+        .with(|c| c.begin(Some(kh("alice")), vec![], false))
         .await
         .expect("bob begins");
     let cid = alice

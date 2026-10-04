@@ -26,6 +26,10 @@ use zeroize::Zeroizing;
 /// 16-byte contribution the ceremony-id is derived from.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OpticalContribution {
+    /// The device's identity in full (§2.2's `KeyMaterial`): the first
+    /// contact pins it (design §12.3), and its hash is the keyhash.
+    pub material: Vec<u8>,
+    /// The keyhash, computed from the material on decode.
     pub device: Keyhash,
     pub contribution: [u8; 16],
 }
@@ -35,7 +39,7 @@ impl OpticalContribution {
         let mut out = Vec::new();
         emit_array_head(&mut out, 3);
         emit_uint(&mut out, 1);
-        emit_bstr(&mut out, &self.device);
+        out.extend_from_slice(&self.material);
         emit_bstr(&mut out, &self.contribution);
         out
     }
@@ -43,9 +47,18 @@ impl OpticalContribution {
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         let it = checked(b, "OpticalContribution")?;
         let a = fields(&it);
+        // the schema fixed the shape: array head, version 1, a KeyMaterial,
+        // then the 16-byte contribution as the last 17 bytes; the material
+        // is what sits between
+        let contribution = fixed16(b, &a[2])?;
+        let material = b[2..b.len() - 17].to_vec();
+        let device = rhtn_crypto::Identity::from_key_material(&material)
+            .ok_or("the key material does not read as an identity")?
+            .keyhash;
         Ok(OpticalContribution {
-            device: fixed32(b, &a[1])?,
-            contribution: fixed16(b, &a[2])?,
+            material,
+            device,
+            contribution,
         })
     }
 }

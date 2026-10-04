@@ -74,15 +74,40 @@ class OpticalTest {
         for (n in 0..200) {
             val bytes = ByteArray(n) { (it * 31 + n).toByte() }
             val text = Optical.payload(bytes)
-            assertTrue("padding in $text", !text.contains('='))
+            assertTrue("alphanumeric only in $text", text.all { it in "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ \$%*+-./:" })
             assertArrayEquals("length $n", bytes, Optical.bytes(text))
         }
     }
 
     @Test
     fun a_qr_that_is_not_one_of_ours_reads_as_one_rather_than_throwing() {
-        assertNull(Optical.bytes("not base64url!"))
-        assertNull(Optical.bytes("A")) // one character cannot be a byte
+        assertNull(Optical.bytes("not base45!"))
+        assertNull(Optical.bytes("A")) // one character cannot be a byte: lengths are 3k and 3k+2
         assertEquals(0, Optical.bytes("")?.size ?: -1)
+    }
+}
+
+
+class OpticalFirstCodeTest {
+    /** The first optical code carries a full key, about 2 KB: it must fit a
+     *  QR at error correction M, which base45 in alphanumeric mode buys. */
+    @Test
+    fun a_two_kilobyte_first_code_fits_a_qr_at_correction_m() {
+        val bytes = ByteArray(2030) { (it * 31 + 7).toByte() }
+        val text = Optical.payload(bytes)
+        assertEquals(3045, text.length)
+        assertArrayEquals(bytes, Optical.bytes(text))
+        val m = Optical.matrix(bytes)
+        assertTrue("2030 bytes took ${m.width} modules", m.width <= 177)
+    }
+
+    @Test
+    fun base45_known_answers_from_rfc_9285() {
+        assertEquals("BB8", Optical.payload("AB".toByteArray()))
+        assertEquals("%69 VD92EX0", Optical.payload("Hello!!".toByteArray()))
+        assertEquals("UJCLQE7W581", Optical.payload("base-45".toByteArray()))
+        assertArrayEquals("ietf!".toByteArray(), Optical.bytes("QED8WEX0"))
+        // a triple past 0xffff is not two bytes
+        assertNull(Optical.bytes("GGW"))
     }
 }

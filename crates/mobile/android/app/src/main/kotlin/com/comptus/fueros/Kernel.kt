@@ -74,30 +74,41 @@ object Kernel {
      */
     fun startMeet(kind: Meet.Kind, role: Meet.Role): Meet? {
         val p = participant ?: return null
-        val to = peer ?: return null
-        val key = peerKey ?: return null
         val retention = call("retention_years", { 2UL }) { p.retentionYears() }
         synchronized(lock) {
             meet?.let { return it }
-            meet = Meet(key, peerName, kind, role, retentionYears = retention.toLong()).also { m ->
+            // nobody is named here: the codes say who is being met
+            // (`wire-format.md` §14.3.1), the provision's peer being the
+            // payload demo's and no part of a ceremony
+            meet = Meet(kind = kind, role = role, retentionYears = retention.toLong()).also { m ->
                 // the kernel's ceremony ends with the screen's: a Stop from
                 // any live step abandons it, so nothing of the conversation
                 // is answered after the person has left it
                 m.onStopped = { call("abandon", { }) { p.abandon() } }
+                // and begins with the brief's Accept, which is the one
+                // question a ceremony asks the person, answered once
+                m.onAccepted = { beginCeremony(p, m) }
             }
         }
-        val m = meet!!
+        return meet
+    }
+
+    /**
+     * Open the kernel's ceremony as the brief is accepted. The responder
+     * names the initiator, whose bootstrap it read; the initiator names
+     * nobody and learns who read its code from their first optical code.
+     * Witnesses are nominated from the counterparty's neighbourhood
+     * (design §7.1); with no horizon yet the nomination is empty and the
+     * ceremony is that much weaker, which the record carries honestly.
+     */
+    private fun beginCeremony(p: Participant, m: Meet) {
         Thread {
             call("begin", { e -> m.stop("begin refused: ${e.reason}") }) {
-                // witnesses are nominated from the counterparty's
-                // neighbourhood (design §7.1); with no horizon yet the
-                // nomination is empty and the ceremony is that much weaker,
-                // which the record carries honestly rather than hiding
-                p.begin(to, listOf(), role == Meet.Role.INITIATOR)
+                p.begin(m.counterpartyKey?.let { unhex(it) }, listOf(), m.role == Meet.Role.INITIATOR)
+                m.begunCeremony()
                 m.note("ceremony open; the two codes are ready to cross.")
             }
         }.start()
-        return m
     }
 
     /**
@@ -170,10 +181,8 @@ object Kernel {
             return "that code is not a meeting invitation this build knows"
         }
         val m = meet ?: return "no meeting is open here"
-        val theirs = bytes.copyOfRange(3, 35)
-        if (hex(theirs) != m.counterpartyKey) {
-            return "that code is someone else's, not ${m.counterpartyName}'s"
-        }
+        // the code is who is being met: the first one names them
+        m.counterparty(hex(bytes.copyOfRange(3, 35)))?.let { return it }
         m.theirAdopt(
             when (bytes[1].toInt()) {
                 1 -> Meet.Adopt.THEM_UNDER_ME
@@ -212,7 +221,11 @@ object Kernel {
         val m = meet ?: return "no meeting is open here"
         if (!opticalTaken) {
             return call("takeOptical", { it.reason }) {
-                p.takeOptical(bytes)
+                // the kernel pins the key the code carries and names the
+                // party by its hash; the flow learns who that is, or
+                // refuses a code from anyone but the one it already knows
+                val who = p.takeOptical(bytes)
+                m.counterparty(hex(who))?.let { return@call it }
                 opticalTaken = true
                 m.note("their contribution is in; showing the meeting id.")
                 null

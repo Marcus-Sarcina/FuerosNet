@@ -4901,7 +4901,7 @@ design already depends on.
 | What | Between | Where it is stated | Encoding |
 |---|---|---|---|
 | The ceremony's intent exchange — the contribution, the nominees, the evidence bundle, the timing and who initiated | Two participants' devices | design §7.1, §7.5.2, §8.1.2 | `IntentExchange` (§14.3.2), carried by the shell's chosen bearer (§14.3.1) and bound to the pre-commitment. The CBOR is specified; two vendors' clients compute the same pre-commitment, the ceremony-id (design §7.5.2.6), either way |
-| The optical transcript — each device's contribution, then the derived ceremony-id, screen to camera | Two participants' devices | design §7.1 item 3, design §7.5.2 | `OpticalContribution` then `TranscriptConfirm` (§14.3.2): the contribution is the key-exchange input, the ceremony-id is the transcript hash both display and check |
+| The optical transcript — each device's key material and contribution, then the derived ceremony-id, screen to camera | Two participants' devices | design §7.1 item 3, design §7.5.2, design §12.3 | `OpticalContribution` then `TranscriptConfirm` (§14.3.2): the key material is pinned at this first contact, the contribution is the key-exchange input, the ceremony-id is the transcript hash both display and check |
 | Proximity channel outcomes — the UWB, NFC or optical result and its ranking | Two participants' devices | §3.2, design §7.1 item 4 | `ProximityOutcomes` (§14.3.2): the §4.5 `Channel` maps as measured, anchored to the ceremony-id. The record's `strongest` (§3.2) is not carried — each device computes it from the outcomes, as each computes the ceremony-id |
 | Traversal candidates | Two participants' devices | design §12.6.3 [author, 2026-09-25] | `CandidateHandover` (§14.3.2), carrying the `Candidate` structure this document now defines; the same candidates travel the end-to-end payload path when a direct connection is set up remotely (design §12.6.3, §14.1.1) |
 | The capture-key handover — the key each participant derived for the captures the other holds of them, handed across at capture time | Two participants' devices | design §7.5.2, design §7.5.2.6 | `CaptureKeyHandover` (§14.3.2): the 32-byte key design §7.5.2.6 derives, anchored to the ceremony-id like the proximity outcomes and the candidates [author, 2026-10-02] |
@@ -4949,18 +4949,25 @@ barred.
 #### 14.3.1 What the anchor is, and what it binds
 
 **The optical channel carries two things across the exchange** (design §7.1
-item 3), and neither is secret. First each device shows its 16-byte
-contribution. From the two, both devices compute the ceremony's
-pre-commitment — `SHA-256` of `rhtn/1:ceremony` and the two contributions in
-ascending participant-keyhash order (design §7.5.2). Then each device shows
-that 32-byte **ceremony-id**, and each checks the other's against its own: a
+item 3), and neither is secret. First each device shows its identity in
+full, the `KeyMaterial` of §2.2, and its 16-byte contribution. **The first
+QR is the first contact** (design §12.3): a device that has not met this
+identity pins the key material it reads here, and its hash is the keyhash
+it knows the party by from then on (§3.4); a device that has met it holds
+the same material already. **The first code read fixes who the counterparty
+is**, and a later code naming anyone else is refused. From the two
+contributions, both devices compute the ceremony's pre-commitment —
+`SHA-256` of `rhtn/1:ceremony` and the two contributions in ascending
+participant-keyhash order (design §7.5.2). Then each device shows that
+32-byte **ceremony-id**, and each checks the other's against its own: a
 mismatch is where a man in the middle shows, and the ceremony stops. That
 value is the transcript hash the rest of the exchange binds to — consents
 and capture keys already bind to it (design §7.5.2), and everything the
 bearer carries is checked against it. **Each party reads both values off a
 screen it is looking at**, which is the whole of the man-in-the-middle
-resistance and the reason this step is close-range: a QR of this size
-resolves at arm's length on a modest selfie camera, not across a room.
+resistance and the reason this step is close-range: the first QR is about
+2 KB and is shown large, the second is small, and both resolve at arm's
+length on a phone camera, not across a room.
 
 **What the anchor binds, and what it does not.** An anchored message binds
 to a ceremony **both** devices computed: the anchor cannot be a value only
@@ -4986,8 +4993,10 @@ Every one is deterministic CBOR under §1, versioned, with the array bounds
 ```
 OpticalContribution = [        ; the first QR each device shows
   uint,                        ; version, 1
-  keyhash,                     ; this device's identity (§2.2), for ordering
-                               ;   the contributions and naming the party
+  KeyMaterial,                 ; this device's identity in full (§2.2): the
+                               ;   first contact pins it (design §12.3), its
+                               ;   hash names the party and orders the
+                               ;   contributions
   bstr .size 16,               ; this device's contribution (design §7.5.2)
 ]
 

@@ -11315,6 +11315,33 @@
     "interpretation": ""
   },
   {
+    "id": "CER-49",
+    "area": "ceremony",
+    "gap": "ceremony",
+    "title": "Pin the counterparty's key material from the first QR, which fixes who is in front of you",
+    "milestone": 4,
+    "kind": "positive",
+    "spec": [
+      "wire-format.md §14.3.1",
+      "light-client-requirements.md §1"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §14.3.1",
+        "text": "a device that has not met this\nidentity pins the key material it reads here, and its hash is the keyhash\nit knows the party by from then on"
+      },
+      {
+        "where": "light-client-requirements.md §1",
+        "text": "**The first code\nyou read is who you are meeting**"
+      }
+    ],
+    "given": "Two clients that have never met: neither holds the other's identity, and the one who shows the first invite begins without naming a counterparty.",
+    "when": "Each reads the other's first QR, then the ceremony runs to a record.",
+    "then": "Each pins the other's key material from the QR, the counterparty is fixed from it, the record finalizes and verifies under the pinned keys, and a second first-QR naming a third party is refused.",
+    "oracle": "behaviour",
+    "interpretation": ""
+  },
+  {
     "id": "RSC-38",
     "area": "resources",
     "gap": "resources",

@@ -229,7 +229,9 @@ fn the_declared_retention_is_the_persons_to_set_between_ceremonies() {
     );
     a.set_retention_years(1).expect("one year is a retention");
     assert_eq!(a.retention_years(), 1);
-    let intent = a.begin(kh("bob"), vec![], true).expect("alice begins");
+    let intent = a
+        .begin(Some(kh("bob")), vec![], true)
+        .expect("alice begins");
     assert_eq!(intent.retention_years, 1, "the intent carries what was set");
     assert!(
         a.set_retention_years(3).is_err(),
@@ -265,8 +267,14 @@ fn either_party_may_begin_and_an_intent_claiming_this_devices_own_side_is_refuse
         );
     }
     // both claim to have begun
-    let ia = s.client("alice").begin(kh("bob"), vec![], true).unwrap();
-    let ib = s.client("bob").begin(kh("alice"), vec![], true).unwrap();
+    let ia = s
+        .client("alice")
+        .begin(Some(kh("bob")), vec![], true)
+        .unwrap();
+    let ib = s
+        .client("bob")
+        .begin(Some(kh("alice")), vec![], true)
+        .unwrap();
     assert_eq!(
         s.client("bob").take_intent(kh("alice"), &ia),
         Err(Abort::InitiatorClaim)
@@ -283,10 +291,13 @@ fn either_party_may_begin_and_an_intent_claiming_this_devices_own_side_is_refuse
     // neither claims
     s.client("alice").abandon();
     s.client("bob").abandon();
-    let ia = s.client("alice").begin(kh("bob"), vec![], false).unwrap();
+    let ia = s
+        .client("alice")
+        .begin(Some(kh("bob")), vec![], false)
+        .unwrap();
     assert_eq!(
         s.client("bob")
-            .begin(kh("alice"), vec![], false)
+            .begin(Some(kh("alice")), vec![], false)
             .map(|_| ()),
         Ok(())
     );
@@ -294,6 +305,79 @@ fn either_party_may_begin_and_an_intent_claiming_this_devices_own_side_is_refuse
         s.client("bob").take_intent(kh("alice"), &ia),
         Err(Abort::InitiatorClaim)
     );
+}
+
+/// Two clients that have never met (design §12.3's first contact): the
+/// first QR carries the key, the first code read fixes the counterparty,
+/// and the record verifies under what was pinned there.
+// acceptance: CER-49
+#[test]
+fn strangers_pin_each_other_from_the_first_qr_and_the_first_code_fixes_the_counterparty() {
+    let mut s = setup(&EVERYONE, &[ChannelKind::Nfc]);
+    // neither holds the other: what each knows is itself and the witnesses
+    s.client("alice").known.retain(|i| i.keyhash != kh("bob"));
+    s.client("bob").known.retain(|i| i.keyhash != kh("alice"));
+    // the initiator names nobody: it shows the first invite and learns who
+    // read it from their QR; the responder read the bootstrap and may name
+    let ia = s
+        .client("alice")
+        .begin(None, vec![], true)
+        .expect("alice begins");
+    assert_eq!(
+        s.client("alice").proximity().err(),
+        Some(Abort::NoCounterparty)
+    );
+    let ib = s
+        .client("bob")
+        .begin(Some(kh("alice")), vec![], false)
+        .expect("bob begins");
+    let qa = s.client("alice").optical_contribution().unwrap();
+    let qb = s.client("bob").optical_contribution().unwrap();
+    assert!(
+        qa.len() > 2000,
+        "the first QR carries the full key: {} bytes",
+        qa.len()
+    );
+    assert_eq!(s.client("alice").take_optical(&qb), Ok(kh("bob")));
+    assert_eq!(s.client("bob").take_optical(&qa), Ok(kh("alice")));
+    assert!(
+        s.client("alice")
+            .known
+            .iter()
+            .any(|i| i.keyhash == kh("bob")),
+        "alice pinned bob"
+    );
+    assert!(
+        s.client("bob")
+            .known
+            .iter()
+            .any(|i| i.keyhash == kh("alice")),
+        "bob pinned alice"
+    );
+    // a second first-QR naming a third party is a party who is not in front of me
+    let qc = {
+        let c = s.client("carol");
+        c.begin(None, vec![], true).unwrap();
+        let q = c.optical_contribution().unwrap();
+        c.abandon();
+        q
+    };
+    assert_eq!(s.client("alice").take_optical(&qc), Err(Abort::NotActive));
+    // and the ceremony runs to a record on what was pinned
+    let ta = s.client("alice").transcript_confirm().unwrap();
+    let tb = s.client("bob").transcript_confirm().unwrap();
+    s.client("alice").take_transcript(&tb).unwrap();
+    s.client("bob").take_transcript(&ta).unwrap();
+    s.client("bob").take_intent(kh("alice"), &ia).unwrap();
+    s.client("alice").take_intent(kh("bob"), &ib).unwrap();
+    let _ = (ia, ib);
+    s.h.log.clear();
+    s.client("alice").abandon();
+    s.client("bob").abandon();
+    let txid = s
+        .run("alice", "bob", &["w1"], &["w2"])
+        .expect("strangers, now pinned, reach a record");
+    assert!(s.client("bob").store.records.contains_key(&txid));
 }
 
 // acceptance: CER-24

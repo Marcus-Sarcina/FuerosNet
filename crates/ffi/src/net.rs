@@ -635,6 +635,12 @@ impl Net {
         Ok(())
     }
 
+    /// Pin an identity met at first contact (design §12.3), so a session
+    /// to it can be authenticated from here on.
+    pub(crate) fn pin_identity(&self, id: &rhtn_crypto::Identity) {
+        self.cfg.pins.pin_identity(id);
+    }
+
     pub(crate) fn wake(&self, endpoint: Option<Wake>) -> Result<(), Refused> {
         let courier = self.courier()?;
         let me = courier.me();

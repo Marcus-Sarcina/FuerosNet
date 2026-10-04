@@ -12247,3 +12247,19 @@ now points at the pre-commitment's section, the §7.3 and §7.4 objects name
 their kinds, NET-019 names the device handover, the rulings entry counts
 ten, and an explicit zero fuzz seed no longer sits at xorshift's fixed point.
 Corpus 323 → 324; functional tests 489 → 490; catalogue 478 → 479.
+
+
+### 2026-10-04 (the first field run: the codes name the counterparty)
+
+The first run on two phones found the meeting bound to the provisioned peer
+before any code crossed, and beneath it a wire format whose first QR carried
+only a keyhash where the design has the key travel in the QR at the meeting
+and be pinned at first contact. The first optical code now carries the
+device's full key material; a ceremony begins with the counterparty unnamed
+where no code has named them, the first code read fixes who they are and
+pins their key for the client and the transport, and a later code naming
+anyone else is refused. The shell learns the counterparty from the codes,
+begins the kernel's ceremony at the brief's Accept so the person is asked
+once, encodes codes in base45 so the two-kilobyte first code fits at
+correction M, and shows them as large as the screen allows. Corpus 324 →
+325; functional tests 490 → 491; catalogue 479 → 480.

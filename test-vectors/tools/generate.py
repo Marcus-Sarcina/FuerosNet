@@ -3763,8 +3763,11 @@ txid: `{hx(peer_light_txid)}`
 # prekey bundle byte-for-byte.  The bytes are the objects alone: what a QR
 # encodes them as, and how a bearer frames them, is no part of these vectors.
 
-oc_alice = e_arr([e_uint(1), e_bstr(alice.keyhash), e_bstr(pc_a)])
-oc_bob = e_arr([e_uint(1), e_bstr(bob.keyhash), e_bstr(pc_b)])
+# the first QR carries the device's identity in full (s2.2's KeyMaterial),
+# which the first contact pins (design s12.3), and its contribution; the
+# keyhash is the material's hash and travels nowhere separately
+oc_alice = e_arr([e_uint(1), alice.key_material, e_bstr(pc_a)])
+oc_bob = e_arr([e_uint(1), bob.key_material, e_bstr(pc_b)])
 tconfirm = e_arr([e_uint(1), e_bstr(pc_demo)])
 
 # the intent alice's bearer carries: her echoed contribution, carol nominated
@@ -3838,7 +3841,9 @@ normal record's own `proximity` disclosure carries.
 
 ## The optical exchange (§14.3.1–.2)
 
-**OpticalContribution — alice's first QR** ({len(oc_alice)} bytes):
+**OpticalContribution — alice's first QR: her full key material, which bob
+pins at this first contact (design §12.3), and her contribution**
+({len(oc_alice)} bytes):
 
 ```
 {hexblock(oc_alice)}
@@ -3965,10 +3970,13 @@ reg('N-candidate-addr-8-bytes', 'bytes',
     e_arr([candidate(0, [192, 0, 2, 7, 0, 0, 0, 7], 4443)]))
 reg('N-optical-contribution-version-2', 'bytes',
     REJ('OpticalContribution', 'schema', 'a version the decoder does not know is refused'),
-    e_arr([e_uint(2), e_bstr(alice.keyhash), e_bstr(pc_a)]))
+    e_arr([e_uint(2), alice.key_material, e_bstr(pc_a)]))
 reg('N-optical-contribution-15', 'bytes',
     REJ('OpticalContribution', 'schema', 'a contribution is 16 bytes'),
-    e_arr([e_uint(1), e_bstr(alice.keyhash), e_bstr(pc_a[:15])]))
+    e_arr([e_uint(1), alice.key_material, e_bstr(pc_a[:15])]))
+reg('N-optical-contribution-keyhash', 'bytes',
+    REJ('OpticalContribution', 'schema', 'the first QR carries the full key material, not a keyhash: nothing would be pinned'),
+    e_arr([e_uint(1), e_bstr(alice.keyhash), e_bstr(pc_a)]))
 reg('N-transcript-confirm-31', 'bytes',
     REJ('TranscriptConfirm', 'schema', 'a ceremony-id is 32 bytes'),
     e_arr([e_uint(1), e_bstr(pc_demo[:31])]))

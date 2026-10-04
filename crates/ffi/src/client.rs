@@ -1038,13 +1038,17 @@ impl Participant {
     /// neither does this.
     pub fn begin(
         &self,
-        counterparty: Id,
+        counterparty: Option<Id>,
         nominees: Vec<Id>,
         initiator: bool,
     ) -> Result<(), Refused> {
         crate::diag::call("begin", || {
-            let cp =
-                keyhash(&counterparty).ok_or_else(|| Refused::new("a counterparty is 32 bytes"))?;
+            let cp = match counterparty {
+                Some(c) => {
+                    Some(keyhash(&c).ok_or_else(|| Refused::new("a counterparty is 32 bytes"))?)
+                }
+                None => None,
+            };
             let noms: Option<Vec<Keyhash>> = nominees.iter().map(|n| keyhash(n)).collect();
             let noms = noms.ok_or_else(|| Refused::new("a nominee is 32 bytes"))?;
             self.handle
@@ -1072,11 +1076,21 @@ impl Participant {
     /// refused.
     pub fn take_optical(&self, bytes: Vec<u8>) -> Result<Id, Refused> {
         crate::diag::call("take_optical", || {
-            self.handle.with_blocking(move |c| {
-                c.take_optical(&bytes)
+            let taken = bytes.clone();
+            let who = self.handle.with_blocking(move |c| {
+                c.take_optical(&taken)
                     .map(|k| k.to_vec())
                     .map_err(|a| Refused::new(format!("{a:?}")))
-            })
+            })?;
+            // the transport pins the same key the client did, so the
+            // payload session to this party can open (`wire-format.md`
+            // §14.3.1; design §12.3's first contact)
+            if let Ok(oc) = rhtn_client::local::OpticalContribution::decode(&bytes)
+                && let Some(id) = rhtn_crypto::Identity::from_key_material(&oc.material)
+            {
+                self.net.pin_identity(&id);
+            }
+            Ok(who)
         })
     }
 
