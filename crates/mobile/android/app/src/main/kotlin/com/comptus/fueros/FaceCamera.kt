@@ -36,9 +36,14 @@ import java.util.concurrent.atomic.AtomicReference
  * shows the person nothing and asks nothing: the prompt is for the
  * counterparty, spoken or toned by the screen above, not a dialog here.
  *
- * **NOT RUN ON HARDWARE**, like every camera and radio half in this shell.
- * The faces that defeat a liveness check and the frames a real sensor
- * delivers have never reached it.
+ * **It has run on hardware; the engine behind it has not.** Two Galaxy
+ * S21+ phones took guided captures in every field ceremony from
+ * `bc08f98` — five and four frames there, five and three at
+ * `1c2d4f9-phase1-retest-2`, each reported `ok` — so the sensor, the
+ * prompts and the timing are exercised. **What has never been tested is
+ * recognition**: the reference engine hashes bytes and recognises nobody
+ * (design §22.2), so no face has ever defeated a liveness check here
+ * because nothing here has ever checked liveness.
  */
 class FaceCamera(private val context: Context) {
 

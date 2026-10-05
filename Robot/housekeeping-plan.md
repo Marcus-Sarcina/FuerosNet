@@ -675,11 +675,56 @@ two phones through the same meeting to a record, on the swept tree, against
 `bc08f98` as the comparison. A documentation pass should not be able to
 change behaviour, and the run is what says so rather than the claim.
 
-**Status, 2026-10-05.** The thirteen batches are done and the gate passes:
-`fmt` clean, `clippy -D warnings` clean, `deny` clean, `cargo test` ok, the
-five fuzz targets no crash over 1.49M runs, the Kotlin round trip ok, 122
-Android unit tests, 0 failed. `refcheck` run by hand: 0 flags. **The field
-run is the one thing outstanding, and it needs the phones.**
+**Phase 1 closed, 2026-10-05.** The thirteen batches are done, the gate
+passes with the three stages the author added, and the field run matches
+the comparison. Run `1c2d4f9-phase1-retest-2` against `ec66a3b-third-1`:
+
+| | at `bc08f98` | on the swept tree |
+|---|---|---|
+| Record | `55dc3951`, formation, 2 signers, held by both | `3a56e163`, formation, 2 signers, held by both |
+| Begin to finalize, initiator | 39 s | 40.3 s |
+| Begin to finalize, responder | 43 s | 43.5 s |
+| Channels | near-field and optical pass, strongest near-field | the same |
+| Captures | 5 and 4 images | 5 and 3 images |
+| The node's decision on the pushed record | `OutOfStore`, 7,134 bytes | `OutOfStore`, 7,134 bytes |
+| Stops and refusals | none | none; the initiator's five `Waiting` retries while the responder finished capturing, as before |
+
+A documentation pass cannot change behaviour, and the run says so rather
+than the claim.
+
+**The capture row was wrong when first written**, and Reviewer2's sixth
+round caught it: this run's figures had been copied into the comparison
+column, where `ec66a3b-third-1`'s own logs say 5 and 4. The error is
+`CLAUDE.md`'s *mechanical substitution without reading the output*, in a
+table whose whole purpose was to be checkable. Nothing else in the row
+moved; the timings and the record came from the raw per-phone logs.
+
+**Two things the re-test found that are not phase 1's.** Recorded here
+because they came out of its closing run; neither is acted on.
+
+- **`field-run.sh`'s default address is the wrong one on a multi-homed
+  laptop.** It takes *"the address this machine routes out of"*, which was
+  the wired `10.1.10.105`; the phones share the Wi-Fi `192.168.0.8` and
+  cannot route to the wired one at all. The first attempt failed its attach
+  ten times and stopped at `converse_open`, and only `--addr` recovered it.
+  `Robot/field-test-procedure.md` should say to pass `--addr` with the
+  phones' network, or the script should prefer the interface the phones
+  were reached on. **The author's, since it is the bench.**
+- **The client pushes its presence record to the node, and the node
+  declines it by rule.** `node/src/store.rs` answers `OutOfStore` to any
+  transaction that is not topology-class, and a presence record is not
+  (`wire-format.md` §10.1.1: the node's store is topology; a presence record is the
+  subject's own archive, which a patron fetches from the subject,
+  `wire-format.md` §7.9).
+  Both runs show the push and the refusal. Whether the client should make
+  a push the node is defined never to take is a question for phase 2's
+  ownership pass, not a defect in either run.
+
+**And one of mine.** The live watch on the ceremony stream stayed silent
+through the whole run because a `cut` at the end of its pipeline
+block-buffers; every step was read back from the files afterwards. A
+pipeline that is meant to stream ends in a stage that flushes per line,
+and `cut` is not one.
 
 ---
 

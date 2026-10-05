@@ -13949,7 +13949,7 @@ Every finding verified against the text or code before anything moved.
 | `change-log.md:11964` "eight rulings" | **FIXED** → ten, the number the commit of that day names |
 | wire 4901's `(design §13.2)` for the ceremony-id | **CONFIRMED, FIXED.** §13.2 is "Formation records are permanently distinct"; the computation is design §7.5.2.6, and the design calls the value the pre-commitment, never "ceremony-id". Now "the same pre-commitment, the ceremony-id (design §7.5.2.6)" |
 | NET-019 omits §14.3.3 | **FIXED**: the device handover named |
-| Kind back-references at §7.3/§7.4/§7.9 | **§7.9 had one; §7.3 and §7.4 FIXED** with one sentence each naming their kind (1 and 2) |
+| Kind back-references at §7.3/§7.4/§7.9 | **§7.3 and §7.4 FIXED** with one sentence each naming their kind (1 and 2). **§7.9 was wrongly closed here** [Reviewer2, sixth round]: it names kind 11, which is the `FishingProposal` defined elsewhere, and never names kinds 5 and 6 — the `ArchiveRequest` and `ArchiveReply` it defines itself. Still owed, with the bare-candidate kind 3 |
 | `KeyGrant::encode` → `Zeroizing` | **FIXED**; the FFI's crossing copy stays the shell's, as for the capture key |
 | `RHTN_FUZZ_SEED=0` | **CONFIRMED, FIXED.** Zero is xorshift's fixed point, so the explicit seed drew one value for the whole budget; it now runs as 1 and says so. Last round's "not reproduced" was wrong: the clock path masked it with `\| 1` and the explicit path did not |
 | `P-peering-light` unasserted | **FIXED**: field 3 a network point, field 4 a locator |
@@ -14063,3 +14063,410 @@ from the acceptance entries rather than from any document, so changing it
 is a catalogue matter and the author's; what could be done without that is
 to measure work rather than time, or to assert the budget only when the
 machine is otherwise idle.
+
+## The ceremony's conversation rides the local bearer while both are present (2026-10-05)
+
+**Found in the field.** Run `1c2d4f9-phase1-retest-1` completed every
+local step with no serving node attached — the optical exchange, the
+intents over Bluetooth, near-field and optical both passing, the capture
+keys both ways, three captures — and stopped at `converse_open` with *"no
+serving node is attached"*. The attach had failed for a bench reason (the
+run advertised the laptop's wired address, which the phones cannot route
+to; `--addr 192.168.0.8:7447` is the fix), but the stop exposed something
+the bench did not cause: **the conversation's kinds 9 to 18 live on the
+end-to-end channel, opening that channel needs the counterparty's prekey
+bundle, and nothing in the local exchanges carries prekey material.** Two
+co-present devices with no node therefore cannot finish a ceremony, even
+though design §12.6.3 makes the relay a fallback and §14.3.2 hands the
+direct path's candidates over on the local bearer so that a co-present
+pair needs no intermediary.
+
+**[ruled, author, 2026-10-05]: the conversation rides the local bearer
+while both parties are present, and the end-to-end channel is for parties
+who have separated.** The author's reason, in his words: *"PQ security is
+mainly there to secure long term records which the live conversation is
+not. The final meeting record can be PQ secured with the prekeys shared
+through the live classically secured channel and that should not break any
+of our assumptions."*
+
+**Not implemented yet.** Ruled during the phase 1 field re-test, which is
+not the moment to change the ceremony; sequenced behind it, with the
+witness build. What it touches, so the sequencing can see its size:
+
+- `network-design.md` §7.10.1 and §14.3: which channel carries kinds 9 to
+  18, and when. `wire-format.md` §14.3.2: a local object carrying prekey
+  material, beside the intent. `light-client-requirements.md` where it
+  states what a ceremony needs of the network. `functional_tests.md` rows
+  for the nodeless ceremony.
+- The kernel: `converse_open` and the steps after it stop requiring the
+  courier when the counterparty is present; the conversation goes out as
+  carriages. `client/src/local.rs` gains the prekey handover.
+- The shell: `Carriage.Phase` gains the conversation; the FFI stops
+  refusing the conversation for want of a node.
+
+**Three things to settle before the design text is written**, each a
+question and not a proposal:
+
+1. **Witnesses.** A nominee that was never present is reached over the
+   network as now; is a co-present third device — a witness in the room —
+   on the local bearer too, or does "present" mean the two participants
+   alone?
+2. **What "separated" means to the kernel.** The bearer dropping, the
+   ceremony finalizing, or something the person does. The spec will need a
+   definition the code can test, and the Bluetooth link does drop and
+   return during a ceremony today.
+3. **The authenticity of a prekey that crossed the local bearer.** A
+   public key needs no confidentiality, but a substituted ML-KEM key would
+   quietly downgrade the later session. The carriages are anchored to the
+   ceremony id and the identity material was pinned from the first code;
+   **whether a carriage is signed under that identity, or only anchored,
+   is the thing to verify** before the prekey rides it. If anchored alone,
+   the handover wants a signature, which the pinned material can check.
+
+The author's reason stands on its own and nothing here adds to it; the
+three above are what the drafting will have to ask.
+
+## Reviewer2, sixth round (2026-10-05): verification
+
+**Nine checkable claims, nine confirmed.** Every one was checked against
+the artefact rather than reasoned about, and the four that are about this
+assistant's own recent work are listed first, because those are the ones
+that misled the author.
+
+| Claim | Verified against | Verdict |
+|---|---|---|
+| The plan misremembers the capture counts | `ec66a3b-third-1`'s per-phone logs: 5 and **4** | **Right.** This run's figures had been copied into the comparison column |
+| `QrCamera.kt` still says NOT RUN ON HARDWARE | the file; false since `bc08f98` | **Right**, and the same claim stood in three more files |
+| `rhtn diag merge` mis-orders every event carrying a duration | a raw line carries `"ms"` twice, at offsets 1 and 7 | **Right**, and the cause is below the merge |
+| `run.json` records `"dirty": true` | both runs | **Right** |
+| Every checklist has zero marked boxes | every `checklist.md` under `runs/` | **Right** |
+| §7.9 names no kind 5 or 6, and the debt is logged closed | §7.9 names only kind 11 while defining `ArchiveRequest` and `ArchiveReply` | **Right**, and the row is corrected above |
+| The Scope arm is short four checks | `codec/src/schema.rs:1714-1734` against `wire-format.md:894` | **Right**, see below |
+| `kdoccheck.py` is wired into nothing | `crates/check.sh` runs three checkers at 1d, not four | **Right** |
+| `5499954` edited `functional_tests.md` without re-pinning | the pin landed at `1298966` | **Right**; found independently while committing |
+
+### The stale-header sweep: one quoted instance, four actual
+
+The round named `QrCamera.kt`. A search found **`FaceCamera.kt`,
+`NfcCeremonyService.kt` and `BleBearer.kt` carrying the same false
+claim** — `CLAUDE.md`'s first failure mode, met in the review loop rather
+than avoided. All four now say what the field runs established, and two of
+the four say something the old text could not:
+
+- `FaceCamera.kt`: the sensor and prompts are exercised; **recognition
+  never has been**, because the reference engine recognises nobody
+  (design §22.2), so no face has defeated a liveness check here because
+  nothing here has checked liveness.
+- `BleBearer.kt`: the header predicted three radio failures. **One
+  happened** — concurrent writes returning `ERROR_GATT_WRITE_REQUEST_BUSY`
+  — and the other two, an MTU smaller than negotiated and a peer leaving
+  mid-carriage, are still untested.
+
+**Why a sweep missed them.** Phase 1 counted whether a declaration had a
+comment and never asked whether a comment was true. The `missing_docs`
+ratchet cannot ask that, and neither can `kdoccheck.py`. **A header that
+outlives its subject is worse than none**, and nothing in the gate will
+ever catch one.
+
+### The merge bug is in the emitter, not the merge
+
+A raw event carrying a duration is `{"ms":65032, ..., "ms":10851}` — the
+timestamp and the duration under **the same key**. JSON permits that and
+every consumer picks one arbitrarily; `rhtn diag merge` picks the last, so
+`cer.capture` sorts at 10851 and lands before `cer.begin`. In
+`1c2d4f9-phase1-retest-2`'s `summary.txt` the order reads capture,
+id_fixed, begin, propose, finalize, capture_key — three steps out of
+place.
+
+**The raw logs are correct and the conclusions drawn from them stand**:
+this session's timeline and the 40.3 s / 43.5 s figures came from the
+per-phone files, not the merge. **But the scrambled artefact was read in
+this session without the scramble being noticed**, which is the reviewer's
+point and a fair one: a tool whose output is trusted is a tool whose
+output must be read.
+
+The fix is at the emitter — a duration is not the event's time and wants
+its own field name — and the merge should prefer the **first** `"ms"` so
+that the logs already on disk read correctly. Both are diagnostics
+framework, outside the spec [author: logging is not the spec's business].
+
+### The Scope arm, now with the line numbers the author asked for
+
+`wire-format.md:894` admits bare `0`, `4`, `5`; `[tag, n]` for `1` and
+`2`; `[6, [keyhash]]` for the list; and `3` retired, which "a decoder
+meeting tag 3 rejects". `schema.rs:1714-1734` rejects a bare `3` and the
+list's bound and order, and does not check:
+
+1. a bare uint is one of `0`, `4`, `5` — `Item::Uint(_) => Ok(())` admits `7`, `99`;
+2. the `[uint, uint]` form carries tag `1` or `2`;
+3. the `[uint, [keyhash]]` form carries tag `6`;
+4. tag `3` in either array form, which the bare arm alone rejects.
+
+Four matches. **Not applied**: the codec is where a wrong acceptance
+becomes a divergence between implementations, and the corpus wants
+negative fixtures for each, which is a vector-generation change and the
+author's to sequence.
+
+### What is corrected here, and what waits
+
+**Corrected now**, all of them false statements rather than design
+matters: the plan's capture row, the four module headers, and the §7.9
+tracking row above.
+
+**Waiting on the author**, because each needs a ruling or a sequencing
+decision and none is safe to fold into a sweep: the nodeless-ceremony
+ruling's propagation and its collision with committed NET-022 and §14.2's
+"the inventory is complete"; the emitter's duplicate `"ms"`; the four
+Scope matches with their fixtures; §7.9's kinds 5 and 6 and the bare
+candidate kind 3; wiring `kdoccheck.py` into stage 1d; the blank
+checklists; and the witnessed ceremony on hardware, which the round calls
+the highest-value test never run and which the bench cannot supply without
+a third device or a hosted-verifier adaptor.
+
+## The property the conversation's transport must preserve (2026-10-05)
+
+**[ruled, author, 2026-10-05]** Three rulings, which together replace the
+"nodeless ceremony" framing with a sharper one. The framing was wrong:
+the question is never whether a node is involved, it is **whose**.
+
+1. **A witness's or a verifier's physical presence is not accounted for.**
+   The author's words: *"the physical presence of a witness or verifier is
+   not accounted for in the PoP protocol. Either one is just an unusually
+   accurate location estimator."* So co-presence buys a witness nothing,
+   and "both parties present" means the two participants alone.
+2. **There is no node between the participants.** A witness or verifier is
+   reached via their locator, so **their** immediate upstream node is
+   implicated, which may be their own infra node. That is acceptable: the
+   author's words, *"The witness' patron node is as randomly selected as
+   the witness themselves, so introducing them to the message stream does
+   not degrade the suppression resistance of the ceremony,"* and the
+   adversarial selection of verifiers *"extends it's protection across the
+   set of available verifier's patrons."*
+3. **The property, stated exactly.** *"What is important is that neither of
+   the participant's patron nodes is involved... The vulnerability would
+   arise if the participants needed their own patron nodes to cooperate
+   before they could participate in a meeting."*
+
+### This is not a gap. It is a stated design claim the code does not meet.
+
+The design does not merely permit a nodeless formation ceremony, it
+**rests on one**. Design §13.2's passage on the eclipsing patron: a
+witnessless, verifierless ceremony is valid as a formation record, so a
+victim *"can therefore memorialise a meeting with anyone they physically
+encounter, and the eclipsing patron cannot suppress it. The false social
+universe is permeable wherever the victim meets a human being."* And the
+compromised-node analysis: *"§6.4's ungated proof of presence means it
+cannot suppress an honest ceremony either."*
+
+**The field runs falsify both as implemented.** In
+`1c2d4f9-phase1-retest-1` the ceremony stopped at `converse_open` with *"no
+serving node is attached"*, after every local step had completed. An
+eclipsing patron does not need to refuse anything to suppress that
+ceremony; it needs only to be absent. The permeability the design relies
+on does not exist in the code.
+
+**The two cases, and why they are one defect.**
+
+| Ceremony | What it legitimately needs | What the code requires |
+|---|---|---|
+| Formation, witnessless and verifierless | nothing beyond the two devices | the participant's own serving node |
+| Witnessed | the witnesses' and verifiers' own upstream nodes | the participant's own serving node relays everything |
+
+Both are the same cause: the conversation is bound to the one session the
+client holds. `ffi/src/net.rs` keeps `live: Option<Live>` and
+`current: Option<..>`, so **a client holds at most one session**, and
+`courier()` refuses every conversation step without it. Reaching a witness
+through that witness's own node is not expressible today.
+
+### Three questions withdrawn, all of them the drafter's own making
+
+- **"What does separated mean to the kernel"** was withdrawn 2026-10-05.
+  The word appears in no document. It was the drafter's phrasing in an
+  option the author approved, and was then escalated into a question for
+  the author about the drafter's own coinage. **No such predicate is
+  needed**: kinds 9 to 18 exist only inside a ceremony, nothing in that set
+  has work after the record finalizes, and what legitimately arrives later
+  is a late response (kind 2) or a key grant (kind 1) on the ordinary
+  payload path under §7.4.3's patience. Which transport a message takes is
+  a property of the recipient, never of a phase.
+- **"Whether the locally carried prekeys are signed"** was the wrong
+  remedy, superseded by the ruling below. Confidentiality and exclusivity
+  on the channel give the share what it needs; a per-carriage signature
+  would have added authentication the channel gets from its key.
+- **"Whether the invitation's framing should be specified"** was withdrawn
+  2026-10-05. **[author, 2026-10-05]**: *"A peering or adoption only
+  becomes a topology class event once it concludes. A refused offer of
+  either does not need to propagate or be memorialized in any way."* The
+  checkable form: an adoption concludes through a separate signed adoption
+  body and a specified topology-class record, so a kind that fails to
+  cross or is misread degrades to a plain meeting, and the shell already
+  falls to `NONE` on an unrecognised byte. The offer has no protocol
+  status because it cannot have a protocol effect. The interoperability
+  half was equally weak: the local interface is shell-owned by design, as
+  `BleBearer.kt` says of its own service identifiers, and §14.3 specifies
+  the anchored objects that cross the interface rather than the interface.
+
+**Also corrected: there are two optical stages, and §14.3.1 describes only
+the second.** The drafter quoted §14.3.1's *"neither is secret"* against
+the author's recollection of what the first stage carries. The author was
+right. The shell's invitation code carries a version byte, the transaction
+kind, an ask-backup flag and the 32-byte identifier, and
+`Kernel.kt`'s own comment says it *"is not a §14.3 object and the shell
+owns it"*. What the author's recollection did not include is a local
+address: the bearer is found by service identifier and discovery, and the
+direct path's candidates cross later over the bearer, anchored.
+
+### A second ruling, and the one conflict it opens (2026-10-05)
+
+**[ruled, author, 2026-10-05]** *"The participant's node should not relay
+anything. A light client node does not need it's patron or infra node to
+address a distant node for which it holds a locator."*
+
+**This already matches `network-design.md` §14.2's table.** Its
+leaf-to-leaf row gives the **Endpoint** as *"The recipient node"*, so the
+sender addresses the recipient's node and its own is not in the path. The
+leaf-to-patron row says the patron is *"the addressed party, not a
+relay"*. There is no row for addressing **someone else's** node, which is
+the case the ruling names and the case a witness leg is.
+
+**§12.6.3 was read as conflicting with this. It does not, and the
+misreading was the drafter's**: "relays" was taken for "routes".
+
+**[ruled, author, 2026-10-05]**, which resolves it by direction:
+*"The closest infra tier relays inbound connections and queues messages
+while the light client is unavailable. The light client making an outbound
+connection does so directly if possible, using it's nearest infra node as
+a TURN relay only if it sits behind a proxy it needs to traverse."*
+
+So §12.6.3 stands as written, and its three rows read:
+
+| Row | What it is, under the ruling |
+|---|---|
+| **Direct** | the outbound default |
+| **Relayed** | the sender needed traversal and the recipient is reached inbound, so both nodes appear. The sender's node is a **traversal aid, not a router** |
+| **Queued** | the recipient's node holding inbound while they are away (§14.1.4) |
+
+Its opening sentence, *"Only the infra tier closest to a light-client
+endpoint relays that client's traffic"*, is about that client's own
+traffic in either direction, and is consistent throughout.
+
+**What carries the suppression property is the distinction the text does
+not quite make explicit**: in the Relayed row the sender's node supplies
+traversal rather than permission. One sentence saying so would make the
+property legible to a reader who, like this drafter, reads the row as
+routing. **Offered, not owed.**
+
+**And the property holds where it matters.** The eclipse escape hatch of
+design §13.2 is the formation ceremony, which is witnessless and
+verifierless and now needs no outbound connection at all. So a hostile
+nearest node cannot withhold traversal from it, because nothing is being
+traversed. A witnessed ceremony behind symmetric NAT does depend on a
+TURN relay, but a witnessed ceremony needs prior records, which the
+eclipsed party by definition does not have.
+
+### What the code has, and what it lacks
+
+Two facts, both checked:
+
+- **A client holds exactly one session.** `ffi/src/net.rs:488`: `attach`
+  calls `self.detach()` as its first statement. Attaching to a witness's
+  node would therefore drop the serving node. Nothing expresses "a session
+  to this node as well".
+- **The addresses for a direct dial already exist and nothing sends over
+  them.** `Client::reachable()` returns `ReachableNode { node, addresses }`
+  for every infra node the horizon can resolve. Its only consumer is the
+  `reachable` command in the participant driver, which prints it. The
+  conversation uses `courier.send`, which relays through the one attached
+  session.
+
+So the ruling's cost is not the bearer and not the prekeys. It is that
+**the client's transport is built around one attached node**, and
+addressing a distant node for which a locator is held has no path at all.
+
+### Propagation surface, once ruled
+
+`functional_tests.md` NET-022, which says in committed text that the
+conversation *"crosses no local interface"* and is reversed for the
+participant leg; NET-016, if the carriages gain signatures; a new row for
+the formation ceremony with no node reachable. `wire-format.md` §14.2's
+*"the inventory is complete"* and §14.3.2 for the prekey object; §7.10.1
+for which leg each kind takes. `network-design.md` §7.1, and §13.2 and
+§6.4 to confirm the suppression claims now hold rather than being
+restated. The codec and corpus for the new local object. The client's
+single-session assumption, which is the largest of these.
+
+## The local session is encrypted (2026-10-05)
+
+**[ruled, author, 2026-10-05]** *"Encrypt the carriages under a key
+derived from the optical exchange."* And, on the capture key: *"Yes,
+encrypt the capture key handover too as a consequence of the local session
+encryption, do not be ambiguous in such a way that this could be
+interpreted as a distinct, nested encryption."*
+
+### One encryption, at the session layer
+
+**The drafting must not read as per-object encryption.** The local session
+is encrypted; every object it carries is protected because it rides that
+session. The `CaptureKeyHandover` of §14.3.2 is unchanged as an object:
+its bytes, its anchor and its checks stay exactly as specified, and
+nothing is wrapped twice. A sentence saying "the capture key handover is
+encrypted" would invite a second layer and is the wording to avoid. The
+same holds for the prekey object this ruling makes possible, and for the
+intent, the proximity outcomes and the candidates.
+
+### What keys it, and why that material is secret
+
+The optical exchange's **two 16-byte contributions**. They are the only
+material in either optical stage that is not public by nature: the key
+material is a public key, and the ceremony-id is `SHA-256` over
+`rhtn/1:ceremony` and both contributions in ascending participant-keyhash
+order, so publishing the id does not reveal them. Thirty-two bytes, seen
+by nobody outside screen-reading range.
+
+**The order of operations already works.** The contributions cross
+optically first. The intent, which echoes a contribution, crosses the
+bearer second. A bearer keyed before the intent therefore protects the
+echo rather than leaking what it was derived from.
+
+**Distinct derivation labels are required** so the same two contributions
+do not key a secret and name a public identifier under one construction.
+`rhtn/1:ceremony` exists; the session key wants its own label beside it.
+
+### What it buys, stated so nobody later overclaims it
+
+It closes the gap between **radio range and optical range**. Bluetooth
+reaches tens of metres and the service identifier is a constant in this
+repository, so today any radio in that volume reads every carriage. After
+the change an adversary must see both screens.
+
+**It does not provide cryptographic man-in-the-middle resistance, and
+cannot.** A co-present adversary who photographs both codes holds the key.
+§14.3.1 rests the whole step on physical range and this does not change
+that; it makes the cryptographic boundary coincide with the physical one
+instead of sitting far outside it.
+
+### What the bearer needs, which no earlier item captured
+
+The local channel is today the only transport in the system with no
+cryptographic protection. Checked 2026-10-05: the characteristics are
+declared `PERMISSION_WRITE` and `PERMISSION_READ`, not the `_ENCRYPTED`
+variants the platform offers; there is no bonding or pairing anywhere in
+`BleBearer.kt`; the service identifier is a published constant; and the
+server holds `peer` as one mutable field that a later connection
+overwrites rather than being refused. So the channel is neither
+confidential nor exclusive, and the ruling supplies both from the kernel
+rather than from the platform, which keeps the bearer dumb.
+
+### Amendments owed, because the present text denies this
+
+| Text | Why it moves |
+|---|---|
+| `wire-format.md` §14.3.1, *"and neither is secret"* | a contribution becomes key material |
+| `wire-format.md` §14.3.2, *"No part of that resistance is cryptographic"* | part of it becomes cryptographic |
+| `functional_tests.md` NET-016, *"every anchored value is public"* and *"test the check, not authentication"* | both stop describing a carriage |
+| `network-design.md` §7.5.2.6 | the capture key's confidentiality stops resting on co-presence alone, deliberately and not by inheritance |
+| `wire-format.md` §14.3.2 | the session's key derivation and its label, and the prekey object |
+
+NET-022 and §14.2's *"the inventory is complete"* are owed by the
+conversation ruling above rather than by this one. §12.6.3 and §14.2's
+table are untouched by either.

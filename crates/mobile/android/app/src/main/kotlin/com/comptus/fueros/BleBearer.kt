@@ -49,13 +49,17 @@ import timber.log.Timber
  * and connects. Who does which is the shell's choice and carries no
  * meaning — the initiator of the ceremony is not necessarily the advertiser.
  *
- * **NOT RUN ON HARDWARE.** It compiles against the platform's API and its
- * framing is tested in `BearerTest` against a link that reorders, repeats
- * and drops. Two radios have never run it, and the things that will bite
- * are the ones radios bite with: an MTU smaller than negotiated, a write
- * that reports success and does not arrive, a peer that disappears
- * mid-carriage. Each of those is a message that does not assemble, which
- * `Bearer.Reassembly` answers with nothing rather than with wrong bytes.
+ * **It has run on hardware, and a radio did bite.** Two radios carried
+ * every carriage phase — intent, proximity, capture key — in each field
+ * ceremony from `bc08f98`. The bite was the one this header predicted:
+ * concurrent writes returned status 201,
+ * `ERROR_GATT_WRITE_REQUEST_BUSY`, which is a write that reports failure
+ * rather than one that reports success and does not arrive, so
+ * [writeDone] now serialises writes on their acknowledgements. The other
+ * two predictions are still untested: an MTU smaller than negotiated,
+ * and a peer that disappears mid-carriage. Each is a message that does
+ * not assemble, which `Bearer.Reassembly` answers with nothing rather
+ * than with wrong bytes.
  *
  * **The link is ready when the subscription is**, not when the connection
  * is. A notify characteristic carries nothing until the client has written

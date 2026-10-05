@@ -13,7 +13,11 @@ import android.os.Bundle
  * exists whenever the app does, and its answers must not say more than a
  * ceremony's existence allows.
  *
- * **NOT RUN ON HARDWARE**, like every radio half in this shell.
+ * **It has run on hardware.** The tap passed on both phones in every
+ * field ceremony from `bc08f98`, and the near-field channel was the
+ * strongest each ceremony reported. What the runs have not covered is a
+ * reader that is not this app, or a tap during another ceremony's
+ * window.
  */
 class NfcCeremonyService : HostApduService() {
 

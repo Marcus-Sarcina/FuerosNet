@@ -32,11 +32,23 @@ import timber.log.Timber
  * `OpticalContribution`, a `TranscriptConfirm` or nothing of the sort is
  * the kernel's to say, and it says so by refusing them.
  *
- * **NOT RUN ON HARDWARE.** It compiles, and the payload path it feeds is
- * round-tripped in `OpticalTest`; the camera half has never seen a lens.
- * What a lens adds is blur, perspective and exposure — the reasons a scan
- * fails rather than returns the wrong bytes, since a corrupted symbol
- * fails its own error correction before ZXing returns anything.
+ * **What a lens added, which is why this file looks as it does.** The
+ * camera half ran on two Galaxy S21+ phones from `af72cc1` onward, and
+ * every guard here came out of that rather than out of a test: the first
+ * code carried the whole 2 KB object and could not be read at arm's
+ * length at all, which is what drove the kernel to cross it in 256-byte
+ * parts; a second open while a read was live threw
+ * `CameraAccessException -38`, so a read holds the device once; a session
+ * that stalled never recovered, so a watchdog restarts it; and the frame
+ * size is chosen per camera because the default was too small to resolve
+ * a dense symbol. A scan still fails rather than returns the wrong bytes,
+ * since a corrupted symbol fails its own error correction before ZXing
+ * returns anything.
+ *
+ * The header said **NOT RUN ON HARDWARE** until 2026-10-05, which had
+ * been false since `bc08f98`. A module header that outlives its subject
+ * is worse than none: the phase 1 sweep documented this file and did not
+ * read what was already in it (Reviewer2, sixth round).
  */
 class QrCamera(private val context: Context) {
 
