@@ -14470,3 +14470,22 @@ rather than from the platform, which keeps the bearer dumb.
 NET-022 and §14.2's *"the inventory is complete"* are owed by the
 conversation ruling above rather than by this one. §12.6.3 and §14.2's
 table are untouched by either.
+
+## Two process errors around the gate, 2026-10-05
+
+Recorded because both cost time and both are repeatable.
+
+**Stopping a background gate leaves the gate running.** `TaskStop` kills
+the task wrapper; `check.sh` and its `cargo` child carry on as orphans
+outside the sandbox, where they cannot be signalled. The second gate then
+started alongside the first, which is the contention that produced the
+`dec_02` wall-clock failure recorded above. **Check `pgrep -af check.sh`
+after stopping a gate task**, and wait for the orphan rather than starting
+another run beside it.
+
+**`pkill -f PATTERN` matches the shell that runs it.** `pkill -f "cargo
+test"` was issued from a command line containing the string `cargo test`,
+so it killed its own shell and returned 144 before the real target was
+reached. A `while read p` loop over `pgrep -f "check\.sh"` did the same one
+layer down. **Kill by explicit pid, never by a pattern that appears in the
+killing command.**

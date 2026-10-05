@@ -14,8 +14,11 @@ begin
 
 // Function signature and definition of the equational theory E
 
-functions: fst/1, h/1, pair/2, snd/1
-equations: fst(<x.1, x.2>) = x.1, snd(<x.1, x.2>) = x.2
+functions: fst/1, h/1, pair/2, sdec/2, senc/2, snd/1
+equations:
+    fst(<x.1, x.2>) = x.1,
+    sdec(senc(x.1, x.2), x.2) = x.1,
+    snd(<x.1, x.2>) = x.2
 
 restriction Distinct:
   "∀ a b #i. (Distinct( a, b ) @ #i) ⇒ (¬(a = b))"
@@ -38,18 +41,21 @@ restriction Equality:
 rule (modulo E) Initiator_Shows_Contribution:
    [ Fr( ~ca ) ]
   --[ Showed( $A, $B, ~ca ), Distinct( $A, $B ) ]->
-   [
-   !Optical( $A, $B, 'contribution', ~ca ), Out( ~ca ), Init1( $A, $B, ~ca )
-   ]
+   [ !Optical( $A, $B, 'contribution', ~ca ), Init1( $A, $B, ~ca ) ]
 
   /* has exactly the trivial AC variant */
 
 rule (modulo E) Responder_Shows_Contribution:
    [ Fr( ~cb ) ]
   --[ Showed( $B, $A, ~cb ), Distinct( $B, $A ) ]->
-   [
-   !Optical( $B, $A, 'contribution', ~cb ), Out( ~cb ), Resp1( $B, $A, ~cb )
-   ]
+   [ !Optical( $B, $A, 'contribution', ~cb ), Resp1( $B, $A, ~cb ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Adversary_Reads_A_Screen:
+   [ !Optical( $A, $B, kind, value ) ]
+  --[ Observed( $A, $B, kind, value ) ]->
+   [ Out( value ) ]
 
   /* has exactly the trivial AC variant */
 
@@ -58,7 +64,6 @@ rule (modulo E) Initiator_Confirms:
   --[ Derived( $A, $B, h(<'rhtn/1:ceremony', ca, cb>) ) ]->
    [
    !Optical( $A, $B, 'confirm', h(<'rhtn/1:ceremony', ca, cb>) ),
-   Out( h(<'rhtn/1:ceremony', ca, cb>) ),
    Init2( $A, $B, ca, cb, h(<'rhtn/1:ceremony', ca, cb>) )
    ]
 
@@ -69,7 +74,6 @@ rule (modulo E) Responder_Confirms:
   --[ Derived( $B, $A, h(<'rhtn/1:ceremony', ca, cb>) ) ]->
    [
    !Optical( $B, $A, 'confirm', h(<'rhtn/1:ceremony', ca, cb>) ),
-   Out( h(<'rhtn/1:ceremony', ca, cb>) ),
    Resp2( $B, $A, cb, ca, h(<'rhtn/1:ceremony', ca, cb>) )
    ]
 
@@ -92,13 +96,20 @@ rule (modulo E) Responder_Anchors:
 rule (modulo E) Bearer_Send:
    [ AnchorA( $A, $B, ca, cb, cid ), Fr( ~payload ) ]
   --[ Sent( $A, $B, cid, ~payload ) ]->
-   [ Out( <'anchored', cid, ca, ~payload> ) ]
+   [
+   Out( senc(<'anchored', cid, ca, ~payload>,
+             h(<'rhtn/1:ceremony-session', ca, cb>))
+   )
+   ]
 
   /* has exactly the trivial AC variant */
 
 rule (modulo E) Bearer_Take:
    [
-   AnchorB( $B, $A, cb, ca, cid ), In( <'anchored', anchor, echo, payload> )
+   AnchorB( $B, $A, cb, ca, cid ),
+   In( senc(<'anchored', anchor, echo, payload>,
+            h(<'rhtn/1:ceremony-session', ca, cb>))
+   )
    ]
   --[
   Eq( anchor, cid ), Eq( echo, ca ), Accepted( $B, $A, anchor, payload )
@@ -123,15 +134,12 @@ solve( AnchorA( $A, $B, ca, cb, cid ) ▶₀ #s )
   solve( AnchorB( $B, $A, cb, ca, h(<'rhtn/1:ceremony', ~ca.1, ~cb.1>)
          ) ▶₀ #i )
     case Responder_Anchors
-    solve( !KU( ~payload ) @ #vk.6 )
+    solve( !KU( senc(<'anchored', h(<'rhtn/1:ceremony', ~ca, ~cb>), ~ca, 
+                      ~payload>,
+                     h(<'rhtn/1:ceremony-session', ~ca, ~cb>))
+           ) @ #vk )
       case Bearer_Send
-      solve( !KU( ~ca ) @ #vk.6 )
-        case Bearer_Send
-        solve( !KU( h(<'rhtn/1:ceremony', ~ca, ~cb>) ) @ #vk.6 )
-          case Bearer_Send
-          SOLVED // trace found
-        qed
-      qed
+      SOLVED // trace found
     qed
   qed
 qed
@@ -178,11 +186,22 @@ guarded formula characterizing all satisfying traces:
 simplify
 solve( AnchorB( $B, $A, cb, ca, cid ) ▶₀ #i )
   case Responder_Anchors
-  solve( !KU( ~ca ) @ #vk.5 )
-    case Bearer_Send
-    solve( !KU( h(<'rhtn/1:ceremony', ~ca, ~cb>) ) @ #vk.4 )
-      case Bearer_Send
-      SOLVED // trace found
+  solve( !KU( senc(<'anchored', h(<'rhtn/1:ceremony', ~ca, ~cb>), ~ca, p>,
+                   h(<'rhtn/1:ceremony-session', ~ca, ~cb>))
+         ) @ #vk )
+    case c_senc
+    solve( !KU( ~ca ) @ #vk.7 )
+      case Adversary_Reads_A_Screen
+      solve( !KU( h(<'rhtn/1:ceremony-session', ~ca, ~cb>) ) @ #vk.3 )
+        case c_h
+        solve( !KU( ~cb ) @ #vk.12 )
+          case Adversary_Reads_A_Screen
+          solve( !KU( h(<'rhtn/1:ceremony', ~ca, ~cb>) ) @ #vk.10 )
+            case Adversary_Reads_A_Screen_case_1
+            SOLVED // trace found
+          qed
+        qed
+      qed
     qed
   qed
 qed
@@ -204,14 +223,135 @@ solve( AnchorA( $A, $B, ca, cb, cid1 ) ▶₀ #s )
   case Initiator_Anchors
   solve( AnchorB( $B, $A, cb, ca, cid2 ) ▶₀ #i )
     case Responder_Anchors
-    solve( !KU( ~payload ) @ #vk.6 )
-      case Bearer_Send
-      solve( !KU( ~ca ) @ #vk.6 )
-        case Bearer_Send
-        solve( !KU( h(<'rhtn/1:ceremony', ~ca, ~cb>) ) @ #vk.6 )
+    solve( !KU( senc(<'anchored', h(<'rhtn/1:ceremony', ~ca, ~cb>), ~ca, 
+                      ~payload>,
+                     h(<'rhtn/1:ceremony-session', ~ca, ~cb>))
+           ) @ #vk )
+      case c_senc
+      solve( !KU( ~ca ) @ #vk.7 )
+        case Adversary_Reads_A_Screen
+        solve( !KU( ~payload ) @ #vk.8 )
           case Bearer_Send
-          SOLVED // trace found
+          solve( !KU( h(<'rhtn/1:ceremony-session', ~ca, ~cb>) ) @ #vk.5 )
+            case c_h
+            solve( !KU( ~cb ) @ #vk.13 )
+              case Adversary_Reads_A_Screen
+              solve( !KU( h(<'rhtn/1:ceremony', ~ca, ~cb>) ) @ #vk.11 )
+                case Adversary_Reads_A_Screen_case_1
+                solve( !KU( h(<'rhtn/1:ceremony-session', ~ca.1, ~cb.1>) ) @ #vk.12 )
+                  case c_h
+                  solve( !KU( ~ca.1 ) @ #vk.16 )
+                    case Adversary_Reads_A_Screen
+                    solve( !KU( ~cb.1 ) @ #vk.17 )
+                      case Adversary_Reads_A_Screen
+                      SOLVED // trace found
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
         qed
+      qed
+    qed
+  qed
+qed
+
+lemma a_contribution_is_secret_unless_a_screen_was_read [reuse]:
+  all-traces
+  "∀ A B c #s #k.
+    ((Showed( A, B, c ) @ #s) ∧ (K( c ) @ #k)) ⇒
+    (∃ X Y kind #o. Observed( X, Y, kind, c ) @ #o)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ A B c #s #k.
+  (Showed( A, B, c ) @ #s) ∧ (K( c ) @ #k)
+ ∧
+  ∀ X Y kind #o. (Observed( X, Y, kind, c ) @ #o) ⇒ ⊥"
+*/
+simplify
+solve( Showed( A, B, c ) @ #s )
+  case Initiator_Shows_Contribution
+  solve( !KU( ~ca ) @ #vk )
+    case Adversary_Reads_A_Screen
+    by contradiction /* from formulas */
+  next
+    case Bearer_Send
+    solve( !KU( h(<'rhtn/1:ceremony-session', ~ca, ~cb>) ) @ #vk.1 )
+      case c_h
+      by contradiction /* cyclic */
+    qed
+  qed
+next
+  case Responder_Shows_Contribution
+  solve( !KU( ~cb ) @ #vk )
+    case Adversary_Reads_A_Screen
+    by contradiction /* from formulas */
+  qed
+qed
+
+lemma a_payload_is_secret_unless_a_screen_was_read:
+  all-traces
+  "∀ A B cid p #s #k.
+    ((Sent( A, B, cid, p ) @ #s) ∧ (K( p ) @ #k)) ⇒
+    (∃ X Y kind v #o. Observed( X, Y, kind, v ) @ #o)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ A B cid p #s #k.
+  (Sent( A, B, cid, p ) @ #s) ∧ (K( p ) @ #k)
+ ∧
+  ∀ X Y kind v #o. (Observed( X, Y, kind, v ) @ #o) ⇒ ⊥"
+*/
+simplify
+solve( AnchorA( $A, $B, ca, cb, cid ) ▶₀ #s )
+  case Initiator_Anchors
+  solve( !KU( ~payload ) @ #vk )
+    case Bearer_Send
+    solve( !KU( h(<'rhtn/1:ceremony-session', ~ca, ~cb>) ) @ #vk.1 )
+      case c_h
+      solve( !KU( ~ca ) @ #vk.5 )
+        case Adversary_Reads_A_Screen
+        by contradiction /* from formulas */
+      next
+        case Bearer_Send
+        by contradiction /* cyclic */
+      qed
+    qed
+  qed
+qed
+
+lemma a_payload_accepted_with_no_screen_read_was_sent:
+  all-traces
+  "∀ B A cid p #i.
+    ((Accepted( B, A, cid, p ) @ #i) ∧
+     (¬(∃ X Y kind v #o. Observed( X, Y, kind, v ) @ #o))) ⇒
+    (∃ #s. Sent( A, B, cid, p ) @ #s)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ B A cid p #i.
+  (Accepted( B, A, cid, p ) @ #i)
+ ∧
+  (∀ X Y kind v #o. (Observed( X, Y, kind, v ) @ #o) ⇒ ⊥) ∧
+  (∀ #s. (Sent( A, B, cid, p ) @ #s) ⇒ ⊥)"
+*/
+simplify
+solve( AnchorB( $B, $A, cb, ca, cid ) ▶₀ #i )
+  case Responder_Anchors
+  solve( !KU( senc(<'anchored', h(<'rhtn/1:ceremony', ~ca, ~cb>), ~ca, p>,
+                   h(<'rhtn/1:ceremony-session', ~ca, ~cb>))
+         ) @ #vk )
+    case Bearer_Send
+    by contradiction /* from formulas */
+  next
+    case c_senc
+    solve( !KU( ~ca ) @ #vk.7 )
+      case Adversary_Reads_A_Screen
+      by contradiction /* from formulas */
+    next
+      case Bearer_Send
+      solve( !KU( h(<'rhtn/1:ceremony-session', ~ca, ~cb>) ) @ #vk.3 )
+        case c_h
+        by contradiction /* cyclic */
       qed
     qed
   qed
@@ -234,11 +374,14 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/local/exchange.spthy
 
-  processing time: 0.97s
+  processing time: 1.76s
   
-  exchange_is_executable (exists-trace): verified (7 steps)
+  exchange_is_executable (exists-trace): verified (5 steps)
   an_accepted_anchor_was_derived_by_both (all-traces): verified (6 steps)
-  the_anchor_does_not_authenticate_the_sender (exists-trace): verified (5 steps)
-  a_payload_is_re_anchorable_into_another_ceremony (exists-trace): verified (7 steps)
+  the_anchor_does_not_authenticate_the_sender (exists-trace): verified (8 steps)
+  a_payload_is_re_anchorable_into_another_ceremony (exists-trace): verified (13 steps)
+  a_contribution_is_secret_unless_a_screen_was_read (all-traces): verified (8 steps)
+  a_payload_is_secret_unless_a_screen_was_read (all-traces): verified (7 steps)
+  a_payload_accepted_with_no_screen_read_was_sent (all-traces): verified (8 steps)
 
 ==============================================================================

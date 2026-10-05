@@ -12265,6 +12265,49 @@ correction M, and shows them as large as the screen allows. Corpus 324 →
 325; functional tests 490 → 491; catalogue 479 → 480.
 
 
+### 2026-10-05 (the conversation's transport, and the local session encrypted)
+
+Four rulings, and the first replaces a framing rather than filling a gap.
+The question was never whether a node takes part in a ceremony but whose:
+kinds 9 to 18 now travel **by who the recipient is**, a participant's leg
+to the co-present counterparty over the local interface and a witness's or
+verifier's leg over the end-to-end path through that party's own locator and
+upstream node. **Neither participant's own patron is required for a
+meeting.** A witness's patron is as randomly selected as the witness, and a
+verifier's is covered by the selection that chose the verifier, so neither
+costs the ceremony anything; needing your own would cost it §13.2, whose
+escape from a false social universe is a formation record made with anyone
+you physically encounter. Field run `1c2d4f9-phase1-retest-1` showed the
+code requiring the participant's own serving node and stopping without it,
+which an eclipsing patron would suppress by being absent.
+
+The local session is now encrypted, once, under the two optical
+contributions beneath a label of their own, with an AEAD. One encryption at
+the session layer and nothing nested: every object the bearer carries is a
+plaintext inside it, the `CaptureKeyHandover` among them, whose
+confidentiality in flight had rested on co-presence alone. So the two
+contributions stopped being public, which §14.3.1 had said they were and
+§14.3.2 had turned into "no part of that resistance is cryptographic". The
+cryptographic boundary now coincides with the physical one instead of
+sitting a radio's range outside it. A `PrekeyHandover` rides the session,
+carrying the bundle in the bytes §7.8 already publishes, so a co-present
+pair can open an end-to-end channel afterwards with no node's help.
+
+`models/tamarin/local/exchange.spthy` gained the locality it needed to say
+any of this: an adversary learns an optical value only by firing a rule that
+records the act, so a lemma can ask whether it did. Seven lemmas verified,
+the four old ones unchanged. The two new halves are that nobody who did not
+look can read a carriage and nobody who did not look can inject one, which
+together are the channel's exclusivity, derived from the key rather than
+assumed. A measured mutation corrected a claim this drafter had reasoned
+rather than run: leaking one contribution falsifies nothing but the
+contribution's own secrecy, because the key needs both, so the session
+survives one readable screen.
+
+Functional tests 492 → 495: NET-016 and NET-022 amended, NET-024 to NET-026
+added for the session, the prekey handover and the nodeless formation
+ceremony.
+
 ### 2026-10-04 (the second and third field runs)
 
 Two phones now run the ceremony from the invite to the proposal. The

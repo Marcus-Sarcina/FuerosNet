@@ -14,8 +14,11 @@ begin
 
 // Function signature and definition of the equational theory E
 
-functions: fst/1, h/1, pair/2, snd/1
-equations: fst(<x.1, x.2>) = x.1, snd(<x.1, x.2>) = x.2
+functions: fst/1, h/1, pair/2, sdec/2, senc/2, snd/1
+equations:
+    fst(<x.1, x.2>) = x.1,
+    sdec(senc(x.1, x.2), x.2) = x.1,
+    snd(<x.1, x.2>) = x.2
 
 restriction Distinct:
   "∀ a b #i. (Distinct( a, b ) @ #i) ⇒ (¬(a = b))"
@@ -38,18 +41,21 @@ restriction Equality:
 rule (modulo E) Initiator_Shows_Contribution:
    [ Fr( ~ca ) ]
   --[ Showed( $A, $B, ~ca ), Distinct( $A, $B ) ]->
-   [
-   !Optical( $A, $B, 'contribution', ~ca ), Out( ~ca ), Init1( $A, $B, ~ca )
-   ]
+   [ !Optical( $A, $B, 'contribution', ~ca ), Init1( $A, $B, ~ca ) ]
 
   /* has exactly the trivial AC variant */
 
 rule (modulo E) Responder_Shows_Contribution:
    [ Fr( ~cb ) ]
   --[ Showed( $B, $A, ~cb ), Distinct( $B, $A ) ]->
-   [
-   !Optical( $B, $A, 'contribution', ~cb ), Out( ~cb ), Resp1( $B, $A, ~cb )
-   ]
+   [ !Optical( $B, $A, 'contribution', ~cb ), Resp1( $B, $A, ~cb ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) Adversary_Reads_A_Screen:
+   [ !Optical( $A, $B, kind, value ) ]
+  --[ Observed( $A, $B, kind, value ) ]->
+   [ Out( value ) ]
 
   /* has exactly the trivial AC variant */
 
@@ -58,7 +64,6 @@ rule (modulo E) Initiator_Confirms:
   --[ Derived( $A, $B, h(<'rhtn/1:ceremony', ca, cb>) ) ]->
    [
    !Optical( $A, $B, 'confirm', h(<'rhtn/1:ceremony', ca, cb>) ),
-   Out( h(<'rhtn/1:ceremony', ca, cb>) ),
    Init2( $A, $B, ca, cb, h(<'rhtn/1:ceremony', ca, cb>) )
    ]
 
@@ -69,7 +74,6 @@ rule (modulo E) Responder_Confirms:
   --[ Derived( $B, $A, h(<'rhtn/1:ceremony', ca, cb>) ) ]->
    [
    !Optical( $B, $A, 'confirm', h(<'rhtn/1:ceremony', ca, cb>) ),
-   Out( h(<'rhtn/1:ceremony', ca, cb>) ),
    Resp2( $B, $A, cb, ca, h(<'rhtn/1:ceremony', ca, cb>) )
    ]
 
@@ -92,13 +96,20 @@ rule (modulo E) Responder_Anchors:
 rule (modulo E) Bearer_Send:
    [ AnchorA( $A, $B, ca, cb, cid ), Fr( ~payload ) ]
   --[ Sent( $A, $B, cid, ~payload ) ]->
-   [ Out( <'anchored', cid, ca, ~payload> ) ]
+   [
+   Out( senc(<'anchored', cid, ca, ~payload>,
+             h(<'rhtn/1:ceremony-session', ca, cb>))
+   )
+   ]
 
   /* has exactly the trivial AC variant */
 
 rule (modulo E) Bearer_Take:
    [
-   AnchorB( $B, $A, cb, ca, cid ), In( <'anchored', anchor, echo, payload> )
+   AnchorB( $B, $A, cb, ca, cid ),
+   In( senc(<'anchored', anchor, echo, payload>,
+            h(<'rhtn/1:ceremony-session', ca, cb>))
+   )
    ]
   --[ Eq( cid, cid ), Eq( echo, ca ), Accepted( $B, $A, anchor, payload )
   ]->
@@ -138,9 +149,20 @@ solve( (∀ #x. (Derived( $A, $B, cid.1 ) @ #x) ⇒ ¬(#x < #i))  ∥
   case case_1
   solve( AnchorB( $B, $A, cb, ca, cid ) ▶₀ #i )
     case Responder_Anchors
-    solve( !KU( ~ca ) @ #vk.5 )
-      case Bearer_Send
-      SOLVED // trace found
+    solve( !KU( senc(<'anchored', cid, ~ca, p>,
+                     h(<'rhtn/1:ceremony-session', ~ca, ~cb>))
+           ) @ #vk )
+      case c_senc
+      solve( !KU( ~ca ) @ #vk.7 )
+        case Adversary_Reads_A_Screen
+        solve( !KU( h(<'rhtn/1:ceremony-session', ~ca, ~cb>) ) @ #vk.3 )
+          case c_h
+          solve( !KU( ~cb ) @ #vk.12 )
+            case Adversary_Reads_A_Screen
+            SOLVED // trace found
+          qed
+        qed
+      qed
     qed
   qed
 qed
@@ -170,6 +192,50 @@ guarded formula characterizing all satisfying traces:
 */
 by sorry
 
+lemma a_contribution_is_secret_unless_a_screen_was_read [reuse]:
+  all-traces
+  "∀ A B c #s #k.
+    ((Showed( A, B, c ) @ #s) ∧ (K( c ) @ #k)) ⇒
+    (∃ X Y kind #o. Observed( X, Y, kind, c ) @ #o)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ A B c #s #k.
+  (Showed( A, B, c ) @ #s) ∧ (K( c ) @ #k)
+ ∧
+  ∀ X Y kind #o. (Observed( X, Y, kind, c ) @ #o) ⇒ ⊥"
+*/
+by sorry
+
+lemma a_payload_is_secret_unless_a_screen_was_read:
+  all-traces
+  "∀ A B cid p #s #k.
+    ((Sent( A, B, cid, p ) @ #s) ∧ (K( p ) @ #k)) ⇒
+    (∃ X Y kind v #o. Observed( X, Y, kind, v ) @ #o)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ A B cid p #s #k.
+  (Sent( A, B, cid, p ) @ #s) ∧ (K( p ) @ #k)
+ ∧
+  ∀ X Y kind v #o. (Observed( X, Y, kind, v ) @ #o) ⇒ ⊥"
+*/
+by sorry
+
+lemma a_payload_accepted_with_no_screen_read_was_sent:
+  all-traces
+  "∀ B A cid p #i.
+    ((Accepted( B, A, cid, p ) @ #i) ∧
+     (¬(∃ X Y kind v #o. Observed( X, Y, kind, v ) @ #o))) ⇒
+    (∃ #s. Sent( A, B, cid, p ) @ #s)"
+/*
+guarded formula characterizing all counter-examples:
+"∃ B A cid p #i.
+  (Accepted( B, A, cid, p ) @ #i)
+ ∧
+  (∀ X Y kind v #o. (Observed( X, Y, kind, v ) @ #o) ⇒ ⊥) ∧
+  (∀ #s. (Sent( A, B, cid, p ) @ #s) ⇒ ⊥)"
+*/
+by sorry
+
 /* All wellformedness checks were successful. */
 
 /*
@@ -187,11 +253,14 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/results/mutant-11-local-exchange-an_accepted_anchor_was_derived_by_both.spthy
 
-  processing time: 1.09s
+  processing time: 1.10s
   
   exchange_is_executable (exists-trace): analysis incomplete (1 steps)
-  an_accepted_anchor_was_derived_by_both (all-traces): falsified - found trace (5 steps)
+  an_accepted_anchor_was_derived_by_both (all-traces): falsified - found trace (8 steps)
   the_anchor_does_not_authenticate_the_sender (exists-trace): analysis incomplete (1 steps)
   a_payload_is_re_anchorable_into_another_ceremony (exists-trace): analysis incomplete (1 steps)
+  a_contribution_is_secret_unless_a_screen_was_read (all-traces): analysis incomplete (1 steps)
+  a_payload_is_secret_unless_a_screen_was_read (all-traces): analysis incomplete (1 steps)
+  a_payload_accepted_with_no_screen_read_was_sent (all-traces): analysis incomplete (1 steps)
 
 ==============================================================================

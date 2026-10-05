@@ -36,42 +36,61 @@ message is accepted:
 
 THE TWO CHANNELS, and this is the whole of the theory's content.
 
-  OPTICAL: **authentic and public.**  A `!Optical` fact is created only by the
-  rules below, so the adversary cannot inject one -- that is §14.1's
-  non-intermediability, taken as the premise it is.  Every optical value is
-  also sent to `Out`, so the adversary reads all of them -- that is §14.3.1's
-  "neither is secret", stated as plainly in the model as in the document.
+  OPTICAL: **authentic, and confidential to whoever looks.**  A `!Optical`
+  fact is created only by the rules below, so the adversary cannot inject one
+  -- that is §14.1's non-intermediability, taken as the premise it is.  The
+  adversary learns an optical value only by firing
+  `Adversary_Reads_A_Screen`, which records an `Observed` action.
 
-  BEARER: **fully adversarial.**  `Out` and `In`, nothing else.  Bluetooth, a
-  local radio, or a fetch through FuerosNet: §14.3 leaves the choice to the
-  shell and ranks it by locality rather than integrity, so the model gives the
-  adversary the strongest position the ranking permits.
+  **This changed on 2026-10-05.**  Until then every optical rule also wrote
+  its value to `Out`, because §14.3.1 said neither value was secret.  The
+  author's ruling makes the two contributions key the local session, so they
+  are secret from anyone who did not see a screen, and reading a screen
+  became an act the trace records rather than a freebie.
 
-WHAT IS ESTABLISHED, AND WHAT IS NOT.  The one positive property is
+  BEARER: **fully adversarial as a transport, and carrying ciphertext.**
+  `Out` and `In`, nothing else; Bluetooth, a local radio, or a fetch through
+  FuerosNet, since §14.3 leaves the choice to the shell and ranks it by
+  locality rather than integrity.  What crosses it is now one `senc` under a
+  key derived from the two contributions, so the adversary's position on the
+  transport is as strong as ever and what it can do there depends on whether
+  it looked at the screens.
+
+WHAT IS ESTABLISHED, AND WHAT IS NOT.  Two positive properties now.
 `an_accepted_anchor_was_derived_by_both`: a message accepted over the bearer
 carries a ceremony-id both devices independently computed and each read off
 the other's screen.  It is mutation-tested -- delete the anchor comparison and
 it falsifies.
 
-  **The anchor does not authenticate the sender, and does not prevent replay
-  into another ceremony.**  Both are recorded below as `exists-trace` lemmas
-  that VERIFY, because the attack being reachable is the finding: the anchor
-  and the contributions are public by §14.3.1, so an adversary that has read
-  the screens can wrap any payload it likes in a valid-looking anchor.  What
-  the check buys is that a payload cannot be accepted under an anchor nobody
-  derived -- ceremony-binding against a party who did not watch, and nothing
-  against one who did.
+Two more, added 2026-10-05, which are the two halves of what the session
+encryption buys and are stated as what they are -- properties conditioned on
+an action, not claims that the adversary is weaker.
+`a_payload_is_secret_unless_a_screen_was_read`: nobody who did not look can
+READ a carriage, which is what the prekey share rests on.
+`a_payload_accepted_with_no_screen_read_was_sent`: nobody who did not look
+can INJECT one.  **Exclusivity of the local channel is these two together**,
+derived from the key rather than assumed; the bearer itself stays `Out` and
+`In`, as permissive as it ever was.
 
-  WHY THAT IS NOT A DEFECT IN THE DESIGN, and why the model cannot say so
-  itself.  §14.3.1 puts the man-in-the-middle resistance in one sentence --
+  **The anchor still does not authenticate the sender, and still does not
+  prevent replay into another ceremony.**  Both remain `exists-trace` lemmas
+  that VERIFY, because the attack remains reachable -- to an adversary that
+  read the screens.  The anchor was never what authenticated anything, and
+  the session key does not change that; it changes who can reach the anchor
+  at all.  What the anchor check buys is unchanged: a payload cannot be
+  accepted under an anchor nobody derived.
+
+  WHY THAT IS NOT A DEFECT IN THE DESIGN, and how much of it the model can
+  now say.  §14.3.1 puts the man-in-the-middle resistance in one sentence --
   "each party reads both values off a screen it is looking at" -- and the cost
   of reading those screens is physical presence, which is the cost design §1
-  meters.  **Dolev-Yao has no locality**: reading `Out` is free here, so the
-  adversary of this model is automatically co-present at no cost, and the
-  protection the design relies on is outside what any symbolic model can
-  express.  The lemmas therefore mark the boundary rather than a break: past
-  it the guarantee is physical, and §14.1 already states it as a goal that
-  nothing can verify.
+  meters.  **Dolev-Yao still has no locality**, and this theory does not
+  invent any: the adversary may read every screen it likes.  What the
+  `Observed` action adds is the ability to ASK whether it did, which is enough
+  to separate the adversary standing over the two phones from the one with a
+  radio in the next room.  The boundary is therefore drawn in the same place
+  and is now visible from inside the model: past it the guarantee is
+  physical, and §14.1 states that as a goal nothing can verify.
 
 LIMITS, stated as the ceremony theories state theirs.
   - **The contribution ordering is a projection.**  design §7.5.2 orders the
@@ -85,15 +104,24 @@ LIMITS, stated as the ceremony theories state theirs.
     (`wire-format.md` §5.3 requires each to verify alone), not from the
     anchor, so bearer substitution cannot manufacture a qualifying record it
     does not already hold.  That is the wire theories' subject, not this one's.
-  - **No confidentiality is modelled or claimed**, because none is wanted:
-    §14.3.2 closed the confidential-bearer question, nothing carried being
-    secret.
+  - **Confidentiality is modelled as the ruling defines it and no further.**
+    One `senc` over the whole anchored message, under one key, with no object
+    carrying an encryption of its own [author, 2026-10-05: *"do not be
+    ambiguous in such a way that this could be interpreted as a distinct,
+    nested encryption"*].  The key is symbolic: `senc` is perfect here, so
+    this says nothing about a cipher, a nonce discipline or key reuse across
+    carriages, each of which is `wire-format.md` §14.3.2's business and not a
+    symbolic property.  Matching `senc(..)` in `Bearer_Take`'s premise models
+    an **AEAD**: a term that is not a well-formed plaintext under the key does
+    not match, which is what an authenticated mode gives and what the wire
+    format must therefore specify.  A bare stream cipher would not earn this
+    rule.
 ================================================================================
 */
 
 begin
 
-builtins: hashing
+builtins: hashing, symmetric-encryption
 
 restriction Distinct:
   "All a b #i. Distinct(a, b) @ #i ==> not(a = b)"
@@ -115,15 +143,36 @@ rule Initiator_Shows_Contribution:
     [ Fr(~ca) ]
   --[ Showed($A, $B, ~ca), Distinct($A, $B) ]->
     [ !Optical($A, $B, 'contribution', ~ca)
-    , Out(~ca)
     , Init1($A, $B, ~ca) ]
 
 rule Responder_Shows_Contribution:
     [ Fr(~cb) ]
   --[ Showed($B, $A, ~cb), Distinct($B, $A) ]->
     [ !Optical($B, $A, 'contribution', ~cb)
-    , Out(~cb)
     , Resp1($B, $A, ~cb) ]
+
+/*
+  THE ONE WAY THE ADVERSARY LEARNS AN OPTICAL VALUE, and the whole of what
+  this theory gained when the carriages became confidential.
+
+  Before the 2026-10-05 ruling every optical rule also wrote its value to
+  `Out`, because §14.3.1 said neither value was secret.  Now a contribution
+  keys the local session, so the value is secret from anyone who did not see
+  the screen -- and seeing a screen is an ACT, recorded as `Observed`.
+
+  **This is how locality enters a Dolev-Yao model.**  The adversary may still
+  read everything, exactly as before, by firing this rule; what changed is
+  that the trace then says so, and a lemma can ask whether it did.  Nothing
+  here claims the adversary is weaker.  It makes the model able to
+  distinguish the adversary who stood over the two phones from the one with a
+  radio in the next room, which is the only distinction the ruling buys and
+  the distinction §14.3.1's physical premise has always rested on.
+*/
+
+rule Adversary_Reads_A_Screen:
+    [ !Optical($A, $B, kind, value) ]
+  --[ Observed($A, $B, kind, value) ]->
+    [ Out(value) ]
 
 /*
   THE CEREMONY-ID, derived and then shown (design §7.5.2, §14.3.1).  Both
@@ -136,14 +185,12 @@ rule Initiator_Confirms:
     [ Init1($A, $B, ca), !Optical($B, $A, 'contribution', cb) ]
   --[ Derived($A, $B, h(<'rhtn/1:ceremony', ca, cb>)) ]->
     [ !Optical($A, $B, 'confirm', h(<'rhtn/1:ceremony', ca, cb>))
-    , Out(h(<'rhtn/1:ceremony', ca, cb>))
     , Init2($A, $B, ca, cb, h(<'rhtn/1:ceremony', ca, cb>)) ]
 
 rule Responder_Confirms:
     [ Resp1($B, $A, cb), !Optical($A, $B, 'contribution', ca) ]
   --[ Derived($B, $A, h(<'rhtn/1:ceremony', ca, cb>)) ]->
     [ !Optical($B, $A, 'confirm', h(<'rhtn/1:ceremony', ca, cb>))
-    , Out(h(<'rhtn/1:ceremony', ca, cb>))
     , Resp2($B, $A, cb, ca, h(<'rhtn/1:ceremony', ca, cb>)) ]
 
 /*
@@ -170,15 +217,32 @@ rule Responder_Anchors:
   payload is fresh on the honest path and any term the adversary likes on the
   other, which is exactly the substitution §14.3.2's echo check is there to
   catch.
+
+  **ONE ENCRYPTION, AT THE SESSION LAYER** [author, 2026-10-05]: *"do not be
+  ambiguous in such a way that this could be interpreted as a distinct,
+  nested encryption."*  The whole anchored message is one `senc` under one
+  key.  The objects inside are unchanged -- the anchor is still compared, the
+  echo still checked -- and no object carries an encryption of its own.  The
+  `CaptureKeyHandover` is protected here because it rides this, not because
+  anything wraps it twice.
+
+  THE KEY is `h(<'rhtn/1:ceremony-session', ca, cb>)`: the two contributions
+  under a label distinct from the ceremony-id's `'rhtn/1:ceremony'`, so one
+  construction does not both key a secret and name a public value.  The
+  adversary derives it exactly when it has both contributions, which is to
+  say exactly when it read both screens.
 */
 
 rule Bearer_Send:
     [ AnchorA($A, $B, ca, cb, cid), Fr(~payload) ]
   --[ Sent($A, $B, cid, ~payload) ]->
-    [ Out(<'anchored', cid, ca, ~payload>) ]
+    [ Out(senc(<'anchored', cid, ca, ~payload>,
+               h(<'rhtn/1:ceremony-session', ca, cb>))) ]
 
 rule Bearer_Take:
-    [ AnchorB($B, $A, cb, ca, cid), In(<'anchored', anchor, echo, payload>) ]
+    [ AnchorB($B, $A, cb, ca, cid)
+    , In(senc(<'anchored', anchor, echo, payload>,
+              h(<'rhtn/1:ceremony-session', ca, cb>))) ]
   --[ Eq(anchor, cid)                 // the anchor, against this device's own
     , Eq(echo, ca)                    // the echoed contribution (§14.3.2)
     // THE ANCHOR AS THE MESSAGE CARRIED IT, not as this device computed it.
@@ -219,28 +283,93 @@ lemma an_accepted_anchor_was_derived_by_both:
      ==> (Ex #x. Derived(A, B, cid) @ #x & #x < #i)
        & (Ex #y. Derived(B, A, cid) @ #y & #y < #i)"
 
-/*  THE FIRST BOUNDARY, and it VERIFIES because the attack is reachable.  The
-    contribution is public (§14.3.1), so an adversary that read the screens
-    echoes it correctly and the receiver accepts a payload the sender never
-    sent.  §14.3.2 says the echo catches "a bearer that does not agree with
-    the screen"; what it catches is a bearer contradicting the screen, never
-    one quoting it.                                                          */
+/*  THE FIRST BOUNDARY, and it still VERIFIES because the attack is still
+    reachable -- but only now to an adversary that FIRED
+    `Adversary_Reads_A_Screen`.  Before the 2026-10-05 ruling it was reachable
+    for free.  The echo catches a bearer contradicting the screen, never one
+    quoting it, and quoting it now costs standing where the screens are.    */
 lemma the_anchor_does_not_authenticate_the_sender:
   exists-trace
   "Ex B A cid p #i.
        Accepted(B, A, cid, p) @ #i
      & not(Ex #s. Sent(A, B, cid, p) @ #s)"
 
-/*  THE SECOND BOUNDARY, same cause.  The ceremony-id is public too, so a
-    payload from one ceremony is re-anchorable into another: the adversary
-    rewraps it under the second ceremony's id and echo, both of which it
-    read.  Ceremony-binding holds against a party who did not watch the
-    screens and not against one who did.                                     */
+/*  THE SECOND BOUNDARY, same cause and the same change: re-anchoring needs
+    the second ceremony's id, echo AND session key, so it needs that
+    ceremony's screens.  Ceremony-binding holds against a party who did not
+    watch and not against one who did, which is what it always said; the
+    cost of watching is now the cost of reading two screens rather than
+    nothing.                                                                 */
 lemma a_payload_is_re_anchorable_into_another_ceremony:
   exists-trace
   "Ex A B cid1 cid2 p #s #i.
        Sent(A, B, cid1, p) @ #s
      & Accepted(B, A, cid2, p) @ #i
      & not(cid1 = cid2)"
+
+/*  WHAT THE 2026-10-05 RULING BUYS, and the reason the theory was touched at
+    all.  A contribution is secret unless a screen was read: the only rule
+    that writes one to `Out` is `Adversary_Reads_A_Screen`, and firing it is
+    recorded.  Carried as `reuse` because the two lemmas below rest on it.
+
+    MUTATION-TESTED 2026-10-05: restoring `Out` to EITHER contribution rule
+    falsifies this in 4 steps, which is what it should do -- that
+    contribution is then public and no screen was read to make it so.                                                                      */
+lemma a_contribution_is_secret_unless_a_screen_was_read [reuse]:
+  "All A B c #s #k.
+       Showed(A, B, c) @ #s
+     & K(c) @ #k
+     ==> (Ex X Y kind #o. Observed(X, Y, kind, c) @ #o)"
+
+/*  THE CONFIDENTIALITY HALF, which is what the prekey share rests on
+    [author, 2026-10-05]: the share is *"protected in flight by the classical
+    encryption of this local direct channel and visible only to the
+    participants who need it."*  A payload sent over the bearer is secret
+    unless a screen was read.  Without this lemma the theory would establish
+    that nobody else can INJECT into the channel while saying nothing about
+    whether anybody else can READ it, and reading is the direction a prekey
+    cares about.
+
+    MUTATION-TESTED 2026-10-05: restoring `Out` to BOTH contribution rules
+    falsifies this in 7 steps, the adversary then deriving the session key
+    and decrypting every carriage.  Restoring it to ONE leaves it verified;
+    the note under the integrity lemma says why that matters.                              */
+lemma a_payload_is_secret_unless_a_screen_was_read:
+  "All A B cid p #s #k.
+       Sent(A, B, cid, p) @ #s
+     & K(p) @ #k
+     ==> (Ex X Y kind v #o. Observed(X, Y, kind, v) @ #o)"
+
+/*  THE INTEGRITY HALF, and the one the old theory could
+    not state.  In a trace where no screen was read, a payload accepted over
+    the bearer is a payload that was sent: the session key needs both
+    contributions, the contributions need the screens, and without the key
+    the adversary cannot produce a term `Bearer_Take` will decrypt.
+
+    THIS IS THE REMOTE ADVERSARY, and it is the whole of the gain.  Bluetooth
+    reaches tens of metres and the service UUID is a constant in the
+    repository, so before this ruling every carriage was readable and
+    forgeable at that range.  Now the range is the range of reading a phone
+    screen.  Nothing here weakens the Dolev-Yao adversary; the lemma simply
+    asks what follows when it did not come close enough to look.
+
+    MUTATION-TESTED 2026-10-05: restoring `Out` to BOTH contribution rules
+    falsifies this in 8 steps.  **An earlier draft of this comment said one
+    was enough. The mutation was run and one is not**, which is the whole
+    reason a mutation claim gets run rather than reasoned.
+
+    WHAT THE ONE-CONTRIBUTION MUTATION SHOWS, worth more than the claim it
+    replaced.  Leak one contribution and both this lemma and the secrecy of
+    the payload still VERIFY: the key is `h(<label, ca, cb>)` and an
+    adversary holding one half derives nothing.  Only
+    `a_contribution_is_secret_unless_a_screen_was_read` falsifies, as it
+    must.  **The session therefore survives one readable screen and needs
+    both**, which is why the key takes the two contributions rather than the
+    ceremony-id, which a single screen would give away.                                          */
+lemma a_payload_accepted_with_no_screen_read_was_sent:
+  "All B A cid p #i.
+       Accepted(B, A, cid, p) @ #i
+     & not(Ex X Y kind v #o. Observed(X, Y, kind, v) @ #o)
+     ==> (Ex #s. Sent(A, B, cid, p) @ #s)"
 
 end

@@ -1443,16 +1443,36 @@ asking its operator about something the operator did not see.
 
 **Two carriages, by what has to be agreed in the room** [author, 2026-10-02].
 What the two devices must fix between themselves while facing each other — the
-optical anchor, the intent, the proximity outcomes, traversal candidates and
-the capture key — crosses the local interface between them (§14.1.0,
-`wire-format.md` §14). Everything else the ceremony says, kinds 9 to 18 of
-`wire-format.md` §7.10.1 — the consent each query needs, which also tells the
-subject who was selected, the fishing proposals, the witness request and the
-witness's answer, the responses one party gathered for the proposer, each
-signer's back-pointers, the proposed body, each signer's signature entry and
-the finalised record — travels the end-to-end payload path between the
-participants' devices and is sent to each nominated witness as well, the
-consent request alone excepted: the fuzzed profile it carries reaches the
+optical anchor, the intent, the proximity outcomes, traversal candidates, the
+capture key and each other's prekey material — crosses the local interface
+between them (§14.1.0, `wire-format.md` §14).
+
+**And so does the conversation between the two participants** [author,
+2026-10-05]. Kinds 9 to 18 of `wire-format.md` §7.10.1 travel by **who the
+recipient is, not by which phase the ceremony is in**: a participant's leg
+goes to the counterparty over the local interface, because the counterparty
+is co-present by definition; a witness's or a verifier's leg goes over the
+end-to-end payload path, reached through that party's own locator and
+therefore through that party's own upstream node.
+
+**The property this preserves, which is why it is written this way.**
+Neither participant's own patron is required for a meeting. A witness's
+patron is as randomly selected as the witness, and a verifier's is covered
+by the adversarial selection that chose the verifier, so putting either in
+the message stream costs the ceremony nothing. **What would cost it
+everything is needing your own patron's cooperation to meet somebody**, and
+§13.2 depends on that not being so: a witnessless formation record is how a
+party inside a false social universe memorialises a meeting with anyone they
+physically encounter, and an eclipsing patron that was merely absent would
+otherwise suppress it.
+
+The conversation's content is unchanged by any of this. It is the consent
+each query needs, which also tells the subject who was selected, the fishing
+proposals, the witness request and the witness's answer, the responses one
+party gathered for the proposer, each signer's back-pointers, the proposed
+body, each signer's signature entry and the finalised record. Each one a
+participant sends goes to the counterparty and to every witness either party
+nominated, the consent request alone excepted: the fuzzed profile it carries reaches the
 subject and the one verifier the query names, and nobody who holds no capture
 to compare it against (`wire-format.md` §5.6). The witness request goes first,
 so a witness holds the ceremony before the rest of it arrives. That is what a
@@ -2177,7 +2197,15 @@ needed, available when the binding is made.
 **Its construction is contributory** [2026-09-02]: each participant contributes
 16 random bytes across the optical exchange (`wire-format.md` §14.3.1), and the pre-commitment is the SHA-256
 of the ASCII tag `rhtn/1:ceremony` followed by the two contributions in
-ascending participant-keyhash order. Either party's honest randomness makes
+ascending participant-keyhash order.
+
+**Those same two contributions key the local session** [author,
+2026-10-05], under a label of their own (`wire-format.md` §14.3.2), so the
+handover that carries this key across is confidential in flight. **The
+protection is the session's and is not a second encryption of the key**:
+the `CaptureKeyHandover` is the object `wire-format.md` §14.3.2 specifies, unchanged, and it
+is protected because it rides an encrypted session. Before that ruling its
+confidentiality in flight rested on co-presence alone. Either party's honest randomness makes
 the value unique, so **neither party can force a repeat**, and a forced repeat
 is the one thing worth forcing, since consents and capture keys bind to this
 value. Stated exactly because both clients must compute the same 32 bytes.

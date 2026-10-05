@@ -4949,8 +4949,10 @@ barred.
 #### 14.3.1 What the anchor is, and what it binds
 
 **The optical channel carries two things across the exchange** (design §7.1
-item 3), and neither is secret. First each device shows its identity in
-full, the `KeyMaterial` of §2.2, and its 16-byte contribution. **The first
+item 3). The first is public and the second is not: an identity is a public
+key, and a contribution keys the local session (§14.3.2), so it is secret
+from anyone who did not see the screen. First each device shows its identity
+in full, the `KeyMaterial` of §2.2, and its 16-byte contribution. **The first
 QR is the first contact** (design §12.3): a device that has not met this
 identity pins the key material it reads here, and its hash is the keyhash
 it knows the party by from then on (§3.4); a device that has met it holds
@@ -4972,23 +4974,60 @@ length on a phone camera, not across a room.
 **What the anchor binds, and what it does not.** An anchored message binds
 to a ceremony **both** devices computed: the anchor cannot be a value only
 one party derived, nor one an adversary invented. It **authenticates
-nobody**. Every anchored value is public — the contributions are shown on
-screens and the ceremony-id is derived from them — so a party that has read
-those screens can wrap any payload in an anchor that checks, and can
-re-anchor one ceremony's message into another. A check against the anchor
-catches a bearer that *contradicts* the screens, never one that quotes
-them.
+nobody**. A party that has read both screens can wrap any payload in an
+anchor that checks, and can re-anchor one ceremony's message into another. A
+check against the anchor catches a bearer that *contradicts* the screens,
+never one that quotes them.
 
-**No part of that resistance is cryptographic**, and an implementer must
-not read these checks as authentication: a co-present adversary passes all
-of them. What stands in its place is §14.1's property — reading the screens
-costs being there, which is the cost design §1 meters.
+**The anchor's own resistance is not cryptographic**, and an implementer
+must not read these checks as authentication: a co-present adversary passes
+all of them. What stands in its place is §14.1's property — reading the
+screens costs being there, which is the cost design §1 meters.
+
+**But the contributions are not public, and the bearer is encrypted under
+them** [author, 2026-10-05]. The two 16-byte contributions are shown on
+screens and nowhere else: the ceremony-id is `SHA-256` over a label and
+both of them, so publishing the id does not reveal either. They key the
+local session of §14.3.2, so a party that did not read a screen can neither
+read a carriage nor produce one that is accepted. **This moves no boundary
+that §14.1 draws.** It makes the cryptographic boundary coincide with the
+physical one: before it, a radio at Bluetooth range held everything the
+bearer carried; after it, an adversary must stand where the screens are.
+
+**One screen is not enough**, which is why the session key takes both
+contributions rather than the ceremony-id. `models/tamarin/local/exchange.spthy`
+proves it: leak one contribution and both the confidentiality and the
+integrity of a carriage still hold, since the key needs the pair.
 
 #### 14.3.2 The encodings
 
 Every one is deterministic CBOR under §1, versioned, with the array bounds
 §1 requires; **a version a decoder does not know is refused** [2026-09-30], as
 §3 has an unknown transaction version refused.
+
+**The local session is encrypted, once, under one key** [author,
+2026-10-05]. Every message the bearer carries crosses as a single AEAD
+ciphertext over the whole encoded object. **No object carries an encryption
+of its own**: the encodings below are the plaintexts, their fields and
+checks exactly as stated, and an implementation that wrapped any of them
+separately would be building a second layer this section does not define.
+The `CaptureKeyHandover` is protected because it rides this session, not
+because anything encrypts it twice.
+
+| | |
+|---|---|
+| Key | `SHA-256` of `rhtn/1:ceremony-session` and the two contributions, in the same ascending participant-keyhash order §14.3.1 derives the ceremony-id under |
+| Why a label of its own | so one construction does not both key a secret and name a public value. The ceremony-id's label is `rhtn/1:ceremony` |
+| Mode | an **AEAD**. A ciphertext that is not a well-formed plaintext under the key is refused, which is what the local exchange's proof assumes and a bare stream cipher would not give |
+
+**What this is and is not.** It makes the bearer confidential and
+exclusive to the two participants, which is what lets a prekey cross it
+(§14.3.4). It is not man-in-the-middle resistance: a co-present adversary
+that reads both screens holds the key, and §14.3.1's physical premise is
+still the whole of the resistance past that point.
+`models/tamarin/local/exchange.spthy` carries both halves as proved
+lemmas, and the mutation that restores either contribution to the
+adversary.
 
 ```
 OpticalContribution = [        ; the first QR each device shows
@@ -5206,3 +5245,46 @@ identity and names the key it delegates to (§8.2), the bundle verifies under
 the identity and names the device whose material it covers under the
 signature (§7.8, field 5) — so the artifacts say exactly what the identity
 signed, and the exposure is bounded by the windows it signed for.
+
+#### 14.3.4 The prekey handover
+
+**What it is for.** The ceremony's conversation runs between the two
+participants over the bearer, so neither needs a node to reach the other
+while they are together. What they do need a node for, today, is each
+other's prekey material: a session is opened from a published bundle, and a
+bundle is fetched (§7.8). **This object carries it across the local session
+instead**, so a co-present pair can open an end-to-end channel afterwards
+without either party's own node having cooperated in anything [author,
+2026-10-05].
+
+```
+PrekeyHandover = [             ; the sender's prekey material, locally
+  uint,                        ; version, 1
+  bstr .size 32,               ; the ceremony-id (§14.3.1), checked as above
+  bstr .size 32,               ; the sending DEVICE, by the key it presents
+                               ;   (§8.2); a session is with a device and
+                               ;   never with an identity (design §14.2.4)
+  bstr,                        ; the sender's signed prekey bundle, exactly
+                               ;   the bytes §7.8 publishes
+  ? bstr,                      ; one one-time key as §7.8 encodes it, absent
+                               ;   where the sender's pool is empty
+]
+```
+
+**The bundle is reused, not reinvented**, as §14.3.2's intent reuses
+`ArchiveEntry`. It arrives in the form §7.8 publishes, signed by the
+sending identity, and **a bundle that does not verify under the identity
+pinned at §14.3.1 is refused**. So the material's authenticity rests on the
+signature it already carries rather than on the channel, and the channel's
+job here is confidentiality: a bundle is not secret, but which pair
+exchanged one, when, and alongside which ceremony are all things §14.3.2's
+session keeps between them.
+
+**No one-time key is not an error.** §7.8 lets a pool run dry, and a
+session opened without one is the case design §14.2.4.3 already covers.
+The receiver treats an absent fifth element as the pool being empty, not as
+a malformed object.
+
+**This does not make a session.** It supplies what opening one needs. When
+the two parties open it, and over which path, is design §12.6.3's business
+and unchanged by this section.
