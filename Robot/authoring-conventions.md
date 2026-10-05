@@ -282,3 +282,66 @@ it is framed — the former P8 was withdrawn on exactly this ground, and any fin
 whose precondition is *"an attacker inside the horizon"* should be checked against
 it before it is entered here.
 
+
+---
+
+## The source, which is documentation too
+
+**These rules are for the code, and they are the ones above applied to it**
+[author, 2026-10-04]. The documents are authoritative on the design; the
+source is authoritative on what was built, and a reader who has the design
+in hand should be able to read a file and learn what it is for, what it
+owns, and why it is shaped as it is — without reading its body.
+
+### A module header on every file
+
+What the file is for, what state or invariant it owns, and the document
+that required it. Cited by document and section, as the documents cite each
+other: `` `wire-format.md` §7.10.1 ``, never a bare `§N`, since a file has
+no document of its own for a bare section to belong to.
+
+**A header may cite `Robot/`** — the rule that forbids it applies to the
+root documents, whose integrity must not rest on a working file. A source
+file is not part of the design.
+
+### An item's comment says why, not what
+
+**What the code plainly does is not worth a line.** `/// Returns the
+keyhash.` above `pub fn keyhash()` costs a reader time and tells them
+nothing. What is worth a line:
+
+- **A bound: where the number came from.** `256` is a magic number until it
+  names `wire-format.md` §1's table or the measurement behind it.
+- **A refusal: which rule it enforces**, so a reader checking the rule can
+  find the code and a reader reading the code can find the rule.
+- **An ordering, a lock, or a retry: the hazard it answers.** These are the
+  comments that survive: *"a second write while the first is out is refused
+  with status 201"* is a line nobody can reconstruct from the code.
+- **A choice between two workable designs: the one not taken, and why.**
+
+### Decisions are attributed and dated, and never invented
+
+**The author's decisions are marked as his**, in the documents' own form:
+`[author, 2026-10-04]`. A drafter's choice is unmarked, which is what the
+absence of a mark means.
+
+**Where he decided something and gave no reason, the comment records the
+decision and stops.** Inventing a plausible rationale creates a dependency
+nobody chose and can displace the better argument he actually had. This is
+the standing failure mode in `CLAUDE.md` and it is likelier in code than in
+prose, because a function seems to demand a justification in a way a
+sentence does not. The comment says what was decided; the question goes to
+him.
+
+### Comments inside a function mark hazards, not steps
+
+A `//` line earns its place by warning. Narrating the next statement does
+not warn, ages badly, and trains a reader to skip the comments that do.
+
+### The sweep's own rule
+
+**A documentation pass covers every file in the crate it names**, and
+reports the count rather than the state: *"codec: 122 public items, 122
+documented"*, not *"codec is documented"*. The cleanup-pass rule above
+applies unchanged — a crate half-swept is worse than one untouched, because
+the reader cannot tell which half they are in.
