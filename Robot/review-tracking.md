@@ -14002,3 +14002,28 @@ invite to the proposal; every step before it has crossed on hardware.
 
 Not yet run on hardware: the proposal, the signatures, the record held by
 both, and the done screen. The next run starts there.
+
+## The first complete ceremony on hardware (2026-10-04)
+
+Run `ec66a3b-third-1`, ceremony `9d83b3a6`, record `55dc3951`: two Galaxy
+S21+ phones ran a presence ceremony from the invite to the done screen,
+and both hold the same formation record, signed by the two participants.
+Timings from each phone's begin: optical exchange and intents 15–20 s,
+proximity 2–5 s, capture 12–15 s, conversation and record 3 s; 39 s and
+43 s to finalize. Warnings over the whole ceremony: none on the responder,
+three `Waiting` polls on the proposer. What ran: the bootstrap on the rear
+camera; the contribution in eight parts and the transcript in one, in
+lockstep on the selfie cameras; the intents over BLE; the NFC tap, both
+passing; the capture keys over BLE; the guided captures; the witness
+request and back-pointers through the serving node; the formation
+proposal; both signatures; the record finalized and held on both. Nothing
+in the wire format, the design or the light-client requirements had to
+bend to make it run; what changed is listed in the two sections above.
+
+**Open after this run**: the proposer polls `conversePropose` with no end
+while the counterparty is gone (the person has Stop); the retention
+figure; UWB; iOS; the second ceremony between the same two phones, which
+needs a witness the bench does not have (the instrument witnesses are not
+in either phone's neighbourhood, there being no horizon); the APK's commit
+stamp, which reads the commit of the tree at build time and not what the
+tree had uncommitted.

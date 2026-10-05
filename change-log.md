@@ -12280,3 +12280,10 @@ that has stopped refuses a witness request naming it, and two identities at
 their genesis form a record with no witness: the formation record, the one
 witnessless shape, which the kernel could not build before. Functional tests
 491 → 492; catalogue 480 → 481.
+
+### 2026-10-04 (the first complete ceremony on hardware)
+
+Two phones ran a presence ceremony from the invite to the done screen and
+both hold the same formation record, signed by the two participants, forty
+seconds from begin to finalize. Nothing in the design documents changed to
+make it run.
