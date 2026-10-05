@@ -166,12 +166,14 @@ else
   # JSON would carry nothing to explain a resolver or feature error
   tail -5 "$linterr" | sed 's/^/  /'
 fi
-report="$(mktemp)"
-python3 "$HERE/../Robot/tools/lintreport.py" < "$lintjson" > "$report"
-cat "$report"
-owed=$(grep -c '| missing documentation' "$report" || true)
-nonhalting=$((nonhalting + owed))
-rm -f "$lintjson" "$linterr" "$report"
+# The count comes from the tool and not from its output: the report
+# carries diagnostics rendered by clippy, whose context lines reproduce
+# arbitrary source, so any pattern grepped for here is a pattern some
+# source file can contain.
+owedfile="$(mktemp)"
+python3 "$HERE/../Robot/tools/lintreport.py" --count-file "$owedfile" < "$lintjson"
+nonhalting=$((nonhalting + $(cat "$owedfile")))
+rm -f "$lintjson" "$linterr" "$owedfile"
 
 echo "=== 3b2. Lint, the other feature flavours ==="
 # The flavours compile code the default build never sees: the two
@@ -196,13 +198,11 @@ flavourlint() {
     echo "  $label: WARNINGS"; fail=1
     tail -5 "$err" | sed 's/^/  /'
   fi
-  local report n
-  report="$(mktemp)"
-  python3 "$HERE/../Robot/tools/lintreport.py" < "$out" > "$report"
-  cat "$report"
-  n=$(grep -c '| missing documentation' "$report" || true)
-  nonhalting=$((nonhalting + n))
-  rm -f "$out" "$err" "$report"
+  local owedfile
+  owedfile="$(mktemp)"
+  python3 "$HERE/../Robot/tools/lintreport.py" --count-file "$owedfile" < "$out"
+  nonhalting=$((nonhalting + $(cat "$owedfile")))
+  rm -f "$out" "$err" "$owedfile"
 }
 flavourlint "fieldtest" --no-default-features \
   -p rhtn-client -p rhtn-daemon -p rhtn-participant -p rhtn-ffi \

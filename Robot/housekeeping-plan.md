@@ -160,6 +160,15 @@ attribute applies.
 undocumented constant reported and did not halt; a planted `len() == 0`
 halted and was rendered in full.
 
+**The count is read from the tool and not from its output** [author,
+2026-10-05]. The first version grepped the report for `| missing
+documentation`, and the report carries diagnostics rendered by clippy,
+whose context lines reproduce arbitrary source — so the pattern was one
+any source file could contain. A function whose own line ends in a comment
+spelling it made the count say one item was owed where none was, and three
+where two were. `lintreport.py --count-file` writes the number, and
+nothing parses the prose.
+
 **What the gate caught that nothing else did.** Two failures on the first
 run, both artefacts of turning the lint on rather than of any comment:
 

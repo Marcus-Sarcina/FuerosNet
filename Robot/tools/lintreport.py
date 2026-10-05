@@ -31,8 +31,15 @@ dropped, restoring the rule the attribute itself applies.
 
 Exit is always 0. The stage's verdict is clippy's own exit status, which
 this script neither sees nor second-guesses.
+
+`--count-file PATH` writes the owed count there as a bare integer, for a
+caller that needs the number rather than the report. **The report is prose
+and is not to be parsed**: it carries diagnostics rendered by clippy, whose
+context lines reproduce arbitrary source, so any pattern a caller greps for
+is a pattern some source file can contain.
 """
 
+import argparse
 import json
 import sys
 
@@ -87,6 +94,14 @@ def split(diagnostics):
 
 
 def main():
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument(
+        "--count-file",
+        metavar="PATH",
+        help="write the owed count there, as a bare integer",
+    )
+    args = ap.parse_args()
+
     real, owed = split(messages(sys.stdin))
     for text in real:
         print(text)
@@ -96,6 +111,9 @@ def main():
         n = len(owed)
         item = "item" if n == 1 else "items"
         print(f"  documentation: {n} public {item} owe a comment")
+    if args.count_file:
+        with open(args.count_file, "w") as f:
+            f.write(f"{len(owed)}\n")
     return 0
 
 
