@@ -32,8 +32,10 @@
 #    --conf <file>    the phones file to read and write (default:
 #                     crates/tools/phones.conf).
 #
-#  Needs adb with every phone on USB, debugging enabled and the laptop
-#  authorised (`adb devices` lists each as `device`); cargo, cargo-ndk and
+#  Needs adb with every phone reachable: on USB, debugging enabled and the
+#  laptop authorised (`adb devices` lists each as `device`), or over Wi-Fi
+#  at the address phones.conf records from an earlier setup (the phone's
+#  adb must still be in TCP mode, which a reboot undoes); cargo, cargo-ndk and
 #  an NDK for the native library; the JBR under ~/opt/android-studio/jbr or
 #  $JAVA_HOME for Gradle. The material read is public, as the screen that
 #  shows it says; nothing secret leaves the phone here.
@@ -91,28 +93,50 @@ fi
 [ ${#SERIALS[@]} -gt 0 ] || die "no phone named and none in $CONF; pass a serial or add one as <serial>= to the file"
 
 ADB="$(find_adb)" || die "adb is not on PATH and no SDK was found under \$ANDROID_HOME, \$ANDROID_SDK_ROOT or ~/Android/Sdk"
+# the address the conf holds for a serial, if any
+conf_addr() {
+  [ -f "$CONF" ] || return 0
+  sed -n "s/^[[:space:]]*$1[[:space:]]*=[^@]*@\([^[:space:]]*\).*$/\1/p" "$CONF" | head -1
+}
+# each phone's adb id: its serial on USB, or its Wi-Fi address where the
+# cable is off and an earlier setup recorded one. Every adb call below
+# uses the id; the serial stays the name
+declare -A ADB_ID=()
 for s in "${SERIALS[@]}"; do
   state="$("$ADB" devices | awk -v s="$s" '$1 == s {print $2}')"
   case "$state" in
-    device) ;;
-    "") die "$s is not listed by adb devices; is it on USB with debugging enabled?" ;;
+    device) ADB_ID["$s"]="$s"; continue ;;
+    "") ;;
     *) die "$s is listed as '$state', not 'device'; authorise the laptop on the phone" ;;
   esac
+  a="$(conf_addr "$s")"
+  [ -n "$a" ] || die "$s is not on USB and $CONF holds no address for it; plug it in"
+  "$ADB" devices | grep -q "^$a[[:space:]]" || { say "$s: not on USB; connecting over Wi-Fi at $a"; timeout 8 "$ADB" connect "$a" > /dev/null 2>&1 || true; }
+  waited=0
+  while [ "$waited" -lt 20 ] && ! "$ADB" devices | awk '$2 == "device" {print $1}' | grep -qx "$a"; do sleep 0.5; waited=$((waited + 1)); done
+  "$ADB" devices | awk '$2 == "device" {print $1}' | grep -qx "$a" || die "$s is neither on USB nor answering adb at $a (is it on, on the Wi-Fi, and in TCP adb mode since its last reboot?)"
+  got="$("$ADB" -s "$a" shell getprop ro.serialno < /dev/null 2> /dev/null | tr -d '\r')"
+  [ "$got" = "$s" ] || die "$a answers as '$got', not $s; the address in $CONF is stale"
+  ADB_ID["$s"]="$a"
 done
 say "phones: ${SERIALS[*]}"
 
 # ------------------------------------------------------------ the wifi -----
 # the phone's address on its Wi-Fi, or nothing where it is not on one
 wifi_of() {
-  "$ADB" -s "$1" shell ip -4 -o addr show wlan0 2> /dev/null | awk '{print $4}' | cut -d/ -f1 | head -1 | tr -d '\r'
+  "$ADB" -s "${ADB_ID[$1]}" shell ip -4 -o addr show wlan0 2> /dev/null | awk '{print $4}' | cut -d/ -f1 | head -1 | tr -d '\r'
 }
 # switch adbd to listen on TCP beside USB; the phone keeps it until a reboot
 wifi_adb() {
   local s="$1" ip
   ip="$(wifi_of "$s")"
   if [ -z "$ip" ]; then say "$s: not on a Wi-Fi network; no address recorded"; return 1; fi
-  "$ADB" -s "$s" tcpip "$ADB_PORT" > /dev/null 2>&1 || { say "$s: adb tcpip $ADB_PORT failed; no address recorded"; return 1; }
-  sleep 2
+  case "${ADB_ID[$s]}" in
+    *:*) ;; # already over Wi-Fi: adbd is in TCP mode, and restarting it would drop this connection
+    *)
+      "$ADB" -s "${ADB_ID[$s]}" tcpip "$ADB_PORT" > /dev/null 2>&1 || { say "$s: adb tcpip $ADB_PORT failed; no address recorded"; return 1; }
+      sleep 2 ;;
+  esac
   echo "$ip:$ADB_PORT"
 }
 # one serial's line in the conf: material and address each kept from the
@@ -173,14 +197,14 @@ fi
 
 # ------------------------------------------------- wipe, install, launch -----
 for s in "${SERIALS[@]}"; do
-  model="$("$ADB" -s "$s" shell getprop ro.product.model 2> /dev/null | tr -d '\r')"
+  model="$("$ADB" -s "${ADB_ID[$s]}" shell getprop ro.product.model 2> /dev/null | tr -d '\r')"
   say "$s ($model): uninstalling $APP (and its data)"
   # not installed is not a failure
-  "$ADB" -s "$s" uninstall "$APP" > /dev/null 2>&1 || true
+  "$ADB" -s "${ADB_ID[$s]}" uninstall "$APP" > /dev/null 2>&1 || true
   say "$s: installing $(basename "$APK")"
-  "$ADB" -s "$s" install -r "$APK" > /dev/null || die "$s: the install failed"
+  "$ADB" -s "${ADB_ID[$s]}" install -r "$APK" > /dev/null || die "$s: the install failed"
   # the first start mints the identity; the material shows in Conversations
-  "$ADB" -s "$s" shell am start -W -n "$APP/.HomeActivity" > /dev/null 2>&1 || die "$s: the app did not start"
+  "$ADB" -s "${ADB_ID[$s]}" shell am start -W -n "$APP/.HomeActivity" > /dev/null 2>&1 || die "$s: the app did not start"
 done
 
 # ------------------------------------------------------- the material -----
@@ -188,12 +212,12 @@ read_material() {
   # the Conversations screen prints the material as one line of hex;
   # uiautomator's dump of the screen is the way to read it without a
   # typo. Nothing shorter than 400 hex characters is it.
-  "$ADB" -s "$1" exec-out uiautomator dump /dev/tty 2> /dev/null \
+  "$ADB" -s "${ADB_ID[$1]}" exec-out uiautomator dump /dev/tty 2> /dev/null \
     | grep -oE '[0-9a-f]{400,}' | head -1
 }
 declare -A MATERIAL=()
 for s in "${SERIALS[@]}"; do
-  model="$("$ADB" -s "$s" shell getprop ro.product.model 2> /dev/null | tr -d '\r')"
+  model="$("$ADB" -s "${ADB_ID[$s]}" shell getprop ro.product.model 2> /dev/null | tr -d '\r')"
   echo
   echo "  On $s ($model): unlock the phone and tap Conversations."
   echo "  The screen shows this device's public key material; this script reads it."

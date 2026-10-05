@@ -51,7 +51,11 @@
         </activity>
 
         <activity android:name=".ConversationsActivity" android:exported="false" />
-        <activity android:name=".MeetActivity" android:exported="false" />
+        <!-- Portrait, fixed: D2 has the phone turned around to face the
+             counterparty, and a rotation would rebuild the screen, restart
+             the camera and reset the read at the moment it matters. -->
+        <activity android:name=".MeetActivity" android:exported="false"
+            android:screenOrientation="portrait" />
         <activity android:name=".ConversationActivity" android:exported="false" />
         <activity android:name=".PlaceholderActivity" android:exported="false" />
 

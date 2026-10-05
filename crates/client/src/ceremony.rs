@@ -1438,6 +1438,7 @@ impl Client {
         let salts: [[u8; 16]; 7] = std::array::from_fn(|_| self.random::<16>());
         let (retention, their_retention) =
             (self.cfg.retention_years, self.active()?.their_retention);
+        let mine_back = self.archive.next_back_pointers();
         let a = self.active()?;
         let parts = participants(me, a.peer()?);
         let (r0, r1) = if parts[0] == me {
@@ -1468,6 +1469,25 @@ impl Client {
         let mut responses = a.responses.clone();
         responses.extend(their_responses);
         sort_responses(&mut responses);
+        // **No witness is a formation record or nothing** (design §13.2;
+        // `wire-format.md` §3.2): two identities each at their genesis,
+        // with no response either way, memorialise their meeting as the one
+        // witnessless shape, and that is the first meeting of two new
+        // joiners, whom no horizon can offer a witness.  Any other pair
+        // without a witness waits for one.
+        let formation = witnesses.is_empty() && {
+            let counterparty = a.peer()?;
+            // the counterparty's back-pointers where the conversation has
+            // carried them; a driver that hands them to review instead
+            // has the codec's genesis rule catch a pair that is not fresh
+            let theirs = a.conversation.back.get(&counterparty);
+            responses.is_empty()
+                && mine_back == vec![rhtn_archive::genesis(&me)]
+                && theirs.is_none_or(|t| *t == vec![rhtn_archive::genesis(&counterparty)])
+        };
+        if witnesses.is_empty() && !formation {
+            return Err(abort("propose", Abort::NoWitness));
+        }
         let proposal = Proposal {
             started_at: a.started_at,
             finalized_at: now,
@@ -1475,11 +1495,13 @@ impl Client {
             witnesses,
             responses,
             root: disclosure_root(&set),
+            formation,
         };
         tracing::info!(
             target: "cer",
             witnesses = proposal.witnesses.len(),
             responses = proposal.responses.len(),
+            formation,
             ms = self.since_begin_ms(),
             "cer.propose"
         );
@@ -3407,9 +3429,8 @@ impl Harness {
                 }
             }
         }
-        if witnesses.is_empty() {
-            return Err(Abort::NoWitness);
-        }
+        // no witness is `propose`'s to judge: a formation for two at their
+        // genesis, `NoWitness` for anyone else
         // 7. proposal, review, signatures
         let theirs = self.client(&b).responses();
         let m = self.send(b, a, Msg::Responses(theirs));

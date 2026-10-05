@@ -101,6 +101,11 @@ class Meet(
         return null
     }
 
+    /** The optical exchange under way at D2, the object cut into parts
+     *  and crossed in step ([OpticalExchange]); null between the two. Held
+     *  here so a redrawn screen finds it rather than starting over. */
+    var exchange: OpticalExchange? = null
+
     /** Told when the person accepts the brief: the kernel's, so the
      *  ceremony begins there, which is the one question it asks. */
     var onAccepted: (() -> Unit)? = null
@@ -690,15 +695,44 @@ class Meet(
      */
     fun crossBootstrap() {
         synchronized(lock) {
+            // read twice, or tapped after the camera read it: crossed once
+            if (bootstrapCrossed || step != Step.INTENT) return
             bootstrapCrossed = true
+            // the initiator taps that it was read; the responder's camera read it
+            stepped(Step.INTENT, Step.BRIEF, if (role == Role.INITIATOR) "tap" else "camera")
+            changed()
         }
-        // the initiator taps that it was read; the responder's camera read it
-        advance(Step.INTENT, Step.BRIEF, if (role == Role.INITIATOR) "tap" else "camera")
     }
 
     fun bootstrapCrossed(): Boolean = synchronized(lock) { bootstrapCrossed }
 
     fun opticalDone() = advance(Step.OPTICAL, Step.PROXIMITY, "kernel")
+
+    private var intentSent = false
+    private var intentReceived = false
+
+    /**
+     * **The optical step ends when both intents have crossed**: this
+     * device's sent over the bearer, and the counterparty's received. On
+     * either alone the proximity ladder would start on one phone while the
+     * other was still sending, and the ladder holds the kernel's thread
+     * for its tap window, so the intent behind it went out half a minute
+     * late and the two tap windows never overlapped [2026-10-04]. A
+     * mismatch of outcomes between two phones that tapped once is what the
+     * kernel then refuses.
+     */
+    fun intentSent() = intentCrossed(sent = true)
+
+    fun intentReceived() = intentCrossed(received = true)
+
+    private fun intentCrossed(sent: Boolean = false, received: Boolean = false) {
+        val both = synchronized(lock) {
+            if (sent) intentSent = true
+            if (received) intentReceived = true
+            intentSent && intentReceived
+        }
+        if (both) moved(Step.OPTICAL, Step.PROXIMITY)
+    }
 
     fun proximityDone() = advance(Step.PROXIMITY, Step.CAPTURE, "kernel")
 

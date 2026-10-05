@@ -186,3 +186,33 @@ fn a_restart_in_the_arrival_second_overwrites_nothing_accepted() {
     assert_eq!(second.all_files().len(), 3);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// The recipient's directory outlives a delivery: a push for the same
+/// recipient may be between its file write and its directory flush when a
+/// running drain delivers and removes what it just wrote, and the flush
+/// of a directory that has gone was reported as a refusal for a message
+/// the other side already held [2026-10-04, the first field run].
+#[test]
+fn a_delivery_leaves_the_recipients_directory_and_a_drained_push_is_not_a_refusal() {
+    use rhtn_node::queue::{QueueStore, Queued};
+    let dir = std::env::temp_dir().join(format!("rhtn-queue-dir-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let store = DirStore::new(&dir);
+    let item = |n: u8| Queued {
+        ciphertext: vec![n; 40],
+        recipient: kh("alice"),
+        device: [7u8; 32],
+        arrival: 1_000 + n as u64,
+    };
+    assert!(store.push(item(1)));
+    assert!(store.remove(&kh("alice"), &item(1)));
+    let recipient_dir = std::fs::read_dir(&dir)
+        .unwrap()
+        .flatten()
+        .find(|e| e.path().is_dir())
+        .map(|e| e.path());
+    assert!(recipient_dir.is_some(), "the directory stays once emptied");
+    assert!(store.push(item(2)), "a push after a delivery is accepted");
+    assert_eq!(store.list(&kh("alice")).len(), 1);
+    let _ = std::fs::remove_dir_all(&dir);
+}

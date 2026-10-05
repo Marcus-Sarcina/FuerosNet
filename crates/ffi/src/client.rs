@@ -258,6 +258,9 @@ pub struct Proposed {
     /// Signed `VerifierResponse`s, in the order the body carries them.
     pub responses: Vec<Vec<u8>>,
     pub root: Vec<u8>,
+    /// Subtype 1, a formation record: two identities at their genesis, no
+    /// witness and no response (`wire-format.md` §3.2; design §13.2).
+    pub formation: bool,
 }
 
 /// One of the seven values a record discloses, with the salt it is hashed
@@ -444,6 +447,7 @@ impl Proposed {
             witnesses: p.witnesses.iter().map(Witnessing::of).collect(),
             responses: p.responses.clone(),
             root: p.root.to_vec(),
+            formation: p.formation,
         }
     }
 
@@ -466,6 +470,7 @@ impl Proposed {
                 .as_slice()
                 .try_into()
                 .map_err(|_| Refused::new("a disclosure root is 32 bytes"))?,
+            formation: self.formation,
         })
     }
 

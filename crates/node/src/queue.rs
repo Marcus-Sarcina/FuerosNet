@@ -128,17 +128,30 @@ impl QueueStore for DirStore {
                     // The directory entry is flushed too, so the newly
                     // created file survives a crash rather than the content
                     // alone [2026-10-01].
-                    let ok = f
-                        .write_all(&item.ciphertext)
-                        .and_then(|()| f.sync_all())
-                        .and_then(|()| sync_dir(&dir))
-                        .is_ok();
-                    if !ok {
+                    let written = f.write_all(&item.ciphertext).and_then(|()| f.sync_all());
+                    if written.is_err() {
                         // a half-written file would be read back and
                         // delivered once as a garbage message: leave none
                         let _ = std::fs::remove_file(&path);
+                        return false;
                     }
-                    return ok;
+                    // **The file is on the disk and a drain may already have
+                    // taken it.** A drain for this recipient running since
+                    // an earlier push reads the directory as it goes, and
+                    // delivers and removes a file the moment it is synced;
+                    // the directory flush here then finds nothing to flush.
+                    // That is delivery, not failure: refusing it told a
+                    // sender its message had not crossed when the other
+                    // phone already held it, and the shell stopped the
+                    // meeting on that word [2026-10-04, the first field run]
+                    match sync_dir(&dir) {
+                        Ok(()) => return true,
+                        Err(_) if !path.exists() => return true,
+                        Err(_) => {
+                            let _ = std::fs::remove_file(&path);
+                            return false;
+                        }
+                    }
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
                 Err(_) => return false,
@@ -163,8 +176,11 @@ impl QueueStore for DirStore {
                 && device == item.device
                 && std::fs::read(&path).is_ok_and(|c| c == item.ciphertext)
             {
+                // the file alone: the recipient's directory stays, since a
+                // push for the same recipient may be between its write and
+                // its directory flush, and an empty directory per recipient
+                // is a bounded cost
                 let _ = std::fs::remove_file(&path);
-                let _ = std::fs::remove_dir(self.recipient_dir(recipient));
                 return true;
             }
         }

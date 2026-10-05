@@ -374,9 +374,8 @@ impl Client {
                 flags: *flags,
             });
         }
-        if witnesses.is_empty() {
-            return Err(abort("converse_propose", Abort::NoWitness));
-        }
+        // no witness: `propose` builds a formation record where the two
+        // are at their genesis, and refuses `NoWitness` otherwise
         let a = self.active.as_ref().ok_or(Abort::NotActive)?;
         if !a.conversation.back.contains_key(&counterparty) {
             return Err(abort(
@@ -760,6 +759,13 @@ impl Client {
             Msg::WitnessRequest(req) => {
                 if !req.participants.contains(&from) {
                     return refused("a request from no participant of the ceremony it names");
+                }
+                // a request naming this client as a participant is its own
+                // ceremony's, and not a nomination: it reaches here where
+                // this side has stopped, and answering it would have this
+                // client witness itself, to itself
+                if req.participants.contains(&self.keyhash()) {
+                    return refused("a participant is not a witness of its own ceremony");
                 }
                 let flags = self.take_witness_request(&req);
                 self.observe(req.ceremony_id, from, kind);

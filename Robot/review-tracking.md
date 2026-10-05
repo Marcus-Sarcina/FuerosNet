@@ -13975,3 +13975,30 @@ the ceremony stopped at the author's first finding and the run was stopped.
 Owed from this: the first code carries no locator (design §12.3 says it
 travels with the key; the phones have none yet); the 177-module read on
 hardware.
+
+
+## The second and third field runs (2026-10-04)
+
+Runs `ec66a3b-second-4` and `ec66a3b-third-1`, with the fixes installed
+over Wi-Fi between attempts. The ceremony now runs on two phones from the
+invite to the proposal; every step before it has crossed on hardware.
+
+| Found | Disposition |
+|---|---|
+| The invite's title and text named the provisioned peer | The old APK: the setup script's install had failed with the phones on Wi-Fi only; it now reaches a phone at its recorded address |
+| The app crashed opening the selfie camera (`CameraAccessException`, -38) | **FIXED.** Every redraw reopened the camera on the same reader; the service disconnected the first open and its callback threw off the UI thread. A read in progress is left alone; a failure stops the meeting with its reason |
+| The responder read the bootstrap twice and crashed on the second (`cannot go INTENT -> BRIEF from BRIEF`) | **FIXED.** A symbol already delivered is not read again; `crossBootstrap` is idempotent; a late read is ignored |
+| Neither selfie camera read the 2 KB first code | **Design change, author**: the object crosses in parts of 256 bytes, in lockstep (`OpticalExchange`), each side showing the part the other needs next and its header saying what it holds; two reads per part. The side finishing first waits: a code of the next exchange counts as the other side holding everything. Camera frames at up to three megapixels, `TRY_HARDER`, portrait locked, codes drawn to the content area's width, base45 so the codes are alphanumeric. Once aligned a part crosses in half a second; the whole exchange in ten to twenty seconds |
+| A code wider than the content area was clipped at the right and read nowhere | **FIXED**: the width is the body's, never the screen's |
+| A camera session that reads nothing for a minute, where a fresh one reads in a second | **MITIGATED**: a session with no read for twenty seconds restarts itself |
+| Aim: the person holding a phone cannot see what its camera sees | **FIXED**: a band at the top of the meeting screen shows the middle of the camera's view, for the other holder to steer by; a `TextureView` with a fixed place in the layout, since a detached and re-attached one crashes the next frame |
+| The capture key was refused by the radio (`status 201`) | **FIXED.** GATT takes one write request at a time; the capture key was written fourteen milliseconds after the proximity outcomes. The client waits for each write's acknowledgement |
+| One phone went to proximity thirty seconds before the other; the tap windows never overlapped and the outcomes disagreed (`ChannelDisagreement`) | **FIXED.** The optical step ended on the counterparty's intent alone, and the proximity ladder then held the kernel's thread for its thirty-second window while this side's own intent waited behind it. It ends when both intents have crossed |
+| The serving node refused a message it had delivered (`Refused(NotStored)`) | **FIXED in the node.** A drain running since an earlier push delivered and removed the new file between its write and its directory flush, and the flush of a directory that was gone counted as a failed store. `remove` leaves the recipient's directory; a push whose file was drained is a success. Test in `node/tests/queue.rs` |
+| A participant that had stopped took its counterparty's witness request as a nomination and answered it, to itself among others | **FIXED in the kernel**: a request naming this client as a participant is refused. Test in `adaptors/tests/conversation.rs` |
+| The proposer refused `NoWitness` forever: no nominees exist on this bench | **FIXED in the kernel: the formation path.** Design §6.4: a witnessless, verifierless ceremony is valid as a formation record, subtype 1, and the codec and archive already held that shape; the kernel had no way to build it. `Proposal.formation`; `propose` builds one where both are at their genesis with no response either way, and refuses `NoWitness` otherwise; the proposed body's parser reads subtype 1. **CER-025**, **CER-50**; the harness and the participant pipe format carry the flag; the test that expected `NoWitness` of two new joiners whose nominees declined now expects the formation. Functional tests 491 → 492, catalogue 480 → 481 |
+| The proposer's shell polls `conversePropose` every tick while the counterparty is gone | **OPEN**: a wait with no end; the person has Stop. A deadline, or the kernel noticing the counterparty's session gone, is owed |
+| The responder at the verifiers step after a stop: the shell shows the stop, the kernel abandoned | As designed |
+
+Not yet run on hardware: the proposal, the signatures, the record held by
+both, and the done screen. The next run starts there.

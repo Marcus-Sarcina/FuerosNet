@@ -452,6 +452,8 @@ object Kernel {
             }) { p.intentCarriage() } ?: return@Thread
             if (carriage?.send(mine, Carriage.Phase.INTENT) == true) {
                 m.note("intent sent: ${mine.size} message(s) over the radio.")
+                // proximity starts once theirs is in as well
+                m.intentSent()
             } else {
                 m.stop("the radio would not take the intent; nothing crossed")
             }
@@ -510,7 +512,8 @@ object Kernel {
                 call("takeIntentCarriage", { e -> m.stop("the carried intent was refused: ${e.reason}") }) {
                     val taken = p.takeIntentCarriage(to, set)
                     m.note("their intent is in, with $taken continuation(s).")
-                    m.opticalDone()
+                    // proximity starts once ours has gone as well
+                    m.intentReceived()
                 }
             }
             Meet.Step.PROXIMITY -> live.received(Carriage.Phase.PROXIMITY)?.let { set ->

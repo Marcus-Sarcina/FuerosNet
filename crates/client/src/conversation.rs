@@ -393,19 +393,26 @@ pub fn proposal_from_body(body: &[u8]) -> Result<(Proposal, Vec<Vec<Txid>>), Str
         fixed32(body, map_get(pm, 1).ok_or("participant keyhash")?)
     };
     let participants = [participant(&ps[0])?, participant(&ps[1])?];
-    let Some(Item::Array(ws)) = map_get(m, 4) else {
-        return Err("witnesses".into());
-    };
-    let mut witnesses = Vec::with_capacity(ws.len());
-    for w in ws {
-        let Item::Map(wm) = w else {
-            return Err("a witness is a map".into());
-        };
-        witnesses.push(Witness {
-            keyhash: fixed32(body, map_get(wm, 1).ok_or("witness keyhash")?)?,
-            nominated_by: fixed32(body, map_get(wm, 2).ok_or("nominated_by")?)?,
-            flags: map_get(wm, 3).and_then(as_uint).ok_or("witness flags")?,
-        });
+    // subtype 1, a formation, carries no key 4 and no key 5 (s3.2); the
+    // codec's check above has already held it to that shape
+    let formation = map_get(m, 6).and_then(as_uint).ok_or("subtype")? == 1;
+    let mut witnesses = Vec::new();
+    match map_get(m, 4) {
+        Some(Item::Array(ws)) => {
+            for w in ws {
+                let Item::Map(wm) = w else {
+                    return Err("a witness is a map".into());
+                };
+                witnesses.push(Witness {
+                    keyhash: fixed32(body, map_get(wm, 1).ok_or("witness keyhash")?)?,
+                    nominated_by: fixed32(body, map_get(wm, 2).ok_or("nominated_by")?)?,
+                    flags: map_get(wm, 3).and_then(as_uint).ok_or("witness flags")?,
+                });
+            }
+        }
+        Some(_) => return Err("witnesses".into()),
+        None if formation => {}
+        None => return Err("witnesses".into()),
     }
     let responses = match value_slice(body, 5) {
         Some(r) => array_item_ranges(body, r.start)
@@ -422,6 +429,7 @@ pub fn proposal_from_body(body: &[u8]) -> Result<(Proposal, Vec<Vec<Txid>>), Str
         witnesses,
         responses,
         root: fixed32(body, map_get(m, 8).ok_or("root")?)?,
+        formation,
     };
     if back.len() != proposal.signers().len() {
         return Err("one back-pointer list per signer".into());

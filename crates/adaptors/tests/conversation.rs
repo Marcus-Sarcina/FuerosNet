@@ -634,3 +634,78 @@ async fn a_signer_whose_root_check_fails_answers_and_the_proposer_records_it() {
         );
     }
 }
+
+/// A witness request that reaches a participant whose own ceremony has
+/// stopped names it as a participant, not a nominee: it is refused, and
+/// nothing is answered, least of all to itself. Seen on the first field
+/// run, where the responder stopped as the initiator opened, took the
+/// request as a nomination, and sent its answer to both participants, one
+/// of them itself [2026-10-04].
+#[tokio::test]
+async fn a_stopped_participant_does_not_witness_its_own_ceremony() {
+    let now_s = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let scene = Scene::starting(now_s - 30 * 86_400);
+    let node = live_node(
+        "witness",
+        scene.table("witness", &["witness"]),
+        "witness",
+        &[],
+    );
+    let inboxes = Inboxes::default();
+    let serving: Arc<dyn Serving> = LocalNode::new(node.clone(), inboxes.clone());
+    let optical = vec![ChannelKind::Optical];
+    let mut alice = host("alice", &serving, &inboxes, optical.clone(), 0);
+    let mut bob = host("bob", &serving, &inboxes, optical, 0);
+    let population: Vec<Keyhash> = ["alice", "bob"].iter().map(|n| kh(n)).collect();
+    for p in [&alice, &bob] {
+        p.courier.attach(population.clone()).await;
+    }
+    let ia = alice
+        .with(|c| c.begin(Some(kh("bob")), vec![], true))
+        .await
+        .expect("alice begins");
+    let ib = bob
+        .with(|c| c.begin(Some(kh("alice")), vec![], false))
+        .await
+        .expect("bob begins");
+    alice
+        .with(move |c| c.take_intent(kh("bob"), &ib))
+        .await
+        .expect("alice takes bob's intent");
+    bob.with(move |c| c.take_intent(kh("alice"), &ia))
+        .await
+        .expect("bob takes alice's intent");
+    let ch = alice.with(|c| c.proximity()).await.expect("channels");
+    bob.with(move |c| c.take_channels(&ch))
+        .await
+        .expect("bob agrees");
+    // bob stops; alice, not knowing, opens: her request to witness goes to
+    // her counterparty as every message of the conversation does
+    bob.with(|c| c.abandon()).await;
+    alice
+        .step(|c| c.converse_open())
+        .await
+        .expect("alice opens");
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    bob.drain();
+    alice.drain();
+    let b = bob.conversed();
+    assert!(
+        b.iter().any(|(k, c)| *k == kh("alice")
+            && matches!(c, Conversed::Refused { kind: 12, why } if why.contains("own ceremony"))),
+        "bob refuses the request naming him as a participant: {b:?}"
+    );
+    assert!(
+        !b.iter().any(|(_, c)| matches!(c, Conversed::Asked { .. })),
+        "and is not asked to witness"
+    );
+    let a = alice.conversed();
+    assert!(
+        !a.iter()
+            .any(|(k, c)| *k == kh("bob") && matches!(c, Conversed::WitnessAnswer { .. })),
+        "nothing is answered to alice as from a witness: {a:?}"
+    );
+}

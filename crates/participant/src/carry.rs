@@ -176,7 +176,7 @@ pub fn take_ask(s: &str) -> Result<WitnessAsk, String> {
 
 pub fn pack_proposed(p: &Proposed) -> String {
     format!(
-        "{}|{}|{}|{}|{}|{}",
+        "{}|{}|{}|{}|{}|{}|{}",
         p.started_at,
         p.finalized_at,
         list(p.participants.iter().map(|x| hex(x)).collect()),
@@ -187,7 +187,8 @@ pub fn pack_proposed(p: &Proposed) -> String {
                 .collect()
         ),
         list(p.responses.iter().map(|r| hex(r)).collect()),
-        hex(&p.root)
+        hex(&p.root),
+        u8::from(p.formation)
     )
 }
 
@@ -217,6 +218,8 @@ pub fn take_proposed(s: &str) -> Result<Proposed, String> {
         witnesses: witnesses?,
         responses: ids(field(&f, 4, "a proposal")?, "a response")?,
         root: bytes(field(&f, 5, "a proposal")?, "a disclosure root")?,
+        // a seventh field, 1 for a formation record; absent is a normal one
+        formation: f.get(6).is_some_and(|x| x.trim() == "1"),
     })
 }
 

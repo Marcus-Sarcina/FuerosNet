@@ -380,6 +380,42 @@ fn strangers_pin_each_other_from_the_first_qr_and_the_first_code_fixes_the_count
     assert!(s.client("bob").store.records.contains_key(&txid));
 }
 
+/// Two new joiners, nobody to nominate and nobody to ask: their first
+/// meeting is a formation record, the one witnessless shape (design §13.2;
+/// `wire-format.md` §3.2), and their second, no longer at genesis, waits
+/// for a witness.  The first field run stopped here, on a `NoWitness` that
+/// no horizon could ever answer [2026-10-04].
+// acceptance: CER-50
+#[test]
+fn two_new_joiners_form_a_record_with_no_witness_and_only_once() {
+    let mut s = setup(&["alice", "bob"], &[ChannelKind::Nfc]);
+    let txid = s
+        .run("alice", "bob", &[], &[])
+        .expect("a formation record with no witness");
+    let env = s.client("alice").store.records[&txid].clone();
+    let rec = rhtn_archive::record::Record::parse(&env).expect("a record");
+    assert_eq!(
+        rec.signers.len(),
+        2,
+        "the two participants sign and nobody else"
+    );
+    assert_eq!(
+        rec.back,
+        vec![
+            vec![rhtn_archive::genesis(&rec.signers[0])],
+            vec![rhtn_archive::genesis(&rec.signers[1])]
+        ],
+        "each participant's back-pointer is the genesis value"
+    );
+    assert!(s.client("bob").store.records.contains_key(&txid));
+    // the same two again: no longer at their genesis, no witness is a wait
+    assert_eq!(
+        s.run("alice", "bob", &[], &[]).err(),
+        Some(Abort::NoWitness),
+        "a second witnessless meeting is not a formation"
+    );
+}
+
 // acceptance: CER-24
 #[test]
 fn the_capture_key_goes_directly_to_the_selected_verifier_and_nowhere_else() {
@@ -570,15 +606,23 @@ fn a_witness_far_from_the_claimed_start_declines_and_the_others_carry_the_record
             .any(|(_, n)| matches!(n, Notice::NomineesOutnumbered { mine: 0, theirs: 1 })),
         "alice is told her nominee is absent"
     );
-    // every nominee declining: no record
+    // every nominee declining: two at their genesis still form a record,
+    // the witnessless shape (design §13.2), signed by the two alone
     let mut none = setup_with(
         &EVERYONE,
         &[ChannelKind::Nfc],
         &[("w1", 3_600_000), ("w2", -3_600_000)],
     );
-    assert_eq!(
-        none.run("alice", "bob", &["w1"], &["w2"]),
-        Err(Abort::NoWitness)
+    let t = none
+        .run("alice", "bob", &["w1"], &["w2"])
+        .expect("a formation record, both nominees having declined");
+    let rec = rhtn_archive::record::Record::parse(&none.client("alice").store.records[&t]).unwrap();
+    assert_eq!(rec.signers.len(), 2, "alice and bob alone");
+    assert!(
+        rec.back
+            .iter()
+            .zip(&rec.signers)
+            .all(|(b, k)| *b == vec![rhtn_archive::genesis(k)])
     );
 }
 
@@ -634,6 +678,7 @@ fn a_witness_holds_a_bounded_number_of_pending_requests_and_the_oldest_goes_firs
             flags: 3,
         }],
         responses: vec![],
+        formation: false,
         root: [0; 32],
     };
     let back = vec![w.back_pointers(); 3];

@@ -13,6 +13,10 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.graphics.SurfaceTexture
+import android.view.Surface
+import android.view.TextureView
+import android.widget.FrameLayout
 
 /**
  * Meet: the ceremony flow (screens sheet section D). One Activity walks the
@@ -40,6 +44,16 @@ class MeetActivity : Activity() {
     private lateinit var body: LinearLayout
     private lateinit var scroll: ScrollView
     private var camera: QrCamera? = null
+    /** The selfie camera's view, kept across redraws so the session it
+     *  feeds is not torn down with the screen: what the person holding the
+     *  other phone steers by, since this one faces away from its user. */
+    private var preview: TextureView? = null
+    private var previewSurface: Surface? = null
+    /** Where the preview lives: a fixed child of the root below the
+     *  scrolling screen, so a redraw never detaches the TextureView (a
+     *  detached and re-attached TextureView has no layer to draw and
+     *  crashes the next frame). Hidden except at the optical step. */
+    private lateinit var previewHost: FrameLayout
 
     /** Hands-off steps started this screen's life: so a redraw rejoins a
      *  running step rather than starting it again. */
@@ -54,19 +68,61 @@ class MeetActivity : Activity() {
         body = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         scroll = ScrollView(this).apply {
             addView(body)
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.MATCH_PARENT,
-            )
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
         }
-        setContentView(
-            LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                fitsSystemWindows = true
-                setPadding(48, 48, 48, 48)
-                addView(scroll)
-            },
-        )
+        // the preview: a full-width band showing the middle of the camera's
+        // view, the rest cropped above and below [author, 2026-10-04]; it
+        // sits above the scrolling screen so whatever the screen cannot fit
+        // is the band and never the code
+        val full = resources.displayMetrics.widthPixels - 96
+        val band = full / 3
+        val tv = TextureView(this).also { preview = it }
+        tv.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+            override fun onSurfaceTextureAvailable(st: SurfaceTexture, width: Int, height: Int) {
+                // a 4:3 buffer the camera will take as a preview target
+                st.setDefaultBufferSize(1280, 960)
+                previewSurface = Surface(st)
+                Diag.event("camera", "which" to "qr", "op" to "preview", "state" to "available")
+                redraw()
+            }
+            override fun onSurfaceTextureSizeChanged(st: SurfaceTexture, width: Int, height: Int) {}
+            override fun onSurfaceTextureUpdated(st: SurfaceTexture) {}
+            override fun onSurfaceTextureDestroyed(st: SurfaceTexture): Boolean {
+                previewSurface?.release()
+                previewSurface = null
+                return true
+            }
+        }
+        previewHost = FrameLayout(this).apply {
+            setBackgroundColor(Color.DKGRAY)
+            clipChildren = true
+            clipToPadding = true
+            // the camera's 4:3 frame drawn at full width, centred, and
+            // clipped to the band: the middle third of what it sees
+            addView(
+                tv,
+                FrameLayout.LayoutParams(full, full * 4 / 3).apply {
+                    gravity = android.view.Gravity.CENTER
+                },
+            )
+            layoutParams = LinearLayout.LayoutParams(full, band).apply { bottomMargin = 12 }
+            visibility = android.view.View.GONE
+        }
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(48, 48, 48, 48)
+            addView(previewHost)
+            addView(scroll)
+        }
+        // the system bars' insets, applied by hand: Android 15 draws edge
+        // to edge and does not honour fitsSystemWindows on a plain layout,
+        // which put the first code under the status bar
+        root.setOnApplyWindowInsetsListener { v, insets ->
+            val bars = insets.getInsets(android.view.WindowInsets.Type.systemBars())
+            v.setPadding(48 + bars.left, 48 + bars.top, 48 + bars.right, 48 + bars.bottom)
+            insets
+        }
+        setContentView(root)
     }
 
     override fun onStart() {
@@ -91,6 +147,7 @@ class MeetActivity : Activity() {
 
     private fun redraw() {
         body.removeAllViews()
+        previewHost.visibility = android.view.View.GONE
         val m = Kernel.meet()
         if (m == null) {
             entry()
@@ -224,12 +281,16 @@ class MeetActivity : Activity() {
             }
             Meet.Role.RESPONDER -> {
                 para("Point the back of your phone at ${m.counterpartyName}'s screen. Their code carries who they are and the kind of meeting they chose; the next screen is where you accept or refuse it.")
+                aim("The band at the top is the middle of what the rear camera sees: put their code in it.")
                 scan(QrCamera.Facing.REAR, "bootstrap") { bytes ->
                     // the bootstrap is the shell's own object and carries no
                     // anchor, so the shell reads it (`wire-format.md` §14.3
                     // fixes the ANCHORED objects and this is not one)
-                    val read = Kernel.takeBootstrap(bytes)
                     runOnUiThread {
+                        // a read that lands after the step moved on is not
+                        // this screen's any more
+                        if (m.step() != Meet.Step.INTENT) return@runOnUiThread
+                        val read = Kernel.takeBootstrap(bytes)
                         if (read == null) m.crossBootstrap() else m.stop(read)
                     }
                 }
@@ -244,7 +305,13 @@ class MeetActivity : Activity() {
         // full key, about 2 KB and 177 modules, and the limit at arm's
         // length is the camera's resolution of a module, so every pixel
         // of width is bought here (`wire-format.md` §14.3.1)
-        val scale = maxOf(1, minOf(8, (resources.displayMetrics.widthPixels - 48) / m.width))
+        // as wide as the content area, always: the range a code reads at
+        // grows with its size, and a part of the exchange is a small symbol
+        // [author, 2026-10-04]. The area is the body's own width once laid
+        // out, never the screen's: a code wider than its parent is clipped
+        // at the right, quiet zone and modules, and reads nowhere
+        val avail = if (body.width > 0) body.width else resources.displayMetrics.widthPixels - 96 - 48
+        val scale = maxOf(1, (avail - 8) / m.width)
         Diag.event("qr.shown", "which" to which, "bytes" to bytes.size, "modules" to m.width, "scale" to scale)
         val w = m.width * scale
         val px = IntArray(w * w)
@@ -266,15 +333,36 @@ class MeetActivity : Activity() {
      * and a refusal stops the ceremony with a reason rather than silently:
      * a camera this shell does not hold is a meeting it cannot carry.
      */
-    private fun scan(facing: QrCamera.Facing, which: String, found: (ByteArray) -> Unit) {
+    /**
+     * **What the selfie camera sees**, under the code, for the person
+     * holding the other phone to aim by [author, 2026-10-04]: this phone
+     * faces away from its user, so its screen is the other holder's
+     * instrument. The view and its surface outlive the redraws, and the
+     * camera session takes the surface as a second target; the first read
+     * waits for the surface where it is not up yet.
+     */
+    private fun aim(line: String = "The band at the top is the middle of what this phone's selfie camera sees. The other person steers by it.") {
+        previewHost.visibility = android.view.View.VISIBLE
+        para(line)
+    }
+
+    private fun scan(facing: QrCamera.Facing, which: String, continuous: Boolean = false, found: (ByteArray) -> Unit) {
         if (!held(Manifest.permission.CAMERA)) {
             para("This step needs the camera. Nothing is read until you allow it.")
             button("Allow the camera") { ask(1, Manifest.permission.CAMERA) }
             return
         }
+        // a read waits for its preview surface, which arrives on the next
+        // redraw
+        val surface = previewSurface ?: run { para("Starting the camera…"); return }
         para("Scanning…")
         val cam = camera ?: QrCamera(this).also { camera = it }
-        cam.readOne(facing, null, which) { bytes -> found(bytes) }?.let { why -> para(why) }
+        // a camera that fails after it was asked for stops the meeting with
+        // the reason; a redraw while a read is running does not reopen it
+        val onFailed: (String) -> Unit = { why ->
+            runOnUiThread { Kernel.meet()?.stop(why) ?: redraw() }
+        }
+        cam.readOne(facing, surface, which, onFailed, continuous) { bytes -> found(bytes) }?.let { why -> para(why) }
     }
 
     // ---- D1.5 the brief: everything front-loaded -----------------------
@@ -320,16 +408,50 @@ class MeetActivity : Activity() {
             para("Opening the ceremony…")
             return
         }
-        val code = Kernel.optical()
-        if (code == null) {
-            para("The code needs an open ceremony, which this device has lost.")
+        // the object in parts, crossed in step with the other side
+        // (`OpticalExchange`): the exchange outlives the redraws, and a new
+        // one opens for the transcript once the contribution is taken
+        val transcript = Kernel.opticalTaken()
+        val which = if (transcript) OpticalExchange.TRANSCRIPT else OpticalExchange.CONTRIBUTION
+        val x = m.exchange?.takeIf { it.which == which } ?: run {
+            val code = Kernel.optical()
+            if (code == null) {
+                para("The code needs an open ceremony, which this device has lost.")
+                return
+            }
+            OpticalExchange(which, code).also { m.exchange = it }
+        }
+        val name = if (transcript) "transcript" else "contribution"
+        qr(x.frame(), "$name ${x.showing() + 1}/${x.count}")
+        para(x.status())
+        if (x.done()) {
+            // this side is through; the last code stays up for the other
+            // side's camera until the kernel moves on (the transcript's
+            // exchange, or their intent arriving over the bearer)
+            para(if (transcript) "Both codes agree. Waiting for the other phone to catch up before the exchange moves on." else "Their contribution is in; the meeting id follows.")
             return
         }
-        val which = if (Kernel.opticalTaken()) "transcript" else "contribution"
-        qr(code, which)
-        scan(QrCamera.Facing.SELFIE, which) { bytes ->
-            val why = Kernel.takeOptical(bytes)
-            runOnUiThread { if (why != null) m.stop(why) else redraw() }
+        aim()
+        scan(QrCamera.Facing.SELFIE, name, continuous = true) { bytes ->
+            runOnUiThread {
+                if (m.step() != Meet.Step.OPTICAL || m.exchange !== x) return@runOnUiThread
+                when (x.take(bytes)) {
+                    OpticalExchange.Took.NOT_OURS -> return@runOnUiThread
+                    OpticalExchange.Took.MALFORMED -> { m.stop("a code of the exchange did not read as one"); return@runOnUiThread }
+                    else -> {}
+                }
+                Diag.event("optical.exchange", "which" to name, "showing" to x.showing(), "received" to x.received(), "theirs" to x.theirCount(), "they_hold" to x.theirReceived())
+                if (x.done()) {
+                    // both hold everything: the object goes to the kernel;
+                    // the exchange stays so its last code stays up, and the
+                    // next redraw opens the transcript's or the kernel has
+                    // moved on
+                    camera?.close()
+                    val why = Kernel.takeOptical(x.theirs()!!)
+                    if (why != null) { m.stop(why); return@runOnUiThread }
+                }
+                redraw()
+            }
         }
     }
 

@@ -391,6 +391,7 @@ The Cargo workspace has **16 crates**. Components below follow responsibilities 
 | CER-022 | C | Either participant may begin a ceremony, by showing an invite or by reading one, and the client offers both. Which party showed the first invite has no bearing on the ceremony's outcome or on the polarity of any adoption that follows; the pair takes from whoever began a start time within clock tolerance, and the one who began proposes the body for signature. | D §7.1; W §14.3.2, §7.10.1; L §1 |
 | CER-023 | N | The two intents of a ceremony disagree on who began, one `initiator` true and the other false. An intent whose `initiator` equals this device's own is refused where it is read, with both claiming to have begun or neither, and the ceremony does not proceed to a conversation that would wait on nobody. | W §14.3.2; L §1 |
 | CER-024 | C | The first QR carries the device's full key material and the first code a device reads fixes who its counterparty is: a client that has never met the counterparty pins the key material from that code and completes the ceremony on it, the keyhash being the material's hash; a later code naming anyone else is refused; a first QR carrying a keyhash in place of the material is malformed. | W §14.3.1–.2, §3.4; D §12.3; L §1 |
+| CER-025 | C | Two identities each at their genesis, with no witness attesting and no verifier response either way, propose and finalize their meeting as a formation record: subtype 1, no witness array and no response array, each participant's back-pointer the genesis value, signed by the two alone. A pair not both at their genesis proposes no body without a witness and waits for one. | D §6.4, §13.2; W §3.2, §4.5 |
 
 ### VerifierQuery, consent, key grants and response processing
 
@@ -963,7 +964,7 @@ Open local parameters are not all specification defects: cache TTLs, queue cap, 
 
 ## 10. Document baseline and coverage totals
 
-This specification contains **491 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
+This specification contains **492 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
 
 | Prefix | Families |
 |---|---:|
@@ -977,7 +978,7 @@ This specification contains **491 numbered requirement/test families** across **
 | NET | 23 |
 | SES | 15 |
 | MAIL | 27 |
-| CER | 24 |
+| CER | 25 |
 | VER | 18 |
 | CAP | 16 |
 | REC | 12 |

@@ -517,6 +517,22 @@ class MeetConversationTest {
     }
 
     @Test
+    fun the_optical_step_ends_only_when_both_intents_have_crossed() {
+        val m = Meet(kind = Meet.Kind()).apply { crossBootstrap(); accept() }
+        assertEquals(Meet.Step.OPTICAL, m.step())
+        m.intentReceived()
+        assertEquals("theirs alone is not enough", Meet.Step.OPTICAL, m.step())
+        m.intentSent()
+        assertEquals(Meet.Step.PROXIMITY, m.step())
+        // and the other order
+        val n = Meet(kind = Meet.Kind()).apply { crossBootstrap(); accept() }
+        n.intentSent()
+        assertEquals(Meet.Step.OPTICAL, n.step())
+        n.intentReceived()
+        assertEquals(Meet.Step.PROXIMITY, n.step())
+    }
+
+    @Test
     fun every_kernel_move_renders_the_bound_screen() {
         val m = atVerifiers()
         var renders = 0

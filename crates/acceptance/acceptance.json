@@ -11342,6 +11342,33 @@
     "interpretation": ""
   },
   {
+    "id": "CER-50",
+    "area": "ceremony",
+    "gap": "ceremony",
+    "title": "Form a record with no witness where both are at their genesis, and wait for one otherwise",
+    "milestone": 4,
+    "kind": "positive",
+    "spec": [
+      "design §6.4",
+      "wire-format.md §4.5"
+    ],
+    "rule": [
+      {
+        "where": "design §6.4",
+        "text": "a **witnessless, verifierless ceremony is valid** — as a formation record, subtype 1, the one witnessless shape"
+      },
+      {
+        "where": "wire-format.md §4.5",
+        "text": "PRESENT on a normal record (1..=16), ABSENT on a\n                       ;   formation — subtype-conditional, never free choice"
+      }
+    ],
+    "given": "Two clients with no transaction of their own, nominating nobody, or whose nominees all decline; and the same two again after that record.",
+    "when": "Each runs the ceremony to the proposal.",
+    "then": "The first meeting finalizes as a formation record signed by the two alone, with no witness array, no response array and the genesis value as each participant's back-pointer; the second, the two no longer at their genesis, is refused as NoWitness until a witness attests.",
+    "oracle": "behaviour",
+    "interpretation": ""
+  },
+  {
     "id": "RSC-38",
     "area": "resources",
     "gap": "resources",

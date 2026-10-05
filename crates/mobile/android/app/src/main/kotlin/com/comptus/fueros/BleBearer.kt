@@ -99,6 +99,8 @@ class BleBearer(private val context: Context) {
          * twenty, which is what `Bearer`'s header was sized against.
          */
         const val ATT_OVERHEAD = 3
+        /** How long a write waits for the previous one's acknowledgement. */
+        const val WRITE_ACK_MS = 5_000L
     }
 
     /** What arrives, packet by packet, for the caller to reassemble. */
@@ -176,13 +178,28 @@ class BleBearer(private val context: Context) {
             // two is set, never both.
             gatt?.let { g ->
                 val c = g.getService(SERVICE)?.getCharacteristic(INBOUND) ?: return false
+                // **One write request in flight.** GATT acknowledges each
+                // write before it takes the next, and a second request
+                // while the first is out is refused with status 201,
+                // ERROR_GATT_WRITE_REQUEST_BUSY: the capture key fourteen
+                // milliseconds after the proximity outcomes was. So a send
+                // waits for the previous write's acknowledgement, and gives
+                // up where none comes in five seconds.
+                if (!writeDone.tryAcquire(WRITE_ACK_MS, java.util.concurrent.TimeUnit.MILLISECONDS)) {
+                    Diag.warn("ble", "op" to "write", "state" to "refused", "reason" to "the previous write was never acknowledged")
+                    return false
+                }
                 return try {
                     @Suppress("DEPRECATION")
                     val status = g.writeCharacteristic(c, packet, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
                     val ok = status == BluetoothGatt.GATT_SUCCESS || status == 0
-                    if (!ok) Diag.warn("ble", "op" to "write", "status" to status)
+                    if (!ok) {
+                        Diag.warn("ble", "op" to "write", "status" to status)
+                        writeDone.release()
+                    }
                     ok
                 } catch (e: SecurityException) {
+                    writeDone.release()
                     refused("write")
                     false
                 }
@@ -442,7 +459,15 @@ class BleBearer(private val context: Context) {
         }
     }
 
+    /** Held while a write request is out; released by its acknowledgement. */
+    private val writeDone = java.util.concurrent.Semaphore(1)
+
     private val clientCallback = object : BluetoothGattCallback() {
+        override fun onCharacteristicWrite(g: BluetoothGatt, c: BluetoothGattCharacteristic, status: Int) {
+            if (status != BluetoothGatt.GATT_SUCCESS) Diag.warn("ble", "op" to "write", "state" to "acknowledged", "status" to status)
+            writeDone.release()
+        }
+
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
             connection("client", status, newState)
             if (newState != BluetoothProfile.STATE_CONNECTED) subscription.reset()
@@ -513,6 +538,9 @@ class BleBearer(private val context: Context) {
 
     /** Stop everything and give the radio back. Safe to call twice. */
     fun close() {
+        // a send waiting on an acknowledgement that will never come is let go
+        writeDone.drainPermits()
+        writeDone.release()
         if (gatt != null || server != null) Diag.event("ble", "op" to "close")
         manager()?.adapter?.let { stopScan(it) }
         runCatching {

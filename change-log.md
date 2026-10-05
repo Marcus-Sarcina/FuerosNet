@@ -12263,3 +12263,20 @@ begins the kernel's ceremony at the brief's Accept so the person is asked
 once, encodes codes in base45 so the two-kilobyte first code fits at
 correction M, and shows them as large as the screen allows. Corpus 324 →
 325; functional tests 490 → 491; catalogue 479 → 480.
+
+
+### 2026-10-04 (the second and third field runs)
+
+Two phones now run the ceremony from the invite to the proposal. The
+optical exchange crosses in parts of 256 bytes in lockstep, each screen
+showing the part the other side needs next and saying what it holds, with a
+camera band to aim by; a code already read is not read again, a camera
+failure stops the meeting instead of crashing it, and a session that reads
+nothing restarts itself. The Bluetooth client waits for each write's
+acknowledgement, and the optical step ends only when both intents have
+crossed, so the tap windows overlap. In the node, a message a running drain
+had delivered is no longer reported refused. In the kernel, a participant
+that has stopped refuses a witness request naming it, and two identities at
+their genesis form a record with no witness: the formation record, the one
+witnessless shape, which the kernel could not build before. Functional tests
+491 → 492; catalogue 480 → 481.

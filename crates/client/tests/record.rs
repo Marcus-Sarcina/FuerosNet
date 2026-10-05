@@ -41,6 +41,7 @@ fn full_set() -> DisclosureSet {
 fn signed_record(w: &mut World, set: &DisclosureSet, responses: Vec<Vec<u8>>) -> Record {
     let t = w.tick();
     let p = Proposal {
+        formation: false,
         started_at: t,
         finalized_at: t + 600,
         participants: [kh("alice"), kh("bob")],
@@ -171,6 +172,7 @@ fn a_subject_withholds_its_signature_from_a_body_omitting_a_response_it_holds() 
     let held = BTreeMap::from([(q.query_id(), resp.clone())]);
     let nominees = BTreeSet::from([kh("w1")]);
     let without = Proposal {
+        formation: false,
         started_at: 1,
         finalized_at: 2,
         participants: [kh("alice"), kh("bob")],
@@ -187,6 +189,7 @@ fn a_subject_withholds_its_signature_from_a_body_omitting_a_response_it_holds() 
         Err(Refusal::OmittedResponse(q.query_id()))
     );
     let with = Proposal {
+        formation: false,
         responses: vec![resp],
         ..without
     };
@@ -207,6 +210,7 @@ fn a_participant_refuses_a_witness_attributed_to_it_that_it_did_not_nominate() {
     let hook = Hook(RefCell::new(vec![]));
     let nominees = BTreeSet::from([kh("w1"), kh("w2")]);
     let w3_as_mine = Proposal {
+        formation: false,
         started_at: 1,
         finalized_at: 2,
         participants: [kh("alice"), kh("bob")],
@@ -274,6 +278,7 @@ fn the_person_is_told_before_signing_when_their_nominees_are_outnumbered_or_abse
         witnesses,
         responses: vec![],
         root: [0; 32],
+        formation: false,
     };
     assert_eq!(
         participant_check(&kh("alice"), &p, &nominees, &BTreeMap::new(), &hook),
@@ -286,6 +291,7 @@ fn the_person_is_told_before_signing_when_their_nominees_are_outnumbered_or_abse
     );
     // absent altogether
     let none = Proposal {
+        formation: false,
         witnesses: p.witnesses[..4].to_vec(),
         ..p.clone()
     };
@@ -300,6 +306,7 @@ fn the_person_is_told_before_signing_when_their_nominees_are_outnumbered_or_abse
     );
     // an even split raises nothing
     let even = Proposal {
+        formation: false,
         witnesses: vec![p.witnesses[0].clone(), p.witnesses[4].clone()],
         ..p.clone()
     };
@@ -720,6 +727,7 @@ fn a_presence_record_takes_classical_response_signatures_and_a_recovery_takes_hy
     let t = w.tick();
     let back = vec![w.back("alice"), w.back("bob"), w.back("w1"), w.back("w2")];
     let p = Proposal {
+        formation: false,
         started_at: t,
         finalized_at: t + 600,
         participants: [kh("alice"), kh("bob")],
@@ -751,6 +759,7 @@ fn a_presence_record_takes_classical_response_signatures_and_a_recovery_takes_hy
     let hybrid_no_prior =
         rhtn_codec::cbor::map_without_key(&hybrid, 8).expect("a map less one key");
     let p = Proposal {
+        formation: false,
         responses: vec![hybrid_no_prior],
         ..p
     };
@@ -812,6 +821,7 @@ fn a_witnesss_nominator_is_a_participant_and_the_signers_are_the_body_s_witnesse
     // and the envelope signed by the participants then the witnesses in
     // field 4's order
     let ok = Proposal {
+        formation: false,
         started_at: t,
         finalized_at: t + 600,
         participants: [kh("alice"), kh("bob")],
@@ -846,6 +856,7 @@ fn a_witnesss_nominator_is_a_participant_and_the_signers_are_the_body_s_witnesse
     // is cross-nomination by the witness's counterparty, and a third party
     // nominating cannot be that
     let stranger = Proposal {
+        formation: false,
         witnesses: vec![
             Witness {
                 keyhash: kh("w1"),

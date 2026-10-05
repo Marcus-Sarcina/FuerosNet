@@ -39,6 +39,7 @@ fn contents(w: &mut World) -> (Contents, [u8; 32]) {
     let set = full_set();
     let t = w.tick();
     let p = Proposal {
+        formation: false,
         started_at: t,
         finalized_at: t + 600,
         participants: [kh("alice"), kh("bob")],

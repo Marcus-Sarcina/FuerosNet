@@ -155,9 +155,11 @@ pub fn integrity_value(attested: bool, scheme: u64) -> Vec<u8> {
     out
 }
 
-/// What both participants and every witness sign: a normal presence
-/// record's body, its responses those gathered, its root over the agreed
-/// disclosure set.
+/// What both participants and every witness sign: a presence record's
+/// body, its responses those gathered, its root over the agreed disclosure
+/// set.  **A formation record** (`wire-format.md` §3.2 subtype 1; design
+/// §13.2) is the one witnessless shape: two fresh identities, each with
+/// the genesis value for a back-pointer, no witnesses and no responses.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Proposal {
     pub started_at: u64,
@@ -167,6 +169,8 @@ pub struct Proposal {
     /// Signed `VerifierResponse`s, in the order the body carries them.
     pub responses: Vec<Vec<u8>>,
     pub root: [u8; 32],
+    /// Subtype 1: no witnesses, no responses, genesis back-pointers.
+    pub formation: bool,
 }
 
 /// Sort responses as the body requires (`wire-format.md` §4.5 field 5):
@@ -188,12 +192,38 @@ impl Proposal {
     }
 
     /// The body, with one back-pointer list per signer in signer order.
+    /// A formation omits keys 4 and 5 and carries subtype 1 (§3.2).
     pub fn body(&self, back: &[Vec<Txid>]) -> Vec<u8> {
         assert_eq!(
             back.len(),
             self.signers().len(),
             "one back-pointer list per signer"
         );
+        if self.formation {
+            assert!(
+                self.witnesses.is_empty() && self.responses.is_empty(),
+                "a formation carries no witnesses and no responses"
+            );
+            let mut out = Vec::new();
+            emit_map_head(&mut out, 6);
+            emit_back_pointers(&mut out, back);
+            emit_uint(&mut out, 1);
+            emit_uint(&mut out, self.started_at);
+            emit_uint(&mut out, 2);
+            emit_uint(&mut out, self.finalized_at);
+            emit_uint(&mut out, 3);
+            emit_array_head(&mut out, 2);
+            for p in &self.participants {
+                emit_map_head(&mut out, 1);
+                emit_uint(&mut out, 1);
+                emit_bstr(&mut out, p);
+            }
+            emit_uint(&mut out, 6);
+            emit_uint(&mut out, 1);
+            emit_uint(&mut out, 8);
+            emit_bstr(&mut out, &self.root);
+            return out;
+        }
         let mut out = Vec::new();
         emit_map_head(&mut out, 7 + (!self.responses.is_empty()) as usize);
         emit_back_pointers(&mut out, back);

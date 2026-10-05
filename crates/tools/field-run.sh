@@ -401,6 +401,11 @@ while [ "$i" -lt "${#PHONE_SERIALS[@]}" ]; do
     say "$s: not on USB; connecting over Wi-Fi at $a"
     out="$(timeout 8 "$ADB" connect "$a" 2>&1 || true)"
     case "$out" in *connected*) ;; *) say "$s: adb connect $a: ${out:-no answer} (is the phone on, on the Wi-Fi, and switched to TCP adb by field-setup.sh since its last reboot?)" ;; esac
+    # a network connection is listed a moment after connect returns:
+    # wait for it, up to ten seconds, rather than reading the list early
+    waited=0
+    while [ "$waited" -lt 20 ] && ! usb_now | grep -qx "$a"; do sleep 0.5; waited=$((waited + 1)); done
+    usb_now | grep -qx "$a" || say "$s: $a is not listed as a device after ten seconds"
   fi
   i=$((i + 1))
 done
@@ -410,7 +415,9 @@ DEVICES=()
 while IFS= read -r id; do
   [ -n "$id" ] || continue
   case "$id" in
-    *:*) serial="$("$ADB" -s "$id" shell getprop ro.serialno 2> /dev/null | tr -d '\r')"; [ -n "$serial" ] || serial="$id" ;;
+    # adb shell forwards stdin, which inside a read loop is the rest of the
+    # list: it reads from /dev/null here or it eats the next phone
+    *:*) serial="$("$ADB" -s "$id" shell getprop ro.serialno 2> /dev/null < /dev/null | tr -d '\r')"; [ -n "$serial" ] || serial="$id" ;;
     *) serial="$id" ;;
   esac
   [ -n "${ADB_ID[$serial]:-}" ] && continue
@@ -540,14 +547,14 @@ pull_phone() { # serial
   while IFS= read -r f; do
     f="${f%$'\r'}"
     case "$f" in
-      *.jsonl) "$ADB" -s "${ADB_ID[$s]}" exec-out run-as "$APP" cat "files/diag/$f" > "$dir/$f" 2> /dev/null \
+      *.jsonl) "$ADB" -s "${ADB_ID[$s]}" exec-out run-as "$APP" cat "files/diag/$f" > "$dir/$f" 2> /dev/null < /dev/null \
         && say "$s: pulled $f ($(wc -l < "$dir/$f") lines)" ;;
     esac
   done < "$dir/ls.txt"
   "$ADB" -s "${ADB_ID[$s]}" shell run-as "$APP" ls files/diag/report 2> /dev/null | tr -d '\r' | while IFS= read -r f; do
     case "$f" in
       *.zip)
-        "$ADB" -s "${ADB_ID[$s]}" exec-out run-as "$APP" cat "files/diag/report/$f" > "$dir/$f" 2> /dev/null || continue
+        "$ADB" -s "${ADB_ID[$s]}" exec-out run-as "$APP" cat "files/diag/report/$f" > "$dir/$f" 2> /dev/null < /dev/null || continue
         mkdir -p "$dir/report"
         python3 -c 'import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' "$dir/$f" "$dir/report" \
           && say "$s: pulled report $f ($(ls "$dir/report/events" 2> /dev/null | wc -l) event files)" ;;
