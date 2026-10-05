@@ -33,6 +33,9 @@ pub struct Evaluation<N> {
 /// and answers for a set in one computation; it sees nothing else and
 /// changes nothing else.
 pub trait Policy<N: Ord + Clone + Debug>: Send + Sync {
+    /// The policy's name, for a report. **Not an identifier anything on
+    /// the wire carries** (design §16.4): a node's choice of policy is
+    /// published nowhere.
     fn name(&self) -> &'static str;
 
     /// Score `candidates` from the observer's evidence, in one computation.
@@ -63,6 +66,9 @@ pub trait Policy<N: Ord + Clone + Debug>: Send + Sync {
 /// an edge is worth at its distance is policy.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReferenceMetric {
+    /// What one pair's edge is worth. **Policy, not protocol** (design §16.4):
+    /// beyond the horizon trust flows equally over hierarchical and acquaintance
+    /// edges, and what an edge is worth at its distance is the evaluator's own.
     pub edge_capacity: u64,
 }
 
@@ -83,6 +89,8 @@ impl ReferenceMetric {
         g
     }
 
+    /// The scope the evidence implies, which is the evidence's own (design
+    /// §16.2.1).
     pub fn scope<N: Ord + Clone + Debug>(&self, ev: &Evidence<N>) -> Scope<N> {
         ev.scope()
     }
@@ -176,10 +184,12 @@ impl<N: Ord + Clone + Debug> Policy<N> for ReferenceMetric {
 /// with its population.
 #[derive(Clone, Debug, PartialEq)]
 pub struct DistanceDecay {
+    /// The decay factor per hop. Below 1 for a series that can converge at all.
     pub lambda: f64,
 }
 
 impl DistanceDecay {
+    /// A decay policy with the given λ.
     pub fn new(lambda: f64) -> Self {
         DistanceDecay { lambda }
     }

@@ -30,9 +30,15 @@ pub fn honest_one(lambda: f64, depth: usize) -> f64 {
     lambda.powi(depth as i32)
 }
 
+/// Whether a series converges. **The property design §16.2 asks of a
+/// metric**: a policy whose mass diverges rewards a region for growing,
+/// which is what a fake region does.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Convergence {
+    /// The mass is bounded in the depth.
     Converges,
+    /// The mass grows without bound, so a large enough fake region
+    /// outweighs any honest one.
     Diverges,
 }
 

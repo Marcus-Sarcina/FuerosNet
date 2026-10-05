@@ -16,14 +16,18 @@ use rhtn_crypto::verify::{self, Lookup};
 /// An `EndpointRecord` (`wire-format.md` §7.6) as a holder reads it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EndpointRecord {
+    /// Field 1: the node whose endpoints these are, and the signer.
     pub node: Keyhash,
     /// The publisher's preference order; entries are distinct.
     pub endpoints: Vec<Vec<u8>>,
+    /// The sequence number, which orders two records for one node.
     pub seqno: Seqno,
+    /// The record's own bytes, which the signature covers.
     pub bytes: Vec<u8>,
 }
 
 impl EndpointRecord {
+    /// Parse an endpoint record and verify the node's signature over it.
     pub fn parse(b: &[u8]) -> Result<Self, String> {
         let item = parse_all(b).map_err(|e| e.0)?;
         schema::check_kind(b, "EndpointRecord", &item).map_err(|e| e.0)?;

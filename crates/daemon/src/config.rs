@@ -138,18 +138,26 @@ pub struct Config {
 /// severe level written.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LogConfig {
+    /// The file the JSON lines are written to.
     pub path: PathBuf,
+    /// The least severe level written.
     pub level: LogLevel,
 }
 
 /// The levels `[log] level` takes, from nothing to everything.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LogLevel {
+    /// Nothing is written.
     Off,
+    /// Errors only.
     Error,
+    /// Errors and warnings.
     Warn,
+    /// Those, and what a running node reports of itself as it runs.
     Info,
+    /// Those, and the per-step detail.
     Debug,
+    /// Everything.
     Trace,
 }
 
@@ -185,7 +193,9 @@ impl LogLevel {
 /// whether or not this field is set.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Invalid {
+    /// The line it was on; 0 means the file as a whole.
     pub line: usize,
+    /// What was wrong with it.
     pub what: String,
 }
 

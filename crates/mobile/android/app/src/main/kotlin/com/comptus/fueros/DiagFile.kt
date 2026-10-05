@@ -35,7 +35,9 @@ class DiagFile(
     start: Boolean = true,
 ) {
     companion object {
+        /** The bundle's default cap in bytes, past which the file rolls. */
         const val DEFAULT_CAP = 16L * 1024 * 1024
+        /** How many lines the writer thread's queue holds. */
         const val QUEUE_LINES = 4096
         private const val SUFFIX = ".jsonl"
         private const val PREV = ".prev"

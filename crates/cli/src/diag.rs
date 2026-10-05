@@ -35,9 +35,13 @@ pub struct Line {
     /// The line's position in its file, 1-based, for a stable order among
     /// equal times.
     pub n: usize,
+    /// The event's own monotonic time, in milliseconds.
     pub ms: u64,
+    /// Its level, as the renderer wrote it.
     pub level: String,
+    /// The layer that raised it.
     pub layer: String,
+    /// The event's name.
     pub event: String,
     /// Every other key, sorted by name, which is the order the JSON
     /// reader hands them back in.
@@ -50,9 +54,11 @@ pub struct Line {
 /// One file, parsed.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Source {
+    /// The file, as the caller named it.
     pub name: String,
     /// `(anchor.ms, anchor.unix_ms)`, where the file has one.
     pub anchor: Option<(u64, u64)>,
+    /// The events it carried, in file order.
     pub lines: Vec<Line>,
     /// Lines that were not a JSON object with the four fields, and were
     /// skipped: a truncated last line, a stray human line.
@@ -61,6 +67,7 @@ pub struct Source {
 
 /// The name of the anchor event and its wall-clock field.
 pub const ANCHOR_EVENT: &str = "diag.anchor";
+/// The field on that event carrying the wall clock.
 pub const ANCHOR_FIELD: &str = "unix_ms";
 /// A phone's live stream opens with this event, which carries `unix_ms`
 /// too and so anchors the collector's file (`live.rs`).

@@ -28,7 +28,10 @@ use std::sync::Arc;
 /// is the client's to decide (`light-client-requirements.md` §1.3).
 #[uniffi::export(with_foreign)]
 pub trait Proximity: Send + Sync {
+    /// The channels this hardware has, in any order.
     fn supported(&self) -> Vec<Channel>;
+    /// Run `channel` against `peer`, named by its keyhash, and say how it
+    /// went.
     fn run(&self, channel: Channel, peer: Vec<u8>) -> ChannelOutcome;
     /// Metres, where the channel measured one.
     fn resolution_m(&self, channel: Channel) -> Option<u64>;
@@ -42,6 +45,7 @@ pub trait Proximity: Send + Sync {
 /// and nothing beside it.
 #[uniffi::export(with_foreign)]
 pub trait Camera: Send + Sync {
+    /// The pixels of one frame answering `ask`.
     fn capture(&self, ask: Ask) -> Vec<u8>;
 }
 
@@ -53,13 +57,16 @@ pub trait Camera: Send + Sync {
 /// what the ceremony reads.
 #[uniffi::export(with_foreign)]
 pub trait Clock: Send + Sync {
+    /// Milliseconds since the Unix epoch, as the platform reports it.
     fn now_ms(&self) -> u64;
+    /// Sleep the calling thread for `ms` milliseconds.
     fn wait_ms(&self, ms: u64);
 }
 
 /// The platform's randomness.
 #[uniffi::export(with_foreign)]
 pub trait Random: Send + Sync {
+    /// Exactly `n` random bytes.  Short measure is refused, not padded.
     fn fill(&self, n: u32) -> Vec<u8>;
 }
 
@@ -70,10 +77,10 @@ pub trait Random: Send + Sync {
 /// answering ask none (design Appendix A.3).
 #[uniffi::export(with_foreign)]
 pub trait Operator: Send + Sync {
+    /// Put `question` to the person; their yes or no.
     fn ask(&self, question: String) -> bool;
 }
 
-/// Where notices go.  They are raised as they occur and never polled for.
 /// Where the client's own state lives between runs (design §23.3:
 /// archives, sealed captures and caches go where the storage is).  The
 /// shell owns the place, app-private storage on a phone; the kernel owns
@@ -89,8 +96,10 @@ pub trait Storage: Send + Sync {
     fn write(&self, name: String, bytes: Vec<u8>) -> bool;
 }
 
+/// Where notices go.  They are raised as they occur and never polled for.
 #[uniffi::export(with_foreign)]
 pub trait Notices: Send + Sync {
+    /// A notice, handed over on whichever kernel thread raised it.
     fn told(&self, notice: Told);
 }
 
@@ -123,6 +132,7 @@ pub trait Custody: Send + Sync {
 /// share and hears nothing; [`Silent`] is the Rust-side no-op.
 #[uniffi::export(with_foreign)]
 pub trait Diagnostics: Send + Sync {
+    /// One diagnostic event, already a JSON line.
     fn event(&self, line: String);
 }
 
@@ -137,14 +147,23 @@ impl Diagnostics for Silent {
 /// Everything a shell supplies, in one object it hands over once.
 #[derive(Clone, uniffi::Object)]
 pub struct Platform {
+    /// The proximity hardware.
     pub proximity: Arc<dyn Proximity>,
+    /// The camera.
     pub camera: Arc<dyn Camera>,
+    /// The clock.
     pub clock: Arc<dyn Clock>,
+    /// The randomness source.
     pub random: Arc<dyn Random>,
+    /// The person.
     pub operator: Arc<dyn Operator>,
+    /// Where notices go.
     pub notices: Arc<dyn Notices>,
+    /// Where persisted state lives.
     pub storage: Arc<dyn Storage>,
+    /// Where the storage key lives.
     pub custody: Arc<dyn Custody>,
+    /// Where field-test diagnostics go; [`Silent`] where none are wanted.
     pub diagnostics: Arc<dyn Diagnostics>,
 }
 

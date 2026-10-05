@@ -158,9 +158,13 @@ fn carry_supersession(
 /// 0, requests on fresh bidirectional streams of the same connection, and
 /// the replies back through `on_reply`.
 pub struct SessionAdjacency {
+    /// The peer this adjacency speaks to.
     pub peer: Keyhash,
+    /// Frames to send it, by type and body.
     pub outbound: mpsc::UnboundedSender<(u64, Vec<u8>)>,
+    /// The connection, where one is still up.
     pub conn: Option<quinn::Connection>,
+    /// Where a reply to a request stream is delivered.
     pub on_reply: Arc<Mutex<Option<ReplyHandler>>>,
 }
 
@@ -208,12 +212,15 @@ fn reply_handler(
 /// per requester as with any other query).  Over the limit a request
 /// stream fails; the values are the operator's.
 pub struct RateLimit {
+    /// How many are allowed in a window.
     pub per_window: u32,
+    /// How long the window is.
     pub window: Duration,
     buckets: Mutex<HashMap<Keyhash, (tokio::time::Instant, u32)>>,
 }
 
 impl RateLimit {
+    /// A limit of `per_window` per `window`.
     pub fn new(per_window: u32, window: Duration) -> Self {
         RateLimit {
             per_window,
@@ -259,31 +266,47 @@ pub type LocalVerifier = Arc<
 /// The state of the direct path to one peer (design §14.1.1): held, or
 /// failed and not retried until the next path opening.
 pub enum DirectState {
+    /// A direct connection is held.
     Connected(quinn::Connection),
+    /// The direct path failed at this instant, and is not retried until the
+    /// next path opening.
     Failed(std::time::Instant),
 }
 
 /// Where live payload went.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LiveDelivery {
+    /// Over the direct path.
     Direct,
+    /// Through the serving nodes.
     Relayed,
 }
 
+/// A node running on a real endpoint: everything it holds, and the socket
+/// it holds it behind.
 pub struct LiveNode {
+    /// The session layer's node.
     pub node: Arc<Node>,
+    /// Its own view of the topology.
     pub view: Arc<Mutex<NodeView>>,
+    /// Its currency attestations and their ladder.
     pub currency: Arc<Mutex<CurrencyState>>,
+    /// Its anchor table.
     pub anchors: Arc<Mutex<AnchorTable>>,
+    /// The identities it has pinned.
     pub ids: Arc<Mutex<Vec<Identity>>>,
+    /// The sessions it can reach peers on.
     pub adjacency: LiveAdjacency,
+    /// The QUIC endpoint it listens on.
     pub endpoint: quinn::Endpoint,
+    /// The address that endpoint is bound to.
     pub addr: SocketAddr,
     /// The endpoint this node dials out on: upstream attaches, and the hops
     /// of a resolution it runs for a client.
     pub client_ep: quinn::Endpoint,
     /// How long one dial may take on a proxied resolution.
     pub dial_timeout: Duration,
+    /// What it will accept per requester per window.
     pub limits: Arc<RateLimit>,
     /// The socket this node serves and dials on: QUIC, STUN answered for
     /// the clients it serves, and STUN asked of its own serving node.
@@ -753,6 +776,7 @@ impl LiveNode {
         })
     }
 
+    /// This node's own identity.
     pub fn me(&self) -> Keyhash {
         self.node.cfg.me.keyhash
     }

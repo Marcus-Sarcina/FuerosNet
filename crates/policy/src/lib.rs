@@ -30,12 +30,29 @@
 //! functions here carry its constructions across, and the tests carry its
 //! regression cases and committed figures.
 
+#![warn(missing_docs)]
+
+/// The reference policy's reading of a presented archive (design §16.1,
+/// §16.2.1).
 pub mod archive;
+/// A policy's resistance bound over the simulation's topologies (design
+/// §16.4).
 pub mod conformance;
+/// What one observer holds, and the omniscient topology the conformance
+/// test derives each observer's share of (design §16.3, §16.3.1).
 pub mod evidence;
+/// A capacitated graph and its maximum flow: the metric is max-flow /
+/// min-cut (design §16.2).
 pub mod flow;
+/// The graph the metric runs on (design §16.2.1): scope and horizon, the
+/// distance function, throughput by distance, and the three-pass
+/// allocation rule (design §16.4).
 pub mod landscape;
+/// The interface a node consults, the reference metric behind it, and two
+/// substitutes.
 pub mod policy;
+/// The arithmetic of design §16.2: what a decay policy sums over a fake
+/// region, and whether that sum converges.
 pub mod series;
 
 pub use evidence::{Conduct, Evidence, Observation, World};

@@ -20,14 +20,18 @@ object Consent {
 
     @Volatile private var host: Activity? = null
 
+    /** Put questions to `a` from now on. */
     fun host(a: Activity) {
         host = a
     }
 
+    /** Stop putting questions to `a`, where it is still the host. */
     fun release(a: Activity) {
         if (host === a) host = null
     }
 
+    /** Put `question` to the person and wait for their answer.  No
+     *  foreground screen means no, as nobody was shown it. */
     fun ask(question: String): Boolean {
         val a = host ?: return false
         val latch = CountDownLatch(1)

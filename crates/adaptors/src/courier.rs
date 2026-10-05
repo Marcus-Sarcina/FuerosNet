@@ -24,6 +24,7 @@ use tokio::sync::mpsc;
 pub struct Inlet(Arc<Mutex<Option<Inbound>>>);
 
 impl Inlet {
+    /// Where payload for this party is delivered.
     pub fn inbound(&self) -> Inbound {
         let slot = self.0.clone();
         Arc::new(move |from, bytes, binding| {
@@ -34,6 +35,7 @@ impl Inlet {
         })
     }
 
+    /// Deliver this party's payload to `to` from now on.
     pub fn bind(&self, to: Inbound) {
         *self.0.lock().unwrap() = Some(to);
     }
@@ -63,9 +65,15 @@ impl Carried {
     }
 }
 
+/// What carries the client's messages: the serving node for what it
+/// relays, the direct path where one is held, and the client's own thread
+/// behind `handle`.
 pub struct Courier {
+    /// The client, on its own thread.
     pub handle: Handle,
+    /// The serving node, for what it publishes, stocks and relays.
     pub serving: Arc<dyn Serving>,
+    /// The direct path, tried before the relay (design §12.6.3).
     pub direct: Arc<dyn Direct>,
     app: mpsc::UnboundedSender<(Keyhash, Dispatched)>,
     verifiers: Mutex<Option<Arc<Verifiers>>>,
@@ -144,6 +152,7 @@ impl Courier {
         *self.verifiers.lock().unwrap() = Some(v);
     }
 
+    /// The identity this courier carries for.
     pub fn me(&self) -> Keyhash {
         self.handle.me()
     }

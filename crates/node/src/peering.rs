@@ -17,16 +17,25 @@ use std::collections::BTreeSet;
 /// concentration observable (design §3.4).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Peering {
+    /// One party.
     pub a: Keyhash,
+    /// The other.
     pub b: Keyhash,
+    /// Where `a` is reachable. **Exactly one point or locator per endpoint**
+    /// (`wire-format.md` §4.4), unlike an anchor entry's list.
     pub a_point: NetworkPoint,
+    /// Where `b` is reachable.
     pub b_point: NetworkPoint,
+    /// When the peering was made.
     pub timestamp: u64,
+    /// What each commits to replicating of the other, where they did.
     pub replication_commitment: Option<u64>,
+    /// The presence record the peering rests on, where it rests on one.
     pub proof_of_presence: Option<[u8; 32]>,
 }
 
 impl Peering {
+    /// Read a peering from its transaction record.
     pub fn from_record(rec: &Record) -> Result<Self, String> {
         if rec.tx_type != TYPE_PEERING {
             return Err("not a peering".into());
@@ -106,17 +115,32 @@ pub enum PayloadPath {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Replicated {
     /// A topology object, byte-for-byte with its body-kind tag.
-    Topology { kind: u64, object: Vec<u8> },
+    Topology {
+        /// The body-kind tag.
+        kind: u64,
+        /// The object, byte for byte.
+        object: Vec<u8>,
+    },
     /// A trust-bearing transaction.
-    TrustBearing { object: Vec<u8> },
+    TrustBearing {
+        /// The transaction, byte for byte.
+        object: Vec<u8>,
+    },
     /// A client's reachability, so a sibling answering in failover knows the
     /// client's status (design §14.1.2).
-    Reachability { client: Keyhash, reachable: bool },
+    Reachability {
+        /// Whose reachability it is.
+        client: Keyhash,
+        /// What the detector settled on.
+        reachable: bool,
+    },
 }
 
 /// A sibling that takes replicated state.
 pub trait Replica {
+    /// Take one replicated item.
     fn take(&self, item: &Replicated);
+    /// Which sibling this is.
     fn who(&self) -> Keyhash;
 }
 
@@ -260,16 +284,30 @@ impl NodeView {
 pub enum Delivery {
     /// The peers exchanged addresses during setup and connected; nobody
     /// else sees the flow.
-    Direct { to: Keyhash },
+    Direct {
+        /// The recipient.
+        to: Keyhash,
+    },
     /// Both serving infra nodes relay ciphertext.
-    Relayed { via: Keyhash, to: Keyhash },
+    Relayed {
+        /// The first carrier, this node's own serving node.
+        via: Keyhash,
+        /// The recipient.
+        to: Keyhash,
+    },
     /// The recipient is offline: the recipient's serving node holds
     /// ciphertext until reconnect (design §14.1.4).
-    Queued { at: Keyhash, to: Keyhash },
+    Queued {
+        /// The node holding it.
+        at: Keyhash,
+        /// The recipient it waits for.
+        to: Keyhash,
+    },
 }
 
 /// Whoever carries the bytes, so a test can see who saw them.
 pub trait PayloadSink {
+    /// Carry `bytes` to `to`, through `carrier` where one carried them.
     fn carry(&self, carrier: Option<Keyhash>, to: &Keyhash, bytes: &[u8]);
 }
 

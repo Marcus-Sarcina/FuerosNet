@@ -15,9 +15,13 @@ use std::collections::BTreeSet;
 /// order.
 #[derive(Debug, Clone)]
 pub struct SeriesChain {
+    /// The node whose relationship this series records.
     pub node: Keyhash,
+    /// The patron.
     pub patron: Keyhash,
+    /// The adoption that opened the series at counter zero.
     pub adoption: Record,
+    /// The reissues that moved it, in order.
     pub reissues: Vec<Record>,
 }
 
@@ -145,6 +149,7 @@ impl SeriesChain {
         1 + self.reissues.len()
     }
 
+    /// Every record of the series, the adoption first.
     pub fn records(&self) -> Vec<&Record> {
         std::iter::once(&self.adoption)
             .chain(self.reissues.iter())

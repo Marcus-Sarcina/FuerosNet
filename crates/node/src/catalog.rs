@@ -17,6 +17,7 @@ use std::collections::BTreeMap;
 /// the owner's Dunbar Org, and one the evaluator cannot compute admits
 /// nobody.
 pub trait ScopeEval {
+    /// Whether `scope`, relative to `owner`, admits `asker`.
     fn admits(&self, scope: &Scope, owner: &Keyhash, asker: &Keyhash) -> bool;
     /// Whether `asker` is inside this node's own horizon.
     fn in_horizon(&self, asker: &Keyhash) -> bool;
@@ -25,7 +26,9 @@ pub trait ScopeEval {
 /// The table's view: positions relative to the owner as the table holds
 /// them.
 pub struct TableScopes<'a> {
+    /// The table the scopes are evaluated against.
     pub table: &'a Table,
+    /// Whose view this is.
     pub me: Keyhash,
 }
 
@@ -81,9 +84,15 @@ impl ScopeEval for TableScopes<'_> {
 /// filtering, and the host's discover rule for it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Held {
+    /// Who owns the entry.
     pub owner: Keyhash,
+    /// The entry's signed bytes.
     pub bytes: Vec<u8>,
+    /// Its service type, for matching a query.
     pub service_type: String,
+    /// The `discover_scope` the owner asked for, which decides who this entry
+    /// is returned to. **Never returned in the entry itself**
+    /// (`wire-format.md` §6.6).
     pub discover: Scope,
 }
 
@@ -168,14 +177,17 @@ impl CatalogService {
         )
     }
 
+    /// The entry held for `resource`, where one is.
     pub fn held(&self, resource: &Keyhash) -> Option<&Held> {
         self.entries.get(resource)
     }
 
+    /// How many entries are held.
     pub fn len(&self) -> usize {
         self.entries.len()
     }
 
+    /// Whether none is.
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
@@ -266,6 +278,7 @@ impl CatalogService {
         Ok(owner)
     }
 
+    /// The abuse reports held for `owner`'s resources (design §11.6).
     pub fn reports_for(&self, owner: &Keyhash) -> Vec<Vec<u8>> {
         self.reports.get(owner).cloned().unwrap_or_default()
     }

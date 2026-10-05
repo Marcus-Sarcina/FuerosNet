@@ -13,19 +13,23 @@ use rhtn_codec::cose::sha256;
 /// the credential is added.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Request {
+    /// The request method.
     pub method: String,
     /// Origin-form target: path and query.
     pub target: String,
     /// Header names lowercased, in the order received, the caller's
     /// `host`, framing and `rhtn-*` headers removed.
     pub headers: Vec<(String, String)>,
+    /// The request body.
     pub body: Vec<u8>,
 }
 
 /// Why a message is not forwarded: each answered `malformed request`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Reject {
+    /// The request does not read.
     Malformed(&'static str),
+    /// The request names more than one thing it could be for.
     Ambiguous(&'static str),
     /// A tunnel, a protocol switch or an interim response: not one request
     /// and one response.
@@ -235,9 +239,13 @@ fn decode_chunked(b: &[u8]) -> Result<(Vec<u8>, usize), Reject> {
 /// The credential the gateway presents (`resource-requirements.md` §2).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Credential {
+    /// Who the credential speaks for.
     pub principal: [u8; 32],
+    /// The application roles it carries.
     pub roles: Vec<String>,
+    /// Which resource it is for, so one resource's credential is not another's.
     pub audience: Keyhash,
+    /// The hosted session it belongs to.
     pub session: [u8; 16],
 }
 

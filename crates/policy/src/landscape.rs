@@ -23,6 +23,7 @@ pub struct Scope<N: Ord + Clone> {
 }
 
 impl<N: Ord + Clone> Scope<N> {
+    /// An empty scope.
     pub fn new() -> Self {
         Scope {
             adj: BTreeMap::new(),
@@ -53,23 +54,29 @@ impl<N: Ord + Clone> Scope<N> {
         s
     }
 
+    /// Add an isolated node, so it appears with no scope edges.
     pub fn add_node(&mut self, n: N) {
         self.adj.entry(n).or_default();
     }
 
+    /// Join `a` and `b`. **Scope edges are undirected** (design §16.2.1): the
+    /// hierarchy's direction settles authority, not reachability for the metric.
     pub fn link(&mut self, a: &N, b: &N) {
         self.adj.entry(a.clone()).or_default().insert(b.clone());
         self.adj.entry(b.clone()).or_default().insert(a.clone());
     }
 
+    /// Whether the scope holds `n`.
     pub fn contains(&self, n: &N) -> bool {
         self.adj.contains_key(n)
     }
 
+    /// Every node, in order.
     pub fn nodes(&self) -> impl Iterator<Item = &N> {
         self.adj.keys()
     }
 
+    /// The nodes one scope edge from `n`; empty where it holds no such node.
     pub fn neighbours(&self, n: &N) -> impl Iterator<Item = &N> {
         self.adj.get(n).into_iter().flatten()
     }
@@ -177,9 +184,12 @@ pub fn hops_from<N: Ord + Clone + Debug>(g: &FlowGraph<N>, source: &N) -> BTreeM
 /// individual flow.
 #[derive(Clone, Debug)]
 pub struct Split<N: Ord + Clone> {
+    /// The split graph itself, cloned for each individual flow.
     pub network: Network,
     index: BTreeMap<N, usize>,
+    /// The shared sink an allocation's drains run to.
     pub sink: usize,
+    /// The source: the observer, from which every flow starts.
     pub source: usize,
 }
 
@@ -285,6 +295,7 @@ pub fn score<N: Ord + Clone + Debug>(
 /// One candidate as the allocation ranked it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Ranked<N> {
+    /// The candidate ranked.
     pub candidate: N,
     /// Available flow: the candidate's individual standing on the graph
     /// before any allocation.

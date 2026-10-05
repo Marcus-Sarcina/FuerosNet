@@ -82,7 +82,9 @@ class BleBearer(private val context: Context) {
          * another bearer.
          */
         val SERVICE: UUID = UUID.fromString("7f3a1c64-9b2e-4d51-8a07-1e6f5c2b4d93")
+        /** The characteristic a client writes its packets to. */
         val INBOUND: UUID = UUID.fromString("7f3a1c65-9b2e-4d51-8a07-1e6f5c2b4d93")
+        /** The characteristic the server notifies its packets on. */
         val OUTBOUND: UUID = UUID.fromString("7f3a1c66-9b2e-4d51-8a07-1e6f5c2b4d93")
 
         /**
@@ -116,6 +118,7 @@ class BleBearer(private val context: Context) {
      * `BleBearerTest` can hold it; the radio callbacks only feed it.
      */
     class Subscription {
+        /** Whether notifications are on. */
         @Volatile
         var active: Boolean = false
             private set
@@ -143,6 +146,7 @@ class BleBearer(private val context: Context) {
             return active
         }
 
+        /** Forget the subscription, as a disconnect does. */
         fun reset() {
             active = false
         }

@@ -114,6 +114,8 @@ class Meet(
     /** The kernel's ceremony is open: the first code can be shown. */
     fun begun(): Boolean = synchronized(lock) { begun }
 
+    /** The kernel's ceremony opened: redraw, since the first code can now
+     *  be shown. */
     fun begunCeremony() {
         synchronized(lock) {
             begun = true
@@ -121,15 +123,25 @@ class Meet(
         }
     }
 
+    /** Where the meeting stands, as the screens sheet orders the steps. */
     enum class Step {
+        /** The invitation: one device shows its code, the other reads it. */
         INTENT,
+        /** The brief: what the record will hold, for the person to accept. */
         BRIEF,
+        /** The optical exchange, and the intents over the bearer. */
         OPTICAL,
+        /** The distance channels. */
         PROXIMITY,
+        /** The guided captures. */
         CAPTURE,
+        /** The verifier selection and the queries. */
         VERIFIERS,
+        /** The proposed body, for every signer to review. */
         REVIEW,
+        /** The record is finalised and held. */
         DONE,
+        /** The meeting ended without one, and [stopReason] says why. */
         STOPPED,
     }
 
@@ -160,6 +172,7 @@ class Meet(
      * a patronage action in a named direction.
      */
     data class Kind(
+        /** Which way a patronage action goes, if it is one. */
         val adopt: Adopt = Adopt.NONE,
         /** *"Ask this person to backup my user data"* — the checkbox. */
         val askBackup: Boolean = false,
@@ -201,12 +214,17 @@ class Meet(
      * (design §19.6); this is the selector's side of the exchange.
      */
     data class Chosen(
+        /** The verifier's keyhash in hex. */
         val key: String,
+        /** Why it was eligible. */
         val basis: Basis,
+        /** Its verdict, once one has come back. */
         val verdict: Verdict? = null,
     )
 
+    /** What a bound screen is told: re-read the accessors and redraw. */
     interface Ui {
+        /** Re-read the accessors and redraw. */
         fun render()
     }
 
@@ -238,14 +256,23 @@ class Meet(
 
     /** The kernel's `Progress`, with identifiers as hex. */
     data class Progress(
+        /** Whether this side proposes: the initiator does. */
         val proposer: Boolean,
+        /** Queries issued and not yet answered. */
         val queriesOutstanding: Int,
+        /** Nominees that will attest. */
         val attesting: List<String> = listOf(),
+        /** Nominees that declined. */
         val declined: List<String> = listOf(),
+        /** Signers whose back-pointers are held. */
         val backFrom: List<String> = listOf(),
+        /** Whether the counterparty's gathered responses are held. */
         val theirResponses: Boolean = false,
+        /** Whether the body is out, or has been shown. */
         val proposed: Boolean = false,
+        /** Signers whose entries are held, at the proposer. */
         val signed: List<String> = listOf(),
+        /** Signers that refused, at the proposer. */
         val refused: List<String> = listOf(),
     )
 
@@ -335,6 +362,7 @@ class Meet(
         }
     }
 
+    /** Unbind a screen: it is rendered no more. */
     fun unbind(u: Ui) {
         synchronized(lock) {
             if (ui === u) ui = null
@@ -349,10 +377,13 @@ class Meet(
 
     fun step(): Step = synchronized(lock) { step }
 
+    /** The meeting's own log lines, oldest first. */
     fun log(): List<String> = synchronized(lock) { log.toList() }
 
+    /** The finalised record's txid in hex, once there is one. */
     fun recordTxid(): String? = synchronized(lock) { recordTxid }
 
+    /** Why the meeting stopped, where it did. */
     fun stopReason(): String? = synchronized(lock) { stopReason }
 
     /**
@@ -367,6 +398,8 @@ class Meet(
             step == Step.REVIEW
     }
 
+    /** Whether this step is one where the device faces away from the
+     *  person: the complement of [acceptsInput] over the live steps. */
     fun handsOff(): Boolean = synchronized(lock) {
         step == Step.OPTICAL || step == Step.PROXIMITY || step == Step.CAPTURE
     }
@@ -686,6 +719,7 @@ class Meet(
     /** Refuse, from the brief, which is where a person may. */
     fun refuse() = stop("you refused the meeting")
 
+    /** Whether the person has accepted the brief. */
     fun briefAcknowledged(): Boolean = synchronized(lock) { briefAcknowledged }
 
     /**
@@ -704,8 +738,11 @@ class Meet(
         }
     }
 
+    /** Whether the invitation has crossed. */
     fun bootstrapCrossed(): Boolean = synchronized(lock) { bootstrapCrossed }
 
+    /** The kernel finished the optical exchange.  The step itself ends
+     *  only once both intents have crossed; see [intentSent]. */
     fun opticalDone() = advance(Step.OPTICAL, Step.PROXIMITY, "kernel")
 
     private var intentSent = false
@@ -723,6 +760,7 @@ class Meet(
      */
     fun intentSent() = intentCrossed(sent = true)
 
+    /** The counterparty's intent arrived over the bearer. */
     fun intentReceived() = intentCrossed(received = true)
 
     private fun intentCrossed(sent: Boolean = false, received: Boolean = false) {
@@ -734,6 +772,7 @@ class Meet(
         if (both) moved(Step.OPTICAL, Step.PROXIMITY)
     }
 
+    /** The kernel finished the distance channels. */
     fun proximityDone() = advance(Step.PROXIMITY, Step.CAPTURE, "kernel")
 
     /** Capture is the last hands-off step; the device comes back to the

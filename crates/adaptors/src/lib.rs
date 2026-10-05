@@ -19,9 +19,21 @@
 //! relay.  Those are seams, traits with the in-process implementation
 //! behind them, so that what exists is exactly what the documents say.
 
+#![warn(missing_docs)]
+
+/// The client on a thread of its own, and the handle everything else
+/// reaches it through.
 pub mod actor;
+/// A serving node beside this client in one process, for a node that is
+/// its own serving node.
 pub mod attached;
+/// What carries the client's messages out and what arrives in.
 pub mod courier;
+/// The direct payload path over the transport's socket (design §12.6.3).
 pub mod direct;
+/// What the client asks of a serving node, answered by the node beside
+/// it.
 pub mod serving;
+/// A query for a verifier hosted in this process, answered on the
+/// request stream of the node hosting it.
 pub mod verifier;

@@ -29,10 +29,12 @@ impl<N: Ord + Clone> Default for FlowGraph<N> {
 }
 
 impl<N: Ord + Clone + Debug> FlowGraph<N> {
+    /// An empty graph.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Add an isolated node, so it appears in the graph with no edges.
     pub fn add_node(&mut self, u: N) {
         self.cap.entry(u).or_default();
     }
@@ -62,22 +64,27 @@ impl<N: Ord + Clone + Debug> FlowGraph<N> {
         self.add_edge(v, u, c);
     }
 
+    /// Whether the graph holds `u`.
     pub fn has(&self, u: &N) -> bool {
         self.cap.contains_key(u)
     }
 
+    /// The capacity of `u -> v`, zero where there is no such edge.
     pub fn capacity(&self, u: &N, v: &N) -> u64 {
         self.cap.get(u).and_then(|m| m.get(v)).copied().unwrap_or(0)
     }
 
+    /// Every node, in order.
     pub fn nodes(&self) -> impl Iterator<Item = &N> {
         self.cap.keys()
     }
 
+    /// How many nodes the graph holds.
     pub fn len(&self) -> usize {
         self.cap.len()
     }
 
+    /// Whether the graph holds no node at all.
     pub fn is_empty(&self) -> bool {
         self.cap.is_empty()
     }
@@ -149,6 +156,7 @@ pub struct Network {
 }
 
 impl Network {
+    /// A network of `vertices` vertices and no edges.
     pub fn new(vertices: usize) -> Self {
         Network {
             to: Vec::new(),
@@ -157,11 +165,13 @@ impl Network {
         }
     }
 
+    /// Add one vertex and return its index.
     pub fn add_vertex(&mut self) -> usize {
         self.adj.push(Vec::new());
         self.adj.len() - 1
     }
 
+    /// How many vertices the network holds.
     pub fn vertices(&self) -> usize {
         self.adj.len()
     }

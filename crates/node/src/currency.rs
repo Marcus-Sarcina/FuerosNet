@@ -19,7 +19,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 /// `issuer_role` (`wire-format.md` §7.1): the rungs of §12.6.5.1's ladder.
 pub const ROLE_PATRON: u64 = 0;
+/// Rung 1: a sibling under the same patron.
 pub const ROLE_SIBLING: u64 = 1;
+/// Rung 2: the patron's patron.
 pub const ROLE_GRANDPATRON: u64 = 2;
 /// A down-line threshold attesting a root's current key (design §12.7.2):
 /// an optional input to anchor caching, not a rung of the ladder.  Declared
@@ -28,20 +30,24 @@ pub const ROLE_DOWNLINE: u64 = 3;
 
 /// `CurrencyReply` field 2.
 pub const REPLY_ATTESTATION: u64 = 0;
+/// The issuer cannot issue: no rung of the ladder is open to it.
 pub const REPLY_CANNOT_ISSUE: u64 = 1;
 
 /// design §21's default: hours, not days.
 pub const DEFAULT_LIFETIME_SECONDS: u64 = 10 * 3600;
 
+/// A request for a currency attestation (`wire-format.md` §7.1).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CurrencyRequest {
     /// The subject asked about.  The querier is not named, so an answer
     /// forwarded onward attributes the question to nobody.
     pub subject: Keyhash,
+    /// The nonce the reply must echo.
     pub nonce: [u8; 16],
 }
 
 impl CurrencyRequest {
+    /// The request's bytes.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
         emit_map_head(&mut out, 2);
@@ -51,6 +57,7 @@ impl CurrencyRequest {
         emit_bstr(&mut out, &self.nonce);
         out
     }
+    /// A request from its bytes.
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         parse_all(b).map_err(|e| e.0)?;
         schema::check_unsigned(Family::CurrencyRequest, b, 0).map_err(|e| e.0)?;
@@ -80,11 +87,23 @@ impl CurrencyRequest {
 /// (`wire-format.md` §7.1).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CurrencyReply {
-    Attestation { nonce: [u8; 16], bytes: Vec<u8> },
-    CannotIssue { nonce: [u8; 16] },
+    /// An attestation, signed by the issuer.
+    Attestation {
+        /// The nonce, echoed from the request.
+        nonce: [u8; 16],
+        /// The attestation's bytes.
+        bytes: Vec<u8>,
+    },
+    /// No rung of the ladder is open to this issuer, which it says rather
+    /// than inventing an answer.
+    CannotIssue {
+        /// The nonce, echoed from the request.
+        nonce: [u8; 16],
+    },
 }
 
 impl CurrencyReply {
+    /// The nonce, whichever reply this is.
     pub fn nonce(&self) -> [u8; 16] {
         match self {
             CurrencyReply::Attestation { nonce, .. } | CurrencyReply::CannotIssue { nonce } => {
@@ -92,6 +111,7 @@ impl CurrencyReply {
             }
         }
     }
+    /// The reply's bytes.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
         match self {
@@ -114,6 +134,7 @@ impl CurrencyReply {
         }
         out
     }
+    /// A reply from its bytes.
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         parse_all(b).map_err(|e| e.0)?;
         schema::check_unsigned(Family::CurrencyReply, b, 0).map_err(|e| e.0)?;
@@ -145,8 +166,11 @@ impl CurrencyReply {
 /// topology (design §12.6.5).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Staple {
+    /// Verified, and within its window on this node's clock.
     Current,
+    /// Verified, and past its window.
     Expired,
+    /// No staple was presented.
     Absent,
     /// The attestation names a different subject.
     WrongSubject,
@@ -214,6 +238,7 @@ pub fn staple_state(
 /// Whom this node will issue for, and on what rung.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Rung {
+    /// Rung 0: the subject's own patron, who holds the adoption.
     Patron,
     /// The patron is unreachable and this node is its sibling, holding the
     /// adoption record by replication (design §3.4).
@@ -224,6 +249,7 @@ pub enum Rung {
 }
 
 impl Rung {
+    /// This rung's `issuer_role` on the wire.
     pub fn role(&self) -> u64 {
         match self {
             Rung::Patron => ROLE_PATRON,
@@ -239,6 +265,7 @@ impl Rung {
 /// keyed on outage duration).  Which key a subject currently holds is the
 /// table's business, not this.
 pub struct CurrencyState {
+    /// How long an attestation this node issues is good for.
     pub lifetime: u64,
     /// Fed by the transport's reachability detector on the sessions this
     /// node holds, or by an operator: who is dark, and since when on this
@@ -287,9 +314,13 @@ impl Default for CurrencyState {
 /// then the patron only if the introducer answers code 1 or not at all.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CurrencyAsk {
+    /// Whose currency is asked about.
     pub subject: Keyhash,
+    /// The nonce the reply must echo.
     pub nonce: [u8; 16],
+    /// Who introduced the subject, where the asker knows.
     pub introducer: Option<Keyhash>,
+    /// The subject's patron, where the asker knows.
     pub patron: Option<Keyhash>,
     /// Whom the request went to, in order.
     pub asked: Vec<Keyhash>,
@@ -299,7 +330,9 @@ pub struct CurrencyAsk {
 /// holds, or a question now outstanding.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Requirement {
+    /// Settled from what this node already holds.
     Settled(Gate),
+    /// A question now outstanding with another party.
     Asked(CurrencyAsk),
 }
 
@@ -315,6 +348,8 @@ pub enum AskStep {
     /// Nobody left to ask: the caller concludes nothing and addresses what
     /// it holds.
     Exhausted,
+    /// The reply did not echo the nonce asked under, so it answers some other
+    /// question.
     WrongNonce,
 }
 

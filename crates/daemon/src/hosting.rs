@@ -68,7 +68,9 @@ use std::sync::Arc;
 /// package and not about a line in this file.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Refused {
+    /// The line it was on; 0 means the file as a whole.
     pub line: usize,
+    /// What was wrong with it.
     pub what: String,
 }
 

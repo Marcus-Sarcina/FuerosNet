@@ -23,6 +23,7 @@ pub struct DirStore {
 }
 
 impl DirStore {
+    /// A store writing one file per queued message under `dir`.
     pub fn new(dir: impl Into<PathBuf>) -> Self {
         let dir = dir.into();
         std::fs::create_dir_all(&dir).expect("queue directory");

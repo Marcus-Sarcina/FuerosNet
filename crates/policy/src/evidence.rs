@@ -14,6 +14,9 @@ use std::fmt::Debug;
 /// The evidence one observer evaluates from.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Evidence<N: Ord + Clone> {
+    /// Whose evidence this is. **Every standing computed from it is relative to
+    /// this node** (design §16.2): there is no view from nowhere, and two
+    /// observers of one network hold different sets.
     pub observer: N,
     /// `(patron, node)`: the routing and authority hierarchy.  Scope is
     /// built from these and from the sibling edges they imply.
@@ -51,9 +54,16 @@ pub struct Evidence<N: Ord + Clone> {
 /// of these (design §7.4.3).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Observation<N> {
+    /// The verifier that answered, or did not.
     pub verifier: N,
+    /// When the record carrying it finalized, which is what puts the observation
+    /// inside an observer's window or outside it.
     pub finalized_at: u64,
+    /// Whether the response was `unavailable` (design §7.4.3).
     pub unavailable: bool,
+    /// Whether the verifier runs infrastructure, which is what separates the two
+    /// counts below: an infra node that will not answer is a different matter
+    /// from a phone that was off.
     pub infra: bool,
 }
 
@@ -63,15 +73,20 @@ pub struct Observation<N> {
 /// observer's own policy, published nowhere (design §16.4).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Conduct {
+    /// Responses that carried a verdict.
     pub answered: u32,
+    /// `unavailable` from a verifier running infrastructure.
     pub unavailable_infra: u32,
+    /// `unavailable` from a verifier that is not.
     pub unavailable_light: u32,
 }
 
 impl Conduct {
+    /// Both unavailable counts together.
     pub fn unavailable(&self) -> u32 {
         self.unavailable_infra + self.unavailable_light
     }
+    /// Every observation of this verifier in the window.
     pub fn total(&self) -> u32 {
         self.answered + self.unavailable()
     }
@@ -82,6 +97,7 @@ fn unordered<N: Ord + Clone>(a: N, b: N) -> (N, N) {
 }
 
 impl<N: Ord + Clone + Debug> Evidence<N> {
+    /// Empty evidence for `observer`, which knows only itself.
     pub fn new(observer: N) -> Self {
         Evidence {
             observer,
@@ -175,6 +191,7 @@ impl<N: Ord + Clone + Debug> Evidence<N> {
         out
     }
 
+    /// Whether `n` appears anywhere in this observer's evidence.
     pub fn knows(&self, n: &N) -> bool {
         self.known().contains(n)
     }
@@ -196,11 +213,14 @@ impl<N: Ord + Clone + Debug> Evidence<N> {
 /// bound observer-relative (design §16.3.1).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct World<N: Ord + Clone> {
+    /// Every `(patron, node)` adoption in the topology.
     pub adoptions: Vec<(N, N)>,
+    /// Every peering.
     pub peerings: Vec<(N, N)>,
 }
 
 impl<N: Ord + Clone + Debug> World<N> {
+    /// An empty topology.
     pub fn new() -> Self {
         World {
             adoptions: Vec::new(),
@@ -208,22 +228,27 @@ impl<N: Ord + Clone + Debug> World<N> {
         }
     }
 
+    /// Record that `patron` adopted `node`.
     pub fn adopt(&mut self, patron: N, node: N) {
         self.adoptions.push((patron, node));
     }
 
+    /// Record a peering between `a` and `b`.
     pub fn peer(&mut self, a: N, b: N) {
         self.peerings.push((a, b));
     }
 
+    /// The scope the adoptions imply (design §16.2.1).
     pub fn scope(&self) -> Scope<N> {
         Scope::from_adoptions(&self.adoptions)
     }
 
+    /// The nodes within `observer`'s horizon (design §15.1).
     pub fn horizon(&self, observer: &N) -> BTreeSet<N> {
         self.scope().horizon(observer, HORIZON)
     }
 
+    /// The nodes `patron` adopted.
     pub fn children(&self, patron: &N) -> Vec<N> {
         self.adoptions
             .iter()
@@ -232,6 +257,7 @@ impl<N: Ord + Clone + Debug> World<N> {
             .collect()
     }
 
+    /// Every node named by any adoption or peering.
     pub fn nodes(&self) -> BTreeSet<N> {
         self.adoptions
             .iter()

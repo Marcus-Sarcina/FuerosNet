@@ -62,8 +62,11 @@ fn seed64(fresh: Fresh) -> [u8; 64] {
 /// One one-time key pair, of both kinds, held until served once.
 #[derive(Debug, Clone)]
 pub struct OneTimePair {
+    /// The id an initial message names it by.
     pub id: u32,
+    /// The Diffie-Hellman half.
     pub dh: DhSecret,
+    /// The key-encapsulation half.
     pub kem: KemSecret,
 }
 
@@ -72,16 +75,24 @@ pub struct OneTimePair {
 /// pairs not yet served.
 #[derive(Debug, Clone)]
 pub struct PayloadKeys {
+    /// The identity Diffie-Hellman key.
     pub ik: DhSecret,
+    /// The id of the signed prekey in force.
     pub spk_id: u32,
+    /// That signed prekey.
     pub spk: DhSecret,
+    /// When it came into force, which is what rotation is counted from.
     pub spk_since: u64,
+    /// The id of the post-quantum signed prekey in force.
     pub pqspk_id: u32,
+    /// That post-quantum signed prekey.
     pub pqspk: KemSecret,
     /// Signed prekeys retired but kept a while for sessions opened against them.
     pub retired: BTreeMap<u32, (DhSecret, KemSecret)>,
+    /// The one-time pairs not yet served, by id.
     pub one_time: BTreeMap<u32, OneTimePair>,
     next_id: u32,
+    /// When the bundle was last published, where it has been.
     pub published_at: Option<u64>,
 }
 
@@ -136,6 +147,7 @@ impl PayloadKeys {
         out
     }
 
+    /// Read the keys back from what [`PayloadKeys::encode`] wrote.
     pub fn decode(b: &[u8]) -> Option<PayloadKeys> {
         use crate::durable::*;
         let (_, f) = parse_array(b, 10)?;
@@ -171,6 +183,8 @@ impl PayloadKeys {
         })
     }
 
+    /// A fresh set of keys: identity, both signed prekeys at id one, and
+    /// no one-time pairs yet.
     pub fn generate(fresh: Fresh, now: u64) -> Self {
         PayloadKeys {
             ik: DhSecret::from_seed(seed32(fresh)),
@@ -258,6 +272,7 @@ impl PayloadKeys {
         self.one_time.remove(&id)
     }
 
+    /// Whether the signed prekey's interval has elapsed.
     pub fn due_for_rotation(&self, now: u64, cfg: &PayloadConfig) -> bool {
         now.saturating_sub(self.spk_since) >= cfg.signed_prekey_interval_s
     }
@@ -289,14 +304,20 @@ impl PayloadKeys {
 /// names.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Blob {
+    /// The identity Diffie-Hellman key.
     pub ik: DhPublic,
+    /// The id of the signed prekey carried.
     pub spk_id: u32,
+    /// That signed prekey.
     pub spk: DhPublic,
+    /// The id of the post-quantum signed prekey carried.
     pub pqspk_id: u32,
+    /// That post-quantum signed prekey.
     pub pqspk: KemPublic,
 }
 
 impl Blob {
+    /// The bytes of this `Blob`, as the wire composes them.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
         emit_map_head(&mut out, 5);
@@ -313,6 +334,7 @@ impl Blob {
         out
     }
 
+    /// Read a `Blob` from `b`; an error naming what did not read.
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         let item = parse_all(b).map_err(|e| e.0)?;
         let Item::Map(m) = &item else {
@@ -347,12 +369,16 @@ impl Blob {
 /// A one-time key as served: its id and both public halves.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OneTimeKey {
+    /// The id an initial message names it by.
     pub id: u32,
+    /// The Diffie-Hellman half.
     pub dh: DhPublic,
+    /// The key-encapsulation half.
     pub kem: KemPublic,
 }
 
 impl OneTimeKey {
+    /// The bytes of this `OneTimeKey`, as the wire composes them.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
         emit_map_head(&mut out, 3);
@@ -365,6 +391,7 @@ impl OneTimeKey {
         out
     }
 
+    /// Read a `OneTimeKey` from `b`; an error naming what did not read.
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         let item = parse_all(b).map_err(|e| e.0)?;
         let Item::Map(m) = &item else {
@@ -397,8 +424,11 @@ impl OneTimeKey {
 /// identity, its blob decoded.
 #[derive(Debug, Clone)]
 pub struct Prefetched {
+    /// Whose material this is.
     pub subject: Keyhash,
+    /// When the subject published it.
     pub published_at: u64,
+    /// The decoded blob.
     pub blob: Blob,
     /// The device this material belongs to (`wire-format.md` §7.8): what a
     /// one-time key is asked for and a relay submission is addressed to.
@@ -474,17 +504,25 @@ pub fn one_time_request(subject: Keyhash, device: [u8; 32], nonce: [u8; 16]) -> 
 /// ratchet message.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InitialMessage {
+    /// The initiator's identity Diffie-Hellman key.
     pub ik: DhPublic,
+    /// Its ephemeral key.
     pub ek: DhPublic,
+    /// The encapsulation against the recipient's post-quantum prekey.
     pub kem_ciphertext: Vec<u8>,
+    /// Which signed prekey of the recipient's was used.
     pub spk_id: u32,
+    /// Which post-quantum signed prekey.
     pub pqspk_id: u32,
+    /// Which one-time key, where one was served.
     pub opk_id: Option<u32>,
+    /// The first ratchet message.
     pub first: Vec<u8>,
 }
 
 /// Channel tags: what a byte string on the end-to-end channel is.
 pub const CHANNEL_INITIAL: u64 = 0;
+/// A ratchet message on an open session.
 pub const CHANNEL_MESSAGE: u64 = 1;
 
 /// Which construction this module's sessions run: read off the ratchet
@@ -497,7 +535,9 @@ pub fn construction() -> crate::ratchet::Construction {
 /// Plaintext kinds, the demultiplexing this construction settles on
 /// (design §14.2.4.6): a protocol object or application payload.
 pub const KIND_APPLICATION: u64 = 0;
+/// A `KeyGrant` (`wire-format.md` §7.3).
 pub const KIND_KEY_GRANT: u64 = 1;
+/// A `LateResponse` (`wire-format.md` §7.4).
 pub const KIND_LATE_RESPONSE: u64 = 2;
 /// The direct path's candidates, exchanged with the peer alone over the
 /// relayed channel (design §12.6.3, §14.1.1).
@@ -512,6 +552,7 @@ pub const KIND_RESPONSE_COPY: u64 = 4;
 /// subject holds their archive, so a patron evaluating you fetches from
 /// you and no infra node serves it on your behalf.
 pub const KIND_ARCHIVE_REQUEST: u64 = 5;
+/// The reply to that request.
 pub const KIND_ARCHIVE_REPLY: u64 = 6;
 /// A verification query to its verifier, and the signed response back
 /// (`wire-format.md` §5.6): the same `[ VerificationQuery, COSE_Sign1,
@@ -519,6 +560,7 @@ pub const KIND_ARCHIVE_REPLY: u64 = 6;
 /// querier and verifier — direct where the path is held, relayed
 /// otherwise (design §12.6.3) — and the `VerifierResponse` the other way.
 pub const KIND_QUERY: u64 = 7;
+/// The signed `VerifierResponse` back.
 pub const KIND_RESPONSE: u64 = 8;
 /// The ceremony's conversation after the local exchanges
 /// (`wire-format.md` §7.10.1, kinds 9 to 18, in the order a ceremony uses
@@ -536,6 +578,7 @@ pub const KIND_CONSENT_REPLY: u64 = 10;
 pub const KIND_FISHING_PROPOSAL: u64 = 11;
 /// A `WitnessRequest` (§7.10.2) to a nominee, and its `WitnessAnswer`.
 pub const KIND_WITNESS_REQUEST: u64 = 12;
+/// The nominee's `WitnessAnswer` back.
 pub const KIND_WITNESS_ANSWER: u64 = 13;
 /// The `GatheredResponses` (§7.10.2) of the participant that did not
 /// propose, to the proposer.
@@ -545,6 +588,7 @@ pub const KIND_BACK_POINTERS: u64 = 15;
 /// The `ProposedBody` (§7.10.2) every signer reviews, and each signer's
 /// `SigningReply`: its two entries or its refusal.
 pub const KIND_PROPOSED_BODY: u64 = 16;
+/// One signer's `SigningReply` back.
 pub const KIND_SIGNING_REPLY: u64 = 17;
 /// The finalised `Envelope` (§3), proposer to every signer.
 pub const KIND_RECORD: u64 = 18;
@@ -558,6 +602,7 @@ pub fn wrap(kind: u64, bytes: &[u8]) -> Vec<u8> {
     out
 }
 
+/// The kind and the bytes back out of a wrapped plaintext.
 pub fn unwrap(plaintext: &[u8]) -> Result<(u64, Vec<u8>), String> {
     let parts = array_item_ranges(plaintext, 0).ok_or("plaintext not an array")?;
     if parts.len() != 2 {
@@ -610,6 +655,7 @@ fn unchannel(b: &[u8]) -> Result<(u64, [u8; 32], Vec<u8>), String> {
 }
 
 impl InitialMessage {
+    /// The bytes of this message, as the channel composes them.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
         emit_map_head(&mut out, 6 + self.opk_id.is_some() as usize);
@@ -632,6 +678,7 @@ impl InitialMessage {
         out
     }
 
+    /// Read a `InitialMessage` from `b`; an error naming what did not read.
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         let item = parse_all(b).map_err(|e| e.0)?;
         let Item::Map(m) = &item else {
@@ -671,7 +718,9 @@ impl InitialMessage {
 /// Why a session could not be opened or a message read.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PayloadError {
+    /// No open session with that peer device.
     NoSession,
+    /// No prefetched bundle to open one with.
     NoBundle,
     /// An initial message whose identity key is not the one bound to the
     /// sender it names (design §14.2.4.2).
@@ -679,7 +728,9 @@ pub enum PayloadError {
     /// An initial message received before: opening it again would replace
     /// the session it already opened.
     Replayed,
+    /// The bytes do not read as what they claim to be.
     Malformed(String),
+    /// A cryptographic operation failed.
     Crypto(String),
 }
 
@@ -710,7 +761,9 @@ pub type PerDevice = Vec<([u8; 32], Vec<u8>)>;
 /// device and never with an identity).
 #[derive(Default)]
 pub struct Sessions {
+    /// The open sessions, one per peer device.
     pub ratchets: BTreeMap<PeerDevice, Ratchet>,
+    /// The bundles prefetched, one per peer device.
     pub prefetched: BTreeMap<PeerDevice, Prefetched>,
     /// The ephemeral keys of initial messages already received, most
     /// recent last.  A one-time key spends itself, but an initial opened
@@ -769,6 +822,8 @@ impl Sessions {
         out
     }
 
+    /// The sessions back from what [`Sessions::encode`] wrote.  Displaced
+    /// sessions are held in memory only, so none come back.
     pub fn decode(b: &[u8]) -> Option<Sessions> {
         use crate::durable::*;
         let (_, f) = parse_array(b, 3)?;
@@ -837,6 +892,7 @@ impl Sessions {
         self.prefetched_of(peer).iter().map(|p| p.device).collect()
     }
 
+    /// Whether a bundle is held for any device of `peer`.
     pub fn has_bundle(&self, peer: &Keyhash) -> bool {
         !self.prefetched_of(peer).is_empty()
     }
@@ -930,6 +986,7 @@ impl Sessions {
             .is_some()
     }
 
+    /// Whether a session is open with that one device of `peer`.
     pub fn has_session_with(&self, peer: &Keyhash, device: &[u8; 32]) -> bool {
         self.ratchets.contains_key(&(*peer, *device))
     }
@@ -1110,9 +1167,13 @@ impl Sessions {
 /// its sessions, the serving node it publishes to, the plaintexts waiting
 /// for a one-time key to arrive, and the one-time requests in flight.
 pub struct PayloadState {
+    /// This client's own numbers.
     pub cfg: PayloadConfig,
+    /// Its PQXDH material.
     pub keys: PayloadKeys,
+    /// Its sessions and prefetched bundles.
     pub sessions: Sessions,
+    /// The node it publishes its bundle to, where it has one.
     pub serving: Option<Keyhash>,
     /// This device, by the key it presents (`wire-format.md` §7.8): what
     /// its bundle names and what its messages say they are from.  The
@@ -1210,6 +1271,7 @@ impl PayloadState {
         })
     }
 
+    /// A fresh payload state under `cfg`: new material, no session.
     pub fn new(cfg: PayloadConfig, fresh: Fresh, now: u64) -> Self {
         PayloadState {
             keys: PayloadKeys::generate(fresh, now),

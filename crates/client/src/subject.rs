@@ -23,7 +23,9 @@ pub const YEAR_SECONDS: u64 = 365 * 86_400;
 /// release keys past it (design §7.5.2.3), two years by default.
 #[derive(Debug, Clone)]
 pub struct SubjectConfig {
+    /// How many queries one requester may make in a ceremony window.
     pub per_requester_limit: u32,
+    /// The retention horizon, past which capture keys are not released.
     pub retention_seconds: u64,
 }
 
@@ -52,13 +54,16 @@ struct Window {
 /// query id, which is what the finalization veto reads.
 #[derive(Debug, Clone)]
 pub struct SubjectState {
+    /// This subject's own numbers.
     pub cfg: SubjectConfig,
     window: Option<Window>,
     consented: BTreeMap<[u8; 32], BTreeSet<[u8; 32]>>,
+    /// The responses delivered to this subject, by query id.
     pub responses: BTreeMap<[u8; 32], Vec<u8>>,
 }
 
 impl SubjectState {
+    /// A subject with no window open and nothing consented, holding `cfg`.
     pub fn new(cfg: SubjectConfig) -> Self {
         SubjectState {
             cfg,
@@ -84,6 +89,7 @@ impl SubjectState {
         self.window = None;
     }
 
+    /// Whether a ceremony window is open.
     pub fn window_open(&self) -> bool {
         self.window.is_some()
     }

@@ -40,12 +40,23 @@ class Carriage(private val radio: Bearer.Link?) {
      * out of another's assembly.
      */
     object Phase {
+        /** The intent exchange and any bundle continuations with it. */
         const val INTENT = 0
+        /** What the distance channels measured. */
         const val PROXIMITY = 1
+        /** The capture key, one each way. */
         const val CAPTURE_KEY = 2
     }
 
-    enum class Chosen { RADIO, FETCH, NONE }
+    /** Which bearer a carriage runs over. */
+    enum class Chosen {
+        /** The radio between the two devices. */
+        RADIO,
+        /** §14.3.1's last resort, a fetch through the network. Not built. */
+        FETCH,
+        /** Nothing to carry over. */
+        NONE,
+    }
 
     /** Which bearer this would use, given what is to hand. */
     val chosen: Chosen = when {
@@ -68,17 +79,28 @@ class Carriage(private val radio: Bearer.Link?) {
      * nothing of what the packets carried.
      */
     class Counters {
+        /** Packets sent. */
         var sent = 0
+        /** Their bytes. */
         var sentBytes = 0
+        /** Sends the radio refused. */
         var sendFailed = 0
+        /** Packets taken. */
         var received = 0
+        /** Their bytes. */
         var receivedBytes = 0
+        /** Repeats dropped. */
         var duplicates = 0
+        /** Refusals by reason, in the order each reason first occurred. */
         val refused = linkedMapOf<String, Int>()
+        /** When the first packet of the phase arrived. */
         var firstMs: Long? = null
+        /** When the set became whole. */
         var wholeMs: Long? = null
+        /** Whether the event for this phase has gone out. */
         var reported = false
 
+        /** How many packets were refused, over every reason. */
         fun refusals(): Int = refused.values.sum()
 
         /** The event's fields. */

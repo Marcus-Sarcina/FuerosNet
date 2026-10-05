@@ -53,7 +53,10 @@ class DiagStream(
     start: Boolean = true,
 ) {
     companion object {
+        /** How many lines are held for a collector that is not connected. */
         const val BACKLOG_LINES = 4096
+        /** The event a stream opens with, which anchors the collector's
+         *  file to the wall clock. */
         const val EVENT_HELLO = "diag.hello"
 
         /** `host:port`, IPv6 in brackets, or null when it does not parse. */

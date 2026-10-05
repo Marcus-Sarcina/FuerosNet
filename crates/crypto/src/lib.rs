@@ -11,10 +11,20 @@
 //! the signatures over them; `verify::envelope` is the complete check of a
 //! transaction envelope including embedded evidence.
 
+#![warn(missing_docs)]
+
+/// Transport delegations (`wire-format.md` §8.2): a window-bounded
+/// credential an identity signs for a key that is not its own.
 pub mod delegation;
+/// The hybrid identity, its keyhash, and the signing half.
 pub mod identity;
+/// PQXDH (design §5.3): the key agreement a payload session opens with.
 pub mod pqxdh;
+/// What a caller must provide to sign: the trait the profile's signing
+/// contexts are written against.
 pub mod signer;
+/// Verification of the structures `rhtn-codec` parses, up to a complete
+/// transaction envelope with its embedded evidence.
 pub mod verify;
 
 pub use identity::{Identity, SigningIdentity};

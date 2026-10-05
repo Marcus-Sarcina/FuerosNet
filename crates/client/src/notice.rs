@@ -12,25 +12,47 @@ use crate::Keyhash;
 pub enum Notice {
     /// What the record will contain and who will be able to read it, at
     /// the moment of capture (`light-client-requirements.md` §1.5).
-    RecordDisclosure { role: Role },
+    RecordDisclosure {
+        /// The capacity the person is told in.
+        role: Role,
+    },
     /// A query about this subject arrived (design §7.4.1: surfaced, not
     /// logged).
-    QuerySurfaced { verifier: Keyhash },
+    QuerySurfaced {
+        /// The verifier that asked.
+        verifier: Keyhash,
+    },
     /// A requester exceeded its allowance and gets no grant.
-    ProbingRefused { requester: Keyhash },
+    ProbingRefused {
+        /// Who asked past their allowance.
+        requester: Keyhash,
+    },
     /// This party's nominees are absent from or outnumbered in a proposed
     /// witness set (`light-client-requirements.md` §1.1).
-    NomineesOutnumbered { mine: usize, theirs: usize },
+    NomineesOutnumbered {
+        /// How many of this party's nominees the set holds.
+        mine: usize,
+        /// How many of the counterparty's.
+        theirs: usize,
+    },
     /// The selector recognises nobody in the counterparty's candidate pool
     /// (`light-client-requirements.md` §1.4).
     NoCandidateRecognised,
     /// A catalog entry declares a data practice this client does not
     /// recognise (`wire-format.md` §6.1): a declaration exists.
-    UnrecognisedDeclaration { resource: Keyhash, value: u64 },
+    UnrecognisedDeclaration {
+        /// The resource whose entry declares it.
+        resource: Keyhash,
+        /// The declared value this client does not recognise.
+        value: u64,
+    },
     /// An initial payload message could not be attributed to the sender it
     /// named, so no session was opened and nothing was dispatched
     /// (design §14.2.4.2).
-    PayloadUnattributable { from: Keyhash },
+    PayloadUnattributable {
+        /// Whom the message named as its sender.
+        from: Keyhash,
+    },
 }
 
 /// The capacity a party is told in.  Only a participant is told (design
@@ -38,12 +60,14 @@ pub enum Notice {
 /// role would be a notice the design withdrew.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Role {
+    /// A party to the ceremony, which is the one capacity told.
     Participant,
 }
 
 /// Where notices go.  A running client shows them to its operator; a
 /// harness records them.
 pub trait Notifier {
+    /// Raise `notice`, at the moment the documents say to raise it.
     fn notify(&self, notice: Notice);
 }
 

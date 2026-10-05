@@ -37,11 +37,17 @@ fn uint(m: &[(Item, Item)], key: u64) -> Option<u64> {
 /// without the id (§5.6).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VerificationQuery {
+    /// Whom the query is about.
     pub subject: Keyhash,
+    /// Who is asking.
     pub querier: Keyhash,
+    /// The ceremony pre-commitment the query binds to.
     pub ceremony_id: [u8; 32],
+    /// The fuzzed profile the verifier compares.
     pub profile: Vec<u8>,
+    /// The template version it is to be compared under.
     pub template_version: u64,
+    /// The one verifier this query is addressed to.
     pub verifier: Keyhash,
 }
 
@@ -151,8 +157,11 @@ pub fn consent_verifies(subject: &Identity, consent: &[u8], query_id: &[u8; 32])
 /// the selection basis.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QueryRequest {
+    /// The query itself.
     pub query: VerificationQuery,
+    /// The subject's consent, beside it.
     pub consent: Vec<u8>,
+    /// The selector's claim of why this verifier was picked.
     pub selection_basis: u64,
 }
 
@@ -160,6 +169,7 @@ pub struct QueryRequest {
 pub const REQUEST_VERIFIER_QUERY: u64 = 4;
 
 impl QueryRequest {
+    /// The bytes of this `QueryRequest`, as the wire composes them.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
         emit_array_head(&mut out, 3);
@@ -169,6 +179,7 @@ impl QueryRequest {
         out
     }
 
+    /// Read a `QueryRequest` from `b`; an error naming what did not read.
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         parse_all(b).map_err(|e| e.0)?;
         schema::check_unsigned(Family::VerifierQuery, b, 0).map_err(|e| e.0)?;
@@ -187,13 +198,19 @@ impl QueryRequest {
 /// A response's result (`wire-format.md` §4.5 field 4).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Verdict {
+    /// The profile matched the template.
     Match = 0,
+    /// It did not.
     NoMatch = 1,
+    /// The comparison could not be made, a capture that would not open
+    /// among the reasons.
     Inconclusive = 2,
+    /// No comparison was attempted.
     Unavailable = 3,
 }
 
 impl Verdict {
+    /// The variant `v` names, or nothing where it names none.
     pub fn from_u64(v: u64) -> Option<Self> {
         Some(match v {
             0 => Verdict::Match,
@@ -209,12 +226,16 @@ impl Verdict {
 /// result that evaluated, absent for `unavailable`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Basis {
+    /// A comparison against a held capture.
     PhotoMatch = 0,
+    /// The verifier knows the subject.
     PersonalKnowledge = 1,
+    /// Both of those.
     Both = 2,
 }
 
 impl Basis {
+    /// The variant `v` names, or nothing where it names none.
     pub fn from_u64(v: u64) -> Option<Self> {
         Some(match v {
             0 => Basis::PhotoMatch,
@@ -235,13 +256,21 @@ impl Basis {
 /// consent carried in field 7 and the selector's claim echoed in field 10.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Response {
+    /// Who answered.
     pub verifier: Keyhash,
+    /// Whom the answer is about.
     pub subject: Keyhash,
+    /// The query answered.
     pub query_id: [u8; 32],
+    /// The result.
     pub verdict: Verdict,
+    /// What it rests on, absent for `unavailable`.
     pub basis: Option<Basis>,
+    /// The template version compared under, where the basis carries one.
     pub template_version: Option<u64>,
+    /// The subject's consent, carried in field 7.
     pub consent: Vec<u8>,
+    /// The selector's claim, echoed in field 10.
     pub selection_basis: u64,
 }
 
@@ -354,7 +383,9 @@ fn bytes_of_value(b: &[u8], key: u64) -> Option<Vec<u8>> {
 /// never a record.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KeyGrant {
+    /// The record whose capture this unseals.
     pub record: Txid,
+    /// The query it answers.
     pub query_id: [u8; 32],
     /// The capture key, wiped when the grant is dropped.
     pub key: Zeroizing<[u8; 32]>,
@@ -375,6 +406,7 @@ impl KeyGrant {
         out
     }
 
+    /// Read a `KeyGrant` from `b`; an error naming what did not read.
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         let item = parse_all(b).map_err(|e| e.0)?;
         schema::check_unsigned(Family::KeyGrant, b, 0).map_err(|e| e.0)?;
@@ -393,13 +425,16 @@ impl KeyGrant {
 /// ceremony, carried beside the record it supplements and never inside it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LateResponse {
+    /// The record it supplements.
     pub record: Txid,
+    /// Whom it is about.
     pub subject: Keyhash,
     /// The signed `VerifierResponse`, as issued.
     pub response: Vec<u8>,
 }
 
 impl LateResponse {
+    /// The bytes of this `LateResponse`, as the wire composes them.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
         emit_map_head(&mut out, 3);
@@ -412,6 +447,7 @@ impl LateResponse {
         out
     }
 
+    /// Read a `LateResponse` from `b`; an error naming what did not read.
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         let item = parse_all(b).map_err(|e| e.0)?;
         schema::check_unsigned(Family::LateResponse, b, 0).map_err(|e| e.0)?;

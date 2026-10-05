@@ -20,7 +20,9 @@ pub const MAX_ROLES: usize = 64;
 /// What a hosted package is to the gateway: a place to hand one message
 /// and read one back, and whether it is running.
 pub trait Backend: Send + Sync {
+    /// Answer one request to this resource.
     fn handle(&self, message: &[u8]) -> Result<Vec<u8>, String>;
+    /// Whether the backend is up.
     fn running(&self) -> bool;
 }
 
@@ -28,9 +30,14 @@ pub trait Backend: Send + Sync {
 /// addressed by, the backend where the node carries the traffic and none
 /// where it brokers, and the roles the package declared.
 pub struct Binding {
+    /// Who owns the resource.
     pub owner: Keyhash,
+    /// The authority its backend is addressed by.
     pub authority: String,
+    /// The backend where this node carries the traffic; `None` where it
+    /// brokers and the traffic goes elsewhere.
     pub backend: Option<Arc<dyn Backend>>,
+    /// The roles the package declared.
     pub declared_roles: BTreeSet<String>,
 }
 
@@ -38,10 +45,13 @@ pub struct Binding {
 /// `connect` is granted.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Row {
+    /// The application roles the member holds.
     pub roles: BTreeSet<String>,
+    /// Whether `connect` is granted.
     pub connect: bool,
 }
 
+/// Why a row could not be made.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RowError {
     /// Wider than a header could carry: refused at configuration.
@@ -51,6 +61,7 @@ pub enum RowError {
     /// A name reserved for the node's own evaluation
     /// (`resource-requirements.md` §3).
     Reserved(String),
+    /// No resource is bound here under that identity.
     NoSuchResource,
 }
 
@@ -80,10 +91,12 @@ pub struct Gateway {
 }
 
 impl Gateway {
+    /// Bind `resource` at this node.
     pub fn bind(&mut self, resource: Keyhash, binding: Binding) {
         self.bindings.insert(resource, binding);
     }
 
+    /// The binding for `resource`, where it is bound here.
     pub fn binding(&self, resource: &Keyhash) -> Option<&Binding> {
         self.bindings.get(resource)
     }
@@ -147,6 +160,7 @@ impl Gateway {
         Ok(())
     }
 
+    /// The row `member` holds for `resource`.
     pub fn row(&self, resource: &Keyhash, member: &Keyhash) -> Option<&Row> {
         self.rows.get(&(*resource, *member))
     }
@@ -174,6 +188,7 @@ impl Gateway {
         self.rows.iter().map(|(k, r)| (*k, r.clone())).collect()
     }
 
+    /// How many sessions this node hosts.
     pub fn hosted_sessions(&self) -> usize {
         self.sessions.len()
     }
@@ -460,16 +475,20 @@ pub const RESERVED_ROLES: [&str; 2] = ["connect", "discover"];
 /// What a package declares (`resource-requirements.md` §7, §8).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Manifest {
+    /// The application roles it declares.
     pub roles: BTreeSet<String>,
+    /// The host exports it imports.
     pub imports: Vec<String>,
 }
 
 /// A package instantiated against the host's exports.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Package {
+    /// The roles the instantiated package holds.
     pub roles: BTreeSet<String>,
 }
 
+/// What the host exports to a package.
 pub fn exports() -> &'static [&'static str] {
     &HOST_EXPORTS
 }

@@ -206,6 +206,7 @@ pub struct Watcher {
 }
 
 impl Watcher {
+    /// A watcher over `dir`, following nothing until it is swept.
     pub fn new(dir: impl Into<PathBuf>) -> Self {
         Watcher {
             dir: dir.into(),

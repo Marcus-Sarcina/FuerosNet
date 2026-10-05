@@ -31,11 +31,14 @@ use rhtn_codec::schema;
 /// verifier's response carries onward in its field 7.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConsentReply {
+    /// The query consented to.
     pub query_id: [u8; 32],
+    /// The classical `COSE_Sign1` over it, as the subject produced it.
     pub consent: Vec<u8>,
 }
 
 impl ConsentReply {
+    /// The bytes of this `ConsentReply`, as its kind composes them.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
         emit_array_head(&mut out, 2);
@@ -44,6 +47,7 @@ impl ConsentReply {
         out
     }
 
+    /// Read a `ConsentReply` from `b`; an error naming what did not read.
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         let it = checked(b, "ConsentReply")?;
         let Item::Array(a) = &it else {
@@ -61,10 +65,12 @@ impl ConsentReply {
 /// carried as the bytes they arrived as.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FishingProposal {
+    /// One to 256 archive entries, each as the bytes it arrived as.
     pub entries: Vec<Vec<u8>>,
 }
 
 impl FishingProposal {
+    /// The bytes of this `FishingProposal`, as its kind composes them.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
         emit_array_head(&mut out, self.entries.len());
@@ -74,6 +80,7 @@ impl FishingProposal {
         out
     }
 
+    /// Read a `FishingProposal` from `b`; an error naming what did not read.
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         checked(b, "FishingProposal")?;
         Ok(FishingProposal {
@@ -103,6 +110,7 @@ impl WitnessRequest {
         out
     }
 
+    /// Read a `WitnessRequest` from `b`; an error naming what did not read.
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         let it = checked(b, "WitnessRequest")?;
         let Item::Map(m) = &it else {
@@ -125,10 +133,13 @@ impl WitnessRequest {
 /// bits it will set (Witness field 3, §3.2), or declining with nothing.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WitnessAnswer {
+    /// The attestation bits the nominee will set, or nothing where it
+    /// declined.
     pub bits: Option<u64>,
 }
 
 impl WitnessAnswer {
+    /// The bytes of this `WitnessAnswer`, as its kind composes them.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
         emit_map_head(&mut out, 1 + usize::from(self.bits.is_some()));
@@ -141,6 +152,7 @@ impl WitnessAnswer {
         out
     }
 
+    /// Read a `WitnessAnswer` from `b`; an error naming what did not read.
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         let it = checked(b, "WitnessAnswer")?;
         let Item::Map(m) = &it else {
@@ -158,10 +170,13 @@ impl WitnessAnswer {
 /// them, each as the bytes its verifier signed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GatheredResponses {
+    /// The signed responses, in the order the body sorts them, each as
+    /// the bytes its verifier signed.
     pub responses: Vec<Vec<u8>>,
 }
 
 impl GatheredResponses {
+    /// The bytes of this `GatheredResponses`, as its kind composes them.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
         emit_array_head(&mut out, self.responses.len());
@@ -171,6 +186,7 @@ impl GatheredResponses {
         out
     }
 
+    /// Read a `GatheredResponses` from `b`; an error naming what did not read.
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         checked(b, "GatheredResponses")?;
         let responses = raw_items(b, 0)?;
@@ -189,10 +205,12 @@ impl GatheredResponses {
 /// to eight txids.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BackPointers {
+    /// One to eight txids.
     pub txids: Vec<Txid>,
 }
 
 impl BackPointers {
+    /// The bytes of this `BackPointers`, as its kind composes them.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
         emit_array_head(&mut out, self.txids.len());
@@ -202,6 +220,7 @@ impl BackPointers {
         out
     }
 
+    /// Read a `BackPointers` from `b`; an error naming what did not read.
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         let it = checked(b, "BackPointers")?;
         let Item::Array(a) = &it else {
@@ -219,11 +238,14 @@ impl BackPointers {
 /// the root before signing (§4.5.1).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProposedBody {
+    /// The body as every signer will sign it, back-pointers in place.
     pub body: Vec<u8>,
+    /// The disclosure set its root commits to, every slot revealed.
     pub set: DisclosureSet,
 }
 
 impl ProposedBody {
+    /// The bytes of this `ProposedBody`, as its kind composes them.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
         emit_map_head(&mut out, 2);
@@ -285,10 +307,13 @@ impl ProposedBody {
 /// carries none either.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SigningReply {
+    /// The signer's two envelope entries over the body, classical then
+    /// post-quantum as one byte string; or its refusal.
     pub reply: Result<Vec<u8>, Refusal>,
 }
 
 impl SigningReply {
+    /// The bytes of this `SigningReply`, as its kind composes them.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
         match &self.reply {
@@ -317,6 +342,7 @@ impl SigningReply {
         out
     }
 
+    /// Read a `SigningReply` from `b`; an error naming what did not read.
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         let it = checked(b, "SigningReply")?;
         let Item::Map(m) = &it else {

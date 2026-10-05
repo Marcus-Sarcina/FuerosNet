@@ -34,8 +34,11 @@ pub const LABELS: [&str; 7] = [
 /// field carries.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Disclosure {
+    /// Which of the seven this is.
     pub label: &'static str,
+    /// The salt it is hashed under, fresh per record.
     pub salt: [u8; 16],
+    /// The CBOR the field carries.
     pub value: Vec<u8>,
 }
 
@@ -162,12 +165,17 @@ pub fn integrity_value(attested: bool, scheme: u64) -> Vec<u8> {
 /// the genesis value for a back-pointer, no witnesses and no responses.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Proposal {
+    /// When the meeting began, in milliseconds since the epoch.
     pub started_at: u64,
+    /// When the proposer finalised this body.
     pub finalized_at: u64,
+    /// The two parties, in the order the body carries them.
     pub participants: [Keyhash; 2],
+    /// The witness set and each witness's place.
     pub witnesses: Vec<Witness>,
     /// Signed `VerifierResponse`s, in the order the body carries them.
     pub responses: Vec<Vec<u8>>,
+    /// The root over the agreed disclosure set.
     pub root: [u8; 32],
     /// Subtype 1: no witnesses, no responses, genesis back-pointers.
     pub formation: bool,
@@ -275,7 +283,12 @@ pub enum Refusal {
     OmittedResponse([u8; 32]),
     /// A claimed start far from the witness's own clock
     /// (`light-client-requirements.md` §1.2).
-    ClockFar { claimed: u64, observed: u64 },
+    ClockFar {
+        /// The start the body claims.
+        claimed: u64,
+        /// What this signer's own clock says.
+        observed: u64,
+    },
     /// The body does not verify against what this signer holds: its
     /// root, its back-pointers, or a ceremony it is not holding
     /// (`wire-format.md` §7.10.2, refusal 4).
@@ -421,8 +434,11 @@ pub fn take_late_response<L: Lookup + ?Sized>(
 /// default.
 #[derive(Debug, Clone)]
 pub struct Presented {
+    /// The record the envelope carried, verified.
     pub record: Record,
+    /// The fields revealed, by label.
     pub revealed: BTreeMap<&'static str, Vec<u8>>,
+    /// The labels withheld, which are unknown and never a default.
     pub withheld: Vec<&'static str>,
 }
 

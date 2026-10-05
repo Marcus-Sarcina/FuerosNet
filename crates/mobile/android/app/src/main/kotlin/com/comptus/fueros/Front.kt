@@ -19,6 +19,7 @@ class Front {
      * thread and never reads back synchronously into the kernel.
      */
     interface Ui {
+        /** Re-read the accessors and redraw. */
         fun render()
     }
 
@@ -29,24 +30,39 @@ class Front {
      * delivery (`light-client-requirements.md` §9; the screens sheet's C2).
      */
     enum class Delivery {
+        /** Handed to the kernel, which has not yet said. */
         SENDING,
+        /** The kernel accepted it for carriage. */
         SENT,
+        /** The kernel refused it, and [Message.reason] says why. */
         UNSENT,
     }
 
+    /** One message on a thread, as a screen shows it. */
     data class Message(
+        /** This shell's own ordinal, which gives the thread its order. */
         val id: Long,
+        /** Whether this side sent it. */
         val mine: Boolean,
+        /** Who sent it, as a screen names them. */
         val who: String,
+        /** The text. */
         val text: String,
+        /** How far it got, for one this side sent. */
         val delivery: Delivery,
+        /** Why it was refused, where it was. */
         val reason: String?,
     )
 
+    /** One conversation, as a screen shows it. */
     data class Thread(
+        /** The counterparty's keyhash in hex, which identifies the thread. */
         val peerKey: String,
+        /** What to call them on screen. */
         val peerName: String,
+        /** Whether the last message went over the direct path. */
         val direct: Boolean,
+        /** The messages, oldest first. */
         val messages: List<Message>,
     )
 
@@ -94,13 +110,17 @@ class Front {
 
     fun status(): String = synchronized(lock) { statusLine }
 
+    /** Whether the kernel has a session and material published. */
     fun provisioned(): Boolean = synchronized(lock) { provisioned }
 
+    /** The notice lines, oldest first, at most [NOTICE_LINES] of them. */
     fun notices(): List<String> = synchronized(lock) { notices.toList() }
 
+    /** Every conversation this shell holds. */
     fun threads(): List<Thread> =
         synchronized(lock) { convos.entries.map { it.value.snapshot(it.key) } }
 
+    /** The conversation with `peerKey`, where there is one. */
     fun thread(peerKey: String): Thread? =
         synchronized(lock) { convos[peerKey]?.snapshot(peerKey) }
 
@@ -115,6 +135,7 @@ class Front {
         }
     }
 
+    /** Say whether the kernel is provisioned, and redraw. */
     fun setProvisioned(yes: Boolean) {
         synchronized(lock) {
             provisioned = yes
@@ -190,6 +211,7 @@ class Front {
     }
 
     private companion object {
+        /** How many notice lines are kept; the oldest goes first. */
         const val NOTICE_LINES = 200
     }
 }

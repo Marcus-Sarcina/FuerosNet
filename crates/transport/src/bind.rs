@@ -32,6 +32,7 @@ pub const DEFAULT_LEEWAY_SECONDS: u64 = 10;
 /// A node's topology store answers this; a light client's horizon view
 /// does; a harness answers from a map.
 pub trait Held: Send + Sync {
+    /// The delegation held for `keyhash`, the newest by `not_before`.
     fn delegation(&self, keyhash: &[u8; 32]) -> Option<Delegation>;
     /// The held delegation naming transport key `key`, for a peer known
     /// by the key it presented and nothing else: the direct path.  None
@@ -69,9 +70,11 @@ impl HeldMap {
             }
         }
     }
+    /// How many delegations are held.
     pub fn len(&self) -> usize {
         self.0.lock().unwrap().len()
     }
+    /// Whether none is held.
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
@@ -152,8 +155,12 @@ type Cache = HashMap<[u8; 32], ([u8; 32], Delegation)>;
 /// node or client; cloned into every connection.
 #[derive(Clone)]
 pub struct Binding {
+    /// The delegations this binding will accept a peer under.
     pub held: Arc<dyn Held>,
+    /// How far outside its window a delegation may still be taken, for clock
+    /// skew between two honest parties.
     pub leeway_secs: u64,
+    /// The clock the window is checked against.
     pub clock: Clock,
     /// This side's own delegated credential, presented first on every
     /// connection; none for a peer presenting its own classical member.
@@ -180,18 +187,22 @@ impl Default for Binding {
 }
 
 impl Binding {
+    /// The same binding holding `held`.
     pub fn with_held(mut self, held: Arc<dyn Held>) -> Self {
         self.held = held;
         self
     }
+    /// The same binding with `secs` of leeway.
     pub fn with_leeway(mut self, secs: u64) -> Self {
         self.leeway_secs = secs;
         self
     }
+    /// The same binding reading `clock`.
     pub fn with_clock(mut self, clock: Clock) -> Self {
         self.clock = clock;
         self
     }
+    /// The same binding presenting `c` on a connection it dials.
     pub fn with_credential(mut self, c: Arc<Credential>) -> Self {
         self.credential = Some(c);
         self
@@ -205,6 +216,7 @@ impl Binding {
             .map(|i| i.raw)
     }
 
+    /// Whether `d`'s window contains this binding's clock, within the leeway.
     pub fn in_window(&self, d: &Delegation) -> bool {
         let now = (self.clock)();
         let l = self.leeway_secs;

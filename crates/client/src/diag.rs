@@ -279,6 +279,7 @@ pub mod json {
     }
 
     impl<F: Fn(String) + Send + Sync + 'static> JsonLines<F> {
+        /// A layer writing each rendered line to `sink`.
         pub fn new(sink: F) -> JsonLines<F> {
             JsonLines { sink }
         }

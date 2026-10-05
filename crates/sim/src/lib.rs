@@ -9,6 +9,10 @@
 //!
 //! [`scenario`] builds several nodes over loopback and scripts them.
 
+// Every public item carries its own documentation: the source is the
+// fourth reading of the design, and a bare name is not one.
+#![warn(missing_docs)]
+
 pub mod daemons;
 pub mod mesh;
 pub mod nat;

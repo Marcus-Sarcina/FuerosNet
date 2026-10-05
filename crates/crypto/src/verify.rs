@@ -12,12 +12,18 @@ use rhtn_codec::envelope;
 /// names the identity to fetch, or an object that fails.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Failure {
+    /// This verifier holds no key for the keyhash named.  **The third
+    /// outcome, not a rejection** (`wire-format.md` §3.4): the object may
+    /// be perfectly good, and the keyhash is what to fetch.
     MissingKey(Vec<u8>),
     /// A record a delegated key may sign (`wire-format.md` §7.5, §7.1)
     /// verifies under neither the identity's own key nor any delegation
     /// this holder keeps for it: unverifiable until that keyhash's
     /// delegation arrives, as §10.1.1 defers for a missing key.
     MissingDelegation(Vec<u8>),
+    /// The object is bad: a signature that does not verify, a shape that
+    /// does not read, or a rule it breaks.  **Not deferrable** — no key
+    /// arriving later makes it good.
     Invalid(String),
 }
 
@@ -53,6 +59,8 @@ impl From<String> for Failure {
 
 /// Resolve a keyhash to a pinned identity.
 pub trait Lookup {
+    /// The identity pinned for `keyhash`, or `None` where this holder has
+    /// none, which is [`Failure::MissingKey`] and not a rejection.
     fn identity(&self, keyhash: &[u8]) -> Option<&Identity>;
     /// The transport key a delegation this holder keeps names for
     /// `keyhash` (`wire-format.md` §8.2, §10.1): what a subtree
@@ -363,12 +371,22 @@ pub fn adoption_evidence<L: Lookup + ?Sized>(ids: &L, body: &[u8]) -> Result<(),
 /// presented, and the window against its clock; neither is done here.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Delegation {
+    /// The transport key delegated, field 1.
     pub key: [u8; 32],
+    /// The identity that delegated it, field 2.
     pub keyhash: [u8; 32],
+    /// The window's start, field 3.
     pub not_before: u64,
+    /// The window's end, field 4, exactly
+    /// [`DELEGATION_WINDOW_SECONDS`](rhtn_codec::schema::DELEGATION_WINDOW_SECONDS)
+    /// after `not_before`.
     pub not_after: u64,
 }
 
+/// Verify a delegation hybrid under the identity it names and return its
+/// fields.  **The window and the presented key are the caller's to
+/// check**, against its own clock and its own handshake respectively;
+/// neither is knowable here.
 pub fn delegation<L: Lookup + ?Sized>(ids: &L, raw: &[u8]) -> Result<Delegation, Failure> {
     let d = delegation_fields(raw)?;
     let id = ids

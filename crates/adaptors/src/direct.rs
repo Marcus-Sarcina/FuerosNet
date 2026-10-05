@@ -24,6 +24,7 @@ use std::time::Duration;
 pub struct Reachable(Arc<Mutex<HashSet<Keyhash>>>);
 
 impl Reachable {
+    /// Record whether a direct path to `peer` is held.
     pub fn set(&self, peer: Keyhash, held: bool) {
         let mut s = self.0.lock().unwrap();
         if held {
@@ -33,6 +34,7 @@ impl Reachable {
         }
     }
 
+    /// Whether a direct path to `peer` is held.
     pub fn holds(&self, peer: &Keyhash) -> bool {
         self.0.lock().unwrap().contains(peer)
     }
@@ -53,6 +55,7 @@ type Fut<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 /// The transport side of the direct path.
 pub trait Direct: Send + Sync {
+    /// Where this side can be reached, as the transport knows it.
     fn reachable(&self) -> Reachable;
     /// This side's candidates for `peer`, or none where the path may not
     /// be direct: then nothing is gathered, exchanged or dialled.
@@ -165,6 +168,7 @@ impl LightDirect {
         Ok(light)
     }
 
+    /// The address this socket is bound to.
     pub fn addr(&self) -> io::Result<SocketAddr> {
         self.0.socket.addr()
     }

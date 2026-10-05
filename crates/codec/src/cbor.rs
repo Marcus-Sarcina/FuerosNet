@@ -9,17 +9,32 @@
 
 use std::ops::Range;
 
+/// A parsed CBOR item.  **Strings and byte strings are ranges into the
+/// input**, never copies: an unknown key's value survives exactly as it
+/// arrived, and a signature can be checked over the received bytes rather
+/// than a re-encoding of them.
+///
+/// The profile's own types (§1.2) are all that appear: no tags, no floats,
+/// no indefinite lengths, and nothing the parser would have to normalise.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Item {
+    /// Major type 0.
     Uint(u64),
+    /// Major type 1, held as the negative value itself rather than as
+    /// CBOR's `-1 - n` encoding of it.
     Neg(i64),
+    /// Major type 2: a range into the input, not a copy.
     Bytes(Range<usize>),
+    /// Major type 3: a range into the input, its contents valid UTF-8.
     Text(Range<usize>),
+    /// Major type 4, definite length only (§1.2).
     Array(Vec<Item>),
     /// Key items paired with value items, in received order (which the
     /// profile requires to be ascending bytewise).
     Map(Vec<(Item, Item)>),
+    /// Simple value 20 or 21.
     Bool(bool),
+    /// Simple value 22.
     Null,
 }
 
@@ -67,7 +82,12 @@ impl std::fmt::Display for Error {
 }
 impl std::error::Error for Error {}
 
+/// A parser over one input.  **Iterative, never recursive**: nesting is
+/// held on an explicit stack of [`Frame`]s, so depth is bounded by the
+/// input's own length and never by the machine stack, and no input can end
+/// the process by nesting alone.
 pub struct Parser<'a> {
+    /// The bytes every returned range indexes.
     pub b: &'a [u8],
 }
 
@@ -346,6 +366,9 @@ pub fn map_without_key(b: &[u8], key: u64) -> Option<Vec<u8>> {
     Some(out)
 }
 
+/// The value at an unsigned map key, or `None`.  Linear over the pairs,
+/// which the profile's maps are small enough for; the parser has already
+/// refused duplicate keys, so the first match is the only match.
 pub fn map_get(m: &[(Item, Item)], key: u64) -> Option<&Item> {
     m.iter().find_map(|(k, v)| match k {
         Item::Uint(x) if *x == key => Some(v),
@@ -353,6 +376,9 @@ pub fn map_get(m: &[(Item, Item)], key: u64) -> Option<&Item> {
     })
 }
 
+/// An item as an unsigned integer, or `None` where it is any other type.
+/// **A negative is not a small unsigned**: where a field admits both signs
+/// it is read as [`Item::Neg`] and never through here.
 pub fn as_uint(it: &Item) -> Option<u64> {
     match it {
         Item::Uint(n) => Some(*n),

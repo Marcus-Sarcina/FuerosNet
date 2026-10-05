@@ -24,6 +24,7 @@
 //! scaffolding reads it rather than shaping it — and the Kotlin the Android
 //! shell speaks is generated from the built library by
 //! `mobile/android/tools/build-native.sh`.
+#![warn(missing_docs)]
 
 uniffi::setup_scaffolding!();
 
@@ -34,10 +35,18 @@ compile_error!(
      build the field-test flavour with `--no-default-features --features fieldtest`"
 );
 
+/// What a shell asks of the kernel: every call the ceremony, the
+/// conversation and the session need.
 pub mod client;
+/// What the kernel asks of the platform: the camera, the radios, the
+/// clock, randomness, storage, custody and diagnostics.
 pub mod device;
 pub(crate) mod diag;
+/// A node and identities in one process, for a shell's own tests.
 #[cfg(feature = "harness")]
 pub mod harness;
+/// The session and the payload path behind the boundary, and the events
+/// a shell reads from them.
 pub mod net;
+/// The types that cross the boundary, in the shapes UniFFI can carry.
 pub mod types;

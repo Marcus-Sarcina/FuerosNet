@@ -51,6 +51,8 @@ object Optical {
         EncodeHintType.CHARACTER_SET to "US-ASCII", // alphanumeric mode is what the alphabet earns
     )
 
+    /** `bytes` in base45 (RFC 9285), which is the alphabet a QR's
+     *  alphanumeric mode encodes two characters to eleven bits. */
     fun payload(bytes: ByteArray): String {
         val out = StringBuilder((bytes.size + 1) / 2 * 3)
         var i = 0

@@ -22,10 +22,12 @@ pub type Inbound = Arc<dyn Fn(Keyhash, Vec<u8>, Option<Vec<u8>>) + Send + Sync>;
 pub struct Inboxes(Arc<Mutex<HashMap<Keyhash, Inbound>>>);
 
 impl Inboxes {
+    /// Deliver `client`'s payload to `inbound` from now on.
     pub fn host(&self, client: Keyhash, inbound: Inbound) {
         self.0.lock().unwrap().insert(client, inbound);
     }
 
+    /// Whether this process hosts `client`.
     pub fn hosts(&self, client: &Keyhash) -> bool {
         self.0.lock().unwrap().contains_key(client)
     }
@@ -58,6 +60,7 @@ pub type Answer<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 /// they say what this side knows without asking, and a node across a
 /// session knows neither.
 pub trait Serving: Send + Sync {
+    /// The serving node's own identity.
     fn me(&self) -> Keyhash;
     /// The serving node's own device: the key it presents in a handshake
     /// (`wire-format.md` §8.2), which is where material for the node
@@ -73,6 +76,8 @@ pub trait Serving: Send + Sync {
     /// Stock `subject`'s one-time pool; whether the node took the
     /// deposit, which a bound may refuse whole.
     fn stock<'a>(&'a self, subject: Keyhash, keys: Vec<Vec<u8>>) -> Answer<'a, bool>;
+    /// A `PrekeyRequest` from `from` (`wire-format.md` §7.8): the node's
+    /// reply, or nothing where it answers none.
     fn prekey<'a>(&'a self, from: Keyhash, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>>;
     /// A `CatalogQuery` from `from` (`wire-format.md` §6.4): the node's
     /// reply, or nothing where it answers none.
@@ -103,7 +108,9 @@ pub trait Serving: Send + Sync {
 
 /// The node this client lives beside, as its serving node.
 pub struct LocalNode {
+    /// The node itself.
     pub node: Arc<LiveNode>,
+    /// Where payload for each hosted client is delivered.
     pub inboxes: Inboxes,
     /// Where this node cannot answer, a subject whose material it does not
     /// hold or a recipient it neither hosts nor serves: on the wire the
@@ -113,6 +120,7 @@ pub struct LocalNode {
 }
 
 impl LocalNode {
+    /// A local node wrapping `node`, delivering to `inboxes`.
     pub fn new(node: Arc<LiveNode>, inboxes: Inboxes) -> Arc<LocalNode> {
         Arc::new(LocalNode {
             node,

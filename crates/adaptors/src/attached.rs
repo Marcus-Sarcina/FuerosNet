@@ -25,6 +25,8 @@ pub type Nonces = Arc<dyn Fn() -> [u8; 16] + Send + Sync>;
 /// (`light-client-requirements.md` §2).
 pub type Current = Arc<dyn Fn() -> Option<Arc<rhtn_transport::session::Session>> + Send + Sync>;
 
+/// A serving node beside this client in one process: what an attach
+/// reaches when the node is not across the wire.
 pub struct AttachedNode {
     /// The node's own keyhash, which a client knows before it attaches;
     /// replaced by a failover, since the session it holds is then with a
@@ -35,6 +37,7 @@ pub struct AttachedNode {
 }
 
 impl AttachedNode {
+    /// An attached node for `node`, answering on `session`.
     pub fn new(node: Keyhash, session: Current, nonce: Nonces) -> Arc<AttachedNode> {
         Arc::new(AttachedNode {
             node: std::sync::Mutex::new(node),

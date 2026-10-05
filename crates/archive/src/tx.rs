@@ -9,21 +9,30 @@ use rhtn_codec::encode::*;
 use rhtn_crypto::SigningIdentity;
 use rhtn_crypto::signer::Sign1;
 
+/// Type 1: adoption, which subsumes key rotation and recovery.
 pub const TYPE_ADOPTION: u64 = 1;
+/// Type 2: departure.
 pub const TYPE_DEPARTURE: u64 = 2;
+/// Type 3: disavowal.
 pub const TYPE_DISAVOWAL: u64 = 3;
+/// Type 4: peering.
 pub const TYPE_PEERING: u64 = 4;
+/// Type 5: presence, the ceremony's record.
 pub const TYPE_PRESENCE: u64 = 5;
+/// Type 7: reissue. **Six is not used** and is not reassigned.
 pub const TYPE_REISSUE: u64 = 7;
 
 /// `{series, counter}` (`wire-format.md` §2.3), encoded `[series, counter]`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Seqno {
+    /// The series, which an adoption opens and a reissue moves.
     pub series: u32,
+    /// The counter within the series, starting at zero.
     pub counter: u32,
 }
 
 impl Seqno {
+    /// Emit the `[series, counter]` pair into `out`.
     pub fn emit(&self, out: &mut Vec<u8>) {
         emit_array_head(out, 2);
         emit_uint(out, self.series as u64);
@@ -36,9 +45,14 @@ impl Seqno {
 /// series there is no order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Order {
+    /// Within the same series, a strictly greater counter.
     Newer,
+    /// The same series and counter: one slot.
     Same,
+    /// Within the same series, a lesser counter.
     Older,
+    /// Different series: **no order at all** (`wire-format.md` §2.1), which is
+    /// not the same as equal.
     Incomparable,
 }
 
@@ -58,10 +72,14 @@ pub fn compare(prev: Seqno, next: Seqno) -> Order {
 /// A `Locator` (`wire-format.md` §2.3): anchor, nibble path, seqno.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Locator {
+    /// The anchor the path is relative to.
     pub anchor: Keyhash,
     /// Packed 4-bit hop indices, high nibble first.
     pub path: Vec<u8>,
+    /// How many nibbles of `path` are significant, at most
+    /// [`PATH_NIBBLES`](rhtn_codec::bounds::PATH_NIBBLES).
     pub nibbles: u64,
+    /// The sequence number, which orders two locators for one subject.
     pub seqno: Seqno,
 }
 
@@ -90,6 +108,7 @@ impl Locator {
             byte & 0x0f
         })
     }
+    /// Emit the locator into `out`.
     pub fn emit(&self, out: &mut Vec<u8>) {
         emit_map_head(out, 3);
         emit_uint(out, 1);
@@ -174,18 +193,31 @@ pub enum Evidence {
     /// Field 8: a presence record between the two parties, by txid.
     Presence(Txid),
     /// Field 9: the former patron's transfer statement.
-    Transfer { former: Keyhash, block: Vec<u8> },
+    Transfer {
+        /// The former patron.
+        former: Keyhash,
+        /// Its signed transfer statement.
+        block: Vec<u8>,
+    },
     /// Field 6: an encoded `Recovery` map.
     Recovery(Vec<u8>),
 }
 
 /// An adoption body (`wire-format.md` §4.1).
 pub struct Adoption<'a> {
+    /// Field 1: the node being adopted.
     pub node: Keyhash,
+    /// Field 2: the patron.
     pub patron: Keyhash,
+    /// Field 3: the node's resulting position, whose seqno opens the
+    /// relationship's series at counter zero.
     pub locator: Locator,
+    /// Field 4: when.
     pub timestamp: u64,
+    /// Field 5: **the adopted node's** key material, never the patron's
+    /// (`wire-format.md` §4.1).
     pub key_material: Option<Vec<u8>>,
+    /// The evidence the adoption rests on.
     pub evidence: Evidence,
     /// Field 7: the head of the archive prefix presented, if any.
     pub presented_head: Option<Txid>,
@@ -193,6 +225,7 @@ pub struct Adoption<'a> {
     pub back: [&'a [Txid]; 2],
 }
 
+/// The body of an adoption, ready to sign.
 pub fn adoption_body(a: &Adoption) -> Vec<u8> {
     let mut out = Vec::new();
     let n = 5 + a.key_material.is_some() as usize + a.presented_head.is_some() as usize + 1;
@@ -478,8 +511,13 @@ pub fn reissue_body(
 /// (bit 0 protocol_ran, bit 1 both_responsive, bit 2 latency_bound).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Witness {
+    /// The witness's identity.
     pub keyhash: Keyhash,
+    /// Which participant nominated it. **A witness attributed to a party that
+    /// did not nominate it is a refusal** (`light-client-requirements.md` §1.1),
+    /// which is why the field is in the body rather than inferred.
     pub nominated_by: Keyhash,
+    /// The attestation bits it signs under.
     pub flags: u64,
 }
 

@@ -210,6 +210,8 @@ class FaceCamera(private val context: Context) {
         return f
     }
 
+    /** Close the camera and report what it delivered.  Safe to call
+     *  twice: the second does nothing. */
     @Synchronized
     fun close() {
         if (device != null || delivered.get() > 0 || frameTimeouts.get() > 0) {

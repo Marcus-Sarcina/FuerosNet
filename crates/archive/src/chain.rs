@@ -18,18 +18,23 @@ pub const REQUEST_ARCHIVE: u64 = 2;
 /// An `ArchiveRequest` (`wire-format.md` §7.9).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ArchiveRequest {
+    /// Whose archive is wanted.
     pub subject: Keyhash,
     /// The frontier to walk back from: one txid for an unmerged chain,
     /// several where a merge left more than one branch unreturned
     /// (`wire-format.md` §7.9).  Empty: the holder's newest record, the
     /// recovery case.
     pub frontier: Vec<Txid>,
+    /// How many records at most, which the answering node may cut further.
     pub max_records: u64,
+    /// Stop before this time, where the asker already holds the older part.
     pub stop_before: Option<u64>,
+    /// The nonce the reply must echo.
     pub nonce: [u8; 16],
 }
 
 impl ArchiveRequest {
+    /// The request's bytes.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
         emit_map_head(
@@ -56,6 +61,7 @@ impl ArchiveRequest {
         out
     }
 
+    /// A request from its bytes.
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         parse_all(b).map_err(|e| e.0)?;
         schema::check_unsigned(Family::ArchiveRequest, b, 0).map_err(|e| e.0)?;
@@ -80,8 +86,11 @@ impl ArchiveRequest {
 /// An `ArchiveReply` (`wire-format.md` §7.9): records head first.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ArchiveReply {
+    /// The nonce, echoed from the request.
     pub nonce: [u8; 16],
+    /// The records, each as its own signed envelope bytes.
     pub records: Vec<Vec<u8>>,
+    /// Whether the answer was cut: more remain behind what was sent.
     pub more: bool,
     /// The frontier: every back-pointer this batch named and did not
     /// return, present iff `more` (`wire-format.md` §7.9).
@@ -105,6 +114,7 @@ fn txids_at(b: &[u8], k: u64) -> Result<Vec<Txid>, String> {
 }
 
 impl ArchiveReply {
+    /// The reply's bytes.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
         emit_map_head(
@@ -130,6 +140,7 @@ impl ArchiveReply {
         out
     }
 
+    /// A reply from its bytes.
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         parse_all(b).map_err(|e| e.0)?;
         schema::check_unsigned(Family::ArchiveReply, b, 0).map_err(|e| e.0)?;
@@ -162,14 +173,20 @@ impl ArchiveReply {
 /// its sealed capture and the capture seed, kept by txid across pruning.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Evidence {
+    /// The record the evidence belongs to, as its own bytes.
     pub record: Vec<u8>,
+    /// The capture sealed under a key only its subject can derive.
     pub sealed_capture: Vec<u8>,
+    /// This device's own seed for the ceremony.
     pub seed: Vec<u8>,
 }
 
 /// One key's archive: a Merkle DAG of the records it signed.
 #[derive(Debug, Clone)]
 pub struct Archive {
+    /// Whose archive this is. **Its own signed history** and not a store of
+    /// what it has seen of others (design §10.0): nothing prunes it but the
+    /// checkpoint rule, and no horizon bounds it.
     pub key: Keyhash,
     records: BTreeMap<Txid, Record>,
     heads: BTreeSet<Txid>,
@@ -180,6 +197,8 @@ pub struct Archive {
 }
 
 impl Archive {
+    /// An empty archive for `key`, whose next transaction carries the genesis
+    /// value (`wire-format.md` §3.1).
     pub fn new(key: Keyhash) -> Self {
         Archive {
             key,
@@ -329,22 +348,28 @@ impl Archive {
         Ok(a)
     }
 
+    /// The branch heads: one for a linear archive, more where it has forked.
     pub fn heads(&self) -> Vec<Txid> {
         self.heads.iter().copied().collect()
     }
 
+    /// How many records the archive holds.
     pub fn len(&self) -> usize {
         self.records.len()
     }
 
+    /// Whether the archive holds no record at all.
     pub fn is_empty(&self) -> bool {
         self.records.is_empty()
     }
 
+    /// The record at `txid`, where this archive holds it.
     pub fn get(&self, txid: &Txid) -> Option<&Record> {
         self.records.get(txid)
     }
 
+    /// The checkpoint, where one has been elected: what pruning is permitted
+    /// beyond (design §10.1).
     pub fn checkpoint(&self) -> Option<Txid> {
         self.checkpoint
     }
@@ -585,10 +610,14 @@ impl Archive {
 
     // ---------------------------------------------------------------- evidence
 
+    /// Keep the evidence belonging to a record. **Not part of the chain**
+    /// (design §10.0): the chain governs the signed history and this is what
+    /// the device holds beside it.
     pub fn keep_evidence(&mut self, txid: Txid, ev: Evidence) {
         self.evidence.insert(txid, ev);
     }
 
+    /// The evidence kept for `txid`, where any is.
     pub fn evidence(&self, txid: &Txid) -> Option<&Evidence> {
         self.evidence.get(txid)
     }

@@ -16,22 +16,31 @@ pub const REQUEST_PREKEY: u64 = 3;
 pub const CONSTRUCTION_PQXDH: u64 = 1;
 /// `PrekeyReply` field 4.
 pub const FAIL_UNKNOWN_SUBJECT: u64 = 0;
+/// The request was refused.
 pub const FAIL_REFUSED: u64 = 1;
 /// `PrekeyRequest` field 2.
 pub const MODE_REUSABLE: u64 = 0;
+/// A one-time key was served, so the session has the stronger forward
+/// secrecy (design §14.2.4.2).
 pub const MODE_ONE_TIME: u64 = 1;
 
 /// A `PrekeyBundle` as the network reads it: the subject, the construction,
 /// when it was published, and the blob it does not read.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PrekeyBundle {
+    /// Field 1: whose bundle this is, and the signer.
     pub subject: Keyhash,
+    /// Field 2: the construction, 1 for PQXDH.
     pub construction: u64,
+    /// Field 3: the opaque reusable material, bounded by
+    /// [`PREKEY_BUNDLE_BLOB`](rhtn_codec::bounds::PREKEY_BUNDLE_BLOB).
     pub blob: Vec<u8>,
+    /// Field 4: when it was published.
     pub published_at: u64,
     /// The device whose material this is, named by the key it presents in
     /// a handshake (`wire-format.md` §7.8); under the signature.
     pub device: [u8; 32],
+    /// The bundle's own bytes, which the signature covers.
     pub bytes: Vec<u8>,
 }
 
@@ -172,18 +181,28 @@ pub enum PrekeyRequest {
     /// one-time key is one device's, so the decoder requires it then
     /// (`wire-format.md` §7.8 field 4).
     One {
+        /// Whose bundle is wanted.
         subject: Keyhash,
+        /// Whether a one-time key is asked for.
         one_time: bool,
+        /// The nonce the reply must echo.
         nonce: [u8; 16],
+        /// Which device, where one is named.
         device: Option<[u8; 32]>,
     },
+    /// Reusable material across a population, in one request (design §14.2.4):
+    /// a batch names a population rather than a person and so carries no intent
+    /// signal.
     Batch {
+        /// The subjects asked for.
         subjects: Vec<Keyhash>,
+        /// The nonce the reply must echo.
         nonce: [u8; 16],
     },
 }
 
 impl PrekeyRequest {
+    /// The request's bytes.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
         match self {
@@ -226,6 +245,7 @@ impl PrekeyRequest {
         out
     }
 
+    /// A request from its bytes.
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         parse_all(b).map_err(|e| e.0)?;
         schema::check_unsigned(Family::PrekeyRequestOrBatch, b, 0).map_err(|e| e.0)?;
@@ -287,16 +307,21 @@ impl PrekeyRequest {
 /// code where no bundle is held.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PrekeyReply {
+    /// The nonce, echoed from the request.
     pub nonce: [u8; 16],
     /// One bundle per device the node holds for the subject, or the one
     /// device the request named (`wire-format.md` §7.8); empty where field
     /// 4 says why.
     pub bundles: Vec<Vec<u8>>,
+    /// A one-time key, where the node still served one. **Its absence is not
+    /// an error**: it weakens forward secrecy and the session opens regardless.
     pub one_time: Option<Vec<u8>>,
+    /// Why the reply carries no bundle, where it carries none.
     pub code: Option<u64>,
 }
 
 impl PrekeyReply {
+    /// The reply's bytes.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
         emit_map_head(
@@ -325,6 +350,7 @@ impl PrekeyReply {
         out
     }
 
+    /// A reply from its bytes.
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         parse_all(b).map_err(|e| e.0)?;
         schema::check_unsigned(Family::PrekeyReply, b, 0).map_err(|e| e.0)?;
@@ -373,6 +399,7 @@ pub fn encode_batch_reply(replies: &[PrekeyReply]) -> Vec<u8> {
     out
 }
 
+/// The replies of a batch request, one per subject the node answered for.
 pub fn decode_batch_reply(b: &[u8]) -> Result<Vec<PrekeyReply>, String> {
     parse_all(b).map_err(|e| e.0)?;
     let parts = array_item_ranges(b, 0).ok_or("batch reply not an array")?;

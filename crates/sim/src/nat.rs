@@ -45,14 +45,20 @@ struct State {
     sent_to: HashMap<SocketAddr, Vec<SocketAddr>>,
 }
 
+/// A NAT in front of the sockets inside it: it rewrites what passes and
+/// drops what its filtering rule does not admit.
 pub struct Nat {
+    /// How it allocates external sockets.
     pub mapping: Mapping,
+    /// What it admits from outside.
     pub filtering: Filtering,
     /// Where inside sockets send their wrapped datagrams.
     pub inside: SocketAddr,
     inside_sock: Arc<UdpSocket>,
     state: Arc<Mutex<State>>,
+    /// How many datagrams the filtering rule dropped.
     pub filtered: AtomicU64,
+    /// How many it passed.
     pub forwarded: AtomicU64,
     task: tokio::task::JoinHandle<()>,
 }
@@ -64,6 +70,7 @@ impl Drop for Nat {
 }
 
 impl Nat {
+    /// Start a NAT on loopback under these two rules.
     pub async fn start(mapping: Mapping, filtering: Filtering) -> std::io::Result<Arc<Nat>> {
         let inside_sock = Arc::new(UdpSocket::bind("127.0.0.1:0").await?);
         let inside = inside_sock.local_addr()?;

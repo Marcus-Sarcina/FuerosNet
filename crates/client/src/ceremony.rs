@@ -45,11 +45,17 @@ pub struct Config {
     pub clock_tolerance_s: u64,
     /// The retention this client declares, in years (design §7.5.1).
     pub retention_years: u64,
+    /// The template version this client captures and compares under.
     pub template_version: u64,
+    /// The guided capture's figures.
     pub capture: crate::device::CaptureParams,
+    /// How what it keeps at rest is sealed.
     pub seal: SealParams,
+    /// Its numbers as a subject.
     pub subject: SubjectConfig,
+    /// Its numbers as a verifier.
     pub verifier: VerifierConfig,
+    /// Its numbers for the payload path.
     pub payload: payload::PayloadConfig,
     /// The trust policy this client computes standing with: the reference
     /// metric unless something substitutes one (design §16.1).  **Nothing
@@ -164,8 +170,11 @@ struct Fetch {
 /// What a restore from the device's own storage found.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Restored {
+    /// How many records came back.
     pub records: usize,
+    /// How many payload sessions did.
     pub sessions: usize,
+    /// What the horizon did with the snapshot it found.
     pub horizon: crate::horizon::Woke,
 }
 
@@ -175,13 +184,19 @@ pub struct Restored {
 /// their witnesses.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Msg {
+    /// What each side commits to as the meeting opens.
     Intent(Intent),
+    /// What the distance channels measured.
     Channels(Vec<ChannelOutcome>),
     /// The capture key, wiped wherever a copy is dropped.
     CaptureKey(Zeroizing<[u8; 32]>),
+    /// A query for the subject to consent to.
     ConsentRequest(VerificationQuery),
+    /// The subject's consent to one.
     Consent {
+        /// The query consented to.
         query_id: [u8; 32],
+        /// The signed consent over it.
         consent: Vec<u8>,
     },
     /// A `KeyGrant`, subject to verifier.
@@ -194,12 +209,17 @@ pub enum Msg {
     ResponseCopy(Vec<u8>),
     /// The responses one party gathered, handed to the proposer.
     Responses(Vec<Vec<u8>>),
+    /// What a nominee is asked to witness.
     WitnessRequest(WitnessRequest),
+    /// Its answer: the flags it will sign under, or a decline.
     WitnessAnswer(Option<u64>),
+    /// One signer's back-pointers for the body.
     BackPointers(Vec<Txid>),
+    /// The body every signer reviews, with its disclosure set.
     Proposal(Box<Proposed>),
     /// A signer's envelope entries over the body, or its refusal.
     Signed(Result<Vec<u8>, Refusal>),
+    /// The finalised envelope, proposer to every signer.
     Record(Vec<u8>),
     /// The recovering subject names the prior key whose history it claims.
     ClaimPrior(Keyhash),
@@ -208,7 +228,9 @@ pub enum Msg {
     /// The assembled `Recovery` block and the old archive's head, to the
     /// patron.
     RecoveryProposal {
+        /// The assembled `Recovery` block.
         block: Vec<u8>,
+        /// The old archive's head, where the subject presents one.
         presented_head: Option<Txid>,
     },
     /// The adoption body the patron proposes.
@@ -231,16 +253,22 @@ pub enum Msg {
     /// `device`: the recipient's device, carried so a failed direct path
     /// can fall back to the relay (`wire-format.md` §7.10 field 4).
     Payload {
+        /// The recipient.
         to: Keyhash,
+        /// The ciphertext.
         bytes: Vec<u8>,
+        /// The recipient's device it is for.
         device: [u8; 32],
     },
     /// The same bytes handed to the serving node to relay to `to`.
     /// `device` is the recipient's device the ciphertext is for
     /// (`wire-format.md` §7.10 field 4).
     Relay {
+        /// The recipient.
         to: Keyhash,
+        /// The ciphertext.
         bytes: Vec<u8>,
+        /// The recipient's device it is for.
         device: [u8; 32],
     },
     /// Application traffic to the serving node itself: it rides the
@@ -252,8 +280,11 @@ pub enum Msg {
 /// its root commits to, and the back-pointers each signer supplied.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Proposed {
+    /// The body as every signer will sign it.
     pub proposal: Proposal,
+    /// The disclosure set its root commits to.
     pub set: DisclosureSet,
+    /// The back-pointers each signer supplied, in signer order.
     pub back: Vec<Vec<Txid>>,
 }
 
@@ -291,20 +322,31 @@ impl Msg {
 /// selection, its clock, and its declared retention.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Intent {
+    /// This party's contribution to the pre-commitment.
     pub contribution: [u8; 16],
+    /// Whom it nominates to witness, from the counterparty's
+    /// neighbourhood.
     pub nominees: Vec<Keyhash>,
+    /// Its prior records, for the counterparty's selection.
     pub bundle: Vec<Vec<u8>>,
+    /// Its clock, in milliseconds since the epoch.
     pub started_at: u64,
+    /// The retention it declares, in years.
     pub retention_years: u64,
+    /// Whether this side initiated.
     pub initiator: bool,
 }
 
 /// What a nominee is told when asked to witness (design §7.1 step 8).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WitnessRequest {
+    /// The ceremony being witnessed.
     pub ceremony_id: [u8; 32],
+    /// The two parties, in body order.
     pub participants: [Keyhash; 2],
+    /// The claimed start, which a witness checks its own clock against.
     pub started_at: u64,
+    /// What the distance channels measured.
     pub channels: Vec<ChannelOutcome>,
 }
 
@@ -315,9 +357,14 @@ pub struct WitnessRequest {
 /// subject presented, and the key material an adoption of a party the
 /// patron is introducing carries.
 pub struct Adopting {
+    /// The evidence the binding rests on.
     pub evidence: Evidence,
+    /// The series of the relationship line it opens.
     pub series: u32,
+    /// The head a recovering subject presented, where one did.
     pub presented_head: Option<Txid>,
+    /// The key material of a party the patron is introducing, where the
+    /// adoption carries it.
     pub key_material: Option<Vec<u8>>,
 }
 
@@ -380,13 +427,22 @@ pub struct Client {
     /// (`light-client-requirements.md` §2): held for the backup and never
     /// written to the archive.
     pub provider_credential: Option<Vec<u8>>,
+    /// The identities whose keys this client holds, for checking
+    /// signatures.
     pub known: Vec<Identity>,
+    /// Its own archive.
     pub archive: Archive,
+    /// Its persisted state: sealed captures, seeds, records, disclosures.
     pub store: ClientStore,
+    /// Its state as a subject.
     pub subject: SubjectState,
+    /// Its state as a verifier.
     pub verifier: VerifierState,
+    /// Whom it recognises, by tier, which is what selection draws on.
     pub acquaintance: Acquaintance,
+    /// Its own numbers.
     pub cfg: Config,
+    /// The device it runs on.
     pub device: Device,
     /// Where this client sits, in each subnet it is in.
     ///
@@ -448,8 +504,11 @@ pub struct Client {
 /// (design §14.2.4.6).
 #[derive(Debug)]
 pub enum Dispatched {
+    /// Application payload, for whatever is above this client.
     Application(Vec<u8>),
+    /// A `KeyGrant`, and what it came to at this verifier.
     Grant(GrantOutcome),
+    /// A `LateResponse`: the record it attached to, or why it did not.
     Late(Result<Txid, String>),
     /// The peer's candidates for the direct path, for the transport to
     /// dial.
@@ -461,7 +520,9 @@ pub enum Dispatched {
     /// its id, where the body decoded, and what it came to.  An answer
     /// waiting on a grant is answered when the grant lands, or expires.
     Query {
+        /// The query's id, where the body decoded.
         query: Option<[u8; 32]>,
+        /// What it came to.
         outcome: QueryOutcome,
     },
     /// A verifier's response to a query I issued: the query and the
@@ -471,7 +532,9 @@ pub enum Dispatched {
     /// many records went back, and whether more remain.  The reply is in
     /// the outbox.
     Served {
+        /// How many records went back.
         records: usize,
+        /// Whether more remain to be fetched.
         more: bool,
     },
     /// A reply to a fetch this client made: the records it verified into
@@ -508,6 +571,8 @@ fn anchor_refused(which: &'static str, e: Abort) -> Abort {
 }
 
 impl Client {
+    /// A ceremony device holding `id`: it has the seed, so every act the
+    /// signing table gives the identity key is open to it.
     pub fn new(id: SigningIdentity, known: Vec<Identity>, cfg: Config, device: Device) -> Self {
         let now = device.clock.now_ms() / 1000;
         let random = device.random.clone();
@@ -582,6 +647,7 @@ impl Client {
         }
     }
 
+    /// This client's own keyhash.
     pub fn keyhash(&self) -> Keyhash {
         self.public.keyhash
     }
@@ -1023,6 +1089,7 @@ impl Client {
         Ok(cid)
     }
 
+    /// The active ceremony's id, once both contributions have fixed it.
     pub fn ceremony_id(&self) -> Option<[u8; 32]> {
         self.active.as_ref().and_then(|a| a.ceremony_id)
     }
@@ -1328,6 +1395,7 @@ impl Client {
             .unwrap_or_default()
     }
 
+    /// The two nominee lists of the active ceremony: mine, then theirs.
     pub fn nominees(&self) -> (Vec<Keyhash>, Vec<Keyhash>) {
         self.active
             .as_ref()
@@ -1419,6 +1487,7 @@ impl Client {
         Some(flags)
     }
 
+    /// The back-pointers this client would supply for a proposed body.
     pub fn back_pointers(&self) -> Vec<Txid> {
         let back = self.archive.next_back_pointers();
         tracing::debug!(target: "cer", count = back.len(), "cer.back_pointers");
@@ -3322,8 +3391,11 @@ pub fn conversation_from(kind: u64, bytes: &[u8]) -> Result<Msg, Abort> {
 /// One message on one path.
 #[derive(Debug, Clone)]
 pub struct Sent {
+    /// Who sent it.
     pub from: Keyhash,
+    /// Who it went to.
     pub to: Keyhash,
+    /// What was sent.
     pub msg: Msg,
 }
 
@@ -3332,17 +3404,22 @@ pub struct Sent {
 /// a test can say what travelled where.
 #[derive(Default)]
 pub struct Harness {
+    /// Every client on the harness, by keyhash.
     pub clients: BTreeMap<Keyhash, Client>,
+    /// Every message moved, in order, with its path.
     pub log: Vec<Sent>,
 }
 
 impl Harness {
+    /// Put `c` on the harness; its keyhash, which is how it is reached.
     pub fn add(&mut self, c: Client) -> Keyhash {
         let k = c.keyhash();
         self.clients.insert(k, c);
         k
     }
 
+    /// The client `k`.  Panics where the harness holds none, which in a
+    /// test is the test's own error.
     pub fn client(&mut self, k: &Keyhash) -> &mut Client {
         self.clients.get_mut(k).expect("a client on the harness")
     }

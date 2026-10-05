@@ -11,11 +11,14 @@ use rhtn_codec::schema::{self, Family};
 use rhtn_crypto::identity::testkit::test_identity;
 use rhtn_crypto::{Identity, verify};
 
+/// The names every corpus identity is derived from, in the order the
+/// corpus lists them.
 pub const NAMES: [&str; 25] = [
     "alice", "bob", "carol", "alice2", "w1", "w2", "w3", "w4", "w5", "w6", "w7", "w8", "w9", "w10",
     "w11", "w12", "w13", "w14", "w15", "w16", "c1", "c2", "c3", "c4", "c5",
 ];
 
+/// The corpus, parsed from `test-vectors/corpus.json`.
 pub fn corpus() -> serde_json::Value {
     let path = concat!(
         env!("CARGO_MANIFEST_DIR"),
@@ -24,6 +27,7 @@ pub fn corpus() -> serde_json::Value {
     serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
 }
 
+/// Every corpus identity, by [`NAMES`].
 pub fn identities() -> Vec<Identity> {
     NAMES.iter().map(|n| test_identity(n).public).collect()
 }
@@ -49,6 +53,8 @@ impl verify::Lookup for Held {
     }
 }
 
+/// What a holder keeps: every corpus identity, and every delegation the
+/// corpus carries as an accepted fixture.
 pub fn held() -> Held {
     let ids = identities();
     let mut delegations = Vec::new();

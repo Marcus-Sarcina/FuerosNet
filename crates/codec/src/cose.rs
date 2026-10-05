@@ -5,6 +5,9 @@
 use crate::encode::*;
 use sha2::{Digest, Sha256};
 
+/// SHA-256, the one hash this profile uses: content addressing (§1.4),
+/// the keyhash over `KeyMaterial` (§2.2), and the derivations the design
+/// names.  Here so that nothing else in the crate reaches for a digest.
 pub fn sha256(b: &[u8]) -> [u8; 32] {
     Sha256::digest(b).into()
 }
@@ -39,8 +42,12 @@ pub fn sig_structure_sign1(protected: &[u8], aad: &[u8], payload: &[u8]) -> Vec<
     out
 }
 
-/// COSE algorithm identifiers this profile uses.
+/// The classical component's algorithm, EdDSA over Ed25519 (§2.2).
 pub const ALG_EDDSA: i64 = -8;
+/// The post-quantum component's algorithm, ML-DSA-65 (§2.2).  **Every
+/// algorithm this profile admits is negative** (§2.2): EdDSA is −8 and
+/// ML-DSA-44, -65 and -87 are −48, −49 and −50, so a field holding one
+/// cannot be a `uint`.
 pub const ALG_ML_DSA_65: i64 = -49;
 
 /// A protected header `{1: alg, 4: kid}` as deterministic CBOR.
@@ -145,19 +152,39 @@ pub fn keyhash(ed_pub: &[u8; 32], pq_pub: &[u8]) -> [u8; 32] {
 }
 
 /// The role tags of §1.1 (`external_aad`).
+///
+/// **One tag per role, and a signature made for one role cannot be read as
+/// another**: the tag is covered by the signature, so moving a signed
+/// structure into a context that expects a different tag makes it verify
+/// as nothing.  §1.1 is the table these come from and is authoritative on
+/// the set; a structure with no tag of its own does not get one invented
+/// here.
 pub mod aad {
+    /// A transaction envelope (§1.1, §3).
     pub const ENVELOPE: &[u8] = b"rhtn/1:envelope";
+    /// A verifier's response (§1.1, §4.5).
     pub const VERIFIER: &[u8] = b"rhtn/1:verifier";
+    /// A subject's consent to a query about it (§1.1, §4.5).
     pub const CONSENT: &[u8] = b"rhtn/1:consent";
+    /// A currency attestation (§1.1, §7.1).
     pub const CURRENCY: &[u8] = b"rhtn/1:currency";
+    /// A catalog entry (§1.1, §6.1).
     pub const CATALOG: &[u8] = b"rhtn/1:catalog";
+    /// An abuse report (§1.1, §6.3).
     pub const ABUSE: &[u8] = b"rhtn/1:abuse";
+    /// A standalone locator (§1.1, §2.3).
     pub const LOCATOR: &[u8] = b"rhtn/1:locator";
+    /// An anchor entry (§1.1, §7.2).
     pub const ANCHOR: &[u8] = b"rhtn/1:anchor";
+    /// A node's endpoint record (§1.1, §7.6).
     pub const ENDPOINTS: &[u8] = b"rhtn/1:endpoints";
+    /// A prekey bundle (§1.1, §7.8).
     pub const PREKEY: &[u8] = b"rhtn/1:prekey";
+    /// A subtree acknowledgement (§1.1, §7.5).
     pub const SUBTREE_ACK: &[u8] = b"rhtn/1:subtree-ack";
+    /// An old key's successor statement (§1.1, §4.1).
     pub const SUCCESSOR: &[u8] = b"rhtn/1:successor";
+    /// A former patron's transfer statement (§1.1, §4.1).
     pub const TRANSFER: &[u8] = b"rhtn/1:transfer";
     /// The fourteenth: a transport delegation (`wire-format.md` §8.2).
     pub const DELEGATION: &[u8] = b"rhtn/1:delegation";

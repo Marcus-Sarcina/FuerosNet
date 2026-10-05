@@ -33,15 +33,27 @@ use std::time::Duration;
 pub enum Ask {
     /// Where a subject is, from an anchor and a path (`wire-format.md` §7.7).
     Resolve {
+        /// Whom to resolve.
         subject: Keyhash,
+        /// The anchor the path is relative to.
         anchor: Keyhash,
+        /// The path under it, packed two nibbles to a byte.
         path: Vec<u8>,
+        /// How many of the packed nibbles are the path's.
         nibbles: u64,
     },
     /// A subject's archive, newest first where no head is named (§7.9).
-    Archive { subject: Keyhash, max_records: u64 },
+    Archive {
+        /// Whose archive to fetch.
+        subject: Keyhash,
+        /// How many records to ask for.
+        max_records: u64,
+    },
     /// What a node's catalog answers this asker (§6.4).
-    Catalog { service_type: Option<String> },
+    Catalog {
+        /// The service type to filter on, or nothing for every type.
+        service_type: Option<String>,
+    },
 }
 
 /// Attach to `target` at `addr` as `me`, pinning everyone in `known`.

@@ -15,6 +15,7 @@ use std::path::PathBuf;
 /// One client's endpoint, as that client gave it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Endpoint {
+    /// Where to ring, as the user's chosen service gave it.
     pub url: String,
     /// What the posted body is encrypted to.  Opaque here: this node
     /// encrypts to it and reads nothing.
@@ -26,6 +27,7 @@ pub struct Endpoint {
 }
 
 impl Endpoint {
+    /// Whether the registration has lapsed by `now`.
     pub fn lapsed(&self, now: u64) -> bool {
         self.lapses_at.is_some_and(|t| now >= t)
     }
@@ -34,7 +36,9 @@ impl Endpoint {
 /// What a registration did, which is what the reply's code carries.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Registered {
+    /// The registration was recorded.
     Held,
+    /// A registration with no endpoint withdrew the one held.
     Withdrawn,
     /// The URL or the key is longer than this node accepts, or a
     /// registration named a key without an endpoint to attach it to.
@@ -53,10 +57,12 @@ pub struct WakeRegister {
     /// The longest URL and key this node will hold.  The wire bounds both
     /// (`wire-format.md` §7.10); an operator may hold less.
     pub max_url: usize,
+    /// The longest key this register will hold.
     pub max_key: usize,
 }
 
 impl WakeRegister {
+    /// An empty register.
     pub fn new() -> Self {
         WakeRegister {
             max_url: 2048,
@@ -94,6 +100,8 @@ impl WakeRegister {
         self.of_client(client).next().map(|(_, e)| e)
     }
 
+    /// The endpoint registered for that client's device, where one is and has
+    /// not lapsed.
     pub fn get_for(&self, client: &Keyhash, device: &[u8; 32]) -> Option<&Endpoint> {
         self.endpoints.get(&(*client, *device))
     }

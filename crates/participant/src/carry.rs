@@ -76,6 +76,7 @@ pub fn pack_carriage(c: &[Vec<u8>]) -> String {
     list(c.iter().map(|m| hex(m)).collect())
 }
 
+/// The carriage messages back out of what [`pack_carriage`] wrote.
 pub fn take_carriage(s: &str) -> Result<Vec<Vec<u8>>, String> {
     ids(s, "a carriage message")
 }
@@ -118,6 +119,7 @@ fn outcome_of(s: &str) -> Result<ChannelOutcome, String> {
     }
 }
 
+/// The channel outcomes as one line a terminal can carry.
 pub fn pack_channels(a: &[Achieved]) -> String {
     list(
         a.iter()
@@ -133,6 +135,7 @@ pub fn pack_channels(a: &[Achieved]) -> String {
     )
 }
 
+/// The outcomes back out of what [`pack_channels`] wrote.
 pub fn take_channels(s: &str) -> Result<Vec<Achieved>, String> {
     unlist(s)
         .iter()
@@ -152,6 +155,7 @@ pub fn take_channels(s: &str) -> Result<Vec<Achieved>, String> {
 
 // ------------------------------------------------------- witness ask
 
+/// A witness request as one line a terminal can carry.
 pub fn pack_ask(a: &WitnessAsk) -> String {
     format!(
         "{}|{}|{}|{}",
@@ -162,6 +166,7 @@ pub fn pack_ask(a: &WitnessAsk) -> String {
     )
 }
 
+/// The request back out of what [`pack_ask`] wrote.
 pub fn take_ask(s: &str) -> Result<WitnessAsk, String> {
     let f: Vec<&str> = s.split('|').collect();
     Ok(WitnessAsk {
@@ -174,6 +179,7 @@ pub fn take_ask(s: &str) -> Result<WitnessAsk, String> {
 
 // ---------------------------------------------------------- proposal
 
+/// A proposed body as one line a terminal can carry.
 pub fn pack_proposed(p: &Proposed) -> String {
     format!(
         "{}|{}|{}|{}|{}|{}|{}",
@@ -208,6 +214,7 @@ pub fn take_witnesses(s: &str) -> Result<Vec<Witnessing>, String> {
         .collect()
 }
 
+/// The body back out of what [`pack_proposed`] wrote.
 pub fn take_proposed(s: &str) -> Result<Proposed, String> {
     let f: Vec<&str> = s.split('|').collect();
     let witnesses = take_witnesses(field(&f, 3, "a proposal")?);
@@ -225,6 +232,7 @@ pub fn take_proposed(s: &str) -> Result<Proposed, String> {
 
 // ------------------------------------------------------- disclosures
 
+/// A disclosure set as one line a terminal can carry.
 pub fn pack_revealed(set: &[Revealed]) -> String {
     list(
         set.iter()
@@ -233,6 +241,7 @@ pub fn pack_revealed(set: &[Revealed]) -> String {
     )
 }
 
+/// The set back out of what [`pack_revealed`] wrote.
 pub fn take_revealed(s: &str) -> Result<Vec<Revealed>, String> {
     unlist(s)
         .iter()
@@ -260,6 +269,7 @@ pub fn pack_back(back: &[Vec<Vec<u8>>]) -> String {
         .join(";")
 }
 
+/// The back-pointers back out of what [`pack_back`] wrote.
 pub fn take_back(s: &str) -> Result<Vec<Vec<Vec<u8>>>, String> {
     if s == "-" {
         return Ok(Vec::new());

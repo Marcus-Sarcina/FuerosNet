@@ -31,10 +31,12 @@ pub struct OpticalContribution {
     pub material: Vec<u8>,
     /// The keyhash, computed from the material on decode.
     pub device: Keyhash,
+    /// The 16 bytes this device contributes to the ceremony-id.
     pub contribution: [u8; 16],
 }
 
 impl OpticalContribution {
+    /// The bytes of this `OpticalContribution`, as §14.3.2 composes them.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
         emit_array_head(&mut out, 3);
@@ -44,6 +46,7 @@ impl OpticalContribution {
         out
     }
 
+    /// Read a `OpticalContribution` from `b`; an error naming what did not read.
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         let it = checked(b, "OpticalContribution")?;
         let a = fields(&it);
@@ -67,10 +70,12 @@ impl OpticalContribution {
 /// this device computed, for the other to check against its own.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TranscriptConfirm {
+    /// The ceremony-id this device computed from both contributions.
     pub ceremony_id: [u8; 32],
 }
 
 impl TranscriptConfirm {
+    /// The bytes of this `TranscriptConfirm`, as §14.3.2 composes them.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
         emit_array_head(&mut out, 2);
@@ -79,6 +84,7 @@ impl TranscriptConfirm {
         out
     }
 
+    /// Read a `TranscriptConfirm` from `b`; an error naming what did not read.
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         let it = checked(b, "TranscriptConfirm")?;
         let a = fields(&it);
@@ -94,16 +100,24 @@ impl TranscriptConfirm {
 /// `BundleContinuation` messages follow.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IntentExchange {
+    /// The sender's own contribution, echoed.
     pub contribution: [u8; 16],
+    /// Whom it nominates to witness.
     pub nominees: Vec<Keyhash>,
+    /// The first carriage of its evidence bundle.
     pub bundle: Vec<Vec<u8>>,
+    /// Its clock, in milliseconds since the epoch.
     pub started_at: u64,
+    /// The retention it commits to, in years.
     pub retention_years: u64,
+    /// Whether this side initiated.
     pub initiator: bool,
+    /// How many `BundleContinuation` messages follow.
     pub continuations: u64,
 }
 
 impl IntentExchange {
+    /// The bytes of this `IntentExchange`, as §14.3.2 composes them.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
         emit_array_head(&mut out, 8);
@@ -124,6 +138,7 @@ impl IntentExchange {
         out
     }
 
+    /// Read a `IntentExchange` from `b`; an error naming what did not read.
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         let it = checked(b, "IntentExchange")?;
         let a = fields(&it);
@@ -144,12 +159,16 @@ impl IntentExchange {
 /// continuation from the end of the bundle.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BundleContinuation {
+    /// The ceremony this carriage belongs to.
     pub ceremony_id: [u8; 32],
+    /// Which carriage this is, numbered from one.
     pub index: u64,
+    /// The entries it carries.
     pub entries: Vec<Vec<u8>>,
 }
 
 impl BundleContinuation {
+    /// The bytes of this `BundleContinuation`, as §14.3.2 composes them.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
         emit_array_head(&mut out, 4);
@@ -163,6 +182,7 @@ impl BundleContinuation {
         out
     }
 
+    /// Read a `BundleContinuation` from `b`; an error naming what did not read.
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         let it = checked(b, "BundleContinuation")?;
         let a = fields(&it);
@@ -178,11 +198,14 @@ impl BundleContinuation {
 /// `Channel` maps exactly as a record carries them.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProximityOutcomes {
+    /// The ceremony these measurements belong to.
     pub ceremony_id: [u8; 32],
+    /// What each channel measured, as a record carries them.
     pub channels: Vec<ChannelOutcome>,
 }
 
 impl ProximityOutcomes {
+    /// The bytes of this `ProximityOutcomes`, as §14.3.2 composes them.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
         emit_array_head(&mut out, 3);
@@ -192,6 +215,7 @@ impl ProximityOutcomes {
         out
     }
 
+    /// Read a `ProximityOutcomes` from `b`; an error naming what did not read.
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         let it = checked(b, "ProximityOutcomes")?;
         let a = fields(&it);
@@ -258,11 +282,14 @@ pub(crate) fn read_channels(it: &Item) -> Result<Vec<ChannelOutcome>, String> {
 /// reads one — reachability is settled by the dial.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CandidateHandover {
+    /// The ceremony these candidates belong to.
     pub ceremony_id: [u8; 32],
+    /// The encoded candidate array, as the transport produced it.
     pub candidates: Vec<u8>,
 }
 
 impl CandidateHandover {
+    /// The bytes of this `CandidateHandover`, as §14.3.2 composes them.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
         emit_array_head(&mut out, 3);
@@ -272,6 +299,7 @@ impl CandidateHandover {
         out
     }
 
+    /// Read a `CandidateHandover` from `b`; an error naming what did not read.
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         let it = checked(b, "CandidateHandover")?;
         let a = fields(&it);
@@ -310,11 +338,14 @@ impl CandidateHandover {
 /// public ceremony-id is excluded by §14.1's property, not by this check.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CaptureKeyHandover {
+    /// The ceremony this key belongs to; one from another is refused.
     pub ceremony_id: [u8; 32],
+    /// The 32 bytes the sender derived, wiped when dropped.
     pub key: Zeroizing<[u8; 32]>,
 }
 
 impl CaptureKeyHandover {
+    /// The bytes of this `CaptureKeyHandover`, as §14.3.2 composes them.
     pub fn encode(&self) -> Zeroizing<Vec<u8>> {
         let mut out = Zeroizing::new(Vec::new());
         emit_array_head(&mut out, 3);
@@ -324,6 +355,7 @@ impl CaptureKeyHandover {
         out
     }
 
+    /// Read a `CaptureKeyHandover` from `b`; an error naming what did not read.
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         let it = checked(b, "CaptureKeyHandover")?;
         let a = fields(&it);

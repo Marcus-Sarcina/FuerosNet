@@ -26,19 +26,42 @@ class OpticalExchange(
      *  other exchange is not this one's. */
     val which: Int,
     mine: ByteArray,
+    /** How many bytes go in one part. */
     val chunk: Int = CHUNK,
 ) {
     companion object {
+        /** The header's version byte; another version reads as
+         *  [Took.NOT_OURS]. */
         const val VERSION = 1
+        /** The header's length: version, which, index, count, received. */
         const val HEADER = 5
         /** Parts of 256 bytes: the 2,022-byte contribution is eight codes
          *  of 61 modules, against one of 173. */
         const val CHUNK = 256
+        /** [which] for the first exchange, the contribution. */
         const val CONTRIBUTION = 0
+        /** [which] for the second, the transcript confirmation. */
         const val TRANSCRIPT = 1
     }
 
-    enum class Took { NOT_OURS, DUPLICATE, ACCEPTED, COMPLETE, MALFORMED }
+    /** What a code the camera read came to. */
+    enum class Took {
+        /** Not this exchange's: too short to carry a header, another
+         *  version's, or another exchange's. */
+        NOT_OURS,
+        /** A part already held.  The other side shows it until it sees
+         *  this side's progress, so this is the ordinary case; so is the
+         *  next exchange's code, which says they hold everything. */
+        DUPLICATE,
+        /** A part this side needed, and more remain. */
+        ACCEPTED,
+        /** The last part this side needed: theirs is whole. */
+        COMPLETE,
+        /** This exchange's header, carrying figures that cannot be: no
+         *  parts, an index past the count, a count that changed between
+         *  codes, or more of mine held than this side has. */
+        MALFORMED,
+    }
 
     private val parts: List<ByteArray> = mine.toList().chunked(chunk).map { it.toByteArray() }.ifEmpty { listOf(ByteArray(0)) }
 
@@ -63,8 +86,14 @@ class OpticalExchange(
     /** The index of the part [frame] shows, for the screen and the events. */
     fun showing(): Int = synchronized(lock) { minOf(theirGot, count - 1) }
 
+    /** How many contiguous parts of theirs this side holds. */
     fun received(): Int = synchronized(lock) { got }
+
+    /** How many parts they say they have, or -1 before any code of theirs
+     *  has been read. */
     fun theirCount(): Int = synchronized(lock) { theirCount }
+
+    /** How many of mine their last header said they hold. */
     fun theirReceived(): Int = synchronized(lock) { theirGot }
 
     /**

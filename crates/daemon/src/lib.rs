@@ -11,6 +11,10 @@
 //! obligations, and adds no protocol of its own: everything on the wire is
 //! decided in the crates beneath.
 
+// Every public item carries its own documentation: the source is the
+// fourth reading of the design, and a bare name is not one.
+#![warn(missing_docs)]
+
 #[cfg(all(feature = "releasable", feature = "fieldtest"))]
 compile_error!(
     "rhtn-daemon: `releasable` and `fieldtest` are two flavours of one build; \

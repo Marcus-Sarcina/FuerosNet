@@ -40,7 +40,9 @@ impl Horizon for HorizonSnapshot {
     }
 }
 
+/// Control frame 5: topology pushed to an attached client.
 pub const FRAME_TOPOLOGY_PUSH: u64 = 5;
+/// Control frame 6: a rootward memo.
 pub const FRAME_TOPOLOGY_MEMO: u64 = 6;
 
 /// `TopologyPush` (`wire-format.md` §10.1): the body-kind tag and the object
@@ -59,6 +61,7 @@ pub struct Rebuilt {
     pub records: usize,
 }
 
+/// A push frame's bytes, carrying one object of `kind`.
 pub fn encode_push(kind: u64, object: &[u8]) -> Vec<u8> {
     let mut out = Vec::new();
     emit_map_head(&mut out, 2);
@@ -69,6 +72,7 @@ pub fn encode_push(kind: u64, object: &[u8]) -> Vec<u8> {
     out
 }
 
+/// The kind and object a push frame carries.
 pub fn decode_push(body: &[u8]) -> Result<(u64, Vec<u8>), String> {
     let item = parse_all(body).map_err(|e| e.0)?;
     let Item::Map(m) = &item else {
@@ -92,6 +96,7 @@ pub struct Memo {
     pub patron: Keyhash,
     /// The patron's own position.
     pub position: Locator,
+    /// Which of the patron's slots the memo is about.
     pub slot: u64,
     /// The underlying transaction's own timestamp, copied.
     pub timestamp: u64,
@@ -100,6 +105,7 @@ pub struct Memo {
 }
 
 impl Memo {
+    /// The memo's bytes.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
         emit_map_head(&mut out, 4 + self.occupant.is_some() as usize);
@@ -118,6 +124,7 @@ impl Memo {
         out
     }
 
+    /// A memo from its bytes.
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         parse_all(b).map_err(|e| e.0)?;
         rhtn_codec::schema::check_unsigned(rhtn_codec::schema::Family::TopologyMemo, b, 0)
@@ -149,18 +156,22 @@ pub enum MemoOutcome {
     ForeignSubnet,
     /// Applied where a table is kept, and forwarded rootward.
     Forwarded {
+        /// Where it was forwarded.
         to: Keyhash,
     },
     /// Forwarded rootward, and sent down the branch holding the other slot
     /// this node's table shows the occupant in (§10.2.4).
     ForwardedAndDescended {
+        /// Where it was forwarded rootward.
         to: Keyhash,
+        /// The branch it also went down.
         down: Keyhash,
     },
     /// Applied where a table is kept; this node is the root.
     StoppedAtRoot,
     /// This node is the root, and the memo went down the other branch.
     StoppedAtRootAndDescended {
+        /// The branch it went down.
         down: Keyhash,
     },
     /// This node holds that slot at or after the memo's timestamp.
@@ -181,6 +192,7 @@ pub enum MemoOutcome {
     /// client: the hit is handed to the client at contact, and the records
     /// that answer it are theirs (§10.2).
     ForAttachedClient {
+        /// The attached client the hit is for.
         client: Keyhash,
     },
     /// The occupant sits in one of this node's own slots and the memo
@@ -188,15 +200,21 @@ pub enum MemoOutcome {
     /// just spoken, its own records decide, and nothing compels it to act
     /// (§10.2.4).  `forwarded` says where the memo went on rootward.
     HeldElsewhere {
+        /// The patron the memo places the occupant under.
         patron: Keyhash,
+        /// The slot the memo names.
         slot: u64,
+        /// The memo's own timestamp.
         timestamp: u64,
+        /// When this node's own record took the slot, which is what decides.
         mine: u64,
+        /// Where the memo went on rootward, if anywhere.
         forwarded: Option<Keyhash>,
     },
     /// A downward memo, passed on toward the patron whose slot it did not
     /// name; this node's table was updated on the way past.
     Descended {
+        /// The patron it was passed to.
         to: Keyhash,
     },
     /// A downward memo this node can take no further: no table, no other
@@ -205,6 +223,7 @@ pub enum MemoOutcome {
     /// This node has a patron but no session toward it and no serving node
     /// to stand in: nowhere to send.
     Unroutable,
+    /// The memo does not read.
     Malformed(String),
 }
 

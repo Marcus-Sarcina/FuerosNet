@@ -14027,3 +14027,39 @@ needs a witness the bench does not have (the instrument witnesses are not
 in either phone's neighbourhood, there being no horizon); the APK's commit
 stamp, which reads the commit of the tree at build time and not what the
 tree had uncommitted.
+
+
+## A flaky test, found by the housekeeping gate (2026-10-04)
+
+`cli/tests/live.rs`'s `two_phones_stream_at_once_and_one_reconnects_into_the_same_file`
+asserted that the collector logs phone A's connection before phone B's.
+**Each connection is accepted on its own thread and logs when it gets the
+lock**, so the order is the scheduler's: the test failed about one run in
+eight, at `bc08f98` as much as on the swept tree, which is how it was shown
+to predate this work rather than follow from it. The first two connects are
+now asserted as a set and the reconnect, which genuinely is ordered after
+both have closed, still by position. Twelve consecutive passes after.
+
+**It was found by running the gate, not by reading the code**, and it is
+the class phase 3 is for: a test that passes most of the time asserts less
+than it appears to.
+
+## A wall-clock test budget, and a process error (2026-10-04)
+
+`crypto/tests/decoder.rs`'s `dec_02` failed the gate once with *"decode
+exceeded the time budget"*, then passed five of five run alone. The
+budget is one second per decode and the whole test takes 77 seconds, so a
+single decode need only be delayed past a second to fail it.
+
+**The cause was mine**: two gate runs and a cargo build were running
+concurrently, so the machine was measuring itself. **A gate run wants the
+machine to itself**, and starting one while another is going also
+contends for the cargo lock, which is what first made the two runs appear
+to hang.
+
+**The finding stands for phase 3 regardless**: a wall-clock assertion on a
+shared machine measures the machine, not the decoder. The budget `T` comes
+from the acceptance entries rather than from any document, so changing it
+is a catalogue matter and the author's; what could be done without that is
+to measure work rather than time, or to assert the budget only when the
+machine is otherwise idle.

@@ -15,6 +15,10 @@
 //! engineering question, as §9.2 says plainly, and nothing here claims to
 //! settle it.
 
+// Every public item carries its own documentation: the source is the
+// fourth reading of the design, and a bare name is not one.
+#![warn(missing_docs)]
+
 use rhtn_node::resources::{Backend, HOST_EXPORTS};
 use std::sync::{Arc, Mutex};
 use wasmtime::component::{Component, Linker, Val};
@@ -319,6 +323,7 @@ pub struct Hosted {
 }
 
 impl Hosted {
+    /// A host serving out of `sandbox`, running from the start.
     #[must_use]
     pub fn new(sandbox: Sandbox) -> Self {
         Self {
@@ -335,6 +340,7 @@ impl Hosted {
         *self.running.lock().unwrap() = false;
     }
 
+    /// The sandbox this host serves out of.
     #[must_use]
     pub fn sandbox(&self) -> &Sandbox {
         &self.sandbox

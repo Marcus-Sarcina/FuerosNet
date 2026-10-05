@@ -16,27 +16,37 @@ use std::collections::BTreeMap;
 
 /// Stream-1 request types (`wire-format.md` §9.2).
 pub const REQUEST_RESOLVE: u64 = 1;
+/// Request frame 8: a currency attestation.
 pub const REQUEST_CURRENCY: u64 = 8;
 
 /// Reply codes for `ResolveReply` field 2 (`wire-format.md` §7.7.3).
 pub const REPLY_SERVING: u64 = 0;
+/// The reply is a failure, with a code.
 pub const REPLY_FAILURE: u64 = 1;
+/// The reply refers the asker onward.
 pub const REPLY_REFERRAL: u64 = 2;
 
 /// Failure codes for field 4, with the disposition each implies.
 pub const FAIL_NO_SUCH_CHILD: u64 = 0;
+/// This node is not authoritative for the subject.
 pub const FAIL_NOT_AUTHORITATIVE: u64 = 1;
+/// The answer is not available.
 pub const FAIL_UNAVAILABLE: u64 = 2;
+/// The node refused to answer.
 pub const FAIL_REFUSED: u64 = 3;
 
 /// What a requester does with a failure code (`wire-format.md` §7.7.3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Disposition {
+    /// Resolve again from the start: what this node held is stale.
     ReResolve,
+    /// Try the same party again.
     Retry,
+    /// Stop: no retry will change the answer.
     Terminal,
 }
 
+/// What an asker does with a failure code: retry elsewhere, or stop.
 pub fn disposition(code: u64) -> Disposition {
     match code {
         FAIL_UNAVAILABLE => Disposition::Retry,
@@ -68,7 +78,10 @@ fn decode_points(b: &[u8], at: usize) -> Result<Vec<NetworkPoint>, String> {
 /// nibble first, counted in nibbles rather than bytes.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Path {
+    /// The path's nibbles, packed two per byte.
     pub bytes: Vec<u8>,
+    /// How many of them are significant, at most
+    /// [`PATH_NIBBLES`](rhtn_codec::bounds::PATH_NIBBLES).
     pub nibbles: u64,
 }
 
@@ -78,6 +91,7 @@ impl Path {
         Path::default()
     }
 
+    /// A path from one slot index per level.
     pub fn from_indices(ix: &[u8]) -> Self {
         let mut bytes = vec![0u8; ix.len().div_ceil(2)];
         for (i, v) in ix.iter().enumerate() {
@@ -106,10 +120,12 @@ impl Path {
             .collect()
     }
 
+    /// How many nibbles the path holds.
     pub fn len(&self) -> usize {
         self.nibbles as usize
     }
 
+    /// Whether the path is the anchor itself.
     pub fn is_empty(&self) -> bool {
         self.nibbles == 0
     }
@@ -119,10 +135,13 @@ impl Path {
         Path::from_indices(&self.indices()[from.min(self.len())..])
     }
 
+    /// Whether this path is a prefix of `other`, which is what makes a node an
+    /// ancestor in the subnet.
     pub fn is_prefix_of(&self, other: &Path) -> bool {
         other.len() >= self.len() && other.indices()[..self.len()] == self.indices()[..]
     }
 
+    /// Emit the path into `out`.
     pub fn emit(&self, out: &mut Vec<u8>) {
         emit_map_head(out, 2);
         emit_uint(out, 1);
@@ -131,6 +150,7 @@ impl Path {
         emit_uint(out, self.nibbles);
     }
 
+    /// A path from its bytes.
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         let item = parse_all(b).map_err(|e| e.0)?;
         let Item::Map(m) = &item else {
@@ -147,13 +167,18 @@ impl Path {
     }
 }
 
+/// A request to resolve a subject to where it is served
+/// (`wire-format.md` §7.7).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolveRequest {
+    /// Whose position is wanted.
     pub subject: Keyhash,
     /// The anchor the path is relative to; without it the path is
     /// uninterpretable (`wire-format.md` §7.7.3).
     pub anchor: Keyhash,
+    /// The path's nibbles, packed.
     pub path: Vec<u8>,
+    /// How many are significant.
     pub nibbles: u64,
     /// Fresh per logical resolution, and reused across endpoint retries for
     /// that same resolution.
@@ -161,12 +186,14 @@ pub struct ResolveRequest {
 }
 
 impl ResolveRequest {
+    /// The request's path.
     pub fn path(&self) -> Path {
         Path {
             bytes: self.path.clone(),
             nibbles: self.nibbles,
         }
     }
+    /// The request's bytes.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
         emit_map_head(&mut out, 4);
@@ -180,6 +207,7 @@ impl ResolveRequest {
         emit_bstr(&mut out, &self.nonce);
         out
     }
+    /// A request from its bytes.
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         parse_all(b).map_err(|e| e.0)?;
         schema::check_unsigned(Family::ResolveRequest, b, 0).map_err(|e| e.0)?;
@@ -213,9 +241,14 @@ impl ResolveRequest {
 /// identifies the client to it (`wire-format.md` §7.7.3).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServingInfra {
+    /// The serving node.
     pub node: Keyhash,
+    /// Where to reach it.
     pub endpoints: Vec<NetworkPoint>,
+    /// What is left of the path below it.
     pub residual: Path,
+    /// Its key material, so an asker that has never contacted it can
+    /// authenticate the connection.
     pub key_material: Option<Vec<u8>>,
 }
 
@@ -223,30 +256,44 @@ pub struct ServingInfra {
 /// counted from the referring node's own position.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Referral {
+    /// The node to ask next.
     pub next: Keyhash,
+    /// Where to reach it.
     pub endpoints: Vec<NetworkPoint>,
     /// MUST be ≥ 1: a referral that advances nothing is a loop.
     pub advances: u64,
+    /// Its key material, where the referring node carries it.
     pub key_material: Option<Vec<u8>>,
 }
 
+/// What a resolve request came to.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ResolveReply {
+    /// The subject is served here.
     Serving {
+        /// The nonce, echoed from the request.
         nonce: [u8; 16],
+        /// Where, and by whom.
         serving: ServingInfra,
     },
+    /// No answer, with a reason.
     Failure {
+        /// The nonce, echoed from the request.
         nonce: [u8; 16],
+        /// One of the `FAIL_*` constants.
         code: u64,
     },
+    /// Ask the next hop instead.
     Referral {
+        /// The nonce, echoed from the request.
         nonce: [u8; 16],
+        /// Who to ask, and where.
         referral: Referral,
     },
 }
 
 impl ResolveReply {
+    /// The nonce, whichever reply this is.
     pub fn nonce(&self) -> [u8; 16] {
         match self {
             ResolveReply::Serving { nonce, .. }
@@ -255,6 +302,7 @@ impl ResolveReply {
         }
     }
 
+    /// The reply's bytes.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
         emit_map_head(&mut out, 3);
@@ -303,6 +351,7 @@ impl ResolveReply {
         out
     }
 
+    /// A reply from its bytes.
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         parse_all(b).map_err(|e| e.0)?;
         schema::check_unsigned(Family::ResolveReply, b, 0).map_err(|e| e.0)?;
@@ -370,14 +419,22 @@ impl ResolveReply {
 /// An `AnchorEntry` (`wire-format.md` §7.2) as the table holds it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AnchorEntry {
+    /// The subnet this entry is for.
     pub anchor: Keyhash,
+    /// Where to reach its anchor.
     pub endpoints: Vec<NetworkPoint>,
+    /// How large the subtree beneath it is.
     pub subtree_size: u64,
+    /// The sequence number, which orders two entries for one anchor.
     pub seqno: Seqno,
+    /// The entry's own bytes, which the signature covers.
     pub bytes: Vec<u8>,
 }
 
 impl AnchorEntry {
+    /// Parse an anchor entry. **Its signature cannot be checked on receipt**
+    /// (`wire-format.md` §7.2): the table is an index, not a credential store,
+    /// and holds keyhashes rather than keys.
     pub fn parse(b: &[u8]) -> Result<Self, String> {
         let item = parse_all(b).map_err(|e| e.0)?;
         schema::check_kind(b, "AnchorEntry", &item).map_err(|e| e.0)?;
@@ -440,6 +497,7 @@ pub struct AnchorTable {
     /// design §12.7.3: ignore roots with fewer than `threshold` subordinates.
     /// A per-node policy, never a protocol constant.
     pub threshold: u64,
+    /// How entries enter the table.
     pub ingestion: Ingestion,
 }
 
@@ -454,6 +512,7 @@ impl Default for AnchorTable {
 }
 
 impl AnchorTable {
+    /// An empty table admitting subtrees of at least `threshold`.
     pub fn new(threshold: u64, ingestion: Ingestion) -> Self {
         AnchorTable {
             entries: BTreeMap::new(),
@@ -462,18 +521,22 @@ impl AnchorTable {
         }
     }
 
+    /// The entry for `anchor`, where the table holds one.
     pub fn get(&self, anchor: &Keyhash) -> Option<&AnchorEntry> {
         self.entries.get(anchor)
     }
 
+    /// How many entries the table holds.
     pub fn len(&self) -> usize {
         self.entries.len()
     }
 
+    /// Whether it holds none.
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
 
+    /// Every anchor the table holds.
     pub fn anchors(&self) -> Vec<Keyhash> {
         self.entries.keys().copied().collect()
     }
@@ -535,8 +598,11 @@ pub enum Step {
     /// The reply is malformed: a referral advancing nothing is a loop, and
     /// one advancing past the path's end is malformed (`wire-format.md` §7.7.3).
     Malformed(String),
+    /// The answer was a failure.
     Failed {
+        /// One of the `FAIL_*` constants.
         code: u64,
+        /// What the asker should do about it.
         disposition: Disposition,
     },
     /// The nonce does not echo the request's.
@@ -575,7 +641,11 @@ pub enum Carried {
     Delegated(Keyhash),
     /// An infra node's own: the first hop is the anchor, dialled from the
     /// table's entry, or reached on a session where one exists.
-    Direct { sent_on_session: bool },
+    Direct {
+        /// Whether it went on a session already held, rather than a
+        /// connection opened for it.
+        sent_on_session: bool,
+    },
 }
 
 /// What a serving node does with a resolution request from a client.
@@ -963,7 +1033,9 @@ pub use rhtn_archive::locator::{SignedLocator, signed_locator};
 /// (`negative-vectors.md`'s `state_action`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LocatorOutcome {
+    /// Nothing was held for this series; now there is.
     Installed,
+    /// A higher counter in a series already held.
     Replaced,
     /// A lower counter in a series already held.
     IgnoredStale,
@@ -978,6 +1050,7 @@ pub enum LocatorOutcome {
     /// A series the subject's own chain shows it left: rejected whatever
     /// the counter (`wire-format.md` §4.6).
     Abandoned,
+    /// The record does not read.
     Malformed(String),
 }
 
@@ -1008,10 +1081,13 @@ pub struct LocatorStore {
 }
 
 impl LocatorStore {
+    /// An empty store.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Record that `series` is proved for `subject`, which is what lets a
+    /// later locator in it be taken.
     pub fn prove_series(&mut self, subject: Keyhash, series: u32) {
         self.proved.insert((subject, series));
     }
@@ -1031,6 +1107,7 @@ impl LocatorStore {
         }
     }
 
+    /// Whether `series` was abandoned for `subject`.
     pub fn abandoned(&self, subject: &Keyhash, series: u32) -> bool {
         self.abandoned.contains(&(*subject, series))
     }
@@ -1099,6 +1176,7 @@ impl LocatorStore {
             .collect()
     }
 
+    /// The locator held for `subject` in `series`, where one is.
     pub fn in_series(&self, subject: &Keyhash, series: u32) -> Option<&SignedLocator> {
         self.held.get(&(*subject, series))
     }
@@ -1148,12 +1226,15 @@ impl LocatorStore {
 /// resolution and reused across endpoint retries (`wire-format.md` §7.7.3).
 #[derive(Debug, Clone)]
 pub struct Resolution {
+    /// The request this resolution answers.
     pub request: ResolveRequest,
     /// Path indices consumed so far, from referrals.
     pub consumed: usize,
     /// The hops queried, in order.
     pub hops: Vec<Keyhash>,
+    /// Where the asker got to.
     pub endpoints: Vec<NetworkPoint>,
+    /// The serving node, once one answered.
     pub arrived: Option<ServingInfra>,
 }
 
@@ -1213,7 +1294,9 @@ impl Resolution {
 /// Why a contact attempt at one endpoint failed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EndpointFailure {
+    /// The endpoint that failed.
     pub endpoint: NetworkPoint,
+    /// Why.
     pub why: String,
 }
 
@@ -1228,7 +1311,9 @@ pub enum Contact {
     /// address produces a handshake failure rather than a silent
     /// misdirection (`wire-format.md` §7.7.3, §9.1).
     Failed {
+        /// The party the caller meant.
         target: Keyhash,
+        /// Every endpoint tried, and why each failed.
         attempts: Vec<EndpointFailure>,
     },
 }

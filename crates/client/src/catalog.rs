@@ -53,6 +53,8 @@ pub struct Sweep {
     /// The nonce of the query this sweep is waiting on.  One at a time:
     /// a sweep asks, takes, and asks again.
     outstanding: Option<[u8; 16]>,
+    /// How many queries this sweep has sent, which is what a bound on the
+    /// sweep is counted against.
     pub queries: u32,
 }
 
@@ -114,10 +116,12 @@ impl Sweep {
 /// The catalog view: one portion per node asked.
 #[derive(Debug, Clone, Default)]
 pub struct View {
+    /// What each node asked has served, by node.
     pub portions: BTreeMap<Keyhash, Portion>,
 }
 
 impl View {
+    /// `node`'s portion, empty where the node has not been asked yet.
     pub fn portion(&mut self, node: Keyhash) -> &mut Portion {
         self.portions.entry(node).or_default()
     }
@@ -157,14 +161,21 @@ pub fn surface_declaration(entry: &CatalogEntry, notifier: &dyn Notifier) {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Refusal {
     /// The service presents an endpoint other than the signed entry's.
-    EndpointDiffers { signed: Vec<u8>, presented: Vec<u8> },
+    EndpointDiffers {
+        /// The endpoint the signed entry carries.
+        signed: Vec<u8>,
+        /// What the service presented instead.
+        presented: Vec<u8>,
+    },
 }
 
 /// Where traffic to a brokered resource goes: the entry's endpoint, and
 /// the owner the person is shown.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Route {
+    /// The signed entry's endpoint, which is where traffic goes.
     pub endpoint: Vec<u8>,
+    /// The entry's owner, whom the person is shown.
     pub owner: Keyhash,
 }
 
@@ -187,10 +198,15 @@ pub fn route_brokered(entry: &CatalogEntry, presented: &[u8]) -> Result<Route, R
 /// entry with the roles held, and nothing the node filtered out.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Shown {
+    /// The entry itself, its signature already checked.
     pub entry: CatalogEntry,
+    /// The roles held on it, as the node served them.
     pub roles: Vec<String>,
 }
 
+/// The served page as the person is shown it: every entry whose signature
+/// checks against `ids`, with its roles.  An entry that does not verify is
+/// dropped rather than shown unverified.
 pub fn page<L: Lookup + ?Sized>(ids: &L, served: &[(Vec<u8>, Vec<String>)]) -> Vec<Shown> {
     served
         .iter()

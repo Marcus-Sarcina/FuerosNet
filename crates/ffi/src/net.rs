@@ -32,6 +32,7 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 /// What an attach achieved, as a screen shows it.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Attached {
+    /// The node the session is with.
     pub serving: Id,
     /// False on a sibling: the session holds the replicated state but not
     /// the authority to countersign, and the user is owed the difference
@@ -47,6 +48,7 @@ pub struct Attached {
 /// over.  **The shell obtains it; this side never does.**
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Wake {
+    /// Where the service is posted to.
     pub url: String,
     /// What the posted body is encrypted to.
     pub key: Vec<u8>,
@@ -64,13 +66,26 @@ pub enum Status {
     /// sibling holds the replicated state and not the authority to
     /// countersign, so the subnet-scoped transactions the patron
     /// countersigns wait for the patron (design §14.1.2).
-    Attached { serving: Id, primary: bool },
+    Attached {
+        /// The node the session is with.
+        serving: Id,
+        /// Whether that node is the patron rather than a sibling.
+        primary: bool,
+    },
     /// The serving node was judged unreachable and the cached siblings are
     /// being tried, in order.
-    Reconnecting { from: Id },
+    Reconnecting {
+        /// The node judged unreachable.
+        from: Id,
+    },
     /// Judged unreachable and no cached sibling answered: the kernel has
     /// no session and will not get one without an attach.
-    Lost { from: Id, reason: String },
+    Lost {
+        /// The node judged unreachable.
+        from: Id,
+        /// Why the last attempt failed, in words.
+        reason: String,
+    },
 }
 
 /// Something that arrived, already decrypted; or the connection changing.
@@ -80,26 +95,41 @@ pub enum Event {
     /// found none.
     Connection(Status),
     /// Application payload from `from`.
-    Payload { from: Id, bytes: Vec<u8> },
+    Payload {
+        /// Who sent it.
+        from: Id,
+        /// The plaintext.
+        bytes: Vec<u8>,
+    },
     /// A verifier's copy of the response it gave about this subject: the
     /// query it answered, or why the copy was refused.
     ResponseCopy {
+        /// The verifier that answered.
         from: Id,
+        /// The query it answered, where the copy read.
         query: Option<Id>,
+        /// Why the copy was refused, where it was.
         refused: Option<String>,
     },
     /// A late response, attached to the record it supplements or not.
     Late {
+        /// The verifier that answered late.
         from: Id,
+        /// The record it supplements, where one was found.
         record: Option<Id>,
+        /// Why it was refused, where it was.
         refused: Option<String>,
     },
     /// A verifier answered a query this device put to it: the query and
     /// the verdict, or why the response was refused.
     Answered {
+        /// The verifier that answered.
         from: Id,
+        /// The query answered, where the response read.
         query: Option<Id>,
+        /// The verdict, where there is one.
         answer: Option<crate::types::Answer>,
+        /// Why the response was refused, where it was.
         refused: Option<String>,
     },
     /// The ceremony's conversation moved (`wire-format.md` §7.10.1): what
@@ -107,9 +137,13 @@ pub enum Event {
     /// switches on and in words for the notice line, and the record where
     /// it finalized.  What the step owed in answer went out from here.
     Conversed {
+        /// Who the step arrived from.
         from: Id,
+        /// Which step it was, to switch on.
         step: Conversation,
+        /// The same step in words, for a notice line.
         what: String,
+        /// The record, where the step finalized one.
         record: Option<Id>,
     },
 }
@@ -119,7 +153,9 @@ pub enum Event {
 /// kernel's words for it.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct SigningRefusal {
+    /// The code the wire carries, 1 to 4.
     pub code: u32,
+    /// The kernel's words for it.
     pub why: String,
 }
 
@@ -138,31 +174,69 @@ impl SigningRefusal {
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
 pub enum Conversation {
     /// A consent request about me: consented and answered, or declined.
-    Consent { query: Id, consented: bool },
+    Consent {
+        /// The query asked about me.
+        query: Id,
+        /// Whether I consented.
+        consented: bool,
+    },
     /// The subject consented to a query I issued: it went to its verifier.
-    Consented { query: Id },
+    Consented {
+        /// The query the subject consented to.
+        query: Id,
+    },
     /// A nominee answered the request to witness: it attests, or declined.
-    WitnessAnswer { witness: Id, attests: bool },
+    WitnessAnswer {
+        /// The nominee that answered.
+        witness: Id,
+        /// Whether it will attest.
+        attests: bool,
+    },
     /// Asked to witness: this device will, or declined.
-    Asked { attests: bool },
+    Asked {
+        /// Whether this device will attest.
+        attests: bool,
+    },
     /// The counterparty's gathered responses arrived, at the proposer.
-    Gathered { responses: u32 },
+    Gathered {
+        /// How many responses arrived.
+        responses: u32,
+    },
     /// A signer's back-pointers arrived, at the proposer.
-    BackPointers { signer: Id },
+    BackPointers {
+        /// Whose back-pointers arrived.
+        signer: Id,
+    },
     /// Shown the body: signed, or refused; the reply went either way.
-    Reviewed { refused: Option<SigningRefusal> },
+    Reviewed {
+        /// The refusal sent back, where this device refused.
+        refused: Option<SigningRefusal>,
+    },
     /// A signer replied, at the proposer: its entries, or its refusal.
     Signed {
+        /// Which signer replied.
         signer: Id,
+        /// Its refusal, where it refused rather than signed.
         refused: Option<SigningRefusal>,
     },
     /// The record finalized and held.
-    Finalized { txid: Id },
+    Finalized {
+        /// The finalized record.
+        txid: Id,
+    },
     /// Observed and kept, as a witness or the counterparty; nothing owed.
-    Observed { kind: u64 },
+    Observed {
+        /// The step's wire kind (`wire-format.md` §7.10.1).
+        kind: u64,
+    },
     /// Not taken: from no party to a ceremony this client is in or
     /// witnesses, a body that does not read, or a step it cannot take.
-    Refused { kind: u64, why: String },
+    Refused {
+        /// The step's wire kind, where the bytes named one.
+        kind: u64,
+        /// Why it was not taken.
+        why: String,
+    },
 }
 
 impl Conversation {

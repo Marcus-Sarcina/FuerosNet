@@ -82,7 +82,9 @@ pub trait PostQuantumRatchet {
 /// Ratchet is recommended).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Construction {
+    /// The floor: the Double Ratchet alone.
     DoubleRatchet,
+    /// The recommendation: a post-quantum contribution over it.
     TripleRatchet,
 }
 

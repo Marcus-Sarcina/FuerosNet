@@ -180,11 +180,17 @@ pub const MAINTAIN_EVERY: std::time::Duration = std::time::Duration::from_secs(6
 pub struct CatalogItem {
     /// The node that served it.
     pub node: Id,
+    /// The resource the entry is under.
     pub resource: Id,
+    /// Who owns the service.
     pub owner: Id,
+    /// The service type, as the entry names it.
     pub service_type: String,
+    /// The instance name, which distinguishes two of a type from one owner.
     pub instance: String,
+    /// The endpoint as the entry carries it, undecoded.
     pub endpoint: Vec<u8>,
+    /// The declared data practice, where the entry declares one.
     pub data_practice: Option<u64>,
     /// The serving node held more than one page carries for some type.
     pub truncated: bool,
@@ -195,6 +201,7 @@ pub struct CatalogItem {
 /// What a restore from a backup did.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Restored {
+    /// Records the import took.
     pub records: u64,
     /// Sealed captures the import scan discarded as past their retention
     /// (design §13.7.1), which the person is told rather than not.
@@ -204,14 +211,18 @@ pub struct Restored {
 /// What a proximity run achieved, as the shell is shown it.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Achieved {
+    /// Which channel ran.
     pub channel: Channel,
+    /// How it went.
     pub outcome: ChannelOutcome,
+    /// Metres, where the channel measured a distance.
     pub resolution_m: Option<u64>,
 }
 
 /// A verifier the client selected, and why it was eligible.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Selected {
+    /// The verifier.
     pub verifier: Id,
     /// 0 met, 1 in the horizon, 2 reachable, 3 discretionary
     /// (`wire-format.md` §5.5's `selection_basis`).
@@ -221,16 +232,22 @@ pub struct Selected {
 /// A response about the counterparty, as a screen shows it.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Response {
+    /// The verifier that answered.
     pub verifier: Id,
+    /// Whom the answer is about.
     pub subject: Id,
+    /// What it said.
     pub answer: Answer,
 }
 
 /// A witness's place on a record (`wire-format.md` §4.5 field 4).
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Witnessing {
+    /// The witness.
     pub witness: Id,
+    /// Which participant nominated it.
     pub nominated_by: Id,
+    /// The witness flags the record carries for it.
     pub flags: u64,
 }
 
@@ -242,21 +259,30 @@ pub struct Witnessing {
 /// encoding for the asking.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct WitnessAsk {
+    /// The ceremony being witnessed.
     pub ceremony: Id,
+    /// The two parties meeting.
     pub participants: Vec<Id>,
+    /// When the meeting began, in milliseconds since the epoch.
     pub started_at: u64,
+    /// What the participants' proximity channels achieved.
     pub channels: Vec<Achieved>,
 }
 
 /// The record two parties are proposing, before anybody has signed it.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Proposed {
+    /// When the meeting began, in milliseconds since the epoch.
     pub started_at: u64,
+    /// When the proposer finalised the body.
     pub finalized_at: u64,
+    /// The two parties, in the order the body carries them.
     pub participants: Vec<Id>,
+    /// The witnesses and their places.
     pub witnesses: Vec<Witnessing>,
     /// Signed `VerifierResponse`s, in the order the body carries them.
     pub responses: Vec<Vec<u8>>,
+    /// The disclosure root the body commits to.
     pub root: Vec<u8>,
     /// Subtype 1, a formation record: two identities at their genesis, no
     /// witness and no response (`wire-format.md` §3.2; design §13.2).
@@ -268,8 +294,11 @@ pub struct Proposed {
 /// the label is carried so a shell can show which is which.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Revealed {
+    /// Which of the seven this is.
     pub label: String,
+    /// The salt the value is hashed under.
     pub salt: Vec<u8>,
+    /// The value itself.
     pub value: Vec<u8>,
 }
 
@@ -277,15 +306,20 @@ pub struct Revealed {
 /// subject where one is owed.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Answered {
+    /// The query answered.
     pub query: Id,
+    /// The querier's copy, encoded.
     pub to_querier: Vec<u8>,
+    /// The subject's copy, where one is owed.
     pub to_subject: Option<SubjectCopy>,
 }
 
 /// The subject's copy of an answer: whom it goes to and the bytes.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct SubjectCopy {
+    /// Whom the copy goes to.
     pub subject: Id,
+    /// The copy, encoded.
     pub bytes: Vec<u8>,
 }
 
@@ -296,14 +330,18 @@ pub struct SubjectCopy {
 /// cannot see what carries it, so honouring that is the caller's.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Consented {
+    /// The consent the querier's request carries.
     pub consent: Vec<u8>,
+    /// The grant owed to the query's verifier, where one is.
     pub grant: Option<Vec<u8>>,
 }
 
 /// The two nominee lists a ceremony holds: this side's and the other's.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Nominees {
+    /// This side's nominees.
     pub mine: Vec<Id>,
+    /// The counterparty's.
     pub theirs: Vec<Id>,
 }
 
@@ -362,7 +400,9 @@ impl Progress {
 /// addresses it holds for it.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct ReachableNode {
+    /// The node.
     pub node: Id,
+    /// The addresses held for it.
     pub addresses: Vec<String>,
 }
 
@@ -370,14 +410,18 @@ pub struct ReachableNode {
 /// shown it, and the seven disclosures it commits to.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Proposal {
+    /// The record body as every signer is shown it.
     pub proposed: Proposed,
+    /// The seven disclosures the body's root commits to.
     pub revealed: Vec<Revealed>,
 }
 
 /// One signer's entries on a record body.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct SignedEntries {
+    /// Whose entries these are.
     pub signer: Id,
+    /// The entries, encoded.
     pub entries: Vec<u8>,
 }
 
@@ -1983,9 +2027,14 @@ impl Participant {
 /// they are in.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Placed {
+    /// The party placed.
     pub node: Id,
+    /// The anchor the path is relative to.
     pub anchor: Id,
+    /// The path under that anchor, packed two nibbles to a byte
+    /// (`wire-format.md` §7.7.3).
     pub path: Vec<u8>,
+    /// How many of the packed nibbles are the path's.
     pub nibbles: u64,
 }
 

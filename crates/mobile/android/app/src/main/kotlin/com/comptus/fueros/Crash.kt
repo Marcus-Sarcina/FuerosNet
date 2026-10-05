@@ -12,6 +12,7 @@ package com.comptus.fueros
  */
 object Crash {
 
+    /** How many top frames the event carries. */
     const val FRAMES = 12
 
     /** The handler as it would be installed, given the one it chains to.
@@ -34,6 +35,7 @@ object Crash {
             previous?.uncaughtException(thread, e)
         }
 
+    /** Install the handler, chaining to whatever was there before. */
     fun install() {
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler(handler(previous))

@@ -97,6 +97,7 @@ impl Terminal {
         *self.answer.lock().unwrap() = yes;
     }
 
+    /// The standing answer, as [`answers`](Self::answers) last set it.
     pub fn answering(&self) -> bool {
         *self.answer.lock().unwrap()
     }
@@ -215,10 +216,13 @@ fn describe(t: &Told) -> String {
     }
 }
 
+/// `b` as lower-case hex, which is how this driver writes every byte
+/// string.
 pub fn hex(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
 }
 
+/// The bytes `s` spells in hex, or nothing where it does not spell any.
 pub fn unhex(s: &str) -> Option<Vec<u8>> {
     if !s.len().is_multiple_of(2) {
         return None;

@@ -15,6 +15,7 @@ use rustls::{DigitallySignedStruct, DistinguishedName, Error as TlsError, Signat
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+/// The ALPN this profile offers and accepts, and no other (§9.2).
 pub const ALPN: &[u8] = b"rhtn/1";
 /// The name the dialling party hands TLS; identities are keyhashes and the
 /// verifier ignores it (§9.1).
@@ -29,6 +30,7 @@ pub struct Pins {
 }
 
 impl Pins {
+    /// An empty pin set.
     pub fn new() -> Self {
         Self::default()
     }
@@ -48,6 +50,7 @@ impl Pins {
         Ok(())
     }
 
+    /// Pin an identity's key material under its keyhash.
     pub fn pin_identity(&self, id: &rhtn_crypto::Identity) {
         self.pin(id.keyhash, &id.key_material())
             .expect("an identity hashes to its own keyhash");
@@ -99,6 +102,7 @@ pub fn key_of_spki(spki: &[u8]) -> Option<[u8; 32]> {
 /// The clock a credential reads: seconds since the Unix epoch.
 pub type Clock = Arc<dyn Fn() -> u64 + Send + Sync>;
 
+/// The wall clock, for a window check.
 pub fn system_clock() -> Clock {
     Arc::new(|| {
         std::time::SystemTime::now()
@@ -112,8 +116,11 @@ pub fn system_clock() -> Clock {
 /// states (§8.2).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Issued {
+    /// The credential's own bytes.
     pub raw: Vec<u8>,
+    /// When its window opens.
     pub not_before: u64,
+    /// When its window closes.
     pub not_after: u64,
 }
 
@@ -167,6 +174,7 @@ impl Credential {
         }
     }
 
+    /// The same, reading `clock`.
     pub fn with_clock(mut self, clock: Clock) -> Self {
         self.clock = clock;
         self
@@ -225,6 +233,7 @@ impl Credential {
             .cloned()
     }
 
+    /// The credential in force now, where one is.
     pub fn current(&self) -> Option<Issued> {
         self.current_at((self.clock)())
     }
@@ -242,6 +251,7 @@ impl Credential {
         self.run.lock().unwrap().last().map(|i| i.not_after)
     }
 
+    /// Every credential held, in force or not.
     pub fn issued(&self) -> Vec<Issued> {
         self.run.lock().unwrap().clone()
     }
@@ -251,14 +261,21 @@ impl Credential {
 /// its own identity, or a transport key that identity delegated.
 #[derive(Clone)]
 pub enum Presenter {
+    /// The identity's own classical member, held here because only this type
+    /// signs with it.
     Own {
+        /// Whose identity it is.
         keyhash: [u8; 32],
+        /// The key itself.
         ed: Box<ed25519_dalek::SigningKey>,
     },
+    /// A delegated transport credential, for a device that holds no seed
+    /// (design §23.3).
     Delegated(Arc<Credential>),
 }
 
 impl Presenter {
+    /// A presenter that presents the identity's own classical member.
     pub fn own(id: &SigningIdentity) -> Self {
         Presenter::Own {
             keyhash: id.public.keyhash,
@@ -289,6 +306,7 @@ impl Presenter {
         }
     }
 
+    /// The delegated credential this presenter carries, where it has one.
     pub fn credential(&self) -> Option<&Arc<Credential>> {
         match self {
             Presenter::Delegated(c) => Some(c),
@@ -309,11 +327,14 @@ impl Presenter {
 /// seed is a party as much as the one holding the seed (design §23.3).
 #[derive(Clone)]
 pub struct Party {
+    /// Who this party is, by keyhash.
     pub keyhash: [u8; 32],
+    /// What it presents in a handshake: its own key, or a delegated one.
     pub presenter: Presenter,
 }
 
 impl Party {
+    /// A party presenting `p`.
     pub fn of(p: impl Into<Presenter>) -> Self {
         let presenter = p.into();
         Party {
@@ -321,6 +342,7 @@ impl Party {
             presenter,
         }
     }
+    /// Its delegated credential, where it has one.
     pub fn credential(&self) -> Option<&Arc<Credential>> {
         self.presenter.credential()
     }
@@ -383,6 +405,8 @@ pub fn classical_member(key_material: &[u8]) -> Option<[u8; 32]> {
     })
 }
 
+/// An Ed25519 key as the RFC 7250 `SubjectPublicKeyInfo` a raw-public-key
+/// handshake presents.
 pub fn spki_der(ed: &ed25519_dalek::VerifyingKey) -> Vec<u8> {
     ed.to_public_key_der()
         .expect("Ed25519 SPKI")
@@ -626,6 +650,7 @@ impl ProducesTickets for ClampedTicketer {
     }
 }
 
+/// A server configuration presenting `me`.
 pub fn server_config(me: impl Into<Presenter>) -> rustls::ServerConfig {
     server_config_with(me, vec![aws_lc_rs::kx_group::X25519MLKEM768])
 }
@@ -638,6 +663,7 @@ pub fn server_endpoint(
     server_endpoint_with(server_config(me), addr)
 }
 
+/// A server endpoint presenting `me`, bound as given.
 pub fn server_endpoint_with(
     cfg: rustls::ServerConfig,
     addr: std::net::SocketAddr,
@@ -655,6 +681,7 @@ pub fn client_endpoint(addr: std::net::SocketAddr) -> std::io::Result<quinn::End
     quinn::Endpoint::client(addr)
 }
 
+/// The transport parameters this profile dials and listens with.
 pub fn transport_config() -> quinn::TransportConfig {
     let mut t = quinn::TransportConfig::default();
     // Liveness is the session's heartbeat, not QUIC's idle timer; keep the
@@ -681,6 +708,7 @@ pub fn dial(
     dial_with(endpoint, cfg, addr)
 }
 
+/// Dial `addr`, expecting the keyhash the configuration pins.
 pub fn dial_with(
     endpoint: &quinn::Endpoint,
     cfg: rustls::ClientConfig,
@@ -695,10 +723,12 @@ pub fn dial_with(
         .map_err(|_| DialError::Config)
 }
 
+/// Why a dial did not produce a connection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DialError {
     /// No pinned key material for the target keyhash: nothing to authenticate against.
     NotPinned,
+    /// The configuration itself would not build.
     Config,
 }
 

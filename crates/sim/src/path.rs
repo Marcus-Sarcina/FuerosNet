@@ -27,21 +27,27 @@ pub struct Direction {
 }
 
 impl Direction {
+    /// Drop everything, or stop doing so.
     pub fn blackhole(&self, on: bool) {
         self.blackhole.store(on, Ordering::SeqCst);
     }
+    /// Whether everything is being dropped.
     pub fn is_blackholed(&self) -> bool {
         self.blackhole.load(Ordering::SeqCst)
     }
+    /// Drop one datagram in `n`; zero drops none.
     pub fn drop_one_in(&self, n: u64) {
         self.drop_one_in.store(n, Ordering::SeqCst);
     }
+    /// Delay each datagram by `ms` milliseconds.
     pub fn delay(&self, ms: u64) {
         self.delay_ms.store(ms, Ordering::SeqCst);
     }
+    /// Keep a copy of each datagram, or stop doing so.
     pub fn capture(&self, on: bool) {
         self.capturing.store(on, Ordering::SeqCst);
     }
+    /// Every datagram captured so far.
     pub fn captured(&self) -> Vec<Vec<u8>> {
         self.captured
             .lock()
@@ -62,12 +68,15 @@ impl Direction {
             .map(|(_, d)| d.clone())
             .collect()
     }
+    /// Throw away what was captured.
     pub fn clear_captured(&self) {
         self.captured.lock().unwrap().clear();
     }
+    /// How many datagrams went through.
     pub fn passed(&self) -> u64 {
         self.passed.load(Ordering::SeqCst)
     }
+    /// How many were dropped.
     pub fn dropped(&self) -> u64 {
         self.dropped.load(Ordering::SeqCst)
     }

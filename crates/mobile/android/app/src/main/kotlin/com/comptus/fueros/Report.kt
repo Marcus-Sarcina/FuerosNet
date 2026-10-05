@@ -26,6 +26,7 @@ import java.util.zip.ZipOutputStream
  */
 object Report {
 
+    /** The directory under the app's files the bundle is built in. */
     const val DIR = "report"
 
     /** Build the zip and return it. */

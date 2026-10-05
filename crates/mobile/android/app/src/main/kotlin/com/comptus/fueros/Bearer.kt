@@ -193,8 +193,10 @@ object Bearer {
          */
         var taken = 0
             private set
+        /** Their slice bytes. */
         var takenBytes = 0
             private set
+        /** Repeats dropped. */
         var duplicates = 0
             private set
 

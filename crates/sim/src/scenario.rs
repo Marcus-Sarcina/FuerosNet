@@ -8,8 +8,11 @@ use std::sync::Arc;
 
 /// One serving node, running.
 pub struct Running {
+    /// The node itself.
     pub node: Arc<Node>,
+    /// The address it serves on.
     pub addr: SocketAddr,
+    /// Its QUIC endpoint.
     pub endpoint: quinn::Endpoint,
     /// The socket it serves on: QUIC, and STUN for the clients it serves
     /// (design §14.1.1).
@@ -43,6 +46,7 @@ impl Running {
         self.endpoint.close(0u32.into(), b"dark");
     }
 
+    /// How it presents itself in a handshake.
     pub fn party(&self) -> rhtn_transport::tls::Party {
         self.node.cfg.me.clone()
     }

@@ -24,6 +24,10 @@
 //! beginning with a word that says what it is. Everything a script needs
 //! to tell the two apart is in that first word.
 
+// Every public item carries its own documentation: the source is the
+// fourth reading of the design, and a bare name is not one.
+#![warn(missing_docs)]
+
 #[cfg(all(feature = "releasable", feature = "fieldtest"))]
 compile_error!(
     "rhtn-participant: `releasable` and `fieldtest` are two flavours of one build; \
@@ -822,6 +826,8 @@ pub fn read_peers(path: &Path) -> Result<Vec<Vec<u8>>, String> {
     Ok(out)
 }
 
+/// The `help` command's own output: every command this driver takes, one
+/// per line.
 pub const HELP: &str = "\
 help                      these lines
 me                        this participant's keyhash

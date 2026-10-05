@@ -44,6 +44,7 @@ pub struct Verifiers {
 }
 
 impl Verifiers {
+    /// An empty set of hosted verifiers.
     pub fn new() -> Arc<Verifiers> {
         Arc::default()
     }

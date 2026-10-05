@@ -12,3 +12,7 @@
 //! comment `// acceptance: XXX-NN` on the test.  The generator omits the stub
 //! for any id it finds implemented, so the ignored count here is the count of
 //! tests still owed.
+
+// Every public item carries its own documentation: the source is the
+// fourth reading of the design, and a bare name is not one.
+#![warn(missing_docs)]

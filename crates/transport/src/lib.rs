@@ -11,11 +11,23 @@
 //!
 //! Section references are to `wire-format.md` unless prefixed `design`.
 
+#![warn(missing_docs)]
+
+/// §9.1's bind: the delegations a connection will accept a peer under,
+/// and the window check over them.
 pub mod bind;
+/// The mailbox a node keeps for its clients (design §14.1.6).
 pub mod queue;
+/// The stream-0 session of §8: attach, heartbeat, siblings, and the node
+/// and client that hold one.
 pub mod session;
+/// STUN (RFC 5389), for learning a reflexive address.
 pub mod stun;
+/// QUIC with TLS 1.3 and raw public keys (§9.1): pins, presenters,
+/// configurations and the dial.
 pub mod tls;
+/// Path traversal (design §12.6.3): candidates, their ordering, and the
+/// wrapping a relayed datagram carries.
 pub mod traversal;
 
 pub use tls::{Pins, client_config, client_endpoint, server_config, server_endpoint};

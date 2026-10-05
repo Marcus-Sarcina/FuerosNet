@@ -11,6 +11,7 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 /// Whoever serves records by txid: the subject, a holder, or a test.
 pub trait Fetch {
+    /// The envelope bytes at `txid`, where this source holds them.
     fn fetch(&self, txid: &Txid) -> Option<Vec<u8>>;
 }
 
@@ -25,26 +26,36 @@ impl Fetch for BTreeMap<Txid, Vec<u8>> {
 /// incomplete, not malformed; §3.1: a chain that does not reach back).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Root {
+    /// The walk reached the subject's genesis value.
     Genesis,
     /// A series reissue whose predecessors were not served: the range is
     /// unbroken from the head to it, and `beyond` lies past the checkpoint.
     Checkpoint {
+        /// The checkpoint the walk rooted at.
         at: Txid,
+        /// The predecessors beyond it, which were not served.
         beyond: Vec<Txid>,
     },
     /// `at` names `missing`, which could not be fetched.
     Unfetched {
+        /// The record naming the predecessor.
         at: Txid,
+        /// The predecessor that could not be fetched.
         missing: Txid,
     },
     /// `at` names `named` as the subject's predecessor, and the subject did
     /// not sign it.
     DoesNotReachBack {
+        /// The record naming the predecessor.
         at: Txid,
+        /// The predecessor it named, which the subject did not sign.
         named: Txid,
     },
+    /// A record on the path does not read.
     Malformed {
+        /// Where.
         at: Txid,
+        /// Why.
         why: String,
     },
 }
@@ -61,17 +72,24 @@ impl Root {
     }
 }
 
+/// A verified walk backward from a head: what was found, how each signature
+/// fared, and where it rooted.
 #[derive(Debug, Clone)]
 pub struct Walk {
+    /// Whose archive was walked.
     pub subject: Keyhash,
+    /// The head it started from.
     pub head: Txid,
     /// Records whose structure verified, head first in visit order.
     pub records: Vec<Record>,
+    /// Each record's signature verdict, in visit order.
     pub signatures: Vec<(Txid, SigStatus)>,
+    /// Where the walk ended: genesis, a checkpoint, or short.
     pub root: Root,
 }
 
 impl Walk {
+    /// The txids visited, head first.
     pub fn txids(&self) -> Vec<Txid> {
         self.records.iter().map(|r| r.txid).collect()
     }
@@ -196,26 +214,35 @@ pub fn walk<F: Fetch + ?Sized, L: Lookup + ?Sized>(
 /// How one fetched batch ends.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BatchEnd {
+    /// The batch reached genesis.
     Genesis,
+    /// The batch reached a checkpoint.
     Checkpoint(Txid),
     /// Predecessors named but not returned; the next request names
     /// `continue_from`, the oldest record returned.
     Unfetched {
+        /// The oldest record returned, which the next request names.
         continue_from: Txid,
+        /// The predecessors named but not returned.
         missing: Vec<Txid>,
     },
     /// Record `index` is not what the chain says follows.
     Mismatch {
+        /// Which record.
         index: usize,
+        /// Why.
         why: String,
     },
 }
 
+/// One batch's verdict: what verified, and why it stopped.
 #[derive(Debug, Clone)]
 pub struct BatchVerdict {
     /// Records verified in order, up to the first mismatch.
     pub verified: Vec<Record>,
+    /// Each verified record's signature verdict.
     pub signatures: Vec<(Txid, SigStatus)>,
+    /// Why the batch ended.
     pub end: BatchEnd,
     /// False when no head was requested: the first record's newestness is
     /// the holder's claim (`wire-format.md` §7.9).
@@ -245,6 +272,7 @@ fn entry_envelope<'a, L: Lookup + ?Sized>(ids: &L, bytes: &'a [u8]) -> Result<&'
 }
 
 impl BatchVerdict {
+    /// The txids that verified.
     pub fn verified_txids(&self) -> Vec<Txid> {
         self.verified.iter().map(|r| r.txid).collect()
     }
@@ -394,7 +422,9 @@ pub fn verify_batch_bounded<L: Lookup + ?Sized>(
 /// records about the restored or presented history.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FetchOutcome {
+    /// The txids recorded, newest first.
     pub records: Vec<Txid>,
+    /// Why the fetch ended.
     pub end: BatchEnd,
     /// `true` only when a requested head anchored the first batch: a chain
     /// restored from the holder's claimed newest record is internally
@@ -402,6 +432,9 @@ pub struct FetchOutcome {
     pub verified_complete: bool,
     /// The newest record, and whether it is the holder's claim.
     pub newest: Option<Txid>,
+    /// Whether `newest` is the holder's claim rather than a head the requester
+    /// named, which is what makes a chain internally verified and never
+    /// verified-complete.
     pub newest_is_holders_claim: bool,
 }
 

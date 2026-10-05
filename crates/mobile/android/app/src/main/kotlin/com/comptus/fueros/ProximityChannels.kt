@@ -48,10 +48,12 @@ object ProximityChannels {
     @Volatile private var anchorAgreed = false
     private val cachedTap = AtomicReference<ChannelOutcome?>(null)
 
+    /** Run channels for `a` from now on. */
     fun host(a: Activity) {
         host = a
     }
 
+    /** Stop running channels for `a`, where it is still the host. */
     fun release(a: Activity) {
         if (host === a) host = null
     }
@@ -88,6 +90,8 @@ object ProximityChannels {
         cachedTap.set(ChannelOutcome.PASS)
     }
 
+    /** The channels this device has.  A channel the hardware lacks is
+     *  not listed, so the kernel does not ask for it. */
     fun supported(context: Context): List<Channel> {
         val out = mutableListOf<Channel>()
         if (NfcAdapter.getDefaultAdapter(context)?.isEnabled == true) {
@@ -97,6 +101,8 @@ object ProximityChannels {
         return out
     }
 
+    /** Run `channel` and say how it went.  A channel [supported] does
+     *  not list is answered honestly rather than left to the caller. */
     fun run(context: Context, channel: Channel): ChannelOutcome = when (channel) {
         Channel.NFC -> tap(context)
         Channel.OPTICAL ->

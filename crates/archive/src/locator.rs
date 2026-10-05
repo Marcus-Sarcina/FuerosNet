@@ -12,12 +12,16 @@ use rhtn_crypto::verify::{self, Lookup};
 /// A `SignedLocator` as a holder keeps it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SignedLocator {
+    /// The subject the locator is for, and the signer.
     pub subject: Keyhash,
+    /// The locator itself.
     pub locator: Locator,
+    /// The object's own bytes, which the signature covers.
     pub bytes: Vec<u8>,
 }
 
 impl SignedLocator {
+    /// Parse a signed locator and verify the subject's signature over it.
     pub fn parse(b: &[u8]) -> Result<Self, String> {
         let item = parse_all(b).map_err(|e| e.0)?;
         schema::check_kind(b, "SignedLocator", &item).map_err(|e| e.0)?;

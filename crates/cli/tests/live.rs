@@ -125,11 +125,30 @@ fn two_phones_stream_at_once_and_one_reconnects_into_the_same_file() {
     // what the collector said
     let said = log.lock().unwrap().clone();
     let connects: Vec<&String> = said.iter().filter(|l| l.starts_with("connect")).collect();
-    assert!(
-        connects[0].contains("R58MA") && connects[0].contains("run run-a"),
+    assert_eq!(connects.len(), 3, "{said:?}");
+    // **The first two are unordered.** Each connection is accepted on its
+    // own thread and logs when it gets the lock, so which of A and B is
+    // written first is the scheduler's; asserting an order here failed
+    // about one run in eight [2026-10-04].  The reconnect is ordered,
+    // happening only after the test has closed both.
+    let first_two = &connects[..2];
+    assert_eq!(
+        first_two
+            .iter()
+            .filter(|l| l.contains("R58MA") && l.contains("run run-a"))
+            .count(),
+        1,
         "{said:?}"
     );
-    assert!(connects[1].contains("R58MB"), "{said:?}");
+    assert_eq!(
+        first_two.iter().filter(|l| l.contains("R58MB")).count(),
+        1,
+        "{said:?}"
+    );
+    assert!(
+        !first_two.iter().any(|l| l.contains("reconnect")),
+        "{said:?}"
+    );
     assert!(connects[2].contains("reconnect"), "{said:?}");
     assert!(
         said.iter().any(|l| l.starts_with("disconnect")

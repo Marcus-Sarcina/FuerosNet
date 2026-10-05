@@ -20,7 +20,9 @@ use std::collections::BTreeMap;
 /// The AEAD a store seals under: a parameter (design §22.2).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Aead {
+    /// AES-256-GCM.
     Aes256Gcm,
+    /// ChaCha20-Poly1305.
     ChaCha20Poly1305,
 }
 
@@ -29,7 +31,9 @@ pub enum Aead {
 /// what it is reading.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SealParams {
+    /// The AEAD the store seals under.
     pub aead: Aead,
+    /// The template's fixed length for the modality version in use.
     pub template_len: usize,
 }
 
@@ -48,7 +52,9 @@ impl Default for SealParams {
 /// (`light-client-requirements.md` §1.3), with the instant it was taken.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Frame {
+    /// When it was taken, in milliseconds since the epoch.
     pub at_ms: u64,
+    /// The pixels, their metadata already stripped.
     pub bytes: Vec<u8>,
 }
 
@@ -56,9 +62,13 @@ pub struct Frame {
 /// (design §7.5.2.7).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Capture {
+    /// Which modality was captured.
     pub modality: u64,
+    /// The template version it was derived under.
     pub template_version: u64,
+    /// The template itself, of the modality version's fixed length.
     pub template: Vec<u8>,
+    /// The frames behind it.
     pub frames: Vec<Frame>,
 }
 
@@ -69,12 +79,19 @@ pub struct Capture {
 /// is what the store files it under afterwards.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SealedCapture {
+    /// Whose likeness it is.
     pub subject: Keyhash,
+    /// Who holds it.
     pub holder: Keyhash,
+    /// The ceremony that sealed it.
     pub ceremony_id: [u8; 32],
+    /// Which modality was captured.
     pub modality: u64,
+    /// The template version it was derived under.
     pub template_version: u64,
+    /// The AEAD nonce.
     pub nonce: [u8; 12],
+    /// The sealed capture.
     pub ciphertext: Vec<u8>,
 }
 
@@ -230,9 +247,13 @@ pub fn open(
 /// grant needs to name the capture and derive its key.
 #[derive(Clone, PartialEq, Eq)]
 pub struct OwnSeed {
+    /// The seed itself, which is the one secret a store holds.
     pub seed: [u8; 32],
+    /// Whose device holds the capture it unlocks.
     pub counterparty: Keyhash,
+    /// The ceremony the capture is bound to.
     pub ceremony_id: [u8; 32],
+    /// When the record finalized, which is what retention is counted from.
     pub finalized_at: u64,
 }
 
@@ -265,9 +286,13 @@ impl Drop for OwnSeed {
 /// is ever written here.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct ClientStore {
+    /// The sealed captures this client holds of others, by record.
     pub sealed: BTreeMap<Txid, SealedCapture>,
+    /// Its own seeds, by record, which unlock its likeness elsewhere.
     pub seeds: BTreeMap<Txid, OwnSeed>,
+    /// The presence records it keeps.
     pub records: BTreeMap<Txid, Vec<u8>>,
+    /// Late responses attached to a record, kept and discarded with it.
     pub late: BTreeMap<Txid, Vec<Vec<u8>>>,
     /// Late responses that verified and named a participant but could not
     /// be attached, by the record they were offered for, naming their
@@ -278,6 +303,8 @@ pub struct ClientStore {
     /// keeping evidence this holder declined to admit would outlive the
     /// reason it was declined.
     pub unattached_late: BTreeMap<Txid, Vec<Keyhash>>,
+    /// The disclosure sets of this client's own records, which are
+    /// ordinary record state (`wire-format.md` §4.5.1.2).
     pub disclosures: BTreeMap<Txid, DisclosureSet>,
 }
 
@@ -335,6 +362,7 @@ impl ClientStore {
 /// a subject past it declines to release a capture key, and the holder's
 /// ciphertext becomes unopenable without anyone deleting anything.
 impl ClientStore {
+    /// Write the store under `dir`, one file per collection.
     pub fn save(&self, dir: &std::path::Path) -> std::io::Result<()> {
         write_once(
             &dir.join("records"),

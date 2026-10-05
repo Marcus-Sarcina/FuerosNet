@@ -6,20 +6,38 @@ use crate::bounds;
 use crate::cbor::*;
 use crate::schema::{self, Family};
 
+/// Which stream a frame arrived on, and therefore which type registry and
+/// which size ceiling apply to it (§8.0, §9.2).  **The two are separate
+/// namespaces**: a type number means one thing on the control stream and
+/// another on a request stream, so a frame read against the wrong one is
+/// not merely refused but misread, and the stream is carried alongside the
+/// bytes everywhere in this module for that reason.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Stream {
+    /// Stream 0: control (§8.0), bounded by [`bounds::CONTROL_FRAME_BYTES`].
     Control,
+    /// A bidirectional request stream (§9.2), bounded by
+    /// [`bounds::REQUEST_FRAME_BYTES`].
     Request,
 }
 
+/// A frame read from the wire: which stream it came on, the type it
+/// declared, the family that type names there if this profile knows one,
+/// and the body, kept as a **range into the caller's bytes** rather than a
+/// copy so that a signature can be checked over the received bytes
+/// themselves.
 #[derive(Debug, Clone)]
 pub struct Frame {
+    /// The stream it arrived on, which fixes how `frame_type` reads.
     pub stream: Stream,
+    /// The type number as declared, known to this profile or not.
     pub frame_type: u64,
     /// The message family the type names on this stream, if known.
     pub family: Option<Family>,
     /// The body's bytes within the payload (after the length prefix).
     pub body: std::ops::Range<usize>,
+    /// The body already parsed, so a caller reads its fields without
+    /// parsing the bytes a second time.
     pub body_item: Item,
 }
 

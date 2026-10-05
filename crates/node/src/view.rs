@@ -20,7 +20,9 @@ use rhtn_policy::{Policy, ReferenceMetric};
 /// (`wire-format.md` §10.2).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Slot {
+    /// Who holds the slot, where anyone does.
     pub occupant: Option<Keyhash>,
+    /// When they took it.
     pub timestamp: u64,
 }
 
@@ -28,6 +30,8 @@ pub struct Slot {
 /// A source of the time, in seconds since the epoch.
 pub type Clock = Arc<dyn Fn() -> u64 + Send + Sync>;
 
+/// A node's own view of where it sits and what it holds. **Its own and
+/// nobody else's**: nothing here is shared state.
 pub struct NodeView {
     /// This node's own identity, the public half: what it is named by and
     /// what its `KeyMaterial` is.
@@ -56,7 +60,9 @@ pub struct NodeView {
     /// This node's position in every other subnet it is bound in, by
     /// anchor (design §3.1.1: one node, several bindings, each its own).
     pub positions: BTreeMap<Keyhash, Locator>,
+    /// The verified bindings.
     pub table: Table,
+    /// What it holds of the topology.
     pub store: TopologyStore,
     /// Locators this node holds for other parties (`wire-format.md` §2.3).
     pub locators: LocatorStore,
@@ -113,6 +119,7 @@ pub struct NodeView {
 }
 
 impl NodeView {
+    /// A view for `identity` at `position`.
     pub fn new(identity: Arc<SigningIdentity>, position: Locator) -> Self {
         let public = identity.public.clone();
         Self::build(public, Some(identity), None, position)
@@ -191,6 +198,7 @@ impl NodeView {
         self.clock = Arc::new(move || t);
     }
 
+    /// This node's own identity.
     pub fn me(&self) -> Keyhash {
         self.public.keyhash
     }
@@ -267,6 +275,7 @@ impl NodeView {
         );
     }
 
+    /// Which slot `occupant` holds, where it holds one.
     pub fn slot_of(&self, occupant: &Keyhash) -> Option<u64> {
         self.slots
             .iter()

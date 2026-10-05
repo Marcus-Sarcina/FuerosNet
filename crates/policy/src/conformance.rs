@@ -24,6 +24,8 @@ pub const FANOUT: u64 = 10;
 pub struct Rng(u64);
 
 impl Rng {
+    /// A generator seeded from `seed`; zero is taken as one, xorshift having no
+    /// other value at zero.
     pub fn new(seed: u64) -> Self {
         Rng(seed.max(1))
     }
@@ -145,6 +147,7 @@ pub fn attach_region_behind(
 /// One population size of a region, under the policy.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Row {
+    /// How many identities the region holds at this size.
     pub identities: usize,
     /// The best individual standing any identity in the region achieved.
     pub best: f64,
@@ -164,17 +167,25 @@ pub enum Verdict {
     /// The joint standing stopped growing once the region exceeded its cut,
     /// and neither it nor any individual standing exceeded the cut at any
     /// size.
-    Bounded { cut: u64 },
+    Bounded {
+        /// The cut the standing saturated below.
+        cut: u64,
+    },
     /// The joint standing grew at every increase in population.
     GrowsWithSize,
     /// Neither saturated below the cut nor grew monotonically.
     Unbounded,
 }
 
+/// One region's behaviour across the population sizes, and the verdict the
+/// rows earn.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Region {
+    /// What the region is, for the report.
     pub title: &'static str,
+    /// One row per population size, in the order grown.
     pub rows: Vec<Row>,
+    /// What the rows earn: saturation below the cut, or not.
     pub verdict: Verdict,
 }
 
@@ -205,7 +216,10 @@ impl Region {
 /// The branching criterion, measured on two regions (design §16.2, §16.4).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Branching {
+    /// The fanout the regions were grown at, design §3.1's f.
     pub fanout: u64,
+    /// The policy's decay, where it has one. `None` for a policy whose standing
+    /// is not a decay at all, such as the reference metric.
     pub lambda: Option<f64>,
     /// Whether λ < 1/f, where the policy has a λ.
     pub criterion_satisfied: Option<bool>,
@@ -213,7 +227,10 @@ pub struct Branching {
     pub hierarchy_only: Vec<f64>,
     /// The same with an acquaintance degree that grows with depth.
     pub with_acquaintance: Vec<f64>,
+    /// Whether the hierarchy-only series converges.
     pub hierarchy_verdict: Convergence,
+    /// Whether it still converges once acquaintance degree grows with depth,
+    /// which is the case design §16.2 warns about.
     pub acquaintance_verdict: Convergence,
 }
 
@@ -234,13 +251,16 @@ pub fn classify_levels(cumulative: &[f64]) -> Convergence {
     }
 }
 
+/// One policy's conformance over the simulation's topologies (design §16.4).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Report {
+    /// The policy's name, as it reports itself.
     pub policy: &'static str,
     /// E2: a fake region entered by one adoption at the horizon's edge.
     pub cut_bound: Region,
     /// E3: a region behind one acquired peering edge beyond the horizon.
     pub conservation: Region,
+    /// The branching criterion, measured on two regions.
     pub branching: Branching,
 }
 
@@ -250,6 +270,7 @@ impl Report {
         &self.conservation.verdict
     }
 
+    /// The report as text, for a test's committed output and for a reader.
     pub fn render(&self) -> String {
         let mut s = String::new();
         let _ = writeln!(s, "conformance report: {}", self.policy);
@@ -315,6 +336,7 @@ impl Report {
 
 /// The population sizes the simulation uses.
 pub const CUT_BOUND_SHAPES: [(usize, usize); 3] = [(2, 2), (3, 3), (4, 4)];
+/// The population sizes the conservation region is grown to.
 pub const CONSERVATION_SIZES: [usize; 4] = [4, 8, 16, 32];
 /// The depths the branching regions are grown to.
 pub const BRANCHING_DEPTH: usize = 3;

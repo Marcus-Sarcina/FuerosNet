@@ -15,6 +15,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// The comparison a verifier runs between a template it holds and the
 /// profile a query carries: categorical, never a score (design §7.4.1).
 pub trait Matcher {
+    /// Compare `profile` against `template` under `template_version`.
     fn compare(&self, template: &[u8], profile: &[u8], template_version: u64) -> Verdict;
 }
 
@@ -38,10 +39,16 @@ impl Matcher for ByteEquality {
 /// template versions this client can compare under.
 #[derive(Debug, Clone)]
 pub struct VerifierConfig {
+    /// How this verifier seals what it keeps at rest.
     pub seal: SealParams,
+    /// How long an unopened grant waits for its query, and a query for its
+    /// grant.
     pub grant_buffer_ms: u64,
+    /// How many queries one requester may make in a window.
     pub per_requester_limit: u32,
+    /// How long that window is.
     pub window_ms: u64,
+    /// The template versions this client can compare under.
     pub template_versions: BTreeSet<u64>,
 }
 
@@ -60,9 +67,13 @@ impl Default for VerifierConfig {
 /// What a verifier acts with: its own identity, the keys it holds, its
 /// store and its engine.  Borrowed for the duration of one event.
 pub struct Verifying<'a, L: Lookup + ?Sized> {
+    /// This verifier's own identity, which signs the response.
     pub me: &'a SigningIdentity,
+    /// The keys it holds, for checking what arrives.
     pub ids: &'a L,
+    /// Its store, which is where the templates are.
     pub store: &'a ClientStore,
+    /// Its comparison engine.
     pub matcher: &'a dyn Matcher,
 }
 
@@ -71,8 +82,11 @@ pub struct Verifying<'a, L: Lookup + ?Sized> {
 /// (`wire-format.md` §5.6).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Answer {
+    /// The query answered.
     pub query_id: [u8; 32],
+    /// The querier's copy, signed and encoded.
     pub to_querier: Vec<u8>,
+    /// The subject and their copy.
     pub to_subject: (Keyhash, Vec<u8>),
 }
 
@@ -82,6 +96,7 @@ pub enum QueryOutcome {
     /// The stream is closed with nothing sent: no error schema exists, and
     /// no signed response is fabricated for input that is not evidence.
     Closed(&'static str),
+    /// Compared and answered.
     Answered(Answer),
     /// A well-formed query whose grant has not arrived: it waits, bounded.
     AwaitingGrant,
@@ -90,11 +105,13 @@ pub enum QueryOutcome {
 /// What an arriving grant came to.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GrantOutcome {
+    /// Not taken, for the stated reason.
     Rejected(&'static str),
     /// Held, bounded, for a query not yet seen.
     Buffered,
     /// A duplicate, or a second grant for a query already answered.
     Ignored,
+    /// It completed a waiting query, which was compared and answered.
     Answered(Answer),
 }
 
@@ -113,6 +130,7 @@ struct Pending {
 /// passes, and never past an answer.
 #[derive(Debug, Clone)]
 pub struct VerifierState {
+    /// This verifier's own numbers.
     pub cfg: VerifierConfig,
     ceremonies: BTreeMap<[u8; 32], [u8; 32]>,
     counters: BTreeMap<Keyhash, (u64, u32)>,
@@ -122,6 +140,8 @@ pub struct VerifierState {
 }
 
 impl VerifierState {
+    /// A verifier holding `cfg`, with nothing pending and nothing
+    /// answered.
     pub fn new(cfg: VerifierConfig) -> Self {
         VerifierState {
             cfg,

@@ -20,8 +20,12 @@ use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 
 /// One running `rhtnp`, and the pipe a scenario talks to it down.
 pub struct Party {
+    /// The name the scenario calls it by, which its test identity derives
+    /// from.
     pub name: String,
+    /// Its keyhash.
     pub keyhash: [u8; 32],
+    /// Its state directory.
     pub dir: PathBuf,
     stdin: ChildStdin,
     stdout: BufReader<ChildStdout>,
@@ -62,6 +66,7 @@ impl Party {
         out
     }
 
+    /// Its signing identity, derived from the name as the test kit does.
     pub fn identity(&self) -> SigningIdentity {
         test_identity(&self.name)
     }
@@ -145,6 +150,8 @@ impl Participants {
         self.parties.last_mut().expect("just pushed")
     }
 
+    /// The party called `name`.  Panics where there is none, which in a
+    /// scenario is the scenario's own error.
     pub fn get(&mut self, name: &str) -> &mut Party {
         self.parties
             .iter_mut()

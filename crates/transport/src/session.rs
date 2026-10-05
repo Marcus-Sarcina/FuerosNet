@@ -27,7 +27,9 @@ use tokio::time::{Duration, Instant, sleep_until};
 
 /// Application close code for a refused attach (§8.2).
 pub const CLOSE_REFUSED: u32 = 1;
+/// Control frame 1: a client attaching.
 pub const FRAME_ATTACH: u64 = 1;
+/// Control frame 2: the node's answer.
 pub const FRAME_ATTACH_ACK: u64 = 2;
 /// How long an attach waits for its acknowledgement, **as a whole**.  A
 /// dark endpoint that accepts the connection and answers nothing otherwise
@@ -39,7 +41,9 @@ pub const ATTACH_ACK_TIMEOUT: Duration = Duration::from_secs(15);
 /// A delegated peer's first frame on a connection that opens no session
 /// (`wire-format.md` §8.0, §8.2).
 pub const FRAME_DELEGATION: u64 = 7;
+/// Control frame 3: the heartbeat.
 pub const FRAME_HEARTBEAT: u64 = 3;
+/// Control frame 4: a replacement sibling list.
 pub const FRAME_SIBLING_UPDATE: u64 = 4;
 
 // ------------------------------------------------------------ capabilities
@@ -83,6 +87,7 @@ pub fn encode_capabilities(caps: &BTreeMap<u64, Vec<u8>>) -> Vec<u8> {
     out
 }
 
+/// The capabilities map a frame carries, by id.
 pub fn decode_capabilities(b: &[u8], item: &Item) -> BTreeMap<u64, Vec<u8>> {
     let mut out = BTreeMap::new();
     if let Item::Map(m) = item {
@@ -108,6 +113,7 @@ pub fn control_frame(frame_type: u64, body: &[u8]) -> Vec<u8> {
     out
 }
 
+/// What came off the stream: a frame, or why none did.
 #[derive(Debug)]
 pub enum FrameRead {
     /// The CBOR payload behind an in-bound length prefix.
@@ -155,6 +161,7 @@ pub struct FrameReader {
 }
 
 impl FrameReader {
+    /// A reader over `recv`, reading one length-prefixed frame at a time.
     pub fn new(recv: RecvStream) -> Self {
         FrameReader {
             recv,
@@ -199,6 +206,7 @@ pub enum Control {
     Malformed,
 }
 
+/// Which control frame the payload is, without validating its body.
 pub fn classify(payload: &[u8]) -> Control {
     match frame::parse_payload(Stream::Control, payload) {
         Ok(f) => match f.family {
@@ -211,17 +219,29 @@ pub fn classify(payload: &[u8]) -> Control {
 
 // ------------------------------------------------------------ messages
 
+/// One address a node is reachable at (`wire-format.md` §4.4). **IPv4
+/// only**: a 16-byte address is malformed in v1.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NetworkPoint {
+    /// The address.
     pub ip: [u8; 4],
+    /// The autonomous system it sits in, where known.
     pub asn: Option<u64>,
+    /// The port, absent meaning the profile's default.
     pub port: Option<u64>,
 }
 
+/// A sibling a node names to a client attaching to it, so the client can
+/// fail over without resolving (`wire-format.md` §8.2).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SiblingRef {
+    /// The sibling's identity.
     pub keyhash: [u8; 32],
+    /// Where to reach it.
     pub endpoints: Vec<NetworkPoint>,
+    /// Its key material, so a client that has never contacted it can
+    /// authenticate the failover. **There is no fetch path for material a
+    /// holder lacks**, which is why it travels here.
     pub key_material: Option<Vec<u8>>,
 }
 
@@ -230,6 +250,7 @@ pub struct SiblingRef {
 pub const DEFAULT_PORT: u64 = 7431;
 
 impl NetworkPoint {
+    /// A point at `ip`, with `port` or the default.
     pub fn new(ip: [u8; 4], port: Option<u64>) -> Self {
         NetworkPoint {
             ip,
@@ -237,6 +258,7 @@ impl NetworkPoint {
             port: port.filter(|p| *p != DEFAULT_PORT),
         }
     }
+    /// The same point, in `asn`.
     pub fn with_asn(mut self, asn: u64) -> Self {
         self.asn = Some(asn);
         self
@@ -254,15 +276,18 @@ impl NetworkPoint {
             _ => None,
         }
     }
+    /// The point's own bytes.
     pub fn encode_bytes(&self) -> Vec<u8> {
         let mut out = Vec::new();
         self.encode(&mut out);
         out
     }
+    /// A point from its bytes.
     pub fn decode_bytes(b: &[u8]) -> Result<Self, String> {
         let item = parse_all(b).map_err(|e| e.0)?;
         Self::decode(b, &item).ok_or_else(|| "network point".to_string())
     }
+    /// Emit the point into `out`.
     pub fn encode(&self, out: &mut Vec<u8>) {
         emit_map_head(
             out,
@@ -280,6 +305,7 @@ impl NetworkPoint {
             emit_uint(out, p);
         }
     }
+    /// A point from a parsed item and the bytes it indexes.
     pub fn decode(b: &[u8], it: &Item) -> Option<Self> {
         let Item::Map(m) = it else { return None };
         let ip = match map_get(m, 1) {
@@ -305,6 +331,7 @@ impl NetworkPoint {
 }
 
 impl SiblingRef {
+    /// Emit the reference into `out`.
     pub fn encode(&self, out: &mut Vec<u8>) {
         emit_map_head(out, 2 + self.key_material.is_some() as usize);
         emit_uint(out, 1);
@@ -319,6 +346,7 @@ impl SiblingRef {
             out.extend_from_slice(km);
         }
     }
+    /// A reference from a parsed item and the bytes it indexes.
     pub fn decode(b: &[u8], it: &Item) -> Option<Self> {
         let Item::Map(m) = it else { return None };
         let keyhash = match map_get(m, 1) {
@@ -380,12 +408,18 @@ fn decode_sibling_list(b: &[u8], it: Option<&Item>) -> Option<Vec<SiblingRef>> {
     }
 }
 
+/// A node's answer to an attach (`wire-format.md` §8.1).
 #[derive(Debug, Clone)]
 pub struct AttachAck {
+    /// Field 1: whether the client is in this node's own subtree.
     pub mode: u64,
+    /// Field 2: the siblings to fail over to.
     pub siblings: Vec<SiblingRef>,
+    /// Field 3: the heartbeat interval the node sets.
     pub interval: u64,
+    /// Field 4: how much is queued for this client.
     pub queued: u64,
+    /// Field 5: the node's published capabilities.
     pub capabilities: BTreeMap<u64, Vec<u8>>,
     /// Field 6: the serving node's own delegation, present whenever the
     /// key it presented is a delegated one (`wire-format.md` §8.2).
@@ -393,6 +427,7 @@ pub struct AttachAck {
 }
 
 impl AttachAck {
+    /// The acknowledgement's bytes.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
         emit_map_head(
@@ -470,6 +505,7 @@ pub fn encode_attach(
     out
 }
 
+/// A heartbeat frame's bytes.
 pub fn encode_heartbeat(counter: u64, timestamp: u64) -> Vec<u8> {
     let mut out = Vec::new();
     emit_map_head(&mut out, 2);
@@ -499,6 +535,8 @@ pub fn decode_sibling_update(b: &[u8], me: &[u8; 32]) -> Option<Vec<SiblingRef>>
     Some(list)
 }
 
+/// A sibling-update frame's bytes, which **replaces** the list rather than
+/// adding to it (`wire-format.md` §8.2).
 pub fn encode_sibling_update(refs: &[SiblingRef]) -> Vec<u8> {
     let mut out = Vec::new();
     emit_map_head(&mut out, !refs.is_empty() as usize);
@@ -520,29 +558,48 @@ fn unix_now() -> u64 {
 /// drop it.
 pub type OutboundFilter = Arc<dyn Fn(u64, &[u8]) -> Option<Vec<u8>> + Send + Sync>;
 
+/// What happened on a session, for a test or a diagnostic to read.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Event {
+    /// A frame went out.
     Sent {
+        /// Which frame.
         frame_type: u64,
+        /// Its complete bytes.
         bytes: Vec<u8>,
     },
+    /// A frame arrived and was handled.
     Received {
+        /// Which frame.
         frame_type: u64,
     },
+    /// An unknown control frame arrived and was skipped, which §8.0 requires
+    /// rather than failing the session.
     Skipped {
+        /// Which frame.
         frame_type: u64,
     },
+    /// A frame was dropped without being handled.
     Discarded,
+    /// Something exceeded a bound.
     OverBound,
+    /// The attach succeeded.
     Attached {
+        /// Whether the client is in this node's own subtree.
         mode: u64,
     },
+    /// The attach was refused by local policy.
     Refused,
+    /// The detector settled on unreachable for this peer.
     PeerUnreachable,
+    /// The client failed over to a sibling.
     Failover {
+        /// The sibling it went to.
         to: [u8; 32],
     },
+    /// Payload was delivered to the application.
     Delivered {
+        /// Its bytes.
         bytes: Vec<u8>,
     },
     /// The Attach went as 0-RTT early data on this connection.
@@ -552,8 +609,10 @@ pub enum Event {
     /// This connection's own handshake completed; `early_accepted` says
     /// whether the server took the early data.
     HandshakeDone {
+        /// Whether the server took the early data.
         early_accepted: bool,
     },
+    /// The connection closed.
     Closed,
     /// An attach under a credential this node has verified superseded: no
     /// AttachAck, nothing delivered (design §12.6.5).
@@ -561,10 +620,12 @@ pub enum Event {
     /// The peer's presented key was bound to the keyhash meant, this way
     /// (`wire-format.md` §9.1).
     Bound {
+        /// How it bound.
         how: Bound,
     },
     /// Nothing bound the presented key; the connection was refused.
     Unbound {
+        /// Why nothing did.
         why: Refusal,
     },
     /// This side presented its own delegation first on the connection
@@ -575,13 +636,18 @@ pub enum Event {
     /// A connectivity check began: one candidate of the peer dialled, at
     /// `at_ms` since the checks started (RFC 8445 §6.1.4.2; design §14.1.1).
     Dialled {
+        /// The candidate dialled.
         addr: std::net::SocketAddr,
+        /// Milliseconds since the checks began.
         at_ms: u64,
     },
     /// That check ended, in a handshake that bound or not.
     DialDone {
+        /// The candidate checked.
         addr: std::net::SocketAddr,
+        /// Milliseconds since the checks began.
         at_ms: u64,
+        /// Whether the handshake bound.
         ok: bool,
     },
 }
@@ -659,6 +725,7 @@ impl Log {
             Log::default()
         }
     }
+    /// Whether the log is recording.
     pub fn is_recording(&self) -> bool {
         self.recording
     }
@@ -673,9 +740,11 @@ impl Log {
             self.events.lock().unwrap().push((Instant::now(), e));
         }
     }
+    /// Every event with the instant it happened.
     pub fn events(&self) -> Vec<(Instant, Event)> {
         self.events.lock().unwrap().clone()
     }
+    /// How many events satisfy `f`.
     pub fn count(&self, f: impl Fn(&Event) -> bool) -> usize {
         self.events
             .lock()
@@ -718,9 +787,12 @@ impl Sender {
     }
 }
 
+/// What the detector has settled on for a peer (design §14.1.2).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Reachability {
+    /// The peer answered.
     Reachable,
+    /// The peer did not, for long enough that the detector settled on it.
     Unreachable,
 }
 
@@ -818,6 +890,7 @@ async fn control_loop(
 
 // ------------------------------------------------------------ the serving node
 
+/// A decision about one keyhash, which the caller supplies.
 pub type Predicate = Arc<dyn Fn(&[u8; 32]) -> bool + Send + Sync>;
 
 /// Where a client's reachability goes when the detector settles it.
@@ -864,11 +937,13 @@ pub type RequestHandler = Arc<
 /// sessions).
 pub type Peer = ([u8; 32], [u8; 32]);
 
+/// What a serving node needs to run (`wire-format.md` §8, §9).
 pub struct NodeConfig {
     /// Who this node speaks as and what it presents: its identity's
     /// classical member, or the delegated credential an instance holds in
     /// place of the seed (design §23.3).
     pub me: Party,
+    /// The identities this node has pinned.
     pub pins: Pins,
     /// §9.1's bind: what this node holds from the topology class, its
     /// leeway and clock, and its own delegated credential where it is an
@@ -890,6 +965,7 @@ pub struct NodeConfig {
     pub policy: Predicate,
     /// The node's own topology: true means the client is in this node's subtree (mode 0).
     pub in_subtree: Predicate,
+    /// What this node will not send outward, where it has a rule.
     pub filter: Option<OutboundFilter>,
     /// The mailbox (design §14.1.6).
     pub queue: Arc<dyn QueueStore>,
@@ -917,6 +993,7 @@ pub struct NodeConfig {
     /// Told when a client attaches and when its session ends, so a node
     /// above can hold the set `wire-format.md` §10.1.1's adjacency names.
     pub on_attach: Option<AttachHook>,
+    /// Called for a control frame this layer does not itself handle.
     pub on_control: Option<ControlHandler>,
     /// Payload arriving on a direct connection from an authenticated peer
     /// that opens no session (design §14.1.1).  Absent, such a connection
@@ -1011,12 +1088,16 @@ struct NodeState {
     outbound: HashMap<Peer, mpsc::UnboundedSender<(u64, Vec<u8>)>>,
 }
 
+/// A serving node: its configuration, the sessions it holds, and the
+/// mailbox it drains to them.
 pub struct Node {
+    /// What it was configured with.
     pub cfg: NodeConfig,
     state: Mutex<NodeState>,
     /// Held across a submission's cap check and its push, so two
     /// submissions cannot both see the room for one (design §14.1.6).
     queue_gate: Mutex<()>,
+    /// What happened, for a test or a diagnostic to read.
     pub log: Log,
     /// Relay submissions taken, delivered or queued: what a test reads to
     /// say whether payload went through this node or around it.
@@ -1024,6 +1105,7 @@ pub struct Node {
 }
 
 impl Node {
+    /// A node from `cfg`, with no session yet.
     pub fn new(cfg: NodeConfig) -> Arc<Self> {
         let log = cfg.log.clone();
         Arc::new(Node {
@@ -1218,6 +1300,7 @@ impl Node {
         }
     }
 
+    /// Whether this node has verified `keyhash` superseded (design §12.6.5).
     pub fn is_superseded(&self, keyhash: &[u8; 32]) -> bool {
         self.state
             .lock()
@@ -1822,18 +1905,23 @@ async fn answer_payload(
 
 // ------------------------------------------------------------ the client
 
+/// What a client needs to attach (`wire-format.md` §8.1).
 #[derive(Clone)]
 pub struct ClientConfig {
     /// Who this client speaks as and what it presents: the identity's own
     /// classical member on the ceremony device, or the delegated key of a
     /// desktop that holds no seed (design §23.3).
     pub me: Party,
+    /// The identities this client has pinned.
     pub pins: Pins,
     /// §9.1's bind on the dialling side, and this client's own delegated
     /// credential where it is a delegated device (design §23.3).
     pub bind: Binding,
+    /// The capabilities it publishes.
     pub capabilities: BTreeMap<u64, Vec<u8>>,
+    /// A client-integrity attestation, where it has one.
     pub attestation: Option<Vec<u8>>,
+    /// What this client will not send outward, where it has a rule.
     pub filter: Option<OutboundFilter>,
     /// The cached sibling list, persisted by the client (§8.2).
     pub sibling_cache: Arc<Mutex<Vec<SiblingRef>>>,
@@ -1856,6 +1944,7 @@ pub struct ClientConfig {
 }
 
 impl ClientConfig {
+    /// The TLS configuration for dialling `target`, pinned to it.
     pub fn tls_for(&self, target: &[u8; 32]) -> Option<rustls::ClientConfig> {
         let mut map = self.tls.lock().unwrap();
         if let Some(c) = map.get(target) {
@@ -1880,22 +1969,32 @@ impl ClientConfig {
     }
 }
 
+/// An attached session: the connection, what the node answered, and what
+/// arrives on it.
 pub struct Session {
+    /// The connection itself.
     pub conn: Connection,
+    /// What the node answered at attach.
     pub ack: AttachAck,
+    /// Payload delivered on this session, as it arrives.
     pub deliveries: mpsc::UnboundedReceiver<Vec<u8>>,
     /// Known control frames beyond the session's own, as `(type, body)`:
     /// topology pushes and memos the serving node delivers.
     pub frames: mpsc::UnboundedReceiver<(u64, Vec<u8>)>,
     /// Control frames this client sends on stream 0.
     pub outbound: mpsc::UnboundedSender<(u64, Vec<u8>)>,
+    /// What happened, for a test or a diagnostic to read.
     pub log: Log,
+    /// What the detector has settled on for this peer.
     pub reach: Arc<Mutex<Reachability>>,
+    /// The task driving the session, aborted when the session drops.
     pub task: tokio::task::JoinHandle<()>,
 }
 
+/// What an attach came to.
 #[derive(Debug)]
 pub enum AttachOutcome {
+    /// A session, attached.
     Attached(Session),
     /// Close code 1: the node's answer, not the endpoint's (§8.2).
     Refused,
@@ -1903,6 +2002,7 @@ pub enum AttachOutcome {
     /// the keyhash meant (§9.1): a refused session, never a session with
     /// that keyhash.  `Window` is retried once by `attach_any`.
     Unbound(Refusal),
+    /// The endpoint itself failed: no handshake was attempted or completed.
     EndpointFailure(String),
 }
 

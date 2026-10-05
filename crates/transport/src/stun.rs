@@ -11,12 +11,18 @@
 
 use std::net::{IpAddr, SocketAddr};
 
+/// RFC 5389's magic cookie.
 pub const MAGIC_COOKIE: u32 = 0x2112_A442;
+/// A binding request.
 pub const BINDING_REQUEST: u16 = 0x0001;
+/// A binding response.
 pub const BINDING_RESPONSE: u16 = 0x0101;
+/// The `XOR-MAPPED-ADDRESS` attribute.
 pub const ATTR_XOR_MAPPED_ADDRESS: u16 = 0x0020;
+/// The `FINGERPRINT` attribute.
 pub const ATTR_FINGERPRINT: u16 = 0x8028;
 const FINGERPRINT_XOR: u32 = 0x5354_554e;
+/// A STUN header's fixed size.
 pub const HEADER_BYTES: usize = 20;
 
 /// Whether a datagram is a STUN message: the two high bits zero, the magic
@@ -31,7 +37,9 @@ pub fn is_stun(b: &[u8]) -> bool {
 /// A Binding message's kind, from its message type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Binding {
+    /// A binding request.
     Request,
+    /// A binding response.
     Response,
 }
 
@@ -119,8 +127,11 @@ pub fn binding_response(txid: &[u8; 12], seen: SocketAddr) -> Vec<u8> {
 /// address a response carries.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Parsed {
+    /// Request or response.
     pub kind: Binding,
+    /// The transaction id, which a response echoes.
     pub txid: [u8; 12],
+    /// The address the server saw, where the message carried one.
     pub mapped: Option<SocketAddr>,
 }
 

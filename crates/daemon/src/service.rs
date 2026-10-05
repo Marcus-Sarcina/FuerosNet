@@ -150,6 +150,7 @@ fn hex_bytes(s: &str) -> Option<Vec<u8>> {
 
 /// A running daemon: the node, and the state it must write back.
 pub struct Service {
+    /// The running node.
     pub node: Arc<LiveNode>,
     /// Where the prekey pools and the topology store are kept.  Held so
     /// shutdown writes them to the same places startup read them from.

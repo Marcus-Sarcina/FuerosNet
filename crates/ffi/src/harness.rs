@@ -20,9 +20,12 @@ pub struct TestIdentity {
     pub seeds: Vec<u8>,
     /// The `KeyMaterial` array others pin.
     pub material: Vec<u8>,
+    /// The keyhash, which is what a counterparty names.
     pub id: Id,
 }
 
+/// The test identity `name` derives, the same one every workspace test and
+/// the vector generator derive from that name.
 #[uniffi::export]
 pub fn test_identity(name: String) -> TestIdentity {
     let sid = rhtn_crypto::identity::testkit::test_identity(&name);
@@ -49,6 +52,8 @@ pub struct TestNode {
 
 #[uniffi::export]
 impl TestNode {
+    /// A node run by `name` on a loopback port of its own, pinning
+    /// `clients` and holding each in a slot so their sessions are primary.
     #[uniffi::constructor]
     pub fn start(name: String, clients: Vec<String>) -> Arc<TestNode> {
         Self::started(name, clients, vec![], None)

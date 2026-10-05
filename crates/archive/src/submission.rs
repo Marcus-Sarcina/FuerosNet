@@ -12,30 +12,41 @@ use rhtn_codec::schema::{self, Family};
 
 /// Request types 9 to 12 (`wire-format.md` §7.10, §9.2's table).
 pub const REQUEST_PREKEY_PUBLICATION: u64 = 9;
+/// Request frame 10: one-time keys deposited.
 pub const REQUEST_ONE_TIME_DEPOSIT: u64 = 10;
+/// Request frame 11: a message handed over to relay.
 pub const REQUEST_RELAY: u64 = 11;
+/// Request frame 12: where to ring this client.
 pub const REQUEST_WAKE: u64 = 12;
 
 /// A client publishing its own bundle to the node that serves it
 /// (`wire-format.md` §7.10).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PrekeyPublication {
+    /// The signed bundle being published.
     pub bundle: Vec<u8>,
+    /// The nonce the reply must echo.
     pub nonce: [u8; 16],
 }
 
 /// A client stocking its node's pool.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OneTimeDeposit {
+    /// The one-time keys, each opaque to the node holding them.
     pub keys: Vec<Vec<u8>>,
+    /// The nonce the reply must echo.
     pub nonce: [u8; 16],
 }
 
 /// A client handing its node payload to carry.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RelaySubmission {
+    /// Who the message is for. **The node learns this and no more**: the
+    /// ciphertext is opaque to it.
     pub recipient: Keyhash,
+    /// The message, encrypted to the recipient.
     pub ciphertext: Vec<u8>,
+    /// The nonce the reply must echo.
     pub nonce: [u8; 16],
     /// The recipient's device this ciphertext is for (`wire-format.md`
     /// §7.10 field 4): a session is with a device, and the node cannot
@@ -49,9 +60,13 @@ pub struct RelaySubmission {
 /// neither may be carried without one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WakeRegistration {
+    /// The nonce the reply must echo.
     pub nonce: [u8; 16],
+    /// Where to ring. **Absent withdraws the registration** (design §14.1.5).
     pub endpoint: Option<String>,
+    /// The key the endpoint is addressed under.
     pub key: Option<Vec<u8>>,
+    /// When the registration lapses.
     pub lapses_at: Option<u64>,
 }
 
@@ -60,15 +75,23 @@ pub struct WakeRegistration {
 /// somebody else.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SubmissionReply {
+    /// The nonce, echoed from the submission.
     pub nonce: [u8; 16],
+    /// The outcome, one of the constants below.
     pub code: u64,
 }
 
+/// Accepted, which means **stored** (`wire-format.md` §7.10): a node that
+/// cannot store refuses rather than acknowledging.
 pub const SUBMISSION_ACCEPTED: u64 = 0;
+/// Refused. **Says nothing about the recipient**: an over-bound answer
+/// would be a claim about somebody else and may be false.
 pub const SUBMISSION_REFUSED: u64 = 1;
+/// The recipient's queue is at its cap.
 pub const SUBMISSION_OVER_BOUND: u64 = 2;
 
 impl PrekeyPublication {
+    /// The publication's bytes.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
         emit_map_head(&mut out, 2);
@@ -82,6 +105,7 @@ impl PrekeyPublication {
         out
     }
 
+    /// A publication from its bytes.
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         let item = parse_all(b).map_err(|e| e.0)?;
         schema::check_unsigned(Family::PrekeyPublication, b, 0).map_err(|e| e.0)?;
@@ -97,6 +121,7 @@ impl PrekeyPublication {
 }
 
 impl OneTimeDeposit {
+    /// The deposit's bytes.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
         emit_map_head(&mut out, 2);
@@ -110,6 +135,7 @@ impl OneTimeDeposit {
         out
     }
 
+    /// A deposit from its bytes.
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         let item = parse_all(b).map_err(|e| e.0)?;
         schema::check_unsigned(Family::OneTimeDeposit, b, 0).map_err(|e| e.0)?;
@@ -135,6 +161,7 @@ impl OneTimeDeposit {
 }
 
 impl RelaySubmission {
+    /// The submission's bytes.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
         emit_map_head(&mut out, 4);
@@ -149,6 +176,7 @@ impl RelaySubmission {
         out
     }
 
+    /// A submission from its bytes.
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         let item = parse_all(b).map_err(|e| e.0)?;
         schema::check_unsigned(Family::RelaySubmission, b, 0).map_err(|e| e.0)?;
@@ -172,7 +200,9 @@ impl RelaySubmission {
 /// neither beyond posting to the one and encrypting to the other.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WakeEndpoint {
+    /// Where to ring, as the user's chosen service gave it.
     pub url: String,
+    /// The key the service authenticates the ring with.
     pub key: Vec<u8>,
     /// When the client expects the endpoint to stop working, if it knows.
     pub lapses_at: Option<u64>,
@@ -202,10 +232,12 @@ impl WakeRegistration {
         }
     }
 
+    /// Whether this registration withdraws rather than registers.
     pub fn withdraws(&self) -> bool {
         self.endpoint.is_none()
     }
 
+    /// The registration's bytes.
     pub fn encode(&self) -> Vec<u8> {
         let n = 1
             + self.endpoint.is_some() as usize
@@ -230,6 +262,7 @@ impl WakeRegistration {
         out
     }
 
+    /// A registration from its bytes.
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         let item = parse_all(b).map_err(|e| e.0)?;
         schema::check_unsigned(Family::WakeRegistration, b, 0).map_err(|e| e.0)?;
@@ -257,6 +290,7 @@ impl WakeRegistration {
 }
 
 impl SubmissionReply {
+    /// An accepted reply for `nonce`.
     pub fn accepted(nonce: [u8; 16]) -> SubmissionReply {
         SubmissionReply {
             nonce,
@@ -264,10 +298,12 @@ impl SubmissionReply {
         }
     }
 
+    /// A reply for `nonce` carrying `code`.
     pub fn code(nonce: [u8; 16], code: u64) -> SubmissionReply {
         SubmissionReply { nonce, code }
     }
 
+    /// The reply's bytes.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
         emit_map_head(&mut out, 2);
@@ -278,6 +314,7 @@ impl SubmissionReply {
         out
     }
 
+    /// A reply from its bytes.
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         let item = parse_all(b).map_err(|e| e.0)?;
         schema::check_unsigned(Family::SubmissionReply, b, 0).map_err(|e| e.0)?;

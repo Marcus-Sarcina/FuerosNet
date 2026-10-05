@@ -16,21 +16,50 @@
 //! Every decision here is the node's own, taken against the node's own view.
 //! Nothing in this crate consults a party it shares no state with.
 
+#![warn(missing_docs)]
+
+/// The catalog a node answers from, and the abuse reports it holds for
+/// an owner (`wire-format.md` §6; design §11.5, §11.6).
 pub mod catalog;
+/// Attestation issuance, its escalation ladder and the staple checks
+/// (design §12.6.5, §12.6.5.1; `wire-format.md` §7.1).
 pub mod currency;
+/// The node's diagnostic events, compiled out of a releasable build.
 pub mod diag;
+/// The hosted-session surface a resource is reached through
+/// (`resource-requirements.md` §2).
 pub mod http;
+/// Peering records and the direct payload path (design §6.3, §12.6.3,
+/// §12.7.5; `wire-format.md` §4.4).
 pub mod peering;
+/// The prekey pool a node serves on a subject's behalf
+/// (`wire-format.md` §7.8).
 pub mod prekeys;
+/// The forwarding rule and the rootward memo (`wire-format.md` §10.1,
+/// §10.2; design §15).
 pub mod propagation;
+/// A directory-backed mailbox, for a node that keeps what it holds
+/// across a restart.
 pub mod queue;
+/// The anchor table and the resolution exchange (`wire-format.md` §7.2,
+/// §7.6, §7.7; design §12).
 pub mod resolution;
+/// Resources bound at this node: their rows, their packages and the
+/// gateway in front of them (`resource-requirements.md`).
 pub mod resources;
+/// A node on a real endpoint: the sockets, the tasks and the limits.
 pub mod runtime;
+/// The topology store: what a node holds, by the rule
+/// `wire-format.md` §10.1.1 states.
 pub mod store;
+/// What a client hands this node and what it answers
+/// (`wire-format.md` §7.10).
 pub mod submissions;
+/// What a node computes about standing from what it holds (design §16).
 pub mod trust;
+/// A node's own view of where it sits and what it holds.
 pub mod view;
+/// Where to ring a client that is not attached (design §14.1.5).
 pub mod wake;
 
 pub use rhtn_archive::{Keyhash, Txid};

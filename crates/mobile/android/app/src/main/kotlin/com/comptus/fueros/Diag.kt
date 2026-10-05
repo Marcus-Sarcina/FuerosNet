@@ -50,6 +50,8 @@ object Diag {
     /** Whether anything hears. Callers with a cost to avoid ask first. */
     fun enabled(): Boolean = sink != null
 
+    /** Send every event to `sink` from now on, with `flush` to drain it
+     *  and `files` to list the bundle. */
     fun install(
         sink: (String) -> Unit,
         flush: () -> Unit = {},
@@ -60,6 +62,7 @@ object Diag {
         this.lister = files
     }
 
+    /** Take the sinks away: events go nowhere again. */
     fun uninstall() {
         sink = null
         flusher = null

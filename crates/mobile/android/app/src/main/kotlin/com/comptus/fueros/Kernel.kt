@@ -56,8 +56,10 @@ object Kernel {
      *  every change. */
     fun bind(u: Front.Ui) = front.bind(u)
 
+    /** Unbind a screen: it is rendered no more. */
     fun unbind(u: Front.Ui) = front.unbind(u)
 
+    /** The meeting in progress, where one is open. */
     fun meet(): Meet? = meet
 
     /** Whether the counterparty's contribution is in, which is what the

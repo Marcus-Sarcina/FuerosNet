@@ -17,8 +17,11 @@ pub const WINDOW_SECONDS: u64 = 730 * 86_400;
 /// in it, and when it finalized.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Qualified {
+    /// The record.
     pub txid: Txid,
+    /// The subject's counterparty in it.
     pub counterparty: Keyhash,
+    /// When it finalized.
     pub finalized_at: u64,
 }
 
@@ -30,9 +33,14 @@ pub struct Qualified {
 /// §1.4).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Pool {
+    /// The distinct qualifying records, counted once by txid.
     pub n: usize,
+    /// The distinct prior counterparties, less the current one.
     pub candidates: BTreeSet<Keyhash>,
+    /// The qualifying records themselves.
     pub records: Vec<Qualified>,
+    /// `(record, signer)` for each record a key was wanting for, which is
+    /// unverifiable rather than invalid.
     pub unverifiable: Vec<(Txid, Keyhash)>,
 }
 
@@ -110,9 +118,13 @@ pub fn required(n: usize, candidates: usize) -> usize {
 /// §5.5 field 10), tier-aligned.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum SelectionBasis {
+    /// Someone the selector has met.
     Met = 0,
+    /// A member of one of its trust horizons.
     InHorizon = 1,
+    /// One further edge over either of those.
     Reachable = 2,
+    /// Picked on no stated acquaintance.
     Discretionary = 3,
 }
 
@@ -121,8 +133,11 @@ pub enum SelectionBasis {
 /// one further edge over both.  Nobody audits it.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Acquaintance {
+    /// The people this selector has met.
     pub met: BTreeSet<Keyhash>,
+    /// The members of any of its trust horizons.
     pub horizon: BTreeSet<Keyhash>,
+    /// One further edge over both of those.
     pub reachable: BTreeSet<Keyhash>,
 }
 

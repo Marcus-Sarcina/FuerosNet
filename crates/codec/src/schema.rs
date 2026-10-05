@@ -9,11 +9,17 @@ use crate::cbor::*;
 /// Field types the unsigned schemas use.
 #[derive(Clone, Copy)]
 pub enum T {
+    /// A 32-byte keyhash (§2.2).
     Keyhash,
+    /// A 16-byte nonce.
     Nonce16,
+    /// A 32-byte string with no further meaning fixed here.
     Bytes32,
+    /// An unsigned integer.
     Uint,
+    /// A boolean.
     Bool,
+    /// A byte string of any length the enclosing bound allows.
     Bstr,
     /// The `[series, counter]` pair, both in the u32 range.
     Seqno,
@@ -21,24 +27,50 @@ pub enum T {
     KeyMaterial,
     /// A non-empty byte string of at most this many bytes.
     BstrMax(usize),
+    /// A text string of at most this many bytes.
     Tstr(usize),
+    /// Unchecked: any well-formed item. For a field whose shape is the
+    /// enclosing decoder's to settle, not the generic walk's.
     Any,
+    /// A locator map (§2.3).
     Locator,
+    /// A path map, its nibble count bounded by
+    /// [`PATH_NIBBLES`](crate::bounds::PATH_NIBBLES).
     Path,
+    /// A capabilities map, bounded in entries and in each value's bytes
+    /// (§1.3).
     Capabilities,
+    /// An array of sibling references, at most
+    /// [`SIBLING_REFS`](crate::bounds::SIBLING_REFS) (§1.3).
     SiblingRefs,
+    /// An array of network points (§4.4), bounded by
+    /// [`NETWORK_POINTS_PER_RECORD`](crate::bounds::NETWORK_POINTS_PER_RECORD)
+    /// where the enclosing structure is an anchor entry or an endpoint
+    /// record (§7.2, §7.6).
     NetworkPoints,
+    /// A serving-infrastructure map.
     ServingInfra,
+    /// A referral map, which may carry the referred node's key material.
     Referral,
+    /// An array of catalog entries, each held to the `CatalogEntry` kind
+    /// and to §1.3's byte bound.
     CatalogEntries,
     /// One-time keys as deposited, opaque and bounded (`wire-format.md` §7.10).
     OneTimeKeys,
+    /// An array of transaction envelopes (§3).
     Envelopes,
+    /// An array of keyhashes.
     Keyhashes,
+    /// A currency attestation (§7.1), checked as its own kind.
     CurrencyAttestation,
+    /// A prekey bundle (§7.8), checked as its own kind.
     PrekeyBundle,
+    /// One catalog entry (§6.1), checked as its own kind.
     CatalogEntry,
+    /// A scope, checked as its own kind: what a catalog entry's access
+    /// rule names.
     Scope,
+    /// A verifier's signed response (§4.5), checked as its own kind.
     VerifierResponse,
     /// A transport delegation (`wire-format.md` §8.2), a signed map.
     Delegation,
@@ -54,36 +86,74 @@ pub enum T {
 /// One schema: (key, required, type).
 pub type Fields = &'static [(u64, bool, T)];
 
+/// The unsigned message families this profile defines, one per schema in
+/// [`fields`].  **A family is how a decoder knows which schema to hold a
+/// map to**, and the mapping from a frame's type number to a family is the
+/// stream's (§8.0, §9.2) rather than this enum's: the same number names
+/// different families on the control and request streams.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Family {
+    /// Control frame 1: a client attaching to its serving node.
     Attach,
+    /// Control frame 2: the node's answer to an attach.
     AttachAck,
+    /// Control frame 3: the session heartbeat.
     Heartbeat,
+    /// Control frame 4: a replacement sibling list.
     SiblingUpdate,
+    /// Control frame 5: topology pushed to an attached client.
     TopologyPush,
+    /// Control frame 6: a topology memo.
     TopologyMemo,
+    /// Request frame 1: resolve an identity to where it is served.
     ResolveRequest,
+    /// Request frame 2: fetch archive entries (§7.9).
     ArchiveRequest,
+    /// Request frame 3: prekeys for one subject, or a batch across a
+    /// population (§7.8).
     PrekeyRequestOrBatch,
+    /// Request frame 4: a query put to a verifier (§4.5).
     VerifierQuery,
+    /// Request frame 5: a catalog query (§6.1).
     CatalogQuery,
+    /// Request frame 6: a request to a resource.
     ResourceRequest,
+    /// Request frame 7: registering a resource in the catalog.
     ResourceRegistration,
     /// What a client hands its serving node (`wire-format.md` §7.10).
     PrekeyPublication,
+    /// Request frame 10: one-time keys deposited with the serving node.
     OneTimeDeposit,
+    /// Request frame 11: a message handed to a node to relay (§7.10).
     RelaySubmission,
+    /// Request frame 12: where to ring this client (§14.1.5).
     WakeRegistration,
+    /// The answer to a submission: accepted, over bound, or refused.
     SubmissionReply,
+    /// Request frame 8: a currency attestation requested (§7.1).
     CurrencyRequest,
+    /// The answer to a [`ResolveRequest`](Family::ResolveRequest).
     ResolveReply,
+    /// The answer to a [`CatalogQuery`](Family::CatalogQuery), bounded by
+    /// [`CATALOG_REPLY_ENTRIES`](crate::bounds::CATALOG_REPLY_ENTRIES).
     CatalogReply,
+    /// The answer to a [`ResourceRequest`](Family::ResourceRequest).
     ResourceResponse,
+    /// The answer to an [`ArchiveRequest`](Family::ArchiveRequest) (§7.9).
     ArchiveReply,
+    /// The answer to a [`PrekeyRequestOrBatch`](Family::PrekeyRequestOrBatch),
+    /// one bundle per device (§7.8).
     PrekeyReply,
+    /// The answer to a [`CurrencyRequest`](Family::CurrencyRequest).
     CurrencyReply,
+    /// The answer to a
+    /// [`ResourceRegistration`](Family::ResourceRegistration).
     ResourceRegistrationReply,
+    /// A subject releasing a capture key to a holder (§7.3), carried on
+    /// the end-to-end payload path as kind 1 (§7.10.1).
     KeyGrant,
+    /// A verifier's response arriving after finalization (§7.4), kind 2 on
+    /// the payload path (§7.10.1).
     LateResponse,
     /// Control frame 7: a delegated peer's first frame on a connection that
     /// opens no session (`wire-format.md` §8.0, §8.2).
@@ -195,6 +265,12 @@ const DELEGATION: Fields = &[
     (4, true, Uint),
     (5, true, Any),
 ];
+/// A transport delegation's window, **exactly** 48 hours (§8.2): field 4
+/// is this many seconds after field 3 and no other value is well-formed.
+///
+/// 48 hours is what one credential costs when a device is separated from
+/// the key that signs them, and the run an instance is provisioned with is
+/// 45 of them, 90 days end to end (design §12.6.5).
 pub const DELEGATION_WINDOW_SECONDS: u64 = 172_800;
 const CURRENCY_REPLY: Fields = &[
     (1, true, Nonce16),
@@ -229,6 +305,9 @@ const REFERRAL: Fields = &[
     (4, false, KeyMaterial),
 ];
 
+/// The schema for a family: its keys, which are required, and each one's
+/// type.  `None` for a family with no table here, which is a family whose
+/// shape is checked by its own decoder rather than by the generic walk.
 pub fn fields(f: Family) -> Option<Fields> {
     use Family::*;
     Some(match f {

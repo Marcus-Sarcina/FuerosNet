@@ -297,8 +297,14 @@ owns, and why it is shaped as it is — without reading its body.
 
 What the file is for, what state or invariant it owns, and the document
 that required it. Cited by document and section, as the documents cite each
-other: `` `wire-format.md` §7.10.1 ``, never a bare `§N`, since a file has
-no document of its own for a bare section to belong to.
+other: `` `wire-format.md` §7.10.1 ``.
+
+**A bare `§N` is permitted only where the crate's own root declares what it
+means.** `rhtn-codec` does this and is the model: *"section references in
+this crate are to `wire-format.md` unless prefixed `design`"*, after which
+its files cite `§1.3` and are unambiguous. A crate that has not declared a
+default has no document for a bare section to belong to, and must name one
+every time.
 
 **A header may cite `Robot/`** — the rule that forbids it applies to the
 root documents, whose integrity must not rest on a working file. A source
@@ -345,3 +351,22 @@ reports the count rather than the state: *"codec: 122 public items, 122
 documented"*, not *"codec is documented"*. The cleanup-pass rule above
 applies unchanged — a crate half-swept is worse than one untouched, because
 the reader cannot tell which half they are in.
+
+### What holds the standard afterwards
+
+**On the Rust side the build does.** Every crate root carries
+`#![warn(missing_docs)]`, and the gate runs `clippy -D warnings`, so a new
+public item without a comment fails the gate. The lint counts what a reader
+reaches: functions, types, constants, modules, enum variants and public
+struct fields.
+
+**On the Kotlin side a counter does, and nothing more.**
+`Robot/tools/kdoccheck.py` reports every public declaration in the shell
+with no comment above it. It is not in the gate, so the number can grow
+between runs; re-running it is the only thing that catches that.
+
+A count from either is reportable in the form the rule above asks for:
+*"the shell: 27 files, 0 owed"*. A count from a regex written for the
+occasion is not — one such regex undercounted the Rust tree by half, and
+the first Kotlin counter over-counted by a factor of four, both by
+mistaking a local for something a reader reaches.

@@ -84,40 +84,74 @@ pub(crate) struct Witnessing {
 pub enum Conversed {
     /// A consent request about me: consented, the reply and any grant
     /// sent; or not.
-    Consent { query: [u8; 32], consented: bool },
+    Consent {
+        /// The query asked about me.
+        query: [u8; 32],
+        /// Whether I consented.
+        consented: bool,
+    },
     /// The subject consented to a query I issued: it went to its verifier.
-    Consented { query: [u8; 32] },
+    Consented {
+        /// The query the subject consented to.
+        query: [u8; 32],
+    },
     /// A nominee answered: the flags it will sign under, or a decline.
     WitnessAnswer {
+        /// The nominee that answered.
         witness: Keyhash,
+        /// The flags it will sign under, or nothing where it declined.
         flags: Option<u64>,
     },
     /// Asked to witness: the flags this client answered with, or a
     /// decline.
     Asked {
+        /// The ceremony this client was asked to witness.
         ceremony: [u8; 32],
+        /// The flags it answered with, or nothing where it declined.
         flags: Option<u64>,
     },
     /// The counterparty's gathered responses, at the proposer.
-    Gathered { responses: usize },
+    Gathered {
+        /// How many responses arrived.
+        responses: usize,
+    },
     /// A signer's back-pointers, at the proposer.
-    BackPointers { signer: Keyhash },
+    BackPointers {
+        /// Whose back-pointers arrived.
+        signer: Keyhash,
+    },
     /// Shown the body: signed, or refused; the reply went either way.
-    Reviewed { refused: Option<Refusal> },
+    Reviewed {
+        /// The refusal sent back, where this client refused.
+        refused: Option<Refusal>,
+    },
     /// A signer replied, at the proposer: its entries, or its refusal.
     Signed {
+        /// Which signer replied.
         signer: Keyhash,
+        /// Its refusal, where it refused rather than signed.
         refused: Option<Refusal>,
     },
     /// The record finalized and held.
-    Finalized { txid: Txid },
+    Finalized {
+        /// The finalized record.
+        txid: Txid,
+    },
     /// Observed and kept, as a witness or as the counterparty: nothing
     /// owed in answer.
-    Observed { kind: u64 },
+    Observed {
+        /// The step's wire kind (`wire-format.md` §7.10.1).
+        kind: u64,
+    },
     /// Not taken: from no party to a ceremony this client is in or
     /// witnesses, a body that does not read, or a step this client cannot
     /// take.
-    Refused { kind: u64, why: String },
+    Refused {
+        /// The step's wire kind, where the bytes named one.
+        kind: u64,
+        /// Why it was not taken.
+        why: String,
+    },
 }
 
 impl std::fmt::Display for Conversed {

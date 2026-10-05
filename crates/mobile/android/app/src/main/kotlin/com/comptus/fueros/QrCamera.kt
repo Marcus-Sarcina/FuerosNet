@@ -40,7 +40,14 @@ import timber.log.Timber
  */
 class QrCamera(private val context: Context) {
 
-    enum class Facing { REAR, SELFIE }
+    /** Which camera a read uses: the invitation is scanned on the rear
+     *  one, the optical exchange on the front. */
+    enum class Facing {
+        /** `LENS_FACING_BACK`. */
+        REAR,
+        /** `LENS_FACING_FRONT`. */
+        SELFIE,
+    }
 
     private companion object {
         /** Try harder: the dense first code at the edge of resolution is

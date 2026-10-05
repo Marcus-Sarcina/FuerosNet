@@ -16,6 +16,10 @@
 //! becomes a participant by being adopted, which takes two parties present
 //! to each other and cannot be done from a terminal.
 
+// Every public item carries its own documentation: the source is the
+// fourth reading of the design, and a bare name is not one.
+#![warn(missing_docs)]
+
 pub mod diag;
 pub mod inspect;
 pub mod keys;

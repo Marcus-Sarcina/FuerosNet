@@ -9,27 +9,47 @@ use std::ops::Range;
 /// it carries, and the signature bytes.  Ranges index the envelope bytes.
 #[derive(Debug, Clone)]
 pub struct Entry {
+    /// The protected header's encoded bytes, which the `Sig_structure`
+    /// covers verbatim.
     pub protected: Range<usize>,
+    /// The `kid` the header carries: the keyhash of the signer, or empty
+    /// where the enclosing structure names it (§3.5).
     pub kid: Vec<u8>,
+    /// The `alg` the header carries, −8 or −49 (§2.2).
     pub alg: i64,
+    /// The signature bytes.
     pub signature: Range<usize>,
 }
 
+/// A parsed transaction envelope (§3).  **Ranges index the caller's bytes
+/// and nothing is copied**: a signature covers the body as received, so
+/// the body must be verifiable as the bytes that arrived rather than as a
+/// re-encoding of what was understood from them.
 #[derive(Debug, Clone)]
 pub struct Envelope {
+    /// The profile version, field 1.
     pub version: u64,
+    /// The transaction type, field 2, which fixes the body's schema and
+    /// the signer set derived from it (§3.5).
     pub tx_type: u64,
     /// The body's encoded bytes, which every signature covers.
     pub body: Range<usize>,
+    /// The body already parsed, so a caller reads its fields without
+    /// parsing the bytes a second time.
     pub body_item: Item,
     /// Logical signers in body order, as keyhashes.
     pub signers: Vec<Vec<u8>>,
+    /// The `COSE_Signature` entries, two per logical signer (§3.5).
     pub entries: Vec<Entry>,
 }
 
+/// Envelope field 1: the profile version (§3).
 pub const KEY_VERSION: u64 = 1;
+/// Envelope field 2: the transaction type (§3).
 pub const KEY_TYPE: u64 = 2;
+/// Envelope field 3: the body, which every signature covers (§3).
 pub const KEY_BODY: u64 = 3;
+/// Envelope field 4: the `COSE_Sign` signature array (§3, §3.5).
 pub const KEY_SIGNATURES: u64 = 4;
 
 fn bs<'a>(b: &'a [u8], it: &Item) -> &'a [u8] {

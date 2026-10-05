@@ -44,6 +44,7 @@ impl Handle {
         }
     }
 
+    /// The identity the client behind this handle speaks as.
     pub fn me(&self) -> Keyhash {
         self.me
     }

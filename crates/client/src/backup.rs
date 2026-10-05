@@ -44,8 +44,11 @@ const AAD_BODY: &[u8] = b"rhtn/1:backup-body";
 /// chosen rather than derived.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Cost {
+    /// Memory, in kibibytes.
     pub m_kib: u32,
+    /// How many passes over it.
     pub passes: u32,
+    /// How many lanes.
     pub lanes: u32,
 }
 
@@ -65,7 +68,12 @@ pub enum Wrap {
     /// Argon2id over a passphrase (design §13.7.1's named KDF: memory-hard,
     /// which raises the cost of GPU and specialised-hardware attack in
     /// proportion to the parameters chosen rather than preventing it).
-    Passphrase { salt: [u8; 16], cost: Cost },
+    Passphrase {
+        /// The salt, fresh per envelope.
+        salt: [u8; 16],
+        /// The cost the writer used, which a reader must use too.
+        cost: Cost,
+    },
 }
 
 impl Wrap {
@@ -116,6 +124,7 @@ pub struct Contents {
     pub seeds: Option<[[u8; 32]; 2]>,
     /// The archive's records, as bytes.
     pub records: Vec<Vec<u8>>,
+    /// The client's own persisted state.
     pub store: ClientStore,
     /// An operator's provider credential, opaque to this network
     /// (`light-client-requirements.md` §2): carried here, under the
@@ -412,7 +421,9 @@ fn uint(it: &Item) -> Option<u64> {
 /// What a scan threw away.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Discarded {
+    /// Sealed captures past their retention.
     pub captures: usize,
+    /// Seeds the reader would not take.
     pub seeds: usize,
 }
 

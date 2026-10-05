@@ -14,6 +14,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 /// `TopologyPush` field 1 (`wire-format.md` §10.1): the one wrapper field.
 pub const KIND_TRANSACTION: u64 = 0;
+/// A held endpoint record (`wire-format.md` §7.6).
 pub const KIND_ENDPOINT_RECORD: u64 = 1;
 /// A `Delegation` (`wire-format.md` §8.2): current state, one per
 /// delegating keyhash, the newest by `not_before` [author, 2026-09-21].
@@ -27,7 +28,9 @@ pub const KIND_SUBTREE_ACK: u64 = 3;
 /// lookup a record signed under a delegated key is verified against
 /// (`wire-format.md` §7.5, §7.1).
 pub struct Known<'a, L: Lookup + ?Sized> {
+    /// The identities this node has pinned.
     pub ids: &'a L,
+    /// What it holds of the topology.
     pub store: &'a TopologyStore,
 }
 
@@ -100,8 +103,11 @@ pub fn is_topology_class(tx_type: u64) -> bool {
 /// enters storage and propagation when the prerequisite arrives.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Pending {
+    /// Which kind of object is waiting.
     pub kind: u64,
+    /// Its bytes.
     pub bytes: Vec<u8>,
+    /// Who it came from.
     pub from: Keyhash,
     /// The identity whose key material is missing, where that is the want.
     pub missing_key: Option<Keyhash>,
@@ -135,7 +141,12 @@ pub enum Decision {
     Held(Pending),
     /// Equal `seqno`, different signed contents: the pair is malformed,
     /// neither is current, and the holder re-resolves (§10.1.2).
-    Conflict { subject: Keyhash, seqno: Seqno },
+    Conflict {
+        /// Whose records conflict.
+        subject: Keyhash,
+        /// The sequence number both claim.
+        seqno: Seqno,
+    },
     /// Well formed, correctly signed, and this node's own table will not
     /// hold it: neither stored nor forwarded.
     ///
@@ -148,8 +159,10 @@ pub enum Decision {
     Malformed(String),
 }
 
+/// An endpoint record this node holds, with what it was taken under.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HeldEndpoint {
+    /// The record itself.
     pub record: EndpointRecord,
 }
 
@@ -157,10 +170,16 @@ pub struct HeldEndpoint {
 /// arrived in, forwarded byte-for-byte.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HeldDelegation {
+    /// The delegation itself.
     pub delegation: Delegation,
+    /// Its bytes, which the signature covers.
     pub bytes: Vec<u8>,
 }
 
+/// What a node holds of the topology, by the storage rule
+/// `wire-format.md` §10.1.1 states. **Its own view and nobody else's**:
+/// nothing here is shared, and two nodes of one network hold different
+/// stores.
 #[derive(Default)]
 pub struct TopologyStore {
     /// **The seen-set: what this node stored, by identifier.**  This is
@@ -207,6 +226,7 @@ pub struct TopologyStore {
 }
 
 impl TopologyStore {
+    /// An empty store.
     pub fn new() -> Self {
         Self::default()
     }
@@ -231,14 +251,17 @@ impl TopologyStore {
         self.pending_ceiling.unwrap_or(PENDING_HELD)
     }
 
+    /// Whether the store already holds `t`.
     pub fn holds_txid(&self, t: &Txid) -> bool {
         self.seen.contains_key(t)
     }
 
+    /// The transaction at `t`, where the store holds it.
     pub fn transaction(&self, t: &Txid) -> Option<&Record> {
         self.transactions.get(t)
     }
 
+    /// Every transaction held.
     pub fn transactions(&self) -> impl Iterator<Item = &Record> {
         self.transactions.values()
     }
@@ -265,16 +288,19 @@ impl TopologyStore {
         self.own.insert(txid, bytes);
     }
 
+    /// The seen-set, as `(effective, txid)` pairs.
     pub fn seen(&self) -> Vec<(u64, Txid)> {
         let mut out: Vec<(u64, Txid)> = self.seen.iter().map(|(t, e)| (*e, *t)).collect();
         out.sort();
         out
     }
 
+    /// How many transactions the store holds.
     pub fn len(&self) -> usize {
         self.seen.len() + self.endpoints.len()
     }
 
+    /// Whether it holds none.
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
@@ -323,23 +349,29 @@ impl TopologyStore {
         self.endpoints.keys().map(|(n, _)| *n).collect()
     }
 
+    /// The endpoint record held for `subject` in `series`, where one is.
     pub fn endpoint_in(&self, subject: &Keyhash, series: u32) -> Option<&EndpointRecord> {
         self.endpoints.get(&(*subject, series)).map(|h| &h.record)
     }
 
+    /// Record that `series` is proved for `subject`.
     pub fn prove_series(&mut self, subject: Keyhash, series: u32) {
         self.proved_series.insert((subject, series));
     }
 
+    /// Whether `series` is proved for `subject`.
     pub fn series_proved(&self, subject: &Keyhash, series: u32) -> bool {
         self.proved_series.contains(&(*subject, series))
     }
 
+    /// Whether an equal sequence number with different contents has been seen,
+    /// which retires the pair (`wire-format.md` §10.1.2).
     pub fn conflicted(&self, subject: &Keyhash, seqno: Seqno) -> bool {
         self.conflicts
             .contains(&(*subject, seqno.series, seqno.counter))
     }
 
+    /// What waits on evidence that has not arrived.
     pub fn pending(&self) -> &[Pending] {
         &self.pending
     }
@@ -351,10 +383,12 @@ impl TopologyStore {
         self.presence.insert(txid, bytes);
     }
 
+    /// The presence record at `txid`, where the store holds it.
     pub fn presence(&self, txid: &Txid) -> Option<&Vec<u8>> {
         self.presence.get(txid)
     }
 
+    /// Every presence record held, with its txid.
     pub fn presence_records(&self) -> Vec<(Txid, Vec<u8>)> {
         self.presence.iter().map(|(t, b)| (*t, b.clone())).collect()
     }
@@ -417,6 +451,7 @@ impl TopologyStore {
         self.acks.retain(|(a, g), _| keep(a, g));
     }
 
+    /// How many acknowledgements the store holds.
     pub fn acks_held(&self) -> usize {
         self.acks.len()
     }
@@ -436,6 +471,7 @@ impl TopologyStore {
             .find(|d| d.key == *key)
     }
 
+    /// Every delegation held, one per delegating keyhash.
     pub fn delegations(&self) -> Vec<&Delegation> {
         self.delegations.values().map(|h| &h.delegation).collect()
     }

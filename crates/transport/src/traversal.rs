@@ -62,6 +62,8 @@ pub fn wrap(addr: SocketAddr, payload: &[u8]) -> Vec<u8> {
     out
 }
 
+/// The inner datagram and the address it came from, where the bytes carry
+/// a wrapped one.
 pub fn unwrap(b: &[u8]) -> Option<(SocketAddr, &[u8])> {
     match b.first()? {
         4 if b.len() >= 7 => {
@@ -353,13 +355,18 @@ pub fn endpoint(
 /// own address, or the address the serving node saw it at.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CandidateKind {
+    /// An address the peer sees on one of its own interfaces.
     Host = 0,
+    /// An address a STUN server saw, so the peer's view through its NAT.
     ServerReflexive = 1,
 }
 
+/// One address a peer offers, and how it learned of it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Candidate {
+    /// How the address was learned, which orders the candidates tried.
     pub kind: CandidateKind,
+    /// The address itself.
     pub addr: SocketAddr,
 }
 
@@ -380,6 +387,7 @@ pub fn encode_candidates(cs: &[Candidate]) -> Vec<u8> {
     out
 }
 
+/// The candidates a peer offered, from their encoded bytes.
 pub fn decode_candidates(b: &[u8]) -> Result<Vec<Candidate>, String> {
     use rhtn_codec::cbor::*;
     let item = parse_all(b).map_err(|e| e.0)?;

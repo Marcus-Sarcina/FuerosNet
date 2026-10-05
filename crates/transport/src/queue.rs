@@ -15,12 +15,15 @@ use std::sync::Mutex;
 /// (design §14.1.6): ciphertext, recipient keyhash and device, arrival time.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Queued {
+    /// The message, opaque to the node holding it.
     pub ciphertext: Vec<u8>,
+    /// Who it is for.
     pub recipient: [u8; 32],
     /// The recipient's device the ciphertext is readable by, named by the
     /// key it presents (`wire-format.md` §7.10); [`ANY_DEVICE`] where the
     /// submission named none, which any of the recipient's sessions drains.
     pub device: [u8; 32],
+    /// When it arrived, which orders the queue.
     pub arrival: u64,
 }
 
@@ -54,6 +57,9 @@ pub enum Refusal {
     NotStored,
 }
 
+/// Where a node keeps what it holds for its clients. **Accepted means
+/// stored** (`wire-format.md` §7.10), so an implementation that cannot
+/// store says so rather than acknowledging.
 pub trait QueueStore: Send + Sync {
     /// Store `item`.  **False means it is not stored**, and the caller
     /// refuses the submission rather than reporting it queued: a store
@@ -68,7 +74,9 @@ pub trait QueueStore: Send + Sync {
     fn remove(&self, recipient: &[u8; 32], item: &Queued) -> bool;
     /// What is queued for `recipient`, for inspection; nothing is removed.
     fn list(&self, recipient: &[u8; 32]) -> Vec<Queued>;
+    /// Drop everything queued for `recipient`.
     fn drop_all(&self, recipient: &[u8; 32]);
+    /// How many messages wait for `recipient`.
     fn count(&self, recipient: &[u8; 32]) -> usize {
         self.list(recipient).len()
     }
@@ -79,12 +87,15 @@ pub trait QueueStore: Send + Sync {
             .into_iter()
             .find(|q| for_device(q, device))
     }
+    /// How many wait for that one device.
     fn count_for(&self, recipient: &[u8; 32], device: &[u8; 32]) -> usize {
         self.list(recipient)
             .iter()
             .filter(|q| for_device(q, device))
             .count()
     }
+    /// How many bytes wait for `recipient`, which is what the cap is read
+    /// against.
     fn bytes(&self, recipient: &[u8; 32]) -> usize {
         self.list(recipient)
             .iter()
@@ -93,6 +104,8 @@ pub trait QueueStore: Send + Sync {
     }
 }
 
+/// An in-memory store, for a node that keeps nothing across a restart and
+/// for tests.
 #[derive(Default)]
 pub struct MemoryStore(Mutex<HashMap<[u8; 32], VecDeque<Queued>>>);
 

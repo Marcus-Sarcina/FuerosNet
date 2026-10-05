@@ -14,27 +14,40 @@ use rhtn_crypto::verify::{self, Lookup};
 
 /// Stream-1 request types (`wire-format.md` §9.2).
 pub const REQUEST_CATALOG_QUERY: u64 = 5;
+/// Request frame 6: a request to a resource.
 pub const REQUEST_RESOURCE: u64 = 6;
+/// Request frame 7: registering a resource.
 pub const REQUEST_REGISTRATION: u64 = 7;
 
 /// `ResourceRegistrationReply` field 2.
 pub const REGISTRATION_RECORDED: u64 = 0;
+/// The registration was refused.
 pub const REGISTRATION_REFUSED: u64 = 1;
 
 /// `ResourceResponse` field 1, in the normative evaluation order's terms.
 pub const STATUS_DELIVERED: u64 = 0;
+/// Refused: the owner's rule did not admit the requester.
 pub const STATUS_REFUSED: u64 = 1;
+/// Unavailable: the resource exists but did not answer.
 pub const STATUS_UNAVAILABLE: u64 = 2;
+/// Malformed: the request did not read.
 pub const STATUS_MALFORMED: u64 = 3;
+/// No acknowledgement from the resource.
 pub const STATUS_NO_ACK: u64 = 4;
+/// The requester holds no role the entry's rule names.
 pub const STATUS_NO_ROLE: u64 = 5;
 
 /// `AbuseReport` field 3.
 pub const ABUSE_UNAVAILABLE: u64 = 0;
+/// Malfunction.
 pub const ABUSE_MALFUNCTION: u64 = 1;
+/// Excessive load.
 pub const ABUSE_EXCESSIVE_LOAD: u64 = 2;
+/// An unauthorised access attempt.
 pub const ABUSE_UNAUTHORISED_ACCESS: u64 = 3;
+/// Content.
 pub const ABUSE_CONTENT: u64 = 4;
+/// Anything else.
 pub const ABUSE_OTHER: u64 = 5;
 
 /// A scope (design §11.4; `wire-format.md` §6.6): a region relative to the
@@ -43,14 +56,24 @@ pub const ABUSE_OTHER: u64 = 5;
 pub enum Scope {
     /// The owner alone: `self`.
     Own,
+    /// Tag 1: the owner and everything `n` levels below it.
     Down(u64),
+    /// Tag 2: the owner and everything `n` levels above it.
     Up(u64),
+    /// Tag 4: the owner's siblings under one patron.
     Siblings,
+    /// Tag 5: the owner's Dunbar neighbourhood.
     Dunbar,
+    /// Tag 6: exactly these keyhashes. **Ascending with no duplicates**
+    /// (`wire-format.md` §4): the list is signed, so a decoder that took an
+    /// unordered or repeating one would accept bytes another decoder rejects.
     List(Vec<Keyhash>),
 }
 
 impl Scope {
+    /// Emit this scope into `out` (`wire-format.md` §4): a bare `uint` for the
+    /// forms that take no argument, `[tag, n]` for those that take a depth, and
+    /// `[6, [...]]` for a list.
     pub fn emit(&self, out: &mut Vec<u8>) {
         match self {
             Scope::Own => emit_uint(out, 0),
@@ -77,6 +100,7 @@ impl Scope {
         }
     }
 
+    /// This scope's own bytes.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
         self.emit(&mut out);
@@ -112,6 +136,7 @@ impl Scope {
         }
     }
 
+    /// A scope from its own encoded bytes.
     pub fn decode(b: &[u8]) -> Result<Scope, String> {
         let item = parse_all(b).map_err(|e| e.0)?;
         Scope::read(b, &item)
@@ -121,12 +146,25 @@ impl Scope {
 /// The fields an owner signs (`wire-format.md` §6.1).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EntryFields {
+    /// Field 1: the resource's identity, which is also the entry's signer.
     pub resource: Keyhash,
+    /// Field 3: the service type, DNS-SD style and **matched byte for byte**
+    /// (`wire-format.md` §6.1): no case folding, no normalisation, no subtype
+    /// grammar. A registry of conventional names may grow socially; the protocol
+    /// compares bytes.
     pub service_type: String,
+    /// Field 4: the instance name, **for display only**. Never matched against
+    /// and never unique.
     pub instance: String,
+    /// Field 5: the connection endpoint, the SRV analogue.
     pub endpoint: Vec<u8>,
+    /// Field 6: `connect_scope`, **advisory**. Absent offers no prediction,
+    /// neither allow-all nor deny-all; the owner decides at request time
+    /// regardless (`wire-format.md` §11).
     pub connect_scope: Option<Scope>,
+    /// Field 7: additional service metadata, the TXT analogue.
     pub metadata: Option<Vec<u8>>,
+    /// Field 9: the owner's declared logging and retention practice.
     pub data_practice: Option<u64>,
 }
 
@@ -134,14 +172,24 @@ pub struct EntryFields {
 /// host stores and serves unchanged.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CatalogEntry {
+    /// Field 1: the resource's identity, which is also the signer.
     pub resource: Keyhash,
+    /// Field 2: the owner.
     pub owner: Keyhash,
+    /// Field 3: the service type, matched byte for byte.
     pub service_type: String,
+    /// Field 4: the instance name, for display only.
     pub instance: String,
+    /// Field 5: the connection endpoint.
     pub endpoint: Vec<u8>,
+    /// Field 6: `connect_scope`, advisory.
     pub connect_scope: Option<Scope>,
+    /// Field 7: additional service metadata.
     pub metadata: Option<Vec<u8>>,
+    /// Field 9: the declared data practice.
     pub data_practice: Option<u64>,
+    /// The entry's own bytes, kept because the signature covers them and a
+    /// re-encoding is not what was signed.
     pub bytes: Vec<u8>,
 }
 
@@ -192,6 +240,7 @@ impl CatalogEntry {
         out
     }
 
+    /// Parse an entry and verify the resource's signature over it.
     pub fn parse(b: &[u8]) -> Result<Self, String> {
         let item = parse_all(b).map_err(|e| e.0)?;
         schema::check_kind(b, "CatalogEntry", &item).map_err(|e| e.0.to_string())?;
@@ -246,14 +295,23 @@ impl CatalogEntry {
 /// An `AbuseReport` (`wire-format.md` §6.3): by the resource it names.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AbuseReport {
+    /// Field 1: the resource, **and the signer**. A resource reports; its owner
+    /// receives (design §11.6).
     pub resource: Keyhash,
+    /// Field 2: when it occurred.
     pub occurred_at: u64,
+    /// Field 3: the category, one of the `ABUSE_*` constants above.
     pub category: u64,
+    /// Field 4: detail, resource-defined and uninterpreted by the network.
+    /// **Bounded and deliberately small**: a signed object is portable, so what
+    /// it carries travels further than its recipient.
     pub detail: Option<Vec<u8>>,
+    /// The report's own bytes, which the signature covers.
     pub bytes: Vec<u8>,
 }
 
 impl AbuseReport {
+    /// Build and sign a report as `resource`.
     pub fn build(
         resource: &SigningIdentity,
         occurred_at: u64,
@@ -285,6 +343,7 @@ impl AbuseReport {
         out
     }
 
+    /// Parse a report and verify the resource's signature over it.
     pub fn parse(b: &[u8]) -> Result<Self, String> {
         let item = parse_all(b).map_err(|e| e.0)?;
         schema::check_kind(b, "AbuseReport", &item).map_err(|e| e.0.to_string())?;
@@ -324,11 +383,14 @@ fn nonce_at(b: &[u8], m: &[(Item, Item)], k: u64) -> Result<[u8; 16], String> {
 /// A `CatalogQuery` (`wire-format.md` §6.4).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CatalogQuery {
+    /// The service type asked for, or every type where absent.
     pub service_type: Option<String>,
+    /// The nonce the reply must echo.
     pub nonce: [u8; 16],
 }
 
 impl CatalogQuery {
+    /// The query's bytes.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
         emit_map_head(&mut out, 1 + self.service_type.is_some() as usize);
@@ -341,6 +403,7 @@ impl CatalogQuery {
         out
     }
 
+    /// A query from its bytes.
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         parse_all(b).map_err(|e| e.0)?;
         schema::check_unsigned(Family::CatalogQuery, b, 0).map_err(|e| e.0.to_string())?;
@@ -364,12 +427,16 @@ impl CatalogQuery {
 /// A `CatalogReply`: the entries byte-for-byte, and the continuation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CatalogReply {
+    /// The nonce, echoed from the query.
     pub nonce: [u8; 16],
+    /// The entries, each as its own signed bytes.
     pub entries: Vec<Vec<u8>>,
+    /// Where to resume, where the answer did not fit.
     pub continuation: Option<String>,
 }
 
 impl CatalogReply {
+    /// The reply's bytes.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
         emit_map_head(&mut out, 2 + self.continuation.is_some() as usize);
@@ -387,6 +454,7 @@ impl CatalogReply {
         out
     }
 
+    /// A reply from its bytes.
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         parse_all(b).map_err(|e| e.0)?;
         schema::check_unsigned(Family::CatalogReply, b, 0).map_err(|e| e.0.to_string())?;
@@ -417,12 +485,19 @@ impl CatalogReply {
 /// A `ResourceRegistration` (`wire-format.md` §6.2).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResourceRegistration {
+    /// The signed entry being registered.
     pub entry: Vec<u8>,
+    /// The `discover_scope` the owner asks for. **It travels in this direction
+    /// only** (`wire-format.md` §6.6): it decides which askers an answering node
+    /// returns the entry to, and is never carried in the entry itself, since
+    /// telling an asker how it was selected is what that would do.
     pub scope: Option<Scope>,
+    /// The nonce the reply must echo.
     pub nonce: [u8; 16],
 }
 
 impl ResourceRegistration {
+    /// The registration's bytes.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
         emit_map_head(&mut out, 2 + self.scope.is_some() as usize);
@@ -437,6 +512,7 @@ impl ResourceRegistration {
         out
     }
 
+    /// A registration from its bytes.
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         parse_all(b).map_err(|e| e.0)?;
         schema::check_unsigned(Family::ResourceRegistration, b, 0).map_err(|e| e.0.to_string())?;
@@ -460,11 +536,14 @@ impl ResourceRegistration {
 /// A `ResourceRegistrationReply`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RegistrationReply {
+    /// The nonce, echoed from the registration.
     pub nonce: [u8; 16],
+    /// Recorded or refused: one of the `REGISTRATION_*` constants above.
     pub code: u64,
 }
 
 impl RegistrationReply {
+    /// The reply's bytes.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
         emit_map_head(&mut out, 2);
@@ -475,6 +554,7 @@ impl RegistrationReply {
         out
     }
 
+    /// A reply from its bytes.
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         parse_all(b).map_err(|e| e.0)?;
         schema::check_unsigned(Family::ResourceRegistrationReply, b, 0)
@@ -494,11 +574,14 @@ impl RegistrationReply {
 /// application request as an HTTP/1.1 message.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResourceRequest {
+    /// The resource addressed.
     pub resource: Keyhash,
+    /// The request's body, uninterpreted by the network.
     pub message: Vec<u8>,
 }
 
 impl ResourceRequest {
+    /// The request's bytes.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
         emit_map_head(&mut out, 2);
@@ -509,6 +592,7 @@ impl ResourceRequest {
         out
     }
 
+    /// A request from its bytes.
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         parse_all(b).map_err(|e| e.0)?;
         schema::check_unsigned(Family::ResourceRequest, b, 0).map_err(|e| e.0.to_string())?;
@@ -532,15 +616,19 @@ impl ResourceRequest {
 /// delivered.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResourceResponse {
+    /// The outcome, one of the `STATUS_*` constants above.
     pub status: u64,
+    /// The resource's answer, where it delivered one.
     pub body: Option<Vec<u8>>,
 }
 
 impl ResourceResponse {
+    /// A response carrying `status` and no body.
     pub fn code(status: u64) -> Self {
         ResourceResponse { status, body: None }
     }
 
+    /// The response's bytes.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
         emit_map_head(&mut out, 1 + self.body.is_some() as usize);
@@ -553,6 +641,7 @@ impl ResourceResponse {
         out
     }
 
+    /// A response from its bytes.
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         parse_all(b).map_err(|e| e.0)?;
         schema::check_unsigned(Family::ResourceResponse, b, 0).map_err(|e| e.0.to_string())?;

@@ -219,11 +219,17 @@ class AndroidShell(private val context: Context) :
     }
 
     private companion object {
+        /** The name the wrapped storage key is kept under. */
         const val CUSTODY = "custody"
+        /** Android's own key store provider. */
         const val KEYSTORE = "AndroidKeyStore"
+        /** The alias of the key that wraps the kernel's storage key. */
         const val KEY_ALIAS = "fueros.kernel.at-rest"
+        /** The wrapping transform. */
         const val TRANSFORM = "AES/GCM/NoPadding"
+        /** The nonce's length, as GCM wants it. */
         const val IV_BYTES = 12
+        /** The tag's length in bits. */
         const val TAG_BITS = 128
     }
 }

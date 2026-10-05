@@ -4,21 +4,37 @@ use ml_dsa::signature::Keypair as _;
 use rhtn_codec::cose;
 
 /// The public half: what a counterparty pins.
+///
+/// **Both components, always.** An identity is the hybrid pair (design
+/// §5.1), and the keyhash covers both, so neither key alone names it and a
+/// holder of one cannot be given the other later without changing who the
+/// identity is.
 #[derive(Clone)]
 pub struct Identity {
+    /// `SHA-256` of the `KeyMaterial` array, which is how every structure
+    /// in the profile names this identity (`wire-format.md` §2.2).
     pub keyhash: [u8; 32],
+    /// The classical component, Ed25519.
     pub ed: EdVk,
+    /// The post-quantum component, ML-DSA-65.
     pub pq: ml_dsa::VerifyingKey<MlDsa65>,
 }
 
 /// The private half.
+///
+/// **The signing keys never leave this type.** There is no accessor for
+/// either secret and no `Clone`: what a caller can do with one is sign,
+/// which is why the whole profile's signing lives in this crate.
 pub struct SigningIdentity {
+    /// The public half, derived from the same seeds.
     pub public: Identity,
     ed_sk: ed25519_dalek::SigningKey,
     pq_sk: ml_dsa::ExpandedSigningKey<MlDsa65>,
 }
 
 impl Identity {
+    /// An identity from its two public keys, hashing the keyhash from
+    /// them (`wire-format.md` §2.2).
     pub fn from_public(ed: EdVk, pq: ml_dsa::VerifyingKey<MlDsa65>) -> Self {
         let keyhash = cose::keyhash(ed.as_bytes(), pq.encode().as_ref());
         Identity { keyhash, ed, pq }
@@ -57,6 +73,9 @@ impl Identity {
         cose::key_material(self.ed.as_bytes(), self.pq.encode().as_ref())
     }
 
+    /// Check a classical signature over `tbs`.  **False for a malformed
+    /// signature as for a wrong one**: a caller cannot tell the two apart
+    /// and has no use for the difference.
     pub fn verify_ed(&self, sig: &[u8], tbs: &[u8]) -> bool {
         let Ok(s) = EdSig::from_slice(sig) else {
             return false;
@@ -64,6 +83,8 @@ impl Identity {
         self.ed.verify(tbs, &s).is_ok()
     }
 
+    /// Check a post-quantum signature over `tbs`, with the empty context
+    /// the profile fixes (`wire-format.md` §2.2).
     pub fn verify_pq(&self, sig: &[u8], tbs: &[u8]) -> bool {
         let Ok(s) = ml_dsa::Signature::<MlDsa65>::try_from(sig) else {
             return false;
@@ -94,6 +115,7 @@ impl SigningIdentity {
         &self.ed_sk
     }
 
+    /// A classical signature over `tbs`.
     pub fn sign_ed(&self, tbs: &[u8]) -> Vec<u8> {
         self.ed_sk.sign(tbs).to_bytes().to_vec()
     }
@@ -178,6 +200,9 @@ pub mod testkit {
     use super::SigningIdentity;
     use rhtn_codec::cose::sha256;
 
+    /// The identity a test-vector name stands for, derived from the two
+    /// stated seeds.  Deterministic, so the vectors and the tests that
+    /// read them name the same keys.
     pub fn test_identity(name: &str) -> SigningIdentity {
         let ed_seed = sha256(format!("rhtn-test-vectors:{name}:ed25519-seed").as_bytes());
         let pq_seed = sha256(format!("rhtn-test-vectors:{name}:ml-dsa-65-seed").as_bytes());

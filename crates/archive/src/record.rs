@@ -13,15 +13,27 @@ use rhtn_crypto::verify::{self, Lookup};
 /// verified, unverifiable for want of a signer's key, or failing.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SigStatus {
+    /// Verified under a key this holder has.
     Verified,
-    Unverifiable { missing: Keyhash },
+    /// The signer's key is not held: **the third outcome**, not a rejection.
+    Unverifiable {
+        /// The key that is not held.
+        missing: Keyhash,
+    },
+    /// The signature is bad, or the shape is.
     Invalid(String),
 }
 
+/// One envelope parsed into the facts a chain walker needs. **Ranges index
+/// `bytes` and nothing is re-encoded**: the signature covers the bytes as
+/// received.
 #[derive(Debug, Clone)]
 pub struct Record {
+    /// The envelope's own bytes, which the signatures cover.
     pub bytes: Vec<u8>,
+    /// `SHA-256` of the body map (`wire-format.md` §1.4).
     pub txid: Txid,
+    /// The transaction type, one of the `TYPE_*` constants.
     pub tx_type: u64,
     /// Logical signers in signer order (`wire-format.md` §3.1's table).
     pub signers: Vec<Keyhash>,
@@ -33,6 +45,7 @@ pub struct Record {
     /// The record's effective time as a predecessor: `finalized_at` for a
     /// presence record, the timestamp otherwise.
     pub effective: u64,
+    /// The body's range within `bytes`.
     pub body: std::ops::Range<usize>,
 }
 
@@ -137,6 +150,7 @@ impl Record {
         }
     }
 
+    /// The body as key-value pairs, parsed afresh from the bytes.
     pub fn body_map(&self) -> Vec<(Item, Item)> {
         match parse_all(&self.bytes[self.body.clone()]) {
             Ok(Item::Map(ref m)) => m.clone(),
@@ -155,6 +169,7 @@ impl Record {
         body[r.start + br.start..r.start + br.end].try_into().ok()
     }
 
+    /// The unsigned integer at a body key, where the key holds one.
     pub fn field_uint(&self, key: u64) -> Option<u64> {
         map_get(&self.body_map(), key).and_then(as_uint)
     }

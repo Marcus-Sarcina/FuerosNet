@@ -270,6 +270,7 @@ fn slice<'a>(raw: &'a [u8], base: usize, r: &std::ops::Range<usize>) -> &'a [u8]
     raw.get(a..b).unwrap_or(&[])
 }
 
+/// `b` as lower-case hex, for a terminal to show.
 pub fn hex(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
 }

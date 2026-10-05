@@ -36,6 +36,10 @@ pub struct DelegatedSigner {
 }
 
 impl DelegatedSigner {
+    /// A signer for `keyhash` holding `key`, which that identity
+    /// delegated to it for a window (`wire-format.md` §8.2).  **Nothing
+    /// here checks the delegation**: the holder of the key was given it,
+    /// and a receiver checks the credential it is presented with.
     pub fn new(keyhash: [u8; 32], key: ed25519_dalek::SigningKey) -> Self {
         DelegatedSigner { keyhash, key }
     }

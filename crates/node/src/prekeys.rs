@@ -15,13 +15,17 @@ use std::collections::{BTreeMap, VecDeque};
 /// window (`infra-client-requirements.md` §6).
 #[derive(Debug, Clone)]
 pub struct PrekeyConfig {
+    /// How many one-time keys one requester may take for one subject in a
+    /// window.
     pub one_time_per_requester_per_subject: u32,
+    /// How long that window is, in seconds.
     pub window_s: u64,
     /// How many one-time keys a client may leave in one deposit, and how
     /// large a pool this node lends it (`wire-format.md` §7.10).  The wire
     /// bounds a deposit at 256; an operator may lend less, and says so
     /// with the reply's code rather than trimming a deposit silently.
     pub per_deposit: usize,
+    /// How many one-time keys a subject's pool holds at most.
     pub pool: usize,
 }
 
@@ -49,6 +53,7 @@ pub const ANY_DEVICE: [u8; 32] = rhtn_transport::queue::ANY_DEVICE;
 /// they live in memory for one window and are never written anywhere.
 #[derive(Debug, Default)]
 pub struct PrekeyService {
+    /// What this service was configured with.
     pub cfg: PrekeyConfig,
     bundles: BTreeMap<Slot, Vec<u8>>,
     /// Each key under the name it is kept at, so serving one can unlink it.
@@ -71,6 +76,7 @@ pub struct PrekeyService {
 }
 
 impl PrekeyService {
+    /// A service with `cfg` and an empty pool.
     pub fn new(cfg: PrekeyConfig) -> Self {
         PrekeyService {
             cfg,
@@ -180,6 +186,7 @@ impl PrekeyService {
             .sum()
     }
 
+    /// How many one-time keys remain for that subject's device.
     pub fn pool_size_for(&self, subject: &Keyhash, device: &[u8; 32]) -> usize {
         self.pools.get(&(*subject, *device)).map_or(0, |p| p.len())
     }
@@ -432,6 +439,7 @@ impl PrekeyService {
         Ok(s)
     }
 
+    /// A service restored from `dir`, with `cfg`.
     pub fn load(dir: &std::path::Path, cfg: PrekeyConfig) -> std::io::Result<PrekeyService> {
         let mut s = PrekeyService::new(cfg);
         let root = dir.join("prekeys");

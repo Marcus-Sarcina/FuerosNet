@@ -7,18 +7,27 @@ use rhtn_codec::cbor::*;
 use rhtn_crypto::verify::{self, Lookup};
 use std::collections::BTreeSet;
 
+/// A currency attestation (`wire-format.md` §7.1): an issuer's statement
+/// that a subject's current key is what it says, for a window.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Attestation {
+    /// Field 1: the subject.
     pub subject: Keyhash,
+    /// Field 2: the subject's current key.
     pub current: Keyhash,
+    /// Field 3: when it was issued.
     pub issued_at: u64,
+    /// Field 4: when it lapses.
     pub expires_at: u64,
+    /// Field 5: the role the issuer holds in saying so.
     pub role: u64,
+    /// Field 7: the issuer, and the signer.
     pub issuer: Keyhash,
     /// Field 8, the issuer's delegation naming the key field 7 was made
     /// under, where the issuer signed under a delegated key
     /// (`wire-format.md` §7.1); verified with the signature.
     pub delegation: Option<Vec<u8>>,
+    /// The attestation's own bytes, which the signature covers.
     pub bytes: Vec<u8>,
 }
 
@@ -69,7 +78,9 @@ pub fn reply_attestation(reply: &[u8]) -> Option<Vec<u8>> {
 /// What an inquirer holds about one identity after asking.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CurrencyView {
+    /// Nobody answered.
     NoAnswer,
+    /// One current key, attested.
     Attested(Attestation),
     /// Divergent assertions, all retained; none chosen (design §9.0.2).
     Fork(Vec<Attestation>),

@@ -27,11 +27,18 @@ use std::time::{Duration, Instant};
 
 /// One running `rhtnd`, with the files it was started from.
 pub struct Daemon {
+    /// The name the scenario calls it by, which its test identity derives
+    /// from.
     pub name: String,
+    /// Its keyhash.
     pub keyhash: [u8; 32],
+    /// The address it is serving on.
     pub addr: SocketAddr,
+    /// Its state directory.
     pub dir: PathBuf,
+    /// The configuration file it was started from.
     pub config: PathBuf,
+    /// The peers file it was started from.
     pub peers: PathBuf,
     child: Option<Child>,
     /// The process's stderr, line by line, drained by a thread.
@@ -39,6 +46,7 @@ pub struct Daemon {
 }
 
 impl Daemon {
+    /// Its signing identity, derived from the name as the test kit does.
     pub fn identity(&self) -> SigningIdentity {
         test_identity(&self.name)
     }
@@ -49,6 +57,7 @@ impl Daemon {
         self.dir.join("topology")
     }
 
+    /// The archive's directory.
     pub fn archive(&self) -> PathBuf {
         self.dir.join("archive")
     }
@@ -236,6 +245,8 @@ impl Daemons {
         )
     }
 
+    /// The daemon called `name`.  Panics where there is none, which in a
+    /// scenario is the scenario's own error.
     pub fn get(&self, name: &str) -> &Daemon {
         self.daemons
             .iter()
@@ -286,6 +297,7 @@ impl Daemons {
         addr
     }
 
+    /// Every daemon's name, in the order they were started.
     pub fn names(&self) -> Vec<String> {
         self.daemons.iter().map(|d| d.name.clone()).collect()
     }
@@ -398,6 +410,8 @@ unsafe extern "C" {
     fn kill(pid: i32, sig: i32) -> i32;
 }
 
+/// Write `name`'s test seed material to `path`, as a daemon's identity
+/// file.
 pub fn write_identity(path: &Path, name: &str) {
     let mut bytes =
         rhtn_codec::cose::sha256(format!("rhtn-test-vectors:{name}:ed25519-seed").as_bytes())

@@ -48,6 +48,9 @@
 //! holds.  The device — camera, proximity channels, clock, the person — is
 //! behind an interface, so the same client runs on a harness.
 
+// Every public item carries its own documentation: the source is the
+// fourth reading of the design, and a bare name is not one.
+#![warn(missing_docs)]
 // Two flavours of one build, never both: `releasable` compiles every hook
 // out, `fieldtest` keeps them and renders them.  Built together they would
 // render nothing and claim to be a field build.

@@ -21,8 +21,10 @@ import java.io.FileNotFoundException
 class ReportProvider : ContentProvider() {
 
     companion object {
+        /** This provider's authority, which the manifest declares too. */
         fun authority(context: Context) = "${context.packageName}.report"
 
+        /** The content URI for `file`, to grant another app read of. */
         fun uriFor(context: Context, file: File): Uri =
             Uri.Builder().scheme("content").authority(authority(context)).path(file.name).build()
     }

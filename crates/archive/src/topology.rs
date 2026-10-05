@@ -37,9 +37,12 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::Arc;
 
+/// How a binding ended.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum End {
+    /// A departure ended it.
     Departure,
+    /// A disavowal ended it, with its reason code where it carried one.
     Disavowal(Option<u64>),
     /// The key was replaced by a recovery adoption (design §9.0.2).
     Superseded(Keyhash),
@@ -108,12 +111,18 @@ pub enum Evaluation {
 /// One patron-subordinate relationship, from the adoption that opened it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Binding {
+    /// The subordinate.
     pub node: Keyhash,
+    /// The patron.
     pub patron: Keyhash,
+    /// The series the adoption opened, which a reissue moves.
     pub series: u32,
+    /// The adoption that opened it.
     pub adoption: Txid,
     /// The adoption's timestamp: the patron's own clock.
     pub from: u64,
+    /// How it ended, with the transaction, its time and the manner; `None`
+    /// while it is open.
     pub end: Option<(Txid, u64, End)>,
     /// The subnet the adoption's locator names.
     pub anchor: Option<Keyhash>,
@@ -121,10 +130,12 @@ pub struct Binding {
     /// path's final nibble (design §3.1).  Nothing for a self-anchored
     /// root, which occupies no patron's slot.
     pub slot: Option<u8>,
+    /// Whether the evidence the adoption rests on has been seen.
     pub evidence: EvidenceStatus,
 }
 
 impl Binding {
+    /// Whether the relationship is still open.
     pub fn open(&self) -> bool {
         self.end.is_none()
     }
@@ -133,21 +144,29 @@ impl Binding {
 /// A held `SubtreeAck` (`wire-format.md` §7.5).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ack {
+    /// The adoption acknowledged.
     pub adoption: Txid,
+    /// The patron's patron, who issued it.
     pub grandpatron: Keyhash,
+    /// The node adopted.
     pub node: Keyhash,
+    /// The acknowledgement's own bytes, which the signature covers.
     pub bytes: Vec<u8>,
 }
 
+/// Why a transaction was not applied to the table.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Refusal {
+    /// The transaction's shape is wrong.
     Structure(String),
+    /// A signature did not verify, or its key is not held.
     Signatures(SigStatus),
     /// Structurally valid; the evidence it names is not what it claims
     /// (`wire-format.md` §3.4's evaluation step).
     Evidence(String),
     /// The proposed patron sits in this node's own down-line (design §6.2.5).
     Cycle {
+        /// The node already in this table's own down-line.
         below: Keyhash,
     },
     /// The slot the locator claims is already held by an open subordinate
@@ -160,33 +179,47 @@ pub enum Refusal {
     /// the patron's real intent — that is the patron's to get right, and
     /// §1.1 leaves a holder no way to find out.
     Slot {
+        /// The patron whose slot is claimed.
         patron: Keyhash,
+        /// Which slot, the locator path's final nibble.
         slot: u8,
+        /// The subordinate already holding it.
         held: Keyhash,
     },
 }
 
+/// What applying a transaction did to the table.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Applied {
+    /// A new relationship opened.
     Adopted,
     /// A reissue moved a relationship into the series it entered.
     Reissued {
+        /// The subordinate.
         node: Keyhash,
+        /// The patron.
         patron: Keyhash,
+        /// The series it entered.
         series: u32,
     },
     /// A recovery replaced `prior` with `successor` as the current key.
     Replaced {
+        /// The key replaced.
         prior: Keyhash,
+        /// The key that replaced it.
         successor: Keyhash,
     },
+    /// A relationship ended.
     Ended,
     /// Verified, and there was no binding for it to change.
     Nothing,
 }
 
+/// What applying a transaction did, and what this node issued because of
+/// it.
 #[derive(Debug, Clone)]
 pub struct Outcome {
+    /// What changed.
     pub applied: Applied,
     /// Acknowledgements this node issued as a consequence (design §11.2.1).
     pub acks: Vec<Vec<u8>>,
@@ -198,12 +231,17 @@ pub struct Outcome {
 /// Whether to acknowledge a given adoption: `(patron, node)` to a decision.
 pub type AckPolicy = Arc<dyn Fn(&Keyhash, &Keyhash) -> bool + Send + Sync>;
 
+/// What an infra node needs to issue acknowledgements: its signer, its
+/// standing policy, and its clock.
 pub struct AckIssuer {
     /// The node's signer: its delegated key where it runs as an instance
     /// (`wire-format.md` §7.5) [author, 2026-09-21], its identity's own
     /// classical member otherwise.
     pub signer: Arc<dyn Sign1 + Send + Sync>,
+    /// Whether to acknowledge a given adoption, decided beforehand and applied
+    /// without anyone being asked.
     pub policy: AckPolicy,
+    /// The node's clock, for the acknowledgement's timestamp.
     pub now: u64,
 }
 
@@ -235,6 +273,9 @@ type PendingDisavowal = (Keyhash, Keyhash, u64, Txid, Option<u64>);
 /// patron, series, txid, time.
 type PendingDeparture = (Keyhash, Keyhash, u32, Txid, u64);
 
+/// The local table of verified bindings and what a node derives from it
+/// (design §6, §11.2.1). **Every node's table is its own** and nothing
+/// here is shared state.
 #[derive(Default)]
 pub struct Table {
     /// This node's own identity, where it has one in the table.
@@ -260,14 +301,18 @@ pub struct Table {
     /// `with_pending_ceiling_for_tests`; `None` is the production
     /// ceiling.  Not persisted: a decoded table holds the constant.
     pending_ceiling: Option<usize>,
+    /// Which of two bindings to prefer where both are open, for a holder that
+    /// has a reason; `None` leaves the table's own order.
     pub prefer: Option<Preference>,
 }
 
 impl Table {
+    /// An empty table belonging to nobody in particular.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// An empty table whose owner is `me`.
     pub fn with_me(me: Keyhash) -> Self {
         let mut t = Table {
             me: Some(me),
@@ -324,10 +369,12 @@ impl Table {
         self.nodes.insert(k);
     }
 
+    /// Whether `k` is known to run infrastructure.
     pub fn is_infra(&self, k: &Keyhash) -> bool {
         self.infra.contains(k)
     }
 
+    /// Whether the table has already applied `txid`.
     pub fn holds(&self, txid: &Txid) -> bool {
         self.held.contains(txid)
     }
@@ -344,10 +391,12 @@ impl Table {
         self.pending_ceiling.unwrap_or(PENDING_HELD_TOTAL)
     }
 
+    /// Whether `k` appears in the table at all.
     pub fn is_node(&self, k: &Keyhash) -> bool {
         self.nodes.contains(k)
     }
 
+    /// Every binding, open and ended.
     pub fn bindings(&self) -> &[Binding] {
         &self.bindings
     }
@@ -356,6 +405,7 @@ impl Table {
         self.bindings.iter().filter(|b| b.open())
     }
 
+    /// The patrons of `node` across its open bindings.
     pub fn patrons(&self, node: &Keyhash) -> BTreeSet<Keyhash> {
         self.open_bindings()
             .filter(|b| b.node == *node)
@@ -363,6 +413,7 @@ impl Table {
             .collect()
     }
 
+    /// The subordinates of `patron` across its open bindings.
     pub fn subordinates(&self, patron: &Keyhash) -> BTreeSet<Keyhash> {
         self.open_bindings()
             .filter(|b| b.patron == *patron)
@@ -380,6 +431,7 @@ impl Table {
         out
     }
 
+    /// Whether `node` is self-anchored, occupying no patron's slot.
     pub fn is_root(&self, node: &Keyhash) -> bool {
         self.nodes.contains(node) && self.patrons(node).is_empty()
     }
@@ -497,10 +549,12 @@ impl Table {
         Ok(path)
     }
 
+    /// The clients attached to each node, as this table has seen.
     pub fn attached_clients(&self) -> &BTreeMap<Keyhash, Vec<Keyhash>> {
         &self.attached
     }
 
+    /// The acknowledgements held.
     pub fn acks(&self) -> &[Ack] {
         &self.acks
     }
@@ -615,6 +669,8 @@ impl Table {
         }
     }
 
+    /// Apply one verified transaction to the table, issuing acknowledgements
+    /// where the policy calls for them.
     pub fn apply<L: Lookup + ?Sized>(
         &mut self,
         rec: &Record,
@@ -1156,6 +1212,7 @@ impl Table {
             .collect()
     }
 
+    /// How many acknowledgements wait on a signer's delegation.
     pub fn deferred_acks(&self) -> usize {
         self.deferred_acks.len()
     }
@@ -1166,8 +1223,11 @@ impl Table {
 /// successor key; a verified reissue keeps the key and moves its series.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Supersession {
+    /// The key that was replaced.
     pub superseded: Keyhash,
+    /// The key that replaced it.
     pub successor: Keyhash,
+    /// The recovery adoption that did so.
     pub evidence: Txid,
 }
 
@@ -1207,9 +1267,11 @@ impl Supersession {
 /// strangers contribute nothing.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct InitialTrust {
+    /// The records that bind this identity to each counterparty.
     pub by_counterparty: BTreeMap<Keyhash, Vec<Txid>>,
 }
 
+/// What a fresh holder may take on trust from what it was handed.
 pub fn initial_trust(
     known: &BTreeSet<Keyhash>,
     subject: &Keyhash,
@@ -1244,7 +1306,9 @@ pub struct Snapshot {
     /// they were folded.  **This names the input exactly**, where a count
     /// only names how many there were.
     pub folded: [u8; 32],
+    /// The highest sequence number the snapshot covers, with its transaction.
     pub high: Option<(u64, Txid)>,
+    /// The table's encoded bytes.
     pub table: Vec<u8>,
 }
 
@@ -1254,10 +1318,16 @@ pub enum Restored {
     /// The snapshot was the store's value: nothing was replayed.
     Current,
     /// The snapshot was behind and `folded` later records brought it up.
-    Extended { folded: usize },
+    Extended {
+        /// How many later records were folded in.
+        folded: usize,
+    },
     /// No usable snapshot, or one the store had moved under: `replayed`
     /// records went through `apply` from nothing.
-    Replayed { replayed: usize },
+    Replayed {
+        /// How many records went through `apply` from nothing.
+        replayed: usize,
+    },
 }
 
 /// Whether `(effective, txid)` sorts after everything a snapshot folded in.
@@ -1334,6 +1404,7 @@ impl Snapshot {
         out
     }
 
+    /// A snapshot from its bytes, or nothing where they do not read.
     pub fn decode(b: &[u8]) -> Option<Snapshot> {
         let item = parse_all(b).ok()?;
         let Item::Map(m) = &item else { return None };

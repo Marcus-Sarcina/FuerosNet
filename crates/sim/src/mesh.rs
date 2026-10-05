@@ -47,7 +47,9 @@ impl Adjacency for Links {
 
 /// Several node views with links between them, some of which may be cut.
 pub struct Mesh {
+    /// The node views, by keyhash.
     pub views: BTreeMap<Keyhash, NodeView>,
+    /// Every identity in the mesh, for checking signatures.
     pub identities: Vec<Identity>,
     /// Unordered pairs that carry nothing.
     severed: BTreeSet<(Keyhash, Keyhash)>,
@@ -61,6 +63,7 @@ fn pair(a: &Keyhash, b: &Keyhash) -> (Keyhash, Keyhash) {
 }
 
 impl Mesh {
+    /// A mesh over `views`, fully connected and with nothing signed yet.
     pub fn new(views: Vec<NodeView>, identities: Vec<Identity>) -> Mesh {
         let views = views.into_iter().map(|v| (v.me(), v)).collect();
         Mesh {
@@ -71,22 +74,27 @@ impl Mesh {
         }
     }
 
+    /// Every node in the mesh.
     pub fn nodes(&self) -> Vec<Keyhash> {
         self.views.keys().copied().collect()
     }
 
+    /// Cut the link between `a` and `b`: the pair carries nothing.
     pub fn sever(&mut self, a: &Keyhash, b: &Keyhash) {
         self.severed.insert(pair(a, b));
     }
 
+    /// Restore every cut link.
     pub fn heal_all(&mut self) {
         self.severed.clear();
     }
 
+    /// Whether the link between `a` and `b` is cut.
     pub fn is_severed(&self, a: &Keyhash, b: &Keyhash) -> bool {
         self.severed.contains(&pair(a, b))
     }
 
+    /// How many links are cut.
     pub fn severed_count(&self) -> usize {
         self.severed.len()
     }

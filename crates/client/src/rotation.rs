@@ -17,12 +17,16 @@ use rhtn_crypto::SigningIdentity;
 /// the position the adoption gave, and the chain proving the series.
 #[derive(Debug, Clone)]
 pub struct Relationship {
+    /// The patron.
     pub patron: Keyhash,
+    /// The position the adoption gave.
     pub position: Locator,
+    /// The chain proving the series this line is on.
     pub chain: SeriesChain,
 }
 
 impl Relationship {
+    /// The series this line is currently on.
     pub fn series(&self) -> u32 {
         self.chain.current()
     }
@@ -124,9 +128,13 @@ pub fn propose_reissue(
 /// the sealed counter.
 #[derive(Debug, Clone)]
 pub struct Repair {
+    /// The patron whose line this repairs.
     pub patron: Keyhash,
+    /// The seal, produced first.
     pub seal: Vec<u8>,
+    /// The reissue proposed after it, naming the sealed counter.
     pub reissue: Vec<u8>,
+    /// The fresh series the reissue moves to.
     pub new_series: u32,
 }
 
@@ -197,10 +205,13 @@ pub struct Rotation {
     /// inline, and a value this size does not belong on a stack frame.
     old: Option<Box<SigningIdentity>>,
     archive: Archive,
+    /// The seals produced, one per patron line, once [`Rotation::seal`]
+    /// has run.
     pub seals: Vec<(Keyhash, Vec<u8>)>,
 }
 
 impl Rotation {
+    /// A rotation away from `old`, over the archive that key built.
     pub fn begin(old: Box<SigningIdentity>, archive: Archive) -> Self {
         Rotation {
             old: Some(old),
@@ -229,6 +240,7 @@ impl Rotation {
         &self.seals
     }
 
+    /// Whether the seals have been produced and the old key dropped.
     pub fn sealed(&self) -> bool {
         self.old.is_none()
     }

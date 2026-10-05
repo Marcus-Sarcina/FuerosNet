@@ -19,7 +19,9 @@ use zeroize::Zeroizing;
 /// The KDF's info string, in the specification's shape:
 /// application, curve, hash, KEM.
 pub const INFO: &[u8] = b"rhtn/1_X25519_SHA-256_ML-KEM-768";
+/// An ML-KEM-768 encapsulation key, in bytes (FIPS 203).
 pub const KEM_PUBLIC_BYTES: usize = 1184;
+/// An ML-KEM-768 ciphertext, in bytes (FIPS 203).
 pub const KEM_CIPHERTEXT_BYTES: usize = 1088;
 
 /// An X25519 private key.
@@ -31,6 +33,7 @@ pub struct DhSecret(StaticSecret);
 pub struct DhPublic(pub [u8; 32]);
 
 impl DhSecret {
+    /// A private key from 32 bytes of seed, clamped as X25519 requires.
     pub fn from_seed(seed: [u8; 32]) -> Self {
         DhSecret(StaticSecret::from(seed))
     }
@@ -42,10 +45,14 @@ impl DhSecret {
         self.0.to_bytes()
     }
 
+    /// The matching public key.
     pub fn public(&self) -> DhPublic {
         DhPublic(*PublicKey::from(&self.0).as_bytes())
     }
 
+    /// One Diffie-Hellman output against a peer's public key.  **Not a
+    /// key by itself**: every use here feeds it into [`kdf`] alongside
+    /// the others.
     pub fn agree(&self, their: &DhPublic) -> [u8; 32] {
         *self.0.diffie_hellman(&PublicKey::from(their.0)).as_bytes()
     }
@@ -82,6 +89,7 @@ impl Drop for KemSecret {
 pub struct KemPublic(pub Vec<u8>);
 
 impl KemSecret {
+    /// A decapsulation key from its 64-byte seed (FIPS 203's seed form).
     pub fn from_seed(seed: [u8; 64]) -> Self {
         KemSecret {
             key: DecapsulationKey::<MlKem768>::from_seed(Seed::from(seed)),
@@ -94,10 +102,16 @@ impl KemSecret {
         self.seed
     }
 
+    /// The matching encapsulation key, encoded.
     pub fn public(&self) -> KemPublic {
         KemPublic(self.key.encapsulation_key().to_bytes().to_vec())
     }
 
+    /// The shared secret a ciphertext carries, or why it could not be
+    /// read.  **A ciphertext of the wrong length is an error here and not
+    /// a silent wrong secret**: the caller is about to mix it with three
+    /// Diffie-Hellman outputs, and a session that derives a key from
+    /// rubbish fails later and further away.
     pub fn decapsulate(&self, ciphertext: &[u8]) -> Result<[u8; 32], String> {
         let ss = self
             .key
@@ -130,18 +144,28 @@ impl KemPublic {
 /// identity key, the signed prekey, the post-quantum signed prekey, and
 /// the one-time keys where served.
 pub struct TheirBundle<'a> {
+    /// Their identity key for the agreement, IK_B.
     pub ik: &'a DhPublic,
+    /// Their signed prekey, SPK_B.
     pub spk: &'a DhPublic,
+    /// Their post-quantum signed prekey, PQSPK_B.
     pub pqspk: &'a KemPublic,
+    /// A one-time prekey, OPK_B, where the node still served one.  Its
+    /// absence weakens forward secrecy and is not an error (design
+    /// §14.2.4.2).
     pub opk: Option<&'a DhPublic>,
+    /// A post-quantum one-time prekey, PQOPK_B, on the same terms.
     pub pqopk: Option<&'a KemPublic>,
 }
 
 /// What initiating yields: the shared secret, the ephemeral public key and
 /// the KEM ciphertext the initial message carries.
 pub struct Initiated {
+    /// The shared secret.
     pub sk: [u8; 32],
+    /// The ephemeral public key the initial message carries, EK_A.
     pub ek: DhPublic,
+    /// The KEM ciphertext the initial message carries.
     pub kem_ciphertext: Vec<u8>,
 }
 
@@ -176,10 +200,17 @@ pub fn initiate(
 
 /// The responder's keys the initial message names.
 pub struct Responder<'a> {
+    /// This party's identity key for the agreement, IK_B.
     pub ik: &'a DhSecret,
+    /// Its signed prekey, SPK_B.
     pub spk: &'a DhSecret,
+    /// Its post-quantum signed prekey, PQSPK_B.
     pub pqspk: &'a KemSecret,
+    /// The one-time prekey the initial message named, where it named one.
+    /// **The caller must pass the one named and not another**: the
+    /// agreement is over whichever keys the initiator used.
     pub opk: Option<&'a DhSecret>,
+    /// The post-quantum one-time prekey, on the same terms.
     pub pqopk: Option<&'a KemSecret>,
 }
 

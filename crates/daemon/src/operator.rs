@@ -75,8 +75,11 @@ pub enum Hosting {
 /// question about exposure.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BindingView {
+    /// Which resource.
     pub resource: Keyhash,
+    /// Whose it is.
     pub owner: Keyhash,
+    /// Where it runs.
     pub hosting: Hosting,
 }
 

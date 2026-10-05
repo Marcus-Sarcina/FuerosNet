@@ -28,10 +28,16 @@ use std::collections::{BTreeMap, BTreeSet};
 pub enum Woke {
     /// The snapshot was the record set's value: nothing was folded.
     Current,
+    /// The snapshot was behind: this many records were folded onto it.
     Extended {
+        /// How many records were folded.
         folded: usize,
     },
+    /// No snapshot this copy could be caught up with: none was held, or
+    /// the one held could not account for every later fact, so the record
+    /// set was replayed whole (TOP-036).
     Replayed {
+        /// How many records were replayed.
         replayed: usize,
     },
 }
@@ -46,8 +52,11 @@ pub enum Woke {
 /// inventing what nobody propagated.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Place {
+    /// The anchor the path is relative to.
     pub anchor: Keyhash,
+    /// The path under it, packed two nibbles to a byte.
     pub path: Vec<u8>,
+    /// How many of the packed nibbles are the path's.
     pub nibbles: u64,
 }
 
@@ -176,6 +185,7 @@ pub struct Horizon {
 }
 
 impl Horizon {
+    /// An empty horizon belonging to `me`, holding no record.
     pub fn new(me: Keyhash) -> Horizon {
         Horizon {
             me,
@@ -192,6 +202,7 @@ impl Horizon {
         }
     }
 
+    /// Whose horizon this is.
     pub fn me(&self) -> Keyhash {
         self.me
     }
@@ -275,6 +286,7 @@ impl Horizon {
         self.delegations.values().find(|d| d.key == *key)
     }
 
+    /// How many delegations are held.
     pub fn delegations(&self) -> usize {
         self.delegations.len()
     }
@@ -385,6 +397,7 @@ impl Horizon {
             .collect()
     }
 
+    /// Whether this horizon has already taken `txid`.
     pub fn holds(&self, txid: &Txid) -> bool {
         self.seen.contains_key(txid)
     }
@@ -416,6 +429,7 @@ impl Horizon {
         }
     }
 
+    /// How many records are held.
     pub fn records(&self) -> usize {
         self.seen.len()
     }
