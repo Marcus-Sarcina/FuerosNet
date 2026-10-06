@@ -1018,6 +1018,62 @@ fn instant_of(log: &Log, pred: impl Fn(&Event) -> bool) -> Option<Instant> {
         .map(|(t, _)| t)
 }
 
+// acceptance: SES-31
+/// **A passed deadline can be this task's own starvation rather than the
+/// peer's silence.**  Whatever the peer sent while the loop was not
+/// scheduled is in the stream, unread, so the loop reads what is readable
+/// before it believes the clock.  SES-07 is the complement and both are
+/// needed: there the peer has stopped answering, nothing is buffered, and
+/// the verdict must still land within one interval of waking.
+#[tokio::test]
+async fn ses_31_a_starved_loop_reads_what_arrived_before_judging_the_peer() {
+    // **The node needs a runtime of its own.**  `#[tokio::test]` is
+    // current-thread and `spawn_node` spawns onto the caller's runtime, so
+    // blocking this test's only worker would silence the node too and the
+    // miss would be genuine.  The starvation has to be one-sided, and that
+    // deviation from every other test here is the point of this one.
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(async move {
+            let (_node, addr) = spawn_node(node_cfg("bob", 1));
+            tx.send(addr).unwrap();
+            std::future::pending::<()>().await;
+        });
+    });
+    let addr = rx.recv().unwrap();
+
+    let ccfg = client_cfg("alice");
+    let AttachOutcome::Attached(s) = attach(
+        &ccfg,
+        &client_ep(),
+        test_identity("bob").public.keyhash,
+        addr,
+        false,
+    )
+    .await
+    else {
+        panic!()
+    };
+    sleep(Duration::from_millis(1500)).await;
+    assert_eq!(*s.reach.lock().unwrap(), Reachability::Reachable);
+
+    // four intervals with this worker blocked: the node keeps beating on its
+    // own runtime and the beats queue in the socket, unread
+    std::thread::sleep(std::time::Duration::from_millis(4000));
+    sleep(Duration::from_millis(500)).await;
+
+    assert_eq!(
+        s.log.count(|e| matches!(e, Event::PeerUnreachable)),
+        0,
+        "beats that had already arrived were read before the deadline was believed"
+    );
+    assert_eq!(*s.reach.lock().unwrap(), Reachability::Reachable);
+}
+
 // acceptance: SES-15
 #[tokio::test]
 async fn ses_15_a_0rtt_reattach_is_acknowledged_only_after_its_own_handshake() {

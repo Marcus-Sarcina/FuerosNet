@@ -1472,6 +1472,43 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             }
             Ok(())
         }
+        // `wire-format.md` §14.3.4: the sender's prekey material, carried
+        // across the local session so a co-present pair can open an
+        // end-to-end channel afterwards with no node's help.  The bundle
+        // and the one-time key are opaque here: each is the bytes §7.8
+        // publishes and verifies under its own signature, which is where
+        // their shape is checked.  The one-time key is optional because
+        // §7.8 lets a pool run dry.
+        "PrekeyHandover" => {
+            let Item::Array(a) = item else {
+                return Err(Error("not array"));
+            };
+            if a.len() != 4 && a.len() != 5 {
+                return Err(Error("four fields, or five with a one-time key"));
+            }
+            if as_uint(&a[0]) != Some(1) {
+                return Err(Error("version 1"));
+            }
+            match &a[1] {
+                Item::Bytes(r) if r.len() == 32 => {}
+                _ => return Err(Error("a ceremony-id is 32 bytes")),
+            }
+            match &a[2] {
+                Item::Bytes(r) if r.len() == 32 => {}
+                _ => return Err(Error("a device is 32 bytes")),
+            }
+            match &a[3] {
+                Item::Bytes(r) if !r.is_empty() => {}
+                _ => return Err(Error("a bundle is a non-empty byte string")),
+            }
+            if let Some(k) = a.get(4) {
+                match k {
+                    Item::Bytes(r) if !r.is_empty() => {}
+                    _ => return Err(Error("a one-time key is a non-empty byte string")),
+                }
+            }
+            Ok(())
+        }
         "DeviceIntroduction" => {
             let Item::Array(a) = item else {
                 return Err(Error("not array"));

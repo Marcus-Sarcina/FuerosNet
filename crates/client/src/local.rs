@@ -344,6 +344,64 @@ pub struct CaptureKeyHandover {
     pub key: Zeroizing<[u8; 32]>,
 }
 
+/// The sender's prekey material, carried across the local session
+/// (`wire-format.md` §14.3.4).
+///
+/// **What it is for.** Opening an end-to-end channel needs the peer's
+/// published bundle, and fetching one needs a node. Crossing it here means
+/// a co-present pair can open that channel afterwards without either
+/// party's own node having cooperated in anything.
+///
+/// **The bundle is reused, not reinvented.** It arrives in the bytes
+/// §7.8 publishes, signed by the sending identity, so the material's
+/// authenticity is that signature's and not the channel's. The channel
+/// supplies confidentiality: a bundle is not secret, but which pair
+/// exchanged one and alongside which ceremony are.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PrekeyHandover {
+    /// The ceremony this belongs to; one from another is refused.
+    pub ceremony_id: [u8; 32],
+    /// The sending device, by the key it presents (`wire-format.md` §8.2):
+    /// a session is with a device and never with an identity.
+    pub device: [u8; 32],
+    /// The sender's signed bundle, exactly the bytes §7.8 publishes.
+    pub bundle: Vec<u8>,
+    /// One one-time key as §7.8 encodes it, or nothing where the sender's
+    /// pool is empty, which §7.8 permits and is not an error here.
+    pub one_time: Option<Vec<u8>>,
+}
+
+impl PrekeyHandover {
+    /// The bytes of this `PrekeyHandover`, as §14.3.4 composes them.
+    pub fn encode(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        emit_array_head(&mut out, 4 + usize::from(self.one_time.is_some()));
+        emit_uint(&mut out, 1);
+        emit_bstr(&mut out, &self.ceremony_id);
+        emit_bstr(&mut out, &self.device);
+        emit_bstr(&mut out, &self.bundle);
+        if let Some(k) = &self.one_time {
+            emit_bstr(&mut out, k);
+        }
+        out
+    }
+
+    /// Read a `PrekeyHandover` from `b`; an error naming what did not read.
+    pub fn decode(b: &[u8]) -> Result<Self, String> {
+        let it = checked(b, "PrekeyHandover")?;
+        let a = fields(&it);
+        Ok(PrekeyHandover {
+            ceremony_id: fixed32(b, &a[1])?,
+            device: fixed32(b, &a[2])?,
+            bundle: bs(b, &a[3]).ok_or("a bundle is a byte string")?,
+            one_time: match a.get(4) {
+                None => None,
+                Some(k) => Some(bs(b, k).ok_or("a one-time key is a byte string")?),
+            },
+        })
+    }
+}
+
 impl CaptureKeyHandover {
     /// The bytes of this `CaptureKeyHandover`, as §14.3.2 composes them.
     pub fn encode(&self) -> Zeroizing<Vec<u8>> {

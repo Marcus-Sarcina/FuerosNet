@@ -243,3 +243,70 @@ fn an_object_the_schema_refuses_does_not_decode_here_either() {
     assert!(TranscriptConfirm::decode(&fixture("P-capture-key-handover")).is_err());
     assert!(CandidateHandover::decode(&fixture("P-capture-key-handover")).is_err());
 }
+
+// acceptance: owed, pending the §14.3.4 corpus fixture
+/// The prekey handover round-trips, with and without a one-time key.
+///
+/// **Not against the corpus, because the corpus has no fixture for it
+/// yet** (`test-vectors/README.md` says five of six). So this asserts the
+/// encoder against itself and the checker against malformed input, which
+/// is strictly less than every other test in this file claims. The byte
+/// equality this file exists for is owed and is not here.
+#[test]
+fn the_prekey_handover_round_trips_with_and_without_a_one_time_key() {
+    let full = PrekeyHandover {
+        ceremony_id: [7u8; 32],
+        device: [9u8; 32],
+        bundle: vec![0xa1, 0x01, 0x02],
+        one_time: Some(vec![0xb2, 0x03]),
+    };
+    assert_eq!(
+        PrekeyHandover::decode(&full.encode()).expect("decodes"),
+        full
+    );
+
+    // §7.8 lets a pool run dry, so an absent one-time key is the empty
+    // pool and not a malformed object
+    let dry = PrekeyHandover {
+        one_time: None,
+        ..full.clone()
+    };
+    let bytes = dry.encode();
+    assert_eq!(PrekeyHandover::decode(&bytes).expect("decodes"), dry);
+    assert_ne!(bytes, full.encode(), "the fifth element is present or not");
+}
+
+/// What the checker refuses.
+#[test]
+fn the_prekey_handover_refuses_what_it_should() {
+    use rhtn_codec::encode::*;
+    let mk = |n: usize, ver: u64, cid: &[u8], dev: &[u8], bundle: &[u8]| {
+        let mut out = Vec::new();
+        emit_array_head(&mut out, n);
+        emit_uint(&mut out, ver);
+        emit_bstr(&mut out, cid);
+        emit_bstr(&mut out, dev);
+        emit_bstr(&mut out, bundle);
+        out
+    };
+    assert!(
+        PrekeyHandover::decode(&mk(4, 2, &[7u8; 32], &[9u8; 32], &[1])).is_err(),
+        "version 2"
+    );
+    assert!(
+        PrekeyHandover::decode(&mk(4, 1, &[7u8; 31], &[9u8; 32], &[1])).is_err(),
+        "a 31-byte ceremony-id"
+    );
+    assert!(
+        PrekeyHandover::decode(&mk(4, 1, &[7u8; 32], &[9u8; 31], &[1])).is_err(),
+        "a 31-byte device"
+    );
+    assert!(
+        PrekeyHandover::decode(&mk(4, 1, &[7u8; 32], &[9u8; 32], &[])).is_err(),
+        "an empty bundle"
+    );
+    assert!(
+        PrekeyHandover::decode(&mk(3, 1, &[7u8; 32], &[9u8; 32], &[1])).is_err(),
+        "three fields"
+    );
+}

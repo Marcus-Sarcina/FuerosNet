@@ -316,6 +316,7 @@ The Cargo workspace has **16 crates**. Components below follow responsibilities 
 | ID | Kind | Requirement and functional test oracle | Authority |
 |---|---|---|---|
 | SES-015 | C | If the primary cannot be reached during initial attach after restart, use the persisted validated sibling list immediately under endpoint retry policy. Do not wait for three heartbeat misses on a session that never existed. | L §4; D §14.1.2 |
+| SES-016 | C | **A deadline already elapsed is this task's own starvation until the stream says otherwise.** Misses are counted by elapsed full intervals on a local monotonic clock (W §8.2), and a loop descheduled past three intervals finds the peer's heartbeats waiting unread: it reads what the stream holds before it believes the clock, and declares nothing when a fresh beat is among them. Two bounds keep that from becoming a deferral: a past deadline is floored a scheduler turn ahead, since the transport has had no turn to surface what arrived, and frames that refresh liveness nothing are counted so a peer flooding them cannot postpone the verdict. **A peer that has genuinely stopped is still declared within one interval of the loop waking**, which is SES-007's case and the complement of this one. | W §8.2; D §14.1.4 |
 
 ### Prekey publication, opaque deposit and ciphertext relay
 
@@ -967,7 +968,7 @@ Open local parameters are not all specification defects: cache TTLs, queue cap, 
 
 ## 10. Document baseline and coverage totals
 
-This specification contains **495 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
+This specification contains **496 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
 
 | Prefix | Families |
 |---|---:|
@@ -979,7 +980,7 @@ This specification contains **495 numbered requirement/test families** across **
 | RES | 15 |
 | CUR | 12 |
 | NET | 26 |
-| SES | 15 |
+| SES | 16 |
 | MAIL | 27 |
 | CER | 25 |
 | VER | 18 |

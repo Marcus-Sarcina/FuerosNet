@@ -810,6 +810,57 @@ struct LoopIo {
 /// The heartbeat and liveness loop both roles run after the ack (§8.2).
 /// Returns when the stream or connection ends.  `on_frame` sees every
 /// known non-heartbeat frame.
+/// How many frames that refresh nothing may be consumed after the deadline
+/// has passed before the silence is reported anyway.
+///
+/// The reader is polled ahead of the deadline so a starved task does not
+/// report its own scheduling as the peer's silence (see `control_loop`).
+/// **This bounds that preference.**  `Control::Malformed`, `Control::Unknown`
+/// and a heartbeat whose counter is not fresh all leave `last_valid` alone,
+/// so a peer sending them fast enough to keep the reader always ready would
+/// otherwise defer the verdict for ever and a functionally silent peer would
+/// stay `Reachable`.  Eight is a chosen value: enough that a burst which
+/// arrived while the task was descheduled is drained before the clock is
+/// believed, few enough that a flooding peer buys only a handful of frames.
+const MISS_GRACE_FRAMES: u32 = 8;
+
+/// How long a deadline already in the past waits before it is believed.
+///
+/// **Polling the reader first is not enough on its own.** A deadline that
+/// has already elapsed completes on the instant it is polled, so it wins
+/// before the transport has had a turn to surface the frames that arrived
+/// while this task was descheduled: the reader is pending at that moment
+/// not because the peer is silent but because nothing has been parsed yet.
+/// Observed as five catch-up heartbeats, then the declaration, then the
+/// five beats that had been waiting all along [2026-10-05].
+///
+/// So a past deadline is floored at this far ahead, which is a window the
+/// reader is awaited across and wins if anything surfaces. It applies only
+/// to a deadline noticed late, never to one reached on time, so it delays
+/// no honest declaration. 250 ms is a chosen value: a scheduler turn and a
+/// datagram's parse, and it does not scale with the heartbeat interval
+/// because neither of those does.
+const MISS_CONFIRM: Duration = Duration::from_millis(250);
+
+/// Declare the peer unreachable, once.  Idempotent: a second call while the
+/// state already holds changes nothing and logs nothing, which is what the
+/// top of the loop used to guarantee by checking before it wrote.
+fn mark_unreachable(
+    reach: &Arc<Mutex<Reachability>>,
+    log: &Log,
+    on_change: &Option<Arc<dyn Fn(Reachability) + Send + Sync>>,
+) {
+    let mut r = reach.lock().unwrap();
+    if *r != Reachability::Unreachable {
+        *r = Reachability::Unreachable;
+        log.push(Event::PeerUnreachable);
+        drop(r);
+        if let Some(f) = on_change {
+            f(Reachability::Unreachable);
+        }
+    }
+}
+
 async fn control_loop(
     mut sender: Sender,
     recv: RecvStream,
@@ -830,35 +881,46 @@ async fn control_loop(
     let mut next_send = start + interval;
     let mut counter: u64 = 0;
     let mut last_valid = start;
+    // whether the silence has been declared, which both disables the
+    // deadline branch (a past deadline completes at once, so an armed one
+    // would spin) and makes the declaration idempotent
+    let mut missed = false;
+    // frames consumed past the deadline that refreshed nothing
+    let mut stale_frames: u32 = 0;
     let mut seen: HashSet<u64> = HashSet::new();
     let mut max_seen: u64 = 0;
     loop {
         // misses are elapsed full intervals on the local monotonic clock
-        let deadline = last_valid + interval * 3;
-        if Instant::now() >= deadline {
-            let mut r = reach.lock().unwrap();
-            if *r != Reachability::Unreachable {
-                *r = Reachability::Unreachable;
-                log.push(Event::PeerUnreachable);
-                drop(r);
-                if let Some(f) = &on_change {
-                    f(Reachability::Unreachable);
-                }
-            }
-        }
+        let due = last_valid + interval * 3;
+        // a deadline already past is not believed on the instant it is
+        // noticed; see MISS_CONFIRM
+        let deadline = due.max(Instant::now() + MISS_CONFIRM);
         tokio::select! {
+            // **Ordered, and the order is what this fixes.**  A passed
+            // deadline can mean a starved task rather than a silent peer:
+            // whatever the peer sent while this task was not scheduled is
+            // in the stream, unread.  So the deadline is polled last, after
+            // what is readable has been read.  Declaring the silence at the
+            // top of the loop instead reported a peer unreachable and then
+            // read its heartbeat on the next line, flapping once per
+            // starvation [2026-10-05].  The two branches above the reader
+            // are a timer and this side's own traffic; neither can starve
+            // it, since each fires at most once per interval.
+            biased;
             _ = sleep_until(next_send) => {
                 if counter == u64::MAX { return None; }
                 if sender.frame(FRAME_HEARTBEAT, &encode_heartbeat(counter, unix_now())).await.is_err() { return None; }
                 counter += 1;
                 next_send += interval;
             }
-            _ = sleep_until(deadline), if deadline > Instant::now() => {}
             out = outbound.recv() => {
                 if let Some((ft, body)) = out
                     && sender.frame(ft, &body).await.is_err() { return None; }
             }
-            r = reader.next(bounds::CONTROL_FRAME_BYTES) => match r {
+            r = reader.next(bounds::CONTROL_FRAME_BYTES) => {
+                let past = Instant::now() >= due;
+                let mut fresh = false;
+                match r {
                 FrameRead::Closed(e) => return e,
                 FrameRead::OverBound(_) => { log.push(Event::OverBound); return None; }
                 FrameRead::Payload(p) => match classify(&p) {
@@ -869,6 +931,7 @@ async fn control_loop(
                         if let Item::Map(m) = &item
                             && let Some(c) = map_get(m, 1).and_then(as_uint)
                                 && fresh_counter(&mut seen, &mut max_seen, c) {
+                                    fresh = true;
                                     last_valid = Instant::now();
                                     let was = std::mem::replace(&mut *reach.lock().unwrap(), Reachability::Reachable);
                                     if was == Reachability::Unreachable
@@ -883,6 +946,23 @@ async fn control_loop(
                         if !on_frame(fam, &bytes, body, &item) { return None; }
                     }
                 }
+                }
+                if fresh {
+                    // a refreshed deadline re-arms the branch below
+                    missed = false;
+                    stale_frames = 0;
+                } else if past {
+                    stale_frames += 1;
+                    if stale_frames >= MISS_GRACE_FRAMES && !missed {
+                        missed = true;
+                        mark_unreachable(&reach, &log, &on_change);
+                    }
+                }
+            }
+            // last, and only while the silence stands undeclared
+            _ = sleep_until(deadline), if !missed => {
+                missed = true;
+                mark_unreachable(&reach, &log, &on_change);
             }
         }
     }
