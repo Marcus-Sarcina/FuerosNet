@@ -105,8 +105,21 @@ class BleBearer(private val context: Context) {
          * twenty, which is what `Bearer`'s header was sized against.
          */
         const val ATT_OVERHEAD = 3
+        /**
+         * The most bytes one attribute value can hold, which is the ceiling
+         * on a notification and on a write whatever the MTU: Android
+         * negotiates 517, which would carry 514, and the stack throws on
+         * the 513th byte. **The proposed body was the first carriage long
+         * enough to find this**, and it took the kernel's thread with it
+         * [2026-10-06, on the bench].
+         */
+        const val MAX_ATTRIBUTE = 512
         /** How long a write waits for the previous one's acknowledgement. */
         const val WRITE_ACK_MS = 5_000L
+
+        /** What one packet may carry on a link that negotiated `mtu`: the
+         *  MTU less ATT's overhead, and never more than an attribute holds. */
+        fun payloadOf(mtu: Int): Int = minOf(mtu - ATT_OVERHEAD, MAX_ATTRIBUTE)
     }
 
     /** What arrives, packet by packet, for the caller to reassemble. */
@@ -175,7 +188,7 @@ class BleBearer(private val context: Context) {
     /** The link this bearer presents, once a peer is connected and
      *  subscribed; before that every `send` is refused. */
     fun link(): Bearer.Link = object : Bearer.Link {
-        override fun mtu(): Int = negotiated - ATT_OVERHEAD
+        override fun mtu(): Int = payloadOf(negotiated)
 
         override fun send(packet: ByteArray): Boolean {
             if (!subscription.active) {
@@ -210,6 +223,14 @@ class BleBearer(private val context: Context) {
                     writeDone.release()
                     refused("write")
                     false
+                } catch (e: RuntimeException) {
+                    // the stack refusing the packet — too long for an
+                    // attribute, a link gone between the check and the
+                    // call — is a packet that did not go, which is what
+                    // the contract says and not a thread to end
+                    writeDone.release()
+                    Diag.warn("ble", "op" to "write", "state" to "refused", "reason" to (e.message ?: e::class.java.simpleName))
+                    false
                 }
             }
             val s = server ?: return false
@@ -223,6 +244,9 @@ class BleBearer(private val context: Context) {
                 ok
             } catch (e: SecurityException) {
                 refused("notify")
+                false
+            } catch (e: RuntimeException) {
+                Diag.warn("ble", "op" to "notify", "state" to "refused", "reason" to (e.message ?: e::class.java.simpleName))
                 false
             }
         }

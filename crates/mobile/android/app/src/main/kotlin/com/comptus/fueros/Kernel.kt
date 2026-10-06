@@ -34,6 +34,10 @@ object Kernel {
     @Volatile private var peer: ByteArray? = null
     @Volatile private var peerKey: String? = null
     private var peerName: String = "peer"
+    /** Who this device nominates to witness, where the provision names
+     *  anybody: a bench stand-in for the horizon a phone at genesis does
+     *  not have (see [beginCeremony]). */
+    @Volatile private var nominees: List<ByteArray> = listOf()
     private var started = false
     private var provisioned = false
 
@@ -48,6 +52,9 @@ object Kernel {
     /** The radio and the carriage over it, once the meeting opens one. */
     @Volatile private var ble: BleBearer? = null
     @Volatile private var carriage: Carriage? = null
+    /** How many conversation carriages this side has sent over the bearer
+     *  in this ceremony: what picks each one's phase ([Carriage.Phase.conversation]). */
+    private var sentCarriages = 0
 
     /** The application's context, kept for the radio the bearer needs. */
     @Volatile private var appContext: Context? = null
@@ -100,13 +107,17 @@ object Kernel {
      * names the initiator, whose bootstrap it read; the initiator names
      * nobody and learns who read its code from their first optical code.
      * Witnesses are nominated from the counterparty's neighbourhood
-     * (design §7.1); with no horizon yet the nomination is empty and the
-     * ceremony is that much weaker, which the record carries honestly.
+     * (design §7.1). This shell holds no horizon to nominate from yet, so
+     * the nomination is empty and the ceremony is that much weaker, which
+     * the record carries honestly — unless the provision named nominees,
+     * which is the bench standing in for that horizon (`field-run.sh`): a
+     * witness is reached over the network and need not be present
+     * [author, 2026-10-05], so the laptop's instruments can be the ones.
      */
     private fun beginCeremony(p: Participant, m: Meet) {
         Thread {
             call("begin", { e -> m.stop("begin refused: ${e.reason}") }) {
-                p.begin(m.counterpartyKey?.let { unhex(it) }, listOf(), m.role == Meet.Role.INITIATOR)
+                p.begin(m.counterpartyKey?.let { unhex(it) }, nominees, m.role == Meet.Role.INITIATOR)
                 m.begunCeremony()
                 m.note("ceremony open; the two codes are ready to cross.")
             }
@@ -270,10 +281,14 @@ object Kernel {
      * as [Event.Answered].
      */
     private fun courier(p: Participant): Meet.Courier = object : Meet.Courier {
-        override fun open(): String? = refusal("converseOpen") { p.converseOpen() }
-        override fun queries(): String? = refusal("converseQueries") { p.converseQueries() }
-        override fun gathered(): String? = refusal("converseGathered") { p.converseGathered() }
-        override fun propose(): String? = refusal("conversePropose") { p.conversePropose() }
+        // each step's leg to the counterparty is a carriage for the
+        // bearer, drained right after the step whether it went or was
+        // refused: a refused propose that is `Waiting` has sent nothing,
+        // and a step that went has left its carriage in the kernel
+        override fun open(): String? = refusal("converseOpen") { p.converseOpen() }.also { sendCarriages(p) }
+        override fun queries(): String? = refusal("converseQueries") { p.converseQueries() }.also { sendCarriages(p) }
+        override fun gathered(): String? = refusal("converseGathered") { p.converseGathered() }.also { sendCarriages(p) }
+        override fun propose(): String? = refusal("conversePropose") { p.conversePropose() }.also { sendCarriages(p) }
         override fun progress(): Meet.Progress? =
             call("progress", { null }) { p.progress() }?.let { pr ->
                 Meet.Progress(
@@ -439,6 +454,7 @@ object Kernel {
         synchronized(lock) {
             ble = radio
             carriage = Carriage(radio.link())
+            sentCarriages = 0
         }
         Thread {
             // THE LINK FIRST. offer and seek return as the radio starts,
@@ -487,6 +503,29 @@ object Kernel {
         }
         Diag.event("ble", "op" to "link", "phase" to phase, "state" to "awaited", "ms" to (Diag.ms() - started))
         return true
+    }
+
+    /**
+     * **The counterparty's leg of the conversation crosses the bearer**
+     * (design §7.1; `wire-format.md` §14.3.2): kinds 9 to 18 for the
+     * co-present counterparty are sealed under the local session and sit
+     * in the kernel until drained, and no node carries them. Drained
+     * after every step this side takes, after every carriage taken, and
+     * after every message that arrived over the network, since each can
+     * produce one; one message per phase, so the receiver can take each
+     * as it lands. A carriage the radio will not take is said and left:
+     * the kernel does not hold a copy, and the step it belonged to waits
+     * until the person stops the meeting.
+     */
+    private fun sendCarriages(p: Participant) {
+        val live = carriage ?: return
+        val out = call("carriages", { listOf() }) { p.carriages() }
+        for (bytes in out) {
+            val phase = Carriage.Phase.conversation(sentCarriages++)
+            if (!live.send(listOf(bytes), phase)) {
+                meet?.note("a carriage of the conversation did not cross the bearer (phase $phase).")
+            }
+        }
     }
 
     /**
@@ -565,6 +604,24 @@ object Kernel {
                         live.discard(Carriage.Phase.CAPTURE_KEY)
                     }
                 }
+            }
+            // the conversation: every phase from CONVERSATION up that has
+            // arrived whole is one message of the counterparty's, taken
+            // and its phase discarded so the sender's count can wrap.
+            // What a taken step owes the counterparty goes straight back
+            Meet.Step.VERIFIERS, Meet.Step.REVIEW -> {
+                var taken = 0
+                for (phase in Carriage.Phase.CONVERSATION until Bearer.PHASES) {
+                    val set = live.received(phase) ?: continue
+                    for (bytes in set) {
+                        call("takeCarriage", { e -> m.note("a carriage was refused: ${e.reason}") }) {
+                            p.takeCarriage(bytes)
+                        }
+                        taken += 1
+                    }
+                    live.discard(phase)
+                }
+                if (taken > 0) sendCarriages(p)
             }
             else -> {}
         }
@@ -732,6 +789,9 @@ object Kernel {
         val to = unhex(provision.getString("peer"))
         peer = to
         peerName = provision.optString("peer_name", "peer")
+        nominees = provision.optJSONArray("nominees")
+            ?.let { a -> (0 until a.length()).map { unhex(a.getString(it)) } }
+            ?: listOf()
         peerKey = hex(to)
         front.peerKnown(peerKey!!, peerName)
         val node = unhex(provision.getString("node"))
@@ -790,6 +850,9 @@ object Kernel {
                 is Event.Conversed -> {
                     val m = meet
                     if (m != null) m.conversed(e.what, turnOf(e.step)) else front.note("· ${e.what}")
+                    // a step taken on a message from a witness can owe the
+                    // counterparty one: the last signature in, the record out
+                    if (m != null) sendCarriages(p)
                 }
                 null -> {}
                 else -> front.note("· $e")
@@ -799,7 +862,16 @@ object Kernel {
             // proposer learns its queries are answered and proposes, where
             // the responder hands over, and where the body's arrival moves
             // to review. The poll is nothing outside those steps.
-            meet?.let { m -> if (m.opened()) m.poll(courier(p)) }
+            meet?.let { m ->
+                // a conversation phase that landed before the flow reached
+                // the conversation is taken on the tick, as is one whose
+                // packet arrived while the step driver held the lock
+                val t = m.step()
+                if (t == Meet.Step.VERIFIERS || t == Meet.Step.REVIEW) {
+                    peer?.let { drainBearer(p, it, m) }
+                }
+                if (m.opened()) m.poll(courier(p))
+            }
         }
     }
 

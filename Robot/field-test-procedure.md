@@ -116,7 +116,11 @@ private directory. A release-signed APK would leave only the share sheet.
    phones' live streams (TCP port 7448 on the same address; `--stream-port
    0` for none), provisions each phone with the other as its *payload*
    peer (the Conversations demo's; the ceremony learns who it meets from
-   the codes, not from this) and the
+   the codes, not from this), with **one nominee** — the first phone
+   witness-1, the second witness-2 — since a phone at genesis has no
+   horizon to nominate from and the record would otherwise be a formation
+   (the bench standing in for the horizon; a witness is reached over the
+   network and need not be present [author, 2026-10-05]) and the
    collector as its stream target (the app is stopped and started twice;
    the second start is the one that attaches), starts the logcat captures,
    writes `checklist.md` and `run.json`, and holds. The run is named

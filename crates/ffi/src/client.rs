@@ -47,6 +47,16 @@ pub struct Participant {
     net: Net,
     /// Where the client's state goes between runs, under [`STATE`].
     storage: Arc<dyn crate::device::Storage>,
+    /// **One save at a time.** The state is saved after every call that
+    /// can change it and after every event that arrived, and those run
+    /// on two of the shell's threads at once — a conversation step on one,
+    /// the event loop on the other. Two writes of the same name in flight
+    /// together is what a platform's storage cannot be asked to take: on
+    /// the bench one of the pair landed and the other was refused, and
+    /// the refusal stopped a ceremony that had done nothing wrong
+    /// [2026-10-06]. The lock also orders the states, so what lands last
+    /// is what was taken last.
+    saving: std::sync::Mutex<()>,
     /// The seeds this device holds, for the backup: on the ceremony
     /// device alone.
     seeds: Option<[[u8; 32]; 2]>,
@@ -732,6 +742,7 @@ impl Participant {
                 handle,
                 net,
                 storage,
+                saving: std::sync::Mutex::new(()),
                 seeds: Some([ed, pq]),
             };
             p.open()?;
@@ -802,6 +813,9 @@ impl Participant {
     /// and by a shell at any point it is about to be suspended.
     pub fn save(&self) -> Result<(), Refused> {
         crate::diag::call("save", || {
+            // a poisoned lock is a thread that panicked mid-save, and the
+            // next save overwriting whatever it left is the recovery
+            let _one = self.saving.lock().unwrap_or_else(|e| e.into_inner());
             let bytes = self.handle.with_blocking(|c| c.durable());
             let took = self.storage.write(STATE.into(), bytes)
                 && self.storage.write(SIBLINGS.into(), self.net.siblings());
@@ -930,6 +944,7 @@ impl Participant {
                 handle,
                 net,
                 storage,
+                saving: std::sync::Mutex::new(()),
                 seeds: None,
             };
             p.open()?;
@@ -1263,6 +1278,41 @@ impl Participant {
             self.handle
                 .with_blocking(move |c| c.take_capture_key_carriage(&bytes).map(|k| k.to_vec()))
                 .map_err(|a| Refused::new(format!("{a:?}")))
+        })
+    }
+
+    /// The conversation's carriages for the co-present counterparty, in
+    /// order, sealed under the local session (`wire-format.md` §14.3.2):
+    /// what the shell's bearer carries, as it carried the intent, the
+    /// outcomes and the capture key.
+    ///
+    /// **Drained, not read.** Each is returned once. The counterparty's
+    /// leg of kinds 9 to 18 crosses the local interface (design §7.1)
+    /// and no node carries it, so a shell that does not call this after
+    /// every step of the conversation leaves the ceremony waiting on
+    /// messages that are sitting here. A step produces one from a call
+    /// on this side, from a carriage taken, or from a message that
+    /// arrived over the network, so all three are moments to drain.
+    #[must_use]
+    pub fn carriages(&self) -> Vec<Vec<u8>> {
+        crate::diag::call_plain("carriages", || self.handle.with_blocking(|c| c.carriages()))
+    }
+
+    /// A conversation carriage the bearer delivered from the counterparty:
+    /// opened under the local session and taken as the step it carries,
+    /// whose outcome reaches the shell as [`Event::Conversed`] exactly as
+    /// a step that arrived over the network does.
+    ///
+    /// A carriage that will not open is dropped and nothing is said:
+    /// there is no party to tell, since whoever sent it held no key
+    /// (`wire-format.md` §14.3.2). What the step owes a witness goes out
+    /// on the courier from here, where one is attached.
+    pub fn take_carriage(&self, bytes: Vec<u8>) -> Result<(), Refused> {
+        crate::diag::call("take_carriage", || {
+            self.net.take_carriage(&self.handle, bytes)?;
+            self.net.carry_outbox(&self.handle)?;
+            let _ = self.save();
+            Ok(())
         })
     }
 

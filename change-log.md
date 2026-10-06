@@ -12413,6 +12413,66 @@ catalogue 483 → 488. A fifth
 instance of the §13.2-for-§6.4 citation error, in the kernel's own comments,
 corrected with it.
 
+### 2026-10-06 (the witnessed ceremony on hardware)
+
+**Two phones and two laptop witnesses hold one record, `76d7332d`, with
+four signers.** The first witnessed presence record on hardware, after
+every run before it had been a two-signer formation; 44 and 50 seconds
+from begin to finalize. It took four runs in one sitting, and each of the
+three failures was a defect in shipped code that the bench only made
+visible.
+
+**What a witnessed run needed from the bench.** A phone at genesis has no
+horizon to nominate from, so the shell nominated nobody and every record
+was a formation. The provision now names one nominee per phone — the
+first phone witness-1, the second witness-2, so the `nominated_by` split
+is balanced — and carries both witnesses' key material; the shell passes
+the nominees to `begin`. A stand-in for the horizon, labelled as one, and
+possible only because a witness is reached over the network and need not
+be present [author, 2026-10-05]. The witness half then worked unattended
+on the first attempt: both instruments answered both phones, sent
+back-pointers, observed every step, reviewed and signed.
+
+**Run 1: the conversation never crossed the bearer.** The counterparty's
+leg of kinds 9 to 18 has been a carriage for the local interface since
+the 5th, and the kernel and the adaptors moved that day — but the FFI
+exported no way for a shell to drain or deliver one, and the shell's
+bearer carried three phases and handed off to "the courier" from the
+capture on. `Participant::carriages` and `Participant::take_carriage`
+now exist, the latter through the courier where a node is attached and
+through the kernel where none is; the shell gives each conversation
+carriage a bearer phase of its own from phase 3 to the header's last,
+takes and discards each as it lands, and drains after every step, every
+carriage taken and every network arrival. Two unit tests on the phases.
+
+**Run 2: a storage race.** Two saves of the kernel's state in flight at
+once, from the conversation step's thread and the event loop's, and the
+shell's write using one fixed temporary file per name: the second rename
+found the file gone and the proposer stopped on "the platform's storage
+did not take the state". Fired four times unnoticed in run 1 and never
+before the routing split. One save at a time in the FFI, a temporary
+file per write in the shell.
+
+**Run 3: the first long carriage.** The proposed body, 773 sealed bytes,
+was cut into packets of the negotiated MTU less three — 514, against a
+GATT attribute value's ceiling of 512 — and the Android stack threw on
+the notification, through the bearer and into the kernel's event loop,
+which it ended; the counterparty waited at review for a body that never
+left. The link's packet is now bounded by the attribute ceiling, and a
+stack exception on send is the `false` the link's contract always
+promised. Both witnesses had signed by then: the first four-signer body.
+
+**Run 4: the record.** Seven bearer phases each way, the witnesses'
+signatures over the network, the record to the counterparty over the
+bearer and to the witnesses over the network, and all four hand it up to
+the node.
+
+What this run did not exercise: the far-node path of the morning's
+commit. Both witnesses sit behind the phones' own node and a phone with
+no horizon cannot place a witness, so the relay went through the serving
+node. Reaching a witness through its own node needs phones that hold a
+horizon.
+
 ### 2026-10-04 (the second and third field runs)
 
 Two phones now run the ceremony from the invite to the proposal. The

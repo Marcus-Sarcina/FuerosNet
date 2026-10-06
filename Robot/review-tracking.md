@@ -14758,3 +14758,99 @@ RES-19.
 **A fifth §13.2-for-§6.4** turned up in `sequence.rs` and `ceremony.rs`
 while working here. The sweep that found the first four was over the
 documents; these are in code comments, which that sweep did not cover.
+
+## The witnessed ceremony on hardware: first attempt (2026-10-06)
+
+Run `81ebdcc-witnessed-1-1`, two Galaxy S21+ at genesis, the laptop's
+node and its two `rhtnp` instruments, each phone provisioned with one
+nominee (the bench standing in for a horizon the phones do not have).
+
+**The witness half works unattended.** Both witnesses received both
+phones' requests (kind 12), answered "will attest", sent their
+back-pointers, and observed kinds 14 and 15; both phones logged both
+witnesses attesting and both witnesses' back-pointers; the node stored
+and delivered every relay. Nothing on the laptop side needed a hand.
+
+**The ceremony stalled at the proposer**, `converse_propose` answering
+`Waiting(the counterparty's responses)` every two seconds. The
+non-proposer had sent its gathered responses (kind 14) to both witnesses
+and to nobody else — because its leg to the counterparty is a carriage for
+the bearer since 2026-10-05, and **the bearer carried phases 0, 1 and 2
+only**: the intent, the outcomes and the capture key. The shell's
+`drainBearer` knew three phases and handed off to "the courier" from the
+capture on, and the FFI exported no `carriages`/`take_carriage` pair at
+all. The kernel and the adaptors moved on the 5th; the surface the shell
+reaches never did. This drafter wrote "no FFI signature changed" that day
+and took it for "nothing the shell needs changed", which it was not: a new
+pair was owed and never written.
+
+**Fixed as:** `Participant::carriages` and `Participant::take_carriage`
+in the FFI, the latter through the courier where one is attached and
+through the kernel directly where none is, so a formation with no node
+still moves; in the shell, one bearer phase per conversation carriage
+from phase 3 to the header's last, each taken and discarded as it lands
+so the sender's count wraps cleanly, drained after every step, every
+carriage taken and every network arrival, and on the tick. Rebuilt and
+re-run as `witnessed-2`.
+
+## The witnessed ceremony on hardware: second attempt (2026-10-06)
+
+Run `81ebdcc-witnessed-2-1`, with the bearer carrying the conversation.
+**The carriages crossed**: phases 3 and 4 received on both phones (the
+witness request and the back-pointers, each way), a fifth sent; both
+witnesses answered both phones with flags 3 and observed kinds 14 and 15.
+
+**Then the proposer stopped at `converse_queries`: "the platform's storage
+did not take the state."** The trail shows two `save` calls in flight at
+the same instant, one from the conversation step's thread and one from
+the event loop's after a delivery, and the shell's storage writing
+`client` twice at once — `ok:true` and `ok:false`. `AndroidShell.land`
+wrote every save of a name into one fixed temporary file and renamed it,
+so the second writer's rename found the file gone; two writers could also
+interleave bytes in it, which is worse than a refusal. It fired four times
+in the first attempt, unnoticed because nothing was waiting on the answer
+at those moments, and zero times in the pre-split runs: the conversation
+over the bearer is what put two threads on the state at once.
+
+**Fixed at both ends:** `Participant::save` takes a lock, so the kernel
+issues one write at a time and the last landed is the last taken; `land`
+uses a temporary file per write, so any two writers the shell ever has
+cannot share one. Rebuilt and re-run as `witnessed-3`.
+
+## The witnessed ceremony on hardware: third attempt (2026-10-06)
+
+Run `81ebdcc-witnessed-3-1`. **Furthest yet, and the first four-signer
+body on hardware.** Both witnesses attested and sent back-pointers over
+the network, the gathered responses and back-pointers crossed the bearer
+both ways (phases 3 to 5), the proposer proposed `witnesses=2
+formation=false`, reviewed as a participant with `signers=4`, sent the
+body to both witnesses, and **both witnesses reviewed and signed** —
+their signatures reached the proposer. No storage refusal: the save lock
+held.
+
+**Then the proposer's kernel thread died** sending the body to the
+counterparty: `IllegalArgumentException: notification should not be
+longer than max length of an attribute value`, from
+`BluetoothGattServer.notifyCharacteristicChanged` under
+`Kernel.sendCarriages`. Every earlier carriage was under a hundred bytes
+and went in one packet; the proposed body is 773 sealed bytes, cut into
+packets of `negotiated − 3`, and Android negotiates 517, so the first
+packet was 514 bytes against a GATT attribute value's ceiling of 512. The
+`Link.send` contract is "false where it did not go"; the Android stack
+threw instead, up through the bearer into the event loop, and the
+counterparty waited at review for a body that never left.
+
+**Two defects, both the shell's:** the link's `mtu()` must never exceed
+the attribute ceiling, and `send` must turn a stack exception into the
+false the contract promises rather than take the kernel thread with it.
+
+## The witnessed ceremony on hardware: done (2026-10-06)
+
+Run `81ebdcc-witnessed-4-1`: record `76d7332d`, four signers, held by both
+phones and both witnesses; 44.2 s and 50.1 s begin to finalize; phases 0
+to 6 sent and received on both phones; zero storage write refusals (four
+`ok:false` lines are cold-start reads of absent files); zero crashes; all
+four signers handed the record up and the node answered `OutOfStore`
+each time, as it did for the formation runs. The open item "the
+witnessed ceremony on hardware" closes. Still open from the same list:
+the far-node path on hardware, which needs phones holding a horizon.

@@ -681,6 +681,32 @@ impl Net {
         Ok(())
     }
 
+    /// Take a conversation carriage off the bearer and put what it came
+    /// to on the one event stream.
+    ///
+    /// **With or without a node.** Attached, the courier does it, so the
+    /// two arrivals look the same to the shell. Detached, the step runs
+    /// here and its outcome is put on the stream by the same hand: a
+    /// formation ceremony completes with no node reachable (design §6.4)
+    /// and a carriage must not wait on one.
+    pub(crate) fn take_carriage(&self, handle: &Handle, bytes: Vec<u8>) -> Result<(), Refused> {
+        if let Ok(courier) = self.courier() {
+            self.rt()
+                .block_on(async move { courier.take_carriage(bytes).await });
+            return Ok(());
+        }
+        let (peer, taken) =
+            handle.with_blocking(move |c| (c.counterparty(), c.take_conversation_carriage(&bytes)));
+        // a carriage that will not open is dropped, as the courier drops
+        // one: there is nobody to tell
+        if let (Some(peer), Ok(conversed)) = (peer, taken)
+            && let Some(e) = event_of(peer, Dispatched::Conversation(conversed))
+        {
+            let _ = self.events_tx.send(e);
+        }
+        Ok(())
+    }
+
     /// Carry messages the client made outside its outbox: a bundle the
     /// ceremony device signed for this one, once it is attached.
     pub(crate) fn carry(&self, msgs: Vec<rhtn_client::ceremony::Msg>) -> Result<(), Refused> {

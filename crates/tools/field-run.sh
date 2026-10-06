@@ -462,11 +462,19 @@ for s in ${DEVICES[@]+"${DEVICES[@]}"}; do
       else
         peer_material="$W_MATERIAL1"; peer_keyhash="$W_KEYHASH1"; peer_name="witness-1"
       fi
-      python3 - "$DAEMON_MATERIAL" "$peer_material" "${PHONE_MATERIALS[i]}" "$DAEMON_KEYHASH" "$ADDR" "$peer_keyhash" "$peer_name" "$RETENTION" > "$RUN/phones/$s/provision.json" <<'PY'
+      # the nominee: a phone at genesis has no horizon to nominate a witness
+      # from (`light-client-requirements.md` §1.1), so the bench names one
+      # — the first phone witness-1, the second witness-2, so each side's
+      # nominee is its own and the `nominated_by` split is balanced. Both
+      # witnesses go into `known` either way: a nominee must be addressable
+      # and its signature on the record verifiable
+      if [ $((i % 2)) -eq 0 ]; then nominee="$W_KEYHASH1"; nominee_name="witness-1"; else nominee="$W_KEYHASH2"; nominee_name="witness-2"; fi
+      python3 - "$DAEMON_MATERIAL" "$peer_material" "${PHONE_MATERIALS[i]}" "$DAEMON_KEYHASH" "$ADDR" "$peer_keyhash" "$peer_name" "$RETENTION" "$W_MATERIAL1" "$W_MATERIAL2" "$nominee" > "$RUN/phones/$s/provision.json" <<'PY'
 import json, sys
-node_m, peer_m, own_m, node, addr, peer, name, retention = sys.argv[1:9]
-blob = {"known": [node_m, peer_m, own_m], "node": node, "addr": addr,
-        "peer": peer, "peer_name": name}
+node_m, peer_m, own_m, node, addr, peer, name, retention, w1, w2, nominee = sys.argv[1:12]
+known = [node_m, peer_m, own_m] + [w for w in (w1, w2) if w != peer_m]
+blob = {"known": known, "node": node, "addr": addr,
+        "peer": peer, "peer_name": name, "nominees": [nominee]}
 if retention:
     blob["retention_years"] = int(retention)
 print(json.dumps(blob, separators=(",", ":")))
@@ -484,7 +492,7 @@ PY
       "$ADB" -s "${ADB_ID[$s]}" shell am force-stop "$APP"
       "$ADB" -s "${ADB_ID[$s]}" shell am start -W -n "$APP/.HomeActivity" > /dev/null 2>&1 || say "$s: am start failed"
       provisioned=true
-      say "$s: provisioned to attach at $ADDR with peer $peer_name${STREAM_ADDR:+, streaming to $STREAM_ADDR}"
+      say "$s: provisioned to attach at $ADDR with peer $peer_name, nominating $nominee_name${STREAM_ADDR:+, streaming to $STREAM_ADDR}"
     fi
   fi
   DEVICE_PROVISIONED+=("$provisioned")

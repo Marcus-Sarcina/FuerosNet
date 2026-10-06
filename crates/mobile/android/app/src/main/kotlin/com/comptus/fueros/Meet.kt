@@ -28,8 +28,10 @@ package com.comptus.fueros
  *    signed.
  *
  * **From the capture on, the kernel drives and this flow follows.** The
- * ceremony's conversation runs on the end-to-end path (`wire-format.md`
- * §7.10.1; `crates/client/src/sequence.rs`), and the four steps a
+ * ceremony's conversation runs by who the recipient is (`wire-format.md`
+ * §7.10.1; `crates/client/src/sequence.rs`): the counterparty's leg over
+ * the bearer, as a carriage the shell moves, and a witness's over the
+ * end-to-end path, which the courier carries; and the four steps a
  * participant takes are the [Courier]'s: open, the queries, the gathered
  * responses, the body. This flow decides *when*, from the kernel's
  * [Progress] as the shell polls it, and the kernel holds no timer: the

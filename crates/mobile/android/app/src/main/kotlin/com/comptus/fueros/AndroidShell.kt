@@ -190,11 +190,26 @@ class AndroidShell(private val context: Context) :
         }
     }
 
+    /**
+     * Write whole or not at all: the bytes land in a temporary file of
+     * their own and are renamed over `name`, so a reader never sees half
+     * a state. **A temporary file per write, not per name**: two writes
+     * of one name in flight together — which the kernel no longer issues,
+     * and which this shell must survive anyway — would otherwise share
+     * the file, interleave in it, and the second's rename find it gone
+     * [2026-10-06, on the bench].
+     */
     private fun land(name: String, bytes: ByteArray): Boolean {
         return try {
-            val tmp = File(dir, "$name.tmp")
-            tmp.writeBytes(bytes)
-            tmp.renameTo(File(dir, name))
+            val tmp = File.createTempFile("$name.", ".tmp", dir)
+            try {
+                tmp.writeBytes(bytes)
+                tmp.renameTo(File(dir, name))
+            } finally {
+                // a rename that went leaves nothing here; one that did
+                // not leaves a file that would otherwise outlive the attempt
+                tmp.delete()
+            }
         } catch (_: Exception) {
             false
         }

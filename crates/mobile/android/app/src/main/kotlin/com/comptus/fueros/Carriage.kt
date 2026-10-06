@@ -46,6 +46,27 @@ class Carriage(private val radio: Bearer.Link?) {
         const val PROXIMITY = 1
         /** The capture key, one each way. */
         const val CAPTURE_KEY = 2
+
+        /**
+         * The conversation's carriages, from the capture on: the
+         * counterparty's leg of kinds 9 to 18 crosses this bearer
+         * (design §7.1), sealed under the local session, and **each
+         * message takes a phase of its own** from here to the last the
+         * header can name. A phase's set is whole only once its sender
+         * has flagged a last message, and the conversation does not know
+         * how many it will send, so one message per phase is what lets
+         * each be taken the moment it is in. The receiver discards a
+         * phase as it takes it, so the sender's count wraps round the
+         * range without colliding with anything still waiting.
+         */
+        const val CONVERSATION = 3
+
+        /** How many phases the conversation has to wrap through. */
+        const val CONVERSATIONS = Bearer.PHASES - CONVERSATION
+
+        /** The phase the `n`th conversation carriage this side sends
+         *  goes as, counted from zero. */
+        fun conversation(n: Int): Int = CONVERSATION + Math.floorMod(n, CONVERSATIONS)
     }
 
     /** Which bearer a carriage runs over. */

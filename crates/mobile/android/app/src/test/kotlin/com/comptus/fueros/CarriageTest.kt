@@ -110,3 +110,50 @@ class CarriageWipeTest {
         assertArrayEquals("what was taken is the taker's to wipe", handover, back[0])
     }
 }
+
+/** The conversation's carriages over the bearer: one message per phase,
+ *  taken as each lands, the phases wrapping without collision. */
+class ConversationCarriageTest {
+
+    private class Pipe(val mtu: Int = 23 - 3) : Bearer.Link {
+        var other: Carriage? = null
+        override fun mtu() = mtu
+        override fun send(packet: ByteArray): Boolean {
+            other?.packet(packet)
+            return true
+        }
+    }
+
+    @Test
+    fun each_conversation_carriage_takes_a_phase_of_its_own_and_the_range_wraps() {
+        val first = Carriage.Phase.conversation(0)
+        assertEquals(Carriage.Phase.CONVERSATION, first)
+        // the three staged phases are never reused by the conversation
+        for (n in 0 until 3 * Carriage.Phase.CONVERSATIONS) {
+            val ph = Carriage.Phase.conversation(n)
+            assertTrue("phase $ph for carriage $n is past the staged ones", ph >= Carriage.Phase.CONVERSATION)
+            assertTrue("phase $ph fits the header's nibble", ph < Bearer.PHASES)
+        }
+        // and the count wraps round the range rather than running off it
+        assertEquals(first, Carriage.Phase.conversation(Carriage.Phase.CONVERSATIONS))
+    }
+
+    @Test
+    fun a_message_per_phase_is_whole_on_its_own_and_a_discarded_phase_takes_the_next_round() {
+        val a = Pipe(); val b = Pipe()
+        val ca = Carriage(a); val cb = Carriage(b)
+        a.other = cb; b.other = ca
+        // more messages than the range has phases: the receiver takes and
+        // discards each as it lands, so the wrap lands on a cleared phase
+        for (n in 0 until Carriage.Phase.CONVERSATIONS + 2) {
+            val ph = Carriage.Phase.conversation(n)
+            val msg = ByteArray(40) { (n + it).toByte() }
+            assertTrue(ca.send(listOf(msg), ph))
+            val set = cb.received(ph)
+            assertNotNull("carriage $n is whole on its own in phase $ph", set)
+            assertArrayEquals(msg, set!![0])
+            cb.discard(ph)
+            assertNull("a discarded phase holds nothing", cb.received(ph))
+        }
+    }
+}

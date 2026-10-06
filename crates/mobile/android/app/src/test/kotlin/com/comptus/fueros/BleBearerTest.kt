@@ -81,4 +81,16 @@ class BleBearerTest {
         s.reset()
         assertFalse(s.active)
     }
+
+    @Test
+    fun a_packet_never_exceeds_what_an_attribute_holds_whatever_the_mtu() {
+        // the default MTU before negotiation carries twenty, as the header
+        // was sized against
+        assertEquals(20, BleBearer.payloadOf(23))
+        assertEquals(182, BleBearer.payloadOf(185))
+        // Android's largest, 517, would carry 514: two more than an
+        // attribute value can hold, and the stack throws on them
+        assertEquals(BleBearer.MAX_ATTRIBUTE, BleBearer.payloadOf(517))
+        assertTrue(BleBearer.payloadOf(517) + BleBearer.ATT_OVERHEAD < 517)
+    }
 }
