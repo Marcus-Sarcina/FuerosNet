@@ -244,69 +244,105 @@ fn an_object_the_schema_refuses_does_not_decode_here_either() {
     assert!(CandidateHandover::decode(&fixture("P-capture-key-handover")).is_err());
 }
 
-// acceptance: owed, pending the §14.3.4 corpus fixture
-/// The prekey handover round-trips, with and without a one-time key.
-///
-/// **Not against the corpus, because the corpus has no fixture for it
-/// yet** (`test-vectors/README.md` says five of six). So this asserts the
-/// encoder against itself and the checker against malformed input, which
-/// is strictly less than every other test in this file claims. The byte
-/// equality this file exists for is owed and is not here.
+/// The prekey handover encodes to the canonical bytes, with and without a
+/// one-time key.
 #[test]
-fn the_prekey_handover_round_trips_with_and_without_a_one_time_key() {
-    let full = PrekeyHandover {
-        ceremony_id: [7u8; 32],
-        device: [9u8; 32],
-        bundle: vec![0xa1, 0x01, 0x02],
-        one_time: Some(vec![0xb2, 0x03]),
-    };
-    assert_eq!(
-        PrekeyHandover::decode(&full.encode()).expect("decodes"),
-        full
+fn the_prekey_handover_encodes_to_the_canonical_bytes() {
+    let fx = fixture("P-prekey-handover");
+    let read = PrekeyHandover::decode(&fx).expect("the canonical handover decodes");
+    assert_eq!(read.encode(), fx, "byte equality with the corpus");
+    assert!(
+        read.one_time.is_some(),
+        "the canonical one carries a one-time key"
     );
+    // the bundle is records.md's bytes unchanged, not a reinvention: it is
+    // long enough to be a signed COSE object rather than a stub
+    assert!(read.bundle.len() > 64, "a signed bundle, reused");
 
     // §7.8 lets a pool run dry, so an absent one-time key is the empty
     // pool and not a malformed object
-    let dry = PrekeyHandover {
-        one_time: None,
-        ..full.clone()
-    };
-    let bytes = dry.encode();
-    assert_eq!(PrekeyHandover::decode(&bytes).expect("decodes"), dry);
-    assert_ne!(bytes, full.encode(), "the fifth element is present or not");
+    let dry = fixture("P-prekey-handover-dry");
+    let read = PrekeyHandover::decode(&dry).expect("the dry handover decodes");
+    assert_eq!(read.encode(), dry);
+    assert_eq!(read.one_time, None);
+    assert_ne!(dry, fx, "the fifth element is present or not");
 }
 
-/// What the checker refuses.
+/// What the checker refuses, each against the corpus's own negative.
 #[test]
 fn the_prekey_handover_refuses_what_it_should() {
-    use rhtn_codec::encode::*;
-    let mk = |n: usize, ver: u64, cid: &[u8], dev: &[u8], bundle: &[u8]| {
-        let mut out = Vec::new();
-        emit_array_head(&mut out, n);
-        emit_uint(&mut out, ver);
-        emit_bstr(&mut out, cid);
-        emit_bstr(&mut out, dev);
-        emit_bstr(&mut out, bundle);
-        out
-    };
+    for id in [
+        "N-prekey-handover-device-31",
+        "N-prekey-handover-anchor-31",
+        "N-prekey-handover-empty-bundle",
+        "N-prekey-handover-version-2",
+    ] {
+        assert!(PrekeyHandover::decode(&fixture(id)).is_err(), "{id}");
+    }
+}
+
+/// The session's envelope round-trips, and refuses what it should.
+#[test]
+fn a_sealed_carriage_opens_only_under_its_own_key_and_ceremony() {
+    let key = [3u8; 32];
+    let cid = [7u8; 32];
+    let plain = IntentExchange {
+        contribution: [1u8; 16],
+        nominees: vec![],
+        bundle: vec![],
+        started_at: 5,
+        retention_years: 2,
+        initiator: true,
+        continuations: 0,
+    }
+    .encode();
+
+    let sealed = seal_carriage(&key, &cid, &plain);
+    assert_ne!(sealed, plain, "the bearer carries ciphertext");
     assert!(
-        PrekeyHandover::decode(&mk(4, 2, &[7u8; 32], &[9u8; 32], &[1])).is_err(),
-        "version 2"
+        !sealed.windows(plain.len()).any(|w| w == plain),
+        "the plaintext is not in the sealed bytes"
     );
+    assert_eq!(
+        *open_carriage(&key, &cid, &sealed).expect("opens"),
+        plain,
+        "and opens to exactly what went in"
+    );
+
+    // a different ceremony's key, which is what actually separates them
     assert!(
-        PrekeyHandover::decode(&mk(4, 1, &[7u8; 31], &[9u8; 32], &[1])).is_err(),
-        "a 31-byte ceremony-id"
+        open_carriage(&[4u8; 32], &cid, &sealed).is_none(),
+        "another key"
     );
+    // the associated data states that binding as well
     assert!(
-        PrekeyHandover::decode(&mk(4, 1, &[7u8; 32], &[9u8; 31], &[1])).is_err(),
-        "a 31-byte device"
+        open_carriage(&key, &[8u8; 32], &sealed).is_none(),
+        "another ceremony-id"
     );
+    // a flipped byte anywhere
+    for i in [0, 6, 13, sealed.len() - 1] {
+        let mut bad = sealed.clone();
+        bad[i] ^= 1;
+        assert!(
+            open_carriage(&key, &cid, &bad).is_none(),
+            "byte {i} flipped"
+        );
+    }
+    // and plaintext from a peer that does not encrypt
     assert!(
-        PrekeyHandover::decode(&mk(4, 1, &[7u8; 32], &[9u8; 32], &[])).is_err(),
-        "an empty bundle"
+        open_carriage(&key, &cid, &plain).is_none(),
+        "a peer sending plaintext fails to open, which is the refusal a \
+         version disagreement should produce"
     );
-    assert!(
-        PrekeyHandover::decode(&mk(3, 1, &[7u8; 32], &[9u8; 32], &[1])).is_err(),
-        "three fields"
-    );
+}
+
+/// Two sealings of one plaintext differ, so the nonce is doing its work.
+#[test]
+fn sealing_twice_gives_different_bytes() {
+    let (key, cid, plain) = ([3u8; 32], [7u8; 32], b"the same object".to_vec());
+    let a = seal_carriage(&key, &cid, &plain);
+    let b = seal_carriage(&key, &cid, &plain);
+    assert_ne!(a, b, "a random nonce per carriage");
+    assert_eq!(*open_carriage(&key, &cid, &a).unwrap(), plain);
+    assert_eq!(*open_carriage(&key, &cid, &b).unwrap(), plain);
 }

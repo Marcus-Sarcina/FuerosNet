@@ -374,7 +374,7 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/tamarin/local/exchange.spthy
 
-  processing time: 1.76s
+  processing time: 1.64s
   
   exchange_is_executable (exists-trace): verified (5 steps)
   an_accepted_anchor_was_derived_by_both (all-traces): verified (6 steps)

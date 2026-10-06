@@ -8,7 +8,7 @@
 use crate::backup;
 use crate::device::{ChannelKind, ChannelOutcome, ChannelResult, Device, guided_capture};
 use crate::diag::id8;
-use crate::horizon::Horizon;
+use crate::horizon::{Askable, Horizon, Reach, Upstream};
 use crate::keys::{capture_key, pre_commitment};
 use crate::notice::{Notice, Role};
 use crate::payload::{self, PayloadError, PayloadState};
@@ -91,6 +91,13 @@ pub enum Abort {
     /// counterparty's contribution has not been taken (§14.3.1), so
     /// nothing can be anchored to it or derived from it.
     NoCeremonyId,
+    /// A carriage that would not open under the local session's key
+    /// (`wire-format.md` §14.3.2).  Says only that the bytes came from
+    /// somebody without the key: a peer whose shell does not encrypt, a
+    /// tampered byte, or another ceremony's traffic.  **Not an anchor
+    /// failure** — §14.3.1's checks run on the plaintext and are what say
+    /// which ceremony a carriage claimed.
+    Unsealable,
     /// The counterparty's claimed start is far from this clock.
     ClockFar,
     /// No proximity channel passed.
@@ -274,6 +281,18 @@ pub enum Msg {
     /// Application traffic to the serving node itself: it rides the
     /// transport session and needs no construction.
     Transport(Vec<u8>),
+    /// **A conversation step for the co-present counterparty**, sealed
+    /// under the local session (`wire-format.md` §14.3.2) and carried by
+    /// the bearer (design §7.1).
+    ///
+    /// No node takes part in this and none is asked to: the counterparty
+    /// is co-present by definition, so its leg of kinds 9 to 18 crosses
+    /// the local interface while a witness's leg goes over the end-to-end
+    /// path [author, 2026-10-05]. **This is what makes a formation
+    /// ceremony work with no node reachable**, which design §6.4's escape
+    /// from a false social universe depends on, by the formation path of
+    /// design §13.2.
+    Carriage(Vec<u8>),
 }
 
 /// What the proposer shows every signer: the proposal, the disclosure set
@@ -904,7 +923,7 @@ impl Client {
             initiator = intent.initiator,
             "cer.intent.sent"
         );
-        Ok(out)
+        out.iter().map(|p| self.seal(p)).collect()
     }
 
     /// The counterparty's carriage set.  The echoed contribution is checked
@@ -926,7 +945,12 @@ impl Client {
             .as_ref()
             .and_then(|a| a.their_contribution)
             .ok_or(Abort::NotActive)?;
-        let (read, taken) = crate::local::read_intent(carriage, &cid).map_err(Abort::Malformed)?;
+        let opened: Vec<Zeroizing<Vec<u8>>> = carriage
+            .iter()
+            .map(|c| self.open(c))
+            .collect::<Result<_, _>>()?;
+        let plain: Vec<Vec<u8>> = opened.iter().map(|p| p.to_vec()).collect();
+        let (read, taken) = crate::local::read_intent(&plain, &cid).map_err(Abort::Malformed)?;
         if read.contribution != theirs {
             return Err(anchor_refused("intent", Abort::ContributionMismatch));
         }
@@ -958,18 +982,21 @@ impl Client {
     pub fn proximity_carriage(&mut self) -> Result<Vec<u8>, Abort> {
         let outcomes = self.proximity()?;
         let cid = self.anchored_id()?;
-        Ok(crate::local::ProximityOutcomes {
-            ceremony_id: cid,
-            channels: outcomes,
-        }
-        .encode())
+        self.seal(
+            &crate::local::ProximityOutcomes {
+                ceremony_id: cid,
+                channels: outcomes,
+            }
+            .encode(),
+        )
     }
 
     /// The counterparty's outcomes, anchored to this ceremony or refused.
     /// What they measured is their claim, and this side weighs it (design
     /// §1.3 item 4) — which is what [`Client::take_channels`] does.
     pub fn take_proximity(&mut self, bytes: &[u8]) -> Result<(), Abort> {
-        let read = crate::local::ProximityOutcomes::decode(bytes).map_err(Abort::Malformed)?;
+        let plain = self.open(bytes)?;
+        let read = crate::local::ProximityOutcomes::decode(&plain).map_err(Abort::Malformed)?;
         self.anchored("proximity", read.ceremony_id)?;
         self.take_channels(&read.channels)
     }
@@ -979,18 +1006,21 @@ impl Client {
     /// with the anchor this carriage adds.
     pub fn candidate_carriage(&self, candidates: Vec<u8>) -> Result<Vec<u8>, Abort> {
         let cid = self.anchored_id()?;
-        Ok(crate::local::CandidateHandover {
-            ceremony_id: cid,
-            candidates,
-        }
-        .encode())
+        self.seal(
+            &crate::local::CandidateHandover {
+                ceremony_id: cid,
+                candidates,
+            }
+            .encode(),
+        )
     }
 
     /// The counterparty's candidates, anchored or refused.  What comes back
     /// is the bare array for the transport to dial: an address, not
     /// evidence of anything.
     pub fn take_candidate_carriage(&mut self, bytes: &[u8]) -> Result<Vec<u8>, Abort> {
-        let read = crate::local::CandidateHandover::decode(bytes).map_err(Abort::Malformed)?;
+        let plain = self.open(bytes)?;
+        let read = crate::local::CandidateHandover::decode(&plain).map_err(Abort::Malformed)?;
         self.anchored("candidates", read.ceremony_id)?;
         Ok(read.candidates)
     }
@@ -1006,8 +1036,9 @@ impl Client {
             key: self.capture_key()?,
         }
         .encode();
+        let sealed = Zeroizing::new(self.seal(&out)?);
         tracing::info!(target: "cer", direction = "sent", "cer.capture_key");
-        Ok(out)
+        Ok(sealed)
     }
 
     /// The counterparty's capture key, anchored to this ceremony or
@@ -1018,7 +1049,8 @@ impl Client {
         &mut self,
         bytes: &[u8],
     ) -> Result<Zeroizing<[u8; 32]>, Abort> {
-        let read = crate::local::CaptureKeyHandover::decode(bytes).map_err(Abort::Malformed)?;
+        let plain = self.open(bytes)?;
+        let read = crate::local::CaptureKeyHandover::decode(&plain).map_err(Abort::Malformed)?;
         self.anchored("capture_key", read.ceremony_id)?;
         tracing::info!(target: "cer", direction = "received", "cer.capture_key");
         Ok(read.key)
@@ -1034,9 +1066,66 @@ impl Client {
         Ok(())
     }
 
+    /// The local session's key for this ceremony (`wire-format.md`
+    /// §14.3.2): SHA-256 of the session tag and both 16-byte
+    /// contributions, under a label distinct from the pre-commitment's.
+    ///
+    /// **Available exactly when a carriage can move.** Both contributions
+    /// are needed, and the second arrives optically before the first
+    /// carriage does, so there is no ordering in which a sender holds half
+    /// a key. Before that this is `NoCeremonyId`, the same answer
+    /// [`Client::anchored_id`] gives for the same reason.
+    pub(crate) fn session_key(&self) -> Result<Zeroizing<[u8; 32]>, Abort> {
+        let a = self.active.as_ref().ok_or(Abort::NotActive)?;
+        let theirs = a.their_contribution.ok_or(Abort::NoCeremonyId)?;
+        Ok(crate::keys::session_key(
+            (&self.public.keyhash, &a.contribution),
+            (&a.peer()?, &theirs),
+        ))
+    }
+
+    /// Seal one carriage for this ceremony's session.
+    pub(crate) fn seal(&self, plaintext: &[u8]) -> Result<Vec<u8>, Abort> {
+        let (k, cid) = (self.session_key()?, self.anchored_id()?);
+        Ok(crate::local::seal_carriage(&k, &cid, plaintext))
+    }
+
+    /// Open one carriage, or refuse it as [`Abort::Unsealable`].
+    pub(crate) fn open(&self, sealed: &[u8]) -> Result<Zeroizing<Vec<u8>>, Abort> {
+        let (k, cid) = (self.session_key()?, self.anchored_id()?);
+        crate::local::open_carriage(&k, &cid, sealed)
+            .ok_or_else(|| abort("open_carriage", Abort::Unsealable))
+    }
+
+    /// Seal and open a carriage **as a co-present adversary would**.
+    ///
+    /// `wire-format.md` §14.3.1 concedes exactly this: a party that read
+    /// both screens holds the session key, so it can wrap any payload in a
+    /// carriage that opens and re-anchor one ceremony's message into
+    /// another. §14.3.2's encryption moves who can do that, not whether it
+    /// can be done, and `models/tamarin/local/exchange.spthy` carries both
+    /// as lemmas that verify.
+    ///
+    /// **These exist so a test can be that adversary**, which is the only
+    /// way to exercise the anchor checks now that the key refuses
+    /// everybody else before they are reached. A shell has no use for them
+    /// and must not acquire one: `light-client-requirements.md` §9 keeps
+    /// cryptography in the kernel, and neither is reachable through the
+    /// FFI.
+    #[doc(hidden)]
+    pub fn seal_as_co_present(&self, plaintext: &[u8]) -> Result<Vec<u8>, Abort> {
+        self.seal(plaintext)
+    }
+
+    /// The counterpart of [`Client::seal_as_co_present`].
+    #[doc(hidden)]
+    pub fn open_as_co_present(&self, sealed: &[u8]) -> Result<Vec<u8>, Abort> {
+        self.open(sealed).map(|p| p.to_vec())
+    }
+
     /// This ceremony's id, or why there is none: no ceremony under way,
     /// or one whose id the counterparty's contribution has not fixed yet.
-    fn anchored_id(&self) -> Result<[u8; 32], Abort> {
+    pub(crate) fn anchored_id(&self) -> Result<[u8; 32], Abort> {
         self.active
             .as_ref()
             .ok_or(Abort::NotActive)?
@@ -1067,6 +1156,15 @@ impl Client {
         }
         let cid = pre_commitment((&me, &a.contribution), (&from, &intent.contribution));
         a.ceremony_id = Some(cid);
+        // **The contribution is kept, not just consumed.**  Both paths that
+        // fix a ceremony-id see this value and only the optical one used to
+        // record it, so a ceremony begun through the value path held an id
+        // whose inputs it could no longer name.  Nothing needed them until
+        // the local session's key did (`wire-format.md` §14.3.2), and in
+        // the optical flow this is the value `take_intent_carriage` has
+        // already checked the echo against, so writing it again changes
+        // nothing there [2026-10-05].
+        a.their_contribution = Some(intent.contribution);
         a.their_nominees = intent.nominees.clone();
         a.their_bundle = intent.bundle.clone();
         a.their_retention = intent.retention_years;
@@ -1393,6 +1491,12 @@ impl Client {
             .as_ref()
             .map(|a| a.responses.clone())
             .unwrap_or_default()
+    }
+
+    /// Who is in front of this device in the active ceremony, where one is
+    /// under way and the first code has named them.
+    pub fn counterparty(&self) -> Option<Keyhash> {
+        self.active.as_ref().and_then(|a| a.counterparty)
     }
 
     /// The two nominee lists of the active ceremony: mine, then theirs.
@@ -2339,8 +2443,53 @@ impl Client {
     }
 
     /// What this client has made and not yet handed up, taken away.
+    /// What the courier is owed: everything the outbox holds **except**
+    /// the counterparty's carriages, which no node carries.
     pub fn outbox(&mut self) -> Vec<Msg> {
-        std::mem::take(&mut self.outbox)
+        let (carriages, rest): (Vec<Msg>, Vec<Msg>) = std::mem::take(&mut self.outbox)
+            .into_iter()
+            .partition(|m| matches!(m, Msg::Carriage(_)));
+        self.outbox = carriages;
+        rest
+    }
+
+    /// What the bearer is owed: the counterparty's carriages, drained.
+    ///
+    /// **Separate from [`Client::outbox`] because the two go different
+    /// ways**, and a carriage handed to a courier would be refused by a
+    /// node that knows no such thing. A caller that drains one and not the
+    /// other leaves the ceremony waiting, so every path that can produce a
+    /// carriage drains this.
+    pub fn carriages(&mut self) -> Vec<Vec<u8>> {
+        let (carriages, rest): (Vec<Msg>, Vec<Msg>) = std::mem::take(&mut self.outbox)
+            .into_iter()
+            .partition(|m| matches!(m, Msg::Carriage(_)));
+        self.outbox = rest;
+        carriages
+            .into_iter()
+            .filter_map(|m| match m {
+                Msg::Carriage(b) => Some(b),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Take a conversation step off the bearer: open it, and hand the
+    /// kind and bytes to the same path a payload-borne step takes.
+    ///
+    /// **The anchor is the key.** A carriage that does not open under this
+    /// ceremony's session key is refused as [`Abort::Unsealable`], which
+    /// is all a receiver can say about bytes from a party without the key;
+    /// everything the step itself claims is checked by `converse_in` on
+    /// the plaintext, exactly as for a step that arrived over the network.
+    pub fn take_conversation_carriage(
+        &mut self,
+        bytes: &[u8],
+    ) -> Result<crate::sequence::Conversed, Abort> {
+        let from = self.active.as_ref().ok_or(Abort::NotActive)?.peer()?;
+        let plain = self.open(bytes)?;
+        let (kind, inner) = crate::payload::unwrap(&plain).map_err(Abort::Malformed)?;
+        Ok(self.converse_in(from, kind, &inner))
     }
 
     /// Where this client sits in the subnet `anchor` names.
@@ -2777,6 +2926,101 @@ impl Client {
         }
     }
 
+    /// Everything addressing `to` needs that this client can answer from
+    /// its own state (`wire-format.md` §7.7.2): who serves it, and — only
+    /// where that is not held — the infrastructure a resolution could be
+    /// asked of.
+    ///
+    /// **The identities are added here**, because the horizon holds
+    /// positions and addresses and this holds the key material that binds
+    /// a dial (`wire-format.md` §9.1).  A node whose identity this client
+    /// does not hold is still named: a resolution reply may carry its
+    /// material, which is what §7.7.3's optional field is for.
+    pub fn reach_for(&self, to: &Keyhash) -> Reach {
+        let binds = |node: &Keyhash| {
+            self.known
+                .iter()
+                .find(|i| i.keyhash == *node)
+                .map(|i| i.key_material())
+        };
+        let upstream = match self.horizon.upstream_of(to) {
+            Upstream::Known {
+                node,
+                endpoints,
+                key_material: _,
+            } => {
+                let key_material = binds(&node);
+                Upstream::Known {
+                    node,
+                    endpoints,
+                    key_material,
+                }
+            }
+            other => other,
+        };
+        // only a bare position needs somebody asked, and nothing is
+        // prepared for the other two cases
+        let ask = match &upstream {
+            Upstream::Position { .. } => self
+                .horizon
+                .reachable_infra()
+                .into_iter()
+                .map(|(node, endpoints)| Askable {
+                    key_material: binds(&node),
+                    node,
+                    endpoints,
+                })
+                .collect(),
+            _ => Vec::new(),
+        };
+        Reach { upstream, ask }
+    }
+
+    /// What was queued for `to` while a prekey reply was awaited, now
+    /// that a session with the device exists: in the order it was queued.
+    ///
+    /// **A send with no session queues its plaintext and asks for a
+    /// one-time key** (`wire-format.md` §7.8), and the queue is drained
+    /// when the reply opens the session.  Where the ask is answered with
+    /// no bundle — a subject that had not published one yet — nothing
+    /// opens and the queue stays; and a session established the other way
+    /// round, by the peer writing first, never looked at it.  **The
+    /// queued steps were then stranded for as long as that session
+    /// lived**, which cost a witness the opening of a conversation and
+    /// cost the sender no error [2026-10-06]. This is what the gate
+    /// caught.
+    ///
+    /// An encryption that fails leaves the rest of that device's queue
+    /// undelivered, as the reply path's does: a ratchet that will not
+    /// encrypt is not a condition a retry mends.
+    fn flush_pending(&mut self, to: Keyhash) -> Vec<Msg> {
+        let devices: Vec<[u8; 32]> = self
+            .payload
+            .pending
+            .keys()
+            .filter(|(p, _)| *p == to)
+            .map(|(_, d)| *d)
+            .filter(|d| self.payload.sessions.has_session_with(&to, d))
+            .collect();
+        let me = self.payload.device;
+        let mut out = Vec::new();
+        for device in devices {
+            let waiting = self
+                .payload
+                .pending
+                .remove(&(to, device))
+                .unwrap_or_default();
+            for plaintext in &waiting {
+                let Some(r) = self.payload.sessions.ratchets.get_mut(&(to, device)) else {
+                    break;
+                };
+                let Ok(m) = r.encrypt(plaintext) else { break };
+                out.push(self.route(to, payload::channel_message(&me, &m), device));
+            }
+        }
+        out
+    }
+
     /// Send `bytes` of `kind` to `to` (design §14.2.4.1): to the serving
     /// node it rides the transport session; to a leaf it goes on the
     /// session held, or waits for the one-time key requested now, and
@@ -2804,7 +3048,9 @@ impl Client {
         // device without one gets a session opened, on a one-time key
         // asked for that device (`wire-format.md` §7.8 field 4)
         let me = self.payload.device;
-        let mut out = Vec::new();
+        // anything queued for this peer earlier goes first, so the order it
+        // was queued in is the order it travels
+        let mut out = self.flush_pending(to);
         if self.payload.sessions.has_session(&to) {
             for (device, m) in self.payload.sessions.send(&me, &to, &plaintext)? {
                 out.push(self.route(to, m, device));
@@ -3170,6 +3416,15 @@ impl Client {
     /// application payload to the application.
     pub fn receive_payload(&mut self, from: Keyhash, bytes: &[u8]) -> Result<Dispatched, String> {
         let out = self.receive_payload_in(from, bytes);
+        // **a session opened by the peer writing first drains what was
+        // waiting for one** ([`Client::flush_pending`]): into the outbox,
+        // which the courier carries after every delivery, because a
+        // delivery hands back a `Dispatched` and has nowhere else to put a
+        // message of its own.
+        if out.is_ok() {
+            let waiting = self.flush_pending(from);
+            self.outbox.extend(waiting);
+        }
         match &out {
             Ok(d) => tracing::info!(
                 target: "pay",

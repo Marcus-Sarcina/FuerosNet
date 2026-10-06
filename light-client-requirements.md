@@ -398,6 +398,13 @@ only party who can tell them is their own client.
   someone rotated, rather than intent to message. Fetching on demand instead
   announces each intended conversation to whoever serves the bundle (design
   §19.8, C11).
+- **Put a targeted fetch to the node that serves the subject** [author,
+  2026-10-05]. A node answers a prekey request from what was published to it
+  (`wire-format.md` §7.8), so the party holding a subject's bundle is the node
+  that subject attached to, and your own serving node holds it only where it
+  serves them too. The intent a targeted fetch discloses then reaches the party
+  that is about to be handed the message rather than your patron (design §19.4,
+  P26). Your own node is where it goes when that one cannot be reached.
 - **Never prefetch one-time keys.** Serving one consumes it, so blanket prefetch
   would drain every pool in the org and make exhaustion the normal state —
   destroying its value as a signal that someone is draining a pool deliberately.
@@ -462,6 +469,11 @@ only party who can tell them is their own client.
 - **A resolution request discloses intent to reach someone**, before any contact
   exists, to whoever serves it (design §19.4, P26). Do not resolve
   speculatively, the same reasoning that forbids prefetching one-time prekeys.
+- **Ask it of any infra node whose address you hold**, not only of your serving
+  node (`wire-format.md` §7.7.1) [author, 2026-10-05]. The addresses above are
+  what that choice is made from, and a client whose serving node will not answer
+  has somewhere else to ask. What a resolution came to is a cache like the
+  others: give it a lifetime and say what it is.
 
 ---
 
@@ -588,6 +600,21 @@ only party who can tell them is their own client.
   warning. The trade each path carries — an IP to a peer inside the horizon,
   a communication graph to the serving node — is recorded where trades are
   (design §19.4, P17), not put to the person.
+
+- **The relayed path's first term is the recipient's own node** [author,
+  2026-10-05]. Where no direct path is held, hand the payload to the node that
+  serves the recipient — dialled at an address you hold, or one resolved for it —
+  because that is the party which queues for its own client while the client is
+  away and gives it over on return (design §§12.6.3, 14.1.4). **A light client
+  does not need its patron or infra node to address a distant node for which it
+  holds a locator**; your own serving node is the fallback, for a client that
+  cannot open an outbound connection at all and needs it to traverse a proxy. A
+  node that already serves you is reached on the session that is up rather than
+  dialled a second time.
+- **Bound what you keep open to nodes that do not serve you, and close an idle
+  one.** An open connection to a stranger's node is a standing statement about
+  who you are talking to (design §19.4), and the bound is yours to choose and
+  state, like every other cache here.
 
 ---
 

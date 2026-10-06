@@ -2,10 +2,12 @@
 //! arrives on them goes in.
 
 use crate::actor::Handle;
+use crate::beyond::Beyond;
 use crate::direct::Direct;
 use crate::serving::{Inbound, Serving};
 use crate::verifier::Verifiers;
 use rhtn_archive::Keyhash;
+use rhtn_archive::prekey::{PrekeyRequest, REQUEST_PREKEY};
 use rhtn_client::ceremony::{Dispatched, Msg};
 use rhtn_client::payload::{KIND_CANDIDATES, KIND_QUERY, KIND_RESPONSE, KIND_RESPONSE_COPY};
 use rhtn_client::query::QueryRequest;
@@ -75,6 +77,9 @@ pub struct Courier {
     pub serving: Arc<dyn Serving>,
     /// The direct path, tried before the relay (design §12.6.3).
     pub direct: Arc<dyn Direct>,
+    /// The network past this client's serving node, where a dialler was
+    /// wired: how payload reaches the recipient's own node.
+    beyond: Mutex<Option<Arc<Beyond>>>,
     app: mpsc::UnboundedSender<(Keyhash, Dispatched)>,
     verifiers: Mutex<Option<Arc<Verifiers>>>,
     offered: Mutex<HashSet<Keyhash>>,
@@ -139,6 +144,7 @@ impl Courier {
                 handle,
                 serving,
                 direct,
+                beyond: Mutex::new(None),
                 app,
                 verifiers: Mutex::new(None),
                 offered: Mutex::new(HashSet::new()),
@@ -150,6 +156,69 @@ impl Courier {
 
     pub(crate) fn report_grants_to(&self, v: Arc<Verifiers>) {
         *self.verifiers.lock().unwrap() = Some(v);
+    }
+
+    /// Reach nodes this client is not attached to through `beyond`.
+    ///
+    /// **Wired late, like the inbound side**, because the dialler is built
+    /// from the endpoint an attach opens and the courier exists before it.
+    /// A courier nobody wires one into carries payload the way it always
+    /// did: the direct path, then the node serving this client.
+    pub fn reach_beyond(&self, beyond: Arc<Beyond>) {
+        *self.beyond.lock().unwrap() = Some(beyond);
+    }
+
+    /// Hand payload to the node that serves `to`, where this client can
+    /// say who that is and reach them.
+    ///
+    /// **The recipient's node, not this client's** [author, 2026-10-05]:
+    /// it is the party that queues for its own client while the client is
+    /// away (design §14.1.4), and reaching it needs no cooperation from
+    /// the sender's patron, which is what makes a route obtained in person
+    /// survive an uncooperative one (design §12.6.3, §6.4).
+    async fn to_their_node(&self, to: Keyhash, bytes: &[u8], device: [u8; 32]) -> bool {
+        let Some(beyond) = self.beyond.lock().unwrap().clone() else {
+            return false;
+        };
+        let reach = self.handle.with(move |c| c.reach_for(&to)).await;
+        beyond
+            .carry(to, device, bytes.to_vec(), reach, Some(self.serving.me()))
+            .await
+    }
+
+    /// A targeted prekey fetch, put to the node that serves the subject.
+    ///
+    /// **A node answers prekey requests from what was published to it**
+    /// (`wire-format.md` §7.8), so the node that holds a subject's bundle
+    /// is the node that subject attached to.  A client asking its own
+    /// patron for a peer served elsewhere is asking a party that cannot
+    /// know, and under the ruling of 2026-10-05 it is also asking the one
+    /// party the ceremony must not depend on.
+    ///
+    /// **It discloses less, not more.** §7.8 states that requesting a
+    /// one-time key discloses the intent to message that subject; put
+    /// here, that intent reaches the subject's own node, which is about to
+    /// be handed the message anyway, instead of this client's patron
+    /// (design §19.4, P26).
+    ///
+    /// The sweep is not routed this way: a `PrekeyBatchRequest` names a
+    /// whole population and is answered from what one node holds.
+    async fn their_prekeys(&self, body: &[u8]) -> Option<Vec<u8>> {
+        let beyond = self.beyond.lock().unwrap().clone()?;
+        let subject = match PrekeyRequest::decode(body).ok()? {
+            PrekeyRequest::One { subject, .. } => subject,
+            PrekeyRequest::Batch { .. } => return None,
+        };
+        let reach = self.handle.with(move |c| c.reach_for(&subject)).await;
+        beyond
+            .ask_their_node(
+                subject,
+                reach,
+                Some(self.serving.me()),
+                REQUEST_PREKEY,
+                body.to_vec(),
+            )
+            .await
     }
 
     /// The identity this courier carries for.
@@ -240,6 +309,35 @@ impl Courier {
             }
             // undecryptable: dropped, and nothing said to anyone
             Err(_) => {}
+        }
+    }
+
+    /// Take a conversation step off the **local bearer** and put what it
+    /// came to where a network-borne step's outcome goes.
+    ///
+    /// **The two arrivals must look the same to an application.** Since
+    /// 2026-10-05 the counterparty's leg of kinds 9 to 18 crosses the
+    /// local interface and a witness's goes over the end-to-end path
+    /// (design §7.1), and a screen showing one and not the other would be
+    /// showing half a ceremony. So this ends where `deliver` ends: one
+    /// `Dispatched::Conversation` on the application's channel, from the
+    /// counterparty.
+    ///
+    /// A carriage that will not open is dropped and nothing is said to
+    /// anyone, as an undecryptable payload is: there is no party to tell,
+    /// since whoever sent it held no key.
+    pub async fn take_carriage(&self, bytes: Vec<u8>) {
+        let from = self.handle.with(|c| c.counterparty()).await;
+        let Some(from) = from else { return };
+        // a refusal is dropped, as the comment above says: the error is
+        // not reported anywhere, because there is nobody it could be
+        // reported to
+        if let Ok(conversed) = self
+            .handle
+            .with(move |c| c.take_conversation_carriage(&bytes))
+            .await
+        {
+            let _ = self.app.send((from, Dispatched::Conversation(conversed)));
         }
     }
 
@@ -363,6 +461,27 @@ impl Courier {
         Ok(self.carry(msgs).await)
     }
 
+    /// The relayed path, in the order design §12.6.3 takes it: **the
+    /// recipient's own node first**, and the node serving this client as
+    /// the fallback.
+    ///
+    /// **Why the sender's node is still a term.** The ruling that put the
+    /// recipient's node first also kept the sender's nearest infra node as
+    /// a relay for a client that cannot open an outbound connection at all
+    /// — one behind a proxy it must traverse [author, 2026-10-05]. That is
+    /// a traversal relay rather than a carriage, and this workspace has no
+    /// separate traversal path to put it on, so it stands where the
+    /// store-and-forward fallback already stood. What changed is that it is
+    /// no longer the *first* answer, and so no longer a party whose
+    /// cooperation a sender needs.
+    async fn relayed(&self, to: Keyhash, bytes: &[u8], device: [u8; 32]) -> bool {
+        self.to_their_node(to, bytes, device).await
+            || self
+                .serving
+                .relay(self.me(), to, bytes.to_vec(), device)
+                .await
+    }
+
     /// Carry the client's messages where the seams go: prekey traffic to
     /// the serving node, payload on the direct path where it is held and
     /// to the relay otherwise.
@@ -394,7 +513,13 @@ impl Courier {
                         }
                     }
                     Msg::PrekeyRequest(b) => {
-                        if let Some(reply) = me.serving.prekey(me.me(), &b).await {
+                        // the subject's own node first, and this client's
+                        // where that one could not be reached
+                        let answered = match me.their_prekeys(&b).await {
+                            Some(reply) => Some(reply),
+                            None => me.serving.prekey(me.me(), &b).await,
+                        };
+                        if let Some(reply) = answered {
                             let more = me.handle.with(move |c| c.take_prekey_reply(&reply)).await;
                             if let Ok(more) = more {
                                 out.absorb(me.carry(more).await);
@@ -403,17 +528,19 @@ impl Courier {
                     }
                     Msg::Payload { to, bytes, device } => {
                         // a delivery short of complete leaves the message
-                        // with the sender, and the relay carries it (design
-                        // §14.1.1): direct where a path is held, the relay
-                        // as the fallback, nobody's choice
+                        // with the sender, and a relayed path carries it
+                        // (design §14.1.1): direct where a path is held,
+                        // then the three terms below, nobody's choice
                         if !me.direct.deliver(to, bytes.clone()).await
-                            && !me.serving.relay(me.me(), to, bytes.clone(), device).await
+                            && !me.relayed(to, &bytes, device).await
                         {
                             out.refused.push(Msg::Payload { to, bytes, device });
                         }
                     }
+                    // the client already said no direct path is held, so
+                    // the relayed path is the whole of what is left
                     Msg::Relay { to, bytes, device } => {
-                        if !me.serving.relay(me.me(), to, bytes.clone(), device).await {
+                        if !me.relayed(to, &bytes, device).await {
                             out.refused.push(Msg::Relay { to, bytes, device });
                         }
                     }

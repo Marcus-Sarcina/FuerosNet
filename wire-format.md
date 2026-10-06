@@ -2985,6 +2985,14 @@ light client has no reason to hold a socket to an arbitrary anchor and often cou
 not reach one. The serving node resolves on the client's behalf and returns the
 result.
 
+**But it is not restricted to its serving node** [author, 2026-10-05]: *a light
+client does not need its patron or infra node to address a distant node for which
+it holds a locator*. A client MAY put the request to any infra node whose address
+it already holds — the parties in its horizon that published an endpoint record
+(§7.6) — and a client whose serving node will not answer therefore has somewhere
+else to ask. The rule above states the default and its reason: the serving node is
+the one socket a light client certainly has, not the only one it may use.
+
 **Infra nodes exchange resolution requests directly**, static address to static
 address.
 
@@ -5018,7 +5026,22 @@ because anything encrypts it twice.
 |---|---|
 | Key | `SHA-256` of `rhtn/1:ceremony-session` and the two contributions, in the same ascending participant-keyhash order §14.3.1 derives the ceremony-id under |
 | Why a label of its own | so one construction does not both key a secret and name a public value. The ceremony-id's label is `rhtn/1:ceremony` |
-| Mode | an **AEAD**. A ciphertext that is not a well-formed plaintext under the key is refused, which is what the local exchange's proof assumes and a bare stream cipher would not give |
+| Mode | **AES-256-GCM**, one sealing over the whole encoded object |
+| Nonce | **96 bits, random per carriage**, carried in front of the ciphertext. A carriage is a handful per ceremony and the key is per ceremony, so random is safe here and needs no counter either side must keep in step |
+| Associated data | the **ceremony-id**. Belt over braces, stated plainly: the key is already derived from this ceremony's two contributions and so is unique to it, which is what actually stops a carriage opening in another |
+| Why an AEAD and not a cipher | a ciphertext that is not a well-formed plaintext under the key must be **refused**, which is what the local exchange's proof assumes. A bare stream cipher would not give it |
+
+**The construction is `crate::sealed`'s**, which seals what the kernel
+persists: the same AEAD, the same nonce width, the same
+nonce-then-ciphertext layout. One AEAD shape in the kernel and none in the
+shell, which is why a shell carries custody and no cryptography.
+
+**Nothing marks a carriage as sealed.** The session is encrypted by this
+section, so a peer sending plaintext simply fails to open, which is the
+refusal §1's unknown-version rule would give it anyway. A failure to open
+says only that the bytes came from somebody without the key; §14.3.1's
+anchor checks are what say *why* a carriage is refused, and they run on the
+plaintext.
 
 **What this is and is not.** It makes the bearer confidential and
 exclusive to the two participants, which is what lets a prekey cross it

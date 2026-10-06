@@ -865,7 +865,7 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/results/mutant-8-wire-only-attach-a_delegated_bind_names_a_key_the_identity_delegated.spthy
 
-  processing time: 5.39s
+  processing time: 5.44s
   
   attach_completes_honestly (exists-trace): analysis incomplete (1 steps)
   attach_is_executable (exists-trace): analysis incomplete (1 steps)

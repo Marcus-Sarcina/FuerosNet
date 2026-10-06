@@ -1,9 +1,9 @@
 {
  "format": "rhtn-test-corpus/1",
  "pins": {
-  "wire-format.md": "6becb450495eb90348e909627f92dea4e708a2cd0ef483fce157521a731d54e9",
-  "network-design.md": "75302e1b814849ef9734a3c90e8b63aa29fbeb2c977365bfdf56730137f0d743",
-  "light-client-requirements.md": "4402cb7cb0294bd54c7f0731ed9ec13b0f95d52a30fe1e3cc7920f479b4bd109"
+  "wire-format.md": "6a6ec2e78be398854de80a143c50ea9ae72e1bc1c984318870a64531d9583fff",
+  "network-design.md": "6a375aac1fd3a07120a162a2c058f5c271d4b5b0bb442f4c47e324fdd9dac5d3",
+  "light-client-requirements.md": "21e6ff6262bdb47bf017261868e8599fc9c3506e11492af42371ea844894ed9e"
  },
  "classes": {
   "bytes": "hex is the complete input",
@@ -2886,6 +2886,26 @@
    "hex": "83015820cb8ea88ad0a089017394c291f918217c4dc8d754a4639eb024f23662e5ca2b185820feb5bf5d3660e99d4ea3deff87546d52c0e1cee5cbb007ae04ac2c39bf902466"
   },
   {
+   "id": "P-prekey-handover",
+   "class": "bytes",
+   "expect": {
+    "outcome": "accept",
+    "kind": "PrekeyHandover",
+    "reason": "alice's bundle and one one-time key, anchored; the bundle is records.md's bytes unchanged"
+   },
+   "hex": "85015820cb8ea88ad0a089017394c291f918217c4dc8d754a4639eb024f23662e5ca2b185820fafb7967ea0e2bc7d3b5023bdb9e0bc3ccc2366470048255c85f0b879313ac2a58dca60158208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8dcfc852aa6a0201035840c5b654905fcee6436b8d3d1ba96ba61a02948f1cf18e89a9b45fa174cb970800fb66e27d796ea27e4642b735e251341f9bf8e7de7fc8e47b35cb59e3a8c31ad9041a6a431510055820fafb7967ea0e2bc7d3b5023bdb9e0bc3ccc2366470048255c85f0b879313ac2a068443a10127a0f658407318d11754f8dd5e104a4c16d6b65b9c755394cd8a54a650282d6d164987a645051ebb68b810f3416920c7d7087023c67b8f3c8d6b0028b1f5d8c5a9065add035820843aa21792ec7ab11513879f35807be2d2597e25a21b5139f43d9a6ffad3f6ac"
+  },
+  {
+   "id": "P-prekey-handover-dry",
+   "class": "bytes",
+   "expect": {
+    "outcome": "accept",
+    "kind": "PrekeyHandover",
+    "reason": "the same without a one-time key, which s7.8 permits when a pool runs dry"
+   },
+   "hex": "84015820cb8ea88ad0a089017394c291f918217c4dc8d754a4639eb024f23662e5ca2b185820fafb7967ea0e2bc7d3b5023bdb9e0bc3ccc2366470048255c85f0b879313ac2a58dca60158208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8dcfc852aa6a0201035840c5b654905fcee6436b8d3d1ba96ba61a02948f1cf18e89a9b45fa174cb970800fb66e27d796ea27e4642b735e251341f9bf8e7de7fc8e47b35cb59e3a8c31ad9041a6a431510055820fafb7967ea0e2bc7d3b5023bdb9e0bc3ccc2366470048255c85f0b879313ac2a068443a10127a0f658407318d11754f8dd5e104a4c16d6b65b9c755394cd8a54a650282d6d164987a645051ebb68b810f3416920c7d7087023c67b8f3c8d6b0028b1f5d8c5a9065add03"
+  },
+  {
    "id": "P-device-introduction",
    "class": "bytes",
    "expect": {
@@ -3035,6 +3055,50 @@
     "reason": "a version the decoder does not know is refused"
    },
    "hex": "83025820cb8ea88ad0a089017394c291f918217c4dc8d754a4639eb024f23662e5ca2b185820feb5bf5d3660e99d4ea3deff87546d52c0e1cee5cbb007ae04ac2c39bf902466"
+  },
+  {
+   "id": "N-prekey-handover-device-31",
+   "class": "bytes",
+   "expect": {
+    "outcome": "reject",
+    "kind": "PrekeyHandover",
+    "layer": "schema",
+    "reason": "a device is 32 bytes"
+   },
+   "hex": "84015820cb8ea88ad0a089017394c291f918217c4dc8d754a4639eb024f23662e5ca2b18581ffafb7967ea0e2bc7d3b5023bdb9e0bc3ccc2366470048255c85f0b879313ac58dca60158208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8dcfc852aa6a0201035840c5b654905fcee6436b8d3d1ba96ba61a02948f1cf18e89a9b45fa174cb970800fb66e27d796ea27e4642b735e251341f9bf8e7de7fc8e47b35cb59e3a8c31ad9041a6a431510055820fafb7967ea0e2bc7d3b5023bdb9e0bc3ccc2366470048255c85f0b879313ac2a068443a10127a0f658407318d11754f8dd5e104a4c16d6b65b9c755394cd8a54a650282d6d164987a645051ebb68b810f3416920c7d7087023c67b8f3c8d6b0028b1f5d8c5a9065add03"
+  },
+  {
+   "id": "N-prekey-handover-anchor-31",
+   "class": "bytes",
+   "expect": {
+    "outcome": "reject",
+    "kind": "PrekeyHandover",
+    "layer": "schema",
+    "reason": "a ceremony-id is 32 bytes"
+   },
+   "hex": "8401581fcb8ea88ad0a089017394c291f918217c4dc8d754a4639eb024f23662e5ca2b5820fafb7967ea0e2bc7d3b5023bdb9e0bc3ccc2366470048255c85f0b879313ac2a58dca60158208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8dcfc852aa6a0201035840c5b654905fcee6436b8d3d1ba96ba61a02948f1cf18e89a9b45fa174cb970800fb66e27d796ea27e4642b735e251341f9bf8e7de7fc8e47b35cb59e3a8c31ad9041a6a431510055820fafb7967ea0e2bc7d3b5023bdb9e0bc3ccc2366470048255c85f0b879313ac2a068443a10127a0f658407318d11754f8dd5e104a4c16d6b65b9c755394cd8a54a650282d6d164987a645051ebb68b810f3416920c7d7087023c67b8f3c8d6b0028b1f5d8c5a9065add03"
+  },
+  {
+   "id": "N-prekey-handover-empty-bundle",
+   "class": "bytes",
+   "expect": {
+    "outcome": "reject",
+    "kind": "PrekeyHandover",
+    "layer": "schema",
+    "reason": "a bundle is a non-empty byte string"
+   },
+   "hex": "84015820cb8ea88ad0a089017394c291f918217c4dc8d754a4639eb024f23662e5ca2b185820fafb7967ea0e2bc7d3b5023bdb9e0bc3ccc2366470048255c85f0b879313ac2a40"
+  },
+  {
+   "id": "N-prekey-handover-version-2",
+   "class": "bytes",
+   "expect": {
+    "outcome": "reject",
+    "kind": "PrekeyHandover",
+    "layer": "schema",
+    "reason": "a version the decoder does not know is refused"
+   },
+   "hex": "84025820cb8ea88ad0a089017394c291f918217c4dc8d754a4639eb024f23662e5ca2b185820fafb7967ea0e2bc7d3b5023bdb9e0bc3ccc2366470048255c85f0b879313ac2a58dca60158208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8dcfc852aa6a0201035840c5b654905fcee6436b8d3d1ba96ba61a02948f1cf18e89a9b45fa174cb970800fb66e27d796ea27e4642b735e251341f9bf8e7de7fc8e47b35cb59e3a8c31ad9041a6a431510055820fafb7967ea0e2bc7d3b5023bdb9e0bc3ccc2366470048255c85f0b879313ac2a068443a10127a0f658407318d11754f8dd5e104a4c16d6b65b9c755394cd8a54a650282d6d164987a645051ebb68b810f3416920c7d7087023c67b8f3c8d6b0028b1f5d8c5a9065add03"
   },
   {
    "id": "P-consent-reply",

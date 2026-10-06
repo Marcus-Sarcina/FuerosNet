@@ -8,7 +8,7 @@ use common::*;
 use rhtn_archive::record::Record;
 use rhtn_archive::topology::Snapshot;
 use rhtn_archive::tx::*;
-use rhtn_client::horizon::{Horizon, Took, Woke};
+use rhtn_client::horizon::{Horizon, Took, Upstream, Woke};
 
 /// The transaction identifiers a horizon holds, in the order a fold takes
 /// them.
@@ -1076,4 +1076,86 @@ fn a_restored_horizon_still_holds_the_addresses_it_was_keeping_to_route_around_a
         "the retired pair stays retired"
     );
     assert!(fresh.endpoints_of(&kh("carol")).is_empty());
+}
+
+// acceptance: TOP-47
+#[test]
+fn a_client_says_who_serves_a_peer_from_its_own_copy_and_asks_nobody() {
+    // bob roots the subnet, alice and carol under it, w2 under carol
+    let mut w = World::new();
+    let recs = vec![
+        adopt(&mut w, "alice", "bob", vec![0x10], 1),
+        adopt(&mut w, "carol", "bob", vec![0x20], 1),
+        adopt(&mut w, "w2", "carol", vec![0x21], 2),
+        adopt(&mut w, "w1", "alice", vec![0x11], 2),
+    ];
+    let mut h = fed("alice", &recs);
+
+    // **a position with no address above it is not an answer.** The
+    // client can place w2 and reach nobody, so what it has is something
+    // to resolve, not somewhere to send
+    assert_eq!(
+        h.upstream_of(&kh("w2")),
+        Upstream::Position {
+            anchor: kh("bob"),
+            path: vec![0x21],
+            nibbles: 2
+        },
+        "placed, with no infrastructure addressable above it"
+    );
+
+    // the anchor publishes: it sits at the empty path, so it is an
+    // ancestor of everyone in the subnet
+    let (root, at_bob) = endpoints("bob", 7101, 1, 1);
+    assert_eq!(h.ingest_endpoint(&root, &ids()), Took::Applied);
+    assert_eq!(
+        h.upstream_of(&kh("w2")),
+        Upstream::Known {
+            node: kh("bob"),
+            endpoints: vec![at_bob.encode_bytes()],
+            key_material: None
+        },
+        "the only ancestor with an address"
+    );
+
+    // carol publishes, and the nearest ancestor wins: w2's own patron,
+    // not the root above it (`wire-format.md` §7.7.2)
+    let (sib, at_carol) = endpoints("carol", 7102, 1, 1);
+    assert_eq!(h.ingest_endpoint(&sib, &ids()), Took::Applied);
+    assert_eq!(
+        h.upstream_of(&kh("w2")),
+        Upstream::Known {
+            node: kh("carol"),
+            endpoints: vec![at_carol.encode_bytes()],
+            key_material: None
+        },
+        "the nearest infrastructure ancestor, which is the node it attaches to"
+    );
+
+    // **a party that published one is its own upstream**: §7.7.3's empty
+    // residual, where the target *is* the serving node
+    assert_eq!(
+        h.upstream_of(&kh("carol")),
+        Upstream::Known {
+            node: kh("carol"),
+            endpoints: vec![at_carol.encode_bytes()],
+            key_material: None
+        },
+        "an infra node is addressed directly"
+    );
+
+    // a sibling's subtree is not an ancestor of alice's own
+    assert_eq!(
+        h.upstream_of(&kh("w1")),
+        Upstream::Known {
+            node: kh("bob"),
+            endpoints: vec![at_bob.encode_bytes()],
+            key_material: None
+        },
+        "alice published nothing, so the root is the nearest that did"
+    );
+
+    // and a party this client cannot place at all leaves it nothing: no
+    // position to resolve from and nobody to dial
+    assert_eq!(h.upstream_of(&kh("dave")), Upstream::Unknown);
 }

@@ -266,7 +266,44 @@ impl Client {
         };
         let mut out = Vec::new();
         let mut failed = Vec::new();
+        // **The counterparty's leg crosses the local interface** (design
+        // §7.1): it is co-present by definition, so its step is sealed
+        // under the local session and carried by the bearer, and no node
+        // takes part.  A witness's leg goes over the end-to-end path
+        // below, reached through that witness's own locator and upstream
+        // node, which is as randomly selected as the witness is
+        // [author, 2026-10-05].
+        //
+        // **This is what the payload path cannot do here.** Opening a
+        // payload session needs the peer's published bundle, and fetching
+        // one needs a node; so before this split a formation ceremony
+        // between two co-present devices could not finish without the
+        // participants' own infrastructure, which is the suppression
+        // design §6.4 says no party can perform on another's client.
+        let peer = self.active.as_ref().and_then(|a| a.counterparty);
         for k in to {
+            if Some(*k) == peer {
+                match self.carriage_for_peer(kind, &bytes) {
+                    // **Into the outbox, not the caller's list.**  The
+                    // courier carries what the caller returns, and no node
+                    // carries a carriage; `Client::carriages` is the one
+                    // drain for these whether the step was called directly
+                    // or ran inside a delivery.  Keeping the two apart is
+                    // also what leaves the four `converse_*` signatures
+                    // alone, so no consumer of the FFI changes.
+                    Ok(m) => self.outbox.push(m),
+                    Err(e) => {
+                        tracing::warn!(
+                            target: "cer",
+                            kind = crate::diag::kind_name(kind),
+                            abort = %crate::diag::abort(&e),
+                            "cer.carriage.failed"
+                        );
+                        failed.push((*k, PayloadError::NoSession));
+                    }
+                }
+                continue;
+            }
             match self.send_payload(*k, kind, &bytes) {
                 Ok(m) => out.extend(m),
                 Err(e) => {
@@ -282,6 +319,14 @@ impl Client {
             }
         }
         (out, failed)
+    }
+
+    /// One conversation step as a carriage for the co-present
+    /// counterparty: the plaintext framed as the payload path frames it,
+    /// reused rather than reinvented, sealed under the local session.
+    fn carriage_for_peer(&self, kind: u64, bytes: &[u8]) -> Result<Msg, Abort> {
+        let plain = crate::payload::wrap(kind, bytes);
+        Ok(Msg::Carriage(self.seal(&plain)?))
     }
 
     /// The same, where the counterparty not hearing it stops the step.
@@ -738,9 +783,32 @@ impl Client {
             .collect();
         let envelope = envelope_from_entries(TYPE_PRESENCE, &body, &entries);
         let others: Vec<Keyhash> = signers.into_iter().filter(|s| *s != me).collect();
+        // **The counterparty's session is captured before the teardown.**
+        // `Client::finalize` takes the active ceremony, and the local
+        // session's key is derived from that ceremony's two contributions,
+        // so sealing the record's leg afterwards finds no key and the
+        // counterparty never receives the record it had just signed.  The
+        // witnesses' legs are payload and do not care [2026-10-05].
+        let session = self.session_key().ok().zip(self.anchored_id().ok());
+        let peer = self.counterparty();
         match self.finalize(&envelope, Some(&set)) {
             Ok(txid) => {
-                self.converse_into_outbox(&Msg::Record(envelope), &others);
+                // the witnesses, over the end-to-end path as ever
+                let remote: Vec<Keyhash> = others
+                    .iter()
+                    .copied()
+                    .filter(|k| Some(*k) != peer)
+                    .collect();
+                self.converse_into_outbox(&Msg::Record(envelope.clone()), &remote);
+                // and the counterparty, over the bearer, under the session
+                // this ceremony had while it still had one
+                if let (Some(p), Some((k, cid))) = (peer, session)
+                    && others.contains(&p)
+                {
+                    let plain = crate::payload::wrap(crate::payload::KIND_RECORD, &envelope);
+                    self.outbox
+                        .push(Msg::Carriage(crate::local::seal_carriage(&k, &cid, &plain)));
+                }
                 Conversed::Finalized { txid }
             }
             Err(e) => refused(&format!("{e:?}")),

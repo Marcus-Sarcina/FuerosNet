@@ -167,11 +167,16 @@ fn a_bearer_that_disagrees_with_the_screen_stops_the_ceremony() {
     // AN INTENT ECHOING A CONTRIBUTION THE SCREEN DID NOT SHOW: the bearer
     // disagrees with the screen (§14.3.2), and this is the check the shell
     // used to be left to make.
+    // **The forger must hold the session key**, which §14.3.1 concedes a
+    // party that read both screens does.  Since §14.3.2 every carriage is
+    // sealed, so this is the only adversary that reaches the echo check at
+    // all: anybody else is refused as Unsealable first.
     let mut forged = s.client("bob").intent_carriage().unwrap();
     forged[0] = {
-        let mut i = rhtn_client::local::IntentExchange::decode(&forged[0]).unwrap();
+        let plain = s.client("alice").open_as_co_present(&forged[0]).unwrap();
+        let mut i = rhtn_client::local::IntentExchange::decode(&plain).unwrap();
         i.contribution = [7u8; 16];
-        i.encode()
+        s.client("alice").seal_as_co_present(&i.encode()).unwrap()
     };
     assert!(
         matches!(
@@ -195,8 +200,19 @@ fn a_bearer_that_disagrees_with_the_screen_stops_the_ceremony() {
         }],
     }
     .encode();
+    // **Two layers now, and the key is the first.**  Carol's own carriage
+    // is sealed under carol's session key, so alice cannot open it: the
+    // per-ceremony key separates the two before any anchor is compared.
     assert!(matches!(
         s.client("alice").take_proximity(&stray),
+        Err(Abort::Unsealable)
+    ));
+    // and the anchor check is still what catches a holder of alice's key
+    // re-anchoring another ceremony's message, which is the attack
+    // §14.3.1 concedes and the theory proves reachable
+    let resealed = s.client("alice").seal_as_co_present(&stray).unwrap();
+    assert!(matches!(
+        s.client("alice").take_proximity(&resealed),
         Err(Abort::CeremonyIdMismatch)
     ));
     let stray = rhtn_client::local::CandidateHandover {
@@ -206,6 +222,11 @@ fn a_bearer_that_disagrees_with_the_screen_stops_the_ceremony() {
     .encode();
     assert!(matches!(
         s.client("alice").take_candidate_carriage(&stray),
+        Err(Abort::Unsealable)
+    ));
+    let resealed = s.client("alice").seal_as_co_present(&stray).unwrap();
+    assert!(matches!(
+        s.client("alice").take_candidate_carriage(&resealed),
         Err(Abort::CeremonyIdMismatch)
     ));
     // a key from another ceremony is refused, and carol's real one no
@@ -217,12 +238,24 @@ fn a_bearer_that_disagrees_with_the_screen_stops_the_ceremony() {
     .encode();
     assert!(matches!(
         s.client("alice").take_capture_key_carriage(&stray),
+        Err(Abort::Unsealable)
+    ));
+    let resealed = s.client("alice").seal_as_co_present(&stray).unwrap();
+    assert!(matches!(
+        s.client("alice").take_capture_key_carriage(&resealed),
         Err(Abort::CeremonyIdMismatch)
     ));
 
-    // and bytes that are not a §14.3 object at all
+    // and bytes that are not a §14.3 object at all, in both layers: raw
+    // garbage never reaches the decoder, and garbage a key holder sealed
+    // does
     assert!(matches!(
         s.client("alice").take_proximity(&[0x00]),
+        Err(Abort::Unsealable)
+    ));
+    let sealed_garbage = s.client("alice").seal_as_co_present(&[0x00]).unwrap();
+    assert!(matches!(
+        s.client("alice").take_proximity(&sealed_garbage),
         Err(Abort::Malformed(_))
     ));
 }

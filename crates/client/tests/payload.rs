@@ -1543,3 +1543,86 @@ fn two_opens_that_cross_settle_on_one_session_and_nothing_sent_meanwhile_is_lost
     assert_eq!(n.collect("carol"), vec!["Application(from bob, fourth)"]);
     assert_eq!(n.collect("bob"), vec!["Application(from carol, fourth)"]);
 }
+
+// acceptance: PAY-26
+#[test]
+fn a_step_queued_before_a_session_travels_when_the_peer_opens_one() {
+    // **the defect this closes.** A send with no session queues its
+    // plaintext and asks for a one-time key; the queue is drained when the
+    // reply opens the session.  Where the ask is answered with no bundle,
+    // nothing opens and the queue stays — and a session established the
+    // other way round, by the peer writing first, never looked at it.  The
+    // gate caught it as a witness that missed the opening of a
+    // conversation and a sender that was told nothing [2026-10-06].
+    let mut n = net(&["bob"], &[("alice", "bob"), ("w1", "bob")]);
+    n.attach("alice");
+
+    // alice writes to w1, which has published nothing: the plaintext waits
+    // and a one-time key is asked for
+    let msgs =
+        n.s.client("alice")
+            .send_payload(kh("w1"), KIND_APPLICATION, b"the opening step")
+            .expect("queued, not refused");
+    let req = msgs
+        .iter()
+        .find_map(|m| match m {
+            Msg::PrekeyRequest(b) => Some(b.clone()),
+            _ => None,
+        })
+        .expect("a one-time key asked for");
+    assert!(
+        !msgs
+            .iter()
+            .any(|m| matches!(m, Msg::Payload { .. } | Msg::Relay { .. })),
+        "nothing travels before the session exists"
+    );
+
+    // the node answers with no bundle, w1 having published none
+    let now = n.now();
+    let reply = n
+        .nodes
+        .get_mut("bob")
+        .unwrap()
+        .prekeys
+        .answer(&kh("alice"), &req, now)
+        .expect("a reply");
+    assert!(
+        n.s.client("alice").take_prekey_reply(&reply).is_err(),
+        "nothing in it to open a session with"
+    );
+
+    // w1 arrives and writes first, so alice's session with it comes from
+    // the other direction.  Both sides sweep once w1 has published: a
+    // recipient can only attribute an initial message from a peer whose
+    // binding it holds, and a sweep prefetches reusable material without
+    // opening anything (`wire-format.md` §7.8).
+    n.attach("w1");
+    n.sweep("w1");
+    n.sweep("alice");
+    let msgs =
+        n.s.client("w1")
+            .send_payload(kh("alice"), KIND_APPLICATION, b"from the witness")
+            .expect("w1 can write to alice");
+    n.carry(kh("w1"), msgs);
+    let said = |from: &str, to: &str| {
+        n.delivered
+            .iter()
+            .filter(|(f, t, _)| *f == kh(from) && *t == kh(to))
+            .map(|(_, _, d)| d.clone())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        said("w1", "alice"),
+        vec!["Application(from the witness)".to_string()],
+        "alice holds a session with w1 now, opened by w1"
+    );
+
+    // **and what was waiting went out on it.** The flush puts it in the
+    // outbox, which this harness drains after a delivery exactly as the
+    // courier does, so nothing in the test had to ask for it.
+    assert_eq!(
+        said("alice", "w1"),
+        vec!["Application(the opening step)".to_string()],
+        "w1 receives the step queued before it had published"
+    );
+}

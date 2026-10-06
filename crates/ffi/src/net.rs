@@ -13,6 +13,7 @@
 use crate::types::{Id, Refused, id_of};
 use rhtn_adaptors::actor::Handle;
 use rhtn_adaptors::attached::{self, AttachedNode};
+use rhtn_adaptors::beyond::{Beyond, Beyonder};
 use rhtn_adaptors::courier::{Courier, Inlet};
 use rhtn_adaptors::direct::{Gate, LightDirect, Reachable};
 use rhtn_archive::Keyhash;
@@ -328,6 +329,15 @@ pub(crate) struct Net {
     /// Nonces for what this client hands its node: the platform's random
     /// source, which is the only one this workspace has.
     nonce: Arc<dyn Fn() -> [u8; 16] + Send + Sync>,
+    /// The dialler for nodes that do not serve this client, and what it
+    /// has resolved.
+    ///
+    /// **Built once and outliving every attach**, because what it holds
+    /// is about other people's nodes: a resolution thrown away because
+    /// this client reattached would be asked again for no reason, and the
+    /// pool it keeps is bounded in time regardless.
+    beyonder: Arc<Beyonder>,
+    beyond: Arc<Beyond>,
 }
 
 /// How long one dial may take before the next endpoint is tried: the
@@ -374,6 +384,8 @@ impl Net {
             log: Log::default(),
         };
         let (events_tx, events) = tokio::sync::mpsc::unbounded_channel();
+        let beyonder = Beyonder::new(endpoint.clone(), cfg.clone());
+        let beyond = Beyond::new(beyonder.clone(), nonce.clone());
         Ok(Net {
             reachable: Reachable::default(),
             rt: Some(rt),
@@ -386,6 +398,8 @@ impl Net {
             events_tx,
             events: Mutex::new(events),
             nonce,
+            beyonder,
+            beyond,
         })
     }
 
@@ -497,6 +511,7 @@ impl Net {
         let current = self.current.clone();
         let addrs = addrs.to_vec();
         let reachable = self.reachable.clone();
+        let beyond = self.beyond.clone();
         let built = self.rt().block_on(async move {
             // the serving node first, and the cached siblings where it is
             // unreachable at attach time: the cold-start fallback
@@ -570,6 +585,11 @@ impl Net {
                 serving.clone(),
                 Arc::new(direct),
             );
+            // **the relayed path's first term** (design §12.6.3): payload
+            // for a peer no direct path is held to goes to that peer's own
+            // node, dialled from here, and to the node serving this client
+            // only where that fails
+            courier.reach_beyond(beyond);
             inlet.bind(courier.inbound());
             let tasks = vec![
                 attached::follow(handle_for_task.clone(), frames),
@@ -994,6 +1014,7 @@ fn event_of(from: Keyhash, d: Dispatched) -> Option<Event> {
 
 impl Drop for Net {
     fn drop(&mut self) {
+        self.beyonder.close();
         if let Some(rt) = self.rt.take() {
             // what is in flight is abandoned, which is what releasing a
             // client means; nothing here waits

@@ -1,5 +1,5 @@
 TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
-Running breadth-first search Model-Checking with fp 45 and seed 7654990723100556135 with 4 workers on 32 cores with 21461MB heap and 64MB offheap memory [pid: 4020885] (Linux 7.0.0-31-generic amd64, Eclipse Adoptium 21.0.12.1 x86_64, MSBDiskFPSet, DiskStateQueue).
+Running breadth-first search Model-Checking with fp 23 and seed -7923355221958706094 with 4 workers on 32 cores with 21461MB heap and 64MB offheap memory [pid: 7493] (Linux 7.0.0-31-generic amd64, Eclipse Adoptium 21.0.12.1 x86_64, MSBDiskFPSet, DiskStateQueue).
 Parsing file /home/aspiringsavage/Documents/FuerosNet/models/tla/SupersessionDiscipline.tla
 Parsing file /tmp/Naturals.tla
 Parsing file /tmp/FiniteSets.tla
@@ -8,9 +8,9 @@ Semantic processing of module Naturals
 Semantic processing of module Sequences
 Semantic processing of module FiniteSets
 Semantic processing of module SupersessionDiscipline
-Starting... (2026-10-05 15:59:23)
+Starting... (2026-10-05 21:17:28)
 Computing initial states...
-Finished computing initial states: 1 distinct state generated at 2026-10-05 15:59:23.
+Finished computing initial states: 1 distinct state generated at 2026-10-05 21:17:28.
 Error: Invariant NeverIssuedForASupersededKey is violated.
 Error: The behavior up to this point is:
 State 1: <Initial predicate>
@@ -27,7 +27,7 @@ State 2: <Attach line 132, col 3 to line 134, col 62 of module SupersessionDisci
 /\ held = (n1 :> <<0>> @@ n2 :> <<0>>)
 /\ chain = <<0>>
 /\ badIssue = FALSE
-/\ serving = (n1 :> -1 @@ n2 :> 0)
+/\ serving = (n1 :> 0 @@ n2 :> -1)
 
 State 3: <Reissue line 142, col 3 to line 147, col 64 of module SupersessionDiscipline>
 /\ badServe = FALSE
@@ -35,7 +35,7 @@ State 3: <Reissue line 142, col 3 to line 147, col 64 of module SupersessionDisc
 /\ held = (n1 :> <<0>> @@ n2 :> <<0>>)
 /\ chain = <<0, 1>>
 /\ badIssue = FALSE
-/\ serving = (n1 :> -1 @@ n2 :> 0)
+/\ serving = (n1 :> 0 @@ n2 :> -1)
 
 State 4: <Reissue line 142, col 3 to line 147, col 64 of module SupersessionDiscipline>
 /\ badServe = FALSE
@@ -43,7 +43,7 @@ State 4: <Reissue line 142, col 3 to line 147, col 64 of module SupersessionDisc
 /\ held = (n1 :> <<0>> @@ n2 :> <<0>>)
 /\ chain = <<0, 1, 0>>
 /\ badIssue = FALSE
-/\ serving = (n1 :> -1 @@ n2 :> 0)
+/\ serving = (n1 :> 0 @@ n2 :> -1)
 
 State 5: <ChainArrives line 166, col 3 to line 176, col 44 of module SupersessionDiscipline>
 /\ badServe = FALSE
@@ -51,7 +51,7 @@ State 5: <ChainArrives line 166, col 3 to line 176, col 44 of module Supersessio
 /\ held = (n1 :> <<0, 1, 0>> @@ n2 :> <<0>>)
 /\ chain = <<0, 1, 0>>
 /\ badIssue = FALSE
-/\ serving = (n1 :> -1 @@ n2 :> 0)
+/\ serving = (n1 :> -1 @@ n2 :> -1)
 
 State 6: <Issue line 119, col 3 to line 120, col 61 of module SupersessionDiscipline>
 /\ badServe = FALSE
@@ -59,9 +59,9 @@ State 6: <Issue line 119, col 3 to line 120, col 61 of module SupersessionDiscip
 /\ held = (n1 :> <<0, 1, 0>> @@ n2 :> <<0>>)
 /\ chain = <<0, 1, 0>>
 /\ badIssue = TRUE
-/\ serving = (n1 :> -1 @@ n2 :> 0)
+/\ serving = (n1 :> -1 @@ n2 :> -1)
 
-385 states generated, 110 distinct states found, 52 states left on queue.
+328 states generated, 98 distinct states found, 47 states left on queue.
 The depth of the complete state graph search is 6.
 The average outdegree of the complete state graph is 2 (minimum is 0, the maximum 4 and the 95th percentile is 4).
-Finished in 00s at (2026-10-05 15:59:23)
+Finished in 00s at (2026-10-05 21:17:28)

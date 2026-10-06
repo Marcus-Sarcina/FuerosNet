@@ -12,7 +12,7 @@ their purpose: **a disagreement between a vector and the specification is a
 finding against one of them**, and either answer is progress. Review rounds
 have produced specification fixes.
 
-**Pinned**: wire-format.md `6becb450495eb90348e909627f92dea4e708a2cd0ef483fce157521a731d54e9` · network-design.md `75302e1b814849ef9734a3c90e8b63aa29fbeb2c977365bfdf56730137f0d743`
+**Pinned**: wire-format.md `6a6ec2e78be398854de80a143c50ea9ae72e1bc1c984318870a64531d9583fff` · network-design.md `6a375aac1fd3a07120a162a2c058f5c271d4b5b0bb442f4c47e324fdd9dac5d3`
 
 **Scope**: wire-format/protocol **interoperability** vectors.
 `light-client-requirements.md` is pinned alongside the two protocol documents
@@ -52,7 +52,7 @@ vector. This file and `negative-vectors.md` are authored by hand.
 | `corpus.json` | The machine-readable corpus (bar 6): every fixture under a stable id with class, exact bytes and a structured expect — no harness parses Markdown headings as an interface |
 | *(the Rust corpus runner)* | Retired 2026-09-22 [author]. Its parser grew into `rhtn-codec`, and `crates/crypto/tests/corpus.rs` now carries every corpus entry through the workspace's own decoder and RustCrypto `ml-dsa`, against the generator's dilithium-py signatures: the cross-implementation check the runner made, without a second decoder to keep in step with the wire |
 | `verifier-selection.md` | The reasonableness criterion — `required()` table rows generated from the formula — and the window boundaries. *The nonce, seed and rank vectors retired 2026-09-01 with deterministic selection* |
-| `local-interfaces.md` | Five of the six local device-to-device encodings of `wire-format.md` §14.3, as one coherent exchange [2026-09-29]: the optical contributions and the ceremony-id they derive (`records.md`'s pre-commitment known answer byte-for-byte), the bearer-carried intent echoing one, the two anchored exchanges, and the handover between one identity's devices reusing `records.md`'s delegation and desktop bundle. **No signatures of their own** — every one is unsigned, which is the point §14.3.3 and `models/tamarin/local/` both turn on, and which the 2026-10-05 session encryption does not change: that ruling encrypts the carriage and signs nothing. **§14.3.4's `PrekeyHandover` has no fixture yet** [2026-10-05], which is why this says five of six; the bundle it carries is `records.md`'s, reused in the bytes §7.8 publishes |
+| `local-interfaces.md` | The six local device-to-device encodings of `wire-format.md` §14.3, as one coherent exchange [2026-09-29]: the optical contributions and the ceremony-id they derive (`records.md`'s pre-commitment known answer byte-for-byte), the bearer-carried intent echoing one, the two anchored exchanges, and the handover between one identity's devices reusing `records.md`'s delegation and desktop bundle. **No signatures of their own** — every one is unsigned, which is the point §14.3.3 and `models/tamarin/local/` both turn on, and which the 2026-10-05 session encryption does not change: that ruling encrypts the carriage and signs nothing. §14.3.4's `PrekeyHandover` carries the bundle `records.md` publishes, reused in those bytes rather than reinvented, with and without a one-time key since §7.8 lets a pool run dry |
 | `negative-vectors.md` | Conformance fixtures against a **structured result model** (structural / signatures / chain / per-subject selection / effectiveness / evidentiary), in byte-level, context-dependent, method, and must-accept sections |
 
 ## What every vector assumes

@@ -110,8 +110,10 @@ LIMITS, stated as the ceremony theories state theirs.
     ambiguous in such a way that this could be interpreted as a distinct,
     nested encryption"*].  The key is symbolic: `senc` is perfect here, so
     this says nothing about a cipher, a nonce discipline or key reuse across
-    carriages, each of which is `wire-format.md` §14.3.2's business and not a
-    symbolic property.  Matching `senc(..)` in `Bearer_Take`'s premise models
+    carriages.  §14.3.2 now fixes all three -- AES-256-GCM, a random 96-bit
+    nonce per carriage in front of the ciphertext, one sealing over the whole
+    object -- and none of them is a symbolic property, so the theory neither
+    checks them nor claims to.  Matching `senc(..)` in `Bearer_Take`'s premise models
     an **AEAD**: a term that is not a well-formed plaintext under the key does
     not match, which is what an authenticated mode gives and what the wire
     format must therefore specify.  A bare stream cipher would not earn this

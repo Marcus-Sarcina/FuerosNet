@@ -17,6 +17,8 @@
 
 use crate::Keyhash;
 use crate::device::{ChannelKind, ChannelOutcome, ChannelResult};
+use aws_lc_rs::aead::{AES_256_GCM, Aad, LessSafeKey, Nonce, UnboundKey};
+use aws_lc_rs::rand::{SecureRandom, SystemRandom};
 use rhtn_codec::cbor::*;
 use rhtn_codec::encode::*;
 use rhtn_codec::schema;
@@ -566,4 +568,85 @@ fn entries(b: &[u8], field: usize) -> Result<Vec<Vec<u8>>, String> {
     let at = top.get(field).ok_or("no such field")?.start;
     let items = array_item_ranges(b, at).ok_or("bundle not an array")?;
     Ok(items.into_iter().map(|r| b[r].to_vec()).collect())
+}
+
+// -------------------------------------------------- the session's envelope
+
+/// Seal one carriage under the local session's key (`wire-format.md`
+/// §14.3.2).
+///
+/// **One encryption, at the session layer.** This wraps a whole encoded
+/// object and nothing inside it is encrypted again: the objects above are
+/// the plaintexts, their fields and checks exactly as specified, and the
+/// `CaptureKeyHandover` is protected because it rides this rather than
+/// because anything wraps it twice [author, 2026-10-05].
+///
+/// AES-256-GCM under the 32 bytes [`crate::keys::session_key`] derives,
+/// with a random 96-bit nonce per carriage carried in front of the
+/// ciphertext, matching [`crate::sealed`]'s construction so the kernel has
+/// one AEAD shape and the shell has none.
+///
+/// **The ceremony-id is the associated data, and that is belt over
+/// braces.** The key is already derived from this ceremony's two
+/// contributions and so is unique to it, which is what actually stops a
+/// carriage opening in another ceremony. The associated data states the
+/// binding rather than creating it.
+///
+/// **The key always exists by the time a carriage moves.** Both
+/// contributions cross optically before the first carriage does, so there
+/// is no ordering in which a sender holds half a key.
+pub fn seal_carriage(key: &[u8; 32], ceremony_id: &[u8; 32], plaintext: &[u8]) -> Vec<u8> {
+    let mut nonce = [0u8; 12];
+    SystemRandom::new()
+        .fill(&mut nonce)
+        .expect("the system's random source");
+    let mut body = plaintext.to_vec();
+    carriage_aead(key)
+        .seal_in_place_append_tag(
+            Nonce::assume_unique_for_key(nonce),
+            Aad::from(ceremony_id),
+            &mut body,
+        )
+        .expect("sealing appends a tag");
+    let mut out = Vec::with_capacity(nonce.len() + body.len());
+    out.extend_from_slice(&nonce);
+    out.extend_from_slice(&body);
+    out
+}
+
+/// Open one carriage, or nothing.
+///
+/// **A failure here is not distinguishable from a wrong key, a wrong
+/// ceremony or a tampered byte, and does not need to be**: §14.3.1's
+/// anchor checks are what tell a receiver *why* a carriage is refused, and
+/// they run on the plaintext this returns. What this says is only whether
+/// the bytes came from a holder of the session key.
+///
+/// A peer that sends plaintext fails here, which is the refusal a version
+/// disagreement should produce: `wire-format.md` §14.3.2 has the session
+/// encrypted, so unencrypted bytes are a shell this one cannot speak to.
+pub fn open_carriage(
+    key: &[u8; 32],
+    ceremony_id: &[u8; 32],
+    sealed: &[u8],
+) -> Option<Zeroizing<Vec<u8>>> {
+    if sealed.len() < 12 {
+        return None;
+    }
+    let (n, body) = sealed.split_at(12);
+    let mut buf = Zeroizing::new(body.to_vec());
+    let opened = carriage_aead(key)
+        .open_in_place(
+            Nonce::assume_unique_for_key(n.try_into().ok()?),
+            Aad::from(ceremony_id),
+            &mut buf,
+        )
+        .ok()?
+        .len();
+    buf.truncate(opened);
+    Some(buf)
+}
+
+fn carriage_aead(key: &[u8; 32]) -> LessSafeKey {
+    LessSafeKey::new(UnboundKey::new(&AES_256_GCM, key).expect("a 32-byte key"))
 }

@@ -63,6 +63,71 @@ pub struct Place {
 /// A party, and the subnet a place of theirs is in.
 pub type Placement = (Keyhash, Keyhash);
 
+/// Where a party sits, as much of it as addressing that party needs
+/// (`wire-format.md` §7.7.2).
+///
+/// **What a light client can answer for itself** [author, 2026-10-05]: a
+/// client holding a peer's position and an address for the node above it
+/// needs neither its patron nor its serving node to reach that peer, and
+/// the three cases below are the three answers its own copy of its
+/// neighbourhood can give.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Upstream {
+    /// The node that serves the party, and where it answers: held
+    /// already, so nobody is asked anything.
+    Known {
+        /// The serving node.
+        node: Keyhash,
+        /// Where it answers, as the `NetworkPoint`s were encoded.
+        endpoints: Vec<Vec<u8>>,
+        /// What binds it on a dial, where this client holds the identity
+        /// (`wire-format.md` §9.1); filled in by [`crate::ceremony::Client`],
+        /// which holds the identities, and never by the horizon.
+        key_material: Option<Vec<u8>>,
+    },
+    /// A position and no address, which is what a resolution request is
+    /// made of (`wire-format.md` §7.7.3).
+    Position {
+        /// The anchor the path is relative to.
+        anchor: Keyhash,
+        /// The path under it, packed two nibbles to a byte.
+        path: Vec<u8>,
+        /// How many of the packed nibbles are the path's.
+        nibbles: u64,
+    },
+    /// Nothing held: this client cannot place the party at all, so it has
+    /// nothing to resolve from and nothing to dial.
+    Unknown,
+}
+
+/// A node a resolution could be asked of: where it answers, and what
+/// binds it on a dial (`wire-format.md` §9.1).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Askable {
+    /// The node.
+    pub node: Keyhash,
+    /// Where it answers, as the `NetworkPoint`s were encoded.
+    pub endpoints: Vec<Vec<u8>>,
+    /// What binds it, where this client holds the identity.
+    pub key_material: Option<Vec<u8>>,
+}
+
+/// Everything addressing a party needs that a client can answer from its
+/// own state: who serves the party, and — only where that is not held —
+/// the infrastructure a resolution could be asked of.
+///
+/// **The asking set is empty unless a resolution is actually needed.**
+/// A resolution request discloses the intent to reach somebody to
+/// whoever serves it, so none is prepared speculatively
+/// (`light-client-requirements.md` §4.2).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Reach {
+    /// Who serves the party, as far as this client can say.
+    pub upstream: Upstream,
+    /// Who could be asked, where the answer above is a bare position.
+    pub ask: Vec<Askable>,
+}
+
 /// A packed path's nibbles, one per hop (`wire-format.md` §2.1).
 fn nibbles_of(path: &[u8], n: u64) -> Vec<u8> {
     (0..usize::try_from(n).unwrap_or(usize::MAX))
@@ -395,6 +460,77 @@ impl Horizon {
         seen.into_iter()
             .map(|n| (n, self.endpoints_of(&n)))
             .collect()
+    }
+
+    /// Who serves `peer`, and where: the nearest ancestor in a subnet
+    /// this client can place `peer` in that has published an endpoint
+    /// record (`wire-format.md` §7.6, §7.7.2 — resolution terminates at
+    /// the nearest infrastructure ancestor, which is the node the target
+    /// attaches to).
+    ///
+    /// **Holding an endpoint record is what says a party is
+    /// infrastructure** [author, 2026-09-14], so the nearest ancestor
+    /// holding one is the nearest infra ancestor; no type is read off a
+    /// position, because type is not a function of position
+    /// (`light-client-requirements.md` §4.2).
+    ///
+    /// **A party that published one is its own upstream.**  That is
+    /// §7.7.3's empty residual: the target *is* the serving node, and a
+    /// client addressing an infra node addresses it directly.
+    ///
+    /// Bounded by the horizon throughout, since both of the stores this
+    /// reads are.
+    pub fn upstream_of(&self, peer: &Keyhash) -> Upstream {
+        let own = self.endpoints_of(peer);
+        if !own.is_empty() {
+            return Upstream::Known {
+                node: *peer,
+                endpoints: own,
+                key_material: None,
+            };
+        }
+        let places = self.places_of(peer);
+        // the longest proper prefix wins: the nearest ancestor, not any
+        // ancestor.  An anchor sits at the empty path, so it is the last
+        // candidate rather than a special case
+        let mut best: Option<(u64, Keyhash, Vec<Vec<u8>>)> = None;
+        for p in &places {
+            let theirs = nibbles_of(&p.path, p.nibbles);
+            for ((node, anchor), place) in &self.places {
+                if *anchor != p.anchor || node == peer || place.nibbles >= p.nibbles {
+                    continue;
+                }
+                let hops = nibbles_of(&place.path, place.nibbles);
+                if !theirs.starts_with(&hops) {
+                    continue;
+                }
+                let endpoints = self.endpoints_of(node);
+                if endpoints.is_empty() {
+                    continue;
+                }
+                if best.as_ref().is_none_or(|(n, _, _)| place.nibbles > *n) {
+                    best = Some((place.nibbles, *node, endpoints));
+                }
+            }
+        }
+        if let Some((_, node, endpoints)) = best {
+            return Upstream::Known {
+                node,
+                endpoints,
+                key_material: None,
+            };
+        }
+        // a position with no address above it: there is something to ask
+        // a resolution about, and the first subnet is as good as any —
+        // a party in two of them is reachable through either
+        match places.first() {
+            Some(p) => Upstream::Position {
+                anchor: p.anchor,
+                path: p.path.clone(),
+                nibbles: p.nibbles,
+            },
+            None => Upstream::Unknown,
+        }
     }
 
     /// Whether this horizon has already taken `txid`.

@@ -138,6 +138,7 @@ pub fn variant(a: &crate::ceremony::Abort) -> &'static str {
         Declined => "Declined",
         NotActive => "NotActive",
         NoCeremonyId => "NoCeremonyId",
+        Unsealable => "Unsealable",
         ClockFar => "ClockFar",
         NoProximity => "NoProximity",
         ChannelDisagreement => "ChannelDisagreement",
@@ -253,6 +254,7 @@ pub fn msg(m: &crate::ceremony::Msg) -> &'static str {
         Payload { .. } => "Payload",
         Relay { .. } => "Relay",
         Transport(_) => "Transport",
+        Carriage(_) => "Carriage",
     }
 }
 

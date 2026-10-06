@@ -14250,7 +14250,8 @@ the question is never whether a node is involved, it is **whose**.
 ### This is not a gap. It is a stated design claim the code does not meet.
 
 The design does not merely permit a nodeless formation ceremony, it
-**rests on one**. Design §13.2's passage on the eclipsing patron: a
+**rests on one**. Design §6.4's passage on the eclipsing patron, which uses
+the formation path §13.2 defines: a
 witnessless, verifierless ceremony is valid as a formation record, so a
 victim *"can therefore memorialise a meeting with anyone they physically
 encounter, and the eclipsing patron cannot suppress it. The false social
@@ -14546,3 +14547,214 @@ opaque because each verifies under its own signature.
   distant node it holds a locator for. `Client::reachable()` already
   returns those addresses and only the participant driver's `reachable`
   command consumes them.
+
+## The conversation's participant legs: the enumeration before the change
+
+**[author, 2026-10-04]** governs how this is done: a change to the public
+FFI surface is permitted *"as a discrete action. An analysis should be run
+to enumerate needed changes, then that list of changes needs to be worked
+through sequentially with each changed items' consumers inspected and/or
+modified as part of a coherent refactoring pass, then the gate must be run
+and the initial analysis redone on the remaining items."* This is that
+analysis, written before anything moved.
+
+### Where the split actually falls, which is narrower than feared
+
+The kernel already hands every conversation step out as
+`Msg::Payload { to, bytes, device }`, and the courier already routes on
+`to` (`adaptors/src/courier.rs`). So the ruling needs no change to how the
+conversation is *produced*: it needs the recipient compared against the
+ceremony's counterparty at one point, and the two halves sent different
+ways. `ffi/src/net.rs`'s `carry` is that one point, and it currently sends
+everything to the courier.
+
+**The kernel needs nothing for the routing decision itself.** What it lacks
+is a way to take a conversation step back off the bearer, which is the
+mirror of `conversation_from` already being public.
+
+### The list, in dependency order
+
+| # | Change | Consumers to inspect |
+|---|---|---|
+| 1 | A counterparty accessor on `Client`, or the FFI reading `active` | none; additive |
+| 2 | `Participant::converse_*` return the counterparty-bound carriages instead of `()` | the four FFI methods, `Kernel.kt`'s four call sites, `participant/src/lib.rs`'s driver commands |
+| 3 | A kernel and FFI entry to take a conversation carriage, dispatching through `conversation_from` | additive |
+| 4 | `Carriage.Phase` gains the conversation; the shell sends and receives it | `Carriage.kt`, `Kernel.kt`, `Meet.kt`'s step gating |
+| 5 | NET-022's amended form and NET-026 become testable; rows exist already | the acceptance catalogue |
+
+**Item 2 is the surface change and the only one that is not additive.**
+Four methods change return type. Their consumers are the shell's four
+calls and the participant driver's commands, and both are in this tree, so
+no external consumer exists to break.
+
+### What this does not reach, and why NET-026 still fails after it
+
+A witnessed ceremony's legs go to witnesses, and those still travel through
+the courier, which needs the participant's own attached node. So this
+change makes the **formation** ceremony nodeless and leaves the witnessed
+one as it is. **NET-026 names the formation case and will pass; the
+property design §6.4 rests on is the formation case**, so the eclipse
+escape is closed by this change alone. Reaching a witness through that
+witness's own node is the transport item below and is not required for
+§13.2.
+
+### The transport item, sized
+
+`ffi/src/net.rs:488`: `attach` calls `self.detach()` as its first
+statement, so a client holds one session. Addressing a distant node for
+which a locator is held has no path at all, and `Client::reachable()`
+already returns those addresses with the participant driver's `reachable`
+command as its only consumer. This is a transport change of its own and
+should not ride items 1 to 5.
+
+## Item 2 executed: the conversation's participant legs (2026-10-05)
+
+**The enumeration was wrong in one way that made the change smaller.** It
+said the four `converse_*` must change return type, because the FFI cannot
+move a carriage and the shell must. In fact putting the peer's carriage in
+the **outbox** rather than the caller's list gives one drain,
+`Client::carriages`, that serves both a step taken directly and a step
+answered inside a delivery. **So no FFI signature changed** and no consumer
+broke. The surface change the ruling was invoked for turned out not to be
+needed.
+
+What landed: `Msg::Carriage`, the split in `converse_to` on the
+counterparty, `Client::carriages` beside `Client::outbox`,
+`Client::take_conversation_carriage`, `Client::counterparty`, and
+`Courier::take_carriage`.
+
+### Three things the tests forced, each a real asymmetry
+
+1. **`take_intent` fixed a ceremony-id without recording the contribution
+   it came from.** Two paths fix an id and only the optical one kept the
+   inputs, so a ceremony begun through the value path held an id it could
+   no longer name. Nothing needed them until the session key did. Now both
+   record it, and in the optical flow it is the value the echo check has
+   already compared.
+2. **A step off the bearer must reach the application where a step off the
+   network does.** The kernel returns the outcome to its caller, which is
+   right for the kernel and wrong as the whole story: a screen showing
+   network-borne steps and not local ones shows half a ceremony. So the
+   **courier** owns carriage delivery and ends where `deliver` ends, one
+   `Dispatched::Conversation` on the application's channel. The FFI must do
+   the same when the shell is wired.
+3. **A bearer runs continuously, and a test cannot enumerate when.** Four
+   explicit hand-over points were tried and each left a later assertion
+   failing, because a step answers a step and a delivery queues what it
+   owes. The harness now runs a bearer task for the life of the test,
+   which is what a radio is.
+
+### The stopped participant: the mechanism moved and the property improved
+
+**[ruled, author, 2026-10-05]**: *"Go ahead and adjust the test to match
+the expected behavior. Less metadata leakage this way."*
+
+A witness request reaching a participant whose own ceremony has stopped
+used to be read, recognised as naming its own device, and refused by name.
+Since the participant leg crosses the local session, `abandon` discards the
+ceremony and with it the session key, so the request **cannot be opened**.
+
+**The new behaviour tells a sender strictly less, and that is the gain.** A
+refusal naming the kind and a reason confirmed that this device had held
+that ceremony and had stopped. Failing to decrypt confirms nothing: a
+device that never began, one that finished and one that stopped are
+indistinguishable from outside. The test now asserts that equivalence
+directly, against a client that never began a ceremony at all.
+
+**Two citation errors of this drafter's, corrected.** The rule was
+attributed to "CER-025" in an earlier note and in the test's own comment.
+`functional_tests.md` CER-025 is the formation record and acceptance CER-25
+is the anti-oracle aggregate; **neither covers this**, and no register row
+does. The test is a field-run regression carrying its own rationale, which
+is why nothing flagged the mismatch. The id was written from memory twice,
+the same failure as the §13.2 citation above.
+
+### What item 2 does and does not buy
+
+NET-026's formation ceremony no longer needs a node for the participants'
+legs. **It is not yet proved by a test**: no test runs a formation ceremony
+with no node reachable, and until one does, NET-026 is specified and
+unproved. The witnessed path still reaches witnesses through the courier
+and so through the participant's own attached node, which is item 3.
+
+## A citation that propagated wrong, 2026-10-05
+
+**The eclipse-escape sentence is design §6.4, not §13.2.** *"They can
+therefore memorialise a meeting with anyone they physically encounter, and
+the eclipsing patron cannot suppress it"* sits in §6.4 Countersigning.
+§13.2 is the **formation path** that argument uses, which is a different
+thing and a real section, so citing it was not a dangling reference.
+
+**Which is why nothing caught it.** `refcheck` resolves a `§N` against
+actual headings and §13.2 is a heading, so a citation pointing at the wrong
+real section passes every check this project has. It was caught only
+because the acceptance catalogue demands the rule quote be **verbatim in
+the cited section**, and the quote was not there. That demand is the only
+thing in the tree that checks a citation's *content* rather than its
+existence.
+
+Corrected in four places: `functional_tests.md` NET-022 and NET-026,
+`network-design.md` §7.1's new paragraph, and this file twice. The form
+used is "design §6.4 ... by the formation path of §13.2", which says both
+true things.
+
+**The drafting error underneath** is `CLAUDE.md`'s first failure mode
+reached from a new direction: the citation was written from memory, and
+then copied into each place the argument was restated rather than checked
+once at the source.
+
+## Item 3 executed: a client addresses a distant node itself (2026-10-06)
+
+**My sizing of this item named the wrong defect.** I recorded it as
+`attach` calling `self.detach()` first, "so a client holds one session".
+That line is right and should stay: it ends the *serving* relationship
+before opening the next one, and one serving session is what a light
+client has. The actual defect was that **no second kind of connection
+existed at all** — every message for a peer with no direct path went to
+`serving.relay`, which is this client's own patron. So the change is
+additive rather than a rearchitecture of `attach`, and it is smaller than
+I said.
+
+**Three of the four pieces were already in the tree**, which I found by
+reading rather than from the notes:
+
+- `transport/src/session.rs` `connect_request_only` — a request-only dial,
+  no attach, no heartbeat, no readers — with `request_on` beside it. Its
+  only non-test caller was the node's own resolution driver.
+- The far node needs no change: `node/src/submissions.rs` `relay` checks
+  nothing about whether the submitter is one of its clients, and the
+  runtime dispatches submissions on any authenticated peer session.
+- A client's address book is honest about its reach: `horizon.rs` prunes
+  endpoint records to the h=2 horizon, so the ~221 infra nodes it holds
+  addresses for are a set its patron is one member of, not a gate.
+
+**What the prekey half forced.** A node answers a prekey request from what
+was published to it (`prekeys.rs` answers from `self.bundles`), so a
+client asking its own patron for a bundle of somebody served elsewhere
+gets `FAIL_UNKNOWN_SUBJECT`. The witnessed path across two serving nodes
+could not open a session at all. A targeted fetch now goes to the
+subject's own node; the batch sweep still goes to this client's node.
+This was not on my enumeration and is load-bearing.
+
+**Where the ruling's third term went.** The author's answer to the
+fallback question was "Recipient's patron caches or relays as normal",
+with the earlier ruling keeping the sender's nearest infra node as a TURN
+relay for a client behind a proxy. There is no separate traversal path in
+this workspace, so the store-and-forward fallback through the sender's
+node stands where that relay would be, as the *last* term rather than the
+first. Said in `Courier::relayed`'s own comment so the next reader does
+not take it for the ruling itself.
+
+**Landed:** `Horizon::upstream_of` with `Upstream`/`Askable`/`Reach`,
+`Client::reach_for`, `adaptors/src/beyond.rs` (the `Distant` seam, the
+§7.7 descent, its cache at fifteen minutes, and `Beyonder`, the dialler
+with a bounded idle-expiring pool), `Courier::relayed` and
+`Courier::their_prekeys`, the FFI wiring one `Beyond` that outlives every
+attach. Documents: `wire-format.md` §7.7.1's note, design §12.6.3's note,
+three `light-client-requirements.md` obligations, PAY-012, PAY-013,
+RES-016, TOP-039 and PAY-008 amended; acceptance TOP-47, PAY-24, PAY-25,
+RES-19.
+
+**A fifth §13.2-for-§6.4** turned up in `sequence.rs` and `ceremony.rs`
+while working here. The sweep that found the first four was over the
+documents; these are in code comments, which that sweep did not cover.

@@ -27,6 +27,9 @@ pub mod actor;
 /// A serving node beside this client in one process, for a node that is
 /// its own serving node.
 pub mod attached;
+/// Reaching a node that does not serve this client: the §7.7 descent and
+/// the submission that hands payload to the recipient's own node.
+pub mod beyond;
 /// What carries the client's messages out and what arrives in.
 pub mod courier;
 /// The direct payload path over the transport's socket (design §12.6.3).

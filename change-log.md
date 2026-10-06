@@ -12308,6 +12308,111 @@ Functional tests 492 → 495: NET-016 and NET-022 amended, NET-024 to NET-026
 added for the session, the prekey handover and the nodeless formation
 ceremony.
 
+### 2026-10-05 (a starved control loop, and what a stopped device says)
+
+**A session declared its peer unreachable without reading what had already
+arrived.** The control loop's `select!` gave no preference, so under load
+the timer arm could win against a reader holding a heartbeat that was
+already in the socket, and a deadline in the past completes the instant it
+is polled. The loop is now `biased`, the reader ahead of the timer, with a
+grace of eight malformed or unrelated frames before a miss is believed and
+a quarter-second confirmation on a deadline that is already past — long
+enough that a reader with something to deliver gets there first. SES-016
+and acceptance SES-31 carry it, the test starving the client's runtime
+while the node runs on its own thread, which is the only way to reproduce
+the ordering rather than assert about it. A prediction of this drafter's
+was wrong and the run said so: the eight-frame grace does not break
+SES-05, because at one malformed frame per interval the reader is pending
+between frames.
+
+**Two more families on the local session.** NET-027 says the key separates
+ceremonies before any anchor is compared, and that the anchor is what
+remains against a holder of the key — both layers testable, so both
+tested. NET-028 carries a ruling of the same day: a device whose ceremony
+has stopped has discarded the session key with it, so a conversation step
+reaching it is refused for want of a key rather than read, recognised and
+refused by name. **A device that never began, one that finished and one
+that stopped are indistinguishable from outside** [author: *"Less metadata
+leakage this way."*]. The earlier behaviour confirmed to a sender that
+this device had held that ceremony and had stopped, which is owed to
+nobody. Functional tests 496 → 498.
+
+**Two citation errors of this drafter's, both corrected.** The rule above
+was attributed to CER-025 twice, in the notes and in the test's own
+comment; `functional_tests.md` CER-025 is the formation record and
+acceptance CER-25 is the anti-oracle aggregate, and no register row
+covered the rule at all until NET-028 — which is why nothing flagged the
+mismatch. The id was written from memory, which is the same habit as the
+§13.2-for-§6.4 error of the preceding day.
+
+### 2026-10-06 (a client addresses a distant node itself)
+
+The ruling of 2026-10-05 — *a light client does not need its patron or infra
+node to address a distant node for which it holds a locator* — had nothing
+behind it in the code: a client could open exactly one connection, to the
+node serving it, and every message for a peer it held no direct path to was
+handed to that node to relay. **The relayed path's terms are now ordered the
+way the ruling orders them.** Payload for such a peer goes to the node that
+serves *that peer*, dialled by the sender itself, request-only, with no
+attach preceding it; the sender's own node is the fallback for a client that
+cannot open an outbound connection at all and needs it to traverse a proxy.
+A node already serving the sender is reached on the session that is up
+rather than dialled twice.
+
+**Two things had to come with it.** A client has to be able to say who
+serves a peer, which it now does from its own copy of its horizon: the
+nearest ancestor that published an endpoint record, holding such a record
+being the whole of the evidence that its publisher is infrastructure, and a
+party that published one being its own upstream. Where it holds a position
+and no address above it, it drives §7.7's descent itself rather than asking
+its serving node to — one nonce for the logical resolution, referrals
+checked for progress rather than against an arrival total, failure codes
+taking their stated dispositions, and the answer cached for **fifteen
+minutes** [author, 2026-10-06: the number is the implementation's, to be
+adjusted if it proves wrong]. And a **targeted** prekey fetch goes to the
+subject's own node, because a node answers from what was published to it and
+the holder of a subject's bundle is the node that subject attached to; the
+sweep still goes to the client's own node. Without that half the witnessed
+path across two serving nodes could not open a session at all.
+
+**Three notes in the documents, two of them where a reading was
+ambiguous.** `wire-format.md` §7.7.1 says a light client sends its
+resolution to its serving node; it now also says that is the default and not
+the limit. Design §12.6.3's relayed row lists both serving nodes, which is
+true of who sees the flow and was being read as whose cooperation a sender
+needs; the row stands with a note saying which [author, 2026-10-06: *"I
+don't think it's strictly wrong, but the ambiguous reading implies a need for
+note of some sort."*]. `light-client-requirements.md` gains the three
+obligations: the targeted fetch's destination, where a resolution may be
+asked, and the relayed path's order with a bound on what a client keeps
+open to nodes that do not serve it.
+
+Proved by test at three layers: the client naming the serving node from its
+own state with nothing sent, the descent and its cache against a scripted
+network, and two running nodes with a sender attached to neither — the
+recipient's node takes and queues the payload, the sender's refuses it, and
+a dead address ahead of a live one is not an outage.
+
+**The gate then found a defect none of that was looking for, and it was
+not in the new code.** A send with no session queues its plaintext and
+asks for a one-time key; the queue is drained when the reply opens the
+session. Where the ask was answered with no bundle — a subject that had
+not published one yet — nothing opened and the queue stayed; and a session
+established the other way round, by the peer writing first, never looked
+at it. **The queued steps were stranded for as long as that session
+lived, and the sender was told nothing.** It surfaced as a witness holding
+a participant's consent reply and neither of that participant's opening
+legs, which is how it was traced: a later message arriving ruled out both
+slowness and a session that never opened. A session established by any
+route now drains what was waiting for one, ahead of anything queued after
+it. PAY-014 and acceptance PAY-26, the test confirmed to fail without the
+fix.
+
+Functional tests 498 → 503, with PAY-008 amended to the new order;
+catalogue 483 → 488. A fifth
+instance of the §13.2-for-§6.4 citation error, in the kernel's own comments,
+corrected with it.
+
 ### 2026-10-04 (the second and third field runs)
 
 Two phones now run the ceremony from the invite to the proposal. The

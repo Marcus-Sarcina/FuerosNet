@@ -3820,6 +3820,15 @@ ck_handover = e_arr([e_uint(1), e_bstr(pc_demo), e_bstr(ck_alice_to_bob)])
 intro_payload = e_map(pk_desk_pairs)
 dev_intro = e_arr([e_uint(1), e_bstr(TK['alice-desktop'].pub), e_bstr(intro_payload)])
 dev_cred = e_arr([e_uint(1), e_arr([e_bstr(deleg_alice_desktop)]), e_bstr(prekey_desktop)])
+# wire s14.3.4: alice hands bob her prekey material across the local
+# session, so the pair can open an end-to-end channel after they separate
+# with no node's help.  The bundle is NOT reinvented: it is `prekey`, the
+# same bytes records.md publishes, signed by alice and naming her phone as
+# the device.  The one-time key is one of the deposit's, opaque here.
+prekey_handover = e_arr([e_uint(1), e_bstr(pc_demo), e_bstr(alice.ed_pub),
+                         e_bstr(prekey), e_bstr(otks[0])])
+prekey_handover_dry = e_arr([e_uint(1), e_bstr(pc_demo), e_bstr(alice.ed_pub),
+                             e_bstr(prekey)])
 
 emit('local-interfaces.md', f"""# Local device-to-device interfaces (`wire-format.md` §14.3)
 
@@ -3950,6 +3959,8 @@ for fid, by, kind, note in [
     ('P-candidates-bare', cands_bare, 'Candidates', 'the payload path form; both address families'),
     ('P-candidate-handover', cand_handover, 'CandidateHandover', 'the same candidates, anchored'),
     ('P-capture-key-handover', ck_handover, 'CaptureKeyHandover', "alice's key for bob's captures of her, anchored"),
+    ('P-prekey-handover', prekey_handover, 'PrekeyHandover', "alice's bundle and one one-time key, anchored; the bundle is records.md's bytes unchanged"),
+    ('P-prekey-handover-dry', prekey_handover_dry, 'PrekeyHandover', 'the same without a one-time key, which s7.8 permits when a pool runs dry'),
     ('P-device-introduction', dev_intro, 'DeviceIntroduction', 'field 3 is the PrekeyBundle map, field 6 absent'),
     ('P-device-credential', dev_cred, 'DeviceCredential', 'delegation and signed bundle, byte-identical to records.md'),
 ]:
@@ -3989,6 +4000,19 @@ reg('N-capture-key-handover-anchor-31', 'bytes',
 reg('N-capture-key-handover-version-2', 'bytes',
     REJ('CaptureKeyHandover', 'schema', 'a version the decoder does not know is refused'),
     e_arr([e_uint(2), e_bstr(pc_demo), e_bstr(ck_alice_to_bob)]))
+
+reg('N-prekey-handover-device-31', 'bytes',
+    REJ('PrekeyHandover', 'schema', 'a device is 32 bytes'),
+    e_arr([e_uint(1), e_bstr(pc_demo), e_bstr(alice.ed_pub[:31]), e_bstr(prekey)]))
+reg('N-prekey-handover-anchor-31', 'bytes',
+    REJ('PrekeyHandover', 'schema', 'a ceremony-id is 32 bytes'),
+    e_arr([e_uint(1), e_bstr(pc_demo[:31]), e_bstr(alice.ed_pub), e_bstr(prekey)]))
+reg('N-prekey-handover-empty-bundle', 'bytes',
+    REJ('PrekeyHandover', 'schema', 'a bundle is a non-empty byte string'),
+    e_arr([e_uint(1), e_bstr(pc_demo), e_bstr(alice.ed_pub), e_bstr(b'')]))
+reg('N-prekey-handover-version-2', 'bytes',
+    REJ('PrekeyHandover', 'schema', 'a version the decoder does not know is refused'),
+    e_arr([e_uint(2), e_bstr(pc_demo), e_bstr(alice.ed_pub), e_bstr(prekey)]))
 
 # the ceremony conversation's structures (s7.10.2), kinds 9-18 in messages.md
 for fid, by, kind, note in [

@@ -1461,7 +1461,8 @@ patron is as randomly selected as the witness, and a verifier's is covered
 by the adversarial selection that chose the verifier, so putting either in
 the message stream costs the ceremony nothing. **What would cost it
 everything is needing your own patron's cooperation to meet somebody**, and
-§13.2 depends on that not being so: a witnessless formation record is how a
+§6.4 depends on that not being so, by the formation path §13.2 defines: a
+witnessless formation record is how a
 party inside a false social universe memorialises a meeting with anyone they
 physically encounter, and an eclipsing patron that was merely absent would
 otherwise suppress it.
@@ -4608,6 +4609,19 @@ cannot.** A verification query and its response are payload (§7.3,
 | **Direct** | Peer is **inside the horizon** (§15.1), both online, traversal succeeds | Nobody. The peers exchange addresses during setup and connect |
 | **Relayed** | Peer is **outside the horizon**, *or* traversal fails — symmetric NAT, CGNAT, two mobile peers | Both serving infra nodes, as TURN relays carrying ciphertext |
 | **Queued** | Recipient offline | The recipient's serving node holds ciphertext until reconnect (§14.1.4) |
+
+**"Relays" in the table is about who sees the flow, not about whose cooperation a
+sender needs** [author, 2026-10-06]. The two nodes on that row are not
+symmetrical. The **recipient's** serving node is the party a sender hands payload
+to: it is the one that queues for its own client while that client is away
+(§14.1.4) and gives it over on return, which is what it does for a message
+arriving from anywhere. The **sender's** nearest infra node appears on the path
+where the sender cannot open an outbound connection at all and needs it to
+traverse a proxy — a relay for the connection rather than a carrier of the
+message. A light client does not need its patron or infra node to address a
+distant node for which it holds a locator [author, 2026-10-05], and §12.6.1's
+resolution is how it finds one it cannot already place. Both nodes still see the
+flow, which is what the row says and the whole of what it says.
 
 **Direct connection is limited to the horizon**, because a direct path reveals
 each peer's IP to the other (P17). Three reasons this is the right boundary:
