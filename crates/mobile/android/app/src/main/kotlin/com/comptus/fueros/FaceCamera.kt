@@ -176,10 +176,10 @@ class FaceCamera(private val context: Context) {
                     "facing" to "SELFIE",
                     "width" to width,
                     "height" to height,
-                    "ms" to (Diag.ms() - startedMs),
+                    "took_ms" to (Diag.ms() - startedMs),
                 )
             } else {
-                Diag.warn("camera", "which" to "face", "op" to "open", "error" to out, "ms" to (Diag.ms() - startedMs))
+                Diag.warn("camera", "which" to "face", "op" to "open", "error" to out, "took_ms" to (Diag.ms() - startedMs))
             }
             out
         } catch (e: SecurityException) {

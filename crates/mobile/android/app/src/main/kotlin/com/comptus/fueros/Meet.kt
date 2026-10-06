@@ -73,6 +73,16 @@ class Meet(
          *  reached and to answer, short enough to hold two people standing
          *  with their phones. */
         const val PATIENCE_MS = 60_000L
+
+        /**
+         * How long the contribution is shown in colour before this device
+         * falls back to the monochrome format ([Polychrome]). Five seconds
+         * is several frames at the field runs' measured rate, so a camera
+         * that can separate the channels has had many chances, and one
+         * that cannot has cost five seconds of a ceremony that runs for
+         * minutes [author, 2026-10-06].
+         */
+        const val COLOUR_PROBE_MS = 5_000L
     }
     /** The adoption this meeting carries, as chosen at D1a. */
     val adopt: Adopt get() = kind.adopt
@@ -107,6 +117,19 @@ class Meet(
      *  and crossed in step ([OpticalExchange]); null between the two. Held
      *  here so a redrawn screen finds it rather than starting over. */
     var exchange: OpticalExchange? = null
+
+    /**
+     * When this device began presenting the contribution in colour, or
+     * null while it is not ([Polychrome]). What the fall back is timed
+     * from: a reader whose camera cannot separate the channels decodes
+     * nothing at all from a colour frame, so it reports holding none of
+     * this side's parts and there is nothing else to read the failure off.
+     */
+    @Volatile var colourSince: Long? = null
+
+    /** Set once this device has fallen back to the monochrome format, so
+     *  it does not try colour again inside one ceremony. */
+    @Volatile var colourRefused: Boolean = false
 
     /** Told when the person accepts the brief: the kernel's, so the
      *  ceremony begins there, which is the one question it asks. */

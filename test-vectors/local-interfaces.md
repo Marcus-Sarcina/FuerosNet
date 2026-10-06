@@ -1,6 +1,6 @@
 # Local device-to-device interfaces (`wire-format.md` §14.3)
 
-Generated against `wire-format.md` `6a6ec2e78be39885…`, `network-design.md` `6a375aac1fd3a071…` and `light-client-requirements.md` `21e6ff6262bdb47b…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `8c218fc84946e2b9…`, `network-design.md` `6e7868f1592c8723…` and `light-client-requirements.md` `02f445f96d3f7daf…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Canonical. Spec-derived, reproduced by the independent harness.** The encodings
 of `wire-format.md` §14.3, as one coherent exchange: **alice initiates with
@@ -9,7 +9,13 @@ answer in `records.md` **byte-for-byte**, and the device handover reuses the
 desktop transport key (`keys.md`), alice's delegation to it (`records.md`)
 and the desktop's signed prekey bundle (`records.md`) byte-for-byte. The
 bytes are the objects alone — what a QR encodes them as, and how a bearer
-frames them, is the shell's and no part of these vectors. **Interpretations
+frames them, is the shell's and no part of these vectors. **The sealing is
+not the shell's and is not covered here yet** [reviewer, 2026-10-06]:
+`wire-format.md` §14.3.2 fixes the session key, the cipher, the nonce in
+front of the ciphertext and the ceremony-id as associated data, so two
+shells must agree on a sealed carriage byte-for-byte; the plaintexts below
+are what goes inside one, and a session-key known answer with one sealed
+carriage to open are owed. **Interpretations
 taken**: the intent's bundle entry uses `wire-format.md` §7.9's *envelope*
 form (the presented form is equally legal; the envelope is the
 holder-withholds-nothing case); the intent's retention is the design's

@@ -339,7 +339,11 @@ impl Msg {
 /// the pre-commitment, the witnesses it nominates from the counterparty's
 /// neighbourhood, the bundle of its prior records for the counterparty's
 /// selection, its clock, and its declared retention.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// **`Debug` redacts the contribution** (the impl below): since 2026-10-05
+/// the two contributions key the local session (`wire-format.md` §14.3.2),
+/// so one of them in a log line is half of a key that a party who read the
+/// other screen completes [reviewer, 2026-10-06].
+#[derive(Clone, PartialEq, Eq)]
 pub struct Intent {
     /// This party's contribution to the pre-commitment.
     pub contribution: [u8; 16],
@@ -354,6 +358,22 @@ pub struct Intent {
     pub retention_years: u64,
     /// Whether this side initiated.
     pub initiator: bool,
+}
+
+impl std::fmt::Debug for Intent {
+    /// Everything but the contribution, which is key material: the field is
+    /// named and its value is not, so a log line still says an intent was
+    /// here [reviewer, 2026-10-06].
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Intent")
+            .field("contribution", &"<redacted>")
+            .field("nominees", &self.nominees)
+            .field("bundle", &self.bundle.len())
+            .field("started_at", &self.started_at)
+            .field("retention_years", &self.retention_years)
+            .field("initiator", &self.initiator)
+            .finish()
+    }
 }
 
 /// What a nominee is told when asked to witness (design §7.1 step 8).
@@ -421,6 +441,27 @@ pub(crate) struct Active {
     /// The conversation on the end-to-end path (`crate::sequence`): what
     /// this side put out and what came back.
     pub(crate) conversation: crate::sequence::Conversation,
+}
+
+impl Drop for Active {
+    /// **The ceremony's key material goes with the ceremony**
+    /// [reviewer, 2026-10-06]. The two contributions key the local session
+    /// (`wire-format.md` §14.3.2), the seed derives the capture keys
+    /// (design §7.5.2), and the template is a likeness; none has a use once
+    /// this ceremony is over, and §14.3.2 gives the session key exactly the
+    /// ceremony's lifetime. Dropping `Active` is every way one ends:
+    /// finished, stopped, abandoned, or replaced by the next.
+    fn drop(&mut self) {
+        use zeroize::Zeroize;
+        self.contribution.zeroize();
+        if let Some(theirs) = self.their_contribution.as_mut() {
+            theirs.zeroize();
+        }
+        self.seed.zeroize();
+        if let Some(t) = self.template.as_mut() {
+            t.zeroize();
+        }
+    }
 }
 
 impl Active {
@@ -885,7 +926,7 @@ impl Client {
         tracing::info!(
             target: "cer",
             ceremony = %id8(&mine),
-            ms = self.since_begin_ms(),
+            took_ms = self.since_begin_ms(),
             "cer.id_fixed"
         );
         self.subject.open_window(mine);
@@ -1180,7 +1221,7 @@ impl Client {
         tracing::info!(
             target: "cer",
             ceremony = %id8(&cid),
-            ms = self.since_begin_ms(),
+            took_ms = self.since_begin_ms(),
             "cer.id_fixed"
         );
         self.subject.open_window(cid);
@@ -1675,7 +1716,7 @@ impl Client {
             witnesses = proposal.witnesses.len(),
             responses = proposal.responses.len(),
             formation,
-            ms = self.since_begin_ms(),
+            took_ms = self.since_begin_ms(),
             "cer.propose"
         );
         Ok((proposal, set))
@@ -1788,7 +1829,7 @@ impl Client {
         tracing::info!(
             target: "cer",
             active = self.active.is_some(),
-            ms = self.since_begin_ms(),
+            took_ms = self.since_begin_ms(),
             "cer.abandon"
         );
         self.active = None;
@@ -1823,12 +1864,17 @@ impl Client {
             txid = %id8(&txid),
             signers,
             mine,
-            ms = self.since_begin_ms(),
+            took_ms = self.since_begin_ms(),
             "cer.finalize"
         );
-        if let Some(a) = self.active.take_if(|_| mine) {
+        // taken, not moved out of: `Active`'s `Drop` wipes the ceremony's
+        // key material, and a type with a destructor cannot be dismantled
+        // field by field.  The seed is copied on the way past, which is
+        // what `store.seeds` is for; what the drop then wipes is this
+        // ceremony's copy
+        if let Some(mut a) = self.active.take_if(|_| mine) {
             let peer = a.peer()?;
-            if let Some(sealed) = a.sealed {
+            if let Some(sealed) = a.sealed.take() {
                 self.store.sealed.insert(txid, sealed);
             }
             self.store.seeds.insert(

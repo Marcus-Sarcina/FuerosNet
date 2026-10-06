@@ -35,9 +35,91 @@ class OpticalExchange(
         const val VERSION = 1
         /** The header's length: version, which, index, count, received. */
         const val HEADER = 5
-        /** Parts of 256 bytes: the 2,022-byte contribution is eight codes
-         *  of 61 modules, against one of 173. */
-        const val CHUNK = 256
+        /**
+         * **Parts of 76 bytes: 27 of them, for a five-minute ceremony**
+         * [author, 2026-10-06].
+         *
+         * **The quantity that matters is the module count, and nothing
+         * here is in pixels** [author, 2026-10-06]. A code is drawn at the
+         * screen's width, so its module is that width divided by the
+         * symbol's modules; phone *physical* width varies far less across
+         * models and generations than resolution does, so modules per
+         * screen-width code is the figure that carries over and a pixel
+         * count is not. Calibrated on the field runs of 2026-10-06 — a
+         * 69-module code read to about 18 inches on a 70 mm screen, so a
+         * module of 1.0 mm read to 450 of itself — the rule is:
+         *
+         * **a code reads at about `450 / modules` times its own width.**
+         *
+         * Measured with the real encoder over a 2,022-byte contribution,
+         * and the boundaries are exact rather than sampled:
+         *
+         * | chunk | parts | modules | reads at | on a 70 mm screen |
+         * |---|---|---|---|---|
+         * | 256 | 8 | 69 | 6.5 × width | 18 in |
+         * | 128 | 16 | 53 | 8.5 × | 23 in |
+         * | 92–96 | 22 | 45 | 10 × | 28 in |
+         * | 77–91 | 23–27 | 45 | 10 × | 28 in |
+         * | **76** | **27** | **41** | **11 ×** | **30 in** |
+         * | 56–75 | 28–37 | 41 | 11 × | 30 in |
+         * | 48 | 43 | 37 | 12 × | 34 in |
+         * | 20 | 102 | 29 | 15.5 × | 43 in |
+         * | 8 | 253 | 25 | 18 × | 50 in |
+         *
+         * **Why 76 and not any other chunk in the 25-to-35-part band**
+         * [author, 2026-10-06]: 41 modules is the best range the band can
+         * reach — 37 modules needs 43 parts — and it holds from chunk 56
+         * all the way to 76, where the next byte crosses into 45. So 76 is
+         * the **cheapest** way to the band's best range, and spending the
+         * band's remaining parts buys nothing at all: 32 parts at chunk 64
+         * reads no further than 27 at chunk 76.
+         *
+         * **The five minutes it is chosen for.** Run 4 of 2026-10-06
+         * measured 43.0 s from `cer.begin` to the witness request with
+         * eight parts, and a median 0.5–0.6 s a part; nineteen more parts
+         * is about ten seconds, so the request goes out near 53 s. The
+         * witnesses' four-minute floor runs from *their* receipt of it
+         * (design §7.1), which puts the record at about **4 min 55 s**
+         * after begin, before the permission prompts and the proximity tap
+         * that precede it.
+         *
+         * **Error correction stays at M.** Measured, L buys about a fifth
+         * fewer parts at the same module count and nothing in range, which
+         * is the dimension that was wanted; at the resolution margin the
+         * trade is two-sided anyway, since marginal modules produce the bit
+         * errors that correction is what recovers from. The reasoning for M
+         * in `Optical` stands.
+         *
+         * **Four to six feet is not this lever's**, at any part count the
+         * header's one-byte fields admit: 25 modules is its floor and
+         * costs 253 parts of the 255 available. What reaches further is
+         * carrying less — a 32-byte commitment optically with the key
+         * material following on the bearer and checked against it — or
+         * carrying more per frame: three ordinary QRs, one per colour
+         * channel, each channel an independent part, which divides the
+         * part count by three and degrades to monochrome for free
+         * [proposed, author, 2026-10-06; not built].
+         */
+        const val CHUNK = 76
+
+        /**
+         * **The part size when a frame carries three of them** — eleven
+         * bytes, which under [Polychrome]'s two-byte header is thirteen
+         * and so the smallest QR there is: 25 modules with its quiet zone,
+         * reading at about 18 × the code's own width, which on a 70 mm
+         * screen is about 50 inches. Three a frame carries the 2,022-byte
+         * contribution in 62 frames, or about 35 s at the field runs'
+         * measured rate [author, 2026-10-06].
+         *
+         * **Frame 0 carries full headers**, so it is 16 bytes a channel
+         * and one symbol larger — 29 modules — which makes the frame that
+         * decides whether colour works the easiest of them to read, and
+         * carries the part count the compressed headers leave out. If
+         * fewer than three of its channels arrive, the sender falls back
+         * to [CHUNK] and the three parts it carried are re-sent under the
+         * monochrome partitioning.
+         */
+        const val CHUNK_POLY = 11
         /** [which] for the first exchange, the contribution. */
         const val CONTRIBUTION = 0
         /** [which] for the second, the transcript confirmation. */
@@ -83,6 +165,32 @@ class OpticalExchange(
         byteArrayOf(VERSION.toByte(), which.toByte(), index.toByte(), count.toByte(), got.toByte()) + parts[index]
     }
 
+    /**
+     * **A colour frame's three parts**, from the part the other side needs
+     * next: red carries it, green the one after, blue the one after that
+     * (`Polychrome`). Short at the end of the object, where fewer than
+     * three remain.
+     *
+     * `compressed` is false for the frame that decides whether colour
+     * works — it carries full headers, so each channel is a self-standing
+     * part and one of them brings the count — and true for every frame
+     * after it.
+     */
+    fun colourFrames(compressed: Boolean): List<ByteArray> = synchronized(lock) {
+        val first = minOf(theirGot, count - 1)
+        val frame = first / Polychrome.CHANNELS
+        (0 until Polychrome.CHANNELS).mapNotNull { ch ->
+            val i = frame * Polychrome.CHANNELS + ch
+            if (i >= count) {
+                null
+            } else if (compressed) {
+                Polychrome.header(frame, got) + parts[i]
+            } else {
+                byteArrayOf(VERSION.toByte(), which.toByte(), i.toByte(), count.toByte(), got.toByte()) + parts[i]
+            }
+        }
+    }
+
     /** The index of the part [frame] shows, for the screen and the events. */
     fun showing(): Int = synchronized(lock) { minOf(theirGot, count - 1) }
 
@@ -103,7 +211,23 @@ class OpticalExchange(
      * side needed completes theirs. Their header's count of mine is taken
      * either way, since that is what moves the two on.
      */
-    fun take(bytes: ByteArray): Took = synchronized(lock) {
+    fun take(bytes: ByteArray, channel: Int = 0): Took = synchronized(lock) {
+        // **a compressed header carries no `which` and no count**
+        // (`Polychrome`): the channel it arrived in is its index within the
+        // frame, and the count came with the full headers of frame 0. One
+        // that arrives before that frame did is not ours to place.
+        if (Polychrome.compressed(bytes)) {
+            if (bytes.size <= Polychrome.HEADER) return Took.MALFORMED
+            if (theirCount < 0) return Took.NOT_OURS
+            val index = Polychrome.frameOf(bytes) * Polychrome.CHANNELS + channel
+            val gotOfMineC = Polychrome.gotOf(bytes)
+            if (index >= theirCount || gotOfMineC > count) return Took.MALFORMED
+            theirGot = maxOf(theirGot, gotOfMineC)
+            if (theirs[index] != null) return Took.DUPLICATE
+            theirs[index] = bytes.copyOfRange(Polychrome.HEADER, bytes.size)
+            while (got < theirCount && theirs[got] != null) got++
+            return if (got == theirCount) Took.COMPLETE else Took.ACCEPTED
+        }
         if (bytes.size < HEADER || bytes[0].toInt() != VERSION) return Took.NOT_OURS
         if (bytes[1].toInt() == which + 1) {
             // **a code of the next exchange is the other side saying it has
@@ -123,7 +247,17 @@ class OpticalExchange(
             theirCount = n
             theirs = arrayOfNulls(n)
         } else if (n != theirCount) {
-            return Took.MALFORMED
+            // **a count that changed is the other side re-partitioning**,
+            // which is what a fall back from colour to monochrome is: the
+            // parts already held are of the old partitioning and are no
+            // use, so they go [author, 2026-10-06]. It was MALFORMED when
+            // one partitioning was all there was. Nothing rests on
+            // trusting it — the assembled object is checked against the
+            // screens either way (`wire-format.md` §14.3.2), and a wrong
+            // re-partition simply fails to assemble.
+            theirCount = n
+            theirs = arrayOfNulls(n)
+            got = 0
         }
         if (gotOfMine > count) return Took.MALFORMED
         theirGot = maxOf(theirGot, gotOfMine)

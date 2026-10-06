@@ -8,6 +8,18 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class OpticalExchangeTest {
+
+    /**
+     * **The chunk these tests name for themselves.** They are about the
+     * lockstep — who shows what, who advances, what a stale code counts
+     * as — and not about the production constant, which is chosen for
+     * reading distance and moved when that changes
+     * (`OpticalExchange.CHUNK`, and `OpticalChunkTest` pins its cost).
+     * Four of these broke when the constant moved from 256 to 48 on
+     * 2026-10-06, which is a test reading a number it did not mean to
+     * depend on.
+     */
+    private val PARTS_OF_256 = 256
     private fun bytes(n: Int, seed: Int) = ByteArray(n) { ((it * 7 + seed) and 0xff).toByte() }
 
     /** Two devices facing each other: each reads whatever the other shows,
@@ -28,8 +40,8 @@ class OpticalExchangeTest {
     @Test
     fun a_two_kilobyte_object_crosses_in_eight_parts_each_way_in_step() {
         val ma = bytes(2022, 1); val mb = bytes(2022, 9)
-        val a = OpticalExchange(OpticalExchange.CONTRIBUTION, ma)
-        val b = OpticalExchange(OpticalExchange.CONTRIBUTION, mb)
+        val a = OpticalExchange(OpticalExchange.CONTRIBUTION, ma, PARTS_OF_256)
+        val b = OpticalExchange(OpticalExchange.CONTRIBUTION, mb, PARTS_OF_256)
         assertEquals(8, a.count)
         assertEquals(0, a.showing())
         val rounds = run(a, b)
@@ -41,8 +53,8 @@ class OpticalExchangeTest {
 
     @Test
     fun a_device_shows_the_part_the_other_side_needs_next_and_keeps_the_last_up() {
-        val a = OpticalExchange(OpticalExchange.CONTRIBUTION, bytes(600, 1))  // 3 parts
-        val b = OpticalExchange(OpticalExchange.CONTRIBUTION, bytes(300, 2))  // 2 parts
+        val a = OpticalExchange(OpticalExchange.CONTRIBUTION, bytes(600, 1), PARTS_OF_256)  // 3 parts
+        val b = OpticalExchange(OpticalExchange.CONTRIBUTION, bytes(300, 2), PARTS_OF_256)  // 2 parts
         assertEquals(0, a.showing())
         // a reads b's first; a still shows its first, since b has none of a's
         assertEquals(OpticalExchange.Took.ACCEPTED, a.take(b.frame()))
@@ -69,8 +81,8 @@ class OpticalExchangeTest {
 
     @Test
     fun codes_of_another_exchange_or_a_bad_shape_are_not_taken() {
-        val a = OpticalExchange(OpticalExchange.CONTRIBUTION, bytes(100, 1))
-        val t = OpticalExchange(OpticalExchange.TRANSCRIPT, bytes(34, 3))
+        val a = OpticalExchange(OpticalExchange.CONTRIBUTION, bytes(100, 1), PARTS_OF_256)
+        val t = OpticalExchange(OpticalExchange.TRANSCRIPT, bytes(34, 3), PARTS_OF_256)
         // the next exchange's code is the other side's word that it holds all of mine
         assertEquals(OpticalExchange.Took.DUPLICATE, a.take(t.frame()))
         assertEquals(OpticalExchange.Took.NOT_OURS, a.take(byteArrayOf(1, 0, 3)))
@@ -84,24 +96,24 @@ class OpticalExchangeTest {
 
     @Test
     fun a_code_of_the_next_exchange_counts_as_the_other_side_holding_everything() {
-        val a = OpticalExchange(OpticalExchange.CONTRIBUTION, bytes(600, 1))
-        val b = OpticalExchange(OpticalExchange.CONTRIBUTION, bytes(300, 2))
+        val a = OpticalExchange(OpticalExchange.CONTRIBUTION, bytes(600, 1), PARTS_OF_256)
+        val b = OpticalExchange(OpticalExchange.CONTRIBUTION, bytes(300, 2), PARTS_OF_256)
         // a holds all of b's; b moved to the transcript before a read its last header
         a.take(b.frame()); b.take(a.frame()); a.take(b.frame())
         assertTrue(a.complete())
         assertFalse(a.done())
-        val t = OpticalExchange(OpticalExchange.TRANSCRIPT, bytes(34, 3))
+        val t = OpticalExchange(OpticalExchange.TRANSCRIPT, bytes(34, 3), PARTS_OF_256)
         assertEquals(OpticalExchange.Took.DUPLICATE, a.take(t.frame()))
         assertTrue("b's transcript code says b has all of a's", a.done())
         // but a code of an exchange further on, or before, is not ours
-        val far = OpticalExchange(2, bytes(10, 4))
+        val far = OpticalExchange(2, bytes(10, 4), PARTS_OF_256)
         assertEquals(OpticalExchange.Took.NOT_OURS, a.take(far.frame()))
         assertEquals(OpticalExchange.Took.NOT_OURS, t.take(a.frame()))
     }
 
     @Test
     fun the_status_line_names_both_sides_progress() {
-        val a = OpticalExchange(OpticalExchange.CONTRIBUTION, bytes(600, 1))
+        val a = OpticalExchange(OpticalExchange.CONTRIBUTION, bytes(600, 1), PARTS_OF_256)
         assertEquals("Showing part 1 of 3; received none of theirs yet; they hold 0 of your 3.", a.status())
     }
 }

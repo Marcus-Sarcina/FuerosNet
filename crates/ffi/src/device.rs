@@ -211,7 +211,7 @@ impl dev::Proximity for ProximityIn {
             channel = ?kind,
             outcome = ?result,
             resolution_m = out.resolution_m,
-            ms = started.elapsed().as_millis() as u64,
+            took_ms = started.elapsed().as_millis() as u64,
             "platform.proximity"
         );
         out
@@ -229,7 +229,7 @@ impl dev::Camera for CameraIn {
             target: "platform",
             prompt = ?prompt,
             bytes = pixels.len(),
-            ms = started.elapsed().as_millis() as u64,
+            took_ms = started.elapsed().as_millis() as u64,
             "platform.camera"
         );
         // metadata is empty because none crosses: there is nothing to
@@ -282,7 +282,7 @@ impl dev::Operator for OperatorIn {
             target: "platform",
             question,
             answer,
-            ms = started.elapsed().as_millis() as u64,
+            took_ms = started.elapsed().as_millis() as u64,
             "platform.operator"
         );
         answer

@@ -900,7 +900,7 @@
   "rule": [
    {
     "where": "light-client-requirements.md §1.3",
-    "text": "Randomised prompts, 3-5 images over 10-15 seconds"
+    "text": "The randomised prompts are\n  the requirement; the ten-to-fifteen-second window was not"
    },
    {
     "where": "design §7.5",
@@ -1906,7 +1906,7 @@
   "id": "CER-38",
   "area": "ceremony",
   "gap": "ceremony",
-  "title": "The guided capture runs on a camera and a person",
+  "title": "The guided capture runs on a camera and a person, prompts spread through the capture",
   "milestone": "after-5",
   "kind": "positive",
   "spec": [
@@ -1915,12 +1915,12 @@
   "rule": [
    {
     "where": "design §7.1",
-    "text": "Each party\n   captures 3-5 images of the counterparty over 10-15 seconds under randomised\n   prompts"
+    "text": "retains 3-5 images of the counterparty, taken **under randomised prompts\n   spread through the capture, which runs for the ceremony's enforced duration**"
    }
   ],
   "given": "A camera with a person in front of it.",
-  "when": "The guided capture runs under the real prompts, and again against a still image held up to the lens.",
-  "then": "The frames differ from each other; a still does not satisfy the liveness the record claims; and the modality the record states is the one the camera provided.",
+  "when": "The capture runs under the real prompts for the ceremony's enforced duration, and again against a still image held up to the lens.",
+  "then": "The frames differ from each other and the retained ones coincide with the prompts, so each carries prompted motion; a still does not satisfy the liveness the record claims; the modality the record states is the one the camera provided; and the retained count is the 3 to 5 the summary bounds, whatever the loop between prompts took.",
   "oracle": "behaviour",
   "deferred": "a camera and a person: the reference camera returns the same synthetic frame every time, which proves the timing and the prompt variation and nothing about what was captured",
   "interpretation": null,
@@ -2318,6 +2318,54 @@
   "then": "Both hold the same record, byte for byte, and nothing was asked of any node. No step returns a message for a courier to carry, and a step that needed one would have refused for want of a serving node.",
   "oracle": "behaviour",
   "interpretation": "This is the escape design §13.2 rests on, so the test's value is in what is absent: there is no serving node in it at all. A witnessed ceremony is the contrasting case and legitimately reaches each witness through that witness's own locator and upstream node."
+ },
+ {
+  "id": "CER-52",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "A witness will not sign before four minutes have passed on its own clock",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "design §7.1",
+   "light-client-requirements.md §1.2"
+  ],
+  "rule": [
+   {
+    "where": "design §7.1",
+    "text": "A witness refuses to sign before four minutes have passed **on its\nown clock, from the moment the request to witness reached it**"
+   }
+  ],
+  "given": "A witness holding a ceremony it has agreed to attest, and a conversation driven to the proposed body in well under four minutes.",
+  "when": "The proposer asks the witness to sign before four minutes have passed since the witness received the request, and again past four minutes; and separately, a participant claims an elapsed time longer than the witness has observed.",
+  "then": "The early request yields no signature and an answer that names waiting rather than refusal, so the proposer may ask again; the request past four minutes is signed; and the claim of a longer elapsed time neither shortens nor lengthens the wait, the witness's own receipt being what starts it. No reader of the record can distinguish a witness that waited from one that did not, so nothing is asserted of the record itself.",
+  "oracle": "behaviour",
+  "deferred": "a four-minute wall clock in a ceremony test, which is the reason the rule is a release obligation and not a bench one",
+  "interpretation": null
+ },
+ {
+  "id": "CER-53",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "The camera holds one counterparty present across the enforced duration, or the meeting is abandoned",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "design §7.5",
+   "light-client-requirements.md §1.3"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §1.3",
+    "text": "Abandon the meeting where no face is visible for longer than the maximum gap; where a different face appears while the one being held is absent"
+   }
+  ],
+  "given": "A camera, two people, and a client running the continuity check at its reference parameters — four minutes, a ninety per cent presence ratio, a twenty-second maximum gap — comparing its samples with the same profile and matcher a verifier uses.",
+  "when": "Four runs: the face withdrawn for longer than the maximum gap; a second person's face substituted while the first is absent; the face withdrawn repeatedly for gaps each inside the maximum but summing past the ratio; and a compliant run with pruning of intermediate samples enabled.",
+  "then": "The first three are abandoned by the client's own decision, the third at the end of the window and not before, with nothing of the check entering any transaction and no counterparty or witness able to tell that it ran. The compliant run's retained captures coincide with the prompts spread through the window rather than clustering in its final minutes, and no unretained sample survives the ceremony's close.",
+  "oracle": "behaviour",
+  "deferred": "a camera and two people over four minutes: the reference camera returns the same synthetic frame every time, which can prove the gap and ratio arithmetic and nothing about whose face was in front of the lens. The same-face comparison itself is verification's own matcher at an easier operating point and waits on CAP-015's pin, not on a capability of its own",
+  "interpretation": null
  },
  {
   "id": "CUR-01",
@@ -4317,7 +4365,7 @@
    },
    {
     "where": "light-client-requirements.md §1.3",
-    "text": "**Run the guided capture sequence.**"
+    "text": "**Run the capture loop for the whole capture portion, and retain 3-5 of what\n  it takes**"
    }
   ],
   "given": "A shell supplying the proximity hardware, camera, clock, randomness, operator and notice sink as objects, and a client started behind them on a thread of its own.",

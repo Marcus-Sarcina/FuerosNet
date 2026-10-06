@@ -834,12 +834,17 @@ const MISS_GRACE_FRAMES: u32 = 8;
 /// Observed as five catch-up heartbeats, then the declaration, then the
 /// five beats that had been waiting all along [2026-10-05].
 ///
-/// So a past deadline is floored at this far ahead, which is a window the
-/// reader is awaited across and wins if anything surfaces. It applies only
-/// to a deadline noticed late, never to one reached on time, so it delays
-/// no honest declaration. 250 ms is a chosen value: a scheduler turn and a
-/// datagram's parse, and it does not scale with the heartbeat interval
-/// because neither of those does.
+/// So a deadline is floored at this far ahead, which is a window the reader
+/// is awaited across and wins if anything surfaces. **It floors every
+/// deadline and not only a late one** [reviewer, 2026-10-06]: a deadline
+/// already within the floor when the loop reaches it is pushed out to the
+/// floor too, so a declaration can land up to this late on an unstarved
+/// loop. That is the cost, it is bounded by this constant, and it is
+/// nothing beside three heartbeat intervals — which is what the earlier
+/// wording, that it "applies only to a deadline noticed late", obscured by
+/// claiming more than the code does. 250 ms is a chosen value: a scheduler
+/// turn and a datagram's parse, and it does not scale with the heartbeat
+/// interval because neither of those does.
 const MISS_CONFIRM: Duration = Duration::from_millis(250);
 
 /// Declare the peer unreachable, once.  Idempotent: a second call while the
@@ -913,10 +918,12 @@ async fn control_loop(
                 counter += 1;
                 next_send += interval;
             }
-            out = outbound.recv() => {
-                if let Some((ft, body)) = out
-                    && sender.frame(ft, &body).await.is_err() { return None; }
-            }
+            // **ahead of the outbound queue, for the reason the order
+            // exists at all** [reviewer, 2026-10-06]: a queue that is
+            // always ready would starve the reader exactly as the timer
+            // did, and the cost of judging a live peer unreachable is
+            // larger than the cost of a control frame waiting a turn.
+            // The heartbeat is the arm above and is not delayed by either.
             r = reader.next(bounds::CONTROL_FRAME_BYTES) => {
                 let past = Instant::now() >= due;
                 let mut fresh = false;
@@ -960,6 +967,10 @@ async fn control_loop(
                 }
             }
             // last, and only while the silence stands undeclared
+            out = outbound.recv() => {
+                if let Some((ft, body)) = out
+                    && sender.frame(ft, &body).await.is_err() { return None; }
+            }
             _ = sleep_until(deadline), if !missed => {
                 missed = true;
                 mark_unreachable(&reach, &log, &on_change);

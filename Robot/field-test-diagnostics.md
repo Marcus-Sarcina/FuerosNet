@@ -168,7 +168,8 @@ dial (`runtime.rs` ~945), candidate counts and reflexive-address found at
 | `meet.step` | from, to, trigger (tap or kernel), ms | `Meet.advance`, every transition |
 | `meet.stop` | reason | `Meet.stop` |
 | `meet.note` | the line | `Meet.note`, `Front.note` |
-| `qr.shown` / `qr.read` | which, bytes, facing, decode attempts, decode ms | `MeetActivity` render, `QrCamera.readOne/decode` |
+| `qr.shown` / `qr.read` | which, bytes, modules, **module_mm**, **reads_at_mm**, **channels** where a frame is colour, facing, decode attempts, decode ms, **channel** on a colour read | `MeetActivity` render, `QrCamera.readOne/decode/colour` |
+| `optical.colour` | state (`refused`), how many of this side's parts the other held when it was given up on | `MeetActivity.optical`'s fall back to the monochrome format |
 | `camera` | open, close, error, template, exposure and anti-banding as set | `QrCamera`, `FaceCamera` |
 | `face.frames` | delivered, timeouts (5 s open, 2 s frame), sizes; never pixels | `FaceCamera.open/frame` |
 | `ble` | advertise, scan, connect, MTU negotiated, discovery, disconnect, every refusal | `BleBearer` |

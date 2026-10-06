@@ -73,6 +73,28 @@ pub const ANCHOR_FIELD: &str = "unix_ms";
 /// too and so anchors the collector's file (`live.rs`).
 pub const HELLO_EVENT: &str = "diag.hello";
 
+/// The **first** `"ms"` in a raw line, read from the text.
+///
+/// **Because a line can carry two, and the parser keeps the wrong one**
+/// [reviewer, 2026-10-01]. Until 2026-10-06 the emitters wrote a duration
+/// under `ms` as well, so an event with one reads
+/// `{"ms":65032, ..., "ms":10851}`; JSON permits it, `serde_json` keeps the
+/// last, and the merge sorted such an event by its duration — which put
+/// `cer.capture` before `cer.begin` in the flagship artefact of the field
+/// runs. The emitters now write `took_ms`, and this keeps **the logs
+/// already on disk** reading correctly, the timestamp being the first
+/// field every emitter writes.
+///
+/// Scanned rather than parsed: a parser that kept the first would have to
+/// replace `serde_json`'s map, and nothing else about these lines needs
+/// that.
+fn first_ms(raw: &str) -> Option<u64> {
+    let at = raw.find("\"ms\":")? + 5;
+    let rest = raw[at..].trim_start();
+    let end = rest.find(|c: char| !c.is_ascii_digit())?;
+    rest[..end].parse().ok()
+}
+
 /// One raw line, read back: the [`Line`] and, where the line is an anchor
 /// (a `diag.anchor`, or a stream's `diag.hello`, carrying `unix_ms`), the
 /// anchor `(ms, unix_ms)`.  `None` for a line that is not a JSON object
@@ -86,7 +108,7 @@ pub fn parse_line(source: &str, n: usize, raw: &str) -> Option<(Line, Option<(u6
         return None;
     };
     let (ms, level, layer, event) = (
-        map.get("ms").and_then(Value::as_u64)?,
+        first_ms(raw).or_else(|| map.get("ms").and_then(Value::as_u64))?,
         map.get("level").and_then(Value::as_str)?,
         map.get("layer").and_then(Value::as_str)?,
         map.get("event").and_then(Value::as_str)?,

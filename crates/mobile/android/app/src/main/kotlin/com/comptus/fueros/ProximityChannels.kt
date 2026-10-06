@@ -127,7 +127,7 @@ object ProximityChannels {
             "op" to "tap",
             "side" to if (reader) "reader" else "card",
             "outcome" to outcome,
-            "ms" to (Diag.ms() - started),
+            "took_ms" to (Diag.ms() - started),
         )
         cachedTap.set(outcome)
         return outcome

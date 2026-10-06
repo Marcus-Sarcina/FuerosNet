@@ -1393,11 +1393,14 @@ end node, starting from its own local records of people it has met.
    amplifier raises it without changing distance. For the participants' own
    assurance; not remotely verifiable.
 5. **Guided face capture**, locally on each device (§7.2, §7.5). Each party
-   captures 3–5 images of the counterparty over 10–15 seconds under randomised
-   prompts — turn slightly, change expression, which supplies both the angle and
-   lighting *diversity* that defeats correlated within-session failure, and the
-   motion and parallax that constitute the **liveness check** against a printed
-   photo, a screen replay or generated video. **Each party also hands the other a
+   retains 3–5 images of the counterparty, taken **under randomised prompts
+   spread through the capture, which runs for the ceremony's enforced duration**
+   [author, 2026-10-06] — turn slightly, change expression, which supplies both
+   the angle and lighting *diversity* that defeats correlated within-session
+   failure, and the motion and parallax that constitute the **liveness check**
+   against a printed photo, a screen replay or generated video. The loop behind
+   those prompts runs throughout, because the same camera is holding the
+   counterparty present (§7.5); most of what it takes is never retained. **Each party also hands the other a
    per-ceremony capture key — derived from a seed only the *subject* holds —
    and seals its captures under the key that subject supplied, discarding it
    once sealed** (§7.5.2), so a compliant client holds no decryptable
@@ -1484,6 +1487,25 @@ were responsive, and nothing beyond that.
 Ceremony duration is deliberately minutes, not seconds. It meters human time,
 which is the scarce resource the attack must consume; a per-identity cooldown
 would not, since an attacker holds many identities.
+
+**The floor is four minutes, and the witnesses are what enforce it** [author,
+2026-10-06]. A witness refuses to sign before four minutes have passed **on its
+own clock, from the moment the request to witness reached it**, whatever the
+participants, the other witnesses or the verifiers say and however early the
+conversation completes (`light-client-requirements.md` §1.2). **Local receipt
+against the local clock, with no fudge factor** [author, 2026-10-06]: the
+arrival is the only instant of the ceremony the witness's own clock witnessed,
+where the `started_at` the request carries is a claim the parties made. The
+consequence is that a ceremony runs longer than four minutes from where the
+participants stand — the optical exchange, the channels and the capture all
+precede the request — **and that is the intended shape** and not a cost to
+tune away. A duration the parties assert is a
+duration an automated pair asserts in a second; the witnesses' clocks are the
+only ones at a ceremony that the parties do not hold, which is the same reason
+§1.2 already has them police the claimed start. **Unverifiable from the record
+and stated as a commitment**: no later reader can tell that a witness waited,
+as no reader can tell what tolerance it applied, and what stops an eager
+witness is that neither participant chose it (§7.1.1).
 
 > **Vignette V4 — Why it takes a few minutes.**
 > At a conference you could collect two hundred LinkedIn connections in an
@@ -1961,8 +1983,12 @@ the biometric stays local.
 problem, but a burst of frames does not deliver it: failures within one session
 are strongly correlated (same lighting, same angle, same glasses, same day), so
 m near-duplicate frames give far less than the p^m improvement independence
-would imply. The gain comes from **diversity, not count.** A short guided
-capture with varied angle and expression. **m = 3–5 over 10–15 seconds** (chosen; §21).
+would imply. The gain comes from **diversity, not count.** A guided
+capture with varied angle and expression. **m = 3–5 retained** (chosen; §21),
+taken **across the ceremony's enforced duration rather than ten or fifteen
+seconds** [author, 2026-10-06]: what was never a requirement was the short
+window — the prompted motion and parallax were, and the paragraphs below say
+where in the four minutes the retained images come from.
 
 **Bonus: the guided capture doubles as a liveness check.** Randomised prompts
 producing motion and parallax are what distinguish a live face from a printed
@@ -1970,9 +1996,55 @@ photo, a screen replay, or a generated video. Presentation-attack resistance is
 required regardless, so the capture should be designed for both purposes at
 once.
 
+**And the same camera holds the counterparty present for the whole enforced
+duration** [author, 2026-10-06]. Deciding that a face is in front of the lens
+rather than a blank wall is a capability the capture needs anyway; pointed at
+the four minutes above it is what each party's own device uses to establish
+that it met one person continuously. The device probes for a face throughout,
+samples the frames where one is there, compares the samples for the **same**
+face, and abandons the meeting on a gap longer than the maximum, on a
+different face appearing while the one it was holding is absent, or on the gaps
+summing past the allowed ratio by the end. The archived captures are then taken
+from across that window rather than in one burst: **the prompts fall at random
+through it and the retained images are the ones taken at them** [author,
+2026-10-06], so the randomness that spreads the archive and the prompts that
+make it a liveness check are one mechanism rather than two.
+
+**What is not retained does not survive the ceremony.** Most of what the loop
+takes is a continuity sample and nothing else: it is compared, and it is gone
+when the ceremony closes. §7.5.2's commitment holds throughout — a compliant
+client ends a ceremony holding no decryptable likeness of the counterparty —
+so the samples are compared in memory, never stored unsealed, and the ones
+selected are sealed under the subject's capture key like any other.
+
+**The same-face test is the matcher verification already needs, at its easiest
+point** [author, 2026-10-06]. Nothing new has to be chosen for it: the profile
+and the algorithm a verifier uses to compare what it was sent against what it
+holds (§7.3) are what compares two local samples taken seconds apart, and that
+comparison is **strictly easier than the one the protocol already rests on** —
+same device, same camera, same lighting, same minute, against §7.4.4's
+cross-device matching across months at a few percent false reject (A9). A
+matcher that cannot hold a face across twenty seconds of one meeting was never
+going to carry verification, so the continuity check imposes no accuracy
+requirement of its own and adds no second algorithm to pin (CAP-015).
+
+**This is each party enforcing their own interest, and no part of the record.**
+Nothing about the continuity check enters a transaction, no counterparty or
+witness can tell that it ran, and a client that skips it weakens only the
+standing of the user who ran it — which is why it is a commitment in
+`light-client-requirements.md` §1.3 and not a rule anybody issues. The
+reference parameters are a **ninety per cent presence ratio** and a
+**twenty-second maximum gap** over the four minutes (§21), and they are the
+reference client's to adjust, not the protocol's [author, 2026-10-06].
+
 **Storage is not the constraint.** A face crop at modest resolution runs roughly
 30–80 KB; five images is ~250–400 KB per meeting, and 200 meetings over 730 days
-is under 100 MB. Capture *time* is the binding cost, not disk.
+is under 100 MB. Capture *time* is the binding cost, not disk. **The continuity
+loop does not change that, because what it holds is a lookback and not a
+window**: a client that keeps every sample of four minutes is holding megabytes
+of somebody else's face for no purpose the rule states, where a lookback longer
+than the maximum gap is all that establishing continuity needs
+(`light-client-requirements.md` §1.3).
 
 **Modality versioning.** Retaining source photographs rather than templates
 means any future still-image algorithm can be applied to old records. A break
@@ -7988,11 +8060,13 @@ not derived.
 | λ | Trust decay per hop (if decay metric used) | < 1/f | Convergence requirement (§16.2) — **necessary, not sufficient**: f bounds subordinates, not §16.2.1's acquaintance degree |
 | — | Verifiers sought per subject | min(floor(n/2), 10, \|candidates\|) | A reasonableness criterion — n is the subject's own claim (§8.1.2); candidates = distinct prior counterparties (§8.1) |
 | — | Capture retention | 2 years | Schelling point; §7.5.1 |
-| — | Images per capture | 3–5 | Guided variation, not burst; doubles as liveness (§7.5) |
+| — | Images per capture | 3–5 **retained** | Guided variation, not burst; taken at prompts spread through the enforced duration, most samples discarded (§7.5) |
+| — | Face-present ratio over the ceremony | ≥ 90% | The counterparty's continuous presence, enforced by each party for itself (§7.5) |
+| — | Longest gap with no face | 20 s | Above it the meeting is abandoned; the sample lookback must exceed it (§7.5) |
 | — | Location precision | geohash 3 (default) | ~156 × 156 km; precision 4 is ~39 × 19.5 km (§7.7) |
 | — | Presence record size | ~35 KB | 10 ML-DSA-65 signatures + body; 26–48 KB across parameter sets (§5, §8.2) |
 | — | Currency attestation lifetime | ~10 h | Security parameter, not a cache knob; Kerberos-anchored (§12.6.5) |
-| — | Ceremony duration | minutes, not seconds | Meters human time, the scarce resource (§7.1) |
+| — | Ceremony duration | **≥ 4 minutes**, witness-enforced | Meters human time, the scarce resource; measured by each witness from its own receipt of the request (§7.1) |
 | — | Heartbeat liveness threshold | 3 consecutive missed intervals | Below this a client does not fail over (§14.1.2) |
 | — | Default transport port | 7431/udp | Overridable per `NetworkPoint` (`wire-format.md` §9.2) |
 | — | Delegated transport credential | 48 h each, a run of 45 | 90 days end to end. The run is what lets an instance serve while its operator's device is asleep, and is the horizon a seized store inherits (§12.6.5). Chosen, not derived |

@@ -282,7 +282,7 @@ class MeetActivity : Activity() {
             Meet.Role.RESPONDER -> {
                 para("Point the back of your phone at ${m.counterpartyName}'s screen. Their code carries who they are and the kind of meeting they chose; the next screen is where you accept or refuse it.")
                 aim("The band at the top is the middle of what the rear camera sees: put their code in it.")
-                scan(QrCamera.Facing.REAR, "bootstrap") { bytes ->
+                scan(QrCamera.Facing.REAR, "bootstrap") { bytes, _ ->
                     // the bootstrap is the shell's own object and carries no
                     // anchor, so the shell reads it (`wire-format.md` §14.3
                     // fixes the ANCHORED objects and this is not one)
@@ -298,21 +298,65 @@ class MeetActivity : Activity() {
         }
     }
 
-    /** A QR on the screen, large enough to scan across a table. */
+    /** A QR on the screen, as large as the layout allows. What it reads
+     *  at is **its module as a fraction of its own width**, never a pixel
+     *  count (`OpticalExchange.CHUNK`): about `450 / modules` times the
+     *  code's width, so the diagnostics carry the module's millimetres and
+     *  the symbol's modules rather than the pixel scale alone. */
+    /**
+     * **A colour frame: three parts in one image** ([Polychrome]), drawn
+     * as wide as the content area like any other code. The three symbols
+     * share a module grid, so what the screen shows is one symbol's worth
+     * of modules carrying three parts.
+     */
+    private fun qrColour(frames: List<ByteArray>, which: String) {
+        if (frames.isEmpty()) return
+        // a short frame at the object's end repeats its last part rather
+        // than leaving a channel blank: a blank channel is a channel the
+        // reader reports as lost, which would read as colour failing
+        val three = (0 until Polychrome.CHANNELS).map { frames.getOrElse(it) { frames.last() } }
+        val modules = Optical.matrix(three[0]).width
+        val avail = if (body.width > 0) body.width else resources.displayMetrics.widthPixels - 96 - 48
+        val scale = maxOf(1, (avail - 8) / modules)
+        val (px, w) = Polychrome.compose(three, scale)
+        val dpi = resources.displayMetrics.xdpi
+        val moduleMm = if (dpi > 0f) scale.toFloat() / dpi * 25.4f else 0f
+        Diag.event(
+            "qr.shown", "which" to which, "bytes" to three.sumOf { it.size },
+            "modules" to modules, "scale" to scale, "channels" to Polychrome.CHANNELS,
+            "module_mm" to String.format("%.2f", moduleMm),
+            "reads_at_mm" to (450f * moduleMm).toInt(),
+        )
+        show(px, w)
+    }
+
     private fun qr(bytes: ByteArray, which: String) {
         val m = Optical.matrix(bytes)
-        // as large as the screen allows: the first optical code carries a
-        // full key, about 2 KB and 177 modules, and the limit at arm's
-        // length is the camera's resolution of a module, so every pixel
-        // of width is bought here (`wire-format.md` §14.3.1)
-        // as wide as the content area, always: the range a code reads at
-        // grows with its size, and a part of the exchange is a small symbol
-        // [author, 2026-10-04]. The area is the body's own width once laid
+        // **As wide as the content area, always**: what a code reads at is
+        // its module's physical size, which is this width divided by the
+        // symbol's modules, so every pixel of width is range
+        // [author, 2026-10-04]. The 2 KB object is 43 parts of 37 modules
+        // since 2026-10-06 (`OpticalExchange.CHUNK` carries the measured
+        // trade); it used to be one symbol of 177, which is what the
+        // chunking replaced. The area is the body's own width once laid
         // out, never the screen's: a code wider than its parent is clipped
         // at the right, quiet zone and modules, and reads nowhere
         val avail = if (body.width > 0) body.width else resources.displayMetrics.widthPixels - 96 - 48
         val scale = maxOf(1, (avail - 8) / m.width)
-        Diag.event("qr.shown", "which" to which, "bytes" to bytes.size, "modules" to m.width, "scale" to scale)
+        // **The module's physical size, and the range it earns.** Pixels
+        // are how this is drawn and say nothing about what reads it: a
+        // module is a length on glass, and `xdpi` is what turns the one
+        // into the other. Reported so a run on another phone compares
+        // [author, 2026-10-06]; `450 / modules` times the code's own width
+        // is the calibration the field runs give (`OpticalExchange.CHUNK`).
+        val dpi = resources.displayMetrics.xdpi
+        val moduleMm = if (dpi > 0f) (m.width * scale).toFloat() / m.width / dpi * 25.4f else 0f
+        Diag.event(
+            "qr.shown", "which" to which, "bytes" to bytes.size, "modules" to m.width,
+            "scale" to scale,
+            "module_mm" to String.format("%.2f", moduleMm),
+            "reads_at_mm" to (450f * moduleMm).toInt(),
+        )
         val w = m.width * scale
         val px = IntArray(w * w)
         for (y in 0 until w) {
@@ -320,6 +364,11 @@ class MeetActivity : Activity() {
                 px[y * w + x] = if (m.get(x / scale, y / scale)) Color.BLACK else Color.WHITE
             }
         }
+        show(px, w)
+    }
+
+    /** Pixels into the view, which the two renderers share. */
+    private fun show(px: IntArray, w: Int) {
         body.addView(
             ImageView(this).apply {
                 setImageBitmap(Bitmap.createBitmap(px, w, w, Bitmap.Config.ARGB_8888))
@@ -346,7 +395,16 @@ class MeetActivity : Activity() {
         para(line)
     }
 
-    private fun scan(facing: QrCamera.Facing, which: String, continuous: Boolean = false, found: (ByteArray) -> Unit) {
+    private fun scan(
+        facing: QrCamera.Facing,
+        which: String,
+        continuous: Boolean = false,
+        /** Read the frame as three colour channels as well as in
+         *  luminance ([Polychrome]); the channel reaches `found` as its
+         *  second argument and is a part's index within its frame. */
+        channels: Boolean = false,
+        found: (ByteArray, Int) -> Unit,
+    ) {
         if (!held(Manifest.permission.CAMERA)) {
             para("This step needs the camera. Nothing is read until you allow it.")
             button("Allow the camera") { ask(1, Manifest.permission.CAMERA) }
@@ -362,7 +420,10 @@ class MeetActivity : Activity() {
         val onFailed: (String) -> Unit = { why ->
             runOnUiThread { Kernel.meet()?.stop(why) ?: redraw() }
         }
-        cam.readOne(facing, surface, which, onFailed, continuous) { bytes -> found(bytes) }?.let { why -> para(why) }
+        val channelSink: ((ByteArray, Int) -> Unit)? =
+            if (channels) { bytes, ch -> found(bytes, ch) } else null
+        cam.readOne(facing, surface, which, onFailed, continuous, channelSink) { bytes -> found(bytes, 0) }
+            ?.let { why -> para(why) }
     }
 
     // ---- D1.5 the brief: everything front-loaded -----------------------
@@ -413,17 +474,54 @@ class MeetActivity : Activity() {
         // one opens for the transcript once the contribution is taken
         val transcript = Kernel.opticalTaken()
         val which = if (transcript) OpticalExchange.TRANSCRIPT else OpticalExchange.CONTRIBUTION
-        val x = m.exchange?.takeIf { it.which == which } ?: run {
+        // **The contribution goes in colour until a camera says it cannot**
+        // ([Polychrome]): three parts a frame at eleven bytes each, which
+        // is the smallest symbol there is and the longest read. The
+        // transcript is one part and stays monochrome, which is also what
+        // keeps `which` out of the compressed header.
+        val colour = !transcript && !m.colourRefused
+        val chunk = if (colour) OpticalExchange.CHUNK_POLY else OpticalExchange.CHUNK
+        val x = m.exchange?.takeIf { it.which == which && it.chunk == chunk } ?: run {
             val code = Kernel.optical()
             if (code == null) {
                 para("The code needs an open ceremony, which this device has lost.")
                 return
             }
-            OpticalExchange(which, code).also { m.exchange = it }
+            if (colour) m.colourSince = System.currentTimeMillis()
+            OpticalExchange(which, code, chunk).also { m.exchange = it }
         }
         val name = if (transcript) "transcript" else "contribution"
-        qr(x.frame(), "$name ${x.showing() + 1}/${x.count}")
-        para(x.status())
+        if (colour) {
+            // **the frame that decides it carries full headers**, so each
+            // channel is a self-standing part and one of them brings the
+            // count the compressed headers leave out; every frame after it
+            // is compressed
+            val confirmed = x.theirReceived() >= Polychrome.CHANNELS
+            val began = m.colourSince
+            if (!confirmed && began != null && System.currentTimeMillis() - began > Meet.COLOUR_PROBE_MS) {
+                // their camera has had several frames and holds none of
+                // this side's parts: a colour frame decodes to nothing at
+                // all where the channels do not separate, so this is what
+                // that failure looks like from here
+                Diag.event("optical.colour", "state" to "refused", "they_hold" to x.theirReceived())
+                m.colourRefused = true
+                m.exchange = null
+                m.colourSince = null
+                // **the camera goes with it**: its colour sink outlives a
+                // redraw, and three decodes a frame is a cost the
+                // monochrome path should not keep paying once colour has
+                // been given up on
+                camera?.close()
+                camera = null
+                redraw()
+                return
+            }
+            qrColour(x.colourFrames(confirmed), "$name ${x.showing() + 1}/${x.count}")
+            para(x.status())
+        } else {
+            qr(x.frame(), "$name ${x.showing() + 1}/${x.count}")
+            para(x.status())
+        }
         if (x.done()) {
             // this side is through; the last code stays up for the other
             // side's camera until the kernel moves on (the transcript's
@@ -432,10 +530,10 @@ class MeetActivity : Activity() {
             return
         }
         aim()
-        scan(QrCamera.Facing.SELFIE, name, continuous = true) { bytes ->
+        scan(QrCamera.Facing.SELFIE, name, continuous = true, channels = colour) { bytes, ch ->
             runOnUiThread {
                 if (m.step() != Meet.Step.OPTICAL || m.exchange !== x) return@runOnUiThread
-                when (x.take(bytes)) {
+                when (x.take(bytes, ch)) {
                     OpticalExchange.Took.NOT_OURS -> return@runOnUiThread
                     OpticalExchange.Took.MALFORMED -> { m.stop("a code of the exchange did not read as one"); return@runOnUiThread }
                     else -> {}

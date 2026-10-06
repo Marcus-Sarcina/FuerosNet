@@ -142,13 +142,13 @@ object Kernel {
         val started = Diag.ms()
         return try {
             val out = body()
-            Diag.event("shell.return", "method" to method, "ms" to (Diag.ms() - started), "ok" to true)
+            Diag.event("shell.return", "method" to method, "took_ms" to (Diag.ms() - started), "ok" to true)
             out
         } catch (e: Refused.Reason) {
             Diag.warn(
                 "shell.return",
                 "method" to method,
-                "ms" to (Diag.ms() - started),
+                "took_ms" to (Diag.ms() - started),
                 "ok" to false,
                 "refused" to Diag.scrub(e.reason),
             )
@@ -497,11 +497,11 @@ object Kernel {
         val ready = Bearer.awaitReady(LINK_READY_MS) { radio.ready() || m.step() == Meet.Step.STOPPED }
         if (m.step() == Meet.Step.STOPPED) return false
         if (!ready) {
-            Diag.warn("ble", "op" to "link", "phase" to phase, "state" to "timeout", "ms" to (Diag.ms() - started))
+            Diag.warn("ble", "op" to "link", "phase" to phase, "state" to "timeout", "took_ms" to (Diag.ms() - started))
             m.stop("the Bluetooth link did not come ready within ${LINK_READY_MS / 1000} s, so the $phase could not cross")
             return false
         }
-        Diag.event("ble", "op" to "link", "phase" to phase, "state" to "awaited", "ms" to (Diag.ms() - started))
+        Diag.event("ble", "op" to "link", "phase" to phase, "state" to "awaited", "took_ms" to (Diag.ms() - started))
         return true
     }
 

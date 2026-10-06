@@ -184,3 +184,48 @@ fn the_binary_merges_the_fixtures() {
         "{text}"
     );
 }
+
+/// **A line carrying two `ms` sorts by the first one, which is its time.**
+/// The emitters wrote a duration under `ms` as well until 2026-10-06
+/// (`took_ms` now), and `serde_json` keeps the last of a duplicate key, so
+/// the merge sorted such an event by its duration: in the field runs'
+/// `summary.txt` that put `cer.capture` eleven seconds in, before the
+/// `cer.begin` it followed [reviewer, 2026-10-01]. Every log already on
+/// disk is read by this path, so the fix lives here as well as at the
+/// emitters.
+#[test]
+fn an_event_carrying_a_duration_under_the_time_s_key_sorts_by_the_time() {
+    let doubled = concat!(
+        "{\"ms\":10,\"level\":\"info\",\"layer\":\"shell\",\"event\":\"diag.anchor\",\"unix_ms\":1700000000000}\n",
+        "{\"ms\":65032,\"level\":\"info\",\"layer\":\"cer\",\"event\":\"cer.capture\",\"ms\":10851}\n",
+        "{\"ms\":20000,\"level\":\"info\",\"layer\":\"cer\",\"event\":\"cer.begin\"}\n",
+    );
+    let p = parse("phone", doubled);
+    assert_eq!(p.lines.len(), 3, "both lines read");
+    let merged = merge(&[p]);
+    let order: Vec<&str> = merged.iter().map(|l| l.event.as_str()).collect();
+    assert_eq!(
+        order,
+        vec!["diag.anchor", "cer.begin", "cer.capture"],
+        "the capture sorts at 65032 and not at its 10851 ms duration"
+    );
+}
+
+/// And the duration is now a field of its own, so the merge shows it
+/// rather than dropping it with the timestamp's key.
+#[test]
+fn a_duration_in_its_own_field_survives_into_the_timeline() {
+    let line = concat!(
+        "{\"ms\":10,\"level\":\"info\",\"layer\":\"shell\",\"event\":\"diag.anchor\",\"unix_ms\":1700000000000}\n",
+        "{\"ms\":65032,\"level\":\"info\",\"layer\":\"cer\",\"event\":\"cer.finalize\",\"took_ms\":44155}\n",
+    );
+    let p = parse("phone", line);
+    let lines = merge(&[p]);
+    let fields = &lines.last().expect("a line").fields;
+    assert!(
+        fields
+            .iter()
+            .any(|(k, v)| k == "took_ms" && v.as_u64() == Some(44155)),
+        "the duration is a field: {fields:?}"
+    );
+}

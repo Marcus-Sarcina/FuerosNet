@@ -272,14 +272,19 @@ elif [ "$rc" -eq 3 ]; then :
 else echo "  android unit tests: FAILED"; fail=1; fi
 
 echo "=== 5. Build cache ==="
-# whatever this pass did not build is stale; the fuzz build under codec/
-# has a target of its own and is small
-if cargo sweep --version > /dev/null 2>&1; then
-  before=$(du -sm "$HERE/target" 2>/dev/null | cut -f1)
-  (cd "$HERE" && cargo sweep --file > /dev/null 2>&1)
-  after=$(du -sm "$HERE/target" 2>/dev/null | cut -f1)
-  echo "  cargo sweep: target ${before} MB -> ${after} MB"
-fi
+# **The build just ran, so what is stale is stale now** (`tools/sweep.sh`):
+# the incremental sessions of builds nobody is troubleshooting, which
+# nothing else collects, and whatever cargo-sweep can attribute to a build
+# that is no longer current.  Housekeeping, so a failure here is said and
+# never the gate's verdict.
+#
+# **This replaced a stage that had never swept anything** [2026-10-06]: it
+# called `cargo sweep --file`, which reads a stamp file that nothing ever
+# wrote, so every run failed with "failed to read stamp file" into a
+# discarded stderr while the before/after numbers moved for other reasons
+# and read like a sweep. 102 GiB of incremental sessions had accumulated
+# behind it, which cargo-sweep does not reach at all.
+if "$HERE/tools/sweep.sh"; then :; else echo "  build cache: sweep.sh refused"; fi
 
 echo
 # A non-halting finding never changes the exit status: it is reported so

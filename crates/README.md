@@ -30,10 +30,18 @@ first.  Each one implements catalogue entries and marks them
 own, `spec-pins.json`, advanced only by `tools/pincheck.py --accept`, and the
 vectors'), checks the catalogue, checks that the generated stubs match it,
 checks the format at rustfmt's default width, lints, checks licences and
-advisories against `deny.toml`, builds and tests the workspace, and sweeps
-the build cache of what the pass did not build (`cargo-sweep`, stamped
-before the first step), since cargo names every artifact by hash and
-deletes nothing itself.  It is
+advisories against `deny.toml`, builds and tests the workspace, and bounds
+the build cache (`tools/sweep.sh`), since cargo names every artifact by
+hash and deletes nothing itself.  **Two halves, and the larger one is not
+cargo-sweep's**: `incremental/` holds a session cache per crate per
+fingerprint that nothing collects — every feature flavour and every
+`--all-targets` pass leaves one behind for ever, and cargo-sweep does not
+reach them — so `sweep.sh` keeps the two newest sessions of each crate and
+anything touched in the last three days and removes the rest, then lets
+cargo-sweep take whatever it can attribute to a build no longer current.
+Only this workspace's own crates have sessions, dependencies being built
+without incremental, so a prune costs one slower build of our own code.
+It is
 separate from `models/run-all.sh`, which runs on a different cadence, and it
 fences cargo the same way that script fences the prover.  The reformat of
 2026-09-22 is listed in `.git-blame-ignore-revs` at the repository root; set

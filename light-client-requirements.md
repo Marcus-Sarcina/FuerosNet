@@ -92,6 +92,22 @@ the counterparty; the code does.
   is that the protocol ran and both parties were responsive as the sequence you
   received shows (design §7.1), without asking your operator, who saw none of
   it (design Appendix A.3).
+- **Do not sign before four minutes of ceremony have passed on your own
+  clock** [author, 2026-10-06]. Four minutes, whatever the participants, the
+  other witnesses or the verifiers say, and however early the conversation
+  reaches you complete: the ceremony is priced in human time (design §7.1) and
+  your clock is one of the few at a ceremony the parties do not hold. An eager
+  witness is the one an automated pair would want, and the only thing that
+  stops them having it is that neither of them chose you (design §7.1.1).
+  **Nobody can check that you waited**, as nobody can check the tolerance
+  above, so this is a commitment and not something a reader of the record
+  enforces. **Measure from your own receipt of the request, against your own
+  clock, with no fudge factor** [author, 2026-10-06]: the arrival is the only
+  instant of the ceremony your clock witnessed, where `started_at` is a claim
+  the parties made. The participants will have been at it longer than four
+  minutes by then — the codes, the channels and the capture all precede your
+  request — and that is the intended shape, so do not discount your four
+  minutes by what they claim to have already spent.
 - **Hold only a few ceremonies as a witness at once.** The bound is yours; the
   reference client holds eight, and past it the request with the oldest claimed
   start goes. A request for a ceremony you already hold gets the answer you
@@ -102,11 +118,56 @@ the counterparty; the code does.
 - **Obtain the strongest proximity channel the hardware supports**, and record
   which was achieved. Never present a weaker channel as a stronger one (design
   §7.6.3).
+- **Hold the counterparty present for the whole enforced duration, with the
+  camera** [author, 2026-10-06]. The check that a face is in front of the lens
+  rather than a blank wall is one the capture needs anyway (design §7.5); over
+  the four minutes of design §7.1 it is also how this device establishes that
+  it met one person continuously, and **it is the user's own interest it
+  enforces** — nothing about it enters the record, no counterparty or witness
+  can tell that it ran, and a client that skips it weakens the standing of
+  nobody but its own user. So:
+    - **Probe for a valid face throughout**, not only at the capture.
+    - **Sample the frames where one is present**, at a frequency you state.
+    - **Compare the samples across the meeting**, so what is established is
+      one person's continuous presence and not a sequence of strangers.
+    - **Abandon the meeting** where no face is visible for longer than the
+      maximum gap; where a different face appears while the one being held is
+      absent; or where the gaps sum past the allowed ratio by the end of the
+      four minutes.
+    - **Take the captures to be archived from across the whole window**,
+      rather than in one burst: the prompts fall at random through it and the
+      retained images are the ones taken at them [author, 2026-10-06], so one
+      mechanism spreads the archive and makes it a liveness check.
+    - **Hold nothing of the rest once the ceremony closes.** A continuity
+      sample is compared and discarded; design §7.5.2's commitment — that a
+      compliant client holds no decryptable likeness of another person — binds
+      the samples as much as the archive, so they are compared in memory,
+      never written unsealed, and gone when the meeting is.
+    - **Retaining every intermediate sample is not required.** A lookback
+      longer than the maximum gap is enough to establish continuity. **But a
+      client that prunes must choose its keepers as it goes**, or every
+      archived capture comes from the last minutes of the meeting, which is
+      the one stretch a sample of the whole was supposed not to be.
+  The reference parameters are **four minutes, a ninety per cent presence
+  ratio and a twenty-second maximum gap**, and they are the client's to adjust
+  [author, 2026-10-06]. **Use the profile and the matcher verification already
+  needs** (design §7.3, §7.5) [author, 2026-10-06]: comparing two of your own
+  samples taken seconds apart is the same question a verifier answers, at its
+  easiest — one camera, one light, one minute — against the cross-device
+  matching across months that the protocol already rests on. So this needs no
+  second algorithm and nothing further pinned; what the platform must supply
+  beyond it is the presence detection that says a face is there at all.
 - **Refresh the reference image on every subsequent ceremony** with the same
   counterparty, so the stored image tracks the person rather than the first
   meeting (design §7.5).
-- **Run the guided capture sequence.** Randomised prompts, 3–5 images over 10–15
-  seconds (design §7.5).
+- **Run the capture loop for the whole capture portion, and retain 3–5 of what
+  it takes** (design §7.5) [author, 2026-10-06]. **The randomised prompts are
+  the requirement; the ten-to-fifteen-second window was not** — turn, smile,
+  frown, whatever the interface comes to show the person in front of the
+  camera — so spread the prompts through the capture and **sync the retained
+  images to them**, which is what makes each retained image carry the motion
+  and parallax a printed photograph cannot. The loop between prompts is the
+  continuity check below, and most of what it takes is never retained.
 - **Seal captures under the capture key the subject supplied, discard it once the
   capture is sealed, and never retain a key released later** (design §7.5.2). A
   compliant client holds no decryptable likeness of another person; it regains

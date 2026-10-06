@@ -3534,6 +3534,30 @@ the conversation only from its counterparty and its ceremony's witnesses, and
 a witness only from the two participants the request named**; from anyone
 else these kinds are application payload from a stranger, and are dropped.
 
+**Which interface each leg takes is decided by who the recipient is**
+[author, 2026-10-05], and the table's "Between" column is where to read it
+off:
+
+| Recipient of the leg | Interface | Envelope |
+|---|---|---|
+| The co-present **counterparty**, for every one of kinds 9 to 18 it is sent | The local interface of §14.1, on the bearer the shell chose (§14.3.1) | The plaintext below, sealed under the local session (§14.3.2) and listed in §14.2 as a carriage |
+| A **witness** or a **verifier**, for every kind either is sent | The end-to-end payload path (§7.8, design §14.2.4), reached through that party's own locator and its upstream node | This section's plaintext inside the payload session, as it always was |
+
+**The plaintext is the same object either way**: `uint kind || bytes`, built
+once and then either sealed under the local session or sent through the
+payload session, so the two interfaces carry one encoding and a shell has one
+set of structures to implement. **Nothing here is a different message for
+being carried differently**, and the kinds' meanings, the "who hears what"
+rules above and §7.10.2's structures are untouched by the split.
+
+**Why the counterparty's leg leaves the payload path.** Opening a payload
+session needs the peer's published bundle and fetching one needs a node, so
+while every leg travelled this path a ceremony between two co-present devices
+could not finish without the participants' own infrastructure — which is the
+suppression design §6.4 holds that no party can perform on another's client.
+A witness's leg still needs a node, and that is a different node: the
+witness's own, as randomly selected as the witness (design §7.1.1).
+
 #### 7.10.2 The conversation's structures
 
 Every structure here is deterministic CBOR under §1 with the bounds §1.3
@@ -4914,6 +4938,8 @@ design already depends on.
 | Traversal candidates | Two participants' devices | design §12.6.3 [author, 2026-09-25] | `CandidateHandover` (§14.3.2), carrying the `Candidate` structure this document now defines; the same candidates travel the end-to-end payload path when a direct connection is set up remotely (design §12.6.3, §14.1.1) |
 | The capture-key handover — the key each participant derived for the captures the other holds of them, handed across at capture time | Two participants' devices | design §7.5.2, design §7.5.2.6 | `CaptureKeyHandover` (§14.3.2): the 32-byte key design §7.5.2.6 derives, anchored to the ceremony-id like the proximity outcomes and the candidates [author, 2026-10-02] |
 | A delegated device's payload material, and the ceremony device's signature over it | Two devices of one identity | design §23.3, §7.8 | `DeviceIntroduction` then `DeviceCredential` (§14.3.3): §7.8's bundle unsigned and then signed, beside §8.2's delegations |
+| **The participants' own legs of the ceremony's conversation** — kinds 9 to 18 of §7.10.1, each one addressed to the co-present counterparty | Two participants' devices | §7.10.1, design §7.1 [author, 2026-10-05] | The kind-tagged plaintext §7.10.1 defines, **unchanged**, sealed under the local session (§14.3.2) and carried by the same bearer. A witness's or verifier's leg of the same kind travels the end-to-end payload path instead; the leg is chosen by who the recipient is |
+| **The post-quantum prekey handover** — the sender's signed bundle and one one-time key, so a co-present pair can open an end-to-end channel afterwards without a node | Two participants' devices | §7.8, design §14.2.4.3 [author, 2026-10-05] | `PrekeyHandover` (§14.3.4), anchored to the ceremony-id and sealed under the local session like every other carriage |
 
 **The last row is the one that is not between two people.** A phone
 provisioning a desktop it owns is the same class of interface and the same
@@ -4921,14 +4947,17 @@ property: the two devices are in one place, and the protocol should not
 care whether the parties either side of a local interface are two people or
 one person's two devices.
 
-**The inventory is complete** [author, 2026-10-02]. The rest of the
-ceremony's conversation, kinds 9 to 18 of §7.10.1 — the consent each query
-needs, which also tells the subject who was selected, the fishing proposals,
-the witness request and the witness's answer, the responses one party
-gathered for the proposer, each signer's back-pointers, the proposed body,
-each signer's signature entry and the finalised record — crosses no local
-interface. It travels the end-to-end payload path between the participants'
-devices and is sent to each nominated witness as well (§7.10.1, design §7.1).
+**The inventory was complete when the conversation crossed no local
+interface. It no longer is** [author, 2026-10-05]: kinds 9 to 18 of §7.10.1
+now travel **by who the recipient is**, so a participant's leg to the
+co-present counterparty is a local carriage — the two rows above — while a
+witness's or a verifier's leg of the same kind travels the end-to-end
+payload path and is reached through that party's own locator and upstream
+node. The content did not change and neither did its encoding; what changed
+is which of the two interfaces each leg takes. **Every leg a witness hears
+still reaches it**, which is how a witness observes the sequence it attests
+(§7.10.1, design §7.1), and that is what the ruling turned on: never whether
+a node takes part in a ceremony but *whose*.
 
 ### 14.3 Carriage, and the encodings it moves
 
@@ -5029,6 +5058,7 @@ because anything encrypts it twice.
 | Mode | **AES-256-GCM**, one sealing over the whole encoded object |
 | Nonce | **96 bits, random per carriage**, carried in front of the ciphertext. A carriage is a handful per ceremony and the key is per ceremony, so random is safe here and needs no counter either side must keep in step |
 | Associated data | the **ceremony-id**. Belt over braces, stated plainly: the key is already derived from this ceremony's two contributions and so is unique to it, which is what actually stops a carriage opening in another |
+| Lifetime | **the ceremony's** [author, 2026-10-05]. The key is derived from that ceremony's two contributions and held only while it is live: a device that finished, stopped or abandoned has let it go with the rest of the ceremony's state, and a carriage arriving afterwards is refused for want of a key. **So a refusal says nothing about why**, which is the point — a device that never began, one that finished and one that stopped answer alike, where recognising a stopped ceremony by name would confirm to the sender that this device had held it |
 | Why an AEAD and not a cipher | a ciphertext that is not a well-formed plaintext under the key must be **refused**, which is what the local exchange's proof assumes. A bare stream cipher would not give it |
 
 **The construction is `crate::sealed`'s**, which seals what the kernel
@@ -5129,9 +5159,14 @@ local policy declines to read, ends the bundle there with the *n* it has.
 A receiver checks the echoed contribution in field 2 against the
 `OpticalContribution` it read optically before trusting anything
 bearer-carried; a mismatch is a bearer that does not agree with the screen,
-and the ceremony does not continue over it. **The check is not
-authentication** and §14.3.1 says what it is: the contribution is public, so
-it catches a bearer contradicting the screen and never one quoting it.
+and the ceremony does not continue over it. **The check was never
+authentication, and since 2026-10-05 it no longer has to be**: it catches a
+bearer contradicting the screen, where what makes a carriage attributable at
+all is the session encryption below — derived from both contributions, so
+only a party that read both screens can produce one that opens
+(§14.3.2's session; `models/tamarin/local/exchange.spthy` proves the pair of
+lemmas this rests on). The contributions were public when this check was
+written and are not now.
 
 **Two more exchanges ride the ceremony's interfaces, anchored the same way**
 [author, 2026-09-29]:
@@ -5212,11 +5247,15 @@ over is an address to dial, not evidence of anything — reachability is
 settled by the dial (RFC 8445's checks), and nearness by the proximity
 channels and nothing else.
 
-**A confidential bearer channel is not wanted** [author, 2026-09-29]: the
-contributions and the bundle are not secret,
-and the ceremony-id is a commitment rather than a key, so nothing here
-requires bearer encryption. A bearer that happens to encrypt — a Bluetooth
-pairing, a fetch inside a session — is welcome and relied upon for nothing.
+**A confidential bearer channel was not wanted, and that position is
+superseded** [author, 2026-09-29; superseded 2026-10-05]. It rested on the
+contributions and the bundle not being secret; the contributions now key the
+local session (§14.3.2), which makes them secret and makes every carriage
+confidential whatever the bearer does. **What survives of it is the part
+about the bearer**: a bearer that happens to encrypt — a Bluetooth pairing,
+a fetch inside a session — is welcome and is still relied upon for nothing,
+because the confidentiality the ceremony needs is the session's and a
+shell's choice of radio cannot weaken it.
 
 #### 14.3.3 The handover between one identity's devices
 

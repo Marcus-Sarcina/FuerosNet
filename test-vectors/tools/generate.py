@@ -3761,7 +3761,13 @@ txid: `{hx(peer_light_txid)}`
 # pre-commitment known answer byte-for-byte, and the device handover reuses
 # keys.md's desktop transport key, records.md's delegation and the desktop's
 # prekey bundle byte-for-byte.  The bytes are the objects alone: what a QR
-# encodes them as, and how a bearer frames them, is no part of these vectors.
+# encodes them as, and how a bearer frames them, is no part of these
+# vectors -- but the SEALING is, since 2026-10-05, and is not covered here
+# yet: s14.3.2 specifies the session key, the cipher, the nonce's placement
+# and the associated data, so two shells must agree on a sealed carriage
+# byte-for-byte and nothing below checks that they do.  The owed vectors are
+# a ceremony-session key known answer and one sealed carriage to open
+# [reviewer, 2026-10-06].
 
 # the first QR carries the device's identity in full (s2.2's KeyMaterial),
 # which the first contact pins (design s12.3), and its contribution; the
@@ -3841,7 +3847,13 @@ answer in `records.md` **byte-for-byte**, and the device handover reuses the
 desktop transport key (`keys.md`), alice's delegation to it (`records.md`)
 and the desktop's signed prekey bundle (`records.md`) byte-for-byte. The
 bytes are the objects alone — what a QR encodes them as, and how a bearer
-frames them, is the shell's and no part of these vectors. **Interpretations
+frames them, is the shell's and no part of these vectors. **The sealing is
+not the shell's and is not covered here yet** [reviewer, 2026-10-06]:
+`wire-format.md` §14.3.2 fixes the session key, the cipher, the nonce in
+front of the ciphertext and the ceremony-id as associated data, so two
+shells must agree on a sealed carriage byte-for-byte; the plaintexts below
+are what goes inside one, and a session-key known answer with one sealed
+carriage to open are owed. **Interpretations
 taken**: the intent's bundle entry uses `wire-format.md` §7.9's *envelope*
 form (the presented form is equally legal; the envelope is the
 holder-withholds-nothing case); the intent's retention is the design's

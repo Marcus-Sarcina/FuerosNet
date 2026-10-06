@@ -136,8 +136,14 @@ impl Path {
         let (ts, tc) = (to_server.clone(), to_client.clone());
         let task = tokio::spawn(async move {
             let peer: Arc<Mutex<Option<SocketAddr>>> = Arc::default();
-            let mut from_client = [0u8; 2048];
-            let mut from_server = [0u8; 2048];
+            // **A datagram larger than the buffer is silently truncated
+            // by `recv_from`**, which a proxy must not do to the traffic
+            // it is only supposed to delay and drop [reviewer,
+            // 2026-10-06; this drafter had recorded that nothing here
+            // truncates, and 2048 is where it did]. 65535 is a UDP
+            // payload's ceiling, so nothing a socket can deliver is cut.
+            let mut from_client = [0u8; 65535];
+            let mut from_server = [0u8; 65535];
             loop {
                 tokio::select! {
                     r = f.recv_from(&mut from_client) => {

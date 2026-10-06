@@ -33,12 +33,12 @@ pub(crate) fn call<T>(
     let out = f();
     match &out {
         Ok(_) => {
-            tracing::info!(target: "ffi", method, ms = elapsed(started), ok = true, "ffi.return")
+            tracing::info!(target: "ffi", method, took_ms = elapsed(started), ok = true, "ffi.return")
         }
         Err(e) => tracing::warn!(
             target: "ffi",
             method,
-            ms = elapsed(started),
+            took_ms = elapsed(started),
             ok = false,
             refused = e.reason(),
             "ffi.return"
@@ -54,7 +54,7 @@ pub(crate) fn call_plain<T>(method: &'static str, f: impl FnOnce() -> T) -> T {
     let started = clock();
     tracing::debug!(target: "ffi", method, "ffi.call");
     let out = f();
-    tracing::info!(target: "ffi", method, ms = elapsed(started), ok = true, "ffi.return");
+    tracing::info!(target: "ffi", method, took_ms = elapsed(started), ok = true, "ffi.return");
     out
 }
 

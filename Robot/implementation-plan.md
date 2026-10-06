@@ -635,6 +635,21 @@ problem rather than a protocol one. None of the three is implemented and none is
 claimed: a manifest that agrees with its component is not a manifest anybody
 vouched for.
 
+**Two release obligations wait on the Android sweep** [author, 2026-10-06].
+A witness's four-minute floor (CER-026, acceptance CER-52) and the camera's
+continuity check over that window (CAP-017, acceptance CER-53) are
+requirements of the **releasable** flavour and are not to be implemented
+before every basic protocol method has been live-tested on Android: either
+one puts four minutes of wall clock into every ceremony, and the field runs
+of 2026-10-03 to 10-06 each turned on a defect found in forty to a hundred
+seconds. So the order is fixed by the cost of the test cycle and not by the
+dependency graph — the rules are written in the documents now so that the
+later pass implements what was decided rather than what it remembers.
+
+The two decisions they wait on are in `light-client-requirements.md` §10:
+what a witness's four minutes run from, and whether the continuity window
+replaces design §7.5's guided burst or sits beside it.
+
 **Then the split** (section 2), on its trigger rather than on a date.
 
 ---

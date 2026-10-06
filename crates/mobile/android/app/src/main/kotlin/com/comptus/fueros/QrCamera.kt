@@ -101,6 +101,20 @@ class QrCamera(private val context: Context) {
     private var lastRead: String? = null
     private var continuous = false
     private var found: ((ByteArray) -> Unit)? = null
+    /**
+     * Where a colour frame's channels go: the bytes and which channel
+     * carried them, since **the channel is the part's index**
+     * ([Polychrome]). Set alongside [found], never instead: a frame is
+     * tried in colour and then in luminance, so a monochrome code in front
+     * of a colour-reading camera still reads.
+     */
+    private var foundChannel: ((ByteArray, Int) -> Unit)? = null
+    /** The three luminance planes a colour frame separates into, reused:
+     *  eight megabytes at a 1920×1440 frame is not a per-frame allocation. */
+    private var planes: Array<ByteArray>? = null
+    /** What each channel last delivered, so a frame held up while the other
+     *  side catches up is not read again. */
+    private val lastChannel = arrayOfNulls<ByteArray>(Polychrome.CHANNELS)
     /** In continuous mode, the payload last delivered: the same code read
      *  again is not news. */
     private var lastPayload: ByteArray? = null
@@ -133,6 +147,9 @@ class QrCamera(private val context: Context) {
          *  open until [close]. For an exchange whose codes change as the
          *  other side reads. */
         continuous: Boolean = false,
+        /** Where a colour frame's three channels go, where the caller is
+         *  reading a polychrome exchange ([Polychrome]). */
+        foundChannel: ((ByteArray, Int) -> Unit)? = null,
         found: (ByteArray) -> Unit,
     ): String? {
         // **One open per read.** A screen redraws for every note and step,
@@ -152,6 +169,8 @@ class QrCamera(private val context: Context) {
         this.facing = facing
         this.failed = failed
         this.continuous = continuous
+        this.foundChannel = foundChannel
+        java.util.Arrays.fill(lastChannel, null)
         this.found = found
         lastPayload = null
         attempts.set(0)
@@ -186,8 +205,17 @@ class QrCamera(private val context: Context) {
             val image = ir.acquireLatestImage() ?: return@setOnImageAvailableListener
             try {
                 if (reading.get()) {
-                    // the Y plane alone: ZXing wants luminance and a QR has
-                    // no colour in it
+                    // **colour first, where the caller is reading a
+                    // polychrome exchange**: three channels separated out
+                    // of the one frame, each its own symbol and its own
+                    // part ([Polychrome]). A frame that yields nothing in
+                    // colour falls through to the luminance read below, so
+                    // a monochrome code in front of a colour-reading
+                    // camera still reads and the fall back costs a frame
+                    // and no state [author, 2026-10-06].
+                    if (colour(image)) return@setOnImageAvailableListener
+                    // the Y plane alone: ZXing wants luminance and a
+                    // monochrome QR has no colour in it
                     val y = image.planes[0]
                     val row = y.rowStride
                     val buf = y.buffer
@@ -253,10 +281,14 @@ class QrCamera(private val context: Context) {
         val fl = failed
         val cont = continuous
         val found = this.found ?: return
+        // the colour sink goes with it: a restart that dropped it would
+        // leave a colour exchange reading nothing and read as colour
+        // having failed
+        val channel = this.foundChannel
         val preview = previewSurface
         close()
         lastRead = null
-        readOne(f, preview, w, fl, cont, found)
+        readOne(f, preview, w, fl, cont, channel, found)
     }
 
     private fun cameraRefused(why: String): String {
@@ -275,6 +307,62 @@ class QrCamera(private val context: Context) {
         failed = null
         close()
         tell?.invoke("the ${facing?.name?.lowercase() ?: ""} camera failed while $op: ${e.message ?: e.javaClass.simpleName}")
+    }
+
+    /**
+     * One frame read as three colour channels. True where a channel
+     * delivered something, so the luminance read is not also tried.
+     *
+     * **The chroma is half-resolution and that is the risk the format was
+     * built to measure** ([Polychrome]): a 4:2:0 frame carries one chroma
+     * sample per 2×2 block, so whether three channels separate at module
+     * scale is this camera's property and not the code's. A simulation of
+     * the subsampling alone separates them from two pixels a module; what
+     * it cannot simulate is this device's white balance.
+     */
+    private fun colour(image: android.media.Image): Boolean {
+        val sink = foundChannel ?: return false
+        if (image.planes.size < 3) return false
+        val w = image.width
+        val h = image.height
+        val p = planes ?: Array(Polychrome.CHANNELS) { ByteArray(w * h) }.also { planes = it }
+        if (p[0].size < w * h) return false
+        val yp = image.planes[0]
+        val up = image.planes[1]
+        val vp = image.planes[2]
+        val y = ByteArray(yp.buffer.remaining()).also { yp.buffer.get(it) }
+        val u = ByteArray(up.buffer.remaining()).also { up.buffer.get(it) }
+        val v = ByteArray(vp.buffer.remaining()).also { vp.buffer.get(it) }
+        attempts.incrementAndGet()
+        Polychrome.planesFromYuv(y, u, v, yp.rowStride, up.rowStride, up.pixelStride, w, h, p)
+        var any = false
+        for (ch in 0 until Polychrome.CHANNELS) {
+            val bytes = Polychrome.decodePlane(p[ch], w, h) ?: continue
+            val last = lastChannel[ch]
+            if (last != null && last.contentEquals(bytes)) {
+                // the same part held up while the other side catches up
+                any = true
+                continue
+            }
+            lastChannel[ch] = bytes
+            lastReadMs = Diag.ms()
+            Diag.event(
+                "qr.read",
+                "which" to which,
+                "bytes" to bytes.size,
+                "facing" to facing,
+                "channel" to ch,
+                "attempts" to attempts.get(),
+                "decode_ms" to (Diag.ms() - startedMs),
+            )
+            any = true
+            sink(bytes, ch)
+        }
+        if (any) {
+            attempts.set(0)
+            startedMs = Diag.ms()
+        }
+        return any
     }
 
     /** A frame to bytes, or null where there was no symbol in it. */
@@ -331,7 +419,7 @@ class QrCamera(private val context: Context) {
                         "facing" to facing,
                         "width" to width,
                         "height" to height,
-                        "ms" to (Diag.ms() - startedMs),
+                        "took_ms" to (Diag.ms() - startedMs),
                     )
                     val surfaces = listOfNotNull(reader.surface, preview)
                     try {

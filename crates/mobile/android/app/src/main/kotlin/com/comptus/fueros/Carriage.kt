@@ -203,7 +203,7 @@ class Carriage(private val radio: Bearer.Link?) {
             "bytes" to c.sentBytes,
             "failed" to c.sendFailed,
             "ok" to ok,
-            "ms" to (Diag.ms() - started),
+            "took_ms" to (Diag.ms() - started),
         )
         return ok
     }

@@ -24,7 +24,11 @@ import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
  * payload is therefore text, and the price is a third more characters on
  * objects of 34 and 53 bytes: 46 and 71 characters, which is nothing for a
  * QR. §14.3.1's claim is that *"a QR of this size resolves at arm's length
- * on a modest selfie camera"*, and the sizes below are what keep that true.
+ * on a modest selfie camera"*, and the sizes below are what keep that
+ * true. **The contribution is not of this size**: it carries a full key,
+ * and what keeps *it* readable is being cut into parts
+ * (`OpticalExchange.CHUNK`), one symbol per code, rather than anything
+ * here.
  */
 object Optical {
     /**

@@ -14807,10 +14807,11 @@ the event loop's after a delivery, and the shell's storage writing
 `client` twice at once — `ok:true` and `ok:false`. `AndroidShell.land`
 wrote every save of a name into one fixed temporary file and renamed it,
 so the second writer's rename found the file gone; two writers could also
-interleave bytes in it, which is worse than a refusal. It fired four times
-in the first attempt, unnoticed because nothing was waiting on the answer
-at those moments, and zero times in the pre-split runs: the conversation
-over the bearer is what put two threads on the state at once.
+interleave bytes in it, which is worse than a refusal. It fired **once, in this
+run** — corrected 2026-10-06; the four `ok:false` lines in run 1 are
+cold-start reads and not failed writes, and the count below in this file
+is the audited one. Zero times in the pre-split runs: the conversation over
+the bearer is what put two threads on the state at once.
 
 **Fixed at both ends:** `Participant::save` takes a lock, so the kernel
 issues one write at a time and the last landed is the last taken; `land`
@@ -14854,3 +14855,451 @@ four signers handed the record up and the node answered `OutOfStore`
 each time, as it did for the formation runs. The open item "the
 witnessed ceremony on hardware" closes. Still open from the same list:
 the far-node path on hardware, which needs phones holding a horizon.
+
+## Two release obligations memorialized, not implemented (2026-10-06)
+
+**[ruled, author, 2026-10-06]** Two rules the ceremony owes, recorded now
+and implemented after the Android live-test sweep, because either one puts
+four minutes into every ceremony and today's four field runs each turned on
+a defect inside a hundred seconds.
+
+1. **A witness enforces a four-minute floor on its own clock** and refuses
+   to sign until it has passed, "regardless of the signals received from
+   participants or other witnesses/verifiers". Design §7.1 beside the
+   human-time argument it strengthens; `light-client-requirements.md` §1.2
+   as a witness obligation; CER-026, acceptance CER-52.
+
+2. **The camera holds the counterparty continuously present** across that
+   window: probe, sample, compare for the same face, abandon on a gap past
+   the maximum, on a different face appearing while the held one is absent,
+   or on gaps summing past the ratio; archived captures drawn at random from
+   the whole window; pruning allowed with a lookback longer than the maximum
+   gap, provided the keepers are chosen as the meeting runs so the archive
+   is not all from its last minutes. Reference parameters four minutes, 90%,
+   20 s, the client's to adjust. Design §7.5; `light-client-requirements.md`
+   §1.3; CAP-017, acceptance CER-53.
+
+**Both are commitments, not wire rules**, and both say so where they are
+written: no reader of a record can tell that a witness waited or that a
+camera watched, and the continuity check exists for the user running it.
+The author's framing is that each device enforces *its own user's* interest
+in the exclusivity of the meeting.
+
+**Two questions put to the author and recorded in
+`light-client-requirements.md` §10 rather than guessed:**
+
+- **What the four minutes run from.** The request's arrival is the only
+  instant the witness's own clock witnessed; the claimed `started_at` is
+  what the record will carry, and trusting it trusts the parties. The
+  author's words were "according to their own local clock", which settles
+  whose clock and not which origin.
+- **Whether the continuity window replaces the guided burst.** The author
+  has the archived captures drawn from the four-minute window, which is
+  where design §7.5's 3–5 images over 10–15 seconds currently come from.
+  §7.5 wants that burst for two things: angle and lighting diversity, which
+  a random draw across four minutes supplies at least as well, and the
+  **prompted motion and parallax that are the liveness check**, which
+  continuous presence does not supply. §7.5 is left as it stands pending the
+  answer.
+
+**One capability note**, stated in both documents: the rule needs a
+same-face test and not only presence detection. Android's face detection
+gives bounding boxes; "a different face became visible" is a comparison
+across samples, which is the stronger half and the one the shell does not
+have today.
+
+## Both questions answered the same day (2026-10-06)
+
+**[ruled, author, 2026-10-06]**
+
+1. **The witness's four minutes run from its own receipt of the request**,
+   compared to its own clock, *"no fudge factor"*. The author's note that
+   the participants' total will exceed four minutes and *"that is fine"* is
+   in the documents as the intended shape, so nobody later reads the gap
+   between the ceremony's start and the request's arrival as waste to
+   recover.
+
+2. **The 10–15 second capture window was never the requirement** — *"the
+   prompted motion and parallax are"*. The capture loop runs through the
+   capture portion; the prompts (turn, smile, frown, as the interface comes
+   to show them) spread through it; the retained captures are synced to the
+   prompt times; the rest are continuity samples and are not retained past
+   the ceremony's close.
+
+**What this resolved that I had framed as a conflict.** I had asked whether
+the continuity window *replaces* the guided burst, treating the burst's
+prompts and the window's randomness as two mechanisms to reconcile. The
+author's answer collapses them: the prompts fall at random through the
+window and the retained images are the ones taken at them, so one mechanism
+spreads the archive and supplies the liveness. That reading is now written
+in design §7.5 and `light-client-requirements.md` §1.3 — **if the intent was
+for the archival draw to be independent of the prompts, that is the one line
+to change.**
+
+**The sweep, because the window was in six places and three of them were
+quotes.** design §7.1 step 5, §7.5's chosen value, §21's parameter table,
+`light-client-requirements.md` §1.3, functional_tests CAP-001, and the rule
+quotes of acceptance CER-03, CER-38 and **DMN-10** — the last found by the
+catalogue's verbatim check rather than by me, which is the second time this
+week the checkers caught a quote I had not thought to look for. `wire-format`
+§4.5's `image count (3–5)` is untouched: it bounds what is retained, which
+the ruling does not change.
+
+## The same-face test is not a new capability (2026-10-06)
+
+**[ruled, author, 2026-10-06]** *"We need a same-face test for the verifier
+process anyway, there's no reason the same profile and algorithm used in
+verification can't compare local captures taken a few seconds apart."*
+
+**This corrects something I wrote twice.** I had recorded the continuity
+rule as needing "two capabilities, presence detection and the stronger
+same-face test... the one the shell does not have today", and offered it as
+a cost to know before the later pass estimated the work. That reading was
+wrong in the direction that invents work: the matcher is already required
+by verification (design §7.3), and comparing two of a device's own samples
+taken seconds apart is **the same question at a strictly easier operating
+point** — one camera, one light, one minute — than the cross-device
+matching across months that design §7.4.4 and assumption A9 already rest
+on. A matcher that cannot hold a face across twenty seconds of one meeting
+was never going to carry verification.
+
+**What follows, and is now written in all four places** (design §7.5,
+`light-client-requirements.md` §1.3, CAP-017, acceptance CER-53): the
+continuity check imposes no accuracy requirement of its own, adds no second
+algorithm, and needs nothing further pinned — **CAP-015's matcher pin
+covers it**. What the platform must supply beyond the matcher is only the
+presence detection that says a face is there at all, which is what the
+shell has today.
+
+## Seventh-round re-review: dispositions (2026-10-06)
+
+### The evidence assessment, and two corrections to this drafter
+
+**The storage-race count was wrong, and the reviewer is right.** I wrote
+that the race "fired four times in the first attempt". Run 1 holds **four
+`ok:false` lines and every one is a `read`** — cold-start reads of files
+that do not exist yet, which is normal. Run 2 holds the same four reads
+**plus one failed write**, which is the race. So it fired **once**, in run
+2. Worse than a miscount: in the same session I had written the correct
+interpretation of run 4's four lines ("cold-start reads of absent files")
+and did not carry it backwards to the claim I had already made. Corrected
+in the change-log entry, which is pushed.
+
+**The QR-camera defect is real and my first reading of it was wrong.** I
+saw `"attempts":0` on the camera's close lines and read it as "the decoder
+never attempted a frame"; `QrCamera.kt:211` resets the counter on every
+successful read, so it means "none since the last success". Measured
+properly, from the capture request to the first successful read:
+
+| run | GXV | MRK |
+|---|---|---|
+| 3 | **19.6 s**, no restart | 2.9 s, then a **20.1 s stall at 480 attempts**, watchdog restart |
+| 4 | **10.5 s**, no restart | 3.6 s, then a **20.1 s stall at 406 attempts**, watchdog restart |
+
+Two distinct things, both real: one phone slow to a first decode with the
+watchdog never firing — plausibly aiming, and bounded by the person — and
+the other stalling mid-exchange for twenty seconds across four hundred
+decode attempts before the watchdog recovered it. **Named as a defect
+here** rather than left in a commit message's silence, which is the
+reviewer's point.
+
+**Accepted without argument**: the witnesses are same-operator laptop
+processes and auto-consenting, so no human witness consent UX has run; the
+runs were on a dirty tree with no clean re-run at `cb81612`; the field-test
+checklists are still blank.
+
+### The wire survivals: all three real, all three swept
+
+Verified verbatim before touching anything, and the reviewer's line
+numbers were exact.
+
+1. **§14.2's "the inventory is complete … crosses no local interface"** —
+   rewritten to say the inventory *was* complete and no longer is, with the
+   routing-by-recipient rule and **two new rows**: the participants' own
+   legs of kinds 9 to 18, and the `PrekeyHandover`.
+2. **§14.3.2's "the contribution is public"** — corrected. Under the
+   session encryption the echo check no longer has to be authentication:
+   only a party that read both screens can produce a carriage that opens,
+   which is what the Tamarin pair proves.
+3. **§14.3.2's "A confidential bearer channel is not wanted"** — marked
+   superseded with its original date kept, and the half that survives
+   stated: a bearer that happens to encrypt is still relied upon for
+   nothing, because the confidentiality is the session's.
+4. **§7.10.1 got its leg assignments** — a two-row table (counterparty →
+   local interface sealed under the session; witness or verifier →
+   end-to-end path), the point that **the plaintext is the same object
+   either way**, and why the counterparty's leg left the payload path.
+
+**NET-022's self-contradiction** is fixed: its retained sentence had the
+same content travelling "the end-to-end payload path between the
+participants' devices", denying the row's own first sentence.
+**NET-028's citation** now resolves: §14.3.2 gained a Lifetime row saying
+the session key lives exactly as long as the ceremony, which is the rule
+NET-028 cites and the mechanism behind the author's "less metadata leakage"
+ruling.
+
+### New findings
+
+1. **The contributions were not zeroized and `Intent`'s `Debug` printed
+   one.** Both fixed: `Active` has a `Drop` that wipes both contributions,
+   the seed and the template, and `Intent` has a hand-written `Debug` that
+   names the contribution and redacts its value. **This is the
+   `new-key-path-zeroize-audit` rule and I did not run it** when the
+   contributions became key material on 2026-10-05; the reviewer did.
+   Taking rather than moving `a.sealed` in `finalize` is what the new
+   destructor required.
+2. **`PrekeyHandover` is built and unsent** — confirmed: outside
+   `local.rs` and the tests, the only reference is the codec checker.
+   **Deferred explicitly** rather than wired in this pass: the emitter
+   needs a kernel method, an FFI pair and a bearer phase in the shell, and
+   the author's sequencing for the ceremony's release obligations puts
+   shell work after the Android sweep. Until it is wired, NET-025 and
+   §14.3.4 describe an object nothing produces, and the nodeless pair of
+   NET-026 ends a ceremony with no end-to-end channel. Owed, and now owed
+   in writing.
+3. **Control-loop residuals, both fixed.** `MISS_CONFIRM` floors *every*
+   deadline and not only a late one, so a declaration can land 250 ms late
+   on an unstarved loop — the comment claimed more than the code did and
+   now states the cost. And `outbound.recv()` sat ahead of the reader in
+   the `biased` order, so a full outbound queue could starve the reader and
+   reproduce the false-unreachable the fix was for; the reader now comes
+   first, the heartbeat arm being ahead of both and unaffected.
+4. **The flaky adaptors test** stands as a watch item. Its cause may be the
+   stranded-payload defect fixed in `81ebdcc` (PAY-014), which this review
+   predates by one commit; the settle loop's 10 s budget is unchanged.
+
+### Avenues taken, and not
+
+**Taken:** the wire sweep and §7.10.1's leg table (1); the zeroize and the
+`Debug` redaction (3); **the duplicate-`ms` fix (4)** — the emitters write
+`took_ms` at twenty sites across Rust and Kotlin, and `rhtn diag merge`
+reads the **first** `"ms"` in a raw line so the logs already on disk read
+correctly, with two tests and the headline run re-merged to prove it: the
+witnesses' `cer.finalize` now sits after the proposer's at +176773 instead
+of 77 s early; **the modelpincheck blind spot (6)** — the theories are
+globbed and an unproved one flags, verified by adding a file and watching
+it fire; and the stale bearer disclaimer in `local-interfaces.md`, which
+now says the sealing is specified and not covered.
+
+**Not taken, recorded:** the session-sealing vectors (5) — a
+`ceremony-session` key known answer and one sealed carriage to open are
+owed, and the generator says so where the disclaimer was; the corpus floor
+and the unit-class fixtures in `verify.py`; `kdoccheck.py` in stage 1d;
+`take_optical`'s `NotActive` conflation and its two new siblings; the
+grant-path wipes; the courier's sleep-per-query; the Scope arm, which waits
+on the author's corpus-negatives sequencing.
+
+**One more correction owed to the reviewer**: "nothing in `crates/sim/src`
+truncates" was mine, in this file, and it is wrong —
+`sim/src/path.rs:139-140` read into 2048-byte buffers, and `recv_from`
+truncates a larger datagram silently. The buffers are now 65535, a UDP
+payload's ceiling, so the proxy cannot cut traffic it is only meant to
+delay and drop.
+
+## The optical codes' density, and the lever it cannot reach (2026-10-06)
+
+**[ruled, author, 2026-10-06]** The initial contribution codes are too
+dense to read beyond about 18 inches; break the object into more chunks.
+Target: 4 to 6 feet.
+
+**Done**: `OpticalExchange.CHUNK` 256 → 48, so the 2,022-byte contribution
+is 43 parts of 37 modules instead of 8 of 69. Predicted range about 34
+inches, from the one calibration the field runs give (18 inches at a 1.0 mm
+module → range ≈ 450 × module). Cost 26–52 s at the runs' measured 0.5–1.2
+s per part, against 20.6 s today.
+
+**Not reachable by chunking, and the author's target needs a ruling.** 4
+feet is a 25-module symbol: 253 parts, two and a half minutes, and the
+header's one-byte fields cap it at 255 parts anyway. The lever that
+reaches it is **sending less optically**: a 32-byte commitment in the QR
+with the `KeyMaterial` following over the bearer and refused unless it
+hashes to the pinned value. That is cryptographically the same pin — §2.2
+makes the keyhash SHA-256 of the material, so the hash binds it — and it
+is one code at about three feet, or one code at 25 modules and four feet
+with room to spare.
+
+**But it reverses the author's ruling of 2026-10-04**, which moved the
+first code *to* full key material precisely because "the design has the
+key travel in the QR at the meeting and be pinned at first contact"
+(`wire-format.md` §14.3.1, design §12.3). So it is his to make, not mine
+to apply, and what I have done is make the measurement that prices it.
+The one thing the change would cost is a first contact that cannot
+complete without the bearer — which the ceremony already cannot, since the
+intent crosses it.
+
+**A test depending on a number it did not mean to.** Four
+`OpticalExchangeTest` cases broke when the constant moved: they are about
+the lockstep and now name their own chunk size, with `OpticalChunkTest`
+pinning what the production constant costs instead.
+
+## A polychromatic optical channel, priced (2026-10-06)
+
+**[proposed, author, 2026-10-06]** *"We might consider a polychromatic QR
+since all modern devices have color cameras and it would increase the data
+throughput for a given module size while increasing the weird-and-wow
+factor."* Not implemented; this is what it would buy and cost.
+
+**The design that keeps the decoder we have.** Not a new symbology with 3
+bits a module, which would mean writing both an encoder and a detector and
+losing ZXing's finder, alignment and perspective handling. Instead **three
+ordinary QRs, one per colour channel**: encode parts *n*, *n+1*, *n+2* as
+three monochrome symbols, put each in the red, green and blue plane of one
+bitmap, and on the reader split the camera frame into its channels and run
+the existing decoder three times. Three standard symbols in, three
+standard decodes out.
+
+**It degrades to monochrome for free, which is the property that makes it
+worth doing.** Each channel is an independent part, so a frame where only
+one channel survives white balance still advances the exchange by one
+part — exactly what the lockstep already handles, since a part already
+held is the ordinary `DUPLICATE` case. There is no all-or-nothing frame
+and no new failure mode: the worst case is the throughput we have now.
+
+**What it buys, in the table's own units.** Three parts a frame is three
+times the throughput at the same module count, so either the part count
+divides by three at the same range — 102 parts becomes 34 at 29 modules,
+about a minute becomes twenty seconds — or the range grows at the same
+part count: 102 frames of three parts carries the object at **8-byte
+parts, 25 modules, 18 × the code's width, about 50 inches on a 70 mm
+screen**. That is the 4 feet the chunking lever cannot reach, without
+touching `wire-format.md` §14.3.1 and without the commitment-plus-bearer
+change this file records as the other way there.
+
+**What it costs, honestly.**
+
+- **White balance is the real risk.** A phone camera's auto white balance
+  and colour processing can collapse channel separation, and the screen's
+  primaries are not the camera's. Mitigations are full-saturation
+  primaries, locking white balance where the API allows, and a per-frame
+  calibration patch; none is certain, and this is the half that has to be
+  measured on hardware rather than argued.
+- **Three symbols must share one frame's geometry.** Each channel's QR has
+  its own finder patterns in the same place, which is fine, but the
+  combined image is three overlaid patterns — a decoder reading the luma
+  channel of a colour image sees their superposition and may detect
+  nothing. The reader must split channels *before* detection, so this
+  needs the analyser's pipeline changed and not only a new bitmap.
+- **The field-test harness has to grow a colour path**: `OpticalTest`
+  round-trips a matrix through ZXing on the JVM, which is still the right
+  shape, but a colour test needs a simulated camera pipeline — gamma,
+  white balance, cross-talk — or it proves only that three planes compose
+  and separate arithmetically.
+- **It is the shell's own**, not the wire's: §14.3 fixes the bytes and
+  leaves the symbol to the shell, so none of this touches the protocol.
+
+**Sequenced after the Android live-test sweep**, with the ceremony's other
+release obligations, for the same reason: it is shell work whose failures
+cost a rebuild and a re-run each.
+
+## Colour: the probe, and the header the probe pays for (2026-10-06)
+
+**[refined, author, 2026-10-06]** *"It seems like either the phones will
+read the color or they won't and that will be known after the first round
+of presentation. So maybe it isn't necessary for each part in subsequent
+frames to contain its own header?"*
+
+**Right, and the gain is exactly two headers a frame** — three headers
+become one — **which is nothing at today's symbol and decisive at the one
+we are aiming for.** Capacity per symbol from the measured chunk
+boundaries, over the 2,022-byte contribution:
+
+| m.width | cap/channel | mono parts | colour, header each | colour, one header | reads at |
+|---|---|---|---|---|---|
+| 41 (today) | 81 B | 27 | 9 frames | 9 frames | 11 × width |
+| 37 | 53 B | 43 | 15 | 14 | 12 × |
+| 33 | 29 B | 85 | 29 | 25 | 13.6 × |
+| 29 | 25 B | 102 | 34 | **29** | 15.5 × |
+| **25 (v1)** | **13 B** | **253** | **85** | **60** | **18 ×** |
+
+At 41 modules the shared header saves nothing — 9 frames either way. At
+version 1, the smallest QR there is, it saves **29%**: 60 frames instead of
+85. The five-byte header is 38% of a 13-byte symbol, which is why the
+instinct lands exactly where the range is.
+
+**What that buys: 4.2 feet in 30 to 36 seconds.** 60 frames at the field
+runs' measured 0.5–0.6 s a code, at 18 × the code's width — about 50
+inches on a 70 mm screen. Better than the four-to-six-foot target on both
+axes, where monochrome needs 253 parts and two and a half minutes to reach
+the same symbol.
+
+**The probe is the right protocol**, and it is what makes the shared header
+safe: the first presentation carries three parts with their own headers, so
+a receiver that decodes three knows colour works and a receiver that
+decodes one or two says so and both sides fall back to monochrome. Nothing
+is assumed about the camera that has not just been demonstrated on it.
+
+**One refinement to put beside it: the channel can *be* the index.** With a
+shared header naming the frame's base part, red, green and blue supply the
+offset, so a channel lost mid-exchange is a *known* missing piece rather
+than an unidentifiable fragment, and the lockstep re-shows exactly it.
+
+**And one question the shared header raises.** If the header lives in one
+channel, losing that channel loses the frame's addressing and not just its
+third. Three ways out, measured at version 1:
+
+- **A header in every channel** — 85 frames, every piece self-describing.
+- **One header in one channel** — 60 frames, the frame needs that channel.
+- **A two-byte header in every channel** — frame index and `got` only,
+  since the probe has already fixed version, `which` and the part count —
+  **62 frames**, every piece self-describing, and two frames is the whole
+  price of that robustness.
+
+The third looks like the right trade and is the author's to pick; it is
+recorded here rather than chosen, because the first presentation's format
+is the only part of this that cannot be changed later without a flag day.
+
+## The polychrome format, built (2026-10-06)
+
+**[ruled, author, 2026-10-06]** Two-byte header in every channel; build
+the polychrome offset format with monochrome as the fallback; test on
+hardware and decide. If it goes, back to the 43-part monochrome point and
+play with presentation speed.
+
+**Built, and the pieces are:**
+
+- `Polychrome.kt`: the compressed header (frame index, `got`, high bit set
+  so it can never be read as a monochrome version byte), `compose` of
+  three symbols into one ARGB frame, `separate` back out of one, and
+  `planesFromYuv` for the camera's 4:2:0.
+- `OpticalExchange`: `CHUNK_POLY = 11`, `colourFrames(compressed)`, and
+  `take(bytes, channel)` where a compressed header's part index is the
+  frame times three plus the channel. A changed count now **re-partitions**
+  rather than being malformed, which is what a fall back is.
+- `QrCamera`: a colour read before the luminance one, three planes reused
+  across frames, each channel's part delivered with its index; the sink
+  survives a watchdog restart.
+- `MeetActivity`: `qrColour`, the decision frame's full headers, the
+  five-second fall back, and the camera closed when colour is given up on
+  so the monochrome path stops paying for three decodes a frame.
+
+**What the JVM settled and what it cannot.** Simulating the 4:2:0
+subsampling — including averaging the chroma over each 2×2 block as a
+sensor bins it — all three channels decode **from two pixels a module**,
+where a monochrome symbol needs about two and a half. So the subsampling
+alone does not cancel the gain, which is contrary to what I expected and
+said when flagging it. What no simulation here can answer: this device's
+auto white balance, its colour processing, and the screen's primaries
+against the sensor's response. That is the hardware test.
+
+**Two things I had wrong, both now pinned by tests.**
+
+1. A composed colour frame is **not** monochrome-readable — luminance is a
+   blend of the three symbols. I had written the opposite in `compose`'s
+   own comment. It changes the protocol: a reader that cannot separate
+   channels holds *none* of the sender's parts, so the fall back is timed
+   and not inferred from a partial count.
+2. A monochrome frame read in colour mode decodes on all three channels
+   (black is 0,0,0 and white 255,255,255, so each channel sees the same
+   symbol) and is delivered three times. Harmless — the monochrome
+   header carries its own index and the second and third are duplicates —
+   but it is why the camera is closed on fall back rather than left with
+   its colour sink.
+
+**If it is kept**, the open question is `CHUNK_POLY`: eleven bytes is the
+smallest symbol and the longest read, and a hardware run may show that
+the channels need more module than that affords, in which case the part
+size rises and the range falls by the same table the monochrome lever
+uses. **If it is not**, the monochrome point to return to is `CHUNK = 48`
+— 43 parts of 37 modules, about 34 inches — and the presentation rate is
+the other lever: the field runs' median part-to-part gap was 0.5–1.2 s and
+nothing has yet tried to shorten it.

@@ -57,6 +57,22 @@ def main():
             flags.append(f'UNSTAMPED {p.name}: no source recorded for it, '
                          f'so it is either orphaned by a renamed run or a '
                          f'site that does not stamp')
+    # **And the other direction, which the stamped set cannot see**
+    # [reviewer, 2026-10-06]: a theory added to the tree and never run is
+    # named by no result, so every check above passes while the file has
+    # never been proved.  The sources are globbed rather than listed for
+    # the same reason `refcheck` has no exemptions: a list is a place for
+    # something to go missing from.  `results/` holds the generated
+    # mutants and the bounded copies, which are a run's output and not a
+    # source anybody writes.
+    proved = {s for srcs in stamped.values() for s in srcs}
+    for p in sorted(MODELS.rglob('*.spthy')) + sorted(MODELS.rglob('*.tla')):
+        rel = p.relative_to(MODELS).as_posix()
+        if rel.startswith('results/'):
+            continue
+        if rel not in proved:
+            flags.append(f'UNPROVED {rel}: a theory in the tree that no '
+                         f'stamped result names, so nothing has run it')
     print(f'{len(stamped)} stamped results over {checked} sources; '
           f'{len(flags)} flags')
     for f in flags:
