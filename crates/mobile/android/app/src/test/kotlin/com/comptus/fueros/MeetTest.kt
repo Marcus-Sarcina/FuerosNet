@@ -260,6 +260,50 @@ class MeetConversationTest {
         assertEquals("0a0b0c0d0e0f", m.recordTxid())
     }
 
+    /**
+     * **A conversation that will never move again stops itself**
+     * ([Meet.STALE_MS]). Two field runs of 2026-10-07 ended with a phone
+     * polling for ever: `aimed-1` left the proposer waiting on a carriage
+     * that had been thrown away, and `shutter-1` had the sender stop
+     * correctly while the counterparty went on, because the thing that
+     * would have told it was the thing that failed.
+     */
+    @Test
+    fun a_conversation_that_stops_moving_is_given_up_on() {
+        val m = atVerifiers(Meet.Role.RESPONDER)
+        val c = FakeCourier(Meet.Progress(proposer = false, queriesOutstanding = 0))
+        val t0 = 1_000_000L
+        m.converse(c, t0)
+        // polling with the same progress is not progress, however long
+        m.poll(c, t0 + Meet.STALE_MS)
+        assertEquals("still inside the allowance", Meet.Step.VERIFIERS, m.step())
+        m.poll(c, t0 + Meet.STALE_MS + 1)
+        assertEquals(Meet.Step.STOPPED, m.step())
+        assertTrue(
+            "and says why: ${m.stopReason()}",
+            m.stopReason()?.contains("nothing has moved") == true,
+        )
+    }
+
+    /** Anything at all moving restarts the allowance: `Progress` compares
+     *  by value, so every figure the conversation exposes counts. */
+    @Test
+    fun progress_of_any_kind_restarts_the_allowance() {
+        val m = atVerifiers(Meet.Role.RESPONDER)
+        val c = FakeCourier(Meet.Progress(proposer = false, queriesOutstanding = 0))
+        val t0 = 1_000_000L
+        m.converse(c, t0)
+        // one nominee agrees to attest, well into the allowance
+        c.progress = Meet.Progress(proposer = false, queriesOutstanding = 0, attesting = listOf("w1"))
+        m.poll(c, t0 + Meet.STALE_MS - 1)
+        assertEquals(Meet.Step.VERIFIERS, m.step())
+        // the clock runs from there, not from the start
+        m.poll(c, t0 + Meet.STALE_MS + 1)
+        assertEquals("the allowance began again", Meet.Step.VERIFIERS, m.step())
+        m.poll(c, t0 + 2 * Meet.STALE_MS)
+        assertEquals(Meet.Step.STOPPED, m.step())
+    }
+
     @Test
     fun the_responder_hands_over_once_and_reviews_when_the_body_is_shown() {
         val m = atVerifiers(Meet.Role.RESPONDER)

@@ -56,6 +56,26 @@ object Kernel {
      *  in this ceremony: what picks each one's phase ([Carriage.Phase.conversation]). */
     private var sentCarriages = 0
 
+    /**
+     * **The one thread the bearer's work runs on, and never a GATT
+     * callback's.**
+     *
+     * A packet arriving used to be assembled, handed to the kernel and
+     * have the kernel's reply *sent* inline, on whatever thread the
+     * Bluetooth stack delivered it on — which is a binder thread, and the
+     * same binder thread that delivers write acknowledgements. `BleBearer`
+     * serialises writes on their acknowledgement, so a send on that thread
+     * waits for a permit only that thread can release. Run `shutter-1` of
+     * 2026-10-07 shows it outright: acknowledgements arrive on
+     * `binder:11774_4`, and `binder:11774_4` sat in the gate for the full
+     * twenty-four seconds and then threw the ceremony's back-pointers
+     * away [measured, 2026-10-07].
+     *
+     * One thread, not a pool: the phases are ordered, and two senders
+     * racing for one permit is the other half of the same bug.
+     */
+    @Volatile private var bearerWork: java.util.concurrent.ExecutorService? = null
+
     /** The application's context, kept for the radio the bearer needs. */
     @Volatile private var appContext: Context? = null
 
@@ -396,13 +416,17 @@ object Kernel {
     /** End the ceremony in progress. */
     fun stopMeet(reason: String) {
         meet?.stop(reason)
-        synchronized(lock) {
+        val work = synchronized(lock) {
             meet = null
             opticalTaken = false
             ble?.close()
             ble = null
             carriage = null
+            bearerWork.also { bearerWork = null }
         }
+        // the bearer's thread goes with the meeting; a send still in the
+        // gate is not waited for, since the link it was for is closed
+        work?.shutdownNow()
         // the hardware goes back with the meeting: a camera held behind a
         // dead ceremony and a channel bound to a stale id are both the kind
         // of thing nobody consented to
@@ -433,10 +457,26 @@ object Kernel {
         // is just dropped into its phase and the step waiting on that phase
         // is attempted — a late proximity packet cannot complete the intent
         // and a replayed intent packet cannot complete the capture.
+        // **off the stack's thread, always** ([bearerWork]): everything
+        // below this point can send, and a send blocks on an
+        // acknowledgement that a GATT callback thread is the only one able
+        // to deliver
+        val work = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+            Thread(r, "bearer").apply { isDaemon = true }
+        }
+        synchronized(lock) { bearerWork = work }
         val inbound = BleBearer.Inbound { packet ->
             val live = carriage ?: return@Inbound
-            live.packet(packet)?.let { why -> m.note("a packet was refused: $why") }
-            drainBearer(p, to, m)
+            if (work.isShutdown) return@Inbound
+            try {
+                work.execute {
+                    if (carriage !== live) return@execute
+                    live.packet(packet)?.let { why -> m.note("a packet was refused: $why") }
+                    drainBearer(p, to, m)
+                }
+            } catch (e: java.util.concurrent.RejectedExecutionException) {
+                // the meeting ended between the check and the submit
+            }
         }
         val why = when (m.role) {
             Meet.Role.INITIATOR -> radio.offer(inbound)
@@ -513,9 +553,18 @@ object Kernel {
      * after every step this side takes, after every carriage taken, and
      * after every message that arrived over the network, since each can
      * produce one; one message per phase, so the receiver can take each
-     * as it lands. A carriage the radio will not take is said and left:
-     * the kernel does not hold a copy, and the step it belonged to waits
-     * until the person stops the meeting.
+     * as it lands.
+     *
+     * **A carriage the radio will not take ends the ceremony.** The
+     * kernel holds no copy, so the message is gone, and the counterparty
+     * is waiting on a phase that no longer exists anywhere — it cannot
+     * know that, and it cannot recover. This was a note and nothing more
+     * until run `aimed-1` of 2026-10-07, where one dropped phase left the
+     * proposer at `VERIFIERS` indefinitely while both phones went on
+     * polling; the step's own comment said it "waits until the person
+     * stops the meeting", and that is not a failure mode to leave to the
+     * person. Stopping says so on both screens and gives the hardware
+     * back [author, 2026-10-07].
      */
     private fun sendCarriages(p: Participant) {
         val live = carriage ?: return
@@ -523,7 +572,8 @@ object Kernel {
         for (bytes in out) {
             val phase = Carriage.Phase.conversation(sentCarriages++)
             if (!live.send(listOf(bytes), phase)) {
-                meet?.note("a carriage of the conversation did not cross the bearer (phase $phase).")
+                stopMeet("a carriage of the conversation did not cross the bearer (phase $phase)")
+                return
             }
         }
     }

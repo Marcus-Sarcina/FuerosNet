@@ -43,6 +43,22 @@ import com.google.zxing.qrcode.QRCodeReader
  */
 object Polychrome {
 
+    /**
+     * **Off** [author, 2026-10-07]. The first colour run read *worse*
+     * than monochrome at a larger module — 2.53 mm against 1.49 mm, and
+     * closer — because a camera's `YUV_420_888` carries chroma at half
+     * linear resolution and a channel's contrast against its neighbours
+     * is nothing like black against white. The range the format was built
+     * for is bought more cheaply by a coarser monochrome symbol
+     * (`OpticalExchange.CHUNK`), so the presentation does not offer
+     * colour and the exchange never leaves the monochrome partitioning.
+     *
+     * The format is kept, with its tests, because what it cost to learn
+     * is the measurement and not the code. Nothing reads this but
+     * `MeetActivity`.
+     */
+    const val OFFERED = false
+
     /** How many parts one frame carries: one per colour channel. */
     const val CHANNELS = 3
 

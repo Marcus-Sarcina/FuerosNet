@@ -114,8 +114,38 @@ class BleBearer(private val context: Context) {
          * [2026-10-06, on the bench].
          */
         const val MAX_ATTRIBUTE = 512
-        /** How long a write waits for the previous one's acknowledgement. */
-        const val WRITE_ACK_MS = 5_000L
+        /**
+         * **How long one wait for the previous write's acknowledgement
+         * lasts.** Eight seconds, not five.
+         *
+         * Run `aimed-1` of 2026-10-07 measured a phase-3 write that
+         * completed locally in 1 ms and surfaced on the counterparty
+         * **4.4 s later**. Five seconds was no margin over that at all,
+         * so the next phase hit the gate, timed out and was lost.
+         */
+        const val WRITE_ACK_MS = 8_000L
+
+        /**
+         * **How long a write waits in total before it gives the packet
+         * up**, across repeated waits.
+         *
+         * A gate that times out has not attempted the write — the packet
+         * is still in hand and the link has said nothing about being
+         * down, so the answer is to wait again rather than to throw the
+         * packet away. Twenty-four seconds is three waits, which is far
+         * past anything measured; a ceremony that is held up this long is
+         * still inside the witnesses' four-minute floor, and a lost
+         * carriage costs the whole ceremony.
+         */
+        const val WRITE_GIVE_UP_MS = 24_000L
+
+        /** `ERROR_GATT_WRITE_REQUEST_BUSY`: a second request while the
+         *  first is out. Worth one more try after a breath, not a loss. */
+        const val WRITE_BUSY = 201
+        /** How long to wait before retrying a write the stack called busy. */
+        const val WRITE_BUSY_MS = 250L
+        /** How many times a busy write is offered again. */
+        const val WRITE_BUSY_TRIES = 3
 
         /** What one packet may carry on a link that negotiated `mtu`: the
          *  MTU less ATT's overhead, and never more than an attribute holds. */
@@ -204,21 +234,69 @@ class BleBearer(private val context: Context) {
                 // while the first is out is refused with status 201,
                 // ERROR_GATT_WRITE_REQUEST_BUSY: the capture key fourteen
                 // milliseconds after the proximity outcomes was. So a send
-                // waits for the previous write's acknowledgement, and gives
-                // up where none comes in five seconds.
-                if (!writeDone.tryAcquire(WRITE_ACK_MS, java.util.concurrent.TimeUnit.MILLISECONDS)) {
-                    Diag.warn("ble", "op" to "write", "state" to "refused", "reason" to "the previous write was never acknowledged")
-                    return false
+                // waits for the previous write's acknowledgement.
+                //
+                // **A wait that expires is waited again, not given up on.**
+                // The gate has not attempted anything: the packet is still
+                // in hand, and a slow acknowledgement says nothing about
+                // the link being down. Run `aimed-1` of 2026-10-07 lost a
+                // ceremony's back-pointers to a single five-second wait
+                // over a 4.4 s delivery, and the phase after it crossed
+                // the same link without trouble — so the packet was thrown
+                // away for being early, and the counterparty waited for it
+                // for ever.
+                //
+                // **And the gate has more than one waiter.** In that run
+                // two sends were waiting on the single permit at once —
+                // one from 197389 ms and one from 197853 — and when the
+                // acknowledgement finally came at 202390 the second took
+                // it while the first gave up six milliseconds earlier.
+                // So a wait that expires may simply have lost a race, and
+                // the thread each send arrives on is on the record now
+                // rather than inferred from overlapping timings.
+                var waited = 0L
+                while (!writeDone.tryAcquire(WRITE_ACK_MS, java.util.concurrent.TimeUnit.MILLISECONDS)) {
+                    waited += WRITE_ACK_MS
+                    if (waited >= WRITE_GIVE_UP_MS) {
+                        Diag.warn(
+                            "ble", "op" to "write", "state" to "refused",
+                            "reason" to "the previous write was never acknowledged",
+                            "waited_ms" to waited,
+                            "thread" to Thread.currentThread().name,
+                        )
+                        return false
+                    }
+                    Diag.warn(
+                        "ble", "op" to "write", "state" to "waiting",
+                        "reason" to "the previous write is not acknowledged yet",
+                        "waited_ms" to waited,
+                        "thread" to Thread.currentThread().name,
+                    )
                 }
                 return try {
                     @Suppress("DEPRECATION")
-                    val status = g.writeCharacteristic(c, packet, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
+                    var status = g.writeCharacteristic(c, packet, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
+                    // **a stack that says busy is offered the packet
+                    // again**: the gate is held either way, so nothing
+                    // else is racing it, and busy is a moment and not a
+                    // refusal
+                    var tries = 1
+                    while (status == WRITE_BUSY && tries < WRITE_BUSY_TRIES) {
+                        Diag.warn("ble", "op" to "write", "state" to "busy", "try" to tries)
+                        Thread.sleep(WRITE_BUSY_MS)
+                        tries += 1
+                        @Suppress("DEPRECATION")
+                        status = g.writeCharacteristic(c, packet, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
+                    }
                     val ok = status == BluetoothGatt.GATT_SUCCESS || status == 0
                     if (!ok) {
-                        Diag.warn("ble", "op" to "write", "status" to status)
+                        Diag.warn("ble", "op" to "write", "status" to status, "tries" to tries)
                         writeDone.release()
                     }
                     ok
+                } catch (e: InterruptedException) {
+                    writeDone.release()
+                    false
                 } catch (e: SecurityException) {
                     writeDone.release()
                     refused("write")
@@ -496,7 +574,17 @@ class BleBearer(private val context: Context) {
 
     private val clientCallback = object : BluetoothGattCallback() {
         override fun onCharacteristicWrite(g: BluetoothGatt, c: BluetoothGattCharacteristic, status: Int) {
-            if (status != BluetoothGatt.GATT_SUCCESS) Diag.warn("ble", "op" to "write", "state" to "acknowledged", "status" to status)
+            // the gate's permit is given back on any outcome: a write
+            // that failed is still a write no longer in flight
+            val fields = arrayOf(
+                "op" to "write", "state" to "acknowledged",
+                "status" to status, "thread" to Thread.currentThread().name,
+            )
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                Diag.event("ble", *fields)
+            } else {
+                Diag.warn("ble", *fields)
+            }
             writeDone.release()
         }
 

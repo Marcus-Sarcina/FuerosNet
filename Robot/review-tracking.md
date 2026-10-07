@@ -15269,8 +15269,10 @@ play with presentation speed.
   across frames, each channel's part delivered with its index; the sink
   survives a watchdog restart.
 - `MeetActivity`: `qrColour`, the decision frame's full headers, the
-  five-second fall back, and the camera closed when colour is given up on
-  so the monochrome path stops paying for three decodes a frame.
+  fall back, and the camera closed when colour is given up on so the
+  monochrome path stops paying for three decodes a frame. *(The decision
+  itself moved to `Meet.colourVerdict` on 2026-10-07, and the five-second
+  window with it — see the first colour run below.)*
 
 **What the JVM settled and what it cannot.** Simulating the 4:2:0
 subsampling — including averaging the chroma over each 2×2 block as a
@@ -15287,7 +15289,8 @@ against the sensor's response. That is the hardware test.
    blend of the three symbols. I had written the opposite in `compose`'s
    own comment. It changes the protocol: a reader that cannot separate
    channels holds *none* of the sender's parts, so the fall back is timed
-   and not inferred from a partial count.
+   and not inferred from a partial count. *(Still true, but the timing was
+   wrong in three ways; the first colour run below has them.)*
 2. A monochrome frame read in colour mode decodes on all three channels
    (black is 0,0,0 and white 255,255,255, so each channel sees the same
    symbol) and is delivered three times. Harmless — the monochrome
@@ -15360,3 +15363,385 @@ implementation today, in the Rust kernel. The Kotlin shell never seals or
 opens — it moves sealed bytes. So "two shells must agree byte-for-byte" was
 latent, not live. What makes it worth doing now is that iOS is the next
 implementation and a divergence there would present as a bearer fault.
+
+## The first colour run, and the decision it got wrong (2026-10-07)
+
+**Run `ff57caf-colour-1-1`**, two SM-G996U1 on the same serving node, two
+witnesses. The ceremony completed: meeting `b5a68acc`, four signers, 105 s
+brief to done, `takeCarriage` ok on both — the prekey handover's first
+hardware exercise.
+
+**The format reads.** RFCRC1JDMRK separated all three channels from one
+captured frame (`channel` 0/1/2 at `attempts` 151, 16 bytes each);
+RFCRC1JDGXV got two before its camera was shut. Geometry as designed: 29
+modules, 2.14 mm, 962 mm read distance, against monochrome's 41 / 1.49 mm
+/ 670 mm. So the hardware half of the chroma question — white balance,
+colour processing, screen primaries against sensor response — comes back
+in the format's favour, and `PolychromeChromaTest`'s two-pixels-a-module
+result holds up.
+
+**Three defects, none of them optical.**
+
+1. **The decision ran between the channels of one frame.** `colour()`
+   called the sink per channel, each a `runOnUiThread` post, each a
+   redraw, and the redraw is where the decision lives. Both phones refused
+   in the 15 ms gap after the first channel's post — MRK threw away a
+   complete three-channel frame 12 ms after it arrived. Fixed by
+   separating the whole capture before delivering any of it: the
+   delivery's size *is* the evidence.
+2. **The allowance expired before the first read could land.** 5 s from
+   the exchange opening, against acquisitions of 7.3 s and 10.5 s, with
+   the camera not even open for the first 1.4 s.
+3. **The predicate asked the wrong thing.** `theirReceived() >= CHANNELS`
+   alone.
+
+**[ruled, author, 2026-10-07] on the timeouts.** No limit on the first
+frame's display or read, or an extremely generous one; later frames
+somewhat tighter but still liberal throughout, because the run failed to
+read past about two feet. Applied: `COLOUR_PROBE_MS` 5 s → 45 s, measured
+on a probe that has gone *quiet* and restarted by any capture that
+separated all three channels — not by one that separated fewer, which is
+evidence against colour and would otherwise let two cameras each managing
+two planes probe for ever at a third of monochrome's rate.
+`QrCamera.STALL_MS` 20 s → 40 s so a watchdog restart cannot land inside
+an acquisition and discard the planes already separated.
+
+**[ruled, author, 2026-10-07] on whose camera decides — and this is the
+one I had wrong twice.** I first said the licensing receipt is the
+counterparty's, not this side's, because theirs is the reader that must
+recover the index from the plane a part arrived in. That is true but it is
+not the point. **The presentations are lock-step**, so the format is one
+decision for the channel and not one per direction: each side shows the
+part the other still needs, so a side on three-part frames and a side on
+one-part frames walk their sequences at different rates, and the side that
+finishes stops advancing the other, leaving parts undelivered with nothing
+left to trigger them.
+
+So the rule is a **conjunction both sides can compute from the same two
+facts** — this camera's best capture, and the counterparty's `got`
+reaching three, which says the same of theirs — and therefore cannot
+diverge on.
+
+**And the deadlock the conjunction opens, closed without a new signal.** A
+side that falls back alone re-partitions at the monochrome chunk, and a
+side left in colour reads *nothing at all* of a monochrome presentation —
+so its allowance, restarted only by its own reads, never expires. Fixed by
+`OpticalExchange.theirsAreCoarse()`: a colour part is at most 11 bytes and
+a monochrome one up to 76, the two formats share the five-byte header, so
+the **length** of a part says which format the other side is on, exactly.
+A short last part cannot read as colour because it is short, not long.
+
+The three rules are now `Meet.colourVerdict`, off the Activity. Six tests
+added; **two fail against the predicate as it shipped** (checked by
+reverting it). Android units 142 → 148.
+
+**One item off the owed list, by correction.** "The QR camera's 20.1 s
+stall" was carried as an unexplained defect since the fourth field run. It
+is `QrCamera.STALL_MS` — the watchdog firing, with an `op=restart`
+warning each time, three times in this run's 83 s optical pass after
+500-odd frames decoding nothing. The stall is real and worth chasing; it
+was never unnamed, and I should not have filed it as if it were.
+
+**[ruled, author, 2026-10-07] on what a fall back must do.** The side that
+falls back starts over from the first part and waits for the other side to
+read it and re-present its own first monochrome part, or parts are dropped
+at one end of the sequence or the other.
+
+**Checked against the code, and it already holds** — nothing to change.
+The fall back nulls the exchange and the next redraw builds one at the
+monochrome chunk, which is fresh: `got = 0`, `theirGot = 0`,
+`theirCount = -1`, and the colour-era parts gone with it. Its presentation
+index is `min(theirGot, count - 1)` = 0 and stays there until the other
+side's header reports holding one, which is the waiting. The other side
+follows within one frame of theirs.
+
+**But it was holding by accident of three separate facts and nothing
+tested it**, which is one refactor from gone. Now
+`a_fall_back_restarts_both_sequences_from_the_first_part` drives a real
+mid-exchange fall back with both sides holding colour-era state, runs the
+monochrome lockstep to completion, and asserts both objects assemble byte
+for byte — the only assertion that catches a drop at the ends as well as
+the middle. Teeth confirmed by breaking `theirsAreCoarse()`: it fails on
+the follow, and the break reproduces exactly the deadlock the ruling is
+about. Android units 148 → 149.
+
+**The gap that remains.** The step where `MeetActivity` nulls the exchange
+is in the Activity and no JVM test reaches it; the test starts from a
+fresh monochrome exchange existing. An edit that made the Activity reuse
+the colour exchange would not be caught here, only on hardware.
+
+**Still open on colour, for the next run.** Whether the 7–10 s first
+acquisition is only the first one or the per-frame cost. If it is
+per-frame, 62 frames of colour loses to 27 parts of monochrome outright
+and `CHUNK_POLY` is the wrong operating point regardless of the decision
+logic.
+
+## The second colour run, and the end of the colour path (2026-10-07)
+
+**Run `ff57caf-colour-2-1` failed, and the format is withdrawn.** The
+decision logic worked — colour confirmed and the compressed format
+engaged, `bytes: 39` being `3 × (2 + 11)` — and that is how the run got
+far enough to find two defects the first run's twelve-second fall back had
+hidden.
+
+**Defect 1, fatal and structural: the object's last frame.** A compressed
+header names only the frame; the reader takes the index from the channel a
+part arrived in. The presentation must fill all three channels, so
+`qrColour` pads a short frame by repeating the last part — and the repeat,
+read in the next channel along, decodes as the part *after* the last one,
+which does not exist, and the reader stops the meeting on it. `184 = 61 ×
+3 + 1`, so the final frame carried one real part and two poisoned copies.
+GXV died there holding 183 of 184 with `"a code of the exchange did not
+read as one"` at ms 339585. **It could not have ended any other way** for
+any part count that is not a multiple of three. Fixed anyway — a short
+frame now goes out under full headers even mid-compression, so the copies
+carry their own true index and read as duplicates — and pinned by
+`the_last_frame_of_an_object_that_is_not_a_multiple_of_three`, teeth
+confirmed by reverting the fix.
+
+**Defect 2, mine: `colourChannels` is a high-water mark.** The conjunction
+was meant to stop a one-plane camera compressing, and it does not, because
+it remembers the *best* capture ever taken. MRK separated three planes
+once early and one or two for the rest of the run, so it compressed and
+then advanced about one part a frame over 184 — stuck at `received: 125`
+while GXV reached 183. A recent-window measure is what the rule needs.
+**Not fixed**: the path is off, and speculative work on a disabled format
+is not worth it. Owed if colour is ever revived.
+
+**Defect 3, instrumentation, and the one that misled the author.**
+`reads_at_mm` applies the monochrome `450 × module` calibration to colour
+frames. It reported **1137 mm** for a code that read *closer* than the
+670 mm monochrome one. A figure wrong in the optimistic direction is worse
+than none, so colour frames no longer emit it.
+
+**[ruled, author, 2026-10-07] bigger modules, and the range over the part
+band.** The three constraints — 4–6 ft, a 2 KB object, 25–35 parts — are
+not simultaneously satisfiable, and the author chose the range.
+
+Surveyed with the encoder over the real contribution, the cheapest chunk
+at each module count:
+
+| chunk | parts | modules | reads at | on 70 mm |
+|---|---|---|---|---|
+| 8 | 253 | 25 | 18.0 × | 50 in |
+| **20** | **102** | **29** | **15.5 ×** | **43 in** |
+| 35 | 58 | 33 | 13.6 × | 38 in |
+| 55 | 37 | 37 | 12.2 × | 34 in |
+| 76 | 27 | 41 | 11.0 × | 30 in |
+
+**`CHUNK` 76 → 20.** Not 8, for two reasons that are not judgement calls:
+253 parts is within two of the header's one-byte ceiling so the object
+cannot grow, and widening the header does not help because a 25-module
+symbol holds exactly thirteen bytes — a seven-byte header spills into 29
+modules and gives the range back. And the time: run 1's monochrome pass
+did 27 parts in 68 s of wall clock, 40 s of it two watchdog restarts, so
+the lockstep costs about **1.05 s a part**, which is 1.8 min at 102 parts
+and 4.4 min at 253.
+
+**What I got wrong and should have said in the first place.** I chose
+`CHUNK_POLY = 11` and documented it as "the smallest QR there is", then
+reported the author's 25-to-35-part target as met — by the *monochrome*
+27, while the colour path ran at 184. The colour path abandoned the target
+outright and I never said so. The author found it by watching the screen.
+
+**Colour is off**, by `Polychrome.OFFERED = false`, read only by
+`MeetActivity`. The format and its tests are kept: what it cost to learn
+is the measurement, not the code.
+
+## The range was never the module's to give (2026-10-07)
+
+**Three runs, one symbol changing and one camera changing:**
+
+| run | modules | module | measured |
+|---|---|---|---|
+| 2026-10-06 | 69 | 0.97 mm | ~18 in |
+| `mono102` | 29 | 2.14 mm | ~12 in |
+| `aimed-1` | 29 | 2.14 mm | **~24 in** |
+
+The module grew 2.2-fold between rows one and two and the distance
+**fell**. Rows two and three are the *same symbol*, and the second reads
+twice as far, because the camera was told where to focus and meter.
+
+**So `450 / modules` is dead.** It was fitted to the single observation in
+row one and then used to predict range in a source table, in `qr.shown`,
+and in two rounds of design argument. At 12 inches a 2.14 mm module
+already lands about eight pixels a module — four times a decoder's need —
+so **pixel resolution was never the binding constraint**, and the rule was
+fitting noise.
+
+**What was actually binding: the camera's control loop.** `QrCamera` asked
+for `CONTROL_AF_MODE_CONTINUOUS_PICTURE` with **no AF region, no AE
+region, and a null capture callback**. So focus went wherever the
+whole-frame algorithm liked — which at arm's length is the counterparty's
+phone by accident, and at three feet is the room — metering averaged a
+bright screen against a dim room, and nothing was ever read back to tell
+us which. Regions on the middle third doubled the range and dropped ISO
+from 3395 to ~300.
+
+**And what the coarse symbol does buy, which is real:** against 27 parts
+of 41 modules, the 102 × 29 point ran the optical pass in **57.3 s against
+83.6**, p90 decode **390 ms against 1979**, and **zero watchdog restarts
+against three**. Four times the parts, 26 s faster end to end. The
+restarts are the whole story: at 41 modules a real fraction of reads were
+marginal and each stall cost twenty seconds. So `CHUNK = 20` stands — but
+for acquisition margin, not for range, and the source now says so.
+
+**My error, named.** I fitted a rule to one data point, put it in a source
+file as a table of predicted distances, and spent two build-and-run cycles
+optimising the variable it pointed at — without once checking whether
+resolution was the constraint. The camera's control loop, which turned out
+to be the whole answer, was never looked at until the author reported that
+2.2× the module read *closer*. `Robot/authoring-conventions.md`'s own
+warning applies: I took the component as given and optimised it.
+
+**Owed.** The exposure: `aimed-1` metered **42–66 ms**, which smears a
+handheld read of millimetre features whatever the symbol is. A
+self-luminous screen can take a short shutter and deliberate
+underexposure. Not done — the author took the bearer fix instead.
+
+## A dropped carriage hung a ceremony (2026-10-07)
+
+**`aimed-1` reached `VERIFIERS` and stopped there**, both phones polling,
+until the author closed them.
+
+```
+MRK 197388  phase 3 sent        ok, took_ms 1
+GXV 201781  phase 3 received    4.4 s later
+MRK 202390  ble write refused   "the previous write was never acknowledged"
+MRK 202390  phase 4 sent        packets 0, failed 1, ok false, took_ms 5001
+MRK 202396  phase 5 sent        ok, took_ms 4543
+```
+
+Phase 4 was the back-pointers. `BleBearer` serialises writes on a
+one-permit gate with a 5 s wait; the acknowledgement for phase 3 came at
+about 202390, and **phase 5 took the permit six milliseconds before phase
+4 gave up**. The two overlap — 197389 and 197853 — so there were two
+senders waiting on one permit and the loser threw its packet away.
+
+That the two overlap is also what rules out the hypothesis I nearly
+shipped on: a send cannot be self-deadlocked against the callback that
+releases the gate, because one of the two waiters *did* get it. Had I not
+checked, raising the wait would have turned a 5 s loss into a 24 s loss.
+
+**Three fixes, all applied [author, 2026-10-07 chose this over the
+exposure work]:**
+
+- **A wait that expires is waited again.** The gate attempted nothing, so
+  the packet is still in hand; `WRITE_GIVE_UP_MS = 24_000` across three
+  waits, and a loser of the race gets the next release.
+- **`WRITE_ACK_MS` 5 s → 8 s**, above the measured 4.4 s with margin, plus
+  three offers 250 ms apart for `ERROR_GATT_WRITE_REQUEST_BUSY`.
+- **A lost carriage ends the ceremony.** `Kernel.sendCarriages` called
+  `note` and continued; the kernel holds no copy, so the counterparty
+  waits on a phase that no longer exists anywhere and cannot know it. Its
+  own comment said the step "waits until the person stops the meeting",
+  which is not a failure mode to leave to the person. Now `stopMeet`.
+
+The thread name is on every write and acknowledgement, because the
+two-waiter race was *inferred* from overlapping timestamps rather than
+measured.
+
+## The shutter, the bearer's thread, and a record (2026-10-07)
+
+**Run `ff57caf-threaded-1` completed**: meeting `19b596fd`, four signers,
+**69.7 s brief to done**, optical pass 48.4 s for 102 parts, decode median
+293 ms and p90 466 ms, zero watchdog restarts, **zero failed bearer sends,
+zero contended writes**. The fastest complete ceremony so far, against
+76.6 s at 27 parts and 105.1 s at the first.
+
+**The range, and where every inch of it came from:**
+
+| change | measured |
+|---|---|
+| start | 12 in |
+| AF and AE regions on the middle third | 24 in |
+| shutter cap and −1.5 EV | **≥42 in** |
+
+`fps [30, 30]` was the camera's briskest floor, and the compensation took
+the exposure from 42–66 ms to **10 ms** on 100 of 149 frames. Module size
+contributed nothing; it moved the range *backwards* when it was the only
+thing changed.
+
+**The hang was one fault wearing three faces.** A send issued from inside
+a GATT callback waits on a permit only that same callback thread can
+release. The thread names — added for exactly this — settle it:
+acknowledgements on `binder:11774_4`, and `binder:11774_4` blocked in the
+gate for the full 24 s. The retry and the longer wait I shipped first
+widened the window rather than fixing the cause, and I had raised this
+hypothesis and then dismissed it on an unsound inference: in `aimed-1` one
+of two waiters got the permit, which I read as proof that acknowledgements
+could arrive, when it could equally have been a *different* write's
+acknowledgement releasing it.
+
+Fixed structurally: `Kernel.bearerWork`, one dedicated daemon thread, and
+the inbound handler posts to it instead of running inline. One thread and
+not a pool — the phases are ordered, and two senders racing one permit was
+the other half.
+
+**`Meet.STALE_MS = 180_000`, and it is a new rule rather than a repair.**
+`shutter-1` had the sender stop correctly while the counterparty polled
+on, because the carriage that would have told it was what failed. Three
+minutes with nothing in `Progress` changing now ends the ceremony on
+either side. Not a protocol timer — the design gives the proposer the say
+and no node runs a clock — but the shell declining to leave a person
+holding a phone that will never move. Three minutes is mine to defend, not
+derived: `shutter-1`'s longest single step was 24 s. Two tests pin it,
+both confirmed failing without the rule.
+
+**Owed, and none of it started.**
+
+- **The shutter floor is assumed, not measured.** 10 ms is shorter than
+  one 60 Hz refresh; it works because these panels are 120 Hz. On a 60 Hz
+  phone it could catch a half-drawn code. `SCREEN_HZ` should come from the
+  display's actual refresh rate.
+- **`colourChannels` is still a high-water mark**, harmless only because
+  `Polychrome.OFFERED` is false.
+- **The symbology, aimed at duration and not range** — queued for the
+  next session [author, 2026-10-07]. See below.
+- **One clean run is weak evidence** that the bearer sequence is closed.
+  Three runs found three failures in three different places; they do all
+  trace to the one root, but that is an argument and not a measurement.
+
+## Queued: more bits a frame at the same module (2026-10-07)
+
+**[author, 2026-10-07]** The range is satisfactory and settled: variation
+in angle and distance was introduced without disrupting the flow, so it
+will work for people standing or sitting at normal conversational range,
+which is the point. **What is wanted now is a shorter exchange — more bits
+in each frame at the same module size.** Not a problem as it stands, but
+there is no reason to leave the benefit on the table.
+
+**This reframes the symbology question entirely.** It was carried as a
+range lever, worth ~30% bigger modules at the same payload. Aimed at
+duration instead, the same capacity advantage becomes **fewer parts at an
+unchanged module**, which is a direct cut in the 48 s optical pass — and
+unlike every other lever tried this session it does not trade against
+anything measured, because the module size that reads at 42 inches is held
+fixed.
+
+**The author's own observation is the lead:** single-bullseye codes are
+common, so QR's three finder patterns are not required of a 2D symbology.
+QR spends them, plus timing, format and alignment, on fixed furniture that
+dominates a 25-byte payload. The candidates:
+
+- **Aztec** — one central bullseye, and **no quiet zone required**, which
+  is 8 of 29 modules back on its own at the current symbol.
+- **Data Matrix** — no bullseye at all: a solid L on two edges and a
+  dashed timing track, with a 2-module quiet zone against QR's 4.
+
+ZXing encodes and decodes both, so this is contained.
+
+**Do it by survey, not by recollection.** The method is the one that
+produced `CHUNK`'s table: drive the real encoder over the real 2,022-byte
+contribution, print capacity against module count at each chunk, and read
+the boundaries off the output. **No capacity figure should be stated from
+memory** — that habit is what produced the `450 / modules` rule, and it
+cost this session two build-and-run cycles. Hold 29 modules fixed, find
+what each symbology carries there, and the part count follows.
+
+**What a result would have to clear to be worth taking:** the decoder has
+to read the new symbology as reliably as the current one at 42 inches. The
+figures to beat are this session's — decode median 293 ms, p90 466 ms,
+zero watchdog restarts — because a denser symbol at the same module is
+exactly the trade that put p90 at 1979 ms and three restarts at 41
+modules. A shorter pass that reintroduces marginal reads is not a gain.

@@ -11,11 +11,13 @@ import org.junit.Test
  * **The figure is the module count, not a pixel count** [author,
  * 2026-10-06]: a code is drawn at the screen's width, so its module is a
  * fixed fraction of that width, and physical width varies far less across
- * phones than resolution does. The field runs of 2026-10-06 calibrate it
- * — a 69-module code read to about 18 inches on a 70 mm screen, so a code
- * reads to about `450 / modules` times its own width — and these
- * assertions are the encoder's own output, so a chunk changed without
- * reading `CHUNK`'s table fails here.
+ * phones than resolution does.
+ *
+ * **These assertions are about the symbol and not about range.** The
+ * module count was once turned into a predicted read distance; three
+ * hardware runs contradicted that and `CHUNK`'s own table carries what
+ * replaced it. What is pinned here is the encoder's output, so a chunk
+ * changed without reading that table fails.
  */
 class OpticalChunkTest {
 
@@ -26,31 +28,49 @@ class OpticalChunkTest {
     @Test
     fun the_chosen_chunk_yields_the_symbol_the_range_was_chosen_for() {
         val x = OpticalExchange(OpticalExchange.CONTRIBUTION, contribution)
-        assertEquals("parts at CHUNK = ${OpticalExchange.CHUNK}", 27, x.count)
+        assertEquals("parts at CHUNK = ${OpticalExchange.CHUNK}", 102, x.count)
         assertEquals(
             "the symbol's modules, which fix the module as a fraction of the " +
                 "code's width and so the range",
-            41,
+            29,
             Optical.matrix(x.frame()).width,
         )
     }
 
-    /** **The chosen chunk leaves the object room to grow**, which the
-     *  next step down does not: 25 modules needs 8-byte parts and 253 of
-     *  them, against a ceiling of 255. */
-    /** **76 is the last chunk at 41 modules**, which is what makes it the
-     *  cheapest point at the best range the 25-to-35-part band can reach:
-     *  one byte more crosses into 45 modules and loses an inch of range,
-     *  and the fewer parts below it buy nothing [author, 2026-10-06]. */
+    /** **20 is the last chunk at 29 modules**, which is what makes it the
+     *  cheapest point at that range: one byte more crosses into 33 modules
+     *  and gives five inches back, and the fewer parts below it buy
+     *  nothing [author, 2026-10-07]. */
     @Test
     fun the_chosen_chunk_is_the_last_one_at_its_module_count() {
         fun modules(chunk: Int) =
             Optical.matrix(OpticalExchange(OpticalExchange.CONTRIBUTION, contribution, chunk).frame()).width
-        assertEquals("at CHUNK", 41, modules(OpticalExchange.CHUNK))
+        assertEquals("at CHUNK", 29, modules(OpticalExchange.CHUNK))
         assertEquals(
             "one byte more is a denser symbol",
-            45,
+            33,
             modules(OpticalExchange.CHUNK + 1),
+        )
+    }
+
+    /**
+     * **The step that reads furthest is shut by the header, not by taste**
+     * — so it is pinned, because it is the whole reason the range stops
+     * at 29 modules. A 25-module symbol takes thirteen bytes: the
+     * five-byte header and eight of payload. That is 253 parts of a
+     * 2,022-byte object against a ceiling of 255, and a wider header to
+     * raise the ceiling does not fit in the symbol.
+     */
+    @Test
+    fun the_twenty_five_module_step_is_shut_by_the_header_s_ceiling() {
+        fun at(chunk: Int) = OpticalExchange(OpticalExchange.CONTRIBUTION, contribution, chunk)
+        assertEquals("25 modules needs 8-byte parts", 25, Optical.matrix(at(8).frame()).width)
+        assertEquals("and 253 of them", 253, at(8).count)
+        assertTrue("which is within two of the ceiling", 255 - at(8).count <= 2)
+        assertEquals(
+            "a header two bytes wider spills the symbol, giving the range back",
+            29,
+            Optical.matrix(at(8 + 2).frame()).width,
         )
     }
 

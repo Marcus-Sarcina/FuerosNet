@@ -168,7 +168,10 @@ dial (`runtime.rs` ~945), candidate counts and reflexive-address found at
 | `meet.step` | from, to, trigger (tap or kernel), ms | `Meet.advance`, every transition |
 | `meet.stop` | reason | `Meet.stop` |
 | `meet.note` | the line | `Meet.note`, `Front.note` |
-| `qr.shown` / `qr.read` | which, bytes, modules, **module_mm**, **reads_at_mm**, **channels** where a frame is colour, facing, decode attempts, decode ms, **channel** on a colour read | `MeetActivity` render, `QrCamera.readOne/decode/colour` |
+| `qr.shown` / `qr.read` | which, bytes, modules, **module_mm**, **channels** where a frame is colour, facing, decode attempts, decode ms, **channel** on a colour read. No predicted read distance: `reads_at_mm` was dropped on 2026-10-07 after three runs contradicted the rule behind it | `MeetActivity` render, `QrCamera.readOne/decode/colour` |
+| `qr.frame` | which, **channels** separated out of one capture, fresh, attempts — the evidence a colour decision rests on | `QrCamera.colour` |
+| `camera.lens` | which, id, facing, **fixed_focus**, nearest_mm, hyperfocal_mm, af_modes, focal_mm, sensor_mm; every camera once a process | `QrCamera.lens/lensOf` |
+| `camera.focus` | which, facing, **af** state, ae, **focus_mm**, iso, **exposure_us**, attempts — on a change of AF state and otherwise about once a second | `QrCamera.focusWatch` |
 | `optical.colour` | state (`refused`), how many of this side's parts the other held when it was given up on | `MeetActivity.optical`'s fall back to the monochrome format |
 | `camera` | open, close, error, template, exposure and anti-banding as set | `QrCamera`, `FaceCamera` |
 | `face.frames` | delivered, timeouts (5 s open, 2 s frame), sizes; never pixels | `FaceCamera.open/frame` |

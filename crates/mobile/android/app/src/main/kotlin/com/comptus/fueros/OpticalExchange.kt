@@ -15,9 +15,9 @@ package com.comptus.fueros
  * parts this device holds, which is what lets the other side advance. So
  * each screen changes as the other side reads it, nobody skips a part, and
  * both keep their last part up until the other's header says it has them
- * all; [done] is that, both ways. A smaller code reads at arm's length
- * where one dense code did not, and a screen that changes every second or
- * so tells the person that something is happening.
+ * all; [done] is that, both ways. A smaller code is acquired in a
+ * fraction of the time one dense code took — and a screen that changes
+ * every second or so tells the person that something is happening.
  *
  * Pure Kotlin: the camera and the kernel are the caller's.
  */
@@ -36,8 +36,8 @@ class OpticalExchange(
         /** The header's length: version, which, index, count, received. */
         const val HEADER = 5
         /**
-         * **Parts of 76 bytes: 27 of them, for a five-minute ceremony**
-         * [author, 2026-10-06].
+         * **Parts of 20 bytes: 102 of them, for acquisition** — and *not*
+         * for read distance, which this does not buy.
          *
          * **The quantity that matters is the module count, and nothing
          * here is in pixels** [author, 2026-10-06]. A code is drawn at the
@@ -45,43 +45,71 @@ class OpticalExchange(
          * symbol's modules; phone *physical* width varies far less across
          * models and generations than resolution does, so modules per
          * screen-width code is the figure that carries over and a pixel
-         * count is not. Calibrated on the field runs of 2026-10-06 — a
-         * 69-module code read to about 18 inches on a 70 mm screen, so a
-         * module of 1.0 mm read to 450 of itself — the rule is:
+         * count is not. That part holds.
          *
-         * **a code reads at about `450 / modules` times its own width.**
+         * **What does not hold: `450 / modules` as a read distance.** A
+         * rule was fitted here to one observation — a 69-module code read
+         * to about 18 inches on a 70 mm screen — and used to predict
+         * range. **Three hardware runs have contradicted it:**
          *
-         * Measured with the real encoder over a 2,022-byte contribution,
-         * and the boundaries are exact rather than sampled:
+         * | run | modules | module | measured |
+         * |---|---|---|---|
+         * | 2026-10-06 | 69 | 0.97 mm | ~18 in |
+         * | `mono102`, 2026-10-07 | 29 | 2.14 mm | ~12 in |
+         * | `aimed-1`, 2026-10-07 | 29 | 2.14 mm | **~24 in** |
          *
-         * | chunk | parts | modules | reads at | on a 70 mm screen |
-         * |---|---|---|---|---|
-         * | 256 | 8 | 69 | 6.5 × width | 18 in |
-         * | 128 | 16 | 53 | 8.5 × | 23 in |
-         * | 92–96 | 22 | 45 | 10 × | 28 in |
-         * | 77–91 | 23–27 | 45 | 10 × | 28 in |
-         * | **76** | **27** | **41** | **11 ×** | **30 in** |
-         * | 56–75 | 28–37 | 41 | 11 × | 30 in |
-         * | 48 | 43 | 37 | 12 × | 34 in |
-         * | 20 | 102 | 29 | 15.5 × | 43 in |
-         * | 8 | 253 | 25 | 18 × | 50 in |
+         * The module grew 2.2-fold between the first two rows and the
+         * distance *fell*; the third row is the same symbol as the second
+         * and reads twice as far, because the camera was told where to
+         * focus and meter (`QrCamera.middle`). **Within 1.0 to 2.1 mm the
+         * module did not determine the read distance and the camera's
+         * control loop did** [measured, 2026-10-07]. At 12 inches a
+         * 2.14 mm module already lands about eight pixels a module, four
+         * times what a decoder needs, so pixel resolution was never the
+         * binding constraint and the rule was fitting noise.
          *
-         * **Why 76 and not any other chunk in the 25-to-35-part band**
-         * [author, 2026-10-06]: 41 modules is the best range the band can
-         * reach — 37 modules needs 43 parts — and it holds from chunk 56
-         * all the way to 76, where the next byte crosses into 45. So 76 is
-         * the **cheapest** way to the band's best range, and spending the
-         * band's remaining parts buys nothing at all: 32 parts at chunk 64
-         * reads no further than 27 at chunk 76.
+         * No distance is predicted here any more, and `qr.shown` no
+         * longer reports one. A figure wrong in the optimistic direction
+         * sent two build-and-run cycles after the wrong variable.
          *
-         * **The five minutes it is chosen for.** Run 4 of 2026-10-06
-         * measured 43.0 s from `cer.begin` to the witness request with
-         * eight parts, and a median 0.5–0.6 s a part; nineteen more parts
-         * is about ten seconds, so the request goes out near 53 s. The
-         * witnesses' four-minute floor runs from *their* receipt of it
-         * (design §7.1), which puts the record at about **4 min 55 s**
-         * after begin, before the permission prompts and the proximity tap
-         * that precede it.
+         * **What a coarser symbol does buy, measured: acquisition.**
+         * Against chunk 76's 27 parts of 41 modules, on the same phones
+         * and the same object:
+         *
+         * | | 27 × 41 modules | 102 × 29 modules |
+         * |---|---|---|
+         * | optical pass | 83.6 s | **57.3 s** |
+         * | a part | 3.1 s | **0.56 s** |
+         * | decode median | 365 ms | 340 ms |
+         * | decode p90 | 1979 ms | **390 ms** |
+         * | watchdog restarts | 3 | **0** |
+         *
+         * Four times the parts and **26 s faster end to end**. The p90
+         * collapsing and the restarts going to zero are the same fact: at
+         * 41 modules a real fraction of reads were marginal and each
+         * stall cost twenty seconds, and at 29 almost none are. So the
+         * parts are cheap and the margin is what they buy — which is a
+         * better reason for this chunk than the one it was chosen for.
+         *
+         * **Why not 8, which is coarser still.** Not a judgement call:
+         * 253 parts is within two of the header's ceiling, since [index]
+         * and the count are a byte each, so the object could not grow.
+         * Widening them does not help, because a 25-module symbol holds
+         * exactly thirteen bytes — the five-byte header and eight of
+         * payload — so a seven-byte header spills into 29 modules.
+         *
+         * **What this gives up.** The 25-to-35-part band of 2026-10-06,
+         * deliberately [author, 2026-10-07]. And the four-to-six-foot
+         * target is not reached: 24 inches is where `aimed-1` landed, and
+         * the lever that moved it was the camera. The exposure is the next
+         * one — that run metered 42 to 66 ms, which smears a handheld read
+         * of millimetre features whatever the symbol is.
+         *
+         * **What it costs in time.** At the measured 0.56 s a part the
+         * optical pass is about **57 s**. The witnesses' four-minute floor
+         * runs from *their* receipt of the witness request (design §7.1)
+         * and the request goes out after the pass, so the floor is what
+         * sets the record's time either way.
          *
          * **Error correction stays at M.** Measured, L buys about a fifth
          * fewer parts at the same module count and nothing in range, which
@@ -106,7 +134,7 @@ class OpticalExchange(
          * ([Polychrome]), which divides the part count by three and
          * degrades to monochrome when a camera cannot separate them.
          */
-        const val CHUNK = 76
+        const val CHUNK = 20
 
         /**
          * **The part size when a frame carries three of them** — eleven
@@ -181,15 +209,31 @@ class OpticalExchange(
      * works — it carries full headers, so each channel is a self-standing
      * part and one of them brings the count — and true for every frame
      * after it.
+     *
+     * **A short frame at the object's end goes out under full headers
+     * even when the exchange is compressed.** The sender has to put
+     * something in every channel, and the presentation pads a short frame
+     * by repeating the last part it was given — but a compressed header
+     * says only which *frame* a part belongs to, and the reader takes the
+     * index from the channel it arrived in. So a repeated part read in
+     * the next channel along decodes as the part after the last one,
+     * which does not exist, and the reader stops the meeting on it. Run 2
+     * of 2026-10-07 died exactly there, one part short of 184 with
+     * `"a code of the exchange did not read as one"`: 184 is 61 × 3 + 1,
+     * so its final frame carried one real part and two poisoned copies.
+     * Under full headers the copies carry their own true index and read
+     * as the duplicates they are.
      */
     fun colourFrames(compressed: Boolean): List<ByteArray> = synchronized(lock) {
         val first = minOf(theirGot, count - 1)
         val frame = first / Polychrome.CHANNELS
+        val base = frame * Polychrome.CHANNELS
+        val short = base + Polychrome.CHANNELS > count
         (0 until Polychrome.CHANNELS).mapNotNull { ch ->
-            val i = frame * Polychrome.CHANNELS + ch
+            val i = base + ch
             if (i >= count) {
                 null
-            } else if (compressed) {
+            } else if (compressed && !short) {
                 Polychrome.header(frame, got) + parts[i]
             } else {
                 byteArrayOf(VERSION.toByte(), which.toByte(), i.toByte(), count.toByte(), got.toByte()) + parts[i]
@@ -271,6 +315,27 @@ class OpticalExchange(
         theirs[index] = bytes.copyOfRange(HEADER, bytes.size)
         while (got < theirCount && theirs[got] != null) got++
         if (got == theirCount) Took.COMPLETE else Took.ACCEPTED
+    }
+
+    /**
+     * **Whether the other side is partitioned coarser than a colour frame
+     * carries** — so, while this side is presenting colour, whether they
+     * have fallen back to monochrome.
+     *
+     * No signal is needed for it: a colour part is at most [CHUNK_POLY]
+     * bytes and a monochrome one is up to [CHUNK], and the two formats
+     * share the five-byte header, so the length of a part that arrives is
+     * the only thing that distinguishes them — and it distinguishes them
+     * exactly. A short last part cannot make a monochrome partitioning
+     * look like a colour one, because it is short and not long.
+     *
+     * **The fall back has to be symmetric** [author, 2026-10-06]: the two
+     * presentations are lock-step, and a side left in colour after the
+     * other has gone monochrome reads nothing of theirs at all, so it is
+     * the one side that can never time out on its own.
+     */
+    fun theirsAreCoarse(): Boolean = synchronized(lock) {
+        theirCount > 0 && theirs.any { it != null && it.size > CHUNK_POLY }
     }
 
     /** Whether every part of theirs is held. */

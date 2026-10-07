@@ -75,14 +75,46 @@ class Meet(
         const val PATIENCE_MS = 60_000L
 
         /**
-         * How long the contribution is shown in colour before this device
-         * falls back to the monochrome format ([Polychrome]). Five seconds
-         * is several frames at the field runs' measured rate, so a camera
-         * that can separate the channels has had many chances, and one
-         * that cannot has cost five seconds of a ceremony that runs for
-         * minutes [author, 2026-10-06].
+         * **How long the conversation may make no progress at all before
+         * the ceremony is given up on.**
+         *
+         * This is not a protocol timer — the design gives the proposer the
+         * say over when to propose and no node runs a clock. It is the
+         * shell refusing to leave a person holding a phone that will never
+         * move again. Two runs ended that way: `aimed-1` left the proposer
+         * at `VERIFIERS` for minutes after a dropped carriage, and
+         * `shutter-1` had the sender stop itself correctly while **the
+         * counterparty went on polling**, because nothing told it and
+         * nothing was going to.
+         *
+         * Three minutes is far longer than any step has ever taken — the
+         * whole of `shutter-1` to the witness request was 339 s, and its
+         * longest single step 24 s — so it fires only where something is
+         * genuinely never coming. It is a figure to adjust if practice
+         * disagrees, not a derived one.
          */
-        const val COLOUR_PROBE_MS = 5_000L
+        const val STALE_MS = 180_000L
+
+        /**
+         * **How long the colour probe may go without progress** before
+         * this device falls back to the monochrome format ([Polychrome]).
+         *
+         * The clock is restarted by every code read, so this is an
+         * allowance on *no progress* rather than a budget for the probe:
+         * the time two people spend picking the phones up, re-arranging
+         * their grip and getting the two cameras aimed at each other is
+         * not colour's to answer for, and neither is a read that is merely
+         * slow. **Forty-five seconds** is about eighty frames at the field
+         * runs' measured rate, and the first colour run's acquisitions
+         * took 7.3 s and 10.5 s, so a probe that is working has room and
+         * one that is not costs forty-five seconds of a ceremony that runs
+         * for five minutes.
+         *
+         * [author, 2026-10-06]: there should either be no limit on the
+         * first frame's display or read or an extremely generous one, and
+         * the later frames liberal with it too.
+         */
+        const val COLOUR_PROBE_MS = 45_000L
     }
     /** The adoption this meeting carries, as chosen at D1a. */
     val adopt: Adopt get() = kind.adopt
@@ -119,17 +151,83 @@ class Meet(
     var exchange: OpticalExchange? = null
 
     /**
-     * When this device began presenting the contribution in colour, or
-     * null while it is not ([Polychrome]). What the fall back is timed
-     * from: a reader whose camera cannot separate the channels decodes
-     * nothing at all from a colour frame, so it reports holding none of
-     * this side's parts and there is nothing else to read the failure off.
+     * **When the colour probe last made progress**, or null while this
+     * device is not presenting in colour ([Polychrome]): set when the
+     * colour exchange opens and again on every code this side reads, so
+     * [COLOUR_PROBE_MS] measures a probe that has gone quiet rather than
+     * one that is merely slow.
      */
     @Volatile var colourSince: Long? = null
 
     /** Set once this device has fallen back to the monochrome format, so
      *  it does not try colour again inside one ceremony. */
     @Volatile var colourRefused: Boolean = false
+
+    /** Set once both cameras have shown they separate all three channels,
+     *  so the compressed format is licensed and the run records it the
+     *  once rather than on every redraw. */
+    @Volatile var colourConfirmed: Boolean = false
+
+    /** **The most planes this device's camera has separated out of one
+     *  captured frame** ([Polychrome]). Three is this half of the evidence
+     *  that colour works; the other half is the counterparty's `got`
+     *  reaching three, which says the same of theirs. */
+    @Volatile var colourChannels: Int = 0
+
+    /** What the colour probe has come to, for the screen that presents
+     *  the contribution ([colourVerdict]). */
+    enum class Colour {
+        /** Still probing: present the three channels under full headers,
+         *  which is the format a reader can place without the count. */
+        PROBE,
+        /** Both cameras have shown they separate all three: present the
+         *  compressed format, three parts a frame under one header. */
+        COMPRESS,
+        /** Give colour up for this ceremony and re-partition at the
+         *  monochrome chunk. */
+        FALL_BACK,
+    }
+
+    /**
+     * **Whether to present the contribution in colour, and in which of the
+     * two colour formats** ([Polychrome]).
+     *
+     * The two presentations are lock-step — each side shows the part the
+     * other still needs — so **the format is one decision for the channel
+     * and not one per direction** [author, 2026-10-06]. A side on
+     * three-part frames and a side on one-part frames walk their sequences
+     * at different rates, and the side that finishes stops advancing the
+     * other, leaving parts undelivered with nothing left to trigger them.
+     *
+     * Three rules, each symmetric:
+     *
+     * - **Compress only when both cameras have separated all three
+     *   channels.** Each side sees both halves — its own best capture in
+     *   [colourChannels], and the counterparty's `got` reaching three,
+     *   which says the same of theirs — so both compute the same
+     *   conjunction and neither can compress alone. Dropping the index out
+     *   of the header is safe only for a reader that recovers it from the
+     *   plane a part arrived in, which is the counterparty's camera and
+     *   not this one.
+     * - **Follow the other side out of colour.** A part of theirs longer
+     *   than a colour frame carries says they have re-partitioned at the
+     *   monochrome chunk ([OpticalExchange.theirsAreCoarse]). A side left
+     *   in colour reads nothing at all of a monochrome presentation, so it
+     *   is the one side whose own allowance can never expire.
+     * - **Give up after [COLOUR_PROBE_MS] without a full capture.** The
+     *   clock is restarted by any capture that separated all three, and
+     *   not by one that separated fewer, which is evidence against colour
+     *   rather than progress.
+     */
+    fun colourVerdict(x: OpticalExchange, now: Long): Colour {
+        if (colourRefused) return Colour.FALL_BACK
+        if (x.theirsAreCoarse()) return Colour.FALL_BACK
+        if (colourChannels >= Polychrome.CHANNELS && x.theirReceived() >= Polychrome.CHANNELS) {
+            return Colour.COMPRESS
+        }
+        val began = colourSince ?: return Colour.PROBE
+        return if (now - began > COLOUR_PROBE_MS) Colour.FALL_BACK else Colour.PROBE
+    }
 
     /** Told when the person accepts the brief: the kernel's, so the
      *  ceremony begins there, which is the one question it asks. */
@@ -369,6 +467,9 @@ class Meet(
     /** When the queries went out and when the last answer landed, on the
      *  caller's clock; what the patience is measured from. */
     private var queriesOutAt = 0L
+    /** When the conversation last moved in any way this side can see: the
+     *  clock [STALE_MS] runs against. */
+    private var lastProgressAt = 0L
     private var lastAnswerAt = 0L
     /** The person said to go on without the unanswered queries. */
     private var goOn = false
@@ -855,11 +956,22 @@ class Meet(
         val live = synchronized(lock) { opened && (step == Step.VERIFIERS || step == Step.REVIEW) }
         if (!live) return
         val p = c.progress() ?: return
-        synchronized(lock) {
+        val stale = synchronized(lock) {
+            // **anything at all moving is progress** — `Progress` compares
+            // by value, so this is every figure the conversation exposes
+            if (p != progress || lastProgressAt == 0L) lastProgressAt = nowMs
             progress = p
             witnessesMine = p.attesting.count { nomineesMine.contains(it) }
             witnessesTheirs = p.attesting.count { nomineesTheirs.contains(it) }
             changed()
+            nowMs - lastProgressAt > STALE_MS
+        }
+        // **a conversation that will never move again is not left to the
+        // person** ([STALE_MS]). The counterparty may have stopped without
+        // being able to say so: a carriage that would have told them is
+        // the very thing that failed.
+        if (stale) {
+            return stop("nothing has moved for ${STALE_MS / 1000} s; the other phone may have stopped")
         }
         if (step() != Step.VERIFIERS) return
         if (p.proposed) {

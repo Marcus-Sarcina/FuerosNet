@@ -12345,6 +12345,239 @@ covered the rule at all until NET-028 — which is why nothing flagged the
 mismatch. The id was written from memory, which is the same habit as the
 §13.2-for-§6.4 error of the preceding day.
 
+### 2026-10-07 (the shutter, the thread under the bearer, and a record)
+
+**Three and a half feet, and the shutter was the lever.** A floor under
+the frame rate is a ceiling over the exposure, so the request now asks for
+the briskest range the camera offers whose floor does not exceed one
+screen refresh, with a stop and a half of deliberate underexposure — a
+code on a screen is the highest contrast a camera is ever handed, so
+underexposing costs it nothing and keeps the white modules from blooming
+over the black. The camera's own best floor was 30 fps, and the
+compensation took the shutter from **42–66 ms down to 10**. The range went
+from 24 inches to **at least 42**.
+
+So the whole of the range came from the camera, and none of it from the
+code: 12 inches to begin with, 24 once focus and metering were pointed at
+the middle of the frame, 42 once the shutter was capped. The symbol never
+changed across the last two.
+
+**The bearer's work came off the Bluetooth stack's thread, which is what
+had been hanging the ceremonies.** A packet arriving was assembled and
+answered inline on whatever thread the stack delivered it on — a binder
+thread, and the same binder thread that delivers write acknowledgements.
+Writes are serialised on their acknowledgement, so a send on that thread
+waited on a permit only that thread could release. The thread names put it
+beyond doubt: acknowledgements arrived on `binder:11774_4`, and
+`binder:11774_4` sat in the gate for twenty-four seconds and then threw a
+ceremony's back-pointers away. One dedicated thread now carries it, not a
+pool, since the phases are ordered and two senders racing for one permit
+was the other half of the same fault.
+
+**And a conversation that will never move again stops itself.** The run
+before this one had the sender fail *correctly* — it stopped with a reason
+rather than hanging — while the counterparty went on polling, because the
+carriage that would have told it was the very thing that failed. Three
+minutes with nothing in the conversation's progress changing now ends the
+ceremony on either side. Not a protocol timer: the design gives the
+proposer the say over when to propose and no node runs a clock. This is
+the shell refusing to leave a person holding a phone that will never move.
+
+**The result: meeting `19b596fd`, four signers, 69.7 s from the brief to
+done** — the fastest complete ceremony yet, against 76.6 s for the
+27-part build and 105.1 s for the first. Optical pass 48.4 s for 102
+parts, decode median 293 ms, p90 466 ms, **no watchdog restarts, no failed
+bearer sends, and not one contended write**.
+
+### 2026-10-07 (the camera, not the code, and a carriage that hung a ceremony)
+
+**The rule that said a code reads at `450 / modules` times its own width
+is dead, and it was mine.** It was fitted to a single observation — a
+69-module code read to about 18 inches — and then used to predict range in
+a source table, in `qr.shown`, and through two rounds of design argument.
+Three hardware runs contradicted it: 0.97 mm modules read to 18 inches,
+2.14 mm modules to **12**, and the *same* 2.14 mm modules to **24** once
+the camera was told where to focus and meter. The module grew 2.2-fold and
+the distance fell. At 12 inches a 2.14 mm module already lands about eight
+pixels a module, four times a decoder's need, so pixel resolution was
+never the binding constraint.
+
+**What was binding was the camera's control loop, which nobody had
+looked at.** `QrCamera` asked for continuous autofocus with **no focus
+region, no metering region, and a null capture callback** — so focus went
+wherever the whole-frame algorithm liked, which at arm's length is the
+counterparty's phone by accident and at three feet is the room; metering
+averaged a bright screen against a dim one; and nothing was read back to
+say which. Regions on the middle third of the frame **doubled the range**
+and dropped the sensitivity from ISO 3395 to about 300. The lens now
+reports itself — every camera's focus limits once a process, and its
+autofocus state, focus distance, exposure and ISO as it runs — so the next
+question about range is answered with a measurement instead of a rule.
+
+**`CHUNK` stays at 20, for a different reason than it was chosen for.**
+Against 27 parts of 41 modules, the 102 × 29 point ran the optical pass in
+**57.3 s against 83.6**, decode p90 **390 ms against 1979**, and **no
+watchdog restarts against three**. Four times the parts and 26 seconds
+faster end to end, because at 41 modules a real fraction of reads were
+marginal and every stall cost twenty seconds. The parts are cheap and the
+margin is what they buy. No distance is predicted anywhere any more.
+
+**And a dropped Bluetooth carriage hung a ceremony.** A write's
+acknowledgement took about five seconds; two sends were waiting on the
+bearer's single permit, and the second took it six milliseconds before the
+first gave up and discarded its packet — which carried the back-pointers.
+The kernel holds no copy, so the counterparty waited at `VERIFIERS` on a
+phase that no longer existed anywhere, polling, until the person closed
+it. A wait that expires is now waited again rather than given up on, since
+the gate attempted nothing and the packet is still in hand; the wait is
+8 s with a 24 s ceiling; a stack that answers *busy* is offered the packet
+again; and **a carriage that still will not cross ends the ceremony** with
+a reason instead of leaving one side waiting on nothing. The thread each
+write arrives on is on the record, because the two-waiter race was
+inferred from overlapping timestamps rather than measured.
+
+### 2026-10-07 (the colour path withdrawn, and the range bought with parts)
+
+**The second colour run got far enough to kill the format.** The decision
+logic worked — colour confirmed, the compressed format engaged — and that
+is how the run reached the two defects the first run's twelve-second fall
+back had hidden.
+
+**The object's last frame cannot be sent in the compressed format.** A
+compressed header names only the frame; the reader takes the index from
+the channel a part arrived in. The sender must fill all three channels, so
+a short frame is padded by repeating the last part — and the repeat, read
+in the next channel along, decodes as the part *after* the last one, which
+does not exist. `184 = 61 × 3 + 1`, so the final frame carried one real
+part and two poisoned copies, and one phone stopped there holding 183 of
+184. It could not have ended otherwise for any count that is not a
+multiple of three. A short frame now goes out under full headers even
+mid-compression, so the copies carry their own index and read as the
+duplicates they are.
+
+**And the conjunction that was meant to keep a one-plane camera out of the
+compressed format did not, because it remembered the best capture ever
+taken rather than the recent ones.** One phone separated three planes once
+and one or two thereafter, compressed anyway, and advanced about a part a
+frame over 184 — stranded at 125 while its counterparty reached 183.
+
+**The instrumentation was the worst of it.** `reads_at_mm` applies the
+monochrome `450 × module` calibration to colour frames, and reported
+1137 mm for a code that read *closer* than the 670 mm monochrome one. A
+figure wrong in the optimistic direction is worse than none; colour frames
+no longer emit one.
+
+**Colour is off.** A camera's `YUV_420_888` carries chroma at half linear
+resolution and a channel's contrast against its neighbours is nothing like
+black against white, so the format read worse at a larger module — 2.53 mm
+against 1.49 mm, and closer. The range it was built for is bought more
+cheaply by a coarser monochrome symbol. The format and its tests are kept;
+what it cost to learn is the measurement, not the code.
+
+**The range, bought with parts** **[author, 2026-10-07]**: bigger modules
+is what this is for, and the three constraints — four to six feet, a 2 KB
+object, 25 to 35 parts — are not simultaneously satisfiable. The author
+chose the range. Surveyed with the encoder over the real contribution, the
+cheapest chunk at each module count is 8/253/25, **20/102/29**, 35/58/33,
+55/37/37 and 76/27/41, reading at 50, 43, 38, 34 and 30 inches on a 70 mm
+screen.
+
+**`CHUNK` 76 → 20: 102 parts of 29 modules, reading at about 43 inches**
+against the 30 the 27-part point reached. Not the 25-module step that
+reads at 50, for two reasons that are not judgement calls: 253 parts is
+within two of the header's one-byte ceiling, so the object cannot grow,
+and widening the header does not help because a 25-module symbol holds
+exactly thirteen bytes — a seven-byte header spills into 29 modules and
+gives the range back. And the lockstep costs about 1.05 s a part, measured
+off run 1's 27 parts in 68 s of wall clock less its two watchdog restarts,
+which is 1 min 47 s at 102 parts and 4 min 24 s at 253. The four-minute
+witness floor still dominates either way.
+
+### 2026-10-07 (the colour exchange on hardware, and a decision on the wrong camera)
+
+**The polychrome format reads.** One phone separated all three channels
+out of a single captured frame — `channel` 0, 1 and 2 at the same
+`attempts` count, 16 bytes each — and the frame geometry came out as
+designed: 29 modules, 2.14 mm a module, reading at 962 mm against the
+monochrome path's 1.49 mm and 670 mm. The chroma at half linear
+resolution, which was the format's one real risk, is survivable on
+hardware as `PolychromeChromaTest` said it would be on the JVM.
+
+**And it fell back anyway, three times over.**
+
+**The decision ran between the channels of one frame.** The camera
+delivered each separated plane on its own dispatch, each posting its own
+redraw, and the redraw is where the colour decision lives: on both phones
+the refusal fired in the 15 ms gap between the first channel's delivery
+and the second, on evidence that was two channels short because the other
+two had not been handed over yet. The camera now separates a whole capture
+before it delivers any of it, and the delivery's own size is how many
+planes came out, so there is nothing for the decision to interleave with.
+
+**The allowance expired before the first read could land.** Five seconds
+ran from the moment the exchange opened — before the camera was even
+open — and the first colour acquisition took 7.3 s on one phone and 10.5 s
+on the other. **[author, 2026-10-07]**: there should be no limit on the
+first frame's display or read or an extremely generous one, and the later
+frames liberal too; the time two people spend picking the phones up,
+re-arranging their grip and getting the two cameras aimed is not colour's
+to answer for. Forty-five seconds now, measured on a probe that has gone
+*quiet* — restarted by any capture that separated all three channels, and
+pointedly not by one that separated fewer, since that is evidence against
+colour rather than progress. The camera's stall watchdog went 20 s → 40 s
+with it, so a restart cannot land inside a colour acquisition and throw
+away the planes already separated.
+
+**The decision was taken on the wrong camera, and then on the wrong
+number of them.** It asked only whether the counterparty held three parts.
+The first correction was that dropping the index out of the header is safe
+only for the reader that has to recover it, which is the counterparty's
+camera and not this one. **The author's correction went further and is the
+one that matters: the two presentations are lock-step, so the format is
+one decision for the channel and not one per direction** — each side shows
+the part the other still needs, so a side on three-part frames and a side
+on one-part frames walk their sequences at different rates, and the side
+that finishes stops advancing the other, leaving parts undelivered with
+nothing left to trigger them. So **both cameras must have shown they
+separate all three**, which each side computes from the same two facts —
+its own best capture, and the counterparty's `got` reaching three — and
+therefore cannot diverge on.
+
+**That left one deadlock, which the same rule closes.** A side that falls
+back alone re-partitions at the monochrome chunk, and a side left in
+colour reads *nothing at all* of a monochrome presentation — so its own
+allowance, restarted by its own reads, would never expire and the exchange
+would stop dead. Nothing new has to be sent to fix it: a colour part is at
+most eleven bytes and a monochrome one up to seventy-six, and the two
+formats share the five-byte header, so **the length of a part is what says
+which format the other side is on**, and it says it exactly — a short last
+part cannot make a monochrome partitioning look like a colour one, because
+it is short and not long.
+
+**And the fall back restarts both sequences from the first part**
+**[author, 2026-10-07]** — the side that falls back starts over and waits
+for the other to read its first monochrome part and re-present its own, or
+parts are dropped at one end of the sequence or the other. Checked against
+the code and it already held: the fall back nulls the exchange, the next
+redraw builds a fresh one at the monochrome chunk with every counter at
+zero, and its index stays at the first part until the other side's header
+reports holding it. It was holding by accident of three separate facts
+with nothing testing it, which is one refactor from gone, so it is pinned
+now by a test that drives a real mid-exchange fall back and then asserts
+both objects assemble byte for byte.
+
+The three rules now sit in `Meet.colourVerdict`, off the Activity and
+under test: two of the seven new tests fail against the predicate as it
+shipped, and a third against the rule that closes the deadlock.
+
+**What else the run settled.** The ceremony completed — meeting
+`b5a68acc`, four signers, 105 s from the brief to done — and
+`takeCarriage` succeeded on both phones, so the prekey handover has now
+run on hardware. The camera's 20 s stall, carried as an unexplained defect
+since the fourth field run, is the watchdog firing: three `op=restart`
+warnings in one 83 s optical pass, each after 500-odd frames decoding
+nothing. The stall is real; it was never unnamed.
+
 ### 2026-10-06 (a client addresses a distant node itself)
 
 The ruling of 2026-10-05 — *a light client does not need its patron or infra
