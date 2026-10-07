@@ -92,13 +92,19 @@ class OpticalExchange(
          *
          * **Four to six feet is not this lever's**, at any part count the
          * header's one-byte fields admit: 25 modules is its floor and
-         * costs 253 parts of the 255 available. What reaches further is
-         * carrying less — a 32-byte commitment optically with the key
-         * material following on the bearer and checked against it — or
-         * carrying more per frame: three ordinary QRs, one per colour
-         * channel, each channel an independent part, which divides the
-         * part count by three and degrades to monochrome for free
-         * [proposed, author, 2026-10-06; not built].
+         * costs 253 parts of the 255 available.
+         *
+         * **Carrying less optically is declined** [author, 2026-10-06]: a
+         * 32-byte commitment in the code with the key material following
+         * on the bearer would reach four feet in one symbol, and the key
+         * travels in the code at the meeting and is pinned at first
+         * contact (`wire-format.md` §14.3.1, design §12.3). That is
+         * settled and not an avenue.
+         *
+         * What is left is carrying **more per frame**: three ordinary QRs,
+         * one per colour channel, each channel an independent part
+         * ([Polychrome]), which divides the part count by three and
+         * degrades to monochrome when a camera cannot separate them.
          */
         const val CHUNK = 76
 

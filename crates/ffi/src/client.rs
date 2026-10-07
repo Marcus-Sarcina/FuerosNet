@@ -1316,6 +1316,45 @@ impl Participant {
         })
     }
 
+    /// **This device's prekey handover for the co-present counterparty**
+    /// (`wire-format.md` §14.3.4): its signed bundle and one one-time key,
+    /// anchored to the ceremony and sealed under the local session, for
+    /// the shell's bearer to carry like the capture key.
+    ///
+    /// **What it is for**: opening an end-to-end channel needs the peer's
+    /// published bundle and fetching one needs a node, so a pair whose
+    /// ceremony completed with no node reachable (design §6.4) would
+    /// otherwise hold a record and be unable to say a word to each other.
+    /// Handed over here, neither asks anybody.
+    pub fn prekey_carriage(&self) -> Result<Vec<u8>, Refused> {
+        crate::diag::call("prekey_carriage", || {
+            let out = self
+                .handle
+                .with_blocking(|c| c.prekey_carriage())
+                .map_err(|a| Refused::new(format!("{a:?}")))?;
+            let _ = self.save();
+            Ok(out)
+        })
+    }
+
+    /// The counterparty's handover, opened and kept: the bundle verified
+    /// under the identity pinned at `wire-format.md` §14.3.1 and held as
+    /// prefetched material, the one-time key kept for the first session
+    /// opened with that device.
+    ///
+    /// A handover of another ceremony, or one whose bundle does not
+    /// verify, is refused: the signature is what makes the material
+    /// trustworthy and never the channel it arrived on.
+    pub fn take_prekey_carriage(&self, bytes: Vec<u8>) -> Result<(), Refused> {
+        crate::diag::call("take_prekey_carriage", || {
+            self.handle
+                .with_blocking(move |c| c.take_prekey_carriage(&bytes))
+                .map_err(|a| Refused::new(format!("{a:?}")))?;
+            let _ = self.save();
+            Ok(())
+        })
+    }
+
     /// What the channels achieved, for the screen: read from the ceremony,
     /// not measured again.
     #[must_use]

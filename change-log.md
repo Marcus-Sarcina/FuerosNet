@@ -12413,6 +12413,58 @@ catalogue 483 → 488. A fifth
 instance of the §13.2-for-§6.4 citation error, in the kernel's own comments,
 corrected with it.
 
+### 2026-10-06 (the prekey handover wired, and the session's cryptography vectored)
+
+**The handover had been specified, encoded, schema-checked and fixtured, and
+emitted by nothing.** §14.3.4 and NET-025 described an object no code
+produced, so a pair whose ceremony completed with no node reachable — which
+is what design §6.4's escape leaves behind — held a record and could not
+say a word to each other. The kernel now builds one and takes one, and the
+FFI carries the pair; the shell's bearer phase is the remaining half and is
+shell work.
+
+**What the handover actually buys needed one more thing than the object.**
+With a peer's bundle in hand a send still asked a node for a one-time key,
+so the handover alone changed nothing. The handed key is now spent on the
+first session opened with that device, and that is what makes the send emit
+no prekey request at all. **The first cut of this was wrong and four tests
+said so**: it opened a session from *any* prefetched material, which would
+have destroyed one-time forward secrecy on every first message — §7.8 has
+the key requested *when* a session opens, never prefetched, and
+reusable-only is the pool-ran-dry case and not a shortcut. Narrowed to a
+handed key, which is the only thing that opens a session without asking.
+
+Proved by test: two devices through the optical exchange hand over, and a
+send then produces one initial message, **no `PrekeyRequest`**, which the
+counterparty opens. A handover naming another party's bundle is refused, as
+is another ceremony's id, and bytes of no session do not open at all —
+the signature is what makes the material trustworthy and never the channel.
+Acceptance CER-54.
+
+**And the local session's cryptography is vectored at last.** It is the one
+part of §14.3 that is not the shell's: §14.3.2 fixes the key's derivation,
+the cipher, the nonce in front of the ciphertext and the ceremony-id as
+associated data, and until now nothing checked any of it. That was
+survivable only because there is exactly **one** implementation — the
+sealing lives in the Rust kernel and the Kotlin shell moves sealed bytes —
+so nothing could disagree; iOS is the next one, and a divergence there
+would surface as a ceremony failing at the bearer, which the anchor check
+reports as *"a bearer that does not agree with the screen"*: a cryptography
+bug pointing at a radio.
+
+`test-vectors/local-interfaces.md` now carries the session key derived from
+the two contributions in ascending participant-keyhash order, and one
+sealed carriage — the `PrekeyHandover` fixture, nonce in front, ceremony-id
+as associated data — with the nonce stated as the fixture's own, since an
+implementation draws one at random per carriage and a known answer needs
+one fixed. **Not corpus entries**: the corpus holds CBOR objects and checks
+that every accept-class byte fixture parses canonically, which a derived key
+and an AEAD output are not. `verify.py` recomputes both with its own
+primitives instead — the key from the document's stated contributions, the
+contributions against the optical fixtures, the associated data against the
+ceremony-id, the carriage opened to the handover's bytes, and another
+ceremony's key failing to open it. Five checks, all in the gate.
+
 ### 2026-10-06 (the polychrome format, built)
 
 **Three ordinary QRs in one image, one per colour channel** [author,

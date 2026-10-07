@@ -1188,6 +1188,16 @@ pub struct PayloadState {
     pub pending: BTreeMap<PeerDevice, Vec<Vec<u8>>>,
     /// One-time requests in flight, by nonce: the peer device asked for.
     pub outstanding: BTreeMap<[u8; 16], PeerDevice>,
+    /// **One-time keys a counterparty handed over in person**
+    /// (`wire-format.md` §14.3.4), by the device they belong to: spent on
+    /// the first session opened with that device and gone with it.
+    ///
+    /// Not durable state, and deliberately: a key handed across a local
+    /// interface during a ceremony is for opening a channel with the
+    /// person who handed it over, and a restart that lost it costs a
+    /// one-time key's forward secrecy on a first message, which §7.8
+    /// already declares as the reusable-only case.
+    pub handed: BTreeMap<PeerDevice, Vec<u8>>,
     /// What the node last reported of the pool, or what was uploaded.
     pub pool_reported: usize,
     /// Peers who sent an initial message this client could not attribute
@@ -1266,6 +1276,7 @@ impl PayloadState {
             signed_bundle,
             pending,
             outstanding: BTreeMap::new(),
+            handed: BTreeMap::new(),
             pool_reported: uint(&f[6])? as usize,
             wanted: BTreeSet::new(),
         })
@@ -1282,6 +1293,7 @@ impl PayloadState {
             signed_bundle: None,
             pending: BTreeMap::new(),
             outstanding: BTreeMap::new(),
+            handed: BTreeMap::new(),
             pool_reported: 0,
             wanted: BTreeSet::new(),
         }

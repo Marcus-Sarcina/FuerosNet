@@ -2368,6 +2368,30 @@
   "interpretation": null
  },
  {
+  "id": "CER-54",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "A prekey handover opens an end-to-end channel with no node asked",
+  "milestone": 4,
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §14.3.4",
+   "wire-format.md §7.8",
+   "design §6.4"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §14.3.4",
+    "text": "so a co-present pair can open an end-to-end channel afterwards\nwithout either party's own node having cooperated in anything"
+   }
+  ],
+  "given": "Two participants through the optical exchange of a ceremony, each holding the local session key, neither attached to any node.",
+  "when": "Each builds a prekey handover and takes the other's, and one then sends application payload to the other.",
+  "then": "The send produces an initial message and no prekey request: nothing is addressed to a node. The recipient opens it and the payload reaches its application. A handover naming another party's bundle is refused, as is one carrying another ceremony's id, and bytes that are not of this ceremony's session do not open at all.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
   "id": "CUR-01",
   "area": "currency",
   "gap": "currency",

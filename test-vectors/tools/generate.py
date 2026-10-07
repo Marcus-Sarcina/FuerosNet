@@ -3762,12 +3762,10 @@ txid: `{hx(peer_light_txid)}`
 # keys.md's desktop transport key, records.md's delegation and the desktop's
 # prekey bundle byte-for-byte.  The bytes are the objects alone: what a QR
 # encodes them as, and how a bearer frames them, is no part of these
-# vectors -- but the SEALING is, since 2026-10-05, and is not covered here
-# yet: s14.3.2 specifies the session key, the cipher, the nonce's placement
-# and the associated data, so two shells must agree on a sealed carriage
-# byte-for-byte and nothing below checks that they do.  The owed vectors are
-# a ceremony-session key known answer and one sealed carriage to open
-# [reviewer, 2026-10-06].
+# vectors -- but the SEALING is, since 2026-10-05, and it is covered at the
+# end of the file: s14.3.2 specifies the session key, the cipher, the
+# nonce's placement and the associated data, so two shells must agree on a
+# sealed carriage byte-for-byte [reviewer, 2026-10-06].
 
 # the first QR carries the device's identity in full (s2.2's KeyMaterial),
 # which the first contact pins (design s12.3), and its contribution; the
@@ -3848,12 +3846,12 @@ desktop transport key (`keys.md`), alice's delegation to it (`records.md`)
 and the desktop's signed prekey bundle (`records.md`) byte-for-byte. The
 bytes are the objects alone — what a QR encodes them as, and how a bearer
 frames them, is the shell's and no part of these vectors. **The sealing is
-not the shell's and is not covered here yet** [reviewer, 2026-10-06]:
-`wire-format.md` §14.3.2 fixes the session key, the cipher, the nonce in
-front of the ciphertext and the ceremony-id as associated data, so two
-shells must agree on a sealed carriage byte-for-byte; the plaintexts below
-are what goes inside one, and a session-key known answer with one sealed
-carriage to open are owed. **Interpretations
+not the shell's** [reviewer, 2026-10-06]: `wire-format.md` §14.3.2 fixes the
+session key, the cipher, the nonce in front of the ciphertext and the
+ceremony-id as associated data, so two shells must agree on a sealed
+carriage byte-for-byte. The plaintexts below are what goes inside one, and
+the section at the end carries the key's derivation and one sealed carriage
+to open. **Interpretations
 taken**: the intent's bundle entry uses `wire-format.md` §7.9's *envelope*
 form (the presented form is equally legal; the envelope is the
 holder-withholds-nothing case); the intent's retention is the design's
@@ -3959,6 +3957,78 @@ byte-identical to its `records.md` fixture** ({len(dev_cred)} bytes):
 {hexblock(dev_cred)}
 ```
 """)
+
+# ---- the local session's cryptography (s14.3.2) -------------------------
+# **Two implementations must agree on these byte for byte.**  The sealing is
+# the one part of s14.3 that is not the shell's: s14.3.2 fixes the key's
+# derivation, the cipher, the nonce in front of the ciphertext and the
+# ceremony-id as associated data, and until 2026-10-06 nothing here checked
+# any of it -- the Rust kernel was the only implementation, so nothing could
+# disagree, and iOS is the next one [reviewer, 2026-10-06].
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+# the key: SHA-256 over the label and the two contributions in ascending
+# participant-keyhash order, which is the order the ceremony-id uses
+session_key = H(b'rhtn/1:ceremony-session' + pc_first + pc_second)
+
+# one sealed carriage: the PrekeyHandover above, sealed under that key with
+# the ceremony-id as associated data.  **The nonce is a test vector's, not a
+# generator's**: an implementation draws it at random per carriage (s14.3.2),
+# and a known answer needs one fixed, so this is derived from the fixture
+# names and is no part of the protocol
+seal_nonce = H(b'rhtn-test-vectors:ceremony-session-nonce')[:12]
+sealed_handover = seal_nonce + AESGCM(session_key).encrypt(
+    seal_nonce, prekey_handover, pc_demo)
+
+emit("local-interfaces.md", f"""
+### The local session's cryptography (§14.3.2)
+
+**Two implementations must agree on this byte for byte**, which is why it is
+here: §14.3.2 fixes the key's derivation, the cipher, where the nonce sits
+and what the associated data is, and the shell's choice of bearer cannot
+change any of it.
+
+**The session key** — `SHA-256` over `rhtn/1:ceremony-session` and the two
+contributions in **ascending participant-keyhash order**, the same order the
+ceremony-id uses, so both devices derive one key without agreeing on who is
+first:
+
+```
+label        rhtn/1:ceremony-session
+first        {pc_first.hex()}
+second       {pc_second.hex()}
+key          {session_key.hex()}
+```
+
+**One sealed carriage** — the `PrekeyHandover` above, sealed under that key:
+AES-256-GCM, the 96-bit nonce **in front of** the ciphertext, and the
+ceremony-id as associated data. The nonce here is the fixture's own, since an
+implementation draws one at random per carriage and a known answer needs one
+fixed:
+
+```
+nonce        {seal_nonce.hex()}
+aad          {pc_demo.hex()}
+plaintext    the P-prekey-handover fixture, {len(prekey_handover)} bytes
+sealed       {len(sealed_handover)} bytes
+```
+
+```
+{hexblock(sealed_handover)}
+```
+
+**What a second implementation checks**: that it derives the same key from
+the two contributions, that opening the bytes above under it with that
+associated data gives the handover's bytes back, and that a carriage sealed
+under another ceremony's key does not open — which is what the associated
+data and the key's own derivation each enforce.
+""")
+
+# **Not corpus entries**: the corpus holds CBOR objects and checks that every
+# accept-class byte fixture parses canonically, and a derived key and an AEAD
+# output are neither.  They are checked by `verify.py`, which recomputes both
+# from the document's own figures with its own primitives -- which is the
+# cross-implementation check they exist for.
 
 for fid, by, kind, note in [
     ('P-optical-contribution-alice', oc_alice, 'OpticalContribution', "alice's first QR"),

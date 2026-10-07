@@ -10,12 +10,12 @@ desktop transport key (`keys.md`), alice's delegation to it (`records.md`)
 and the desktop's signed prekey bundle (`records.md`) byte-for-byte. The
 bytes are the objects alone — what a QR encodes them as, and how a bearer
 frames them, is the shell's and no part of these vectors. **The sealing is
-not the shell's and is not covered here yet** [reviewer, 2026-10-06]:
-`wire-format.md` §14.3.2 fixes the session key, the cipher, the nonce in
-front of the ciphertext and the ceremony-id as associated data, so two
-shells must agree on a sealed carriage byte-for-byte; the plaintexts below
-are what goes inside one, and a session-key known answer with one sealed
-carriage to open are owed. **Interpretations
+not the shell's** [reviewer, 2026-10-06]: `wire-format.md` §14.3.2 fixes the
+session key, the cipher, the nonce in front of the ciphertext and the
+ceremony-id as associated data, so two shells must agree on a sealed
+carriage byte-for-byte. The plaintexts below are what goes inside one, and
+the section at the end carries the key's derivation and one sealed carriage
+to open. **Interpretations
 taken**: the intent's bundle entry uses `wire-format.md` §7.9's *envelope*
 form (the presented form is equally legal; the envelope is the
 holder-withholds-nothing case); the intent's retention is the design's
@@ -1045,4 +1045,58 @@ c852aa6a0201035840f249d77bfe95b72deb8e043a5b1ed3984070ef0b6eec3e
 dd2f588457897011abd3e6caec490611a2fc51b6df80d7a8fb78952e82601140
 e28ae1963fa875ac3daa095645c349407b50cb7ee67ea87f34977600
 ```
+
+
+### The local session's cryptography (§14.3.2)
+
+**Two implementations must agree on this byte for byte**, which is why it is
+here: §14.3.2 fixes the key's derivation, the cipher, where the nonce sits
+and what the associated data is, and the shell's choice of bearer cannot
+change any of it.
+
+**The session key** — `SHA-256` over `rhtn/1:ceremony-session` and the two
+contributions in **ascending participant-keyhash order**, the same order the
+ceremony-id uses, so both devices derive one key without agreeing on who is
+first:
+
+```
+label        rhtn/1:ceremony-session
+first        d43a0b07379cf934c8b7e4b54629f95c
+second       57c54784788abe36a304be6d2eff43d4
+key          41e5809dfcbfe09a7019e7aa1180705532527c68ec69e243926451417261d9d4
+```
+
+**One sealed carriage** — the `PrekeyHandover` above, sealed under that key:
+AES-256-GCM, the 96-bit nonce **in front of** the ciphertext, and the
+ceremony-id as associated data. The nonce here is the fixture's own, since an
+implementation draws one at random per carriage and a known answer needs one
+fixed:
+
+```
+nonce        5de3c068484e4dfcbbd92cd7
+aad          cb8ea88ad0a089017394c291f918217c4dc8d754a4639eb024f23662e5ca2b18
+plaintext    the P-prekey-handover fixture, 326 bytes
+sealed       354 bytes
+```
+
+```
+5de3c068484e4dfcbbd92cd758d67f3179fe2114ea5ac6e25e06e6b8c6262409
+3d2f3bacf815836d9d29958b7aab3e3df07de4e2ecdc0a73fb3d77809a20ff58
+2a0ec97db3e13d1d1b642100cbc9d8594b4c8e491373668bce783a84f363e46a
+b3e0ae8248f32479194454c0c729dfbec5663825650a8a4ab38e40f59659c234
+3b17b3814dba1b171d1125e00c9430d71b3736f6166be8fee2957d74440b3b92
+1b5044be54c96c520e233f88601f0d4d86f5c2ef384e8485302291ac2d32cff5
+0bce00d3460716b33c74410c52a588f23bc2f2a58b6cf6e7b05f895243f69ecf
+2eb5682905c07ee95c404c85b1918d074e333064f530163930c1f3dd169323be
+766a89163a35bc7a6566cfa19e5dbbc3954d19e346d6fe13e9aa953a97e746cf
+9d5a38444773054a3bab6edf3234fb6333b26eb76d3f5231532365c956014640
+461d7efedf02fb632ec9eef11aa5a40058f09bbae449fdb72f2e25b05309f552
+1b5e
+```
+
+**What a second implementation checks**: that it derives the same key from
+the two contributions, that opening the bytes above under it with that
+associated data gives the handover's bytes back, and that a carriage sealed
+under another ceremony's key does not open — which is what the associated
+data and the key's own derivation each enforce.
 

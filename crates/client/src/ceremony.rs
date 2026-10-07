@@ -2972,6 +2972,138 @@ impl Client {
         }
     }
 
+    /// **This device's prekey handover for the co-present counterparty**
+    /// (`wire-format.md` §14.3.4): its signed bundle and one one-time key,
+    /// anchored to this ceremony and sealed under the local session like
+    /// every other carriage.
+    ///
+    /// **Why it crosses the local interface at all.** Opening an
+    /// end-to-end channel needs the peer's published bundle, and fetching
+    /// one needs a node (§7.8). Two devices that have just met have no
+    /// reason to ask anybody: each already holds what the other needs, and
+    /// a pair whose ceremony completed with no node reachable (design §6.4)
+    /// would otherwise end holding a record and unable to say a word to
+    /// each other.
+    ///
+    /// Nothing is spent that a pool misses: the one-time key is one of this
+    /// device's own, generated here and kept with the rest, and a device
+    /// whose material is unsigned — one holding no seed (design §23.3) —
+    /// has nothing to hand over and says so.
+    pub fn prekey_carriage(&mut self) -> Result<Vec<u8>, Abort> {
+        let cid = self.anchored_id()?;
+        let now = self.now_s();
+        let bundle = match self.bundle_to_publish(now) {
+            Some(Msg::PublishBundle(b)) => b,
+            _ => {
+                // a device holding no seed has nothing signed to hand
+                // over (design §23.3)
+                return Err(abort(
+                    "prekey_carriage",
+                    Abort::Malformed("this device has no signed bundle to hand over".into()),
+                ));
+            }
+        };
+        let random = self.device.random.clone();
+        let mut fresh = |out: &mut [u8]| random.fill(out);
+        let one_time = self.payload.keys.one_time_keys(1, &mut fresh).pop();
+        let handover = crate::local::PrekeyHandover {
+            ceremony_id: cid,
+            device: self.payload.device,
+            bundle,
+            one_time,
+        };
+        tracing::info!(
+            target: "cer",
+            ceremony = %id8(&cid),
+            one_time = handover.one_time.is_some(),
+            "cer.prekey.handed"
+        );
+        self.seal(&handover.encode())
+    }
+
+    /// **The counterparty's handover, opened and kept** (`wire-format.md`
+    /// §14.3.4): the bundle verified under the identity pinned at §14.3.1
+    /// and held as prefetched material, and the one-time key kept for the
+    /// first session opened with that device.
+    ///
+    /// **The signature is what makes it trustworthy and not the channel.**
+    /// A bundle that does not verify is refused however it arrived, which
+    /// is the same rule the node path applies; the ceremony-id is checked
+    /// so a handover of another ceremony cannot be replayed into this one.
+    pub fn take_prekey_carriage(&mut self, sealed: &[u8]) -> Result<(), Abort> {
+        let cid = self.anchored_id()?;
+        let peer = self.active.as_ref().ok_or(Abort::NotActive)?.peer()?;
+        let plain = self.open(sealed)?;
+        let h = crate::local::PrekeyHandover::decode(&plain).map_err(Abort::Malformed)?;
+        if h.ceremony_id != cid {
+            return Err(abort("take_prekey_carriage", Abort::CeremonyIdMismatch));
+        }
+        let p = payload::read_bundle(&self.known, &h.bundle).map_err(Abort::Malformed)?;
+        if p.subject != peer || p.device != h.device {
+            return Err(abort(
+                "take_prekey_carriage",
+                Abort::Malformed("a bundle for another party or another device".into()),
+            ));
+        }
+        tracing::info!(
+            target: "cer",
+            ceremony = %id8(&cid),
+            device = %id8(&h.device),
+            one_time = h.one_time.is_some(),
+            "cer.prekey.taken"
+        );
+        if let Some(k) = h.one_time {
+            self.payload.handed.insert((peer, h.device), k);
+        }
+        self.payload.sessions.prefetch(p);
+        Ok(())
+    }
+
+    /// Open a session from material already held, asking nobody.
+    ///
+    /// **This is what a handover buys** (`wire-format.md` §14.3.4): the
+    /// peer's bundle and one of its one-time keys are both in hand, so
+    /// there is nothing left for a node to be asked. Called only where a
+    /// handed key is held — prefetched reusable material alone does not
+    /// open a session, because §7.8 has the one-time key requested when a
+    /// session opens and reusable-only is the pool-ran-dry case.
+    fn open_from_held(
+        &mut self,
+        to: Keyhash,
+        device: [u8; 32],
+        plaintext: &[u8],
+    ) -> Option<Vec<Msg>> {
+        let their = self.payload.sessions.prefetched.get(&(to, device))?.clone();
+        let handed = self.payload.handed.remove(&(to, device));
+        // a handed key that will not decode is a key this side cannot use,
+        // and §7.8's reusable-only case is what is left
+        let one_time = handed.and_then(|k| payload::OneTimeKey::decode(&k).ok());
+        let random = self.device.random.clone();
+        let mut fresh = |out: &mut [u8]| random.fill(out);
+        let me = self.payload.device;
+        let first = self
+            .payload
+            .sessions
+            .open(
+                &self.payload.keys,
+                &me,
+                to,
+                &their,
+                one_time.as_ref(),
+                &mut fresh,
+                plaintext,
+            )
+            .ok()?;
+        tracing::debug!(
+            target: "pay",
+            to = %id8(&to),
+            device = %id8(&device),
+            one_time = one_time.is_some(),
+            "pay.open.held"
+        );
+        Some(vec![self.route(to, first, device)])
+    }
+
     /// Everything addressing `to` needs that this client can answer from
     /// its own state (`wire-format.md` §7.7.2): who serves it, and — only
     /// where that is not held — the infrastructure a resolution could be
@@ -3108,6 +3240,26 @@ impl Client {
         }
         for device in devices {
             if self.payload.sessions.has_session_with(&to, &device) {
+                continue;
+            }
+            // **a one-time key handed over in person opens the session
+            // here**, with no request and no node: what a prekey handover
+            // across the local interface is for (`wire-format.md`
+            // §14.3.4), and what lets a pair whose ceremony needed no node
+            // say something to each other afterwards.
+            //
+            // **Only a handed key, never prefetched material alone.** §7.8
+            // has a one-time key requested *when* a session is opened and
+            // never prefetched, and a session opened on reusable material
+            // alone is a declared reduction in forward secrecy for its
+            // first message — the case where a pool ran dry, not a
+            // shortcut to take whenever a sweep happens to have fetched a
+            // bundle. Four tests said so when this first fired on any
+            // prefetched material [2026-10-06].
+            if self.payload.handed.contains_key(&(to, device))
+                && let Some(msgs) = self.open_from_held(to, device, &plaintext)
+            {
+                out.extend(msgs);
                 continue;
             }
             self.payload

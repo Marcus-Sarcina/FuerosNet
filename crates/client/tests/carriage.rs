@@ -314,3 +314,117 @@ fn an_anchor_asked_for_before_the_id_is_fixed_is_its_own_refusal() {
     // fixed: the same calls answer
     assert!(s.client("alice").capture_key_carriage().is_ok());
 }
+
+// acceptance: CER-54
+/// **The prekey handover, and what it is for** (`wire-format.md` §14.3.4):
+/// two devices that have just met hand each other a signed bundle and one
+/// one-time key across the local session, and can then open an end-to-end
+/// channel with **no node asked for anything** — which is the case design
+/// §6.4's escape leaves behind, a pair holding a record and otherwise
+/// unable to say a word to each other.
+#[test]
+fn a_handover_opens_an_end_to_end_channel_with_no_node_asked() {
+    let mut s = setup(&["alice", "bob"], &[ChannelKind::Nfc]);
+    s.face_off("alice", "bob");
+    s.client("alice")
+        .begin(Some(kh("bob")), vec![], true)
+        .unwrap();
+    s.client("bob")
+        .begin(Some(kh("alice")), vec![], false)
+        .unwrap();
+    let oa = s.client("alice").optical_contribution().unwrap();
+    let ob = s.client("bob").optical_contribution().unwrap();
+    s.client("alice").take_optical(&ob).unwrap();
+    s.client("bob").take_optical(&oa).unwrap();
+    let ta = s.client("alice").transcript_confirm().unwrap();
+    let tb = s.client("bob").transcript_confirm().unwrap();
+    s.client("alice").take_transcript(&tb).unwrap();
+    s.client("bob").take_transcript(&ta).unwrap();
+
+    // each hands over its bundle and a one-time key, sealed under the
+    // local session like every other carriage
+    let ha = s
+        .client("alice")
+        .prekey_carriage()
+        .expect("alice hands over");
+    let hb = s.client("bob").prekey_carriage().expect("bob hands over");
+    s.client("alice")
+        .take_prekey_carriage(&hb)
+        .expect("alice takes bob's");
+    s.client("bob")
+        .take_prekey_carriage(&ha)
+        .expect("bob takes alice's");
+
+    // and now a message opens a session with no `PrekeyRequest` at all:
+    // nothing here is addressed to a node
+    let msgs = s
+        .client("alice")
+        .send_payload(
+            kh("bob"),
+            rhtn_client::payload::KIND_APPLICATION,
+            b"met you just now",
+        )
+        .expect("a session opens from what was handed over");
+    assert!(
+        !msgs.iter().any(|m| matches!(m, Msg::PrekeyRequest(_))),
+        "nothing is asked of a node: {msgs:?}"
+    );
+    assert_eq!(msgs.len(), 1, "one initial message, to bob's one device");
+
+    // bob opens it, which is the whole claim
+    let bytes = match msgs.first() {
+        Some(Msg::Relay { bytes, .. }) | Some(Msg::Payload { bytes, .. }) => bytes,
+        other => panic!("an initial message for bob: {other:?}"),
+    };
+    let d = s
+        .client("bob")
+        .receive_payload(kh("alice"), bytes)
+        .expect("bob opens it");
+    assert!(
+        matches!(&d, Dispatched::Application(p) if p == b"met you just now"),
+        "what crossed: {d:?}"
+    );
+}
+
+// acceptance: CER-54
+/// A handover of another ceremony is refused, and one whose bundle does
+/// not verify is refused however it arrived: the signature is what makes
+/// the material trustworthy and never the channel.
+#[test]
+fn a_handover_is_checked_against_this_ceremony_and_its_own_signature() {
+    let mut s = setup(&["alice", "bob", "carol"], &[ChannelKind::Nfc]);
+    s.face_off("alice", "bob");
+    s.client("alice")
+        .begin(Some(kh("bob")), vec![], true)
+        .unwrap();
+    s.client("bob")
+        .begin(Some(kh("alice")), vec![], false)
+        .unwrap();
+    let oa = s.client("alice").optical_contribution().unwrap();
+    let ob = s.client("bob").optical_contribution().unwrap();
+    s.client("alice").take_optical(&ob).unwrap();
+    s.client("bob").take_optical(&oa).unwrap();
+    let ta = s.client("alice").transcript_confirm().unwrap();
+    let tb = s.client("bob").transcript_confirm().unwrap();
+    s.client("alice").take_transcript(&tb).unwrap();
+    s.client("bob").take_transcript(&ta).unwrap();
+
+    // bob's own handover, offered back to bob: sealed under the session
+    // they share, so it opens — and names bob where alice is expected
+    let hb = s.client("bob").prekey_carriage().unwrap();
+    let why = s
+        .client("bob")
+        .take_prekey_carriage(&hb)
+        .expect_err("refused");
+    assert!(
+        format!("{why:?}").contains("another party") || format!("{why:?}").contains("Malformed"),
+        "a bundle for the wrong party: {why:?}"
+    );
+
+    // and bytes from no session of this ceremony do not open at all
+    let refused = s
+        .client("alice")
+        .take_prekey_carriage(&[7u8; 64])
+        .expect_err("refused");
+    assert!(matches!(refused, Abort::Unsealable), "{refused:?}");
+}

@@ -1108,6 +1108,74 @@ check(verify_sig(BY[_dp[2]], -8, bytes.fromhex(_dp[8][3]),
       and byid['D-enum-data-practice']['expect']['outcome'] == 'accept',
       "data_practice 4: the owner's signature covers the unknown value and the expectation is accept")
 
+# ------------------------------------------- the local session (s14.3.2)
+# **The one part of s14.3 that is not the shell's**, and the only part two
+# implementations can disagree about silently: the key's derivation, the
+# cipher, the nonce's place and the associated data. Recomputed here from
+# the document's own figures with this harness's own primitives, which is
+# the cross-check the vectors exist for [reviewer, 2026-10-06].
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM as _AESGCM
+
+_li = read('local-interfaces.md')
+
+
+def _field(name):
+    """The hex after `name` in the session's block."""
+    m = re.search(rf'^{name}\s+([0-9a-f]+)$', _li, re.M)
+    return bytes.fromhex(m.group(1)) if m else None
+
+
+_first, _second = _field('first'), _field('second')
+_key, _nonce, _aad = _field('key'), _field('nonce'), _field('aad')
+check(
+    None not in (_first, _second, _key, _nonce, _aad)
+    and _key == H(b'rhtn/1:ceremony-session' + _first + _second),
+    'session key: SHA-256 over the label and the two contributions, in the order the document states',
+)
+# the two contributions are the ones the optical contributions carry, and
+# their order is the ceremony-id's: ascending participant keyhash
+_oc_a = canonical(bytes.fromhex(byid['P-optical-contribution-alice']['hex']))
+_oc_b = canonical(bytes.fromhex(byid['P-optical-contribution-bob']['hex']))
+_pc_a, _pc_b = bytes.fromhex(_oc_a[2]), bytes.fromhex(_oc_b[2])
+_want = (_pc_a, _pc_b) if KH['alice'] < KH['bob'] else (_pc_b, _pc_a)
+check(
+    (_first, _second) == _want,
+    'session key: the contributions are the optical ones and the order is the ceremony-id\'s',
+)
+check(
+    _aad == H(b'rhtn/1:ceremony' + _first + _second),
+    'sealed carriage: the associated data is the ceremony-id',
+)
+# and the sealed bytes open to the handover's own fixture
+_m = re.search(r'^sealed\s+(\d+) bytes$', _li, re.M)
+_blocks = re.findall(r'```\n([0-9a-f\s]+)\n```', _li)
+_sealed = next(
+    (b for b in (bytes.fromhex(''.join(x.split())) for x in _blocks)
+     if _m and len(b) == int(_m.group(1)) and b[:12] == _nonce),
+    None,
+)
+_plain = bytes.fromhex(byid['P-prekey-handover']['hex'])
+_opened = None
+if _sealed is not None:
+    try:
+        _opened = _AESGCM(_key).decrypt(_nonce, _sealed[12:], _aad)
+    except Exception:
+        _opened = None
+check(
+    _opened == _plain,
+    'sealed carriage: nonce in front, AES-256-GCM, and it opens to the P-prekey-handover fixture',
+)
+# a carriage of another ceremony does not open, which is what the key's own
+# derivation and the associated data each enforce
+_other = H(b'rhtn/1:ceremony-session' + _second + _first)
+_no = None
+if _sealed is not None:
+    try:
+        _no = _AESGCM(_other).decrypt(_nonce, _sealed[12:], _aad)
+    except Exception:
+        _no = None
+check(_no is None, "sealed carriage: another ceremony's key does not open it")
+
 print()
 if FAILURES:
     print(f'{len(FAILURES)} FAILURE(S)'); sys.exit(1)

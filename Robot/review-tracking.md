@@ -15303,3 +15303,60 @@ uses. **If it is not**, the monochrome point to return to is `CHUNK = 48`
 — 43 parts of 37 modules, about 34 inches — and the presentation rate is
 the other lever: the field runs' median part-to-part gap was 0.5–1.2 s and
 nothing has yet tried to shorten it.
+
+## The optical data lever: declined (2026-10-06)
+
+**[ruled, author, 2026-10-06]** *"No."*
+
+Carrying a 32-byte commitment optically with the `KeyMaterial` following
+on the bearer, checked against it, is **not** an avenue. It would have
+reached four feet in one symbol and it reverses the ruling of 2026-10-04,
+which is the one that matters: **the key travels in the code at the
+meeting and is pinned at first contact** (`wire-format.md` §14.3.1, design
+§12.3). The optical channel is the authenticated one because of what
+crosses it, and moving the material to the bearer would make the bearer
+load-bearing for identity at first contact even though a hash binds it.
+
+Recorded here and in `OpticalExchange.CHUNK`'s own comment, which had been
+carrying it as an open route to the range target and now says it is
+closed. **The levers that remain for reading distance** are the part size
+(the measured table, bounded below by the header's 255 parts at 25
+modules) and the colour format, which is built and waiting on a hardware
+run.
+
+## Both owed items done (2026-10-06)
+
+**[ruled, author, 2026-10-06]** *"Do both."*
+
+**The prekey handover.** Kernel: `Client::prekey_carriage` and
+`take_prekey_carriage`, plus `open_from_held`, which is the piece I had not
+counted — with a peer's bundle in hand a send still asked a node for a
+one-time key, so the object alone bought nothing. FFI:
+`Participant::prekey_carriage` / `take_prekey_carriage`. The shell's bearer
+phase is the remaining half and is shell work, so it waits.
+
+**The first cut was wrong in the dangerous direction and the suite caught
+it.** `open_from_held` fired on *any* prefetched material, which would have
+opened every first session on reusable material alone and destroyed
+one-time forward secrecy generally. Four tests failed — the two that assert
+a one-time key is requested when a session opens, and two more — which is
+exactly §7.8's rule. Narrowed to a handed key: nothing else opens a session
+without asking.
+
+**The session's cryptography, vectored.** The key from the two
+contributions in ascending keyhash order, and one sealed carriage to open,
+in `local-interfaces.md`. **Not corpus entries**: the corpus checks that
+every accept-class byte fixture parses as canonical CBOR, and a derived key
+and an AEAD output are neither — `unit` class is for a described condition
+rather than bytes, so neither class fits. `verify.py` recomputes them with
+its own primitives instead, which is the cross-implementation check they
+exist for: the key's derivation, the contributions against the optical
+fixtures, the AAD against the ceremony-id, the carriage opening to the
+handover's fixture, and another ceremony's key failing on it.
+
+**Why the urgency was lower than I first said**, and worth recording so the
+next reader does not over-rate the finding: the sealing has exactly one
+implementation today, in the Rust kernel. The Kotlin shell never seals or
+opens — it moves sealed bytes. So "two shells must agree byte-for-byte" was
+latent, not live. What makes it worth doing now is that iOS is the next
+implementation and a divergence there would present as a bearer fault.
