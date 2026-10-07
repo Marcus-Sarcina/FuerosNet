@@ -122,6 +122,15 @@ class OpticalExchange(
          * header's one-byte fields admit: 25 modules is its floor and
          * costs 253 parts of the 255 available.
          *
+         * **Aztec was measured against this and rejected** [2026-10-07].
+         * It carries 2.6 times the payload at the same module and reads to
+         * 22 inches against QR's 42, with decode p90 at 2,561 ms against
+         * 466 — and the pass came out *longer* for carrying less, twice
+         * over. A quiet zone made no difference. `SymbologySurveyTest`
+         * carries the figures and the reason: the per-part cost is a
+         * lockstep round-trip and not a decode, so payload a frame is the
+         * wrong term to attack.
+         *
          * **Carrying less optically is declined** [author, 2026-10-06]: a
          * 32-byte commitment in the code with the key material following
          * on the bearer would reach four feet in one symbol, and the key
@@ -154,6 +163,17 @@ class OpticalExchange(
          * monochrome partitioning.
          */
         const val CHUNK_POLY = 11
+        /**
+         * **How many of the parts they cannot have yet are rotated
+         * through.** Eight: wide enough that a reader missing most frames
+         * still has several distinct parts offered to it, narrow enough
+         * that the rotation returns to a part before the reader has
+         * forgotten why it wanted it. The receiver fills holes in any
+         * order, so the only cost of a wider window is that a part waits
+         * longer for its turn.
+         */
+        const val WINDOW = 8
+
         /** [which] for the first exchange, the contribution. */
         const val CONTRIBUTION = 0
         /** [which] for the second, the transcript confirmation. */
@@ -187,17 +207,68 @@ class OpticalExchange(
     private val lock = Any()
     private var theirCount = -1
     private var theirs: Array<ByteArray?> = emptyArray()
-    /** Contiguous parts of theirs held, from the first. */
+    /** Contiguous parts of theirs held, from the first: what the header
+     *  carries, and all the header has room to say. */
     private var got = 0
-    /** How many of mine their last header said they hold. */
+    /** How many of mine their last header said they hold, contiguously
+     *  from the first: the floor under [theirHeld]. */
     private var theirGot = 0
+    /**
+     * **Which of this side's parts the other side holds**, part by part.
+     *
+     * The header has room for one number and it is the *contiguous* count
+     * — so a receiver holding parts 0, 1, 2, 5 and 7 reports three, and
+     * the sender cannot tell 5 and 7 from the holes. That is why rotating
+     * a window over `theirGot` upward does not work: half its turns go to
+     * parts already held. Simulated at the measured frame rates it came
+     * out *slower* than showing one part at a time.
+     *
+     * So the full set travels, in tracking rows drawn below the symbol and
+     * outside its error correction ([tracking]). **The header's count
+     * still seeds this**, which is what makes the rows safe to lose: a
+     * contiguous count of N means parts 0 to N-1 are held, so a side that
+     * cannot read the rows degrades to exactly the old behaviour rather
+     * than to a wrong belief.
+     */
+    private var theirHeld = BooleanArray(0)
+    /** How many times each of this side's parts has been *seen* set in
+     *  their rows, against `Tracking.CONFIRM` ([takeTracking]). */
+    private var sightings = IntArray(0)
+    /** Where the window's rotation stands ([frame]). */
+    private var turn = 0
 
-    /** The code to show now: the part they need next, carrying my progress
-     *  through theirs. */
+    /**
+     * **The code to show now, rotating through a window of the parts they
+     * cannot have yet.**
+     *
+     * It used to be exactly one part — `min(theirGot, count - 1)` — held
+     * up until their header reported progress. That is what made the
+     * exchange cost a round-trip a part, and `qr.looks` of 2026-10-07
+     * measured the waste: **85 to 93% of the frames this side decoded
+     * successfully were the same part over again**, while a third to three
+     * quarters of all camera frames decoded fine. The reading was never
+     * the problem; the waiting was.
+     *
+     * **The window needs nothing new on the wire.** `theirGot` is a
+     * *contiguous* count, so every part from it upward is one they cannot
+     * have — the sender may show any of them and the receiver fills holes
+     * out of order, its contiguous count jumping as runs complete. So the
+     * rotation is bounded by [WINDOW] and not by what the header can
+     * describe, and the tracking rows that would replace the header's
+     * single byte are a later refinement rather than a prerequisite.
+     *
+     * **How long each part is shown for belongs to the screen**, not
+     * here: one [turn] is one part, and the screen ticks slowly enough
+     * that a reader missing most frames still catches each one
+     * (`Meet.TURN_MS`).
+     */
     fun frame(): ByteArray = synchronized(lock) {
-        val index = minOf(theirGot, count - 1)
-        byteArrayOf(VERSION.toByte(), which.toByte(), index.toByte(), count.toByte(), got.toByte()) + parts[index]
+        byteArrayOf(VERSION.toByte(), which.toByte(), showing().toByte(), count.toByte(), got.toByte()) + parts[showing()]
     }
+
+    /** The rotation advances a step; the screen calls this when it has
+     *  shown a frame long enough. */
+    fun turn() = synchronized(lock) { turn += 1 }
 
     /**
      * **A colour frame's three parts**, from the part the other side needs
@@ -241,8 +312,76 @@ class OpticalExchange(
         }
     }
 
-    /** The index of the part [frame] shows, for the screen and the events. */
-    fun showing(): Int = synchronized(lock) { minOf(theirGot, count - 1) }
+    /** The index of the part [frame] shows, for the screen and the events:
+     *  the window's current step, dwelling [DWELL] turns on each. */
+    fun showing(): Int = synchronized(lock) {
+        val missing = owed()
+        if (missing.isEmpty()) return minOf(theirGot, count - 1)
+        missing[turn % missing.size]
+    }
+
+    /** **The parts the other side is known to lack**, up to [WINDOW] of
+     *  them from the lowest — which is what the rotation walks. */
+    private fun owed(): IntArray {
+        val out = IntArray(minOf(WINDOW, count))
+        var n = 0
+        var i = 0
+        while (i < count && n < out.size) {
+            if (!holds(i)) out[n++] = i
+            i++
+        }
+        return out.copyOf(n)
+    }
+
+    /** Whether the other side holds this side's part `i`: their bitmap
+     *  where it has been read, and their header's contiguous count as the
+     *  floor under it. */
+    private fun holds(i: Int): Boolean =
+        i < theirGot || (i < theirHeld.size && theirHeld[i])
+
+    /**
+     * **The tracking bitmap this side shows**: which of the *other* side's
+     * parts are held here, so they know what is still owed. Empty until
+     * one of their codes has been read, since until then there is no count
+     * to describe.
+     *
+     * Drawn outside the symbol's error correction, which is safe because
+     * it is re-shown every frame and because a module only ever turns on:
+     * a module misread as *unset* costs a redundant re-show, and one
+     * misread as *set* would cost a part — so the reader confirms a set
+     * module before it believes it ([takeTracking]).
+     */
+    fun tracking(): BooleanArray = synchronized(lock) {
+        if (theirCount <= 0) return BooleanArray(0)
+        BooleanArray(theirCount) { theirs[it] != null }
+    }
+
+    /**
+     * Their tracking bitmap, as the camera sampled it. Monotonic: a part
+     * once known held is never unknown again, so a dropped or misread
+     * frame cannot walk the belief backwards.
+     */
+    fun takeTracking(bits: BooleanArray) = synchronized(lock) {
+        if (theirHeld.size < count) theirHeld = theirHeld.copyOf(count)
+        if (sightings.size < count) sightings = sightings.copyOf(count)
+        val n = minOf(bits.size, count)
+        for (i in 0 until n) {
+            if (!bits[i] || theirHeld[i]) continue
+            // **a set module is believed only after `Tracking.CONFIRM`
+            // sightings.** The rows carry no error correction, and the two
+            // directions of misreading are not equally cheap: read unset
+            // when set costs one redundant re-show, read set when unset
+            // costs a part the counterparty still needs and will never be
+            // offered again. So the costly direction is confirmed and the
+            // cheap one is not. The rows are re-shown every frame, so a
+            // module genuinely set reaches the threshold in a frame or
+            // two, while a noise hit has to recur in the same cell.
+            if (++sightings[i] >= Tracking.CONFIRM) theirHeld[i] = true
+        }
+    }
+
+    /** How many of this side's parts the other side is known to hold. */
+    fun theirHeldCount(): Int = synchronized(lock) { (0 until count).count { holds(it) } }
 
     /** How many contiguous parts of theirs this side holds. */
     fun received(): Int = synchronized(lock) { got }
@@ -251,8 +390,16 @@ class OpticalExchange(
      *  has been read. */
     fun theirCount(): Int = synchronized(lock) { theirCount }
 
-    /** How many of mine their last header said they hold. */
-    fun theirReceived(): Int = synchronized(lock) { theirGot }
+    /** **How many of this side's parts the other side holds** — their
+     *  bitmap where it has been read, their header's contiguous count as
+     *  the floor. The figure the screen and the diagnostics want; the raw
+     *  contiguous count is [theirContiguous]. */
+    fun theirReceived(): Int = theirHeldCount()
+
+    /** What their *header* last reported, contiguous from the first: the
+     *  floor under the bitmap, and all a side that cannot read the rows
+     *  ever learns. */
+    fun theirContiguous(): Int = synchronized(lock) { theirGot }
 
     /**
      * A code the camera read. A header of another exchange, or none, is
@@ -347,14 +494,19 @@ class OpticalExchange(
         theirs.fold(ByteArray(0)) { acc, p -> acc + (p ?: ByteArray(0)) }
     }
 
-    /** Both have everything: theirs is held here, and their last header
-     *  said they hold all of mine. */
-    fun done(): Boolean = synchronized(lock) { theirCount > 0 && got == theirCount && theirGot >= count }
+    /** Both have everything: theirs is held here, and they are known to
+     *  hold all of this side's — from their bitmap where it reads, from
+     *  their header's contiguous count otherwise. */
+    fun done(): Boolean = synchronized(lock) {
+        theirCount > 0 && got == theirCount && (0 until count).all { holds(it) }
+    }
 
     /** Where the two stand, for the screen. */
-    fun status(): String = synchronized(lock) {
-        val shown = minOf(theirGot, count - 1) + 1
-        val theirsSoFar = if (theirCount < 0) "none of theirs yet" else "$got of ${theirCount} of theirs"
-        "Showing part $shown of $count; received $theirsSoFar; they hold $theirGot of your $count."
+    fun status(): String {
+        val shown = showing() + 1
+        return synchronized(lock) {
+            val theirsSoFar = if (theirCount < 0) "none of theirs yet" else "$got of $theirCount of theirs"
+            "Showing part $shown of $count; received $theirsSoFar; they hold ${theirHeldCount()} of your $count."
+        }
     }
 }

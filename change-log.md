@@ -12345,6 +12345,110 @@ covered the rule at all until NET-028 — which is why nothing flagged the
 mismatch. The id was written from memory, which is the same habit as the
 §13.2-for-§6.4 error of the preceding day.
 
+### 2026-10-07 (Aztec measured on hardware, and rejected)
+
+**It read to 22 inches where QR reached 42, and the pass got longer for
+carrying less.** Three configurations on the same phones, the same object
+and the same camera settings:
+
+| | QR, 102 parts | Aztec bare, 39 | Aztec +margin, 64 |
+|---|---|---|---|
+| optical pass | **48.4 s** | 72.6 s | 98.1 s |
+| a part | **0.47 s** | 1.86 s | 1.53 s |
+| decode p90 | **466 ms** | 2,561 ms | 3,029 ms |
+| range | **~42 in** | ~22–27 in | ~22 in |
+
+**The quiet zone was the suspected cause and it was not.** Aztec requires
+none, so the first cut drew the matrix flush; adding QR's own two-module
+margin, at an identical drawn module of 27, changed the range not at all
+and the p90 for the worse. So the loss is the symbol's own — one central
+bullseye gives a detector far less to localise and perspective-correct
+from than three corner finders, which is exactly what a hand-held camera
+at distance needs.
+
+**My survey measured the wrong thing, and it is the same error as the
+`450 / modules` rule.** It rendered a perfect matrix and asked the reader
+for the fewest pixels a module it could decode from; both symbologies
+answered two. A perfect render has no blur, no noise, no perspective and
+no rolling shutter, so it tests whether the *resolution* suffices and not
+whether a camera finds the thing — which is what binds. Twice now I have
+measured what was easy and treated it as what mattered.
+
+**And the capacity gain never survived contact at all.** 2.6 times fewer
+parts gave a **50% longer** pass; 1.6 times fewer gave a doubled one. The
+per-part cost is a **lockstep round-trip**, not a decode — 0.47 s against
+a 293 ms median under QR — so most of it is waiting for the counterparty's
+header and no payload-per-frame touches it. The author's question has a
+measured answer and it is not the expected one: **packing more bits into a
+frame does not shorten this exchange.** The 48 seconds is round-trips.
+
+**Reverted to QR at chunk 20**, the best measured configuration. Kept: the
+refresh-rate fix, the survey and its decode-floor harness — with the
+hardware verdict written across the top of it, so the next attempt starts
+from what a camera did and not from what a render said — and the
+documents' de-pinning from QR, since the deduction stands and QR is simply
+what currently wins it.
+
+### 2026-10-07 (the symbology chosen by deduction, and the refresh rate measured)
+
+**The optical channel is required and a particular 2D code is not**
+**[author, 2026-10-07].** Two things bound what a screen can hand a
+camera: the screen's **refresh rate**, which is the frequency floor on one
+axis, and the **feature size a camera resolves at the distance wanted**,
+which is the packet-size limit on the other. Whatever packs the most bits
+inside both is the right symbology, and the protocol does not stay pinned
+to one if something better is or becomes available. Codes for other media
+are plainly inapplicable; the medium here is a screen read by a camera.
+
+**Measured against that test, QR is no longer the answer.** Surveyed with
+the real encoders over the real 2,022-byte contribution, at the module
+size the field runs proved:
+
+| symbology | chunk | parts | modules drawn | decode floor |
+|---|---|---|---|---|
+| QR, base45 | 20 | 102 | 29 | 2 px/module |
+| **Aztec, raw bytes** | **52** | **39** | **27** | **2 px/module** |
+| Data Matrix, raw bytes | 36 | 57 | 26 | *never decoded* |
+
+**Aztec carries two and a half times the payload in a slightly larger
+module, from the same decode floor.** Where it gets that is furniture: one
+central bullseye against QR's three corner finders, and **no quiet zone at
+all** — measured rather than taken on the standard's word, since a bare
+matrix decodes at two pixels a module. Data Matrix was denser on paper and
+ZXing's reader never found it at any density, so it is out by measurement
+and not by argument.
+
+**The bytes go raw, where QR's wanted base45.** Base45's alphabet is
+exactly QR's alphanumeric set, which packed it at 5.5 bits a character — a
+real saving there and a pure loss here, since Aztec has no such mode and
+would spend eight bits on each of 1.5 characters a byte. The text is
+ISO-8859-1, total over 0–255 both ways and Aztec's own default, so nothing
+is transcoded; the round trip is pinned over every byte value and through a
+real symbol.
+
+**So `CHUNK` 20 → 52 and the parts fall 102 → 39**, which at the measured
+0.56 s a part should take the optical pass from 48 s to about 22. The
+module goes 29 → 27, which is *larger*, so nothing is given back on the
+range the camera work bought.
+
+**One thing Aztec does less of, measured: a single symbol takes 2,025
+bytes.** The contribution is 2,022, so the whole object fits by three
+bytes where QR had room to spare. It is cut into parts regardless — a
+symbol that size reads at no distance — but three bytes is the kind of
+margin one new field would cross, so the ceiling is pinned.
+
+**"QR" is out of the root documents**, where it had been standing in for
+"the optical code" — a rule stated by the identifier that happened to
+implement it rather than by the role, and so quietly wrong the moment the
+symbology moved. §14.3.1 now carries the deduction instead.
+
+**And the shutter's floor is measured rather than assumed.** It was the
+constant 60 Hz, safe only because the phones under test refresh at 120 and
+the shutter settled at 10 ms — a tenth of a frame short of one 60 Hz draw.
+The display's own refresh rate is read now, with 60 as the fallback where
+it will not say, since assuming a slow panel asks for a longer minimum
+exposure and errs towards motion blur rather than half a drawn code.
+
 ### 2026-10-07 (the shutter, the thread under the bearer, and a record)
 
 **Three and a half feet, and the shutter was the lever.** A floor under

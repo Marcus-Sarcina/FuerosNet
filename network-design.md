@@ -1378,7 +1378,7 @@ end node, starting from its own local records of people it has met.
    counterparty. It needs no global randomness, and it is not a Sybil defence —
    no topology rule can be (§17.2). Procedure and residual: §7.1.1.
 2. Route-latency plausibility check (§7.6), weak evidence, modest weight.
-3. Optical channel: QR codes exchanged screen-to-camera. Carries key exchange
+3. Optical channel: 2D codes exchanged screen-to-camera. Carries key exchange
    and the transcript hash. Inherently short-range and line-of-sight. **Either
    party may begin** [author, 2026-10-02]: one device shows an invite and the
    other reads it, and which did has no bearing on the ceremony's outcome or
@@ -2423,7 +2423,7 @@ three compounding reasons:
    same radio environment. There is no threat model in between that this catches.
 3. **Narrow residual, unavailable where it matters.** The one case it uniquely
    catches is a naive remote relay, two parties on a video call, one pointing a
-   phone at the other's feed to capture QR codes, which the optical channel alone
+   phone at the other's feed to capture the codes, which the optical channel alone
    does not catch. But UWB catches it, and NFC's physical-range
    friction makes it awkward, so the value is additive only on devices lacking
    both, and iOS blocks general
@@ -2482,7 +2482,7 @@ Strongest first:
    **NOT anti-relay.** Relay attacks against NFC are a well-documented class;
    short physical range does not prevent a relay pair with a fast link. NFC
    supplies *physical-range friction*, not a distance-bounding guarantee.
-3. **Optical (QR) channel.** Short-range and line-of-sight, but relayable: a
+3. **Optical channel.** Short-range and line-of-sight, but relayable: a
    confederate's screen shows whatever a remote client instructs. A bound on the
    screen-to-camera round trip would constrain only the latency a relay adds,
    measured against a camera-and-display floor that is device-specific and
@@ -4482,7 +4482,7 @@ your subtree.
 ### 12.3 Resolution sequence
 
 **Case 0 — First contact (dominant case).** The locator travels with the key,
-out of band: QR code at a meeting, a referral from a mutual contact. No lookup
+out of band: an optical code at a meeting, a referral from a mutual contact. No lookup
 occurs. Bob pins Alice's full public key on first contact and uses the hash
 thereafter.
 
@@ -5438,10 +5438,10 @@ the network stack and its unique services with device-specific services and
 utilities** [author, 2026-09-13]. It is not a rule that no cryptographic
 payload may cross: **where the kernel must pass one through the interface, it
 may**, and each such point is a specific interaction rather than a general
-channel. Some likely examples: the QR display and optical return during a
+channel. Some likely examples: the optical display and return during a
 ceremony (§7); seed material taken from a device or operating-system entropy
 source to generate a keypair; a secret the user types to initialise a client
-instance; and ingesting a new contact from a QR code, a contact card or another
+instance; and ingesting a new contact from an optical code, a contact card or another
 such object. **The test is whether the two layers stay separable**, not whether
 bytes with structure ever cross.
 

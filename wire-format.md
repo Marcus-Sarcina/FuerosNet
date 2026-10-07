@@ -4990,7 +4990,7 @@ item 3). The first is public and the second is not: an identity is a public
 key, and a contribution keys the local session (§14.3.2), so it is secret
 from anyone who did not see the screen. First each device shows its identity
 in full, the `KeyMaterial` of §2.2, and its 16-byte contribution. **The first
-QR is the first contact** (design §12.3): a device that has not met this
+code is the first contact** (design §12.3): a device that has not met this
 identity pins the key material it reads here, and its hash is the keyhash
 it knows the party by from then on (§3.4); a device that has met it holds
 the same material already. **The first code read fixes who the counterparty
@@ -5004,9 +5004,20 @@ value is the transcript hash the rest of the exchange binds to — consents
 and capture keys already bind to it (design §7.5.2), and everything the
 bearer carries is checked against it. **Each party reads both values off a
 screen it is looking at**, which is the whole of the man-in-the-middle
-resistance and the reason this step is close-range: the first QR is about
+resistance and the reason this step is close-range: the first code is about
 2 KB and is shown large, the second is small, and both resolve at arm's
 length on a phone camera, not across a room.
+
+**The symbology is not fixed here, and is chosen by deduction.** An
+optical channel is required; a particular 2D code is not [author,
+2026-10-07]. Two things bound what one can carry: **the screen's refresh
+rate**, which is the frequency floor on one axis, and **the feature size a
+camera resolves at the distance wanted**, which is the packet-size limit
+on the other. Whatever packs the most bits inside both is the right
+symbology, and the protocol does not stay pinned to one if something
+better is or becomes available. Codes for other media — fibre line
+formats and the like — are plainly inapplicable: the medium here is a
+screen read by a camera.
 
 **What the anchor binds, and what it does not.** An anchored message binds
 to a ceremony **both** devices computed: the anchor cannot be a value only
@@ -5083,7 +5094,7 @@ lemmas, and the mutation that restores either contribution to the
 adversary.
 
 ```
-OpticalContribution = [        ; the first QR each device shows
+OpticalContribution = [        ; the first code each device shows
   uint,                        ; version, 1
   KeyMaterial,                 ; this device's identity in full (§2.2): the
                                ;   first contact pins it (design §12.3), its
@@ -5092,7 +5103,7 @@ OpticalContribution = [        ; the first QR each device shows
   bstr .size 16,               ; this device's contribution (design §7.5.2)
 ]
 
-TranscriptConfirm = [          ; the second QR, once both contributions are in
+TranscriptConfirm = [          ; the second code, once both contributions are in
   uint,                        ; version, 1
   bstr .size 32,               ; the ceremony-id this device computed
                                ;   (design §7.5.2); the other checks it equals

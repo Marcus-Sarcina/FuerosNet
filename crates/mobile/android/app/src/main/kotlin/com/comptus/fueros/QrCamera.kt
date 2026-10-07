@@ -16,6 +16,9 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.view.Surface
 import com.google.zxing.BinaryBitmap
+import com.google.zxing.ChecksumException
+import com.google.zxing.FormatException
+import com.google.zxing.NotFoundException
 import com.google.zxing.DecodeHintType
 import com.google.zxing.PlanarYUVLuminanceSource
 import com.google.zxing.common.HybridBinarizer
@@ -84,13 +87,23 @@ class QrCamera(private val context: Context) {
         const val STALL_MS = 40_000L
 
         /**
-         * **One screen refresh, in hertz**: the frame rate whose interval
-         * the exposure should not fall below, since a shutter shorter than
-         * the panel's refresh catches it mid-draw. Sixty is one 16.7 ms
-         * frame, and the phones these run on refresh at 60 or 120, so one
-         * 60 Hz period integrates a whole frame on either ([briskest]).
+         * **The refresh rate to assume where the display will not say**,
+         * in hertz. Sixty is the slowest panel worth expecting, and
+         * assuming slow is the safe direction: it asks for a *longer*
+         * minimum exposure than a fast panel needs, which costs a little
+         * motion blur rather than half a drawn code.
+         *
+         * The real figure comes from the display ([screenHz]). It was a
+         * constant 60 until 2026-10-07, which happened to be safe only
+         * because the phones under test refresh at 120 and the shutter
+         * settled at 10 ms — a tenth of a frame short of one 60 Hz draw.
          */
-        const val SCREEN_HZ = 60
+        const val SCREEN_HZ_UNKNOWN = 60
+
+        /** How far apart a symbol's own black and white must read before
+         *  the midpoint between them is trusted as a threshold for the
+         *  tracking cells. */
+        const val TRACK_CONTRAST = 40
 
         /**
          * **How far under to expose a screen**, in stops. A code on a
@@ -178,6 +191,82 @@ class QrCamera(private val context: Context) {
     private var previewSurface: Surface? = null
 
 
+    /**
+     * **Why a frame did not read**, which was one counter until 2026-10-07
+     * and conflated two unrelated failures.
+     *
+     * Only 8% of frames decode at all (median 9 attempts a read, measured
+     * over the run of 2026-10-07), while the camera delivers 29 of its 30
+     * frames a second into the decoder — so the exchange's duration is
+     * almost entirely the 92% that fail, and not the capture rate and not
+     * the lockstep.
+     *
+     * **Which 92% decides what to build.** A symbol never *located* is a
+     * framing or localisation failure, which a bounding mark a detector can
+     * find at distance answers directly. A symbol located and *unreadable*
+     * is blur or noise or too few pixels a module, which a bounding mark
+     * does nothing for and oversampling does. The two were one `catch
+     * (e: Exception)` whose own comment said "either way the next frame is
+     * the answer" — true of the frame, and not true of the design.
+     */
+    private val read = java.util.concurrent.atomic.AtomicInteger(0)
+    private val notFound = java.util.concurrent.atomic.AtomicInteger(0)
+    private val checksum = java.util.concurrent.atomic.AtomicInteger(0)
+    private val format = java.util.concurrent.atomic.AtomicInteger(0)
+    private val other = java.util.concurrent.atomic.AtomicInteger(0)
+
+    /** The tally, and the counters reset: emitted on a timer while a read
+     *  runs and once more as it closes. */
+    private fun looks(why: String) {
+        val r = read.getAndSet(0)
+        val nf = notFound.getAndSet(0)
+        val ck = checksum.getAndSet(0)
+        val fm = format.getAndSet(0)
+        val ot = other.getAndSet(0)
+        val n = r + nf + ck + fm + ot
+        if (n == 0) return
+        Diag.event(
+            "qr.looks",
+            "which" to which,
+            "facing" to facing,
+            "at" to why,
+            "frames" to n,
+            "read" to r,
+            "not_located" to nf,
+            "located_unreadable" to (ck + fm),
+            "checksum" to ck,
+            "format" to fm,
+            "other" to ot,
+            "read_pct" to (if (n > 0) 100 * r / n else 0),
+            "tracked" to tracked.getAndSet(0),
+        )
+    }
+
+    /**
+     * **Point the tracking sampler at a counterparty whose size is now
+     * known**, without reopening the camera.
+     *
+     * Their part count arrives in the first code of theirs that reads, so
+     * it cannot be given when the read starts; and a read already running
+     * for the same symbol is deliberately left running
+     * ([readOne]), so it cannot be given by asking again. Their drawn
+     * symbol is the same width as this side's, both being this build at
+     * the same chunk.
+     */
+    fun trackingOf(parts: Int, modules: Int, sink: ((BooleanArray) -> Unit)?) {
+        trackingParts = parts
+        trackingModules = modules
+        foundTracking = sink
+    }
+
+    /** Where a sampled tracking bitmap goes, and the geometry it needs:
+     *  how many parts the counterparty has and how wide their symbol is
+     *  ([Tracking]). Set by the caller alongside the read. */
+    private var foundTracking: ((BooleanArray) -> Unit)? = null
+    private var trackingParts = 0
+    private var trackingModules = 0
+    private val tracked = java.util.concurrent.atomic.AtomicInteger(0)
+
     private val surveyed = java.util.concurrent.atomic.AtomicBoolean(false)
     private val attempts = java.util.concurrent.atomic.AtomicInteger(0)
     private var startedMs: Long = 0
@@ -204,6 +293,10 @@ class QrCamera(private val context: Context) {
          *  frame in one delivery, where the caller is reading a polychrome
          *  exchange ([Polychrome]). */
         foundChannels: ((List<Pair<ByteArray, Int>>) -> Unit)? = null,
+        /** Where a sampled tracking bitmap goes, with how many parts the
+         *  counterparty has and how wide their drawn symbol is
+         *  ([Tracking]). All three or none. */
+        tracking: Triple<Int, Int, (BooleanArray) -> Unit>? = null,
         found: (ByteArray) -> Unit,
     ): String? {
         // **One open per read.** A screen redraws for every note and step,
@@ -224,6 +317,9 @@ class QrCamera(private val context: Context) {
         this.failed = failed
         this.continuous = continuous
         this.foundChannels = foundChannels
+        this.trackingParts = tracking?.first ?: 0
+        this.trackingModules = tracking?.second ?: 0
+        this.foundTracking = tracking?.third
         java.util.Arrays.fill(lastChannel, null)
         this.found = found
         lastPayload = null
@@ -247,10 +343,14 @@ class QrCamera(private val context: Context) {
             override fun run() {
                 if (!reading.get() || handler !== h) return
                 if (Diag.ms() - lastReadMs >= STALL_MS) {
+                    looks("restart")
                     Diag.warn("camera", "which" to "qr", "op" to "restart", "facing" to facing, "attempts" to attempts.get(), "stalled_ms" to (Diag.ms() - lastReadMs))
                     restart()
                     return
                 }
+                // the tally rides the watchdog's tick rather than a timer
+                // of its own ([looks])
+                looks("tick")
                 h.postDelayed(this, 2_000)
             }
         }, 2_000)
@@ -341,10 +441,14 @@ class QrCamera(private val context: Context) {
         // leave a colour exchange reading nothing and read as colour
         // having failed
         val channel = this.foundChannels
+        // the tracking sink goes with it for the same reason the colour
+        // sink does: a restart that dropped it would leave the rows
+        // unread and the window rotating on the header's count alone
+        val track = this.foundTracking?.let { Triple(trackingParts, trackingModules, it) }
         val preview = previewSurface
         close()
         lastRead = null
-        readOne(f, preview, w, fl, cont, channel, found)
+        readOne(f, preview, w, fl, cont, channel, track, found)
     }
 
     private fun cameraRefused(why: String): String {
@@ -443,13 +547,84 @@ class QrCamera(private val context: Context) {
     private fun decode(y: ByteArray, rowStride: Int, w: Int, h: Int): ByteArray? {
         val source = PlanarYUVLuminanceSource(y, rowStride, h, 0, 0, w, h, false)
         return try {
-            val text = QRCodeReader().decode(BinaryBitmap(HybridBinarizer(source)), DECODE_HINTS).text
-            Optical.bytes(text)
+            val r = QRCodeReader().decode(BinaryBitmap(HybridBinarizer(source)), DECODE_HINTS)
+            read.incrementAndGet()
+            // **the rows come off the same capture as the symbol**: the
+            // decoder has just told us where its finders are, which is a
+            // module basis, so the cells below need no detector of their
+            // own ([Tracking.cells])
+            trackFrom(r, y, rowStride, w, h)
+            Optical.bytes(r.text)
+        } catch (e: NotFoundException) {
+            // **the detector never located a symbol.** Framing, focus or
+            // localisation — a bounding mark the detector could find at
+            // distance is what answers this one, and a sharper image is not.
+            notFound.incrementAndGet()
+            null
+        } catch (e: ChecksumException) {
+            // **located, and unreadable.** Blur, noise or too few pixels a
+            // module: the error correction was exhausted. Oversampling and
+            // a coarser module answer this one, and a bounding mark does
+            // nothing for it.
+            checksum.incrementAndGet()
+            null
+        } catch (e: FormatException) {
+            // located, and the bits were not a well-formed symbol —
+            // the same causes as a checksum failure, further along
+            format.incrementAndGet()
+            null
         } catch (e: Exception) {
-            // no symbol in this frame, or one that failed its own error
-            // correction. Either way the next frame is the answer.
+            other.incrementAndGet()
             null
         }
+    }
+
+    /**
+     * **Sample the tracking rows under a symbol that just decoded.**
+     *
+     * The threshold is taken from the symbol itself — the top-left
+     * finder's core is black and its quiet zone white — rather than from
+     * the cells, because at the start of an exchange every cell is white
+     * and a threshold derived from them would read noise as parts held.
+     */
+    private fun trackFrom(r: com.google.zxing.Result, y: ByteArray, rowStride: Int, w: Int, h: Int) {
+        val sink = foundTracking ?: return
+        val parts = trackingParts
+        val modules = trackingModules
+        if (parts <= 0 || modules <= 0) return
+        val p = r.resultPoints ?: return
+        if (p.size < 3) return
+        // the detector's order for a QR: bottom-left, top-left, top-right
+        val bl = Tracking.At(p[0].x, p[0].y)
+        val tl = Tracking.At(p[1].x, p[1].y)
+        val tr = Tracking.At(p[2].x, p[2].y)
+        fun lum(a: Tracking.At): Int? {
+            val x = Math.round(a.x)
+            val yy = Math.round(a.y)
+            if (x < 0 || yy < 0 || x >= w || yy >= h) return null
+            return y[yy * rowStride + x].toInt() and 0xff
+        }
+        val (blackAt, whiteAt) = Tracking.reference(modules, Optical.MARGIN, tl, tr, bl) ?: return
+        val black = lum(blackAt) ?: return
+        val white = lum(whiteAt) ?: return
+        // a symbol whose own black and white are not apart is not a
+        // threshold worth trusting
+        if (white - black < TRACK_CONTRAST) return
+        val mid = (black + white) / 2
+        val cells = Tracking.cells(parts, modules, Optical.MARGIN, tl, tr, bl)
+        if (cells.size < parts) return
+        val bits = BooleanArray(parts)
+        var seen = 0
+        for (i in 0 until parts) {
+            val v = lum(cells[i]) ?: continue
+            seen++
+            if (v < mid) bits[i] = true
+        }
+        // a partial read is not delivered: a row out of frame would read
+        // as unset, which is harmless, but it also tells us nothing
+        if (seen < parts) return
+        tracked.incrementAndGet()
+        sink(bits)
     }
 
     /** The largest YUV frame the camera offers within [maxPixels]. */
@@ -587,6 +762,25 @@ class QrCamera(private val context: Context) {
     }
 
     /**
+     * **What the panel in front of this camera actually refreshes at.**
+     *
+     * The counterparty's screen is the subject, and an exposure shorter
+     * than one of its refreshes catches it part-drawn — so the floor under
+     * the shutter is a property of *their* display, which this device
+     * cannot read. Its own is the only available stand-in and the two are
+     * the same model of thing; where even that is unavailable,
+     * [SCREEN_HZ_UNKNOWN] assumes the slowest panel worth expecting, which
+     * is the safe direction.
+     */
+    private fun screenHz(): Int {
+        val dm = context.getSystemService(Context.DISPLAY_SERVICE) as? android.hardware.display.DisplayManager
+        val r = dm?.getDisplay(android.view.Display.DEFAULT_DISPLAY)?.refreshRate ?: 0f
+        // a display that reports nothing useful, and anything outside the
+        // range a panel plausibly runs at, is not believed
+        return if (r >= 24f && r <= 480f) Math.round(r) else SCREEN_HZ_UNKNOWN
+    }
+
+    /**
      * **The frame rate that caps the shutter**, which is the only lever on
      * exposure time that does not take exposure away from the camera
      * altogether: a frame cannot last longer than its own interval, so a
@@ -598,16 +792,19 @@ class QrCamera(private val context: Context) {
      * it on lowering the sensitivity instead of shortening the shutter,
      * which is right for a photograph and wrong for this.
      *
-     * **Sixty, and not higher, because the subject is a screen.** The
-     * exposure has to integrate at least one whole refresh or it catches
-     * the panel mid-draw; one 60 Hz frame is 16.7 ms, which is also short
-     * enough to hold a hand still to within a module. So the choice is the
-     * briskest range the camera offers whose floor does not exceed 60, and
-     * the slowest it offers if every range is faster than that.
+     * **Capped by the panel's refresh, because the subject is a screen.**
+     * The exposure has to integrate at least one whole refresh or it
+     * catches the panel mid-draw, so the choice is the briskest range the
+     * camera offers whose floor does not exceed the display's own rate
+     * ([screenHz]), and the slowest it offers if every range is faster
+     * than that. At 60 Hz that is one 16.7 ms frame; at 120 it allows
+     * 8.3 ms, which is also still short enough to hold a hand still to
+     * within a module.
      */
     private fun briskest(ranges: Array<Range<Int>>?): Range<Int>? {
         val all = ranges?.takeIf { it.isNotEmpty() } ?: return null
-        return all.filter { it.lower <= SCREEN_HZ }.maxWithOrNull(
+        val hz = screenHz()
+        return all.filter { it.lower <= hz }.maxWithOrNull(
             compareBy({ it.lower }, { it.upper }),
         ) ?: all.minByOrNull { it.lower }
     }
@@ -758,6 +955,7 @@ class QrCamera(private val context: Context) {
                                         "region" to (region?.get(0)?.rect?.toShortString() ?: "none"),
                                         "fps" to (fps?.toString() ?: "none"),
                                         "darken_steps" to darken,
+                                        "screen_hz" to screenHz(),
                                     )
                                     s.setRepeatingRequest(b.build(), focusWatch, h)
                                 } catch (e: Exception) {
@@ -792,6 +990,7 @@ class QrCamera(private val context: Context) {
 
     /** Stop and give the camera back. Safe to call twice. */
     fun close() {
+        if (device != null) looks("close")
         reading.set(false)
         if (device != null) {
             Diag.event("camera", "which" to "qr", "op" to "close", "attempts" to attempts.get())

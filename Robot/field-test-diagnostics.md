@@ -172,6 +172,32 @@ dial (`runtime.rs` ~945), candidate counts and reflexive-address found at
 | `qr.frame` | which, **channels** separated out of one capture, fresh, attempts — the evidence a colour decision rests on | `QrCamera.colour` |
 | `camera.lens` | which, id, facing, **fixed_focus**, nearest_mm, hyperfocal_mm, af_modes, focal_mm, sensor_mm; every camera once a process | `QrCamera.lens/lensOf` |
 | `camera.focus` | which, facing, **af** state, ae, **focus_mm**, iso, **exposure_us**, attempts — on a change of AF state and otherwise about once a second | `QrCamera.focusWatch` |
+| `qr.looks` | which, facing, at (tick/restart/close), **frames**, read, **not_located**, **located_unreadable** (checksum + format), other, read_pct — every two seconds on the watchdog's tick and once at close | `QrCamera.looks` |
+
+| `qr.tracking` | parts, held, rows, across, module_px — when the rows are drawn | `MeetActivity.trackingUnder` |
+
+**`qr.looks` carries `tracked`**, the count of frames whose tracking rows
+were sampled whole. A decode with no `tracked` beside it is a symbol read
+whose rows were out of frame or too low-contrast to judge — which costs a
+re-show and not the exchange, since the header's contiguous count is a
+floor under the bitmap (`OpticalExchange.takeTracking`).
+
+**`qr.looks` is the one that says what to build.** Only about 8% of frames
+decode, while the camera delivers 29 of its 30 a second into the decoder,
+so the exchange's duration is almost entirely the 92% that fail. A symbol
+**not located** is a framing or localisation failure, which a bounding mark
+a detector can find at distance answers and a sharper image does not. A
+symbol **located and unreadable** is blur, noise or too few pixels a
+module, which oversampling answers and a bounding mark does nothing for.
+The two were a single `catch (e: Exception)` until 2026-10-07.
+
+**The `qr.*` and `QrCamera` names are historical.** The symbol has been an
+Aztec code since 2026-10-07 and the symbology is explicitly not pinned
+(`wire-format.md` §14.3.1), so read them as *the optical code* rather than
+as a format. Renaming them would churn this register and the tooling that
+parses it for no gain; telemetry is not where the design states its rules.
+The `camera` request line carries **`screen_hz`**, the display's measured
+refresh rate, which is what caps the shutter.
 | `optical.colour` | state (`refused`), how many of this side's parts the other held when it was given up on | `MeetActivity.optical`'s fall back to the monochrome format |
 | `camera` | open, close, error, template, exposure and anti-banding as set | `QrCamera`, `FaceCamera` |
 | `face.frames` | delivered, timeouts (5 s open, 2 s frame), sizes; never pixels | `FaceCamera.open/frame` |

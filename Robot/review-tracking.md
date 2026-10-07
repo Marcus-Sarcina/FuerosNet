@@ -15702,7 +15702,68 @@ both confirmed failing without the rule.
   Three runs found three failures in three different places; they do all
   trace to the one root, but that is an argument and not a measurement.
 
-## Queued: more bits a frame at the same module (2026-10-07)
+## Done: more bits a frame, by deduction (2026-10-07)
+
+**[ruled, author, 2026-10-07]** The optical channel is required; a
+particular 2D code is not. The symbology is chosen by deduction against
+two bounds — the screen's refresh rate and the feature size a camera
+resolves at the distance wanted — and the protocol does not stay pinned to
+one if something better is or becomes available.
+
+**Aztec passes that test and QR does not, measured.** `SymbologySurveyTest`
+drives the real encoders over the real contribution and the real readers
+over rendered matrices:
+
+| symbology | chunk | parts | modules | decode floor |
+|---|---|---|---|---|
+| QR + base45 | 20 | 102 | 29 | 2 px/module |
+| **Aztec + bytes** | **52** | **39** | **27** | **2 px/module** |
+| Data Matrix + bytes | 36 | 57 | 26 | **never decoded** |
+
+2.6× the payload, a *larger* module, the same decode floor. Aztec's saving
+is furniture — one bullseye against three finders, and no quiet zone,
+which the survey measures rather than assuming. Data Matrix is out because
+ZXing's reader did not find it at any density from 1 to 8 px/module; worth
+revisiting only with a different decoder.
+
+**Two things I got wrong on the way, both caught by reading the output.**
+
+1. **The first survey used all-zero parts.** Base45 of zeros is a string
+   of `'0'`, so QR picked *numeric* mode — three digits to ten bits — and
+   every symbology looked more capacious than it is. It reported 55 parts
+   at 29 modules where the real figure is 102. Fixed by building parts
+   from the real contribution, which then reproduced `CHUNK`'s known table
+   exactly. This is the mechanical-substitution failure mode verbatim:
+   the regex ran, the numbers came out, and nothing checked them against
+   a figure already known.
+2. **I asserted the whole object would not fit one Aztec symbol.** The
+   ceiling is **2,025 bytes** and the contribution is 2,022, so it fits by
+   three. The test passed only because I happened to probe with 2,030.
+   Now the ceiling is measured and pinned in both directions.
+
+**`CHUNK` 20 → 52**, parts 102 → 39, modules 29 → 27. Expected pass about
+22 s against 48. Unproven on hardware.
+
+**"QR" removed from the root documents**, where it stood in for "the
+optical code" — the conventions' own rule against naming an identifier
+where a role is meant, and wrong the moment the symbology moved. §14.3.1
+carries the deduction now. The `qr.*` event names stay, noted as
+historical in the diagnostics register: telemetry is not where the design
+states its rules, and renaming would churn the register and its parsers.
+
+**`SCREEN_HZ` fixed.** It was a constant 60, safe only because these
+panels refresh at 120 while the shutter settled at 10 ms — a tenth of a
+frame short of one 60 Hz draw. `QrCamera.screenHz` reads the display, with
+60 as the fallback, since assuming a slow panel errs towards motion blur
+rather than half a drawn code. On the record as `screen_hz`.
+
+**What the next run has to show.** The bar is the last run's: decode
+median 293 ms, p90 466 ms, zero watchdog restarts, and reads at about
+three and a half feet. A coarser symbol with fewer parts should not give
+any of that back, but fewer parts at a new symbology is two changes at
+once and only hardware says.
+
+## Superseded: more bits a frame at the same module (2026-10-07)
 
 **[author, 2026-10-07]** The range is satisfactory and settled: variation
 in angle and distance was introduced without disrupting the flow, so it
@@ -15745,3 +15806,193 @@ figures to beat are this session's — decode median 293 ms, p90 466 ms,
 zero watchdog restarts — because a denser symbol at the same module is
 exactly the trade that put p90 at 1979 ms and three restarts at 41
 modules. A shorter pass that reintroduces marginal reads is not a gain.
+
+## Aztec, measured and rejected (2026-10-07)
+
+**Two hardware runs settle it.** Same phones, same object, same camera
+settings; only the symbol changed.
+
+| | QR, 102 parts | Aztec bare, 39 | Aztec +margin, 64 |
+|---|---|---|---|
+| optical pass | **48.4 s** | 72.6 s | 98.1 s |
+| a part | **0.47 s** | 1.86 s | 1.53 s |
+| decode median | **293 ms** | 332 ms | 330 ms |
+| decode p90 | **466 ms** | 2,561 ms | 3,029 ms |
+| range | **~42 in** | ~22–27 in | ~22 in |
+
+**The quiet zone was the hypothesis and it was wrong.** Holding the drawn
+module at 27 and adding QR's own two-module margin changed the range not
+at all. So the loss is intrinsic: one central bullseye gives a detector
+far less to localise and perspective-correct from than three corner
+finders.
+
+**The error that cost two runs, and it is a repeat.** The survey's decode
+floor rendered a *perfect* matrix and asked for the fewest pixels a module
+the reader could manage — two, for both symbologies. A perfect render has
+no blur, noise, perspective or rolling shutter, so it measures whether the
+resolution suffices and not whether a camera *finds* the symbol. That is
+the binding constraint and the test did not touch it. Identical in shape
+to fitting `450 / modules` to one observation: measure what is easy,
+assume it is what matters.
+
+**What should have been done:** put the candidate on a phone at the
+earliest point, before the chunk, the documents and the tests moved with
+it. A one-screen harness showing a candidate symbol at a chosen module
+while the other phone reads it would have answered this in ten minutes
+rather than two full build-wipe-run cycles.
+
+**And the deeper finding, which outlives the symbology question.**
+Capacity per frame is **the wrong term**. QR's pass is 0.47 s a part
+against a 293 ms decode median, so the majority of each part is the
+lockstep waiting on the counterparty's header. 2.6× fewer parts gave a 50%
+*longer* pass. **The 48 s is round-trips, not symbols** — so the duration
+lever is the exchange protocol:
+
+- the sender shows only the one part the receiver needs next
+  (`OpticalExchange.frame`), so a receiver collects at most one part per
+  round-trip however fast it decodes
+- a sender cycling through the parts it believes still missing would let a
+  receiver take several per round-trip
+- the cost is that the lockstep's guarantees are what make it simple: the
+  screens change as the other side reads, nobody skips a part, and
+  `done()` is both sides agreeing. A carousel needs a repair notion.
+
+**Reverted to QR at chunk 20.** Kept: `QrCamera.screenHz`; the survey and
+its harness, with the hardware verdict written across the top so the next
+attempt starts from what a camera did; the documents' de-pinning from QR,
+since the author's deduction stands and QR is what currently wins it.
+
+**One Aztec-specific finding, now dormant with the revert.** A composed
+colour frame decoded in luminance to its **green channel, byte for byte**
+— green's 0.587 weight dominates and Aztec's 23% correction absorbs the
+rest. Under QR it decodes to nothing, which is what makes the colour fall
+back *timed* rather than inferred. The premise is symbology-dependent and
+anything reviving colour must re-derive it rather than inherit it.
+
+## The counters settle it: the lockstep is the bottleneck (2026-10-07)
+
+**Run `aaee318-looks-1`**, QR at chunk 20, 102 parts, smooth to 33 inches.
+`qr.looks` splits every frame the decoder saw:
+
+| | frames | decoded | new parts | **duplicate decodes** | not located | located, unreadable |
+|---|---|---|---|---|---|---|
+| GXV | 1916 | 1437 (75%) | 107 | **92.6%** | 453 (24%) | 26 (**1%**) |
+| MRK | 2036 | 695 (34%) | 107 | **84.6%** | 1321 (65%) | 20 (**1%**) |
+
+**Decode was never the problem.** A third to three quarters of *all*
+camera frames decode. And when the detector locates a symbol it reads it
+99% of the time.
+
+**The waste is the lockstep.** 85–93% of successful decodes are the same
+part read again, because the sender holds its frame until it sees this
+side's acknowledgement — and that acknowledgement can only arrive on the
+counterparty's next readable frame. Removing it:
+
+| | now | with the tracking bitmap |
+|---|---|---|
+| GXV at 75% frame success | 48 s | **~4.5 s** |
+| MRK at 34% | 48 s | **~10 s** |
+
+**I flip-flopped on this and the reason is worth recording.** I said the
+duration was round-trips; then "corrected" it to capture rate on the basis
+of `attempts` being 9 per read; the counters show the first answer was
+right. **`attempts` counts frames since the last *fresh* read, not since
+the last successful decode** — so 9 attempts a read meant nine frames per
+*new part*, of which most decoded and duplicated. Third time this session
+a number meant something other than what I took it for: `450 / modules`
+fitted to one point, a synthetic decode floor that ignored what binds, and
+now a counter read as the wrong denominator. The pattern is taking a
+measurement's *name* for its definition.
+
+**What this does to the author's five-point design:**
+
+1. **Point 2, the tracking bitmap — dominant, 5–10×.** Everything else is
+   rounding next to it.
+2. **Point 3, the coloured frame — the right second lever, now with a
+   number.** The residual failures are *localisation*: 24% of frames on
+   GXV and 65% on MRK. A bounding mark findable at distance attacks
+   exactly that, and roughly doubles the worse phone.
+3. **Points 1 and 4, rectangular form and the one-byte header** — chiefly
+   the *mechanism* for point 2. 102 → 85 parts is worth under a second
+   once the lockstep is gone.
+4. **Point 5, oversampling — dead.** `located_unreadable` is **1%**. There
+   is no blur, noise or resolution deficit to attack, so combining frames
+   has nothing to combine against and a coarser module buys nothing.
+   Multi-binarization may still convert some *not located* into located,
+   which is a different and smaller claim than the one I made.
+
+**And one asymmetry to watch**: identical phones, 75% against 34% frame
+success, MRK two-thirds not-located. Aim, or that camera. If it is the
+camera, the coloured frame matters more than the averages suggest.
+
+**At 4.5–10 s the optical pass stops setting the ceremony's duration** —
+the four-minute witness floor does, with permissions and fumbling. Which
+is where the author wanted it.
+
+## The tracking bitmap, built (2026-10-07)
+
+**[ruled, author, 2026-10-07]** Build it. The window carousel I proposed
+as a cheaper first step — rotate over `theirGot` upward, no wire change —
+**was wrong, and `WindowTest` killed it before hardware did**:
+
+```
+p=0.34   one-at-a-time 577 frames,   window-without-bitmap 657   => 0.9x
+p=0.34   one-at-a-time 577 frames,   window-with-bitmap    309   => 1.9x
+p=0.75   one-at-a-time 267 frames,   window-with-bitmap    138   => 1.9x
+```
+
+`got` is *contiguous*, so a window over it includes parts the receiver
+already caught out of order past its first hole, and the sender cannot
+tell which. Half the turns go to parts already held and the duplicate
+saving cancels. **The bitmap is not an optimisation of the carousel; it is
+what makes a carousel work at all.**
+
+With it, every catch is useful: 105 catches for 102 parts at p=0.34, which
+is the floor. At 30 frames a second that is **309 frames ≈ 10 s on the
+worse phone and 138 ≈ 4.6 s on the better**, against 48 s measured.
+
+**What was built.**
+
+- `OpticalExchange.theirHeld` — which of this side's parts the other side
+  holds, part by part, replacing a contiguous count as the thing the
+  rotation consults. `showing()` walks `owed()`, the lowest `WINDOW`
+  parts they lack.
+- **The header's contiguous count seeds it**, which is what makes the rows
+  safe to lose: a count of N means parts 0..N-1 are held, so a side that
+  cannot read the rows degrades to exactly the behaviour that shipped
+  rather than to a wrong belief.
+- `Tracking` — the layout and the geometry, pure and tested. One module a
+  part at **twice** the symbol's module size, drawn flush under it.
+- **The rows need no bounding mark and no detector.** A symbol that
+  decoded has already told us where its finders are
+  (`Result.getResultPoints`), and three finders fix a module basis, so the
+  cells below are an extrapolation from geometry already in hand. This is
+  why point 2 did not have to wait for point 3.
+- The threshold comes from the *symbol* — its top-left finder's core is
+  black, its quiet zone white — and not from the cells, because at the
+  start of an exchange every cell is white and a threshold off the cells
+  would read noise as parts held.
+- `Meet.TURN_MS = 100` — the screen advances the rotation on its own
+  clock. It used to redraw only when something changed, which was right
+  when it showed one part and held it.
+
+**Known weaknesses, named rather than discovered.**
+
+- **Affine, not perspective.** Three finder points cannot give the fourth
+  degree of freedom, so tilt is uncorrected. Acceptable because the
+  extrapolation is a few module-rows below a symbol that filled the frame,
+  and because a misread cell costs a re-show. Unmeasured on hardware.
+- **The rows are outside the error correction.** A module misread *unset*
+  costs a redundant re-show; misread *set* would cost a part. Mitigated by
+  double-size modules and by `Tracking.CONFIRM`, which `takeTracking`
+  enforces: a set module is believed on its second sighting, since the
+  rows are re-shown every frame and a noise hit would have to recur in the
+  same cell.
+- **`WINDOW = 8` and `TURN_MS = 100` are reasoned, not measured.** At 34%
+  frame success a part shown for three frames lands about 70% of the time;
+  that arithmetic sets both, and hardware is what checks it.
+- A defect caught in review rather than in a run: the turner was first
+  written to be cancelled and re-posted by every redraw, so a steady
+  stream of incoming reads would have reset the clock for ever and the
+  window would never have turned. The reads are of *their* parts and the
+  rotation is of this side's; the two must not be coupled.

@@ -49,9 +49,14 @@ object Optical {
      * at arm's length — the limit there is the camera's resolution of fine
      * modules, not the number of smudges.
      */
+    /** **The quiet zone, in modules each side.** Named because the
+     *  tracking rows are laid out against the drawn matrix and have to
+     *  know where the symbol inside it starts (`Tracking.cells`). */
+    const val MARGIN = 2
+
     private val HINTS = mapOf<EncodeHintType, Any>(
         EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.M,
-        EncodeHintType.MARGIN to 2,
+        EncodeHintType.MARGIN to MARGIN,
         EncodeHintType.CHARACTER_SET to "US-ASCII", // alphanumeric mode is what the alphabet earns
     )
 

@@ -44,6 +44,58 @@ class MeetActivity : Activity() {
     private lateinit var body: LinearLayout
     private lateinit var scroll: ScrollView
     private var camera: QrCamera? = null
+
+    /**
+     * **What advances the optical window.** The screen used to redraw only
+     * when something changed — a part read, a step moved — which was
+     * right when it showed exactly one part and held it until the other
+     * side reported progress. The window rotates
+     * (`OpticalExchange.frame`), so something has to turn it, and the
+     * screen is the only thing that knows when a frame has been up long
+     * enough (`Meet.TURN_MS`).
+     *
+     * Posted only while the contribution or transcript is on screen, and
+     * cancelled the moment it is not: a timer redrawing a screen that has
+     * moved on is how a camera ends up held behind a dead ceremony.
+     */
+    /** The symbol's geometry as last drawn, so the tracking rows under it
+     *  match its module size exactly ([trackingUnder]). */
+    private var lastModules = 0
+    private var lastScale = 0
+
+    private val turning = android.os.Handler(android.os.Looper.getMainLooper())
+    private var turner: Runnable? = null
+
+    private fun turnWhileShowing(x: OpticalExchange) {
+        // **started once and left alone.** Cancelling and re-posting on
+        // every redraw would let a steady stream of incoming reads reset
+        // the clock for ever, and the window would never turn — the reads
+        // are of *their* parts and the rotation is of this side's, so the
+        // two must not be coupled.
+        if (turner != null) return
+        val r = object : Runnable {
+            override fun run() {
+                val m = Kernel.meet()
+                val live = m != null && m.step() == Meet.Step.OPTICAL && m.exchange === x
+                if (!live) {
+                    turner = null
+                    return
+                }
+                x.turn()
+                // reschedule before drawing: redraw is what calls back in
+                // here, and this runnable is what owns the cadence
+                turning.postDelayed(this, Meet.TURN_MS)
+                redraw()
+            }
+        }
+        turner = r
+        turning.postDelayed(r, Meet.TURN_MS)
+    }
+
+    private fun stopTurning() {
+        turner?.let { turning.removeCallbacks(it) }
+        turner = null
+    }
     /** The selfie camera's view, kept across redraws so the session it
      *  feeds is not torn down with the screen: what the person holding the
      *  other phone steers by, since this one faces away from its user. */
@@ -142,6 +194,9 @@ class MeetActivity : Activity() {
         // to
         camera?.close()
         camera = null
+        // and the window stops turning with it: a timer redrawing a screen
+        // nobody is looking at is the same kind of leak
+        stopTurning()
         super.onStop()
     }
 
@@ -373,6 +428,8 @@ class MeetActivity : Activity() {
             // (`OpticalExchange.CHUNK`) [measured, 2026-10-07].
             "module_mm" to String.format("%.2f", moduleMm),
         )
+        lastModules = m.width
+        lastScale = scale
         val w = m.width * scale
         val px = IntArray(w * w)
         for (y in 0 until w) {
@@ -381,6 +438,35 @@ class MeetActivity : Activity() {
             }
         }
         show(px, w)
+    }
+
+    /**
+     * **The tracking rows, flush under the symbol** ([Tracking]): which of
+     * the counterparty's parts are held here, one module each, so they can
+     * rotate through what is actually still owed rather than through what
+     * a contiguous count cannot describe.
+     *
+     * Drawn as a second image rather than inside the symbol's matrix: the
+     * symbol has to stay a well-formed code for the decoder, and the rows
+     * carry no error correction of their own.
+     */
+    private fun trackingUnder(x: OpticalExchange, modules: Int, scale: Int) {
+        val bits = x.tracking()
+        if (bits.isEmpty()) return
+        val (px, w) = Tracking.pixels(bits, bits.size, modules, scale)
+        val h = Tracking.rows(bits.size, modules) * Tracking.SCALE * scale
+        if (h <= 0) return
+        Diag.event(
+            "qr.tracking", "parts" to bits.size, "held" to bits.count { it },
+            "rows" to Tracking.rows(bits.size, modules), "across" to Tracking.across(modules),
+            "module_px" to Tracking.SCALE * scale,
+        )
+        body.addView(
+            ImageView(this).apply {
+                setImageBitmap(Bitmap.createBitmap(px, w, h, Bitmap.Config.ARGB_8888))
+                layoutParams = LinearLayout.LayoutParams(w, h)
+            },
+        )
     }
 
     /** Pixels into the view, which the two renderers share. */
@@ -420,6 +506,9 @@ class MeetActivity : Activity() {
          *  channel that carried it, which is a part's index within its
          *  frame. */
         channels: Boolean = false,
+        /** Where a sampled tracking bitmap goes ([Tracking]), with the
+         *  counterparty's part count and drawn symbol width. */
+        tracking: Triple<Int, Int, (BooleanArray) -> Unit>? = null,
         /** Everything one captured frame carried: one pair in luminance,
          *  up to three from a colour frame. **A whole frame at a time**,
          *  because how many channels separated is what the caller decides
@@ -442,7 +531,7 @@ class MeetActivity : Activity() {
             runOnUiThread { Kernel.meet()?.stop(why) ?: redraw() }
         }
         val channelSink: ((List<Pair<ByteArray, Int>>) -> Unit)? = if (channels) found else null
-        cam.readOne(facing, surface, which, onFailed, continuous, channelSink) { bytes -> found(listOf(bytes to 0)) }
+        cam.readOne(facing, surface, which, onFailed, continuous, channelSink, tracking) { bytes -> found(listOf(bytes to 0)) }
             ?.let { why -> para(why) }
     }
 
@@ -530,6 +619,7 @@ class MeetActivity : Activity() {
                 m.colourRefused = true
                 m.exchange = null
                 m.colourSince = null
+                stopTurning()
                 // **the camera goes with it**: its colour sink outlives a
                 // redraw, and three decodes a frame is a cost the
                 // monochrome path should not keep paying once colour has
@@ -553,8 +643,12 @@ class MeetActivity : Activity() {
             para(x.status())
         } else {
             qr(x.frame(), "$name ${x.showing() + 1}/${x.count}")
+            trackingUnder(x, lastModules, lastScale)
             para(x.status())
         }
+        // the window turns on the screen's own clock, not on a read
+        // landing ([turnWhileShowing])
+        if (!x.done()) turnWhileShowing(x)
         if (x.done()) {
             // this side is through; the last code stays up for the other
             // side's camera until the kernel moves on (the transcript's
@@ -563,6 +657,22 @@ class MeetActivity : Activity() {
             return
         }
         aim()
+        // **the sampler learns their size as soon as a code of theirs
+        // reads** ([Tracking]): their part count is in that first header,
+        // and their symbol is as wide as this side's, both being this
+        // build at the same chunk. Until then there is nothing to sample.
+        val theirs = x.theirCount()
+        if (theirs > 0 && lastModules > 0) {
+            camera?.trackingOf(theirs, lastModules) { bits ->
+                runOnUiThread {
+                    val m2 = Kernel.meet() ?: return@runOnUiThread
+                    if (m2.step() != Meet.Step.OPTICAL || m2.exchange !== x) return@runOnUiThread
+                    val before = x.theirReceived()
+                    x.takeTracking(bits)
+                    if (x.theirReceived() != before) redraw()
+                }
+            }
+        }
         scan(QrCamera.Facing.SELFIE, name, continuous = true, channels = colour) { frame ->
             runOnUiThread {
                 if (m.step() != Meet.Step.OPTICAL || m.exchange !== x) return@runOnUiThread

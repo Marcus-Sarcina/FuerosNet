@@ -96,6 +96,24 @@ class Meet(
         const val STALE_MS = 180_000L
 
         /**
+         * **How long one part of the optical window is shown for.**
+         *
+         * The exchange rotates through the parts the counterparty cannot
+         * have yet (`OpticalExchange.frame`), and the screen is what
+         * advances it. The camera on the other side delivers about 30
+         * frames a second and decodes a third to three quarters of them
+         * (`qr.looks`, 2026-10-07), so a part shown for one frame is more
+         * likely missed than caught. **A hundred milliseconds is about
+         * three frames**, which the worse phone catches around 70% of the
+         * time, and a full rotation of eight parts takes 0.8 s.
+         *
+         * It cannot go much lower: re-encoding and blitting the symbol is
+         * cheap but not free, and below two frames a part the rotation
+         * outruns the reader it is for.
+         */
+        const val TURN_MS = 100L
+
+        /**
          * **How long the colour probe may go without progress** before
          * this device falls back to the monochrome format ([Polychrome]).
          *
