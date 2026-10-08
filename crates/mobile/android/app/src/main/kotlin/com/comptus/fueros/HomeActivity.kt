@@ -44,7 +44,6 @@ class HomeActivity : Activity() {
         "Settings" to { placeholder("Settings", "Wake endpoint, backup — later.") },
         // the diagnostics bundle, fieldtest flavour only
         // (`Robot/field-test-diagnostics.md`, section 4)
-        if (BuildConfig.FIELD_TEST) "Send diagnostics (field test)" to { Report.send(this) } else null,
     )
 
     override fun onCreate(savedInstanceState: Bundle?) {

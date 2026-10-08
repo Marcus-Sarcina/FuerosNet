@@ -15996,3 +15996,74 @@ worse phone and 138 ≈ 4.6 s on the better**, against 48 s measured.
   stream of incoming reads would have reset the clock for ever and the
   window would never have turned. The reads are of *their* parts and the
   rotation is of this side's; the two must not be coupled.
+
+## The exchange on hardware, and the screen it needed (2026-10-07)
+
+**Run `68f1174-bitmap-1` finished, and the carousel is what it claimed.**
+
+| | at the session's start | now |
+|---|---|---|
+| optical pass | 83.6 s | **22.3 s** |
+| brief → done | 105.1 s | **40.2 s** |
+| reliable range | ~12 in | **~36 in** |
+| decode p90 | 1979 ms | 466 ms |
+| watchdog restarts | 3 | 0 |
+
+Simulation predicted 1.9×; hardware gave 2.2×. [author, 2026-10-07]:
+"very fast, 3 foot range, everything I hoped for."
+
+**Three screen defects, each found by looking at the phone.**
+
+1. **The page scrolled past the code.** Every redraw ended with
+   `fullScroll(FOCUS_DOWN)`, which was harmless while the code was the
+   tallest thing on the page and became a bug the moment the tracking rows
+   made the content taller than the viewport. Nothing overlapped the
+   code — the view had scrolled off it. Found by screenshot, not by
+   reasoning.
+2. **The prose ate the space.** A title and two instruction paragraphs,
+   about five hundred pixels, drew *before* the flag that suppresses them,
+   so the rows fell off the bottom. **[author, 2026-10-07]** there should
+   be nothing on that screen but the optical channel and the viewfinder.
+   The flag is now raised before a single view is added, and `title`,
+   `heading`, `para`, `button` and the note list all stand down for the
+   step. The camera-permission refusal is the one exception: without it
+   the screen is a dead end.
+3. **The module is bounded by height as well as width.** The code and its
+   rows are one instrument and the whole of it has to be in view, so the
+   module can no longer outgrow the page whatever the part count.
+
+**And the defect that mattered: a short tail changed the grid.** 2,022
+bytes chunked at 20 is 101 parts of twenty and **one of two**, and two
+bytes draws a 25-module symbol where twenty draws 29. The tracking rows
+are laid out against the symbol's module count, so one side sampled at a
+pitch the other was not using, read bits that were never set, confirmed
+them, and concluded the counterparty held all 102 when it held 91 — then
+stopped sending. **A mis-registered sample is not a failed read, it is a
+confident wrong answer**, which is the worse failure.
+
+Two fixes, because the cause and the class both deserve one:
+
+- `OpticalExchange.evenly` spreads the remainder a byte at a time, so
+  every part draws the same symbol. Pinned by encoding *every* part of the
+  real contribution and asserting one distinct size.
+- `Tracking.MARKS`: two cells past the bitmap, one always set and one
+  always clear. A sample whose marks do not read as themselves is
+  discarded and counted. They earned it immediately — **33 and 16
+  `misregistered` samples** caught in the completing run.
+
+**[ruled, author, 2026-10-07] the diagnostics bundle is removed.** It
+zipped the event files to `ACTION_SEND`, which on a device with nothing
+that accepts a zip degenerates to a save dialogue with nowhere to send
+it — so it never worked — and `field-run.sh` already streams every event
+live and pulls every file at stop. The button, `Report.assemble`,
+`Report.send`, `ReportProvider` and the flavour manifest's provider are
+gone. **`Report.headerFields` stays**: it is what every live stream opens
+with.
+
+**[ruled, author, 2026-10-07] `WINDOW` and `TURN_MS` are not tuned.**
+These phones are high-end testers and lower-spec equipment has to be
+supported. A value fitted to a camera catching a third of its frames is
+wrong for one catching a tenth, and the failure is silent — the exchange
+merely crawls. Both stay where the arithmetic puts them. The gap between
+the measured 22 s and the simulated floor near 10 s is left on the table
+deliberately.

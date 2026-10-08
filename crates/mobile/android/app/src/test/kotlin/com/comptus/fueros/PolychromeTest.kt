@@ -238,8 +238,10 @@ class PolychromeExchangeTest {
         val colour = OpticalExchange(OpticalExchange.CONTRIBUTION, obj(99, 1), OpticalExchange.CHUNK_POLY)
         // a monochrome object whose last part is short: the long parts are
         // what settle it, and the first one it shows is long
-        val mono = OpticalExchange(OpticalExchange.CONTRIBUTION, obj(OpticalExchange.CHUNK + 1, 2), OpticalExchange.CHUNK)
-        assertEquals("a long part and a one-byte one", 2, mono.count)
+        // parts are even now, so "coarse" is judged on a part of a real
+        // object rather than on a deliberately lopsided pair
+        val mono = OpticalExchange(OpticalExchange.CONTRIBUTION, obj(OpticalExchange.CHUNK * 3, 2), OpticalExchange.CHUNK)
+        assertEquals(3, mono.count)
         assertEquals(OpticalExchange.Took.ACCEPTED, colour.take(mono.frame(), 0))
         assertTrue("the first part is a whole monochrome chunk", colour.theirsAreCoarse())
     }
@@ -346,8 +348,12 @@ class PolychromeExchangeTest {
     fun the_last_frame_of_an_object_that_is_not_a_multiple_of_three() {
         // 34 bytes at an 11-byte chunk is 4 parts: frame 1 holds part 3
         // alone, which is the shape that killed the run
-        val a = OpticalExchange(OpticalExchange.CONTRIBUTION, obj(34, 1), OpticalExchange.CHUNK_POLY)
-        val b = OpticalExchange(OpticalExchange.CONTRIBUTION, obj(34, 2), OpticalExchange.CHUNK_POLY)
+        // an object that splits into equal parts, so every channel of a
+        // frame is the same symbol: `OpticalExchange.evenly` spreads a
+        // remainder a byte at a time, and on an object this small a byte
+        // is enough to change the symbol
+        val a = OpticalExchange(OpticalExchange.CONTRIBUTION, obj(44, 1), OpticalExchange.CHUNK_POLY)
+        val b = OpticalExchange(OpticalExchange.CONTRIBUTION, obj(44, 2), OpticalExchange.CHUNK_POLY)
         assertEquals(4, a.count)
 
         // b reads a's first frame — parts 0, 1 and 2 — and says so in its
@@ -370,7 +376,7 @@ class PolychromeExchangeTest {
         assertEquals(OpticalExchange.Took.COMPLETE, b.take(frames[0], 0))
         assertEquals(OpticalExchange.Took.DUPLICATE, b.take(frames[0], 1))
         assertEquals(OpticalExchange.Took.DUPLICATE, b.take(frames[0], 2))
-        assertArrayEquals("a's object, whole", obj(34, 1), b.theirs())
+        assertArrayEquals("a's object, whole", obj(44, 1), b.theirs())
     }
 
     /**

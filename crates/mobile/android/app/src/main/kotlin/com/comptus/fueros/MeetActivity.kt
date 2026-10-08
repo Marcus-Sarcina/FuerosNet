@@ -63,6 +63,10 @@ class MeetActivity : Activity() {
     private var lastModules = 0
     private var lastScale = 0
 
+    /** Whether this redraw put the optical package on screen, which is
+     *  what decides where the page is scrolled to. */
+    private var optical = false
+
     private val turning = android.os.Handler(android.os.Looper.getMainLooper())
     private var turner: Runnable? = null
 
@@ -203,12 +207,18 @@ class MeetActivity : Activity() {
     private fun redraw() {
         body.removeAllViews()
         previewHost.visibility = android.view.View.GONE
+        optical = false
         val m = Kernel.meet()
         if (m == null) {
             entry()
-            report()
             return
         }
+        // **nothing on this screen but the optical channel and the
+        // viewfinder** [author, 2026-10-07]. Set before a single view is
+        // added, because the title and the instructions come first and
+        // between them cost about five hundred pixels — which is what
+        // pushed the tracking rows off the bottom.
+        optical = m.step() == Meet.Step.OPTICAL
         title(
             when (m.step()) {
                 Meet.Step.INTENT -> "Meet ${m.counterpartyName}"
@@ -234,18 +244,12 @@ class MeetActivity : Activity() {
             Meet.Step.STOPPED -> stopped(m)
         }
         logLines(m)
-        report()
     }
 
     /** The Report action (`Robot/field-test-diagnostics.md`, section 4):
      *  the run's events and a header, zipped and offered to the share
      *  sheet. Fieldtest flavour only; the releasable flavour has no button
      *  and nothing it would send. */
-    private fun report() {
-        if (!BuildConfig.FIELD_TEST) return
-        button("Send diagnostics (field test)") { Report.send(this) }
-    }
-
     /**
      * Every permission asked for is an event, and so is each answer
      * (`Robot/field-test-diagnostics.md`, section 3.6, `permission`).
@@ -394,7 +398,7 @@ class MeetActivity : Activity() {
         show(px, w)
     }
 
-    private fun qr(bytes: ByteArray, which: String) {
+    private fun qr(bytes: ByteArray, which: String, trackingParts: Int = 0) {
         val m = Optical.matrix(bytes)
         // **As wide as the content area, always**: what a code reads at is
         // its module's physical size, which is this width divided by the
@@ -406,7 +410,17 @@ class MeetActivity : Activity() {
         // out, never the screen's: a code wider than its parent is clipped
         // at the right, quiet zone and modules, and reads nowhere
         val avail = if (body.width > 0) body.width else resources.displayMetrics.widthPixels - 96 - 48
-        val scale = maxOf(1, (avail - 8) / m.width)
+        // **and it has to fit the page's height too, because the code and
+        // its tracking rows are one instrument.** The rows add
+        // `Tracking.SCALE` module-heights apiece, and the whole package
+        // has to be visible to the other person's camera at once [author,
+        // 2026-10-07] — so the module is bounded by what is left
+        // vertically as well as by the width.
+        val rowModules = if (trackingParts > 0) Tracking.rows(trackingParts, m.width) * Tracking.SCALE else 0
+        val availH = heightForCode()
+        val byWidth = (avail - 8) / m.width
+        val byHeight = if (availH > 0) availH / (m.width + rowModules) else byWidth
+        val scale = maxOf(1, minOf(byWidth, byHeight))
         // **The module's physical size.** Pixels are how this is drawn
         // and say nothing about what reads it: a module is a length on
         // glass, and `xdpi` is what turns the one into the other.
@@ -469,6 +483,23 @@ class MeetActivity : Activity() {
         )
     }
 
+    /**
+     * **What vertical room the code and its rows have**: the scrolling
+     * page's own height, less the aiming band when that is up. Measured
+     * where the views have been laid out, estimated from the display
+     * where they have not, since the first draw precedes either having a
+     * height.
+     */
+    private fun heightForCode(): Int {
+        val page = if (scroll.height > 0) scroll.height else resources.displayMetrics.heightPixels - 420
+        val band = when {
+            previewHost.visibility != android.view.View.VISIBLE -> 0
+            previewHost.height > 0 -> previewHost.height
+            else -> resources.displayMetrics.heightPixels / 8
+        }
+        return page - band - 48
+    }
+
     /** Pixels into the view, which the two renderers share. */
     private fun show(px: IntArray, w: Int) {
         body.addView(
@@ -516,8 +547,10 @@ class MeetActivity : Activity() {
         found: (List<Pair<ByteArray, Int>>) -> Unit,
     ) {
         if (!held(Manifest.permission.CAMERA)) {
-            para("This step needs the camera. Nothing is read until you allow it.")
-            button("Allow the camera") { ask(1, Manifest.permission.CAMERA) }
+            // the one thing that still speaks over the code: without it
+            // the screen is a dead end
+            paraAlways("This step needs the camera. Nothing is read until you allow it.")
+            buttonAlways("Allow the camera") { ask(1, Manifest.permission.CAMERA) }
             return
         }
         // a read waits for its preview surface, which arrives on the next
@@ -642,7 +675,7 @@ class MeetActivity : Activity() {
             qrColour(x.colourFrames(compress), "$name ${x.showing() + 1}/${x.count}")
             para(x.status())
         } else {
-            qr(x.frame(), "$name ${x.showing() + 1}/${x.count}")
+            qr(x.frame(), "$name ${x.showing() + 1}/${x.count}", x.theirCount())
             trackingUnder(x, lastModules, lastScale)
             para(x.status())
         }
@@ -936,7 +969,12 @@ class MeetActivity : Activity() {
 
     // ---- view helpers --------------------------------------------------
 
-    private fun title(t: String) = body.addView(
+    private fun title(t: String) {
+        if (optical) return
+        titleAlways(t)
+    }
+
+    private fun titleAlways(t: String) = body.addView(
         TextView(this).apply {
             text = t
             textSize = 24f
@@ -945,7 +983,12 @@ class MeetActivity : Activity() {
         },
     )
 
-    private fun heading(t: String) = body.addView(
+    private fun heading(t: String) {
+        if (optical) return
+        headingAlways(t)
+    }
+
+    private fun headingAlways(t: String) = body.addView(
         TextView(this).apply {
             text = t
             textSize = 16f
@@ -954,7 +997,20 @@ class MeetActivity : Activity() {
         },
     )
 
-    private fun para(t: String) = body.addView(
+    /**
+     * **Nothing but the code and its rows while the exchange runs**
+     * [author, 2026-10-07]: the prose is extraneous and the screen space
+     * is not spare. What the words described — the aiming band, the part
+     * count, the progress — the band itself and the tracking rows show
+     * directly, and every line of it costs module size, which costs
+     * range.
+     */
+    private fun para(t: String) {
+        if (optical) return
+        paraAlways(t)
+    }
+
+    private fun paraAlways(t: String) = body.addView(
         TextView(this).apply {
             text = t
             textSize = 15f
@@ -962,7 +1018,17 @@ class MeetActivity : Activity() {
         },
     )
 
-    private fun button(label: String, onClick: () -> Unit) = body.addView(
+    /** A control is not drawn while the exchange is on screen either:
+     *  there is nothing to press until it ends, and the space is the
+     *  code's ([para]). The one exception is a refused camera, which is
+     *  drawn through [buttonAlways] because without it the screen is a
+     *  dead end. */
+    private fun button(label: String, onClick: () -> Unit) {
+        if (optical) return
+        buttonAlways(label, onClick)
+    }
+
+    private fun buttonAlways(label: String, onClick: () -> Unit) = body.addView(
         Button(this).apply {
             text = label
             setPadding(0, 16, 0, 16)
@@ -971,6 +1037,9 @@ class MeetActivity : Activity() {
     )
 
     private fun logLines(m: Meet) {
+        // the ceremony's running commentary is not drawn while the code
+        // is up: it costs module size, which costs range ([para])
+        if (optical) return
         m.log().forEach { line ->
             body.addView(
                 TextView(this).apply {
@@ -982,6 +1051,15 @@ class MeetActivity : Activity() {
                 },
             )
         }
-        scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) }
+        // **the optical package is never scrolled away from.** Every
+        // redraw used to end at the bottom of the page, which was harmless
+        // while the code was the tallest thing on it; the tracking rows
+        // made the content taller than the viewport and the bottom became
+        // somewhere the code's top is off-screen. The code and its rows
+        // are the instrument the other person is aiming at, so they stay
+        // put and the prose below them falls off the page instead
+        // [author, 2026-10-07].
+        if (optical) scroll.post { scroll.fullScroll(ScrollView.FOCUS_UP) }
+        else scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) }
     }
 }

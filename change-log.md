@@ -12345,6 +12345,68 @@ covered the rule at all until NET-028 — which is why nothing flagged the
 mismatch. The id was written from memory, which is the same habit as the
 §13.2-for-§6.4 error of the preceding day.
 
+### 2026-10-07 (the exchange three times faster, and the screen it needed)
+
+**The optical pass fell from 83.6 s to 22.3 s and the range rose from
+about twelve inches to about three feet**, over a session in which almost
+nothing that was first tried turned out to be the lever.
+
+| | at the start | now |
+|---|---|---|
+| optical pass | 83.6 s | **22.3 s** |
+| brief → done | 105.1 s | **40.2 s** |
+| reliable range | ~12 in | **~36 in** |
+| decode p90 | 1979 ms | 466 ms |
+| watchdog restarts | 3 | 0 |
+
+**The range was the camera's and never the symbol's.** Focus and metering
+regions on the middle of the frame doubled it; capping the shutter against
+the display's own refresh rate nearly doubled it again. Module size moved
+it *backwards* when it was the only thing changed.
+
+**The duration was the lockstep's and never the reading's.** Splitting the
+decoder's one failure counter in two showed a third to three quarters of
+camera frames decoding, 99% of located symbols reading, and **85 to 93% of
+the successful decodes being the same part over again** — the sender held
+its frame until the counterparty's acknowledgement came back, and that
+acknowledgement could only arrive on the counterparty's next readable
+frame. The parts held now travel as a bitmap drawn under the symbol, so
+either side replays what is actually owed.
+
+**The screen had to be emptied for it.** The rows made the content taller
+than the page, and a redraw that ended at the bottom of the page then
+ended somewhere the code was off the top — so a title, two instruction
+paragraphs, a status line and a running commentary were between the person
+and the instrument they were aiming at. **There is nothing on that screen
+now but the optical channel and the viewfinder** [author, 2026-10-07], and
+the module is bounded by the height left as well as the width, since the
+code and its rows are one thing that has to be seen at once.
+
+**And a short tail nearly undid it.** 2,022 bytes chunked at twenty is a
+hundred and one parts of twenty and one of **two**, and two bytes draws a
+smaller symbol than twenty — which moved the grid the tracking rows are
+laid out against. One side sampled at a pitch the other was not using,
+confirmed bits that were never set, and stopped sending with eleven parts
+still owed. The object is split evenly now, so every part draws the same
+symbol; and two registration marks sit past the bitmap, one always set and
+one always clear, so a sample whose marks do not read as themselves is
+discarded rather than believed. **A mis-registered read is not a failure,
+it is a confident wrong answer**, which is the worse of the two. The marks
+caught 33 and 16 such samples in the run that completed.
+
+**The diagnostics bundle is removed** [author, 2026-10-07]: it offered a
+zip to the share sheet, which on a device with nothing that accepts one
+degenerates to a save dialogue with nowhere to send it, and the field
+harness already streams every event live and pulls every file at the end.
+What remains of it is the header each stream opens with.
+
+**The window and the turn are deliberately not tuned** [author,
+2026-10-07]. The phones that measured them are high-end testers and
+lower-spec equipment has to be supported; a value fitted to a camera
+catching a third of its frames is wrong for one catching a tenth, and that
+failure is silent. The gap between the measured 22 s and a simulated floor
+near 10 s is left on the table on purpose.
+
 ### 2026-10-07 (Aztec measured on hardware, and rejected)
 
 **It read to 22 inches where QR reached 42, and the pass got longer for

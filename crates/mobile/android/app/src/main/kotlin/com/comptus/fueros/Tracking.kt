@@ -39,13 +39,36 @@ object Tracking {
      *  and the cheap one is not. */
     const val CONFIRM = 2
 
+    /**
+     * **Two cells past the bitmap that are always the same**, one set and
+     * one clear, so a reader can tell whether it is looking at the rows it
+     * thinks it is.
+     *
+     * The rows are laid out against the symbol's module count, and a
+     * reader that assumes the wrong one samples the wrong cells — which
+     * is not a *failure*, it is a confident wrong answer. Run
+     * `68f1174-bitmap-1` ended that way: one side read a counterparty's
+     * rows at the wrong pitch, confirmed bits that were never set and
+     * stopped sending with eleven parts owed. The even partition means
+     * both symbols are the same size now; this is what catches it if
+     * anything ever makes them differ again.
+     */
+    const val MARKS = 2
+
+    /** How many cells are drawn: the bitmap and its [MARKS]. */
+    fun slots(count: Int): Int = count + MARKS
+
+    /** Whether cell `i` past the bitmap should read set. */
+    fun markAt(count: Int, i: Int): Boolean = i == count
+
     /** How many tracking modules fit across a symbol `modules` wide. */
     fun across(modules: Int): Int = modules / SCALE
 
-    /** How many rows of tracking modules `count` parts need. */
+    /** How many rows of tracking modules `count` parts and their marks
+     *  need. */
     fun rows(count: Int, modules: Int): Int {
         val w = across(modules)
-        return if (w <= 0) 0 else (count + w - 1) / w
+        return if (w <= 0) 0 else (slots(count) + w - 1) / w
     }
 
     /** Where part `i` sits: its column and row among the tracking
@@ -99,7 +122,7 @@ object Tracking {
         // edge is the quiet zone's and their first row is the matrix's last
         val left = -margin.toFloat()
         val top = (modules - margin).toFloat()
-        return (0 until count).map { i ->
+        return (0 until slots(count)).map { i ->
             val (cx, cy) = cellOf(i, modules)
             at(left + (cx + 0.5f) * SCALE, top + (cy + 0.5f) * SCALE)
         }
@@ -135,8 +158,9 @@ object Tracking {
         val h = rows(count, modules) * SCALE * scale
         val px = IntArray(w * h) { android.graphics.Color.WHITE }
         val cell = SCALE * scale
-        for (i in 0 until count) {
-            if (i >= bits.size || !bits[i]) continue
+        for (i in 0 until slots(count)) {
+            val on = if (i < count) i < bits.size && bits[i] else markAt(count, i)
+            if (!on) continue
             val (cx, cy) = cellOf(i, modules)
             val x0 = cx * cell
             val y0 = cy * cell

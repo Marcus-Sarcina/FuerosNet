@@ -1,15 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The fieldtest flavour's additions, merged over `main`'s manifest. -->
+<!-- The fieldtest flavour's additions, merged over `main`'s manifest.
+
+     Nothing to add at present. The diagnostics bundle's content provider
+     stood here until 2026-10-07, serving a zip to the share sheet; the
+     control that used it never worked on a device with nothing that
+     accepts a zip, and `crates/tools/field-run.sh` already streams every
+     event live and pulls every file at stop. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application>
-        <!-- The diagnostics bundle leaves the device through the share
-             sheet (`Report.kt`): this provider serves the one zip under
-             app-private storage to the application the tester picks, by a
-             URI granted for that send alone. Only this flavour has it. -->
-        <provider
-            android:name=".ReportProvider"
-            android:authorities="${applicationId}.report"
-            android:exported="false"
-            android:grantUriPermissions="true" />
-    </application>
+    <application />
 </manifest>

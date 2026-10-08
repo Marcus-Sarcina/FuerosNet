@@ -171,8 +171,36 @@ class OpticalExchange(
          * forgotten why it wanted it. The receiver fills holes in any
          * order, so the only cost of a wider window is that a part waits
          * longer for its turn.
+         *
+         * **Not tuned to the phones it was measured on** [author,
+         * 2026-10-07]: those are high-end testers and lower-spec
+         * equipment has to be supported too. A value fitted to a camera
+         * that catches a third of its frames is the wrong value for one
+         * that catches a tenth, and the failure would be silent — the
+         * exchange merely crawls. So this stays where the arithmetic puts
+         * it rather than where one pair of phones would.
          */
         const val WINDOW = 8
+
+        /**
+         * `bytes` in parts of at most `chunk`, as evenly as it divides:
+         * the count is what a fixed chunk would give, and the remainder
+         * is spread one byte at a time rather than left as a short tail.
+         */
+        fun evenly(bytes: ByteArray, chunk: Int): List<ByteArray> {
+            if (bytes.isEmpty() || chunk <= 0) return listOf(ByteArray(0))
+            val n = (bytes.size + chunk - 1) / chunk
+            val base = bytes.size / n
+            val over = bytes.size % n
+            val out = ArrayList<ByteArray>(n)
+            var at = 0
+            for (i in 0 until n) {
+                val len = base + if (i < over) 1 else 0
+                out.add(bytes.copyOfRange(at, at + len))
+                at += len
+            }
+            return out
+        }
 
         /** [which] for the first exchange, the contribution. */
         const val CONTRIBUTION = 0
@@ -199,7 +227,28 @@ class OpticalExchange(
         MALFORMED,
     }
 
-    private val parts: List<ByteArray> = mine.toList().chunked(chunk).map { it.toByteArray() }.ifEmpty { listOf(ByteArray(0)) }
+    /**
+     * **The object, split as evenly as it divides** — every part within a
+     * byte of every other.
+     *
+     * Chunking at a fixed size leaves a remainder, and the remainder is a
+     * *short* part: 2,022 bytes at 20 is a hundred and one of twenty and
+     * one of **two**. A two-byte part encodes to a smaller symbol than a
+     * twenty-byte one, and the symbol's module count is what the tracking
+     * rows are laid out against — so the geometry changed with the part
+     * and a reader assuming otherwise sampled the wrong cells.
+     *
+     * Run `68f1174-bitmap-1` ended there: one phone showed its short last
+     * part at 25 modules while the other sampled as though it were 29,
+     * read bits that were not set, confirmed them, and concluded the
+     * counterparty held all 102 when it held 91 — so it stopped sending
+     * with eleven parts still owed [measured, 2026-10-07].
+     *
+     * Even parts make every symbol the same size, which costs nothing:
+     * the receiver assembles by concatenating what arrived, so a part's
+     * own length is all the length information anyone needs.
+     */
+    private val parts: List<ByteArray> = evenly(mine, chunk)
 
     /** How many parts this device shows. */
     val count: Int get() = parts.size

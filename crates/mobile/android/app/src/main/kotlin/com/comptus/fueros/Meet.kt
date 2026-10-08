@@ -110,6 +110,13 @@ class Meet(
          * It cannot go much lower: re-encoding and blitting the symbol is
          * cheap but not free, and below two frames a part the rotation
          * outruns the reader it is for.
+         *
+         * **And it is not tuned to the phones that measured it** [author,
+         * 2026-10-07]. Those are high-end testers; a slower camera
+         * catching fewer frames needs each part held *longer*, not
+         * shorter, and a value fitted here would fail quietly there by
+         * making the exchange crawl. The arithmetic sets it, not the
+         * best hardware available (`OpticalExchange.WINDOW`).
          */
         const val TURN_MS = 100L
 

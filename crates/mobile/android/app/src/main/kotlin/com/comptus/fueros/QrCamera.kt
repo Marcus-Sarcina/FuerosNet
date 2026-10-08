@@ -239,6 +239,7 @@ class QrCamera(private val context: Context) {
             "other" to ot,
             "read_pct" to (if (n > 0) 100 * r / n else 0),
             "tracked" to tracked.getAndSet(0),
+            "misregistered" to misregistered.getAndSet(0),
         )
     }
 
@@ -266,6 +267,7 @@ class QrCamera(private val context: Context) {
     private var trackingParts = 0
     private var trackingModules = 0
     private val tracked = java.util.concurrent.atomic.AtomicInteger(0)
+    private val misregistered = java.util.concurrent.atomic.AtomicInteger(0)
 
     private val surveyed = java.util.concurrent.atomic.AtomicBoolean(false)
     private val attempts = java.util.concurrent.atomic.AtomicInteger(0)
@@ -611,18 +613,30 @@ class QrCamera(private val context: Context) {
         // threshold worth trusting
         if (white - black < TRACK_CONTRAST) return
         val mid = (black + white) / 2
+        val slots = Tracking.slots(parts)
         val cells = Tracking.cells(parts, modules, Optical.MARGIN, tl, tr, bl)
-        if (cells.size < parts) return
+        if (cells.size < slots) return
         val bits = BooleanArray(parts)
         var seen = 0
-        for (i in 0 until parts) {
+        for (i in 0 until slots) {
             val v = lum(cells[i]) ?: continue
             seen++
-            if (v < mid) bits[i] = true
+            val set = v < mid
+            if (i < parts) {
+                if (set) bits[i] = true
+            } else if (set != Tracking.markAt(parts, i)) {
+                // **the marks did not read as themselves**, so this is not
+                // the grid it was taken for. A mis-registered sample is
+                // not a failed read but a confident wrong answer, which is
+                // the worse thing: it ended a run with eleven parts owed
+                // ([Tracking.MARKS]).
+                misregistered.incrementAndGet()
+                return
+            }
         }
         // a partial read is not delivered: a row out of frame would read
         // as unset, which is harmless, but it also tells us nothing
-        if (seen < parts) return
+        if (seen < slots) return
         tracked.incrementAndGet()
         sink(bits)
     }

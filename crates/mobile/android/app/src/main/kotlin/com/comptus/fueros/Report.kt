@@ -1,69 +1,26 @@
 package com.comptus.fueros
 
-import android.app.Activity
 import android.content.Context
-import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.nfc.NfcAdapter
 import android.os.Build
-import java.io.File
-import java.util.zip.ZipEntry
-import java.util.zip.ZipOutputStream
 
 /**
- * The Report action (`Robot/field-test-diagnostics.md`, section 4, "the
- * bundle"): the run's event files and a header, zipped under app-private
- * storage and offered through the share sheet. Fieldtest flavour only; the
- * screens show the button under `BuildConfig.FIELD_TEST` and the provider
- * that serves the zip is declared in that flavour's manifest alone.
+ * **What a run's events are stamped with**: the run id, the commit, the
+ * specification pins the build was checked against, the device, the radios
+ * it has, the flavour and the app version, and the wall-clock anchor for
+ * the `ms` fields. `DiagStream` opens every live stream with these.
  *
- * The header names what the merge tool and a reader need to place the
- * file: the run id, the commit, the specification pins the build was
- * checked against, the device, the radios it has, the flavour and the app
- * version, and the wall-clock anchor for the `ms` fields. The tester's
- * checklist and the counterparty's run id are M4's.
+ * **The bundle and its share sheet are gone** [author, 2026-10-07]. They
+ * zipped the event files and offered them to `ACTION_SEND`, which on a
+ * phone with nothing that accepts a zip degenerates to a save dialogue
+ * with nowhere to send it — so the control never worked. It was also
+ * redundant: `crates/tools/field-run.sh` streams every event live while a
+ * run holds and pulls every file from the device at stop, which is where
+ * every measurement in this work has come from.
  */
 object Report {
 
-    /** The directory under the app's files the bundle is built in. */
-    const val DIR = "report"
-
-    /** Build the zip and return it. */
-    fun assemble(context: Context): File {
-        Diag.event("report.assemble", "run" to Diag.runId)
-        Diag.flush()
-        val dir = File(File(context.filesDir, "diag"), DIR).apply { mkdirs() }
-        dir.listFiles()?.forEach { it.delete() }
-        val zip = File(dir, "fueros-${Diag.runId}.zip")
-        ZipOutputStream(zip.outputStream().buffered()).use { z ->
-            z.putNextEntry(ZipEntry("header.json"))
-            z.write(header(context).toByteArray())
-            z.closeEntry()
-            for (f in Diag.files()) {
-                z.putNextEntry(ZipEntry("events/${f.name}"))
-                f.inputStream().use { it.copyTo(z) }
-                z.closeEntry()
-            }
-        }
-        return zip
-    }
-
-    /** Assemble and hand to the share sheet. */
-    fun send(activity: Activity) {
-        val zip = assemble(activity)
-        val uri = ReportProvider.uriFor(activity, zip)
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "application/zip"
-            putExtra(Intent.EXTRA_STREAM, uri)
-            putExtra(Intent.EXTRA_SUBJECT, "fueros run ${Diag.runId}")
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        activity.startActivity(Intent.createChooser(intent, "Send the diagnostics bundle"))
-        Diag.event("report.sent", "bytes" to zip.length())
-    }
-
-    /** `header.json`. */
     fun header(context: Context): String = Diag.obj(headerFields(context))
 
     /** The header's fields, in order: `header.json`'s body, and what the

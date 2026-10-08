@@ -252,7 +252,7 @@ Report action to the Meet screens and a retention declaration of one day;
 
 **The bundle.** `Participant::diagnostics_bundle()` returns the ring plus the
 header; the shell writes it with the file and the checklist into one zip in
-app-private storage and offers the share sheet (`ACTION_SEND`) or leaves it
+app-private storage. **Removed 2026-10-07**: the share sheet had nowhere to send a zip on these devices and the live stream and the pull at stop already carry everything. What remains of `Report` is the header every stream opens with. The text below is kept for what it says about that header, and leaves it
 for `adb pull`. Captures, keys and seeds are excluded by the type, not by a
 filter.
 

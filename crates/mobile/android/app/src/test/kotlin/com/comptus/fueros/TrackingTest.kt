@@ -31,10 +31,83 @@ class TrackingTest {
         return Triple(tl, tr, bl)
     }
 
+    /**
+     * **Every part of the real object must draw the same symbol.** The
+     * tracking rows are laid out against the symbol's module count, so a
+     * part that encodes smaller moves the grid under a reader that
+     * assumes otherwise — which is how run `68f1174-bitmap-1` ended with
+     * one side believing the other held 102 parts when it held 91.
+     *
+     * The cause was a short tail: 2,022 bytes chunked at 20 is 101 parts
+     * of twenty and one of **two**, and two bytes is a smaller symbol.
+     * `OpticalExchange.evenly` spreads the remainder instead.
+     */
+    @Test
+    fun every_part_of_the_contribution_draws_the_same_symbol() {
+        val contribution = ByteArray(2022) { (it * 31 % 251).toByte() }
+        val split = OpticalExchange.evenly(contribution, OpticalExchange.CHUNK)
+        val sizes = split.mapIndexed { i, part ->
+            // the frame for part i, as the screen would draw it
+            val frame = byteArrayOf(
+                OpticalExchange.VERSION.toByte(), OpticalExchange.CONTRIBUTION.toByte(),
+                i.toByte(), split.size.toByte(), 0,
+            ) + part
+            Optical.matrix(frame).width
+        }.toSet()
+        assertEquals("one symbol size for every part, got $sizes", 1, sizes.size)
+    }
+
+    /** And the partition is still the object: nothing lost, nothing
+     *  duplicated, and no part longer than the chunk. */
+    @Test
+    fun the_even_partition_is_the_object() {
+        for (size in listOf(1, 19, 20, 21, 2022, 4095)) {
+            val obj = ByteArray(size) { (it * 7).toByte() }
+            val parts = OpticalExchange.evenly(obj, OpticalExchange.CHUNK)
+            assertEquals(
+                "count matches a fixed chunk's",
+                (size + OpticalExchange.CHUNK - 1) / OpticalExchange.CHUNK,
+                parts.size,
+            )
+            assertTrue("no part over the chunk", parts.all { it.size <= OpticalExchange.CHUNK })
+            assertTrue("within a byte of each other", (parts.maxOf { it.size } - parts.minOf { it.size }) <= 1)
+            org.junit.Assert.assertArrayEquals(obj, parts.fold(ByteArray(0)) { a, b -> a + b })
+        }
+    }
+
+    /** The marks read as themselves where the grid is right, and a reader
+     *  at the wrong pitch sees them wrong — which is the whole point of
+     *  them. */
+    @Test
+    fun the_marks_catch_a_grid_read_at_the_wrong_pitch() {
+        val count = 102
+        val held = BooleanArray(count) { it < 40 }
+        val (px, w) = Tracking.pixels(held, count, modules, scale)
+        val h = Tracking.rows(count, modules) * Tracking.SCALE * scale
+        val (tl, tr, bl) = finders()
+        fun sampleAt(assumed: Int): Pair<Int, Boolean> {
+            val cells = Tracking.cells(count, assumed, margin, tl, tr, bl)
+            var set = 0
+            var marksOk = true
+            for (i in 0 until Tracking.slots(count)) {
+                val x = Math.round(cells[i].x)
+                val yy = Math.round(cells[i].y) - modules * scale
+                val on = if (yy in 0 until h && x in 0 until w) px[yy * w + x] == android.graphics.Color.BLACK else false
+                if (i < count) { if (on) set++ } else if (on != Tracking.markAt(count, i)) marksOk = false
+            }
+            return Pair(set, marksOk)
+        }
+        val (right, rightMarks) = sampleAt(modules)
+        assertEquals("the right pitch reads what was drawn", 40, right)
+        assertTrue("and its marks read as themselves", rightMarks)
+        val (_, wrongMarks) = sampleAt(25)
+        assertTrue("a 25-module assumption is caught by the marks", !wrongMarks)
+    }
+
     @Test
     fun the_layout_is_what_the_part_count_needs() {
         assertEquals("fourteen cells across a 29-module symbol", 14, Tracking.across(29))
-        assertEquals("102 parts in eight rows", 8, Tracking.rows(102, 29))
+        assertEquals("102 parts and two marks in eight rows", 8, Tracking.rows(102, 29))
         assertEquals(Pair(0, 0), Tracking.cellOf(0, 29))
         assertEquals(Pair(13, 0), Tracking.cellOf(13, 29))
         assertEquals(Pair(0, 1), Tracking.cellOf(14, 29))
@@ -52,15 +125,16 @@ class TrackingTest {
         val h = rows * Tracking.SCALE * scale
         val (tl, tr, bl) = finders()
         val cells = Tracking.cells(count, modules, margin, tl, tr, bl)
-        assertEquals(count, cells.size)
+        assertEquals("the bitmap and its marks", Tracking.slots(count), cells.size)
         // the cells are below the symbol, so their y is past the matrix
         val top = modules * scale
-        for (i in 0 until count) {
+        for (i in 0 until Tracking.slots(count)) {
             val x = Math.round(cells[i].x)
             val y = Math.round(cells[i].y) - top
             assertTrue("cell $i at ${cells[i].x},${cells[i].y} is inside the block", y in 0 until h && x in 0 until w)
             val black = px[y * w + x] == android.graphics.Color.BLACK
-            assertEquals("cell $i", drawn[i], black)
+            val want = if (i < count) drawn[i] else Tracking.markAt(count, i)
+            assertEquals("cell $i", want, black)
         }
     }
 
