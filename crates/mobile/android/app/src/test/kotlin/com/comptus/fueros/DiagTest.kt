@@ -104,7 +104,7 @@ class DiagTest {
         m.crossBootstrap()
         m.accept()
         m.note("their contribution is in: 0123456789abcdef0123")
-        m.opticalDone()
+        m.intentSent(); m.intentReceived()
         m.stop("the carried intent was refused")
         val events = lines.map { Regex("\"event\":\"([^\"]+)\"").find(it)!!.groupValues[1] }
         assertEquals(listOf("meet.step", "meet.step", "meet.note", "meet.step", "meet.stop"), events)

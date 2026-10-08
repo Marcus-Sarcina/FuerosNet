@@ -720,6 +720,22 @@ impl Participant {
             // this key twice, from the same seeds: the transport needs one and
             // the client never leaves the thread that holds the other
             let me = Arc::new(rhtn_crypto::SigningIdentity::from_seeds(&ed, &pq));
+            // **a participant knows its own key without being told.** The
+            // delegated-device path above already adds its own identity to
+            // `known` where the caller left it out; this one did not, so a
+            // client was only able to verify a record it had itself signed
+            // if whoever started it handed its own `KeyMaterial` back.
+            //
+            // Every field run did, because the harness built `known` as
+            // node, peer and self — which hid this completely. A phone
+            // provisioned knowing nobody, which is what meeting a stranger
+            // actually looks like, reached `REVIEW` and refused the
+            // counterparty's signature with *missing key for signer*,
+            // naming **itself** [measured, 2026-10-07].
+            let mut ids = ids;
+            if !ids.iter().any(|i| i.keyhash == me.public.keyhash) {
+                ids.push(me.public.clone());
+            }
             // the nonces this client's submissions carry come from the
             // platform's random source, which is the only one there is
             let random = platform.random.clone();

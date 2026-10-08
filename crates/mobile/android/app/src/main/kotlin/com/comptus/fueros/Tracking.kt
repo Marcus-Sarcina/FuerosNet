@@ -81,6 +81,18 @@ object Tracking {
     /** A point in the camera's frame. */
     data class At(val x: Float, val y: Float)
 
+    /** One module along each axis of the symbol's grid — `ux, uy, vx, vy`
+     *  — from the distance between finder centres; null where the symbol
+     *  is too small to have one. */
+    private fun basis(modules: Int, margin: Int, topLeft: At, topRight: At, bottomLeft: At): FloatArray? {
+        val span = (modules - 2 * margin - 7).toFloat()
+        if (span <= 0f) return null
+        return floatArrayOf(
+            (topRight.x - topLeft.x) / span, (topRight.y - topLeft.y) / span,
+            (bottomLeft.x - topLeft.x) / span, (bottomLeft.y - topLeft.y) / span,
+        )
+    }
+
     /**
      * **Where each tracking cell lands in the camera's frame**, from the
      * three finder centres the decoder already handed back
@@ -105,14 +117,7 @@ object Tracking {
         topRight: At,
         bottomLeft: At,
     ): List<At> {
-        val symbol = modules - 2 * margin
-        val span = (symbol - 7).toFloat()
-        if (span <= 0f) return emptyList()
-        // one module along each axis, from the distance between finder centres
-        val ux = (topRight.x - topLeft.x) / span
-        val uy = (topRight.y - topLeft.y) / span
-        val vx = (bottomLeft.x - topLeft.x) / span
-        val vy = (bottomLeft.y - topLeft.y) / span
+        val (ux, uy, vx, vy) = basis(modules, margin, topLeft, topRight, bottomLeft) ?: return emptyList()
         // the symbol's own (0,0) corner: the top-left finder's centre sits
         // three and a half modules into it on both axes
         val ox = topLeft.x - 3.5f * ux - 3.5f * vx
@@ -132,13 +137,7 @@ object Tracking {
      *  threshold the cells are judged against: the top-left finder's core
      *  is black and its quiet zone is white. */
     fun reference(modules: Int, margin: Int, topLeft: At, topRight: At, bottomLeft: At): Pair<At, At>? {
-        val symbol = modules - 2 * margin
-        val span = (symbol - 7).toFloat()
-        if (span <= 0f) return null
-        val ux = (topRight.x - topLeft.x) / span
-        val uy = (topRight.y - topLeft.y) / span
-        val vx = (bottomLeft.x - topLeft.x) / span
-        val vy = (bottomLeft.y - topLeft.y) / span
+        val (ux, uy, vx, vy) = basis(modules, margin, topLeft, topRight, bottomLeft) ?: return null
         // a module out from the symbol's corner, into the quiet zone
         val white = At(
             topLeft.x - 4.5f * ux - 4.5f * vx,

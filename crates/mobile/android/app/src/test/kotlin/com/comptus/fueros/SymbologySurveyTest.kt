@@ -38,9 +38,9 @@ import org.junit.Test
  * distance needs and what a synthetic render never asks for.
  *
  * **And the capacity never mattered anyway.** 2.6 times fewer parts gave
- * a 50% *longer* pass. The per-part cost is a lockstep round-trip, not a
- * decode — 0.47 s against a 293 ms median — so payload a frame does not
- * touch it. Anything revisiting the symbology should measure *on
+ * a 50% *longer* pass. The per-part cost was the wait for the
+ * counterparty's acknowledgement, not a decode — 0.47 s against a 293 ms
+ * median — so payload a frame does not touch it. Anything revisiting the symbology should measure *on
  * hardware*, early, and should expect capacity to buy little.
  */
 class SymbologySurveyTest {

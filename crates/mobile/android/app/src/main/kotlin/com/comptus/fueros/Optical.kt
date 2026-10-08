@@ -42,6 +42,11 @@ object Optical {
      */
     private const val A = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ \$%*+-./:"
 
+    /** **The quiet zone, in modules each side.** Named because the
+     *  tracking rows are laid out against the drawn matrix and have to
+     *  know where the symbol inside it starts (`Tracking.cells`). */
+    const val MARGIN = 2
+
     /**
      * **Error correction M, 15%.** L would make a smaller symbol and a
      * less forgiving one; Q and H cost modules that make the symbol denser
@@ -49,11 +54,6 @@ object Optical {
      * at arm's length — the limit there is the camera's resolution of fine
      * modules, not the number of smudges.
      */
-    /** **The quiet zone, in modules each side.** Named because the
-     *  tracking rows are laid out against the drawn matrix and have to
-     *  know where the symbol inside it starts (`Tracking.cells`). */
-    const val MARGIN = 2
-
     private val HINTS = mapOf<EncodeHintType, Any>(
         EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.M,
         EncodeHintType.MARGIN to MARGIN,

@@ -58,20 +58,12 @@ object Kernel {
 
     /**
      * **The one thread the bearer's work runs on, and never a GATT
-     * callback's.**
-     *
-     * A packet arriving used to be assembled, handed to the kernel and
-     * have the kernel's reply *sent* inline, on whatever thread the
-     * Bluetooth stack delivered it on — which is a binder thread, and the
-     * same binder thread that delivers write acknowledgements. `BleBearer`
-     * serialises writes on their acknowledgement, so a send on that thread
-     * waits for a permit only that thread can release. Run `shutter-1` of
-     * 2026-10-07 shows it outright: acknowledgements arrive on
-     * `binder:11774_4`, and `binder:11774_4` sat in the gate for the full
-     * twenty-four seconds and then threw the ceremony's back-pointers
-     * away [measured, 2026-10-07].
-     *
-     * One thread, not a pool: the phases are ordered, and two senders
+     * callback's.** A packet is delivered on a binder thread, the same one
+     * that delivers write acknowledgements; `BleBearer` serialises writes
+     * on their acknowledgement, so a send on that thread waits for a
+     * permit only that thread can release — which hung a ceremony for the
+     * full twenty-four seconds of the gate [measured, 2026-10-07]. One
+     * thread and not a pool: the phases are ordered, and two senders
      * racing for one permit is the other half of the same bug.
      */
     @Volatile private var bearerWork: java.util.concurrent.ExecutorService? = null
@@ -94,11 +86,8 @@ object Kernel {
     fun opticalTaken(): Boolean = opticalTaken
 
     /**
-     * Begin a ceremony with the one provisioned peer, meeting or adopting
-     * as chosen. The kernel prepares the local half; the optical handshake
-     * and the bearer that carries the intent are specified now
-     * (`wire-format.md` §14.3) and carried from here: the two QRs on the
-     * cameras and the intent over a Bluetooth LE bearer. A ceremony already
+     * Begin a ceremony, meeting or adopting as chosen, with whoever the
+     * codes turn out to name (`wire-format.md` §14.3). A ceremony already
      * live is returned as-is.
      */
     fun startMeet(kind: Meet.Kind, role: Meet.Role): Meet? {
@@ -259,6 +248,7 @@ object Kernel {
                 // refuses a code from anyone but the one it already knows
                 val who = p.takeOptical(bytes)
                 m.counterparty(hex(who))?.let { return@call it }
+                adopt(who)
                 opticalTaken = true
                 m.note("their contribution is in; showing the meeting id.")
                 null
@@ -435,6 +425,31 @@ object Kernel {
     }
 
     /**
+     * **The counterparty, adopted as this device's lasting knowledge** at
+     * the point its key is pinned — which both sides do at the optical
+     * step, alike [author, 2026-10-08]: showing the invitation against
+     * scanning it is an incident of the world and not a fact the rest of
+     * the ceremony carries. Before this the provision had to name whoever
+     * a device could meet; now the meeting is what introduces them
+     * (`wire-format.md` §14.3.1, design §12.3), and the provisioned peer
+     * remains only for messaging before any meeting.
+     */
+    private fun adopt(who: ByteArray) {
+        val key = hex(who)
+        synchronized(lock) {
+            peer = who
+            peerKey = key
+            if (peerName.isEmpty() || peerName == "the other person") peerName = key.take(8)
+        }
+        front.peerKnown(key, peerName)
+    }
+
+    /** Who this device is talking to: the meeting's counterparty while one
+     *  is open, the adopted or provisioned peer otherwise. */
+    private fun counterparty(): ByteArray? =
+        meet?.counterpartyKey?.let { runCatching { unhex(it) }.getOrNull() } ?: peer
+
+    /**
      * **The bearer's load** (`wire-format.md` §14.3.2): this device's
      * intent carriage out, the counterparty's in, over the best bearer the
      * two share.
@@ -445,12 +460,11 @@ object Kernel {
      * for.
      *
      * **Who advertises and who scans carries no meaning.** §14.3.1 leaves
-     * the bearer to the shell, so this uses the bootstrap's own asymmetry:
-     * the party that showed the QR offers, the party that read it seeks.
+     * the bearer to the shell, so this uses the invitation's own asymmetry:
+     * the party that showed it offers, the party that read it seeks.
      */
     private fun carryIntent(m: Meet) {
         val p = participant ?: return
-        val to = peer ?: return
         val radio = BleBearer(appContext ?: return)
         // ONE inbound handler for the whole conversation. Each phase is
         // apart in the carriage (`Carriage.Phase`), so a packet arriving
@@ -472,7 +486,7 @@ object Kernel {
                 work.execute {
                     if (carriage !== live) return@execute
                     live.packet(packet)?.let { why -> m.note("a packet was refused: $why") }
-                    drainBearer(p, to, m)
+                    drainBearer(p, m)
                 }
             } catch (e: java.util.concurrent.RejectedExecutionException) {
                 // the meeting ended between the check and the submit
@@ -549,22 +563,15 @@ object Kernel {
      * **The counterparty's leg of the conversation crosses the bearer**
      * (design §7.1; `wire-format.md` §14.3.2): kinds 9 to 18 for the
      * co-present counterparty are sealed under the local session and sit
-     * in the kernel until drained, and no node carries them. Drained
-     * after every step this side takes, after every carriage taken, and
-     * after every message that arrived over the network, since each can
-     * produce one; one message per phase, so the receiver can take each
-     * as it lands.
+     * in the kernel until drained, and no node carries them. Drained after
+     * every step this side takes, every carriage taken and every message
+     * that arrived over the network, since each can produce one; one
+     * message per phase, so the receiver can take each as it lands.
      *
-     * **A carriage the radio will not take ends the ceremony.** The
-     * kernel holds no copy, so the message is gone, and the counterparty
-     * is waiting on a phase that no longer exists anywhere — it cannot
-     * know that, and it cannot recover. This was a note and nothing more
-     * until run `aimed-1` of 2026-10-07, where one dropped phase left the
-     * proposer at `VERIFIERS` indefinitely while both phones went on
-     * polling; the step's own comment said it "waits until the person
-     * stops the meeting", and that is not a failure mode to leave to the
-     * person. Stopping says so on both screens and gives the hardware
-     * back [author, 2026-10-07].
+     * **A carriage the radio will not take ends the ceremony**: the kernel
+     * holds no copy, so the message is gone and the counterparty is
+     * waiting on a phase that exists nowhere, which is not a failure to
+     * leave to the person [author, 2026-10-07].
      */
     private fun sendCarriages(p: Participant) {
         val live = carriage ?: return
@@ -586,7 +593,7 @@ object Kernel {
      * the step drivers, so a set that completed before its step was reached
      * is taken the moment it is.
      */
-    private fun drainBearer(p: Participant, to: ByteArray, m: Meet): Unit = synchronized(bearerLock) {
+    private fun drainBearer(p: Participant, m: Meet): Unit = synchronized(bearerLock) {
         // SERIALIZED, because two threads reach here: the BLE inbound
         // callback when the counterparty's packets land, and the step
         // driver (runProximity/runCapture) right after it sends. received()
@@ -597,6 +604,7 @@ object Kernel {
         val live = carriage ?: return
         when (m.step()) {
             Meet.Step.OPTICAL -> live.received(Carriage.Phase.INTENT)?.let { set ->
+                val to = counterparty() ?: return m.stop("the codes did not name who this is with")
                 // every refusal here is the kernel catching a bearer
                 // that disagrees with the screens (§14.3.2), which is
                 // the one thing the anchor is for
@@ -684,7 +692,6 @@ object Kernel {
      */
     fun runProximity(m: Meet) {
         val p = participant ?: return
-        val to = peer ?: return
         val radio = ble ?: return m.stop("no radio carries the channel outcomes")
         if (!awaitLink(radio, m, "proximity")) return
         val mine = call("proximityCarriage", { e -> m.stop("proximity: ${e.reason}"); null }) {
@@ -694,7 +701,7 @@ object Kernel {
             return m.stop("the radio would not take the channel outcomes; nothing crossed")
         }
         m.note("channels run; the strongest that passed is recorded.")
-        drainBearer(p, to, m)
+        drainBearer(p, m)
     }
 
     /**
@@ -708,7 +715,6 @@ object Kernel {
      */
     fun runCapture(m: Meet) {
         val p = participant ?: return
-        val to = peer ?: return
         // the handover carries my key in clear: once the bearer has
         // had it, this shell keeps no copy, the packets it was cut
         // into included (design §7.5.2)
@@ -724,11 +730,11 @@ object Kernel {
         }
         if (!sent) return m.stop("the radio would not take the capture key; nothing crossed")
         m.note("my capture key is sent; capturing the counterparty.")
-        drainBearer(p, to, m)
+        drainBearer(p, m)
     }
 
-    /** The one peer this device was provisioned to talk to, or null while
-     *  unprovisioned: what a conversation screen opens onto. */
+    /** The peer this device talks to — adopted at a meeting or named by the
+     *  provision — or null: what a conversation screen opens onto. */
     fun peerKey(): String? = peerKey
 
     /**
@@ -774,7 +780,7 @@ object Kernel {
      */
     fun send(text: String) {
         val p = participant
-        val to = peer
+        val to = counterparty()
         val key = peerKey
         if (p == null || to == null || key == null) {
             front.note("· unprovisioned: nobody to send to")
@@ -836,19 +842,40 @@ object Kernel {
                 p.setRetentionYears(retention.toULong())
             }
         }
-        val to = unhex(provision.getString("peer"))
+        // **the provision need not name anybody.** A device that has met
+        // nobody is the ordinary case, and the invitation code is what
+        // introduces the first counterparty ([counterparty]); a named peer
+        // here is only a convenience for messaging before any meeting.
+        val to = provision.optString("peer", "").takeIf { it.isNotEmpty() }
+            ?.let { runCatching { unhex(it) }.getOrNull() }
         peer = to
-        peerName = provision.optString("peer_name", "peer")
+        peerName = provision.optString("peer_name", "the other person")
         nominees = provision.optJSONArray("nominees")
             ?.let { a -> (0 until a.length()).map { unhex(a.getString(it)) } }
             ?: listOf()
-        peerKey = hex(to)
-        front.peerKnown(peerKey!!, peerName)
-        val node = unhex(provision.getString("node"))
-        val a = call("attach", { e -> front.setStatus("attach refused: ${e.reason}"); null }) {
-            p.attach(node, listOf(provision.getString("addr")), listOf(to))
-        } ?: return
-        show(p, Status.Attached(node, a.primary))
+        peerKey = to?.let { hex(it) }
+        peerKey?.let { front.peerKnown(it, peerName) }
+        // **a provision may name no node, and then this device stays
+        // detached** (design §6.4): a pair can meet with nothing reachable
+        // but each other, and what they form is the witnessless shape —
+        // two identities at their genesis, no witnesses, no responses
+        // (`wire-format.md` §3.2 subtype 1). The event loop below still
+        // runs, because it is what drives the ceremony; only the attach
+        // is skipped [author, 2026-10-07].
+        val nodeHex = provision.optString("node", "")
+        if (nodeHex.isEmpty()) {
+            front.note("· no node in the provision: this device stays detached,")
+            front.note("  and a meeting crosses the bearer alone (design §6.4).")
+            show(p, Status.Detached)
+        } else {
+            val node = unhex(nodeHex)
+            val a = call("attach", { e -> front.setStatus("attach refused: ${e.reason}"); null }) {
+                // a device that has met nobody attaches with no peers to
+                // follow; the first one is learned at the meeting
+                p.attach(node, listOf(provision.optString("addr", "")), listOfNotNull(to))
+            } ?: return
+            show(p, Status.Attached(node, a.primary))
+        }
         while (true) {
             val e = p.nextEvent(2000UL)
             // the kind of thing that arrived and who from, as eight hex
@@ -918,7 +945,7 @@ object Kernel {
                 // packet arrived while the step driver held the lock
                 val t = m.step()
                 if (t == Meet.Step.VERIFIERS || t == Meet.Step.REVIEW) {
-                    peer?.let { drainBearer(p, it, m) }
+                    drainBearer(p, m)
                 }
                 if (m.opened()) m.poll(courier(p))
             }

@@ -16067,3 +16067,121 @@ wrong for one catching a tenth, and the failure is silent — the exchange
 merely crawls. Both stay where the arithmetic puts them. The gap between
 the measured 22 s and the simulated floor near 10 s is left on the table
 deliberately.
+
+## The harness was doing the ceremony's job (2026-10-07)
+
+**[ruled, author, 2026-10-07]** The meeting transaction introduces an
+unknown counterparty **without external reference**. Scanning the first
+invitation must be the first knowledge one device has of another, and
+sufficient on its own to initiate a PoP for any pair.
+
+`field-run.sh` provisioned each phone with `known = [node, peer, own]` —
+**the counterparty's full `KeyMaterial`, pre-shared** — and a `peer`
+keyhash besides. Every successful run in this work had that help. The
+protocol never needed it: `OpticalContribution` carries `KeyMaterial` in
+full and `Participant::take_optical` pins an identity it has not met
+(*"first contact pins the full key"*). Three layers of shell insisted.
+
+**What had the assumption built in**
+
+1. **The Meet screen would not open**: *"A ceremony is with someone you are
+   provisioned to. None yet."* You could only meet someone already named.
+2. **`Kernel.bringUp` required `provision.peer`** and fed it to the bearer,
+   proximity, capture and messaging. The counterparty now comes from
+   `takeBootstrap` and *becomes* this device's knowledge, so it outlives
+   the meeting rather than preceding it.
+3. **The shell required a node.** `getString("node")` threw without one and
+   `attach` was unconditional. It can stay detached and still run the event
+   loop that drives the ceremony.
+
+`crates/tools/nodeless.sh` provisions `{"known":[],"nominees":[]}` — no
+node, no address, no peer, no key material, no witnesses — and takes the
+phones from `adb devices`, so the harness knows nothing either.
+
+**Three defects the cold run then found, none of which any previous run
+could have.**
+
+**`Net::carry` demanded a node.** Both phones crossed the optical channel,
+the proximity and the capture in 49 s and stopped at *"the conversation
+could not open: no serving node is attached"*. `Net::take_carriage` was
+already written both ways and says so — *"a carriage must not wait on
+one"* — but the outbound half was not. It now succeeds when nothing was
+destined for the network, which with no witness and no verifier is
+everything: the counterparty's leg of kinds 9–18 crosses the bearer and no
+node carries it. Anything that genuinely wanted the network is still
+refused and named.
+
+**And the structural lesson in that one.** `NET-026`, *a formation
+ceremony completes with no node reachable*, **already existed and already
+passed** — in `adaptors/tests/conversation.rs`, with *"no courier in this
+test and no `Serving` behind one"*. It proved the property at the client
+layer while the FFI above re-imposed exactly what it disproved. A property
+asserted one layer below where it can fail is not asserted.
+
+**`Participant::start` did not know its own key.** The delegated-device
+path beside it already pushes its own identity into `known` where the
+caller left it out; the participant path used `known` as given. So a client
+could verify a record it had itself signed only if whoever started it
+handed its own `KeyMaterial` back — which the harness did. Cold, the
+ceremony reached `REVIEW` and refused the counterparty's signature with
+**`Record("missing key for signer …")` naming itself**. One line, mirroring
+the path beside it.
+
+**The optical step had no staleness deadline.** `STALE_MS` covered
+`VERIFIERS` and `REVIEW`, leaving the ceremony's longest step with no end:
+one phone's app was restarted mid-exchange and the other, holding 41 of
+102 parts, read a dead screen indefinitely. `Meet.opticalStale` closes it,
+and it fired correctly on the next run's abandoned attempt.
+
+**And a permission trap I had created.** The carousel's turn calls
+`redraw`, which begins `body.removeAllViews()` — so at ten turns a second
+**every view was destroyed and remade ten times a second, the *Allow the
+camera* button included**, and a press and its release landed on different
+instances. The permission flags told the story: `CAMERA` had no `USER_SET`
+where `BLUETOOTH_CONNECT` did, so the dialogue had never been answered
+because it could not be reached. A turn now repaints the two images in
+place and the window does not turn at all while the camera is
+unavailable. The settled-refusal escape to app settings stays; it was the
+right answer to the wrong question.
+
+**Owed.** A ceremony test **at the FFI boundary**. Nothing in that surface
+reflects the known set, so the invariant cannot be asserted there without
+new API or a full two-party run through it — and the lesson above is
+precisely that the client-layer test was not enough. The hardware run is
+the only evidence for the fix today.
+
+## The review of the two days, and the excision (2026-10-08)
+
+**[ruled, author, 2026-10-08]** The colour path and every tendril of it go,
+and the lockstep's narration with them: the implementation is to stay as
+legible and concise as possible. Done — `Polychrome.kt` and its tests,
+the colour branches in the camera, the exchange, the flow and the screen,
+and the dead accessors (`opticalDone`, `acceptsInput`, `handsOff`,
+`complete`, `theirContiguous`). `OpticalExchange` rewritten around the
+window and the rows alone; `take` refuses a changed count again, since a
+re-partition was the fall back's and nothing else's.
+
+**[ruled, author, 2026-10-08]** *There is not supposed to be any
+distinction between the parties following the scan of the invite.*
+Showing against scanning is an incident of the world and not a fact for
+the PoP logic to carry. In the shell the counterparty is now adopted in
+one place, where its key is pinned (`Kernel.adopt`, from `takeOptical`),
+which both sides reach alike; the tick-driven drain no longer depends on
+a provisioned peer. The kernel's `begin(..., initiator)` still feeds the
+wire format's own `initiator` flag (`wire-format.md` §14.3.2), which
+settles whose start the pair adopts and which side proposes the body
+(§7.10.1, CER-023). **[ruled, author, 2026-10-08] The wire is left
+alone rather than a new mechanism introduced for this. The standing rule:
+wherever a bug arises from the initiator value, a role-neutral solution
+is favoured — and leave it at that.** The bearer's offer/seek and the
+tap's reader/card choices also follow the role, carry no meaning past the
+radio and say so.
+
+**Also found in the review and fixed**: eight stacked or orphaned doc
+comments; the `MeetActivity` header still claiming nothing ran on a
+device; `QrCamera.lens` still presenting fixed focus as the candidate;
+the `change-log.md` tail out of date order (the 10-07 block above 10-06,
+both above two 10-04 entries) — restored to forward order by commit time;
+`Robot/field-test-diagnostics.md` claiming the symbol "has been an Aztec
+code since 2026-10-07"; `settled` not surviving the Activity, now a
+SharedPreferences flag; `cargo fmt` failing on the uncommitted `net.rs`.

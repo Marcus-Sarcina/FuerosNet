@@ -24,20 +24,17 @@ import android.widget.FrameLayout
  * of places you navigate between. The state lives in [Kernel]'s [Meet], so
  * a recreation mid-flow rejoins it.
  *
- * **What this build carries and what it cannot.** The flow, its front-
- * loaded brief, its hands-off phase and its review-before-sign gate are all
- * here and enforced by [Meet]. **D1 through D4 are wired to hardware**: the
- * bootstrap and anchor QRs on the rear and selfie cameras, the intent over
- * a Bluetooth LE bearer, the proximity tap over NFC (with the optical pass
- * D2 already made), and the guided capture on the selfie camera, every
- * radio and camera half compiling against the platform's API and **none of
- * it run on a device**, which the files behind each say at the top. **D5
- * through D7 run on the kernel's courier**: the request to witness, the
- * queries and their consent, the gathered responses, the body and the
- * record cross the end-to-end path (`wire-format.md` §7.10.1), the kernel
- * reviews and signs as the body arrives, and the flow moves on what the
- * kernel reports. The screens from D5 on show and let the person stop;
- * nothing there is a control over the protocol.
+ * The flow, its front-loaded brief, its hands-off phase and its
+ * review-before-sign gate are enforced by [Meet]. **D1 through D4 run on
+ * the hardware**: the invitation and anchor codes on the rear and selfie
+ * cameras, the intent over a Bluetooth LE bearer, the tap over NFC and the
+ * guided capture on the selfie camera. **D5 through D7 run on the kernel's
+ * courier**: the request to witness, the queries and their consent, the
+ * gathered responses, the body and the record cross the end-to-end path
+ * (`wire-format.md` §7.10.1), the kernel reviews and signs as the body
+ * arrives, and the flow moves on what the kernel reports. The screens from
+ * D5 on show and let the person stop; nothing there is a control over the
+ * protocol.
  */
 class MeetActivity : Activity() {
 
@@ -45,31 +42,37 @@ class MeetActivity : Activity() {
     private lateinit var scroll: ScrollView
     private var camera: QrCamera? = null
 
-    /**
-     * **What advances the optical window.** The screen used to redraw only
-     * when something changed — a part read, a step moved — which was
-     * right when it showed exactly one part and held it until the other
-     * side reported progress. The window rotates
-     * (`OpticalExchange.frame`), so something has to turn it, and the
-     * screen is the only thing that knows when a frame has been up long
-     * enough (`Meet.TURN_MS`).
-     *
-     * Posted only while the contribution or transcript is on screen, and
-     * cancelled the moment it is not: a timer redrawing a screen that has
-     * moved on is how a camera ends up held behind a dead ceremony.
-     */
     /** The symbol's geometry as last drawn, so the tracking rows under it
      *  match its module size exactly ([trackingUnder]). */
     private var lastModules = 0
     private var lastScale = 0
 
-    /** Whether this redraw put the optical package on screen, which is
-     *  what decides where the page is scrolled to. */
+    /**
+     * **The two images a turn of the window repaints** ([repaint]), rather
+     * than rebuilding the page: a rebuild begins with `removeAllViews()`,
+     * and at ten turns a second a button pressed on one instance is
+     * released on another and does nothing — which is how the *Allow the
+     * camera* button came to be unusable [author, 2026-10-07]. Nothing but
+     * these two images changes from one turn to the next.
+     */
+    private var codeView: ImageView? = null
+    private var trackView: ImageView? = null
+
+    /** Whether this redraw put the optical package on screen, which
+     *  decides what else is drawn and where the page is scrolled to. */
     private var optical = false
 
     private val turning = android.os.Handler(android.os.Looper.getMainLooper())
     private var turner: Runnable? = null
 
+    /**
+     * **What advances the optical window.** The exchange rotates
+     * (`OpticalExchange.showing`), so something has to turn it, and the
+     * screen is the only thing that knows when a frame has been up long
+     * enough (`Meet.TURN_MS`). Posted only while a code is on screen and
+     * cancelled the moment it is not: a timer redrawing a screen that has
+     * moved on is how a camera ends up held behind a dead ceremony.
+     */
     private fun turnWhileShowing(x: OpticalExchange) {
         // **started once and left alone.** Cancelling and re-posting on
         // every redraw would let a steady stream of incoming reads reset
@@ -85,11 +88,23 @@ class MeetActivity : Activity() {
                     turner = null
                     return
                 }
+                // **a counterparty that has gone is not waited on for
+                // ever** ([Meet.opticalStale]). The window turning is the
+                // only thing still running at this step, so it is the only
+                // place that can notice.
+                if (m.opticalStale()) {
+                    turner = null
+                    m.stop("nothing has crossed for ${Meet.STALE_MS / 1000} s; the other phone may have stopped")
+                    return
+                }
                 x.turn()
                 // reschedule before drawing: redraw is what calls back in
                 // here, and this runnable is what owns the cadence
                 turning.postDelayed(this, Meet.TURN_MS)
-                redraw()
+                // **repaint, do not rebuild** ([repaint]): the page's other
+                // views — a permission button among them — must survive a
+                // press that spans two turns
+                if (!repaint(x)) redraw()
             }
         }
         turner = r
@@ -206,6 +221,8 @@ class MeetActivity : Activity() {
 
     private fun redraw() {
         body.removeAllViews()
+        codeView = null
+        trackView = null
         previewHost.visibility = android.view.View.GONE
         optical = false
         val m = Kernel.meet()
@@ -246,10 +263,6 @@ class MeetActivity : Activity() {
         logLines(m)
     }
 
-    /** The Report action (`Robot/field-test-diagnostics.md`, section 4):
-     *  the run's events and a header, zipped and offered to the share
-     *  sheet. Fieldtest flavour only; the releasable flavour has no button
-     *  and nothing it would send. */
     /**
      * Every permission asked for is an event, and so is each answer
      * (`Robot/field-test-diagnostics.md`, section 3.6, `permission`).
@@ -265,9 +278,50 @@ class MeetActivity : Activity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         for (i in permissions.indices) {
             val granted = grantResults.getOrNull(i) == PackageManager.PERMISSION_GRANTED
-            Diag.event("permission", "which" to short(permissions[i]), "state" to if (granted) "granted" else "denied")
+            // a refusal the system will not ask about again is the one
+            // that matters ([settled])
+            settle(permissions[i], refused = !granted)
+            Diag.event(
+                "permission",
+                "which" to short(permissions[i]),
+                "state" to if (granted) "granted" else "denied",
+                "again" to (granted || shouldShowRequestPermissionRationale(permissions[i])),
+            )
         }
         redraw()
+    }
+
+    /**
+     * **Permissions asked for and refused**, kept across restarts. Android
+     * shows its dialogue again after one refusal and not after two, and
+     * `shouldShowRequestPermissionRationale` is false in *both* the
+     * never-asked and the asked-twice cases — so whether asking would show
+     * anything cannot be read before asking, and a refusal that was not
+     * remembered left the exchange screen a dead end with a button that
+     * did nothing [author, 2026-10-07].
+     */
+    private val settled: android.content.SharedPreferences
+        get() = getSharedPreferences("permissions", MODE_PRIVATE)
+
+    private fun settle(permission: String, refused: Boolean) =
+        settled.edit().putBoolean(permission, refused).apply()
+
+    /** Whether asking again would show the person anything. */
+    private fun willAsk(permission: String): Boolean =
+        !settled.getBoolean(permission, false) || shouldShowRequestPermissionRationale(permission)
+
+    /** The app's own settings page, which is where a refusal the system
+     *  will not re-ask about has to be undone. */
+    private fun openSettings() {
+        Diag.event("permission", "which" to "camera", "state" to "settings")
+        runCatching {
+            startActivity(
+                android.content.Intent(
+                    android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    android.net.Uri.fromParts("package", packageName, null),
+                ),
+            )
+        }.onFailure { para("This device would not open the settings page.") }
     }
 
     private fun short(permission: String) = permission.substringAfterLast('.').lowercase()
@@ -287,11 +341,13 @@ class MeetActivity : Activity() {
     // ---- the entry, before a ceremony is live --------------------------
 
     private fun entry() {
-        val peer = Kernel.peerKey()
-        if (peer == null) {
-            para("A ceremony is with someone you are provisioned to. None yet.")
-            return
-        }
+        // **A meeting is with a stranger** [author, 2026-10-07]: the
+        // invitation code is the first thing either device knows of the
+        // other, so nothing here needs to know who that is. One side shows
+        // a code naming itself and the other scans it; the optical
+        // contribution then carries the key material the kernel pins
+        // (`wire-format.md` §14.3.1).
+        //
         // D1a, the initiator's dialogue, as the author specified it: a
         // regular meeting is the DEFAULT, with the backup checkbox beside
         // it, and patronage a separate option that then asks the direction.
@@ -341,8 +397,7 @@ class MeetActivity : Activity() {
             Meet.Role.RESPONDER -> {
                 para("Point the back of your phone at ${m.counterpartyName}'s screen. Their code carries who they are and the kind of meeting they chose; the next screen is where you accept or refuse it.")
                 aim("The band at the top is the middle of what the rear camera sees: put their code in it.")
-                scan(QrCamera.Facing.REAR, "bootstrap") { frame ->
-                    val bytes = frame.first().first
+                scan(QrCamera.Facing.REAR, "bootstrap") { bytes ->
                     // the bootstrap is the shell's own object and carries no
                     // anchor, so the shell reads it (`wire-format.md` §14.3
                     // fixes the ANCHORED objects and this is not one)
@@ -358,89 +413,36 @@ class MeetActivity : Activity() {
         }
     }
 
-    /** A QR on the screen, as large as the layout allows. The module's
-     *  physical size is **its width as a fraction of the code's own**,
-     *  never a pixel count, so the diagnostics carry the module's
-     *  millimetres and the symbol's modules rather than the pixel scale
-     *  alone. What distance that *reads* at is not predicted from it —
-     *  three runs contradicted the rule that was (`OpticalExchange.CHUNK`). */
-    /**
-     * **A colour frame: three parts in one image** ([Polychrome]), drawn
-     * as wide as the content area like any other code. The three symbols
-     * share a module grid, so what the screen shows is one symbol's worth
-     * of modules carrying three parts.
-     */
-    private fun qrColour(frames: List<ByteArray>, which: String) {
-        if (frames.isEmpty()) return
-        // a short frame at the object's end repeats its last part rather
-        // than leaving a channel blank: a blank channel is a channel the
-        // reader reports as lost, which would read as colour failing
-        val three = (0 until Polychrome.CHANNELS).map { frames.getOrElse(it) { frames.last() } }
-        val modules = Optical.matrix(three[0]).width
-        val avail = if (body.width > 0) body.width else resources.displayMetrics.widthPixels - 96 - 48
-        val scale = maxOf(1, (avail - 8) / modules)
-        val (px, w) = Polychrome.compose(three, scale)
-        val dpi = resources.displayMetrics.xdpi
-        val moduleMm = if (dpi > 0f) scale.toFloat() / dpi * 25.4f else 0f
-        // **no `reads_at_mm` on a colour frame.** The `450 × module`
-        // rule is calibrated on monochrome luminance, and a colour code
-        // does not obey it: run 2 of 2026-10-07 was told 1137 mm for a
-        // code that read *closer* than the 670 mm monochrome one, because
-        // a camera's chroma is half linear resolution and a channel's
-        // contrast against its neighbours is nothing like black against
-        // white. A figure that is wrong in the optimistic direction is
-        // worse than none [author, 2026-10-07].
-        Diag.event(
-            "qr.shown", "which" to which, "bytes" to three.sumOf { it.size },
-            "modules" to modules, "scale" to scale, "channels" to Polychrome.CHANNELS,
-            "module_mm" to String.format("%.2f", moduleMm),
-        )
-        show(px, w)
-    }
-
+    /** A code on the screen, as large as the layout allows. The module's
+     *  physical size is its width as a fraction of the code's own, never a
+     *  pixel count, so the diagnostics carry the module's millimetres and
+     *  the symbol's modules; what distance that reads at is not predicted
+     *  from it (`OpticalExchange.CHUNK`). */
     private fun qr(bytes: ByteArray, which: String, trackingParts: Int = 0) {
         val m = Optical.matrix(bytes)
-        // **As wide as the content area, always**: what a code reads at is
-        // its module's physical size, which is this width divided by the
-        // symbol's modules, so every pixel of width is range
-        // [author, 2026-10-04]. The 2 KB object is 102 parts of 29 modules
-        // since 2026-10-07 (`OpticalExchange.CHUNK` carries the measured
-        // trade); it used to be one symbol of 177, which is what the
-        // chunking replaced. The area is the body's own width once laid
-        // out, never the screen's: a code wider than its parent is clipped
-        // at the right, quiet zone and modules, and reads nowhere
+        // **As wide as the content area** [author, 2026-10-04]: the
+        // module's physical size is this width over the symbol's modules.
+        // The area is the body's own width once laid out, never the
+        // screen's: a code wider than its parent is clipped at the right,
+        // quiet zone and modules, and reads nowhere
         val avail = if (body.width > 0) body.width else resources.displayMetrics.widthPixels - 96 - 48
-        // **and it has to fit the page's height too, because the code and
-        // its tracking rows are one instrument.** The rows add
-        // `Tracking.SCALE` module-heights apiece, and the whole package
-        // has to be visible to the other person's camera at once [author,
-        // 2026-10-07] — so the module is bounded by what is left
-        // vertically as well as by the width.
+        // **and it has to fit the page's height too**: the code and its
+        // tracking rows are one instrument, visible to the other person's
+        // camera at once [author, 2026-10-07], so the module is bounded by
+        // what is left vertically as well as by the width
         val rowModules = if (trackingParts > 0) Tracking.rows(trackingParts, m.width) * Tracking.SCALE else 0
         val availH = heightForCode()
         val byWidth = (avail - 8) / m.width
         val byHeight = if (availH > 0) availH / (m.width + rowModules) else byWidth
         val scale = maxOf(1, minOf(byWidth, byHeight))
-        // **The module's physical size.** Pixels are how this is drawn
-        // and say nothing about what reads it: a module is a length on
-        // glass, and `xdpi` is what turns the one into the other.
-        // Reported so a run on another phone compares [author,
-        // 2026-10-06]. It is not turned into a read distance: that rule
-        // was fitted to one observation and three runs have contradicted
-        // it (`OpticalExchange.CHUNK`).
+        // the module's physical size, from the display's own dpi: a fact
+        // about the code, reported so a run on another phone compares
+        // [author, 2026-10-06]. No read distance is predicted from it
         val dpi = resources.displayMetrics.xdpi
-        val moduleMm = if (dpi > 0f) (m.width * scale).toFloat() / m.width / dpi * 25.4f else 0f
+        val moduleMm = if (dpi > 0f) scale / dpi * 25.4f else 0f
         Diag.event(
             "qr.shown", "which" to which, "bytes" to bytes.size, "modules" to m.width,
-            "scale" to scale,
-            // **no predicted read distance.** `450 × module` was fitted
-            // to one observation and three runs have contradicted it:
-            // 0.97 mm read to 18 in, 2.14 mm to 12 in, and the *same*
-            // 2.14 mm to 24 in once the camera was told where to focus
-            // and meter. The module is reported because it is a fact
-            // about the code; the distance was a guess about the camera
-            // (`OpticalExchange.CHUNK`) [measured, 2026-10-07].
-            "module_mm" to String.format("%.2f", moduleMm),
+            "scale" to scale, "module_mm" to String.format("%.2f", moduleMm),
         )
         lastModules = m.width
         lastScale = scale
@@ -475,12 +477,12 @@ class MeetActivity : Activity() {
             "rows" to Tracking.rows(bits.size, modules), "across" to Tracking.across(modules),
             "module_px" to Tracking.SCALE * scale,
         )
-        body.addView(
-            ImageView(this).apply {
-                setImageBitmap(Bitmap.createBitmap(px, w, h, Bitmap.Config.ARGB_8888))
-                layoutParams = LinearLayout.LayoutParams(w, h)
-            },
-        )
+        val v = ImageView(this).apply {
+            setImageBitmap(Bitmap.createBitmap(px, w, h, Bitmap.Config.ARGB_8888))
+            layoutParams = LinearLayout.LayoutParams(w, h)
+        }
+        trackView = v
+        body.addView(v)
     }
 
     /**
@@ -502,19 +504,42 @@ class MeetActivity : Activity() {
 
     /** Pixels into the view, which the two renderers share. */
     private fun show(px: IntArray, w: Int) {
-        body.addView(
-            ImageView(this).apply {
-                setImageBitmap(Bitmap.createBitmap(px, w, w, Bitmap.Config.ARGB_8888))
-                layoutParams = LinearLayout.LayoutParams(w, w).apply { topMargin = 24 }
-            },
-        )
+        val v = ImageView(this).apply {
+            setImageBitmap(Bitmap.createBitmap(px, w, w, Bitmap.Config.ARGB_8888))
+            layoutParams = LinearLayout.LayoutParams(w, w).apply { topMargin = 24 }
+        }
+        codeView = v
+        body.addView(v)
     }
 
     /**
-     * Read one QR with the named camera. The permission is asked for here
-     * and a refusal stops the ceremony with a reason rather than silently:
-     * a camera this shell does not hold is a meeting it cannot carry.
+     * **One turn of the window, repainting and nothing else** ([codeView]).
+     * False where the views are not up, which is the caller's cue to go
+     * the long way round.
      */
+    private fun repaint(x: OpticalExchange): Boolean {
+        val code = codeView ?: return false
+        val m = runCatching { Optical.matrix(x.frame()) }.getOrNull() ?: return false
+        if (m.width != lastModules || lastScale <= 0) return false
+        val scale = lastScale
+        val w = m.width * scale
+        val px = IntArray(w * w)
+        for (y in 0 until w) {
+            for (cx in 0 until w) {
+                px[y * w + cx] = if (m.get(cx / scale, y / scale)) Color.BLACK else Color.WHITE
+            }
+        }
+        code.setImageBitmap(Bitmap.createBitmap(px, w, w, Bitmap.Config.ARGB_8888))
+        val bits = x.tracking()
+        val track = trackView
+        if (track != null && bits.isNotEmpty()) {
+            val (tpx, tw) = Tracking.pixels(bits, bits.size, m.width, scale)
+            val th = Tracking.rows(bits.size, m.width) * Tracking.SCALE * scale
+            if (th > 0) track.setImageBitmap(Bitmap.createBitmap(tpx, tw, th, Bitmap.Config.ARGB_8888))
+        }
+        return true
+    }
+
     /**
      * **What the selfie camera sees**, under the code, for the person
      * holding the other phone to aim by [author, 2026-10-04]: this phone
@@ -528,29 +553,31 @@ class MeetActivity : Activity() {
         para(line)
     }
 
+    /**
+     * Read a code with the named camera. The permission is asked for here,
+     * and a camera that fails after it was asked for stops the ceremony
+     * with the reason rather than silently.
+     */
     private fun scan(
         facing: QrCamera.Facing,
         which: String,
         continuous: Boolean = false,
-        /** Read the frame as three colour channels as well as in
-         *  luminance ([Polychrome]); each channel reaches `found` with the
-         *  channel that carried it, which is a part's index within its
-         *  frame. */
-        channels: Boolean = false,
-        /** Where a sampled tracking bitmap goes ([Tracking]), with the
-         *  counterparty's part count and drawn symbol width. */
-        tracking: Triple<Int, Int, (BooleanArray) -> Unit>? = null,
-        /** Everything one captured frame carried: one pair in luminance,
-         *  up to three from a colour frame. **A whole frame at a time**,
-         *  because how many channels separated is what the caller decides
-         *  colour on. */
-        found: (List<Pair<ByteArray, Int>>) -> Unit,
+        found: (ByteArray) -> Unit,
     ) {
         if (!held(Manifest.permission.CAMERA)) {
             // the one thing that still speaks over the code: without it
             // the screen is a dead end
-            paraAlways("This step needs the camera. Nothing is read until you allow it.")
-            buttonAlways("Allow the camera") { ask(1, Manifest.permission.CAMERA) }
+            if (willAsk(Manifest.permission.CAMERA)) {
+                paraAlways("This step needs the camera. Nothing is read until you allow it.")
+                buttonAlways("Allow the camera") { ask(1, Manifest.permission.CAMERA) }
+            } else {
+                // **the system will not ask again**, so offering a button
+                // that calls `requestPermissions` would be offering
+                // nothing. Its settings page is the only place left where
+                // the answer can be changed.
+                paraAlways("This step needs the camera, and Android will not ask again after a refusal. Turn it on in this app's settings and come back — the meeting is still here.")
+                buttonAlways("Open app settings") { openSettings() }
+            }
             return
         }
         // a read waits for its preview surface, which arrives on the next
@@ -563,9 +590,7 @@ class MeetActivity : Activity() {
         val onFailed: (String) -> Unit = { why ->
             runOnUiThread { Kernel.meet()?.stop(why) ?: redraw() }
         }
-        val channelSink: ((List<Pair<ByteArray, Int>>) -> Unit)? = if (channels) found else null
-        cam.readOne(facing, surface, which, onFailed, continuous, channelSink, tracking) { bytes -> found(listOf(bytes to 0)) }
-            ?.let { why -> para(why) }
+        cam.readOne(facing, surface, which, onFailed, continuous, found = found)?.let { why -> para(why) }
     }
 
     // ---- D1.5 the brief: everything front-loaded -----------------------
@@ -605,90 +630,27 @@ class MeetActivity : Activity() {
      * input until the capture is done.
      */
     private fun optical(m: Meet) {
-        para("↻  TURN YOUR PHONE AROUND so the screen faces ${m.counterpartyName}, and let them do the same. Each phone reads the other's code with its SELFIE camera.")
-        para("Two codes cross, in order: each phone's contribution, then the meeting id both compute from the pair. If the two ids differ, something is between you and the meeting stops — that check is the whole of what looking at each other's screen buys.")
-        if (!m.begun()) {
-            para("Opening the ceremony…")
-            return
-        }
-        // the object in parts, crossed in step with the other side
-        // (`OpticalExchange`): the exchange outlives the redraws, and a new
-        // one opens for the transcript once the contribution is taken
+        if (!m.begun()) return
+        // the object in parts (`OpticalExchange`): the exchange outlives
+        // the redraws, and a new one opens for the transcript once the
+        // contribution is taken
         val transcript = Kernel.opticalTaken()
         val which = if (transcript) OpticalExchange.TRANSCRIPT else OpticalExchange.CONTRIBUTION
-        // **The contribution goes in colour until a camera says it cannot**
-        // ([Polychrome]): three parts a frame at eleven bytes each, which
-        // is the smallest symbol there is and the longest read. The
-        // transcript is one part and stays monochrome, which is also what
-        // keeps `which` out of the compressed header.
-        val colour = Polychrome.OFFERED && !transcript && !m.colourRefused
-        val chunk = if (colour) OpticalExchange.CHUNK_POLY else OpticalExchange.CHUNK
-        val x = m.exchange?.takeIf { it.which == which && it.chunk == chunk } ?: run {
-            val code = Kernel.optical()
-            if (code == null) {
-                para("The code needs an open ceremony, which this device has lost.")
-                return
-            }
-            if (colour) m.colourSince = System.currentTimeMillis()
-            OpticalExchange(which, code, chunk).also { m.exchange = it }
+        val x = m.exchange?.takeIf { it.which == which } ?: run {
+            val code = Kernel.optical() ?: return m.stop("the kernel would not give the code to show")
+            OpticalExchange(which, code).also { m.exchange = it }
         }
         val name = if (transcript) "transcript" else "contribution"
-        if (colour) {
-            // the three rules and why they are what they are:
-            // `Meet.colourVerdict`
-            val now = System.currentTimeMillis()
-            val verdict = m.colourVerdict(x, now)
-            val quiet = m.colourSince?.let { now - it } ?: 0L
-            if (verdict == Meet.Colour.FALL_BACK) {
-                Diag.event(
-                    "optical.colour",
-                    "state" to "refused",
-                    "why" to if (x.theirsAreCoarse()) "followed" else "quiet",
-                    "my_channels" to m.colourChannels,
-                    "they_hold" to x.theirReceived(),
-                    "i_hold" to x.received(),
-                    "quiet_ms" to quiet,
-                )
-                m.colourRefused = true
-                m.exchange = null
-                m.colourSince = null
-                stopTurning()
-                // **the camera goes with it**: its colour sink outlives a
-                // redraw, and three decodes a frame is a cost the
-                // monochrome path should not keep paying once colour has
-                // been given up on
-                camera?.close()
-                camera = null
-                redraw()
-                return
-            }
-            val compress = verdict == Meet.Colour.COMPRESS
-            if (compress && !m.colourConfirmed) {
-                m.colourConfirmed = true
-                Diag.event("optical.colour", "state" to "confirmed", "my_channels" to m.colourChannels, "they_hold" to x.theirReceived(), "i_hold" to x.received())
-            }
-            // **while it is still being decided the frame carries full
-            // headers**, so each channel is a self-standing part and one of
-            // them brings the count the compressed headers leave out; every
-            // frame after both cameras have shown they read three is
-            // compressed
-            qrColour(x.colourFrames(compress), "$name ${x.showing() + 1}/${x.count}")
-            para(x.status())
-        } else {
-            qr(x.frame(), "$name ${x.showing() + 1}/${x.count}", x.theirCount())
-            trackingUnder(x, lastModules, lastScale)
-            para(x.status())
-        }
+        qr(x.frame(), "$name ${x.showing() + 1}/${x.count}", x.theirCount())
+        trackingUnder(x, lastModules, lastScale)
         // the window turns on the screen's own clock, not on a read
-        // landing ([turnWhileShowing])
-        if (!x.done()) turnWhileShowing(x)
-        if (x.done()) {
-            // this side is through; the last code stays up for the other
-            // side's camera until the kernel moves on (the transcript's
-            // exchange, or their intent arriving over the bearer)
-            para(if (transcript) "Both codes agree. Waiting for the other phone to catch up before the exchange moves on." else "Their contribution is in; the meeting id follows.")
-            return
-        }
+        // landing ([turnWhileShowing]) — and not at all while this side
+        // cannot read, since the screen should sit still under whatever
+        // the person is answering
+        if (!x.done() && held(Manifest.permission.CAMERA)) turnWhileShowing(x) else stopTurning()
+        // this side through: the last code stays up for the other side's
+        // camera until the kernel moves on
+        if (x.done()) return
         aim()
         // **the sampler learns their size as soon as a code of theirs
         // reads** ([Tracking]): their part count is in that first header,
@@ -706,41 +668,21 @@ class MeetActivity : Activity() {
                 }
             }
         }
-        scan(QrCamera.Facing.SELFIE, name, continuous = true, channels = colour) { frame ->
+        scan(QrCamera.Facing.SELFIE, name, continuous = true) { bytes ->
             runOnUiThread {
                 if (m.step() != Meet.Step.OPTICAL || m.exchange !== x) return@runOnUiThread
-                // **a whole captured frame at a time**: its size is how
-                // many planes this camera separated, which is this side's
-                // half of the colour evidence, and it has to be in hand
-                // before the decision below runs on it
-                if (colour) {
-                    if (frame.size > m.colourChannels) m.colourChannels = frame.size
-                    // **only a capture that separated all three extends the
-                    // allowance.** A capture that yields one or two planes
-                    // is evidence against colour, not progress, and a clock
-                    // that any read restarts would leave two cameras that
-                    // each manage two planes probing for ever at a third of
-                    // the rate monochrome would give them.
-                    if (frame.size >= Polychrome.CHANNELS) m.colourSince = System.currentTimeMillis()
-                }
                 // **their progress arrives on a part already held**: a
                 // header's `got` is taken before the part is judged a
-                // duplicate (`OpticalExchange.take`), and that figure is
-                // what advances this side's own presentation. So what
-                // counts as news is either count moving, not the verdict
+                // duplicate (`OpticalExchange.take`), so what counts as
+                // news is either count moving, not the verdict
                 val heldBefore = x.received()
                 val theyHeldBefore = x.theirReceived()
-                for ((bytes, ch) in frame) {
-                    if (x.take(bytes, ch) == OpticalExchange.Took.MALFORMED) {
-                        m.stop("a code of the exchange did not read as one")
-                        return@runOnUiThread
-                    }
+                if (x.take(bytes) == OpticalExchange.Took.MALFORMED) {
+                    m.stop("a code of the exchange did not read as one")
+                    return@runOnUiThread
                 }
-                val news = x.received() != heldBefore || x.theirReceived() != theyHeldBefore
-                // nothing moved: the other side is holding its code up
-                // until it sees this side's progress, so there is nothing
-                // to redraw and nothing to record
-                if (!news) return@runOnUiThread
+                if (x.received() == heldBefore && x.theirReceived() == theyHeldBefore) return@runOnUiThread
+                m.opticalMoved()
                 Diag.event("optical.exchange", "which" to name, "showing" to x.showing(), "received" to x.received(), "theirs" to x.theirCount(), "they_hold" to x.theirReceived())
                 if (x.done()) {
                     // both hold everything: the object goes to the kernel;
@@ -1051,14 +993,10 @@ class MeetActivity : Activity() {
                 },
             )
         }
-        // **the optical package is never scrolled away from.** Every
-        // redraw used to end at the bottom of the page, which was harmless
-        // while the code was the tallest thing on it; the tracking rows
-        // made the content taller than the viewport and the bottom became
-        // somewhere the code's top is off-screen. The code and its rows
-        // are the instrument the other person is aiming at, so they stay
-        // put and the prose below them falls off the page instead
-        // [author, 2026-10-07].
+        // **the optical package is never scrolled away from**: the code
+        // and its rows are the instrument the other person is aiming at,
+        // so the page stays at the top while they are up and ends at the
+        // bottom otherwise [author, 2026-10-07]
         if (optical) scroll.post { scroll.fullScroll(ScrollView.FOCUS_UP) }
         else scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) }
     }

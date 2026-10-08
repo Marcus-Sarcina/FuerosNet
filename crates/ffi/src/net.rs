@@ -708,9 +708,37 @@ impl Net {
     }
 
     /// Carry messages the client made outside its outbox: a bundle the
-    /// ceremony device signed for this one, once it is attached.
+    /// ceremony device signed for this one, and the conversation's legs to
+    /// witnesses and verifiers.
+    ///
+    /// **Detached is not an error when nothing needed a node.** The
+    /// counterparty's leg of kinds 9 to 18 crosses the local interface and
+    /// no node carries it ([`Participant::carriages`]), so a ceremony with
+    /// no witness and no verifier produces nothing here at all — and a
+    /// formation ceremony is exactly that shape: two identities at their
+    /// genesis, no witnesses, no responses (`wire-format.md` §3.2 subtype
+    /// 1, design §6.4's escape).
+    ///
+    /// [`Net::take_carriage`] was already written both ways and says so in
+    /// its own comment, *"a carriage must not wait on one"*; this half was
+    /// not, so a nodeless pair crossed the optical channel, the proximity
+    /// and the capture and then stopped dead at the conversation with *no
+    /// serving node is attached* — 49 seconds in, with everything the
+    /// record needed already in hand [measured, 2026-10-07].
+    ///
+    /// Anything that genuinely wanted the network is still refused, and
+    /// named: dropping it silently would lose a witness's request.
     pub(crate) fn carry(&self, msgs: Vec<rhtn_client::ceremony::Msg>) -> Result<(), Refused> {
-        let courier = self.courier()?;
+        let courier = match self.courier() {
+            Ok(c) => c,
+            Err(_) if msgs.is_empty() => return Ok(()),
+            Err(_) => {
+                return Err(Refused::new(format!(
+                    "no serving node is attached and {} message(s) need one",
+                    msgs.len()
+                )));
+            }
+        };
         let carried = self.rt().block_on(async move { courier.carry(msgs).await });
         if !carried.refused.is_empty() {
             return Err(Refused::new("the serving node refused the publication"));

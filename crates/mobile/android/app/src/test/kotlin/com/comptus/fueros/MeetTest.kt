@@ -21,11 +21,8 @@ class MeetTest {
     ) = Meet("aa", "carol", Meet.Kind(adopt, backup), role)
 
     @Test
-    fun the_flow_begins_at_intent_and_takes_input_there() {
-        val m = meet()
-        assertEquals(Meet.Step.INTENT, m.step())
-        assertTrue(m.acceptsInput())
-        assertFalse(m.handsOff())
+    fun the_flow_begins_at_intent() {
+        assertEquals(Meet.Step.INTENT, meet().step())
     }
 
     @Test
@@ -38,27 +35,20 @@ class MeetTest {
     }
 
     @Test
-    fun the_hands_off_phase_takes_no_input_and_is_reached_only_through_the_brief() {
+    fun the_hands_off_phase_is_reached_only_through_the_brief() {
         val m = meet()
         m.crossBootstrap()
         assertEquals(Meet.Step.BRIEF, m.step())
-        assertTrue("the brief still takes input", m.acceptsInput())
         m.accept()
         // optical, proximity, capture: the device faces away
-        for (s in listOf(Meet.Step.OPTICAL, Meet.Step.PROXIMITY, Meet.Step.CAPTURE)) {
-            assertEquals(s, m.step())
-            assertTrue(m.handsOff())
-            assertFalse("no input while the device faces the counterparty", m.acceptsInput())
-            when (s) {
-                Meet.Step.OPTICAL -> m.opticalDone()
-                Meet.Step.PROXIMITY -> m.proximityDone()
-                Meet.Step.CAPTURE -> m.captureDone()
-                else -> {}
-            }
-        }
+        assertEquals(Meet.Step.OPTICAL, m.step())
+        m.intentSent(); m.intentReceived()
+        assertEquals(Meet.Step.PROXIMITY, m.step())
+        m.proximityDone()
+        assertEquals(Meet.Step.CAPTURE, m.step())
+        m.captureDone()
         // capture hands back to the user for verifier selection
         assertEquals(Meet.Step.VERIFIERS, m.step())
-        assertTrue(m.acceptsInput())
     }
 
     @Test
@@ -66,7 +56,8 @@ class MeetTest {
         val m = meet()
         m.crossBootstrap() // at BRIEF
         // there is no way to reach the hands-off phase but through the brief
-        assertThrows(IllegalStateException::class.java) { m.opticalDone() }
+        m.intentSent(); m.intentReceived()
+        assertEquals(Meet.Step.BRIEF, m.step())
         m.accept()
         assertEquals(Meet.Step.OPTICAL, m.step())
     }
@@ -76,7 +67,7 @@ class MeetTest {
         val m = meet()
         assertThrows(IllegalStateException::class.java) { m.finalized("tx") }
         m.crossBootstrap(); m.accept()
-        m.opticalDone(); m.proximityDone(); m.captureDone()
+        m.intentSent(); m.intentReceived(); m.proximityDone(); m.captureDone()
         val c = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0))
         m.converse(c)
         assertEquals(Meet.Step.REVIEW, m.step())
@@ -112,7 +103,7 @@ class MeetTest {
 
     /** The flow, up to the point the verifier step is live. */
     private fun atVerifiers(): Meet = meet().apply {
-        crossBootstrap(); accept(); opticalDone(); proximityDone(); captureDone()
+        crossBootstrap(); accept(); intentSent(); intentReceived(); proximityDone(); captureDone()
     }
 
     @Test
@@ -166,10 +157,8 @@ class MeetTest {
     }
 
     @Test
-    fun the_verifier_step_still_takes_input_and_the_kernel_hands_it_on_to_review() {
+    fun the_kernel_hands_the_verifier_step_on_to_review() {
         val m = atVerifiers()
-        assertTrue(m.acceptsInput())
-        assertFalse(m.handsOff())
         m.selected(listOf())
         // no tap moves to review: the body going out does
         m.converse(FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0)))
@@ -223,8 +212,13 @@ class MeetConversationTest {
 
     private fun atVerifiers(role: Meet.Role = Meet.Role.INITIATOR): Meet =
         Meet("aa", "carol", Meet.Kind(), role).apply {
-            crossBootstrap(); accept(); opticalDone(); proximityDone(); captureDone()
+            crossBootstrap(); accept(); intentSent(); intentReceived(); proximityDone(); captureDone()
         }
+
+    /** A meeting with its codes crossing, which is where the optical
+     *  deadline applies. */
+    private fun atOptical(): Meet =
+        Meet("aa", "carol", Meet.Kind()).apply { crossBootstrap(); accept() }
 
     @Test
     fun the_conversation_opens_once_on_the_verifiers_step_and_not_before() {
@@ -302,6 +296,34 @@ class MeetConversationTest {
         assertEquals("the allowance began again", Meet.Step.VERIFIERS, m.step())
         m.poll(c, t0 + 2 * Meet.STALE_MS)
         assertEquals(Meet.Step.STOPPED, m.step())
+    }
+
+    /**
+     * **The optical exchange has an end too.** The staleness deadline
+     * covered `VERIFIERS` and `REVIEW` only, leaving the longest step of
+     * the ceremony with none: on the bench one phone's app was restarted
+     * mid-exchange and the other, holding 41 of 102 parts, went on reading
+     * a screen that would never change again [2026-10-07].
+     */
+    @Test
+    fun an_optical_exchange_that_stops_moving_is_given_up_on() {
+        val m = atOptical()
+        val t0 = 500_000L
+        m.opticalMoved(t0)
+        assertFalse("inside the allowance", m.opticalStale(t0 + Meet.STALE_MS))
+        assertTrue("past it", m.opticalStale(t0 + Meet.STALE_MS + 1))
+        // a part landing restarts it
+        m.opticalMoved(t0 + Meet.STALE_MS)
+        assertFalse("the allowance began again", m.opticalStale(t0 + 2 * Meet.STALE_MS))
+        assertTrue(m.opticalStale(t0 + 2 * Meet.STALE_MS + 1))
+    }
+
+    /** And it only applies while the codes are crossing: a step that has
+     *  moved on has its own deadline, or none. */
+    @Test
+    fun the_optical_deadline_is_only_the_optical_step_s() {
+        val m = atVerifiers(Meet.Role.INITIATOR)
+        assertFalse("not at the optical step", m.opticalStale(System.currentTimeMillis() + 10 * Meet.STALE_MS))
     }
 
     @Test
@@ -449,7 +471,6 @@ class MeetConversationTest {
         val c = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0))
         m.converse(c)
         assertEquals(Meet.Step.REVIEW, m.step())
-        assertTrue(m.acceptsInput())
         m.stop("you stopped at review")
         assertEquals(Meet.Step.STOPPED, m.step())
         // the kernel goes on without the screen: its word is not an error here
@@ -463,7 +484,7 @@ class MeetConversationTest {
     @Test
     fun the_patience_runs_out_and_the_initiator_proposes_with_queries_unanswered() {
         val m = Meet("aa", "carol", Meet.Kind(), Meet.Role.INITIATOR, patienceMs = 1_000).apply {
-            crossBootstrap(); accept(); opticalDone(); proximityDone(); captureDone()
+            crossBootstrap(); accept(); intentSent(); intentReceived(); proximityDone(); captureDone()
         }
         m.selected(listOf(Meet.Chosen("v1", Meet.Basis.MET), Meet.Chosen("v2", Meet.Basis.MET)))
         val c = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 2))
@@ -687,7 +708,7 @@ class MeetRowsTest {
     // ---- D6: UX-003 ---------------------------------------------------
 
     private fun atReview(m: Meet): Meet {
-        m.crossBootstrap(); m.accept(); m.opticalDone(); m.proximityDone(); m.captureDone()
+        m.crossBootstrap(); m.accept(); m.intentSent(); m.intentReceived(); m.proximityDone(); m.captureDone()
         m.converse(FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0)))
         check(m.step() == Meet.Step.REVIEW)
         return m

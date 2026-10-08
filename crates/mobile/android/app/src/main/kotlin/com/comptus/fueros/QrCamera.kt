@@ -39,23 +39,13 @@ import timber.log.Timber
  * `OpticalContribution`, a `TranscriptConfirm` or nothing of the sort is
  * the kernel's to say, and it says so by refusing them.
  *
- * **What a lens added, which is why this file looks as it does.** The
- * camera half ran on two Galaxy S21+ phones from `af72cc1` onward, and
- * every guard here came out of that rather than out of a test: the first
- * code carried the whole 2 KB object and could not be read at arm's
- * length at all, which is what drove the kernel to cross it in 256-byte
- * parts; a second open while a read was live threw
- * `CameraAccessException -38`, so a read holds the device once; a session
- * that stalled never recovered, so a watchdog restarts it; and the frame
- * size is chosen per camera because the default was too small to resolve
- * a dense symbol. A scan still fails rather than returns the wrong bytes,
- * since a corrupted symbol fails its own error correction before ZXing
- * returns anything.
- *
- * The header said **NOT RUN ON HARDWARE** until 2026-10-05, which had
- * been false since `bc08f98`. A module header that outlives its subject
- * is worse than none: the phase 1 sweep documented this file and did not
- * read what was already in it (Reviewer2, sixth round).
+ * **Every guard here came off hardware rather than out of a test**: one
+ * open per read, since a second open while one is live disconnects the
+ * first; a watchdog that restarts a stalled session; a frame size chosen
+ * per camera; and the focus, metering and shutter steering below, which
+ * is where the exchange's range came from. A scan fails rather than
+ * returns the wrong bytes, since a corrupted symbol fails its own error
+ * correction before ZXing returns anything.
  */
 class QrCamera(private val context: Context) {
 
@@ -76,14 +66,9 @@ class QrCamera(private val context: Context) {
          *  camera service on these phones comes up unhealthy at times, a
          *  minute of frames decoding nothing where a fresh session reads in
          *  a second; the person should not have to leave and come back.
-         *
-         *  **Forty seconds, not twenty.** A colour frame's first read is
-         *  slow — 7.3 s and 10.5 s on the two phones of the first colour
-         *  run, against a monochrome median of 370 ms — and a restart
-         *  inside that acquisition throws away the channels already
-         *  separated. The trigger has to sit well clear of a read that is
-         *  merely slow, and the author's standing instruction on this path
-         *  is to be liberal throughout [author, 2026-10-06]. */
+         *  Forty seconds, well clear of a read that is merely slow: the
+         *  standing instruction on this path is to be liberal with
+         *  timeouts throughout [author, 2026-10-06]. */
         const val STALL_MS = 40_000L
 
         /**
@@ -116,11 +101,9 @@ class QrCamera(private val context: Context) {
 
     /**
      * The frame size: **as many pixels as the camera gives up to about
-     * three megapixels**, chosen per camera from what it offers. The first
-     * optical code is 173 modules across (`wire-format.md` §14.3.1), and at
-     * arm's length a 720p frame put well under a pixel on each module,
-     * which no decoder reads; a 1080p-class frame at a hand's length puts
-     * two to three. Decoding a frame this size costs tens of milliseconds.
+     * three megapixels**, chosen per camera from what it offers. A 720p
+     * frame put well under a pixel on each module of the first, dense
+     * code; decoding a frame this size costs tens of milliseconds.
      */
     private var width = 1280
     private var height = 720
@@ -157,29 +140,6 @@ class QrCamera(private val context: Context) {
     private var lastRead: String? = null
     private var continuous = false
     private var found: ((ByteArray) -> Unit)? = null
-    /**
-     * Where a colour frame's channels go: **every channel of one captured
-     * frame in one delivery**, each the bytes and the channel that carried
-     * them, since the channel is the part's index ([Polychrome]). Set
-     * alongside [found], never instead: a frame is tried in colour and
-     * then in luminance, so a monochrome code in front of a colour-reading
-     * camera still reads.
-     *
-     * **One delivery a frame, not one a channel.** The caller decides from
-     * how many channels separated whether colour works at all, and a
-     * delivery per channel lets that decision run between the first
-     * channel and the second: the first field run read all three channels
-     * of a frame 15 ms apart and refused colour in the gap, on evidence
-     * that was two channels short because the other two had not been
-     * handed over yet [field run colour-1, 2026-10-06].
-     */
-    private var foundChannels: ((List<Pair<ByteArray, Int>>) -> Unit)? = null
-    /** The three luminance planes a colour frame separates into, reused:
-     *  eight megabytes at a 1920×1440 frame is not a per-frame allocation. */
-    private var planes: Array<ByteArray>? = null
-    /** What each channel last delivered, so a frame held up while the other
-     *  side catches up is not read again. */
-    private val lastChannel = arrayOfNulls<ByteArray>(Polychrome.CHANNELS)
     /** In continuous mode, the payload last delivered: the same code read
      *  again is not news. */
     private var lastPayload: ByteArray? = null
@@ -192,22 +152,12 @@ class QrCamera(private val context: Context) {
 
 
     /**
-     * **Why a frame did not read**, which was one counter until 2026-10-07
-     * and conflated two unrelated failures.
-     *
-     * Only 8% of frames decode at all (median 9 attempts a read, measured
-     * over the run of 2026-10-07), while the camera delivers 29 of its 30
-     * frames a second into the decoder — so the exchange's duration is
-     * almost entirely the 92% that fail, and not the capture rate and not
-     * the lockstep.
-     *
-     * **Which 92% decides what to build.** A symbol never *located* is a
-     * framing or localisation failure, which a bounding mark a detector can
-     * find at distance answers directly. A symbol located and *unreadable*
-     * is blur or noise or too few pixels a module, which a bounding mark
-     * does nothing for and oversampling does. The two were one `catch
-     * (e: Exception)` whose own comment said "either way the next frame is
-     * the answer" — true of the frame, and not true of the design.
+     * **Why a frame did not read**, in two counters, because the two
+     * failures want different remedies: a symbol never *located* is a
+     * framing failure, which a mark a detector can find at distance
+     * answers; a symbol located and *unreadable* is blur, noise or too few
+     * pixels a module, which oversampling answers and a mark does nothing
+     * for.
      */
     private val read = java.util.concurrent.atomic.AtomicInteger(0)
     private val notFound = java.util.concurrent.atomic.AtomicInteger(0)
@@ -291,10 +241,6 @@ class QrCamera(private val context: Context) {
          *  open until [close]. For an exchange whose codes change as the
          *  other side reads. */
         continuous: Boolean = false,
-        /** Where a colour frame's three channels go, all of one captured
-         *  frame in one delivery, where the caller is reading a polychrome
-         *  exchange ([Polychrome]). */
-        foundChannels: ((List<Pair<ByteArray, Int>>) -> Unit)? = null,
         /** Where a sampled tracking bitmap goes, with how many parts the
          *  counterparty has and how wide their drawn symbol is
          *  ([Tracking]). All three or none. */
@@ -318,11 +264,9 @@ class QrCamera(private val context: Context) {
         this.facing = facing
         this.failed = failed
         this.continuous = continuous
-        this.foundChannels = foundChannels
         this.trackingParts = tracking?.first ?: 0
         this.trackingModules = tracking?.second ?: 0
         this.foundTracking = tracking?.third
-        java.util.Arrays.fill(lastChannel, null)
         this.found = found
         lastPayload = null
         attempts.set(0)
@@ -363,17 +307,7 @@ class QrCamera(private val context: Context) {
             val image = ir.acquireLatestImage() ?: return@setOnImageAvailableListener
             try {
                 if (reading.get()) {
-                    // **colour first, where the caller is reading a
-                    // polychrome exchange**: three channels separated out
-                    // of the one frame, each its own symbol and its own
-                    // part ([Polychrome]). A frame that yields nothing in
-                    // colour falls through to the luminance read below, so
-                    // a monochrome code in front of a colour-reading
-                    // camera still reads and the fall back costs a frame
-                    // and no state [author, 2026-10-06].
-                    if (colour(image)) return@setOnImageAvailableListener
-                    // the Y plane alone: ZXing wants luminance and a
-                    // monochrome QR has no colour in it
+                    // the Y plane alone: ZXing wants luminance
                     val y = image.planes[0]
                     val row = y.rowStride
                     val buf = y.buffer
@@ -439,18 +373,14 @@ class QrCamera(private val context: Context) {
         val fl = failed
         val cont = continuous
         val found = this.found ?: return
-        // the colour sink goes with it: a restart that dropped it would
-        // leave a colour exchange reading nothing and read as colour
-        // having failed
-        val channel = this.foundChannels
-        // the tracking sink goes with it for the same reason the colour
-        // sink does: a restart that dropped it would leave the rows
-        // unread and the window rotating on the header's count alone
+        // the tracking sink goes with it: a restart that dropped it would
+        // leave the rows unread and the window rotating on the header's
+        // count alone
         val track = this.foundTracking?.let { Triple(trackingParts, trackingModules, it) }
         val preview = previewSurface
         close()
         lastRead = null
-        readOne(f, preview, w, fl, cont, channel, track, found)
+        readOne(f, preview, w, fl, cont, track, found)
     }
 
     private fun cameraRefused(why: String): String {
@@ -469,80 +399,6 @@ class QrCamera(private val context: Context) {
         failed = null
         close()
         tell?.invoke("the ${facing?.name?.lowercase() ?: ""} camera failed while $op: ${e.message ?: e.javaClass.simpleName}")
-    }
-
-    /**
-     * One frame read as three colour channels. True where a channel
-     * delivered something, so the luminance read is not also tried.
-     *
-     * **The chroma is half-resolution and that is the risk the format was
-     * built to measure** ([Polychrome]): a 4:2:0 frame carries one chroma
-     * sample per 2×2 block, so whether three channels separate at module
-     * scale is this camera's property and not the code's. A simulation of
-     * the subsampling alone separates them from two pixels a module; what
-     * it cannot simulate is this device's white balance.
-     */
-    private fun colour(image: android.media.Image): Boolean {
-        val sink = foundChannels ?: return false
-        if (image.planes.size < 3) return false
-        val w = image.width
-        val h = image.height
-        val p = planes ?: Array(Polychrome.CHANNELS) { ByteArray(w * h) }.also { planes = it }
-        if (p[0].size < w * h) return false
-        val yp = image.planes[0]
-        val up = image.planes[1]
-        val vp = image.planes[2]
-        val y = ByteArray(yp.buffer.remaining()).also { yp.buffer.get(it) }
-        val u = ByteArray(up.buffer.remaining()).also { up.buffer.get(it) }
-        val v = ByteArray(vp.buffer.remaining()).also { vp.buffer.get(it) }
-        attempts.incrementAndGet()
-        Polychrome.planesFromYuv(y, u, v, yp.rowStride, up.rowStride, up.pixelStride, w, h, p)
-        // **the whole frame is separated before any of it is delivered**,
-        // and every channel that decoded is delivered, held up or not: how
-        // many planes came out of one capture is the evidence the caller
-        // decides colour on ([foundChannels]), so it is the size of the
-        // delivery and not something the caller has to count across them
-        val separated = mutableListOf<Pair<ByteArray, Int>>()
-        var fresh = 0
-        for (ch in 0 until Polychrome.CHANNELS) {
-            val bytes = Polychrome.decodePlane(p[ch], w, h) ?: continue
-            // a plane that decoded is a healthy camera, whether or not the
-            // part in it is news: the watchdog is asking about the camera
-            lastReadMs = Diag.ms()
-            separated.add(bytes to ch)
-            val last = lastChannel[ch]
-            // the same part held up while the other side catches up is
-            // delivered but is not a read worth recording
-            if (last != null && last.contentEquals(bytes)) continue
-            lastChannel[ch] = bytes
-            fresh++
-            Diag.event(
-                "qr.read",
-                "which" to which,
-                "bytes" to bytes.size,
-                "facing" to facing,
-                "channel" to ch,
-                "attempts" to attempts.get(),
-                "decode_ms" to (Diag.ms() - startedMs),
-            )
-        }
-        if (separated.isEmpty()) return false
-        // **how many planes this capture separated**: three is a camera
-        // that can read the format, one or two is a camera that separates
-        // some of them, and either way it is on the record for the run
-        Diag.event(
-            "qr.frame",
-            "which" to which,
-            "channels" to separated.size,
-            "fresh" to fresh,
-            "attempts" to attempts.get(),
-        )
-        sink(separated)
-        if (fresh > 0) {
-            attempts.set(0)
-            startedMs = Diag.ms()
-        }
-        return true
     }
 
     /** A frame to bytes, or null where there was no symbol in it. */
@@ -641,27 +497,12 @@ class QrCamera(private val context: Context) {
         sink(bits)
     }
 
-    /** The largest YUV frame the camera offers within [maxPixels]. */
     /**
-     * **What the lens can actually do**, on the record once per open.
-     *
-     * The range the optical exchange reaches was being predicted from the
-     * module's physical size, on a rule calibrated from one observation —
-     * and the rule is wrong. Run `mono102` of 2026-10-07 put 2.14 mm
-     * modules in front of these cameras, 2.2 times the 0.97 mm the rule
-     * was fitted to, and read them at about 12 inches against the 18 the
-     * denser code had managed: the range went *down* as the module grew.
-     * At 12 inches a 2.14 mm module lands about eight pixels a module,
-     * four times what a decoder needs, so **pixel resolution is not the
-     * constraint and never was** [author, 2026-10-07, measured].
-     *
-     * The candidate that fits is the lens. A front camera with no
-     * autofocus is fixed at roughly arm's length, and past that the blur
-     * is a property of the optics that no module size answers. So the
-     * figures that settle it go in the log: a minimum focus distance of
-     * zero means fixed focus, the hyperfocal distance says where it is
-     * sharp, and the available autofocus modes say whether there is
-     * anything to drive.
+     * **What the lens can do**, on the record: its focus limits and
+     * autofocus modes, so a question about range is answered from the
+     * device rather than assumed. (The front cameras measured so far have
+     * full autofocus; the range was the control loop's, [middle] and
+     * [briskest].)
      */
     private fun lens(manager: CameraManager, id: String) {
         // **every camera, once a process.** Which lens is open says
@@ -870,6 +711,7 @@ class QrCamera(private val context: Context) {
         )
     }
 
+    /** The largest YUV frame the camera offers within [maxPixels]. */
     private fun size(manager: CameraManager, id: String) {
         val map = manager.getCameraCharacteristics(id)
             .get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP) ?: return

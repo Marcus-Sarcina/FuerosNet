@@ -75,71 +75,28 @@ class Meet(
         const val PATIENCE_MS = 60_000L
 
         /**
-         * **How long the conversation may make no progress at all before
-         * the ceremony is given up on.**
-         *
-         * This is not a protocol timer — the design gives the proposer the
-         * say over when to propose and no node runs a clock. It is the
-         * shell refusing to leave a person holding a phone that will never
-         * move again. Two runs ended that way: `aimed-1` left the proposer
-         * at `VERIFIERS` for minutes after a dropped carriage, and
-         * `shutter-1` had the sender stop itself correctly while **the
-         * counterparty went on polling**, because nothing told it and
-         * nothing was going to.
-         *
-         * Three minutes is far longer than any step has ever taken — the
-         * whole of `shutter-1` to the witness request was 339 s, and its
-         * longest single step 24 s — so it fires only where something is
-         * genuinely never coming. It is a figure to adjust if practice
-         * disagrees, not a derived one.
+         * **How long the ceremony may make no progress before it is given
+         * up on**, at the optical step and in the conversation. Not a
+         * protocol timer — the design gives the proposer the say over when
+         * to propose and no node runs a clock — but the shell refusing to
+         * leave a person holding a phone that will never move again, which
+         * two field runs did. Three minutes is far longer than any step
+         * has taken; a figure to adjust if practice disagrees, not a
+         * derived one.
          */
         const val STALE_MS = 180_000L
 
         /**
-         * **How long one part of the optical window is shown for.**
-         *
-         * The exchange rotates through the parts the counterparty cannot
-         * have yet (`OpticalExchange.frame`), and the screen is what
-         * advances it. The camera on the other side delivers about 30
-         * frames a second and decodes a third to three quarters of them
-         * (`qr.looks`, 2026-10-07), so a part shown for one frame is more
-         * likely missed than caught. **A hundred milliseconds is about
-         * three frames**, which the worse phone catches around 70% of the
-         * time, and a full rotation of eight parts takes 0.8 s.
-         *
-         * It cannot go much lower: re-encoding and blitting the symbol is
-         * cheap but not free, and below two frames a part the rotation
-         * outruns the reader it is for.
-         *
-         * **And it is not tuned to the phones that measured it** [author,
-         * 2026-10-07]. Those are high-end testers; a slower camera
-         * catching fewer frames needs each part held *longer*, not
-         * shorter, and a value fitted here would fail quietly there by
-         * making the exchange crawl. The arithmetic sets it, not the
-         * best hardware available (`OpticalExchange.WINDOW`).
+         * **How long one part of the optical window is shown for.** The
+         * camera on the other side delivers about thirty frames a second
+         * and decodes a third to three quarters of them (`qr.looks`,
+         * 2026-10-07), so a hundred milliseconds — about three frames — is
+         * what the worse phone catches most of the time, and a rotation of
+         * eight parts takes under a second. Not tuned to the phones that
+         * measured it [author, 2026-10-07]: a slower camera needs each
+         * part held longer, not shorter (`OpticalExchange.WINDOW`).
          */
         const val TURN_MS = 100L
-
-        /**
-         * **How long the colour probe may go without progress** before
-         * this device falls back to the monochrome format ([Polychrome]).
-         *
-         * The clock is restarted by every code read, so this is an
-         * allowance on *no progress* rather than a budget for the probe:
-         * the time two people spend picking the phones up, re-arranging
-         * their grip and getting the two cameras aimed at each other is
-         * not colour's to answer for, and neither is a read that is merely
-         * slow. **Forty-five seconds** is about eighty frames at the field
-         * runs' measured rate, and the first colour run's acquisitions
-         * took 7.3 s and 10.5 s, so a probe that is working has room and
-         * one that is not costs forty-five seconds of a ceremony that runs
-         * for five minutes.
-         *
-         * [author, 2026-10-06]: there should either be no limit on the
-         * first frame's display or read or an extremely generous one, and
-         * the later frames liberal with it too.
-         */
-        const val COLOUR_PROBE_MS = 45_000L
     }
     /** The adoption this meeting carries, as chosen at D1a. */
     val adopt: Adopt get() = kind.adopt
@@ -171,88 +128,9 @@ class Meet(
     }
 
     /** The optical exchange under way at D2, the object cut into parts
-     *  and crossed in step ([OpticalExchange]); null between the two. Held
-     *  here so a redrawn screen finds it rather than starting over. */
+     *  ([OpticalExchange]); null between the two. Held here so a redrawn
+     *  screen finds it rather than starting over. */
     var exchange: OpticalExchange? = null
-
-    /**
-     * **When the colour probe last made progress**, or null while this
-     * device is not presenting in colour ([Polychrome]): set when the
-     * colour exchange opens and again on every code this side reads, so
-     * [COLOUR_PROBE_MS] measures a probe that has gone quiet rather than
-     * one that is merely slow.
-     */
-    @Volatile var colourSince: Long? = null
-
-    /** Set once this device has fallen back to the monochrome format, so
-     *  it does not try colour again inside one ceremony. */
-    @Volatile var colourRefused: Boolean = false
-
-    /** Set once both cameras have shown they separate all three channels,
-     *  so the compressed format is licensed and the run records it the
-     *  once rather than on every redraw. */
-    @Volatile var colourConfirmed: Boolean = false
-
-    /** **The most planes this device's camera has separated out of one
-     *  captured frame** ([Polychrome]). Three is this half of the evidence
-     *  that colour works; the other half is the counterparty's `got`
-     *  reaching three, which says the same of theirs. */
-    @Volatile var colourChannels: Int = 0
-
-    /** What the colour probe has come to, for the screen that presents
-     *  the contribution ([colourVerdict]). */
-    enum class Colour {
-        /** Still probing: present the three channels under full headers,
-         *  which is the format a reader can place without the count. */
-        PROBE,
-        /** Both cameras have shown they separate all three: present the
-         *  compressed format, three parts a frame under one header. */
-        COMPRESS,
-        /** Give colour up for this ceremony and re-partition at the
-         *  monochrome chunk. */
-        FALL_BACK,
-    }
-
-    /**
-     * **Whether to present the contribution in colour, and in which of the
-     * two colour formats** ([Polychrome]).
-     *
-     * The two presentations are lock-step — each side shows the part the
-     * other still needs — so **the format is one decision for the channel
-     * and not one per direction** [author, 2026-10-06]. A side on
-     * three-part frames and a side on one-part frames walk their sequences
-     * at different rates, and the side that finishes stops advancing the
-     * other, leaving parts undelivered with nothing left to trigger them.
-     *
-     * Three rules, each symmetric:
-     *
-     * - **Compress only when both cameras have separated all three
-     *   channels.** Each side sees both halves — its own best capture in
-     *   [colourChannels], and the counterparty's `got` reaching three,
-     *   which says the same of theirs — so both compute the same
-     *   conjunction and neither can compress alone. Dropping the index out
-     *   of the header is safe only for a reader that recovers it from the
-     *   plane a part arrived in, which is the counterparty's camera and
-     *   not this one.
-     * - **Follow the other side out of colour.** A part of theirs longer
-     *   than a colour frame carries says they have re-partitioned at the
-     *   monochrome chunk ([OpticalExchange.theirsAreCoarse]). A side left
-     *   in colour reads nothing at all of a monochrome presentation, so it
-     *   is the one side whose own allowance can never expire.
-     * - **Give up after [COLOUR_PROBE_MS] without a full capture.** The
-     *   clock is restarted by any capture that separated all three, and
-     *   not by one that separated fewer, which is evidence against colour
-     *   rather than progress.
-     */
-    fun colourVerdict(x: OpticalExchange, now: Long): Colour {
-        if (colourRefused) return Colour.FALL_BACK
-        if (x.theirsAreCoarse()) return Colour.FALL_BACK
-        if (colourChannels >= Polychrome.CHANNELS && x.theirReceived() >= Polychrome.CHANNELS) {
-            return Colour.COMPRESS
-        }
-        val began = colourSince ?: return Colour.PROBE
-        return if (now - began > COLOUR_PROBE_MS) Colour.FALL_BACK else Colour.PROBE
-    }
 
     /** Told when the person accepts the brief: the kernel's, so the
      *  ceremony begins there, which is the one question it asks. */
@@ -495,6 +373,14 @@ class Meet(
     /** When the conversation last moved in any way this side can see: the
      *  clock [STALE_MS] runs against. */
     private var lastProgressAt = 0L
+
+    /**
+     * **When the optical exchange last gained anything**, which [STALE_MS]
+     * runs against too: the longest step of the ceremony had no end until
+     * one phone was restarted mid-exchange and the other went on reading a
+     * dead screen [2026-10-07]. Any part arriving, either way, is progress.
+     */
+    private var lastOpticalAt = 0L
     private var lastAnswerAt = 0L
     /** The person said to go on without the unanswered queries. */
     private var goOn = false
@@ -536,24 +422,6 @@ class Meet(
 
     /** Why the meeting stopped, where it did. */
     fun stopReason(): String? = synchronized(lock) { stopReason }
-
-    /**
-     * Whether this step takes user input. The hands-off phase — optical
-     * exchange, proximity, capture — does not: the device faces away, so a
-     * screen there shows what is happening and offers nothing to tap.
-     */
-    fun acceptsInput(): Boolean = synchronized(lock) {
-        step == Step.INTENT ||
-            step == Step.BRIEF ||
-            step == Step.VERIFIERS ||
-            step == Step.REVIEW
-    }
-
-    /** Whether this step is one where the device faces away from the
-     *  person: the complement of [acceptsInput] over the live steps. */
-    fun handsOff(): Boolean = synchronized(lock) {
-        step == Step.OPTICAL || step == Step.PROXIMITY || step == Step.CAPTURE
-    }
 
     // ---- the verifiers this device selected, and what came back ---------
 
@@ -892,10 +760,6 @@ class Meet(
     /** Whether the invitation has crossed. */
     fun bootstrapCrossed(): Boolean = synchronized(lock) { bootstrapCrossed }
 
-    /** The kernel finished the optical exchange.  The step itself ends
-     *  only once both intents have crossed; see [intentSent]. */
-    fun opticalDone() = advance(Step.OPTICAL, Step.PROXIMITY, "kernel")
-
     private var intentSent = false
     private var intentReceived = false
 
@@ -953,6 +817,26 @@ class Meet(
             queriesOutAt = nowMs
         }
         poll(c, nowMs)
+    }
+
+    /**
+     * **The optical exchange moved**, which restarts its own staleness
+     * clock ([lastOpticalAt]). Called by the screen for every part that
+     * lands, either side's.
+     */
+    fun opticalMoved(nowMs: Long = System.currentTimeMillis()) = synchronized(lock) {
+        lastOpticalAt = nowMs
+    }
+
+    /**
+     * **Whether the optical exchange has stopped moving for good.** The
+     * screen asks on each turn of its window; true is the counterparty
+     * gone, and the ceremony ends rather than reading a dead screen.
+     */
+    fun opticalStale(nowMs: Long = System.currentTimeMillis()): Boolean = synchronized(lock) {
+        if (step != Step.OPTICAL) return false
+        if (lastOpticalAt == 0L) lastOpticalAt = nowMs
+        nowMs - lastOpticalAt > STALE_MS
     }
 
     /**

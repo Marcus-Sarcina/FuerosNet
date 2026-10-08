@@ -11,8 +11,8 @@ class OpticalExchangeTest {
 
     /**
      * **The chunk these tests name for themselves.** They are about the
-     * lockstep — who shows what, who advances, what a stale code counts
-     * as — and not about the production constant, which is chosen for
+     * exchange's rules — who shows what, who advances, what a stale code
+     * counts as — and not about the production constant, which is chosen for
      * reading distance and moved when that changes
      * (`OpticalExchange.CHUNK`, and `OpticalChunkTest` pins its cost).
      * Four of these broke when the constant moved from 256 to 48 on
@@ -72,7 +72,7 @@ class OpticalExchangeTest {
         assertEquals(OpticalExchange.Took.DUPLICATE, a.take(b.frame()))
         assertEquals(2, a.showing())
         assertEquals(OpticalExchange.Took.COMPLETE, b.take(a.frame()))
-        assertTrue(b.complete())
+        assertTrue(b.theirs() != null)
         assertTrue("a saw b hold 2 of 3 so far", !a.done())
         assertEquals(OpticalExchange.Took.DUPLICATE, a.take(b.frame()))
         assertTrue("b's header now says it holds all three", a.done())
@@ -100,7 +100,7 @@ class OpticalExchangeTest {
         val b = OpticalExchange(OpticalExchange.CONTRIBUTION, bytes(300, 2), PARTS_OF_256)
         // a holds all of b's; b moved to the transcript before a read its last header
         a.take(b.frame()); b.take(a.frame()); a.take(b.frame())
-        assertTrue(a.complete())
+        assertTrue(a.theirs() != null)
         assertFalse(a.done())
         val t = OpticalExchange(OpticalExchange.TRANSCRIPT, bytes(34, 3), PARTS_OF_256)
         assertEquals(OpticalExchange.Took.DUPLICATE, a.take(t.frame()))
