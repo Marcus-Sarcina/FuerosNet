@@ -15,8 +15,9 @@ package com.comptus.fueros
  * ([Tracking], [tracking]); from the two, a sender knows which of its
  * parts the other side is still owed and rotates through the lowest
  * [WINDOW] of them, a [turn] at a time on the screen's clock
- * (`Meet.TURN_MS`). The receiver fills holes in any order. [done] is both
- * sides holding everything.
+ * (`Meet.TURN_MS`). The receiver fills holes in any order. **The rows
+ * steer and the header decides**: [done] is both headers saying
+ * everything is held, and the rows only choose what to show meanwhile.
  *
  * Pure Kotlin: the camera and the kernel are the caller's.
  */
@@ -136,9 +137,12 @@ class OpticalExchange(
     private var theirGot = 0
     /**
      * **Which of this side's parts the other side holds**, part by part,
-     * from their tracking rows. The header's count seeds it: a contiguous
-     * count of N means parts 0 to N-1 are held, so a side that cannot read
-     * the rows degrades to the header's word and never to a wrong belief.
+     * from their tracking rows. The header's count seeds it — a contiguous
+     * count of N means parts 0 to N-1 are held — and **corrects it**: the
+     * part at N is certainly *not* held, whatever the rows said, so a
+     * header re-opens it ([take]). A side that cannot read the rows
+     * degrades to the header's word, and a side that misread them is put
+     * right by the next header.
      */
     private var theirHeld = BooleanArray(0)
     /** How many times each of this side's parts has been seen set in
@@ -200,12 +204,12 @@ class OpticalExchange(
     }
 
     /**
-     * Their tracking bitmap, as the camera sampled it. Monotonic: a part
-     * once known held is never unknown again, so a dropped or misread
-     * frame cannot walk the belief backwards. **A set module is believed
-     * only after `Tracking.CONFIRM` sightings**: the rows carry no error
-     * correction, and reading set when unset costs a part the counterparty
-     * still needs, where reading unset when set costs one re-show.
+     * Their tracking bitmap, as the camera sampled it. A part once seen
+     * held stays held, so a dropped frame cannot walk the belief backwards;
+     * only the header walks it back, and only at the one part it can name.
+     * **A set module is believed only after `Tracking.CONFIRM` sightings**:
+     * the rows carry no error correction, and reading set when unset costs
+     * the part its turn, where reading unset when set costs one re-show.
      */
     fun takeTracking(bits: BooleanArray) = synchronized(lock) {
         if (theirHeld.size < count) theirHeld = theirHeld.copyOf(count)
@@ -258,6 +262,16 @@ class OpticalExchange(
         }
         if (gotOfMine > count) return Took.MALFORMED
         theirGot = maxOf(theirGot, gotOfMine)
+        // **the header names one part they certainly lack**: `got` is
+        // contiguous, so the part at it is not held, and the header knows
+        // that better than the rows do. Without this a row misread *set*
+        // was believed for good and the part never offered again — on the
+        // bench one phone held 101 of 102 while the other, sure it held
+        // all, showed a part that was not the missing one [2026-10-08].
+        if (theirGot < theirHeld.size) {
+            theirHeld[theirGot] = false
+            sightings[theirGot] = 0
+        }
         if (theirs[index] != null) return Took.DUPLICATE
         theirs[index] = bytes.copyOfRange(HEADER, bytes.size)
         while (got < theirCount && theirs[got] != null) got++
@@ -270,10 +284,12 @@ class OpticalExchange(
         theirs.fold(ByteArray(0)) { acc, p -> acc + (p ?: ByteArray(0)) }
     }
 
-    /** Both have everything: theirs is held here, and they are known to
-     *  hold all of this side's. */
+    /** Both have everything: theirs is held here, and their header says
+     *  they hold all of this side's. The rows never decide this — they
+     *  cannot say *all* without the header agreeing, since the header
+     *  re-opens the part at its own count. */
     fun done(): Boolean = synchronized(lock) {
-        theirCount > 0 && got == theirCount && (0 until count).all { holds(it) }
+        theirCount > 0 && got == theirCount && theirGot >= count
     }
 
     /** Where the two stand, for the diagnostics. */

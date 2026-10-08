@@ -16185,3 +16185,13 @@ both above two 10-04 entries) — restored to forward order by commit time;
 `Robot/field-test-diagnostics.md` claiming the symbol "has been an Aztec
 code since 2026-10-07"; `settled` not surviving the Activity, now a
 SharedPreferences flag; `cargo fmt` failing on the uncommitted `net.rs`.
+
+**2026-10-08, first cold run on the excised build: hung at 101/102.**
+Diagnosed from the phones' own event files (no collector was up). The
+rows confirmed a false *set* at the first cell of the last row — the
+furthest the affine extrapolation reaches from the finders, where tilt is
+amplified most. Fix is role-neutral and in the exchange, not the sampler:
+the header re-opens the part at its own count, and `done()` is the
+header's. The sampler's tilt weakness stands and is now survivable; a
+perspective-correct sample from a fourth point (the alignment pattern)
+would reduce the delay it costs and is not owed yet.

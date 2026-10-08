@@ -13349,3 +13349,20 @@ is remembered across restarts and sent to the app's settings, and
 `crates/tools/nodeless.sh` provisions two phones knowing nobody. Dead
 accessors and stale headers are gone from the shell, and this log's tail
 is back in date order. Shell unit tests 172 → 152.
+
+### 2026-10-08 (the rows steer, the header decides)
+
+**A ceremony between strangers hung one part short, and the tracking
+rows were why.** One phone held 101 of 102 parts; the other had read a
+row module *set* twice where it was clear, believed the counterparty held
+everything, and sat for good on a part that was not the missing one — the
+bitmap was monotonic by design, so nothing could walk the belief back.
+Both cameras read at 100% throughout.
+
+**The header names the one part they certainly lack.** Its count is
+contiguous, so the part at that count is not held whatever the rows said,
+and every header now re-opens it. Completion is the headers' alone: both
+sides are done when each header says the other holds everything, and the
+rows only choose what to show meanwhile. A misread row now costs a part
+its turn, never the exchange. Pinned by a test that lies to one side twice
+and watches the header put it right. Shell unit tests 152 → 153.

@@ -89,6 +89,39 @@ class WindowTest {
         assertEquals("monotonic", 1, x.theirReceived())
     }
 
+    /**
+     * **The header corrects the one hole it can name.** A module misread
+     * *set* survives [Tracking.CONFIRM] rarely, but it did on the bench
+     * [2026-10-08]: one phone held 101 of 102, the other was sure it held
+     * all and showed a part that was not the missing one, for good. `got`
+     * is contiguous, so the part at `got` is certainly not held, and a
+     * header re-opens it however many sightings said otherwise.
+     */
+    @Test
+    fun a_wrongly_confirmed_part_is_reopened_by_the_header_that_names_it() {
+        val a = OpticalExchange(OpticalExchange.CONTRIBUTION, obj(6 * OpticalExchange.CHUNK, 1), OpticalExchange.CHUNK)
+        val b = OpticalExchange(OpticalExchange.CONTRIBUTION, obj(OpticalExchange.CHUNK, 2), OpticalExchange.CHUNK)
+        // b reads every part of a's but the fourth
+        for (i in listOf(0, 1, 2, 4, 5)) {
+            while (a.showing() != i) a.turn()
+            b.take(a.frame())
+        }
+        assertEquals("three contiguous", 3, b.received())
+        // a's camera misreads b's rows as all held, twice over
+        val lie = BooleanArray(a.count) { true }
+        a.takeTracking(lie); a.takeTracking(lie)
+        assertEquals("every part believed held", a.count, a.theirReceived())
+        // b's header says three: the fourth is certainly missing
+        a.take(b.frame())
+        assertEquals("the header re-opened it", a.count - 1, a.theirReceived())
+        assertTrue("and nothing else decides completion", !a.done())
+        assertEquals("so it is what a shows", 3, a.showing())
+        b.take(a.frame())
+        assertEquals(6, b.received())
+        a.take(b.frame())
+        assertTrue(a.done() && b.done())
+    }
+
     /** **Losing the rows entirely is safe**: the header's contiguous count
      *  is a floor under the bitmap, so a side that cannot sample them
      *  behaves exactly as the shipped exchange did. */

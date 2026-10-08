@@ -12,7 +12,7 @@ package com.comptus.fueros
  * and there is nowhere in a 25-byte symbol to put it.
  *
  * So it goes beside the symbol rather than inside it. **One module a
- * part**: set means held, and a module only ever turns on.
+ * part**: set means held.
  *
  * **Why outside the error correction is acceptable.** The rows are
  * re-shown every frame, so a module misread *unset* costs one redundant
@@ -22,10 +22,13 @@ package com.comptus.fueros
  * at [SCALE] times the symbol's own so they are the easiest thing on the
  * screen to read.
  *
- * **And losing them entirely is safe.** The header still carries its
- * contiguous count, which is a floor under the bitmap
- * (`OpticalExchange.takeTracking`): a side that cannot read the rows
- * degrades to exactly the behaviour that shipped, not to a wrong belief.
+ * **And losing them entirely is safe, as is misreading them.** The
+ * header still carries its contiguous count, which is a floor under the
+ * bitmap and names the one part certainly not held
+ * (`OpticalExchange.take`): a side that cannot read the rows degrades to
+ * the header's word, and a side that read a module set when it was not
+ * is corrected by the next header, which is every frame. The rows steer
+ * the rotation; they never decide completion.
  */
 object Tracking {
     /** How many of the symbol's modules one tracking module spans. Two:
