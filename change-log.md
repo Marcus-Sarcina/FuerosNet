@@ -13417,3 +13417,64 @@ the catalogue's CER-52 amended. And **two shells cross the optical channel
 only if they share one framing**, stated provisionally in the requirements
 (§1) and as CER-027, to be restated compatible with both once the iOS shell
 exists; catalogue CER-55, deferred to that shell.
+
+### 2026-10-08 (the node as an image, and the surface it is enrolled over)
+
+**`infra-client-requirements.md` §9 opens by saying a node is distributed as
+a container or VM image, and nothing in the tree built one.** A two-stage
+Containerfile does now: a builder carrying cmake and clang for aws-lc-rs,
+and a slim runtime carrying `rhtnd` and `rhtn` alone, non-root, with the
+state an operator mounts at `/var/lib/rhtn`. 162 MB. It carries no
+certificate authorities, deliberately — the transport authenticates raw
+public keys and pins by keyhash, so a CA bundle would be a trust root this
+protocol has not got.
+
+**The entrypoint invents no configuration.** `Config` has no `Default`
+because a default listen address or queue cap would be a policy choice made
+by omission, so a missing configuration is a refusal naming the fields an
+instance needs, and the pages that compose it ship with the client (§8.3).
+
+**No daemon change was needed for the first boot.** An instance already
+mints its transport keypair when the file is absent, writes the public half
+beside it, says so, and polls its delegations directory until a credential
+is in force.
+
+**What was missing was the channel by which the signed run comes back**, and
+§8.2 declines to specify one: administration is "out of band, with
+everything else about the host". So the reference node offers one and the
+protocol knows nothing about it. An `[enrolment]` table opens a surface of
+its own, on a port of its own, speaking HTTP/1.1 through the strict parser
+the gateway already uses, and **it is dropped the moment a credential is in
+force** — an administration surface outliving what it was for is a standing
+way in for nothing.
+
+**Only one of its two legs carries a secret, and that is the whole design.**
+A run is signed by the operator and `Credential::add` checks it is the
+operator's, over this transport key, and a delegation — so handing a run in
+needs no authority and is refused at the door rather than written and
+skipped later. Handing the public half *out* does need authority: an
+on-path answer carrying an attacker's key would have the client sign a run
+over it, and the attacker would then serve as the operator's node. The only
+thing a client can share with a host that does not exist yet is what it
+wrote into the configuration, so enrolment carries a one-time token there —
+**used as a MAC key and never sent**: the client picks a nonce and the
+answer carries `HMAC-SHA256(token, info || nonce || key)` beside the key.
+The token is not the transport key and its whole power is to answer one
+fetch; the private half never leaves the instance, which is what design
+§23.3 is for.
+
+**[ruled, author, 2026-10-08]** The instance-mints shape was chosen over
+putting a client-minted transport key in the provider's user-data, which
+would store the private half in the control plane — the credential §8.2
+warns "can destroy the instance and bill its owner". And the listener was
+chosen over reading the public half from the provider's console-log API,
+which the hyperscalers offer and the budget hosts an individual operator
+would pick generally do not: the listener needs only inbound reachability,
+which the node requires anyway to serve.
+
+Proved by test at two levels: the daemon as a process, enrolled over the
+surface with nothing put in its directory by hand, refusing a nonceless
+fetch and a run of the wrong signer and leaving nothing behind; and the
+image itself, where `packaging/smoke.sh` asserts seven things and
+recomputes the proof with a stock HMAC, so the image is checked against
+something other than itself. Daemon tests 28 → 30.

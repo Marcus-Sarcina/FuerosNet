@@ -50,26 +50,58 @@ that must survive a restart lives here.
 **replaced** — `transport.key` yields **`transport.pub`** — and that file is what
 the operator's client signs a run over.
 
-## Enrolment, as it stands
-
-The node half is already complete, and the image changes nothing about it:
+## Enrolment
 
 1. The instance boots, finds no transport key, **mints one**, writes
    `transport.pub`, and says so on stderr: `transport key <hex>; no credential
    in force: waiting for the run in <dir>`.
 2. It **serves nothing** meanwhile, and polls the delegations directory every
    second (`Service::start`'s provisioning loop; §7).
-3. The operator's client reads that public half, signs a run over it — and the
-   endpoint record and anchor entry beside it — and puts them in the volume.
+3. The operator's client gets that public half, signs a run over it, and hands
+   the run back.
 4. The node takes the run on its next look and serves. `mind_the_run` re-reads
    the directory on every tick thereafter, so a renewed run needs no restart,
    and the operator is told while seven credentials or fewer remain.
 
-**What is not here is the channel** by which step 3's files reach the volume.
-`infra-client-requirements.md` §8.2 declines to specify it — "administration is
-out of band, with everything else about the host" — so for now it is whatever
-the provider gives: an attached volume, user-data at first boot, a shell. That
-choice is the next thing to settle, and it is the author's.
+**Step 3 needs a channel, and §8.2 declines to specify one** — "administration
+is out of band, with everything else about the host". So the reference node
+offers one and the protocol knows nothing about it: an `[enrolment]` table in
+the configuration opens a surface of its own, on a port of its own, speaking
+HTTP/1.1 through the strict parser the gateway already uses.
+
+```toml
+[enrolment]
+listen = "0.0.0.0:17447"
+token  = "<64 hex digits>"
+```
+
+```
+GET /enrolment?nonce=<16 bytes hex>   -> transport <hex>
+                                         proof <hex>
+                                         credentials <n>
+PUT /enrolment/run                    (body: one delegation's bytes)
+```
+
+**Why only one of the two legs carries a secret.** A run is signed by the
+operator and `Credential::add` checks that it is the operator's, over *this*
+transport key, and a delegation — so the `PUT` can take bytes from anybody, and
+a run from anyone else is refused at the door rather than written and skipped
+later. The `GET` is the leg that needs authority: an on-path answer carrying an
+attacker's key would have the client sign a run over it, and the attacker would
+then serve as the operator's node. The only thing a client can share with a host
+that does not exist yet is what it wrote into the configuration, so enrolment
+carries a **one-time token** there — **used as a MAC key and never sent**. The
+client picks a nonce; the answer carries `HMAC-SHA256(token,
+"rhtn/1:enrolment-proof" || nonce || key)` beside the key.
+
+**That token is not the transport key.** Its whole power is to answer one fetch
+in the window before a run is in force; the transport private key never leaves
+the instance, which is what design §23.3 is for. **And the surface does not
+outlive the enrolment**: the moment a credential is in force the listener is
+dropped and the port closes.
+
+The port is the operator's to choose and must be opened in the provider's
+firewall alongside the QUIC port. There is no convention for it yet.
 
 ## The three credentials, and why the distinction is in the document
 

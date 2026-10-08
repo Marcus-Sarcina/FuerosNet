@@ -16268,3 +16268,43 @@ archives, which hold it; the bearer tolerates a refused *record* and
 asserts on a refused conversation leg. Not a defect; the field node
 served its phones and stored. The fix measured: 0 failures in 15 runs,
 against 3 in 12 before it.
+
+## The infra node: packaged, and enrolled over its own surface (2026-10-08)
+
+**The node was already built.** `rhtn-node` 18,261 lines and `rhtn-daemon`
+4,952, with the catalogue at 468 of 488 and the plan's milestones through
+the ceremony recorded done. "Basic structure" was not the gap, and the
+delegated-instance shape the cloud case needs — `identity: None` with
+`operator`, `transport-key` and `delegations` — was already in `Config`
+with `delegated.rs` exercising it as a process.
+
+**I nearly built something that existed.** The plan was to add an operator
+notice carrying the transport public key and the state of the run; it is
+already in `Service::start`, which mints the key, writes `transport.pub`,
+says so, and polls for the run. Checked before writing, and the only gap
+was the packaging.
+
+**Two findings worth keeping.** `Path::with_extension` *replaces* an
+extension, so the public half of `transport.key` lands at `transport.pub`
+and not `transport.key.pub` — a provisioning page looking for the wrong
+name would silently never enrol, and the smoke test found it by asserting
+the wrong one first. And `read_run` returns `Ok(0)` on an empty directory
+with the count discarded, which is what makes boot-then-enrol work with no
+change to the daemon.
+
+**The enrolment channel is the reference node's and not the protocol's.**
+§8.2 leaves it unspecified, so nothing was added to the requirements
+documents: an `[enrolment]` table and `daemon/src/enrolment.rs` are an
+implementation choice, recorded in `change-log.md`. **No functional row is
+owed** on the same reasoning — the base documents define no such
+functionality, and a row would imply they require it. What pins the
+behaviour is `daemon/tests/enrolment.rs`.
+
+**Owed, and small.** No convention for the enrolment port (the operator
+names it; a provisioning page will want a default, and that is the
+author's). The endpoint record and anchor entry still arrive by whatever
+means reaches the volume — they cannot ride user-data, since the address
+they name is assigned after the configuration is composed, so the same
+surface is the natural place and is the next increment. And the
+administration pages §8.3 has the node serve, with PRD-12's sandboxed
+frame in the client, remain `todo!()`.

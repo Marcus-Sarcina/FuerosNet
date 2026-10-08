@@ -38,6 +38,9 @@ rhtn-codec = { path = "../codec" }
 rhtn-resources = { path = "../resources" }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "sync", "io-util", "signal"] }
 serde = { version = "1", features = ["derive"] }
+# Apache-2.0 OR ISC OR MIT; already in the graph under rustls (design §5.2
+# names it), and named here for the enrolment proof's HMAC
+aws-lc-rs = "1.18"
 toml = "1"
 # MIT; the lifecycle events, and the cap the `releasable` feature sets
 tracing = { version = "0.1", default-features = false, features = ["std"] }

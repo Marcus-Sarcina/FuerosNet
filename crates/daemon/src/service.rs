@@ -319,6 +319,26 @@ impl Service {
                 // serves nothing before a credential is in force, and one
                 // whose run has lapsed is the same case
                 let public_hex: String = cred.public().iter().map(|b| format!("{b:02x}")).collect();
+                // **the enrolment surface, where the operator asked for
+                // one** ([`crate::enrolment`]): it hands out the public
+                // half above and takes the run signed over it, and its
+                // only effect is a file in the delegations directory the
+                // loop below is already reading. Dropped the moment a
+                // credential is in force, since an administration surface
+                // outliving what it was for is a standing way in for
+                // nothing (`infra-client-requirements.md` §8.2).
+                let enrolling = cfg.enrolment.as_ref().map(|e| {
+                    tokio::spawn(
+                        crate::enrolment::Enrolling {
+                            listen: e.listen,
+                            token: e.token,
+                            credential: cred.clone(),
+                            operator: operator.clone(),
+                            delegations: dir.clone(),
+                        }
+                        .serve(),
+                    )
+                });
                 let mut said = false;
                 loop {
                     read_run(dir, &cred, &operator)?;
@@ -333,6 +353,14 @@ impl Service {
                         said = true;
                     }
                     tokio::time::sleep(PROVISIONING_POLL).await;
+                }
+                if let Some(task) = enrolling {
+                    task.abort();
+                    tracing::info!(
+                        target: "daemon",
+                        step = "enrolment_closed",
+                        "daemon.lifecycle"
+                    );
                 }
                 (operator, None, Some((cred, dir.clone())))
             }

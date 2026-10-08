@@ -76,6 +76,12 @@ pub struct Config {
     /// The patron this node attaches to, and where to reach it.  Absent at
     /// a root, which attaches to nobody.
     pub upstream: Option<(Keyhash, Vec<SocketAddr>)>,
+    /// The out-of-band surface this instance is enrolled over, where its
+    /// operator asked for one ([`crate::enrolment`]): absent means an
+    /// operator who will put the run in the delegations directory by
+    /// whatever means they reach the host with, which
+    /// `infra-client-requirements.md` §8.2 leaves to them.
+    pub enrolment: Option<Enrolment>,
     /// Where the queue's directory store lives, so what was accepted
     /// survives a restart (`infra-client-requirements.md` §2).
     pub queue: PathBuf,
@@ -132,6 +138,23 @@ pub struct Config {
     /// build so one configuration serves both flavours; a releasable build
     /// says once that it logs nothing and goes on.  Absent logs nothing.
     pub log: Option<LogConfig>,
+}
+
+/// The `[enrolment]` table: where an instance offers its out-of-band
+/// enrolment surface, and the one-time token that authenticates the fetch
+/// ([`crate::enrolment`]).
+///
+/// **The token is a MAC key and is never sent**, so a configuration
+/// carrying one is not a configuration carrying a transport key: its whole
+/// power is to answer one fetch of the public half, inside the window
+/// before a run is in force.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Enrolment {
+    /// Where the surface listens. TCP, and not the QUIC address: §8.2 puts
+    /// administration beside the protocol rather than inside it.
+    pub listen: SocketAddr,
+    /// The one-time token, 32 bytes.
+    pub token: [u8; 32],
 }
 
 /// The `[log]` table: a file of JSON lines, one event each, and the least
@@ -220,6 +243,13 @@ fn at(line: usize, what: impl Into<String>) -> Invalid {
 /// 32 bytes from 64 hex digits, lower case only: an upper-case or
 /// short-form keyhash is a different string and is refused rather than
 /// normalised.
+/// The enrolment token, which is 32 bytes of hex like a keyhash and means
+/// something else entirely: a MAC key, not an identity. Separate from
+/// [`keyhash`] so neither reads as the other where it is called.
+fn token32(s: &str) -> Option<[u8; 32]> {
+    keyhash(s)
+}
+
 fn keyhash(s: &str) -> Option<Keyhash> {
     if s.len() != 64
         || !s
@@ -269,7 +299,15 @@ struct File {
     resources: Option<PathBuf>,
     #[serde(rename = "resource-limits")]
     resource_limits: Option<Spanned<Limits>>,
+    enrolment: Option<Spanned<EnrolmentTable>>,
     log: Option<Spanned<LogTable>>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct EnrolmentTable {
+    listen: String,
+    token: String,
 }
 
 #[derive(serde::Deserialize)]
@@ -418,6 +456,32 @@ impl Config {
             }
         };
 
+        let enrolment = match &f.enrolment {
+            None => None,
+            Some(e) => {
+                let n = line_at(text, e);
+                let listen: SocketAddr = e
+                    .get_ref()
+                    .listen
+                    .parse()
+                    .map_err(|_| at(n, "`enrolment.listen` is not an address and port"))?;
+                let token = token32(&e.get_ref().token).ok_or_else(|| {
+                    at(n, "`enrolment.token` is 64 lower-case hex digits, 32 bytes")
+                })?;
+                // **an instance alone is enrolled.** A node holding its
+                // seed signs for itself and has no run to be given, so an
+                // enrolment surface on one would be a way in that answered
+                // nothing (`infra-client-requirements.md` §7)
+                if f.identity.is_some() {
+                    return Err(at(
+                        n,
+                        "`[enrolment]` is an instance's: a node naming `identity` holds its seed and has no run to be handed",
+                    ));
+                }
+                Some(Enrolment { listen, token })
+            }
+        };
+
         // the seed, or the whole of what an instance runs on instead
         match (&f.identity, &f.operator, &f.transport_key, &f.delegations) {
             (Some(_), None, None, None) => {}
@@ -444,6 +508,7 @@ impl Config {
             endpoint_record: f.endpoint_record,
             anchor_entry: f.anchor_entry,
             acknowledge: f.acknowledge.unwrap_or(false),
+            enrolment,
             listen,
             upstream,
             queue: f.queue,
