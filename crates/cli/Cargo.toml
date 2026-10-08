@@ -21,6 +21,9 @@ rhtn-crypto = { path = "../crypto" }
 rhtn-archive = { path = "../archive" }
 rhtn-node = { path = "../node" }
 rhtn-transport = { path = "../transport" }
+# the operator's end of the node's administration surface shares one
+# definition of its proof with the node's end (`enrol`)
+rhtn-daemon = { path = "../daemon" }
 # MIT OR Apache-2.0; `diag merge` reads the field-test files' JSON lines
 serde_json = { workspace = true }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "sync", "io-util"] }

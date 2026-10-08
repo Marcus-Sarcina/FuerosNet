@@ -73,5 +73,8 @@ WORKDIR /var/lib/rhtn
 # QUIC, and the STUN Binding requests the same address answers
 # (`infra-client-requirements.md` §7, design §14.1.1)
 EXPOSE 7447/udp
+# the operator's surface: the one channel their client reaches this
+# instance over (`rhtn_daemon::administration`)
+EXPOSE 7449/tcp
 
 ENTRYPOINT ["/usr/local/bin/rhtnd-entrypoint"]

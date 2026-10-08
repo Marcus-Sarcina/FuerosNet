@@ -16,11 +16,11 @@
 #       enrolment handshake's node half, and the public half it prints is what
 #       the client signs.
 #    4. The transport key it minted is readable by its owner alone.
-#    5. Its enrolment surface answers a fetch with that key and a proof that
-#       it holds the token its configuration carried, and refuses a fetch
-#       with no nonce (`rhtn_daemon::enrolment`).  The proof is recomputed
-#       here with a stock HMAC, so the image is checked against something
-#       other than itself.
+#    5. Its operator's surface answers a fetch with that key and a proof
+#       that it holds the token its configuration carried, and refuses a
+#       fetch with no nonce (`rhtn_daemon::administration`).  The proof is
+#       recomputed here with a stock HMAC, so the image is checked against
+#       something other than itself.
 #
 #  **The two that serve run detached.**  A node that is working does not exit,
 #  so each is started with its output to the engine's log, waited for by the
@@ -147,11 +147,11 @@ else
   fi
 fi
 
-# ---- 5. the enrolment surface, inside the image ---------------------------
+# ---- 5. the operator's surface, inside the image --------------------------
 # a token a provisioning page would have written into the configuration it
 # composed, and a port published off the container
 TOKEN=5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a
-PORT=17447
+PORT=7449
 d="$(state enrolling)"
 if ! minting "$d" keys mint /var/lib/rhtn/operator.key > "$d/operator.txt" 2>&1; then
   bad "could not mint an operator identity for the enrolment case"
@@ -161,20 +161,20 @@ else
     'operator = "/var/lib/rhtn/operator.material"' \
     'transport-key = "/var/lib/rhtn/transport.key"' \
     'delegations = "/var/lib/rhtn/delegations"'
-  printf '\n[enrolment]\nlisten = "0.0.0.0:%s"\ntoken = "%s"\n' "$PORT" "$TOKEN" >> "$d/rhtnd.conf"
+  printf '\n[administration]\nlisten = "0.0.0.0:%s"\ntoken = "%s"\n' "$PORT" "$TOKEN" >> "$d/rhtnd.conf"
   NAMES+=(rhtn-smoke-enrolling)
   "$ENGINE" run -d --name rhtn-smoke-enrolling -p "127.0.0.1:$PORT:$PORT" \
     -v "$d:/var/lib/rhtn" "$IMAGE" > /dev/null
   i=0; up=""
   while [ "$i" -lt 60 ]; do
-    if "$ENGINE" logs rhtn-smoke-enrolling 2>&1 | grep -q "enrolment on"; then up=yes; break; fi
+    if "$ENGINE" logs rhtn-smoke-enrolling 2>&1 | grep -q "surface on"; then up=yes; break; fi
     sleep 0.5; i=$((i + 1))
   done
   if [ -z "$up" ]; then
-    bad "the enrolment surface did not open: $(logs rhtn-smoke-enrolling)"
+    bad "the operator's surface did not open: $(logs rhtn-smoke-enrolling)"
   else
     nonce=07070707070707070707070707070707
-    got="$(curl -s -m 10 "http://127.0.0.1:$PORT/enrolment?nonce=$nonce" || true)"
+    got="$(curl -s -m 10 "http://127.0.0.1:$PORT/node?nonce=$nonce" || true)"
     key="$(printf '%s' "$got" | awk '$1 == "transport" {print $2}')"
     shown="$(printf '%s' "$got" | awk '$1 == "proof" {print $2}')"
     want="$(python3 - "$TOKEN" "$nonce" "$key" <<'PY'
@@ -184,11 +184,11 @@ print(hmac.new(token, b"rhtn/1:enrolment-proof" + nonce + key, hashlib.sha256).h
 PY
 )"
     if [ "${#key}" -eq 64 ] && [ -n "$shown" ] && [ "$shown" = "$want" ]; then
-      ok "its enrolment surface proves it holds the token (${key:0:16}…)"
+      ok "its operator's surface proves it holds the token (${key:0:16}…)"
     else
       bad "the proof did not check: key '${key:0:16}' proof '${shown:0:16}' wanted '${want:0:16}'"
     fi
-    code="$(curl -s -o /dev/null -w '%{http_code}' -m 10 "http://127.0.0.1:$PORT/enrolment" || true)"
+    code="$(curl -s -o /dev/null -w '%{http_code}' -m 10 "http://127.0.0.1:$PORT/node" || true)"
     if [ "$code" = "400" ]; then
       ok "and refuses a fetch with no nonce"
     else

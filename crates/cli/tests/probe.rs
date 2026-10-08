@@ -203,11 +203,19 @@ fn the_command_line_refuses_what_it_will_not_send() {
     // the ask is one of three, and a prekey fetch is not among them
     let (ok, _, err) = run(&["probe", "k", "k", "1.2.3.4:1", "prekey", "k"]);
     assert!(!ok && err.contains("resolve, archive or catalog"), "{err}");
-    // and an unknown command says what there is
+    // and an unknown command says what there is, **with the guarantee and
+    // its one exception**: `node enrol` changes an instance's state, and
+    // the usage would be false if it still claimed nothing here does. It
+    // crosses no protocol request, which is what the class in
+    // `wire-format.md` §9.2 is about [2026-10-08].
     let (ok, _, err) = run(&["send"]);
     assert!(
-        !ok && err.contains("Nothing here sends a request that changes state"),
+        !ok && err.contains("Nothing here sends a protocol request that changes state"),
         "{err}"
+    );
+    assert!(
+        err.contains("`node enrol` is out-of-band administration"),
+        "the exception is named where the guarantee is: {err}"
     );
 }
 

@@ -96,6 +96,19 @@ impl Gateway {
         self.bindings.insert(resource, binding);
     }
 
+    /// Every resource bound here, in keyhash order: what an operator's
+    /// page lists (`infra-client-requirements.md` §10.6).
+    pub fn bound(&self) -> Vec<Keyhash> {
+        self.bindings.keys().copied().collect()
+    }
+
+    /// The standing grant over the owner's horizon for `resource`, where
+    /// one is set (§10.2): the floor under the table, as against the rows
+    /// an operator set for a named member.
+    pub fn standing_grant(&self, resource: &Keyhash) -> Option<&Row> {
+        self.standing.get(resource)
+    }
+
     /// The binding for `resource`, where it is bound here.
     pub fn binding(&self, resource: &Keyhash) -> Option<&Binding> {
         self.bindings.get(resource)

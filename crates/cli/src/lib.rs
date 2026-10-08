@@ -21,6 +21,7 @@
 #![warn(missing_docs)]
 
 pub mod diag;
+pub mod enrol;
 pub mod inspect;
 pub mod keys;
 pub mod live;

@@ -1,6 +1,6 @@
 //! The command line's entry point.
 
-use rhtn_cli::{diag, inspect, keys, live, probe};
+use rhtn_cli::{diag, enrol, inspect, keys, live, probe};
 use rhtn_codec::frame::Stream;
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -20,6 +20,17 @@ usage: rhtn <command> [...]
   keys test <name>
         Print the test identity test-vectors/keys.md derives for <name>.
         These are not secret.
+
+  node enrol <identity> <host:port> --token <64 hex> [...]
+        Enrol an instance over its administration surface: fetch the
+        transport key it minted, check the proof that it holds the token
+        its configuration carried, and hand back a run signed over that
+        key. Options:
+          --credentials <n>   how many 48-hour credentials; default 7
+          --endpoint <addr>   also sign an endpoint record naming <addr>
+          --anchor <size>     also sign an anchor entry claiming <size>
+        This is the provisioning page's work as an instrument: in a product
+        the client does it (L §8.3). It crosses no protocol request.
 
   probe <identity> <node-keyhash> <address> <ask> [...]
         Attach and ask one read-only question. <ask> is one of:
@@ -44,7 +55,8 @@ usage: rhtn <command> [...]
         refusal and abort as it is appended, with its source and ms.
         Runs until killed.
 
-Nothing here sends a request that changes state or spends a budget.
+Nothing here sends a protocol request that changes state or spends a budget.
+`node enrol` is out-of-band administration (I §8.2) and crosses none.
 ";
 
 fn main() -> ExitCode {
@@ -53,6 +65,7 @@ fn main() -> ExitCode {
     let r = match args.split_first() {
         Some((&"inspect", rest)) => do_inspect(rest),
         Some((&"keys", rest)) => do_keys(rest),
+        Some((&"node", rest)) => do_node(rest),
         Some((&"probe", rest)) => do_probe(rest),
         Some((&"diag", rest)) => match rest.split_first() {
             Some((&"merge", files)) => diag::merge_files(files),
@@ -147,6 +160,66 @@ fn do_keys(rest: &[&str]) -> Result<String, String> {
         }
         _ => Err("keys mint <file> | keys show <file> | keys test <name>".into()),
     }
+}
+
+/// `node enrol`: the operator's side of an instance's administration
+/// surface ([`enrol`]).
+fn do_node(rest: &[&str]) -> Result<String, String> {
+    let [sub, identity, at, opts @ ..] = rest else {
+        return Err("node enrol <identity> <host:port> --token <64 hex> [...]".into());
+    };
+    if *sub != "enrol" {
+        return Err(format!(
+            "`node {sub}` is not a command; there is `node enrol`"
+        ));
+    }
+    let (mut token, mut credentials, mut endpoint, mut subtree) = (None, 7usize, None, None);
+    let mut i = 0;
+    while i < opts.len() {
+        let value = opts.get(i + 1).copied();
+        let need = |what: &str| -> Result<&str, String> {
+            value.ok_or_else(|| format!("--{what} takes a value"))
+        };
+        match opts[i] {
+            "--token" => token = enrol::hex32(need("token")?),
+            "--credentials" => {
+                credentials = need("credentials")?
+                    .parse()
+                    .map_err(|_| "--credentials takes a count".to_string())?
+            }
+            "--endpoint" => {
+                endpoint = Some(
+                    need("endpoint")?
+                        .parse()
+                        .map_err(|_| "--endpoint takes an address and port".to_string())?,
+                )
+            }
+            "--anchor" => {
+                subtree = Some(
+                    need("anchor")?
+                        .parse()
+                        .map_err(|_| "--anchor takes a subtree size".to_string())?,
+                )
+            }
+            other => return Err(format!("{other} is not an option of `node enrol`")),
+        }
+        i += 2;
+    }
+    let token = token.ok_or("--token is 64 hex digits, the one the configuration carries")?;
+    if credentials == 0 {
+        return Err("a run of no credentials would enrol nothing".into());
+    }
+    let me = read_identity(identity)?;
+    enrol::enrol(
+        &me,
+        &enrol::Ask {
+            at: at.to_string(),
+            token,
+            credentials,
+            endpoint,
+            subtree,
+        },
+    )
 }
 
 fn do_probe(rest: &[&str]) -> Result<String, String> {

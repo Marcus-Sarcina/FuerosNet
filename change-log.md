@@ -13478,3 +13478,185 @@ fetch and a run of the wrong signer and leaving nothing behind; and the
 image itself, where `packaging/smoke.sh` asserts seven things and
 recomputes the proof with a stock HMAC, so the image is checked against
 something other than itself. Daemon tests 28 → 30.
+
+### 2026-10-08 (the two records an instance cannot sign, over the same surface)
+
+**The endpoint record and the anchor entry join the enrolment surface**, as
+`PUT /enrolment/endpoint-record` and `PUT /enrolment/anchor-entry`, and
+neither needs the token for the reason the run does not: the signature on
+each is the operator's (`infra-client-requirements.md` §4.4), which is the
+whole of what admits it. Each is checked here exactly as `Service::start`
+will check it — this node's, under its operator's signature — so an
+operator meets a refusal while they are standing in front of it rather than
+as a node that will not come up.
+
+**They cannot ride user-data, which is why the surface is where they
+belong**: the endpoint record names the address, and a provider assigns
+that after the configuration is composed. **And they need no restart**:
+`start` reads both *after* the loop that waits for the run, so a record
+delivered during enrolment is on disk before anything looks for it. The
+test asserts that by watching for the line the daemon prints when the
+address it serves on is not one its record names, and finding none.
+
+**One fetch now says what is still wanted** — `endpoint-record` and
+`anchor-entry` as `held`, `wanted` or `unconfigured` beside the
+credentials count — so a provisioning page drives the exchange from the
+answer rather than from a list of steps kept somewhere else.
+
+**[author, 2026-10-08] The surface's conventional port is 7449/TCP**,
+chosen to minimise conflicts: beside the node's own 7447/UDP so an operator
+opening one thinks of the other, TCP where that is UDP, claimed by nothing
+else in this project, and free of the common service lists. A convention
+and not a default — the configuration still names the address, because
+`Config` takes no policy by omission — so a provisioning page, a firewall
+rule and the crate's documentation agree on one number.
+
+Daemon tests 30, the two enrolment tests now covering both records accepted
+and refused three ways each; the image's smoke test seven assertions.
+
+### 2026-10-08 (the operator's surface, and what it is for after enrolment)
+
+**[ruled, author, 2026-10-08] The channel for a re-signed endpoint record
+exists.** The surface built earlier today closed the moment a credential
+came into force, on the argument that one outliving what it was for is a
+standing way in for nothing. **That argument was wrong about what it was
+for**: `infra-client-requirements.md` §4.4 has an endpoint record re-signed
+whenever the address set changes and an anchor entry whenever the subtree
+size does, §7 has the run renewed before it lapses, and §8.3 has the node
+serve its own administration — none of which happens once. An instance
+whose address moves and has no way to be handed a new record "publishes
+nothing until" its operator is reachable, which is the consequence §4.4
+says to plan for.
+
+So the surface stays up for the node's life, and **what was called
+enrolment is its first phase**: the module is `administration`, the table
+is `[administration]`, and the routes are the node's own — `GET /node` and
+`PUT /node/{run,endpoint-record,anchor-entry}`. Naming it for the phase
+that happens once was the "rule stated by the identifier that happened to
+implement it" error, caught before it was a day old.
+
+**While serving, a record taken is published at once** — an endpoint record
+originated, an anchor entry offered to the table — rather than kept for the
+next start. **Ordering is the node's own question and it already answers
+it**: the store's supersession discipline, and `AnchorTable::offer`'s
+refusal of a seqno no newer than the one held. So a record reaches disk
+only where the node took it, and a replay changes neither the node's state
+nor the bytes a restart would read; re-sending the record already held is a
+no-op that says so, since a client unsure whether its push landed must not
+meet a refusal for having succeeded.
+
+**Every inbound route is self-authenticating and none is guarded by a
+bearer secret** — the run by `Credential::add`, the two records by the
+operator's signature over this node's keyhash, checked here exactly as
+`Service::start` checks them. That is what keeps a long-lived surface from
+being a long-lived credential; the token guards only the fetch, as a MAC
+key that is never sent.
+
+**And the run turns out to be the commit point**, found by the test: `add`
+puts a run in force as it verifies it, which ends the wait, and `start`
+then reads the two records from the paths the configuration names and
+refuses one it cannot read. So everything else is pushed first, and the
+fetch names what is still wanted for exactly that reason.
+
+Daemon tests 30, the surface's two covering the standing channel: a
+re-signed record taken and published while serving, a superseded one
+refused with the file unchanged, and an identical re-send answered as
+already held.
+
+### 2026-10-08 (the node's administration page, and a node on this machine)
+
+**A node serves its own administration page** (`infra-client-requirements.md`
+§8.3): `GET /` on the operator's surface. Before its run arrives the page
+says what it is waiting for and carries the transport key to sign over;
+afterwards it is the node's state — what it is, what it holds, who is
+attached (§8.1's own list) and §8's exposure disclosure.
+
+**It carries no control yet, and that is not because none is permitted**
+[corrected, 2026-10-08]. This entry first said §8.1's "reads and never
+speaks for the node" forbade a button. It does not: its own gloss is that
+the interface "does not compose, sign or send anything **on the wire**",
+OPS-011 names the prohibition exactly — "arbitrary frame composition,
+traffic replay, signature creation or manual packet approval controls" —
+and OPS-012 keeps an operator's hosting, predicates and standing policies
+as **explicit management acts**, which presupposes acts. What a node's page
+can never carry is an act needing the operator's *seed*: the endpoint record
+and the anchor entry are signed by that key and the instance does not hold
+it (§4.4, design §23.3). The test asserts that the page runs nothing, since
+a page that ran script could compose anything; it no longer asserts that
+nothing may be pressed. Everything rendered goes through an escape, counts
+included — a keyhash cannot carry a bracket today, and a renderer that
+relies on what its inputs happen to contain is one new field away from
+being wrong.
+
+**`rhtn node enrol` is the operator's end of the surface**, and the first
+thing in that binary that changes a state. It fetches the transport key,
+**checks the proof before signing anything** — an answer from something
+that does not hold the token is refused with nothing signed — then hands
+back the two records and the run. It crosses no protocol request, which is
+what §9.2's read-only class is about, and the usage says so where it used
+to claim that nothing there changes any state at all. The proof is one
+definition shared with the node's end rather than a second implementation.
+
+**`packaging/local.sh up` stands one up on a development machine**: build,
+run, enrol, and the page's URL. **The operator's key is kept outside the
+mounted volume** — `runs/local-node/operator/` against
+`runs/local-node/instance/` — which is the whole of design §23.3. The first
+cut of that script put the seed in the volume while its own comment claimed
+otherwise, which is the kind of false claim the volume layout makes easy.
+
+Verified by running one: a node signed and serving on this machine, its
+page read in a browser, the identity on the page the operator's own as
+§23.3 has it, and the volume holding the transport key, the run and the two
+records with no seed among them. Daemon tests 30; workspace clean.
+
+### 2026-10-08 (the page gains tabs, and the acts an operator may take)
+
+**[corrected, author, 2026-10-08] §8.1 does not forbid controls**, and an
+earlier entry today said it did. Its sentence is "reads and never speaks
+for the node", but its own gloss is "does not compose, sign or send
+anything **on the wire**" — about being a second protocol actor. OPS-011
+enumerates the prohibition: arbitrary frame composition, traffic replay,
+signature creation, manual packet approval. OPS-012 goes the other way and
+*presupposes* acts, keeping an operator's hosting and standing policies as
+"explicit management acts". The failure was quoting a sentence's headline
+and not its gloss.
+
+**[ruled, author, 2026-10-08] What authorises an act is reaching the
+port.** §8.2 already puts administration "out of band, with everything
+else about the host", so where the surface binds is the access decision.
+**An act therefore carries no key**, which is what lets an operator
+administer from a desktop that holds no seed (design §23.3) — the split is
+sharp: management acts need network reach, and the two records need the
+operator's signature and stay the ceremony device's.
+
+**The page is tabbed**: the node, then one per resource bound here, each
+showing its binding hosted against brokered (§10.6), the roles its package
+declared, the standing grant and the rows beneath it, and how many hosted
+sessions are open. **Sessions are shown and not ended** [author,
+2026-10-08]: stopping one is not excluded as policy, and is not built.
+
+**Three acts, none of which is what OPS-011 forbids**: the standing
+acknowledgement policy (design §11.2.1), a re-read of the hosting file
+without a restart, and a stop that takes the path a signal takes so what
+is held is written back. **An act does not rewrite the configuration**,
+which is a file its operator owns: the page states what is in force and
+the configuration states what a restart will choose.
+
+**Where a record is missing the page says so rather than offering a
+control that could not work** — the signature on each is the operator's
+and not the instance's (§4.4), so the page names what is owed and the
+client signs it.
+
+**Editing a grant is not here**, and waits on a decision:
+`resource-requirements.md` §7.3 has an access template "expressed in the
+predicate language, not as opaque configuration", so what a one-click
+grant means is legible in that click. The author's ruling is that
+resources define their own admin functions and the node parses them from a
+standard SDL [author, 2026-10-08]; §7.3's constraint survives inside it
+for the access half. The SDL is not specified anywhere and is the next
+design decision.
+
+One bug found by its own test: the stop used `Notify::notify_waiters`,
+which reaches only waiters registered at that instant, and the service's
+select builds its future afresh each pass — so the wake fell in the gap.
+`notify_one` leaves a permit. Daemon tests 31.

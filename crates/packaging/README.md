@@ -50,58 +50,128 @@ that must survive a restart lives here.
 **replaced** — `transport.key` yields **`transport.pub`** — and that file is what
 the operator's client signs a run over.
 
-## Enrolment
+## The operator's surface, and enrolment as its first phase
 
 1. The instance boots, finds no transport key, **mints one**, writes
    `transport.pub`, and says so on stderr: `transport key <hex>; no credential
    in force: waiting for the run in <dir>`.
 2. It **serves nothing** meanwhile, and polls the delegations directory every
    second (`Service::start`'s provisioning loop; §7).
-3. The operator's client gets that public half, signs a run over it, and hands
-   the run back.
+3. The operator's client gets that public half, signs over it, and hands back
+   the run and the two records an instance cannot sign for itself (§4.4).
 4. The node takes the run on its next look and serves. `mind_the_run` re-reads
    the directory on every tick thereafter, so a renewed run needs no restart,
    and the operator is told while seven credentials or fewer remain.
 
 **Step 3 needs a channel, and §8.2 declines to specify one** — "administration
 is out of band, with everything else about the host". So the reference node
-offers one and the protocol knows nothing about it: an `[enrolment]` table in
-the configuration opens a surface of its own, on a port of its own, speaking
+offers one and the protocol knows nothing about it: an `[administration]` table
+in the configuration opens a surface of its own, on a port of its own, speaking
 HTTP/1.1 through the strict parser the gateway already uses.
 
 ```toml
-[enrolment]
-listen = "0.0.0.0:17447"
+[administration]
+listen = "0.0.0.0:7449"
 token  = "<64 hex digits>"
 ```
 
+**7449/TCP is the convention**, beside the node's own 7447/UDP so an operator
+opening one thinks of the other, and TCP where that is UDP. It is a convention
+and not a default: the configuration names the address, because `Config` takes
+no policy by omission. Open it in the provider's firewall alongside the QUIC
+port.
+
 ```
-GET /enrolment?nonce=<16 bytes hex>   -> transport <hex>
-                                         proof <hex>
-                                         credentials <n>
-PUT /enrolment/run                    (body: one delegation's bytes)
+GET /node?nonce=<16 bytes hex>   -> transport <hex>
+                                    proof <hex>
+                                    phase enrolling|serving
+                                    credentials <n>
+                                    endpoint-record held|wanted|unconfigured
+                                    anchor-entry   held|wanted|unconfigured
+PUT /node/run                    (body: one delegation's bytes)
+PUT /node/endpoint-record        (body: the operator-signed record)
+PUT /node/anchor-entry           (body: the operator-signed entry)
 ```
 
-**Why only one of the two legs carries a secret.** A run is signed by the
-operator and `Credential::add` checks that it is the operator's, over *this*
-transport key, and a delegation — so the `PUT` can take bytes from anybody, and
-a run from anyone else is refused at the door rather than written and skipped
-later. The `GET` is the leg that needs authority: an on-path answer carrying an
+**One fetch says what is still wanted**, so a provisioning page drives the
+exchange from the answer rather than from a list of steps kept elsewhere.
+
+**The run is the commit point, so push everything else first.**
+`Credential::add` puts a run in force as it verifies it, which ends the wait —
+and `start` then reads the two records from the paths the configuration names,
+refusing one it cannot read. A page that pushes the run first has the node look
+for a file it has not sent yet.
+
+### It outlives enrolment
+
+**The surface stays up while the node runs**, because what it is for does not
+happen once: §4.4 has an endpoint record re-signed whenever the address set
+changes and an anchor entry whenever the subtree size does, §7 has the run
+renewed before it lapses, and §8.3 has the node serve its own administration.
+An instance whose address moves and has no way to be handed a new record
+"publishes nothing until" its operator is reachable, which is the consequence
+§4.4 says to plan for.
+
+**While serving, a record taken is published at once** rather than kept for the
+next start: an endpoint record is originated, an anchor entry offered to the
+table. **Ordering is the node's question and it already answers it** — the
+store's supersession discipline for the record, `AnchorTable::offer`'s "no
+newer than the one held" for the entry — so a record is written to disk only
+where the node took it, and a replay changes neither the node's state nor the
+bytes a restart would read. Re-sending the record already held is a no-op that
+says so, so a client unsure whether its push landed may simply push again.
+
+### The administration page
+
+`GET /` is the page the node serves its own operator (§8.3: "a node develops
+and serves its own administration pages; a client provides the frame they are
+presented in"). Before the run arrives it says what it is waiting for and
+carries the transport key to sign over; afterwards it is the node's state —
+what it is, what it holds, who is attached, and §8's exposure disclosure.
+
+**It is one page of text and tables.** No script, no form, no control: §8.1 has
+an operator's interface read and never speak for the node, and a page offering
+a button would be offering one. What changes a node is an object its operator
+signed, which goes to the routes above.
+
+**The frame is the client's to sandbox** (§8.3), isolated from its keys,
+archive and sealed captures, because a seized node serving a hostile page must
+reach nothing on the device that still holds the seed (design §18.1, §23.3).
+Nothing the node serves can assert that isolation; it is PRD-12's and is not
+built.
+
+### A node on this machine
+
+```bash
+packaging/local.sh up      # build, run, enrol, and print the page's URL
+packaging/local.sh down
+```
+
+It mints an operator identity, writes a configuration, runs the container, and
+drives the surface with `rhtn node enrol` — the provisioning page's work as an
+instrument. **The operator's key is kept outside the mounted volume**
+(`runs/local-node/operator/`, against `runs/local-node/instance/`), which is
+the whole of design §23.3: an instance that could read its operator's seed
+would be the arrangement this design exists to avoid.
+
+### Why only one leg carries a secret
+
+A run is signed by the operator and `Credential::add` checks it is the
+operator's, over *this* transport key, and a delegation; the two records carry
+the operator's signature over this node's own keyhash, checked here exactly as
+`Service::start` checks them. So **every inbound route is self-authenticating
+and none is guarded by a bearer secret** — which is what keeps a long-lived
+surface from being a long-lived credential.
+
+The `GET` is the leg that needs authority: an on-path answer carrying an
 attacker's key would have the client sign a run over it, and the attacker would
-then serve as the operator's node. The only thing a client can share with a host
-that does not exist yet is what it wrote into the configuration, so enrolment
-carries a **one-time token** there — **used as a MAC key and never sent**. The
-client picks a nonce; the answer carries `HMAC-SHA256(token,
-"rhtn/1:enrolment-proof" || nonce || key)` beside the key.
-
-**That token is not the transport key.** Its whole power is to answer one fetch
-in the window before a run is in force; the transport private key never leaves
-the instance, which is what design §23.3 is for. **And the surface does not
-outlive the enrolment**: the moment a credential is in force the listener is
-dropped and the port closes.
-
-The port is the operator's to choose and must be opened in the provider's
-firewall alongside the QUIC port. There is no convention for it yet.
+then serve as the operator's node. The only thing a client can share with a
+host that does not exist yet is what it wrote into the configuration, so the
+surface carries a **one-time token** there — **used as a MAC key and never
+sent**. The client picks a nonce; the answer carries `HMAC-SHA256(token,
+"rhtn/1:enrolment-proof" || nonce || key)` beside the key. The token is not the
+transport key: the private half never leaves the instance, which is what design
+§23.3 is for.
 
 ## The three credentials, and why the distinction is in the document
 

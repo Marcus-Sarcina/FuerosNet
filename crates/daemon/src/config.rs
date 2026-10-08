@@ -76,12 +76,12 @@ pub struct Config {
     /// The patron this node attaches to, and where to reach it.  Absent at
     /// a root, which attaches to nobody.
     pub upstream: Option<(Keyhash, Vec<SocketAddr>)>,
-    /// The out-of-band surface this instance is enrolled over, where its
-    /// operator asked for one ([`crate::enrolment`]): absent means an
-    /// operator who will put the run in the delegations directory by
+    /// The out-of-band surface this instance's operator reaches it over,
+    /// where they asked for one ([`crate::administration`]): absent means
+    /// an operator who will put the run and the records in place by
     /// whatever means they reach the host with, which
     /// `infra-client-requirements.md` §8.2 leaves to them.
-    pub enrolment: Option<Enrolment>,
+    pub administration: Option<Administration>,
     /// Where the queue's directory store lives, so what was accepted
     /// survives a restart (`infra-client-requirements.md` §2).
     pub queue: PathBuf,
@@ -140,16 +140,17 @@ pub struct Config {
     pub log: Option<LogConfig>,
 }
 
-/// The `[enrolment]` table: where an instance offers its out-of-band
-/// enrolment surface, and the one-time token that authenticates the fetch
-/// ([`crate::enrolment`]).
+/// The `[administration]` table: where an instance offers the out-of-band
+/// surface its operator reaches it over, and the one-time token that
+/// authenticates the fetch ([`crate::administration`]).
 ///
 /// **The token is a MAC key and is never sent**, so a configuration
 /// carrying one is not a configuration carrying a transport key: its whole
-/// power is to answer one fetch of the public half, inside the window
-/// before a run is in force.
+/// power is to answer a fetch of the public half, and nothing it admits
+/// inward is admitted by it — the run and the two records carry the
+/// operator's own signature.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Enrolment {
+pub struct Administration {
     /// Where the surface listens. TCP, and not the QUIC address: §8.2 puts
     /// administration beside the protocol rather than inside it.
     pub listen: SocketAddr,
@@ -299,13 +300,13 @@ struct File {
     resources: Option<PathBuf>,
     #[serde(rename = "resource-limits")]
     resource_limits: Option<Spanned<Limits>>,
-    enrolment: Option<Spanned<EnrolmentTable>>,
+    administration: Option<Spanned<AdministrationTable>>,
     log: Option<Spanned<LogTable>>,
 }
 
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
-struct EnrolmentTable {
+struct AdministrationTable {
     listen: String,
     token: String,
 }
@@ -456,7 +457,7 @@ impl Config {
             }
         };
 
-        let enrolment = match &f.enrolment {
+        let administration = match &f.administration {
             None => None,
             Some(e) => {
                 let n = line_at(text, e);
@@ -464,21 +465,24 @@ impl Config {
                     .get_ref()
                     .listen
                     .parse()
-                    .map_err(|_| at(n, "`enrolment.listen` is not an address and port"))?;
+                    .map_err(|_| at(n, "`administration.listen` is not an address and port"))?;
                 let token = token32(&e.get_ref().token).ok_or_else(|| {
-                    at(n, "`enrolment.token` is 64 lower-case hex digits, 32 bytes")
+                    at(
+                        n,
+                        "`administration.token` is 64 lower-case hex digits, 32 bytes",
+                    )
                 })?;
-                // **an instance alone is enrolled.** A node holding its
-                // seed signs for itself and has no run to be given, so an
-                // enrolment surface on one would be a way in that answered
-                // nothing (`infra-client-requirements.md` §7)
+                // **an instance alone has a run to be handed.** A node
+                // holding its seed signs for itself, so the surface would
+                // have nothing to admit that it could not already make
+                // (`infra-client-requirements.md` §7)
                 if f.identity.is_some() {
                     return Err(at(
                         n,
-                        "`[enrolment]` is an instance's: a node naming `identity` holds its seed and has no run to be handed",
+                        "`[administration]` is an instance's: a node naming `identity` holds its seed and signs its own run and records",
                     ));
                 }
-                Some(Enrolment { listen, token })
+                Some(Administration { listen, token })
             }
         };
 
@@ -508,7 +512,7 @@ impl Config {
             endpoint_record: f.endpoint_record,
             anchor_entry: f.anchor_entry,
             acknowledge: f.acknowledge.unwrap_or(false),
-            enrolment,
+            administration,
             listen,
             upstream,
             queue: f.queue,

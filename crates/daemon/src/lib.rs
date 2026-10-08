@@ -4,8 +4,8 @@
 //! is what an operator runs.  It owns the three things a library cannot:
 //! the configuration a node cannot derive ([`config`]), the lifecycle from
 //! start to signal to stop ([`service`]), the packages it was told to host
-//! ([`hosting`]), the out-of-band surface an instance is enrolled over
-//! ([`enrolment`]), and the disclosures an operator is owed about what
+//! ([`hosting`]), the out-of-band surface an operator reaches it over
+//! ([`administration`]), and the disclosures an operator is owed about what
 //! their configuration exposes ([`operator`]).
 //!
 //! It answers to `infra-client-requirements.md`, which states the operator
@@ -22,9 +22,9 @@ compile_error!(
      build the field-test flavour with `--no-default-features --features fieldtest`"
 );
 
+pub mod administration;
 pub mod config;
 pub mod diag;
-pub mod enrolment;
 pub mod hosting;
 pub mod operator;
 pub mod service;

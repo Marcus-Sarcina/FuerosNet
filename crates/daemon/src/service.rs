@@ -170,6 +170,30 @@ pub struct Service {
     /// The count last noticed to the operator, so a notice is raised once
     /// per count.
     noticed: std::sync::Mutex<Option<usize>>,
+    /// Told when an act on the operator's surface asks this node to stop,
+    /// so the act takes the shutdown that exists rather than inventing one.
+    stopping: Arc<tokio::sync::Notify>,
+    /// The two operator-signed records' paths, so the page can say which
+    /// sequence number it is serving (`infra-client-requirements.md` §4.4).
+    endpoint_record: Option<std::path::PathBuf>,
+    anchor_entry: Option<std::path::PathBuf>,
+    /// The operator's surface, where the configuration asked for one
+    /// ([`crate::administration`]): held so it ends with the service, since
+    /// a listener outliving the node it administers would hold the port
+    /// against the next one.
+    surface: Option<tokio::task::JoinHandle<()>>,
+}
+
+impl Drop for Service {
+    /// **The surface ends with the service.** A dropped `JoinHandle`
+    /// detaches rather than cancels, which in a process that is exiting
+    /// makes no difference and in a test that builds a service and drops it
+    /// leaves the port held against the next one.
+    fn drop(&mut self) {
+        if let Some(task) = &self.surface {
+            task.abort();
+        }
+    }
 }
 
 /// The operator is told while this many credentials or fewer remain in
@@ -298,10 +322,23 @@ impl Service {
         );
         // the seed, or the credential an instance holds instead of it
         // (design §23.3)
-        let (public, signer, credential) = match (&cfg.identity, &cfg.operator) {
+        // the surface, and the slot the running node goes into for it, are
+        // carried out of the arm that raises them: a node holding its seed
+        // has neither
+        let (public, signer, credential, surface, serving_node, stopping) = match (
+            &cfg.identity,
+            &cfg.operator,
+        ) {
             (Some(path), _) => {
                 let me = Arc::new(read_identity(path)?);
-                (me.public.clone(), Some(me), None)
+                (
+                    me.public.clone(),
+                    Some(me),
+                    None,
+                    None,
+                    Arc::new(std::sync::Mutex::new(None)),
+                    Arc::new(tokio::sync::Notify::new()),
+                )
             }
             (None, Some(op)) => {
                 let operator = read_operator(op)?;
@@ -319,22 +356,45 @@ impl Service {
                 // serves nothing before a credential is in force, and one
                 // whose run has lapsed is the same case
                 let public_hex: String = cred.public().iter().map(|b| format!("{b:02x}")).collect();
-                // **the enrolment surface, where the operator asked for
-                // one** ([`crate::enrolment`]): it hands out the public
-                // half above and takes the run signed over it, and its
-                // only effect is a file in the delegations directory the
-                // loop below is already reading. Dropped the moment a
-                // credential is in force, since an administration surface
-                // outliving what it was for is a standing way in for
-                // nothing (`infra-client-requirements.md` §8.2).
-                let enrolling = cfg.enrolment.as_ref().map(|e| {
+                // **the operator's surface, where they asked for one**
+                // ([`crate::administration`]): it hands out the public half
+                // above, takes the run signed over it, and takes the two
+                // records §4.4 says an instance cannot sign for itself.
+                //
+                // **Spawned once here and kept for the daemon's life.** Its
+                // first phase is this wait, and its second is everything
+                // §4.4 and §7 have recurring — a re-signed record when the
+                // address moves, a renewed run before the old one lapses —
+                // so it binds once and the node is handed to it below
+                // rather than it being torn down and raised again on the
+                // same port [ruled, author, 2026-10-08].
+                let serving_node = Arc::new(std::sync::Mutex::new(None));
+                let stopping = Arc::new(tokio::sync::Notify::new());
+                let surface = cfg.administration.as_ref().map(|a| {
                     tokio::spawn(
-                        crate::enrolment::Enrolling {
-                            listen: e.listen,
-                            token: e.token,
+                        crate::administration::Surface {
+                            listen: a.listen,
+                            token: a.token,
                             credential: cred.clone(),
                             operator: operator.clone(),
                             delegations: dir.clone(),
+                            endpoint_record: cfg.endpoint_record.clone(),
+                            anchor_entry: cfg.anchor_entry.clone(),
+                            node: serving_node.clone(),
+                            hosting: cfg.resources.clone().map(|p| {
+                                let (memory, fuel) = cfg
+                                    .resource_limits
+                                    .unwrap_or((Limits::default().memory, Limits::default().fuel));
+                                (
+                                    p,
+                                    Limits {
+                                        memory,
+                                        fuel,
+                                        ..Limits::default()
+                                    },
+                                )
+                            }),
+                            stopping: stopping.clone(),
                         }
                         .serve(),
                     )
@@ -354,15 +414,14 @@ impl Service {
                     }
                     tokio::time::sleep(PROVISIONING_POLL).await;
                 }
-                if let Some(task) = enrolling {
-                    task.abort();
-                    tracing::info!(
-                        target: "daemon",
-                        step = "enrolment_closed",
-                        "daemon.lifecycle"
-                    );
-                }
-                (operator, None, Some((cred, dir.clone())))
+                (
+                    operator,
+                    None,
+                    Some((cred, dir.clone())),
+                    surface,
+                    serving_node,
+                    stopping,
+                )
             }
             (None, None) => {
                 return Err(Startup::Identity(
@@ -551,6 +610,13 @@ impl Service {
             }
         }
         let node = LiveNode::start_with(node_cfg, view, known.clone(), anchors, limits);
+        // **the surface's second phase begins here**: with a node in the
+        // slot, a record it takes is published at once rather than kept for
+        // the next start ([`crate::administration::Surface`]).
+        *serving_node.lock().unwrap() = Some(crate::administration::Running {
+            node: node.clone(),
+            hosts_resources,
+        });
         if let Some(bytes) = &given_record {
             node.originate(rhtn_node::store::KIND_ENDPOINT_RECORD, bytes);
         }
@@ -621,6 +687,10 @@ impl Service {
             _upstream: upstream,
             credential,
             noticed: std::sync::Mutex::new(None),
+            stopping,
+            endpoint_record: cfg.endpoint_record.clone(),
+            anchor_entry: cfg.anchor_entry.clone(),
+            surface,
         };
         service.mind_the_run();
         Ok(service)
@@ -661,6 +731,22 @@ impl Service {
                 if remaining == 1 { "" } else { "s" }
             );
         }
+    }
+
+    /// **What this node is, holding and attached to**, for the page it
+    /// serves its own operator (`infra-client-requirements.md` §8.1).
+    ///
+    /// Read under one lock each and nowhere twice: a page showing a count
+    /// from one instant beside a count from another describes a state that
+    /// never existed, which is the mistake §10.1 names for authorisation
+    /// and is no better here.
+    pub fn status(&self) -> crate::operator::StatusView {
+        crate::operator::StatusView::of(
+            &self.node,
+            self.credential.as_ref().map(|(c, _)| c),
+            self.endpoint_record.as_deref(),
+            self.anchor_entry.as_deref(),
+        )
     }
 
     /// What this node's configuration exposes the identities below it to
@@ -736,6 +822,13 @@ impl Service {
                 }
                 _ = term.recv() => {
                     tracing::info!(target: "daemon", step = "signalled", signal = "SIGTERM", "daemon.lifecycle");
+                    break;
+                }
+                // **an act on the operator's surface takes the path a
+                // signal takes**, so what is held is written back and
+                // nothing in flight is lost
+                _ = self.stopping.notified() => {
+                    tracing::info!(target: "daemon", step = "signalled", signal = "surface", "daemon.lifecycle");
                     break;
                 }
                 _ = tick.tick() => {

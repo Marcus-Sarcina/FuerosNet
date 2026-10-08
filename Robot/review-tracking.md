@@ -16308,3 +16308,95 @@ they name is assigned after the configuration is composed, so the same
 surface is the natural place and is the next increment. And the
 administration pages §8.3 has the node serve, with PRD-12's sandboxed
 frame in the client, remain `todo!()`.
+
+**The two records, and a doc comment that moved what it documented
+(2026-10-08).** Inserting a `seqno` helper above `layout` in
+`daemon/tests/enrolment.rs` put it between `layout`'s doc comment and
+`layout`, so the doc documented the helper; removing a constant left its
+doc comment orphaned above a struct. Clippy's `empty_line_after_doc_comments`
+caught the second and nothing would have caught the first — this is the
+third time this session that an insertion has re-attributed a doc comment,
+and the lesson is that an edit adding an item next to a documented one
+should read both ends of the result.
+
+**The surface, and two things the tests found (2026-10-08).** The ordering
+constraint is real and undocumented anywhere else: `Credential::add` puts a
+run in force as it verifies it, so the provisioning loop ends on the run,
+and `Service::start` then requires the record paths the configuration names
+to be readable. A page that pushes the run first meets a node that refuses
+its own configuration. Recorded in the module and the packaging README; the
+fetch's `wanted`/`held` report is what a page should drive from.
+
+**And the test harness leaked daemons.** `Daemon::stop` is on the success
+path, so a panicking assertion left the child running and holding its QUIC
+port — the next run then met `AddrInUse` from the previous run rather than
+from anything it did. `daemon/tests/administration.rs` now reaps the child
+on drop. `daemon/tests/delegated.rs` has the same shape and the same
+exposure; it has not been changed, because its tests pass and the author's
+standing rule is to leave what is not asked for, but it is the same latent
+trap.
+
+**The administration page (2026-10-08).** §8.3's "the administration surface
+ships with the node" is now half-built: the node serves its page, and
+PRD-12's sandboxed frame in the client remains `todo!()`, as does PRD-13's
+provisioning pages — `rhtn node enrol` is the instrument standing in for the
+latter. Three things worth keeping:
+
+- **`operator.rs`'s own header said "if it grows a frontend it leaves this
+  crate".** It has not: the page is a `format!` over the same data the text
+  renderings use, with no dependency added. That line still holds and is
+  the test for whether it keeps holding.
+- **The first `local.sh` put the operator's seed inside the mounted volume**
+  while commenting that it never was. Caught by listing the volume rather
+  than by reading the comment. An instance that can read its operator's
+  seed is exactly what design §23.3 exists to prevent, so the demo would
+  have been teaching the opposite of the design.
+- **The CLI's guarantee sentence was load-bearing and tested.** Adding
+  `node enrol` made "nothing here sends a request that changes state"
+  false; the usage now states the guarantee as being about *protocol*
+  requests and names the exception, and the test asserts both halves.
+
+**[author, 2026-10-08] §8.1 does not forbid controls, and I had read it as
+if it did.** The challenge was "surely an admin interface requires controls
+to trigger admin actions?" and it is right. §8.1's sentence is "reads and
+never speaks for the node", but its own gloss is "does not compose, sign or
+send anything **on the wire**" — about being a second protocol actor, not
+about buttons. OPS-011 enumerates the prohibition: arbitrary frame
+composition, traffic replay, signature creation, manual packet approval.
+OPS-012 goes the other way and *presupposes* acts: hosting, predicates and
+standing policies "as explicit management acts".
+
+The line that holds has three parts: management acts within the node's own
+authority are permitted; a packet workbench is not (OPS-011); and anything
+needing the operator's seed is impossible whatever is permitted, because
+the endpoint record and anchor entry carry that signature and the instance
+does not hold the key (§4.4, design §23.3) — so the page can only ask the
+client for those.
+
+Corrected in `operator.rs`'s doc, the page's own footer (which was telling
+an operator something untrue about the design), the test, and the
+change-log entry. **The failure mode was quoting a sentence's headline and
+not its gloss** — the same shape as taking a rule from the identifier that
+implements it.
+
+**The administration page's acts (2026-10-08).** Built: the tab strip, the
+per-resource view, the owed-records notice, and three acts — acknowledge,
+reload, stop. Not built, and each for a stated reason: ending a session
+(the author's "not excluded as policy, but not yet"), and editing a grant
+(waits on the SDL).
+
+**Owed: the SDL for resource-defined admin functions** [author,
+2026-10-08]. Nothing in `resource-requirements.md` defines one; §7.3 fixes
+only that *access templates* are in the predicate language and not opaque
+configuration, and PKG-001 has manifests declare "inspectable role
+templates". So the SDL is new design: what a package may declare, what the
+node renders, and what a declared function may reach — the last bound by
+§9.2, which gives a package no host binding onto network state. Not
+invented here.
+
+**Also owed, and newly sharp:** the surface's exposure. Authority is now
+"reaching the port", so where it binds *is* the access control, and
+nothing in the configuration stops an operator binding it to 0.0.0.0 —
+which `local.sh` does, and the packaging README should say plainly what
+that means. A warning on the page when the surface is bound to a public
+address would be the §8-shaped answer.

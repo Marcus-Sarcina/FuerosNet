@@ -518,3 +518,512 @@ mod tests {
         );
     }
 }
+
+// ---------------------------------------------------------------- status
+
+/// **What this node is, holding and attached to**, as a page or a line at a
+/// time (`infra-client-requirements.md` §8.1: "what it is shown is state,
+/// who is attached, what is queued, what is held").
+///
+/// **Every field is a count, a keyhash or a time**, which is §8.1's other
+/// half: an interface handed frames would be a second parser where the
+/// first one already works. Nothing here is a control, and the page says so
+/// — an operator's interface "reads and never speaks for the node".
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StatusView {
+    /// The identity it serves under.
+    pub keyhash: Keyhash,
+    /// The subnet it answers in.
+    pub anchor: Keyhash,
+    /// Its patron, or none at a root.
+    pub patron: Option<Keyhash>,
+    /// Whether it runs on a delegated credential and holds no seed
+    /// (design §23.3).
+    pub delegated: bool,
+    /// How many credentials of its run are still ahead of now, and when
+    /// the run ends: an instance's, and none for a node holding its seed.
+    pub credentials: Option<usize>,
+    /// When the run's last credential expires.
+    pub run_end: Option<u64>,
+    /// Who holds a session with it, the patron included: §8.1's "who is
+    /// attached".
+    pub attached: Vec<Keyhash>,
+    /// How many identities sit directly beneath it.
+    pub subordinates: usize,
+    /// Topology objects held.
+    pub topology_objects: usize,
+    /// Subtree acknowledgements among them.
+    pub acks_held: usize,
+    /// Records in its own archive.
+    pub archive_records: usize,
+    /// The sequence number of the endpoint record it is serving, where its
+    /// operator has signed one (`infra-client-requirements.md` §4.4).
+    pub endpoint_seqno: Option<u32>,
+    /// The same for its anchor entry.
+    pub anchor_seqno: Option<u32>,
+    /// Where it serves.
+    pub listen: String,
+    /// Its own clock, so an operator can see a skew for themselves.
+    pub now: u64,
+    /// The standing acknowledgement policy (design §11.2.1), which is an
+    /// act an operator takes and so is shown beside its control.
+    pub acknowledging: bool,
+}
+
+impl StatusView {
+    /// **Read it off a running node**, under one lock each and nowhere
+    /// twice: a page showing a count from one instant beside a count from
+    /// another describes a state that never existed, which is the mistake
+    /// `infra-client-requirements.md` §10.1 names for authorisation and is
+    /// no better here.
+    pub fn of(
+        node: &rhtn_node::runtime::LiveNode,
+        credential: Option<&std::sync::Arc<rhtn_transport::tls::Credential>>,
+        endpoint_record: Option<&std::path::Path>,
+        anchor_entry: Option<&std::path::Path>,
+    ) -> StatusView {
+        let attached = {
+            use rhtn_node::Adjacency;
+            node.adjacency.peers()
+        };
+        let view = node.view.lock().unwrap();
+        let me = view.me();
+        let (credentials, run_end) = match credential {
+            None => (None, None),
+            Some(cred) => {
+                let now = view.now();
+                (
+                    Some(cred.issued().iter().filter(|i| i.not_after > now).count()),
+                    cred.run_end(),
+                )
+            }
+        };
+        StatusView {
+            keyhash: me,
+            anchor: view.anchor(),
+            patron: view.patron(),
+            delegated: credential.is_some(),
+            credentials,
+            run_end,
+            attached,
+            subordinates: view.table.subordinates(&me).len(),
+            topology_objects: view.store.len(),
+            acks_held: view.store.acks_held(),
+            archive_records: view.archive.len(),
+            endpoint_seqno: endpoint_record.and_then(|p| {
+                let b = std::fs::read(p).ok()?;
+                rhtn_node::store::EndpointRecord::parse(&b)
+                    .ok()
+                    .map(|r| r.seqno.counter)
+            }),
+            anchor_seqno: anchor_entry.and_then(|p| {
+                let b = std::fs::read(p).ok()?;
+                rhtn_node::resolution::AnchorEntry::parse(&b)
+                    .ok()
+                    .map(|e| e.seqno.counter)
+            }),
+            listen: node.addr.to_string(),
+            now: view.now(),
+            acknowledging: view.ack_policy.is_some(),
+        }
+    }
+
+    /// The status as lines, which is what survives a terminal and a log
+    /// alike — the same form the other views take.
+    pub fn render(&self) -> String {
+        let mut out = String::new();
+        let _ = writeln!(out, "serving as   {}", hex(&self.keyhash));
+        let _ = writeln!(out, "in subnet    {}", hex(&self.anchor));
+        let _ = writeln!(
+            out,
+            "patron       {}",
+            match &self.patron {
+                Some(p) => hex(p),
+                None => "none: this node is a root".into(),
+            }
+        );
+        let _ = writeln!(
+            out,
+            "runs on      {}",
+            if self.delegated {
+                "a credential its operator's client signed; no seed here (design §23.3)"
+            } else {
+                "its own seed"
+            }
+        );
+        if let Some(n) = self.credentials {
+            let _ = writeln!(
+                out,
+                "run          {n} credential(s) ahead of now, ending {}",
+                self.run_end.unwrap_or(0)
+            );
+        }
+        let _ = writeln!(out, "listening on {}", self.listen);
+        let _ = writeln!(out, "clock        {}", self.now);
+        let _ = writeln!(out, "attached     {}", self.attached.len());
+        for a in &self.attached {
+            let _ = writeln!(out, "             {}", hex(a));
+        }
+        let _ = writeln!(out, "subordinates {}", self.subordinates);
+        let _ = writeln!(
+            out,
+            "acknowledges {}",
+            if self.acknowledging {
+                "yes: every adoption beneath it, as it is stored"
+            } else {
+                "no"
+            }
+        );
+        let _ = writeln!(
+            out,
+            "holding      {} topology object(s), {} acknowledgement(s), {} record(s)",
+            self.topology_objects, self.acks_held, self.archive_records
+        );
+        let _ = writeln!(
+            out,
+            "endpoints    {}",
+            match self.endpoint_seqno {
+                Some(s) => format!("an operator-signed record at seqno {s}"),
+                None => "none signed: nothing has told your horizon where to reach you".into(),
+            }
+        );
+        let _ = writeln!(
+            out,
+            "anchor entry {}",
+            match self.anchor_seqno {
+                Some(s) => format!("operator-signed at seqno {s}"),
+                None => "none signed".into(),
+            }
+        );
+        out
+    }
+}
+
+/// **The administration page a node serves for its own operator**
+/// (`infra-client-requirements.md` §8.3): "a node develops and serves its
+/// own administration pages; a client provides the frame they are presented
+/// in".
+///
+/// **Why the node serves it rather than the client drawing it.** §8.3:
+/// third-party implementations of both roles are expected, and a surface
+/// agreed between them would have to be defined universally — constraining
+/// what either may build and fixing behaviour with no reason to be common.
+/// Serving its own, each implementation administers itself with a surface
+/// that matches its software.
+///
+/// **What this page may and may not carry** [corrected, 2026-10-08]. An
+/// earlier note here read §8.1's "reads and never speaks for the node" as
+/// forbidding any control at all. It does not: its own gloss is that the
+/// interface "does not compose, sign or send anything **on the wire**",
+/// OPS-011 names the prohibition exactly — "arbitrary frame composition,
+/// traffic replay, signature creation or manual packet approval controls" —
+/// and OPS-012 has an operator's hosting, predicates and standing policies
+/// kept as **explicit management acts**, which presupposes acts. A control
+/// within the node's own authority is one of those; a packet workbench is
+/// what §8.1 and OPS-011 forbid.
+///
+/// **This page carries no control yet** because none is built, not because
+/// none may be. What can never be one is an act needing the operator's
+/// *seed*: the endpoint record and the anchor entry carry their signature
+/// and not the delegation's (§4.4), and the instance does not hold that key
+/// (design §23.3) — those the page can only ask the client for.
+///
+/// The client that presents this does so in a frame isolated from its keys,
+/// archive and sealed captures (§8.3), because a seized node serving a
+/// hostile page must reach nothing on the device that still holds the seed
+/// (design §18.1, §23.3) — **that isolation is the client's to provide and
+/// nothing here can assert it**.
+pub fn page(
+    status: &StatusView,
+    exposure: &ExposureView,
+    resources: &[ResourceView],
+    showing: Option<&Keyhash>,
+) -> String {
+    let mut out = String::new();
+    let _ = write!(
+        out,
+        "<!DOCTYPE html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">\n\
+         <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n\
+         <title>{} · rhtnd</title>\n<style>\n\
+         :root {{ color-scheme: light dark }}\n\
+         body {{ font: 15px/1.5 system-ui, sans-serif; margin: 0; padding: 1.5rem;\n\
+                max-width: 48rem }}\n\
+         h1 {{ font-size: 1.1rem; margin: 0 0 .25rem }}\n\
+         h2 {{ font-size: .95rem; margin: 1.5rem 0 .4rem }}\n\
+         p.sub {{ margin: 0 0 1rem; opacity: .7 }}\n\
+         pre {{ margin: 0; padding: .6rem .8rem; overflow-x: auto;\n\
+               background: rgba(127,127,127,.12); border-radius: 4px;\n\
+               font: 13px/1.5 ui-monospace, monospace; white-space: pre-wrap;\n\
+               word-break: break-all }}\n\
+         footer {{ margin-top: 2rem; opacity: .7; font-size: .85rem }}\n\
+         </style></head><body>\n",
+        &hex(&status.keyhash)[..16]
+    );
+    let _ = write!(
+        out,
+        "<h1>{}</h1>\n<p class=\"sub\">{}</p>\n",
+        &hex(&status.keyhash)[..16],
+        if status.delegated {
+            "an instance: it runs on a credential its operator's client signed, and holds no seed"
+        } else {
+            "a node holding its own seed"
+        }
+    );
+    let _ = write!(out, "{}", tabs(resources, showing));
+    match showing.and_then(|k| resources.iter().find(|r| r.resource == *k)) {
+        Some(r) => {
+            let _ = write!(out, "{}", r.render_html());
+        }
+        None => {
+            let _ = write!(
+                out,
+                "<h2>State</h2>\n<pre>{}</pre>\n",
+                escape(&status.render())
+            );
+            let _ = write!(
+                out,
+                "<h2>What this exposes the identities below it to</h2>\n<pre>{}</pre>\n",
+                escape(&exposure.render())
+            );
+            let _ = write!(out, "{}", owed(status));
+            let _ = write!(out, "{}", node_controls(status));
+        }
+    }
+    let _ = write!(
+        out,
+        "<footer>This page shows state and carries no control yet. What it will never carry is \
+         an act needing the operator&#39;s key — the endpoint record and the anchor entry are \
+         signed by that key and this instance does not hold it \
+         (<code>infra-client-requirements.md</code> §4.4, design §23.3) — nor a way to compose \
+         or replay traffic (OPS-011).</footer>\n</body></html>\n"
+    );
+    out
+}
+
+/// **One resource bound here**, as its tab shows it
+/// (`infra-client-requirements.md` §10.6, §10.7).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResourceView {
+    /// The resource's identity.
+    pub resource: Keyhash,
+    /// Who owns it.
+    pub owner: Keyhash,
+    /// The authority its backend is addressed by.
+    pub authority: String,
+    /// Whether this node runs the backend or brokers to one elsewhere:
+    /// §10.6 has the two shown apart, since they expose a subordinate to
+    /// different parties.
+    pub hosted: bool,
+    /// The roles the package declared.
+    pub declared_roles: Vec<String>,
+    /// The standing grant over the owner's horizon, where one is set.
+    pub standing: Option<Vec<String>>,
+    /// Each member with a row here, the roles it holds, and whether the
+    /// row came from the standing grant rather than from the operator.
+    pub rows: Vec<(Keyhash, Vec<String>, bool)>,
+    /// Hosted sessions open against it.
+    pub sessions: usize,
+}
+
+impl ResourceView {
+    /// The tab's body.
+    fn render_html(&self) -> String {
+        let mut out = String::new();
+        let _ = write!(
+            out,
+            "<h2>{}</h2>\n<pre>resource  {}\nowner     {}\nhosting   {}\nsessions  {}\nroles     {}</pre>\n",
+            escape(&self.authority),
+            hex(&self.resource),
+            hex(&self.owner),
+            if self.hosted {
+                "this node runs the backend"
+            } else {
+                "brokered: the traffic goes to a backend elsewhere"
+            },
+            self.sessions,
+            escape(&self.declared_roles.join(", "))
+        );
+        let _ = write!(
+            out,
+            "<h2>Who may reach it</h2>\n<pre>standing  {}</pre>\n",
+            match &self.standing {
+                Some(r) if r.is_empty() => "a grant with no roles".to_string(),
+                Some(r) => escape(&r.join(", ")),
+                None => "no standing grant over the owner&#39;s horizon".to_string(),
+            }
+        );
+        if self.rows.is_empty() {
+            out.push_str("<pre>no member holds a row here</pre>\n");
+        } else {
+            let mut body = String::new();
+            for (member, roles, derived) in &self.rows {
+                let _ = writeln!(
+                    body,
+                    "{}  {}{}",
+                    hex(member),
+                    roles.join(", "),
+                    if *derived {
+                        "   (from the standing grant)"
+                    } else {
+                        ""
+                    }
+                );
+            }
+            let _ = writeln!(out, "<pre>{}</pre>", escape(&body));
+        }
+        out.push_str(
+            "<p class=\"sub\">Editing a grant is not here yet. \
+             <code>resource-requirements.md</code> §7.3 has an access template expressed in the \
+             predicate language rather than as opaque configuration, so that what a one-click \
+             grant means is legible in the same click; the vocabulary that section fixes is what \
+             this section waits on.</p>\n",
+        );
+        out
+    }
+}
+
+/// The tab strip: the node itself, then one per resource bound here.
+fn tabs(resources: &[ResourceView], showing: Option<&Keyhash>) -> String {
+    let mut out = String::from("<nav>");
+    let on = |yes: bool| if yes { " class=\"on\"" } else { "" };
+    let _ = write!(out, "<a href=\"/\"{}>The node</a>", on(showing.is_none()));
+    for r in resources {
+        let _ = write!(
+            out,
+            "<a href=\"/?resource={}\"{}>{}</a>",
+            hex(&r.resource),
+            on(showing == Some(&r.resource)),
+            escape(&r.authority)
+        );
+    }
+    out.push_str("</nav>\n");
+    out
+}
+
+/// **What this node cannot do for itself** (`infra-client-requirements.md`
+/// §4.4): the two records carry its operator's signature and not its
+/// delegation's, so where one is missing the page says so rather than
+/// offering a control that could not work.
+fn owed(status: &StatusView) -> String {
+    let mut want = Vec::new();
+    if status.endpoint_seqno.is_none() {
+        want.push(
+            "an <strong>endpoint record</strong>, without which nothing has told your horizon \
+             where to reach this node",
+        );
+    }
+    if status.anchor_seqno.is_none() {
+        want.push("an <strong>anchor entry</strong>");
+    }
+    if want.is_empty() {
+        return String::new();
+    }
+    format!(
+        "<h2>Owed by your client</h2>\n<p class=\"sub\">This node is waiting for {}. The \
+         signature on each is yours and not this instance&#39;s \
+         (<code>infra-client-requirements.md</code> §4.4), so your client signs them and PUTs \
+         them to <code>/node/endpoint-record</code> and <code>/node/anchor-entry</code>. The key \
+         never comes here.</p>\n",
+        want.join(" and ")
+    )
+}
+
+/// **The acts this node can take on its own authority.**
+///
+/// §8.1 forbids the interface composing, signing or sending on the wire,
+/// and OPS-011 forbids frame composition, traffic replay, signature
+/// creation and manual packet approval. A management act is none of those,
+/// and OPS-012 has an operator's hosting and standing policies kept as
+/// exactly such acts.
+///
+/// **What authorises one is reaching this port** [author, 2026-10-08].
+/// §8.2 puts administration "out of band, with everything else about the
+/// host", so where the surface binds is the access decision — and these
+/// carry no key, which is what lets an operator administer from a desktop
+/// holding no seed (design §23.3).
+fn node_controls(status: &StatusView) -> String {
+    format!(
+        "<h2>Acts</h2>\n\
+         <form method=\"post\" action=\"/node/acknowledge\">\n\
+         <p>Standing acknowledgement is <strong>{}</strong>: whether this node countersigns \
+         every adoption beneath it as it is stored (design §11.2.1).<br>\
+         <button name=\"acknowledge\" value=\"{}\">{}</button></p>\n</form>\n\
+         <form method=\"post\" action=\"/node/reload\">\n\
+         <p>Re-read the hosting file, without a restart.<br><button>Reload</button></p>\n\
+         </form>\n\
+         <form method=\"post\" action=\"/node/stop\">\n\
+         <p>Stop, writing back what is held and losing nothing in flight: the same path a \
+         SIGTERM takes.<br><button>Stop this node</button></p>\n</form>\n",
+        if status.acknowledging { "on" } else { "off" },
+        if status.acknowledging { "off" } else { "on" },
+        if status.acknowledging {
+            "Turn it off"
+        } else {
+            "Turn it on"
+        },
+    )
+}
+
+/// The five characters that would otherwise close a tag or an attribute.
+/// **Everything on the page goes through this**, counts included: a keyhash
+/// cannot carry one of them today, and a renderer that relies on what its
+/// inputs happen to contain is one new field away from being wrong.
+fn escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&#39;"),
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
+/// **The page an instance serves before it is enrolled**: what it is
+/// waiting for, and the public half an operator's client signs over.
+///
+/// An operator who opens the surface on a fresh instance should read why it
+/// is not serving rather than an empty table, and the one thing they need
+/// from it is the key — so the key is the page.
+pub fn waiting_page(
+    transport_public: &str,
+    credentials: usize,
+    endpoint_record: &str,
+    anchor_entry: &str,
+) -> String {
+    format!(
+        "<!DOCTYPE html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">\n\
+         <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n\
+         <title>waiting for a run · rhtnd</title>\n<style>\n\
+         :root {{ color-scheme: light dark }}\n\
+         body {{ font: 15px/1.5 system-ui, sans-serif; margin: 0; padding: 1.5rem;\n\
+                max-width: 48rem }}\n\
+         h1 {{ font-size: 1.1rem; margin: 0 0 .25rem }}\n\
+         p.sub {{ margin: 0 0 1rem; opacity: .7 }}\n\
+         pre {{ margin: 0; padding: .6rem .8rem; overflow-x: auto;\n\
+               background: rgba(127,127,127,.12); border-radius: 4px;\n\
+               font: 13px/1.5 ui-monospace, monospace; white-space: pre-wrap;\n\
+               word-break: break-all }}\n\
+         footer {{ margin-top: 2rem; opacity: .7; font-size: .85rem }}\n\
+         </style></head><body>\n\
+         <h1>Not serving yet</h1>\n\
+         <p class=\"sub\">This instance has minted a transport key and is waiting for the run \
+         its operator&#39;s client signs over it.</p>\n\
+         <pre>transport key   {}\n\
+         credentials     {credentials}\n\
+         endpoint record {}\n\
+         anchor entry    {}</pre>\n\
+         <footer>Sign a run over that key and PUT it to <code>/node/run</code>; the two records \
+         go to <code>/node/endpoint-record</code> and <code>/node/anchor-entry</code> first, \
+         because taking the run is what ends this wait \
+         (<code>infra-client-requirements.md</code> §4.4, §7).</footer>\n\
+         </body></html>\n",
+        escape(transport_public),
+        escape(endpoint_record),
+        escape(anchor_entry),
+    )
+}
