@@ -46,6 +46,10 @@ class Carriage(private val radio: Bearer.Link?) {
         const val PROXIMITY = 1
         /** The capture key, one each way. */
         const val CAPTURE_KEY = 2
+        /** The prekey handover (`wire-format.md` §14.3.4), one each way:
+         *  the sender's signed bundle and one one-time key, so the two
+         *  can open a channel afterwards without a node. */
+        const val PREKEY = 3
 
         /**
          * The conversation's carriages, from the capture on: the
@@ -59,7 +63,7 @@ class Carriage(private val radio: Bearer.Link?) {
          * phase as it takes it, so the sender's count wraps round the
          * range without colliding with anything still waiting.
          */
-        const val CONVERSATION = 3
+        const val CONVERSATION = 4
 
         /** How many phases the conversation has to wrap through. */
         const val CONVERSATIONS = Bearer.PHASES - CONVERSATION

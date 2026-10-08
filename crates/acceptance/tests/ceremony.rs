@@ -8,11 +8,11 @@
 /// Spec: design §7.1; light-client-requirements.md §1.2
 /// Milestone: after-5.  Kind: negative.  Oracle: behaviour.
 ///
-/// Rule (design §7.1): "A witness refuses to sign before four minutes have passed **on its own clock, from the moment the request to witness reached it**"
+/// Rule (design §7.1): "A witness does not sign before four minutes have passed **on its own clock, from the moment the request to witness reached it**"
 ///
 /// Given: A witness holding a ceremony it has agreed to attest, and a conversation driven to the proposed body in well under four minutes.
 /// When: The proposer asks the witness to sign before four minutes have passed since the witness received the request, and again past four minutes; and separately, a participant claims an elapsed time longer than the witness has observed.
-/// Then: The early request yields no signature and an answer that names waiting rather than refusal, so the proposer may ask again; the request past four minutes is signed; and the claim of a longer elapsed time neither shortens nor lengthens the wait, the witness's own receipt being what starts it. No reader of the record can distinguish a witness that waited from one that did not, so nothing is asserted of the record itself.
+/// Then: The early request yields no reply at all: the witness withholds its signature until its clock has matured and it has seen the steps' by-products, and the proposer, waiting on an unanswered signer, asks again; the request past four minutes is signed; and the claim of a longer elapsed time neither shortens nor lengthens the wait, the witness's own receipt being what starts it. No reader of the record can distinguish a witness that waited from one that did not, so nothing is asserted of the record itself.
 #[test]
 #[ignore = "acceptance CER-52: owed at milestone after-5"]
 fn cer_52_a_witness_will_not_sign_before_four_minutes_have() {
@@ -33,4 +33,20 @@ fn cer_52_a_witness_will_not_sign_before_four_minutes_have() {
 #[ignore = "acceptance CER-53: owed at milestone after-5"]
 fn cer_53_the_camera_holds_one_counterparty_present_across() {
     todo!("CER-53: The camera holds one counterparty present across the enforced duration, or the meeting is abandoned")
+}
+
+/// Two shells cross the optical channel only if they share one framing (provisional)
+///
+/// Spec: light-client-requirements.md §1; wire-format.md §14.3.1
+/// Milestone: after-5.  Kind: manual.  Oracle: behaviour.
+///
+/// Rule (light-client-requirements.md §1): "two shells cross the optical channel only if they share one framing"
+///
+/// Given: Two different shells, each conforming, each holding a kernel of this workspace.
+/// When: One shows an invitation and the other reads it, both ways round, and the optical exchange runs.
+/// Then: Both assemble the other's contribution byte for byte, which they can do only by sharing the reference shell's framing: the parts, their header and the rows of what is held. Stated provisionally; restated, compatible with both, when the iOS shell exists.
+#[test]
+#[ignore = "acceptance CER-55: owed at milestone after-5"]
+fn cer_55_two_shells_cross_the_optical_channel_only_if_the() {
+    todo!("CER-55: Two shells cross the optical channel only if they share one framing (provisional)")
 }

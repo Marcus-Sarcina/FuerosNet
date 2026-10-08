@@ -182,16 +182,22 @@ impl Serving for LocalNode {
             let from = self.node.me();
             let mut view = self.node.view.lock().unwrap();
             let ids = self.node.ids.lock().unwrap();
-            matches!(
-                view.take_object(
-                    &self.node.adjacency,
-                    &from,
-                    rhtn_node::store::KIND_TRANSACTION,
-                    &bytes,
-                    &*ids
-                ),
+            let decision = view.take_object(
+                &self.node.adjacency,
+                &from,
+                rhtn_node::store::KIND_TRANSACTION,
+                &bytes,
+                &*ids,
+            );
+            let taken = matches!(
+                decision,
                 rhtn_node::store::Decision::Stored | rhtn_node::store::Decision::Duplicate
-            )
+            );
+            // the decision, because a refusal reaches the client as one
+            // bit and a test that sees that bit intermittently needs to
+            // know which refusal it was
+            tracing::debug!(target: "node", taken, decision = ?decision, "node.propagate");
+            taken
         })
     }
 

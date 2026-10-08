@@ -1,6 +1,6 @@
 # Local device-to-device interfaces (`wire-format.md` §14.3)
 
-Generated against `wire-format.md` `348d7c80d9da508a…`, `network-design.md` `d38738bfc5690e2e…` and `light-client-requirements.md` `02f445f96d3f7daf…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `2234f90dfec6fd06…`, `network-design.md` `1d268b5b72aafde3…` and `light-client-requirements.md` `f7c7414e58da1db7…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Canonical. Spec-derived, reproduced by the independent harness.** The encodings
 of `wire-format.md` §14.3, as one coherent exchange: **alice initiates with
@@ -8,7 +8,7 @@ bob**, the contributions and the ceremony-id are the pre-commitment known
 answer in `records.md` **byte-for-byte**, and the device handover reuses the
 desktop transport key (`keys.md`), alice's delegation to it (`records.md`)
 and the desktop's signed prekey bundle (`records.md`) byte-for-byte. The
-bytes are the objects alone — what a QR encodes them as, and how a bearer
+bytes are the objects alone — what an optical code encodes them as, and how a bearer
 frames them, is the shell's and no part of these vectors. **The sealing is
 not the shell's** [reviewer, 2026-10-06]: `wire-format.md` §14.3.2 fixes the
 session key, the cipher, the nonce in front of the ciphertext and the
@@ -24,7 +24,7 @@ normal record's own `proximity` disclosure carries.
 
 ## The optical exchange (§14.3.1–.2)
 
-**OpticalContribution — alice's first QR: her full key material, which bob
+**OpticalContribution — alice's first code: her full key material, which bob
 pins at this first contact (design §12.3), and her contribution**
 (2022 bytes):
 
@@ -164,7 +164,7 @@ a5f551437ead673df5f57b1f2a39e0ed9c98e8278e4574f6ee02f95528796dda
 e4b54629f95c
 ```
 
-**TranscriptConfirm — the second QR, both devices' (the ceremony-id each
+**TranscriptConfirm — the second code, both devices' (the ceremony-id each
 computed; a receiver checks it equals its own)** (36 bytes):
 
 ```

@@ -43,6 +43,17 @@ at this first contact (design §12.3; `wire-format.md` §14.3.1), and a later
 code naming anyone else is refused. Nothing you were told beforehand names
 the counterparty; the code does.
 
+**Provisional, until the second shell exists** [author, 2026-10-08]: **two
+shells cross the optical channel only if they share one framing.**
+`wire-format.md` §14.3.1 fixes the bytes and pins no symbology, so how those
+bytes are cut into codes, what each code's header carries and how a receiver
+shows what it already holds are the shell's own — and two shells that chose
+differently cannot read each other's screens at all. The reference shell's
+framing — the object in parts under a short header, the parts held drawn as
+rows beneath the code — is what a second shell is built against, and this
+paragraph is restated as a requirement, compatible with both, once the iOS
+shell exists.
+
 ### 1.1 Nomination
 
 - **Nominate witnesses only from the counterparty's neighbourhood, never from your
@@ -107,7 +118,12 @@ the counterparty; the code does.
   the parties made. The participants will have been at it longer than four
   minutes by then — the codes, the channels and the capture all precede your
   request — and that is the intended shape, so do not discount your four
-  minutes by what they claim to have already spent.
+  minutes by what they claim to have already spent. **And withhold your
+  reply rather than refuse** [author, 2026-10-08]: your answer to the request
+  acknowledged the ceremony; your signature, once your clock has matured and
+  you have seen the by-products of the steps you were sent, is your readiness.
+  No reply names waiting (`wire-format.md` §7.10.2), and the proposer waits
+  on an unanswered signer.
 - **Hold only a few ceremonies as a witness at once.** The bound is yours; the
   reference client holds eight, and past it the request with the oldest claimed
   start goes. A request for a ceremony you already hold gets the answer you

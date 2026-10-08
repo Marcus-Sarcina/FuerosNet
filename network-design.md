@@ -1489,10 +1489,15 @@ which is the scarce resource the attack must consume; a per-identity cooldown
 would not, since an attacker holds many identities.
 
 **The floor is four minutes, and the witnesses are what enforce it** [author,
-2026-10-06]. A witness refuses to sign before four minutes have passed **on its
+2026-10-06]. A witness does not sign before four minutes have passed **on its
 own clock, from the moment the request to witness reached it**, whatever the
 participants, the other witnesses or the verifiers say and however early the
-conversation completes (`light-client-requirements.md` §1.2). **Local receipt
+conversation completes (`light-client-requirements.md` §1.2) — nor before it
+has seen the by-products of the steps it was sent (`wire-format.md` §7.10.1). **It withholds
+rather than refuses** [author, 2026-10-08]: its answer to the request
+acknowledged the ceremony, its signature once its clock has matured is its
+readiness, and nothing on the wire names waiting; the proposer's wait on an
+unanswered signer is what covers the interval. **Local receipt
 against the local clock, with no fudge factor** [author, 2026-10-06]: the
 arrival is the only instant of the ceremony the witness's own clock witnessed,
 where the `started_at` the request carries is a claim the parties made. The
@@ -8032,8 +8037,8 @@ worth checking for the others.
 
 ## 21. Parameters
 
-**Almost every value here is a chosen operating point rather than a derived one.** The exception is the soundness condition λ < 1/f, which follows from the arithmetic of §16.2 rather than from a choice — what is chosen is any particular λ satisfying it, and §16.2 records that satisfying it is necessary rather than sufficient. Seventeen of
-them are unjustified quantitative claims in the strict sense: the document explains *why each parameter exists* and *what it trades
+**Almost every value here is a chosen operating point rather than a derived one.** The exception is the soundness condition λ < 1/f, which follows from the arithmetic of §16.2 rather than from a choice — what is chosen is any particular λ satisfying it, and §16.2 records that satisfying it is necessary rather than sufficient. Every other
+value is an unjustified quantitative claim in the strict sense: the document explains *why each parameter exists* and *what it trades
 off*, and for none of them does it show that the number is right.
 
 **That is the honest position for a design with no deployment**, but it should not

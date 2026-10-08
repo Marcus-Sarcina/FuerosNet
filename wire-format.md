@@ -3616,6 +3616,13 @@ SigningReply = {
 ; exactly one of keys 1 and 2 is present, and key 3 only beside key 2
 ```
 
+**No value names waiting.** A witness whose four minutes have not passed, or
+which has not yet seen the by-products of the steps it was sent, sends no
+`SigningReply` until it has (design §7.1; `light-client-requirements.md`
+§1.2) [author, 2026-10-08]: its answer to the request acknowledged the
+ceremony, its signature is its readiness, and the proposer's wait on an
+unanswered signer (§7.10.1) covers the interval.
+
 ## 8. Session messages
 
 ### 8.0 Control frame framing

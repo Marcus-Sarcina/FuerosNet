@@ -63,6 +63,7 @@ class CarriageTest {
         assertTrue(near.send(listOf(handover), Carriage.Phase.CAPTURE_KEY))
         assertNull("not the intent's", far.received(Carriage.Phase.INTENT))
         assertNull("not the outcomes'", far.received(Carriage.Phase.PROXIMITY))
+        assertNull("not the prekeys'", far.received(Carriage.Phase.PREKEY))
         val back = far.received(Carriage.Phase.CAPTURE_KEY)
         assertNotNull("the one message of its phase", back)
         assertEquals(1, back!!.size)

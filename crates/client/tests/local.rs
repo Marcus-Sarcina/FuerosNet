@@ -346,3 +346,54 @@ fn sealing_twice_gives_different_bytes() {
     assert_eq!(*open_carriage(&key, &cid, &a).unwrap(), plain);
     assert_eq!(*open_carriage(&key, &cid, &b).unwrap(), plain);
 }
+
+/// **The §14.3.2 vector, pinned on this side of the seam** [reviewer,
+/// 2026-10-08]. `verify.py` re-derives the key and opens the carriage with
+/// primitives of its own; until this test the Rust sealing — the one
+/// implementation — was held to nothing fixed, so a divergence would have
+/// passed the whole gate and surfaced as a ceremony failing at the bearer.
+#[test]
+fn the_session_key_and_the_sealed_carriage_match_the_fixed_vector() {
+    use rhtn_client::keys::session_key;
+    let first = hex16("d43a0b07379cf934c8b7e4b54629f95c");
+    let second = hex16("57c54784788abe36a304be6d2eff43d4");
+    // the vector orders the contributions by participant keyhash, so any
+    // two keyhashes in that order reproduce it, either way round
+    let (lo, hi) = ([0u8; 32], [1u8; 32]);
+    let key = session_key((&lo, &first), (&hi, &second));
+    assert_eq!(
+        hex(&*key),
+        "41e5809dfcbfe09a7019e7aa1180705532527c68ec69e243926451417261d9d4"
+    );
+    assert_eq!(*session_key((&hi, &second), (&lo, &first)), *key);
+    let cid = kh("cb8ea88ad0a089017394c291f918217c4dc8d754a4639eb024f23662e5ca2b18");
+    let sealed = hexbytes(
+        "5de3c068484e4dfcbbd92cd758d67f3179fe2114ea5ac6e25e06e6b8c62624093d2f3bacf815836d9d29958b7aab3e3df07de4e2ecdc0a73fb3d77809a20ff582a0ec97db3e13d1d1b642100cbc9d8594b4c8e491373668bce783a84f363e46ab3e0ae8248f32479194454c0c729dfbec5663825650a8a4ab38e40f59659c2343b17b3814dba1b171d1125e00c9430d71b3736f6166be8fee2957d74440b3b921b5044be54c96c520e233f88601f0d4d86f5c2ef384e8485302291ac2d32cff50bce00d3460716b33c74410c52a588f23bc2f2a58b6cf6e7b05f895243f69ecf2eb5682905c07ee95c404c85b1918d074e333064f530163930c1f3dd169323be766a89163a35bc7a6566cfa19e5dbbc3954d19e346d6fe13e9aa953a97e746cf9d5a38444773054a3bab6edf3234fb6333b26eb76d3f5231532365c956014640461d7efedf02fb632ec9eef11aa5a40058f09bbae449fdb72f2e25b05309f5521b5e",
+    );
+    assert_eq!(sealed.len(), 354);
+    let plain = open_carriage(&key, &cid, &sealed).expect("the fixed carriage opens");
+    assert_eq!(&plain[..], &fixture("P-prekey-handover")[..]);
+    // another ceremony's key — the same contributions the other way round
+    // is one — does not open it, and neither does the right key under
+    // another ceremony's id
+    let other = session_key((&lo, &second), (&hi, &first));
+    assert!(open_carriage(&other, &cid, &sealed).is_none());
+    assert!(open_carriage(&key, &[9u8; 32], &sealed).is_none());
+}
+
+fn hex16(s: &str) -> [u8; 16] {
+    let mut out = [0u8; 16];
+    out.copy_from_slice(&hexbytes(s));
+    out
+}
+
+fn hexbytes(s: &str) -> Vec<u8> {
+    (0..s.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap())
+        .collect()
+}
+
+fn hex(b: &[u8]) -> String {
+    b.iter().map(|x| format!("{x:02x}")).collect()
+}

@@ -13366,3 +13366,54 @@ sides are done when each header says the other holds everything, and the
 rows only choose what to show meanwhile. A misread row now costs a part
 its turn, never the exchange. Pinned by a test that lies to one side twice
 and watches the header put it right. Shell unit tests 152 → 153.
+
+### 2026-10-08 (the eighth round: a delivery reordered, and the handover's other half)
+
+**A participant's back-pointers reached its witness in nine runs of
+twelve, and the loss was in the courier, not the network.** Each inbound
+delivery was spawned as a task of its own, and two tasks on a
+multi-threaded runtime run in either order — so the second of two messages
+a peer sent back to back could reach the client before the first. Before a
+session exists only the first message can open one, and a second arriving
+ahead of it is undecryptable and dropped: the kind-12 request that would
+have opened the witness's session landed a moment after the kind-15
+back-pointers that needed it. The reviewer called it a loss on the
+participant-to-witness leg and it was. **The courier now takes deliveries
+in the order they arrived**, one queue per courier whatever path fed it,
+and the test bearer no longer swallows a refused leg of the conversation. Fifteen runs with the fix, none lost; three of twelve before it.
+
+**The prekey handover's shell half is wired** (`wire-format.md` §14.3.4):
+after the capture key, each phone hands its signed bundle and one one-time
+key across the bearer as a phase of its own, and the kernel takes it the
+moment it lands at whatever step. Two strangers who have met can now open
+a channel with no node to ask — the gap the first cold run left visible.
+And a handed one-time key that does not decode is **refused when it is
+handed over**, while the counterparty is still there to notice, rather
+than found out at the first send and silently downgraded to reusable-only
+material [reviewer, 2026-10-08].
+
+**The Rust sealing is pinned to the fixed §14.3.2 vector**: the session
+key from the two contributions, the fixed carriage opened to the
+handover's bytes, another ceremony's key and another ceremony's id both
+refused. Until now only `verify.py` held the vector, so a divergence in
+the one implementation would have passed the gate. **Two more `Debug`
+derives redacted** — `OpticalContribution` and `IntentExchange` printed
+the contribution, half the session key, one `{:?}` from a log line.
+
+Register drift: NET-023 now routes the participants' leg over the local
+interface as NET-022 has since the 5th; NET-026 sits in order; §21's
+"seventeen" is gone, since the count had drifted and would again; the
+vector generator says "optical code" where the root documents do; the
+Tamarin theory enumerates six anchored messages, re-proved and its mutant
+re-falsified. Shell unit tests 153; client tests 112 → 113.
+
+**Two rulings the round asked for** [author, 2026-10-08]. **A witness
+withholds rather than refuses**: its answer to the request acknowledged the
+ceremony, its signature once its clock has matured and it has seen the
+by-products of the steps it was sent is its readiness, and nothing on the
+wire names waiting — the proposer's wait on an unanswered signer covers the
+interval. Said in the design, the requirements, the wire format and CER-026;
+the catalogue's CER-52 amended. And **two shells cross the optical channel
+only if they share one framing**, stated provisionally in the requirements
+(§1) and as CER-027, to be restated compatible with both once the iOS shell
+exists; catalogue CER-55, deferred to that shell.

@@ -29,8 +29,8 @@ What a test phone needs, and what it does not:
 - **Android 12 or later** (the app's `minSdk` is 31).
 - **A camera**, for the optical anchor and the capture. Not demanded at
   install, but a ceremony cannot begin without one.
-- **Bluetooth LE**, which is this shell's bearer for the intent, proximity
-  and capture-key carriages. The protocol names no bearer
+- **Bluetooth LE**, which is this shell's bearer for the intent, proximity,
+  capture-key and prekey carriages, and the conversation's. The protocol names no bearer
   (`wire-format.md` §14.3.1 leaves it to the shell), so this is the shell's
   practical requirement and not the design's: a phone without BLE installs
   and attaches, and the Meet flow stops at the bearer with the reason

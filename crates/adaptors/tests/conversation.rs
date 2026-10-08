@@ -123,7 +123,21 @@ fn bearing(a: &Party, b: &Party) -> tokio::task::JoinHandle<()> {
                 }
                 let msgs = from.with(|c| c.outbox()).await;
                 if !msgs.is_empty() {
-                    mine.carry(msgs).await;
+                    let out = mine.carry(msgs).await;
+                    // **a refused conversation leg is a lost message**, and
+                    // the FFI's `carry_outbox` reports one; a test bearer
+                    // that swallowed it would hide exactly the loss this
+                    // test exists to catch [reviewer, 2026-10-08]. A
+                    // refused *record* is the node declining to store a
+                    // subject outside its reach (`OutOfStore`), which this
+                    // scene's table makes of both participants and which
+                    // the signers' own archives are the assertion for
+                    let lost: Vec<&Msg> = out
+                        .refused
+                        .iter()
+                        .filter(|m| !matches!(m, Msg::Record(_)))
+                        .collect();
+                    assert!(lost.is_empty(), "the courier refused {lost:?}");
                 }
             }
             tokio::time::sleep(Duration::from_millis(10)).await;
@@ -187,8 +201,19 @@ fn kinds_from(seen: &[(Keyhash, Conversed)], from: &str) -> Vec<u64> {
 // acceptance: CER-45
 // acceptance: CER-46
 // acceptance: CER-47
+/// What `RUST_LOG` asks for, to the test's own output: the node's decision
+/// on a propagated record, the payload layer's sends and refusals. Off
+/// unless asked, so the gate's output stays what it was.
+fn trace() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_test_writer()
+        .try_init();
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn the_conversation_runs_over_the_payload_path_to_a_record_every_signer_holds() {
+    trace();
     // alice met w1 twice before, so bob's selection of alice's verifiers
     // from her bundle has n = 2 and one candidate: w1 is asked about her
     let now_s = SystemTime::now()
@@ -479,7 +504,8 @@ async fn the_conversation_runs_over_the_payload_path_to_a_record_every_signer_ho
         }
         assert!(
             Instant::now() < deadline,
-            "w1's view settles: from alice {a:?}, from bob {b:?}"
+            "w1's view settles: from alice {a:?}, from bob {b:?}\nw1 saw: {:?}",
+            w1.seen
         );
         tokio::time::sleep(Duration::from_millis(20)).await;
     };

@@ -68,7 +68,7 @@
       "simulation/flow_metric.py": "88c1d05f946aa6cd2f9d69da3fa73c19e543eba3779266a9939ac64116632a5a"
     },
     "local-exchange.txt": {
-      "tamarin/local/exchange.spthy": "a745df107a279630716b7c41abf576d58c175637847561afc4cb36eaaee95787"
+      "tamarin/local/exchange.spthy": "a6be7dd1707f1687a977b6d142bab7d7b77b157e5e6306516ac753ce91d48396"
     },
     "mutant-1-wire-only-recovery-successor_statement_binds_the_patron.txt": {
       "tamarin/wire-only/recovery.spthy": "4f466425054ef301b0ec1a756dfd53666f2908df517434c7e023bf8e05d67640"
@@ -77,7 +77,7 @@
       "tamarin/wire-only/attach.spthy": "4dee963df4af6726f85e40119538dbcedc2de8d5952d6aef38afb37866f7e0fc"
     },
     "mutant-11-local-exchange-an_accepted_anchor_was_derived_by_both.txt": {
-      "tamarin/local/exchange.spthy": "a745df107a279630716b7c41abf576d58c175637847561afc4cb36eaaee95787"
+      "tamarin/local/exchange.spthy": "a6be7dd1707f1687a977b6d142bab7d7b77b157e5e6306516ac753ce91d48396"
     },
     "mutant-12-wire-only-query-an_answer_had_the_subjects_consent_for_this_verifier.txt": {
       "tamarin/wire-only/query.spthy": "41e269893bc88e99ae1d8ab4bd4cde0e08284808d15d5064f1f8e285cc5f5e3a"

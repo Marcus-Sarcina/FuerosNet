@@ -3053,6 +3053,19 @@ impl Client {
             "cer.prekey.taken"
         );
         if let Some(k) = h.one_time {
+            // **refused here, not downgraded later** [reviewer, 2026-10-08]:
+            // a handed key that does not decode used to be found out at
+            // the first send and the session opened reusable-only — §7.8's
+            // declared forward-secrecy reduction, taken silently on what
+            // was simply bad input. A handover that cannot be used is a
+            // handover refused, while the counterparty is still in front
+            // of this device to notice
+            payload::OneTimeKey::decode(&k).map_err(|e| {
+                abort(
+                    "take_prekey_carriage",
+                    Abort::Malformed(format!("the handed one-time key does not decode: {e}")),
+                )
+            })?;
             self.payload.handed.insert((peer, h.device), k);
         }
         self.payload.sessions.prefetch(p);
@@ -3075,9 +3088,14 @@ impl Client {
     ) -> Option<Vec<Msg>> {
         let their = self.payload.sessions.prefetched.get(&(to, device))?.clone();
         let handed = self.payload.handed.remove(&(to, device));
-        // a handed key that will not decode is a key this side cannot use,
-        // and §7.8's reusable-only case is what is left
-        let one_time = handed.and_then(|k| payload::OneTimeKey::decode(&k).ok());
+        // the key was checked when it was handed over, so this cannot
+        // fail; if it ever does, nothing opens — a session on reusable
+        // material alone is a forward-secrecy reduction this side does
+        // not take by accident
+        let one_time = match handed {
+            Some(k) => Some(payload::OneTimeKey::decode(&k).ok()?),
+            None => None,
+        };
         let random = self.device.random.clone();
         let mut fresh = |out: &mut [u8]| random.fill(out);
         let me = self.payload.device;

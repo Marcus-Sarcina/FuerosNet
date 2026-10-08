@@ -19,3 +19,7 @@ rhtn-transport = { path = "../transport" }
 tracing = "0.1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "sync", "io-util"] }
 quinn = { version = "0.11", default-features = false, features = ["runtime-tokio", "rustls-aws-lc-rs", "log"] }
+
+[dev-dependencies]
+# opt-in test logging: `RUST_LOG=node=debug cargo test -p rhtn-adaptors`
+tracing-subscriber = { version = "0.3", default-features = false, features = ["std", "fmt", "env-filter"] }

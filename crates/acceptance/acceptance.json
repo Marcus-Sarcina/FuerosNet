@@ -2333,12 +2333,12 @@
   "rule": [
    {
     "where": "design §7.1",
-    "text": "A witness refuses to sign before four minutes have passed **on its\nown clock, from the moment the request to witness reached it**"
+    "text": "A witness does not sign before four minutes have passed **on its\nown clock, from the moment the request to witness reached it**"
    }
   ],
   "given": "A witness holding a ceremony it has agreed to attest, and a conversation driven to the proposed body in well under four minutes.",
   "when": "The proposer asks the witness to sign before four minutes have passed since the witness received the request, and again past four minutes; and separately, a participant claims an elapsed time longer than the witness has observed.",
-  "then": "The early request yields no signature and an answer that names waiting rather than refusal, so the proposer may ask again; the request past four minutes is signed; and the claim of a longer elapsed time neither shortens nor lengthens the wait, the witness's own receipt being what starts it. No reader of the record can distinguish a witness that waited from one that did not, so nothing is asserted of the record itself.",
+  "then": "The early request yields no reply at all: the witness withholds its signature until its clock has matured and it has seen the steps' by-products, and the proposer, waiting on an unanswered signer, asks again; the request past four minutes is signed; and the claim of a longer elapsed time neither shortens nor lengthens the wait, the witness's own receipt being what starts it. No reader of the record can distinguish a witness that waited from one that did not, so nothing is asserted of the record itself.",
   "oracle": "behaviour",
   "deferred": "a four-minute wall clock in a ceremony test, which is the reason the rule is a release obligation and not a bench one",
   "interpretation": null
@@ -2389,6 +2389,30 @@
   "when": "Each builds a prekey handover and takes the other's, and one then sends application payload to the other.",
   "then": "The send produces an initial message and no prekey request: nothing is addressed to a node. The recipient opens it and the payload reaches its application. A handover naming another party's bundle is refused, as is one carrying another ceremony's id, and bytes that are not of this ceremony's session do not open at all.",
   "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "CER-55",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "Two shells cross the optical channel only if they share one framing (provisional)",
+  "milestone": "after-5",
+  "kind": "manual",
+  "spec": [
+   "light-client-requirements.md \u00a71",
+   "wire-format.md \u00a714.3.1"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md \u00a71",
+    "text": "two\nshells cross the optical channel only if they share one framing"
+   }
+  ],
+  "given": "Two different shells, each conforming, each holding a kernel of this workspace.",
+  "when": "One shows an invitation and the other reads it, both ways round, and the optical exchange runs.",
+  "then": "Both assemble the other's contribution byte for byte, which they can do only by sharing the reference shell's framing: the parts, their header and the rows of what is held. Stated provisionally; restated, compatible with both, when the iOS shell exists.",
+  "oracle": "behaviour",
+  "deferred": "the iOS shell, against which the final requirement is written",
   "interpretation": null
  },
  {

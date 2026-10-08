@@ -16195,3 +16195,76 @@ the header re-opens the part at its own count, and `done()` is the
 header's. The sampler's tilt weakness stands and is now survivable; a
 perspective-correct sample from a fourth point (the alignment pattern)
 would reduce the delay it costs and is not owed yet.
+
+**The symmetric adoption is proven on hardware [2026-10-08].** After run
+`9bbc875-cold-5-1`, **both** phones list the other in Conversations
+[author, 2026-10-08] — so `Kernel.adopt` fired on each, from the one
+place both sides reach (`takeOptical`), and the counterparty outlives the
+meeting on the side that scanned *and* the side that showed. That is the
+ruling of 2026-10-08 satisfied where it can be observed.
+
+**What it does not yet prove, and must not be read as proving: the two
+cannot message each other.** The entry is in the list; there is no
+session behind it. `prekey_carriage`/`take_prekey_carriage` exist in the
+FFI and in the generated binding, and **nothing in the hand-written shell
+calls either** — so the pair holds a record, and a send would find no
+session and no node to ask for a prekey. Design §6.4's escape stays half
+realised, as it has been since 2026-10-06; this run is why it is now the
+most conspicuous gap rather than a latent one. Still owed, unchanged.
+
+## Eighth-round re-review, ingested (2026-10-08)
+
+**Verified and applied.** (1) `OpticalContribution`/`IntentExchange`
+derived `Debug` with the contribution — right; redacted like `Intent`.
+(2) A handed one-time key validated lazily, failure downgrading to
+reusable-only — right; refused at `take_prekey_carriage`, and
+`open_from_held` opens nothing on a key that will not decode. (4) The
+flaky adaptors test — reproduced at 3/12, root-caused to
+`Courier::inbound` spawning a task per delivery (order lost between two
+messages of one peer; the second, non-initial one undecryptable before the
+first opened the session). Fixed with one ordered queue per courier; the
+test bearer now asserts on a refused carriage and the tests can log on
+`RUST_LOG`. (5) §21's "seventeen" — the sentence was written 2026-08-25
+and the table has grown since; replaced with the count-free statement the
+paragraph already makes. The generator's "QR" swept, vectors regenerated
+(bytes unchanged, wording and pins only). The Tamarin theory's "five"
+→ six, re-proved (7 lemmas verified, mutant 11 still falsified), re-stamped.
+NET-023's premise corrected to NET-022's routing; NET-026 moved into
+order. Avenue 1 (Rust KAT) done; avenue 2 (the shell's prekey phase) done.
+
+**Ruled since, both applied** [author, 2026-10-08]: the witness
+*withholds* — acknowledges the ceremony in its answer to the request, then
+signals readiness by signing once its clock has matured and it has observed
+the other steps' by-products; no new wire value. And the interop
+consequence is stated, **provisionally**, in `light-client-requirements.md`
+§1 and CER-027, to be restated compatible with both shells once the iOS one
+exists (catalogue CER-55, deferred). The two questions as they stood:
+- (3) **The "waiting" answer has no wire encoding** — right. CER-026's test
+  says the witness "answers that it is waiting, not that it refuses";
+  `SigningReply` admits exactly a signature or refusal 1–4. The floor is
+  an after-5 obligation and unimplemented, so nothing in code has chosen.
+  The simplification on offer: the witness **withholds** its reply until
+  the floor passes, and the proposer's existing `Waiting` covers it — no
+  new value, no wire change. The alternative is a refusal code 5. Not mine
+  to pick.
+- **Interop consequence** (flagged): two different shells cannot cross the
+  optical channel unless they share this shell's framing (chunking,
+  header, tracking rows), which §14.3.1 permits by pinning no symbology.
+  Whether `light-client-requirements.md` should say so in one sentence is
+  the author's.
+
+**Carried, as before**: the round-7 stand-bys with their dispositions
+above (snapshot-slot, Scope arm, kdoccheck, departure codes, verify.py
+residuals, bob-initiates vectors, a sequencing model). The "non-attached
+`RelaySubmission`" and §7.10 shape question likewise.
+
+**Noted from the instrumented runs**: the node refused the record
+publication in every run (`propagate` false), surfaced only because the
+bearer now asserts, and with `LocalNode::propagate` logging its decision
+it named itself: `OutOfStore` — the scene's table puts both participants
+beyond the node's store reach, so the node declines to hold a subject it
+does not serve for storage. The test's assertion is the signers' own
+archives, which hold it; the bearer tolerates a refused *record* and
+asserts on a refused conversation leg. Not a defect; the field node
+served its phones and stored. The fix measured: 0 failures in 15 runs,
+against 3 in 12 before it.

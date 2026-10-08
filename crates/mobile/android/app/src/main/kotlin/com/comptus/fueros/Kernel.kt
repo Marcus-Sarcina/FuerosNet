@@ -54,7 +54,7 @@ object Kernel {
     @Volatile private var carriage: Carriage? = null
     /** How many conversation carriages this side has sent over the bearer
      *  in this ceremony: what picks each one's phase ([Carriage.Phase.conversation]). */
-    private var sentCarriages = 0
+    private val sentCarriages = java.util.concurrent.atomic.AtomicInteger(0)
 
     /**
      * **The one thread the bearer's work runs on, and never a GATT
@@ -508,7 +508,7 @@ object Kernel {
         synchronized(lock) {
             ble = radio
             carriage = Carriage(radio.link())
-            sentCarriages = 0
+            sentCarriages.set(0)
         }
         Thread {
             // THE LINK FIRST. offer and seek return as the radio starts,
@@ -577,7 +577,7 @@ object Kernel {
         val live = carriage ?: return
         val out = call("carriages", { listOf() }) { p.carriages() }
         for (bytes in out) {
-            val phase = Carriage.Phase.conversation(sentCarriages++)
+            val phase = Carriage.Phase.conversation(sentCarriages.getAndIncrement())
             if (!live.send(listOf(bytes), phase)) {
                 stopMeet("a carriage of the conversation did not cross the bearer (phase $phase)")
                 return
@@ -602,6 +602,18 @@ object Kernel {
         // callback thread (step has already moved). The lock makes the
         // second entry see the advanced step and do nothing.
         val live = carriage ?: return
+        // **the prekey handover is taken the moment it lands, at any
+        // step**: the kernel keeps it only while the ceremony is active,
+        // and the ceremony ends at finalization on the kernel's own clock
+        live.received(Carriage.Phase.PREKEY)?.let { set ->
+            set.firstOrNull()?.let { bytes ->
+                call("takePrekeyCarriage", { e -> m.note("their prekey handover was refused: ${e.reason}") }) {
+                    p.takePrekeyCarriage(bytes)
+                    m.note("their prekeys are in: a channel can open later without a node.")
+                }
+            }
+            live.discard(Carriage.Phase.PREKEY)
+        }
         when (m.step()) {
             Meet.Step.OPTICAL -> live.received(Carriage.Phase.INTENT)?.let { set ->
                 val to = counterparty() ?: return m.stop("the codes did not name who this is with")
@@ -730,6 +742,19 @@ object Kernel {
         }
         if (!sent) return m.stop("the radio would not take the capture key; nothing crossed")
         m.note("my capture key is sent; capturing the counterparty.")
+        // **and the prekeys behind it** (`wire-format.md` §14.3.4): this
+        // device's signed bundle and one one-time key, so the two can open
+        // a channel afterwards with no node to ask. The kernel has built
+        // and taken this since 2026-10-06 and nothing in the shell carried
+        // it, so two strangers who had met held a record and could not say
+        // a word to each other. Not the record's concern: a handover that
+        // will not cross is noted, and the meeting goes on
+        val prekeys = call("prekeyCarriage", { e -> m.note("no prekey handover: ${e.reason}"); null }) {
+            p.prekeyCarriage()
+        }
+        if (prekeys != null && carriage?.send(listOf(prekeys), Carriage.Phase.PREKEY) != true) {
+            m.note("the radio would not take the prekey handover; a later message will need a node.")
+        }
         drainBearer(p, m)
     }
 

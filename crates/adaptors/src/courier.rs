@@ -67,6 +67,10 @@ impl Carried {
     }
 }
 
+/// One delivery as the node or the direct path hands it over: who from,
+/// the bytes, and the binding the node carried where it carried one.
+type Delivery = (Keyhash, Vec<u8>, Option<Vec<u8>>);
+
 /// What carries the client's messages: the serving node for what it
 /// relays, the direct path where one is held, and the client's own thread
 /// behind `handle`.
@@ -80,6 +84,9 @@ pub struct Courier {
     /// The network past this client's serving node, where a dialler was
     /// wired: how payload reaches the recipient's own node.
     beyond: Mutex<Option<Arc<Beyond>>>,
+    /// What every [`Courier::inbound`] closure feeds: one queue, drained
+    /// by one task, so deliveries are taken in the order they arrived.
+    inbox: Mutex<Option<mpsc::UnboundedSender<Delivery>>>,
     app: mpsc::UnboundedSender<(Keyhash, Dispatched)>,
     verifiers: Mutex<Option<Arc<Verifiers>>>,
     offered: Mutex<HashSet<Keyhash>>,
@@ -145,6 +152,7 @@ impl Courier {
                 serving,
                 direct,
                 beyond: Mutex::new(None),
+                inbox: Mutex::new(None),
                 app,
                 verifiers: Mutex::new(None),
                 offered: Mutex::new(HashSet::new()),
@@ -234,10 +242,43 @@ impl Courier {
     /// This client's inbound side, for a socket or a node to call with
     /// what arrived from a peer.
     pub fn inbound(self: &Arc<Self>) -> Inbound {
-        let me = self.clone();
+        // **Taken in the order they arrived, one at a time** [reviewer,
+        // 2026-10-08]. Each delivery used to be spawned as a task of its
+        // own, and two tasks on a multi-threaded runtime run in either
+        // order — so the second of two messages a peer sent back to back
+        // could reach the client before the first. Before a session
+        // exists only the first message can open one, and a second that
+        // arrives ahead of it is undecryptable and dropped: on the bench
+        // a witness lost a participant's back-pointers that way in three
+        // runs of twelve, the kind-12 request that would have opened the
+        // session landing a moment after the kind-15 that needed it.
+        //
+        // One queue per courier, whatever closure fed it, so the direct
+        // path and the relay cannot reorder one peer's messages between
+        // them either. The task holds the courier weakly and ends with the
+        // last closure, so a courier replaced by a re-attach is not kept
+        // alive by its own queue.
+        let tx = {
+            let mut slot = self.inbox.lock().unwrap();
+            match slot.as_ref() {
+                Some(tx) => tx.clone(),
+                None => {
+                    let (tx, mut rx) = mpsc::unbounded_channel::<Delivery>();
+                    let weak = Arc::downgrade(self);
+                    tokio::spawn(async move {
+                        while let Some((from, bytes, binding)) = rx.recv().await {
+                            let Some(me) = weak.upgrade() else { break };
+                            me.receive(from, bytes, binding).await;
+                        }
+                    });
+                    *slot = Some(tx.clone());
+                    tx
+                }
+            }
+        };
         Arc::new(move |from, bytes, binding| {
-            let me = me.clone();
-            tokio::spawn(async move { me.receive(from, bytes, binding).await });
+            // a courier whose task has gone is one nobody holds any more
+            let _ = tx.send((from, bytes, binding));
         })
     }
 

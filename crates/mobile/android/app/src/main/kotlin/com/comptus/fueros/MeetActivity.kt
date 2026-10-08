@@ -690,7 +690,7 @@ class MeetActivity : Activity() {
                     // next redraw opens the transcript's or the kernel has
                     // moved on
                     camera?.close()
-                    val why = Kernel.takeOptical(x.theirs()!!)
+                    val why = Kernel.takeOptical(x.theirs() ?: return@runOnUiThread)
                     if (why != null) { m.stop(why); return@runOnUiThread }
                 }
                 redraw()

@@ -26,7 +26,7 @@ use zeroize::Zeroizing;
 
 /// The first QR each device shows (§14.3.2): who is showing it, and the
 /// 16-byte contribution the ceremony-id is derived from.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct OpticalContribution {
     /// The device's identity in full (§2.2's `KeyMaterial`): the first
     /// contact pins it (design §12.3), and its hash is the keyhash.
@@ -35,6 +35,20 @@ pub struct OpticalContribution {
     pub device: Keyhash,
     /// The 16 bytes this device contributes to the ceremony-id.
     pub contribution: [u8; 16],
+}
+
+impl std::fmt::Debug for OpticalContribution {
+    /// Everything but the contribution, which is half of the session key
+    /// (§14.3.2) and one `{:?}` away from a log line: the field is named
+    /// and its value is not, as `ceremony::Intent` does [reviewer,
+    /// 2026-10-08].
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OpticalContribution")
+            .field("material", &self.material.len())
+            .field("device", &self.device)
+            .field("contribution", &"<redacted>")
+            .finish()
+    }
 }
 
 impl OpticalContribution {
@@ -100,7 +114,7 @@ impl TranscriptConfirm {
 /// contribution, its nominees, the first carriage of its evidence bundle,
 /// its clock, the retention it commits to, who initiated, and how many
 /// `BundleContinuation` messages follow.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct IntentExchange {
     /// The sender's own contribution, echoed.
     pub contribution: [u8; 16],
@@ -116,6 +130,22 @@ pub struct IntentExchange {
     pub initiator: bool,
     /// How many `BundleContinuation` messages follow.
     pub continuations: u64,
+}
+
+impl std::fmt::Debug for IntentExchange {
+    /// Everything but the echoed contribution, for the reason
+    /// [`OpticalContribution`]'s gives.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("IntentExchange")
+            .field("contribution", &"<redacted>")
+            .field("nominees", &self.nominees)
+            .field("bundle", &self.bundle.len())
+            .field("started_at", &self.started_at)
+            .field("retention_years", &self.retention_years)
+            .field("initiator", &self.initiator)
+            .field("continuations", &self.continuations)
+            .finish()
+    }
 }
 
 impl IntentExchange {

@@ -3760,14 +3760,14 @@ txid: `{hx(peer_light_txid)}`
 # initiates with bob, the contributions and ceremony-id are records.md's
 # pre-commitment known answer byte-for-byte, and the device handover reuses
 # keys.md's desktop transport key, records.md's delegation and the desktop's
-# prekey bundle byte-for-byte.  The bytes are the objects alone: what a QR
+# prekey bundle byte-for-byte.  The bytes are the objects alone: what a code
 # encodes them as, and how a bearer frames them, is no part of these
 # vectors -- but the SEALING is, since 2026-10-05, and it is covered at the
 # end of the file: s14.3.2 specifies the session key, the cipher, the
 # nonce's placement and the associated data, so two shells must agree on a
 # sealed carriage byte-for-byte [reviewer, 2026-10-06].
 
-# the first QR carries the device's identity in full (s2.2's KeyMaterial),
+# the first code carries the device's identity in full (s2.2's KeyMaterial),
 # which the first contact pins (design s12.3), and its contribution; the
 # keyhash is the material's hash and travels nowhere separately
 oc_alice = e_arr([e_uint(1), alice.key_material, e_bstr(pc_a)])
@@ -3844,7 +3844,7 @@ bob**, the contributions and the ceremony-id are the pre-commitment known
 answer in `records.md` **byte-for-byte**, and the device handover reuses the
 desktop transport key (`keys.md`), alice's delegation to it (`records.md`)
 and the desktop's signed prekey bundle (`records.md`) byte-for-byte. The
-bytes are the objects alone — what a QR encodes them as, and how a bearer
+bytes are the objects alone — what an optical code encodes them as, and how a bearer
 frames them, is the shell's and no part of these vectors. **The sealing is
 not the shell's** [reviewer, 2026-10-06]: `wire-format.md` §14.3.2 fixes the
 session key, the cipher, the nonce in front of the ciphertext and the
@@ -3860,7 +3860,7 @@ normal record's own `proximity` disclosure carries.
 
 ## The optical exchange (§14.3.1–.2)
 
-**OpticalContribution — alice's first QR: her full key material, which bob
+**OpticalContribution — alice's first code: her full key material, which bob
 pins at this first contact (design §12.3), and her contribution**
 ({len(oc_alice)} bytes):
 
@@ -3874,7 +3874,7 @@ pins at this first contact (design §12.3), and her contribution**
 {hexblock(oc_bob)}
 ```
 
-**TranscriptConfirm — the second QR, both devices' (the ceremony-id each
+**TranscriptConfirm — the second code, both devices' (the ceremony-id each
 computed; a receiver checks it equals its own)** ({len(tconfirm)} bytes):
 
 ```
@@ -4031,7 +4031,7 @@ data and the key's own derivation each enforce.
 # cross-implementation check they exist for.
 
 for fid, by, kind, note in [
-    ('P-optical-contribution-alice', oc_alice, 'OpticalContribution', "alice's first QR"),
+    ('P-optical-contribution-alice', oc_alice, 'OpticalContribution', "alice's first code"),
     ('P-optical-contribution-bob', oc_bob, 'OpticalContribution', "bob's"),
     ('P-transcript-confirm', tconfirm, 'TranscriptConfirm', "the ceremony-id both derive; records.md's known answer"),
     ('P-intent-exchange', intent_x, 'IntentExchange', 'echoes the optical contribution; bundle entry is the §7.9 envelope form'),
@@ -4068,7 +4068,7 @@ reg('N-optical-contribution-15', 'bytes',
     REJ('OpticalContribution', 'schema', 'a contribution is 16 bytes'),
     e_arr([e_uint(1), alice.key_material, e_bstr(pc_a[:15])]))
 reg('N-optical-contribution-keyhash', 'bytes',
-    REJ('OpticalContribution', 'schema', 'the first QR carries the full key material, not a keyhash: nothing would be pinned'),
+    REJ('OpticalContribution', 'schema', 'the first code carries the full key material, not a keyhash: nothing would be pinned'),
     e_arr([e_uint(1), e_bstr(alice.keyhash), e_bstr(pc_a)]))
 reg('N-transcript-confirm-31', 'bytes',
     REJ('TranscriptConfirm', 'schema', 'a ceremony-id is 32 bytes'),
