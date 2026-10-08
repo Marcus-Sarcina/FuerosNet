@@ -1,0 +1,77 @@
+# =============================================================================
+#  rhtnd as an image.  `infra-client-requirements.md` §9 opens by saying a node
+#  is "distributed as a container or VM image"; this is that container.
+#
+#  TWO STAGES, because the crypto provider needs a C toolchain and the node
+#  does not.  aws-lc-rs builds with cmake and a C compiler (design §5.2 names
+#  it as the audited alternative, and quinn and rustls take it here), so the
+#  builder carries them and the runtime carries the binary alone.
+#
+#  NO CA BUNDLE IN THE RUNTIME, deliberately.  The transport authenticates raw
+#  public keys (RFC 7250, `wire-format.md` §9.1) and pins by keyhash, so there
+#  is nothing a certificate store would ever be consulted for.  An image that
+#  shipped one would be carrying a trust root this protocol does not have.
+# =============================================================================
+
+ARG RUST=1.98-bookworm
+ARG RUNTIME=debian:bookworm-slim
+
+FROM rust:${RUST} AS build
+
+# cmake and clang for aws-lc-rs; nothing else is added to the builder
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends cmake clang \
+ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+# the whole workspace: the daemon is a path dependency on nine crates beside
+# it, and a partial copy would be a second manifest to keep in step
+COPY . .
+
+# **The releasable flavour by default.**  `releasable` and `fieldtest` are two
+# flavours of one build and never both (`crates/README.md`); an operator runs
+# the first, and the bench builds the second with --build-arg FLAVOUR=fieldtest.
+ARG FLAVOUR=releasable
+# No cache mounts: they need BuildKit, and this has to build under podman and
+# under a plain docker alike.  A slower build is a smaller contract.
+RUN set -eu; \
+    case "$FLAVOUR" in \
+      releasable) cargo build --locked --release -p rhtn-daemon -p rhtn-cli ;; \
+      fieldtest)  cargo build --locked --release --no-default-features \
+                    -p rhtn-daemon -p rhtn-cli \
+                    --features rhtn-daemon/fieldtest,rhtn-client/fieldtest ;; \
+      *) echo "FLAVOUR is releasable or fieldtest, not $FLAVOUR" >&2; exit 2 ;; \
+    esac; \
+    install -m 0755 target/release/rhtnd /usr/local/bin/rhtnd; \
+    install -m 0755 target/release/rhtn  /usr/local/bin/rhtn
+
+FROM ${RUNTIME}
+
+# **A node is not root.**  It reads a seed or a transport key at 0600 and
+# writes a queue; nothing it does wants privilege, and a seized instance is a
+# case this design plans for (design §18.1).  The uid is fixed so a mounted
+# state volume can be chowned to it before the container ever runs.
+ARG UID=10001
+ARG GID=10001
+RUN groupadd -g ${GID} rhtn \
+ && useradd -u ${UID} -g ${GID} -M -d /var/lib/rhtn -s /usr/sbin/nologin rhtn \
+ && mkdir -p /var/lib/rhtn \
+ && chown ${UID}:${GID} /var/lib/rhtn \
+ && chmod 0700 /var/lib/rhtn
+
+COPY --from=build /usr/local/bin/rhtnd /usr/local/bin/rhtnd
+COPY --from=build /usr/local/bin/rhtn  /usr/local/bin/rhtn
+COPY packaging/entrypoint.sh /usr/local/bin/rhtnd-entrypoint
+RUN chmod 0755 /usr/local/bin/rhtnd-entrypoint
+
+# the state the operator mounts: the configuration, the keys, and everything
+# that must survive a restart (`infra-client-requirements.md` §2)
+VOLUME /var/lib/rhtn
+USER rhtn
+WORKDIR /var/lib/rhtn
+
+# QUIC, and the STUN Binding requests the same address answers
+# (`infra-client-requirements.md` §7, design §14.1.1)
+EXPOSE 7447/udp
+
+ENTRYPOINT ["/usr/local/bin/rhtnd-entrypoint"]

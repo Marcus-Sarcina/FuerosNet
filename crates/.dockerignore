@@ -1,0 +1,6 @@
+# the build copies the workspace; these are neither inputs nor small
+target
+mobile/android/app/build
+mobile/android/.gradle
+mobile/android/build
+mobile/ios/build
