@@ -1,6 +1,6 @@
 //! What a hosted package may reach, and what it costs before it is stopped.
 
-use rhtn_node::resources::{Backend, HOST_EXPORTS};
+use rhtn_node::resources::{Backend, HOST_EXPORTS, Manifest};
 use rhtn_resources::{HOST_INSTANCE, Hosted, Limits, Refusal, Sandbox};
 use rhtn_sim::packages::*;
 
@@ -227,8 +227,10 @@ fn what_reaches_a_package_through_the_gateway_is_the_credential_and_the_request(
             owner: me,
             authority: "shop.internal".into(),
             backend: Some(hosted),
-            declared_roles: BTreeSet::from(["reader".to_string()]),
-            admin: Vec::new(),
+            declared: Manifest {
+                roles: BTreeSet::from(["reader".to_string()]),
+                ..Default::default()
+            },
         },
     );
     g.set_row(

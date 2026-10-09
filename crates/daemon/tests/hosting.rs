@@ -85,12 +85,10 @@ fn a_manifest_that_does_not_describe_its_component_is_refused() {
         "the binding it asked for is named: {over}"
     );
 
+    // **a manifest with no component is not a mistake**: it is a resource
+    // this node does not run, which is either reached over its own port
+    // or brokered entirely (§10.6), and both are covered below.
     for (name, text, wrong) in [
-        (
-            "no-component.manifest",
-            "roles = [\"reader\"]\n",
-            "`component` is not set",
-        ),
         (
             "twice.manifest",
             "roles = [\"reader\"]\nroles = [\"writer\"]\ncomponent = \"echo.wasm\"\n",
@@ -123,30 +121,42 @@ fn a_grant_is_checked_against_the_package_before_anything_is_bound() {
         "roles = [\"reader\", \"writer\"]\nimports = [\"rhtn/1:request\", \"rhtn/1:response\"]\ncomponent = \"echo.wasm\"\n",
     );
     let one = host(&m);
-    let granting =
-        |roles: &str| format!("{one}\n[[host.grant]]\nmember = \"{WHO}\"\nroles = [{roles}]\n");
+    // **a grant to one named party is a predicate like any other**
+    // (`infra-client-requirements.md` §10.3: named individuals, inside the
+    // membership gate), so there is one shape in the file rather than one
+    // for everyone and another for somebody
+    let granting = |roles: &str| {
+        format!(
+            "{one}\n[[host.grant]]\nroles = [{roles}]\n             [[host.grant.where]]\nof = \"named\"\nwho = \"{WHO}\"\n"
+        )
+    };
 
     assert_eq!(
-        run(&d, &granting("\"connect\", \"reader\", \"writer\"")),
+        run(&d, &granting("\"reader\", \"writer\"")),
         Ok(1),
         "roles the package declared"
     );
     assert_eq!(
-        run(&d, &granting("\"reader\"")),
+        run(&d, &granting("")),
         Ok(1),
-        "and a row that cannot connect is a row an operator may write"
+        "and a grant of no role is one an operator may write: reaching the resource is the grant"
     );
 
-    let e = run(&d, &granting("\"connect\", \"admin\"")).expect_err("refused");
+    let e = run(&d, &granting("\"admin\"")).expect_err("refused");
     assert!(
-        e.contains("`admin` is not a role that package declared"),
+        e.contains("`admin` is not a role this package declared"),
         "{e}"
     );
-    let e = run(&d, &granting("\"connect\", \"discover\"")).expect_err("refused");
-    assert!(e.contains("reserved"), "{e}");
+    for reserved in ["\"connect\"", "\"discover\""] {
+        let e = run(&d, &granting(reserved)).expect_err("refused");
+        assert!(
+            e.contains("reserved for the node"),
+            "a grant may not write the node's own role: {e}"
+        );
+    }
 
     // nothing is bound out of a file that is refused anywhere in it
-    let f = d.put("hosting", granting("\"connect\", \"admin\""));
+    let f = d.put("hosting", granting("\"admin\""));
     let mut g = Gateway::default();
     assert!(apply(&mut g, Path::new(&f), Limits::default()).is_err());
     assert!(
@@ -213,12 +223,16 @@ fn a_manifest_declares_administrative_operations_and_their_bounds() {
     apply(&mut g, Path::new(&f), Limits::default()).expect("a manifest with operations binds");
     let bound = g.bound();
     let b = g.binding(&bound[0]).expect("the binding");
-    assert_eq!(1, b.admin.len(), "the operation is carried to the binding");
-    assert_eq!("set-greeting", b.admin[0].name);
-    assert_eq!(2, b.admin[0].parameters.len());
+    assert_eq!(
+        1,
+        b.declared.admin.len(),
+        "the operation is carried to the binding"
+    );
+    assert_eq!("set-greeting", b.declared.admin[0].name);
+    assert_eq!(2, b.declared.admin[0].parameters.len());
     assert_eq!(
         rhtn_node::resources::Kind::Text { max: 120 },
-        b.admin[0].parameters[0].kind,
+        b.declared.admin[0].parameters[0].kind,
         "a text field carries the length its package declared"
     );
 
@@ -265,4 +279,348 @@ fn a_manifest_declares_administrative_operations_and_their_bounds() {
         let e = run(&d, &host(&m)).expect_err("refused");
         assert!(e.contains(wrong), "{name}: expected {wrong:?}, got {e}");
     }
+}
+
+/// **A package ships its grants ready-made** (`infra-client-requirements.md`
+/// §10.4), written in the same clause vocabulary an operator's own grant
+/// is, so that what a one-click choice grants is legible before the click.
+/// Read, bounded, and carried to the binding — and never applied.
+#[test]
+fn a_manifest_ships_templates_in_the_operators_own_vocabulary() {
+    let d = Dir::new("templates");
+    d.put("echo.wasm", rhtn_sim::packages::echo());
+    let head = "roles = [\"reader\", \"writer\"]\n\
+                imports = [\"rhtn/1:request\", \"rhtn/1:response\"]\n\
+                component = \"echo.wasm\"\n";
+    let good = d.put(
+        "shop.manifest",
+        format!(
+            "{head}\n\
+             [[template]]\n\
+             name = \"org-read\"\n\
+             label = \"Everyone in my org may read\"\n\
+             roles = [\"reader\"]\n\
+             \n\
+             [[template.where]]\n\
+             of = \"grandclients\"\n\
+             \n\
+             [[template]]\n\
+             name = \"trusted-write\"\n\
+             label = \"My ten most trusted may write\"\n\
+             roles = [\"reader\", \"writer\"]\n\
+             \n\
+             [[template.where]]\n\
+             of = \"most-trusted\"\n\
+             n = 10\n"
+        ),
+    );
+    let f = d.put("hosting", host(&good));
+    let mut g = Gateway::default();
+    apply(&mut g, Path::new(&f), Limits::default()).expect("a manifest with templates binds");
+    let bound = g.bound();
+    let b = g.binding(&bound[0]).expect("the binding");
+    assert_eq!(2, b.declared.templates.len(), "both reached the binding");
+    assert_eq!("org-read", b.declared.templates[0].name);
+    assert_eq!(
+        "reader to my clients and grand-clients",
+        b.declared.templates[0].grant.to_string(),
+        "§10.4: legible in the vocabulary the operator uses elsewhere"
+    );
+    assert_eq!(
+        "reader, writer to my 10 most trusted",
+        b.declared.templates[1].grant.to_string()
+    );
+
+    // **offered, not applied**: §10.4 has shrink-wrapping mean trusting
+    // the author's judgment about access, which is the operator's to give
+    assert!(
+        g.grants_for(&bound[0]).is_empty() && g.rows().is_empty(),
+        "installing a package grants nobody anything"
+    );
+    assert_eq!(
+        vec![("reader".to_string(), false), ("writer".to_string(), false)],
+        g.role_bindings(&bound[0]),
+        "§7: both roles declared, neither bound to anyone yet"
+    );
+
+    // every bound and every clause is checked at admission
+    for (name, body, wrong) in [
+        (
+            "nolabel.manifest",
+            "[[template]]\nname = \"t\"\nroles = [\"reader\"]\n",
+            "`label` is not set",
+        ),
+        (
+            "nothing.manifest",
+            "[[template]]\nname = \"t\"\nlabel = \"T\"\nroles = []\n",
+            "grants nothing",
+        ),
+        (
+            "undeclared.manifest",
+            "[[template]]\nname = \"t\"\nlabel = \"T\"\nroles = [\"admin\"]\n",
+            "not a role this package declared",
+        ),
+        (
+            "badname.manifest",
+            "[[template]]\nname = \"Org Read\"\nlabel = \"T\"\nroles = [\"reader\"]\n",
+            "[a-z0-9_-]",
+        ),
+        (
+            "unknown-clause.manifest",
+            "[[template]]\nname = \"t\"\nlabel = \"T\"\nroles = [\"reader\"]\n\
+             [[template.where]]\nof = \"everyone\"\n",
+            "is not a clause",
+        ),
+        (
+            "wrong-key.manifest",
+            "[[template]]\nname = \"t\"\nlabel = \"T\"\nroles = [\"reader\"]\n\
+             [[template.where]]\nof = \"clients\"\nn = 3\n",
+            "takes no other key",
+        ),
+        (
+            "missing-key.manifest",
+            "[[template]]\nname = \"t\"\nlabel = \"T\"\nroles = [\"reader\"]\n\
+             [[template.where]]\nof = \"distance\"\n",
+            "names `edges`",
+        ),
+        (
+            "twice.manifest",
+            "[[template]]\nname = \"t\"\nlabel = \"T\"\nroles = [\"reader\"]\n\
+             [[template]]\nname = \"t\"\nlabel = \"T\"\nroles = [\"writer\"]\n",
+            "declared twice",
+        ),
+    ] {
+        let m = d.put(name, format!("{head}{body}"));
+        let e = run(&d, &host(&m)).expect_err("refused");
+        assert!(e.contains(wrong), "{name}: expected {wrong:?}, got {e}");
+    }
+}
+
+/// The same vocabulary from the operator's side, including the one clause
+/// that carries a party: a keyhash the file got wrong is refused with the
+/// rest of the file (`infra-client-requirements.md` §10.3).
+#[test]
+fn an_operators_grant_is_written_in_clauses_and_refused_as_a_whole() {
+    let d = Dir::new("op-clauses");
+    d.put("echo.wasm", rhtn_sim::packages::echo());
+    let m = d.put(
+        "echo.manifest",
+        "roles = [\"reader\"]\n\
+         imports = [\"rhtn/1:request\", \"rhtn/1:response\"]\n\
+         component = \"echo.wasm\"\n",
+    );
+    let one = host(&m);
+    let with = |clause: &str| {
+        format!("{one}\n[[host.grant]]\nroles = [\"reader\"]\n[[host.grant.where]]\n{clause}")
+    };
+    for clause in [
+        "of = \"clients\"\n",
+        "of = \"grandclients\"\n",
+        "of = \"distance\"\nedges = 2\n",
+        "of = \"most-trusted\"\nn = 10\n",
+        "of = \"top-fraction\"\npercent = 20\n",
+        "of = \"joined-before\"\nwhen = 1690000000\n",
+        &format!("of = \"named\"\nwho = \"{WHO}\"\n"),
+    ] {
+        assert_eq!(
+            run(&d, &with(clause)),
+            Ok(1),
+            "§10.3's vocabulary, as written: {clause}"
+        );
+    }
+    for (clause, wrong) in [
+        (
+            "of = \"named\"\nwho = \"beef\"\n",
+            "64 lower-case hex digits",
+        ),
+        ("of = \"named\"\n", "64 lower-case hex digits"),
+        ("of = \"top-fraction\"\npercent = 0\n", "1 to 100"),
+        ("of = \"distance\"\nedges = 9\n", "further than two edges"),
+        ("of = \"clients\"\nwho = \"x\"\n", "takes no other key"),
+    ] {
+        let e = run(&d, &with(clause)).expect_err("refused");
+        assert!(e.contains(wrong), "expected {wrong:?}, got {e}");
+    }
+}
+
+/// **A resource that holds its own port**, reached over
+/// `resource-requirements.md` §3's second leg: the node authenticates, the
+/// credential of §2 travels as request headers, and what comes back is the
+/// resource's own answer relayed unread (§3: "the node relays them; it
+/// does not interpret them").
+#[test]
+fn a_resource_that_holds_its_own_port_is_reached_over_a_socket() {
+    use rhtn_archive::topology::Table;
+    use rhtn_node::grant::Standing;
+    use std::io::{Read, Write};
+    use std::sync::{Arc, Mutex};
+
+    // the resource: an ordinary HTTP server, which knows nothing of this
+    // network beyond the headers it is handed
+    let l = std::net::TcpListener::bind("127.0.0.1:0").expect("a port of its own");
+    let addr = l.local_addr().expect("its address");
+    let got = Arc::new(Mutex::new(String::new()));
+    let keep = got.clone();
+    let serving = std::thread::spawn(move || {
+        let (mut c, _) = l.accept().expect("the node connects");
+        let mut buf = [0u8; 8192];
+        let n = c.read(&mut buf).expect("the request arrives");
+        *keep.lock().unwrap() = String::from_utf8_lossy(&buf[..n]).to_string();
+        // chunked, so the relay's re-framing is exercised too
+        c.write_all(
+            b"HTTP/1.1 200 OK\r\ncontent-type: text/plain\r\ntransfer-encoding: chunked\r\n\r\n\
+              5\r\nhello\r\n0\r\n\r\n",
+        )
+        .expect("answered");
+    });
+
+    let d = Dir::new("relay");
+    let m = d.put("front.manifest", "roles = [\"reader\"]\n");
+    let f = d.put(
+        "hosting",
+        format!(
+            "[[host]]\nresource = \"{RES}\"\nowner = \"{WHO}\"\nauthority = \"shop.internal\"\n\
+             manifest = \"{}\"\naddress = \"{addr}\"\n\n[[host.grant]]\nroles = [\"reader\"]\n",
+            m.display()
+        ),
+    );
+    let mut g = Gateway::default();
+    apply(&mut g, Path::new(&f), Limits::default()).expect("an address binds");
+    let resource = g.bound()[0];
+    assert!(
+        g.binding(&resource).expect("bound").backend.is_some(),
+        "§10.6: the node carries the traffic, so it is hosted rather than brokered"
+    );
+
+    // the owner is in its own horizon, so one party is enough to serve
+    let owner = [1u8; 32];
+    let table = Table::with_me(owner);
+    g.refresh(&table, &Standing::unknown());
+    let request = rhtn_archive::catalog::ResourceRequest {
+        resource,
+        message: b"GET /things HTTP/1.1\r\nhost: anything\r\nrhtn-roles: admin\r\n\r\n".to_vec(),
+    }
+    .encode();
+    let reply = g.serve(&owner, &table, &owner, &request);
+    serving.join().expect("the resource answered");
+
+    assert_eq!(0, reply.status, "the request reached the resource");
+    let body = String::from_utf8_lossy(&reply.body.expect("a response")).to_string();
+    assert!(body.starts_with("HTTP/1.1 200 OK"), "{body}");
+    assert!(
+        body.contains("content-length: 5") && body.ends_with("hello"),
+        "a chunked answer is re-framed with the count it has: {body}"
+    );
+    assert!(
+        !body.to_ascii_lowercase().contains("transfer-encoding"),
+        "and the framing it no longer has is gone: {body}"
+    );
+
+    // what the resource was handed: §2's credential, and §3.1's hygiene
+    let seen = got.lock().unwrap().clone();
+    assert!(seen.starts_with("GET /things HTTP/1.1\r\n"), "{seen}");
+    for header in [
+        "rhtn-principal:",
+        "rhtn-roles: reader",
+        "rhtn-audience:",
+        "rhtn-session:",
+    ] {
+        assert!(seen.contains(header), "expected {header:?} in {seen}");
+    }
+    assert!(
+        !seen.contains("rhtn-roles: admin"),
+        "§3.1: the caller's own `rhtn-*` header is removed before the node inserts its own: {seen}"
+    );
+    assert!(
+        seen.contains("host: shop.internal"),
+        "the authority the operator bound, not the one the caller wrote: {seen}"
+    );
+}
+
+/// An address and a component are not a choice to be made quietly: §10.6
+/// has the hosting model follow from where the resource runs, and both at
+/// once describes two places.
+#[test]
+fn an_address_and_a_component_at_once_is_refused() {
+    let d = Dir::new("relay-both");
+    d.put("echo.wasm", rhtn_sim::packages::echo());
+    let m = d.put(
+        "both.manifest",
+        "roles = [\"reader\"]\nimports = [\"rhtn/1:request\", \"rhtn/1:response\"]\ncomponent = \"echo.wasm\"\n",
+    );
+    let e = run(&d, &format!("{}address = \"127.0.0.1:9\"\n", host(&m))).expect_err("refused");
+    assert!(e.contains("is not one it runs"), "{e}");
+
+    // and an address that is not one is refused for being that, with the
+    // component out of the way
+    let bare = d.put("bare.manifest", "roles = [\"reader\"]\n");
+    let e = run(
+        &d,
+        &format!("{}address = \"not-an-address\"\n", host(&bare)),
+    )
+    .expect_err("refused");
+    assert!(e.contains("is not an address"), "{e}");
+}
+
+/// A manifest with no component at all and no address: the node
+/// authenticates and the traffic goes elsewhere (design §11.7, §10.6).
+#[test]
+fn a_resource_with_neither_component_nor_address_is_brokered() {
+    let d = Dir::new("brokered");
+    let m = d.put("away.manifest", "roles = [\"reader\"]\n");
+    let f = d.put("hosting", host(&m));
+    let mut g = Gateway::default();
+    apply(&mut g, Path::new(&f), Limits::default()).expect("a brokered resource binds");
+    let b = g.binding(&g.bound()[0]).expect("bound");
+    assert!(
+        b.backend.is_none(),
+        "§10.6: nothing of the caller's traffic passes through this node"
+    );
+}
+
+/// **Plain HTTP only on a local socket** (`resource-requirements.md` §3).
+/// The node already read the request, so what the far leg protects is
+/// everyone else; until that leg can be given TLS, an address across a
+/// network is refused rather than carried.
+#[test]
+fn an_address_across_a_network_is_refused_while_the_leg_is_plain() {
+    let d = Dir::new("relay-remote");
+    let m = d.put("front.manifest", "roles = [\"reader\"]\n");
+    for away in ["10.0.0.4:8080", "[2001:db8::1]:8080", "0.0.0.0:8080"] {
+        let e = run(&d, &format!("{}address = \"{away}\"\n", host(&m))).expect_err("refused");
+        assert!(e.contains("requires HTTPS"), "{away}: {e}");
+    }
+    for home in ["127.0.0.1:8080", "[::1]:8080"] {
+        assert_eq!(
+            run(&d, &format!("{}address = \"{home}\"\n", host(&m))),
+            Ok(1),
+            "a local socket is the one place §3 permits plain HTTP: {home}"
+        );
+    }
+}
+
+/// **Two resources at one address is a collision.** Nothing partitions
+/// ports across package authors, so where the operator names the address
+/// the file is the only place the clash can be seen — and a node that
+/// dialled the same socket for two resources would have one of them
+/// answering for both.
+#[test]
+fn two_resources_at_one_address_are_refused() {
+    let d = Dir::new("relay-clash");
+    let m = d.put("front.manifest", "roles = [\"reader\"]\n");
+    let other = "0808080808080808080808080808080808080808080808080808080808080808";
+    let entry = |res: &str, port: u16| {
+        format!(
+            "[[host]]\nresource = \"{res}\"\nowner = \"{WHO}\"\nauthority = \"a{port}.internal\"\n\
+             manifest = \"{}\"\naddress = \"127.0.0.1:{port}\"\n",
+            m.display()
+        )
+    };
+    assert_eq!(
+        run(&d, &format!("{}{}", entry(RES, 8081), entry(other, 8082))),
+        Ok(2),
+        "two resources, two addresses"
+    );
+    let e = run(&d, &format!("{}{}", entry(RES, 8081), entry(other, 8081))).expect_err("refused");
+    assert!(e.contains("already listens"), "{e}");
 }

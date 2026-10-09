@@ -199,6 +199,124 @@ Every bound is checked at admission, not at the screen: at most 32 operations,
 help. A manifest naming a field the node could not draw is one it declines to
 host, which §9 makes ordinary capacity rather than a fault on either side.
 
+### Who may reach a resource
+
+A package declares its roles; the operator decides who holds them
+(`resource-requirements.md` §7). The deciding is written as **grants** in
+the predicate language `infra-client-requirements.md` §10.3 fixes, in the
+`resources` file the node reads:
+
+```toml
+[[host]]
+resource = "<64 hex>"
+owner    = "<64 hex>"
+authority = "shop.internal"
+manifest = "shop.manifest"
+
+  # everyone in the owner's horizon may read
+  [[host.grant]]
+  roles = ["reader"]
+
+  # the owner's own clients may write as well
+  [[host.grant]]
+  roles = ["reader", "writer"]
+    [[host.grant.where]]
+    of = "clients"
+```
+
+A grant with no `where` admits every member of the owner's trust horizon,
+which is §10.1's outer gate and nothing further. The clauses are §10.3's
+list and no more:
+
+| `of` | with | means |
+|---|---|---|
+| `clients` | — | the owner's direct clients |
+| `grandclients` | — | those, and theirs |
+| `distance` | `edges` | that many edges from the owner, by the walk that defines the horizon |
+| `most-trusted` | `n` | the owner's `n` most trusted, an absolute rank |
+| `top-fraction` | `percent` | the most trusted fraction, a quantile |
+| `joined-before` | `when` | adopted before that time |
+| `named` | `who` | one member, by keyhash |
+
+Several clauses in one grant are an **and**; several grants are the **or**,
+and a member matched by two holds both their roles. There is no negation —
+no affordance asks for one, and a grant that says *everyone except* changes
+meaning when somebody else joins. A grant never writes `connect`: reaching
+the resource is what a grant is for (§3: "`connect` is the gate and it is
+spent getting the request to you").
+
+**A grant to one named party is a predicate like any other**, which is why
+there is one shape here rather than one key for everyone and another for
+somebody.
+
+**Nothing is evaluated when a request arrives.** §10.2 holds a role table
+and treats a predicate as a macro over it: the grants are expanded into
+rows when the operator configures them, when membership moves, and when a
+rank's inputs change, and a request is a single lookup. A member a
+predicate stops matching loses the row and the hosted session with it
+(§10.5).
+
+**A package may ship grants ready-made**, in the same vocabulary, and the
+node prints them back rather than applying them:
+
+```toml
+[[template]]
+name = "org-read"
+label = "Everyone in my org may read"
+roles = ["reader"]
+
+  [[template.where]]
+  of = "grandclients"
+```
+
+§10.4 is why they are written in the predicate language and not as
+configuration: an operator must see what a one-click choice grants "before
+the click, in the vocabulary they use elsewhere". Taking one is their act;
+installing a package grants nobody anything.
+
+### Where a resource runs
+
+Three shapes, and the file says which by what it names — §10.6 has the
+hosting model follow from where the resource runs rather than from a
+declaration:
+
+| In `[[host]]` | In the manifest | What the node does |
+|---|---|---|
+| — | `component` | runs the package in its own sandbox |
+| `address` | — | proxies to the resource on its own port |
+| — | — | brokers: it authenticates, and the traffic goes elsewhere |
+
+An `address` and a `component` together is refused rather than resolved:
+that describes two places. So is the same address on two resources —
+nothing partitions ports across package authors, so the file is the only
+place a clash can be seen, and a node dialling one socket for two
+resources would have one of them answering for both.
+
+**A resource has one address, and nothing of it touches the network.**
+Callers arrive on the node's own listen port and are routed by resource
+keyhash inside the frame, so the loopback number is private to the host.
+Two services means two resources — two keyhashes, two bindings, two
+authorities — rather than one resource with two ports.
+
+**A resource with its own port is an ordinary program.** It serves its own
+users whatever it serves them — a web interface, a data service, an
+application — and what arrives through the node is a request already
+authenticated and authorised, carrying §2's credential as request headers:
+`rhtn-principal`, `rhtn-roles`, `rhtn-audience`, `rhtn-session`. The node
+strips every inbound `rhtn-*` header before inserting its own, because "a
+client that sets `rhtn-roles: admin` and has it forwarded has defeated the
+entire gateway" (§3.1). The resource's own answer is relayed unread; only a
+chunked body is re-framed, since the framing would otherwise describe
+something the caller never receives.
+
+**Plain HTTP on that leg is only for a local socket.** §3 requires HTTPS
+wherever the leg crosses a network: the node already reads the request, so
+what the far leg protects is everyone else. The relay speaks plain HTTP, so
+an `address` that is not a loopback address is **refused** rather than
+carried — relaying an authenticated principal and an application body over
+the open network is the thing that requirement exists to stop. A resource
+elsewhere waits on TLS for that leg.
+
 ### A node on this machine
 
 ```bash

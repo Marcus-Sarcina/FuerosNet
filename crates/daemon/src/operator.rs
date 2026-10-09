@@ -319,7 +319,7 @@ impl RoleView {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rhtn_node::resources::Backend;
+    use rhtn_node::resources::{Backend, Manifest};
     use std::collections::BTreeSet;
     use std::sync::Arc;
 
@@ -345,8 +345,10 @@ mod tests {
             owner: [2u8; 32],
             authority: "records.example".to_string(),
             backend,
-            declared_roles: roles(&["reader", "writer"]),
-            admin: Vec::new(),
+            declared: Manifest {
+                roles: roles(&["reader", "writer"]),
+                ..Default::default()
+            },
         }
     }
 
@@ -815,10 +817,21 @@ pub struct ResourceView {
     /// §10.6 has the two shown apart, since they expose a subordinate to
     /// different parties.
     pub hosted: bool,
-    /// The roles the package declared.
-    pub declared_roles: Vec<String>,
-    /// The standing grant over the owner's horizon, where one is set.
-    pub standing: Option<Vec<String>>,
+    /// The roles the package declared, each with whether any grant
+    /// reaches it: `resource-requirements.md` §7 wants the unbound ones
+    /// visible, so that *"you installed this and have not decided who may
+    /// use it"* is on the page rather than silent.
+    pub roles: Vec<(String, bool)>,
+    /// What the operator granted, in the predicate language
+    /// (`rhtn_node::grant::Grant`), as the operator would read it back.
+    pub grants: Vec<String>,
+    /// The grants the package shipped ready-made: a name, a label, what
+    /// it would grant, and **how many members it would reach now**
+    /// (`rhtn_node::grant::Template`, §10.4's population made explicit).
+    /// **Offered, not applied** — §10.4 has shrink-wrapping mean trusting
+    /// the author's judgment about access, which is the operator's to
+    /// give.
+    pub templates: Vec<(String, String, String, usize)>,
     /// Each member with a row here, the roles it holds, and whether the
     /// row came from the standing grant rather than from the operator.
     pub rows: Vec<(Keyhash, Vec<String>, bool)>,
@@ -845,17 +858,29 @@ impl ResourceView {
                 "brokered: the traffic goes to a backend elsewhere"
             },
             self.sessions,
-            escape(&self.declared_roles.join(", "))
+            escape(
+                &self
+                    .roles
+                    .iter()
+                    .map(|(r, bound)| if *bound {
+                        r.clone()
+                    } else {
+                        format!("{r} (nobody)")
+                    })
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            )
         );
-        let _ = write!(
-            out,
-            "<h2>Who may reach it</h2>\n<pre>standing  {}</pre>\n",
-            match &self.standing {
-                Some(r) if r.is_empty() => "a grant with no roles".to_string(),
-                Some(r) => escape(&r.join(", ")),
-                None => "no standing grant over the owner&#39;s horizon".to_string(),
+        out.push_str("<h2>Who may reach it</h2>\n");
+        if self.grants.is_empty() {
+            out.push_str("<pre>nothing is granted here</pre>\n");
+        } else {
+            let mut body = String::new();
+            for g in &self.grants {
+                let _ = writeln!(body, "{g}");
             }
-        );
+            let _ = writeln!(out, "<pre>{}</pre>", escape(&body));
+        }
         if self.rows.is_empty() {
             out.push_str("<pre>no member holds a row here</pre>\n");
         } else {
@@ -866,22 +891,18 @@ impl ResourceView {
                     "{}  {}{}",
                     hex(member),
                     roles.join(", "),
-                    if *derived {
-                        "   (from the standing grant)"
-                    } else {
-                        ""
-                    }
+                    if *derived { "   (from a grant)" } else { "" }
                 );
             }
             let _ = writeln!(out, "<pre>{}</pre>", escape(&body));
         }
+        out.push_str(&self.render_templates());
         out.push_str(&self.render_admin());
         out.push_str(
-            "<p class=\"sub\">Editing a grant is not here yet. \
-             <code>resource-requirements.md</code> §7.3 has an access template expressed in the \
-             predicate language rather than as opaque configuration, so that what a one-click \
-             grant means is legible in the same click; the vocabulary that section fixes is what \
-             this section waits on.</p>\n",
+            "<p class=\"sub\">Editing a grant is not wired here yet; what is written above is \
+             what the node holds. The vocabulary is <code>infra-client-requirements.md</code> \
+             §10.3's, and a grant reads back in it because §7.3 has an access template \
+             expressed in the predicate language rather than as opaque configuration.</p>\n",
         );
         out
     }
@@ -894,6 +915,32 @@ impl ResourceView {
     /// §7.3): the manifest names operations and typed parameters, and
     /// every one of them is rendered the same way here, so an operator
     /// learns one idiom rather than one per package.
+    /// **The grants the package shipped**, printed in the same vocabulary
+    /// an operator's own grant prints in, which is §10.4's requirement
+    /// exactly: legible "before the click, in the vocabulary they use
+    /// elsewhere". Taking one is the operator's act and nothing here takes
+    /// it for them.
+    fn render_templates(&self) -> String {
+        if self.templates.is_empty() {
+            return String::new();
+        }
+        let mut out = String::from("<h2>Grants this package offers</h2>\n");
+        let mut body = String::new();
+        for (name, label, grant, reach) in &self.templates {
+            let _ = writeln!(
+                body,
+                "{name}  {label}\n  grants {grant}\n  reaching {reach} member(s) as the horizon is now"
+            );
+        }
+        let _ = writeln!(out, "<pre>{}</pre>", escape(&body));
+        out.push_str(
+            "<p class=\"sub\">Offered, not applied. \
+             <code>infra-client-requirements.md</code> §10.4: a permission default is a security \
+             decision, and the package author&#39;s incentive runs toward breadth.</p>\n",
+        );
+        out
+    }
+
     fn render_admin(&self) -> String {
         use rhtn_node::resources::Kind;
         if self.admin.is_empty() {

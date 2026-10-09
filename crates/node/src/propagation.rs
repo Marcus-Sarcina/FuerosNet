@@ -401,8 +401,7 @@ impl NodeView {
                     // grants and given rows, one leaving has theirs
                     // removed. None of the four moments is a request,
                     // which is why this is here and not in `serve`.
-                    let table = self.table.clone_for(self.me());
-                    self.resources.refresh(&table);
+                    self.expand_grants();
                 }
                 // **an endpoint record is what says its subject is
                 // infrastructure** (`wire-format.md` §7.6: published by

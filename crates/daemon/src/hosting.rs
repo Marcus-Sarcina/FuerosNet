@@ -54,10 +54,9 @@
 //! thing an operator may want to write down.
 
 use rhtn_archive::Keyhash;
-use rhtn_node::resources::{
-    Binding, Gateway, Kind, MAX_ROLES, Manifest, Operation, Parameter, RESERVED_ROLES, Row,
-    instantiate,
-};
+use rhtn_node::grant::{Clause, Grant, Template};
+use rhtn_node::relay::Relay;
+use rhtn_node::resources::{Binding, Gateway, Kind, Manifest, Operation, Parameter, instantiate};
 use rhtn_resources::{Hosted, Limits, Sandbox};
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -123,11 +122,25 @@ struct HostEntry {
     owner: String,
     authority: String,
     manifest: std::path::PathBuf,
-    /// A grant standing over every member of the owner's trust horizon
-    /// (`infra-client-requirements.md` §10.1, §10.2), rather than one
-    /// party at a time.
-    #[serde(default)]
-    standing: Vec<String>,
+    /// Where the resource listens, where it holds its own port rather
+    /// than running inside this node's sandbox
+    /// (`resource-requirements.md` §3's second leg,
+    /// `rhtn_node::relay::Relay`).
+    ///
+    /// **Which of the two a resource is follows from this**, which is
+    /// §10.6's "it follows from where the resource runs, so nothing needs
+    /// declaring": an address and the node proxies, a component and the
+    /// node runs it, neither and the node brokers.
+    address: Option<String>,
+    /// What the operator granted, in the predicate language
+    /// (`infra-client-requirements.md` §10.2, §10.3).
+    ///
+    /// **One vocabulary, not two.** A grant over everyone, a grant over a
+    /// tier and a grant to one named party used to be separate keys; they
+    /// are one list of predicates now, because §10.3 has named
+    /// individuals *inside* the membership gate rather than beside it
+    /// (`resource-requirements.md` §7.1.2) and a second shape for the
+    /// same act is a second place for it to disagree.
     #[serde(default)]
     grant: Vec<GrantEntry>,
 }
@@ -135,8 +148,108 @@ struct HostEntry {
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 struct GrantEntry {
-    member: String,
     roles: Vec<String>,
+    /// The clauses a member must satisfy, all of them. **Absent grants to
+    /// every member of the owner's horizon** — §10.1's outer gate and
+    /// nothing further.
+    #[serde(default, rename = "where")]
+    clauses: Vec<ClauseEntry>,
+}
+
+/// One clause of §10.3's vocabulary as it is written down.
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ClauseEntry {
+    of: String,
+    edges: Option<usize>,
+    n: Option<usize>,
+    percent: Option<u8>,
+    when: Option<u64>,
+    who: Option<String>,
+}
+
+/// Read one clause, refusing a key that means nothing where it is written.
+///
+/// **The same rule the administrative parameters follow**: `of` decides
+/// which other keys have a meaning, and a package or operator who wrote
+/// one that does not believes something the host will not do.
+fn clause_of(c: &ClauseEntry) -> Result<Clause, String> {
+    let only = |keys: [bool; 5], names: &str| -> Result<(), String> {
+        let given = [
+            c.edges.is_some(),
+            c.n.is_some(),
+            c.percent.is_some(),
+            c.when.is_some(),
+            c.who.is_some(),
+        ];
+        for (i, g) in given.iter().enumerate() {
+            if *g && !keys[i] {
+                return Err(format!("`{}` takes {names}", c.of));
+            }
+        }
+        Ok(())
+    };
+    let need =
+        |what: Option<usize>, key: &str| what.ok_or_else(|| format!("`{}` names `{key}`", c.of));
+    match c.of.as_str() {
+        "clients" => {
+            only([false; 5], "no other key")?;
+            Ok(Clause::Clients)
+        }
+        "grandclients" => {
+            only([false; 5], "no other key")?;
+            Ok(Clause::Grandclients)
+        }
+        "distance" => {
+            only([true, false, false, false, false], "`edges`")?;
+            Ok(Clause::AtDistance {
+                edges: need(c.edges, "edges")?,
+            })
+        }
+        "most-trusted" => {
+            only([false, true, false, false, false], "`n`")?;
+            Ok(Clause::MostTrusted { n: need(c.n, "n")? })
+        }
+        "top-fraction" => {
+            only([false, false, true, false, false], "`percent`")?;
+            Ok(Clause::TopFraction {
+                percent: c
+                    .percent
+                    .ok_or_else(|| format!("`{}` names `percent`", c.of))?,
+            })
+        }
+        "joined-before" => {
+            only([false, false, false, true, false], "`when`")?;
+            Ok(Clause::JoinedBefore {
+                when: c.when.ok_or_else(|| format!("`{}` names `when`", c.of))?,
+            })
+        }
+        "named" => {
+            only([false, false, false, false, true], "`who`")?;
+            let who = c.who.as_deref().unwrap_or_default();
+            Ok(Clause::Named {
+                who: keyhash(who)
+                    .ok_or_else(|| format!("`{who}` is not 64 lower-case hex digits"))?,
+            })
+        }
+        other => Err(format!(
+            "`{other}` is not a clause; they are clients, grandclients, \
+             distance, most-trusted, top-fraction, joined-before and named"
+        )),
+    }
+}
+
+/// The grant an entry describes.
+fn grant_of(g: &GrantEntry) -> Result<Grant, String> {
+    let mut roles = BTreeSet::new();
+    for r in &g.roles {
+        roles.insert(r.clone());
+    }
+    let mut clauses = Vec::new();
+    for c in &g.clauses {
+        clauses.push(clause_of(c)?);
+    }
+    Ok(Grant { roles, clauses })
 }
 
 /// Read `path` and bind what it names into `gateway`.
@@ -163,8 +276,14 @@ pub fn apply(gateway: &mut Gateway, path: &Path, limits: Limits) -> Result<usize
     })?;
 
     let mut hosts: Vec<(Keyhash, Binding)> = Vec::new();
-    let mut grants: Vec<(Keyhash, Keyhash, Row)> = Vec::new();
-    let mut standing: Vec<(Keyhash, Row)> = Vec::new();
+    let mut grants: Vec<(Keyhash, Vec<Grant>)> = Vec::new();
+    // **two resources at one address is a collision, not a choice.**
+    // Nothing partitions ports across package authors and nothing could,
+    // so where the operator names the address the file is the only place
+    // the clash can be seen.  Where the node comes to assign addresses
+    // itself — §9's image, once it launches what it hosts — this is the
+    // table it will assign into.
+    let mut addresses: Vec<(std::net::SocketAddr, String)> = Vec::new();
 
     for h in &file.host {
         let named = |what: &str| format!("{}: {what}", h.manifest.display());
@@ -180,42 +299,100 @@ pub fn apply(gateway: &mut Gateway, path: &Path, limits: Limits) -> Result<usize
             return Err(at(0, format!("`{}` is hosted twice", h.resource)));
         }
         let (manifest, component) = read_manifest(&h.manifest).map_err(|e| at(0, named(&e)))?;
-        let package = instantiate(&manifest).map_err(|e| at(0, named(&e)))?;
-        let bytes = std::fs::read(&component)
-            .map_err(|e| at(0, format!("{}: {e}", component.display())))?;
-        let sandbox = Sandbox::admit(&bytes, limits)
-            .map_err(|e| at(0, format!("{}: {e}", component.display())))?;
-        let mut declared: Vec<String> = manifest.imports.clone();
-        declared.sort();
-        declared.dedup();
-        if sandbox.reaches() != declared {
-            return Err(at(
-                0,
-                named(&format!(
-                    "the manifest declares {declared:?} and the component reaches {:?}",
-                    sandbox.reaches()
-                )),
-            ));
-        }
+        instantiate(&manifest).map_err(|e| at(0, named(&e)))?;
+        // **a resource is reached one way, and the file says which**
+        // (§10.6): an address and this node proxies to it, a component
+        // and this node runs it.  Both is a contradiction rather than a
+        // choice, and the operator is told so rather than having one of
+        // them silently win
+        let backend: Option<Arc<dyn rhtn_node::resources::Backend>> = match (&h.address, &component)
+        {
+            (Some(_), Some(c)) => {
+                return Err(at(
+                    0,
+                    named(&format!(
+                        "an address and a component at {}: a resource this node proxies to \
+                             is not one it runs",
+                        c.display()
+                    )),
+                ));
+            }
+            (Some(a), None) => {
+                let addr: std::net::SocketAddr = a
+                    .parse()
+                    .map_err(|e| at(0, format!("`{a}` is not an address: {e}")))?;
+                // **the relay speaks plain HTTP, so it may only speak it
+                // to a local socket** (`resource-requirements.md` §3:
+                // "HTTPS, required, where it crosses a network", and
+                // "plain HTTP is permitted only on a local socket to a
+                // package the node hosts itself").  The node already read
+                // the request, so what the far leg protects is everyone
+                // else: an operator relaying to a resource elsewhere must
+                // not put an authenticated principal and an application
+                // body on the open network.  Refused rather than carried,
+                // until that leg can be given TLS
+                if !addr.ip().is_loopback() {
+                    return Err(at(
+                        0,
+                        format!(
+                            "`{a}` is not a local address: this leg carries plain HTTP, and                              `resource-requirements.md` §3 requires HTTPS wherever it crosses                              a network"
+                        ),
+                    ));
+                }
+                if let Some((_, first)) = addresses.iter().find(|(x, _)| *x == addr) {
+                    return Err(at(
+                        0,
+                        format!(
+                            "`{a}` is where `{first}` already listens: two resources at one                              address is one resource answering for both"
+                        ),
+                    ));
+                }
+                addresses.push((addr, h.resource.clone()));
+                Some(Arc::new(Relay::to(addr, limits.response)))
+            }
+            (None, Some(c)) => {
+                let bytes = std::fs::read(c).map_err(|e| at(0, format!("{}: {e}", c.display())))?;
+                let sandbox = Sandbox::admit(&bytes, limits)
+                    .map_err(|e| at(0, format!("{}: {e}", c.display())))?;
+                let mut declared: Vec<String> = manifest.imports.clone();
+                declared.sort();
+                declared.dedup();
+                if sandbox.reaches() != declared {
+                    return Err(at(
+                        0,
+                        named(&format!(
+                            "the manifest declares {declared:?} and the component reaches {:?}",
+                            sandbox.reaches()
+                        )),
+                    ));
+                }
+                Some(Arc::new(Hosted::new(sandbox)))
+            }
+            // **brokered**: the node authenticates and the caller's
+            // traffic never passes through it (design §11.7, §10.6)
+            (None, None) => None,
+        };
 
+        let mut written = Vec::new();
         for g in &h.grant {
-            let member = keyhash(&g.member)
-                .ok_or_else(|| at(0, format!("`{}` is not 64 lower-case hex digits", g.member)))?;
-            grants.push((res, member, row_of(&g.roles, &package.roles)?));
+            let grant = grant_of(g).map_err(|e| at(0, e))?;
+            // **checked against the package before anything is bound**:
+            // the gateway refuses it too, but by then this file has
+            // already bound its earlier entries, and a half-applied
+            // configuration is one the operator did not write
+            if let Some(why) = grant.refused(&manifest.roles) {
+                return Err(at(0, why.to_string()));
+            }
+            written.push(grant);
         }
-
-        if !h.standing.is_empty() {
-            let row = row_of(&h.standing, &package.roles)?;
-            standing.push((res, row));
-        }
+        grants.push((res, written));
         hosts.push((
             res,
             Binding {
                 owner,
                 authority: h.authority.clone(),
-                backend: Some(Arc::new(Hosted::new(sandbox))),
-                declared_roles: package.roles,
-                admin: manifest.admin.clone(),
+                backend,
+                declared: manifest,
             },
         ));
     }
@@ -224,59 +401,12 @@ pub fn apply(gateway: &mut Gateway, path: &Path, limits: Limits) -> Result<usize
     for (res, binding) in hosts {
         gateway.bind(res, binding);
     }
-    for (res, member, row) in grants {
+    for (res, written) in grants {
         gateway
-            .set_row(res, member, row)
-            .map_err(|e| at(0, format!("{e:?}")))?;
-    }
-    for (res, row) in standing {
-        gateway
-            .stand(res, row)
-            .map_err(|e| at(0, format!("{e:?}")))?;
+            .set_grants(res, written)
+            .map_err(|e| at(0, e.to_string()))?;
     }
     Ok(bound)
-}
-
-/// A role list from the operator, checked against what the package
-/// declared.
-///
-/// `connect` is the gate `resource-requirements.md` §3 reserves for the
-/// node's own evaluation, which is why it appears here and never reaches
-/// the package: the roles a package is told about are the rest of the
-/// list.
-fn row_of(named: &[String], declared: &BTreeSet<String>) -> Result<Row, Refused> {
-    let connect = named.iter().any(|r| r == "connect");
-    let mut application = BTreeSet::new();
-    for r in named {
-        if r == "connect" {
-            continue;
-        }
-        if RESERVED_ROLES.contains(&r.as_str()) {
-            return Err(at(
-                0,
-                format!(
-                    "`{r}` is reserved for the node's own evaluation and is not an application role"
-                ),
-            ));
-        }
-        if !declared.contains(r) {
-            return Err(at(0, format!("`{r}` is not a role that package declared")));
-        }
-        application.insert(r.clone());
-    }
-    if application.len() > MAX_ROLES {
-        return Err(at(
-            0,
-            format!(
-                "{} roles is wider than a credential header carries",
-                application.len()
-            ),
-        ));
-    }
-    Ok(Row {
-        roles: application,
-        connect,
-    })
 }
 
 /// TOML's own message with the line it is about, as `config.rs` renders
@@ -305,7 +435,8 @@ fn manifest_error(text: &str, e: &toml::de::Error) -> String {
     }
 }
 
-/// Read a package's manifest, and where its component sits.
+/// Read a package's manifest, and where its component sits where it has
+/// one.
 ///
 /// **TOML, for the reason the configuration is** (`config.rs`): the
 /// line-oriented format this replaced could not repeat a key, and an
@@ -314,17 +445,36 @@ fn manifest_error(text: &str, e: &toml::de::Error) -> String {
 /// configuration off that format. Strict for the reason that one is too:
 /// an unknown key or a missing one is an error, because a manifest the
 /// host quietly repairs declares something the package did not.
-fn read_manifest(path: &Path) -> Result<(Manifest, std::path::PathBuf), String> {
+fn read_manifest(path: &Path) -> Result<(Manifest, Option<std::path::PathBuf>), String> {
     #[derive(serde::Deserialize)]
     #[serde(deny_unknown_fields)]
     struct File {
-        component: String,
+        /// The component, where the node runs the resource itself.
+        /// **Absent for a resource that holds its own port**, which the
+        /// node reaches over a socket instead and never compiles.
+        component: Option<String>,
         #[serde(default)]
         roles: Vec<String>,
         #[serde(default)]
         imports: Vec<String>,
         #[serde(default)]
         admin: Vec<Op>,
+        #[serde(default)]
+        template: Vec<Tpl>,
+    }
+    /// A grant the package ships ready-made
+    /// (`infra-client-requirements.md` §10.4), in the same clause
+    /// vocabulary an operator's own grant is written in — which is the
+    /// requirement, not a convenience: a template an operator cannot read
+    /// back is the opaque configuration §7.3 refuses.
+    #[derive(serde::Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct Tpl {
+        name: String,
+        label: String,
+        roles: Vec<String>,
+        #[serde(default, rename = "where")]
+        clauses: Vec<ClauseEntry>,
     }
     #[derive(serde::Deserialize)]
     #[serde(deny_unknown_fields)]
@@ -398,14 +548,25 @@ fn read_manifest(path: &Path) -> Result<(Manifest, std::path::PathBuf), String> 
             parameters,
         });
     }
+    let mut templates = Vec::new();
+    for t in f.template {
+        templates.push(Template {
+            name: t.name,
+            label: t.label,
+            grant: grant_of(&GrantEntry {
+                roles: t.roles,
+                clauses: t.clauses,
+            })?,
+        });
+    }
     let manifest = Manifest {
         roles: f.roles.into_iter().collect(),
         imports: f.imports,
         admin,
+        templates,
     };
-    let component = f.component;
     // relative to the manifest, so a package is a directory an operator
     // can move without rewriting what is inside it
     let dir = path.parent().unwrap_or(Path::new("."));
-    Ok((manifest, dir.join(component)))
+    Ok((manifest, f.component.map(|c| dir.join(c))))
 }

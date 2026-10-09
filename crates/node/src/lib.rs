@@ -26,6 +26,9 @@ pub mod catalog;
 pub mod currency;
 /// The node's diagnostic events, compiled out of a releasable build.
 pub mod diag;
+
+/// The predicate language an operator's grants are written in.
+pub mod grant;
 /// The hosted-session surface a resource is reached through
 /// (`resource-requirements.md` §2).
 pub mod http;
@@ -41,6 +44,9 @@ pub mod propagation;
 /// A directory-backed mailbox, for a node that keeps what it holds
 /// across a restart.
 pub mod queue;
+
+/// The second leg, where a resource holds its own port.
+pub mod relay;
 /// The anchor table and the resolution exchange (`wire-format.md` §7.2,
 /// §7.6, §7.7; design §12).
 pub mod resolution;

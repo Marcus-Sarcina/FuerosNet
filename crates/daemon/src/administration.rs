@@ -455,6 +455,8 @@ impl Surface {
         let mut view = node.view.lock().unwrap();
         match crate::hosting::apply(&mut view.resources, &path, limits) {
             Ok(n) => {
+                // §10.2: the operator has just configured roles
+                view.expand_grants();
                 tracing::info!(
                     target: "daemon",
                     step = "surface_act",
@@ -758,6 +760,15 @@ fn seen(said: String) -> (u16, String) {
 fn resource_views(node: &LiveNode) -> Vec<crate::operator::ResourceView> {
     let view = node.view.lock().unwrap();
     let g = &view.resources;
+    // **a template's population, as of this instant** (§10.4): the
+    // ranking behind a rank clause is computed here only if some template
+    // or grant reads one, and is kept nowhere (design §16.2)
+    let table = view.table.clone_for(view.me());
+    let standing = if g.wants_standing() {
+        rhtn_node::grant::Standing::of(&view.evaluate(&g.candidates(&table)).individual)
+    } else {
+        rhtn_node::grant::Standing::unknown()
+    };
     let roles = |r: &rhtn_node::resources::Row| {
         let mut out: Vec<String> = r.roles.iter().cloned().collect();
         if r.connect {
@@ -780,11 +791,28 @@ fn resource_views(node: &LiveNode) -> Vec<crate::operator::ResourceView> {
                 owner: b.owner,
                 authority: b.authority.clone(),
                 hosted: b.backend.is_some(),
-                declared_roles: b.declared_roles.iter().cloned().collect(),
-                standing: g.standing_grant(&resource).map(roles),
+                roles: g.role_bindings(&resource),
+                grants: g
+                    .grants_for(&resource)
+                    .iter()
+                    .map(|gr| gr.to_string())
+                    .collect(),
+                templates: b
+                    .declared
+                    .templates
+                    .iter()
+                    .map(|t| {
+                        (
+                            t.name.clone(),
+                            t.label.clone(),
+                            t.grant.to_string(),
+                            g.population(&resource, &t.grant, &table, &standing),
+                        )
+                    })
+                    .collect(),
                 rows,
                 sessions: g.hosted_sessions(),
-                admin: b.admin.clone(),
+                admin: b.declared.admin.clone(),
             })
         })
         .collect()

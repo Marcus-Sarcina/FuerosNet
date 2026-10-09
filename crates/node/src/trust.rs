@@ -65,6 +65,25 @@ impl NodeView {
         self.policy.score(&self.evidence(), subject)
     }
 
+    /// **Expand every grant held here over the horizon as it is now**,
+    /// and say how many rows were written and dropped.
+    ///
+    /// This is `infra-client-requirements.md` §10.2's first moment — "when
+    /// an operator is configuring roles" — where the other three are a
+    /// membership change, evidence arriving, and the periodic pass for a
+    /// time-dependent predicate. It lives here because it is the one
+    /// place the table, the gateway and the policy are all in hand.
+    pub fn expand_grants(&mut self) -> (usize, usize) {
+        let table = self.table.clone_for(self.me());
+        let standing = if self.resources.wants_standing() {
+            let who = self.resources.candidates(&table);
+            crate::grant::Standing::of(&self.evaluate(&who).individual)
+        } else {
+            crate::grant::Standing::unknown()
+        };
+        self.resources.refresh(&table, &standing)
+    }
+
     /// One computation over a set of candidates (design §16.2).
     pub fn evaluate(&self, candidates: &[Keyhash]) -> Evaluation<Keyhash> {
         self.policy.evaluate(&self.evidence(), candidates)

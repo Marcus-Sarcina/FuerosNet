@@ -13,6 +13,7 @@ use common::*;
 use rhtn_archive::catalog::*;
 use rhtn_archive::topology::{AckIssuer, Table};
 use rhtn_node::catalog::{CatalogService, TableScopes};
+use rhtn_node::grant::{Clause, Grant, Standing};
 use rhtn_node::http;
 use rhtn_node::resources::*;
 use std::collections::BTreeSet;
@@ -393,8 +394,10 @@ fn an_entry_whose_scope_cannot_be_computed_is_stored_and_grants_nothing() {
             owner: kh("bob"),
             authority: "r1.internal".into(),
             backend: Some(Arc::new(Fake::new())),
-            declared_roles: BTreeSet::new(),
-            admin: Vec::new(),
+            declared: Manifest {
+                roles: BTreeSet::new(),
+                ..Default::default()
+            },
         },
     );
     let req = ResourceRequest {
@@ -507,8 +510,10 @@ fn gateway_with(sc: &Scene, backend: Arc<Fake>) -> Gateway {
             owner: kh("alice"),
             authority: "r1.internal".into(),
             backend: Some(backend),
-            declared_roles: BTreeSet::from(["reader".to_string(), "writer".to_string()]),
-            admin: Vec::new(),
+            declared: Manifest {
+                roles: BTreeSet::from(["reader".to_string(), "writer".to_string()]),
+                ..Default::default()
+            },
         },
     );
     let _ = &sc.table;
@@ -653,8 +658,10 @@ fn a_request_is_decided_from_the_materialised_row_and_a_row_wider_than_64_is_ref
             owner: kh("alice"),
             authority: "r1".into(),
             backend: Some(backend.clone()),
-            declared_roles: declared,
-            admin: Vec::new(),
+            declared: Manifest {
+                roles: declared,
+                ..Default::default()
+            },
         },
     );
     // a predicate expanded once: "all my direct clients" as of now
@@ -726,8 +733,10 @@ fn caller_rhtn_headers_are_stripped_the_nodes_inserted_and_a_session_minted_per_
             owner: kh("alice"),
             authority: "r1.internal".into(),
             backend: Some(b1.clone()),
-            declared_roles: BTreeSet::new(),
-            admin: Vec::new(),
+            declared: Manifest {
+                roles: BTreeSet::new(),
+                ..Default::default()
+            },
         },
     );
     g.bind(
@@ -736,8 +745,10 @@ fn caller_rhtn_headers_are_stripped_the_nodes_inserted_and_a_session_minted_per_
             owner: kh("alice"),
             authority: "r2.internal".into(),
             backend: Some(b2.clone()),
-            declared_roles: BTreeSet::new(),
-            admin: Vec::new(),
+            declared: Manifest {
+                roles: BTreeSet::new(),
+                ..Default::default()
+            },
         },
     );
     for r in [R1, R2] {
@@ -970,6 +981,7 @@ fn no_network_primitive_is_exposed_to_a_hosted_package() {
             roles: BTreeSet::from(["reader".to_string()]),
             imports: vec!["rhtn/1:request".into(), import.into()],
             admin: Vec::new(),
+            templates: Vec::new(),
         };
         let e = instantiate(&m).unwrap_err();
         assert!(e.contains("no such binding"), "{import}: {e}");
@@ -980,6 +992,7 @@ fn no_network_primitive_is_exposed_to_a_hosted_package() {
         roles: BTreeSet::from(["reader".to_string()]),
         imports: vec!["rhtn/1:request".into(), "rhtn/1:response".into()],
         admin: Vec::new(),
+        templates: Vec::new(),
     };
     assert!(instantiate(&ok).is_ok());
     assert!(
@@ -987,6 +1000,7 @@ fn no_network_primitive_is_exposed_to_a_hosted_package() {
             roles: BTreeSet::from(["Bad Role".to_string()]),
             imports: vec![],
             admin: Vec::new(),
+            templates: Vec::new(),
         })
         .is_err()
     );
@@ -1142,8 +1156,10 @@ fn the_catalog_page_shows_what_the_viewer_holds_with_the_roles_held() {
             owner: kh("alice"),
             authority: "r2".into(),
             backend: None,
-            declared_roles: BTreeSet::from(["editor".to_string()]),
-            admin: Vec::new(),
+            declared: Manifest {
+                roles: BTreeSet::from(["editor".to_string()]),
+                ..Default::default()
+            },
         },
     );
     g.set_row(
@@ -1349,6 +1365,7 @@ fn a_reserved_role_name_is_refused_where_it_is_written_and_never_reaches_a_backe
             .map(|s| s.to_string())
             .collect(),
         admin: Vec::new(),
+        templates: Vec::new(),
     };
     let err = instantiate(&m).unwrap_err();
     assert!(err.contains("connect") && err.contains("reserved"), "{err}");
@@ -1357,6 +1374,7 @@ fn a_reserved_role_name_is_refused_where_it_is_written_and_never_reaches_a_backe
             imports: vec![],
             roles: BTreeSet::from(["discover".to_string()]),
             admin: Vec::new(),
+            templates: Vec::new(),
         })
         .is_err()
     );
@@ -1364,6 +1382,7 @@ fn a_reserved_role_name_is_refused_where_it_is_written_and_never_reaches_a_backe
         imports: vec![],
         roles: BTreeSet::from(["read".to_string()]),
         admin: Vec::new(),
+        templates: Vec::new(),
     })
     .expect("an application role");
     assert_eq!(ok.roles, BTreeSet::from(["read".to_string()]));
@@ -1377,11 +1396,13 @@ fn a_reserved_role_name_is_refused_where_it_is_written_and_never_reaches_a_backe
             owner: kh("alice"),
             authority: "x".into(),
             backend: Some(backend.clone()),
-            declared_roles: ["connect", "discover", "read"]
-                .iter()
-                .map(|s| s.to_string())
-                .collect(),
-            admin: Vec::new(),
+            declared: Manifest {
+                roles: ["connect", "discover", "read"]
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
+                ..Default::default()
+            },
         },
     );
     let all: BTreeSet<String> = ["connect", "discover", "read"]
@@ -1432,8 +1453,10 @@ fn a_standing_grant_follows_the_owners_horizon_in_and_out() {
             owner: kh("alice"),
             authority: "r1.internal".into(),
             backend: Some(backend),
-            declared_roles: BTreeSet::from(["reader".to_string()]),
-            admin: Vec::new(),
+            declared: Manifest {
+                roles: BTreeSet::from(["reader".to_string()]),
+                ..Default::default()
+            },
         },
     );
 
@@ -1441,18 +1464,17 @@ fn a_standing_grant_follows_the_owners_horizon_in_and_out() {
     // `infra-client-requirements.md` §10.1 makes membership the outer gate
     // and §10.2 keeps the answer a lookup: what a request reads is a row
     // that was already there.
-    let row = Row {
-        roles: BTreeSet::from(["reader".to_string()]),
-        connect: true,
-    };
-    g.stand(R1, row.clone())
-        .expect("a grant over the owner's horizon");
+    g.set_grants(
+        R1,
+        vec![Grant::standing(BTreeSet::from(["reader".to_string()]))],
+    )
+    .expect("a grant over the owner's horizon");
     assert!(
         g.row(&R1, &kh("bob")).is_none(),
         "and nothing is written until it is expanded"
     );
 
-    let (granted, dropped) = g.refresh(&sc.table);
+    let (granted, dropped) = g.refresh(&sc.table, &Standing::unknown());
     assert!(
         granted >= 3,
         "the owner's horizon, expanded: {granted} rows"
@@ -1473,7 +1495,7 @@ fn a_standing_grant_follows_the_owners_horizon_in_and_out() {
     // a second expansion over the same membership writes nothing: the
     // moments §10.2 names are membership changes, not requests
     assert_eq!(
-        g.refresh(&sc.table),
+        g.refresh(&sc.table, &Standing::unknown()),
         (0, 0),
         "nothing moved, so nothing to do"
     );
@@ -1487,7 +1509,7 @@ fn a_standing_grant_follows_the_owners_horizon_in_and_out() {
     };
     g.set_row(R1, kh("bob"), wider.clone())
         .expect("the operator's own row");
-    assert_eq!(g.refresh(&sc.table), (0, 0));
+    assert_eq!(g.refresh(&sc.table, &Standing::unknown()), (0, 0));
     assert_eq!(
         g.row(&R1, &kh("bob")),
         Some(&wider),
@@ -1498,7 +1520,7 @@ fn a_standing_grant_follows_the_owners_horizon_in_and_out() {
     let mut w = World::new();
     let (a_b, _) = w.adopt("bob", "alice", 1);
     let narrowed = table_with(kh("alice"), &w, &[&a_b], &["alice"]);
-    let (granted, dropped) = g.refresh(&narrowed);
+    let (granted, dropped) = g.refresh(&narrowed, &Standing::unknown());
     assert_eq!(granted, 0);
     assert!(dropped >= 2, "carol and w1 left: {dropped} rows dropped");
     assert!(
@@ -1535,8 +1557,10 @@ fn an_ending_purges_the_departed_subtree_from_every_resource_not_only_the_grante
             owner: kh("alice"),
             authority: "r1.internal".into(),
             backend: None,
-            declared_roles: BTreeSet::from(["reader".to_string()]),
-            admin: Vec::new(),
+            declared: Manifest {
+                roles: BTreeSet::from(["reader".to_string()]),
+                ..Default::default()
+            },
         },
     );
     g.bind(
@@ -1545,8 +1569,10 @@ fn an_ending_purges_the_departed_subtree_from_every_resource_not_only_the_grante
             owner: kh("alice"),
             authority: "r2.internal".into(),
             backend: None,
-            declared_roles: BTreeSet::from(["reader".to_string()]),
-            admin: Vec::new(),
+            declared: Manifest {
+                roles: BTreeSet::from(["reader".to_string()]),
+                ..Default::default()
+            },
         },
     );
 
@@ -1555,9 +1581,12 @@ fn an_ending_purges_the_departed_subtree_from_every_resource_not_only_the_grante
         roles: BTreeSet::from(["reader".to_string()]),
         connect: true,
     };
-    g.stand(R1, row.clone())
-        .expect("a grant over the owner's horizon");
-    g.refresh(&table);
+    g.set_grants(
+        R1,
+        vec![Grant::standing(BTreeSet::from(["reader".to_string()]))],
+    )
+    .expect("a grant over the owner's horizon");
+    g.refresh(&table, &Standing::unknown());
     for m in ["carol", "w1", "bob"] {
         g.set_row(R2, kh(m), row.clone())
             .expect("the operator's own row");
@@ -1581,7 +1610,7 @@ fn an_ending_purges_the_departed_subtree_from_every_resource_not_only_the_grante
         &[&a_c, &a_w1, &a_b, &dep],
         &["alice", "carol"],
     );
-    let (granted, dropped) = g.refresh(&after);
+    let (granted, dropped) = g.refresh(&after, &Standing::unknown());
     assert_eq!(granted, 0, "nobody entered");
     assert!(dropped >= 4, "carol and w1, on both resources: {dropped}");
 
@@ -1621,8 +1650,10 @@ fn replacing_a_standing_grant_rewrites_what_it_wrote_and_leaves_the_operators_ow
             owner: kh("alice"),
             authority: "r1.internal".into(),
             backend: None,
-            declared_roles: BTreeSet::from(["reader".to_string()]),
-            admin: Vec::new(),
+            declared: Manifest {
+                roles: BTreeSet::from(["reader".to_string()]),
+                ..Default::default()
+            },
         },
     );
     g.bind(
@@ -1631,8 +1662,10 @@ fn replacing_a_standing_grant_rewrites_what_it_wrote_and_leaves_the_operators_ow
             owner: kh("alice"),
             authority: "r2.internal".into(),
             backend: None,
-            declared_roles: BTreeSet::from(["reader".to_string()]),
-            admin: Vec::new(),
+            declared: Manifest {
+                roles: BTreeSet::from(["reader".to_string()]),
+                ..Default::default()
+            },
         },
     );
 
@@ -1640,11 +1673,17 @@ fn replacing_a_standing_grant_rewrites_what_it_wrote_and_leaves_the_operators_ow
         roles: BTreeSet::from(["reader".to_string()]),
         connect: true,
     };
-    g.stand(R1, open.clone())
-        .expect("a grant over the owner's horizon");
-    g.stand(R2, open.clone())
-        .expect("and one on the other resource");
-    let (granted, _) = g.refresh(&sc.table);
+    g.set_grants(
+        R1,
+        vec![Grant::standing(BTreeSet::from(["reader".to_string()]))],
+    )
+    .expect("a grant over the owner's horizon");
+    g.set_grants(
+        R2,
+        vec![Grant::standing(BTreeSet::from(["reader".to_string()]))],
+    )
+    .expect("and one on the other resource");
+    let (granted, _) = g.refresh(&sc.table, &Standing::unknown());
     assert!(granted >= 6, "both horizons expanded: {granted}");
     assert_eq!(g.row(&R1, &kh("carol")).map(|r| r.connect), Some(true));
 
@@ -1658,22 +1697,28 @@ fn replacing_a_standing_grant_rewrites_what_it_wrote_and_leaves_the_operators_ow
     // and one member opens a session, so the retirement is observable
     assert!(g.session(&kh("carol"), &R1).is_none());
 
-    // the grant is narrowed to nothing
-    let shut = Row {
+    // the grant is narrowed to one that grants no role at all.  **A
+    // grant carries no `connect` of its own**: reaching the resource is
+    // what a grant is for (`resource-requirements.md` §3: "`connect` is
+    // the gate and it is spent getting the request to you"), so the
+    // narrowest grant there is still opens the gate and hands over
+    // nothing further
+    let bare = Row {
         roles: BTreeSet::new(),
-        connect: false,
+        connect: true,
     };
-    g.stand(R1, shut.clone()).expect("the policy is replaced");
-    g.refresh(&sc.table);
+    g.set_grants(R1, vec![Grant::standing(BTreeSet::new())])
+        .expect("the policy is replaced");
+    g.refresh(&sc.table, &Standing::unknown());
 
     assert_eq!(
         g.row(&R1, &kh("carol")),
-        Some(&shut),
+        Some(&bare),
         "the row the old grant wrote now carries the new one"
     );
     assert_eq!(
         g.row(&R1, &kh("w1")),
-        Some(&shut),
+        Some(&bare),
         "every row it wrote, not just one"
     );
     assert_eq!(
@@ -1687,10 +1732,29 @@ fn replacing_a_standing_grant_rewrites_what_it_wrote_and_leaves_the_operators_ow
         "the other resource's grant is not disturbed"
     );
 
+    // withdrawing it altogether takes its rows with it: §10.5's own
+    // example of an authorisation change is "a predicate ceasing to
+    // match", and a predicate that is gone has ceased
+    g.set_grants(R1, vec![]).expect("the policy is withdrawn");
+    g.refresh(&sc.table, &Standing::unknown());
+    assert_eq!(
+        g.row(&R1, &kh("carol")),
+        None,
+        "no predicate writes it any longer, so it is not a row"
+    );
+    assert_eq!(
+        g.row(&R1, &kh("bob")),
+        Some(&pinned),
+        "and the operator's own row is still not the grant's to take"
+    );
+
     // widening it again writes the members back
-    g.stand(R1, open.clone())
-        .expect("the policy is replaced again");
-    g.refresh(&sc.table);
+    g.set_grants(
+        R1,
+        vec![Grant::standing(BTreeSet::from(["reader".to_string()]))],
+    )
+    .expect("the policy is replaced again");
+    g.refresh(&sc.table, &Standing::unknown());
     assert_eq!(
         g.row(&R1, &kh("carol")),
         Some(&open),
@@ -1702,9 +1766,13 @@ fn replacing_a_standing_grant_rewrites_what_it_wrote_and_leaves_the_operators_ow
         "the operator's still does not"
     );
 
-    // re-standing the same policy is not a change and rewrites nothing
+    // re-writing the same policy is not a change and rewrites nothing
     let before = g.row(&R1, &kh("carol")).cloned();
-    g.stand(R1, open).expect("the same policy");
+    g.set_grants(
+        R1,
+        vec![Grant::standing(BTreeSet::from(["reader".to_string()]))],
+    )
+    .expect("the same policy");
     assert_eq!(
         g.row(&R1, &kh("carol")),
         before.as_ref(),
@@ -1755,8 +1823,10 @@ fn rsc_42_a_role_table_holds_the_current_row_and_no_history_of_it() {
             owner: kh("bob"),
             authority: "r1.internal".into(),
             backend: Some(Arc::new(Fake::new())),
-            declared_roles: ["reader", "editor"].into_iter().map(String::from).collect(),
-            admin: Vec::new(),
+            declared: Manifest {
+                roles: ["reader", "editor"].into_iter().map(String::from).collect(),
+                ..Default::default()
+            },
         },
     );
     let row = |roles: &[&str]| Row {
@@ -1783,9 +1853,13 @@ fn rsc_42_a_role_table_holds_the_current_row_and_no_history_of_it() {
     assert!(!g.is_derived(&R1, &m));
     assert_eq!(g.hosted_sessions(), 0);
     // a standing grant's rows carry the one mark, which goes with the row
-    g.stand(R1, row(&["reader"])).unwrap();
+    g.set_grants(
+        R1,
+        vec![Grant::standing(BTreeSet::from(["reader".to_string()]))],
+    )
+    .unwrap();
     let sc = scene();
-    g.refresh(&sc.table.clone_for(kh("bob")));
+    g.refresh(&sc.table.clone_for(kh("bob")), &Standing::unknown());
     let derived: Vec<_> = g
         .rows()
         .into_iter()
@@ -1830,6 +1904,226 @@ fn a_named_row_for_a_party_outside_the_horizon_grants_nothing() {
     assert_eq!(backend.calls.load(Ordering::SeqCst), 0);
     // the row stood until membership was next re-evaluated, and goes then
     assert!(g.row(&R1, &kh("w2")).is_some());
-    g.refresh(&sc.table.clone_for(kh("alice")));
+    g.refresh(&sc.table.clone_for(kh("alice")), &Standing::unknown());
     assert!(g.row(&R1, &kh("w2")).is_none(), "dropped at the refresh");
+}
+
+/// The whole of `infra-client-requirements.md` §10.3's vocabulary, each
+/// clause against the same scene: alice owns the resource, bob and carol
+/// are her clients, w1 is carol's, and w2 hangs off w3 outside the
+/// horizon altogether.
+#[test]
+fn a_grant_selects_by_the_vocabulary_section_10_3_fixes_and_two_grants_union() {
+    let sc = scene();
+    let mut g = Gateway::default();
+    g.bind(
+        R1,
+        Binding {
+            owner: kh("alice"),
+            authority: "r1.internal".into(),
+            backend: None,
+            declared: Manifest {
+                roles: BTreeSet::from(["reader".to_string(), "writer".to_string()]),
+                ..Default::default()
+            },
+        },
+    );
+    let reader = || BTreeSet::from(["reader".to_string()]);
+    let holds = |g: &Gateway, who: &str| g.row(&R1, &kh(who)).is_some();
+
+    // §10.3's "All direct clients", which is the directed question: the
+    // owner is not her own client and the grand-client is not hers
+    let with = |g: &mut Gateway, clauses: Vec<Clause>| {
+        g.set_grants(
+            R1,
+            vec![Grant {
+                roles: reader(),
+                clauses,
+            }],
+        )
+        .expect("a grant the package declared");
+        g.refresh(&sc.table, &Standing::unknown());
+    };
+    with(&mut g, vec![Clause::Clients]);
+    assert!(
+        holds(&g, "bob") && holds(&g, "carol"),
+        "the owner's clients"
+    );
+    assert!(!holds(&g, "w1"), "a grand-client is not a client");
+    assert!(!holds(&g, "alice"), "and the owner is not her own client");
+
+    // §10.3's "All clients and grand-clients"
+    with(&mut g, vec![Clause::Grandclients]);
+    assert!(holds(&g, "w1"), "carol's client is alice's grand-client");
+    assert!(!holds(&g, "w2"), "and w2 is outside the horizon entirely");
+
+    // §10.3's relative tier, read as the horizon's own walk
+    with(&mut g, vec![Clause::AtDistance { edges: 2 }]);
+    assert!(holds(&g, "w1"), "two edges from the owner");
+    assert!(
+        !holds(&g, "bob") && !holds(&g, "carol"),
+        "one edge is not two"
+    );
+
+    // §10.3's named individual, inside the gate
+    with(&mut g, vec![Clause::Named { who: kh("bob") }]);
+    assert!(holds(&g, "bob") && !holds(&g, "carol"), "that one party");
+
+    // §10.3's "Nodes joined before a date", taken from the adoption the
+    // table holds rather than from any clock of this node's
+    let w1_joined = sc
+        .table
+        .bindings()
+        .iter()
+        .find(|b| b.node == kh("w1"))
+        .expect("w1 was adopted")
+        .from;
+    with(&mut g, vec![Clause::JoinedBefore { when: w1_joined }]);
+    assert!(
+        holds(&g, "bob") && holds(&g, "carol"),
+        "adopted before w1 was"
+    );
+    assert!(!holds(&g, "w1"), "and not w1 itself, which joined at it");
+
+    // **a conjunction narrows**: §7.1's one compound affordance
+    with(
+        &mut g,
+        vec![Clause::Grandclients, Clause::Named { who: kh("w1") }],
+    );
+    assert!(holds(&g, "w1"), "a grand-client, and that one");
+    assert!(!holds(&g, "bob"), "a client who is not that one");
+
+    // **a rank nobody computed admits nobody.** A clause the node cannot
+    // evaluate is one it declines to satisfy; the alternative hands out a
+    // role because a score was missing
+    with(&mut g, vec![Clause::MostTrusted { n: 2 }]);
+    assert!(
+        g.rows().is_empty(),
+        "an unranked population satisfies no rank clause"
+    );
+
+    // and with a ranking, the line is where it says
+    g.set_grants(
+        R1,
+        vec![Grant {
+            roles: reader(),
+            clauses: vec![Clause::MostTrusted { n: 2 }],
+        }],
+    )
+    .expect("a rank clause");
+    let order = Standing::of(&[
+        (kh("w1"), 9.0),
+        (kh("bob"), 4.0),
+        (kh("carol"), 1.0),
+        (kh("alice"), 0.5),
+    ]);
+    g.refresh(&sc.table, &order);
+    assert!(holds(&g, "w1") && holds(&g, "bob"), "the two most trusted");
+    assert!(!holds(&g, "carol"), "the third is not in the first two");
+
+    // a quantile draws the same line as a fraction of the population
+    g.set_grants(
+        R1,
+        vec![Grant {
+            roles: reader(),
+            clauses: vec![Clause::TopFraction { percent: 50 }],
+        }],
+    )
+    .expect("a quantile");
+    g.refresh(&sc.table, &order);
+    assert!(holds(&g, "bob") && !holds(&g, "carol"), "half of four");
+
+    // **two grants are the disjunction the language has no operator
+    // for**, and a member matched by both holds both their roles
+    g.set_grants(
+        R1,
+        vec![
+            Grant {
+                roles: reader(),
+                clauses: vec![Clause::Clients],
+            },
+            Grant {
+                roles: BTreeSet::from(["writer".to_string()]),
+                clauses: vec![Clause::Named { who: kh("bob") }],
+            },
+        ],
+    )
+    .expect("two grants");
+    g.refresh(&sc.table, &Standing::unknown());
+    assert_eq!(
+        g.row(&R1, &kh("bob")).map(|r| r.roles.len()),
+        Some(2),
+        "bob is matched by both"
+    );
+    assert_eq!(
+        g.row(&R1, &kh("carol")).map(|r| r.roles.len()),
+        Some(1),
+        "carol by one"
+    );
+}
+
+/// What the node declines to hold, asked once when the operator writes it
+/// (§10.2: "the operator hears about it at configuration time, never a
+/// requester at request time").
+#[test]
+fn a_grant_the_node_cannot_hold_is_refused_when_it_is_written() {
+    let mut g = Gateway::default();
+    g.bind(
+        R1,
+        Binding {
+            owner: kh("alice"),
+            authority: "r1.internal".into(),
+            backend: None,
+            declared: Manifest {
+                roles: BTreeSet::from(["reader".to_string()]),
+                ..Default::default()
+            },
+        },
+    );
+    let refusing = |g: &mut Gateway, grant: Grant| {
+        g.set_grants(R1, vec![grant])
+            .expect_err("the node will not hold it")
+            .to_string()
+    };
+    let of = |roles: &[&str], clauses: Vec<Clause>| Grant {
+        roles: roles.iter().map(|r| r.to_string()).collect(),
+        clauses,
+    };
+
+    assert!(
+        refusing(&mut g, of(&["admin"], vec![])).contains("not a role this package declared"),
+        "a package cannot be granted a role it never declared"
+    );
+    assert!(
+        refusing(&mut g, of(&["connect"], vec![])).contains("reserved"),
+        "and `connect` is the node's own"
+    );
+    for (clauses, wrong) in [
+        (vec![Clause::MostTrusted { n: 0 }], "grants nothing"),
+        (vec![Clause::TopFraction { percent: 0 }], "1 to 100"),
+        (vec![Clause::TopFraction { percent: 101 }], "1 to 100"),
+        (
+            vec![Clause::AtDistance { edges: 3 }],
+            "further than two edges",
+        ),
+        (vec![Clause::Clients; 9], "at most 8 clauses"),
+    ] {
+        let e = refusing(&mut g, of(&["reader"], clauses));
+        assert!(e.contains(wrong), "expected {wrong:?}, got {e}");
+    }
+
+    let many: Vec<Grant> = (0..33)
+        .map(|_| Grant::standing(BTreeSet::from(["reader".to_string()])))
+        .collect();
+    let e = g
+        .set_grants(R1, many)
+        .expect_err("more grants than the node holds")
+        .to_string();
+    assert!(e.contains("at most 32 grants"), "{e}");
+
+    // and nothing was written by any of it
+    assert!(
+        g.grants_for(&R1).is_empty() && g.rows().is_empty(),
+        "a refused grant leaves no trace"
+    );
 }

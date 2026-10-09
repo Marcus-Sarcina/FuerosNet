@@ -72,13 +72,16 @@ fn s02_recovery_must_forget_the_superseded_clients_wake_endpoint(){
 }
 #[test]
 fn g01_changed_standing_grant_must_rewrite_derived_rows(){
- use rhtn_node::resources::{Gateway,Binding,Row};use rhtn_archive::topology::Table;use std::collections::BTreeSet;
+ use rhtn_node::resources::{Gateway,Binding,Row,Manifest};use rhtn_node::grant::{Grant,Standing};use rhtn_archive::topology::Table;use std::collections::BTreeSet;
  let (owner,res)=([41;32],[42;32]);let table=Table::with_me(owner);let mut g=Gateway::default();
- g.bind(res,Binding{owner,authority:"test.internal".into(),backend:None,declared_roles:BTreeSet::from(["reader".into()]),admin:vec![]});
- let allow=Row{roles:BTreeSet::from(["reader".into()]),connect:true};let deny=Row{roles:BTreeSet::new(),connect:false};
- g.stand(res,allow.clone()).unwrap();g.refresh(&table);assert_eq!(g.row(&res,&owner),Some(&allow));
- g.stand(res,deny.clone()).unwrap();g.refresh(&table);
- assert_eq!(g.row(&res,&owner),Some(&deny),"I 10.2: changing standing policy must update rows it generated, not preserve them as if individually assigned");
+ g.bind(res,Binding{owner,authority:"test.internal".into(),backend:None,declared:Manifest{roles:BTreeSet::from(["reader".into()]),..Default::default()}});
+ let allow=Row{roles:BTreeSet::from(["reader".into()]),connect:true};let bare=Row{roles:BTreeSet::new(),connect:true};
+ g.set_grants(res,vec![Grant::standing(BTreeSet::from(["reader".into()]))]).unwrap();g.refresh(&table,&Standing::unknown());assert_eq!(g.row(&res,&owner),Some(&allow));
+ g.set_grants(res,vec![Grant::standing(BTreeSet::new())]).unwrap();g.refresh(&table,&Standing::unknown());
+ assert_eq!(g.row(&res,&owner),Some(&bare),"I 10.2: changing standing policy must update rows it generated, not preserve them as if individually assigned");
+ // and withdrawing the policy altogether takes its rows with it rather than leaving them standing
+ g.set_grants(res,vec![]).unwrap();g.refresh(&table,&Standing::unknown());
+ assert_eq!(g.row(&res,&owner),None,"I 10.2, I 10.5: a row no predicate writes any longer is not a row");
 }
 #[test]
 fn p01_a_set_of_only_disavowed_candidates_has_no_usable_joint_standing(){

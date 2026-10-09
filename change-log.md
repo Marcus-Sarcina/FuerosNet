@@ -13418,6 +13418,117 @@ only if they share one framing**, stated provisionally in the requirements
 (§1) and as CER-027, to be restated compatible with both once the iOS shell
 exists; catalogue CER-55, deferred to that shell.
 
+### 2026-10-08 (the predicate language, and the resource's own port)
+
+**`infra-client-requirements.md` §10.3 lists the predicates an operator
+must have and nothing in the tree had any but the trivial one.** There is a
+language now (`node/src/grant.rs`), and it is exactly §10.3's list: the
+owner's clients, those and theirs, a distance by the walk that defines the
+horizon, an absolute rank, a quantile, an adoption date, and one named
+member. Several clauses in a grant are an *and* — §7.1's own compound
+affordance, "every node at [relative tier] with [trust above threshold]",
+is one — and several grants are the *or*, a member matched by two holding
+both their roles.
+
+**All five of `resource-requirements.md` §7.2.1's classes are covered** —
+structural, tenure, named, absolute rank, relative rank — which is how the
+vocabulary can be called complete rather than merely short. §7.2.1 is also
+what settles the one reading that needed settling: a relative *tier* is
+structural, depending on "the member's position relative to you", with
+"nobody else's arrival or departure" changing it, which is true of a
+distance and not of a rank.
+
+**There is no negation**, because no affordance asks for one and a grant
+that says *everyone except* changes meaning when a party who is not its
+subject joins. §7.1's reason for the whole vocabulary being closed is the
+one that governs: assignment is "a query language over existing data, and
+that bounds what it can express, which for a security-critical component is
+a feature".
+
+**Nothing is evaluated when a request arrives**, which §10.2 already
+required and the code now says in one place: the grants expand into rows at
+the moments §10.2 names — the operator configuring roles, membership
+moving, evidence arriving, the periodic pass — and `serve` is a lookup. The
+gain is §10.5's: a member a predicate *stops* matching now loses the row
+and the hosted session with it, where before only a departure did.
+
+**A grant carries no `connect` of its own.** Reaching the resource is what
+a grant is for (`resource-requirements.md` §3: "`connect` is the gate and
+it is spent getting the request to you"), so the narrowest grant there is
+opens the gate and hands over nothing further, and `connect` in a grant is
+refused as the reserved name it is.
+
+**One shape in the file, not two.** A grant over everyone, a grant over a
+tier and a grant to one party were separate keys; they are one list of
+predicates now, because §10.3 has named individuals *inside* the membership
+gate rather than beside it (`resource-requirements.md` §7.1.2), and a
+second shape for the same act is a second place for it to disagree.
+
+**A rank nobody computed admits nobody.** The ranking is built once per
+re-score from the node's own policy and kept nowhere (design §16.2), and
+only where a grant reads one; a clause the node could not evaluate refuses
+rather than admitting, because the alternative hands out a role because a
+score was missing.
+
+**Templates, which §10.4 requires and nothing had**, with the population
+§10.4 wants made explicit: the page says how many members each would reach
+as the horizon stands. A package ships grants ready-made, written in the
+same clause vocabulary and printed back in it,
+so an operator sees what a one-click choice grants "before the click, in
+the vocabulary they use elsewhere". Installing a package grants nobody
+anything: §10.4 has shrink-wrapping mean trusting the author's judgment
+about access, and that is the operator's to give.
+
+**The binding holds the manifest rather than copies of its fields.** Roles,
+administrative operations and templates are one object with one set of
+bounds, checked once at admission; a binding with its own copies would be a
+second place for them to drift. A package declaring more roles than a row
+can carry is also refused at installation now, which is earlier than
+§10.2's configuration time and for the same reason.
+
+**The second leg exists** (`node/src/relay.rs`). §3 has two legs and only
+the second speaks HTTP on the wire; where the node carries the traffic it
+is now a reverse proxy onto a port the resource holds itself. A resource
+there is an ordinary program serving its own users whatever it serves them,
+and what arrives through the node is a request already authenticated and
+authorised, carrying §2's credential as request headers. The answer is
+relayed unread (§3: "the node relays them; it does not interpret them") —
+only a chunked body is re-framed, because that framing would otherwise
+describe something the caller never receives.
+
+**Which of the three shapes a resource is follows from where it runs**,
+which is §10.6 ("it follows from where the resource runs, so nothing needs
+declaring"): a component and the node runs it in its sandbox, an address
+and the node proxies to it, neither and the node brokers. Both at once is
+refused rather than resolved, since it describes two places. A manifest
+with no component is no longer an error for that reason.
+
+**[ruled, author, 2026-10-08] Users reach a hosted resource through the
+node, for the MVP** — "I can imagine some application architectures which
+might in the future make this an issue, but for an MVP, we should be able
+to show plenty of value strictly through the node."
+
+**So a resource needs exactly one address, and nothing declares a port.**
+The front door multiplexes by resource keyhash inside the frame (§3's
+first leg), so two services are two resources — two keyhashes, two
+bindings — and nothing needs a way to address one listener among several
+behind a single identity. Nothing of a resource's address touches the
+network either: callers arrive on the node's own listen port and the
+loopback number is private to the host.
+
+**What deconfliction there is, is the file's.** Nothing partitions ports
+across package authors and nothing could, so where the operator names the
+address the configuration is the only place a clash can be seen: two
+resources at one address is refused, since the node dialling one socket
+for two resources would have one of them answering for both. When the node
+comes to launch what it hosts (§9's image) it assigns into that same
+table, and a resource in its own network namespace needs no deconfliction
+on the declared side at all.
+
+**Tested end to end**: a resource on a port of its own receives §2's
+credential, the caller's own `rhtn-roles: admin` is gone before the node
+inserts its own (§3.1), and the chunked answer comes back counted.
+
 ### 2026-10-08 (the node as an image, and the surface it is enrolled over)
 
 **`infra-client-requirements.md` §9 opens by saying a node is distributed as

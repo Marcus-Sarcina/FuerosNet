@@ -16401,6 +16401,92 @@ which `local.sh` does, and the packaging README should say plainly what
 that means. A warning on the page when the surface is bound to a public
 address would be the §8-shaped answer.
 
+## The predicate language and the second leg (2026-10-08)
+
+**Three readings I made that the author may want to correct**, all stated
+in the code rather than hidden in it:
+
+1. **"Nodes at a given relative tier" (§10.3) is implemented as a distance
+   by the walk that defines the horizon** (design §15.1.1). Found after
+   writing it: `resource-requirements.md` §7.2.1 classifies that affordance
+   as *structural* — it "depends on the member's position relative to you"
+   and "nobody else's arrival or departure changes the answer for a given
+   member" — which is true of a distance and settles the reading. What
+   §7.2.1 does not settle is direction: the horizon's walk crosses patron,
+   subordinate and sibling edges alike, so distance 1 is a patron, a client
+   **or** a sibling, and `Clause::Clients` is the directed question. If
+   tier was meant to mean direction, the clause needs splitting.
+
+   **§7.2.1 is the authoritative taxonomy and all five of its classes are
+   implemented** — structural, tenure, named, absolute rank, relative rank
+   — which is how the vocabulary can be called complete rather than merely
+   short. It was not consulted until after the clauses were written, from
+   §10.3's list alone; the two agree, but the order was luck. §7.2.1 should
+   have been the starting point.
+2. **A grant implies `connect`.** `resource-requirements.md` §3 has
+   `connect` "spent getting the request to you", so a grant that did not
+   open the gate would grant nothing; the operator's escape is still
+   `set_row`, which writes a row with `connect` false by hand. This removed
+   a field from the file.
+3. **Conjunction and union, no negation.** §7.1's one compound affordance
+   is an *and*; a second grant is the *or*. Nothing asks for a negation and
+   it was not built.
+
+**Owed, and newly sharp:**
+
+- **Port assignment** — **[ruled, author, 2026-10-08] users reach a hosted
+  resource through the node, for the MVP.** "I can imagine some
+  application architectures which might in the future make this an issue,
+  but for an MVP, we should be able to show plenty of value strictly
+  through the node."
+
+  **What that collapses:** a resource needs exactly *one* address. The
+  front door multiplexes by resource keyhash inside the frame (§3's first
+  leg, request type 6), so two services are two resources — two keyhashes,
+  two bindings, two authorities — and nothing needs a way to select among
+  several listeners behind one identity. So no wire field, no per-listener
+  naming, and the manifest declares no ports: a declaration the node could
+  not act on would be machinery, and §10.6 already has the hosting model
+  follow from where the resource runs.
+
+  **Deconfliction now:** the operator names the address, so the file is the
+  only place a clash is visible, and two resources at one address is
+  refused. **Deconfliction later:** when the node launches what it hosts
+  (§9's image) it assigns the host side into that same table, and a
+  resource in its own network namespace needs no deconfliction on the
+  declared side at all — two packages may both listen on 8080. That is
+  `-p published:declared`, which is the prior art.
+
+  **What the published-port shape would have cost**, recorded so the
+  decision is traceable if it is revisited: §3.1's gateway becomes
+  bypassable ("being behind a gateway is a deployment fact, not a property
+  the resource can verify from the request"), so the resource needs §3.1's
+  installation secret; the node leaves the path and is an identity provider
+  (§10, design §11.7) rather than a proxy, so the credential is an
+  assertion the resource validates rather than headers the node inserts;
+  and the published address belongs in `CatalogEntry.connection` (design
+  §11.5, "how to reach it; the SRV analogue"), which is **signed by the
+  owner, not the node** — so a reassigned port needs a fresh owner-signed
+  entry, the same shape as §4.4's endpoint record and anchor entry.
+- **TLS on the second leg.** §3 requires HTTPS wherever that leg crosses a
+  network and the relay has none, so a non-loopback `address` is refused.
+  That keeps the node conforming and leaves "a resource on another host"
+  unreachable until the leg has TLS. It is a real limit, not a nicety: the
+  brokered shape (design §11.7) is the answer for a service elsewhere, and
+  the proxy shape is for something local.
+- **The relay blocks.** `Backend::handle` is synchronous, as the sandbox's
+  is, so a slow local resource holds whatever thread is serving it for up
+  to the five-second patience. Fine for a local socket, wrong for anything
+  further, and the fix belongs with whatever makes the backend async.
+- **The page shows no address.** The binding holds `Arc<dyn Backend>`, so
+  the operator's page can say *hosted* or *brokered* but not *proxied to
+  127.0.0.1:8081* without a downcast or another field. Left alone rather
+  than given a mechanism.
+- **Invoking anything is still not wired** — unchanged from the admin
+  operations: it waits on the third reserved role and the §12
+  ownership-versus-hosting decision about what principal an invocation
+  carries.
+
 ## The SDL, talked through (2026-10-08)
 
 **The prior art splits in two** and the split is what decides the design:

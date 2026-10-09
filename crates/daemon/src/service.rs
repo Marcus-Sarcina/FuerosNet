@@ -543,6 +543,10 @@ impl Service {
                 };
                 let bound = crate::hosting::apply(&mut view.resources, path, limits)
                     .map_err(|e| Startup::Hosting(format!("{}: {e}", path.display())))?;
+                // **configuring roles is one of §10.2's four moments**, so
+                // the grants this file wrote are expanded now rather than
+                // waiting for the topology to move under them
+                view.expand_grants();
                 tracing::info!(target: "daemon", step = "hosting", bound, "daemon.lifecycle");
                 bound > 0
             }

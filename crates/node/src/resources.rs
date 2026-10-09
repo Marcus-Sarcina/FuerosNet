@@ -8,6 +8,7 @@
 
 use crate::Keyhash;
 use crate::catalog::CatalogService;
+use crate::grant::{Grant, GrantError, Standing, Template};
 use crate::http::{self, Credential, pairwise_principal};
 use rhtn_archive::catalog::*;
 use rhtn_archive::topology::Table;
@@ -28,7 +29,15 @@ pub trait Backend: Send + Sync {
 
 /// A resource bound at this node: its owner, the authority the backend is
 /// addressed by, the backend where the node carries the traffic and none
-/// where it brokers, and the roles the package declared.
+/// where it brokers, and what the package declared.
+///
+/// **The declarations are the manifest itself** rather than fields copied
+/// out of it [2026-10-08]: roles, administrative operations and templates
+/// are one object with one set of bounds, checked once at admission, and a
+/// binding that held its own copies would be a second place for them to
+/// drift. A brokered resource (§10.6, no backend) carries what its
+/// operator configured for it in the same shape, since nothing downstream
+/// cares which of the two wrote it.
 pub struct Binding {
     /// Who owns the resource.
     pub owner: Keyhash,
@@ -37,11 +46,8 @@ pub struct Binding {
     /// The backend where this node carries the traffic; `None` where it
     /// brokers and the traffic goes elsewhere.
     pub backend: Option<Arc<dyn Backend>>,
-    /// The roles the package declared.
-    pub declared_roles: BTreeSet<String>,
-    /// The administrative operations it declared, for its host's operator
-    /// ([`Operation`]).
-    pub admin: Vec<Operation>,
+    /// What the package declared ([`Manifest`]).
+    pub declared: Manifest,
 }
 
 /// One member's row for one resource: application roles, and whether
@@ -66,14 +72,40 @@ pub enum RowError {
     Reserved(String),
     /// No resource is bound here under that identity.
     NoSuchResource,
+    /// More grants on one resource than the node will hold.
+    TooManyGrants(usize),
+    /// A grant the node will not hold ([`crate::grant::GrantError`]).
+    BadGrant(GrantError),
+}
+
+impl std::fmt::Display for RowError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RowError::TooWide(n) => {
+                write!(f, "a row carries at most {MAX_ROLES} roles, not {n}")
+            }
+            RowError::Undeclared(r) => write!(f, "`{r}` is not a role this package declared"),
+            RowError::Reserved(r) => {
+                write!(f, "`{r}` is reserved for the node's own evaluation")
+            }
+            RowError::NoSuchResource => write!(f, "no resource is bound under that identity"),
+            RowError::TooManyGrants(n) => write!(
+                f,
+                "at most {} grants on one resource, not {n}",
+                crate::grant::MAX_GRANTS
+            ),
+            RowError::BadGrant(e) => write!(f, "{e}"),
+        }
+    }
 }
 
 /// The gateway's state.
 #[derive(Default)]
 pub struct Gateway {
     bindings: BTreeMap<Keyhash, Binding>,
-    /// Grants standing over the owner's horizon, by resource.
-    standing: BTreeMap<Keyhash, Row>,
+    /// The grants an operator wrote, by resource: the predicates whose
+    /// expansion writes rows (`infra-client-requirements.md` §10.2).
+    grants: BTreeMap<Keyhash, Vec<Grant>>,
     rows: BTreeMap<(Keyhash, Keyhash), Row>,
     /// Rows this gateway wrote by expanding a standing grant, as against
     /// ones the operator set for a named member.
@@ -105,11 +137,76 @@ impl Gateway {
         self.bindings.keys().copied().collect()
     }
 
-    /// The standing grant over the owner's horizon for `resource`, where
-    /// one is set (§10.2): the floor under the table, as against the rows
-    /// an operator set for a named member.
-    pub fn standing_grant(&self, resource: &Keyhash) -> Option<&Row> {
-        self.standing.get(resource)
+    /// The grants written for `resource` (§10.2): the floor under the
+    /// table, as against the rows an operator set for a named member.
+    pub fn grants_for(&self, resource: &Keyhash) -> &[Grant] {
+        self.grants.get(resource).map_or(&[], |g| g.as_slice())
+    }
+
+    /// Which of a resource's declared roles some grant reaches, and which
+    /// none does: `resource-requirements.md` §7 wants a role list with
+    /// "bound/unbound state, so *\"you installed this and have not decided
+    /// who may use it\"* is visible rather than a silent default".
+    pub fn role_bindings(&self, resource: &Keyhash) -> Vec<(String, bool)> {
+        let Some(b) = self.bindings.get(resource) else {
+            return Vec::new();
+        };
+        let granted: BTreeSet<&String> = self
+            .grants_for(resource)
+            .iter()
+            .flat_map(|g| g.roles.iter())
+            .collect();
+        b.declared
+            .roles
+            .iter()
+            .map(|r| (r.clone(), granted.contains(r)))
+            .collect()
+    }
+
+    /// **Whom a re-score would consider**: the union of the horizons of
+    /// every resource owner bound here, which is the set a rank clause's
+    /// line is drawn across.
+    pub fn candidates(&self, table: &Table) -> Vec<Keyhash> {
+        let mut all = BTreeSet::new();
+        for b in self.bindings.values() {
+            all.extend(table.horizon(&b.owner, 2));
+        }
+        all.into_iter().collect()
+    }
+
+    /// Whether any grant held here reads a rank, so a caller can skip the
+    /// policy where none does. design §16.2 has standing computed on
+    /// demand; this says when the demand exists.
+    pub fn wants_standing(&self) -> bool {
+        self.grants.values().flatten().any(|g| g.reads_rank())
+            || self
+                .bindings
+                .values()
+                .flat_map(|b| b.declared.templates.iter())
+                .any(|t| t.grant.reads_rank())
+    }
+
+    /// **How many members a grant would reach as the horizon is now.**
+    ///
+    /// `infra-client-requirements.md` §10.4 has a template's population
+    /// made explicit, and the operator's page shows this count beside the
+    /// template's name so that a one-click grant's reach is legible before
+    /// the click rather than after it.
+    pub fn population(
+        &self,
+        resource: &Keyhash,
+        grant: &Grant,
+        table: &Table,
+        standing: &Standing,
+    ) -> usize {
+        let Some(b) = self.bindings.get(resource) else {
+            return 0;
+        };
+        table
+            .horizon(&b.owner, 2)
+            .iter()
+            .filter(|m| grant.admits(&b.owner, m, table, standing))
+            .count()
     }
 
     /// The binding for `resource`, where it is bound here.
@@ -141,7 +238,7 @@ impl Gateway {
         {
             return Err(RowError::Reserved(r.clone()));
         }
-        if let Some(r) = row.roles.iter().find(|r| !b.declared_roles.contains(*r)) {
+        if let Some(r) = row.roles.iter().find(|r| !b.declared.roles.contains(*r)) {
             return Err(RowError::Undeclared(r.clone()));
         }
         self.derived.remove(&(resource, member));
@@ -209,19 +306,29 @@ impl Gateway {
         self.sessions.len()
     }
 
-    /// A grant standing over every member of the owner's trust horizon.
+    /// **Write the grants for a resource**, replacing whatever was there.
     ///
-    /// **This is the simplest predicate there is** — the one
-    /// `infra-client-requirements.md` §10.1 calls membership being the
-    /// outer gate — and it is held rather than evaluated because §10.1
-    /// answers *from the row, not by evaluating a predicate*: what a
-    /// request reads is a row that was already there.
-    pub fn stand(&mut self, resource: Keyhash, row: Row) -> Result<(), RowError> {
-        if !self.bindings.contains_key(&resource) {
+    /// A grant is a predicate and its roles ([`crate::grant`]), and it is
+    /// *expanded* rather than evaluated: `infra-client-requirements.md`
+    /// §10.1 answers a request *from the row, not by evaluating a
+    /// predicate*, so what a request reads is a row that was already
+    /// there. The empty predicate is the simplest grant there is — §10.1's
+    /// outer gate and nothing further.
+    ///
+    /// **Every grant is checked here**, once, because §10.2 has the
+    /// operator hear about a bad one "at configuration time, never a
+    /// requester at request time".
+    pub fn set_grants(&mut self, resource: Keyhash, grants: Vec<Grant>) -> Result<(), RowError> {
+        let Some(b) = self.bindings.get(&resource) else {
             return Err(RowError::NoSuchResource);
+        };
+        if grants.len() > crate::grant::MAX_GRANTS {
+            return Err(RowError::TooManyGrants(grants.len()));
         }
-        if row.roles.len() > MAX_ROLES {
-            return Err(RowError::TooWide(row.roles.len()));
+        for g in &grants {
+            if let Some(why) = g.refused(&b.declared.roles) {
+                return Err(RowError::BadGrant(why));
+            }
         }
         // **changing the policy changes the rows it wrote**
         // (`infra-client-requirements.md` §10.2: re-evaluate when an
@@ -230,7 +337,7 @@ impl Gateway {
         // them; ending their sessions is §10.5's, and it happens because
         // the row changes rather than in spite of it.  An operator's own
         // row is not the grant's to rewrite.
-        if self.standing.get(&resource) != Some(&row) {
+        if self.grants.get(&resource) != Some(&grants) {
             let stale: Vec<Keyhash> = self
                 .derived
                 .iter()
@@ -243,7 +350,7 @@ impl Gateway {
                 self.sessions.remove(&(m, resource));
             }
         }
-        self.standing.insert(resource, row);
+        self.grants.insert(resource, grants);
         Ok(())
     }
 
@@ -256,34 +363,57 @@ impl Gateway {
     /// one has theirs removed. A member with a row of their own that the
     /// operator set is left alone — the standing grant is a floor under
     /// the table, not a thing that overwrites it.
-    pub fn refresh(&mut self, table: &Table) -> (usize, usize) {
-        let (granted, dropped) = self.rescore(table);
+    pub fn refresh(&mut self, table: &Table, standing: &Standing) -> (usize, usize) {
+        let (granted, dropped) = self.rescore(table, standing);
         tracing::debug!(target: "node", granted, dropped, "node.resource.refreshed");
         (granted, dropped)
     }
 
-    fn rescore(&mut self, table: &Table) -> (usize, usize) {
+    fn rescore(&mut self, table: &Table, standing: &Standing) -> (usize, usize) {
         let (mut granted, mut dropped) = (0, 0);
-        let standing: Vec<(Keyhash, Row)> =
-            self.standing.iter().map(|(k, r)| (*k, r.clone())).collect();
-        for (resource, row) in standing {
+        let written: Vec<(Keyhash, Vec<Grant>)> =
+            self.grants.iter().map(|(k, g)| (*k, g.clone())).collect();
+        for (resource, grants) in written {
             let Some(owner) = self.bindings.get(&resource).map(|b| b.owner) else {
                 continue;
             };
-            let members = table.horizon(&owner, 2);
-            let admissible = self.admissible(&resource, &row);
-            for m in &members {
+            for m in table.horizon(&owner, 2) {
                 // an operator's own row is the floor's exception and is
-                // left alone; a row this grant wrote is the grant's to
+                // left alone; a row a grant wrote is the grants' to
                 // rewrite, and one already correct costs nothing
-                if self.rows.contains_key(&(resource, *m))
-                    && !self.derived.contains(&(resource, *m))
+                if self.rows.contains_key(&(resource, m)) && !self.derived.contains(&(resource, m))
                 {
                     continue;
                 }
-                if admissible && self.rows.get(&(resource, *m)) != Some(&row) {
-                    self.write_row(resource, *m, row.clone());
-                    self.derived.insert((resource, *m));
+                // **a member matched by two grants holds both their
+                // roles**, which is what makes a second grant the
+                // disjunction the language has no operator for
+                // ([`crate::grant::Grant`])
+                let matched: Vec<&Grant> = grants
+                    .iter()
+                    .filter(|g| g.admits(&owner, &m, table, standing))
+                    .collect();
+                if matched.is_empty() {
+                    // **a predicate that stopped matching is §10.5's own
+                    // example** of an authorisation change, so the row it
+                    // wrote goes and the session goes with it
+                    if self.derived.remove(&(resource, m)) {
+                        self.rows.remove(&(resource, m));
+                        self.sessions.remove(&(m, resource));
+                        dropped += 1;
+                    }
+                    continue;
+                }
+                let row = Row {
+                    connect: true,
+                    roles: matched
+                        .iter()
+                        .flat_map(|g| g.roles.iter().cloned())
+                        .collect(),
+                };
+                if self.rows.get(&(resource, m)) != Some(&row) {
+                    self.write_row(resource, m, row);
+                    self.derived.insert((resource, m));
                     granted += 1;
                 }
             }
@@ -320,21 +450,6 @@ impl Gateway {
             }
         }
         (granted, dropped)
-    }
-
-    /// Whether a standing grant's row is one this resource can carry: the
-    /// same three checks `set_row` runs, asked once for the grant instead
-    /// of once per member, since the answer cannot differ between them.
-    fn admissible(&self, resource: &Keyhash, row: &Row) -> bool {
-        let Some(b) = self.bindings.get(resource) else {
-            return false;
-        };
-        row.roles.len() <= MAX_ROLES
-            && !row
-                .roles
-                .iter()
-                .any(|r| RESERVED_ROLES.contains(&r.as_str()))
-            && row.roles.iter().all(|r| b.declared_roles.contains(r))
     }
 
     /// The hosted session identifier for (member, resource), if one is
@@ -585,7 +700,7 @@ pub const MAX_LABEL: usize = 80;
 pub const MAX_HELP: usize = 240;
 
 /// Whether `name` is the shape a role, an operation or a parameter takes.
-fn namelike(name: &str) -> bool {
+pub(crate) fn namelike(name: &str) -> bool {
     !name.is_empty()
         && name.len() <= 32
         && name
@@ -669,15 +784,22 @@ impl Kind {
 }
 
 /// What a package declares (`resource-requirements.md` §7, §8).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Manifest {
-    /// The application roles it declares.
+    /// The application roles it declares. **These are what an operator
+    /// has to allocate** — §7: "the package says what roles exist; the
+    /// operator binds predicates to them", so a package cannot invent one
+    /// after installation and an operator cannot grant one the package
+    /// does not understand.
     pub roles: BTreeSet<String>,
     /// The host exports it imports.
     pub imports: Vec<String>,
     /// The administrative operations it offers its host's operator
     /// ([`Operation`]).
     pub admin: Vec<Operation>,
+    /// The grants it ships ready-made
+    /// ([`crate::grant::Template`]), which an operator may take or ignore.
+    pub templates: Vec<Template>,
 }
 
 /// A package instantiated against the host's exports.
@@ -707,6 +829,13 @@ pub fn instantiate(m: &Manifest) -> Result<Package, String> {
             m.admin.len()
         ));
     }
+    if m.templates.len() > crate::grant::MAX_TEMPLATES {
+        return Err(format!(
+            "a manifest declares at most {} templates, not {}",
+            crate::grant::MAX_TEMPLATES,
+            m.templates.len()
+        ));
+    }
     let mut named = BTreeSet::new();
     for op in &m.admin {
         if let Some(why) = op.refused() {
@@ -715,6 +844,17 @@ pub fn instantiate(m: &Manifest) -> Result<Package, String> {
         if !named.insert(&op.name) {
             return Err(format!("`{}` is declared twice", op.name));
         }
+    }
+    // **a row could not encode them all** (`resource-requirements.md` §3:
+    // at most 64 application roles per resource, and a node "refuses to
+    // materialise a row it could not encode").  Asked here, the operator
+    // hears about it at installation rather than at configuration, which
+    // is earlier still
+    if m.roles.len() > MAX_ROLES {
+        return Err(format!(
+            "a package declares at most {MAX_ROLES} roles, not {}",
+            m.roles.len()
+        ));
     }
     if m.roles.iter().any(|r| {
         r.is_empty()
@@ -731,6 +871,15 @@ pub fn instantiate(m: &Manifest) -> Result<Package, String> {
         .find(|r| RESERVED_ROLES.contains(&r.as_str()))
     {
         return Err(format!("{r} is reserved for the node's own evaluation"));
+    }
+    let mut named = BTreeSet::new();
+    for t in &m.templates {
+        if let Some(why) = t.refused(&m.roles) {
+            return Err(why);
+        }
+        if !named.insert(&t.name) {
+            return Err(format!("`{}` is declared twice", t.name));
+        }
     }
     Ok(Package {
         roles: m.roles.clone(),

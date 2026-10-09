@@ -412,7 +412,7 @@ async fn a_daemon_hosts_the_package_its_configuration_names_and_serves_a_request
     set.hosting(
         "alice",
         &format!(
-            "# what this node hosts, and who may reach it\n[[host]]\nresource = \"{}\"\nowner = \"{}\"\nauthority = \"shop.internal\"\nmanifest = \"{}\"\n\n[[host.grant]]\nmember = \"{}\"\nroles = [\"connect\", \"reader\"]\n",
+            "# what this node hosts, and who may reach it\n[[host]]\nresource = \"{}\"\nowner = \"{}\"\nauthority = \"shop.internal\"\nmanifest = \"{}\"\n\n[[host.grant]]\nroles = [\"reader\"]\n\n[[host.grant.where]]\nof = \"named\"\nwho = \"{}\"\n",
             hex(&shop),
             hex(&kh("w1")),
             manifest.display(),
