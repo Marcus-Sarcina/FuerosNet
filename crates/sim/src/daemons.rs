@@ -142,6 +142,18 @@ impl Daemons {
         p
     }
 
+    /// Who may reach one resource, in the node's own grants directory:
+    /// what an act on the operator's surface rewrites, and what `apply`
+    /// reads.
+    pub fn grants(&mut self, name: &str, resource: &[u8; 32], text: &str) -> PathBuf {
+        let dir = self.dir(name).join("grants");
+        std::fs::create_dir_all(&dir).expect("the grants directory");
+        let hex: String = resource.iter().map(|b| format!("{b:02x}")).collect();
+        let p = dir.join(format!("{hex}.toml"));
+        std::fs::write(&p, text).expect("the grants file");
+        p
+    }
+
     /// The identity, peers and configuration one daemon starts from.
     ///
     /// One writer for both `start` and `refuses`, because a second copy
@@ -165,9 +177,12 @@ impl Daemons {
         std::fs::write(&peers_path, list).expect("the peers file");
         let mut text = String::new();
         if self.hosting.iter().any(|h| h == name) {
+            // the hosting file is the operator's; the grants directory is
+            // the node's own, and a grant act rewrites it
             text.push_str(&format!(
-                "resources = \"{}\"\n",
-                dir.join("hosting").display()
+                "resources = \"{}\"\ngrants = \"{}\"\n",
+                dir.join("hosting").display(),
+                dir.join("grants").display()
             ));
         }
         text.push_str(&format!(

@@ -133,6 +133,17 @@ pub struct Config {
     /// bytes and an instruction budget.  The values are the operator's; no
     /// document fixes either.
     pub resource_limits: Option<(usize, u64)>,
+    /// **Where this node keeps who may reach each resource it hosts**
+    /// ([`crate::grants`]): a directory the node owns, one file per
+    /// resource.
+    ///
+    /// **Not in the hosting file, which is the operator's**
+    /// [ruled, author, 2026-10-09]. A grant is a table update and an act
+    /// on the operator's surface rewrites it, where the node's own
+    /// configuration is never rewritten and a change to it needs a
+    /// restart or a re-read. Absent, a grant act has nowhere to persist
+    /// and says so.
+    pub grants: Option<PathBuf>,
     /// Where a field-test build writes its diagnostic events, and down to
     /// which level (`Robot/field-test-diagnostics.md`).  Accepted by every
     /// build so one configuration serves both flavours; a releasable build
@@ -298,6 +309,7 @@ struct File {
     queue_cap: Option<usize>,
     upstream: Option<Spanned<Upstream>>,
     resources: Option<PathBuf>,
+    grants: Option<PathBuf>,
     #[serde(rename = "resource-limits")]
     resource_limits: Option<Spanned<Limits>>,
     administration: Option<Spanned<AdministrationTable>>,
@@ -525,6 +537,7 @@ impl Config {
             topology: f.topology,
             archive: f.archive,
             resources: f.resources,
+            grants: f.grants,
             resource_limits,
             log,
         })

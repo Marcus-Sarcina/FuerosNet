@@ -13418,6 +13418,60 @@ only if they share one framing**, stated provisionally in the requirements
 (§1) and as CER-027, to be restated compatible with both once the iOS shell
 exists; catalogue CER-55, deferred to that shell.
 
+### 2026-10-09 (grant editing, and where a grant lives)
+
+**`infra-client-requirements.md` §10.2 has the role table re-evaluated
+"when an operator is configuring roles" and nothing let them configure
+one.** The resource's tab on the operator's page now carries four
+controls: grant, narrow, withdraw, and take one the package offered. They
+are OPS-012's "explicit management acts" over an operator's predicates,
+and they are plain forms — §8.3 has the client provide the frame, and
+nothing the node serves should need more of it than a browser already
+does.
+
+**[ruled, author, 2026-10-09] A grant is a table update, so it is written
+back.** Asked whether an act should persist, given that an act does not
+rewrite the configuration: "I think it does rewrite configuration with
+respect to the grants table and the individual resource configs. Some
+resources might require a restart on some configuration changes, but
+grants by itself is just a table update. The question above makes sense in
+the context of node-level configurations where a node restart or hosting
+file re-read needs to be triggered."
+
+**That decided where a grant lives, and it is not the hosting file.** The
+hosting file is the operator's and the node never rewrites it; a grant is
+rewritten by an act. So the two are two files with two owners: the hosting
+file says what this node hosts, and a `grants` directory the node owns
+says who may reach each of them, one file per resource named by its
+keyhash. A hosting file still carrying `[[host.grant]]` is refused with a
+pointer to where grants went, rather than having them quietly ignored.
+
+**An act that did not survive a restart would not be an act**, which is
+the reason under the ruling: a revocation that came back on the next start
+is worse than one that never happened, because the operator watched it
+work.
+
+**Either both or neither.** The table changes first, since it is the
+authority on what a grant may say; if the file cannot be written the table
+is put back and the act fails, so the two never disagree about who may
+reach a resource.
+
+**The page cannot offer what the node would not read.** The clause menu is
+built from the language itself — one list of names, prompts and the single
+parameter each clause takes — so a page and a file cannot drift apart on
+what a clause is called. The same list replaced the hand-written table in
+the hosting file's reader that said which key means anything where.
+
+**A grant written out and read back is the grant it was**, for every
+clause and for the conjunction, which is the test that keeps an act
+honest: the table is what the operator made and the file is what a restart
+will read.
+
+**Three messages had collapsed into one line each** with twenty spaces
+where a line continuation should have been — an artefact of how they were
+written, found by searching for runs of spaces inside string literals
+rather than by reading them.
+
 ### 2026-10-08 (the predicate language, and the resource's own port)
 
 **`infra-client-requirements.md` §10.3 lists the predicates an operator

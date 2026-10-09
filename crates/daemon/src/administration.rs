@@ -84,10 +84,13 @@
 
 use aws_lc_rs::hmac;
 use rhtn_crypto::Identity;
+use rhtn_node::grant::{Clause, Grant};
 use rhtn_node::http::{self, Reject};
+use rhtn_node::resources::Manifest;
 use rhtn_node::runtime::LiveNode;
 use rhtn_node::store::{Decision, KIND_ENDPOINT_RECORD};
 use rhtn_transport::tls::Credential;
+use std::collections::BTreeSet;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -169,6 +172,11 @@ pub struct Surface {
     pub node: Arc<Mutex<Option<Running>>>,
     /// The hosting file and its limits, for a reload.
     pub hosting: Option<(PathBuf, rhtn_resources::Limits)>,
+    /// **Where this node keeps who may reach each resource**
+    /// ([`crate::grants`]), which is what a grant act rewrites. Absent,
+    /// an act has nowhere to persist and refuses rather than changing a
+    /// table that would not survive a restart.
+    pub grants: Option<PathBuf>,
     /// Told when an act asks this node to stop; the service's own loop is
     /// waiting on it, so the act triggers the shutdown that exists rather
     /// than inventing one.
@@ -325,6 +333,10 @@ impl Surface {
             ("GET", "/") | ("GET", "/index.html") => self.page(query),
             ("GET", "/node") => self.fetch(query),
             ("POST", "/node/acknowledge") => self.acknowledge(&req.body),
+            ("POST", "/node/grant") => self.grant_add(&req.body),
+            ("POST", "/node/grant/narrow") => self.grant_narrow(&req.body),
+            ("POST", "/node/grant/drop") => self.grant_drop(&req.body),
+            ("POST", "/node/grant/template") => self.grant_template(&req.body),
             ("POST", "/node/reload") => self.reload(),
             ("POST", "/node/stop") => self.stop(),
             ("PUT", "/node/run") | ("POST", "/node/run") => self.take_run(&req.body),
@@ -337,8 +349,9 @@ impl Surface {
             ("GET", _) | ("PUT", _) | ("POST", _) => (
                 404,
                 "this surface answers GET /, GET /node, \
-                 PUT /node/{run,endpoint-record,anchor-entry} and \
-                 POST /node/{acknowledge,reload,stop}\n"
+                 PUT /node/{run,endpoint-record,anchor-entry}, \
+                 POST /node/{acknowledge,reload,stop} and \
+                 POST /node/grant[/narrow|/drop|/template]\n"
                     .into(),
             ),
             _ => (405, "this surface answers GET and PUT\n".into()),
@@ -443,6 +456,157 @@ impl Surface {
         ))
     }
 
+    /// **Change one resource's grants**, persist them, and expand.
+    ///
+    /// OPS-012 has an operator's predicates and standing policies kept as
+    /// **explicit management acts**, and this is one. Unlike the
+    /// acknowledgement policy above it is written back: a grant is a table
+    /// update [ruled, author, 2026-10-09], and an act that did not survive
+    /// a restart would not be an act — a revocation that came back on the
+    /// next start is worse than one that never happened, because the
+    /// operator watched it work.
+    ///
+    /// **Both or neither.** The table is changed first, because it is the
+    /// authority on what a grant may say; if the file cannot be written
+    /// the table is put back and the act fails, so the two never disagree
+    /// about who may reach this resource.
+    fn amend(
+        &self,
+        resource: &str,
+        change: impl FnOnce(&mut Vec<Grant>, &Manifest) -> Result<String, String>,
+    ) -> (u16, String) {
+        let Ok(node) = self.acting() else {
+            return (409, "this node is not serving yet\n".into());
+        };
+        let Some(dir) = self.grants.clone() else {
+            return (
+                409,
+                "the configuration names no `grants` directory, so a grant could not survive a \
+                 restart and is refused rather than held until one\n"
+                    .into(),
+            );
+        };
+        let Some(res) = unhex(resource)
+            .and_then(|v| <[u8; 32]>::try_from(v).ok())
+            .map(|k: [u8; 32]| k)
+        else {
+            return (400, "a resource is 64 lower-case hex digits\n".into());
+        };
+        let mut view = node.view.lock().unwrap();
+        let Some(declared) = view.resources.binding(&res).map(|b| b.declared.clone()) else {
+            return (
+                404,
+                "no resource is bound here under that identity\n".into(),
+            );
+        };
+        let was: Vec<Grant> = view.resources.grants_for(&res).to_vec();
+        let mut now = was.clone();
+        let said = match change(&mut now, &declared) {
+            Ok(s) => s,
+            Err(e) => return (400, format!("{e}\n")),
+        };
+        if let Err(e) = view.resources.set_grants(res, now.clone()) {
+            return (400, format!("{e}\n"));
+        }
+        if let Err(e) = crate::grants::write_for(&dir, &res, &now) {
+            // put the table back, so what is in force is what is on disk
+            let _ = view.resources.set_grants(res, was);
+            view.expand_grants();
+            return (500, format!("{e}; nothing changed\n"));
+        }
+        // §10.2's first moment: the operator has just configured roles
+        let (granted, dropped) = view.expand_grants();
+        drop(view);
+        tracing::info!(
+            target: "daemon",
+            step = "surface_act",
+            act = "grant",
+            granted,
+            dropped,
+            "daemon.lifecycle"
+        );
+        seen(format!(
+            "{said}. {granted} row(s) written and {dropped} dropped, and the node's own grants \
+             table is written, so a restart takes it."
+        ))
+    }
+
+    /// Add a grant: roles, and one clause of §10.3's vocabulary or none at
+    /// all, which grants over every member of the owner's horizon.
+    fn grant_add(&self, body: &[u8]) -> (u16, String) {
+        let f = form(body);
+        self.amend(field(&f, "resource"), |grants, _| {
+            // a checkbox per declared role, so several arrive under one
+            // name; a comma-separated value is read the same way, since
+            // an operator reaching this route by hand will write one
+            let roles: BTreeSet<String> = fields(&f, "roles")
+                .iter()
+                .flat_map(|v| v.split(','))
+                .map(str::trim)
+                .filter(|r| !r.is_empty())
+                .map(str::to_string)
+                .collect();
+            let of = field(&f, "of");
+            let clauses = if of.is_empty() || of == "everyone" {
+                Vec::new()
+            } else {
+                vec![Clause::read(of, Some(field(&f, "with")))?]
+            };
+            let g = Grant { roles, clauses };
+            let said = format!("granted {g}");
+            grants.push(g);
+            Ok(said)
+        })
+    }
+
+    /// Narrow a grant by one clause, which is the conjunction
+    /// `resource-requirements.md` §7.1 asks for: "every node at [relative
+    /// tier] with [trust above threshold]".
+    fn grant_narrow(&self, body: &[u8]) -> (u16, String) {
+        let f = form(body);
+        self.amend(field(&f, "resource"), |grants, _| {
+            let at: usize = field(&f, "at")
+                .parse()
+                .map_err(|_| "which grant is a number".to_string())?;
+            let g = grants.get_mut(at).ok_or("no such grant")?;
+            g.clauses
+                .push(Clause::read(field(&f, "of"), Some(field(&f, "with")))?);
+            Ok(format!("narrowed to {g}"))
+        })
+    }
+
+    /// Withdraw a grant. §10.5 ends the sessions the rows it wrote were
+    /// carrying, which happens because the rows go rather than in spite of
+    /// it.
+    fn grant_drop(&self, body: &[u8]) -> (u16, String) {
+        let f = form(body);
+        self.amend(field(&f, "resource"), |grants, _| {
+            let at: usize = field(&f, "at")
+                .parse()
+                .map_err(|_| "which grant is a number".to_string())?;
+            if at >= grants.len() {
+                return Err("no such grant".into());
+            }
+            Ok(format!("withdrew {}", grants.remove(at)))
+        })
+    }
+
+    /// Take a grant the package shipped (§10.4), which is the one-click
+    /// choice — and it is the operator's click, not the author's.
+    fn grant_template(&self, body: &[u8]) -> (u16, String) {
+        let f = form(body);
+        self.amend(field(&f, "resource"), |grants, declared| {
+            let name = field(&f, "name");
+            let t = declared
+                .templates
+                .iter()
+                .find(|t| t.name == name)
+                .ok_or_else(|| format!("`{name}` is not a grant this package offers"))?;
+            grants.push(t.grant.clone());
+            Ok(format!("took `{name}`, which grants {}", t.grant))
+        })
+    }
+
     /// Re-read the hosting file, so what this node hosts and who may reach
     /// it can change without a restart (OPS-012).
     fn reload(&self) -> (u16, String) {
@@ -453,7 +617,7 @@ impl Surface {
             return (409, "the configuration names no `resources` file\n".into());
         };
         let mut view = node.view.lock().unwrap();
-        match crate::hosting::apply(&mut view.resources, &path, limits) {
+        match crate::hosting::apply(&mut view.resources, &path, limits, self.grants.as_deref()) {
             Ok(n) => {
                 // §10.2: the operator has just configured roles
                 view.expand_grants();
@@ -829,4 +993,68 @@ fn unhex(s: &str) -> Option<Vec<u8>> {
     (0..s.len() / 2)
         .map(|i| u8::from_str_radix(&s[i * 2..i * 2 + 2], 16).ok())
         .collect()
+}
+
+/// **What a control on the page posted**: the pairs of an
+/// `application/x-www-form-urlencoded` body.
+///
+/// A form is what a page without script has, and the page has no script
+/// (`infra-client-requirements.md` §8.3 has the client provide the frame;
+/// nothing the node serves may need more of it than a browser).
+fn form(body: &[u8]) -> Vec<(String, String)> {
+    String::from_utf8_lossy(body)
+        .split('&')
+        .filter(|p| !p.is_empty())
+        .map(|p| match p.split_once('=') {
+            Some((k, v)) => (unescape(k), unescape(v)),
+            None => (unescape(p), String::new()),
+        })
+        .collect()
+}
+
+/// One field, or the empty string: a control the page did not draw is one
+/// the act will refuse for what it says rather than for being absent.
+fn field<'a>(f: &'a [(String, String)], name: &str) -> &'a str {
+    f.iter()
+        .find(|(k, _)| k == name)
+        .map_or("", |(_, v)| v.as_str())
+}
+
+/// Every value under one name: a checkbox group posts one field per box
+/// ticked.
+fn fields<'a>(f: &'a [(String, String)], name: &str) -> Vec<&'a str> {
+    f.iter()
+        .filter(|(k, _)| k == name)
+        .map(|(_, v)| v.as_str())
+        .collect()
+}
+
+/// Percent-decoding, and `+` for a space.
+fn unescape(s: &str) -> String {
+    let b = s.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        match b[i] {
+            b'+' => {
+                out.push(b' ');
+                i += 1;
+            }
+            b'%' if i + 2 < b.len() => match u8::from_str_radix(&s[i + 1..i + 3], 16) {
+                Ok(v) => {
+                    out.push(v);
+                    i += 3;
+                }
+                Err(_) => {
+                    out.push(b'%');
+                    i += 1;
+                }
+            },
+            c => {
+                out.push(c);
+                i += 1;
+            }
+        }
+    }
+    String::from_utf8_lossy(&out).to_string()
 }

@@ -381,6 +381,7 @@ impl Service {
                             endpoint_record: cfg.endpoint_record.clone(),
                             anchor_entry: cfg.anchor_entry.clone(),
                             node: serving_node.clone(),
+                            grants: cfg.grants.clone(),
                             hosting: cfg.resources.clone().map(|p| {
                                 let (memory, fuel) = cfg
                                     .resource_limits
@@ -541,8 +542,9 @@ impl Service {
                     fuel,
                     ..Limits::default()
                 };
-                let bound = crate::hosting::apply(&mut view.resources, path, limits)
-                    .map_err(|e| Startup::Hosting(format!("{}: {e}", path.display())))?;
+                let bound =
+                    crate::hosting::apply(&mut view.resources, path, limits, cfg.grants.as_deref())
+                        .map_err(|e| Startup::Hosting(format!("{}: {e}", path.display())))?;
                 // **configuring roles is one of §10.2's four moments**, so
                 // the grants this file wrote are expanded now rather than
                 // waiting for the topology to move under them

@@ -59,6 +59,7 @@ use rhtn_node::relay::Relay;
 use rhtn_node::resources::{Binding, Gateway, Kind, Manifest, Operation, Parameter, instantiate};
 use rhtn_resources::{Hosted, Limits, Sandbox};
 use std::collections::BTreeSet;
+use std::fmt::Write;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -85,7 +86,7 @@ impl std::fmt::Display for Refused {
 
 impl std::error::Error for Refused {}
 
-fn at(line: usize, what: impl Into<String>) -> Refused {
+pub(crate) fn at(line: usize, what: impl Into<String>) -> Refused {
     Refused {
         line,
         what: what.into(),
@@ -132,22 +133,17 @@ struct HostEntry {
     /// declaring": an address and the node proxies, a component and the
     /// node runs it, neither and the node brokers.
     address: Option<String>,
-    /// What the operator granted, in the predicate language
-    /// (`infra-client-requirements.md` §10.2, §10.3).
-    ///
-    /// **One vocabulary, not two.** A grant over everyone, a grant over a
-    /// tier and a grant to one named party used to be separate keys; they
-    /// are one list of predicates now, because §10.3 has named
-    /// individuals *inside* the membership gate rather than beside it
-    /// (`resource-requirements.md` §7.1.2) and a second shape for the
-    /// same act is a second place for it to disagree.
+    /// **Where grants used to be written**, kept only to say where they
+    /// went: this file is the operator's and the node never rewrites it,
+    /// and a grant is a table update an act on the operator's surface
+    /// does rewrite ([`crate::grants`]).
     #[serde(default)]
     grant: Vec<GrantEntry>,
 }
 
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
-struct GrantEntry {
+pub(crate) struct GrantEntry {
     roles: Vec<String>,
     /// The clauses a member must satisfy, all of them. **Absent grants to
     /// every member of the owner's horizon** — §10.1's outer gate and
@@ -159,7 +155,7 @@ struct GrantEntry {
 /// One clause of §10.3's vocabulary as it is written down.
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
-struct ClauseEntry {
+pub(crate) struct ClauseEntry {
     of: String,
     edges: Option<usize>,
     n: Option<usize>,
@@ -240,7 +236,7 @@ fn clause_of(c: &ClauseEntry) -> Result<Clause, String> {
 }
 
 /// The grant an entry describes.
-fn grant_of(g: &GrantEntry) -> Result<Grant, String> {
+pub(crate) fn grant_of(g: &GrantEntry) -> Result<Grant, String> {
     let mut roles = BTreeSet::new();
     for r in &g.roles {
         roles.insert(r.clone());
@@ -259,7 +255,12 @@ fn grant_of(g: &GrantEntry) -> Result<Grant, String> {
 /// one role the package never declared, leaves the node hosting none of
 /// them rather than some of them: a half-applied configuration is one the
 /// operator did not write, and `service.rs` reports rather than repairs.
-pub fn apply(gateway: &mut Gateway, path: &Path, limits: Limits) -> Result<usize, Refused> {
+pub fn apply(
+    gateway: &mut Gateway,
+    path: &Path,
+    limits: Limits,
+    grants_dir: Option<&Path>,
+) -> Result<usize, Refused> {
     let text =
         std::fs::read_to_string(path).map_err(|e| at(0, format!("{}: {e}", path.display())))?;
     let file: File = toml::from_str(&text).map_err(|e| {
@@ -335,7 +336,9 @@ pub fn apply(gateway: &mut Gateway, path: &Path, limits: Limits) -> Result<usize
                     return Err(at(
                         0,
                         format!(
-                            "`{a}` is not a local address: this leg carries plain HTTP, and                              `resource-requirements.md` §3 requires HTTPS wherever it crosses                              a network"
+                            "`{a}` is not a local address: this leg carries plain HTTP, and \
+                             `resource-requirements.md` §3 requires HTTPS wherever it \
+                             crosses a network"
                         ),
                     ));
                 }
@@ -343,7 +346,8 @@ pub fn apply(gateway: &mut Gateway, path: &Path, limits: Limits) -> Result<usize
                     return Err(at(
                         0,
                         format!(
-                            "`{a}` is where `{first}` already listens: two resources at one                              address is one resource answering for both"
+                            "`{a}` is where `{first}` already listens: two resources at one address \
+                             is one resource answering for both"
                         ),
                     ));
                 }
@@ -373,10 +377,25 @@ pub fn apply(gateway: &mut Gateway, path: &Path, limits: Limits) -> Result<usize
             (None, None) => None,
         };
 
+        if !h.grant.is_empty() {
+            return Err(at(
+                0,
+                format!(
+                    "`{}` carries grants: who may reach a resource is the node's own table \
+                     now, under the `grants` directory, because an act on the \
+                     operator's surface rewrites it and this file is never rewritten",
+                    h.resource
+                ),
+            ));
+        }
+        // **read from the node's own table, not from this file.** The
+        // grants are still checked against the package before anything is
+        // bound, which is the same invariant from a different source
         let mut written = Vec::new();
-        for g in &h.grant {
-            let grant = grant_of(g).map_err(|e| at(0, e))?;
-            // **checked against the package before anything is bound**:
+        for grant in match grants_dir {
+            Some(d) => crate::grants::read_for(d, &res)?,
+            None => Vec::new(),
+        } {
             // the gateway refuses it too, but by then this file has
             // already bound its earlier entries, and a half-applied
             // configuration is one the operator did not write
@@ -569,4 +588,46 @@ fn read_manifest(path: &Path) -> Result<(Manifest, Option<std::path::PathBuf>), 
     // can move without rewriting what is inside it
     let dir = path.parent().unwrap_or(Path::new("."));
     Ok((manifest, f.component.map(|c| dir.join(c))))
+}
+
+/// **Read a resource's own grants file**, which carries grants and nothing
+/// else ([`crate::grants`]).
+pub(crate) fn parse_grants(text: &str) -> Result<Vec<GrantEntry>, String> {
+    #[derive(serde::Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct File {
+        #[serde(default)]
+        grant: Vec<GrantEntry>,
+    }
+    let f: File = toml::from_str(text).map_err(|e| e.to_string())?;
+    Ok(f.grant)
+}
+
+/// **One grant as its file says it**, which is the inverse of what
+/// [`parse_grants`] reads: a grant written out and read back is the grant
+/// it was, and the test that says so is what keeps an act from quietly
+/// changing what it persisted.
+///
+/// The names and the one parameter each clause takes come from the
+/// language itself (`rhtn_node::grant::VOCABULARY`), so nothing here
+/// decides what a clause is called.
+pub(crate) fn grant_toml(g: &Grant) -> String {
+    let mut out = String::from("\n[[grant]]\nroles = [");
+    let roles: Vec<String> = g.roles.iter().map(|r| format!("\"{r}\"")).collect();
+    out.push_str(&roles.join(", "));
+    out.push_str("]\n");
+    for c in &g.clauses {
+        let of = c.of();
+        let _ = writeln!(out, "\n  [[grant.where]]\n  of = \"{of}\"");
+        if let (Some(key), Some(v)) = (Clause::named(of).and_then(|n| n.takes), c.parameter()) {
+            // a keyhash is a string where a count is a number, and the
+            // vocabulary says which this clause carries
+            let _ = if matches!(c, Clause::Named { .. }) {
+                writeln!(out, "  {key} = \"{v}\"")
+            } else {
+                writeln!(out, "  {key} = {v}")
+            };
+        }
+    }
+    out
 }

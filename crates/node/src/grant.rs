@@ -402,3 +402,163 @@ impl Template {
             .map(|e| format!("`{}`: {e}", self.name))
     }
 }
+
+/// **One clause of the vocabulary as it is written down and offered.**
+///
+/// The names live here rather than in whatever reads them, because a file
+/// and a page offering different words for the same clause would be two
+/// vocabularies wearing one name. `daemon`'s hosting file uses this to
+/// decide which key means anything where, and its operator's page uses it
+/// to offer the choice.
+pub struct Named {
+    /// The clause's name, in a file and on a page.
+    pub of: &'static str,
+    /// The key carrying its one parameter, or nothing where it takes none.
+    pub takes: Option<&'static str>,
+    /// What an operator reads when choosing it.
+    pub prompt: &'static str,
+}
+
+/// §10.3's list, in the order an operator is offered it.
+pub const VOCABULARY: [Named; 7] = [
+    Named {
+        of: "clients",
+        takes: None,
+        prompt: "my direct clients",
+    },
+    Named {
+        of: "grandclients",
+        takes: None,
+        prompt: "my clients and grand-clients",
+    },
+    Named {
+        of: "distance",
+        takes: Some("edges"),
+        prompt: "nodes this many edges from me",
+    },
+    Named {
+        of: "most-trusted",
+        takes: Some("n"),
+        prompt: "my most trusted, this many of them",
+    },
+    Named {
+        of: "top-fraction",
+        takes: Some("percent"),
+        prompt: "my most trusted, this percent of them",
+    },
+    Named {
+        of: "joined-before",
+        takes: Some("when"),
+        prompt: "nodes that joined before this time",
+    },
+    Named {
+        of: "named",
+        takes: Some("who"),
+        prompt: "one node, by keyhash",
+    },
+];
+
+impl Clause {
+    /// The vocabulary entry for `of`, where there is one.
+    pub fn named(of: &str) -> Option<&'static Named> {
+        VOCABULARY.iter().find(|n| n.of == of)
+    }
+
+    /// Its name, which is the key [`VOCABULARY`] lists it under.
+    pub fn of(&self) -> &'static str {
+        match self {
+            Clause::Clients => "clients",
+            Clause::Grandclients => "grandclients",
+            Clause::AtDistance { .. } => "distance",
+            Clause::MostTrusted { .. } => "most-trusted",
+            Clause::TopFraction { .. } => "top-fraction",
+            Clause::JoinedBefore { .. } => "joined-before",
+            Clause::Named { .. } => "named",
+        }
+    }
+
+    /// Its one parameter as it is written down, where it takes one: the
+    /// inverse of [`Clause::read`], so a clause written out and read back
+    /// is the clause it was.
+    pub fn parameter(&self) -> Option<String> {
+        match self {
+            Clause::Clients | Clause::Grandclients => None,
+            Clause::AtDistance { edges } => Some(edges.to_string()),
+            Clause::MostTrusted { n } => Some(n.to_string()),
+            Clause::TopFraction { percent } => Some(percent.to_string()),
+            Clause::JoinedBefore { when } => Some(when.to_string()),
+            Clause::Named { who } => Some(who.iter().map(|b| format!("{b:02x}")).collect()),
+        }
+    }
+
+    /// **Read a clause from the two strings an operator gives it**: its
+    /// name, and its one parameter where it takes one.
+    ///
+    /// This is the page's reader. The hosting file has its own, because
+    /// TOML gives it the parameter already typed and lets it refuse a key
+    /// that means nothing where it is written; both take their names from
+    /// [`VOCABULARY`], so the two cannot drift apart on what a clause is
+    /// called.
+    pub fn read(of: &str, with: Option<&str>) -> Result<Clause, String> {
+        let Some(n) = Clause::named(of) else {
+            let names: Vec<&str> = VOCABULARY.iter().map(|n| n.of).collect();
+            return Err(format!(
+                "`{of}` is not a clause; they are {}",
+                names.join(", ")
+            ));
+        };
+        let given = with.map(str::trim).filter(|w| !w.is_empty());
+        match (n.takes, given) {
+            (None, Some(_)) => return Err(format!("`{of}` takes no parameter")),
+            (Some(key), None) => return Err(format!("`{of}` needs `{key}`")),
+            _ => {}
+        }
+        let number = |what: &str| -> Result<u64, String> {
+            what.parse::<u64>()
+                .map_err(|_| format!("`{what}` is not a number"))
+        };
+        match of {
+            "clients" => Ok(Clause::Clients),
+            "grandclients" => Ok(Clause::Grandclients),
+            "distance" => Ok(Clause::AtDistance {
+                edges: number(given.unwrap_or_default())? as usize,
+            }),
+            "most-trusted" => Ok(Clause::MostTrusted {
+                n: number(given.unwrap_or_default())? as usize,
+            }),
+            "top-fraction" => {
+                let p = number(given.unwrap_or_default())?;
+                if p == 0 || p > 100 {
+                    return Err("a percentage is 1 to 100".into());
+                }
+                Ok(Clause::TopFraction { percent: p as u8 })
+            }
+            "joined-before" => Ok(Clause::JoinedBefore {
+                when: number(given.unwrap_or_default())?,
+            }),
+            "named" => Ok(Clause::Named {
+                who: keyhash_from(given.unwrap_or_default())
+                    .ok_or("a keyhash is 64 lower-case hex digits")?,
+            }),
+            // unreachable while `named` above covers VOCABULARY, and a
+            // refusal rather than a panic if a name is ever added here
+            // without a reading
+            _ => Err(format!("`{of}` has no reading")),
+        }
+    }
+}
+
+fn keyhash_from(s: &str) -> Option<Keyhash> {
+    if s.len() != 64
+        || !s
+            .bytes()
+            .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
+    {
+        return None;
+    }
+    let mut out = [0u8; 32];
+    for (i, b) in out.iter_mut().enumerate() {
+        *b = u8::from_str_radix(&s[i * 2..i * 2 + 2], 16).ok()?;
+    }
+    Some(out)
+}

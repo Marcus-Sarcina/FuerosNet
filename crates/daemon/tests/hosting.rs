@@ -41,7 +41,21 @@ fn host(manifest: &Path) -> String {
 fn run(d: &Dir, text: &str) -> Result<usize, String> {
     let f = d.put("hosting", text);
     let mut g = Gateway::default();
-    apply(&mut g, Path::new(&f), Limits::default()).map_err(|e| e.to_string())
+    apply(
+        &mut g,
+        Path::new(&f),
+        Limits::default(),
+        Some(&d.0.join("grants")),
+    )
+    .map_err(|e| e.to_string())
+}
+
+/// Write a resource's grants where the node keeps them, which is what an
+/// operator's surface rewrites and what `apply` reads.
+fn grants_for(d: &Dir, resource: &str, text: &str) {
+    let dir = d.0.join("grants");
+    std::fs::create_dir_all(&dir).expect("a directory");
+    std::fs::write(dir.join(format!("{resource}.toml")), text).expect("written");
 }
 
 // acceptance: DMN-20
@@ -126,9 +140,14 @@ fn a_grant_is_checked_against_the_package_before_anything_is_bound() {
     // membership gate), so there is one shape in the file rather than one
     // for everyone and another for somebody
     let granting = |roles: &str| {
-        format!(
-            "{one}\n[[host.grant]]\nroles = [{roles}]\n             [[host.grant.where]]\nof = \"named\"\nwho = \"{WHO}\"\n"
-        )
+        grants_for(
+            &d,
+            RES,
+            &format!(
+                "[[grant]]\nroles = [{roles}]\n[[grant.where]]\nof = \"named\"\nwho = \"{WHO}\"\n"
+            ),
+        );
+        one.clone()
     };
 
     assert_eq!(
@@ -155,14 +174,35 @@ fn a_grant_is_checked_against_the_package_before_anything_is_bound() {
         );
     }
 
+    // **the hosting file is not where grants live**, and one that still
+    // carries them says where they went rather than ignoring them
+    let e = run(
+        &d,
+        &format!("{one}\n[[host.grant]]\nroles = [\"reader\"]\n"),
+    )
+    .expect_err("refused");
+    assert!(e.contains("the node's own table"), "{e}");
+
     // nothing is bound out of a file that is refused anywhere in it
     let f = d.put("hosting", granting("\"admin\""));
     let mut g = Gateway::default();
-    assert!(apply(&mut g, Path::new(&f), Limits::default()).is_err());
+    assert!(
+        apply(
+            &mut g,
+            Path::new(&f),
+            Limits::default(),
+            Some(&d.0.join("grants"))
+        )
+        .is_err()
+    );
     assert!(
         g.binding(&[9u8; 32]).is_none(),
         "a file refused at its last line binds nothing from its first"
     );
+
+    // a sound grant again, since the file above left a refused one behind
+    // and these cases are about the hosting file rather than the table
+    let _ = granting("\"reader\"");
 
     // **a grant naming a resource nothing hosts is not expressible.**  It
     // was an error the line format could write down; nesting the grant
@@ -220,7 +260,13 @@ fn a_manifest_declares_administrative_operations_and_their_bounds() {
     // binding rather than how many bound
     let f = d.put("hosting", host(&good));
     let mut g = Gateway::default();
-    apply(&mut g, Path::new(&f), Limits::default()).expect("a manifest with operations binds");
+    apply(
+        &mut g,
+        Path::new(&f),
+        Limits::default(),
+        Some(&d.0.join("grants")),
+    )
+    .expect("a manifest with operations binds");
     let bound = g.bound();
     let b = g.binding(&bound[0]).expect("the binding");
     assert_eq!(
@@ -316,7 +362,13 @@ fn a_manifest_ships_templates_in_the_operators_own_vocabulary() {
     );
     let f = d.put("hosting", host(&good));
     let mut g = Gateway::default();
-    apply(&mut g, Path::new(&f), Limits::default()).expect("a manifest with templates binds");
+    apply(
+        &mut g,
+        Path::new(&f),
+        Limits::default(),
+        Some(&d.0.join("grants")),
+    )
+    .expect("a manifest with templates binds");
     let bound = g.bound();
     let b = g.binding(&bound[0]).expect("the binding");
     assert_eq!(2, b.declared.templates.len(), "both reached the binding");
@@ -411,7 +463,12 @@ fn an_operators_grant_is_written_in_clauses_and_refused_as_a_whole() {
     );
     let one = host(&m);
     let with = |clause: &str| {
-        format!("{one}\n[[host.grant]]\nroles = [\"reader\"]\n[[host.grant.where]]\n{clause}")
+        grants_for(
+            &d,
+            RES,
+            &format!("[[grant]]\nroles = [\"reader\"]\n[[grant.where]]\n{clause}"),
+        );
+        one.clone()
     };
     for clause in [
         "of = \"clients\"\n",
@@ -480,12 +537,19 @@ fn a_resource_that_holds_its_own_port_is_reached_over_a_socket() {
         "hosting",
         format!(
             "[[host]]\nresource = \"{RES}\"\nowner = \"{WHO}\"\nauthority = \"shop.internal\"\n\
-             manifest = \"{}\"\naddress = \"{addr}\"\n\n[[host.grant]]\nroles = [\"reader\"]\n",
+             manifest = \"{}\"\naddress = \"{addr}\"\n",
             m.display()
         ),
     );
+    grants_for(&d, RES, "[[grant]]\nroles = [\"reader\"]\n");
     let mut g = Gateway::default();
-    apply(&mut g, Path::new(&f), Limits::default()).expect("an address binds");
+    apply(
+        &mut g,
+        Path::new(&f),
+        Limits::default(),
+        Some(&d.0.join("grants")),
+    )
+    .expect("an address binds");
     let resource = g.bound()[0];
     assert!(
         g.binding(&resource).expect("bound").backend.is_some(),
@@ -570,7 +634,13 @@ fn a_resource_with_neither_component_nor_address_is_brokered() {
     let m = d.put("away.manifest", "roles = [\"reader\"]\n");
     let f = d.put("hosting", host(&m));
     let mut g = Gateway::default();
-    apply(&mut g, Path::new(&f), Limits::default()).expect("a brokered resource binds");
+    apply(
+        &mut g,
+        Path::new(&f),
+        Limits::default(),
+        Some(&d.0.join("grants")),
+    )
+    .expect("a brokered resource binds");
     let b = g.binding(&g.bound()[0]).expect("bound");
     assert!(
         b.backend.is_none(),
@@ -623,4 +693,82 @@ fn two_resources_at_one_address_are_refused() {
     );
     let e = run(&d, &format!("{}{}", entry(RES, 8081), entry(other, 8081))).expect_err("refused");
     assert!(e.contains("already listens"), "{e}");
+}
+
+/// **A grant written out and read back is the grant it was**, for every
+/// clause of the vocabulary.
+///
+/// This is what keeps an act honest: the table in force is what the
+/// operator made, and the file is what a restart will read, so a clause
+/// that did not survive the round trip would be a grant that quietly
+/// changed meaning when the node restarted.
+#[test]
+fn every_clause_survives_being_written_and_read_back() {
+    use rhtn_node::grant::{Clause, Grant};
+    let d = Dir::new("round-trip");
+    let dir = d.0.join("grants");
+    let resource = [9u8; 32];
+    let roles = |r: &[&str]| r.iter().map(|x| x.to_string()).collect();
+
+    let grants = vec![
+        Grant::standing(roles(&["reader"])),
+        Grant {
+            roles: roles(&["reader", "writer"]),
+            clauses: vec![Clause::Clients],
+        },
+        Grant {
+            roles: roles(&["writer"]),
+            clauses: vec![Clause::Grandclients],
+        },
+        Grant {
+            roles: roles(&["reader"]),
+            clauses: vec![Clause::AtDistance { edges: 2 }],
+        },
+        Grant {
+            roles: roles(&["reader"]),
+            clauses: vec![Clause::MostTrusted { n: 10 }],
+        },
+        Grant {
+            roles: roles(&["reader"]),
+            clauses: vec![Clause::TopFraction { percent: 20 }],
+        },
+        Grant {
+            roles: roles(&["reader"]),
+            clauses: vec![Clause::JoinedBefore {
+                when: 1_690_000_000,
+            }],
+        },
+        Grant {
+            roles: roles(&["reader"]),
+            clauses: vec![Clause::Named { who: [7u8; 32] }],
+        },
+        // and a conjunction, which is §7.1's one compound affordance
+        Grant {
+            roles: roles(&["writer"]),
+            clauses: vec![
+                Clause::AtDistance { edges: 1 },
+                Clause::MostTrusted { n: 3 },
+            ],
+        },
+    ];
+    rhtn_daemon::grants::write_for(&dir, &resource, &grants).expect("written");
+    assert_eq!(
+        grants,
+        rhtn_daemon::grants::read_for(&dir, &resource).expect("read back"),
+        "every clause, and the conjunction, came back as it went out"
+    );
+
+    // an absent file is a resource nobody has been granted anything on,
+    // which `resource-requirements.md` §7 makes the ordinary state of one
+    // just hosted rather than a fault
+    assert!(
+        rhtn_daemon::grants::read_for(&dir, &[1u8; 32])
+            .expect("no file is no grants")
+            .is_empty()
+    );
+
+    // and the file says whose it is, because an operator will find it
+    let text = std::fs::read_to_string(dir.join(format!("{}.toml", "09".repeat(32))))
+        .expect("named by its resource");
+    assert!(text.contains("Written by the node"), "{text}");
 }

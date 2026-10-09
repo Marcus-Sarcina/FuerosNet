@@ -71,6 +71,10 @@ fn layout(tag: &str, token: &[u8; 32], quic_port: u16) -> Layout {
     )
     .unwrap();
     std::fs::write(&peers, "").unwrap();
+    // an empty hosting file hosts nothing, which §9 makes a conforming
+    // state; a test that wants a resource writes over it before the
+    // daemon starts
+    std::fs::write(dir.join("hosting"), "").unwrap();
     std::fs::write(
         &config,
         format!(
@@ -80,6 +84,7 @@ fn layout(tag: &str, token: &[u8; 32], quic_port: u16) -> Layout {
              listen = \"127.0.0.1:{}\"\n\
              endpoint-record = \"{}\"\nanchor-entry = \"{}\"\n\
              queue = \"{}\"\nprekeys = \"{}\"\ntopology = \"{}\"\narchive = \"{}\"\n\
+             resources = \"{}\"\ngrants = \"{}\"\n\
              heartbeat = 30\ningestion = \"unverified-gossip\"\n\
              [allowance]\nrequests = 120\nseconds = 60\n\
              [administration]\nlisten = \"127.0.0.1:0\"\ntoken = \"{}\"\n",
@@ -93,6 +98,8 @@ fn layout(tag: &str, token: &[u8; 32], quic_port: u16) -> Layout {
             dir.join("prekeys").display(),
             dir.join("topology").display(),
             dir.join("archive").display(),
+            dir.join("hosting").display(),
+            dir.join("grants").display(),
             hex(token),
         ),
     )
@@ -560,7 +567,17 @@ fn a_nonceless_fetch_and_a_run_of_the_wrong_signer_are_refused() {
 /// walks through, as a helper for the tests that need a node rather than
 /// the enrolment.
 fn enrolled(tag: &str, quic: u16) -> (Layout, Daemon, SocketAddr) {
+    enrolled_with(tag, quic, |_| {})
+}
+
+/// The same, with a chance to write files the daemon reads at start.
+fn enrolled_with(
+    tag: &str,
+    quic: u16,
+    before: impl FnOnce(&Layout),
+) -> (Layout, Daemon, SocketAddr) {
     let l = layout(tag, &TOKEN, quic);
+    before(&l);
     let mut d = spawn(&l);
     let at = d.surface_at();
     let got = ask(
@@ -639,9 +656,15 @@ fn a_standing_policy_is_changed_from_the_page_and_a_stop_is_the_signal_s_path() 
         "the policy is on or off"
     );
 
-    // a reload with no `resources` named is a refusal that says so
+    // a reload re-reads the hosting file, which here names nothing to
+    // host — §9 makes that a conforming state rather than a defect
     let r = ask(at, "POST /node/reload HTTP/1.1", b"");
-    assert_eq!(409, status(&r), "nothing to re-read: {r}");
+    assert_eq!(200, status(&r), "re-read: {r}");
+    assert!(r.contains("0 package(s) bound"), "{r}");
+
+    // and a grant act with no resource bound has nothing to act on
+    let r = ask(at, "POST /node/grant HTTP/1.1", b"resource=09&roles=reader");
+    assert_eq!(400, status(&r), "a resource is 64 hex digits: {r}");
 
     // **stop takes the signal's path**, so the process ends of its own
     // accord and writes back what it holds
@@ -659,4 +682,158 @@ fn a_standing_policy_is_changed_from_the_page_and_a_stop_is_the_signal_s_path() 
     assert!(gone.success(), "and it stopped cleanly: {gone:?}");
 
     let _ = std::fs::remove_dir_all(&l.dir);
+}
+
+/// **A grant is made, narrowed, withdrawn and taken from the page**, which
+/// is OPS-012's "explicit management acts" over an operator's predicates
+/// in `infra-client-requirements.md` §10.3's vocabulary.
+///
+/// And it persists: a grant is a table update [ruled, author, 2026-10-09],
+/// so unlike the node's own configuration it is written back. An act that
+/// did not survive a restart would not be one.
+#[test]
+fn a_grant_is_made_and_withdrawn_from_the_page_and_is_written_back() {
+    const RES: &str = "0909090909090909090909090909090909090909090909090909090909090909";
+    let owner = hex(&test_identity("bob").public.keyhash);
+    let (l, d, at) = enrolled_with("grants", 37450, |l| {
+        std::fs::write(l.dir.join("echo.wasm"), rhtn_sim::packages::echo()).unwrap();
+        std::fs::write(
+            l.dir.join("shop.manifest"),
+            "roles = [\"reader\", \"writer\"]\n\
+             imports = [\"rhtn/1:request\", \"rhtn/1:response\"]\n\
+             component = \"echo.wasm\"\n\
+             \n\
+             [[template]]\n\
+             name = \"org-read\"\n\
+             label = \"Everyone in my org may read\"\n\
+             roles = [\"reader\"]\n\
+             \n\
+             [[template.where]]\n\
+             of = \"grandclients\"\n",
+        )
+        .unwrap();
+        std::fs::write(
+            l.dir.join("hosting"),
+            format!(
+                "[[host]]\nresource = \"{RES}\"\nowner = \"{}\"\n\
+                 authority = \"shop.internal\"\nmanifest = \"{}\"\n",
+                hex(&test_identity("bob").public.keyhash),
+                l.dir.join("shop.manifest").display()
+            ),
+        )
+        .unwrap();
+    });
+    let tab = format!("GET /?resource={RES} HTTP/1.1");
+
+    // **nothing is granted, and the page says so in both places** (§7):
+    // the role list marks what nobody holds, and the grant section is
+    // empty rather than absent
+    let page = ask(at, &tab, b"");
+    assert!(page.contains("nothing is granted here"), "{page}");
+    assert!(
+        page.contains("reader (nobody)") && page.contains("writer (nobody)"),
+        "§7: a role bound to nobody is visible, not a silent default: {page}"
+    );
+    assert!(
+        page.contains("action=\"/node/grant\""),
+        "the page carries the control: {page}"
+    );
+    assert!(
+        page.contains("Take it") && page.contains("org-read"),
+        "§10.4: the package's own grant is offered: {page}"
+    );
+
+    // a grant over everyone, which is the absence of a clause
+    let made = ask(
+        at,
+        "POST /node/grant HTTP/1.1",
+        format!("resource={RES}&roles=reader&of=everyone").as_bytes(),
+    );
+    assert_eq!(200, status(&made), "{made}");
+    let page = ask(at, &tab, b"");
+    assert!(
+        page.contains("reader to every member of my trust horizon"),
+        "it reads back in the operator's own vocabulary: {page}"
+    );
+    assert!(
+        !page.contains("reader (nobody)"),
+        "and the role is no longer bound to nobody: {page}"
+    );
+
+    // **written to the node's own table**, so a restart takes it
+    let kept = std::fs::read_to_string(l.dir.join("grants").join(format!("{RES}.toml")))
+        .expect("the node wrote its grants");
+    assert!(
+        kept.contains("[[grant]]") && kept.contains("\"reader\""),
+        "{kept}"
+    );
+
+    // narrowing is §7.1's conjunction
+    assert_eq!(
+        200,
+        status(&ask(
+            at,
+            "POST /node/grant/narrow HTTP/1.1",
+            format!("resource={RES}&at=0&of=most-trusted&with=10").as_bytes()
+        ))
+    );
+    let page = ask(at, &tab, b"");
+    assert!(
+        page.contains("reader to my 10 most trusted"),
+        "the clause narrowed the grant it was given: {page}"
+    );
+
+    // a role the package never declared is refused, and nothing moves
+    let no = ask(
+        at,
+        "POST /node/grant HTTP/1.1",
+        format!("resource={RES}&roles=admin&of=clients").as_bytes(),
+    );
+    assert_eq!(400, status(&no), "{no}");
+    assert!(no.contains("not a role this package declared"), "{no}");
+
+    // withdrawing takes the grant and its rows
+    assert_eq!(
+        200,
+        status(&ask(
+            at,
+            "POST /node/grant/drop HTTP/1.1",
+            format!("resource={RES}&at=0").as_bytes()
+        ))
+    );
+    assert!(
+        ask(at, &tab, b"").contains("nothing is granted here"),
+        "the grant is gone"
+    );
+
+    // and the package's own grant is the operator's click, not the author's
+    assert_eq!(
+        200,
+        status(&ask(
+            at,
+            "POST /node/grant/template HTTP/1.1",
+            format!("resource={RES}&name=org-read").as_bytes()
+        ))
+    );
+    assert!(
+        ask(at, &tab, b"").contains("reader to my clients and grand-clients"),
+        "the template's own grant, in the same words it was offered in"
+    );
+
+    // a resource nothing hosts, and a clause that is not one
+    let bad = ask(
+        at,
+        "POST /node/grant HTTP/1.1",
+        format!("resource={owner}&roles=reader&of=clients").as_bytes(),
+    );
+    assert_eq!(404, status(&bad), "{bad}");
+    let bad = ask(
+        at,
+        "POST /node/grant HTTP/1.1",
+        format!("resource={RES}&roles=reader&of=everybody").as_bytes(),
+    );
+    assert_eq!(400, status(&bad), "{bad}");
+    assert!(bad.contains("is not a clause"), "{bad}");
+
+    d.stop();
 }

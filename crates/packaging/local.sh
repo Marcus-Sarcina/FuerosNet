@@ -100,6 +100,7 @@ queue = "/var/lib/rhtn/queue"
 prekeys = "/var/lib/rhtn/prekeys"
 topology = "/var/lib/rhtn/topology"
 archive = "/var/lib/rhtn/archive"
+grants = "/var/lib/rhtn/grants"
 heartbeat = 30
 ingestion = "unverified-gossip"
 

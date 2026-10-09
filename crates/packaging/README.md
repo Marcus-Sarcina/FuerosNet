@@ -45,6 +45,11 @@ that must survive a restart lives here.
 | the endpoint record, the anchor entry | operator-signed, named by `endpoint-record` and `anchor-entry`. **An instance cannot mint these**: the signature on both is its operator's (§4.4), so a change of address is something the client signs |
 | `peers` | the identities this node authenticates for its own countersigning. The entrypoint creates it **empty** when absent, which is a true statement about a node that has adopted nobody — an attaching client is authenticated by the key it presents (`wire-format.md` §9.1) and learned there |
 
+**What the node writes for itself:** `grants/`, one file per resource,
+holding who may reach it. The operator may write one by hand before the
+first start, but an act on the surface rewrites it — it is the node's file,
+not theirs ([who may reach a resource](#who-may-reach-a-resource)).
+
 **What the node mints for itself:** the transport keypair, at `transport-key`,
 0600 and never wider. The public half goes beside it with the extension
 **replaced** — `transport.key` yields **`transport.pub`** — and that file is what
@@ -203,26 +208,30 @@ host, which §9 makes ordinary capacity rather than a fault on either side.
 
 A package declares its roles; the operator decides who holds them
 (`resource-requirements.md` §7). The deciding is written as **grants** in
-the predicate language `infra-client-requirements.md` §10.3 fixes, in the
-`resources` file the node reads:
+the predicate language `infra-client-requirements.md` §10.3 fixes.
+
+**Grants live in the node's own table, not in the hosting file.** The
+configuration names a `grants` directory and the node keeps one file per
+resource in it, named by the resource's keyhash:
 
 ```toml
-[[host]]
-resource = "<64 hex>"
-owner    = "<64 hex>"
-authority = "shop.internal"
-manifest = "shop.manifest"
+# <grants>/0909….toml — written by the node
+[[grant]]
+roles = ["reader"]          # everyone in the owner's horizon
 
-  # everyone in the owner's horizon may read
-  [[host.grant]]
-  roles = ["reader"]
-
-  # the owner's own clients may write as well
-  [[host.grant]]
-  roles = ["reader", "writer"]
-    [[host.grant.where]]
-    of = "clients"
+[[grant]]
+roles = ["reader", "writer"]
+  [[grant.where]]
+  of = "clients"            # the owner's own clients, as well
 ```
+
+**Why not the hosting file.** A grant is a table update, so an act on the
+operator's surface rewrites it — and an act that did not survive a restart
+would not be an act, because a revocation that came back on the next start
+is worse than one that never happened. The hosting file is the operator's
+and is never rewritten; changing it needs a restart or a re-read. Two
+owners, two files. A hosting file that still carries `[[host.grant]]` is
+refused with a pointer to where grants went.
 
 A grant with no `where` admits every member of the owner's trust horizon,
 which is §10.1's outer gate and nothing further. The clauses are §10.3's
@@ -273,6 +282,31 @@ roles = ["reader"]
 configuration: an operator must see what a one-click choice grants "before
 the click, in the vocabulary they use elsewhere". Taking one is their act;
 installing a package grants nobody anything.
+
+### Editing grants from the page
+
+The resource's tab on the operator's page carries the controls, which is
+OPS-012's "explicit management acts" over an operator's predicates:
+
+| Control | Route | What it does |
+|---|---|---|
+| **Grant** | `POST /node/grant` | roles, and one clause or *every member of my trust horizon* |
+| **Narrow** | `POST /node/grant/narrow` | adds a clause to a grant, which is the **and** |
+| **Withdraw** | `POST /node/grant/drop` | removes it, and §10.5 ends the sessions its rows carried |
+| **Take it** | `POST /node/grant/template` | takes a grant the package offered |
+
+They are plain forms — §8.3 has the client provide the frame, and nothing
+the node serves should need more of it than a browser already does. The
+clause menu is built from the language itself, so the page cannot offer a
+clause the node would not read, or call one by a word the file does not
+use. Roles come as a checkbox each, with the ones nobody holds marked.
+
+**Either both or neither.** The act changes the table first, because the
+table is the authority on what a grant may say; if the file cannot be
+written the table is put back and the act fails, so the two never disagree
+about who may reach a resource. The rows are then re-expanded — §10.2's
+first moment is "when an operator is configuring roles" — and the reply
+says how many were written and dropped.
 
 ### Where a resource runs
 

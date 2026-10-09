@@ -16482,10 +16482,46 @@ in the code rather than hidden in it:
   the operator's page can say *hosted* or *brokered* but not *proxied to
   127.0.0.1:8081* without a downcast or another field. Left alone rather
   than given a mechanism.
-- **Invoking anything is still not wired** — unchanged from the admin
-  operations: it waits on the third reserved role and the §12
-  ownership-versus-hosting decision about what principal an invocation
-  carries.
+- **Invoking an administrative operation is still not wired** — a grant
+  can now be made from the page, but an *operation* cannot be invoked: it
+  waits on the third reserved role and the §12 ownership-versus-hosting
+  decision about what principal an invocation carries.
+
+## Grant editing, and what persists (2026-10-09)
+
+**[ruled, author, 2026-10-09] A grant is a table update and is written
+back**, where the node's own configuration is not: "some resources might
+require a restart on some configuration changes, but grants by itself is
+just a table update. The question above makes sense in the context of
+node-level configurations where a node restart or hosting file re-read
+needs to be triggered."
+
+**So grants moved out of the hosting file.** That file is the operator's
+and the node never rewrites it; a grant is rewritten by an act, so it
+lives in a `grants` directory the node owns, one file per resource. This
+reverses part of what landed the day before, where grants were
+`[[host.grant]]` entries — the ruling makes the operator's file the wrong
+home, and a file that still carries them is refused with a pointer rather
+than ignored.
+
+**Still owed here:**
+
+- **No divergence to show.** With grants persisted there is nothing to
+  mark as *in force but not on disk*, which is why no such marker was
+  built. If a future act does change something node-level, the page will
+  need one.
+- **The grants directory is not fsynced**, only renamed over. A crash
+  between the rename and the disk's own flush could lose the last act;
+  the ordinary answer is an fsync of the directory, not built.
+- **An operator's hand-written row** (`set_row`, the floor's exception)
+  has no control on the page. Only grants do. That may be the right
+  answer — §10.3 puts named individuals inside the language — but the API
+  still exists and nothing reaches it.
+- **`grant/narrow` and `grant/drop` address a grant by its index**, which
+  is stable only because the list is written and read in order. Two
+  operators acting at once could have one withdraw what the other
+  narrowed. The surface has no notion of concurrent operators, and the
+  index is the simplest thing that works for one.
 
 ## The SDL, talked through (2026-10-08)
 

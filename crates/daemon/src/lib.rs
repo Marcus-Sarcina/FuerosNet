@@ -26,6 +26,10 @@ pub mod administration;
 pub mod config;
 pub mod diag;
 pub mod hosting;
+
+/// Where a resource's grants are kept: the node's own table, as
+/// against the operator's hosting file.
+pub mod grants;
 pub mod operator;
 pub mod service;
 
