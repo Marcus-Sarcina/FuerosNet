@@ -228,6 +228,7 @@ fn what_reaches_a_package_through_the_gateway_is_the_credential_and_the_request(
             authority: "shop.internal".into(),
             backend: Some(hosted),
             declared_roles: BTreeSet::from(["reader".to_string()]),
+            admin: Vec::new(),
         },
     );
     g.set_row(

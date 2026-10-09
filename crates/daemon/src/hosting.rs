@@ -55,7 +55,8 @@
 
 use rhtn_archive::Keyhash;
 use rhtn_node::resources::{
-    Binding, Gateway, MAX_ROLES, Manifest, RESERVED_ROLES, Row, instantiate,
+    Binding, Gateway, Kind, MAX_ROLES, Manifest, Operation, Parameter, RESERVED_ROLES, Row,
+    instantiate,
 };
 use rhtn_resources::{Hosted, Limits, Sandbox};
 use std::collections::BTreeSet;
@@ -214,6 +215,7 @@ pub fn apply(gateway: &mut Gateway, path: &Path, limits: Limits) -> Result<usize
                 authority: h.authority.clone(),
                 backend: Some(Arc::new(Hosted::new(sandbox))),
                 declared_roles: package.roles,
+                admin: manifest.admin.clone(),
             },
         ));
     }
@@ -277,53 +279,131 @@ fn row_of(named: &[String], declared: &BTreeSet<String>) -> Result<Row, Refused>
     })
 }
 
+/// TOML's own message with the line it is about, as `config.rs` renders
+/// one: `Display` adds a caret diagram that does not belong in a
+/// single-line refusal, and `message()` is the sentence without it.
+fn manifest_error(text: &str, e: &toml::de::Error) -> String {
+    let line = e
+        .span()
+        .map(|s| {
+            text[..s.start.min(text.len())]
+                .bytes()
+                .filter(|b| *b == b'\n')
+                .count()
+                + 1
+        })
+        .unwrap_or(0);
+    let m = e.message();
+    let said = match m.strip_prefix("missing field ") {
+        Some(rest) => format!("{rest} is not set, and has no default"),
+        None => m.to_string(),
+    };
+    if line > 0 {
+        format!("manifest line {line}: {said}")
+    } else {
+        format!("manifest: {said}")
+    }
+}
+
 /// Read a package's manifest, and where its component sits.
 ///
-/// Strict for the reason the configuration is: an unknown key, a repeated
-/// key or a missing one is an error naming its line, because a manifest
-/// the host quietly repairs declares something the package did not.
+/// **TOML, for the reason the configuration is** (`config.rs`): the
+/// line-oriented format this replaced could not repeat a key, and an
+/// administrative operation is a repeated table with named fields and
+/// parameters of its own — the same shape that moved the operator's
+/// configuration off that format. Strict for the reason that one is too:
+/// an unknown key or a missing one is an error, because a manifest the
+/// host quietly repairs declares something the package did not.
 fn read_manifest(path: &Path) -> Result<(Manifest, std::path::PathBuf), String> {
-    let text = std::fs::read_to_string(path).map_err(|e| format!("{e}"))?;
-    let mut seen: Vec<(String, String, usize)> = Vec::new();
-    for (i, raw) in text.lines().enumerate() {
-        let line = raw.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        let (k, v) = line
-            .split_once('=')
-            .ok_or_else(|| format!("manifest line {}: not `key = value`", i + 1))?;
-        let (k, v) = (k.trim().to_string(), v.trim().to_string());
-        if !["roles", "imports", "component"].contains(&k.as_str()) {
-            return Err(format!(
-                "manifest line {}: `{k}` is not a manifest key",
-                i + 1
-            ));
-        }
-        if seen.iter().any(|(x, _, _)| *x == k) {
-            return Err(format!("manifest line {}: `{k}` was already set", i + 1));
-        }
-        seen.push((k, v, i + 1));
+    #[derive(serde::Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct File {
+        component: String,
+        #[serde(default)]
+        roles: Vec<String>,
+        #[serde(default)]
+        imports: Vec<String>,
+        #[serde(default)]
+        admin: Vec<Op>,
     }
-    let take = |key: &str| {
-        seen.iter()
-            .find(|(k, _, _)| k == key)
-            .map(|(_, v, _)| v.clone())
-    };
-    let list = |key: &str| {
-        take(key)
-            .unwrap_or_default()
-            .split(',')
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .map(str::to_string)
-            .collect::<Vec<_>>()
-    };
-    let component = take("component").ok_or("manifest: `component` is not set")?;
+    #[derive(serde::Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct Op {
+        name: String,
+        label: String,
+        #[serde(default)]
+        help: String,
+        #[serde(default)]
+        parameter: Vec<Param>,
+    }
+    #[derive(serde::Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct Param {
+        name: String,
+        label: String,
+        #[serde(rename = "type")]
+        kind: String,
+        low: Option<i64>,
+        high: Option<i64>,
+        max: Option<usize>,
+        #[serde(default)]
+        of: Vec<String>,
+    }
+
+    let text = std::fs::read_to_string(path).map_err(|e| format!("{e}"))?;
+    let f: File = toml::from_str(&text).map_err(|e| manifest_error(&text, &e))?;
+
+    let mut admin = Vec::new();
+    for op in f.admin {
+        let mut parameters = Vec::new();
+        for p in op.parameter {
+            // **the type decides which other keys mean anything**, and a
+            // key that means nothing where it is written is a package
+            // author believing something the host does not do
+            let kind = match p.kind.as_str() {
+                "flag" => Kind::Flag,
+                "number" => Kind::Number {
+                    low: p
+                        .low
+                        .ok_or_else(|| format!("`{}`: a number names `low`", p.name))?,
+                    high: p
+                        .high
+                        .ok_or_else(|| format!("`{}`: a number names `high`", p.name))?,
+                },
+                "text" => Kind::Text {
+                    max: p
+                        .max
+                        .ok_or_else(|| format!("`{}`: text names `max`, its length", p.name))?,
+                },
+                "choice" => Kind::Choice { of: p.of.clone() },
+                "keyhash" => Kind::Keyhash,
+                other => {
+                    return Err(format!(
+                        "`{}`: `{other}` is not a parameter type; they are \
+                         flag, number, text, choice and keyhash",
+                        p.name
+                    ));
+                }
+            };
+            parameters.push(Parameter {
+                name: p.name,
+                label: p.label,
+                kind,
+            });
+        }
+        admin.push(Operation {
+            name: op.name,
+            label: op.label,
+            help: op.help,
+            parameters,
+        });
+    }
     let manifest = Manifest {
-        roles: list("roles").into_iter().collect(),
-        imports: list("imports"),
+        roles: f.roles.into_iter().collect(),
+        imports: f.imports,
+        admin,
     };
+    let component = f.component;
     // relative to the manifest, so a package is a directory an operator
     // can move without rewriting what is inside it
     let dir = path.parent().unwrap_or(Path::new("."));

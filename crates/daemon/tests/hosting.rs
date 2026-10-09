@@ -51,10 +51,13 @@ fn a_manifest_that_does_not_describe_its_component_is_refused() {
     d.put("echo.wasm", rhtn_sim::packages::echo());
     let full = d.put(
         "full.manifest",
-        "roles = reader\nimports = rhtn/1:request,rhtn/1:response\ncomponent = echo.wasm\n",
+        "roles = [\"reader\"]\nimports = [\"rhtn/1:request\", \"rhtn/1:response\"]\ncomponent = \"echo.wasm\"\n",
     );
-    let quiet = d.put("quiet.manifest", "roles = reader\ncomponent = echo.wasm\n");
-    let extra = d.put("extra.manifest", "roles = reader\nimports = rhtn/1:request,rhtn/1:response,rhtn/1:topology\ncomponent = echo.wasm\n");
+    let quiet = d.put(
+        "quiet.manifest",
+        "roles = [\"reader\"]\ncomponent = \"echo.wasm\"\n",
+    );
+    let extra = d.put("extra.manifest", "roles = [\"reader\"]\nimports = [\"rhtn/1:request\", \"rhtn/1:response\", \"rhtn/1:topology\"]\ncomponent = \"echo.wasm\"\n");
 
     assert_eq!(
         run(&d, &host(&full)),
@@ -85,22 +88,22 @@ fn a_manifest_that_does_not_describe_its_component_is_refused() {
     for (name, text, wrong) in [
         (
             "no-component.manifest",
-            "roles = reader\n",
+            "roles = [\"reader\"]\n",
             "`component` is not set",
         ),
         (
             "twice.manifest",
-            "roles = reader\nroles = writer\ncomponent = echo.wasm\n",
-            "already set",
+            "roles = [\"reader\"]\nroles = [\"writer\"]\ncomponent = \"echo.wasm\"\n",
+            "duplicate key",
         ),
         (
             "unknown.manifest",
-            "storage = 1G\ncomponent = echo.wasm\n",
-            "not a manifest key",
+            "storage = \"1G\"\ncomponent = \"echo.wasm\"\n",
+            "unknown field",
         ),
         (
             "reserved.manifest",
-            "roles = connect\ncomponent = echo.wasm\n",
+            "roles = [\"connect\"]\ncomponent = \"echo.wasm\"\n",
             "reserved",
         ),
     ] {
@@ -117,7 +120,7 @@ fn a_grant_is_checked_against_the_package_before_anything_is_bound() {
     d.put("echo.wasm", rhtn_sim::packages::echo());
     let m = d.put(
         "echo.manifest",
-        "roles = reader,writer\nimports = rhtn/1:request,rhtn/1:response\ncomponent = echo.wasm\n",
+        "roles = [\"reader\", \"writer\"]\nimports = [\"rhtn/1:request\", \"rhtn/1:response\"]\ncomponent = \"echo.wasm\"\n",
     );
     let one = host(&m);
     let granting =
@@ -171,5 +174,95 @@ fn a_grant_is_checked_against_the_package_before_anything_is_bound() {
     ] {
         let e = run(&d, text).expect_err("refused");
         assert!(e.contains(wrong), "expected {wrong:?}, got {e}");
+    }
+}
+
+/// **A package's declared administrative operations** (`resource-
+/// requirements.md` §8, §7.3): read from the manifest, bounded at
+/// admission, and refused where the node could not draw them.
+#[test]
+fn a_manifest_declares_administrative_operations_and_their_bounds() {
+    let d = Dir::new("admin-ops");
+    d.put("echo.wasm", rhtn_sim::packages::echo());
+    let good = d.put(
+        "shop.manifest",
+        "roles = [\"reader\"]\n\
+         imports = [\"rhtn/1:request\", \"rhtn/1:response\"]\n\
+         component = \"echo.wasm\"\n\
+         \n\
+         [[admin]]\n\
+         name = \"set-greeting\"\n\
+         label = \"The greeting on the front page\"\n\
+         help = \"What a visitor reads before signing in.\"\n\
+         \n\
+         [[admin.parameter]]\n\
+         name = \"text\"\n\
+         label = \"Greeting\"\n\
+         type = \"text\"\n\
+         max = 120\n\
+         \n\
+         [[admin.parameter]]\n\
+         name = \"shown\"\n\
+         label = \"Show it\"\n\
+         type = \"flag\"\n",
+    );
+    // the gateway itself, since what is asserted is what reached the
+    // binding rather than how many bound
+    let f = d.put("hosting", host(&good));
+    let mut g = Gateway::default();
+    apply(&mut g, Path::new(&f), Limits::default()).expect("a manifest with operations binds");
+    let bound = g.bound();
+    let b = g.binding(&bound[0]).expect("the binding");
+    assert_eq!(1, b.admin.len(), "the operation is carried to the binding");
+    assert_eq!("set-greeting", b.admin[0].name);
+    assert_eq!(2, b.admin[0].parameters.len());
+    assert_eq!(
+        rhtn_node::resources::Kind::Text { max: 120 },
+        b.admin[0].parameters[0].kind,
+        "a text field carries the length its package declared"
+    );
+
+    // **every bound is checked at admission**, because the node draws all
+    // of this and a field it cannot draw is one an operator cannot answer
+    for (name, body, wrong) in [
+        (
+            "nolabel.manifest",
+            "component = \"echo.wasm\"\n[[admin]]\nname = \"x\"\nlabel = \"\"\n",
+            "a label is 1 to",
+        ),
+        (
+            "longtext.manifest",
+            "component = \"echo.wasm\"\n[[admin]]\nname = \"x\"\nlabel = \"X\"\n\
+             [[admin.parameter]]\nname = \"t\"\nlabel = \"T\"\ntype = \"text\"\nmax = 99999\n",
+            "a text field takes 1 to",
+        ),
+        (
+            "unbounded.manifest",
+            "component = \"echo.wasm\"\n[[admin]]\nname = \"x\"\nlabel = \"X\"\n\
+             [[admin.parameter]]\nname = \"t\"\nlabel = \"T\"\ntype = \"text\"\n",
+            "names `max`",
+        ),
+        (
+            "notatype.manifest",
+            "component = \"echo.wasm\"\n[[admin]]\nname = \"x\"\nlabel = \"X\"\n\
+             [[admin.parameter]]\nname = \"t\"\nlabel = \"T\"\ntype = \"blob\"\n",
+            "not a parameter type",
+        ),
+        (
+            "backwards.manifest",
+            "component = \"echo.wasm\"\n[[admin]]\nname = \"x\"\nlabel = \"X\"\n\
+             [[admin.parameter]]\nname = \"n\"\nlabel = \"N\"\ntype = \"number\"\nlow = 9\nhigh = 1\n",
+            "is not below",
+        ),
+        (
+            "twice.manifest",
+            "component = \"echo.wasm\"\n[[admin]]\nname = \"x\"\nlabel = \"X\"\n\
+             [[admin]]\nname = \"x\"\nlabel = \"Y\"\n",
+            "declared twice",
+        ),
+    ] {
+        let m = d.put(name, body);
+        let e = run(&d, &host(&m)).expect_err("refused");
+        assert!(e.contains(wrong), "{name}: expected {wrong:?}, got {e}");
     }
 }

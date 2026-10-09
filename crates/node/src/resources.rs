@@ -39,6 +39,9 @@ pub struct Binding {
     pub backend: Option<Arc<dyn Backend>>,
     /// The roles the package declared.
     pub declared_roles: BTreeSet<String>,
+    /// The administrative operations it declared, for its host's operator
+    /// ([`Operation`]).
+    pub admin: Vec<Operation>,
 }
 
 /// One member's row for one resource: application roles, and whether
@@ -485,6 +488,186 @@ pub const HOST_EXPORTS: [&str; 2] = ["rhtn/1:request", "rhtn/1:response"];
 /// a package could claim a grant nobody made.
 pub const RESERVED_ROLES: [&str; 2] = ["connect", "discover"];
 
+/// **An administrative operation a package declares**
+/// (`resource-requirements.md` §8: "declare what you need in the
+/// manifest"), for the node to render on its operator's page.
+///
+/// **This is the surface an application presents to its host, not the
+/// application itself.** A hosted resource is an independent program — a
+/// web interface, a business application, a game — and it serves its own
+/// users directly, on ports it claims, with the node there to authenticate
+/// them and gate their reach. None of that passes through here. What an
+/// operation covers is only what the *operator* may ask of the instance
+/// they are hosting, which is why the set is structured options, with free
+/// text where only free text will do: a name for this instance.
+///
+/// **So the package describes an operation and the node draws it**, which
+/// is the line §8.3 draws — a node "develops and serves its own
+/// administration pages". Nothing here is markup, a layout or a script: it
+/// is a name, a label, and parameters from a closed set, drawn the same way
+/// for every package, so an operator learns one idiom rather than one per
+/// package.
+///
+/// **Access is not declared here.** §7.3 requires an access template to be
+/// "expressed in the predicate language, not as opaque configuration", so
+/// who may reach a resource stays in the grant section the node renders
+/// from predicates. What this covers is a resource's own configuration.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Operation {
+    /// Its name, which is what an invocation will carry: `[a-z0-9_-]`, as
+    /// a role name is.
+    pub name: String,
+    /// What the operator reads.
+    pub label: String,
+    /// A sentence under it, or empty.
+    pub help: String,
+    /// What it takes.
+    pub parameters: Vec<Parameter>,
+}
+
+/// One of an [`Operation`]'s parameters.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Parameter {
+    /// Its name.
+    pub name: String,
+    /// What the operator reads beside the field.
+    pub label: String,
+    /// What it holds.
+    pub kind: Kind,
+}
+
+/// **The closed set of things a parameter may be.**
+///
+/// Closed because the node renders every one of them: a type it cannot
+/// draw is a type a package could declare and an operator could not
+/// answer. A bound on each is part of the type rather than a convention,
+/// so a manifest that would render an unusable field is refused at
+/// admission instead of discovered at the screen.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Kind {
+    /// A checkbox.
+    Flag,
+    /// A whole number between two bounds, inclusive.
+    Number {
+        /// The least it may be.
+        low: i64,
+        /// The most.
+        high: i64,
+    },
+    /// Free text, **length-limited** [author, 2026-10-08]: a field a
+    /// package can make arbitrarily long is a field that can fill a
+    /// request, so the limit is declared and bounded by [`MAX_TEXT`].
+    Text {
+        /// The most characters it takes.
+        max: usize,
+    },
+    /// One of a fixed list.
+    Choice {
+        /// What it may be.
+        of: Vec<String>,
+    },
+    /// A keyhash, which the node checks for shape before it is sent.
+    Keyhash,
+}
+
+/// At most this many operations in one manifest: a tab a person reads
+/// rather than a surface they search.
+pub const MAX_OPERATIONS: usize = 32;
+/// At most this many parameters on one operation.
+pub const MAX_PARAMETERS: usize = 16;
+/// The longest a declared text field may be, whatever it asks for.
+pub const MAX_TEXT: usize = 4096;
+/// At most this many literals in a choice.
+pub const MAX_CHOICES: usize = 32;
+/// The longest a label may be, and a help line.
+pub const MAX_LABEL: usize = 80;
+/// The longest help line.
+pub const MAX_HELP: usize = 240;
+
+/// Whether `name` is the shape a role, an operation or a parameter takes.
+fn namelike(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 32
+        && name
+            .bytes()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'_' || c == b'-')
+}
+
+impl Operation {
+    /// Why this operation cannot be admitted, where it cannot.
+    ///
+    /// **Checked at admission and not at the screen**: a manifest naming a
+    /// field nobody could answer is a manifest a node declines to host,
+    /// which `infra-client-requirements.md` §9 makes ordinary capacity
+    /// rather than a fault on either side.
+    pub fn refused(&self) -> Option<String> {
+        if !namelike(&self.name) {
+            return Some(format!("`{}` is not [a-z0-9_-], 1 to 32 bytes", self.name));
+        }
+        if self.label.is_empty() || self.label.len() > MAX_LABEL {
+            return Some(format!(
+                "`{}`: a label is 1 to {MAX_LABEL} bytes",
+                self.name
+            ));
+        }
+        if self.help.len() > MAX_HELP {
+            return Some(format!("`{}`: help is at most {MAX_HELP} bytes", self.name));
+        }
+        if self.parameters.len() > MAX_PARAMETERS {
+            return Some(format!(
+                "`{}` takes {} parameters, more than {MAX_PARAMETERS}",
+                self.name,
+                self.parameters.len()
+            ));
+        }
+        let mut seen = BTreeSet::new();
+        for p in &self.parameters {
+            if !namelike(&p.name) {
+                return Some(format!(
+                    "`{}`: `{}` is not [a-z0-9_-], 1 to 32 bytes",
+                    self.name, p.name
+                ));
+            }
+            if !seen.insert(&p.name) {
+                return Some(format!("`{}`: `{}` is named twice", self.name, p.name));
+            }
+            if p.label.is_empty() || p.label.len() > MAX_LABEL {
+                return Some(format!(
+                    "`{}`.`{}`: a label is 1 to {MAX_LABEL} bytes",
+                    self.name, p.name
+                ));
+            }
+            if let Some(why) = p.kind.refused() {
+                return Some(format!("`{}`.`{}`: {why}", self.name, p.name));
+            }
+        }
+        None
+    }
+}
+
+impl Kind {
+    /// Why this parameter cannot be drawn, where it cannot.
+    pub fn refused(&self) -> Option<String> {
+        match self {
+            Kind::Flag | Kind::Keyhash => None,
+            Kind::Number { low, high } if low >= high => Some(format!("{low} is not below {high}")),
+            Kind::Number { .. } => None,
+            Kind::Text { max } if *max == 0 || *max > MAX_TEXT => Some(format!(
+                "a text field takes 1 to {MAX_TEXT} characters, not {max}"
+            )),
+            Kind::Text { .. } => None,
+            Kind::Choice { of } if of.is_empty() || of.len() > MAX_CHOICES => Some(format!(
+                "a choice is 1 to {MAX_CHOICES} literals, not {}",
+                of.len()
+            )),
+            Kind::Choice { of } => of
+                .iter()
+                .find(|c| !namelike(c))
+                .map(|c| format!("`{c}` is not [a-z0-9_-], 1 to 32 bytes")),
+        }
+    }
+}
+
 /// What a package declares (`resource-requirements.md` §7, §8).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Manifest {
@@ -492,6 +675,9 @@ pub struct Manifest {
     pub roles: BTreeSet<String>,
     /// The host exports it imports.
     pub imports: Vec<String>,
+    /// The administrative operations it offers its host's operator
+    /// ([`Operation`]).
+    pub admin: Vec<Operation>,
 }
 
 /// A package instantiated against the host's exports.
@@ -514,6 +700,21 @@ pub fn instantiate(m: &Manifest) -> Result<Package, String> {
         .find(|i| !HOST_EXPORTS.contains(&i.as_str()))
     {
         return Err(format!("no such binding: {i}"));
+    }
+    if m.admin.len() > MAX_OPERATIONS {
+        return Err(format!(
+            "a manifest declares at most {MAX_OPERATIONS} administrative operations, not {}",
+            m.admin.len()
+        ));
+    }
+    let mut named = BTreeSet::new();
+    for op in &m.admin {
+        if let Some(why) = op.refused() {
+            return Err(why);
+        }
+        if !named.insert(&op.name) {
+            return Err(format!("`{}` is declared twice", op.name));
+        }
     }
     if m.roles.iter().any(|r| {
         r.is_empty()

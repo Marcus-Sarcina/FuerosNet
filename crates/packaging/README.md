@@ -129,16 +129,75 @@ presented in"). Before the run arrives it says what it is waiting for and
 carries the transport key to sign over; afterwards it is the node's state —
 what it is, what it holds, who is attached, and §8's exposure disclosure.
 
-**It is one page of text and tables.** No script, no form, no control: §8.1 has
-an operator's interface read and never speak for the node, and a page offering
-a button would be offering one. What changes a node is an object its operator
-signed, which goes to the routes above.
+**It carries no control yet, which is not a prohibition** [corrected,
+2026-10-08]. §8.1's "reads and never speaks for the node" is glossed by §8.1
+itself as composing, signing or sending nothing *on the wire*, and OPS-012 has
+hosting, predicates and standing policies kept as explicit management acts —
+which presupposes acts. A control within the node's own authority is one of
+those; what §8.1 and OPS-011 forbid is a packet workbench. So the page is text
+and tables today because nothing is wired to invoke an operation, and invoking
+one waits on a third reserved role. What can never be a control here is an act
+needing the operator's *seed* — the endpoint record and the anchor entry carry
+their signature, not the delegation's (§4.4), and the instance does not hold
+that key (design §23.3), so for those the page can only ask the client.
 
 **The frame is the client's to sandbox** (§8.3), isolated from its keys,
 archive and sealed captures, because a seized node serving a hostile page must
 reach nothing on the device that still holds the seed (design §18.1, §23.3).
 Nothing the node serves can assert that isolation; it is PRD-12's and is not
 built.
+
+### What a package declares
+
+A manifest is TOML, read strictly — an unknown key or a missing one is an
+error, because a manifest the host quietly repairs declares something the
+package did not. Alongside its roles and its imports it declares the
+operations its host's operator may ask of it:
+
+```toml
+component = "records.wasm"
+roles = ["reader", "writer"]
+imports = ["rhtn/1:request", "rhtn/1:response"]
+
+[[admin]]
+name = "retention"
+label = "How long records are kept"
+help = "Older records are discarded on the next sweep."
+
+  [[admin.parameter]]
+  name = "days"
+  label = "Days"
+  type = "number"
+  low = 1
+  high = 3650
+
+  [[admin.parameter]]
+  name = "nickname"
+  label = "A name for this instance"
+  type = "text"
+  max = 64
+```
+
+**This is the surface the application presents to its host, not the
+application itself.** A hosted resource is an independent program and serves
+its own users directly, on ports it claims, with the node there to
+authenticate them and gate their reach; none of that appears here. An
+operation covers only what the operator hosting the instance may ask of it —
+so the parameter types are a closed set (`flag`, `number` with `low` and
+`high`, `text` with `max`, `choice` with `of`, `keyhash`), structured options
+with free text where only free text will do.
+
+The node draws every one of them the same way, which is §8.3's line: a node
+"develops and serves its own administration pages". Nothing declared is
+markup, layout or script, so an operator learns one idiom rather than one per
+package. **Access is not declared here** — §7.3 requires an access template in
+the predicate language rather than as opaque configuration, so who may reach a
+resource stays in the grant section.
+
+Every bound is checked at admission, not at the screen: at most 32 operations,
+16 parameters each, 32 choices, 4096 characters of text, 80 of label, 240 of
+help. A manifest naming a field the node could not draw is one it declines to
+host, which §9 makes ordinary capacity rather than a fault on either side.
 
 ### A node on this machine
 

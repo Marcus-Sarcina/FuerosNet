@@ -13660,3 +13660,57 @@ One bug found by its own test: the stop used `Notify::notify_waiters`,
 which reaches only waiters registered at that instant, and the service's
 select builds its future afresh each pass — so the wake fell in the gap.
 `notify_one` leaves a permit. Daemon tests 31.
+
+### 2026-10-08 (a package declares its administrative operations)
+
+**[ruled, author, 2026-10-08] The declaration lives in the manifest, and
+its strings are length-limited.** A hosted package now declares what its
+host's operator may ask it to do: an operation with a name, a label, a
+line of help, and parameters from a closed set — a flag, a bounded number,
+**length-limited text**, a choice of literals, or a keyhash.
+
+**What is declared is the surface an application presents to its host, not
+the application itself** [author, 2026-10-08]. A hosted resource is an
+independent program — a web interface, a business application, a game —
+and it serves its own users directly, on ports it claims, with the node
+there to authenticate them and gate their reach; none of that is described
+in the manifest. An operation covers only what the operator hosting the
+instance may ask of it, so the declaration is structured options with the
+occasional free-text field, such as a name for this instance.
+
+**So the package describes an operation and the node draws it** — §8.3's
+line, a node "develops and serves its own administration pages". Nothing
+declared is markup, layout or script, every operation is drawn the same
+way, and an operator learns one idiom rather than one per package. That is
+the property server-driven UI rests on: the renderer holds the vocabulary
+and the declaring side composes from it.
+
+**Access is not declared here.** §7.3 requires an access template in the
+predicate language, so who may reach a resource stays in the grant section
+the node renders from predicates; the manifest covers a resource's own
+configuration.
+
+**Every bound is checked at admission**, not at the screen: a manifest
+naming a field the node could not draw is one it declines to host, which
+§9 makes ordinary capacity rather than a fault on either side. Thirty-two
+operations, sixteen parameters, eighty-byte labels, text of at most 4,096
+characters, and a type that must be one of the five.
+
+**The manifest is TOML now, for the reason the configuration is.** An
+operation is a repeated table with named fields and parameters of its own
+— exactly the shape that moved the operator's configuration off the
+line-oriented format, whose own note says it "could not repeat a key".
+Its refusals read like the configuration's, through `message()` rather
+than the caret diagram `Display` adds.
+
+**What invoking one still needs, found in `RESERVED_ROLES`' own
+reasoning**: a third reserved name. The list reserves `connect` and
+`discover` because a row carrying one "would put the node's own vocabulary
+in the credential and a package could claim a grant nobody made" — and an
+administrative invocation asserts exactly such a name. Without reserving
+it, a package could declare it as an application role, an operator could
+grant it to a member, and that member's ordinary request would arrive
+indistinguishable from the operator's administrative one. The page says so
+where the invocation will go.
+
+Daemon tests 32; the workspace clean.

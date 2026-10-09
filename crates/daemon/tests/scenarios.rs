@@ -404,7 +404,7 @@ async fn a_daemon_hosts_the_package_its_configuration_names_and_serves_a_request
     let manifest = set.dir("alice").join("echo.manifest");
     std::fs::write(
         &manifest,
-        "roles = reader,writer\nimports = rhtn/1:request,rhtn/1:response\ncomponent = echo.wasm\n",
+        "roles = [\"reader\", \"writer\"]\nimports = [\"rhtn/1:request\", \"rhtn/1:response\"]\ncomponent = \"echo.wasm\"\n",
     )
     .expect("its manifest beside it");
     let shop = [9u8; 32];
@@ -488,8 +488,11 @@ async fn a_daemon_hosts_the_package_its_configuration_names_and_serves_a_request
     )
     .expect("a package on disk");
     let bad_manifest = set.dir("bob").join("bad.manifest");
-    std::fs::write(&bad_manifest, "roles = reader\ncomponent = bad.wasm\n")
-        .expect("a manifest that does not mention it");
+    std::fs::write(
+        &bad_manifest,
+        "roles = [\"reader\"]\ncomponent = \"bad.wasm\"\n",
+    )
+    .expect("a manifest that does not mention it");
     set.hosting(
         "bob",
         &format!(

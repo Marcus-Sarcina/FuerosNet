@@ -74,7 +74,7 @@ fn s02_recovery_must_forget_the_superseded_clients_wake_endpoint(){
 fn g01_changed_standing_grant_must_rewrite_derived_rows(){
  use rhtn_node::resources::{Gateway,Binding,Row};use rhtn_archive::topology::Table;use std::collections::BTreeSet;
  let (owner,res)=([41;32],[42;32]);let table=Table::with_me(owner);let mut g=Gateway::default();
- g.bind(res,Binding{owner,authority:"test.internal".into(),backend:None,declared_roles:BTreeSet::from(["reader".into()])});
+ g.bind(res,Binding{owner,authority:"test.internal".into(),backend:None,declared_roles:BTreeSet::from(["reader".into()]),admin:vec![]});
  let allow=Row{roles:BTreeSet::from(["reader".into()]),connect:true};let deny=Row{roles:BTreeSet::new(),connect:false};
  g.stand(res,allow.clone()).unwrap();g.refresh(&table);assert_eq!(g.row(&res,&owner),Some(&allow));
  g.stand(res,deny.clone()).unwrap();g.refresh(&table);

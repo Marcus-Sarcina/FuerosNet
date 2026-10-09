@@ -394,6 +394,7 @@ fn an_entry_whose_scope_cannot_be_computed_is_stored_and_grants_nothing() {
             authority: "r1.internal".into(),
             backend: Some(Arc::new(Fake::new())),
             declared_roles: BTreeSet::new(),
+            admin: Vec::new(),
         },
     );
     let req = ResourceRequest {
@@ -507,6 +508,7 @@ fn gateway_with(sc: &Scene, backend: Arc<Fake>) -> Gateway {
             authority: "r1.internal".into(),
             backend: Some(backend),
             declared_roles: BTreeSet::from(["reader".to_string(), "writer".to_string()]),
+            admin: Vec::new(),
         },
     );
     let _ = &sc.table;
@@ -652,6 +654,7 @@ fn a_request_is_decided_from_the_materialised_row_and_a_row_wider_than_64_is_ref
             authority: "r1".into(),
             backend: Some(backend.clone()),
             declared_roles: declared,
+            admin: Vec::new(),
         },
     );
     // a predicate expanded once: "all my direct clients" as of now
@@ -724,6 +727,7 @@ fn caller_rhtn_headers_are_stripped_the_nodes_inserted_and_a_session_minted_per_
             authority: "r1.internal".into(),
             backend: Some(b1.clone()),
             declared_roles: BTreeSet::new(),
+            admin: Vec::new(),
         },
     );
     g.bind(
@@ -733,6 +737,7 @@ fn caller_rhtn_headers_are_stripped_the_nodes_inserted_and_a_session_minted_per_
             authority: "r2.internal".into(),
             backend: Some(b2.clone()),
             declared_roles: BTreeSet::new(),
+            admin: Vec::new(),
         },
     );
     for r in [R1, R2] {
@@ -964,6 +969,7 @@ fn no_network_primitive_is_exposed_to_a_hosted_package() {
         let m = Manifest {
             roles: BTreeSet::from(["reader".to_string()]),
             imports: vec!["rhtn/1:request".into(), import.into()],
+            admin: Vec::new(),
         };
         let e = instantiate(&m).unwrap_err();
         assert!(e.contains("no such binding"), "{import}: {e}");
@@ -973,12 +979,14 @@ fn no_network_primitive_is_exposed_to_a_hosted_package() {
     let ok = Manifest {
         roles: BTreeSet::from(["reader".to_string()]),
         imports: vec!["rhtn/1:request".into(), "rhtn/1:response".into()],
+        admin: Vec::new(),
     };
     assert!(instantiate(&ok).is_ok());
     assert!(
         instantiate(&Manifest {
             roles: BTreeSet::from(["Bad Role".to_string()]),
-            imports: vec![]
+            imports: vec![],
+            admin: Vec::new(),
         })
         .is_err()
     );
@@ -1135,6 +1143,7 @@ fn the_catalog_page_shows_what_the_viewer_holds_with_the_roles_held() {
             authority: "r2".into(),
             backend: None,
             declared_roles: BTreeSet::from(["editor".to_string()]),
+            admin: Vec::new(),
         },
     );
     g.set_row(
@@ -1339,19 +1348,22 @@ fn a_reserved_role_name_is_refused_where_it_is_written_and_never_reaches_a_backe
             .iter()
             .map(|s| s.to_string())
             .collect(),
+        admin: Vec::new(),
     };
     let err = instantiate(&m).unwrap_err();
     assert!(err.contains("connect") && err.contains("reserved"), "{err}");
     assert!(
         instantiate(&Manifest {
             imports: vec![],
-            roles: BTreeSet::from(["discover".to_string()])
+            roles: BTreeSet::from(["discover".to_string()]),
+            admin: Vec::new(),
         })
         .is_err()
     );
     let ok = instantiate(&Manifest {
         imports: vec![],
         roles: BTreeSet::from(["read".to_string()]),
+        admin: Vec::new(),
     })
     .expect("an application role");
     assert_eq!(ok.roles, BTreeSet::from(["read".to_string()]));
@@ -1369,6 +1381,7 @@ fn a_reserved_role_name_is_refused_where_it_is_written_and_never_reaches_a_backe
                 .iter()
                 .map(|s| s.to_string())
                 .collect(),
+            admin: Vec::new(),
         },
     );
     let all: BTreeSet<String> = ["connect", "discover", "read"]
@@ -1420,6 +1433,7 @@ fn a_standing_grant_follows_the_owners_horizon_in_and_out() {
             authority: "r1.internal".into(),
             backend: Some(backend),
             declared_roles: BTreeSet::from(["reader".to_string()]),
+            admin: Vec::new(),
         },
     );
 
@@ -1522,6 +1536,7 @@ fn an_ending_purges_the_departed_subtree_from_every_resource_not_only_the_grante
             authority: "r1.internal".into(),
             backend: None,
             declared_roles: BTreeSet::from(["reader".to_string()]),
+            admin: Vec::new(),
         },
     );
     g.bind(
@@ -1531,6 +1546,7 @@ fn an_ending_purges_the_departed_subtree_from_every_resource_not_only_the_grante
             authority: "r2.internal".into(),
             backend: None,
             declared_roles: BTreeSet::from(["reader".to_string()]),
+            admin: Vec::new(),
         },
     );
 
@@ -1606,6 +1622,7 @@ fn replacing_a_standing_grant_rewrites_what_it_wrote_and_leaves_the_operators_ow
             authority: "r1.internal".into(),
             backend: None,
             declared_roles: BTreeSet::from(["reader".to_string()]),
+            admin: Vec::new(),
         },
     );
     g.bind(
@@ -1615,6 +1632,7 @@ fn replacing_a_standing_grant_rewrites_what_it_wrote_and_leaves_the_operators_ow
             authority: "r2.internal".into(),
             backend: None,
             declared_roles: BTreeSet::from(["reader".to_string()]),
+            admin: Vec::new(),
         },
     );
 
@@ -1738,6 +1756,7 @@ fn rsc_42_a_role_table_holds_the_current_row_and_no_history_of_it() {
             authority: "r1.internal".into(),
             backend: Some(Arc::new(Fake::new())),
             declared_roles: ["reader", "editor"].into_iter().map(String::from).collect(),
+            admin: Vec::new(),
         },
     );
     let row = |roles: &[&str]| Row {

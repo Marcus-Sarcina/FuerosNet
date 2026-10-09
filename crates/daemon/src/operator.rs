@@ -346,6 +346,7 @@ mod tests {
             authority: "records.example".to_string(),
             backend,
             declared_roles: roles(&["reader", "writer"]),
+            admin: Vec::new(),
         }
     }
 
@@ -823,6 +824,9 @@ pub struct ResourceView {
     pub rows: Vec<(Keyhash, Vec<String>, bool)>,
     /// Hosted sessions open against it.
     pub sessions: usize,
+    /// What its package declared it can be asked to do
+    /// (`rhtn_node::resources::Operation`).
+    pub admin: Vec<rhtn_node::resources::Operation>,
 }
 
 impl ResourceView {
@@ -871,12 +875,57 @@ impl ResourceView {
             }
             let _ = writeln!(out, "<pre>{}</pre>", escape(&body));
         }
+        out.push_str(&self.render_admin());
         out.push_str(
             "<p class=\"sub\">Editing a grant is not here yet. \
              <code>resource-requirements.md</code> §7.3 has an access template expressed in the \
              predicate language rather than as opaque configuration, so that what a one-click \
              grant means is legible in the same click; the vocabulary that section fixes is what \
              this section waits on.</p>\n",
+        );
+        out
+    }
+}
+
+impl ResourceView {
+    /// **What the package declared it can be asked to do**, drawn in the
+    /// node's own vocabulary and not the package's
+    /// (`infra-client-requirements.md` §8.3, `resource-requirements.md`
+    /// §7.3): the manifest names operations and typed parameters, and
+    /// every one of them is rendered the same way here, so an operator
+    /// learns one idiom rather than one per package.
+    fn render_admin(&self) -> String {
+        use rhtn_node::resources::Kind;
+        if self.admin.is_empty() {
+            return "<h2>Acts</h2>\n<p class=\"sub\">This package declares none.</p>\n".into();
+        }
+        let mut out = String::from("<h2>Acts</h2>\n");
+        for op in &self.admin {
+            let _ = writeln!(out, "<h3>{}</h3>", escape(&op.label));
+            if !op.help.is_empty() {
+                let _ = writeln!(out, "<p class=\"sub\">{}</p>", escape(&op.help));
+            }
+            let mut says = String::new();
+            for p in &op.parameters {
+                let what = match &p.kind {
+                    Kind::Flag => "on or off".to_string(),
+                    Kind::Number { low, high } => format!("a number, {low} to {high}"),
+                    Kind::Text { max } => format!("text, at most {max} characters"),
+                    Kind::Choice { of } => format!("one of: {}", of.join(", ")),
+                    Kind::Keyhash => "a keyhash".to_string(),
+                };
+                let _ = writeln!(says, "{}  {}  ({what})", p.name, p.label);
+            }
+            if says.is_empty() {
+                says.push_str("takes nothing\n");
+            }
+            let _ = writeln!(out, "<pre>{}</pre>", escape(&says));
+        }
+        out.push_str(
+            "<p class=\"sub\">Invoking one is not here yet: a reserved role has to be added \
+             first, since a package could otherwise declare the same name as an application \
+             role and a member granted it would be indistinguishable from the operator \
+             (<code>rhtn_node::resources::RESERVED_ROLES</code>).</p>\n",
         );
         out
     }

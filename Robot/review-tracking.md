@@ -16400,3 +16400,48 @@ nothing in the configuration stops an operator binding it to 0.0.0.0 —
 which `local.sh` does, and the packaging README should say plainly what
 that means. A warning on the page when the surface is bound to a public
 address would be the §8-shaped answer.
+
+## The SDL, talked through (2026-10-08)
+
+**The prior art splits in two** and the split is what decides the design:
+describing *operations* (OpenAPI, protobuf/gRPC reflection, OpenRPC, WIT)
+against describing *presentation* (server-driven UI as Airbnb and Spotify
+do it, JSON Schema form renderers, Kubernetes CRDs rendering an editor
+from a declared schema, Home Assistant's config flow). The question that
+settles it is **who owns the widget vocabulary**, and §8.3 answers the
+node: the node serves its own pages.
+
+**[author, 2026-10-08] What is being described is narrower than the first
+pass assumed.** A resource defines its own UI — a web interface, a thin
+client business application, a thick client like an interactive game — and
+when hosted it will claim one or more ports and serve its own pages and
+data services to its users directly, the node there only to authenticate
+and gate access. The manifest describes **the control surface the
+application presents to its host**, which "should almost entirely consist
+of structured options with the occasional free text field for e.g. giving
+a custom name to the resource instance". So the earlier gloss that this
+rules out the plugin-ships-its-own-UI model was wrong on its face: a
+resource ships its own UI, and that UI is simply not what the host draws.
+Corrected in `resources.rs`, the change-log and `packaging/README.md`.
+
+**WIT was the tempting answer and does not fit.** The sandbox is already
+wasmtime's component model, so a package already has an IDL and the node
+could introspect its exports. But a *brokered* resource (§10.6,
+`backend: None`) has no component here at all, so WIT would cover only the
+hosted half and need a second path for the other — which defeats having
+one. The manifest covers both, and §8 already says to declare what you
+need there.
+
+**The constraint that did most of the work**: `HOST_EXPORTS` is
+`["rhtn/1:request", "rhtn/1:response"]` and §9.2 is categorical that the
+hooks do not exist. So an administrative operation wants to be an ordinary
+resource request with a reserved role, not a new host binding — which
+means the declaration needs no transport, no execution model and no
+capability story of its own. That is why this is a small declaration
+rather than a language.
+
+**Owed, and the next step:** the third reserved role, and the decision
+under it. §12 separates ownership from hosting, so the node's operator is
+not necessarily the resource's owner, and what principal an invocation
+carries is a disclosure question (§10.6, §10.7) rather than an
+implementation detail. Not settled here.

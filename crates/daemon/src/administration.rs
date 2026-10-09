@@ -784,6 +784,7 @@ fn resource_views(node: &LiveNode) -> Vec<crate::operator::ResourceView> {
                 standing: g.standing_grant(&resource).map(roles),
                 rows,
                 sessions: g.hosted_sessions(),
+                admin: b.admin.clone(),
             })
         })
         .collect()
