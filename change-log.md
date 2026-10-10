@@ -13485,6 +13485,19 @@ is reached and the thing a stale record would get wrong. A bind on port 0
 is served on a port the configuration never knew, which the same change
 corrects. Tested on both halves of the rule from a wildcard bind.
 
+**A credential overlapping one already held is refused**, also found by
+the run against a container: stray taps enrolled the instance three times
+and it took all three runs — 21 delegation files for 7 windows — because
+the credential deduplicated on identical bytes alone, and each re-signing
+started from a fresh clock. `wire-format.md` §8.2 has a run contiguous,
+"each `not_before` equal to the previous `not_after`", so a credential
+that overlaps one held is never the next of the run: it is the same hours
+signed again. The credential refuses it now, naming the held window and
+where the run ends so the operator signs the next from there; the
+identical bytes re-sent are still taken once, silently, and a renewal that
+starts where the run ends is untouched. The page needs no second
+mechanism: it already narrates the surface's own words per credential.
+
 **Operator is no longer hidden on the home screen.** The plan keyed it on
 an instance being attached; enrolling one is how an identity comes to have
 an instance, so gating the only way in on already being in would leave no

@@ -16515,12 +16515,17 @@ configured to expect as its operator.
    configured bind; it now compares against the bound address, with a
    wildcard IP matching any host and the port deciding. `dmn_25a` pins
    both halves from a wildcard bind.
-2. **A repeated enrolment accumulates.** Three runs went in during the
-   driving of the screen (stray taps), leaving 21 delegation files and a
-   fetch reporting 14 credentials before the last. Nothing broke and the
-   records answered "already held", which is the right behaviour — but
-   nothing on the page says a run is already in force before signing
-   another, and the button is easy to press twice.
+2. **A repeated enrolment accumulated** — **fixed the same day, at the
+   credential.** Three runs went in during the driving of the screen
+   (stray taps), 21 delegation files for 7 windows, because `add` deduped
+   on identical bytes alone and each re-signing came from a fresh clock. An
+   overlapping credential is now refused by the credential itself, naming
+   the held window and the run's end; identical bytes stay idempotent and a
+   contiguous renewal is untouched (`transport/tests/credential.rs`). The
+   page surfaces the refusal through the narration it already had, so no
+   second mechanism was built. What is *not* done: the page still offers
+   the button when the fetch says the instance is already serving — the
+   refusal is what protects the instance, not the button.
 
 **Not exercised**: the frame's off-origin refusal, for want of a page
 carrying a link off the node. The node's pages carry none, so this needs a

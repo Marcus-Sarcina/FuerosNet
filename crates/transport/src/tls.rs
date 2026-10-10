@@ -200,6 +200,16 @@ impl Credential {
     /// `ids` resolves for its field 2, which must be this credential's
     /// keyhash, and naming this credential's public key.  Kept in window
     /// order; one already held is not held twice.
+    ///
+    /// **One whose window overlaps a credential already held is refused**
+    /// [2026-10-10]. `wire-format.md` §8.2 has a run contiguous — "each
+    /// `not_before` equal to the previous `not_after`" — so a credential
+    /// that overlaps one held is never the next of the run: it is the same
+    /// window signed again from a later clock, which is what an operator
+    /// enrolling twice produces, and taking it would hold the same hours
+    /// several times over under different bytes.  A renewal starts where
+    /// the run ends and is not touched by this; the identical bytes sent
+    /// again are still taken once, silently, as before.
     pub fn add<L: Lookup + ?Sized>(&self, ids: &L, raw: &[u8]) -> Result<Delegation, String> {
         let d = verify::delegation(ids, raw).map_err(|e| format!("{e:?}"))?;
         if d.keyhash != self.keyhash {
@@ -209,14 +219,32 @@ impl Credential {
             return Err("delegation names another transport key".into());
         }
         let mut run = self.run.lock().unwrap();
-        if !run.iter().any(|i| i.raw == raw) {
-            run.push(Issued {
-                raw: raw.to_vec(),
-                not_before: d.not_before,
-                not_after: d.not_after,
-            });
-            run.sort_by_key(|i| i.not_before);
+        if run.iter().any(|i| i.raw == raw) {
+            return Ok(d);
         }
+        // half-open windows, so one starting exactly where another ends
+        // is contiguous rather than overlapping
+        if let Some(held) = run
+            .iter()
+            .find(|i| d.not_before < i.not_after && i.not_before < d.not_after)
+        {
+            let ends = run
+                .iter()
+                .map(|i| i.not_after)
+                .max()
+                .unwrap_or(held.not_after);
+            return Err(format!(
+                "its window {}..{} overlaps one already held, {}..{}; the run ends at {ends}, \
+                 and the next credential starts there",
+                d.not_before, d.not_after, held.not_before, held.not_after
+            ));
+        }
+        run.push(Issued {
+            raw: raw.to_vec(),
+            not_before: d.not_before,
+            not_after: d.not_after,
+        });
+        run.sort_by_key(|i| i.not_before);
         Ok(d)
     }
 
