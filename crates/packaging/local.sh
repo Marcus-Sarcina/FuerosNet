@@ -56,8 +56,11 @@ done
 
 if [ "$cmd" = down ]; then
   "$ENGINE" rm -f "$NAME" > /dev/null 2>&1 || true
-  # the node's own directories are its uid's and 0700
-  "$ENGINE" run --rm --user 0:0 -v "$STATE:/s" --entrypoint /bin/sh "$IMAGE" \
+  # the node's own directories are its uid's and 0700, so they are removed
+  # as root inside the image — over the whole of HOME_DIR rather than the
+  # instance's directory alone, so residue an earlier layout left above it
+  # goes too and `down` is not refused by its own past
+  "$ENGINE" run --rm --user 0:0 -v "$HOME_DIR:/s" --entrypoint /bin/sh "$IMAGE" \
     -c 'rm -rf /s/*' > /dev/null 2>&1 || true
   rm -rf "$HOME_DIR"
   say "stopped, and its state removed"

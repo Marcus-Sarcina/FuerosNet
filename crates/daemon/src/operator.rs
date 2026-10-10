@@ -812,11 +812,11 @@ pub fn page(
     }
     let _ = write!(
         out,
-        "<footer>This page shows state and carries no control yet. What it will never carry is \
-         an act needing the operator&#39;s key — the endpoint record and the anchor entry are \
-         signed by that key and this instance does not hold it \
-         (<code>infra-client-requirements.md</code> §4.4, design §23.3) — nor a way to compose \
-         or replay traffic (OPS-011).</footer>\n</body></html>\n"
+        "<footer>This page carries the node&#39;s own acts, and each hosted resource&#39;s \
+         grants on its tab. What it will never carry is an act needing the operator&#39;s key — \
+         the endpoint record and the anchor entry are signed by that key and this instance does \
+         not hold it (<code>infra-client-requirements.md</code> §4.4, design §23.3) — nor a way \
+         to compose or replay traffic (OPS-011).</footer>\n</body></html>\n"
     );
     out
 }

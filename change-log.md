@@ -13498,6 +13498,20 @@ identical bytes re-sent are still taken once, silently, and a renewal that
 starts where the run ends is untouched. The page needs no second
 mechanism: it already narrates the surface's own words per credential.
 
+**The page's footer said it carried no control, beneath three buttons.**
+The §8.1 correction on the 8th reached the resource tab's paragraph and not
+the footer, which went on saying "this page shows state and carries no
+control yet" above *Turn it on*, *Reload* and *Stop this node*. It now says
+what the page carries — the node's own acts, and each hosted resource's
+grants on its tab — and keeps what it will never carry, which was true all
+along. Found on the fresh node from the rebuilt image.
+
+**`local.sh down` was refused by its own past.** It removes the node's
+uid-10001 files as root inside the image, but only under the instance's
+directory; residue the 8 October layout left above that was out of reach
+and the host-side removal then failed. It cleans the whole of the node's
+directory as root now.
+
 **Operator is no longer hidden on the home screen.** The plan keyed it on
 an instance being attached; enrolling one is how an identity comes to have
 an instance, so gating the only way in on already being in would leave no
