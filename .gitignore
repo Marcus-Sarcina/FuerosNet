@@ -20,3 +20,7 @@ crates/sweep.timestamp
 # Field-test runs: every run directory the bench script writes
 # (crates/tools/field-run.sh), bundles from the phones included
 runs/
+
+# The speculative resource-design thread: surfacing requirements for the
+# layers beneath it, and authoritative for nothing [author, 2026-10-10].
+resource-design/

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  **Why this app permits cleartext at all.**
+
+  An operator's administration surface is plain HTTP, and
+  `infra-client-requirements.md` §8.2 is deliberate about why that is not a
+  gap: administration is out of band, "reached the way any other server is
+  reached", and "this document set does not specify the channel". The
+  operator chose where their instance runs and how they reach it — a local
+  network, a tunnel, a private link — and the protocol does not reach into
+  that choice.
+
+  **Nothing on that channel carries a secret.** The enrolment token is used
+  as a MAC key and never sent; the run and the two records of §4.4 are
+  signed objects, so their integrity does not rest on the transport. An
+  eavesdropper learns the node's state, which §8 discloses to its operator
+  anyway.
+
+  **What it does cost**, said plainly: someone able to modify that traffic
+  can modify the page the operator reads. They cannot forge a signed
+  object, so they cannot change what the node holds — but they can lie
+  about it, and an operator acting on a tampered page is acting on
+  something they did not see. The channel is the operator's to protect, and
+  this app cannot do it for them.
+
+  **Why it is not scoped narrower.** An instance lives at whatever address
+  its operator gave it, so there is no domain to name here: a list of hosts
+  would be a list nobody could write in advance.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

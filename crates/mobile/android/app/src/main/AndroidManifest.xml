@@ -37,7 +37,8 @@
     <application
         android:name=".FuerosApp"
         android:label="Fueros"
-        android:allowBackup="false">
+        android:allowBackup="false"
+        android:networkSecurityConfig="@xml/network_security_config">
 
         <!-- Home is the launcher and navigation-first; it brings the kernel
              up and takes a provision extra. The rest are destinations. -->
@@ -58,6 +59,11 @@
             android:screenOrientation="portrait" />
         <activity android:name=".ConversationActivity" android:exported="false" />
         <activity android:name=".PlaceholderActivity" android:exported="false" />
+        <!-- H3's provisioning pages, and the frame the node's own pages are
+             presented in (PRD-12, PRD-13; §8.3). The frame is a separate
+             Activity so that what it holds is a WebView and nothing else. -->
+        <activity android:name=".OperatorActivity" android:exported="false" />
+        <activity android:name=".NodePageActivity" android:exported="false" />
 
         <!-- The tap's card side (D3). exported because the NFC stack, a
              system service, binds it when a reader selects the AID; it

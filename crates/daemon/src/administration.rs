@@ -82,7 +82,6 @@
 //! no document gives an encoding. A second implementation of the node owes
 //! nothing to the shape below.
 
-use aws_lc_rs::hmac;
 use rhtn_crypto::Identity;
 use rhtn_node::grant::{Clause, Grant};
 use rhtn_node::http::{self, Reject};
@@ -108,10 +107,10 @@ use tokio::net::{TcpListener, TcpStream};
 /// nothing else in this project claims it [author, 2026-10-08].
 pub const DEFAULT_PORT: u16 = 7449;
 
-/// The domain separation over the proof: a tag of this project's own, so
-/// the token cannot be made to authenticate anything else that happens to
-/// hash the same bytes.
-pub const PROOF_INFO: &[u8] = b"rhtn/1:enrolment-proof";
+/// The domain separation over the proof, and the nonce's width: the
+/// instance's end of a MAC whose other end is the operator's client, so
+/// both read one definition (`rhtn_crypto::enrolment`).
+pub use rhtn_crypto::enrolment::{NONCE_BYTES, PROOF_INFO, proof};
 
 /// The most one request may carry. A run's delegations are a few
 /// hundred bytes each; this is room for a generous batch and no more, so a
@@ -121,27 +120,6 @@ pub const MAX_REQUEST: usize = 64 * 1024;
 /// How long one caller may hold the listener. Enrolment is a fetch and a
 /// push; a connection that takes longer than this is not enrolling.
 pub const CALLER_TIMEOUT: Duration = Duration::from_secs(10);
-
-/// The nonce a fetch must carry, in bytes. Sixteen: the client chooses it
-/// per fetch, and the proof is worthless for any other.
-pub const NONCE_BYTES: usize = 16;
-
-/// The proof an instance returns beside its transport public key:
-/// `HMAC-SHA256` under the enrolment token over [`PROOF_INFO`], the
-/// caller's nonce, and the key.
-///
-/// **The nonce is what makes it unreplayable** and the key is what it is
-/// about: a proof over one key does not carry to another, which is the
-/// substitution the token is here to stop.
-pub fn proof(token: &[u8; 32], nonce: &[u8], key: &[u8; 32]) -> [u8; 32] {
-    let mut ctx = hmac::Context::with_key(&hmac::Key::new(hmac::HMAC_SHA256, token));
-    ctx.update(PROOF_INFO);
-    ctx.update(nonce);
-    ctx.update(key);
-    let mut out = [0u8; 32];
-    out.copy_from_slice(ctx.sign().as_ref());
-    out
-}
 
 /// The surface an operator reaches their instance over: what it needs to
 /// answer a fetch, to take a run, and to hand the node a record.

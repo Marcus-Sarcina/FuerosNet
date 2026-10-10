@@ -57,14 +57,8 @@ pub fn disposition(code: u64) -> Disposition {
 
 /// A `NetworkPoint` (`wire-format.md` §4.4) is the transport's type; the
 /// node adds nothing to it.
+pub use rhtn_transport::records::emit_points;
 pub use rhtn_transport::session::NetworkPoint;
-
-fn emit_points(out: &mut Vec<u8>, points: &[NetworkPoint]) {
-    emit_array_head(out, points.len());
-    for p in points {
-        p.encode(out);
-    }
-}
 
 fn decode_points(b: &[u8], at: usize) -> Result<Vec<NetworkPoint>, String> {
     array_item_ranges(b, at)
@@ -976,54 +970,11 @@ impl NodeView {
     }
 }
 
-/// Build an `EndpointRecord` for `identity` at `seqno` (`wire-format.md` §7.6).
-pub fn endpoint_record(
-    identity: &rhtn_crypto::SigningIdentity,
-    endpoints: &[NetworkPoint],
-    seqno: Seqno,
-) -> Vec<u8> {
-    let mut payload = Vec::new();
-    emit_map_head(&mut payload, 3);
-    emit_uint(&mut payload, 1);
-    emit_bstr(&mut payload, &identity.public.keyhash);
-    emit_uint(&mut payload, 2);
-    emit_points(&mut payload, endpoints);
-    emit_uint(&mut payload, 3);
-    seqno.emit(&mut payload);
-    let sig = identity.sign1_ed_unnamed(rhtn_codec::cose::aad::ENDPOINTS, &payload);
-    let mut out = Vec::new();
-    emit_map_head(&mut out, 4);
-    out.extend_from_slice(&payload[1..]);
-    emit_uint(&mut out, 4);
-    out.extend_from_slice(&sig);
-    out
-}
-
-/// An `AnchorEntry` for `identity` (`wire-format.md` §7.2).
-pub fn anchor_entry(
-    identity: &rhtn_crypto::SigningIdentity,
-    endpoints: &[NetworkPoint],
-    subtree_size: u64,
-    seqno: Seqno,
-) -> Vec<u8> {
-    let mut payload = Vec::new();
-    emit_map_head(&mut payload, 4);
-    emit_uint(&mut payload, 1);
-    emit_bstr(&mut payload, &identity.public.keyhash);
-    emit_uint(&mut payload, 2);
-    emit_points(&mut payload, endpoints);
-    emit_uint(&mut payload, 3);
-    emit_uint(&mut payload, subtree_size);
-    emit_uint(&mut payload, 4);
-    seqno.emit(&mut payload);
-    let sig = identity.sign1_ed_unnamed(rhtn_codec::cose::aad::ANCHOR, &payload);
-    let mut out = Vec::new();
-    emit_map_head(&mut out, 5);
-    out.extend_from_slice(&payload[1..]);
-    emit_uint(&mut out, 5);
-    out.extend_from_slice(&sig);
-    out
-}
+/// **The two records an operator signs about this node's reachability**,
+/// which the transport crate owns because the signer is a light client
+/// (§4.4: an instance cannot mint either) and the light client does not
+/// carry this crate.
+pub use rhtn_transport::records::{anchor_entry, endpoint_record};
 
 // ---------------------------------------------------------------- locators
 

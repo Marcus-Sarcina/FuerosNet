@@ -16487,6 +16487,48 @@ in the code rather than hidden in it:
   waits on the third reserved role and the §12 ownership-versus-hosting
   decision about what principal an invocation carries.
 
+## The provisioning pages (2026-10-10)
+
+**Built**: H3's enrolment (`OperatorActivity`), the exchange it drives
+(`Provision`), and PRD-12's frame (`NodePageActivity`). The kernel gained
+`enrolment_proof_checks`, `network_point`, `endpoint_record` and
+`anchor_entry`; `delegate` was already there.
+
+**Three relocations, each forced by an existing boundary** — the proof to
+`rhtn-crypto`, §4.4's record builders to `rhtn-archive::endpoint` over
+already-encoded points, and `rhtn-transport` keeping the `NetworkPoint`
+wrapper. The point of note: **`rhtn-client` has `rhtn-transport` as a
+dev-dependency only**, deliberately, so the client crate is a protocol and
+state crate with no network in it. That is what ruled out the obvious
+placement and is worth remembering before the next thing wants to reach
+across it.
+
+**Still owed here:**
+
+- **H1, the provider and zone choice** (PRD-11), which is the cloud
+  signup, payment and launch flow — the large piece, and the one whose UX
+  claim ("no more complicated than a SaaS signup") has not met a real
+  provider yet. Everything H3 does assumes the address and token arrived
+  somehow; H1 is where they come from.
+- **Nothing is remembered.** The screen holds no instance list: an
+  operator who enrols two has nowhere to see them, and H2's delegation
+  state and H4's disclosure both want that list. The kernel has no "which
+  instances are mine" query, which is the mode question
+  `Robot/light-client-screens.md` already records as owed.
+- **Renewal is not wired.** A run is 7 × 48 hours by default and §7 has it
+  renewed contiguously; nothing here renews, so an instance enrolled today
+  stops serving in a fortnight. That is H2's, and it is the first thing a
+  real operator would hit.
+- **The counter is always 1** on both records. A second endpoint record
+  for the same instance needs a higher one, so changing an address
+  currently writes a record a node should refuse as stale. It wants the
+  instance list before it can want anything else.
+- **No on-device test.** The Kotlin side is covered by unit tests against
+  a socket; the whole path — phone to container — has not been run. The
+  local node (`packaging/local.sh`) is the obvious fixture, with the
+  phone's `10.0.2.2` for an emulator or the host's LAN address for a
+  handset.
+
 ## Grant editing, and what persists (2026-10-09)
 
 **[ruled, author, 2026-10-09] A grant is a table update and is written

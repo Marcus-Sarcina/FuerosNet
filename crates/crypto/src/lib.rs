@@ -16,6 +16,10 @@
 /// Transport delegations (`wire-format.md` §8.2): a window-bounded
 /// credential an identity signs for a key that is not its own.
 pub mod delegation;
+
+/// The proof an instance offers for the transport key it minted
+/// (`infra-client-requirements.md` §8.2).
+pub mod enrolment;
 /// The hybrid identity, its keyhash, and the signing half.
 pub mod identity;
 /// PQXDH (design §5.3): the key agreement a payload session opens with.

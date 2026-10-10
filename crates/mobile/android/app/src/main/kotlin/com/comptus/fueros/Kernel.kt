@@ -86,6 +86,99 @@ object Kernel {
     fun opticalTaken(): Boolean = opticalTaken
 
     /**
+     * **Enrol an instance of this operator's** (`Provision`,
+     * `infra-client-requirements.md` §8.2, §8.3): fetch the transport key
+     * it minted, check the proof that the key is *its*, then sign and hand
+     * over the two records §4.4 says it cannot sign for itself, and last
+     * the run that ends its wait.
+     *
+     * **The order is the records first and the run last**, because taking
+     * the run is what makes it start serving: a node that began to serve
+     * before its endpoint record arrived would be reachable and unfindable
+     * at once.
+     *
+     * Each step is narrated as its own line, which is what the page shows.
+     * **A step that fails stops the rest** — a half-enrolled instance is
+     * one nobody asked for, and the lines say how far it got.
+     *
+     * @param at `host:port` of the instance's surface
+     * @param tokenHex the enrolment token its configuration carries
+     * @param credentials how many 48-hour delegations the run carries
+     * @param endpoint the address to name in an endpoint record, or null
+     * @param subtree the subtree size to claim in an anchor entry, or null
+     */
+    fun enrol(
+        at: String,
+        tokenHex: String,
+        credentials: Int,
+        endpoint: String?,
+        subtree: Long?,
+    ): List<String> {
+        val p = participant ?: return listOf("the kernel is not running")
+        val said = mutableListOf<String>()
+        val token = runCatching { Provision.unhex(tokenHex.trim()) }.getOrElse {
+            return listOf("the token is 64 lower-case hex digits")
+        }
+        if (token.size != 32) return listOf("the token is 64 lower-case hex digits")
+
+        val got = Provision.fetch(at).getOrElse { return listOf("${it.message}") }
+        val checks = call("enrolmentProofChecks", { false }) {
+            uniffi.rhtn_ffi.enrolmentProofChecks(token, got.nonce, got.transportKey, got.proof)
+        }
+        if (!checks) {
+            // **the one refusal that matters here**: something answered
+            // that does not hold this configuration's token, so the key it
+            // offered is not this instance's.  Nothing was signed
+            return listOf(
+                "the proof did not check: whatever answered at $at does not hold the token " +
+                    "this instance was configured with, so the key it offered is not its own. " +
+                    "Nothing was signed.",
+            )
+        }
+        said += "transport key ${Provision.hex(got.transportKey).take(16)}…, proof checks"
+        said += "it is ${got.phase}, holding ${got.credentials} credential(s)"
+
+        // §4.4's two records, each signed here because the instance holds
+        // no seed to sign its own
+        if (endpoint != null) {
+            val point = point(endpoint) ?: return said + "`$endpoint` is not host:port"
+            val record = call("endpointRecord", { null }) { p.endpointRecord(listOf(point), 1u) }
+                ?: return said + "the endpoint record was not signed"
+            said += "endpoint record naming $endpoint: " +
+                Provision.put(at, "/node/endpoint-record", record).fold({ it }, { "${it.message}" })
+        }
+        if (subtree != null) {
+            val point = point(endpoint ?: at) ?: return said + "`$at` is not host:port"
+            val entry = call("anchorEntry", { null }) {
+                p.anchorEntry(listOf(point), subtree.toULong(), 1u)
+            } ?: return said + "the anchor entry was not signed"
+            said += "anchor entry claiming a subtree of $subtree: " +
+                Provision.put(at, "/node/anchor-entry", entry).fold({ it }, { "${it.message}" })
+        }
+
+        val run = call("delegate", { null }) {
+            p.delegate(got.transportKey, now(), credentials.toUInt())
+        } ?: return said + "the run was not signed"
+        run.forEachIndexed { i, credential ->
+            said += "credential ${i + 1} of ${run.size}: " +
+                Provision.put(at, "/node/run", credential).fold({ it }, { "${it.message}" })
+        }
+        said += "its administration page is at http://$at/"
+        return said
+    }
+
+    /** A `NetworkPoint` for `host:port`, encoded, or null. */
+    private fun point(hostPort: String): ByteArray? {
+        val host = hostPort.substringBeforeLast(':', "")
+        val port = hostPort.substringAfterLast(':', "").toUShortOrNull() ?: return null
+        if (host.isEmpty()) return null
+        return call("networkPoint", { null }) { uniffi.rhtn_ffi.networkPoint(host, port) }
+    }
+
+    /** Seconds since the epoch, which is what a delegation's window is in. */
+    private fun now(): ULong = (System.currentTimeMillis() / 1000).toULong()
+
+    /**
      * Begin a ceremony, meeting or adopting as chosen, with whoever the
      * codes turn out to name (`wire-format.md` §14.3). A ceremony already
      * live is returned as-is.

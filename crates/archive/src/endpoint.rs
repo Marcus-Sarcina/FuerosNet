@@ -10,6 +10,7 @@
 use crate::Keyhash;
 use crate::tx::Seqno;
 use rhtn_codec::cbor::*;
+use rhtn_codec::encode::*;
 use rhtn_codec::schema;
 use rhtn_crypto::verify::{self, Lookup};
 
@@ -146,4 +147,72 @@ pub fn decide(
         None if holds_another_series && !series_proved => Line::Unproved,
         None => Line::Current,
     }
+}
+
+/// **This identity's endpoint record**, signed by it
+/// (`wire-format.md` §7.6).
+///
+/// **Here because the signer is a light client** [2026-10-10].
+/// `infra-client-requirements.md` §4.4 is categorical that an instance
+/// cannot mint one — "the signature on both is its operator's" — so a
+/// change of address is something the operator's client signs, and §8.3
+/// has that client ship the provisioning pages it signs them on. The
+/// points arrive **already encoded**, which is how [`EndpointRecord`]
+/// reads them back: what a point is belongs to the transport, and nothing
+/// here needs to know.
+#[must_use]
+pub fn endpoint_record(
+    identity: &rhtn_crypto::SigningIdentity,
+    points: &[Vec<u8>],
+    seqno: Seqno,
+) -> Vec<u8> {
+    let mut payload = Vec::new();
+    emit_map_head(&mut payload, 3);
+    emit_uint(&mut payload, 1);
+    emit_bstr(&mut payload, &identity.public.keyhash);
+    emit_uint(&mut payload, 2);
+    emit_array_head(&mut payload, points.len());
+    for p in points {
+        payload.extend_from_slice(p);
+    }
+    emit_uint(&mut payload, 3);
+    seqno.emit(&mut payload);
+    let sig = identity.sign1_ed_unnamed(rhtn_codec::cose::aad::ENDPOINTS, &payload);
+    let mut out = Vec::new();
+    emit_map_head(&mut out, 4);
+    out.extend_from_slice(&payload[1..]);
+    emit_uint(&mut out, 4);
+    out.extend_from_slice(&sig);
+    out
+}
+
+/// **This identity's anchor entry**, signed by it: the same points, with
+/// the subtree it claims.
+#[must_use]
+pub fn anchor_entry(
+    identity: &rhtn_crypto::SigningIdentity,
+    points: &[Vec<u8>],
+    subtree_size: u64,
+    seqno: Seqno,
+) -> Vec<u8> {
+    let mut payload = Vec::new();
+    emit_map_head(&mut payload, 4);
+    emit_uint(&mut payload, 1);
+    emit_bstr(&mut payload, &identity.public.keyhash);
+    emit_uint(&mut payload, 2);
+    emit_array_head(&mut payload, points.len());
+    for p in points {
+        payload.extend_from_slice(p);
+    }
+    emit_uint(&mut payload, 3);
+    emit_uint(&mut payload, subtree_size);
+    emit_uint(&mut payload, 4);
+    seqno.emit(&mut payload);
+    let sig = identity.sign1_ed_unnamed(rhtn_codec::cose::aad::ANCHOR, &payload);
+    let mut out = Vec::new();
+    emit_map_head(&mut out, 5);
+    out.extend_from_slice(&payload[1..]);
+    emit_uint(&mut out, 5);
+    out.extend_from_slice(&sig);
+    out
 }

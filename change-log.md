@@ -13418,6 +13418,64 @@ only if they share one framing**, stated provisionally in the requirements
 (§1) and as CER-027, to be restated compatible with both once the iOS shell
 exists; catalogue CER-55, deferred to that shell.
 
+### 2026-10-10 (the provisioning pages, and what had to move for them)
+
+**`infra-client-requirements.md` §8.3 has the client ship the provisioning
+pages "because they must work before any node exists", and the client
+shipped none.** It does now: H3 on the operator's screen takes an
+instance's address and the token its configuration carries, fetches the
+transport key it minted, **checks the proof before anything is signed**,
+and then signs §4.4's two records and the run that ends the instance's
+wait. Each step is narrated, and a step that fails stops the rest — a
+half-enrolled instance is one nobody asked for.
+
+**The records first and the run last**, because taking the run is what
+makes an instance start serving: one that began to serve before its
+endpoint record arrived would be reachable and unfindable at once.
+
+**Three things had to move before a page could do any of it**, and each
+move was forced by a boundary that already existed:
+
+- **The proof is now `rhtn_crypto::enrolment`.** It was the daemon's, and
+  the party that checks it is a light client that does not carry the
+  daemon. One definition on both sides, rather than a copy on each.
+- **The two records of §4.4 are now `rhtn_archive::endpoint`**, beside the
+  parser that reads them. §4.4 makes signing them the *operator's client's*
+  job — "a change of address is something the client signs" — and a builder
+  in the infra crate was one the client could not reach. They take the
+  points **already encoded**, which is how the parser has always read them:
+  what a point is belongs to the transport, and signing a record over one
+  does not need to know. `rhtn-transport` keeps the `NetworkPoint`-shaped
+  wrapper for the node and the instrument, and `rhtn-client` stays clear of
+  the transport, which was the boundary at issue.
+- **The MAC changed implementation in the move**, from `aws-lc-rs` to
+  RustCrypto, so its bytes are now pinned against a vector computed by
+  neither — a MAC that changed its bytes would have made every instance
+  already configured silently unreachable, with the proof simply failing to
+  check.
+
+**The frame is the client's half of §8.3** (`NodePageActivity`), and what
+it asserts is what the node cannot: no script — the node's pages carry none
+by design, so refusing it is free — no JavaScript bridge, no file or
+content access, no storage that outlives the screen, and navigation
+confined to the instance's own origin. A seized node serving a hostile page
+must reach nothing on the device that still holds the seed (design §18.1,
+§23.3), and the node is the party that isolation is against.
+
+**Cleartext is permitted, with the reason written where it is permitted.**
+§8.2 does not specify the administration channel — it is out of band,
+"reached the way any other server is reached" — and nothing on it carries a
+secret: the token is a MAC key that is never sent, and the run and records
+are signed objects. What it does cost is said in the same file: somebody
+able to modify that traffic cannot forge a signed object, but can modify
+the page the operator reads, and an operator acting on a tampered page is
+acting on something they did not see.
+
+**Operator is no longer hidden on the home screen.** The plan keyed it on
+an instance being attached; enrolling one is how an identity comes to have
+an instance, so gating the only way in on already being in would leave no
+way in.
+
 ### 2026-10-09 (grant editing, and where a grant lives)
 
 **`infra-client-requirements.md` §10.2 has the role table re-evaluated

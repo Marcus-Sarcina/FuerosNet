@@ -32,16 +32,21 @@ class HomeActivity : Activity() {
         }
     }
 
-    /** The destinations. Meet, People, Catalog and Settings are later
-     *  slices; they lead to an honest placeholder rather than pretending.
-     *  Operator is absent by design until the kernel can say an identity
-     *  runs an instance (the mode query is owed). */
+    /** The destinations. People, Catalog and Settings are later slices;
+     *  they lead to an honest placeholder rather than pretending.
+     *
+     *  **Operator is not mode-keyed yet, and for this slice should not be**
+     *  [2026-10-10]: `Robot/light-client-screens.md` has H keyed on an
+     *  instance being attached, but enrolling one is how an identity comes
+     *  to have an instance at all. Gating the only way in on already being
+     *  in would leave no way in. */
     private val destinations = listOfNotNull(
         "Conversations" to { open(ConversationsActivity::class.java) },
         "Meet" to { open(MeetActivity::class.java) },
         "People" to { placeholder("People", "Your horizon — later.") },
         "Catalog" to { placeholder("Catalog", "Resources your node serves — later.") },
         "Settings" to { placeholder("Settings", "Wake endpoint, backup — later.") },
+        "Operator" to { open(OperatorActivity::class.java) },
         // the diagnostics bundle, fieldtest flavour only
         // (`Robot/field-test-diagnostics.md`, section 4)
     )

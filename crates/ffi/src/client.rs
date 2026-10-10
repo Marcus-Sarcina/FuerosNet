@@ -2089,6 +2089,36 @@ impl Participant {
         })
     }
 
+    /// **An endpoint record for an instance of this operator's**
+    /// (`infra-client-requirements.md` §4.4): the signature is the
+    /// operator's, because the instance holds no seed to make its own, so
+    /// a change of address is a thing this device signs and hands over.
+    /// §8.3 has the client ship the pages that do it.
+    pub fn endpoint_record(&self, points: Vec<Vec<u8>>, counter: u32) -> Result<Vec<u8>, Refused> {
+        crate::diag::call("endpoint_record", || {
+            let seqno = rhtn_archive::tx::Seqno { series: 0, counter };
+            self.handle
+                .with_blocking(move |c| c.endpoint_record(&points, seqno))
+                .map_err(|e| Refused::new(format!("{e:?}")))
+        })
+    }
+
+    /// **An anchor entry for the same instance**, claiming a subtree of
+    /// `subtree_size`, signed by the same operator for the same reason.
+    pub fn anchor_entry(
+        &self,
+        points: Vec<Vec<u8>>,
+        subtree_size: u64,
+        counter: u32,
+    ) -> Result<Vec<u8>, Refused> {
+        crate::diag::call("anchor_entry", || {
+            let seqno = rhtn_archive::tx::Seqno { series: 0, counter };
+            self.handle
+                .with_blocking(move |c| c.anchor_entry(&points, subtree_size, seqno))
+                .map_err(|e| Refused::new(format!("{e:?}")))
+        })
+    }
+
     /// Take a finalized adoption this client signed.  Where it is an
     /// adoption of this client, it is also what tells it where it now
     /// sits.
@@ -2256,4 +2286,58 @@ pub fn platform(
         custody,
         diagnostics,
     }
+}
+
+/// **Whether an instance's proof is the one its token produces**
+/// (`rhtn_crypto::enrolment`): the check a provisioning page runs before
+/// anything is signed.
+///
+/// `infra-client-requirements.md` §8.2 has the operator reach their own
+/// instance out of band, and the hazard is substitution — something else
+/// answering at that address would offer *its* transport key, and a run
+/// signed over it would delegate this identity to a stranger. The token is
+/// known to the operator who wrote the configuration and to the instance
+/// that read it, and is used as a MAC key and never sent.
+///
+/// **A page that cannot check this must not sign.** Nothing below this
+/// line is reversible: a run is a credential, and the far side keeps it.
+#[uniffi::export]
+pub fn enrolment_proof_checks(
+    token: Vec<u8>,
+    nonce: Vec<u8>,
+    transport_key: Vec<u8>,
+    shown: Vec<u8>,
+) -> Result<bool, Refused> {
+    let token: [u8; 32] = token
+        .as_slice()
+        .try_into()
+        .map_err(|_| Refused::new("an enrolment token is 32 bytes"))?;
+    let key: [u8; 32] = transport_key
+        .as_slice()
+        .try_into()
+        .map_err(|_| Refused::new("a transport key is 32 bytes"))?;
+    if nonce.len() != rhtn_crypto::enrolment::NONCE_BYTES {
+        return Err(Refused::new(format!(
+            "a nonce is {} bytes",
+            rhtn_crypto::enrolment::NONCE_BYTES
+        )));
+    }
+    Ok(rhtn_crypto::enrolment::checks(&token, &nonce, &key, &shown))
+}
+
+/// **A `NetworkPoint` for an instance at this address** (`wire-format.md`
+/// §4.4), encoded, for the two records below.
+///
+/// IPv4 only, said rather than guessed at: the point encoding carries four
+/// octets, and a provisioning page handed a v6 address should say so to
+/// its operator rather than quietly name a different host.
+#[uniffi::export]
+pub fn network_point(host: String, port: u16) -> Result<Vec<u8>, Refused> {
+    let v4: std::net::Ipv4Addr = host
+        .parse()
+        .map_err(|_| Refused::new(format!("`{host}` is not an IPv4 address")))?;
+    let point = rhtn_transport::session::NetworkPoint::new(v4.octets(), Some(u64::from(port)));
+    let mut out = Vec::new();
+    point.encode(&mut out);
+    Ok(out)
 }

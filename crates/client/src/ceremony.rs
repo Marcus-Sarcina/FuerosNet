@@ -3626,6 +3626,44 @@ impl Client {
         ))
     }
 
+    /// **An endpoint record for an instance of this operator's**
+    /// (`infra-client-requirements.md` §4.4): the signature is the
+    /// operator's and the instance holds no seed to make its own, so this
+    /// is a thing the client signs and hands over. `wire-format.md` §7.6
+    /// publishes one for infrastructure only, which is what makes it the
+    /// statement that its subject is infrastructure.
+    /// The points arrive **already encoded**, which is what keeps this
+    /// crate clear of the transport: what a point is belongs there, and
+    /// signing a record over one does not need to know.
+    pub fn endpoint_record(
+        &self,
+        points: &[Vec<u8>],
+        seqno: rhtn_archive::tx::Seqno,
+    ) -> Result<Vec<u8>, Abort> {
+        Ok(rhtn_archive::endpoint::endpoint_record(
+            self.signer()?,
+            points,
+            seqno,
+        ))
+    }
+
+    /// **An anchor entry for the same instance**, claiming a subtree of
+    /// `subtree_size`, and signed by the same operator for the same
+    /// reason.
+    pub fn anchor_entry(
+        &self,
+        points: &[Vec<u8>],
+        subtree_size: u64,
+        seqno: rhtn_archive::tx::Seqno,
+    ) -> Result<Vec<u8>, Abort> {
+        Ok(rhtn_archive::endpoint::anchor_entry(
+            self.signer()?,
+            points,
+            subtree_size,
+            seqno,
+        ))
+    }
+
     /// What arrived on the end-to-end channel from `from`: decrypted on the
     /// session, or a session opened on my prekeys, and delivered by kind —
     /// a key grant to the grant handler, a late response beside its record,

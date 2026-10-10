@@ -21,6 +21,10 @@ pub mod queue;
 /// The stream-0 session of §8: attach, heartbeat, siblings, and the node
 /// and client that hold one.
 pub mod session;
+
+/// The two records an operator signs about a node's reachability
+/// (`infra-client-requirements.md` §4.4).
+pub mod records;
 /// STUN (RFC 5389), for learning a reflexive address.
 pub mod stun;
 /// QUIC with TLS 1.3 and raw public keys (§9.1): pins, presenters,

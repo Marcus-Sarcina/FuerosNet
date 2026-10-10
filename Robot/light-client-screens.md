@@ -184,7 +184,8 @@ a reason and a way back (UX-013 validates these by walking them).
 |---|---|---|---|
 | H1 Provision an instance | Provider and zone choices **ordered by concentration inside this operator's own horizon**, least first, crowded marked and never hidden; and the caveat said: the ordering speaks to one operator's redundancy, not the network's | Owed in part | PRD-11; `light-client-requirements.md` §6 |
 | H2 Delegations | The run's issuance and renewal state (45 × 48 h, contiguous); what the delegated key signs and what stays on this phone | `delegate`, `presented_key` | `infra-client-requirements.md` §7 |
-| H3 The node's pages | **Provisioning pages only, in a frame isolated from the client's keys, archive and sealed captures**; the administration channel awaits the author's decision | Owed | PRD-12, PRD-13; `infra-client-requirements.md` §8.3 |
+| H3 Enrol an instance | **Built, 2026-10-10** (`OperatorActivity`): the address and token out of band, the fetch, **the proof checked before anything is signed**, then §4.4's two records and the run, each step narrated | `enrolment_proof_checks`, `network_point`, `endpoint_record`, `anchor_entry`, `delegate` | PRD-13; `infra-client-requirements.md` §8.2, §8.3, §4.4 |
+| H3a The node's own pages | **Built, 2026-10-10** (`NodePageActivity`): the node serves them and this frames them — no script, no bridge, no file or content access, no storage, and navigation confined to the instance's own origin | | PRD-12; `infra-client-requirements.md` §8.3; design §18.1, §23.3 |
 | H4 Operator disclosure | What subordinates are exposed to, the hosting model, the roles users hold | Owed | PRD-06; `infra-client-requirements.md` §8 |
 
 ## I. A second device (phone and desktop, two ends of one flow)
