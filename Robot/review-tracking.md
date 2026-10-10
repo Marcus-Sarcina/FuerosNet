@@ -16487,6 +16487,51 @@ in the code rather than hidden in it:
   waits on the third reserved role and the §12 ownership-versus-hosting
   decision about what principal an invocation carries.
 
+## Phone to container, run on hardware (2026-10-10)
+
+**Done, and it works.** RFCRC1JDGXV (SM-G996U1) enrolled a container on
+the development machine over the LAN: fetch, proof, both records, a run of
+seven credentials, and then the node's own page in the frame — where a
+form was pressed and the node took the act.
+
+**The container was the image built two days earlier**, which is better
+evidence than a fresh one would have been: its proof is computed by
+`aws-lc-rs` and the phone checked it with RustCrypto, so **the MAC's move
+between implementations is now confirmed against a real instance** and not
+only against the pinned vector.
+
+**The app was installed over the top** (`adb install -r`), so its data and
+therefore its identity survived — `f2e60afab19361c2…`, the material
+`crates/tools/phones.conf` already held, which is what the instance was
+configured to expect as its operator.
+
+**Two things the run surfaced:**
+
+1. **The endpoint-record address check was naive** — **fixed the same
+   day.** The node said "the listen address 0.0.0.0:7448 is not one the
+   endpoint record names; the address has moved and a new operator-signed
+   record is owed". It had not: 0.0.0.0 is a bind address and the record
+   named 192.168.0.8:7448, the reachable one. It compared against the
+   configured bind; it now compares against the bound address, with a
+   wildcard IP matching any host and the port deciding. `dmn_25a` pins
+   both halves from a wildcard bind.
+2. **A repeated enrolment accumulates.** Three runs went in during the
+   driving of the screen (stray taps), leaving 21 delegation files and a
+   fetch reporting 14 credentials before the last. Nothing broke and the
+   records answered "already held", which is the right behaviour — but
+   nothing on the page says a run is already in force before signing
+   another, and the button is easy to press twice.
+
+**Not exercised**: the frame's off-origin refusal, for want of a page
+carrying a link off the node. The node's pages carry none, so this needs a
+fixture rather than an observation.
+
+**The scratch node is still up** as `rhtn-phone-node`, state under
+`runs/phone-node/`, admin on `0.0.0.0:7450`, QUIC on 7448 — it publishes
+on 0.0.0.0 where `local.sh` publishes on 127.0.0.1, because a phone has to
+reach it. `docker rm -f rhtn-phone-node` and the directory is the whole of
+it.
+
 ## The provisioning pages (2026-10-10)
 
 **Built**: H3's enrolment (`OperatorActivity`), the exchange it drives

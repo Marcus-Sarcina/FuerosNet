@@ -587,20 +587,15 @@ impl Service {
                         p.display()
                     )));
                 }
-                // the address the record names against the one served on
+                // the addresses the record names, compared below against
+                // the one actually bound rather than the one configured
                 let named: Vec<std::net::SocketAddr> = er
                     .endpoints
                     .iter()
                     .filter_map(|b| rhtn_node::resolution::NetworkPoint::decode_bytes(b).ok())
                     .map(|np| np.socket())
                     .collect();
-                if !named.contains(&cfg.listen) {
-                    crate::say!(
-                        "rhtnd: the listen address {} is not one the endpoint record names; the address has moved and a new operator-signed record is owed",
-                        cfg.listen
-                    );
-                }
-                Some(bytes)
+                Some((bytes, named))
             }
         };
         if let Some(p) = &cfg.anchor_entry {
@@ -616,6 +611,32 @@ impl Service {
             }
         }
         let node = LiveNode::start_with(node_cfg, view, known.clone(), anchors, limits);
+        // **the record against the address served on** [2026-10-10].  This
+        // used to compare against the configured bind, which said "the
+        // address has moved" to every containerised node: a node bound to
+        // 0.0.0.0 is reached at an address the bind does not name, and a
+        // bind on port 0 is served on a port the configuration does not
+        // know.  So the bound address is what is compared, a wildcard IP
+        // matches any host the record names, and only the port is
+        // compared then — which is all the node can know about where it is
+        // reached, and the thing a stale record would get wrong
+        if let Some((_, named)) = &given_record {
+            let bound = node.addr;
+            let reached = named.iter().any(|a| {
+                a.port() == bound.port() && (bound.ip().is_unspecified() || a.ip() == bound.ip())
+            });
+            if !reached {
+                crate::say!(
+                    "rhtnd: the listen address {} is not one the endpoint record names ({}); the address has moved and a new operator-signed record is owed",
+                    bound,
+                    named
+                        .iter()
+                        .map(|a| a.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+            }
+        }
         // **the surface's second phase begins here**: with a node in the
         // slot, a record it takes is published at once rather than kept for
         // the next start ([`crate::administration::Surface`]).
@@ -623,7 +644,7 @@ impl Service {
             node: node.clone(),
             hosts_resources,
         });
-        if let Some(bytes) = &given_record {
+        if let Some((bytes, _)) = &given_record {
             node.originate(rhtn_node::store::KIND_ENDPOINT_RECORD, bytes);
         }
         // an instance's credential in force goes to its horizon at once

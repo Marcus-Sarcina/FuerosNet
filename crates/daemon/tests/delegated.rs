@@ -54,6 +54,13 @@ struct Layout {
 /// An instance for bob: bob's material as the operator, alice as a peer,
 /// and whatever records `extra` names in the configuration.
 fn layout(tag: &str, extra: &str) -> Layout {
+    layout_bound(tag, "127.0.0.1:0", extra)
+}
+
+/// The same, bound where the test says: a wildcard with a fixed port is
+/// what a containerised node has, and the one case the address check
+/// used to get wrong.
+fn layout_bound(tag: &str, listen: &str, extra: &str) -> Layout {
     let dir = std::env::temp_dir().join(format!("rhtnd-deleg-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
@@ -72,7 +79,7 @@ fn layout(tag: &str, extra: &str) -> Layout {
     std::fs::write(
         &config,
         format!(
-            "operator = \"{}\"\ntransport-key = \"{}\"\ndelegations = \"{}\"\nlisten = \"127.0.0.1:0\"\nqueue = \"{}\"\nprekeys = \"{}\"\ntopology = \"{}\"\narchive = \"{}\"\nheartbeat = 30\ningestion = \"unverified-gossip\"\n{extra}\n[allowance]\nrequests = 120\nseconds = 60\n",
+            "operator = \"{}\"\ntransport-key = \"{}\"\ndelegations = \"{}\"\nlisten = \"{listen}\"\nqueue = \"{}\"\nprekeys = \"{}\"\ntopology = \"{}\"\narchive = \"{}\"\nheartbeat = 30\ningestion = \"unverified-gossip\"\n{extra}\n[allowance]\nrequests = 120\nseconds = 60\n",
             dir.join("operator").display(),
             key.display(),
             delegations.display(),
@@ -446,4 +453,66 @@ async fn dmn_26_the_operator_signed_record_and_entry_are_what_the_instance_serve
     d2.stop();
     let _ = std::fs::remove_dir_all(&l.dir);
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// **A wildcard bind is reached at an address the bind does not name.**
+/// A containerised node listens on 0.0.0.0 and its operator's record names
+/// the host it is actually reached at; the check used to compare the two
+/// and tell every such node its address had moved. The port is all the
+/// node can know about where it is reached, and the thing a stale record
+/// would get wrong — so the port is what decides, on a wildcard bind.
+#[tokio::test]
+async fn dmn_25a_a_wildcard_bind_is_reached_at_the_host_the_record_names() {
+    const PORT: u16 = 37451;
+    let bob = test_identity("bob");
+    let moved = "is not one the endpoint record names";
+    // the record lives in a directory of its own, as the moved test's
+    // does, and its path goes into the configuration through `extra` so
+    // the key lands where TOML allows it
+    let dir = std::env::temp_dir().join(format!("rhtnd-deleg-wildcard-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let run = |tag: &str, record: &[u8]| {
+        let path = dir.join(format!("{tag}.record"));
+        std::fs::write(&path, record).unwrap();
+        let l = layout_bound(
+            tag,
+            &format!("0.0.0.0:{PORT}"),
+            &format!("endpoint-record = \"{}\"\n", path.display()),
+        );
+        let public = premint(&l, 29);
+        write_run(&l.delegations, &issue_run(&bob, &public, now() - 60, 45));
+        spawn(&l)
+    };
+
+    // the record names a host this machine is not, on the port served
+    let record = endpoint_record(
+        &bob,
+        &[NetworkPoint::new([192, 0, 2, 1], Some(PORT as u64))],
+        seqno(1),
+    );
+    let mut d = run("wildcard-same-port", &record);
+    let served = d.address();
+    assert_eq!(served.port(), PORT, "serving where it was bound: {served}");
+    std::thread::sleep(Duration::from_millis(300));
+    assert!(
+        !d.stderr_has(moved),
+        "a wildcard bind on the record's port has not moved: {:?}",
+        d.stderr.lock().unwrap()
+    );
+    d.stop();
+
+    // and the same bind with a record naming another port has
+    let record = endpoint_record(
+        &bob,
+        &[NetworkPoint::new([192, 0, 2, 1], Some(PORT as u64 + 1))],
+        seqno(1),
+    );
+    let d = run("wildcard-other-port", &record);
+    assert!(
+        d.wait_stderr(moved, 5),
+        "another port is a moved address: {:?}",
+        d.stderr.lock().unwrap()
+    );
+    d.stop();
 }

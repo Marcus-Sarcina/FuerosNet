@@ -13471,6 +13471,20 @@ able to modify that traffic cannot forge a signed object, but can modify
 the page the operator reads, and an operator acting on a tampered page is
 acting on something they did not see.
 
+**The endpoint-record address check compared against the wrong address**,
+found by running the pages against a container: it told the node that
+"the listen address 0.0.0.0:7448 is not one the endpoint record names; the
+address has moved and a new operator-signed record is owed", and nothing
+had moved. It compared the record against the *configured bind*, and a
+containerised node binds 0.0.0.0 — an address nobody is reached at — so
+every such node was told this, and an operator who learned to ignore it
+would have ignored the real case too. It now compares against the address
+actually bound: a wildcard IP matches any host the record names and only
+the port is compared then, which is all the node can know about where it
+is reached and the thing a stale record would get wrong. A bind on port 0
+is served on a port the configuration never knew, which the same change
+corrects. Tested on both halves of the rule from a wildcard bind.
+
 **Operator is no longer hidden on the home screen.** The plan keyed it on
 an instance being attached; enrolling one is how an identity comes to have
 an instance, so gating the only way in on already being in would leave no
