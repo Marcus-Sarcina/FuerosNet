@@ -9,7 +9,7 @@
 mod common;
 
 use common::harness::{Setup, setup};
-use common::kh;
+use common::{id, ids, kh};
 use rhtn_client::ceremony::Adopting;
 use rhtn_client::device::ChannelKind;
 
@@ -378,4 +378,36 @@ fn a_client_that_is_handed_no_nominee_nominates_the_parties_it_has_met() {
         s.client("alice").nominees().0.len(),
         "the caller's list stands as given"
     );
+}
+
+/// **Whom a client has met is folded at every start.** The acquaintance
+/// is derived from the records and was folded only at a finalize, so a
+/// restarted client had met nobody until its next ceremony ended: it
+/// nominated nobody and recognised none of a bundle it had every right
+/// to [author, 2026-10-11: behaviour must not depend on what this session
+/// did first]. Both restorers fold it.
+#[test]
+fn a_restarted_client_has_still_met_whom_it_met() {
+    let mut s = setup(&["alice", "bob"], &[ChannelKind::Nfc]);
+    s.run("alice", "bob", &[], &[]).expect("alice meets bob");
+    assert_eq!(s.client("alice").met(None), vec![kh("bob")]);
+    let blob = s.client("alice").durable();
+    let clock = s.clock.clone();
+
+    // from the durable document
+    let (dev, _h) = common::harness::device(vec![ChannelKind::Nfc], clock.clone(), 17, 0);
+    let mut again = rhtn_client::ceremony::Client::new(id("alice"), ids(), Default::default(), dev);
+    again.restore_durable(&blob).expect("opens whole");
+    assert_eq!(again.met(None), vec![kh("bob")], "restored: still met bob");
+
+    // and from a directory
+    let dir = std::env::temp_dir().join(format!("rhtn-met-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    s.client("alice").save(&dir).expect("saved");
+    let (dev, _h) = common::harness::device(vec![ChannelKind::Nfc], clock, 18, 0);
+    let at = rhtn_client::ceremony::Client::at(&dir, id("alice"), ids(), Default::default(), dev)
+        .expect("opens from the directory");
+    assert_eq!(at.met(None), vec![kh("bob")], "loaded: still met bob");
+    let _ = std::fs::remove_dir_all(&dir);
 }

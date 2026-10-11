@@ -16739,6 +16739,143 @@ verifier reachable; the fishing *act* in the kernel (the object is one
 introduction now; the turn-taking conversation is not built, as it was
 not before).
 
+**The first install of the locator build killed every phone's kernel.**
+Both Meet buttons dead; the log: `start` refused, "the stored state
+does not open: store". `ClientStore::decode` demanded seven collections
+and every phone's stored blob had six — the shape before locators were
+kept. The load path already says what to do ("what no longer parses is
+skipped rather than failing the load"); the backup document's decoder
+did not follow it. Fixed: six or seven collections open, a six-shape
+store holding no locators, which is what that client had. Test:
+`a_store_written_before_locators_were_kept_still_opens`. Reinstalled on
+all four.
+
+**Series B on the locator build — the phones are named by the last three
+characters of their serials from here: GXV, MRK (S21s), ZU8, 4VC (TCLs).**
+B-1, GXV × MRK, DONE on both, txid `986c59ab`, 4 signers, no warning.
+`cer.intent.received entries:0` on both, as it must be: neither held a
+locator before this meeting, and each now holds the other's from the
+intent. The next intent either sends will carry one introduction.
+
+**B-2, GXV × 4VC — hung at the intent, and the bearer connected to the
+wrong phone.** GXV's intent went out (`cer.intent.sent entries:1` — the
+first introduction on hardware), and 4VC stopped after 30 s: "the
+Bluetooth link did not come ready". The BLE log tells it: GXV began
+scanning at 10:45:31.50 and found a device at −73 dBm *before* 4VC
+started advertising (10:45:32.16) — **MRK**, still advertising from its
+10:40 meeting (its server logged "connected" at 10:45:32.19 and "link
+ready"); GXV's five writes were acknowledged by MRK. The scan filtered
+on the shell's fixed service UUID, so any phone running this shell
+within range was a match, and the earliest wins. Two fixes, both
+role-neutral: **the advertisement is named by the ceremony** —
+`BleBearer.uuidFor(ceremony_id)` (SHA-256 over `rhtn/1:ble` and the id,
+first sixteen bytes), both sides having the id from the transcript
+before the bearer starts; the GATT service stays fixed — and **a phone
+goes quiet at finalization** (`quiet()`: advertising and scanning
+stopped, the link kept). The per-ceremony value is also less of a beacon
+than the fixed UUID was. Test: `the_advertisement_uuid_is_the_ceremonys_own`.
+
+**The switch to capture is cued** [author, 2026-10-11: "add an audible or
+tactile signal at the end of the ranging step for non-NFC ceremonies
+like there is for NFC ceremonies"]. The NFC sound is the system's, at
+the tap; nothing in the shell sounded for any step. `MeetActivity` now
+buzzes (150 ms) and beeps (`TONE_PROP_ACK`) once on arriving at CAPTURE,
+whichever channels ran — for an NFC ceremony that is the tap's sound
+and then the switch's, which are different moments. `VIBRATE` declared.
+Best effort on both: a phone without a vibrator or with the tone
+channel muted still shows the step.
+
+**B-2 again, GXV × 4VC — hung at the end of the exchange, and this time
+the exchange itself.** GXV held both of 4VC's transcript parts at
+10:56:21.85 with 4VC's header saying it held one of GXV's; 4VC completed
+at 10:56:22.28 and from 10:56:22.46 showed its last code with `got = 2`.
+GXV decoded that frame for seven seconds (`qr.looks read 37, 56, 53` per
+tick) and never acted on it. The hole: GXV's tracking rows had already
+confirmed both of its parts held, so `theirReceived()` was 2 before the
+header said 2; the activity's "nothing moved" shortcut compared the two
+counts and returned before asking `done()`, which the header had just
+made true — and the camera, rightly, declined every identical frame
+afterwards. **Fixed**: a change in `done()` is news as the counts are.
+Pinned at the exchange level:
+`the_exchange_can_complete_on_a_frame_that_moves_neither_count`. The
+`read: 0` from 10:56:30 is the phones having been parted; the 41 s
+camera "stall" is the watchdog doing its job on an empty view.
+
+**The client examined on two questions** (`Robot/client-review-2026-10-11.md`):
+cruft, and nodeless/bootstrap sufficiency. The author took the first two
+items in the recommended order:
+
+1. **An unprovisioned device runs.** `Kernel.bringUp` returned before
+   the event loop whenever no provision blob was stored, printing
+   instructions to run `payload-peer` on the workstation — so no phone
+   had ever met without a script writing a blob first. Now the
+   unprovisioned device is the ordinary device: its own identity, nobody
+   known, nothing attached, the loop running; a provision is the bench's
+   convenience and never the way in. (`nodeless.sh` can stop provisioning.)
+2. **The exchange is versioned.** `OpticalExchange.version()` moves on
+   every change a screen could act on (a part taken, their count learned,
+   their header or rows moving what they hold, a part re-opened); both
+   screen callbacks compare the version they saw and call one
+   `opticalChanged`. The three hand-rolled before/after comparisons
+   (`heldBefore`, `theyHeldBefore`, `doneBefore`) and the tracking
+   path's own are gone. Test extended: the completing header moves the
+   version where the counts could not, and the same frame again moves
+   nothing.
+
+**[author, 2026-10-11] On persistence**, verbatim: *"This is fundamental.
+I'm noticing the ceremony is completing in ways that leave residue and
+I'm wondering if the underlying problem is that data persistence in the
+client is immature. Any transaction should resolve back to the live
+state of the app being as it was prior with new contacts (until their
+contact list reaches it's storage limit, clients should aggressively
+capture locators on every node that becomes visible, this includes
+witnesses, verifiers, the upline nodes used to reach them, and
+proposed-but-rejected witnesses and verifiers. Once full, they start to
+prune back to a compact set of anchors by dropping the
+least-interacted-with records.), transaction record, and meeting status
+shoudl all be serialized into static persistent records such that the
+behavior of the client in future interactions does not depend on the
+order of transactions in a given session or vary based on residue in
+live variables/registers."* Two things in it: a **contacts policy**
+(capture every locator that becomes visible — witnesses, verifiers,
+upline nodes, proposed-and-rejected candidates — up to a storage limit,
+then prune least-interacted first toward a compact set of anchors), which
+is new to the documents and belongs in `light-client-requirements.md`
+beside §4.2, with the kernel's `store.locators` as its seed; and a
+**persistence principle** — a ceremony ends with the live state as it
+was plus contacts, the record and the meeting's status, all persisted,
+so later behaviour never depends on session order or live residue. The
+audit that follows from the second: what the kernel holds in `active`,
+`acquaintance`, `witnessing`, `payload.handed`, the shell's
+`Kernel` singletons (`peer`, `nominees`, `opticalTaken`, `carriage`,
+`ble`) and `Meet`'s fields after a ceremony ends either way. Owed: the
+document text for both, and that audit.
+
+**Done the same day**: the contacts policy is `light-client-requirements.md`
+§4.3 (design §12.3 Case 1 now points at it; TOP-040/041), and the audit is
+§4 of `Robot/client-review-2026-10-11.md`. Two residues fixed on the spot:
+the kernel's `acquaintance` was folded from records only at a finalize,
+so a restarted client had met nobody until its next ceremony ended —
+now folded at every start (`at`, `restore_durable`); and the shell's
+`startMeet` returned a DONE or STOPPED meeting to the next screen. The
+finding that remains is the contacts store itself: material and locator
+persisted apart, only the locator surviving a restart — the next build.
+
+**[author, 2026-10-11] Pruning, refined**, verbatim: *"Pruning should be
+smart in that it removes low-frequency contacts (least interacted)
+prefferentially when it holds an upstream anchor for that nod. So the
+process is as follows: Storage is approaching capacity; Identify nodes
+least interacted with (some combination of last time contacted and
+number of times contacted); identify upstream nodes of these contacts
+according to their path; Remove contacts who will still be discoverable
+from their upstream; Repeat with loosened thresholds until the desired
+free space has been created in the contact store."* §4.3's third bullet
+and TOP-041 restated to that procedure. For the build: a contact
+carries `last_at` and `count`; the rank is over both; "upstream held" is
+read off the contact's locator path against the contacts held (the
+nearest held prefix under the same anchor, the anchor itself last); the
+loop loosens the rank cut until the target free space is reached.
+
 ## The low-spec pair, first run (2026-10-10)
 
 **Set up**: 8XDIW4G6WCW4LZU8 and VGY5IJRWUSAIX4VC, TCL 30 Z, on

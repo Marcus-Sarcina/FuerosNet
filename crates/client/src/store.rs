@@ -451,7 +451,10 @@ impl ClientStore {
         let rhtn_codec::cbor::Item::Array(f) = &item else {
             return None;
         };
-        if f.len() != 7 {
+        // six collections before locators were kept (2026-10-11), seven
+        // since: a store written by the earlier shape opens with no
+        // locators held, which is what that client had
+        if f.len() != 6 && f.len() != 7 {
             return None;
         }
         let m = |i: usize| unkeyed(b, &f[i]);
@@ -474,8 +477,10 @@ impl ClientStore {
         for (t, v) in m(5)? {
             st.disclosures.insert(t, decode_disclosures(&v)?);
         }
-        for (k, v) in m(6)? {
-            st.locators.insert(k, v);
+        if f.len() == 7 {
+            for (k, v) in m(6)? {
+                st.locators.insert(k, v);
+            }
         }
         Some(st)
     }

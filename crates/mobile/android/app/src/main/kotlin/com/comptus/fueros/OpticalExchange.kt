@@ -135,6 +135,13 @@ class OpticalExchange(
     val count: Int get() = parts.size
 
     private val lock = Any()
+    /** **Bumped by every change of state that a screen could act on**: a
+     *  part of theirs taken, their count learned, their header or rows
+     *  moving what they are known to hold. The screen redraws, and asks
+     *  [done], whenever the version it last drew is behind — one rule in
+     *  place of comparing counts by hand, which missed a header that
+     *  completed the exchange with neither count moving (2026-10-11). */
+    private var version = 0L
     private var theirCount = -1
     private var theirs: Array<ByteArray?> = emptyArray()
     /** Contiguous parts of theirs held, from the first: what the header
@@ -225,9 +232,15 @@ class OpticalExchange(
         val n = minOf(bits.size, count)
         for (i in 0 until n) {
             if (!bits[i] || theirHeld[i]) continue
-            if (++sightings[i] >= Tracking.CONFIRM) theirHeld[i] = true
+            if (++sightings[i] >= Tracking.CONFIRM) {
+                theirHeld[i] = true
+                version++
+            }
         }
     }
+
+    /** Where this exchange's state stands; a screen compares, never reads. */
+    fun version(): Long = synchronized(lock) { version }
 
     /** How many contiguous parts of theirs this side holds. */
     fun received(): Int = synchronized(lock) { got }
@@ -277,6 +290,7 @@ class OpticalExchange(
             // mine, and this side may not have read the header that said so
             // before it did. Without this the side that finishes second
             // waits for a header that is gone
+            if (theirGot != count) version++
             theirGot = count
             return Took.DUPLICATE
         }
@@ -288,10 +302,12 @@ class OpticalExchange(
         if (theirCount < 0) {
             theirCount = n
             theirs = arrayOfNulls(n)
+            version++
         } else if (n != theirCount) {
             return Took.MALFORMED
         }
         if (gotOfMine > count) return Took.MALFORMED
+        if (gotOfMine > theirGot) version++
         theirGot = maxOf(theirGot, gotOfMine)
         // **the header names one part they certainly lack**: `got` is
         // contiguous, so the part at it is not held, and the header knows
@@ -300,11 +316,13 @@ class OpticalExchange(
         // bench one phone held 101 of 102 while the other, sure it held
         // all, showed a part that was not the missing one [2026-10-08].
         if (theirGot < theirHeld.size) {
+            if (theirHeld[theirGot]) version++
             theirHeld[theirGot] = false
             sightings[theirGot] = 0
         }
         if (theirs[index] != null) return Took.DUPLICATE
         theirs[index] = bytes.copyOfRange(HEADER, bytes.size)
+        version++
         while (got < theirCount && theirs[got] != null) got++
         if (got == theirCount) Took.COMPLETE else Took.ACCEPTED
     }

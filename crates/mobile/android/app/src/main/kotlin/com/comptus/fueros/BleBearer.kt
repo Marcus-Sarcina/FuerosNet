@@ -93,6 +93,28 @@ class BleBearer(private val context: Context) {
         val OUTBOUND: UUID = UUID.fromString("7f3a1c66-9b2e-4d51-8a07-1e6f5c2b4d93")
 
         /**
+         * **The UUID a ceremony advertises under**, derived from the
+         * ceremony-id both screens fixed: the first sixteen bytes of
+         * SHA-256 over `rhtn/1:ble` and the id. The GATT service stays
+         * [SERVICE]; this names the *advertisement*, so a scanner connects
+         * to the phone it is meeting and to no other phone running this
+         * shell within range. Run `a4-node-3` of 2026-10-11: a phone still
+         * advertising from a meeting that had finished five minutes earlier
+         * was found first, connected to, and handed the intent meant for
+         * the phone in front of the scanner. A value fresh per ceremony
+         * and known only to the two who read each other's screens is also
+         * less of a beacon than a fixed UUID was: an observer sees a
+         * random service, not this shell.
+         */
+        fun uuidFor(ceremony: ByteArray): UUID {
+            val d = java.security.MessageDigest.getInstance("SHA-256")
+            d.update("rhtn/1:ble".toByteArray())
+            d.update(ceremony)
+            val b = java.nio.ByteBuffer.wrap(d.digest())
+            return UUID(b.long, b.long)
+        }
+
+        /**
          * The Client Characteristic Configuration descriptor, Bluetooth's
          * own and not this shell's: the one a client writes to say it wants
          * a characteristic's notifications. Its value is a 16-bit
@@ -360,7 +382,7 @@ class BleBearer(private val context: Context) {
      * Advertise, and take what a peer writes. The returned string is why it
      * could not start, or null.
      */
-    fun offer(into: Inbound): String? = offerOrSeek("advertise", into) {
+    fun offer(into: Inbound, ceremony: ByteArray): String? = offerOrSeek("advertise", into) {
         val m = manager() ?: return "this device exposes no Bluetooth service"
         val adapter: BluetoothAdapter = m.adapter ?: return "no Bluetooth adapter"
         if (!adapter.isEnabled) return "Bluetooth is off"
@@ -409,11 +431,12 @@ class BleBearer(private val context: Context) {
                     .setConnectable(true)
                     .build(),
                 AdvertiseData.Builder()
-                    // the service UUID and NOTHING ELSE: an advertisement
-                    // is broadcast to the room, and a name or an identifier
-                    // in it would be a presence beacon this ceremony has no
-                    // use for (design §19.4's shape of disclosure)
-                    .addServiceUuid(ParcelUuid(SERVICE))
+                    // the ceremony's own UUID and NOTHING ELSE: an
+                    // advertisement is broadcast to the room, and a name or
+                    // a durable identifier in it would be a presence beacon
+                    // this ceremony has no use for (design §19.4's shape of
+                    // disclosure); the value is fresh per ceremony
+                    .addServiceUuid(ParcelUuid(uuidFor(ceremony)))
                     .setIncludeDeviceName(false)
                     .build(),
                 cb,
@@ -424,8 +447,8 @@ class BleBearer(private val context: Context) {
         }
     }
 
-    /** Scan for a peer offering the service, and connect to the first. */
-    fun seek(into: Inbound): String? = offerOrSeek("scan", into) {
+    /** Scan for the peer offering this ceremony, and connect to it. */
+    fun seek(into: Inbound, ceremony: ByteArray): String? = offerOrSeek("scan", into) {
         val m = manager() ?: return "this device exposes no Bluetooth service"
         val adapter = m.adapter ?: return "no Bluetooth adapter"
         if (!adapter.isEnabled) return "Bluetooth is off"
@@ -447,7 +470,7 @@ class BleBearer(private val context: Context) {
             }
             scanner = cb
             adapter.bluetoothLeScanner?.startScan(
-                listOf(ScanFilter.Builder().setServiceUuid(ParcelUuid(SERVICE)).build()),
+                listOf(ScanFilter.Builder().setServiceUuid(ParcelUuid(uuidFor(ceremony))).build()),
                 ScanSettings.Builder()
                     .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
                     .build(),
@@ -721,6 +744,20 @@ class BleBearer(private val context: Context) {
     }
 
     /** Stop everything and give the radio back. Safe to call twice. */
+    /**
+     * **Stop offering and seeking, keeping the link.** Once the record is
+     * finalized nothing more will be met over this bearer, and an
+     * advertisement left running is what a later scanner finds first
+     * ([uuidFor] keeps that from mattering; this keeps it from happening).
+     */
+    fun quiet() {
+        manager()?.adapter?.let { stopScan(it) }
+        runCatching {
+            advertiser?.let { manager()?.adapter?.bluetoothLeAdvertiser?.stopAdvertising(it) }
+        }
+        advertiser = null
+    }
+
     fun close() {
         // a send waiting on an acknowledgement that will never come is let go
         writeDone.drainPermits()

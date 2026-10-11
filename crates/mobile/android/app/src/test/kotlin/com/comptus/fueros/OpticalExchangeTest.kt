@@ -160,4 +160,49 @@ class OpticalExchangeTest {
         assertEquals(OpticalExchange.Took.COMPLETE, ta.take(tb.frame()))
         assertEquals(1, ta.received())
     }
+
+    /** **The exchange can complete with neither count moving.** The
+     *  tracking rows can confirm that the other side holds every part of
+     *  mine before its header says so, and `done()` waits for the header
+     *  alone (the rows cannot say *all*); so the header that completes the
+     *  exchange may arrive on a frame whose `received()` and
+     *  `theirReceived()` are what they already were. A screen that judges
+     *  news by the two counts alone misses it — and the camera then
+     *  declines every identical frame as not news (GXV × 4VC,
+     *  2026-10-11). The transcript is the case: identical on both sides,
+     *  two parts each. */
+    @Test
+    fun the_exchange_can_complete_on_a_frame_that_moves_neither_count() {
+        val id = bytes(36, 9)
+        val a = OpticalExchange(1, id, chunk = 18)
+        val b = OpticalExchange(1, id, chunk = 18)
+        assertEquals(2, a.count)
+        // the two read each other's first parts; each side shows the
+        // lowest part the other is known to lack, so a's header (got = 1)
+        // is what moves b on to its second part, and the reverse
+        assertEquals(OpticalExchange.Took.ACCEPTED, a.take(b.frame()))
+        assertEquals(OpticalExchange.Took.ACCEPTED, b.take(a.frame()))
+        assertEquals(OpticalExchange.Took.COMPLETE, a.take(b.frame()))
+        assertEquals(2, a.received())
+        // b's rows say it holds both of a's (confirmed twice); b's header
+        // still says one, since b has not read a's second part
+        repeat(Tracking.CONFIRM) { a.takeTracking(booleanArrayOf(true, true)) }
+        assertEquals(2, a.theirReceived())
+        assertFalse("the rows cannot say all: done waits for the header", a.done())
+        // now b really takes a's second part, and its header says got = 2
+        assertEquals(OpticalExchange.Took.COMPLETE, b.take(a.frame()))
+        val heldBefore = a.received()
+        val theyHeldBefore = a.theirReceived()
+        val v = a.version()
+        val took = a.take(b.frame())
+        assertEquals("the part was already held", OpticalExchange.Took.DUPLICATE, took)
+        assertEquals(heldBefore, a.received())
+        assertEquals(theyHeldBefore, a.theirReceived())
+        assertTrue("and yet the exchange is now complete", a.done())
+        assertTrue("which the version says, where the counts could not", a.version() > v)
+        // and the same frame again is not news of any kind
+        val v2 = a.version()
+        assertEquals(OpticalExchange.Took.DUPLICATE, a.take(b.frame()))
+        assertEquals(v2, a.version())
+    }
 }

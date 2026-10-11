@@ -480,3 +480,43 @@ fn a_backup_installs_into_an_empty_client_and_is_refused_into_one_with_an_archiv
     assert!(fresh_alice.install(got).is_err());
     assert_eq!(fresh_alice.archive.len(), 1, "and nothing changed");
 }
+
+/// **A store written before locators were kept still opens.** The first
+/// install of the locator bundle refused every phone's stored state —
+/// six collections where the decoder demanded seven — and no kernel
+/// started. The load path's posture is that what no longer parses is
+/// skipped, never the whole store refused: a six-shape document opens
+/// holding no locators, which is what that client had; a seven-shape one
+/// round-trips with them.
+#[test]
+fn a_store_written_before_locators_were_kept_still_opens() {
+    let mut st = ClientStore::default();
+    st.records.insert([1u8; 32], vec![0xa0]);
+    st.locators.insert([2u8; 32], vec![0xa1]);
+    let seven = st.encode();
+    let back = ClientStore::decode(&seven).expect("the current shape opens");
+    assert_eq!(back, st, "and round-trips, locators included");
+
+    // the same store as the earlier shape wrote it: the first six
+    // collections, no seventh
+    let items = rhtn_codec::cbor::array_item_ranges(&seven, 0).unwrap();
+    assert_eq!(items.len(), 7);
+    let mut six = Vec::new();
+    rhtn_codec::encode::emit_array_head(&mut six, 6);
+    for r in &items[..6] {
+        six.extend_from_slice(&seven[r.clone()]);
+    }
+    let opened = ClientStore::decode(&six).expect("the earlier shape opens");
+    assert_eq!(opened.records, st.records);
+    assert!(
+        opened.locators.is_empty(),
+        "nothing held, as that client held nothing"
+    );
+    // and a shape that is neither is not a store
+    let mut five = Vec::new();
+    rhtn_codec::encode::emit_array_head(&mut five, 5);
+    for r in &items[..5] {
+        five.extend_from_slice(&seven[r.clone()]);
+    }
+    assert!(ClientStore::decode(&five).is_none());
+}

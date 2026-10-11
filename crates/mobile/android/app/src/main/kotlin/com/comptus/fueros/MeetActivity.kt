@@ -61,6 +61,8 @@ class MeetActivity : Activity() {
     /** Whether this redraw put the optical package on screen, which
      *  decides what else is drawn and where the page is scrolled to. */
     private var optical = false
+    /** The step last drawn, so a step is cued once, on arrival. */
+    private var drawnStep: Meet.Step? = null
 
     private val turning = android.os.Handler(android.os.Looper.getMainLooper())
     private var turner: Runnable? = null
@@ -260,7 +262,31 @@ class MeetActivity : Activity() {
             Meet.Step.DONE -> done(m)
             Meet.Step.STOPPED -> stopped(m)
         }
+        // **the switch to capture is cued**, once, as it happens: with the
+        // phones face to face for ranging, nobody is looking at either
+        // screen, and an NFC tap is the only step the system sounds for
+        // [author, 2026-10-11]
+        if (m.step() == Meet.Step.CAPTURE && drawnStep != Meet.Step.CAPTURE) cueCapture()
+        drawnStep = m.step()
         logLines(m)
+    }
+
+    /**
+     * A short buzz and a beep: ranging is over, the camera is next. Both
+     * are best effort — a phone with no vibrator or a muted tone channel
+     * still shows the step — and neither carries anything about the
+     * ceremony beyond the fact that it moved.
+     */
+    private fun cueCapture() {
+        runCatching {
+            val v = getSystemService(android.content.Context.VIBRATOR_SERVICE) as? android.os.Vibrator
+            v?.vibrate(android.os.VibrationEffect.createOneShot(150, android.os.VibrationEffect.DEFAULT_AMPLITUDE))
+        }
+        runCatching {
+            val tone = android.media.ToneGenerator(android.media.AudioManager.STREAM_NOTIFICATION, 80)
+            tone.startTone(android.media.ToneGenerator.TONE_PROP_ACK, 200)
+            body.postDelayed({ runCatching { tone.release() } }, 400)
+        }
     }
 
     /**
@@ -665,21 +691,21 @@ class MeetActivity : Activity() {
                     // rows under this side's own code, reflected, are this
                     // side's own holdings and say nothing about theirs
                     if (x.mine(under)) return@runOnUiThread
-                    val before = x.theirReceived()
+                    val v = x.version()
                     x.takeTracking(bits)
-                    if (x.theirReceived() != before) redraw()
+                    if (x.version() != v) opticalChanged(m, x, name)
                 }
             }
         }
         scan(QrCamera.Facing.SELFIE, name, continuous = true) { bytes ->
             runOnUiThread {
                 if (m.step() != Meet.Step.OPTICAL || m.exchange !== x) return@runOnUiThread
-                // **their progress arrives on a part already held**: a
-                // header's `got` is taken before the part is judged a
-                // duplicate (`OpticalExchange.take`), so what counts as
-                // news is either count moving, not the verdict
-                val heldBefore = x.received()
-                val theyHeldBefore = x.theirReceived()
+                // **news is the exchange's version moving, not a verdict
+                // and not a count**: a header's `got` is taken before the
+                // part is judged a duplicate, and a header can complete
+                // the exchange with neither count moving. The exchange
+                // says whether anything changed; this side acts on that.
+                val v = x.version()
                 when (x.take(bytes)) {
                     OpticalExchange.Took.MALFORMED -> {
                         m.stop("a code of the exchange did not read as one")
@@ -693,21 +719,28 @@ class MeetActivity : Activity() {
                     }
                     else -> {}
                 }
-                if (x.received() == heldBefore && x.theirReceived() == theyHeldBefore) return@runOnUiThread
-                m.opticalMoved()
-                Diag.event("optical.exchange", "which" to name, "showing" to x.showing(), "received" to x.received(), "theirs" to x.theirCount(), "they_hold" to x.theirReceived())
-                if (x.done()) {
-                    // both hold everything: the object goes to the kernel;
-                    // the exchange stays so its last code stays up, and the
-                    // next redraw opens the transcript's or the kernel has
-                    // moved on
-                    camera?.close()
-                    val why = Kernel.takeOptical(x.theirs() ?: return@runOnUiThread)
-                    if (why != null) { m.stop(why); return@runOnUiThread }
-                }
-                redraw()
+                if (x.version() == v) return@runOnUiThread
+                opticalChanged(m, x, name)
             }
         }
+    }
+
+    /**
+     * **The exchange moved**, by a read or by the rows, the one place the
+     * screen acts on it: the staleness clock restarts, the move is on the
+     * record, and where both sides hold everything the object goes to the
+     * kernel — the exchange stays so its last code stays up until the
+     * kernel moves on.
+     */
+    private fun opticalChanged(m: Meet, x: OpticalExchange, name: String) {
+        m.opticalMoved()
+        Diag.event("optical.exchange", "which" to name, "showing" to x.showing(), "received" to x.received(), "theirs" to x.theirCount(), "they_hold" to x.theirReceived())
+        if (x.done()) {
+            camera?.close()
+            val why = Kernel.takeOptical(x.theirs() ?: return)
+            if (why != null) { m.stop(why); return }
+        }
+        redraw()
     }
 
     // ---- D3 proximity: the tap, and the optical pass D2 already made ---

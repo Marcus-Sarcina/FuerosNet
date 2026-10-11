@@ -187,7 +187,9 @@ object Kernel {
         val p = participant ?: return null
         val retention = call("retention_years", { 2UL }) { p.retentionYears() }
         synchronized(lock) {
-            meet?.let { return it }
+            // a meeting still under way is the one to return to; one that
+            // ended either way is residue, and the next starts clean
+            meet?.let { if (it.step() != Meet.Step.DONE && it.step() != Meet.Step.STOPPED) return it }
             // nobody is named here: the codes say who is being met
             // (`wire-format.md` §14.3.1), the provision's peer being the
             // payload demo's and no part of a ceremony
@@ -359,7 +361,7 @@ object Kernel {
         // rests on (§14.3.1); from here a radio carries the bulk,
         // and everything it carries is checked against what the
         // screens showed.
-        carryIntent(m)
+        carryIntent(m, id)
         return null
     }
 
@@ -452,7 +454,12 @@ object Kernel {
     /** The kernel's move of the conversation, as the flow switches on it:
      *  the three it acts on, and the rest. */
     private fun turnOf(c: Conversation): Meet.Turn = when (c) {
-        is Conversation.Finalized -> Meet.Turn.Finalized(hex(c.txid))
+        is Conversation.Finalized -> {
+            // nothing more is met over this bearer: stop offering, so a
+            // later scanner in the room does not find this phone first
+            ble?.quiet()
+            Meet.Turn.Finalized(hex(c.txid))
+        }
         is Conversation.Reviewed ->
             c.refused?.let { Meet.Turn.BodyRefused(it.code.toInt(), it.why) } ?: Meet.Turn.Other
         is Conversation.Signed ->
@@ -556,7 +563,7 @@ object Kernel {
      * the bearer to the shell, so this uses the invitation's own asymmetry:
      * the party that showed it offers, the party that read it seeks.
      */
-    private fun carryIntent(m: Meet) {
+    private fun carryIntent(m: Meet, ceremony: ByteArray) {
         val p = participant ?: return
         val radio = BleBearer(appContext ?: return)
         // ONE inbound handler for the whole conversation. Each phase is
@@ -586,8 +593,8 @@ object Kernel {
             }
         }
         val why = when (m.role) {
-            Meet.Role.INITIATOR -> radio.offer(inbound)
-            Meet.Role.RESPONDER -> radio.seek(inbound)
+            Meet.Role.INITIATOR -> radio.offer(inbound, ceremony)
+            Meet.Role.RESPONDER -> radio.seek(inbound, ceremony)
         }
         if (why != null) {
             // §14.3.1's last resort is a network fetch, which this build
@@ -939,22 +946,26 @@ object Kernel {
 
         val material = p.material().joinToString("") { "%02x".format(it) }
 
+        // **An unprovisioned device is the ordinary device** [author,
+        // 2026-10-11]: it holds its own identity, knows nobody, is
+        // attached to nothing, and meets whoever is in front of it — the
+        // event loop below is what drives a ceremony and it runs either
+        // way. A provision is the bench's convenience (a peer to message,
+        // nominees, a node, a stream) and never the way in. Until this
+        // the shell returned here, and no phone ever met without a
+        // script having written a blob first.
         if (provision == null) {
-            // the material is this device's public identity, shown here
+            // the material is this device's public identity, shown
             // because nothing else exposes it: no flavour logs it and the
             // Report bundle carries identities as eight characters only
-            front.note("· unprovisioned. This device's public key material:")
+            front.note("· this device's public key material:")
             front.note("    $material")
-            front.note("· on the workstation, with that material copied off the screen:")
-            front.note("    cargo run -p rhtn-ffi --features harness \\")
-            front.note("      --bin payload-peer -- <that material>")
-            front.note("· then hand its PROVISION line back as the `provision` extra.")
-            return
+            front.note("· nobody known, nothing attached: a meeting crosses the bearer alone.")
         }
 
         // the retention this device declares (design §7.5.1), where the
         // provision names one; the kernel's own default otherwise
-        val retention = provision.optLong("retention_years", 0L)
+        val retention = provision?.optLong("retention_years", 0L) ?: 0L
         if (retention > 0L) {
             call("set_retention_years", { e -> front.note("· retention refused: ${e.reason}") }) {
                 p.setRetentionYears(retention.toULong())
@@ -964,11 +975,11 @@ object Kernel {
         // nobody is the ordinary case, and the invitation code is what
         // introduces the first counterparty ([counterparty]); a named peer
         // here is only a convenience for messaging before any meeting.
-        val to = provision.optString("peer", "").takeIf { it.isNotEmpty() }
+        val to = provision?.optString("peer", "")?.takeIf { it.isNotEmpty() }
             ?.let { runCatching { unhex(it) }.getOrNull() }
         peer = to
-        peerName = provision.optString("peer_name", "the other person")
-        nominees = provision.optJSONArray("nominees")
+        peerName = provision?.optString("peer_name", "the other person") ?: "the other person"
+        nominees = provision?.optJSONArray("nominees")
             ?.let { a -> (0 until a.length()).map { unhex(a.getString(it)) } }
             ?: listOf()
         peerKey = to?.let { hex(it) }
@@ -980,17 +991,19 @@ object Kernel {
         // (`wire-format.md` §3.2 subtype 1). The event loop below still
         // runs, because it is what drives the ceremony; only the attach
         // is skipped [author, 2026-10-07].
-        val nodeHex = provision.optString("node", "")
+        val nodeHex = provision?.optString("node", "") ?: ""
         if (nodeHex.isEmpty()) {
-            front.note("· no node in the provision: this device stays detached,")
-            front.note("  and a meeting crosses the bearer alone (design §6.4).")
+            if (provision != null) {
+                front.note("· no node in the provision: this device stays detached,")
+                front.note("  and a meeting crosses the bearer alone (design §6.4).")
+            }
             show(p, Status.Detached)
         } else {
             val node = unhex(nodeHex)
             val a = call("attach", { e -> front.setStatus("attach refused: ${e.reason}"); null }) {
                 // a device that has met nobody attaches with no peers to
                 // follow; the first one is learned at the meeting
-                p.attach(node, listOf(provision.optString("addr", "")), listOfNotNull(to))
+                p.attach(node, listOf(provision?.optString("addr", "") ?: ""), listOfNotNull(to))
             } ?: return
             show(p, Status.Attached(node, a.primary))
         }

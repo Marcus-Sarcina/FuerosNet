@@ -190,6 +190,8 @@ The Cargo workspace has **16 crates**. Components below follow responsibilities 
 | TOP-037 | C | Bound what is held for a prerequisite that has not arrived, and at the bound let go of what gossip or a later locator distribution reconstructs, a reissue, an endpoint record or a delegation, before anything that ends or reduces a relationship; among the latter the oldest goes first. A flood of reconstructible items never evicts a held disavowal or departure while any reconstructible item remains; a flood of disavowals evicts the oldest disavowal once nothing reconstructible is left. The ceiling is the holder's. | W §10; D §§6.2.2, 21.1; I §4.3; L §2 |
 | TOP-038 | E | The held-list eviction order (TOP-037) is exercised two ways: the commit gate runs it against a reduced, test-only ceiling that finishes in seconds, and the production-size ceilings run as ignored load tests, `crates/tools/load-tests.sh`, whenever the eviction code changes and before any release. A deployment never runs with a reduced ceiling. | W §10; D §21.1 |
 | TOP-039 | C | A client names **the node that serves a peer** from its own copy of its horizon and asks nobody: the nearest ancestor, in a subnet it can place the peer in, that has published an endpoint record — holding such a record being the whole of the evidence that its publisher is infrastructure (W §§7.6, 7.7.2) [author, 2026-09-14]. A party that published one is its own upstream, which is W §7.7.3's empty residual. Test: the nearest such ancestor wins over a higher one; the anchor, sitting at the empty path, is an ancestor of everyone in its subnet; a placed peer with no addressable ancestor above it yields a position to resolve rather than an answer; a peer the client cannot place yields neither; and both stores stay bounded by the horizon, so a prune takes the answer with it. | W §§7.6, 7.7.2, 7.7.3; D §15.1.1; L §4.2 |
+| TOP-040 | C | Keep contacts: for every party whose locator becomes visible — a counterparty's intent, every party a bundle introduces, every nominee and verifier that answered, the infrastructure traversed to reach them, a fishing candidate declined — the most recent `SignedLocator` held and the key material that verifies it, with the last interaction. Replace by the subject's own word first, then by a greater counter in the same series only. Persist them; a client restarted names witnesses, selects met verifiers and introduces parties exactly as before. | L §4.3; W §§2.3, 5.4; D §12.3 |
+| TOP-041 | C | Bound the contacts store and prune toward what resolves: as capacity nears, rank contacts by least interaction (last time and count), read each one's path for an upstream you also hold, remove those still discoverable from a kept upstream, and loosen the threshold and repeat until the wanted space is free. A contact with no kept upstream goes last: pruning it is losing it, re-learned only by introduction. Exercise a contact under a kept anchor (pruned) against one with no upstream held (kept) at equal rank. | L §4.3; D §12.3 |
 | TOP-035 | C | Persist the seen fact and the table it produced, never a transaction the node was no party to: after a restart the identifier suppresses a second forwarding wave, the body and any cited evidence are gone, and an upgrade migrates what an earlier version wrote before removing it: each body under the former layout yields its identifier and effective time, a body this node signed moves to its retained own acts, and only the foreign bodies and the evidence go. Replay to a new adjacency carries current-state objects and the node's own signed acts alone; a co-signed transaction is filed in the node's own archive and its own position read from there. | I §4.3; D §15.1.1; W §§10.1.1, 10.1.3 |
 | TOP-014 | C | Missing transaction signer keys leave a pending unverifiable object that is not flooded as verified. Distinguish the explicitly allowed unverified endpoint routing hint from a verified topology transaction. | W §§3.4, 7.6, 10.1 |
 | TOP-015 | C | Deduplicate transactions by txid against retained store state, not a short-lived packet cache; replay after restart or around a cycle must not create another forwarding wave. Do not discard a legitimate missing predecessor merely because a descendant was seen. | W §10.1.2 |
@@ -981,7 +983,7 @@ Open local parameters are not all specification defects: cache TTLs, queue cap, 
 
 ## 10. Document baseline and coverage totals
 
-This specification contains **509 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
+This specification contains **511 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
 
 | Prefix | Families |
 |---|---:|
@@ -989,7 +991,7 @@ This specification contains **509 numbered requirement/test families** across **
 | SIG | 13 |
 | TX | 31 |
 | ARC | 18 |
-| TOP | 39 |
+| TOP | 41 |
 | RES | 16 |
 | CUR | 12 |
 | NET | 28 |

@@ -2314,6 +2314,13 @@ impl Client {
         c.archive = Archive::load(dir, kh)?;
         c.store = ClientStore::load(dir)?;
         c.adopt_own_positions();
+        // **derived state is derived at every start** [author, 2026-10-11:
+        // a client's behaviour must not depend on what this session did
+        // first]: whom this client has met is a fold over its records,
+        // and until now it was folded only at a finalize — so a restarted
+        // client had met nobody until its next ceremony ended, nominated
+        // nobody, and recognised none of a bundle it had every right to
+        c.refresh_acquaintance();
         Ok(c)
     }
 
@@ -2468,6 +2475,8 @@ impl Client {
         self.provider_credential = provider;
         self.positions.clear();
         self.adopt_own_positions();
+        // derived state is derived at every start (see `at`)
+        self.refresh_acquaintance();
         Ok(Restored {
             records,
             sessions: self.payload.sessions.ratchets.len(),

@@ -670,6 +670,52 @@ only party who can tell them is their own client.
   transports are the platform's and the ranking cannot be made a conformance
   condition; an implementation with only one of them is not in breach.
 
+### 4.3 Contacts
+
+**[author, 2026-10-11]** A client keeps **contacts**: for every party it
+has learned a locator for, the most recent `SignedLocator` it holds for
+them and the key material that verifies it — the two halves of an
+introduction (`wire-format.md` §2.3) — with when it last dealt with
+them. This is the "local table" design §12.3 Case 1 has you look an
+anchor up in, and it is what you hand onward in a bundle (§1.1,
+`wire-format.md` §5.4).
+
+- **Capture a locator from every party that becomes visible, until the
+  store is full.** A counterparty's, from its intent; every party a
+  bundle introduces, whether or not you selected it; every nominee that
+  answered, attesting or declining; every verifier that answered; the
+  infrastructure you went through to reach any of them; and a candidate
+  proposed in fishing and declined. Capturing is cheap, each is a party
+  you could later be asked about or need to reach, and a store that holds
+  only the parties a ceremony happened to need is one that cannot route
+  the next ceremony's witness.
+- **Replace by the subject's own word first, then by sequence.** A
+  locator the subject handed you itself (its intent, its own message)
+  replaces whatever you held; one handed by a third party replaces only a
+  held locator of the same series with a lower counter, since series do
+  not rank against each other (`wire-format.md` §2.3).
+- **Bound the store, and prune toward what still resolves** [author,
+  2026-10-11]. The storage limit is yours. As it is approached: rank the
+  contacts you have had least to do with — some combination of when you
+  last dealt with each and how often you have — and for each, read its
+  path for the infrastructure above it that you also hold; **remove the
+  contacts that remain discoverable from an upstream you keep**, since
+  their locator can be resolved again from there (design §12.3 Case 1);
+  then loosen the rank threshold and go again until the space you wanted
+  is free. What survives longest is what resolves — anchors and the
+  infrastructure beneath them that your remaining contacts sit under — and
+  a contact with no upstream among your holdings goes last, because
+  pruning it is losing it: that party you will need introduced again,
+  which is the ordinary way of meeting anybody (design §12.3 Case 0).
+- **Persist contacts as you persist records.** They are state, not a
+  cache: a client that forgot its contacts between starts could not name
+  a witness, select a verifier it had met, or introduce anyone, and
+  would behave differently depending on what this session happened to
+  do first. The same rule covers everything a ceremony leaves behind: a
+  ceremony ends with the live state as it was, plus the contacts it
+  taught you, the record, and the meeting's outcome, all persisted — and
+  nothing of the ceremony in a live variable that a later one could read.
+
 ---
 
 ## 5. Path selection

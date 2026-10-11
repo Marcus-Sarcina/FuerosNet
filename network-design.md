@@ -4500,7 +4500,9 @@ thereafter.
 
 **Case 1 — Cached locator, still valid.**
 1. Bob verifies Alice's signature over `{key, anchor, path, sequence}`.
-2. Bob looks up `anchor` in his local table for an address to start from.
+2. Bob looks up `anchor` in his local table for an address to start from —
+   his contacts, which a client keeps and bounds as `light-client-requirements.md`
+   §4.3 says.
 3. Bob queries that node. It answers with Alice's serving infra node, or **refers
    him onward** with the next hop's identity and endpoints (§12.6.1). He repeats
    until he has the serving node, caching what he learns.

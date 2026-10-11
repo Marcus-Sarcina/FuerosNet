@@ -22,6 +22,8 @@
          ceremony-id, and the tap is physical-range evidence weighed by the
          counterparty rather than relied on. -->
     <uses-permission android:name="android.permission.NFC" />
+    <!-- the cue at the switch to capture: a buzz the person feels with the phones face to face -->
+    <uses-permission android:name="android.permission.VIBRATE" />
     <!-- Neither is required to install: a device without one carries the
          exchange another way, and `light-client-requirements.md` §1.3 has a
          missing capability reported unavailable rather than absent. -->

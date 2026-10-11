@@ -93,4 +93,18 @@ class BleBearerTest {
         assertEquals(BleBearer.MAX_ATTRIBUTE, BleBearer.payloadOf(517))
         assertTrue(BleBearer.payloadOf(517) + BleBearer.ATT_OVERHEAD < 517)
     }
+
+    /** **A ceremony advertises under its own UUID**, so a scanner connects
+     *  to the phone it is meeting: deterministic from the ceremony-id both
+     *  screens fixed, different for another ceremony, never the GATT
+     *  service's own. */
+    @Test
+    fun the_advertisement_uuid_is_the_ceremonys_own() {
+        val cid = ByteArray(32) { it.toByte() }
+        val again = BleBearer.uuidFor(cid)
+        assertEquals(BleBearer.uuidFor(cid), again)
+        val other = ByteArray(32) { (it + 1).toByte() }
+        assertTrue(BleBearer.uuidFor(other) != again)
+        assertTrue(again != BleBearer.SERVICE)
+    }
 }
