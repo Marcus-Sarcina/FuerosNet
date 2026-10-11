@@ -1,15 +1,17 @@
 //! Verifier selection against the selection vectors
-//! (`test-vectors/verifier-selection.md`): the criterion's rows, the window
-//! boundaries, and the curated bundle read as the selector reads it.
+//! (`test-vectors/verifier-selection.md`): the criterion's rows and the
+//! curated bundle of introductions read as the selector reads it.
 
 mod common;
 
 use common::*;
+use rhtn_archive::locator::{introduction, signed_locator};
+use rhtn_archive::tx::{Locator, Seqno};
 use rhtn_client::selection::*;
 use std::collections::BTreeSet;
 
 #[test]
-fn the_criterion_and_the_window_match_the_vectors() {
+fn the_criterion_matches_the_vectors() {
     for (n, c, want) in [
         (0, 0, 0),
         (1, 1, 0),
@@ -21,103 +23,91 @@ fn the_criterion_and_the_window_match_the_vectors() {
     ] {
         assert_eq!(required(n, c), want, "n={n} candidates={c}");
     }
-    let started = 1_767_268_800u64;
-    assert!(!in_window(1_704_196_800, started), "exactly 730 days: out");
-    assert!(in_window(1_704_196_801, started));
-    assert!(in_window(1_767_268_799, started));
-    assert!(!in_window(started, started), "not before started_at");
-    assert!(in_window(1, 1000), "the lower bound saturates at zero");
+}
+
+/// An introduction of `who` at `seqno`, as a holder hands it: their key
+/// material with a locator they signed.
+fn intro(who: &str, series: u32, counter: u32) -> Vec<u8> {
+    let signer = id(who);
+    let loc = Locator::root(kh(who), Seqno { series, counter });
+    introduction(
+        &signer.public.key_material(),
+        &signed_locator(&signer, &loc),
+    )
 }
 
 // acceptance: CER-27
 #[test]
-fn n_counts_qualifying_records_once_by_txid_and_the_pool_excludes_the_counterparty() {
-    // the vectors' bar 3, restated over records signed here: alice's history
-    // with carol, then a meeting with bob, handed to bob for his selection
-    let mut w = World::new();
-    let f = w.meet("alice", "carol");
-    let ac1 = w.meet("alice", "carol");
-    let ac2 = w.meet("alice", "carol");
-    let ab = w.meet("alice", "bob");
-    let mut forged = f.bytes.clone();
-    *forged.last_mut().unwrap() ^= 1;
-    let started = w.clock + 7200;
+fn n_counts_introductions_once_by_subject_and_the_pool_excludes_the_counterparty() {
+    // the vectors' bar 3, restated over introductions signed here: alice
+    // hands bob the prior counterparties she names, each with the most
+    // recent locator she holds for them (`wire-format.md` §2.3, §5.4)
+    let c1_loc = Locator::root(
+        kh("c1"),
+        Seqno {
+            series: 2,
+            counter: 7,
+        },
+    );
+    let mismatch = introduction(
+        &id("alice").public.key_material(),
+        &signed_locator(&id("c1"), &c1_loc),
+    );
     let bundle = vec![
-        f.bytes.clone(),
-        ac1.bytes.clone(),
-        ac2.bytes.clone(),
-        ac1.bytes.clone(),
-        ab.bytes.clone(),
-        forged,
+        intro("c1", 2, 7),
+        intro("carol", 1, 0),
+        intro("c1", 2, 9),
+        intro("bob", 1, 0),
+        mismatch,
+        intro("alice", 1, 0),
     ];
-    let p = pool(&ids(), &bundle, &kh("alice"), &kh("bob"), started);
+    let p = pool(&bundle, &kh("alice"), &kh("bob"));
     assert_eq!(
-        p.n, 4,
-        "distinct qualifying records: the formation, ac1, ac2 and ab; ac1 once, the forgery not at all"
+        p.n, 3,
+        "distinct qualifying subjects: c1, carol and bob; c1 once, the mismatch and alice herself not at all"
     );
     assert_eq!(
         p.candidates,
-        BTreeSet::from([kh("carol")]),
+        BTreeSet::from([kh("c1"), kh("carol")]),
         "bob, the current counterparty, is never a candidate"
     );
     assert_eq!(required(p.n, p.candidates.len()), 1);
-    assert!(p.unverifiable.is_empty());
-    // handed by the witness as subject: a witnessed ceremony's participants
-    // met each other, not the witness
-    let pw = pool(
-        &ids(),
-        std::slice::from_ref(&ac1.bytes),
-        &kh("witness"),
-        &kh("bob"),
-        started,
+    assert_eq!(
+        p.refused, 2,
+        "the mismatch and the self-introduction contribute nothing"
     );
-    assert_eq!((pw.n, pw.candidates.len()), (0, 0));
-    // understatement is free: two records handed, a smaller claim
-    let ps = pool(
-        &ids(),
-        &[ac1.bytes.clone(), ab.bytes.clone()],
+    let c1 = p
+        .introduced
+        .iter()
+        .find(|i| i.subject == kh("c1"))
+        .expect("c1 introduced");
+    assert_eq!(
+        c1.introduction.locator.locator.seqno.counter, 9,
+        "the greater counter in the same series stands"
+    );
+    // a different series does not rank against the one held
+    let p2 = pool(
+        &[intro("c1", 2, 9), intro("c1", 3, 1)],
         &kh("alice"),
         &kh("bob"),
-        started,
     );
+    assert_eq!(
+        p2.introduced[0].introduction.locator.locator.seqno.series,
+        2
+    );
+    // understatement is free: one introduction handed, a smaller claim
+    let ps = pool(&[intro("carol", 1, 0)], &kh("alice"), &kh("bob"));
     assert_eq!(
         (
             ps.n,
             ps.candidates.len(),
             required(ps.n, ps.candidates.len())
         ),
-        (2, 1, 1)
+        (1, 1, 0)
     );
-    // a record whose witness key the selector lacks is unverifiable, apart from n
-    let without: Vec<_> = ids()
-        .into_iter()
-        .filter(|i| i.keyhash != kh("witness"))
-        .collect();
-    let pu = pool(&without, &bundle, &kh("alice"), &kh("bob"), started);
-    assert_eq!(
-        pu.n, 1,
-        "only the formation verifies without the witness's key"
-    );
-    assert_eq!(pu.unverifiable.len(), 3);
-    assert!(
-        pu.unverifiable
-            .iter()
-            .all(|(_, missing)| *missing == kh("witness"))
-    );
-    // outside the window nothing qualifies
-    let late = pool(&ids(), &bundle, &kh("alice"), &kh("bob"), ab.effective);
-    assert_eq!(
-        late.n, 3,
-        "a record finalizing at this ceremony's own start is out"
-    );
-    let far = pool(
-        &ids(),
-        &bundle,
-        &kh("alice"),
-        &kh("bob"),
-        started + WINDOW_SECONDS + 10,
-    );
-    assert_eq!(far.n, 0);
+    // nothing is looked up: a stranger's introduction verifies by itself
+    let stranger = pool(&[intro("w7", 1, 0)], &kh("alice"), &kh("bob"));
+    assert_eq!((stranger.n, stranger.refused), (1, 0));
 }
 
 #[test]
@@ -125,8 +115,8 @@ fn selection_runs_by_the_selectors_own_tiers_and_marks_the_fill() {
     let pool = Pool {
         n: 8,
         candidates: BTreeSet::from([kh("carol"), kh("w1"), kh("w2"), kh("w3"), kh("c1")]),
-        records: vec![],
-        unverifiable: vec![],
+        introduced: vec![],
+        refused: 0,
     };
     let me = Acquaintance {
         met: BTreeSet::from([kh("w2")]),

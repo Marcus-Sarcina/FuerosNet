@@ -16487,6 +16487,258 @@ in the code rather than hidden in it:
   waits on the third reserved role and the §12 ownership-versus-hosting
   decision about what principal an invocation carries.
 
+## Series A on the four-phone bench (2026-10-10)
+
+The plan of record is `Robot/field-test-sequence.md`.
+
+**A1, `82ffd1b-a1-mixed-1`, RFCRC1JDMRK (S21) × VGY5IJRWUSAIX4VC (TCL),
+both at genesis — DONE on both**, txid `f76a7914`, mirrors 0, no crash.
+Contribution complete both ways in 32.9 s by the S21's clock, 26.3 by the
+TCL's — quicker than the TCL pair. Decode: S21 96 ms median reading the
+TCL's screen (≈70 reading another S21), TCL 141 ms reading the S21's
+(165–202 reading another TCL) — the bright big screen is easier to read,
+the dim small one harder, each by roughly a third.
+
+**The finding: 30 s lost to a channel the pair does not share.** The S21
+(card side) latched on NFC for its full 30 s timeout and failed; the TCL
+has no NFC and never tried. Both then recorded Optical as the strongest
+that passed. OPTICAL→DONE 84.3 s against 60 on the TCL pair — the
+difference is that wait. `cer.intent.sent` carries nominees, entries,
+continuations, retention and initiator, but **not which proximity
+channels the sender has**, so neither side can skip what the pair cannot
+share. Declaring them in the intent — which already crosses over BLE,
+which both have — would let each side attempt only the intersection.
+That touches what the intent carries, so it is **for the author**; the
+cost is measured here.
+
+**`82ffd1b-a2-adoption-1` was not an adoption — the label is mine and
+wrong.** The author ran a plain meeting on purpose, RFCRC1JDGXV (S21) ×
+8XDIW4G6WCW4LZU8 (TCL) at genesis, to stand up a *second* met pair for
+series B's cross-meeting. DONE on both, txid `911b7e73`, 90/95 s, mirrors
+0. **The bench now holds two pairs with records**: (RFCRC1JDMRK,
+VGY5IJRWUSAIX4VC) → `f76a7914`, and (RFCRC1JDGXV, 8XDIW4G6WCW4LZU8) →
+`911b7e73`. These four are not to be wiped: they are B's prerequisite.
+
+**What stands independently of the run, from the code**: the shell has no
+call to `propose_adoption`, `take_adoption` or `adoption_envelope` — the
+kind chosen at D1a reaches the bootstrap and the brief, and nothing
+proposes it after the record. So A2, when it is run, will stop after the
+presence record until D7 is wired; and the carriage of the adoption body
+between two phones with no node is a `wire-format.md` kinds question for
+the author (kinds 9–18 are the conversation, by the 2 October ruling;
+nothing says how an adoption rides it). A3 has no kernel act at all.
+
+**B1, `82ffd1b-b1-cross-1`, RFCRC1JDMRK × RFCRC1JDGXV, not wiped — hung at
+VERIFIERS.** `cer.begin nominees: 0` on both, `cer.select pool: 0` on
+both, then `propose` → `NoWitness` ×60 at 2 s. **[ruled, author]**
+witnesses are required where available and a witnessless meeting is not
+genesis-only (change-log, this date). Three things, separately:
+
+1. **Nomination** — `begin(…, nominees)` takes only what the shell passes,
+   and `nodeless.sh` passes `[]`; the kernel never nominates from the
+   parties it has met. Buildable: a kernel pool of prior counterparties,
+   offered when the caller names nobody.
+2. **Proceeding witnessless past genesis** — `propose` admits a
+   witnessless record only as a formation (subtype 1), and the codec
+   enforces its genesis back-pointers. The ruling needs §13.2 and
+   `wire-format.md` §3.2 amended first: either the formation subtype
+   admits non-genesis parties, or the ordinary subtype admits zero
+   witnesses. **For the author.**
+3. **The verifier pool was also empty** — each S21's handed bundle named
+   a TCL the other had never met, and the pool came out 0 rather than
+   offering it to "fill the rest deliberately" (D5). Read next.
+
+Also: the shell polls `conversePropose` every 2 s against a refusal that
+cannot change, for as long as the operator waits. A refusal of this kind
+should stop the polling and say so.
+
+**Two structural facts from the code, found reading for the fix:**
+
+- **A party met with no node has no route afterwards.** `reach_for`
+  routes by the party's position in the horizon through infra;
+  `upstream_of` yields nothing for a party with no position, and the
+  direct-path candidates a ceremony exchanges are not kept for later
+  (`reach_for` never consults them). So a nominated witness or a selected
+  verifier that was met nodeless is **unreachable nodeless** — B1 could not
+  have reached its TCLs even with nomination fixed. **A4 and series B are
+  with-node on this bench**, unless the design wants the direct-path
+  candidates kept and used, which is a ruling.
+- **The verifier pool is empty by construction between pairs that share
+  no party.** §5.3 has a handed record qualify only when it "verifies
+  alone", which needs both signers' keys; `pool()` files the rest as
+  `unverifiable` and nothing anywhere resolves that list. Each S21's
+  bundle named a TCL the other had never held, so `pool: 0` on both. Either
+  the bundle carries the other signer's material (a `wire-format.md` §5.4
+  change), or a node is where the material comes from — **for the
+  author**; the nodeless cold bench cannot produce a candidate either way.
+
+**So the nodeless cross-meeting between non-genesis phones depends on the
+§13.2 / §3.2 amendment alone**: with no witness reachable and no verifier
+qualifying, the ruling's "proceed" is the only path, and the codec refuses
+it today.
+
+**Range: not run again** — module_px held at 66 (S21) and 40 (TCL) for the
+whole pass, so distance did not vary. Still an S21 figure.
+
+**The two defects fixed, 2026-10-11, and a third found under them.**
+
+1. **Nomination** — `begin` handed no nominee now nominates from the
+   parties this client has met (`Client::met`, read from the
+   acquaintance the kernel already keeps and refreshes at every
+   finalize; at most ten; the counterparty of the meeting at hand
+   removed at the pin site, a party never witnessing its own meeting).
+   A caller's own list stands untouched. Test:
+   `a_client_that_is_handed_no_nominee_nominates_the_parties_it_has_met`.
+2. **Polling** — `Meet.poll`'s `NoWitness` branch now reads the nominee
+   lists: nobody nominated, or every nominee declined, **stops the
+   meeting and says why**; a nominee still outstanding keeps the wait.
+   Tests: `no_witness_with_nobody_nominated_stops_the_meeting_and_says_why`,
+   `…every_nominee_declined…`; the kept-trying test now names an
+   outstanding nominee, which is the only shape in which trying again
+   can succeed.
+3. **A witness both parties nominate broke the envelope.** Found by the
+   nomination test: once both phones nominate from whom they have met,
+   both name the same party; the harness and the conversation each hand
+   `propose` one `Witness` per nomination, the record carried the entry
+   twice, and the codec's canonical-order check refused it ("two entries
+   at one place are a duplicate"). Every earlier test named distinct
+   witnesses per side. **[ruled, author, 2026-10-11]** verbatim: *"A
+   witness witnesses the whole ceremony. Witnesses known to both parties
+   are more desirable than witnesses known to only one, though they only
+   count as one towards the witness total. The correct behavior in this
+   case is to accept the witness as a single witness rather than to count
+   them twice."* `propose` now keeps one place per witness keyhash.
+   Test: `a_witness_nominated_by_both_participants_signs_once`.
+
+   **Two things the ruling leaves open, for the author.** (a) The record's
+   `nominated_by` names one participant (`wire-format.md` §4.5 field 4;
+   design §6: "requires each `nominated_by` to name one of the
+   participants"), so a witness both named is *attributed* to one; the
+   kernel attributes it to the participant that sorts first, so the body
+   is the same whichever side proposes — a convention, not the design's,
+   and the balance read ("half the set is uncurated") undercounts the
+   nominated-by-both case. (b) "More desirable" has nowhere to act today:
+   nothing caps or ranks the witness list, so every accepted witness
+   signs. If a preference is wanted it is a selection rule in §7.1.
+
+**The node bench is up** (`82ffd1b-a4-node-1`): daemon at
+10.1.10.105:7447, two instrument witnesses, all four phones provisioned
+at genesis — ring-peered, each nominating one bench witness
+(witness-1 / witness-2 alternating, so no two phones in a pair name the
+same one). The run holds under the shell that launched it; stopped by
+its PID tree, never by pattern. **Provisioning wiped the four phones'
+earlier records**: B's prerequisite pairs are to be re-met on this
+bench, with-node, which the 2026-10-10 reading already required.
+
+**The bench ringed the phones; the script now pairs them off — and the
+reasoning I gave for it was wrong.** `field-run.sh` provisioned each
+phone's `peer` as the next phone given, and I read
+`Kernel.takeIntentCarriage(to, …)` with `to` falling back to that peer
+as refusing any meeting the ring did not make mutual. It does not:
+`carryIntent` runs inside `takeOptical`, after this side has read the
+other's code and `adopt(who)` has made *that* party the peer, and the
+transcript confirm has both sides read before either sends. The
+provisioned peer names the chat's recipient and nothing in a meeting.
+So **any two phones on the bench can meet**, cross pairs included, and
+the pairing change (first with second, third with fourth, in
+`phones.conf` order: RFCRC1JDGXV × RFCRC1JDMRK, 8XDIW4G6WCW4LZU8 ×
+VGY5IJRWUSAIX4VC) only makes the chat peer the phone one is likely to
+have met. It stays, as the more useful shape.
+
+**`-2` stopped on both S21s for no serving node**: `attach` timed out
+at 10 s on each, the meeting ran over BLE to the verifiers and stopped
+there ("no serving node is attached and 2 message(s) need one"). The
+bench had advertised the wired address (10.1.10.105, the first routed
+IPv4) and the phones are on the WiFi subnet; the 21 earlier runs all
+used 192.168.0.8. Relaunched as `-3` with `--addr 192.168.0.8:7447`. The
+BLE half was sound: intent, prekeys and the gathered responses all
+crossed; the run reached the step that needs the node and found none.
+
+**A4, `82ffd1b-a4-node-3`, RFCRC1JDGXV × RFCRC1JDMRK (the S21s), both at
+genesis, each nominating one bench witness — DONE on both**, txid
+`41e88dba`, **4 signers**: the two phones and both instrument witnesses,
+`nominated_by` split one each. The witnessed path on hardware for the
+first time: `cer.witness.asked nominees:1 channels:2` on each phone,
+both witnesses' `signing_reply` back through the node's mailbox, and
+`cer.propose witnesses:2 responses:0 formation:false` on the proposer
+2.7 s after its ask. Verifiers `pool: 0` on both, as genesis must be.
+Mirrors 1 (GXV) / 0, no crash. OPTICAL→DONE 43.8 s (GXV) / 41.0 s (MRK); optical
+alone 25 s. **Verified: nomination from the provision reaches the
+record; the bench witnesses are reachable over the node; the proposer
+waits on "the counterparty's responses" and goes the moment they land.**
+One thing to look at, not a defect: the proposer asked `converse_propose`
+28 times in the 3 s before the responses arrived, several within 40 ms
+of each other — the re-poll is driven by more than the 2 s turn.
+
+**The TCL pair on the same bench, 8XDIW4G6WCW4LZU8 × VGY5IJRWUSAIX4VC —
+the proposer DONE, the other stuck at REVIEW.** txid `7e2ca678`, 4
+signers on 8XD and on both witnesses; VGY reviewed and signed in 339 ms
+(`cer.review signers:4`, its `signing_reply` to both witnesses, its
+signature across BLE in 7 packets, which 8XD assembled), 8XD finalized
+and sent the record to the witnesses over the node and to VGY over BLE
+— **phase 7, 29 packets, 14,311 bytes, `failed:0 ok:true` in 99 ms —
+and VGY assembled nothing**: not one bearer event after its own
+signature. The S21s crossed the identical 29-packet message (MRK → GXV,
+12 ms) without loss.
+
+**The defect: the server side of the bearer had no gate.** The client
+side waits for `onCharacteristicWrite` before the next write (the
+2026-10-07 `aimed-1` fix); the server side fired
+`notifyCharacteristicChanged` back-to-back and never overrode
+`onNotificationSent`. Whether a stack queues the second request before
+the first is reported sent is the stack's: Samsung's does, the TCL's
+(API 31) drops. Nothing before this run exercised it — a cold run's
+formation record is a short message, and the S21s always served the
+link when it was long. Fixed: `notifyDone`, the write gate's twin,
+acquired before a notification and released in `onNotificationSent` or
+on any failure; the wait loop is one helper for both. **VGY holds no
+record of this meeting and cannot get it** (the bearer is gone); 8XD and
+the node do. The pair re-meets after the reinstall: 8XD past genesis
+with a witness present is an ordinary record.
+
+**Re-met with the gate, same bench — DONE on both**, txid `1a2556fb`, 4
+signers on both phones and both witnesses. The record's 29 packets took
+1,628 ms gated against 99 ungated, and VGY assembled all 29; 84
+notifications over the run, none waited on, no warning, no mirror
+either side. 8XD began with `bundle: 2` (its record with the witnesses
+from the lost meeting, and this one's predecessor) and VGY's
+`cer.select n:1 pool:0` is right: the one handed record names VGY
+itself. **The bench now holds two with-node pairs**: S21s `41e88dba`,
+TCLs `1a2556fb`; 8XD also holds `7e2ca678`, which VGY never received.
+
+**B1 with-node, `82ffd1b-a4-node-3`, RFCRC1JDGXV × 8XDIW4G6WCW4LZU8 —
+DONE on both**, txid `4c9d99b7`, **3 signers**. The cross pair's
+provision nominees are both witness-1 (position 0 and position 2 of the
+conf), so this was **the nominated-by-both case on hardware**: each
+phone asked witness-1, it answered both, `cer.propose witnesses:1`, and
+the record carries it once — the 2026-10-11 ruling as built, by
+accident of the bench. The verifier half came out exactly as predicted:
+`cer.select n:1 pool:0` on both — one handed record each, unverifiable
+for the co-signer the other has never held (MRK's key on 8XD, VGY's on
+GXV); no query went out. **So B's verification tests cannot run until
+the lookup ruling**: the bundle carrying co-signers' material (§5.4) or
+the key lookup falling back to the serving node. PROXIMITY took 30 s
+again on the mixed pair (the NFC latch; intent channels, owed).
+
+**[ruled, author, 2026-10-11] The bundle is locators; fishing is one at a
+time.** The amendment is applied across the five documents, the codec,
+the archive, the client, the vectors and the harness — the working plan
+with the verbatim rulings is `Robot/locator-bundle.md` until it is
+pruned. Decisions I made under the ruling, each for the author to
+correct: an `Introduction` carries the key material beside the
+`SignedLocator` (nothing else verifies a stranger's locator); the
+sender's own locator rides the intent as a ninth field rather than a new
+handover; the window is dropped rather than replaced by a `met_at`; a
+held locator is replaced by the same series' greater counter, or by the
+subject's own intent outright; *n* counts introductions once by subject,
+so repeated meetings with one person no longer inflate it. **Still owed
+to the author from this**: design §13's pruning boundary now rests on
+recovery alone — is 730 days still the number?; `reach_for` could route
+to a handed locator, which is what would make a nodeless witness or
+verifier reachable; the fishing *act* in the kernel (the object is one
+introduction now; the turn-taking conversation is not built, as it was
+not before).
+
 ## The low-spec pair, first run (2026-10-10)
 
 **Set up**: 8XDIW4G6WCW4LZU8 and VGY5IJRWUSAIX4VC, TCL 30 Z, on

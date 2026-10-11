@@ -1,6 +1,6 @@
 # Verifier selection — the reasonableness criterion
 
-Generated against `wire-format.md` `2234f90dfec6fd06…`, `network-design.md` `1d268b5b72aafde3…` and `light-client-requirements.md` `f7c7414e58da1db7…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `160d4e2f0df1e152…`, `network-design.md` `587da2e1686de35b…` and `light-client-requirements.md` `56f9d13180c0323e…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Canonical. Spec-derived, reproduced by the independent harness.** See
 [README.md](README.md). *The nonce-commitment, seed and hash-rank vectors that
@@ -24,52 +24,41 @@ the formula itself):
 | 20 | 1 | 1 |
 | 25 | 12 | 10 |
 
-## Window boundaries (§5.3)
-
-With `started_at = 1767268800`, the 730-day window is
-`1767268800 − 63072000 = 1704196800 < finalized_at < 1767268800` —
-**exclusive at both ends: previously completed ceremonies only** (§5.3):
-
-| Prior record `finalized_at` | Counted? |
-|---|---|
-| 1704196800 (exactly 730 days) | no — boundary instant is out |
-| 1704196801 | yes |
-| 1767268799 | yes |
-| 1767268800 | no — not before `started_at` |
-
 ## The curated bundle (§5.4) — canonical bar 3
 
-Alice hands bob a bundle at a hypothetical next ceremony,
-`started_at = 1790557200` (window floor 1727485200, exclusive both
-ends; every record below finalized inside it). **Six entries handed, one a
-duplicate and one non-verifying**:
+Alice hands bob a bundle of introductions (§2.3) at a hypothetical next
+ceremony: for each prior counterparty she names, that party's key material
+with the most recent `SignedLocator` she holds for them. No record of any
+meeting travels, and no window applies (§5.3). **Six entries handed, one a
+later locator for a party already introduced, one non-verifying, one of
+alice herself** (each entry's bytes are in `corpus.json` under
+`P-vs-bundle-1` to `P-vs-bundle-6`):
 
 | # | Handed | Qualifies? |
 |---|---|---|
-| 1 | formation record `262a7e58b63c11f5…` (alice–carol) | yes — formations count (§5.3) |
-| 2 | ac1 `c7ceb10e39e61b3f…` (alice–carol) | yes |
-| 3 | ac2 `41eda24193685689…` (alice–carol) | yes |
-| 4 | ac1 again, byte-identical | counts **once** — duplicates dedupe by txid (§5.3) |
-| 5 | normal record `b5b6227510ef730e…` (alice–bob) | yes — but **bob is the current counterparty**, never a candidate for his own verification (§5.3) |
-| 6 | the formation envelope with any signed-body byte mutated | **not in the pool** — a record that fails its checks contributes nothing; there is no "incomplete", it is simply absent (§5.4) |
+| 1 | c1, locator seqno [2, 7] | yes |
+| 2 | carol, locator seqno [1, 0] | yes |
+| 3 | c1 again, locator seqno [2, 9] | counts **once** — one subject is one claim, and the greater counter in the same series stands (§5.3) |
+| 4 | bob, locator seqno [1, 0] | yes toward *n* — but **bob is the current counterparty**, never a candidate for his own verification (§5.3) |
+| 5 | alice's key material with c1's signed locator | **not in the pool** — the material does not hash to the locator's subject; an introduction failing its checks contributes nothing (§5.3, §5.4) |
+| 6 | alice introducing herself | **not in the pool** — a party is not its own prior counterparty (§5.3) |
 
 The arithmetic, stated so a harness can recompute it:
 
 ```
-n = 4          (distinct qualifying records: 1, 2, 3, 5)
-candidates = 1 (distinct prior counterparties {carol, bob} minus the current counterparty bob)
-required = min(floor(4 / 2), 10, 1) = 1
+n = 3          (distinct qualifying subjects: c1, carol, bob)
+candidates = 2 (distinct prior counterparties {c1, carol, bob} minus the current counterparty bob)
+required = min(floor(3 / 2), 10, 2) = 1
 ```
 
-**Witness-only does not qualify** (§5.3): the same normal record handed by
-**w1** as subject names w1 only in field 4 — a witnessed ceremony's
-participants met each other, not the witness. For w1 that bundle yields
-`n = 0, candidates = 0, required = 0`.
-
 **Understatement is free and self-defeating** (§5.4): alice handing only
-`[ac1, npr]` yields `n = 2, candidates = 1, required = min(1, 10, 1) = 1` —
-a smaller claim, a thinner record, and both withheld records remain
-individually valid wherever else she presents them.
+`[carol]` yields `n = 1, candidates = 1, required = min(0, 10, 1) = 0` —
+a smaller claim and a thinner record, and the counterparties withheld are
+hers to name at any later ceremony.
+
+**Fishing is one at a time** (§5.1, §7.10.2): where the bundles leave the
+criterion unmet, a `FishingProposal` carries exactly one introduction — the
+corpus's `P-fishing-proposal` is entry 1 above — and the parties alternate.
 
 **The reasonableness reading** (§5.2): an evaluator comparing a finalized
 record's response count against `required` learns whether the ceremony was

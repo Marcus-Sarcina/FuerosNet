@@ -537,15 +537,16 @@ fn a_verifier_in_a_third_process_answers_and_the_record_carries_it() {
         set.start(n, &cast);
     }
     // **bob can answer for alice the only way anybody comes to**: he has
-    // met her, and holds her sealed captures to show for it.  Twice,
-    // because the criterion is floor(n/2) of the records she hands over
-    // (`wire-format.md` §5.2) — a bundle of one obliges no verifier and
-    // the selection never runs.
+    // met her, and holds her sealed captures to show for it.  And alice
+    // has met carol before, because the criterion is floor(n/2) of the
+    // introductions she hands over (`wire-format.md` §5.2, §5.4) — one
+    // prior counterparty obliges no verifier and the selection never
+    // runs; two do, and carol, the counterparty, is never a candidate for
+    // her own verification (§5.3), which leaves bob.
     ceremony(&mut set, &cast, "alice", "bob", "w1", "w2");
-    ceremony(&mut set, &cast, "alice", "bob", "w1", "w2");
-    // the window is exclusive at the next ceremony's own start
-    // (`wire-format.md` §5.3) and these clocks are seconds: the second
-    // record must have finalized strictly before alice begins again
+    ceremony(&mut set, &cast, "alice", "carol", "w1", "w2");
+    // these clocks are seconds, and a record claims a start no earlier
+    // than its predecessor finalized (`wire-format.md` §3.3)
     std::thread::sleep(std::time::Duration::from_secs(2));
 
     // alice meets carol; intent through capture are PRT-04's steps.
@@ -585,10 +586,10 @@ fn a_verifier_in_a_third_process_answers_and_the_record_carries_it() {
     set.get("alice").must(&format!("capture {kc}"));
 
     // **the pool is what alice handed over, not configuration**
-    // (`wire-format.md` §5.4): two records, one distinct prior
-    // counterparty, so carol must seek one verifier and the one candidate
-    // is bob — a stranger to her, taken at her discretion and marked so,
-    // and her person is told nobody in the pool is known to her
+    // (`wire-format.md` §5.4): two introductions, bob and carol herself,
+    // so carol must seek one verifier and the one candidate is bob — a
+    // stranger to her, taken at her discretion and marked so, and her
+    // person is told nobody in the pool is known to her
     assert_eq!(
         set.get("carol").must("verifiers"),
         [

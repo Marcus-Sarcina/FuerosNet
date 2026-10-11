@@ -264,16 +264,20 @@ shell exists.
   basis honestly (`wire-format.md` §5.5). **Review who was selected for you
   before signing**: the record will carry those responders forever, and you
   cannot repair it.
-- **A fishing proposal from your own history is a bundle augmentation**
-  [author, 2026-09-03] — the same disclosure decision as the original bundle,
-  made explicitly, through the same interface that curates the bundle. **Stop
-  revealing records once a locally adjustable number of responsive candidates
-  is found**, and show the user whether the candidates they offer are
-  genuinely unavailable or are being declined: after the bundle, the working
-  assumption is that **every mutually reachable candidate is accepted if
-  available** — quality filtering stops with the initial bundle, so a
-  counterparty declining available candidates to pull more names out of you
-  is visible as exactly that.
+- **The bundle you hand is introductions to prior counterparties you choose
+  to name, each with the most recent locator you hold for them**
+  (`wire-format.md` §5.4) [author, 2026-10-11] — a handful meant to
+  suffice, never your meeting history. **Fish one candidate at a time, in
+  turns, and only where the bundles left the criterion unmet**: each
+  proposal is one disclosure decision through the same interface that
+  curates the bundle, and once you have exposed as many counterparties as
+  you care to, accept the next proposal and move on. Show the user whether
+  the candidates they offer are genuinely unavailable or are being
+  declined: after the bundle, the working assumption is that **every
+  mutually reachable candidate is accepted if available** — quality
+  filtering stops with the initial bundle, so a counterparty declining
+  available candidates to pull more names out of you is visible as exactly
+  that.
 - **Withhold your envelope signature from a proposed body omitting a verifier
   response you hold** [author, 2026-09-03]. Verifiers deliver a copy of each
   response about you to you (`wire-format.md` §5.6); a proposed final record

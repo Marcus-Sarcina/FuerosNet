@@ -13551,6 +13551,27 @@ exchange names such a code `MIRROR` before any figure in it is believed,
 the rows travel with the bytes they were read under so the same answer
 gates them, and a run now says how often a phone reads itself.
 
+**[ruled, author, 2026-10-10] Witnesses are required where available, and
+a witnessless meeting is not a genesis-only event.** The first
+cross-meeting between two met pairs (`82ffd1b-b1-cross-1`, the two S21s,
+each holding a record with a TCL) hung at witness selection: each phone
+began with `nominees: 0` although each had met someone, and the kernel then
+refused `propose` as `NoWitness` sixty times over, the shell polling it
+every two seconds. The author's ruling, verbatim: *"Both phones have met at
+least one other user. Witnessless meeting is not necessarily a genesis-only
+event. Witnesses are required if available, but if each participant can
+see that no witness is available, they should proceed."*
+
+Two things follow, of different weight. **The nomination is a kernel
+defect**: `begin` takes its nominees from the caller alone and never draws
+on the parties this client has met, which is the candidate pool §8.1
+already defines. **The proceeding is a design amendment**: `propose` admits
+a witnessless record only as the formation subtype, and the codec enforces
+that subtype's genesis back-pointers (§13.2; `wire-format.md` §3.2 calls it
+"the one witnessless shape"). A witnessless record for parties past their
+genesis is therefore a change to the documented shape — the author's to
+make — and is recorded here as owed rather than built.
+
 **The fifth run completed: the first cold ceremony on low-spec hardware**
 [2026-10-10]. Two TCL 30 Z, 2.7 GB and API 31, from BRIEF to DONE on both
 phones — the same ceremony id, the same transaction with two signers,
@@ -13623,6 +13644,116 @@ to the old enumeration when given none.
 an instance being attached; enrolling one is how an identity comes to have
 an instance, so gating the only way in on already being in would leave no
 way in.
+
+### 2026-10-11 (the bundle is a bundle of locators)
+
+**[ruled, author, 2026-10-11] The verifiers are shared directly: the
+bundle is locators, and the locator is the primitive for communicating
+about any identity.** Verbatim: *"The verifiers need to be shared
+directly. The 'bundles' mentioned in previous discussions are meant to be
+bundles of locators. The locator is the primitive for communicating about
+any identity."* And: *"Not necessarily the locator at the time of the
+prior meeting, the most recent locator the participant has for that
+particular prior counterparty."* Found on the bench: the first cross
+meeting with a node handed each side a record whose co-signer the other
+had never held, so nothing qualified and no verifier was asked.
+
+**What changed.** An `Introduction` (`wire-format.md` §2.3) is a party's
+key material with a `SignedLocator` of theirs — the key travels with the
+locator, as §12.3 Case 0 always said, because a stranger's locator
+verifies under nothing else. The bundle (§5.4) is introductions, one per
+prior counterparty the subject names, each carrying the most recent
+locator held; the sender's own locator rides the intent (§14.3.2) so each
+party leaves holding the other's. Qualification (§5.3) is the
+introduction verifying alone; *n* counts introductions once by subject;
+the 730-day window is gone, a locator carrying no time and recency being
+the subject's curation. `ArchiveEntry` leaves the bundle and stays for the
+archive pull. The record-based bundle, its window and the witness-only
+case dissolved with it, in the design, the wire format, the light-client
+requirements, the functional tests (CER-011–013, 017, 018, 020, NET-017;
+CER-028–030 added) and the vectors (bar 3 restated over introductions;
+`P-introduction`, `P-vs-bundle-*`, the intents and continuation).
+
+**[ruled, author, 2026-10-11] Fishing is one candidate at a time, in
+turns, and only where the bundles fall short.** Verbatim: *"The idea was
+that each party would blast the other with a 'bundle' of prior
+counterparties which would usually be sufficient to cover the verifier
+requirement (e.g. the bundle contains 5 options, some might be rejected,
+some might be unavailable, if two were acceptable and available from each
+side, that would suffice). If and only if the initial bundles fail to
+yield an acceptable number of verifiers, the parties initiate the 'go
+fish' procedure where they propose one verifier at a time in turns. This
+is a mechanism to avoid handing over your whole meeting history in the
+initial bundle or having it milked out of you in successive bundles. IF
+the number of exposed counterparties climbs too high, you can just accept
+the next proposal and move on."* A `FishingProposal` (§7.10.2) is one
+introduction; §5.1 and design §8.1.2 state the turn-taking and its
+reason; P37 prices the disclosure as a handful by design.
+
+**Beside it, what the amendment moved.** `started_at` no longer sizes
+anything about selection (§3.3's backdating rationale restated as the
+chain's own order and the retention clocks); design §13's pruning
+boundary keeps its 730 days as the recovery substrate's, no longer as
+the bundle's. The kernel builds its bundle from the locators it holds,
+keeps the counterparty's from each intent, pins every verified
+introduction's key, and reads the pool from introductions alone; nothing
+is looked up.
+
+### 2026-10-11 (a witness both parties name signs once; nothing waits on a witness that cannot come)
+
+**A client handed no nominee nominates from the parties it has met.** The
+2026-10-10 ruling (witnesses are required where available) is now the
+kernel's: `begin` with an empty list draws on the acquaintance the client
+keeps from its own records — at most ten, never the counterparty of the
+meeting at hand, which a party cannot witness. A caller's own list stands
+as given.
+
+**[ruled, author, 2026-10-11] A witness both participants nominate is one
+witness.** Verbatim: *"A witness witnesses the whole ceremony. Witnesses
+known to both parties are more desirable than witnesses known to only
+one, though they only count as one towards the witness total. The correct
+behavior in this case is to accept the witness as a single witness rather
+than to count them twice."* Found by the nomination test the moment both
+sides nominated from whom they had met: each nomination reached `propose`
+as its own `Witness`, the envelope carried the party's entry twice, and
+the codec refused it as out of canonical order. `propose` now keeps one
+place per witness; it is attributed to the participant that sorts first,
+so the body is the same whichever side proposes. The record's
+`nominated_by` names one participant (`wire-format.md` §4.5), so the
+attribution is the kernel's convention and is noted for the author with
+the ruling's preference, which has no cap or ranking to act on today.
+
+**The shell stops waiting where no witness can come.** `Meet.poll` on
+`NoWitness` reads the nominee lists: nobody nominated, or every nominee
+declined, ends the meeting and says so; a nominee still outstanding keeps
+the wait. Before this the proposer asked the kernel every two seconds for
+as long as the person stood there.
+
+**The node bench is up, and the witnessed ceremony ran on it**
+(`82ffd1b-a4-node-3`): a daemon on this machine, two instrument
+witnesses, all four phones provisioned at genesis against it. The two
+S21s met with one bench witness nominated by each: a 4-signer record,
+both witnesses answering over the node within 3 s. The script now pairs
+phones off rather than ringing them (a ring of four is mutual for none,
+and the shell names the provisioned peer as the carried intent's
+sender).
+
+**A notification waits to be reported sent, as a write waits to be
+acknowledged.** The TCL pair's record — 29 packets over BLE — was pushed
+by the serving side in 99 ms and the other side assembled none of it;
+the client side had gated writes on `onCharacteristicWrite` since
+2026-10-07 and the server side had no gate at all, which Samsung's stack
+forgave and the TCL's did not. `BleBearer` now holds one notification
+in flight, released in `onNotificationSent`; the TCL pair then met with
+a 4-signer record, the 29 packets crossing in 1.6 s.
+
+**The cross pair, and what verification waits on.** An S21 and a TCL,
+each holding a record with its partner, met with the node: a 3-signer
+record, both having nominated the same bench witness, which signed once.
+Each side's handed record was unverifiable — its co-signer's key is one
+the other phone has never held — so no verifier qualified and no query
+went out. The design leaves where that key comes from open: the bundle
+(`wire-format.md` §5.4) or the serving node. For the author.
 
 ### 2026-10-09 (grant editing, and where a grant lives)
 

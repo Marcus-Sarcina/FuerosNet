@@ -454,10 +454,15 @@ for s in ${DEVICES[@]+"${DEVICES[@]}"}; do
     if ! "$ADB" -s "${ADB_ID[$s]}" shell pm path "$APP" 2> /dev/null | grep -q package:; then
       say "$s: $APP is not installed; not provisioned (install the fieldtest APK first)"
     else
-      # the peer: the next phone given, or the first witness when alone
+      # the peer: the phones pair off in the order given (first with
+      # second, third with fourth), or the first witness when alone. The
+      # shell names the provisioned peer as the sender of the carried
+      # intent (`takeIntentCarriage`), so the pairing must be mutual: a
+      # ring of more than two phones is mutual for none of them. An odd
+      # last phone is paired with the first and cannot be met by it.
       count=${#PHONE_SERIALS[@]}
       if [ "$count" -gt 1 ]; then
-        j=$(((i + 1) % count))
+        j=$((i ^ 1)); [ "$j" -lt "$count" ] || j=0
         peer_material="${PHONE_MATERIALS[j]}"; peer_keyhash="${PHONE_KEYHASHES[j]}"; peer_name="${PHONE_SERIALS[j]}"
       else
         peer_material="$W_MATERIAL1"; peer_keyhash="$W_KEYHASH1"; peer_name="witness-1"

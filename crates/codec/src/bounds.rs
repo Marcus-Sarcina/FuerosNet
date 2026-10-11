@@ -74,7 +74,7 @@ pub const SIBLING_REFS: usize = 9;
 pub const PEERING_AUDIT_HISTORY: usize = 8;
 /// The local device-to-device interfaces (§14.3).
 pub const INTENT_NOMINEES: usize = 64;
-/// `ArchiveEntry` entries per `IntentExchange` or `BundleContinuation`
+/// `Introduction` entries per `IntentExchange` or `BundleContinuation`
 /// (§1.3, §14.3.2): a bound on the **carriage**; the bundle itself has none
 /// (§5.4).
 pub const INTENT_BUNDLE_ENTRIES: usize = 256;
@@ -84,9 +84,8 @@ pub const CANDIDATES_PER_EXCHANGE: usize = 8;
 /// Delegations per `DeviceCredential` (§1.3, §14.3.3): the run an instance
 /// is provisioned with, 90 days end to end (design §12.6.5).
 pub const DELEGATIONS_PER_CREDENTIAL: usize = 45;
-/// The ceremony's conversation on the end-to-end channel (§7.10.2).
-/// `ArchiveEntry` entries per `FishingProposal`: §5.4's carriage bound.
-pub const FISHING_PROPOSAL_ENTRIES: usize = 256;
+/// The ceremony's conversation on the end-to-end channel (§7.10.2).  A
+/// `FishingProposal` is one `Introduction` (§5.1): one candidate per turn.
 /// `Channel` entries per `WitnessRequest`: the proximity-channel ceiling.
 pub const WITNESS_REQUEST_CHANNELS: usize = 8;
 /// `VerifierResponse` entries per `GatheredResponses`: the per-record bound.

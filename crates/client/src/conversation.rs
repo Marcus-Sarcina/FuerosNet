@@ -60,31 +60,26 @@ impl ConsentReply {
     }
 }
 
-/// A bundle augmentation (§7.10.2, kind 11; design §8.1.2): one to 256
-/// archive entries, each an envelope map or a presentation array (§7.9),
-/// carried as the bytes they arrived as.
+/// One candidate offered in turn (§7.10.2, kind 11; §5.1; design §8.1.2):
+/// an `Introduction` (§2.3), carried as the bytes it arrived as.  One per
+/// proposal is the mechanism — a party is never asked for its history.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FishingProposal {
-    /// One to 256 archive entries, each as the bytes it arrived as.
-    pub entries: Vec<Vec<u8>>,
+    /// The introduction, as the bytes it arrived as.
+    pub introduction: Vec<u8>,
 }
 
 impl FishingProposal {
-    /// The bytes of this `FishingProposal`, as its kind composes them.
+    /// The bytes of this `FishingProposal`: the introduction itself.
     pub fn encode(&self) -> Vec<u8> {
-        let mut out = Vec::new();
-        emit_array_head(&mut out, self.entries.len());
-        for e in &self.entries {
-            out.extend_from_slice(e);
-        }
-        out
+        self.introduction.clone()
     }
 
     /// Read a `FishingProposal` from `b`; an error naming what did not read.
     pub fn decode(b: &[u8]) -> Result<Self, String> {
         checked(b, "FishingProposal")?;
         Ok(FishingProposal {
-            entries: raw_items(b, 0)?,
+            introduction: b.to_vec(),
         })
     }
 }

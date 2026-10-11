@@ -350,7 +350,9 @@ pub struct Intent {
     /// Whom it nominates to witness, from the counterparty's
     /// neighbourhood.
     pub nominees: Vec<Keyhash>,
-    /// Its prior records, for the counterparty's selection.
+    /// Its bundle: introductions to the prior counterparties it names,
+    /// each with the most recent locator it holds for them
+    /// (`wire-format.md` §2.3, §5.4), for the counterparty's selection.
     pub bundle: Vec<Vec<u8>>,
     /// Its clock, in milliseconds since the epoch.
     pub started_at: u64,
@@ -358,6 +360,8 @@ pub struct Intent {
     pub retention_years: u64,
     /// Whether this side initiated.
     pub initiator: bool,
+    /// Its own `SignedLocator`, the most recent it has signed.
+    pub locator: Vec<u8>,
 }
 
 impl std::fmt::Debug for Intent {
@@ -778,6 +782,20 @@ impl Client {
         if !self.device.operator.ask(&question) {
             return Err(abort("begin", Abort::Declined));
         }
+        // **Witnesses are required where available** [ruled, author,
+        // 2026-10-10]: a caller that names nobody is handed the parties
+        // this client has met, which is the candidate pool §8.1 already
+        // defines, rather than a ceremony with no witness to ask. On the
+        // bench two phones that had each met somebody began with no
+        // nominee at all, and the body then waited on a witness that was
+        // never asked. The counterparty, where known, is never a nominee
+        // of its own meeting; where it is not yet known it is dropped at
+        // the pin ([`Client::take_optical`]).
+        let nominees = if nominees.is_empty() {
+            self.met(counterparty.as_ref())
+        } else {
+            nominees
+        };
         let contribution = self.random::<16>();
         let seed = self.random::<32>();
         let started_at = self.now_s();
@@ -788,7 +806,7 @@ impl Client {
             initiator,
             started_at,
             nominees = nominees.len(),
-            bundle = self.store.records.len(),
+            bundle = self.store.locators.len(),
             retention = self.cfg.retention_years,
             "cer.begin"
         );
@@ -822,19 +840,79 @@ impl Client {
     /// the call, so the carriage and the call cannot disagree about what
     /// this device said.
     ///
-    /// **The bundle is everything held** — curating it is the subject's act
+    /// **The bundle is every party this client holds a locator for**, each
+    /// introduced by its key material and the most recent locator held
+    /// (`wire-format.md` §2.3, §5.4) — curating it is the subject's act
     /// through the interface above (`light-client-requirements.md` §1.4),
-    /// and truncation is visible as a smaller *n* (`wire-format.md` §5.4).
+    /// and truncation is visible as a smaller *n*.  A party whose material
+    /// this client no longer holds cannot be introduced and is left out.
     pub fn intent(&self) -> Result<Intent, Abort> {
         let a = self.active.as_ref().ok_or(Abort::NotActive)?;
         Ok(Intent {
             contribution: a.contribution,
             nominees: a.my_nominees.iter().copied().collect(),
-            bundle: self.store.records.values().cloned().collect(),
+            bundle: self.introductions(),
             started_at: a.started_at,
             retention_years: self.cfg.retention_years,
             initiator: a.initiator,
+            locator: self.own_locator()?,
         })
+    }
+
+    /// The introductions this client can make: one per party it holds a
+    /// locator and the key material for, the counterparty of the meeting
+    /// at hand included — it counts toward the subject's claim and is
+    /// never selected (§5.3).
+    #[must_use]
+    pub fn introductions(&self) -> Vec<Vec<u8>> {
+        self.store
+            .locators
+            .iter()
+            .filter_map(|(who, sl)| {
+                let id = self.known.iter().find(|i| i.keyhash == *who)?;
+                Some(rhtn_archive::locator::introduction(&id.key_material(), sl))
+            })
+            .collect()
+    }
+
+    /// This client's own `SignedLocator` for the subnet it acts in: its
+    /// position there, or the self-anchor while it has no patron
+    /// (`wire-format.md` §2.1, §2.3).
+    pub fn own_locator(&self) -> Result<Vec<u8>, Abort> {
+        let position = self
+            .position_in(&self.anchor())
+            .ok_or(Abort::NoRelationship(self.anchor()))?;
+        Ok(rhtn_archive::locator::signed_locator(
+            self.signer()?,
+            &position,
+        ))
+    }
+
+    /// Keep `sl` as the locator held for `who` where it is theirs and
+    /// newer than what is held (`wire-format.md` §2.3): verified under the
+    /// key already pinned for them, replaced by a greater counter in the
+    /// same series.  `outright` is the subject's own statement in its
+    /// intent, which replaces whatever is held, series aside.
+    fn hold_locator(&mut self, who: &Keyhash, sl: &[u8], outright: bool) -> Result<(), Abort> {
+        let read = rhtn_archive::locator::SignedLocator::parse(sl).map_err(Abort::Malformed)?;
+        if read.subject != *who {
+            return Err(Abort::Malformed("a locator for another party".into()));
+        }
+        read.verify(&self.known).map_err(Abort::Malformed)?;
+        let newer = match self.store.locators.get(who) {
+            None => true,
+            Some(have) => {
+                outright
+                    || rhtn_archive::locator::SignedLocator::parse(have).map_or(true, |h| {
+                        let (a, b) = (&read.locator.seqno, &h.locator.seqno);
+                        a.series == b.series && a.counter > b.counter
+                    })
+            }
+        };
+        if newer {
+            self.store.locators.insert(*who, sl.to_vec());
+        }
+        Ok(())
     }
 
     /// **Step 1 of the optical exchange** (`wire-format.md` §14.3.1): the
@@ -866,7 +944,11 @@ impl Client {
         // the first code fixes who is in front of me; a later one naming
         // anyone else is a party who is not the one in front of me
         match a.counterparty {
-            None => a.counterparty = Some(read.device),
+            None => {
+                a.counterparty = Some(read.device);
+                // a party cannot witness its own meeting
+                a.my_nominees.remove(&read.device);
+            }
             Some(k) if k == read.device => {}
             Some(_) => return Err(abort("take_optical", Abort::NotActive)),
         }
@@ -952,6 +1034,7 @@ impl Client {
                 retention_years: intent.retention_years,
                 initiator: intent.initiator,
                 continuations: 0,
+                locator: intent.locator,
             },
             &cid,
         );
@@ -1004,6 +1087,7 @@ impl Client {
                 started_at: read.started_at,
                 retention_years: read.retention_years,
                 initiator: read.initiator,
+                locator: read.locator,
             },
         )?;
         Ok(taken)
@@ -1209,6 +1293,9 @@ impl Client {
         a.their_nominees = intent.nominees.clone();
         a.their_bundle = intent.bundle.clone();
         a.their_retention = intent.retention_years;
+        // the sender's own position, kept as the locator held for them:
+        // its own statement replaces whatever a third party said of it
+        self.hold_locator(&from, &intent.locator, true)?;
         tracing::info!(
             target: "cer",
             from = %id8(&from),
@@ -1344,7 +1431,16 @@ impl Client {
     pub fn select_verifiers(&mut self) -> Result<Vec<(Keyhash, SelectionBasis)>, Abort> {
         let me = self.keyhash();
         let a = self.active.as_ref().ok_or(Abort::NotActive)?;
-        let pool = selection::pool(&self.known, &a.their_bundle, &a.peer()?, &me, a.started_at);
+        let pool = selection::pool(&a.their_bundle, &a.peer()?, &me);
+        // **a verified introduction pins its subject**: the key to verify
+        // a verifier's answer by and the position to reach it at came
+        // with the bundle, and nothing else need supply them
+        for i in &pool.introduced {
+            if !self.known.iter().any(|k| k.keyhash == i.subject) {
+                self.known.push(i.introduction.identity.clone());
+            }
+            let _ = self.hold_locator(&i.subject, &i.introduction.locator.bytes, false);
+        }
         if !pool.candidates.is_empty() && !self.acquaintance.recognises_any(&pool) {
             tracing::warn!(target: "cer", pool = pool.candidates.len(), "cer.select.none_recognised");
             self.device.notifier.notify(Notice::NoCandidateRecognised);
@@ -1540,6 +1636,24 @@ impl Client {
         self.active.as_ref().and_then(|a| a.counterparty)
     }
 
+    /// **The parties this client has met**, as a nominee list: the
+    /// acquaintance it keeps from its own records, less itself and less
+    /// `except` (the counterparty of the meeting at hand, who cannot
+    /// witness it), at most ten [ruled, author, 2026-10-10: witnesses are
+    /// required where available].
+    pub fn met(&self, except: Option<&Keyhash>) -> Vec<Keyhash> {
+        let me = self.keyhash();
+        let mut out: Vec<Keyhash> = self
+            .acquaintance
+            .met
+            .iter()
+            .filter(|p| **p != me && Some(*p) != except)
+            .copied()
+            .collect();
+        out.truncate(10);
+        out
+    }
+
     /// The two nominee lists of the active ceremony: mine, then theirs.
     pub fn nominees(&self) -> (Vec<Keyhash>, Vec<Keyhash>) {
         self.active
@@ -1702,6 +1816,25 @@ impl Client {
         if witnesses.is_empty() && !formation {
             return Err(abort("propose", Abort::NoWitness));
         }
+        // **a party signs once.** A nominee both participants named answers
+        // both and is handed here twice; the record has one place for it,
+        // and the body must be the same whichever side proposes, so the
+        // place is attributed to the participant that sorts first.
+        let witnesses = {
+            let rank = |n: &Keyhash| parts.iter().position(|p| p == n);
+            let mut kept: Vec<Witness> = Vec::with_capacity(witnesses.len());
+            for w in witnesses {
+                match kept.iter_mut().find(|k| k.keyhash == w.keyhash) {
+                    Some(k) => {
+                        if rank(&w.nominated_by) < rank(&k.nominated_by) {
+                            *k = w;
+                        }
+                    }
+                    None => kept.push(w),
+                }
+            }
+            kept
+        };
         let proposal = Proposal {
             started_at: a.started_at,
             finalized_at: now,

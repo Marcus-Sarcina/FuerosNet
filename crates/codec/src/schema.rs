@@ -1133,6 +1133,51 @@ fn device_bundle_ok(b: &[u8], f: &Item, signed: bool) -> Result<(), Error> {
     }
 }
 
+/// An `Introduction` (§2.3) at offset `at`: version 1, the subject's key
+/// material, and a `SignedLocator` whose subject is that material's hash.
+/// The signature is the holder's to verify; the shape and the binding
+/// between the two halves are structural, and an introduction failing
+/// either is not one.
+fn introduction_ok(b: &[u8], at: usize) -> Result<(), Error> {
+    let p = Parser { b };
+    let (v, _) = p.item(at)?;
+    let Item::Array(a) = &v else {
+        return Err(Error("an introduction is an array"));
+    };
+    if a.len() != 3 {
+        return Err(Error("an introduction has three fields"));
+    }
+    if as_uint(&a[0]) != Some(1) {
+        return Err(Error("version 1"));
+    }
+    let parts = array_item_ranges(b, at).ok_or(Error("array walk"))?;
+    check_type(b, parts[1].start, KeyMaterial)?;
+    let material = &b[parts[1].clone()];
+    let sub = &b[parts[2].clone()];
+    let loc = parse_all(sub)?;
+    check_kind(sub, "SignedLocator", &loc)?;
+    let Item::Map(m) = &loc else {
+        return Err(Error("a signed locator is a map"));
+    };
+    let subject = bs(sub, map_get(m, 1).ok_or(Error("subject"))?).ok_or(Error("subject"))?;
+    if crate::cose::sha256(material) != subject {
+        return Err(Error(
+            "an introduction's key material does not hash to its locator's subject",
+        ));
+    }
+    Ok(())
+}
+
+/// Every entry of the array at top-level field `field` is an introduction.
+fn introductions_ok(b: &[u8], field: usize) -> Result<(), Error> {
+    let top = array_item_ranges(b, 0).ok_or(Error("array walk"))?;
+    let at = top.get(field).ok_or(Error("no such field"))?.start;
+    for r in array_item_ranges(b, at).ok_or(Error("bundle not array"))? {
+        introduction_ok(b, r.start)?;
+    }
+    Ok(())
+}
+
 /// Per-kind validation for the signed records and transaction bodies the
 /// corpus names.  `b` holds the bytes the item's ranges index.
 pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
@@ -1349,8 +1394,8 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             let Item::Array(a) = item else {
                 return Err(Error("not array"));
             };
-            if a.len() != 8 {
-                return Err(Error("eight fields"));
+            if a.len() != 9 {
+                return Err(Error("nine fields"));
             }
             if as_uint(&a[0]) != Some(1) {
                 return Err(Error("version 1"));
@@ -1377,6 +1422,7 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             if bundle.len() > INTENT_BUNDLE_ENTRIES {
                 return Err(Error("bundle carriage over 256"));
             }
+            introductions_ok(b, 3)?;
             as_uint(&a[4]).ok_or(Error("started_at"))?;
             as_uint(&a[5]).ok_or(Error("retention"))?;
             match &a[6] {
@@ -1386,6 +1432,13 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             // the bundle itself has no ceiling (§5.4); its carriage does,
             // and the rest follows in numbered continuations
             as_uint(&a[7]).ok_or(Error("continuations is a count"))?;
+            // the sender's own position, bare: the receiver pinned the
+            // sender's key from the screen (§14.3.2)
+            let top = array_item_ranges(b, 0).ok_or(Error("array walk"))?;
+            let r = top.get(8).ok_or(Error("locator"))?;
+            let sub = &b[r.clone()];
+            check_kind(sub, "SignedLocator", &parse_all(sub)?)
+                .map_err(|_| Error("the sender's locator is a SignedLocator"))?;
             Ok(())
         }
         "BundleContinuation" => {
@@ -1411,8 +1464,9 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             if bundle.is_empty() || bundle.len() > INTENT_BUNDLE_ENTRIES {
                 return Err(Error("a continuation carries one to 256 entries"));
             }
-            Ok(())
+            introductions_ok(b, 3)
         }
+        "Introduction" => introduction_ok(b, 0),
         "ProximityOutcomes" => {
             let Item::Array(a) = item else {
                 return Err(Error("not array"));
@@ -1563,21 +1617,9 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             }
             sign1_shape(&a[1])
         }
-        "FishingProposal" => {
-            let Item::Array(entries) = item else {
-                return Err(Error("not array"));
-            };
-            if entries.is_empty() || entries.len() > FISHING_PROPOSAL_ENTRIES {
-                return Err(Error("a fishing proposal carries one to 256 entries"));
-            }
-            // an entry is an envelope map or a presentation array (§7.9)
-            for e in entries {
-                if !matches!(e, Item::Map(_) | Item::Array(_)) {
-                    return Err(Error("an archive entry is a map or an array"));
-                }
-            }
-            Ok(())
-        }
+        // one candidate per proposal, in turns (§5.1): the proposal is the
+        // introduction itself
+        "FishingProposal" => introduction_ok(b, 0),
         "WitnessRequest" => {
             let Item::Map(m) = item else {
                 return Err(Error("not map"));

@@ -255,25 +255,7 @@ class BleBearer(private val context: Context) {
                 // So a wait that expires may simply have lost a race, and
                 // the thread each send arrives on is on the record now
                 // rather than inferred from overlapping timings.
-                var waited = 0L
-                while (!writeDone.tryAcquire(WRITE_ACK_MS, java.util.concurrent.TimeUnit.MILLISECONDS)) {
-                    waited += WRITE_ACK_MS
-                    if (waited >= WRITE_GIVE_UP_MS) {
-                        Diag.warn(
-                            "ble", "op" to "write", "state" to "refused",
-                            "reason" to "the previous write was never acknowledged",
-                            "waited_ms" to waited,
-                            "thread" to Thread.currentThread().name,
-                        )
-                        return false
-                    }
-                    Diag.warn(
-                        "ble", "op" to "write", "state" to "waiting",
-                        "reason" to "the previous write is not acknowledged yet",
-                        "waited_ms" to waited,
-                        "thread" to Thread.currentThread().name,
-                    )
-                }
+                if (!awaitPermit(writeDone, "write")) return false
                 return try {
                     var status = write(g, c, packet)
                     // **a stack that says busy is offered the packet
@@ -313,19 +295,65 @@ class BleBearer(private val context: Context) {
             val s = server ?: return false
             val d = peer ?: return false
             val c = s.getService(SERVICE)?.getCharacteristic(OUTBOUND) ?: return false
+            // **One notification in flight, the write gate's twin.** A
+            // stack takes `notifyCharacteristicChanged` as a request and
+            // reports it sent in `onNotificationSent`; a second request
+            // before that is the stack's to queue or drop, and nothing in
+            // the API says which. Run `a4-node-3` of 2026-10-11: a TCL
+            // serving the link said `ok` to all 29 packets of the record
+            // in 99 ms and the other TCL assembled none of them, while
+            // the same 29 packets crossed between two S21s, whose stack
+            // queues. So a notification waits for the previous one to be
+            // reported sent, as a write waits for its acknowledgement.
+            if (!awaitPermit(notifyDone, "notify")) return false
             return try {
                 val status = notify(s, d, c, packet)
                 val ok = status == BluetoothGatt.GATT_SUCCESS
-                if (!ok) Diag.warn("ble", "op" to "notify", "status" to status)
+                if (!ok) {
+                    Diag.warn("ble", "op" to "notify", "status" to status)
+                    notifyDone.release()
+                }
                 ok
             } catch (e: SecurityException) {
+                notifyDone.release()
                 refused("notify")
                 false
             } catch (e: RuntimeException) {
+                notifyDone.release()
                 Diag.warn("ble", "op" to "notify", "state" to "refused", "reason" to (e.message ?: e::class.java.simpleName))
                 false
             }
         }
+    }
+
+    /**
+     * **Wait for the link's one permit for `op`.** A wait that expires is
+     * waited again, not given up on: the packet is still in hand and a
+     * slow acknowledgement says nothing about the link being down (see
+     * [writeDone]). The thread is on the record because more than one
+     * send can be waiting at once.
+     */
+    private fun awaitPermit(gate: java.util.concurrent.Semaphore, op: String): Boolean {
+        var waited = 0L
+        while (!gate.tryAcquire(WRITE_ACK_MS, java.util.concurrent.TimeUnit.MILLISECONDS)) {
+            waited += WRITE_ACK_MS
+            if (waited >= WRITE_GIVE_UP_MS) {
+                Diag.warn(
+                    "ble", "op" to op, "state" to "refused",
+                    "reason" to "the previous $op was never acknowledged",
+                    "waited_ms" to waited,
+                    "thread" to Thread.currentThread().name,
+                )
+                return false
+            }
+            Diag.warn(
+                "ble", "op" to op, "state" to "waiting",
+                "reason" to "the previous $op is not acknowledged yet",
+                "waited_ms" to waited,
+                "thread" to Thread.currentThread().name,
+            )
+        }
+        return true
     }
 
     /**
@@ -548,6 +576,21 @@ class BleBearer(private val context: Context) {
             Diag.event("ble", "op" to "mtu", "side" to "server", "mtu" to mtu)
         }
 
+        override fun onNotificationSent(d: BluetoothDevice, status: Int) {
+            // the gate's permit is given back on any outcome, as a
+            // write's is: a notification that failed is no longer in flight
+            val fields = arrayOf(
+                "op" to "notify", "state" to "sent",
+                "status" to status, "thread" to Thread.currentThread().name,
+            )
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                Diag.event("ble", *fields)
+            } else {
+                Diag.warn("ble", *fields)
+            }
+            notifyDone.release()
+        }
+
         override fun onCharacteristicWriteRequest(
             d: BluetoothDevice,
             requestId: Int,
@@ -570,6 +613,9 @@ class BleBearer(private val context: Context) {
 
     /** Held while a write request is out; released by its acknowledgement. */
     private val writeDone = java.util.concurrent.Semaphore(1)
+
+    /** Held while a notification is out; released when the stack reports it sent. */
+    private val notifyDone = java.util.concurrent.Semaphore(1)
 
     private val clientCallback = object : BluetoothGattCallback() {
         override fun onCharacteristicWrite(g: BluetoothGatt, c: BluetoothGattCharacteristic, status: Int) {

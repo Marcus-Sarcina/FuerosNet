@@ -12,7 +12,7 @@ their purpose: **a disagreement between a vector and the specification is a
 finding against one of them**, and either answer is progress. Review rounds
 have produced specification fixes.
 
-**Pinned**: wire-format.md `2234f90dfec6fd0606db703fbd668437b31a13b5ec6ba430d6dc8ca4afbe3c02` · network-design.md `1d268b5b72aafde359a500e7766fd2036d6b9a7ec1413e22f9716b41eb4a5003`
+**Pinned**: wire-format.md `160d4e2f0df1e152bbb8b72db925dd7c7a65c11483fd5c9bd45e06324e55eaf5` · network-design.md `587da2e1686de35b29239e15559db0370c20b86408b23103aabe21c06e9171a4`
 
 **Scope**: wire-format/protocol **interoperability** vectors.
 `light-client-requirements.md` is pinned alongside the two protocol documents
@@ -213,17 +213,20 @@ negatives (T9–T12). Still open:
    envelope — and the optionals adoption's field 8 now references it (V9
    pass; the mismatch case moved to the divergence adoption, V9a). The
    harness verifies every signature and every binding.
-3. ~~The curated-bundle fixture~~ **DONE 2026-09-02**
-   (`verifier-selection.md`): a six-entry bundle over real fixtures — the
-   repeated counterparty (formation + ac1 + ac2, one candidate), the
-   duplicate txid (once), the current counterparty (qualifies, never a
-   candidate), the mutated non-verifying record (absent, not "incomplete") —
-   plus the witness-only and understatement cases and the reasonableness
-   reading, all with harness-recomputed arithmetic. The out-of-window
-   exclusive boundary is the window table above it. *The diamond,
-   committed-predecessor, bundle-minus-one and selection-binding cases of
-   earlier revisions dissolved with the chaining and determinism they
-   tested.*
+3. ~~The curated-bundle fixture~~ **DONE 2026-09-02, restated 2026-10-11**
+   (`verifier-selection.md`): a six-entry bundle of **introductions** (a
+   prior counterparty's key material with the most recent signed locator
+   held for them; `wire-format.md` §2.3, §5.4) — the repeated subject with
+   a later counter (once), the current counterparty (counts, never a
+   candidate), the material-to-subject mismatch (absent, not
+   "incomplete"), the subject introducing itself (not a prior
+   counterparty) — plus the understatement case and the reasonableness
+   reading, all with harness-recomputed arithmetic; each entry is a corpus
+   object. *The record-based bundle, its 730-day window and the
+   witness-only case dissolved 2026-10-11 when the bundle became locators;
+   the diamond, committed-predecessor, bundle-minus-one and
+   selection-binding cases of earlier revisions dissolved before that with
+   the chaining and determinism they tested.*
 4. ~~Full query → consent → response vectors~~ **DONE 2026-09-02**: both
    authentication forms — Recovery/hybrid (the recovery adoption) and
    presence/classical (the normal record's three responses, with a worked

@@ -111,16 +111,17 @@ impl TranscriptConfirm {
 }
 
 /// What the bearer carries first (§14.3.2): the sender's echoed
-/// contribution, its nominees, the first carriage of its evidence bundle,
-/// its clock, the retention it commits to, who initiated, and how many
-/// `BundleContinuation` messages follow.
+/// contribution, its nominees, the first carriage of its bundle of
+/// introductions, its clock, the retention it commits to, who initiated,
+/// how many `BundleContinuation` messages follow, and the sender's own
+/// `SignedLocator`.
 #[derive(Clone, PartialEq, Eq)]
 pub struct IntentExchange {
     /// The sender's own contribution, echoed.
     pub contribution: [u8; 16],
     /// Whom it nominates to witness.
     pub nominees: Vec<Keyhash>,
-    /// The first carriage of its evidence bundle.
+    /// The first carriage of its bundle: introductions (§2.3, §5.4).
     pub bundle: Vec<Vec<u8>>,
     /// Its clock, in milliseconds since the epoch.
     pub started_at: u64,
@@ -130,6 +131,8 @@ pub struct IntentExchange {
     pub initiator: bool,
     /// How many `BundleContinuation` messages follow.
     pub continuations: u64,
+    /// The sender's own `SignedLocator`, the most recent it has signed.
+    pub locator: Vec<u8>,
 }
 
 impl std::fmt::Debug for IntentExchange {
@@ -144,6 +147,7 @@ impl std::fmt::Debug for IntentExchange {
             .field("retention_years", &self.retention_years)
             .field("initiator", &self.initiator)
             .field("continuations", &self.continuations)
+            .field("locator", &self.locator.len())
             .finish()
     }
 }
@@ -152,7 +156,7 @@ impl IntentExchange {
     /// The bytes of this `IntentExchange`, as §14.3.2 composes them.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
-        emit_array_head(&mut out, 8);
+        emit_array_head(&mut out, 9);
         emit_uint(&mut out, 1);
         emit_bstr(&mut out, &self.contribution);
         emit_array_head(&mut out, self.nominees.len());
@@ -167,6 +171,7 @@ impl IntentExchange {
         emit_uint(&mut out, self.retention_years);
         emit_bool(&mut out, self.initiator);
         emit_uint(&mut out, self.continuations);
+        out.extend_from_slice(&self.locator);
         out
     }
 
@@ -182,6 +187,7 @@ impl IntentExchange {
             retention_years: as_uint(&a[5]).ok_or("retention")?,
             initiator: matches!(a[6], Item::Bool(true)),
             continuations: as_uint(&a[7]).ok_or("continuations")?,
+            locator: raw_field(b, 8)?,
         })
     }
 }
@@ -473,6 +479,7 @@ pub fn intent_carriage(intent: &IntentExchange, ceremony_id: &[u8; 32]) -> Vec<V
             bundle: first,
             continuations: rest.len() as u64,
             nominees: intent.nominees.clone(),
+            locator: intent.locator.clone(),
             ..*intent
         }
         .encode(),
@@ -593,6 +600,13 @@ fn keyhashes(b: &[u8], it: &Item) -> Result<Vec<Keyhash>, String> {
 /// `field` is the entry array's index among the object's own fields, which
 /// is how the ranges are found: the parsed tree gives the scalars and the
 /// offsets give the opaque items.
+/// The bytes of top-level field `field`, as they lie.
+fn raw_field(b: &[u8], field: usize) -> Result<Vec<u8>, String> {
+    let top = array_item_ranges(b, 0).ok_or("not an array")?;
+    let r = top.get(field).ok_or("no such field")?;
+    Ok(b[r.clone()].to_vec())
+}
+
 fn entries(b: &[u8], field: usize) -> Result<Vec<Vec<u8>>, String> {
     let top = array_item_ranges(b, 0).ok_or("not an array")?;
     let at = top.get(field).ok_or("no such field")?.start;

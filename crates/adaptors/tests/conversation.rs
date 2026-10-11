@@ -214,8 +214,10 @@ fn trace() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn the_conversation_runs_over_the_payload_path_to_a_record_every_signer_holds() {
     trace();
-    // alice met w1 twice before, so bob's selection of alice's verifiers
-    // from her bundle has n = 2 and one candidate: w1 is asked about her
+    // alice met w1 twice before, and holds a locator for w1 and for bob;
+    // her bundle introduces both (`wire-format.md` §5.4), so bob's
+    // selection of alice's verifiers has n = 2 and one candidate — himself
+    // never one — and w1 is asked about her
     let now_s = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -255,10 +257,26 @@ async fn the_conversation_runs_over_the_payload_path_to_a_record_every_signer_ho
         .iter()
         .map(|r| (r.txid, r.bytes.clone()))
         .collect();
+    let introduced: Vec<(Keyhash, Vec<u8>)> = ["w1", "bob"]
+        .iter()
+        .map(|n| {
+            let loc = rhtn_archive::tx::Locator::root(
+                kh(n),
+                rhtn_archive::tx::Seqno {
+                    series: 1,
+                    counter: 0,
+                },
+            );
+            (kh(n), rhtn_archive::locator::signed_locator(&id(n), &loc))
+        })
+        .collect();
     alice
         .with(move |c| {
             for (t, b) in bundle {
                 c.store.records.insert(t, b);
+            }
+            for (k, sl) in introduced {
+                c.store.locators.insert(k, sl);
             }
         })
         .await;

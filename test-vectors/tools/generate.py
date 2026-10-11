@@ -2221,6 +2221,25 @@ goal — but only for objects that have one:
 
 # ================================================================ verifier-selection.md
 
+# the curated bundle, bar 3, over introductions (§2.3, §5.4): alice hands
+# bob the prior counterparties she names, each with the most recent locator
+# she holds for them. Defined here with the helpers below the conversation
+# fixtures reuse.
+def _signed_locator_by(who, loc_bytes):
+    payload = e_map([(e_uint(1), e_bstr(who.keyhash)), (e_uint(2), loc_bytes)])
+    cose = e_arr([e_bstr(sl_protected), b'\xa0', NULL,
+                  e_bstr(who.sign(sig_structure_sign1(sl_protected, AAD_LOCATOR, payload)))])
+    return e_map([(e_uint(1), e_bstr(who.keyhash)), (e_uint(2), loc_bytes), (e_uint(3), cose)])
+def _introduction(who, loc_bytes):
+    return e_arr([e_uint(1), who.key_material, _signed_locator_by(who, loc_bytes)])
+vs_c1 = _introduction(IDS['c1'], locator(bob.keyhash, p_odd, seqno(2, 7)))
+vs_c1_later = _introduction(IDS['c1'], locator(bob.keyhash, p_odd, seqno(2, 9)))
+vs_carol = _introduction(carol, locator(carol.keyhash, b'\x40', seqno(1, 0)))
+vs_bob = _introduction(bob, locator(bob.keyhash, b'\x40', seqno(1, 0)))
+vs_mismatch = e_arr([e_uint(1), alice.key_material, _signed_locator_by(IDS['c1'], locator(bob.keyhash, p_odd, seqno(2, 7)))])
+vs_self = _introduction(alice, locator(alice.keyhash, b'\x40', seqno(1, 0)))
+vs_bundle = [vs_c1, vs_carol, vs_c1_later, vs_bob, vs_mismatch, vs_self]
+
 emit('verifier-selection.md', f"""# Verifier selection — the reasonableness criterion
 
 {PIN}
@@ -2242,52 +2261,41 @@ the formula itself):
 {chr(10).join(f'| {n} | {c} | {min(n // 2, 10, c)} |' for n, c in
               [(0, 0), (1, 1), (2, 1), (3, 2), (7, 5), (20, 1), (25, 12)])}
 
-## Window boundaries (§5.3)
-
-With `started_at = {TS_START}`, the 730-day window is
-`{TS_START} − 63072000 = {TS_START - 63072000} < finalized_at < {TS_START}` —
-**exclusive at both ends: previously completed ceremonies only** (§5.3):
-
-| Prior record `finalized_at` | Counted? |
-|---|---|
-| {TS_START - 63072000} (exactly 730 days) | no — boundary instant is out |
-| {TS_START - 63072000 + 1} | yes |
-| {TS_START - 1} | yes |
-| {TS_START} | no — not before `started_at` |
-
 ## The curated bundle (§5.4) — canonical bar 3
 
-Alice hands bob a bundle at a hypothetical next ceremony,
-`started_at = {TS_EVAL}` (window floor {TS_EVAL - 63072000}, exclusive both
-ends; every record below finalized inside it). **Six entries handed, one a
-duplicate and one non-verifying**:
+Alice hands bob a bundle of introductions (§2.3) at a hypothetical next
+ceremony: for each prior counterparty she names, that party's key material
+with the most recent `SignedLocator` she holds for them. No record of any
+meeting travels, and no window applies (§5.3). **Six entries handed, one a
+later locator for a party already introduced, one non-verifying, one of
+alice herself** (each entry's bytes are in `corpus.json` under
+`P-vs-bundle-1` to `P-vs-bundle-6`):
 
 | # | Handed | Qualifies? |
 |---|---|---|
-| 1 | formation record `{hx(formation_txid)[:16]}…` (alice–carol) | yes — formations count (§5.3) |
-| 2 | ac1 `{hx(ac1_txid)[:16]}…` (alice–carol) | yes |
-| 3 | ac2 `{hx(ac2_txid)[:16]}…` (alice–carol) | yes |
-| 4 | ac1 again, byte-identical | counts **once** — duplicates dedupe by txid (§5.3) |
-| 5 | normal record `{hx(npr_txid)[:16]}…` (alice–bob) | yes — but **bob is the current counterparty**, never a candidate for his own verification (§5.3) |
-| 6 | the formation envelope with any signed-body byte mutated | **not in the pool** — a record that fails its checks contributes nothing; there is no "incomplete", it is simply absent (§5.4) |
+| 1 | c1, locator seqno [2, 7] | yes |
+| 2 | carol, locator seqno [1, 0] | yes |
+| 3 | c1 again, locator seqno [2, 9] | counts **once** — one subject is one claim, and the greater counter in the same series stands (§5.3) |
+| 4 | bob, locator seqno [1, 0] | yes toward *n* — but **bob is the current counterparty**, never a candidate for his own verification (§5.3) |
+| 5 | alice's key material with c1's signed locator | **not in the pool** — the material does not hash to the locator's subject; an introduction failing its checks contributes nothing (§5.3, §5.4) |
+| 6 | alice introducing herself | **not in the pool** — a party is not its own prior counterparty (§5.3) |
 
 The arithmetic, stated so a harness can recompute it:
 
 ```
-n = 4          (distinct qualifying records: 1, 2, 3, 5)
-candidates = 1 (distinct prior counterparties {{carol, bob}} minus the current counterparty bob)
-required = min(floor(4 / 2), 10, 1) = 1
+n = 3          (distinct qualifying subjects: c1, carol, bob)
+candidates = 2 (distinct prior counterparties {{c1, carol, bob}} minus the current counterparty bob)
+required = min(floor(3 / 2), 10, 2) = 1
 ```
 
-**Witness-only does not qualify** (§5.3): the same normal record handed by
-**w1** as subject names w1 only in field 4 — a witnessed ceremony's
-participants met each other, not the witness. For w1 that bundle yields
-`n = 0, candidates = 0, required = 0`.
-
 **Understatement is free and self-defeating** (§5.4): alice handing only
-`[ac1, npr]` yields `n = 2, candidates = 1, required = min(1, 10, 1) = 1` —
-a smaller claim, a thinner record, and both withheld records remain
-individually valid wherever else she presents them.
+`[carol]` yields `n = 1, candidates = 1, required = min(0, 10, 1) = 0` —
+a smaller claim and a thinner record, and the counterparties withheld are
+hers to name at any later ceremony.
+
+**Fishing is one at a time** (§5.1, §7.10.2): where the bundles leave the
+criterion unmet, a `FishingProposal` carries exactly one introduction — the
+corpus's `P-fishing-proposal` is entry 1 above — and the parties alternate.
 
 **The reasonableness reading** (§5.2): an evaluator comparing a finalized
 record's response count against `required` learns whether the ceremony was
@@ -2830,7 +2838,21 @@ conv_parts = sorted([alice, bob], key=lambda i: i.keyhash, reverse=True)
 conv_channels = [e_map([(e_uint(1), e_uint(2)), (e_uint(2), e_uint(0))]),
                  e_map([(e_uint(1), e_uint(3)), (e_uint(2), e_uint(0))])]
 consent_reply = e_arr([e_bstr(npr_q0), consent_over(npr_q0, alice)])
-fishing_proposal = e_arr([pc1_env])
+# an Introduction (§2.3): a prior counterparty's key material with the most
+# recent SignedLocator the holder has for them. alice introduces c1, whose
+# locator c1 signed; the material's hash is the locator's subject
+def signed_locator_by(who, loc_bytes):
+    payload = e_map([(e_uint(1), e_bstr(who.keyhash)), (e_uint(2), loc_bytes)])
+    cose = e_arr([e_bstr(sl_protected), b'\xa0', NULL,
+                  e_bstr(who.sign(sig_structure_sign1(sl_protected, AAD_LOCATOR, payload)))])
+    return e_map([(e_uint(1), e_bstr(who.keyhash)), (e_uint(2), loc_bytes), (e_uint(3), cose)])
+def introduction(who, loc_bytes):
+    return e_arr([e_uint(1), who.key_material, signed_locator_by(who, loc_bytes)])
+sl_c1 = signed_locator_by(IDS['c1'], locator(bob.keyhash, p_odd, seqno(2, 7)))
+intro_c1 = e_arr([e_uint(1), IDS['c1'].key_material, sl_c1])
+sl_bob = signed_locator_by(bob, locator(bob.keyhash, b'\x40', seqno(1, 0)))
+# one candidate per proposal, in turns (§5.1): the proposal is the introduction
+fishing_proposal = intro_c1
 witness_request = e_map([(e_uint(1), e_bstr(npr_precommit)),
                          (e_uint(2), e_arr([e_bstr(i.keyhash) for i in conv_parts])),
                          (e_uint(3), e_uint(TS_C2)),
@@ -2862,7 +2884,7 @@ _e2e_pairs = [
 _conv_pairs = [
     ('VerificationQuery, kind 9 — the normal record\'s first query as the querier sends it to the subject for consent; to the subject alone, never to a witness (§5.6)', npr_query0, 9),
     ('ConsentReply, kind 10 — the subject\'s consent over that query_id', consent_reply, 10),
-    ('FishingProposal, kind 11 — one prior record offered as a bundle augmentation', fishing_proposal, 11),
+    ('FishingProposal, kind 11 — one candidate offered in turn: an introduction to c1', fishing_proposal, 11),
     ('WitnessRequest, kind 12 — the normal record\'s ceremony put to a nominee: its pre-commitment as ceremony-id, the participants in body order, the claimed start, NFC and optical passing', witness_request, 12),
     ('WitnessAnswer, kind 13 — witnessing, with the attestation bits it will set (7: protocol ran, both responsive, latency bound)', witness_answer_yes, 13),
     ('WitnessAnswer, kind 13 — declining; no bits', witness_answer_no, 13),
@@ -3775,13 +3797,14 @@ oc_bob = e_arr([e_uint(1), bob.key_material, e_bstr(pc_b)])
 tconfirm = e_arr([e_uint(1), e_bstr(pc_demo)])
 
 # the intent alice's bearer carries: her echoed contribution, carol nominated
-# from bob's neighbourhood, her one prior record (the alice-c1 envelope; §7.9
-# permits the envelope and the presented forms both, and the envelope is the
-# holder-withholds-nothing case), and the defaults the documents state
+# from bob's neighbourhood, her one introduction (c1, a prior counterparty,
+# with the most recent locator she holds for them; §2.3, §5.4), the
+# defaults the documents state, and her own signed locator
 intent_x = e_arr([e_uint(1), e_bstr(pc_a),
                   e_arr([e_bstr(carol.keyhash)]),
-                  e_arr([pc1_env]),
-                  e_uint(TS_REC), e_uint(2), b'\xf5', e_uint(0)])
+                  e_arr([intro_c1]),
+                  e_uint(TS_REC), e_uint(2), b'\xf5', e_uint(0),
+                  signed_locator])
 
 # the intent bob's bearer carries back, the responder's: his echoed
 # contribution, one nominee from alice's neighbourhood, no prior record (a
@@ -3790,12 +3813,13 @@ intent_x = e_arr([e_uint(1), e_bstr(pc_a),
 intent_r = e_arr([e_uint(1), e_bstr(pc_b),
                   e_arr([e_bstr(W16[0].keyhash)]),
                   e_arr([]),
-                  e_uint(TS_REC), e_uint(3), b'\xf4', e_uint(0)])
+                  e_uint(TS_REC), e_uint(3), b'\xf4', e_uint(0),
+                  sl_bob])
 
 # a bundle past its first carriage: the first continuation, one entry,
 # anchored to the ceremony-id both screens fixed (§14.3.2; the bundle has no
 # ceiling, §5.4, and the carriage has)
-cont_x = e_arr([e_uint(1), e_bstr(pc_demo), e_uint(1), e_arr([pc1_env])])
+cont_x = e_arr([e_uint(1), e_bstr(pc_demo), e_uint(1), e_arr([intro_c1])])
 
 # the outcomes that crossed are the channels the record's own proximity
 # disclosure carries, byte-for-byte (NFC pass, optical pass)
@@ -3884,8 +3908,9 @@ computed; a receiver checks it equals its own)** ({len(tconfirm)} bytes):
 ## The bearer-carried intent (§14.3.2)
 
 **IntentExchange — alice's, echoing her optical contribution; carol
-nominated, one prior record carried as its envelope, retention 2,
-initiator true, no continuations** ({len(intent_x)} bytes):
+nominated, one introduction carried (c1, with the most recent locator
+she holds for them), retention 2, initiator true, no continuations, and
+her own signed locator last** ({len(intent_x)} bytes):
 
 ```
 {hexblock(intent_x)}
@@ -3893,7 +3918,8 @@ initiator true, no continuations** ({len(intent_x)} bytes):
 
 **IntentExchange — bob's, the responder's: echoing his optical
 contribution, one nominee from alice's neighbourhood, an empty bundle,
-retention 3, initiator false, no continuations** ({len(intent_r)} bytes).
+retention 3, initiator false, no continuations, his own signed locator**
+({len(intent_r)} bytes).
 The two flags differ; a device refuses an intent carrying its own value:
 
 ```
@@ -3901,7 +3927,7 @@ The two flags differ; a device refuses an intent carrying its own value:
 ```
 
 **BundleContinuation — the first continuation of a larger bundle, one
-entry, anchored to the ceremony-id** ({len(cont_x)} bytes):
+introduction, anchored to the ceremony-id** ({len(cont_x)} bytes):
 
 ```
 {hexblock(cont_x)}
@@ -4034,7 +4060,12 @@ for fid, by, kind, note in [
     ('P-optical-contribution-alice', oc_alice, 'OpticalContribution', "alice's first code"),
     ('P-optical-contribution-bob', oc_bob, 'OpticalContribution', "bob's"),
     ('P-transcript-confirm', tconfirm, 'TranscriptConfirm', "the ceremony-id both derive; records.md's known answer"),
-    ('P-intent-exchange', intent_x, 'IntentExchange', 'echoes the optical contribution; bundle entry is the §7.9 envelope form'),
+    ('P-introduction', intro_c1, 'Introduction', "a prior counterparty's key material with the most recent SignedLocator held for them (§2.3)"),
+    ('P-vs-bundle-1', vs_c1, 'Introduction', 'verifier-selection.md bar 3, entry 1: c1 at seqno [2, 7]'),
+    ('P-vs-bundle-2', vs_carol, 'Introduction', 'bar 3, entry 2: carol'),
+    ('P-vs-bundle-3', vs_c1_later, 'Introduction', 'bar 3, entry 3: c1 again at seqno [2, 9], counted once'),
+    ('P-vs-bundle-4', vs_bob, 'Introduction', 'bar 3, entry 4: bob, the current counterparty, counted and never a candidate'),
+    ('P-intent-exchange', intent_x, 'IntentExchange', 'echoes the optical contribution; one introduction in the bundle; the sender\'s own signed locator last'),
     ('P-intent-exchange-responder', intent_r, 'IntentExchange', "the responder's: echoes bob's contribution, an empty bundle, initiator false; the flags of the pair differ"),
     ('P-bundle-continuation', cont_x, 'BundleContinuation', 'the bundle past its first carriage, anchored and numbered from one'),
     ('P-proximity-outcomes', prox_x, 'ProximityOutcomes', "the record's own channels, anchored"),
@@ -4099,7 +4130,7 @@ reg('N-prekey-handover-version-2', 'bytes',
 # the ceremony conversation's structures (s7.10.2), kinds 9-18 in messages.md
 for fid, by, kind, note in [
     ('P-consent-reply', consent_reply, 'ConsentReply', "the subject's consent over the normal record's first query_id"),
-    ('P-fishing-proposal', fishing_proposal, 'FishingProposal', 'one ArchiveEntry, the envelope form'),
+    ('P-fishing-proposal', fishing_proposal, 'FishingProposal', 'one introduction: one candidate per proposal, in turns (§5.1)'),
     ('P-witness-request', witness_request, 'WitnessRequest', "the normal record's ceremony; NFC and optical passing"),
     ('P-witness-answer-witnessing', witness_answer_yes, 'WitnessAnswer', 'bits 7: protocol ran, both responsive, latency bound'),
     ('P-witness-answer-declining', witness_answer_no, 'WitnessAnswer', 'declining carries no bits'),
@@ -4155,14 +4186,33 @@ reg('N-intent-nominees-65', 'bytes',
     REJ('IntentExchange', 'schema', 'nominees bound at 64'),
     e_arr([e_uint(1), e_bstr(pc_a),
            e_arr([e_bstr(H(b'rhtn-test-vectors:nominee:' + bytes([i]))) for i in range(65)]),
-           e_arr([]), e_uint(TS_REC), e_uint(2), b'\xf5', e_uint(0)]))
+           e_arr([]), e_uint(TS_REC), e_uint(2), b'\xf5', e_uint(0), signed_locator]))
 reg('N-intent-continuations-missing', 'bytes',
     REJ('IntentExchange', 'schema', 'an intent says how many continuations follow, even none'),
+    e_arr([e_uint(1), e_bstr(pc_a), e_arr([e_bstr(carol.keyhash)]), e_arr([intro_c1]),
+           e_uint(TS_REC), e_uint(2), b'\xf5', signed_locator]))
+reg('N-intent-locator-missing', 'bytes',
+    REJ('IntentExchange', 'schema', "an intent carries the sender's own signed locator"),
+    e_arr([e_uint(1), e_bstr(pc_a), e_arr([e_bstr(carol.keyhash)]), e_arr([intro_c1]),
+           e_uint(TS_REC), e_uint(2), b'\xf5', e_uint(0)]))
+reg('N-intent-bundle-record', 'bytes',
+    REJ('IntentExchange', 'schema', 'a bundle entry is an introduction, not a record'),
     e_arr([e_uint(1), e_bstr(pc_a), e_arr([e_bstr(carol.keyhash)]), e_arr([pc1_env]),
-           e_uint(TS_REC), e_uint(2), b'\xf5']))
+           e_uint(TS_REC), e_uint(2), b'\xf5', e_uint(0), signed_locator]))
+reg('N-introduction-hash-mismatch', 'bytes',
+    REJ('Introduction', 'schema', "an introduction's key material hashes to its locator's subject"),
+    e_arr([e_uint(1), alice.key_material, sl_c1]))
+reg('P-vs-bundle-5', 'bytes',
+    REJ('Introduction', 'schema', "bar 3, entry 5: alice's material with c1's locator, not in the pool"),
+    vs_mismatch)
+reg('P-vs-bundle-6', 'bytes', ACC('Introduction', 'bar 3, entry 6: alice introducing herself — well formed, and not a prior counterparty of her own'),
+    vs_self)
+reg('N-introduction-bare-locator', 'bytes',
+    REJ('Introduction', 'schema', 'a bare locator presented alone is rejected (§2.3)'),
+    e_arr([e_uint(1), IDS['c1'].key_material, locator(bob.keyhash, p_odd, seqno(2, 7))]))
 reg('N-continuation-index-0', 'bytes',
     REJ('BundleContinuation', 'schema', "a continuation's index starts at one"),
-    e_arr([e_uint(1), e_bstr(pc_demo), e_uint(0), e_arr([pc1_env])]))
+    e_arr([e_uint(1), e_bstr(pc_demo), e_uint(0), e_arr([intro_c1])]))
 reg('N-continuation-empty', 'bytes',
     REJ('BundleContinuation', 'schema', 'a continuation carries at least one entry'),
     e_arr([e_uint(1), e_bstr(pc_demo), e_uint(1), e_arr([])]))

@@ -590,6 +590,37 @@ fn what_the_record_will_contain_is_disclosed_at_capture_and_to_nobody_else() {
     );
 }
 
+/// **A party signs once.** A nominee both participants name answers both
+/// requests and is handed to `propose` twice; the record has one place for
+/// it, attributed to the participant that sorts first so the body is the
+/// same whichever side proposes. Before this the envelope carried its
+/// entry twice and failed the codec's canonical-order check — the shape
+/// the kernel now produces by itself whenever two phones that have met
+/// the same people meet (`begin` nominates from the parties met).
+#[test]
+fn a_witness_nominated_by_both_participants_signs_once() {
+    let mut s = setup(&EVERYONE, &[ChannelKind::Nfc]);
+    let t = s
+        .run("alice", "bob", &["w1"], &["w1"])
+        .expect("one witness, named twice, is one signer");
+    let rec = rhtn_archive::record::Record::parse(&s.client("alice").store.records[&t]).unwrap();
+    assert_eq!(rec.signers.len(), 3, "alice, bob and w1 once");
+    let (p, _) = rhtn_client::conversation::proposal_from_body(&rec.bytes[rec.body.clone()])
+        .expect("the body reads back");
+    assert_eq!(p.witnesses.len(), 1);
+    assert_eq!(p.witnesses[0].keyhash, kh("w1"));
+    assert_eq!(
+        p.witnesses[0].nominated_by,
+        participants(kh("alice"), kh("bob"))[0],
+        "attributed to the participant that sorts first"
+    );
+    // and the record is the same one on every signer
+    let alices = s.client("alice").store.records[&t].clone();
+    for n in ["bob", "w1"] {
+        assert_eq!(s.client(n).store.records[&t], alices);
+    }
+}
+
 #[test]
 fn a_witness_far_from_the_claimed_start_declines_and_the_others_carry_the_record() {
     let mut s = setup_with(&EVERYONE, &[ChannelKind::Nfc], &[("w1", 3_600_000)]);

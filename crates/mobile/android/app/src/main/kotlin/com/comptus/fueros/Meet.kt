@@ -925,8 +925,20 @@ class Meet(
                 if (fresh) note("not yet proposed: waiting on $on.")
             }
             refused == "NoWitness" -> {
+                // **the body waits on a witness only where one can still
+                // arrive.** Nobody nominated, or every nominee declined, is
+                // a ceremony that cannot finalize (`wire-format.md` §3.2:
+                // past genesis a record needs a witness), and asking the
+                // kernel again every turn would not change that.
+                val nominees = witnesses()
+                when {
+                    nominees.isEmpty() ->
+                        return stop("neither side nominated a witness, and a meeting past genesis needs one")
+                    nominees.all { it.answer == Answer.DECLINED } ->
+                        return stop("every nominee declined to attest, and a meeting past genesis needs a witness")
+                }
                 val fresh = synchronized(lock) { (!noWitness).also { noWitness = true; changed() } }
-                if (fresh) note("no nominee has agreed to attest; the body waits on one.")
+                if (fresh) note("no nominee has agreed to attest yet; the body waits on one.")
             }
             else -> stop("the body could not be proposed: $refused")
         }

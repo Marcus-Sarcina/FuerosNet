@@ -122,7 +122,7 @@ fn the_intent_and_its_continuation_encode_to_the_canonical_bytes() {
     let fx = fixture("P-intent-exchange");
     let read = IntentExchange::decode(&fx).expect("the canonical intent decodes");
     assert_eq!(read.nominees.len(), 1, "carol nominated");
-    assert_eq!(read.bundle.len(), 1, "one prior record carried");
+    assert_eq!(read.bundle.len(), 1, "one introduction carried");
     assert_eq!(read.retention_years, 2);
     assert!(read.initiator);
     assert_eq!(read.continuations, 0, "it fits in one carriage");
@@ -294,6 +294,7 @@ fn a_sealed_carriage_opens_only_under_its_own_key_and_ceremony() {
         retention_years: 2,
         initiator: true,
         continuations: 0,
+        locator: fixture("P-signedlocator"),
     }
     .encode();
 

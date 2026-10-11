@@ -1408,10 +1408,11 @@ end node, starting from its own local records of people it has met.
    retention period** (§7.5.1) and are then deleted; nothing biometric enters the
    record at any point.
 6. **Verifier queries**, run automatically by the client (§7.3). Each party
-   hands the other a bundle of its prior presence records (§8.1.2,
-   `wire-format.md` §5.4), and each party's client sends a fuzzed profile of
-   the person in front of it to the sample of prior counterparties it selected
-   from that bundle.
+   hands the other a bundle of introductions to its prior counterparties —
+   each one's key with the most recent locator held for them (§8.1.2,
+   `wire-format.md` §5.4) — and each party's client sends a fuzzed profile of
+   the person in front of it to the sample of those counterparties it
+   selected from that bundle.
    **The subject sends each selected verifier the capture key** for that verifier's
    stored images, directly and in parallel, so the verifier can decrypt what it
    holds (§7.5.2). The queries ask whether it matches what they hold.
@@ -1711,8 +1712,8 @@ turns on querying counterparties who met a *different* confederate than the one
 standing here, and with selection by recognition (§8.1.2), which
 counterparties get queried is the **selector's** choice from its own
 acquaintance, not the subject's to steer and not a random draw whose odds can
-be quoted. The confederates can curate the bundle toward records involving
-today's human, but they cannot curate the selector's acquaintances into it:
+be quoted. The confederates can curate the bundle toward counterparties who have
+met today's human, but they cannot curate the selector's acquaintances into it:
 a bundle emptied of everyone the selector knows is exactly the pool of
 strangers §16.1 prices at nothing.
 
@@ -2094,7 +2095,7 @@ ageing, and false rejection is the more common failure (§7.4.4). Two years is a
 (§21).
 
 **A retention year is 365 days**: 365 × 86,400 seconds, the same fixed-day
-arithmetic as verifier selection's 730-day window, and for the same reason:
+arithmetic as the 730-day pruning window (§13), and for the same reason:
 calendar arithmetic differs across implementations and two clients would release
 keys at different instants near expiry.
 
@@ -2637,9 +2638,9 @@ PresenceRecord {
                                                  # into looking like a normal one
   schema_version    : uint16
   txid              : H(canonical body)          # content-addressed
-  started_at        : timestamp                  # body — monotonicity and the
-                                                 # 730-day window need it
-  finalized_at      : timestamp                  # body — window checks need it
+  started_at        : timestamp                  # body — monotonicity needs it
+  finalized_at      : timestamp                  # body — retention and pruning
+                                                 # (§13) read it
   disclosure_root   : bstr[32]                   # §8.1.1
 
   # --- participants (exactly 2) ---
@@ -2759,8 +2760,8 @@ finalises with whatever responses arrived, an evaluator reads the count against
 the criterion, and late replies reach the participants privately, never
 retro-inserted (`wire-format.md` §5.5). Present encoding:
 
-> For a subject with *n* recorded presence transactions in the preceding 730 days,
-> seek **min(floor(n/2), 10, |candidates|)** verifiers,
+> For a subject naming *n* prior counterparties in its bundle, seek
+> **min(floor(n/2), 10, |candidates|)** verifiers,
 > where `|candidates|` is the count of **distinct** prior counterparties. The third
 > term is necessary because *n* counts transactions while candidates are people:
 > twenty meetings with one person would otherwise demand ten verifiers from a pool
@@ -2883,16 +2884,22 @@ same counterparty. Selection now serves exactly that property:
   horizons of users it has met, where foreign topology is visible at all. Two
   edges over the graph of meetings and horizon-mates is the halting
   condition.
-- **Where the bundles surface no common acquaintance, the parties go
-  fishing**: either proposes further candidates from its own history for the
-  other to test against its own knowledge — a conversation on the end-to-end
-  path between the two devices, seen by the witnesses and recorded nowhere. **Each proposal is a bundle augmentation**
-  [author, 2026-09-03] — the same disclosure decision, made through the same
-  curation the bundle got, and it stops at a locally adjustable count of
-  responsive candidates. After the bundle, acceptance is the rule: every
-  mutually reachable candidate is taken if available, quality filtering ended
-  with the initial bundle, and a counterparty declining available candidates
-  to extract more names is visible to the party being fished.
+- **Where the bundles leave the criterion unmet, the parties go fishing,
+  one candidate at a time, in turns** [author, 2026-10-11]: either proposes
+  one further prior counterparty from its own history, as an introduction,
+  for the other to test against its own knowledge, and the other answers
+  with one of its own — a conversation on the end-to-end path between the
+  two devices, seen by the witnesses and recorded nowhere. The bundle is
+  meant to be enough on its own: a handful from each side, of which two
+  acceptable and available from each would do. One at a time is what keeps
+  a party from handing over its whole meeting history in the bundle, or
+  having it drawn out in successive bundles: each turn is one disclosure
+  decision, and a party that has exposed as many counterparties as it
+  cares to accepts the next proposal and moves on. After the bundle,
+  acceptance is the rule: every mutually reachable candidate is taken if
+  available, quality filtering ended with the initial bundle, and a
+  counterparty declining available candidates to extract more names is
+  visible to the party being fished.
 - **The remainder is discretionary fill**, and marked as such: each response
   carries the selector's claim of its basis (`wire-format.md` §5.5), because
   a later evaluator cannot reconstruct the selector's acquaintance graph and
@@ -3444,9 +3451,10 @@ tells an evaluator nothing, which is why fabricating one gains nothing.
 
 **Why the archive must be tamper-evident, and which presentation it defends.**
 Two presentations exist and they are different animals [author, 2026-09-01]. A
-**ceremony bundle** is deliberately curated: the subject cherry-picks presence
-records from any series, no chaining, no completeness, and what defends the
-selector there is recognition, not the chain (§8.1.2, `wire-format.md` §5.4).
+**ceremony bundle** is deliberately curated: the subject names which prior
+counterparties it chooses, as introductions carrying no record at all, no
+chaining, no completeness, and what defends the selector there is
+recognition, not the chain (§8.1.2, `wire-format.md` §5.4).
 An **archive presentation for standing** — the history a prospective patron
 walks at adoption (§16.7) — is the opposite claim: *this range is unbroken*,
 and that claim is exactly what the chain makes checkable. Trimming a standing
@@ -3526,14 +3534,13 @@ met — does not depend on the chain's continuity. Pruning the chain therefore d
 license discarding presence records, sealed captures or capture seeds, and
 `light-client-requirements.md` §2 requires they be kept.
 
-**Except inside the 730-day window, where they are still required.** Only
-in-window records qualify for a ceremony bundle (`wire-format.md` §5.4), so what a
-subject holds inside the window is what it can offer a counterparty to select
-verifiers from, and its own recovery substrate (§9). **Pruning is therefore
-permitted only beyond the window**, which aligns the boundary with qualification
-and costs nothing anyone wants: beyond it, a record can no longer appear in any
-bundle, so the storage saving and the elision of early history concern records
-the candidate set has already aged out.
+**Except inside the 730-day window, where they are still required.** What a
+subject holds inside the window is its own recovery substrate (§9), and the
+evidence behind every counterparty it would name to a verifier-seeking
+counterparty (`wire-format.md` §5.4). **Pruning is therefore permitted only
+beyond the window**, which costs nothing anyone wants: the storage saving
+and the elision of early history concern records whose counterparties have
+long had fresher locators than any record carries.
 
 **One chain per key, spanning every binding.** A subject's transactions in every
 patron relationship advance the same archive — each signer carries one chain, and
@@ -7680,7 +7687,7 @@ and a citation to a missing number resolves there.
 | P33 | **Multi-device replication semantics are unspecified** (§23.3) | Undetermined | **Answered at §23.3** [author, 2026-09-16]: seeds sit on the ceremony device alone and every other device carries a delegated transport credential; deletion state follows the seed, §7.5.2 making a capture decryptable only when its subject releases a key derived from one; archives, captures and caches go where the storage is, under §13.7.1's envelope. Retention and deletion commitments can be assessed now, being a property of one device rather than of an unspecified set. Severity is left as filed rather than restated |
 | **P35** | **An ancestor accumulates a key→position index for its whole subtree** (§15.2.1), so a subnet's root can look up any member without an introduction | Medium | **Accepted, with the boundary stated.** The disclosure content is unchanged — §12.1 already has a locator disclosing patron, depth and subtree to anyone you introduce yourself to, and what changes is that an ancestor stops needing the introduction. **Joining a subnet is a choice to be structurally visible to it**; the property defended is that this never crosses a subnet boundary, which §3.1.1 guarantees by construction. **The memo carries no address**, and that depends on peering being excluded from rootward travel (§15.2) |
 | **P36** | **`seqno` gaps disclose out-of-subnet activity** (`wire-format.md` §2.3) | Low–Medium, **largely answered** by the `{series, counter}` split | The threat was that a node sharing **one** counter across two bindings advances it in both, so an observer in one subnet sees jumps it cannot account for and learns the node is active elsewhere. **Distinct from P3**, which needs an observer present in both subnets; this works from inside one. **The `{series, counter}` split answers it** by giving each patron relationship its own series and so its own counter (`wire-format.md` §2.3, `wire-format.md` §4.6): a per-binding counter, which was previously rejected as breaking `seqno`'s double duty as freshness test and stale-cache detector — until the series tag made within-series the only comparison and cross-series unrankable, which is what removes the breakage. **Residuals**: a node that has not yet reissued since binding elsewhere still shares a line, and the *number* of reissues it has taken is itself visible in the chain. See C19 for what sharpens the pre-split case |
-| **P37** | **A ceremony counterparty is handed a bundle of the subject's presence records, and credibility pushes that bundle wide** (§8.1.2, §19.2) | Medium | Selecting the other's verifiers needs a candidate set, and the subject supplies it as records rather than names, since `wire-format.md` §5.4 counts only what verifies. **The disclosure is elective, not compelled** — nobody walks another party's archive, but the incentive runs one way: a bundle holding nobody the selector recognises is worth nothing to them (§16.1), so being believed means showing counterparties in common, and each record shows its witnesses, verifiers and time. **Distinct from P19**, which is the *adoption* disclosure a prospective patron drives by fetching and walking; this one the subject hands over. **Distinct from P2/C2**, which price the verifier set carried *in the record* rather than the pool it was drawn from. Bounded by what the subject retains (§10.2) and by what they elect to include — at any point: a fishing proposal is a bundle augmentation under the same curation (§8.1.2) [2026-09-03], and **the floor is a real choice**, since what a ceremony gives its participants is a face they will know again (§7), which no bundle affects. Disclosing narrowly costs third-party weight and the counterparty's continuity assurance, not the relationship |
+| **P37** | **A ceremony counterparty is handed a bundle of the subject's prior counterparties — who they have met, and where each can be reached — and credibility pushes that bundle wide** (§8.1.2, §19.2) | Medium | Selecting the other's verifiers needs a candidate set, and the subject supplies it as introductions (`wire-format.md` §2.3, §5.4): a party's key and the most recent locator held for them, nothing of the meeting — no record, no witnesses, no verifiers, no time. **The disclosure is elective, not compelled** — nobody walks another party's archive, but the incentive runs one way: a bundle holding nobody the selector recognises is worth nothing to them (§16.1), so being believed means showing counterparties in common. **Bounded by design to a handful** [author, 2026-10-11]: the bundle is meant to suffice at a few names, and what it leaves unmet is fished one candidate at a time, in turns, so a party is never asked for its history in the bundle and cannot have it drawn out in successive ones — it accepts the next proposal and stops. **Distinct from P19**, which is the *adoption* disclosure a prospective patron drives by fetching and walking; this one the subject hands over. **Distinct from P2/C2**, which price the verifier set carried *in the record* rather than the pool it was drawn from. **The floor is a real choice**, since what a ceremony gives its participants is a face they will know again (§7), which no bundle affects. Disclosing narrowly costs third-party weight and the counterparty's continuity assurance, not the relationship |
 | **P38** | **A filtered catalog query reveals what kind of service the asker seeks** (`wire-format.md` §6.4), to the answering node, whether or not any connection follows — P26's shape at the catalog: interest disclosed before contact | Low–Medium | **The reference client already blunts it** (`light-client-requirements.md` §8): sweep the horizon, cache, refresh on schedule — a browsing click is answered from cache, so no per-interaction query exists to observe. **Residual**: a targeted type-filtered query from any client remains a dated, authenticated statement of interest in a service class — clinical, employment, family, and repetition makes it a history |
 | **P39** | **A prekey fetch reveals how many devices a subject has** (`wire-format.md` §7.8): a reply carries one bundle per device, where it carried one | Low | **A consequence of a session being with a device** (§23.3, §14.2.4), stated rather than hidden. The audience is the horizon that could open a session with the subject at all, the count is held near three by construction (§23.3), and what it reveals is that a person has a phone and a desktop, which the resource types the desktop exists for reveal anyway. **Residual**: the count changes when a device is added or lost, and a party sweeping on schedule sees when |
 | **P40** | **Offering traversal candidates at a ceremony discloses an IP to the counterparty, and not within the horizon bound P17 rests on** (§12.6.3) | Low–Medium | New with the 2026-09-25 ruling that a ceremony in person overrides the gate. **The exposure is chosen rather than bounded**, which inverts P17: the counterparty is a party the user decided to meet and §14.1's interfaces put them in the room, but no horizon limits the set, and a first ceremony may be with somebody the user has no standing with at all. Residual: §7.6 makes an IP a coarse location signal, so a counterparty met once holds an ongoing one for as long as the address lasts and nothing obliges them to discard it. **The location it yields is not new** — the counterparty was in the room — so C1 is untouched and C24 records why; what the address can add is the carrier behind it. **The disclosure is the price of the exit right** §12.6.3 states — a route no patron carried is a route the counterparty knows — and it is refusable: the ceremony completes without candidates, and `light-client-requirements.md` §4 requires the client to offer it as the disclosure it is |

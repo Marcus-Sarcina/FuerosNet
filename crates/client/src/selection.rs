@@ -1,112 +1,86 @@
 //! Verifier selection by recognition (`wire-format.md` §5; design §8.1.2):
-//! the bundle a subject hands over as its own claim, qualification and the
-//! window (§5.3), the reasonableness criterion (§5.2), and the selector's
-//! tiers over its own knowledge (§5.1), computed locally and owed to
-//! nobody.
+//! the bundle a subject hands over as its own claim — introductions to the
+//! prior counterparties it names (§2.3, §5.4) — its qualification (§5.3),
+//! the reasonableness criterion (§5.2), and the selector's tiers over its
+//! own knowledge (§5.1), computed locally and owed to nobody.
 
-use crate::{Keyhash, Txid};
-use rhtn_archive::record::{Record, SigStatus};
-use rhtn_archive::tx::TYPE_PRESENCE;
-use rhtn_crypto::verify::Lookup;
+use crate::Keyhash;
+use rhtn_archive::locator::Introduction;
 use std::collections::{BTreeMap, BTreeSet};
 
-/// 730 days of 86,400 seconds (`wire-format.md` §5.3).
-pub const WINDOW_SECONDS: u64 = 730 * 86_400;
-
-/// One handed record that qualifies: its txid, the subject's counterparty
-/// in it, and when it finalized.
+/// One handed introduction that qualifies: the subject's prior
+/// counterparty, verified, with the material to pin and the locator to
+/// reach it by.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Qualified {
-    /// The record.
-    pub txid: Txid,
-    /// The subject's counterparty in it.
-    pub counterparty: Keyhash,
-    /// When it finalized.
-    pub finalized_at: u64,
+pub struct Introduced {
+    /// The party introduced.
+    pub subject: Keyhash,
+    /// The introduction, as verified.
+    pub introduction: Introduction,
 }
 
-/// What a bundle yields for one subject: `n`, the distinct qualifying
-/// records counted once by txid; the candidates, distinct prior
-/// counterparties less the current one; and the records themselves.
-/// Records the selector could not verify for want of a key are listed
-/// apart, unverifiable rather than invalid (`light-client-requirements.md`
-/// §1.4).
+/// What a bundle yields for one subject: `n`, the qualifying introductions
+/// counted once by subject; the candidates, the introduced parties less
+/// the current counterparty; the introductions themselves; and how many
+/// entries did not qualify, which contribute nothing (§5.3, §5.4).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Pool {
-    /// The distinct qualifying records, counted once by txid.
+    /// The qualifying introductions, counted once by subject.
     pub n: usize,
     /// The distinct prior counterparties, less the current one.
     pub candidates: BTreeSet<Keyhash>,
-    /// The qualifying records themselves.
-    pub records: Vec<Qualified>,
-    /// `(record, signer)` for each record a key was wanting for, which is
-    /// unverifiable rather than invalid.
-    pub unverifiable: Vec<(Txid, Keyhash)>,
+    /// The qualifying introductions, one per subject.
+    pub introduced: Vec<Introduced>,
+    /// Entries that did not qualify.
+    pub refused: usize,
 }
 
-/// Whether `finalized_at` lies inside the window a ceremony starting at
-/// `started_at` counts: exclusive at both ends, the lower bound saturating
-/// at zero (§5.3).
-pub fn in_window(finalized_at: u64, started_at: u64) -> bool {
-    let floor = started_at.saturating_sub(WINDOW_SECONDS);
-    floor < finalized_at && finalized_at < started_at
-}
-
-/// Read a bundle as the selector `me` does with the keys it holds
-/// (§5.3, §5.4): each record verified alone, a presence record naming
-/// `subject` as a participant, finalized inside the window; counted once
-/// by txid; the current `counterparty` never a candidate for their own
-/// verification.  A record that fails contributes nothing.
-pub fn pool<L: Lookup + ?Sized>(
-    ids: &L,
-    bundle: &[Vec<u8>],
-    subject: &Keyhash,
-    counterparty: &Keyhash,
-    started_at: u64,
-) -> Pool {
+/// Read a bundle as the selector does (§5.3, §5.4): each introduction
+/// verified alone — its material naming an identity, its locator's subject
+/// that identity, its signature good under that material; an introduction
+/// of `subject` itself not qualifying; counted once by subject, the greater
+/// counter in the same series standing; the current `counterparty` never a
+/// candidate for their own verification, though counted toward *n*.
+/// Nothing is looked up: the introduction carries what verifies it.
+pub fn pool(bundle: &[Vec<u8>], subject: &Keyhash, counterparty: &Keyhash) -> Pool {
     let mut out = Pool::default();
-    let mut seen: BTreeMap<Txid, ()> = BTreeMap::new();
+    let mut held: BTreeMap<Keyhash, Introduction> = BTreeMap::new();
     for bytes in bundle {
-        let Ok(rec) = Record::parse(bytes) else {
+        let Ok(intro) = Introduction::parse(bytes) else {
+            out.refused += 1;
             continue;
         };
-        if rec.tx_type != TYPE_PRESENCE || seen.contains_key(&rec.txid) {
+        let who = intro.identity.keyhash;
+        if who == *subject {
+            out.refused += 1;
             continue;
         }
-        let parts = rec.participants();
-        if !parts.contains(subject) || parts.len() != 2 {
-            continue;
-        }
-        let other = if parts[0] == *subject {
-            parts[1]
-        } else {
-            parts[0]
-        };
-        if !in_window(rec.effective, started_at) {
-            continue;
-        }
-        match rec.check_signatures(ids) {
-            SigStatus::Verified => {}
-            SigStatus::Unverifiable { missing } => {
-                if !out.unverifiable.iter().any(|(t, _)| *t == rec.txid) {
-                    out.unverifiable.push((rec.txid, missing));
-                }
-                continue;
+        match held.get(&who) {
+            Some(have) if !supersedes(&intro, have) => {}
+            _ => {
+                held.insert(who, intro);
             }
-            SigStatus::Invalid(_) => continue,
         }
-        seen.insert(rec.txid, ());
+    }
+    for (who, intro) in held {
         out.n += 1;
-        if other != *counterparty {
-            out.candidates.insert(other);
+        if who != *counterparty {
+            out.candidates.insert(who);
         }
-        out.records.push(Qualified {
-            txid: rec.txid,
-            counterparty: other,
-            finalized_at: rec.effective,
+        out.introduced.push(Introduced {
+            subject: who,
+            introduction: intro,
         });
     }
     out
+}
+
+/// Whether `new` replaces `have` as the locator held for one subject
+/// (`wire-format.md` §2.3): the same series with a greater counter does;
+/// series do not rank against each other, so a different series does not.
+pub fn supersedes(new: &Introduction, have: &Introduction) -> bool {
+    let (a, b) = (&new.locator.locator.seqno, &have.locator.locator.seqno);
+    a.series == b.series && a.counter > b.counter
 }
 
 /// The reasonableness criterion (§5.2): `min(floor(n / 2), 10, |candidates|)`.

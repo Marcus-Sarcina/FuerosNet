@@ -306,6 +306,11 @@ pub struct ClientStore {
     /// The disclosure sets of this client's own records, which are
     /// ordinary record state (`wire-format.md` §4.5.1.2).
     pub disclosures: BTreeMap<Txid, DisclosureSet>,
+    /// The most recent `SignedLocator` held for each party this client
+    /// has met, by subject: what its bundle introduces them by
+    /// (`wire-format.md` §5.4), replaced by a later one of the same series
+    /// or by the subject's own next intent.
+    pub locators: BTreeMap<Keyhash, Vec<u8>>,
 }
 
 impl ClientStore {
@@ -395,6 +400,10 @@ impl ClientStore {
                 .iter()
                 .map(|(t, d)| (*t, encode_disclosures(d))),
         )?;
+        rewrite(
+            &dir.join("locators"),
+            self.locators.iter().map(|(k, b)| (*k, b.clone())),
+        )?;
         Ok(())
     }
 
@@ -404,7 +413,7 @@ impl ClientStore {
     pub fn encode(&self) -> Vec<u8> {
         use rhtn_codec::encode::*;
         let mut out = Vec::new();
-        emit_array_head(&mut out, 6);
+        emit_array_head(&mut out, 7);
         keyed(&mut out, self.records.iter().map(|(t, b)| (*t, b.clone())));
         keyed(
             &mut out,
@@ -430,6 +439,7 @@ impl ClientStore {
                 .iter()
                 .map(|(t, d)| (*t, encode_disclosures(d))),
         );
+        keyed(&mut out, self.locators.iter().map(|(k, b)| (*k, b.clone())));
         out
     }
 
@@ -441,7 +451,7 @@ impl ClientStore {
         let rhtn_codec::cbor::Item::Array(f) = &item else {
             return None;
         };
-        if f.len() != 6 {
+        if f.len() != 7 {
             return None;
         }
         let m = |i: usize| unkeyed(b, &f[i]);
@@ -463,6 +473,9 @@ impl ClientStore {
         }
         for (t, v) in m(5)? {
             st.disclosures.insert(t, decode_disclosures(&v)?);
+        }
+        for (k, v) in m(6)? {
+            st.locators.insert(k, v);
         }
         Some(st)
     }
@@ -500,6 +513,9 @@ impl ClientStore {
             if let Some(d) = decode_disclosures(&b) {
                 st.disclosures.insert(t, d);
             }
+        }
+        for (k, b) in read_dir_of(&dir.join("locators"))? {
+            st.locators.insert(k, b);
         }
         Ok(st)
     }

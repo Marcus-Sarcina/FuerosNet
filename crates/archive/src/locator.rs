@@ -49,6 +49,71 @@ impl SignedLocator {
     }
 }
 
+/// An `Introduction` (`wire-format.md` §2.3): a third party's locator handed
+/// with its key, as a bundle carries one (§5.4) and a fishing proposal is
+/// one (§7.10.2).  Parsed, the material names an identity, the locator's
+/// subject is that identity's hash, and the signature verifies under it;
+/// nothing else about the subject is said.
+#[derive(Clone)]
+pub struct Introduction {
+    /// The subject, from the carried material.
+    pub identity: rhtn_crypto::Identity,
+    /// The material as carried, for handing onward.
+    pub material: Vec<u8>,
+    /// The locator, verified under the material.
+    pub locator: SignedLocator,
+}
+
+impl PartialEq for Introduction {
+    /// Two introductions are the same when their bytes are: the identity
+    /// is a function of the material.
+    fn eq(&self, other: &Self) -> bool {
+        self.material == other.material && self.locator == other.locator
+    }
+}
+impl Eq for Introduction {}
+
+impl std::fmt::Debug for Introduction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Introduction")
+            .field("subject", &self.identity.keyhash)
+            .field("locator", &self.locator.locator)
+            .finish()
+    }
+}
+
+impl Introduction {
+    /// Parse an introduction and verify it: the codec's shape check binds
+    /// the material to the locator's subject, and the locator's signature
+    /// is checked under that material and nothing else.
+    pub fn parse(b: &[u8]) -> Result<Self, String> {
+        let item = parse_all(b).map_err(|e| e.0)?;
+        schema::check_kind(b, "Introduction", &item).map_err(|e| e.0)?;
+        let parts = array_item_ranges(b, 0).ok_or("not an array")?;
+        let material = b[parts[1].clone()].to_vec();
+        let identity = rhtn_crypto::Identity::from_key_material(&material)
+            .ok_or("the key material does not name an identity")?;
+        let locator = SignedLocator::parse(&b[parts[2].clone()])?;
+        locator.verify(std::slice::from_ref(&identity))?;
+        Ok(Introduction {
+            identity,
+            material,
+            locator,
+        })
+    }
+}
+
+/// Compose an `Introduction` from a subject's key material and a
+/// `SignedLocator` of theirs, as a holder hands it on.
+pub fn introduction(material: &[u8], signed_locator: &[u8]) -> Vec<u8> {
+    let mut out = Vec::new();
+    emit_array_head(&mut out, 3);
+    emit_uint(&mut out, 1);
+    out.extend_from_slice(material);
+    out.extend_from_slice(signed_locator);
+    out
+}
+
 /// Build a `SignedLocator` for `identity`'s own position.
 pub fn signed_locator(identity: &rhtn_crypto::SigningIdentity, locator: &Locator) -> Vec<u8> {
     let mut payload = Vec::new();

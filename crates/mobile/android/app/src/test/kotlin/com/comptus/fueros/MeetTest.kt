@@ -390,6 +390,8 @@ class MeetConversationTest {
     @Test
     fun no_witness_is_surfaced_to_the_person_and_the_proposal_kept_trying() {
         val m = atVerifiers()
+        // a nominee is outstanding, so an answer can still arrive
+        m.nominated(mine = listOf("w1"), theirs = listOf())
         val c = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0))
         c.proposeAnswers += "NoWitness"
         c.proposeAnswers += "NoWitness"
@@ -404,6 +406,34 @@ class MeetConversationTest {
         m.poll(c)
         assertEquals(Meet.Step.REVIEW, m.step())
         assertFalse(m.noWitness())
+    }
+
+    /** **The body waits only where a witness can still arrive.** On the
+     *  bench two phones that had each met somebody sat at the verifiers
+     *  with `nominees: 0`, the proposer asking the kernel every turn for
+     *  a witness nobody had been asked to be. */
+    @Test
+    fun no_witness_with_nobody_nominated_stops_the_meeting_and_says_why() {
+        val m = atVerifiers()
+        val c = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0))
+        c.proposeAnswers += "NoWitness"
+        c.proposeAnswers += "NoWitness"
+        m.converse(c)
+        assertEquals(Meet.Step.STOPPED, m.step())
+        assertTrue(m.stopReason()!!, m.stopReason()!!.contains("neither side nominated"))
+        m.poll(c)
+        assertEquals("not asked again once stopped", 1, c.count("propose"))
+    }
+
+    @Test
+    fun no_witness_with_every_nominee_declined_stops_the_meeting_and_says_why() {
+        val m = atVerifiers()
+        m.nominated(mine = listOf("w1"), theirs = listOf("w2"))
+        val c = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0, declined = listOf("w1", "w2")))
+        c.proposeAnswers += "NoWitness"
+        m.converse(c)
+        assertEquals(Meet.Step.STOPPED, m.step())
+        assertTrue(m.stopReason()!!, m.stopReason()!!.contains("every nominee declined"))
     }
 
     @Test

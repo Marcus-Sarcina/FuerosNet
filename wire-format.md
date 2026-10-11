@@ -212,10 +212,10 @@ malformed, not merely unusual.
 | Explicit-scope keyhash list | 256 |
 | NetworkPoint entries per anchor entry or endpoint record (§7.2, §7.6) | 8 — this row is the anchor entry's and the endpoint record's alone; **peering carries exactly one `NetworkPoint` or `Locator` per endpoint** (§4.4) |
 | Nominees per `IntentExchange` (§14.3.2) | 64 |
-| `ArchiveEntry` entries per `IntentExchange` or `BundleContinuation` (§14.3.2) | 256 — a bound on the carriage; the bundle itself has none (§5.4) |
+| `Introduction` entries per `IntentExchange` or `BundleContinuation` (§14.3.2) | 256 — a bound on the carriage; the bundle itself has none (§5.4) |
 | `Channel` entries per `ProximityOutcomes` (§14.3.2) | 8 — the same ceiling as proximity channels per record, above |
 | `Candidate` entries per `CandidateHandover` or per payload-path candidate exchange (§14.3.2) | 8 |
-| `ArchiveEntry` entries per `FishingProposal` (§7.10.2) | 256 — §5.4's carriage bound |
+| `Introduction` entries per `FishingProposal` (§7.10.2) | 1 — one candidate per proposal, in turns (§5.1) |
 | `Channel` entries per `WitnessRequest` (§7.10.2) | 8 — the proximity-channel ceiling above |
 | `VerifierResponse` entries per `GatheredResponses` (§7.10.2) | 32 — the per-record bound above |
 | `COSE_Signature` entries per `SigningReply` (§7.10.2) | 2 — one logical signer (§3.5) |
@@ -498,6 +498,30 @@ A bare locator carries no
 signature of its own, because an unsigned locator lets any relay substitute
 itself as the node's mailbox (design §12.1).
 
+**An introduction is a locator handed with its key** [author, 2026-10-11].
+A `SignedLocator` names its subject by hash and verifies under nothing a
+stranger holds, and the one place a third party's locator travels, the
+ceremony's bundle (§5.4), hands it to a receiver who has never met the
+subject. Design §12.3 Case 0 has the locator travel with the key; this is
+that shape as an object:
+
+```
+Introduction = [
+  uint,              ; version, 1
+  KeyMaterial,       ; the subject's key material (§2.2); its hash is the
+                     ;   locator's subject, and the signature verifies under it
+  SignedLocator      ; the most recent the holder has for that subject
+]
+```
+
+- **The material's hash MUST equal the locator's subject**, and the
+  locator's signature MUST verify under it; an introduction failing either
+  is not an introduction and contributes nothing wherever it is handed.
+- **It is the holder's statement of what it holds**, not the subject's of
+  where it is now: the locator inside is as fresh as the holder's last
+  word from the subject, which is why a bundle names the most recent held
+  (§5.4) and why resolution still runs by seqno (§2.3).
+
 ---
 
 ## 3. Common envelope and structural verification
@@ -712,12 +736,13 @@ on time being monotonic along **every** verified chain — a rule binding presen
 records alone would let a non-presence transaction bridge backward through the
 chain and break both.
 
-**Without that bound, backdating collapses verification.** `started_at` determines
-the 730-day window, so *n*, and therefore the selection threshold — is computed
-relative to a value the proposer chooses. **Claiming a `started_at` earlier than
-one's own history yields n = 0 and a required verifier count of zero**, and
-shifts the qualification window itself (§5.3), so the claimed day decides which
-records may be counted at all.
+**Without that bound, a ceremony could be placed before the subject's own
+history.** `started_at` is the proposer's value, and nothing about selection
+now turns on it — *n* counts the introductions handed (§5.3), not the
+records of a window — but the order of a subject's own ceremonies does: a
+record claiming a start before its predecessor finalized would put the
+chain's own sequence in doubt, and every retention clock runs from the
+claimed day.
 
 **The back-pointer is what makes this checkable.** It is inside the signature and
 names a record with its own `finalized_at`, so a subject cannot claim a ceremony
@@ -730,8 +755,8 @@ effective time is admissible, including days in the future, so the bound closes
 backdating without licensing the claimed day: what limits an implausible
 `started_at` is a witness declining to attest a ceremony dated far from its own
 clock (`light-client-requirements.md` §1.2), not anything checkable here. *(With deterministic
-selection retired, there is no sample to reroll; the claimed day now decides only
-the qualification window, §5.3.)*
+selection retired and no qualification window, the claimed day decides nothing
+about selection.)*
 
 ### 3.4 What structural verification decides, and what it does not
 
@@ -1422,9 +1447,9 @@ Field-for-field per design §8.1.
 ```
 {
   1: timestamp,        ; started_at. In the body, not disclosable: §3.3's
-                       ;   monotonicity and §5.3's 730-day window need the
-                       ;   exact value, and finalized_at and key 7 already show
-                       ;   the ceremony's day in every presentation
+                       ;   monotonicity needs the exact value, and
+                       ;   finalized_at and key 7 already show the
+                       ;   ceremony's day in every presentation
   2: timestamp,        ; finalized_at
   3: [ Participant, Participant ],
   4: ? [ + Witness ],  ; PRESENT on a normal record (1..=16), ABSENT on a
@@ -1982,21 +2007,25 @@ trust horizon itself. Reachability is the **selector's own judgment over their
 own knowledge** — computed locally, provable to nobody, owed to nobody
 (design §1.1).
 
-**Where the initial bundles surface no common acquaintance, the parties go
-fishing**: either may propose further candidates from their own history so the
-other can test them against tiers 1–4: an exchange over the ceremony's direct
-channel, carried by no wire object and recorded nowhere. **A fishing proposal
-is a bundle augmentation** [author, 2026-09-03]: proposing a candidate from
-your own history is the same disclosure decision the bundle was, made
-explicitly, and a client stops revealing once a locally adjustable number of
-responsive candidates is found. **After the bundle, quality filtering stops**:
-every mutually reachable candidate is accepted if available, so a party
-declining available candidates to draw more names out is visible as exactly
-that — the proposing side can see whether its offers are unavailable or
-refused. **After common
-acquaintances are exhausted, the selector fills the remaining slots at its own
-discretion** from the counterparty's pool; responses from strangers are weak
-evidence and are marked as such (§5.5).
+**Where the initial bundles leave the criterion unmet, the parties go
+fishing: one candidate at a time, in turns** [author, 2026-10-11]. The
+bundle is meant to be enough — a handful of prior counterparties from each
+side, of which two acceptable and available from each would do. Only where
+it is not, either party proposes one further introduction (§2.3) from its
+own history for the other to test against tiers 1–4, and the other answers
+with one of its own: a `FishingProposal` (§7.10.2) over the ceremony's
+end-to-end path, seen by the witnesses and recorded nowhere. **One at a
+time is the point**: a party is never asked for its whole history in the
+bundle, and cannot have it drawn out in successive bundles; each turn is
+one disclosure decision, and a party that has exposed as many
+counterparties as it cares to simply accepts the next proposal and moves
+on. **After the bundle, quality filtering stops**: every mutually reachable
+candidate is accepted if available, so a party declining available
+candidates to draw more names out is visible as exactly that — the
+proposing side can see whether its offers are unavailable or refused.
+**After common acquaintances are exhausted, the selector fills the
+remaining slots at its own discretion** from the counterparty's pool;
+responses from strangers are weak evidence and are marked as such (§5.5).
 
 ### 5.2 The reasonableness criterion
 
@@ -2016,63 +2045,68 @@ diligent, never whether the subject's history is complete. Understating is
 free and self-defeating (§5.4); no credence beyond that is warranted or
 intended.
 
-### 5.3 Qualification and the window
+### 5.3 Qualification
 
-A record **qualifies** for *n* and the candidate pool when it verifies alone —
-canonical, its content address checks, its signatures verify — names the
-subject as one of the two participants, and its `finalized_at` falls inside
-the window. Precisely:
+**The bundle is introductions, and an introduction qualifies for *n* and
+the candidate pool when it verifies alone** [author, 2026-10-11]: its key
+material is well formed, the material's hash is the locator's subject, and
+the locator's signature verifies under that material (§2.3). Nothing else
+is consulted — not the record of the meeting it stands for, which the
+bundle does not carry, and not when that meeting was, which an
+introduction does not say. Precisely:
 
-- **"Two years" is 730 days**, measured back from the record's `started_at`.
-  Not a calendar interval — calendar arithmetic differs across implementations
-  and timezones for no benefit here.
-- **The window is exclusive at both ends** [author, 2026-09-01]: a prior record
-  counts if `started_at - 730d < its finalized_at < started_at` — **previously
-  completed ceremonies only**, so a record finalising at this ceremony's own
-  start instant is out, as is one finalising exactly 730 days earlier.
-- **The lower bound saturates at zero.** Timestamps are unsigned; for a record
-  less than 730 days after the epoch the subtraction would underflow.
-- **A record the subject signed only as a witness does not qualify** — it names
-  them in field 4, not field 3, and a witnessed ceremony's participants met
-  each other, not the witness.
-- **Formation records count**, both toward *n* and as candidates. They record
-  real meetings; what they lack is corroboration, which is a weight question
-  for policy (design §16.1), not a structural one.
-- **The current counterparty is never a candidate for their own verification.**
-  They are the party being established; asking them is not evidence.
-- **Duplicates count once, by `txid`; candidates are distinct prior
-  counterparties, deduplicated by keyhash.** The count counts transactions,
-  the pool counts **identities**, and the two must not be conflated, and
-  identities are the most the protocol can count [author, 2026-09-03]: one
-  person may hold several (design §13.7), so slot uniqueness is keyhash
-  uniqueness, and the record claims no human independence the protocol
-  cannot prove.
+- **The current counterparty is never a candidate for their own
+  verification.** They are the party being established; asking them is not
+  evidence. An introduction naming them still counts toward *n*: it is a
+  prior counterparty the subject claims, like any other.
+- **An introduction of the subject itself does not qualify.** A party is
+  not its own prior counterparty.
+- **Duplicates count once, by subject; candidates are distinct prior
+  counterparties, deduplicated by keyhash.** Two introductions of one
+  subject are one claim, the one with the greater counter in the same
+  series standing (§2.3), and identities are the most the protocol can
+  count [author, 2026-09-03]: one person may hold several (design §13.7),
+  so slot uniqueness is keyhash uniqueness, and the record claims no human
+  independence the protocol cannot prove.
+- **No window.** An introduction carries no time, and which counterparties
+  are recent enough to be worth naming is the subject's curation (§5.4), as
+  everything else about the bundle is.
 
 ### 5.4 The candidate pool is the curated bundle
 
-**The bundle is the subject's to curate** [author, 2026-09-01]: any presence
-records they choose, **from any of their series, with no intervening
-transactions exposed and no chaining between them**. A bundle is a set of
-individually verifiable records, not a stretch of archive — nobody walks
-another party's archive (design §8.1.2), and nothing requires the handed
-records to connect. A record that fails its checks contributes nothing; with
-no completeness to protect, it is simply not in the pool.
+**The bundle is the subject's to curate** [author, 2026-09-01]: any of its
+prior counterparties it chooses to name, **as introductions (§2.3), each
+carrying the most recent locator the subject holds for that party**
+[author, 2026-10-11] — not the position that party had when they met, and
+not a record of the meeting. The locator is the primitive for
+communicating about any identity, and the verifiers are what the bundle
+communicates: a counterparty is handed the people it may ask, with the key
+to verify their answers and the position to reach them by, and nothing
+else about them. Nobody walks another party's archive (design §8.1.2),
+nothing in the bundle connects to anything, and an introduction that fails
+its checks contributes nothing. **The subject's own position rides the
+intent beside the bundle** (§14.3.2), so each party leaves the ceremony
+holding the other's current locator, which is what it will hand onward.
 
 **The bundle has no protocol ceiling; its carriage does** [2026-09-02;
 author, 2026-09-30]. It rides the ceremony channel and is retained nowhere,
 so what a client will hold is local resource policy, and truncation is a
 local act with a visible price, since it changes *n* and the candidate pool.
 What is bounded is each message that carries it: §14.3.2's `IntentExchange`
-holds the first 256 entries and says how many `BundleContinuation` messages
-follow, each holding up to 256 more, so a bundle of any size crosses in as
-many carriages as it needs. A sender that hands fewer than it holds has
-truncated, visibly, as a smaller *n*; a receiver that stops reading
-continuations has truncated, and its *n* is what it holds.
+holds the first 256 introductions and says how many `BundleContinuation`
+messages follow, each holding up to 256 more, so a bundle of any size crosses
+in as many carriages as it needs. A sender that hands fewer than it holds
+has truncated, visibly, as a smaller *n*; a receiver that stops reading
+continuations has truncated, and its *n* is what it holds. **The bundle is
+meant to suffice without being large** (§5.1): a party hands the few it
+is willing to name, and what the bundle leaves unmet is found one
+proposal at a time.
 
 **Understatement is free, and self-defeating rather than dangerous.** A subject
-who hands fewer records gets a smaller *n*, a smaller sample, and a record that
-advertises thinner corroboration. Overstatement is impossible, since every
-record must verify. What protects the selector is **recognition, not
+who hands fewer introductions gets a smaller *n*, a smaller sample, and a
+record that advertises thinner corroboration. Overstatement is impossible,
+since every introduction must verify, and inventing one needs the invented
+party's signature. What protects the selector is **recognition, not
 completeness** (design §8.1.2): a pool holding nobody they know is worth what
 unrecognised history is worth, and a curated pool of strangers announces
 itself to the one party it is aimed at.
@@ -3310,9 +3344,9 @@ ArchiveEntry = PresentedRecord / Envelope
                        ;   presentation, so the two need no discriminator
 ```
 
-**A list of them is also a fishing proposal** (design §8.1.2): one to 256
-`ArchiveEntry` items travel as plaintext kind 11 between the participants'
-devices during a ceremony (§7.10.1, §7.10.2).
+**The ceremony's bundle is not this type.** It hands introductions (§2.3,
+§5.4), and a fishing proposal is one of those (§7.10.2); a presented record
+reaches a counterparty's device by no ceremony path.
 
 **Paginate by re-requesting with field 2 set to the previous reply's field 4.**
 A holder may refuse a request or return fewer records than asked for; **a short
@@ -3500,7 +3534,7 @@ attribute it; here nothing is read before attribution.
 | 8 | `VerifierResponse` (§5.6) | Verifier to querier |
 | 9 | `VerificationQuery` (§5.5), to be consented to | Querier to the subject it is about, and to no witness: the fuzzed profile in field 4 reaches the one verifier field 7 names and nobody who holds no capture to compare it against (§5.6) |
 | 10 | `ConsentReply` (§7.10.2) | Subject to querier |
-| 11 | `FishingProposal` (§7.10.2), a bundle augmentation (design §8.1.2) | Participant to participant |
+| 11 | `FishingProposal` (§7.10.2), one candidate offered in turn (§5.1; design §8.1.2) | Participant to participant |
 | 12 | `WitnessRequest` (§7.10.2) | A participant to a witness it nominated |
 | 13 | `WitnessAnswer` (§7.10.2) | The witness back |
 | 14 | `GatheredResponses` (§7.10.2) | The participant that did not propose, to the proposer |
@@ -3571,7 +3605,7 @@ ConsentReply = [
                        ;   VerifierResponse field 7 carries onward
 ]
 
-FishingProposal = [ 1*256 ArchiveEntry ]   ; §7.9; §5.4's carriage bound
+FishingProposal = Introduction            ; §2.3; one candidate per proposal, in turns (§5.1)
 
 WitnessRequest = {
   1: bstr .size 32,    ; the ceremony-id (§14.3.1)
@@ -4939,7 +4973,7 @@ design already depends on.
 
 | What | Between | Where it is stated | Encoding |
 |---|---|---|---|
-| The ceremony's intent exchange — the contribution, the nominees, the evidence bundle, the timing and who initiated | Two participants' devices | design §7.1, §7.5.2, §8.1.2 | `IntentExchange` (§14.3.2), carried by the shell's chosen bearer (§14.3.1) and bound to the pre-commitment. The CBOR is specified; two vendors' clients compute the same pre-commitment, the ceremony-id (design §7.5.2.6), either way |
+| The ceremony's intent exchange — the contribution, the nominees, the bundle of introductions, the sender's locator, the timing and who initiated | Two participants' devices | design §7.1, §7.5.2, §8.1.2 | `IntentExchange` (§14.3.2), carried by the shell's chosen bearer (§14.3.1) and bound to the pre-commitment. The CBOR is specified; two vendors' clients compute the same pre-commitment, the ceremony-id (design §7.5.2.6), either way |
 | The optical transcript — each device's key material and contribution, then the derived ceremony-id, screen to camera | Two participants' devices | design §7.1 item 3, design §7.5.2, design §12.3 | `OpticalContribution` then `TranscriptConfirm` (§14.3.2): the key material is pinned at this first contact, the contribution is the key-exchange input, the ceremony-id is the transcript hash both display and check |
 | Proximity channel outcomes — the UWB, NFC or optical result and its ranking | Two participants' devices | §3.2, design §7.1 item 4 | `ProximityOutcomes` (§14.3.2): the §4.5 `Channel` maps as measured, anchored to the ceremony-id. The record's `strongest` (§3.2) is not carried — each device computes it from the outcomes, as each computes the ceremony-id |
 | Traversal candidates | Two participants' devices | design §12.6.3 [author, 2026-09-25] | `CandidateHandover` (§14.3.2), carrying the `Candidate` structure this document now defines; the same candidates travel the end-to-end payload path when a direct connection is set up remotely (design §12.6.3, §14.1.1) |
@@ -5133,10 +5167,11 @@ IntentExchange = [             ; carried by the bearer (§14.3.1), not optical
                                ;   disagrees with the screen is caught
   [ * keyhash ],               ; nominees, from the counterparty's
                                ;   neighbourhood (design §7.1); 0..64
-  [ * ArchiveEntry ],          ; the evidence bundle's first carriage: prior
-                               ;   presented records for verifier selection
-                               ;   (§7.9's entry type), 0..256 as everything
-                               ;   else
+  [ * Introduction ],          ; the bundle's first carriage: the prior
+                               ;   counterparties the sender names for
+                               ;   verifier selection, each with the most
+                               ;   recent locator it holds (§2.3, §5.4);
+                               ;   0..256 as everything else
   timestamp,                   ; started_at
   uint,                        ; retention_years the sender commits to
   bool,                        ; initiator: this device showed the invite the
@@ -5152,6 +5187,11 @@ IntentExchange = [             ; carried by the bearer (§14.3.1), not optical
   uint,                        ; continuations: how many BundleContinuation
                                ;   messages follow with the rest of the
                                ;   bundle; 0 where it fits in one carriage
+  SignedLocator,               ; the sender's own position, the most recent
+                               ;   it has signed (§2.3): the receiver pinned
+                               ;   the sender's key from the screen, keeps
+                               ;   this as the locator it holds for them,
+                               ;   and hands it onward in its own bundles
 ]
 
 BundleContinuation = [         ; the bundle past its first carriage
@@ -5161,14 +5201,14 @@ BundleContinuation = [         ; the bundle past its first carriage
                                ;   it does not
   uint,                        ; index: 1 for the first continuation, then
                                ;   consecutive, up to IntentExchange's count
-  [ 1*256 ArchiveEntry ],      ; the next entries, in the sender's order
+  [ 1*256 Introduction ],      ; the next introductions, in the sender's order
 ]
 ```
 
-**The bundle is `ArchiveEntry` (§7.9), reused not reinvented**: a prior
-presented record is exactly what a verifier-selection bundle holds, and the
-256-entry bound is the array bound the rest of the document carries — on
-the carriage, not the bundle (§5.4). A bundle larger than one carriage
+**The bundle is introductions (§2.3), the locator being the primitive for
+communicating about any identity** [author, 2026-10-11], and the 256-entry
+bound is the array bound the rest of the document carries — on the
+carriage, not the bundle (§5.4). A bundle larger than one carriage
 follows in `BundleContinuation` messages, anchored to the ceremony-id like
 the exchanges below and numbered so a receiver can tell a missing one from
 the end; the bundle a receiver evaluates is the entries it accepted in

@@ -404,10 +404,6 @@ arith = re.search(r'n = (\d+).*?candidates = (\d+).*?required = min\(floor\((\d+
 bn, bc, fn, fc, br = map(int, arith.groups())
 check(bn == fn and bc == fc and min(fn // 2, 10, fc) == br,
       'bundle arithmetic: required recomputes from the stated n and candidates')
-tx_txids = {t for _, t in bodies}
-named = re.findall(r'`([0-9a-f]{16})…`', bsect)
-check(len(named) == 4 and all(any(t.startswith(p) for t in tx_txids) for p in named),
-      'bundle: all four qualifying txids resolve to transactions.md fixtures')
 for n_, c_, r_ in re.findall(r'n = (\d+), candidates = (\d+), required = (?:min\([^)]*\) = )?(\d+)', bsect):
     check(min(int(n_) // 2, 10, int(c_)) == int(r_),
           f'bundle case n={n_}: required matches the formula')
@@ -799,11 +795,27 @@ check(_tc == [1, _cid],
 _ix = canonical(bytes.fromhex(byid['P-intent-exchange']['hex']))
 check(_ix[1] == _oc_a[2],
       "s14.3: the intent echoes alice's optical contribution byte-for-byte")
-check(enc(_ix[3][0]).hex() == byid['P-alice-c1-record']['hex'],
-      "s14.3: the intent's bundle entry is the alice-c1 envelope byte-for-byte")
+check(enc(_ix[3][0]).hex() == byid['P-introduction']['hex'],
+      "s14.3: the intent's bundle entry is the introduction of c1 byte-for-byte")
+check(len(_ix) == 9 and isinstance(_ix[8], dict) and {1, 2, 3} <= set(_ix[8]) and _ix[8][1] == KH['alice'],
+      "s14.3: the intent's last field is the sender's own signed locator, alice's")
 _ixr = canonical(bytes.fromhex(byid['P-intent-exchange-responder']['hex']))
-check(_ixr[1] == _oc_b[2] and _ixr[3] == [] and _ixr[4] == _ix[4],
-      "s14.3: the responder's intent echoes bob's contribution, carries an empty bundle and the same start")
+check(_ixr[1] == _oc_b[2] and _ixr[3] == [] and _ixr[4] == _ix[4] and len(_ixr) == 9,
+      "s14.3: the responder's intent echoes bob's contribution, carries an empty bundle, the same start and his locator")
+
+# ---------------------------------------------------------------- curated bundle entries (bar 3, corpus)
+# the six entries are corpus objects: each well-formed one verifies as an
+# introduction under its own material, and the mismatch does not
+def _intro_ok(hexstr):
+    a = canonical(bytes.fromhex(hexstr))
+    km, sl = a[1], a[2]
+    return H(enc(km)).hex() == sl[1] and isinstance(sl[3], list)
+check(all(_intro_ok(byid[f'P-vs-bundle-{i}']['hex']) for i in (1, 2, 3, 4, 6))
+      and not _intro_ok(byid['P-vs-bundle-5']['hex']),
+      'bundle: entries 1-4 and 6 bind material to subject, entry 5 does not')
+check(canonical(bytes.fromhex(byid['P-vs-bundle-1']['hex']))[2][1]
+      == canonical(bytes.fromhex(byid['P-vs-bundle-3']['hex']))[2][1],
+      'bundle: entries 1 and 3 introduce one subject, counted once')
 check(_ix[6] is True and _ixr[6] is False,
       's14.3: the pair of intents disagree on who began, the initiator true and the responder false')
 for _fid in ('P-proximity-outcomes', 'P-candidate-handover'):

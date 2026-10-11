@@ -336,3 +336,46 @@ fn a_client_leaves_a_patron_on_its_own_signature_and_holds_no_position_there_aft
         "already left"
     );
 }
+
+/// **A caller that names no nominee is handed the parties this client has
+/// met** [ruled, author, 2026-10-10: witnesses are required where
+/// available]. On the bench two phones that had each met somebody began
+/// with `nominees: 0` and the body waited on a witness never asked.
+#[test]
+fn a_client_that_is_handed_no_nominee_nominates_the_parties_it_has_met() {
+    let mut s = setup(&["alice", "bob", "carol"], &[ChannelKind::Nfc]);
+    assert!(
+        s.client("alice").met(None).is_empty(),
+        "nobody met, nobody to nominate"
+    );
+    s.run("alice", "bob", &[], &[]).expect("alice meets bob");
+    s.run("alice", "carol", &["bob"], &["bob"])
+        .expect("alice meets carol, bob witnessing");
+    let pool = s.client("alice").met(None);
+    assert!(
+        pool.contains(&kh("bob")) && pool.contains(&kh("carol")),
+        "{pool:?}"
+    );
+    // the counterparty of this meeting is never its own witness
+    assert_eq!(vec![kh("carol")], s.client("alice").met(Some(&kh("bob"))));
+    // and a ceremony begun with nobody named nominates from them
+    s.client("alice")
+        .begin(Some(kh("bob")), vec![], true)
+        .expect("begun");
+    let (mine, _) = s.client("alice").nominees();
+    assert_eq!(
+        vec![kh("carol")],
+        mine,
+        "bob is the counterparty, carol the witness"
+    );
+    s.client("alice").abandon();
+    // a caller that does name nominees is not overridden
+    s.client("alice")
+        .begin(Some(kh("bob")), vec![kh("carol"), kh("bob")], true)
+        .expect("begun");
+    assert_eq!(
+        2,
+        s.client("alice").nominees().0.len(),
+        "the caller's list stands as given"
+    );
+}

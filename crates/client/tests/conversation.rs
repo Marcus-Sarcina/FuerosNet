@@ -37,8 +37,10 @@ fn the_conversation_objects_encode_to_the_canonical_bytes_and_read_back() {
 
     let fx = fixture("P-fishing-proposal");
     let read = FishingProposal::decode(&fx).expect("decodes");
-    assert_eq!(read.entries.len(), 1, "one entry, the envelope form");
-    assert!(matches!(parse_all(&read.entries[0]), Ok(Item::Map(_))));
+    assert!(
+        matches!(parse_all(&read.introduction), Ok(Item::Array(ref a)) if a.len() == 3),
+        "one introduction: one candidate per proposal"
+    );
     assert_eq!(read.encode(), fx);
 
     let fx = fixture("P-witness-request");
