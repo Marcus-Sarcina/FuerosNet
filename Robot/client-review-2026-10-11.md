@@ -202,4 +202,5 @@ the records are, and is what `introductions()`, `hold_locator`,
 Capture points, per the policy: the intent (counterparty), every
 introduction in a bundle (selected or not), every nominee and verifier
 that answered, the infrastructure traversed, a fishing candidate
-declined. That is the next build.
+declined. **Built the same day** (`rhtn_client::contacts`; tracking has the
+capture points and what is not yet captured).

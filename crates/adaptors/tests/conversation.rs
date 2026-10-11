@@ -276,7 +276,16 @@ async fn the_conversation_runs_over_the_payload_path_to_a_record_every_signer_ho
                 c.store.records.insert(t, b);
             }
             for (k, sl) in introduced {
-                c.store.locators.insert(k, sl);
+                let material = id(if k == kh("w1") { "w1" } else { "bob" })
+                    .public
+                    .key_material();
+                let mut contact = rhtn_client::contacts::Contact::new(
+                    material,
+                    rhtn_client::contacts::How::Counterparty,
+                    1,
+                );
+                contact.locator = Some(sl);
+                c.store.contacts.insert(k, contact);
             }
         })
         .await;

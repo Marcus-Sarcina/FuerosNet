@@ -62,11 +62,15 @@ pub struct Config {
     /// the client stores or sends consults it** (design §16.4), so a
     /// client running a substitute produces the same wire traffic.
     pub policy: std::sync::Arc<dyn rhtn_policy::Policy<Keyhash>>,
+    /// How many contacts this client keeps before pruning toward what
+    /// still resolves (`light-client-requirements.md` §4.3).
+    pub contacts_limit: usize,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Config {
+            contacts_limit: 4096,
             clock_tolerance_s: 300,
             retention_years: 2,
             template_version: 1,
@@ -806,7 +810,7 @@ impl Client {
             initiator,
             started_at,
             nominees = nominees.len(),
-            bundle = self.store.locators.len(),
+            bundle = self.store.contacts.values().filter(|c| c.locator.is_some()).count(),
             retention = self.cfg.retention_years,
             "cer.begin"
         );
@@ -866,13 +870,83 @@ impl Client {
     #[must_use]
     pub fn introductions(&self) -> Vec<Vec<u8>> {
         self.store
-            .locators
-            .iter()
-            .filter_map(|(who, sl)| {
-                let id = self.known.iter().find(|i| i.keyhash == *who)?;
-                Some(rhtn_archive::locator::introduction(&id.key_material(), sl))
+            .contacts
+            .values()
+            .filter_map(|c| {
+                let sl = c.locator.as_deref()?;
+                Some(rhtn_archive::locator::introduction(&c.material, sl))
             })
             .collect()
+    }
+
+    /// **A contact learned, or dealt with again** (`light-client-requirements.md`
+    /// §4.3): filed under its material's hash with how it came to be held,
+    /// its identity added to what this client verifies by, and the store
+    /// pruned toward what still resolves where it has grown past its bound.
+    pub fn contact(&mut self, identity: &Identity, how: crate::contacts::How, touch: bool) {
+        let now = self.now_s();
+        let who = identity.keyhash;
+        if !self.known.iter().any(|k| k.keyhash == who) {
+            self.known.push(identity.clone());
+        }
+        match self.store.contacts.get_mut(&who) {
+            Some(c) => {
+                if touch {
+                    c.touch(now);
+                }
+            }
+            None => {
+                self.store.contacts.insert(
+                    who,
+                    crate::contacts::Contact::new(identity.key_material(), how, now),
+                );
+            }
+        }
+        self.prune_contacts();
+    }
+
+    /// One more dealing with `who`, where they are a contact.
+    pub fn touch_contact(&mut self, who: &Keyhash) {
+        let now = self.now_s();
+        if let Some(c) = self.store.contacts.get_mut(who) {
+            c.touch(now);
+        }
+    }
+
+    /// A party dealt with as `how` — a nominee or verifier that answered —
+    /// touched where a contact, made one where its material is held and it
+    /// is not yet: a party answered is a party captured (§4.3).
+    pub fn note_contact(&mut self, who: &Keyhash, how: crate::contacts::How) {
+        if self.store.contacts.contains_key(who) {
+            self.touch_contact(who);
+        } else if let Some(id) = self.known.iter().find(|k| k.keyhash == *who).cloned() {
+            self.contact(&id, how, true);
+        }
+    }
+
+    /// The store pruned to its bound, saying how many went.
+    pub fn prune_contacts(&mut self) -> usize {
+        let keep = self.cfg.contacts_limit;
+        let gone = crate::contacts::prune(&mut self.store.contacts, keep);
+        if gone > 0 {
+            tracing::info!(target: "cer", gone, keep, "cer.contacts.pruned");
+        }
+        gone
+    }
+
+    /// Every contact's identity among what this client verifies by: what
+    /// a ceremony taught is what a restarted client still knows.
+    fn sync_known_from_contacts(&mut self) {
+        let have: std::collections::BTreeSet<Keyhash> =
+            self.known.iter().map(|k| k.keyhash).collect();
+        let learned: Vec<Identity> = self
+            .store
+            .contacts
+            .iter()
+            .filter(|(k, _)| !have.contains(*k))
+            .filter_map(|(_, c)| Identity::from_key_material(&c.material))
+            .collect();
+        self.known.extend(learned);
     }
 
     /// This client's own `SignedLocator` for the subnet it acts in: its
@@ -899,7 +973,12 @@ impl Client {
             return Err(Abort::Malformed("a locator for another party".into()));
         }
         read.verify(&self.known).map_err(Abort::Malformed)?;
-        let newer = match self.store.locators.get(who) {
+        let held = self
+            .store
+            .contacts
+            .get(who)
+            .and_then(|c| c.locator.as_deref());
+        let newer = match held {
             None => true,
             Some(have) => {
                 outright
@@ -910,7 +989,23 @@ impl Client {
             }
         };
         if newer {
-            self.store.locators.insert(*who, sl.to_vec());
+            // a locator is held for a contact: one whose material this
+            // client has, which `verify` above has just established
+            if let Some(c) = self.store.contacts.get_mut(who) {
+                c.locator = Some(sl.to_vec());
+            } else if let Some(id) = self.known.iter().find(|k| k.keyhash == *who).cloned() {
+                // the party's own statement of where it sits is the party
+                // met; a third party's is an introduction
+                let how = if outright {
+                    crate::contacts::How::Counterparty
+                } else {
+                    crate::contacts::How::Introduced
+                };
+                let mut c = crate::contacts::Contact::new(id.key_material(), how, self.now_s());
+                c.locator = Some(sl.to_vec());
+                self.store.contacts.insert(*who, c);
+                self.prune_contacts();
+            }
         }
         Ok(())
     }
@@ -955,12 +1050,8 @@ impl Client {
         a.their_contribution = Some(read.contribution);
         // first contact pins the full key (design §12.3); met before, the
         // same material is already held and nothing changes
-        let pinned = if self.known.iter().any(|k| k.keyhash == read.device) {
-            false
-        } else {
-            self.known.push(identity);
-            true
-        };
+        let pinned = !self.known.iter().any(|k| k.keyhash == read.device);
+        self.contact(&identity, crate::contacts::How::Counterparty, true);
         tracing::info!(
             target: "cer",
             which = "contribution",
@@ -1296,6 +1387,7 @@ impl Client {
         // the sender's own position, kept as the locator held for them:
         // its own statement replaces whatever a third party said of it
         self.hold_locator(&from, &intent.locator, true)?;
+        self.touch_contact(&from);
         tracing::info!(
             target: "cer",
             from = %id8(&from),
@@ -1436,9 +1528,11 @@ impl Client {
         // a verifier's answer by and the position to reach it at came
         // with the bundle, and nothing else need supply them
         for i in &pool.introduced {
-            if !self.known.iter().any(|k| k.keyhash == i.subject) {
-                self.known.push(i.introduction.identity.clone());
-            }
+            self.contact(
+                &i.introduction.identity,
+                crate::contacts::How::Introduced,
+                false,
+            );
             let _ = self.hold_locator(&i.subject, &i.introduction.locator.bytes, false);
         }
         if !pool.candidates.is_empty() && !self.acquaintance.recognises_any(&pool) {
@@ -1586,6 +1680,11 @@ impl Client {
     /// verifier.  The query it answers and the verdict.
     pub fn take_response(&mut self, bytes: &[u8]) -> Result<([u8; 32], Verdict), String> {
         let out = self.take_response_in(bytes);
+        if out.is_ok()
+            && let Ok(r) = Response::read(bytes)
+        {
+            self.note_contact(&r.verifier, crate::contacts::How::Verifier);
+        }
         if tracing::event_enabled!(target: "cer", tracing::Level::INFO) {
             match &out {
                 Ok((q, v)) => {
@@ -1992,6 +2091,24 @@ impl Client {
         // the ceremony closes only where this record is its own: a witness
         // in a ceremony of its own at the same time keeps that one
         let mine = parts.contains(&self.keyhash());
+        // **every signer of a record of mine is a party dealt with**
+        // (`light-client-requirements.md` §4.3): the counterparty, and each
+        // witness that attested — captured here, the one place both the
+        // conversation and a driver that gathers signatures itself arrive
+        if mine {
+            let me = self.keyhash();
+            for s in rec.signers.clone() {
+                if s == me {
+                    continue;
+                }
+                let how = if parts.contains(&s) {
+                    crate::contacts::How::Counterparty
+                } else {
+                    crate::contacts::How::Nominee
+                };
+                self.note_contact(&s, how);
+            }
+        }
         tracing::info!(
             target: "cer",
             txid = %id8(&txid),
@@ -2314,6 +2431,7 @@ impl Client {
         c.archive = Archive::load(dir, kh)?;
         c.store = ClientStore::load(dir)?;
         c.adopt_own_positions();
+        c.sync_known_from_contacts();
         // **derived state is derived at every start** [author, 2026-10-11:
         // a client's behaviour must not depend on what this session did
         // first]: whom this client has met is a fold over its records,
@@ -2476,6 +2594,7 @@ impl Client {
         self.positions.clear();
         self.adopt_own_positions();
         // derived state is derived at every start (see `at`)
+        self.sync_known_from_contacts();
         self.refresh_acquaintance();
         Ok(Restored {
             records,
@@ -2792,6 +2911,9 @@ impl Client {
     /// §3).  Everything returned goes to the serving node.
     pub fn attach(&mut self, serving: Keyhash, population: &[Keyhash]) -> Vec<Msg> {
         self.payload.serving = Some(serving);
+        if let Some(id) = self.known.iter().find(|k| k.keyhash == serving).cloned() {
+            self.contact(&id, crate::contacts::How::Infra, true);
+        }
         let now = self.now_s();
         let random = self.device.random.clone();
         let mut fresh = |out: &mut [u8]| random.fill(out);
@@ -3294,6 +3416,25 @@ impl Client {
                     key_material,
                 }
             }
+            // **a contact's locator is a position to route by**
+            // (`light-client-requirements.md` §4.3; design §12.3 Case 1):
+            // where the horizon holds nothing of the party, what they or
+            // an introducer last said of where they sit is what a
+            // resolution is made of
+            Upstream::Unknown => match self
+                .store
+                .contacts
+                .get(to)
+                .and_then(|c| c.locator.as_deref())
+                .and_then(|sl| rhtn_archive::locator::SignedLocator::parse(sl).ok())
+            {
+                Some(sl) => Upstream::Position {
+                    anchor: sl.locator.anchor,
+                    path: sl.locator.path,
+                    nibbles: sl.locator.nibbles,
+                },
+                None => Upstream::Unknown,
+            },
             other => other,
         };
         // only a bare position needs somebody asked, and nothing is

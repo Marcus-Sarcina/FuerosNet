@@ -13645,6 +13645,24 @@ an instance being attached; enrolling one is how an identity comes to have
 an instance, so gating the only way in on already being in would leave no
 way in.
 
+### 2026-10-11 (contacts)
+
+**[author, 2026-10-11] A client keeps contacts, and prunes toward what
+still resolves.** `light-client-requirements.md` §4.3: for every party
+whose locator becomes visible — a counterparty's intent, every party a
+bundle introduces, every nominee and verifier that answers, the
+infrastructure gone through, a fishing candidate declined — the most
+recent `SignedLocator` held and the key material that verifies it, with
+when and how often the party was dealt with. The store is bounded; as it
+fills, the least dealt-with contacts that an upstream still held would
+rediscover go first, the threshold loosening until the space is free,
+and a contact with no upstream held goes last because pruning it is
+losing it. This is design §12.3 Case 1's local table, and what a bundle
+hands onward. The kernel keeps it (`store.contacts`), and what a
+ceremony taught survives a restart — until this, the locator did and
+the material did not, so nothing held could be verified or introduced
+again. TOP-040, TOP-041.
+
 ### 2026-10-11 (the bundle is a bundle of locators)
 
 **[ruled, author, 2026-10-11] The verifiers are shared directly: the

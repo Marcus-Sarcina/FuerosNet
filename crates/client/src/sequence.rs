@@ -678,6 +678,8 @@ impl Client {
                 if let Some(a) = self.active.as_mut() {
                     a.conversation.answers.insert(from, bits);
                 }
+                // a nominee that answered, either way, is a party dealt with
+                self.note_contact(&from, crate::contacts::How::Nominee);
                 Conversed::WitnessAnswer {
                     witness: from,
                     flags: bits,

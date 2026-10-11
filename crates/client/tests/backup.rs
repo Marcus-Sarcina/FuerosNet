@@ -492,10 +492,17 @@ fn a_backup_installs_into_an_empty_client_and_is_refused_into_one_with_an_archiv
 fn a_store_written_before_locators_were_kept_still_opens() {
     let mut st = ClientStore::default();
     st.records.insert([1u8; 32], vec![0xa0]);
-    st.locators.insert([2u8; 32], vec![0xa1]);
+    st.contacts.insert(
+        [2u8; 32],
+        rhtn_client::contacts::Contact::new(
+            vec![0x82, 0xa0, 0xa0],
+            rhtn_client::contacts::How::Introduced,
+            7,
+        ),
+    );
     let seven = st.encode();
     let back = ClientStore::decode(&seven).expect("the current shape opens");
-    assert_eq!(back, st, "and round-trips, locators included");
+    assert_eq!(back, st, "and round-trips, contacts included");
 
     // the same store as the earlier shape wrote it: the first six
     // collections, no seventh
@@ -509,7 +516,7 @@ fn a_store_written_before_locators_were_kept_still_opens() {
     let opened = ClientStore::decode(&six).expect("the earlier shape opens");
     assert_eq!(opened.records, st.records);
     assert!(
-        opened.locators.is_empty(),
+        opened.contacts.is_empty(),
         "nothing held, as that client held nothing"
     );
     // and a shape that is neither is not a store

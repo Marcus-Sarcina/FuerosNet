@@ -306,11 +306,10 @@ pub struct ClientStore {
     /// The disclosure sets of this client's own records, which are
     /// ordinary record state (`wire-format.md` §4.5.1.2).
     pub disclosures: BTreeMap<Txid, DisclosureSet>,
-    /// The most recent `SignedLocator` held for each party this client
-    /// has met, by subject: what its bundle introduces them by
-    /// (`wire-format.md` §5.4), replaced by a later one of the same series
-    /// or by the subject's own next intent.
-    pub locators: BTreeMap<Keyhash, Vec<u8>>,
+    /// The contacts this client keeps (`light-client-requirements.md`
+    /// §4.3): every party whose locator became visible, with the material
+    /// that verifies it, bounded and pruned toward what still resolves.
+    pub contacts: BTreeMap<Keyhash, crate::contacts::Contact>,
 }
 
 impl ClientStore {
@@ -401,8 +400,8 @@ impl ClientStore {
                 .map(|(t, d)| (*t, encode_disclosures(d))),
         )?;
         rewrite(
-            &dir.join("locators"),
-            self.locators.iter().map(|(k, b)| (*k, b.clone())),
+            &dir.join("contacts"),
+            self.contacts.iter().map(|(k, c)| (*k, c.encode())),
         )?;
         Ok(())
     }
@@ -439,7 +438,10 @@ impl ClientStore {
                 .iter()
                 .map(|(t, d)| (*t, encode_disclosures(d))),
         );
-        keyed(&mut out, self.locators.iter().map(|(k, b)| (*k, b.clone())));
+        keyed(
+            &mut out,
+            self.contacts.iter().map(|(k, c)| (*k, c.encode())),
+        );
         out
     }
 
@@ -478,8 +480,12 @@ impl ClientStore {
             st.disclosures.insert(t, decode_disclosures(&v)?);
         }
         if f.len() == 7 {
+            // a seventh collection that held bare locators (2026-10-11,
+            // for a day) reads as no contacts: nothing there verified
             for (k, v) in m(6)? {
-                st.locators.insert(k, v);
+                if let Some(c) = crate::contacts::Contact::decode(&v) {
+                    st.contacts.insert(k, c);
+                }
             }
         }
         Some(st)
@@ -519,8 +525,10 @@ impl ClientStore {
                 st.disclosures.insert(t, d);
             }
         }
-        for (k, b) in read_dir_of(&dir.join("locators"))? {
-            st.locators.insert(k, b);
+        for (k, b) in read_dir_of(&dir.join("contacts"))? {
+            if let Some(c) = crate::contacts::Contact::decode(&b) {
+                st.contacts.insert(k, c);
+            }
         }
         Ok(st)
     }

@@ -24,3 +24,6 @@ runs/
 # The speculative resource-design thread: surfacing requirements for the
 # layers beneath it, and authoritative for nothing [author, 2026-10-10].
 resource-design/
+
+# Anonymising sidenet research: contextual work outside the core FN project
+/anonymizing-sidenet/

@@ -16876,6 +16876,21 @@ read off the contact's locator path against the contacts held (the
 nearest held prefix under the same anchor, the anchor itself last); the
 loop loosens the rank cut until the target free space is reached.
 
+**Built, 2026-10-11: the contacts store.** `rhtn_client::contacts`
+(`Contact { material, locator, last_at, count, how }`, `prune`,
+`upstream_held`), `store.contacts` in place of `locators` (the directory
+and the seventh collection; a day's bare locators read as nothing).
+Captured: the counterparty at the optical pin and touched at its intent;
+every introduction a bundle verifies, selected or not; a nominee that
+answers; a verifier that answers; the serving node at attach. `known` is
+synced from contacts at every start, which closes the audit's finding —
+material and locator now persist together. `reach_for` reads a contact's
+locator as a position where the horizon holds nothing. Bound:
+`Config::contacts_limit`, 4096. Not yet captured: infrastructure
+traversed in a resolution (no resolution path in the client yet) and a
+declined fishing candidate (fishing not built). The ffi lists contacts
+(`contacts()`), for a People screen to come.
+
 ## The low-spec pair, first run (2026-10-10)
 
 **Set up**: 8XDIW4G6WCW4LZU8 and VGY5IJRWUSAIX4VC, TCL 30 Z, on

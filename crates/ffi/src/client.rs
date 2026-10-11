@@ -346,6 +346,22 @@ pub struct Consented {
     pub grant: Option<Vec<u8>>,
 }
 
+/// One contact as the shell lists it (`light-client-requirements.md` §4.3).
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ContactRow {
+    /// The party.
+    pub who: Id,
+    /// How it came to be held: 0 met, 1 introduced, 2 nominee, 3 verifier,
+    /// 4 infrastructure, 5 declined, 6 provisioned.
+    pub how: u8,
+    /// When last dealt with, seconds.
+    pub last_at: u64,
+    /// How many times.
+    pub count: u64,
+    /// Whether a locator is held, which is what makes it introducible.
+    pub located: bool,
+}
+
 /// The two nominee lists a ceremony holds: this side's and the other's.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Nominees {
@@ -1861,6 +1877,29 @@ impl Participant {
                     mine: mine.iter().map(id_of).collect(),
                     theirs: theirs.iter().map(id_of).collect(),
                 }
+            })
+        })
+    }
+
+    /// The contacts this client keeps, most recently dealt with first.
+    #[must_use]
+    pub fn contacts(&self) -> Vec<ContactRow> {
+        crate::diag::call_plain("contacts", || {
+            self.handle.with_blocking(|c| {
+                let mut rows: Vec<ContactRow> = c
+                    .store
+                    .contacts
+                    .iter()
+                    .map(|(k, v)| ContactRow {
+                        who: id_of(k),
+                        how: v.how as u8,
+                        last_at: v.last_at,
+                        count: v.count,
+                        located: v.locator.is_some(),
+                    })
+                    .collect();
+                rows.sort_by_key(|r| std::cmp::Reverse(r.last_at));
+                rows
             })
         })
     }

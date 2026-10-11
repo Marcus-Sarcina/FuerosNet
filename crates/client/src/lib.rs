@@ -63,6 +63,7 @@ compile_error!(
 pub mod backup;
 pub mod catalog;
 pub mod ceremony;
+pub mod contacts;
 pub mod conversation;
 pub mod device;
 pub mod diag;
