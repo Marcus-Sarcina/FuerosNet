@@ -57,20 +57,20 @@ pruned when the amendment lands.
 
 ## Sweep (every place, by search)
 
-**wire-format.md** (every § below is its own): §2.3 (add `Introduction`); §3 bounds rows 214–218
+**wire-format.md**: `wire-format.md` §2.3 (add `Introduction`); `wire-format.md` §3 bounds rows 214–218
 (entries per `IntentExchange`/`BundleContinuation` are introductions;
-`FishingProposal` carries one); §5.2 (*n* counts introductions); §5.3
+`FishingProposal` carries one); `wire-format.md` §5.2 (*n* counts introductions); `wire-format.md` §5.3
 (qualification rewritten, window removed, witness-only and formation
-bullets removed, duplicates by subject); §5.4 (bundle of introductions,
-most recent locator held); §7.9 (fishing one at a time in turns, the
-milking rationale verbatim); §7.10.2 `FishingProposal` CDDL + kind table
-row; §14.3.2 CDDL (field 3, new field 8) and the "reused not reinvented"
-paragraph; §7.9's `ArchiveEntry` "a list of them is also a fishing
+bullets removed, duplicates by subject); `wire-format.md` §5.4 (bundle of introductions,
+most recent locator held); `wire-format.md` §7.9 (fishing one at a time in turns, the
+milking rationale verbatim); `wire-format.md` §7.10.2 `FishingProposal` CDDL + kind table
+row; `wire-format.md` §14.3.2 CDDL (field 3, new field 8) and the "reused not reinvented"
+paragraph; `wire-format.md` §7.9's `ArchiveEntry` "a list of them is also a fishing
 proposal" sentence.
 
-**network-design.md** (its own §): §7.1 step 6 narrative (1411); §8.1.2 bullets
-(2886–2895: fishing one at a time); §8.1's n criterion note (2769, 2902);
-§13 retention (3530–3535: the window no longer gates the bundle — pruning
+**network-design.md**: design §7.1 step 6 narrative (1411); design §8.1.2 bullets
+(2886–2895: fishing one at a time); design §8.1's n criterion note (2769, 2902);
+design §13 retention (3530–3535: the window no longer gates the bundle — pruning
 boundary needs the author: what now bounds pruning?); 1714–1716, 1833,
 3447 ("curated" language — check each reads true of locators).
 
