@@ -116,4 +116,48 @@ class OpticalExchangeTest {
         val a = OpticalExchange(OpticalExchange.CONTRIBUTION, bytes(600, 1), PARTS_OF_256)
         assertEquals("Showing part 1 of 3; received none of theirs yet; they hold 0 of your 3.", a.status())
     }
+
+    /**
+     * **A side reads its own code back off the other phone's glass.** The
+     * selfie camera faces a screen, and a screen reflects; ZXing decodes a
+     * mirrored symbol. Taken as the other side's, the reflection's header
+     * says "they hold everything" the moment this side does — on the
+     * bench one TCL declared the exchange done at 102/102 while the other
+     * held 80, and starved [2026-10-10]. A part equal to this side's own at
+     * that index can only be this side's, so it is named and nothing in it
+     * is believed.
+     */
+    @Test
+    fun a_reflection_of_this_sides_own_code_is_named_and_changes_nothing() {
+        val a = OpticalExchange(OpticalExchange.CONTRIBUTION, bytes(600, 1), PARTS_OF_256)  // 3 parts
+        val b = OpticalExchange(OpticalExchange.CONTRIBUTION, bytes(600, 2), PARTS_OF_256)  // 3 parts, other bytes
+        // b has given a everything, so a's own header carries received = 3
+        repeat(3) { a.take(b.frame()); b.turn() }
+        assertEquals(3, a.received())
+        val own = a.frame()
+        assertTrue("this side knows its own code", a.mine(own))
+        assertFalse("and does not mistake the other side's for it", a.mine(b.frame()))
+
+        // the reflection, read by this side: named, and no figure moves
+        val theyHeldBefore = a.theirReceived()
+        assertEquals(OpticalExchange.Took.MIRROR, a.take(own))
+        assertEquals("their holdings did not move on this side's own header", theyHeldBefore, a.theirReceived())
+        assertFalse("and the exchange is not done for having read itself", a.done())
+
+        // the other side is in the same position and names a's code as a's
+        assertEquals(OpticalExchange.Took.MIRROR, b.take(b.frame()))
+        assertTrue(b.mine(b.frame()))
+        assertFalse(b.mine(own))
+
+        // **the transcript is the same bytes on both phones**, so there the
+        // rule would name every genuine code a reflection — and did, on
+        // the bench: both phones sat on 1/2 reading each other. It is not
+        // asked of the transcript, where a reflection is also harmless
+        val ta = OpticalExchange(OpticalExchange.TRANSCRIPT, bytes(36, 9), PARTS_OF_256)
+        val tb = OpticalExchange(OpticalExchange.TRANSCRIPT, bytes(36, 9), PARTS_OF_256)
+        assertFalse("identical transcripts are not mistaken for reflections", ta.mine(tb.frame()))
+        // one part under this chunk, so the first taken is the last
+        assertEquals(OpticalExchange.Took.COMPLETE, ta.take(tb.frame()))
+        assertEquals(1, ta.received())
+    }
 }

@@ -204,7 +204,7 @@ class QrCamera(private val context: Context) {
      * symbol is the same width as this side's, both being this build at
      * the same chunk.
      */
-    fun trackingOf(parts: Int, modules: Int, sink: ((BooleanArray) -> Unit)?) {
+    fun trackingOf(parts: Int, modules: Int, sink: ((BooleanArray, ByteArray) -> Unit)?) {
         trackingParts = parts
         trackingModules = modules
         foundTracking = sink
@@ -213,7 +213,7 @@ class QrCamera(private val context: Context) {
     /** Where a sampled tracking bitmap goes, and the geometry it needs:
      *  how many parts the counterparty has and how wide their symbol is
      *  ([Tracking]). Set by the caller alongside the read. */
-    private var foundTracking: ((BooleanArray) -> Unit)? = null
+    private var foundTracking: ((BooleanArray, ByteArray) -> Unit)? = null
     private var trackingParts = 0
     private var trackingModules = 0
     private val tracked = java.util.concurrent.atomic.AtomicInteger(0)
@@ -244,7 +244,7 @@ class QrCamera(private val context: Context) {
         /** Where a sampled tracking bitmap goes, with how many parts the
          *  counterparty has and how wide their drawn symbol is
          *  ([Tracking]). All three or none. */
-        tracking: Triple<Int, Int, (BooleanArray) -> Unit>? = null,
+        tracking: Triple<Int, Int, (BooleanArray, ByteArray) -> Unit>? = null,
         found: (ByteArray) -> Unit,
     ): String? {
         // **One open per read.** A screen redraws for every note and step,
@@ -411,8 +411,12 @@ class QrCamera(private val context: Context) {
             // decoder has just told us where its finders are, which is a
             // module basis, so the cells below need no detector of their
             // own ([Tracking.cells])
-            trackFrom(r, y, rowStride, w, h)
-            Optical.bytes(r.text)
+            // **the rows travel with the bytes they were read under**, so
+            // the side that judges whose code this is can judge the rows by
+            // the same answer: a reflection's rows are this side's own
+            val bytes = Optical.bytes(r.text)
+            trackFrom(r, bytes, y, rowStride, w, h)
+            bytes
         } catch (e: NotFoundException) {
             // **the detector never located a symbol.** Framing, focus or
             // localisation — a bounding mark the detector could find at
@@ -445,7 +449,8 @@ class QrCamera(private val context: Context) {
      * the cells, because at the start of an exchange every cell is white
      * and a threshold derived from them would read noise as parts held.
      */
-    private fun trackFrom(r: com.google.zxing.Result, y: ByteArray, rowStride: Int, w: Int, h: Int) {
+    private fun trackFrom(r: com.google.zxing.Result, bytes: ByteArray?, y: ByteArray, rowStride: Int, w: Int, h: Int) {
+        if (bytes == null) return
         val sink = foundTracking ?: return
         val parts = trackingParts
         val modules = trackingModules
@@ -494,7 +499,7 @@ class QrCamera(private val context: Context) {
         // as unset, which is harmless, but it also tells us nothing
         if (seen < slots) return
         tracked.incrementAndGet()
-        sink(bits)
+        sink(bits, bytes)
     }
 
     /**

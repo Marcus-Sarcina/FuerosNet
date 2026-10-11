@@ -16487,6 +16487,138 @@ in the code rather than hidden in it:
   waits on the third reserved role and the §12 ownership-versus-hosting
   decision about what principal an invocation carries.
 
+## The low-spec pair, first run (2026-10-10)
+
+**Set up**: 8XDIW4G6WCW4LZU8 and VGY5IJRWUSAIX4VC, TCL 30 Z, on
+`192.168.0.10`/`.11`, merged into `crates/tools/phones.conf` beside the
+S21s. Debugging needed a udev rule for vendor `1bbb`; the file is
+`/etc/udev/rules.d/51-android.rules`. `field-setup.sh --conf` on a file
+naming only the TCLs is what kept the S21s' identities intact.
+
+**Run `d4407f5-tcl-cold-1`, TCL to TCL, cold.** Optical exchange complete
+at **42.2 s / 47.9 s** (S21s: 22.3 s); INTENT delivered both ways; then a
+`NoSuchMethodError` in the BLE bearer on both phones, API-33 overloads on
+an API-31 device. Fixed in `BleBearer.kt` with pre-33 paths. **Range was
+not retested** — the run died before that was reached — so the 36-inch
+figure is still an S21 figure.
+
+**What the sweep settled**: `NewApi` is **zero** after the fix, so the
+three sites were the only unguarded 33-only calls — the fix is complete
+rather than lucky. One `InlinedApi` warning stands (`FEATURE_UWB` is an
+API-34 constant inlined at compile time; harmless, the feature query
+simply answers no on 31).
+
+**What stands between lint and the gate**: four `MissingPermission`
+errors, all predating today — `BleBearer.kt` 666/668/669, the close paths
+under `runCatching`, which lint does not read as catching
+`SecurityException`; and `QrCamera.kt:743`, `openCamera`, whose permission
+is asked for at runtime elsewhere. Five more were introduced by the fix's
+own helpers (lint cannot see through a helper to the caller's catch) and
+are suppressed on the helpers with the reason, there being no
+`androidx.annotation` on the classpath to declare the requirement with.
+**Owed**: clear those four the same way and make `NewApi` fatal in
+`build.gradle.kts`, so a 33-only call on `minSdk = 31` fails the gate
+rather than a phone. Not done now because the ceremony is the task.
+- **The pre-33 write path is untested on hardware.** The unit suite is
+  green, but the legacy `writeCharacteristic(c)` returns before the stack
+  has acknowledged, same as the new one; the existing ack gate covers
+  that. What a real pre-33 stack does with a busy write (which it cannot
+  signal) is the thing only the rerun shows.
+
+**Run `d4407f5-tcl-cold-2`, same pair, BLE fix in** — hung at the end of
+the exchange. Not the Bluetooth path: A finished optical, reached BLE and
+timed out at 30 s because B never arrived; B was stuck at 80/102 from
+87 s, never offered parts 80–81 again, and abandoned at 180 s of nothing
+crossing. Diagnosis from the stream and the code, in order: `done()` is
+headers-only; B's header carried 80 throughout; B never showed a
+transcript frame, so the `which+1` shortcut cannot have fired; yet A's
+`showing` of 101 with nothing owed proves `theirGot ≥ 101`. The only
+frame A could have read with byte 4 ≥ 101 was **its own**, reflected in
+B's glass (ZXing decodes mirrored symbols). The reflected rows then
+marked every one of A's parts as held by B, which is why A showed only
+100–101 and B starved. Fixed: `OpticalExchange.mine()` and `Took.MIRROR`,
+judged before any figure is taken; rows travel with their bytes and are
+gated the same way; `optical.mirror` is logged so the rerun measures it.
+**This is a hypothesis with every other path excluded, not an
+observation** — the rerun's `optical.mirror` count is what turns it into
+one, or sends me back to the stream.
+
+**Run `d4407f5-tcl-cold-3`, reflection rule in** — the contribution
+completed on both sides (first time on this pair), both pinned, both
+reached the transcript — and hung there. `optical.mirror`: 156 and 194,
+**all transcript-phase, zero in the contribution**. So: (a) the transcript
+hang was my rule — `TranscriptConfirm` is identical on both phones by
+design (§14.3.2), so equality named every genuine code a reflection; now
+asked of the contribution alone, with a test for the identical-transcript
+case; (b) **the reflection hypothesis for run 2 is unconfirmed** — run 3
+had no reflection to catch (the author had been asked to tilt the screens
+slightly, which may be why), and exclusion of every other path is all it
+rests on. The next run that stalls at the contribution with mirrors at
+zero refutes it; one with mirrors above zero and no stall supports it.
+
+**Run `d4407f5-tcl-cold-5`, callback fix in — DONE on both.** BRIEF →
+OPTICAL → PROXIMITY → CAPTURE → VERIFIERS → REVIEW → DONE, ceremony
+`288f981b`, txid `89400995`, 2 signers; `cer.intent.received` on the
+client, so the pre-33 notification path works on hardware. OPTICAL→DONE
+60.0 s / 67.3 s. Mirrors zero again (three runs now). **The low-spec pair
+is usable.**
+
+**Still owed from this thread:**
+
+- **The range test** — never run; the 36-inch figure is still an S21
+  figure.
+- **The rate idea** (the author's): key the presentation period to the
+  reader's observed throughput. The stream has the inputs — their
+  header's `got` per frame shown — and the TCL numbers (decode ~2.5×
+  slower, period already ~2.5× longer) say where it would bite.
+- **Lint into the gate**: four pre-existing `MissingPermission` findings
+  to clear, then `NewApi` fatal. Note it would not have caught the
+  callback — only the two calls.
+- **The transcript confirm naming its author** — the author's call
+  (§14.3.2 encoding change).
+- **The run-2 stall** — still the one unexplained thing; the reflection
+  reading has three clean runs against it and exclusion for it.
+
+**Run `d4407f5-tcl-cold-4`, transcript rule confined** — the furthest yet:
+contribution 102/102 both ways (34.2 s / 41.5 s), `cer.id_fixed` on
+both, NFC absent and said so, BLE connected both ways (MTU 517), both
+INTENTs sent. The client's write: `acknowledged status 0` — **the pre-33
+write path works on hardware**. The server's INTENT goes by notification
+and the client never received it: only the API-33 three-argument
+`onCharacteristicChanged` was overridden. Fixed with both arities into one
+handler. **No unit test** — the JVM test jar stubs the framework classes
+the callback takes — so the next run is its test. Mirrors in the
+contribution: zero again, screens square. The run-2 reflection reading
+now has two completed runs against it and nothing for it beyond
+exclusion; it stays an open note, not a finding.
+
+**For the author**: the transcript is the man-in-the-middle check
+(§14.3.1), and a phone that reads its own reflection there agrees with
+itself. A `TranscriptConfirm` that names its author — the kernel then
+refusing one not signed by, or not naming, the counterparty — would close
+that; it changes a documented encoding, so it is an option on the table
+and not a change made.
+
+**The author's two suggestions, against the numbers:**
+
+- *Slow the presentation when misses run high near the end.* The tail in
+  this run was the reflection, not the rate — once that is out, the
+  question is open and the data says the period is already device-paced:
+  TURN_MS is 100 ms but the TCL turned every 225–270 ms. A rate keyed on
+  the *reader's* observed throughput (how fast their header's `got`
+  advances per frame shown) is the role-neutral form of it, and the
+  stream now has the figures to design it from. Owed, after the rerun.
+- *Shutter and the smaller screen.* Exposure settled at 20–40 ms at ISO
+  183–366 — at least one whole 60 Hz refresh integrated, which is what
+  `QrCamera` asks for, so the shutter is not the limit. The limit is the
+  decode: 165–202 ms median on the TCL against ~70 ms on the S21, with
+  ~2.5× the frame period to match. Module size was 1.86–1.95 mm at 40–42
+  px per module, comfortably readable; range was not reached again.
+
+**Then**: wipe and reinstall both TCLs (the ceremony needs a fresh genesis
+and the crash left a partial one), re-merge their new material, and rerun
+— the same `--phone` pair, and the range test this run did not reach.
+
 ## Phone to container, run on hardware (2026-10-10)
 
 **Done, and it works.** RFCRC1JDGXV (SM-G996U1) enrolled a container on

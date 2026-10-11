@@ -1,5 +1,6 @@
 package com.comptus.fueros
 
+import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
@@ -274,8 +275,7 @@ class BleBearer(private val context: Context) {
                     )
                 }
                 return try {
-                    @Suppress("DEPRECATION")
-                    var status = g.writeCharacteristic(c, packet, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
+                    var status = write(g, c, packet)
                     // **a stack that says busy is offered the packet
                     // again**: the gate is held either way, so nothing
                     // else is racing it, and busy is a moment and not a
@@ -285,8 +285,7 @@ class BleBearer(private val context: Context) {
                         Diag.warn("ble", "op" to "write", "state" to "busy", "try" to tries)
                         Thread.sleep(WRITE_BUSY_MS)
                         tries += 1
-                        @Suppress("DEPRECATION")
-                        status = g.writeCharacteristic(c, packet, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
+                        status = write(g, c, packet)
                     }
                     val ok = status == BluetoothGatt.GATT_SUCCESS || status == 0
                     if (!ok) {
@@ -315,8 +314,7 @@ class BleBearer(private val context: Context) {
             val d = peer ?: return false
             val c = s.getService(SERVICE)?.getCharacteristic(OUTBOUND) ?: return false
             return try {
-                @Suppress("DEPRECATION")
-                val status = s.notifyCharacteristicChanged(d, c, false, packet)
+                val status = notify(s, d, c, packet)
                 val ok = status == BluetoothGatt.GATT_SUCCESS
                 if (!ok) Diag.warn("ble", "op" to "notify", "status" to status)
                 ok
@@ -493,6 +491,7 @@ class BleBearer(private val context: Context) {
      *  own value and the one-argument write is the only one there is. Both
      *  are deprecated from 33, where [subscribe] takes the other branch. */
     @Suppress("DEPRECATION")
+    @SuppressLint("MissingPermission")
     private fun writeDescriptorBefore33(g: BluetoothGatt, cccd: BluetoothGattDescriptor): Boolean {
         cccd.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
         return g.writeDescriptor(cccd)
@@ -634,12 +633,31 @@ class BleBearer(private val context: Context) {
             }
         }
 
-        @Suppress("DEPRECATION")
+        /**
+         * **Both arities, because the stack calls one or the other.** The
+         * three-argument form arrived in API 33; below it the stack invokes
+         * the two-argument one and the value is on the characteristic. A
+         * class overriding only the new form is never called on a 31 device
+         * — no error, no warning, just silence — which is how a TCL 30 Z
+         * connected, subscribed, sent its own intent and never heard the
+         * other side's [2026-10-10]. Lint cannot see this: an override of a
+         * method that does not exist yet is not a call.
+         */
         override fun onCharacteristicChanged(
             g: BluetoothGatt,
             c: BluetoothGattCharacteristic,
             value: ByteArray,
         ) {
+            changed(c, value)
+        }
+
+        @Deprecated("the pre-33 form, which the stack calls below API 33")
+        @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
+        override fun onCharacteristicChanged(g: BluetoothGatt, c: BluetoothGattCharacteristic) {
+            changed(c, c.value ?: return)
+        }
+
+        private fun changed(c: BluetoothGattCharacteristic, value: ByteArray) {
             if (c.uuid == OUTBOUND) inbound?.packet(value)
         }
     }
@@ -677,3 +695,44 @@ class BleBearer(private val context: Context) {
         subscription.reset()
     }
 }
+
+/**
+ * **A characteristic write on whichever stack this phone has.** The
+ * value-carrying overload arrived in API 33; `minSdk` is 31, and on a
+ * 31 device the method does not exist at runtime at all — the call is a
+ * `NoSuchMethodError`, which took the bearer's thread and the ceremony
+ * with it on a TCL 30 Z [2026-10-10]. Below 33 the value is set on the
+ * characteristic first and the older single-argument write is used; its
+ * boolean is mapped onto the status codes the caller already reads, with
+ * a refusal as `GATT_FAILURE` so it is never mistaken for busy and
+ * retried.
+ */
+// the permission is the caller's to hold and its refusal the caller's to
+// catch (`SecurityException` -> `refused`); lint cannot see through the
+// helper boundary to the catch, and there is no androidx annotation on
+// this classpath to declare the requirement with, so it is suppressed
+// here with the reason
+@SuppressLint("MissingPermission")
+private fun write(g: BluetoothGatt, c: BluetoothGattCharacteristic, packet: ByteArray): Int =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        g.writeCharacteristic(c, packet, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
+    } else {
+        @Suppress("DEPRECATION")
+        c.value = packet
+        @Suppress("DEPRECATION")
+        val sent = g.writeCharacteristic(c)
+        if (sent) BluetoothGatt.GATT_SUCCESS else BluetoothGatt.GATT_FAILURE
+    }
+
+/** The server-side twin: a notification on whichever stack this phone has. */
+@SuppressLint("MissingPermission")
+private fun notify(s: BluetoothGattServer, d: BluetoothDevice, c: BluetoothGattCharacteristic, packet: ByteArray): Int =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        s.notifyCharacteristicChanged(d, c, false, packet)
+    } else {
+        @Suppress("DEPRECATION")
+        c.value = packet
+        @Suppress("DEPRECATION")
+        val sent = s.notifyCharacteristicChanged(d, c, false)
+        if (sent) BluetoothGatt.GATT_SUCCESS else BluetoothGatt.GATT_FAILURE
+    }

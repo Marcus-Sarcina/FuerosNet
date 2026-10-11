@@ -3,8 +3,12 @@
 #  nodeless.sh -- a ceremony with no node, which is design §6.4's escape
 #  (`Robot/field-test-diagnostics.md`, section 4).
 #
-#    nodeless.sh [--addr <ip>] [--port <n>] <label>
+#    nodeless.sh [--addr <ip>] [--port <n>] [--phone <serial>]... <label>
 #    nodeless.sh stop
+#
+#  --phone names the two phones by adb serial, for a bench with more than
+#  two attached; given none, the two on USB are taken, and more or fewer
+#  than two is a refusal.
 #
 #  `field-run.sh` always provisions a node to attach to, and hands each
 #  phone the other's full key material besides. **Both are the harness
@@ -33,6 +37,7 @@ set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
 APP=com.comptus.fueros
+CHOSEN=()
 PORT=7448
 ADDR=""
 LABEL=""
@@ -52,6 +57,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --addr) ADDR="${2:-}"; shift 2 ;;
     --port) PORT="${2:-}"; shift 2 ;;
+    --phone) CHOSEN+=("${2:-}"); shift 2 ;;
     stop) LABEL=stop; shift ;;
     *) LABEL="$1"; shift ;;
   esac
@@ -99,12 +105,23 @@ say "run $RUN"
 # so the phones are only addresses to push it to: whatever adb says is
 # attached and running the app.
 SERIALS=()
-while read -r s st; do
-  [ "$st" = device ] || continue
-  case "$s" in *:*) continue ;; esac
-  SERIALS+=("$s")
-done < <("$ADB" devices | sed 1d)
-[ "${#SERIALS[@]}" -eq 2 ] || die "need exactly two phones on USB, have ${#SERIALS[@]}: ${SERIALS[*]:-none}"
+if [ "${#CHOSEN[@]}" -gt 0 ]; then
+  # named: each must be attached, so a typo is refused here rather than
+  # discovered as a provision that went nowhere
+  for s in "${CHOSEN[@]}"; do
+    "$ADB" devices | awk -v s="$s" '$1 == s && $2 == "device" {f=1} END {exit !f}' \
+      || die "--phone $s: not attached as a device (adb devices)"
+    SERIALS+=("$s")
+  done
+  [ "${#SERIALS[@]}" -eq 2 ] || die "need exactly two --phone, have ${#SERIALS[@]}"
+else
+  while read -r s st; do
+    [ "$st" = device ] || continue
+    case "$s" in *:*) continue ;; esac
+    SERIALS+=("$s")
+  done < <("$ADB" devices | sed 1d)
+  [ "${#SERIALS[@]}" -eq 2 ] || die "need exactly two phones on USB, have ${#SERIALS[@]}: ${SERIALS[*]:-none}; name two with --phone"
+fi
 
 TARGET="$ROOT/crates/target/fieldtest/release"
 [ -x "$TARGET/rhtn" ] || die "no $TARGET/rhtn; run field-setup.sh first"

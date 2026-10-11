@@ -658,10 +658,13 @@ class MeetActivity : Activity() {
         // build at the same chunk. Until then there is nothing to sample.
         val theirs = x.theirCount()
         if (theirs > 0 && lastModules > 0) {
-            camera?.trackingOf(theirs, lastModules) { bits ->
+            camera?.trackingOf(theirs, lastModules) { bits, under ->
                 runOnUiThread {
                     val m2 = Kernel.meet() ?: return@runOnUiThread
                     if (m2.step() != Meet.Step.OPTICAL || m2.exchange !== x) return@runOnUiThread
+                    // rows under this side's own code, reflected, are this
+                    // side's own holdings and say nothing about theirs
+                    if (x.mine(under)) return@runOnUiThread
                     val before = x.theirReceived()
                     x.takeTracking(bits)
                     if (x.theirReceived() != before) redraw()
@@ -677,9 +680,18 @@ class MeetActivity : Activity() {
                 // news is either count moving, not the verdict
                 val heldBefore = x.received()
                 val theyHeldBefore = x.theirReceived()
-                if (x.take(bytes) == OpticalExchange.Took.MALFORMED) {
-                    m.stop("a code of the exchange did not read as one")
-                    return@runOnUiThread
+                when (x.take(bytes)) {
+                    OpticalExchange.Took.MALFORMED -> {
+                        m.stop("a code of the exchange did not read as one")
+                        return@runOnUiThread
+                    }
+                    // said rather than silent, so a run shows how often a
+                    // phone reads itself off the other's glass
+                    OpticalExchange.Took.MIRROR -> {
+                        Diag.event("optical.mirror", "which" to name, "index" to (bytes[2].toInt() and 0xff))
+                        return@runOnUiThread
+                    }
+                    else -> {}
                 }
                 if (x.received() == heldBefore && x.theirReceived() == theyHeldBefore) return@runOnUiThread
                 m.opticalMoved()

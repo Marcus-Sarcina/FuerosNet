@@ -119,6 +119,14 @@ class OpticalExchange(
          *  parts, an index past the count, a count that changed between
          *  codes, or more of mine held than this side has. */
         MALFORMED,
+        /** **This side's own code, read back off the other phone's glass.**
+         *  A part equal to the one this side holds at that index can only
+         *  be this side's, so nothing in it is news about them: not the
+         *  header, whose `received` is this side's own count, and not the
+         *  rows under it. Taken as theirs it said "they hold everything"
+         *  the moment this side did, and the other phone starved
+         *  [2026-10-10]. */
+        MIRROR,
     }
 
     private val parts: List<ByteArray> = evenly(mine, chunk)
@@ -238,8 +246,31 @@ class OpticalExchange(
      * side needed completes theirs. Their header's count of mine is taken
      * either way, since that is what moves the two on.
      */
+    /** Whether `bytes` is one of this side's own codes: this exchange's
+     *  header over a part this side holds at that index.
+     *
+     *  **Exact for the contribution and meaningless for the transcript.**
+     *  The two contributions are different objects, so the other side's
+     *  part at an index is never equal to this side's and equality names a
+     *  reflection with certainty. The transcript is the agreed meeting id,
+     *  the same bytes on both phones by construction — so there a
+     *  reflection and the other side's code are byte-identical, and also
+     *  of one consequence, since confirming against either yields the
+     *  same answer. Applied to the transcript, this rule judged every
+     *  genuine code a reflection and both phones waited on each other
+     *  [2026-10-10]. So it is asked of the contribution alone. */
+    fun mine(bytes: ByteArray): Boolean = synchronized(lock) {
+        if (which != CONTRIBUTION) return false
+        if (bytes.size < HEADER || bytes[0].toInt() != VERSION || bytes[1].toInt() != which) return false
+        val index = bytes[2].toInt() and 0xff
+        index < parts.size && bytes.copyOfRange(HEADER, bytes.size).contentEquals(parts[index])
+    }
+
     fun take(bytes: ByteArray): Took = synchronized(lock) {
         if (bytes.size < HEADER || bytes[0].toInt() != VERSION) return Took.NOT_OURS
+        // **before any figure is believed**: a reflection carries this
+        // side's own header, and its `received` is this side's own count
+        if (mine(bytes)) return Took.MIRROR
         if (bytes[1].toInt() == which + 1) {
             // **a code of the next exchange is the other side saying it has
             // everything of this one**: it moved on only once it held all of

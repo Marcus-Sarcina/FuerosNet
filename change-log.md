@@ -13512,6 +13512,113 @@ directory; residue the 8 October layout left above that was out of reach
 and the host-side removal then failed. It cleans the whole of the node's
 directory as root now.
 
+**The first low-spec run, and what it found** [2026-10-10]. Two TCL 30 Z
+(4188C: Android 12, API 31, arm64, 2.7 GB) joined the bench beside the two
+SM-G996U1, set up on their own without touching the S21s' identities. The
+cold ceremony between them got through the optical exchange — **42.2 s and
+47.9 s end to end against 22.3 s on the S21s** — delivered each INTENT over
+the carriage, and then both phones died.
+
+**Not NFC.** The TCLs have none and the shell skipped it correctly; the
+ceremony fell to BLE, and the BLE bearer called two overloads that arrived
+in API 33 — `writeCharacteristic(characteristic, bytes, type)` and
+`notifyCharacteristicChanged(device, characteristic, confirm, bytes)` — on
+a 31 device, where they do not exist at runtime: a `NoSuchMethodError` on
+the bearer's thread, which Android answered by relaunching the app. The
+file already guarded one Tiramisu call with a pre-33 path; these three
+sites were missed, and nothing in the build held `minSdk = 31` against a
+33-only call. They take the pre-33 path now — the value set on the
+characteristic, the older single-argument call, its boolean mapped onto
+the status codes the caller reads, with a refusal as `GATT_FAILURE` so it
+is never taken for busy and retried. A lint sweep afterwards found no
+other unguarded call, so the fix is the whole of it.
+
+**The second TCL run hung at the end of the exchange, and the stream
+shows a phone reading itself** [2026-10-10]. One side reached 102/102 of
+the other's parts, read the other as holding all 102 of its own, finished
+the transcript, moved to the Bluetooth link and timed out there; the other
+side sat at 80/102 from 87 s on and was never offered the parts it lacked.
+The header-only `done()` rules out every path to the first side's belief
+but one: its **own code**. From 88.5 s its screen carried `received = 102`
+in byte 4, the selfie camera faces a screen and a screen reflects, and
+ZXing decodes a mirrored symbol — so it read its own header back off the
+other phone's glass and took it as theirs, and the reflected tracking rows
+under it, all set, said the other side held everything. That is also the
+shape of the 8 October incident on the S21s, where one phone was "sure it
+held all". **A part equal to this side's own at that index can only be
+this side's** — the two contributions are different objects — so the
+exchange names such a code `MIRROR` before any figure in it is believed,
+the rows travel with the bytes they were read under so the same answer
+gates them, and a run now says how often a phone reads itself.
+
+**The fifth run completed: the first cold ceremony on low-spec hardware**
+[2026-10-10]. Two TCL 30 Z, 2.7 GB and API 31, from BRIEF to DONE on both
+phones — the same ceremony id, the same transaction with two signers,
+captures sealed, every Bluetooth write acknowledged, the server's INTENT
+heard by the client at last. From OPTICAL to DONE, 60 and 67 s; the
+contribution alone, 34–42 s against 22 s on the S21s. No crash, and not
+one `optical.mirror`.
+
+What it took, in order: two Bluetooth overloads and one callback that
+exist only from API 33, on `minSdk = 31`; the bench learning to name its
+phones; and one defect of my own on the way, a reflection rule applied to
+an exchange whose two sides are identical by design. The reflection rule
+stays, confined to the contribution, having caught nothing in three runs.
+
+**The fourth run reached the radio, and found the third API-33 gap**
+[2026-10-10]. Contribution complete both ways in 34 and 42 s, transcript
+agreed on both phones, NFC correctly absent, the Bluetooth link up in both
+directions with a 517-byte MTU, and both INTENTs sent — the client's by a
+write the pre-33 path carried and the stack acknowledged. The server's
+INTENT travels by notification, and the client never heard it: `BleBearer`
+overrode only the three-argument `onCharacteristicChanged` that arrived in
+API 33, so on a 31 device the stack's two-argument call landed on the base
+class and the override was never invoked. No error, no warning, and
+nothing lint can see — an override of a method that does not exist yet is
+not a call. Both forms are overridden now, into one handler. Every other
+callback the bearer overrides predates 33 unchanged.
+
+**And still no reflection**: zero `optical.mirror` in the contribution on
+either phone, screens held square, and the contribution completed. Two
+runs have now passed where the second's stall would have been; the
+reading of that stall is unsupported by anything since observed and stays
+recorded as the one path not excluded.
+
+**The third run completed the contribution on both phones, for the first
+time on this pair — and then hung on the transcript, which was the fix's
+own doing** [2026-10-10]. Both sides reached 102/102, both pinned the
+other's contribution, both moved to the transcript; and there each read
+the other's code and refused it as a reflection. `TranscriptConfirm`
+(`wire-format.md` §14.3.2) carries the ceremony id alone, computed
+symmetrically from the two contributions, so it is the same bytes on both
+phones by design — exactly the case the equality rule cannot tell from a
+reflection. The rule is asked of the contribution only now, where the two
+objects differ and equality is certain; in the transcript a reflection and
+the genuine code are byte-identical and confirm to the same answer.
+
+**And the reflection reading is not confirmed.** Not one `optical.mirror`
+fired in either phone's contribution phase; all 350 were transcript codes
+misjudged. The second run's stall still has every other path excluded,
+but the third produced no reflection to observe. **What the transcript
+step is for** (§14.3.1) is worth a ruling: it is the man-in-the-middle
+check, and a phone reading its own reflection there agrees with itself. A
+confirm that named its author would let the kernel refuse that outright;
+it is a change to a documented encoding, so it is recorded rather than
+made.
+
+**The figures the run was for.** Decode time on the TCL is 165–202 ms
+median against ~70 ms on the S21, and the frame period stretched to
+225–270 ms against 90–100 ms — the rotation turns on the screen's own
+clock, and a 2.7 GB phone does not keep a 100 ms tick. Exposure settled at
+20–40 ms at ISO 183–366, which integrates a whole refresh and is not where
+the slowness is. The exchange itself completed at 42 and 48 s before the
+stall; the stall was the reflection, not the rate.
+
+**The bench can name its phones.** `nodeless.sh` took exactly the two
+phones on USB and refused any other count, so with four attached it could
+run no pair at all; it takes `--phone <serial>` twice now, and falls back
+to the old enumeration when given none.
+
 **Operator is no longer hidden on the home screen.** The plan keyed it on
 an instance being attached; enrolling one is how an identity comes to have
 an instance, so gating the only way in on already being in would leave no
