@@ -48,6 +48,9 @@ object Kernel {
     /** Whether the counterparty's contribution has been read off their
      *  screen, which is what decides the second QR from the first. */
     @Volatile private var opticalTaken = false
+    /** Whether the transcript has been taken for the meeting open: a
+     *  second is the screen repeating itself, and starts no second bearer. */
+    @Volatile private var transcriptTaken = false
 
     /** The radio and the carriage over it, once the meeting opens one. */
     @Volatile private var ble: BleBearer? = null
@@ -349,9 +352,11 @@ object Kernel {
                 null
             }
         }
+        if (transcriptTaken) return null
         var refused: String? = null
         val id = call("takeTranscript", { refused = it.reason; null }) { p.takeTranscript(bytes) }
             ?: return refused ?: "the transcript was refused"
+        transcriptTaken = true
         m.note("the two meeting ids agree: ${hex(id).take(16)}…")
         // D3 can now run: the tap carries this agreed ceremony-id,
         // and the reader/card side follows the bootstrap's own
@@ -509,6 +514,7 @@ object Kernel {
         val work = synchronized(lock) {
             meet = null
             opticalTaken = false
+            transcriptTaken = false
             ble?.close()
             ble = null
             carriage = null

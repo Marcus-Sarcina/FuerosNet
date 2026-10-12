@@ -15,7 +15,7 @@ use crate::net::{Attached, Event, Net, Status, Wake, pins_for};
 use crate::types::{Answer, Channel, ChannelOutcome, Id, Refused, id_of, keyhash};
 use rhtn_adaptors::actor::Handle;
 use rhtn_archive::Keyhash;
-use rhtn_client::ceremony::{Client, Config};
+use rhtn_client::ceremony::Client;
 use rhtn_client::device::DirectPath;
 use rhtn_transport::tls::Party;
 use std::net::SocketAddr;
@@ -767,7 +767,7 @@ impl Participant {
                 let me = rhtn_crypto::SigningIdentity::from_seeds(&ed, &pq);
                 // the client's route reads the same set the direct socket fills
                 let direct: std::rc::Rc<dyn DirectPath> = std::rc::Rc::new(reachable);
-                Client::new(me, known, Config::default(), platform.device(direct))
+                Client::new(me, known, platform.config(), platform.device(direct))
             })
             .map_err(Refused::new)?;
             let p = Participant {
@@ -967,7 +967,7 @@ impl Participant {
                     public,
                     presented,
                     known,
-                    Config::default(),
+                    platform.config(),
                     platform.device(direct),
                 )
             })
@@ -2272,8 +2272,10 @@ fn outcome_of(r: rhtn_client::device::ChannelResult) -> ChannelOutcome {
 
 #[uniffi::export]
 impl Platform {
-    /// The platform's nine objects, handed over once.  The ninth,
-    /// diagnostics, hears nothing from a releasable build.
+    /// The platform's nine objects, handed over once — the ninth,
+    /// diagnostics, hears nothing from a releasable build — and the
+    /// engine's two models with the camera's frame geometry; both models
+    /// empty is the reference stand-in (design §22.2).
     #[uniffi::constructor]
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -2286,6 +2288,10 @@ impl Platform {
         storage: Arc<dyn crate::device::Storage>,
         custody: Arc<dyn crate::device::Custody>,
         diagnostics: Arc<dyn crate::device::Diagnostics>,
+        yunet: Vec<u8>,
+        sface: Vec<u8>,
+        frame_width: u32,
+        frame_height: u32,
     ) -> Platform {
         platform(
             proximity,
@@ -2297,6 +2303,10 @@ impl Platform {
             storage,
             custody,
             diagnostics,
+            yunet,
+            sface,
+            frame_width,
+            frame_height,
         )
     }
 }
@@ -2313,7 +2323,35 @@ pub fn platform(
     storage: Arc<dyn crate::device::Storage>,
     custody: Arc<dyn crate::device::Custody>,
     diagnostics: Arc<dyn crate::device::Diagnostics>,
+    yunet: Vec<u8>,
+    sface: Vec<u8>,
+    frame_width: u32,
+    frame_height: u32,
 ) -> Platform {
+    // **the engine is the shell's to supply and the kernel's to run**:
+    // the two models' bytes and the camera's frame geometry; both models
+    // absent is the reference stand-in, and a model that does not load
+    // is said and then the stand-in, never a half-engine
+    let engine = if yunet.is_empty() && sface.is_empty() {
+        None
+    } else {
+        match rhtn_engine::SFace::from_onnx(
+            &yunet,
+            &sface,
+            frame_width as usize,
+            frame_height as usize,
+            rhtn_engine::Thresholds::default(),
+        ) {
+            Ok(e) => {
+                tracing::info!(target: "platform", width = frame_width, height = frame_height, "platform.engine");
+                Some(Arc::new(e))
+            }
+            Err(why) => {
+                tracing::warn!(target: "platform", %why, "platform.engine.refused");
+                None
+            }
+        }
+    };
     Platform {
         proximity,
         camera,
@@ -2324,6 +2362,7 @@ pub fn platform(
         storage,
         custody,
         diagnostics,
+        engine,
     }
 }
 

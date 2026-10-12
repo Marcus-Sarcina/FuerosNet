@@ -1,0 +1,16 @@
+[package]
+name = "rhtn-engine"
+version = "0.1.0"
+edition = "2024"
+description = "The reference client's biometric engine (design §22.2): YuNet detection and alignment, SFace embedding, the fuzzed profile and the cosine matcher, over tract"
+license = "Apache-2.0"
+
+[dependencies]
+# the flavour is the binding's to choose (`rhtn-client`'s manifest): this
+# crate names none, and its own tests build the releasable one
+rhtn-client = { path = "../client", default-features = false }
+rhtn-codec = { path = "../codec" }
+tract-onnx = "0.23"
+
+[dev-dependencies]
+rhtn-client = { path = "../client", features = ["releasable"] }

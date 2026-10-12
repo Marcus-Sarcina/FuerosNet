@@ -165,16 +165,38 @@ pub struct Platform {
     pub custody: Arc<dyn Custody>,
     /// Where field-test diagnostics go; [`Silent`] where none are wanted.
     pub diagnostics: Arc<dyn Diagnostics>,
+    /// The biometric engine (design §22.2), where the shell supplied its
+    /// models; the reference stand-in otherwise, which recognises nobody.
+    pub engine: Option<Arc<rhtn_engine::SFace>>,
+}
+
+/// The engine as the client holds it: the platform's, shared.
+struct EngineIn(Arc<rhtn_engine::SFace>);
+
+impl dev::Engine for EngineIn {
+    fn template(&self, frames: &[rhtn_client::store::Frame]) -> Vec<u8> {
+        self.0.template(frames)
+    }
+    fn profile(&self, template: &[u8]) -> Vec<u8> {
+        self.0.profile(template)
+    }
+    fn matcher(&self) -> &dyn rhtn_client::verifier::Matcher {
+        self.0.matcher()
+    }
 }
 
 impl Platform {
     /// The client's own device, built from this platform.
     ///
     /// Called on the thread the client runs on, which is where the `Rc`
-    /// the client holds must be made.  The biometric engine is not the
-    /// shell's: design §22.2 leaves the real one open, and the reference
-    /// compares hashes and recognises nobody.
+    /// the client holds must be made.  The biometric engine is the one
+    /// design §22.2 chose where the shell supplied its models
+    /// (`rhtn_engine`), and the reference stand-in otherwise.
     pub fn device(&self, direct: std::rc::Rc<dyn dev::DirectPath>) -> dev::Device {
+        let engine: std::rc::Rc<dyn dev::Engine> = match &self.engine {
+            Some(e) => std::rc::Rc::new(EngineIn(e.clone())),
+            None => std::rc::Rc::new(dev::HashEngine::new(16)),
+        };
         dev::Device {
             proximity: std::rc::Rc::new(ProximityIn(self.proximity.clone())),
             camera: std::rc::Rc::new(CameraIn(self.camera.clone())),
@@ -182,9 +204,23 @@ impl Platform {
             random: std::rc::Rc::new(RandomIn(self.random.clone())),
             operator: std::rc::Rc::new(OperatorIn(self.operator.clone())),
             notifier: std::rc::Rc::new(NoticesIn(self.notices.clone())),
-            engine: std::rc::Rc::new(dev::HashEngine::new(16)),
+            engine,
             direct,
         }
+    }
+
+    /// The client's configuration for this platform: the engine's modality
+    /// version and template length where the engine is present, so what
+    /// is sealed, queried and compared is one version throughout.
+    pub fn config(&self) -> rhtn_client::ceremony::Config {
+        let mut cfg = rhtn_client::ceremony::Config::default();
+        if self.engine.is_some() {
+            cfg.template_version = rhtn_engine::TEMPLATE_VERSION;
+            cfg.seal.template_len = rhtn_engine::TEMPLATE_LEN;
+            cfg.verifier.template_versions =
+                std::collections::BTreeSet::from([rhtn_engine::TEMPLATE_VERSION]);
+        }
+        cfg
     }
 }
 

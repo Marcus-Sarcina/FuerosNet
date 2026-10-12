@@ -205,4 +205,19 @@ class OpticalExchangeTest {
         assertEquals(OpticalExchange.Took.DUPLICATE, a.take(b.frame()))
         assertEquals(v2, a.version())
     }
+
+    /** **Another ceremony's code of this type is not ours**, not malformed:
+     *  once the other side's count is known, a frame with a different
+     *  count is some other phone's exchange, read by accident, and nothing
+     *  of this one is wrong. A frame that cannot be a frame at all is. */
+    @Test
+    fun another_ceremonys_code_is_not_ours_and_a_broken_one_is_malformed() {
+        val a = OpticalExchange(0, bytes(40, 1), chunk = 20)
+        val b = OpticalExchange(0, bytes(40, 2), chunk = 20)
+        assertEquals(OpticalExchange.Took.ACCEPTED, a.take(b.frame()))
+        val stray = byteArrayOf(1, 0, 0, 3, 0) + bytes(20, 9)
+        assertEquals(OpticalExchange.Took.NOT_OURS, a.take(stray))
+        assertEquals(OpticalExchange.Took.MALFORMED, a.take(byteArrayOf(1, 0, 5, 2, 0) + bytes(20, 9)))
+        assertEquals(OpticalExchange.Took.MALFORMED, a.take(byteArrayOf(1, 0, 0, 0, 0)))
+    }
 }

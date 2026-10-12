@@ -13645,6 +13645,21 @@ an instance being attached; enrolling one is how an identity comes to have
 an instance, so gating the only way in on already being in would leave no
 way in.
 
+### 2026-10-11 (the engine)
+
+**The biometric engine design §22.2 chose is built**: OpenCV's SFace
+with YuNet for detection and alignment, run inside the kernel's
+boundary over a pure-Rust inference runtime, so one implementation
+serves every platform and a profile one client produces is what
+another's matcher compares (§7.4.4). Modality version 2: a 128-dimension
+unit template, 512 bytes sealed first in the capture (§7.5.2.7); a
+profile of 128 quantised bytes with seeded noise (§7.5's fuzzing
+target); a categorical verdict at two cosine thresholds with an
+inconclusive band between (§7.4.4). The shell supplies the two models as
+assets and the camera's frame geometry; without them the reference
+stand-in runs, which recognises nobody. The thresholds, the fuzz and the
+fp32 model are the implementation's provisional choices under §22.2.
+
 ### 2026-10-11 (contacts)
 
 **[author, 2026-10-11] A client keeps contacts, and prunes toward what

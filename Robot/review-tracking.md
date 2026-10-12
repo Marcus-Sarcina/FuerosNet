@@ -16891,6 +16891,125 @@ traversed in a resolution (no resolution path in the client yet) and a
 declined fishing candidate (fishing not built). The ffi lists contacts
 (`contacts()`), for a People screen to come.
 
+**GXV × 4VC (15:26) hung at the intent — my refactor.** With the
+exchange versioned, both optical callbacks could see it complete and
+both handed the transcript to the kernel: `cer.id_fixed` twice on 4VC,
+two bearers started, the intent sent on the second, not yet subscribed
+— "the link is not ready" — and the meeting stopped. Before the
+refactor only the decode path handed off, by accident of structure.
+Fixed at the abstraction: `Meet.handOff(exchange)` is true once per
+exchange, `opticalChanged` hands off only on it, and `Kernel.takeOptical`
+refuses a second transcript rather than running it again. Test:
+`an_exchange_hands_off_to_the_kernel_once`. Also seen: GXV began with
+`bundle: 0` — this morning's bare locator for MRK did not survive the
+move to contacts (by design), so GXV × MRK runs once more before the
+cross pair.
+
+**GXV × MRK again (15:32), on the contacts build — DONE on both**, txid
+`97380a5a`, 4 signers, no warning either side; `entries:0` both ways, as
+it had to be (nothing held before). Each now holds the other as a met
+contact with a locator, and both bench witnesses as nominee contacts
+without one — so GXV's next intent introduces MRK alone.
+
+**GXV × 4VC (15:34) — DONE on both**, txid `52356277`, 4 signers; one
+`id_fixed` each; the NFC latch timeout the only warning. **The first
+introduction on hardware**: GXV `cer.intent.sent entries:1`, and on 4VC
+`cer.select n:1 pool:1 required:0` — MRK, introduced by GXV, qualified
+from the material and locator the introduction carried, with nothing
+looked up; one prior counterparty obliges no verifier, as §5.2 says.
+4VC's logcat had rotated (the TCL's buffer is small and the transport
+trace is loud); the laptop's stream had every line. 4VC now holds GXV
+(met) and MRK (introduced) as contacts.
+
+**GXV × ZU8 (15:40) — the first verifier query on hardware, end to end.**
+DONE on both, txid `717f683c`, 3 signers (both named witness-1 again).
+GXV introduced three — MRK, 4VC, and ZU8 itself, whose locator GXV had
+kept from an attempt minutes earlier that ZU8 stopped (below) — and ZU8
+read `cer.select n:3 pool:2 required:1 selected:1 bases:[0]`: 4VC,
+selected by recognition as met, asked about GXV; 4VC buffered the grant,
+answered in under a second, and the response is in the record. **The
+verdict was `NoMatch`, and that is the stand-in's**: the reference
+client's matcher is `ByteEquality` (design §22.2) — a profile matches a
+template only when the bytes are equal — so two phones' captures of one
+face can never match on hardware until an engine is plugged in. The
+plumbing is proven; the verdict is not a finding about the face.
+
+**Two defects beside it, fixed.** (1) ZU8's earlier attempt stopped
+with "a code of the exchange did not read as one": a 35-byte decode —
+a code of the contribution's type with another count, which can only
+be another phone's exchange read by accident. The exchange now returns
+`NOT_OURS` for a count that differs once theirs is known, and the screen
+treats a genuinely malformed decode as a stray (`optical.stray`) rather
+than the end: a dead meeting ends on staleness. Test:
+`another_ceremonys_code_is_not_ours_and_a_broken_one_is_malformed`.
+(2) **[author, 2026-10-11]** "If the user selects either the show QR or
+scan a QR option from the meet screen in error, backing out to the meet
+screen does not reset this decision, and the only way to access the
+alternative is to completely close and re-launch the app." A "Start
+over — choose again" button on the code, scan and brief screens drops
+the meeting (nothing is in the kernel before the brief is accepted),
+and leaving the screen at those steps does the same.
+
+**The engine, built (2026-10-11).** `crates/engine` (`rhtn-engine`): design
+§22.2's choice — OpenCV SFace with YuNet for detection and alignment,
+Apache-2.0 code and weights — run over `tract` (pure Rust, so one
+implementation serves every platform the kernel builds for, and the
+profile one client makes is what another's matcher compares, §7.4.4).
+YuNet's three-stride heads are decoded as OpenCV's `FaceDetectorYN` does
+(score √(cls·obj) ≥ 0.9, NMS at 0.3, 640×480 luminance given as three
+channels); the five landmarks are brought to SFace's 112×112 reference
+by a least-squares similarity and a bilinear warp; the embedding is
+L2-normalised, and a capture's template is the mean of its frames' unit
+embeddings, renormalised. The ffi takes the two models' bytes and the
+camera's geometry at `Platform`; the shell reads them from
+`assets/yunet.onnx` and `assets/sface.onnx`; absent, the stand-in runs
+and the log says so (`shell.engine`, `platform.engine`). With the engine
+present the client is configured for **modality version 2** throughout:
+template 128 × f32 LE, 512 bytes; the verifier compares under 2 only.
+
+**What §22.2 left to the implementation, decided here provisionally —
+for the author to confirm or move**: (1) the **profile** is the template
+quantised to `i8` after per-component noise of σ 0.03 seeded from the
+template's hash — 128 bytes, lossy enough not to be the template (a
+cosine of ≈0.97 against it), specific enough to discriminate; one
+capture yields one profile; (2) the **thresholds**: `Match` at cosine ≥
+0.40, `NoMatch` below 0.30, `Inconclusive` between — SFace's published
+operating point is 0.363 and §7.4.4 asks for a generous band; (3) the
+**model** is the fp32 SFace for now: `tract` is not yet proven on the
+int8 graph's quantised operators, and §22.2 says int8 — to try next;
+(4) the sealed store's AEAD stays as it was (AES-256-GCM). CAP-015 and
+CAP-016 are the author's open rows and stay open: this is the pinning
+they ask for, offered, not the evaluation. The same-face continuity check
+(CAP-017) is not wired to the engine yet. **The models are not in the
+tree**: `face_detection_yunet_2023mar.onnx` (≈230 KB) and
+`face_recognition_sface_2021dec.onnx` (≈38 MB) from
+`github.com/opencv/opencv_zoo` (Apache-2.0), to be fetched with the
+author's say-so and shipped as assets; until then the phones run the
+stand-in exactly as before.
+
+**Models fetched (2026-10-11, with the author's say-so)**, into the app's
+assets: `yunet.onnx` 232,589 bytes, `sface.onnx` 38,696,353 bytes. Both
+load and run under `tract` on the host (`engine/tests/models.rs`). One
+thing the graph taught: YuNet's ONNX declares its shapes at 640×640 and
+`tract`'s inference holds it to them, where OpenCV re-infers per input —
+so detection runs on a 640×640 canvas with the frame placed top-left,
+coordinates unchanged. Its outputs are selected by their declared labels
+(`cls_8` … `kps_32`), which are tensor names, not node names.
+
+**On the phones (22:36)**: the fieldtest kernel library built for Android
+with `tract` once the engine crate stopped naming a client flavour (the
+binding's `--no-default-features --features fieldtest` and the engine's
+default had unified into both); the APK is 140 MB with the models;
+`shell.engine yunet:232589 sface:38696353` on all four, start taking
+1.1–5.8 s with the models loaded (the TCLs the slow ones). The kernel's
+own `platform.engine` line is emitted before the diagnostics renderer is
+installed and so never shows — to move into `Participant.start`. Every
+phone is now on modality version 2: a verifier holding only a version-1
+capture of a subject answers a version-2 query `inconclusive` (the
+template does not read), which is the honest answer. A real verdict
+needs a version-2 capture first: GXV × 4VC again, then GXV × ZU8 with
+4VC selected.
+
 ## The low-spec pair, first run (2026-10-10)
 
 **Set up**: 8XDIW4G6WCW4LZU8 and VGY5IJRWUSAIX4VC, TCL 30 Z, on

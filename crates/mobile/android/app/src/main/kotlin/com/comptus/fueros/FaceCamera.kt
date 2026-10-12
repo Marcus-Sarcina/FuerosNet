@@ -47,8 +47,15 @@ import java.util.concurrent.atomic.AtomicReference
  */
 class FaceCamera(private val context: Context) {
 
-    private val width = 640
-    private val height = 480
+    private val width = WIDTH
+    private val height = HEIGHT
+
+    companion object {
+        /** The frame geometry the kernel's engine is told of: luminance at
+         *  this size, a multiple of 32 each way as YuNet wants. */
+        const val WIDTH = 640
+        const val HEIGHT = 480
+    }
 
     private var thread: HandlerThread? = null
     private var handler: Handler? = null

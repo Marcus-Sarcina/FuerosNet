@@ -304,7 +304,12 @@ class OpticalExchange(
             theirs = arrayOfNulls(n)
             version++
         } else if (n != theirCount) {
-            return Took.MALFORMED
+            // **a code of this exchange's type with another count is
+            // another ceremony's**: a phone across the room on its own
+            // Meet screen, read over the counterparty's shoulder. Nothing
+            // of this one is wrong, so it is not malformed; it is simply
+            // not ours (ZU8, 2026-10-11: a stray code ended the meeting)
+            return Took.NOT_OURS
         }
         if (gotOfMine > count) return Took.MALFORMED
         if (gotOfMine > theirGot) version++

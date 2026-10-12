@@ -113,6 +113,11 @@ impl Instrument {
             shell.clone(),
             shell.clone(),
             sink,
+            // the instrument has no camera worth an engine: the stand-in
+            Vec::new(),
+            Vec::new(),
+            0,
+            0,
         );
         let client =
             Participant::start(seeds, known, Arc::new(p)).map_err(|e| e.reason().to_string())?;

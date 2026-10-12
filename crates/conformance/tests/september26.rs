@@ -90,6 +90,7 @@ fn client(name: &str) -> Client {
         storage: s.clone(),
         custody: s,
         diagnostics: Arc::new(rhtn_ffi::device::Silent),
+        engine: None,
     };
     Client::new(
         test_identity(name),
@@ -182,6 +183,7 @@ async fn r08_failover_must_update_the_kernel_serving_identity() {
             storage: s.clone(),
             custody: s,
             diagnostics: Arc::new(rhtn_ffi::device::Silent),
+            engine: None,
         });
         let mut seeds = rhtn_codec::cose::sha256(b"rhtn-test-vectors:alice:ed25519-seed").to_vec();
         seeds.extend_from_slice(&rhtn_codec::cose::sha256(
@@ -1028,6 +1030,7 @@ fn control_start_from_backup_restores_the_identity_and_writes_current_state() {
         storage: shell.clone(),
         custody: shell.clone(),
         diagnostics: Arc::new(rhtn_ffi::device::Silent),
+        engine: None,
     });
     let restored = Participant::start_from_backup(
         blob,

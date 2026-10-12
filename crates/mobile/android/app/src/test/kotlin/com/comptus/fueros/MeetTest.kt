@@ -436,6 +436,20 @@ class MeetConversationTest {
         assertTrue(m.stopReason()!!, m.stopReason()!!.contains("every nominee declined"))
     }
 
+    /** **An exchange is handed to the kernel once**, whichever path saw it
+     *  complete: the second caller is told no. A new exchange hands off
+     *  afresh. */
+    @Test
+    fun an_exchange_hands_off_to_the_kernel_once() {
+        val m = Meet(kind = Meet.Kind())
+        val a = OpticalExchange(0, ByteArray(40) { it.toByte() }, chunk = 20)
+        assertTrue(m.handOff(a))
+        assertFalse("the second path sees it done too, and does nothing", m.handOff(a))
+        val b = OpticalExchange(1, ByteArray(36) { it.toByte() }, chunk = 18)
+        assertTrue("the transcript is another exchange", m.handOff(b))
+        assertFalse(m.handOff(b))
+    }
+
     @Test
     fun any_other_refusal_stops_the_meeting_with_its_code_shown() {
         val m = atVerifiers()

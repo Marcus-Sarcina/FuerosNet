@@ -131,6 +131,19 @@ class Meet(
      *  ([OpticalExchange]); null between the two. Held here so a redrawn
      *  screen finds it rather than starting over. */
     var exchange: OpticalExchange? = null
+    /** The exchange whose object has gone to the kernel ([handOff]). */
+    private var handedOff: OpticalExchange? = null
+
+    /**
+     * **An exchange's object goes to the kernel once.** Two paths can
+     * see it complete — a read and the tracking rows — and the second
+     * must not hand it over again: on the bench a transcript handed twice
+     * opened two bearers, and the intent went to the one that was not
+     * ready (2026-10-11). True for the first caller, false after.
+     */
+    fun handOff(x: OpticalExchange): Boolean = synchronized(lock) {
+        if (handedOff === x) false else { handedOff = x; true }
+    }
 
     /** Told when the person accepts the brief: the kernel's, so the
      *  ceremony begins there, which is the one question it asks. */

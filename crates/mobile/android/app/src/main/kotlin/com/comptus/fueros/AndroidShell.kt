@@ -38,6 +38,11 @@ import timber.log.Timber
 class AndroidShell(private val context: Context) :
     Proximity, Camera, Clock, Random, Operator, Notices, Storage, Custody, Diagnostics {
 
+    /** An asset's bytes, or none where the app ships without it. */
+    fun asset(name: String): ByteArray =
+        runCatching { context.assets.open(name).use { it.readBytes() } }.getOrDefault(ByteArray(0))
+
+
     private val dir: File = File(context.filesDir, "kernel").apply { mkdirs() }
     private val rng = SecureRandom()
 
@@ -255,5 +260,15 @@ class AndroidShell(private val context: Context) :
  * The kernel reads its own provision and seeds through one before it starts,
  * and one shell answering every interface is one answer per question.
  */
-fun platformOf(shell: AndroidShell): Platform =
-    Platform(shell, shell, shell, shell, shell, shell, shell, shell, shell)
+fun platformOf(shell: AndroidShell): Platform {
+    // **the engine's models ride as assets** (design §22.2: YuNet and
+    // SFace, Apache-2.0): absent, the kernel runs its stand-in and
+    // recognises nobody, and the log says which
+    val yunet = shell.asset("yunet.onnx")
+    val sface = shell.asset("sface.onnx")
+    Diag.event("shell.engine", "yunet" to yunet.size, "sface" to sface.size)
+    return Platform(
+        shell, shell, shell, shell, shell, shell, shell, shell, shell,
+        yunet, sface, FaceCamera.WIDTH.toUInt(), FaceCamera.HEIGHT.toUInt(),
+    )
+}

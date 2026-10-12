@@ -95,6 +95,7 @@ fn platform_of(s: Arc<Shell>) -> Arc<Platform> {
         storage: s.clone(),
         custody: s,
         diagnostics: Arc::new(Silent),
+        engine: None,
     })
 }
 

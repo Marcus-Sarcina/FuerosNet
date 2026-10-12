@@ -210,6 +210,15 @@ class MeetActivity : Activity() {
         Consent.release(this)
         ProximityChannels.release(this)
         Kernel.meet()?.unbind(sink)
+        // **leaving before anything began is changing one's mind**: a
+        // meeting still at the choice or the brief has nothing in the
+        // kernel yet, and keeping it would hand the same choice back to
+        // the next opening of this screen [author, 2026-10-11]
+        if (isFinishing) {
+            Kernel.meet()?.let { m ->
+                if (m.step() == Meet.Step.INTENT || m.step() == Meet.Step.BRIEF) Kernel.stopMeet("dismissed")
+            }
+        }
         // the camera goes back the moment this screen stops: holding one
         // behind a screen nobody is looking at is a camera nobody consented
         // to
@@ -400,6 +409,19 @@ class MeetActivity : Activity() {
         button("Scan a QR code") { start(Meet.Kind(), Meet.Role.RESPONDER) }
     }
 
+    /**
+     * **A choice made in error is undone here**, not by relaunching the
+     * app [author, 2026-10-11]: until the brief is accepted nothing has
+     * begun in the kernel, so the meeting is dropped and the entry screen
+     * offers the choice again.
+     */
+    private fun changeMind() {
+        button("Start over — choose again") {
+            Kernel.stopMeet("dismissed")
+            redraw()
+        }
+    }
+
     private fun start(kind: Meet.Kind, role: Meet.Role) {
         Kernel.startMeet(kind, role)?.bind(sink) ?: para("could not begin: the kernel is not running")
         redraw()
@@ -419,9 +441,11 @@ class MeetActivity : Activity() {
                 }
                 para("When they have scanned it, both of you will be shown what is about to happen.")
                 button("They have scanned it") { m.crossBootstrap() }
+                changeMind()
             }
             Meet.Role.RESPONDER -> {
                 para("Point the back of your phone at ${m.counterpartyName}'s screen. Their code carries who they are and the kind of meeting they chose; the next screen is where you accept or refuse it.")
+                changeMind()
                 aim("The band at the top is the middle of what the rear camera sees: put their code in it.")
                 scan(QrCamera.Facing.REAR, "bootstrap") { bytes ->
                     // the bootstrap is the shell's own object and carries no
@@ -645,6 +669,7 @@ class MeetActivity : Activity() {
         }
         button("Accept — begin") { m.accept() }
         button("Refuse") { m.refuse() }
+        changeMind()
     }
 
     // ---- D2 the optical exchange, mutual and on the selfie cameras -----
@@ -707,8 +732,12 @@ class MeetActivity : Activity() {
                 // says whether anything changed; this side acts on that.
                 val v = x.version()
                 when (x.take(bytes)) {
+                    // a frame that reads but is not well formed is a stray —
+                    // a reflection, a half-lit code, somebody else's screen
+                    // — and the next frame is a second's wait away; a
+                    // meeting that has in fact died ends on staleness
                     OpticalExchange.Took.MALFORMED -> {
-                        m.stop("a code of the exchange did not read as one")
+                        Diag.warn("optical.stray", "which" to name, "bytes" to bytes.size)
                         return@runOnUiThread
                     }
                     // said rather than silent, so a run shows how often a
@@ -735,7 +764,7 @@ class MeetActivity : Activity() {
     private fun opticalChanged(m: Meet, x: OpticalExchange, name: String) {
         m.opticalMoved()
         Diag.event("optical.exchange", "which" to name, "showing" to x.showing(), "received" to x.received(), "theirs" to x.theirCount(), "they_hold" to x.theirReceived())
-        if (x.done()) {
+        if (x.done() && m.handOff(x)) {
             camera?.close()
             val why = Kernel.takeOptical(x.theirs() ?: return)
             if (why != null) { m.stop(why); return }
