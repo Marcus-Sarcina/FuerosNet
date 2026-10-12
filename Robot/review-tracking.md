@@ -17147,6 +17147,24 @@ fieldtest flavour lint, and clippy under **rustc 1.99.0** — the version
 `rust:1-bookworm` carries, where this machine's default was 1.98.0, so a
 new lint was a live hypothesis and is ruled out.
 
+**The next pipeline (job 570956) failed before the gate ran at all**:
+exit 128 in the *predefined* container, which is the checkout, 133 s in.
+The runner's reused build directory was left with an empty `FETCH_HEAD`
+(07:01Z), no `.git/config`, and a freshly created but empty git template
+directory (07:03Z) — so the fetch failed and the runner's own fallback
+to a fresh repository did not complete either. **Not the server**: a
+`git fetch --depth 20` of the same ref from this machine took seven
+seconds and returned `7dc8578`, and the clone in the volume still reads
+its own history (`git log`, `git status`, `rev-parse` all answer without
+a config). Clearing that build directory needs a hand on the runner's
+volume, which this session may not touch, so the in-repo lever is
+`GET_SOURCES_ATTEMPTS: 3`: a retry re-runs the whole step, and the
+runner re-initialises the repository on the way in, which is what the
+missing config needs. If a checkout fails again the volume wants
+clearing by hand — `docker run --rm -v <the 48 GB project volume>:/c
+alpine sh -c 'rm -rf /c/MZuech/FuerosNet/.git'` keeps the 47 GB
+`crates/target` cache the arrangement exists for.
+
 ## The low-spec pair, first run (2026-10-10)
 
 **Set up**: 8XDIW4G6WCW4LZU8 and VGY5IJRWUSAIX4VC, TCL 30 Z, on

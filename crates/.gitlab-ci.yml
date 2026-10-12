@@ -17,6 +17,14 @@ gate:
     # caching arrangement, faster than packing a multi-gigabyte target/
     # into GitLab's cache archive and back out.
     GIT_CLEAN_FLAGS: -ffdx -e .cargo/ -e crates/target/
+    # The checkout itself is retried.  On 2026-10-12 a job failed in the
+    # predefined container with git's exit 128 after about two minutes of
+    # fetching, having left an empty FETCH_HEAD and no `.git/config` in
+    # the build directory it reuses; a shallow fetch of the same ref from
+    # the same machine took seven seconds, so the server was not the
+    # trouble.  A retry re-runs the whole step, which re-initialises that
+    # repository before fetching again.
+    GET_SOURCES_ATTEMPTS: 3
   before_script:
     - apt-get update -qq && apt-get install -y -qq python3 openjdk-17-jdk-headless unzip curl > /dev/null
     - rustup component add rustfmt clippy
