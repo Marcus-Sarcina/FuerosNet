@@ -66,11 +66,18 @@ impl Default for Thresholds {
 /// nose tip, right mouth corner, left mouth corner), in frame pixels.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Face {
+    /// The detector's confidence, √(class · objectness).
     pub score: f32,
+    /// The box's left edge, in frame pixels.
     pub x: f32,
+    /// The box's top edge, in frame pixels.
     pub y: f32,
+    /// The box's width, in frame pixels.
     pub w: f32,
+    /// The box's height, in frame pixels.
     pub h: f32,
+    /// The five landmarks the alignment uses, in frame pixels and in the
+    /// order this struct's own comment gives.
     pub landmarks: [(f32, f32); 5],
 }
 

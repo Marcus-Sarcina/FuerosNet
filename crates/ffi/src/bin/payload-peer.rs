@@ -221,6 +221,9 @@ fn main() {
         storage: s.clone(),
         custody: s,
         diagnostics: Arc::new(Silent),
+        // no camera on a payload peer, so no engine: the reference
+        // stand-in, which recognises nobody and is what these runs ask for
+        engine: None,
     });
     let known = vec![bob.material.clone(), carol.material.clone(), phone.clone()];
     let me = Participant::start(carol.seeds.clone(), known, platform).expect("carol starts");

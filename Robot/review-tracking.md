@@ -17130,6 +17130,23 @@ does), and w1 is in bob's horizon so his one pick among her two is w1.
 Workspace suite green after that (the adaptors file was the one red
 target), clippy clean, code pin re-accepted.
 
+**The pipeline failed on that push (job 570901, exit 1), and the cause was
+the engine commit, not the sessions one.** Two flavours the default build
+never compiles: `ffi/src/bin/payload-peer.rs` builds only under the
+`harness` feature and still constructed `Platform` without the `engine`
+field the engine commit added (`error[E0063]`), which fails stage 3b2's
+second flavour lint and stage 4b's `cargo build -p rhtn-ffi --features
+harness`; and `ffi/kotlin/RoundTrip.kt` called the uniffi constructor with
+nine arguments where it now takes thirteen (the two models and the frame
+geometry), which fails 4b's `kotlinc`. Both now pass: the peer takes
+`engine: None` (no camera, so the reference stand-in, which is what those
+runs ask for) and the fixture passes empty models with zero geometry.
+Checked while diagnosing, all clean: cargo-deny, the acceptance catalogue,
+citecheck, modelpincheck, the checklist generator's tests, the pins, the
+fieldtest flavour lint, and clippy under **rustc 1.99.0** — the version
+`rust:1-bookworm` carries, where this machine's default was 1.98.0, so a
+new lint was a live hypothesis and is ruled out.
+
 ## The low-spec pair, first run (2026-10-10)
 
 **Set up**: 8XDIW4G6WCW4LZU8 and VGY5IJRWUSAIX4VC, TCL 30 Z, on

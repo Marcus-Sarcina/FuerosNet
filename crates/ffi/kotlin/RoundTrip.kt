@@ -30,7 +30,12 @@ class Shell : Proximity, Camera, Clock, Random, Operator, Notices, Storage, Cust
     override fun `event`(`line`: String) {}
 }
 
-fun platformOf(): Platform { val s = Shell(); return Platform(s, s, s, s, s, s, s, s, s) }
+// no models and no camera geometry: the engine is the shell's to supply
+// (design §22.2) and this round trip wants the reference stand-in
+fun platformOf(): Platform {
+    val s = Shell()
+    return Platform(s, s, s, s, s, s, s, s, s, byteArrayOf(), byteArrayOf(), 0u, 0u)
+}
 
 fun main() {
     val node = TestNode.start("bob", listOf("alice", "carol"))
