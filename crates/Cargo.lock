@@ -2009,6 +2009,7 @@ version = "0.1.0"
 dependencies = [
  "rhtn-client",
  "rhtn-codec",
+ "tracing",
  "tract-onnx",
 ]
 

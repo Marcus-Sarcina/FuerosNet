@@ -1626,3 +1626,109 @@ fn a_step_queued_before_a_session_travels_when_the_peer_opens_one() {
         "w1 receives the step queued before it had published"
     );
 }
+
+/// **A sender gets past a peer that lost its half of a session.** A
+/// process that ends before it writes holds no session the sender still
+/// holds; everything sent on it reads "no session with that peer", and
+/// the peer has no session to say so on — on the bench a verifier
+/// refused both queries of a ceremony this way (2026-10-12). The sender's
+/// only move is to open again: the sessions it holds with that peer are
+/// set aside, the next send asks for a one-time key and opens afresh,
+/// and the peer takes the open as it takes any first message.
+#[test]
+fn a_sender_opens_a_fresh_session_past_a_peer_that_lost_its_half() {
+    let mut n = net(&["w1"], &[("alice", "w1"), ("bob", "w1")]);
+    n.attach("bob");
+    n.attach("alice");
+    n.sweep("bob");
+    n.sweep("alice");
+    // through the node, so that what bob cannot read waits where a test
+    // can look at it
+    n.s.handles["alice"].reach.0.set(false);
+    n.s.handles["bob"].reach.0.set(false);
+    // what bob has written so far is all that will survive it
+    let blob = n.s.client("bob").durable();
+    n.send("alice", "bob", "first");
+    assert_eq!(n.collect("bob"), vec!["Application(first)".to_string()]);
+
+    // bob's process ends before it wrote the session alice opened
+    let (dev, handles) = common::harness::device(vec![ChannelKind::Nfc], n.s.clock.clone(), 92, 0);
+    handles.reach.0.set(false);
+    let mut bob2 = Client::new(id("bob"), ids(), Config::default(), dev);
+    let restored = bob2.restore_durable(&blob).expect("opens whole");
+    assert_eq!(restored.sessions, 0, "no session with alice survived");
+    n.s.h.clients.insert(kh("bob"), bob2);
+    n.s.handles.insert("bob", handles);
+
+    // alice, holding the session still, writes on it: refused, and bob
+    // cannot say so
+    n.send("alice", "bob", "second");
+    let (from, bytes) = n.queued("bob");
+    assert_eq!(from, kh("alice"));
+    let refused = n.s.client("bob").receive_payload(kh("alice"), &bytes);
+    assert_eq!(
+        refused.as_ref().map(describe).unwrap_err(),
+        "no session with that peer"
+    );
+
+    // alice sets the session aside and writes again: a one-time key is
+    // asked for bob, a session opens on it, and the message arrives
+    let asked = n.requests("alice").len();
+    assert_eq!(n.s.client("alice").payload.sessions.displace(&kh("bob")), 1);
+    n.send("alice", "bob", "third");
+    assert_eq!(
+        n.requests("alice").len(),
+        asked + 1,
+        "a one-time key asked for bob"
+    );
+    assert_eq!(n.collect("bob"), vec!["Application(third)".to_string()]);
+    // and the two are in step both ways on the session that opened
+    n.send("bob", "alice", "fourth");
+    assert_eq!(n.collect("alice"), vec!["Application(fourth)".to_string()]);
+    n.send("alice", "bob", "fifth");
+    assert_eq!(n.collect("bob"), vec!["Application(fifth)".to_string()]);
+}
+
+/// **A displaced session survives a restart.** Two opens cross; the
+/// lower keyhash's stands and the other's is held for what was already
+/// sent on it (`wire-format.md` §7.10). What was sent on it is still in
+/// flight when the holder restarts — on the bench a counterparty's
+/// message read as "does not authenticate" after one did (2026-10-12) —
+/// so the held session is persisted with the rest, bounded as before.
+#[test]
+fn a_message_sent_on_a_displaced_session_still_opens_after_the_holder_restarts() {
+    let mut n = net(&["w1"], &[("bob", "w1"), ("carol", "w1")]);
+    n.attach("bob");
+    n.attach("carol");
+    n.sweep("bob");
+    n.sweep("carol");
+    n.s.handles["carol"].reach.0.set(false);
+    n.s.handles["bob"].reach.0.set(false);
+    let (low, high) = if kh("bob") < kh("carol") {
+        ("bob", "carol")
+    } else {
+        ("carol", "bob")
+    };
+    n.send(low, high, "low first");
+    n.send(high, low, "high first");
+    // sent on high's own session, before high learns which stands
+    n.send(high, low, "high second");
+    assert_eq!(n.collect(high), vec!["Application(low first)"]);
+    // low takes high's initial: its own stands, high's is held
+    let (from, h1) = n.queued(low);
+    let d =
+        n.s.client(low)
+            .receive_payload(from, &h1)
+            .expect("high's initial opens on low");
+    assert_eq!(describe(&d), "Application(high first)");
+    // low restarts between the two
+    let blob = n.s.client(low).durable();
+    let (dev, _h) = common::harness::device(vec![ChannelKind::Nfc], n.s.clock.clone(), 77, 0);
+    let mut again = Client::new(id(low), ids(), Config::default(), dev);
+    again.restore_durable(&blob).expect("opens whole");
+    let (from, h2) = n.queued(low);
+    let got = again
+        .receive_payload(from, &h2)
+        .expect("the displaced session came back with the restart");
+    assert_eq!(describe(&got), "Application(high second)");
+}

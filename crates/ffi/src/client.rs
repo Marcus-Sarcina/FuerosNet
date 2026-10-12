@@ -56,7 +56,7 @@ pub struct Participant {
     /// the refusal stopped a ceremony that had done nothing wrong
     /// [2026-10-06]. The lock also orders the states, so what lands last
     /// is what was taken last.
-    saving: std::sync::Mutex<()>,
+    saving: Arc<std::sync::Mutex<()>>,
     /// The seeds this device holds, for the backup: on the ceremony
     /// device alone.
     seeds: Option<[[u8; 32]; 2]>,
@@ -183,7 +183,7 @@ impl Drop for SealedStore {
 /// when the platform grants it background time, since a suspended process
 /// runs no clock.  Sixty seconds is a chosen value: the work is nothing
 /// unless something is due, and a pool at its floor waits at most this long.
-pub const MAINTAIN_EVERY: std::time::Duration = std::time::Duration::from_secs(60);
+pub const MAINTAIN_EVERY: std::time::Duration = std::time::Duration::from_secs(10);
 
 /// One catalog entry as this client holds it (`wire-format.md` §6.1).
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -648,8 +648,24 @@ impl Participant {
             return Ok(());
         };
         self.handle
-            .with_blocking(move |c| c.restore_durable(&bytes))
-            .map(|_| ())
+            .with_blocking(move |c| -> Result<(), String> {
+                let r = c.restore_durable(&bytes)?;
+                let held: Vec<String> = c
+                    .payload
+                    .sessions
+                    .held()
+                    .iter()
+                    .map(|(k, d)| {
+                        format!(
+                            "{}/{}",
+                            rhtn_client::diag::id8(k),
+                            rhtn_client::diag::id8(d)
+                        )
+                    })
+                    .collect();
+                tracing::info!(target: "pay", sessions = r.sessions, ?held, "pay.restored");
+                Ok(())
+            })
             .map_err(|e| Refused::new(format!("the stored state does not open: {e}")))
     }
 }
@@ -680,11 +696,24 @@ impl Participant {
 impl Participant {
     /// Start the kernel's own maintenance clock ([`MAINTAIN_EVERY`]).
     fn schedule(&self) {
-        let (h, st) = (self.handle.clone(), self.storage.clone());
+        let (h, st, one) = (
+            self.handle.clone(),
+            self.storage.clone(),
+            self.saving.clone(),
+        );
+        // the same write [`Participant::save`] makes, under the same lock:
+        // run after a maintenance round that carried anything, and after
+        // every inbound dispatch
         let after: Arc<dyn Fn() + Send + Sync> = Arc::new(move || {
-            let bytes = h.with_blocking(|c| c.durable());
+            let _one = one.lock().unwrap_or_else(|e| e.into_inner());
+            let bytes = h.with_blocking(|c| {
+                let held = c.payload.sessions.held().len();
+                tracing::debug!(target: "pay", sessions = held, "pay.saving");
+                c.durable()
+            });
             let _ = st.write(STATE.into(), bytes);
         });
+        self.net.persist_with(after.clone());
         self.net
             .schedule_maintenance(self.handle.clone(), MAINTAIN_EVERY, after);
     }
@@ -705,6 +734,9 @@ impl Participant {
         platform: Arc<Platform>,
     ) -> Result<Participant, Refused> {
         crate::diag::install(platform.diagnostics.clone());
+        // said here, after the renderer exists: the platform built its
+        // engine before anything could show it
+        tracing::info!(target: "platform", present = platform.engine.is_some(), "platform.engine");
         crate::diag::call("start", || {
             if seeds.len() != 64 {
                 return Err(Refused::new(format!(
@@ -774,7 +806,7 @@ impl Participant {
                 handle,
                 net,
                 storage,
-                saving: std::sync::Mutex::new(()),
+                saving: Arc::new(std::sync::Mutex::new(())),
                 seeds: Some([ed, pq]),
             };
             p.open()?;
@@ -848,7 +880,11 @@ impl Participant {
             // a poisoned lock is a thread that panicked mid-save, and the
             // next save overwriting whatever it left is the recovery
             let _one = self.saving.lock().unwrap_or_else(|e| e.into_inner());
-            let bytes = self.handle.with_blocking(|c| c.durable());
+            let bytes = self.handle.with_blocking(|c| {
+                let held = c.payload.sessions.held().len();
+                tracing::debug!(target: "pay", sessions = held, "pay.saving");
+                c.durable()
+            });
             let took = self.storage.write(STATE.into(), bytes)
                 && self.storage.write(SIBLINGS.into(), self.net.siblings());
             if took {
@@ -976,7 +1012,7 @@ impl Participant {
                 handle,
                 net,
                 storage,
-                saving: std::sync::Mutex::new(()),
+                saving: Arc::new(std::sync::Mutex::new(())),
                 seeds: None,
             };
             p.open()?;
@@ -2342,10 +2378,7 @@ pub fn platform(
             frame_height as usize,
             rhtn_engine::Thresholds::default(),
         ) {
-            Ok(e) => {
-                tracing::info!(target: "platform", width = frame_width, height = frame_height, "platform.engine");
-                Some(Arc::new(e))
-            }
+            Ok(e) => Some(Arc::new(e)),
             Err(why) => {
                 tracing::warn!(target: "platform", %why, "platform.engine.refused");
                 None

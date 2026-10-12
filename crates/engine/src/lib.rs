@@ -166,12 +166,39 @@ impl SFace {
         })
     }
 
-    /// The most confident face in a luminance frame, if any.
+    /// The most confident face in a luminance frame of the configured
+    /// geometry, if any.
     pub fn detect(&self, gray: &[u8]) -> Option<Face> {
+        self.detect_in(gray, self.width, self.height)
+    }
+
+    /// **A face in the frame, whichever way up the camera delivered it.**
+    /// A phone's sensor is mounted landscape and its frames arrive
+    /// rotated — 270° on the front cameras of this bench — and YuNet
+    /// knows upright faces only. The frame is tried as delivered, then
+    /// turned a quarter at a time; what comes back is the frame as it was
+    /// found, its geometry, the face in that frame, and how many quarter
+    /// turns it took, so the embedding is cut from the same pixels.
+    pub fn find(&self, gray: &[u8]) -> Option<(Vec<u8>, usize, usize, Face, u8)> {
+        // a frame the camera never delivered is no frame: the shell hands
+        // an empty one where its wait ran out, and that is nobody, not a
+        // reason to stop the client
         if gray.len() < self.width * self.height {
             return None;
         }
-        let (fw, fh) = (self.width, self.height);
+        for turns in [0u8, 3, 1, 2] {
+            let (g, w, h) = rotate(gray, self.width, self.height, turns);
+            if let Some(face) = self.detect_in(&g, w, h) {
+                return Some((g, w, h, face, turns));
+            }
+        }
+        None
+    }
+
+    fn detect_in(&self, gray: &[u8], fw: usize, fh: usize) -> Option<Face> {
+        if gray.len() < fw * fh || fw > CANVAS || fh > CANVAS {
+            return None;
+        }
         let (w, h) = (CANVAS, CANVAS);
         let input = tract_ndarray::Array4::<f32>::from_shape_fn((1, 3, h, w), |(_, _, y, x)| {
             if x < fw && y < fh {
@@ -220,10 +247,15 @@ impl SFace {
         nms(faces).into_iter().next()
     }
 
-    /// The unit embedding of `face` in `gray`: aligned to SFace's five
-    /// reference points, run, and L2-normalised.
+    /// The unit embedding of `face` in `gray`, a frame of the configured
+    /// geometry: aligned to SFace's five reference points, run, and
+    /// L2-normalised.
     pub fn embed(&self, gray: &[u8], face: &Face) -> Option<[f32; DIM]> {
-        let crop = align(gray, self.width, self.height, &face.landmarks);
+        self.embed_in(gray, self.width, self.height, face)
+    }
+
+    fn embed_in(&self, gray: &[u8], fw: usize, fh: usize, face: &Face) -> Option<[f32; DIM]> {
+        let crop = align(gray, fw, fh, &face.landmarks);
         let input =
             tract_ndarray::Array4::<f32>::from_shape_fn((1, 3, SIDE, SIDE), |(_, _, y, x)| {
                 crop[y * SIDE + x]
@@ -247,11 +279,29 @@ impl Engine for SFace {
     fn template(&self, frames: &[Frame]) -> Vec<u8> {
         let mut sum = [0f32; DIM];
         let mut n = 0usize;
-        for f in frames {
-            let Some(face) = self.detect(&f.bytes) else {
+        for (i, f) in frames.iter().enumerate() {
+            let t0 = std::time::Instant::now();
+            let found = self.find(&f.bytes);
+            match &found {
+                Some((_, _, _, face, turns)) => tracing::info!(
+                    target: "engine",
+                    frame = i,
+                    score = face.score,
+                    turns,
+                    took_ms = t0.elapsed().as_millis() as u64,
+                    "engine.face"
+                ),
+                None => tracing::warn!(
+                    target: "engine",
+                    frame = i,
+                    took_ms = t0.elapsed().as_millis() as u64,
+                    "engine.no_face"
+                ),
+            }
+            let Some((g, w, h, face, _)) = found else {
                 continue;
             };
-            let Some(e) = self.embed(&f.bytes, &face) else {
+            let Some(e) = self.embed_in(&g, w, h, &face) else {
                 continue;
             };
             for (s, x) in sum.iter_mut().zip(e.iter()) {
@@ -259,6 +309,7 @@ impl Engine for SFace {
             }
             n += 1;
         }
+        tracing::info!(target: "engine", frames = frames.len(), with_face = n, "engine.template");
         if n == 0 {
             return Vec::new();
         }
@@ -300,6 +351,43 @@ impl Matcher for Cosine {
 }
 
 // ---------------------------------------------------------------- the maths
+
+/// `gray` turned `turns` quarter turns clockwise, with its new geometry.
+pub fn rotate(gray: &[u8], w: usize, h: usize, turns: u8) -> (Vec<u8>, usize, usize) {
+    if gray.len() < w * h {
+        return (Vec::new(), 0, 0);
+    }
+    let mut out = vec![0u8; w * h];
+    match turns % 4 {
+        0 => return (gray[..w * h].to_vec(), w, h),
+        1 => {
+            // 90° clockwise: the new column is the old row, read upward
+            for y in 0..h {
+                for x in 0..w {
+                    out[x * h + (h - 1 - y)] = gray[y * w + x];
+                }
+            }
+            return (out, h, w);
+        }
+        2 => {
+            for y in 0..h {
+                for x in 0..w {
+                    out[(h - 1 - y) * w + (w - 1 - x)] = gray[y * w + x];
+                }
+            }
+        }
+        _ => {
+            // 270° clockwise, which is 90° anticlockwise
+            for y in 0..h {
+                for x in 0..w {
+                    out[(w - 1 - x) * h + y] = gray[y * w + x];
+                }
+            }
+            return (out, h, w);
+        }
+    }
+    (out, w, h)
+}
 
 /// Boxes that overlap a more confident one past [`NMS_IOU`] are the same
 /// face; what remains is sorted most confident first.
@@ -595,6 +683,28 @@ mod tests {
             "the nose landmark lands on the nose reference"
         );
         assert!(crop[5 * SIDE + 5] < 1.0);
+    }
+
+    #[test]
+    fn a_quarter_turn_moves_a_pixel_where_it_should_and_four_are_none() {
+        let (w, h) = (4usize, 2usize);
+        let g: Vec<u8> = (0..8).collect();
+        let (r, rw, rh) = rotate(&g, w, h, 1);
+        assert_eq!((rw, rh), (2, 4));
+        // the top-left pixel of the original is the top-right after 90° cw
+        assert_eq!(r[rw - 1], g[0]);
+        let (back, bw, bh) = rotate(&r, rw, rh, 3);
+        assert_eq!((bw, bh), (w, h));
+        assert_eq!(back, g);
+        let (once, _, _) = rotate(&g, w, h, 2);
+        let (twice, _, _) = rotate(&once, w, h, 2);
+        assert_eq!(twice, g);
+    }
+
+    #[test]
+    fn a_frame_too_short_to_be_one_is_nobody_and_no_panic() {
+        assert_eq!(rotate(&[], 640, 480, 1), (Vec::new(), 0, 0));
+        assert_eq!(rotate(&[0u8; 10], 640, 480, 0), (Vec::new(), 0, 0));
     }
 
     #[test]

@@ -323,6 +323,13 @@ pub(crate) struct Net {
     status: Arc<Mutex<Status>>,
     events_tx: UnboundedSender<Event>,
     events: Mutex<UnboundedReceiver<Event>>,
+    /// Run after every inbound dispatch, whether or not the shell hears
+    /// of it: the client's state written.  **A delivery moves a ratchet
+    /// whether or not it becomes an event**, and a verifier's whole
+    /// service — the session its grant opened, the query it answered —
+    /// produced none; on the bench a phone restarted and had lost every
+    /// session it had served on since its last event [2026-10-12].
+    persist: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
     /// The peers a direct path is held to: shared with the client, whose
     /// route reads it, and with the socket that fills it.
     reachable: Reachable,
@@ -397,6 +404,7 @@ impl Net {
             status: Arc::new(Mutex::new(Status::Detached)),
             events_tx,
             events: Mutex::new(events),
+            persist: Mutex::new(None),
             nonce,
             beyonder,
             beyond,
@@ -632,8 +640,11 @@ impl Net {
         // what the courier hands up joins the one event stream, and the
         // session is watched for the failover the kernel drives itself
         let mut live = live;
-        live.tasks
-            .push(self.rt().spawn(forward(events, self.events_tx.clone())));
+        let persist = self.persist.lock().unwrap().clone();
+        live.tasks.push(
+            self.rt()
+                .spawn(forward(events, self.events_tx.clone(), persist)),
+        );
         live.tasks.push(self.rt().spawn(watch(
             session,
             serving_node,
@@ -817,6 +828,11 @@ impl Net {
         })
     }
 
+    /// What to run after every inbound dispatch: the state written.
+    pub(crate) fn persist_with(&self, after: Arc<dyn Fn() + Send + Sync>) {
+        *self.persist.lock().unwrap() = Some(after);
+    }
+
     /// Routine maintenance on the kernel's own clock, while the process
     /// runs and a session is held: what [`crate::client::Participant::maintain`]
     /// does when a shell calls it, done every `every` without one.  `after`
@@ -918,9 +934,19 @@ fn take_readers(session: &mut Session) -> Readers {
     (deliveries, frames)
 }
 
-/// What the courier hands up, on the one event stream.
-async fn forward(mut from: UnboundedReceiver<(Keyhash, Dispatched)>, to: UnboundedSender<Event>) {
+/// What the courier hands up, on the one event stream — and the state
+/// written first, for every dispatch and not only those that become
+/// events.
+async fn forward(
+    mut from: UnboundedReceiver<(Keyhash, Dispatched)>,
+    to: UnboundedSender<Event>,
+    persist: Option<Arc<dyn Fn() + Send + Sync>>,
+) {
     while let Some((k, d)) = from.recv().await {
+        if let Some(p) = &persist {
+            // a snapshot and a write, blocking: off the worker's duty
+            tokio::task::block_in_place(|| p());
+        }
         if let Some(e) = event_of(k, d) {
             let _ = to.send(e);
         }

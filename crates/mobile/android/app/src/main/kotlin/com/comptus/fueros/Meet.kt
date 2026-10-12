@@ -1075,6 +1075,23 @@ class Meet(
     /** Under [lock]: every transition, as the diagnostics see it. */
     private fun stepped(from: Step, to: Step, trigger: String) {
         step = to
+        steppedAtMs = System.currentTimeMillis()
         Diag.event("meet.step", "from" to from, "to" to to, "trigger" to trigger)
+    }
+
+    /** When the step last changed: the clock the ranging and capture
+     *  steps are judged stale against. */
+    private var steppedAtMs = System.currentTimeMillis()
+
+    /**
+     * **Whether a step with no clock of its own has stopped moving for
+     * good.** The exchange has [opticalStale] and the conversation its
+     * progress; ranging and capture wait on the counterparty's carriage
+     * with nothing watching — on the bench one phone's client died at
+     * capture and the other waited at it for ever (2026-10-11). A step
+     * held longer than [STALE_MS] is the other phone gone.
+     */
+    fun stepStale(nowMs: Long = System.currentTimeMillis()): Boolean = synchronized(lock) {
+        (step == Step.PROXIMITY || step == Step.CAPTURE) && nowMs - steppedAtMs > STALE_MS
     }
 }

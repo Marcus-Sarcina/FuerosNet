@@ -799,7 +799,7 @@ impl Sessions {
     /// and every bundle held.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
-        emit_array_head(&mut out, 3);
+        emit_array_head(&mut out, 4);
         emit_array_head(&mut out, self.ratchets.len());
         for ((kh, dev), r) in &self.ratchets {
             emit_array_head(&mut out, 3);
@@ -819,14 +819,38 @@ impl Sessions {
         for ek in &self.seen_initials {
             emit_bstr(&mut out, ek);
         }
+        // **displaced sessions are persisted too** [2026-10-12]: the rule
+        // holds one "for what was already sent on it", and what was sent
+        // on it is still in flight across a restart — a counterparty's
+        // message encrypted under the session it displaced read as
+        // "does not authenticate" after the holder restarted
+        emit_array_head(&mut out, self.previous.len());
+        for ((kh, dev), rs) in &self.previous {
+            emit_array_head(&mut out, 3);
+            emit_bstr(&mut out, kh);
+            emit_bstr(&mut out, dev);
+            emit_array_head(&mut out, rs.len());
+            for r in rs {
+                emit_bstr(&mut out, &r.encode());
+            }
+        }
         out
+    }
+
+    /// The sessions held, as `(peer, device)` for a log line.
+    pub fn held(&self) -> Vec<(Keyhash, [u8; 32])> {
+        self.ratchets.keys().copied().collect()
     }
 
     /// The sessions back from what [`Sessions::encode`] wrote.  Displaced
     /// sessions are held in memory only, so none come back.
     pub fn decode(b: &[u8]) -> Option<Sessions> {
         use crate::durable::*;
-        let (_, f) = parse_array(b, 3)?;
+        // three collections before displaced sessions were kept, four since
+        let f = match parse_array(b, 4) {
+            Some((_, f)) => f,
+            None => parse_array(b, 3)?.1,
+        };
         let mut ratchets = BTreeMap::new();
         for r in array(&f[0])? {
             let [kh, dev, bytes_] = array(r)?.as_slice() else {
@@ -852,12 +876,49 @@ impl Sessions {
                 seen_initials.pop_front();
             }
         }
+        let mut previous: BTreeMap<PeerDevice, Vec<Ratchet>> = BTreeMap::new();
+        if let Some(p) = f.get(3) {
+            for entry in array(p)? {
+                let [kh, dev, rs] = array(entry)?.as_slice() else {
+                    return None;
+                };
+                let mut held = Vec::new();
+                for r in array(rs)? {
+                    held.push(<Ratchet>::decode(&bytes(b, r)?)?);
+                }
+                held.truncate(PREVIOUS_SESSIONS);
+                previous.insert((fixed::<32>(b, kh)?, fixed::<32>(b, dev)?), held);
+            }
+        }
         Some(Sessions {
             seen_initials,
             ratchets,
             prefetched,
-            previous: BTreeMap::new(),
+            previous,
         })
+    }
+
+    /// Set every session with `peer` aside, as a crossing sets one aside:
+    /// the next send opens afresh, and what the peer still sends on the
+    /// old ones opens on them a while.
+    ///
+    /// **How a sender gets past a peer that lost its half.** A process
+    /// that ended before it wrote holds no session the sender still
+    /// holds, and nothing it could send would say so — it has no session
+    /// to say it on.  The sender's only move is to open again, and this
+    /// is what makes the next send do that.  How many were set aside.
+    pub fn displace(&mut self, peer: &Keyhash) -> usize {
+        let keys: Vec<PeerDevice> = self
+            .ratchets
+            .range((*peer, [0; 32])..=(*peer, [0xff; 32]))
+            .map(|(k, _)| *k)
+            .collect();
+        for k in &keys {
+            if let Some(r) = self.ratchets.remove(k) {
+                self.keep_previous(*k, r);
+            }
+        }
+        keys.len()
     }
 
     /// Hold a session a newer one displaced, newest first, bounded.
@@ -1133,7 +1194,21 @@ impl Sessions {
                 };
                 let on_current = match self.ratchets.get_mut(&(from, device)) {
                     Some(r) => r.decrypt(&inner, &mut seed),
-                    None => return Err(PayloadError::NoSession),
+                    None => {
+                        let held: Vec<String> = self
+                            .ratchets
+                            .range((from, [0; 32])..=(from, [0xff; 32]))
+                            .map(|((_, d), _)| crate::diag::id8(d))
+                            .collect();
+                        tracing::warn!(
+                            target: "pay",
+                            peer = %crate::diag::id8(&from),
+                            device = %crate::diag::id8(&device),
+                            ?held,
+                            "pay.no_session"
+                        );
+                        return Err(PayloadError::NoSession);
+                    }
                 };
                 match on_current {
                     Ok(pt) => Ok(pt),

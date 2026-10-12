@@ -13660,6 +13660,31 @@ assets and the camera's frame geometry; without them the reference
 stand-in runs, which recognises nobody. The thresholds, the fuzz and the
 fp32 model are the implementation's provisional choices under §22.2.
 
+### 2026-10-12 (sessions that outlive the process)
+
+**A verifier on the bench refused both queries of a ceremony**: one as
+"no session with that peer", one as "message does not authenticate". Its
+own stream showed why. It had received the subjects' grants and opened a
+session with each, answered the queries, and been restarted by its
+platform an hour later holding neither session — because the client's
+state was written after every *event the shell saw*, and a verifier's
+whole service raises none. The sessions it opened and the ratchets it
+moved were live variables, which is the residue the persistence ruling of
+the 11th names.
+
+**Two client obligations stated** (`light-client-requirements.md` §3;
+PAY-015, PAY-016). The state is written after every message received or
+sent, whether or not anything is shown. And a query or a grant unanswered
+at half the patience given a verifier goes again, once, on a fresh
+session: the sessions held with that verifier are set aside for what it
+may still send on them, the same bytes go as a first message does, and the
+verifier's crossing rule (`wire-format.md` §7.10) takes the open. Nothing
+new on the wire; a peer that lost its half has no session to say so on,
+and the sender is the only party that can open another. The maintenance
+clock that runs it ticks every ten seconds now rather than every minute.
+
+Families 513.
+
 ### 2026-10-11 (contacts)
 
 **[author, 2026-10-11] A client keeps contacts, and prunes toward what

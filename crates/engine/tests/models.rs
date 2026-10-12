@@ -22,6 +22,7 @@ fn both_models_load_and_run_at_the_cameras_geometry() {
         return;
     };
     let engine = SFace::from_onnx(&y, &s, 640, 480, Thresholds::default()).expect("both load");
+    assert!(engine.find(&[]).is_none(), "an empty frame is nobody");
     let blank = vec![0u8; 640 * 480];
     let t0 = std::time::Instant::now();
     assert!(engine.detect(&blank).is_none(), "nobody in a black frame");

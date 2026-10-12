@@ -11,6 +11,7 @@ license = "Apache-2.0"
 rhtn-client = { path = "../client", default-features = false }
 rhtn-codec = { path = "../codec" }
 tract-onnx = "0.23"
+tracing = { version = "0.1", default-features = false, features = ["std"] }
 
 [dev-dependencies]
 rhtn-client = { path = "../client", features = ["releasable"] }

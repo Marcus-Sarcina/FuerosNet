@@ -64,6 +64,22 @@ pub(crate) struct Conversation {
     pub(crate) entries: BTreeMap<Keyhash, Vec<u8>>,
     /// At the proposer: the signers that refused (kind 17).
     pub(crate) refused: BTreeMap<Keyhash, Refusal>,
+    /// What this side sent a verifier and awaits an answer to, by query:
+    /// its grant as subject, its query as selector.  Cleared by the
+    /// response or its copy; re-sent once on a fresh session when neither
+    /// has come at half the patience (`Client::resend_unanswered`).
+    pub(crate) outgoing: BTreeMap<[u8; 32], Outgoing>,
+}
+
+/// One message to a verifier that an answer is owed to.
+pub(crate) struct Outgoing {
+    pub(crate) to: Keyhash,
+    pub(crate) kind: u64,
+    pub(crate) bytes: Vec<u8>,
+    /// When it went, by this device's clock, in seconds.
+    pub(crate) at_s: u64,
+    /// Whether it has gone again: once, and then the person decides.
+    pub(crate) resent: bool,
 }
 
 /// One ceremony this client was asked to witness and accepted.

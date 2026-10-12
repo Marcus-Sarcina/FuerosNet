@@ -1085,6 +1085,9 @@ object Kernel {
                     drainBearer(p, m)
                 }
                 if (m.opened()) m.poll(courier(p))
+                if (m.stepStale()) {
+                    m.stop("nothing has moved for ${Meet.STALE_MS / 1000} s at ${m.step().name.lowercase()}; the other phone may have stopped")
+                }
             }
         }
     }

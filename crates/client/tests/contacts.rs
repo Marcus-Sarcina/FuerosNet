@@ -81,8 +81,8 @@ fn an_introduced_stranger_is_a_contact_with_material_to_verify_by() {
     );
     assert_eq!(
         s.client("carol").introductions().len(),
-        2,
-        "carol can now introduce bob and alice both"
+        1,
+        "carol introduces bob, whom she met; alice, whom she was only told of, she cannot vouch for"
     );
 }
 

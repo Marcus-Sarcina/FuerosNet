@@ -214,10 +214,12 @@ fn trace() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn the_conversation_runs_over_the_payload_path_to_a_record_every_signer_holds() {
     trace();
-    // alice met w1 twice before, and holds a locator for w1 and for bob;
-    // her bundle introduces both (`wire-format.md` §5.4), so bob's
-    // selection of alice's verifiers has n = 2 and one candidate — himself
-    // never one — and w1 is asked about her
+    // alice met w1 twice and carol once before, and holds a locator for
+    // each; her bundle introduces her prior counterparties alone
+    // (`wire-format.md` §5.4; a contact never met holds no capture and
+    // could only close a query, 2026-10-11), so bob's selection of alice's
+    // verifiers has n = 2 and two candidates, needs one, and asks w1 — the
+    // one in his horizon — about her
     let now_s = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -225,6 +227,7 @@ async fn the_conversation_runs_over_the_payload_path_to_a_record_every_signer_ho
     let mut scene = Scene::starting(now_s - 30 * 86_400);
     scene.meet("alice", "w1");
     scene.meet("alice", "w1");
+    scene.meet("alice", "carol");
     // the node, "witness", serving everyone beside it; alice and bob the
     // participants; w1 alice's nominee, w2 bob's, its clock an hour out,
     // so it declines (`light-client-requirements.md` §1.2); carol nobody's
@@ -257,7 +260,7 @@ async fn the_conversation_runs_over_the_payload_path_to_a_record_every_signer_ho
         .iter()
         .map(|r| (r.txid, r.bytes.clone()))
         .collect();
-    let introduced: Vec<(Keyhash, Vec<u8>)> = ["w1", "bob"]
+    let introduced: Vec<(Keyhash, &'static str, Vec<u8>)> = ["w1", "carol"]
         .iter()
         .map(|n| {
             let loc = rhtn_archive::tx::Locator::root(
@@ -267,7 +270,11 @@ async fn the_conversation_runs_over_the_payload_path_to_a_record_every_signer_ho
                     counter: 0,
                 },
             );
-            (kh(n), rhtn_archive::locator::signed_locator(&id(n), &loc))
+            (
+                kh(n),
+                *n,
+                rhtn_archive::locator::signed_locator(&id(n), &loc),
+            )
         })
         .collect();
     alice
@@ -275,10 +282,11 @@ async fn the_conversation_runs_over_the_payload_path_to_a_record_every_signer_ho
             for (t, b) in bundle {
                 c.store.records.insert(t, b);
             }
-            for (k, sl) in introduced {
-                let material = id(if k == kh("w1") { "w1" } else { "bob" })
-                    .public
-                    .key_material();
+            // what the records say she has met, as a start from storage
+            // reads it
+            c.refresh_acquaintance();
+            for (k, n, sl) in introduced {
+                let material = id(n).public.key_material();
                 let mut contact = rhtn_client::contacts::Contact::new(
                     material,
                     rhtn_client::contacts::How::Counterparty,
@@ -289,6 +297,8 @@ async fn the_conversation_runs_over_the_payload_path_to_a_record_every_signer_ho
             }
         })
         .await;
+    // w1 is in bob's horizon, so bob's pick among alice's two is w1
+    bob.with(|c| c.acquaintance.horizon.insert(kh("w1"))).await;
 
     // the local exchanges, by hand (§14.3): intent, proximity, capture
     let ia = alice

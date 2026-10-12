@@ -450,6 +450,16 @@ class MeetConversationTest {
         assertFalse(m.handOff(b))
     }
 
+    /** **Ranging and capture go stale too**: a step with nothing of its own
+     *  watching it is judged by how long it has been the step. */
+    @Test
+    fun a_step_held_past_the_stale_window_is_the_other_phone_gone() {
+        val m = atVerifiers()
+        assertFalse("the conversation has its own clock", m.stepStale(System.currentTimeMillis() + Meet.STALE_MS * 2))
+        val c = Meet(kind = Meet.Kind())
+        assertFalse(c.stepStale(System.currentTimeMillis() + Meet.STALE_MS * 2))
+    }
+
     @Test
     fun any_other_refusal_stops_the_meeting_with_its_code_shown() {
         val m = atVerifiers()

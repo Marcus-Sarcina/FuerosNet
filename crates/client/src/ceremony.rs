@@ -65,12 +65,20 @@ pub struct Config {
     /// How many contacts this client keeps before pruning toward what
     /// still resolves (`light-client-requirements.md` §4.3).
     pub contacts_limit: usize,
+    /// How long a query or a grant waits for its verifier's answer
+    /// before the person is asked whether to go on without it.  At half
+    /// of this with nothing back, it goes again on a fresh session: a
+    /// verifier that lost its sessions (a process that ended before it
+    /// wrote) refuses everything sent on the old one and has no session
+    /// to say so on, and only the sender can open another.
+    pub query_patience_s: u64,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Config {
             contacts_limit: 4096,
+            query_patience_s: 60,
             clock_tolerance_s: 300,
             retention_years: 2,
             template_version: 1,
@@ -863,16 +871,21 @@ impl Client {
         })
     }
 
-    /// The introductions this client can make: one per party it holds a
-    /// locator and the key material for, the counterparty of the meeting
-    /// at hand included — it counts toward the subject's claim and is
-    /// never selected (§5.3).
+    /// The introductions this client can make: **its prior counterparties**
+    /// (`wire-format.md` §5.4) — the parties it has met, as its records
+    /// say — for whom it holds a locator and the material; the counterparty
+    /// of the meeting at hand included, which counts toward the subject's
+    /// claim and is never selected (§5.3). A contact learned any other way
+    /// is not introduced: a party this client never met holds no capture
+    /// of it, cannot verify a query about it, and offered as a verifier
+    /// could only close the query unanswered (MRK, 2026-10-11).
     #[must_use]
     pub fn introductions(&self) -> Vec<Vec<u8>> {
         self.store
             .contacts
-            .values()
-            .filter_map(|c| {
+            .iter()
+            .filter(|(who, _)| self.acquaintance.met.contains(*who))
+            .filter_map(|(_, c)| {
                 let sl = c.locator.as_deref()?;
                 Some(rhtn_archive::locator::introduction(&c.material, sl))
             })
@@ -1589,17 +1602,85 @@ impl Client {
 
     /// The request that carries a consented query to its verifier.
     pub fn request(
-        &self,
+        &mut self,
         q: &VerificationQuery,
         consent: Vec<u8>,
         basis: SelectionBasis,
     ) -> Vec<u8> {
-        QueryRequest {
+        let bytes = QueryRequest {
             query: q.clone(),
             consent,
             selection_basis: basis as u64,
         }
-        .encode()
+        .encode();
+        self.awaiting_answer(q.query_id(), q.verifier, payload::KIND_QUERY, &bytes);
+        bytes
+    }
+
+    /// Note what went to a verifier, for the answer owed to it.
+    fn awaiting_answer(&mut self, query: [u8; 32], to: Keyhash, kind: u64, bytes: &[u8]) {
+        let now = self.now_s();
+        if let Some(a) = self.active.as_mut() {
+            a.conversation.outgoing.insert(
+                query,
+                crate::sequence::Outgoing {
+                    to,
+                    kind,
+                    bytes: bytes.to_vec(),
+                    at_s: now,
+                    resent: false,
+                },
+            );
+        }
+    }
+
+    /// **A query or grant unanswered at half the patience goes again on
+    /// a fresh session**, once.  Every session with that verifier is set
+    /// aside and the same bytes sent, which asks for a one-time key and
+    /// opens anew when it comes; the verifier's crossing rule takes the
+    /// open (`wire-format.md` §7.10).  What the verifier still sends on
+    /// the old session opens here on the one set aside.
+    ///
+    /// Run by `maintain`, on the kernel's own clock: nothing of this is
+    /// the shell's to drive.
+    pub fn resend_unanswered(&mut self, now: u64) -> Vec<Msg> {
+        let half = self.cfg.query_patience_s / 2;
+        let due: Vec<([u8; 32], Keyhash, u64, Vec<u8>)> = match self.active.as_mut() {
+            Some(a) => a
+                .conversation
+                .outgoing
+                .iter_mut()
+                .filter(|(_, o)| !o.resent && now >= o.at_s.saturating_add(half))
+                .map(|(q, o)| {
+                    o.resent = true;
+                    (*q, o.to, o.kind, o.bytes.clone())
+                })
+                .collect(),
+            None => return Vec::new(),
+        };
+        let mut out = Vec::new();
+        for (query, to, kind, bytes) in due {
+            let displaced = self.payload.sessions.displace(&to);
+            tracing::warn!(
+                target: "pay",
+                query = %id8(&query),
+                kind = crate::diag::kind_name(kind),
+                to = %id8(&to),
+                displaced,
+                "pay.resend"
+            );
+            match self.send_payload(to, kind, &bytes) {
+                Ok(m) => out.extend(m),
+                Err(why) => tracing::warn!(
+                    target: "pay",
+                    query = %id8(&query),
+                    to = %id8(&to),
+                    %why,
+                    "pay.resend.refused"
+                ),
+            }
+        }
+        out
     }
 
     /// Step 6, as subject: consent to a query about me, or not; and where I
@@ -1617,6 +1698,14 @@ impl Client {
         let grant =
             self.subject
                 .grant_for(me, &self.store, &q.verifier, q.query_id(), self.now_s());
+        if let Some(g) = &grant {
+            self.awaiting_answer(
+                q.query_id(),
+                q.verifier,
+                payload::KIND_KEY_GRANT,
+                &g.encode(),
+            );
+        }
         // whether a key was released, never the key
         tracing::info!(
             target: "sub",
@@ -1707,6 +1796,7 @@ impl Client {
             return Err("not a query I issued".into());
         }
         a.responses.push(bytes.to_vec());
+        a.conversation.outgoing.remove(&r.query_id);
         Ok((r.query_id, r.verdict))
     }
 
@@ -1714,6 +1804,9 @@ impl Client {
     pub fn take_response_copy(&mut self, bytes: &[u8]) -> Result<[u8; 32], String> {
         let me = self.signer.as_deref().ok_or(NO_SEED)?;
         let out = self.subject.take_response_copy(me, &self.known, bytes);
+        if let (Ok(q), Some(a)) = (&out, self.active.as_mut()) {
+            a.conversation.outgoing.remove(q);
+        }
         match &out {
             Ok(q) => tracing::info!(target: "sub", query = %id8(q), "sub.response_copy"),
             Err(why) => tracing::warn!(target: "sub", %why, "sub.response_copy.refused"),
@@ -3177,6 +3270,7 @@ impl Client {
         // anything made since the last carry goes up with the routine
         // traffic, so a record whose own carry was missed is not stranded
         let mut out = self.outbox();
+        out.extend(self.resend_unanswered(now));
         if self.payload.keys.due_for_rotation(now, &self.payload.cfg) {
             let random = self.device.random.clone();
             let mut fresh = |out: &mut [u8]| random.fill(out);

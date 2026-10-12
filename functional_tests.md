@@ -493,6 +493,8 @@ The Cargo workspace has **16 crates**. Components below follow responsibilities 
 | PAY-012 | C | Payload for a peer no direct path is held to goes to **the node that serves that peer**, dialled by the sender itself at an address it holds or one it resolved, and answered on taking rather than on delivering (D §§12.6.3, 14.1.4; W §7.10). **The sender's patron is not asked first and is not needed**: a light client does not need its patron or infra node to address a distant node for which it holds a locator [author, 2026-10-05]. A node that already serves the sender is reached on the session that is up and is not dialled a second time. Test: a recipient served by another node receives what was sent; the sender's own node queues nothing; a refusal reaches the caller as a refusal and not as a delivery; a reply echoing another submission's nonce is not an answer; the node's endpoint list is treated as alternatives, so an unreachable first address is not an outage for that node. | D §§12.6.3, 14.1.4, 14.1.6; W §§7.10, 8.2, 9.1; L §5 |
 | PAY-013 | C | A **targeted** prekey fetch goes to the node that serves the subject, since a node answers from what was published to it and the holder of a subject's bundle is the node that subject attached to (W §7.8) [author, 2026-10-05]. The sender's own node is where the fetch goes when that one cannot be reached, and where it serves the subject too. The **sweep** is unaffected: a `PrekeyBatchRequest` names a population and is answered from what one node holds. Test: a subject served elsewhere yields a bundle with the sender's patron not asked; the batch form still goes to the serving node; the intent a targeted fetch discloses reaches the subject's node rather than the patron (D §19.4, P26). | W §7.8; D §§19.4, 14.2.4; L §3 |
 | PAY-014 | C | **Payload queued while a session is awaited is not stranded when the session opens the other way round.** A send with no session queues its plaintext and asks for a one-time key (W §7.8); where that ask is answered with no bundle — a subject that had not published yet — nothing opens and the queue remains, and a session later established by the peer writing first does not look at it. Drain the queue whenever a session with that device exists, by either route, and send what was queued ahead of anything queued after it. Test: a step queued before the peer published travels once the peer opens the session from its side; order is preserved; nothing is dropped and no error stands in for a delivery. | W §7.8; D §14.2.4; L §3 |
+| PAY-015 | C | **The client's sessions are written after every message received or sent**, not only after an event the application sees. A ratchet moves on every message; a verifier's service (a session its grant opened, the query it answered) raises no application event, and a process that ends before writing holds no session its peers still hold and nothing it could say so on. Test: a client that received an initial message and answered a query, then restarted from what it wrote, still opens the peer's next message. | L §3; W §7.10; D §14.2.4 |
+| PAY-016 | C | **A query or a grant unanswered at half the verifier patience is sent again on a fresh session, once.** The sessions held with that verifier are set aside (what it still sends on them opens), the same bytes are sent as a first message is (a one-time key asked for, a session opened on it), and the verifier's crossing rule takes the open (W §7.10). Not a third time: from there the person decides (CER, L §1.4). Test: a peer restarted from a state written before the session was opened refuses the next message, and a message sent after the sessions are set aside arrives and leaves both in step; a query and a grant unanswered at 30 s of a 60 s patience each produce one fresh open, and none at 90 s. | L §§1.4, 3; W §7.10 |
 
 ## 3.5 Observer-relative trust and policy evaluation
 
@@ -983,7 +985,7 @@ Open local parameters are not all specification defects: cache TTLs, queue cap, 
 
 ## 10. Document baseline and coverage totals
 
-This specification contains **511 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
+This specification contains **513 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
 
 | Prefix | Families |
 |---|---:|
@@ -1001,7 +1003,7 @@ This specification contains **511 numbered requirement/test families** across **
 | VER | 18 |
 | CAP | 17 |
 | REC | 12 |
-| PAY | 12 |
+| PAY | 14 |
 | POL | 22 |
 | CAT | 22 |
 | GAT | 37 |

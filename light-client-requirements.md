@@ -493,6 +493,20 @@ only party who can tell them is their own client.
 - **Accept the cost knowingly:** a session opened from prefetched material alone
   lacks one-time-key forward secrecy for its **first message**. Protection improves
   as ratchet contributions are incorporated, not immediately.
+- **Write your sessions after every message you receive or send, not only
+  after what you show the person.** A ratchet moves on every message, and a
+  verifier's whole service — the session a grant opened, the query it
+  answered — may show nothing. A process that ends holding sessions it never
+  wrote cannot read what its peers go on sending, and has no session to say
+  so on.
+- **When a query or a grant has gone unanswered for half the patience you
+  give a verifier, send it again on a fresh session, once.** A verifier that
+  lost its sessions refuses everything sent on the old ones and cannot say
+  so; only the sender can open another. Set the sessions you hold with it
+  aside for what it may still send on them, open anew as for a first message,
+  and send the same bytes. The verifier's crossing rule takes the open
+  (`wire-format.md` §7.10). Once: after that the person decides whether to go
+  on without the answer (§1.4).
 
 ## 4. Session
 

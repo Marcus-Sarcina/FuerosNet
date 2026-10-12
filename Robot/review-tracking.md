@@ -17010,6 +17010,126 @@ template does not read), which is the honest answer. A real verdict
 needs a version-2 capture first: GXV × 4VC again, then GXV × ZU8 with
 4VC selected.
 
+**GXV × 4VC on the engine — both stopped at capture, `TemplateLength`**:
+five frames on GXV, three on 4VC, no face found in any, so the template
+came back empty and the capture was refused as one that did not happen.
+The cause is orientation: a phone's sensor is mounted landscape and the
+front camera's frames arrive turned 270° (`dumpsys media.camera`,
+both phones), and YuNet knows upright faces only. The engine now tries
+the frame as delivered and then a quarter turn at a time, embeds from
+the frame as it was found, and logs every frame (`engine.face` with the
+score and the turns it took, `engine.no_face`, `engine.template` with
+how many frames had one). The kernel's `platform.engine` line now
+fires after the renderer is installed.
+
+**Second attempt: GXV's client died, 4VC waited.** GXV's face camera
+would not open — `CameraAccessException: CAMERA_DISABLED (1): Camera "1"
+disabled by policy` — so every frame came back empty, and the engine's
+rotation sliced an empty frame and **panicked**, which took the client's
+actor with it (`RecvError` on every call after; the app had to be
+restarted). 4VC, having sent its capture key, waited at capture with
+nothing watching the step. Three fixes: the engine treats a frame
+shorter than the geometry as nobody, never a reason to stop; ranging and
+capture are judged stale by how long they have been the step
+(`Meet.stepStale`, the kernel loop's tick), as the exchange and the
+conversation already were; and the camera open is retried where the
+platform says the camera is disabled or busy — the selfie camera the
+exchange just closed is the likely holder.
+
+**GXV × 4VC on the engine — DONE on both**, txid `57c55b2f`, 4 signers,
+**the first version-2 captures sealed**: on each phone 3 of 5 frames had
+a face, scores 0.91–0.92, found after three quarter turns (the 270° the
+sensor orientation predicted); the first two prompts of each capture
+had none. Detection cost: ≈0.2 s a frame on the S21 when found, 0.4–0.5
+when all four turns are tried; ≈1.9 s / 3.9 s on the TCL. Two queries
+went out: 4VC asked ZU8 about GXV and ZU8, holding only a version-1
+capture, answered **`Inconclusive`** — the honest version mismatch, in
+the record; GXV asked MRK about 4VC (MRK was in 4VC's bundle, having
+been introduced to it by GXV) and no answer came back within the
+ceremony — MRK has never met 4VC: it closed the query
+(`ver.query.closed: subject's key not held`), which is VER-004's rule
+(no fabricated response), and GXV went on without it after the person
+answered the "a verifier has not answered — go on?" prompt. **The
+defect is the bundle**: 4VC introduced every contact it held a locator
+for, MRK among them, where §5.4 has it introduce its *prior
+counterparties*. A party never met holds no capture and cannot vouch;
+offered as a verifier it can only close the query. `introductions()`
+now draws on the contacts this client has met, as its records say.
+
+**GXV × ZU8 (00:03–00:06, the apps on GXV and ZU8 restarted at 00:03:21
+first) — DONE on both, txid `9e79cd41`, 3 signers, and both queries
+unanswered.** Both went to 4VC (ZU8's about GXV, GXV's about ZU8),
+reached it within seconds — the node's clock is not wall-anchored and
+had me chasing a fourteen-minute delay that did not exist — and 4VC
+refused all four messages: ZU8's as "message does not authenticate"
+(a ratchet out of step; one skip tried), GXV's as "no session with that
+peer" (no ratchet for GXV's device at all, though 4VC opened one to it
+at 15:4x and received GXV's grant then). The crossing rule (lower
+keyhash's session stands, the other held for what was sent on it) is
+implemented; what the logs cannot show is what each phone's durable
+state holds. Instrumented: `pay.saving` (sessions written), `pay.restored`
+(sessions and peer/device pairs read back), `pay.no_session` (what is
+held for that peer). And one certain gap closed: **displaced sessions
+are now persisted** (a fourth collection in `Sessions`; three still
+reads) — the rule keeps one for what was already sent on it, and that
+is in flight across a restart.
+
+**What the phones restored (00:26, the instrumented build)**: GXV holds
+sessions with ZU8, 4VC, MRK and both witnesses; 4VC holds ZU8, MRK and
+the witnesses — **no session with GXV at all**, though it opened one at
+15:4x and received GXV's grant on it; ZU8 holds 4VC, but the two are
+out of step. So the refusals are durable state, not a transit race, and
+how 4VC's session with GXV went is still unexplained — nothing in the
+kernel removes a ratchet except a crossing initial, and that re-inserts.
+Two consequences for the bench: with the state as it is, every query to
+4VC from GXV will be refused until a session is re-opened, and the
+kernel has no path that re-opens one — a sender keeps using the ratchet
+it holds, the receiver cannot say it has none. **That path is the next
+build**: a query unanswered within half the patience is re-sent on a
+freshly opened session (a one-time key fetched, an initial message the
+receiver's crossing rule takes), which also heals a ratchet that drifted.
+Also restated: `three_meetings` in the ceremony tests gave alice two
+meetings with bob for *n* = 2; *n* counts parties now, so alice meets
+c1 as well, and carol — who knows bob — selects him.
+
+**Root cause found (00:45)**: 4VC's stream for the run. At ms 550702 of
+its 15:4x process it *received* GXV's initial (state "opened", the grant
+buffered), at 550914 ZU8's; it answered both queries; the process ran to
+ms 921592 and was restarted by the platform at 15:48:40 — and after the
+restart it opened a *new* session to ZU8 at its next query (so it held
+none) and refused GXV outright. **Nothing had written the sessions.**
+`Participant::save` ran after every shell call and after every
+`next_event` that returned an event; `event_of` maps `Query`, `Grant`,
+`Candidates`, `Served`, `Fetched` to no event, so a verifier's whole
+service — the session its grant opened, the query it answered, the
+response it sent — moved ratchets that were never written. Both symptoms
+follow: "no session" where 4VC lost the session GXV still holds, "does
+not authenticate" where 4VC's restored ratchet with ZU8 was behind the
+one it had sent on. **Fixed at the source**: the courier's hand-up
+(`forward` in `ffi/src/net.rs`) runs the same write as `save`, under the
+same lock, after every dispatch. **And a heal for the state the phones
+are in** (and for any peer that loses its half, which no message can
+report): `Client::resend_unanswered`, run by `maintain` (now every 10 s),
+re-sends a query or grant unanswered at half `query_patience_s` (60) on
+a fresh session, once — `Sessions::displace` sets the old ones aside as
+a crossing does, `send_payload` asks for a one-time key and opens.
+Tests: payload `a_sender_opens_a_fresh_session_past_a_peer_that_lost_its_half`
+(bob restarted from a blob written before alice's session: refuses,
+then takes the fresh open, both in step both ways), ceremony
+`a_query_and_a_grant_unanswered_at_half_the_patience_go_again_once`
+(nothing at 29 s, one each at 30 s, none at 90 s). Stated in
+`light-client-requirements.md` §3, PAY-015/016, the change-log.
+
+**One test the introductions-by-met rule had not reached**: the adaptors
+conversation test seeded alice with a contact for bob — never met — and
+counted on it to make *n* = 2, so that bob (required = ⌊n/2⌋) would ask a
+verifier at all; introducing only prior counterparties made *n* = 1 and
+no query. Restated honestly: alice met carol once as well, her records
+say so (`refresh_acquaintance` after seeding, as a start from storage
+does), and w1 is in bob's horizon so his one pick among her two is w1.
+Workspace suite green after that (the adaptors file was the one red
+target), clippy clean, code pin re-accepted.
+
 ## The low-spec pair, first run (2026-10-10)
 
 **Set up**: 8XDIW4G6WCW4LZU8 and VGY5IJRWUSAIX4VC, TCL 30 Z, on

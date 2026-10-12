@@ -67,10 +67,22 @@ class AndroidShell(private val context: Context) :
     // closes it; an empty frame is a capture that did not happen, which the
     // kernel's template-length check fails rather than seals.
     override fun capture(ask: Ask): ByteArray {
-        val cam = face ?: FaceCamera(context).also {
-            face = it
-            it.open()?.let { why -> Timber.w("face camera: %s", why) }
+        val cam = face ?: FaceCamera(context).also { face = it }
+        // **a camera that will not open is asked again**: the selfie
+        // camera the exchange just closed can still be held when the first
+        // prompt arrives, and the platform says "disabled by policy" or
+        // "in use" for that moment (GXV, 2026-10-11). Three tries, then
+        // an empty frame, which the kernel treats as a capture that did
+        // not happen.
+        var why = cam.open()
+        var tries = 1
+        while (why != null && tries < 3) {
+            Diag.warn("camera", "which" to "face", "op" to "open", "try" to tries, "error" to why)
+            Thread.sleep(700)
+            why = cam.open()
+            tries += 1
         }
+        why?.let { Timber.w("face camera: %s", it) }
         return cam.frame()
     }
 
