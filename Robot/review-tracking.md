@@ -17414,6 +17414,20 @@ person belongs in the band. Pinned by
 into §22.2, which still lists thresholds as the implementation's to decide:
 the numbers go there when the author settles them in the document.
 
+**[2026-10-13] The pipeline on `8f609eb` failed in the gate, and not on
+anything in the commit**: three advisories were published against
+`quinn-proto` 0.11.17 between the morning's run (which reported
+"advisories ok") and the evening's — RUSTSEC-2026-0338, -0340 and -0343,
+each a panic a remote peer can provoke in the transport (zero-length
+STREAM frames on an unordered read, a peer's minimum ACK delay under
+ACK_FREQUENCY, and the outgoing datagram buffer's accounting). All fixed
+in 0.11.18; `quinn = "0.11"` already admitted it, so `cargo update -p
+quinn-proto` took the lock to **0.11.19** with no manifest change.
+Everything else on that tree had been checked minutes before the push and
+passed, so the advisory database moving under a green tree is the whole
+story — worth remembering as a way the gate can fail with nothing wrong
+in the diff.
+
 ## The low-spec pair, first run (2026-10-10)
 
 **Set up**: 8XDIW4G6WCW4LZU8 and VGY5IJRWUSAIX4VC, TCL 30 Z, on
