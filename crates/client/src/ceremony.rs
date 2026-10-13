@@ -1723,6 +1723,7 @@ impl Client {
             return GrantOutcome::Rejected(NO_SEED);
         };
         let cx = Verifying {
+            seal: &self.cfg.seal,
             me,
             ids: &self.known,
             store: &self.store,
@@ -1740,6 +1741,7 @@ impl Client {
             return QueryOutcome::Closed(NO_SEED);
         };
         let cx = Verifying {
+            seal: &self.cfg.seal,
             me,
             ids: &self.known,
             store: &self.store,
@@ -1757,6 +1759,7 @@ impl Client {
             return Vec::new();
         };
         let cx = Verifying {
+            seal: &self.cfg.seal,
             me,
             ids: &self.known,
             store: &self.store,
@@ -4696,6 +4699,7 @@ impl Client {
             return Vec::new();
         };
         let cx = Verifying {
+            seal: &self.cfg.seal,
             me,
             ids: &self.known,
             store: &self.store,

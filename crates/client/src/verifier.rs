@@ -39,8 +39,6 @@ impl Matcher for ByteEquality {
 /// template versions this client can compare under.
 #[derive(Debug, Clone)]
 pub struct VerifierConfig {
-    /// How this verifier seals what it keeps at rest.
-    pub seal: SealParams,
     /// How long an unopened grant waits for its query, and a query for its
     /// grant.
     pub grant_buffer_ms: u64,
@@ -55,7 +53,6 @@ pub struct VerifierConfig {
 impl Default for VerifierConfig {
     fn default() -> Self {
         VerifierConfig {
-            seal: SealParams::default(),
             grant_buffer_ms: 60_000,
             per_requester_limit: 16,
             window_ms: 600_000,
@@ -67,6 +64,14 @@ impl Default for VerifierConfig {
 /// What a verifier acts with: its own identity, the keys it holds, its
 /// store and its engine.  Borrowed for the duration of one event.
 pub struct Verifying<'a, L: Lookup + ?Sized> {
+    /// How this client's own sealed captures are framed
+    /// (`Client::capture` writes them): **the store's parameters, not a
+    /// verifier's own**.  One store is sealed by the capture path and read
+    /// here, so a second copy of these numbers is a second truth: the
+    /// verifier held one that nothing kept in step, so a 512-byte template
+    /// was written and split at 32 on the way back, and every version-2
+    /// capture read as a capture that would not open [2026-10-12].
+    pub seal: &'a SealParams,
     /// This verifier's own identity, which signs the response.
     pub me: &'a SigningIdentity,
     /// The keys it holds, for checking what arrives.
@@ -123,7 +128,8 @@ struct Pending {
     received_at: u64,
 }
 
-/// A verifier's state across queries: which profile each ceremony carries,
+/// A verifier's state across queries: which profile each subject carries
+/// in each ceremony,
 /// the requester counters for the window, the queries waiting for grants
 /// and the grants waiting for queries, and which queries were answered.
 /// No key is kept: a grant's key lives until it is used or the buffer bound
@@ -132,7 +138,9 @@ struct Pending {
 pub struct VerifierState {
     /// This verifier's own numbers.
     pub cfg: VerifierConfig,
-    ceremonies: BTreeMap<[u8; 32], [u8; 32]>,
+    /// The one profile pinned for a subject in a ceremony, by
+    /// `(ceremony, subject)`.
+    ceremonies: BTreeMap<([u8; 32], Keyhash), [u8; 32]>,
     counters: BTreeMap<Keyhash, (u64, u32)>,
     pending_queries: BTreeMap<[u8; 32], Pending>,
     pending_grants: BTreeMap<[u8; 32], (Keyhash, KeyGrant, u64)>,
@@ -227,15 +235,29 @@ impl VerifierState {
         if !query::consent_verifies(subject, &req.consent, &qid) {
             return QueryOutcome::Closed("consent does not verify under the subject");
         }
-        // one profile per ceremony (design §7.4.1, §7.4.2)
+        // **One profile per subject per ceremony** (design §7.4.1, §7.4.2;
+        // functional row VER-005, where it is the *subject* that authorizes
+        // one profile under the pre-commitment and keeps the state that
+        // prevents variants).  The pre-commitment is one per ceremony and
+        // both parties countersign it (design §7.4.1's derivation), so a
+        // ceremony has two subjects: each party is asked about the other,
+        // and both may choose the same verifier.  Pinned per ceremony
+        // alone, the second of those two legitimate queries is refused —
+        // on the bench a verifier picked by both parties answered one and
+        // closed the other [2026-10-12].
+        //
+        // The price §7.4.1 sets is unchanged: a probe of one subject's
+        // likeness still costs a ceremony with that subject's live
+        // consent, since this verifier compares one profile of that
+        // subject and no other until the ceremony is over.
         let digest = sha256(&q.profile);
-        match self.ceremonies.get(&q.ceremony_id) {
+        match self.ceremonies.get(&(q.ceremony_id, q.subject)) {
             Some(d) if *d != digest => {
-                return QueryOutcome::Closed("a second profile within one ceremony");
+                return QueryOutcome::Closed("a second profile for one subject in one ceremony");
             }
             Some(_) => {}
             None => {
-                self.ceremonies.insert(q.ceremony_id, digest);
+                self.ceremonies.insert((q.ceremony_id, q.subject), digest);
             }
         }
         // the requester's allowance in this window (design §7.4.1)
@@ -379,11 +401,23 @@ impl VerifierState {
     }
 
     /// Answer a query, with or without a grant (`wire-format.md` §5.5, §7.3;
-    /// design §7.5.2.7): no grant, or one naming a record not held, or one
-    /// for another subject's capture, is `unavailable`; a capture that
+    /// design §7.5.2.7): no grant, one naming a record not held, one
+    /// for another subject's capture, or one whose capture was taken under
+    /// another template version, is `unavailable`; a capture that
     /// fails to open is `inconclusive` with basis 0 and the query's
     /// version; a capture that opens is compared.  The grant's key is
     /// consumed here and kept nowhere.
+    ///
+    /// **Nothing is compared across template versions** (functional rows
+    /// VER-012, VER-013: an unsupported version is unavailable, and an old
+    /// template is not reinterpreted under a new matcher).  The capture's
+    /// own version is in the clear on the sealed record, so this is decided
+    /// before the capture is opened — and a verdict of `inconclusive`,
+    /// which names a capture that would not read, is never what a version
+    /// this verifier simply cannot compare produces.  On the bench a
+    /// version-1 capture was compared against a version-2 profile and
+    /// answered `inconclusive`, which read as a capture that failed to
+    /// open [2026-10-12].
     fn answer<L: Lookup + ?Sized>(
         &mut self,
         cx: &Verifying<L>,
@@ -397,8 +431,39 @@ impl VerifierState {
             if sealed.subject != q.subject {
                 return None;
             }
-            Some(match open(&self.cfg.seal, &g.key, sealed) {
-                Err(_) => Verdict::Inconclusive,
+            if sealed.template_version != q.template_version
+                || !self
+                    .cfg
+                    .template_versions
+                    .contains(&sealed.template_version)
+            {
+                tracing::info!(
+                    target: "ver",
+                    query = %crate::diag::id8(&q.query_id()),
+                    held = sealed.template_version,
+                    asked = q.template_version,
+                    reads = ?self.cfg.template_versions,
+                    "ver.query.version"
+                );
+                return None;
+            }
+            // **the two roads to `inconclusive` are told apart here.** A
+            // capture that would not open and a comparison that landed
+            // between the thresholds are one verdict on the wire (§5.5
+            // gives no third) and nothing alike to someone reading a run:
+            // on the bench a version-2 comparison answered inconclusive
+            // and the stream could not say which it was [2026-10-12].
+            Some(match open(cx.seal, &g.key, sealed) {
+                Err(why) => {
+                    tracing::warn!(
+                        target: "ver",
+                        query = %crate::diag::id8(&q.query_id()),
+                        record = %crate::diag::id8(&g.record),
+                        ?why,
+                        "ver.capture.unopened"
+                    );
+                    Verdict::Inconclusive
+                }
                 Ok(capture) => {
                     cx.matcher
                         .compare(&capture.template, &q.profile, q.template_version)

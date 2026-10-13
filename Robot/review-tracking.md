@@ -17165,6 +17165,255 @@ clearing by hand — `docker run --rm -v <the 48 GB project volume>:/c
 alpine sh -c 'rm -rf /c/MZuech/FuerosNet/.git'` keeps the 47 GB
 `crates/target` cache the arrangement exists for.
 
+## GXV × ZU8, the third attempt (2026-10-12, 15:5x)
+
+**The heal works.** Both sides' first messages to 4VC were refused as
+before — `no_session` with `held: []` for GXV's grant and query, "message
+does not authenticate" for ZU8's — and 39 s later, at half the patience,
+`pay.resend` fired on both phones (`displaced` 1 on the session each
+still held, 0 on the peer it had none for). 4VC took the re-sent messages
+on the fresh sessions, buffered GXV's query awaiting its grant, took
+ZU8's grant 94 ms later and **answered**: a response to GXV, a copy to
+ZU8, and the record `78f0e9a2` finalised with three signers and one
+response. That is the first verifier response ever carried in a record
+on hardware.
+
+**Two defects it exposed, both in the verifier and both already stated in
+`functional_tests.md`:**
+
+1. **The second party's query was refused** —
+   `ver.query.closed ... "a second profile within one ceremony"`. The
+   pre-commitment is one per ceremony and both parties countersign it
+   (design §7.4.1's derivation), so a mutual ceremony carries two
+   subjects; `VerifierState.ceremonies` pinned one profile digest per
+   `ceremony_id` alone, so a verifier both parties chose answered one and
+   closed the other. VER-005 states the rule as the **subject**
+   authorizing one profile under the pre-commitment, so the map is keyed
+   `(ceremony, subject)` now and the refusal reads "a second profile for
+   one subject in one ceremony". §7.4.1's price is unchanged: one profile
+   of a given subject per ceremony, that subject's live consent each time.
+   **Owed to the author**: §7.4.1/§7.4.2 say "a profile differing from
+   another countersigned under the same pre-commitment" without naming
+   the subject, and that wording wants his clarification; the code
+   follows VER-005 meanwhile.
+2. **The answered query was Inconclusive, from a comparison across
+   template versions.** 4VC holds a version-1 capture of ZU8 (taken
+   before the engine) and was asked under version 2; `answer` checked only
+   the *query's* version against `cfg.template_versions` and then fed a
+   32-byte hash template to the SFace matcher. VER-013 forbids
+   reinterpreting an old template under a new matcher and VER-012 makes an
+   unsupported version `unavailable` with no basis and no version, which
+   is what it answers now — decided from the sealed record's own
+   `template_version`, in the clear, so the capture is not opened.
+   `ver.query.version` logs held-against-asked.
+
+Tests: `each_of_a_ceremonys_two_subjects_gets_its_own_profile` (carol asks
+bob about alice, alice asks bob about carol, one ceremony, both answered
+Match, and a second *differing* profile of one subject still closed) and
+`a_capture_of_another_template_version_is_unavailable_and_unopened`
+(verifier comparing under 1 and 2, holding version 1, asked under 2:
+unavailable, no basis, no version, matcher never shown the template).
+
+**What the next run should show.** 4VC holds a version-2 capture of GXV
+(`engine.template frames 5 with_face 3`, `cer.capture template_version 2
+ok`), so ZU8's query about GXV should now be answered with a real
+comparison — the first Match on hardware, both captures being of the same
+person. GXV's query about ZU8 should read `unavailable`, honestly, until
+4VC holds a version-2 capture of ZU8: one 4VC × ZU8 ceremony on this
+build would give it one.
+
+**And the saving fix of this morning was in the wrong place.** 4VC's
+stream shows it opening a session with GXV (`state: opened`) and
+renewing ZU8's (`state: displaced`) on the re-sent messages — and **no
+`pay.saving` after either**; its last save in the whole stream is from
+seconds after an earlier start. The hook had gone into `forward` in
+`ffi/src/net.rs`, which drains what the *courier hands up*, and
+`Courier::receive` answers a query and takes a grant **itself**: those
+arms send nothing to the application channel at all (`Ok(Dispatched::
+Grant(_)) => {}`, and the `Query` arm answers back). So a verifier's
+whole service still wrote nothing, which is exactly the hole the morning's
+work set out to close — the symptom would have returned on the next
+restart. The hook belongs where every arrival passes: `Courier` now takes
+a writer (`write_after_arrivals`) and runs it as soon as the client has
+taken the delivery, before what it owes is carried; the ffi wires its own
+save there at attach and `forward` is a plain forwarder again. Test:
+`an_arrival_the_courier_answers_itself_writes_the_state` in the adaptors'
+verifier tests — a grant for a query the verifier never saw writes the
+state and hands nothing up.
+
+## GXV × ZU8, the fourth attempt (2026-10-12, 23:0x) — txid `37f24181`
+
+**Both fixes hold on hardware, and the courier's writer with them.**
+4VC's first copies were refused as the state predicted (`no_session` for
+GXV, "does not authenticate" for ZU8), the re-send went at half the
+patience, and then: *both* queries were taken, where the ceremony-scoped
+pin had closed one. `ver.query.answered 84ea701d from 3a5423fa
+verdict Inconclusive` is ZU8's about GXV, and `ver.query.version
+be4a5d95 held 1 asked 2` then `ver.grant ... answered` is GXV's about
+ZU8 — **`Unavailable`, from the version gate, exactly as intended**, 4VC's
+capture of ZU8 predating the engine. And the session 4VC opened on the
+re-sent message was **saved 45 ms later** (`pay.session opened c8cf9fb1`
+→ `pay.saving sessions: 5`), which the ffi-side hook never did: the next
+run of this pair should need no re-send at all.
+
+**What is left is the number.** ZU8's query about GXV compared two
+version-2 captures of one person and landed in the band: ≥ 0.40 is a
+match, < 0.30 is not, and it fell between. Four different things answer
+`inconclusive` (the capture would not open; the template or the profile is
+not of this version's length; the comparison landed in the band) and the
+stream could not say which — so each is logged apart now:
+`ver.capture.unopened` with the record and the failure,
+`engine.compare.unreadable` with both lengths, and `engine.compare` with
+the score and both thresholds. The pipeline itself is ruled out already:
+`a_profile_of_a_template_matches_it_and_another_template_does_not`
+asserts a template against its own fuzzed profile stays above 0.95, and
+the arithmetic agrees (σ 0.03 over 128 dimensions is a noise norm of
+0.34, which costs about a twentieth of the cosine).
+
+**Owed to the author, now with evidence coming**: §22.2's thresholds
+0.40/0.30 are his provisional choices and I have not touched them. For
+the weighing: OpenCV's own SFace operating point is a cosine of 0.363,
+below our match threshold, so a genuine pair on a cheap camera can fall
+in our band. One more run reads the score out of `engine.compare`.
+
+## GXV × ZU8, the fifth attempt (2026-10-12, 23:4x) — txid `528f653a`
+
+**No re-send, and the instrumentation answered in one run.** 4VC
+restored its session with GXV (`c8cf9fb1` in `pay.restored`, five
+sessions) and both grants and queries went straight through — the saving
+fix holds across a restart. The verdicts were `Unavailable` (GXV's about
+ZU8, `ver.query.version held 1 asked 2`, as designed) and `Inconclusive`
+(ZU8's about GXV) — and the new line says what that second one is:
+
+    ver.capture.unopened query 74bbbe62 record 57c55b2f why Framing
+
+**Not the thresholds at all.** `Framing` is an authenticated plaintext
+that is not a capture: the key was right and the bytes would not parse.
+`engine.compare` never fired, because the matcher was never reached.
+
+**The cause is a second copy of the store's parameters.** A sealed
+capture is `template[template_len] || (at_ms || len || bytes)*` and the
+length is *not* in the record, so whoever opens it splits at the number it
+holds. `Client::capture` seals with `cfg.seal`, which
+`Platform::config()` raises to 512 where the engine is present — and the
+verifier opened with `cfg.verifier.seal`, a **second** `SealParams` that
+nothing ever set, still at the default 32. So every version-2 capture was
+written at 512 and split at 32, the remaining 480 bytes read as frame
+headers, and the answer came back `inconclusive` — the verdict that means
+"the capture would not read". **No version-2 capture has ever been
+openable**, which also explains the `Inconclusive` of run 57c55b2f and
+of the fourth attempt: one defect, not a threshold to tune. The field's
+own doc comment was false, too ("how this verifier seals what it keeps at
+rest": the verifier seals nothing, `Client::capture` does).
+
+**Fixed by removing the duplicate**, which is the shape the author's
+corrections usually take: `VerifierConfig` loses `seal`, `Verifying`
+carries `seal: &SealParams` — the store's own, passed at the four places
+the client builds that context — and the gate now also requires that this
+verifier reads the version it is about to open
+(`template_versions.contains(sealed.template_version)`), so an old
+capture is `unavailable` rather than opened under the wrong length.
+
+Test: `a_capture_sealed_at_the_stores_template_length_opens_at_the_verifier`.
+**Checked against the old behaviour rather than assumed**: with
+`open(&SealParams::default(), ...)` restored it fails with
+`(Inconclusive, Some(PhotoMatch), Some(2))` — the bench's answer exactly
+— and passes with the fix.
+
+**So §22.2's thresholds are still untested on hardware**, and the next
+run is the first that can produce a real comparison: `engine.compare`
+will carry the score with both thresholds beside it.
+
+## GXV × ZU8, the sixth attempt (2026-10-13, 01:4x) — **Match**, txid `0e90ddd7`
+
+    engine.compare score 0.7501765 match_at 0.40 no_match_below 0.30 verdict Match
+    ver.query.answered ec0c3ac4 from 3a5423fa verdict Match
+
+**The first biometric verdict the protocol has ever produced on
+hardware**, and it is in a record: ZU8 asked 4VC about GXV, 4VC opened its
+version-2 capture of GXV, compared it against the fuzzed profile ZU8 took
+of the person in front of it, and answered `Match` at a cosine of
+**0.750**. GXV's query about ZU8 answered `Unavailable` from the version
+gate (`held 1 asked 2 reads {2}`), 4VC's capture of ZU8 predating the
+engine. Three signers, record `0e90ddd7`.
+
+**The run was clean**: no `pay.resend`, no `pay.error`, no
+`pay.no_session` on any of the three phones — the session heal and the
+courier's writer together have made the verifier's sessions durable.
+**Query to verdict took 1.6 s** (`cer.query.issued` 6540011 →
+`cer.response` 6541598), which is the whole of step 6: consent asked of
+the subject, the grant to the verifier, the consented query, the capture
+opened, the comparison, the signed response back.
+
+**What this says about §22.2's provisional numbers** (still the author's
+to set, and now with one data point): a genuine pair across two different
+phones' cameras, one of them the cheap TCL, scored 0.750 against a match
+threshold of 0.40 — a wide margin, and well above OpenCV's own operating
+point for SFace (0.363). The fuzz and the i8 quantisation cost little
+(the engine's own test holds a template against its own profile above
+0.95). **The no-match side remains untested on hardware and cannot be
+tested on this bench**: every face it has is the same person, so nothing
+here produces an impostor score.
+
+**Owed on the bench**: one 4VC × ZU8 ceremony on this build would give
+4VC a version-2 capture of ZU8, after which a GXV × ZU8 run should answer
+`Match` on both sides.
+
+## 4VC × ZU8 (2026-10-13, 01:4x) — **both sides Match from one verifier**, txid `3cb39d78`
+
+    engine.compare score 0.8375502 ... verdict Match   (4dd573ef: 4VC asked GXV about ZU8)
+    engine.compare score 0.8128245 ... verdict Match   (7a027505: ZU8 asked GXV about 4VC)
+
+**The case the subject-scoped pin unlocked, now with real biometrics.**
+One ceremony, one verifier chosen by both parties, two subjects, two
+profiles — and GXV answered both, 0.838 and 0.813, each `Match`. Four
+signers on the record (`3cb39d78`): the two participants and the two
+node-hosted witnesses `976a30cd` and `fb16ef5d`, GXV being the verifier
+and nothing else, so no party held two roles. Each side's selection was
+*n* = 2, pool 1, required 1, basis `Met`.
+
+**Clean on all four phones**: no `pay.resend`, no `pay.error`, no
+`pay.no_session` anywhere in the window.
+
+**Three genuine scores now**: 0.750, 0.813, 0.838, against a match
+threshold of 0.40 and OpenCV's own operating point of 0.363. The weakest
+capture of the three came from the TCL with **one frame of three
+carrying a face** (`engine.template frames 3 with_face 1`) and still
+compared at 0.838 — so the margin is not an artefact of good conditions.
+The no-match side stays untested for want of a second face.
+
+**And 4VC now holds a version-2 capture of ZU8**, so a GXV × ZU8 run
+should answer `Match` on both sides.
+
+## GXV × ZU8, the seventh attempt (2026-10-13, 01:5x) — **both sides Match**, txid `65134085`
+
+    engine.compare score 0.7318285 ... verdict Match   (d7dba551: ZU8 asked 4VC about GXV)
+    engine.compare score 0.8762820 ... verdict Match   (3d86abd9: GXV asked 4VC about ZU8)
+
+**The pair that could not get a single answer four attempts ago now gets
+two.** Both queries to 4VC were answered `Match`, the record
+(`65134085`, three signers) carries both, and the window holds no
+`pay.resend`, no `pay.error` and no `pay.no_session` on any of the three
+phones. 111 s for the ceremony; 14.6 s from `cer.query.issued` to
+`cer.response` on GXV's side, the consent prompt in the middle of it.
+
+**Five genuine comparisons on hardware now**: 0.732, 0.750, 0.813, 0.838,
+0.876 — every one far above §22.2's provisional 0.40, the lowest more
+than twice the no-match ceiling of 0.30. No impostor score exists, and
+cannot on a bench with one face.
+
+**[author, 2026-10-13] The thresholds are loosened for production**: "these
+captures all depict the same person in the same environment on the same few
+day period". Applied as `match_at` 0.40 → **0.363** (SFace's published
+operating point, the one figure measured against impostors; the bench has
+one face and bounds no false-accept rate) and `no_match_below` 0.30 →
+**0.20**, the asymmetry being that a `NoMatch` is signed evidence against a
+person while an `Inconclusive` asserts nothing — a weak capture of the right
+person belongs in the band. Pinned by
+`the_chosen_thresholds_read_a_match_a_doubt_and_a_negative`. Not written
+into §22.2, which still lists thresholds as the implementation's to decide:
+the numbers go there when the author settles them in the document.
+
 ## The low-spec pair, first run (2026-10-10)
 
 **Set up**: 8XDIW4G6WCW4LZU8 and VGY5IJRWUSAIX4VC, TCL 30 Z, on

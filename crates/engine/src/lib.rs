@@ -42,9 +42,24 @@ const CANVAS: usize = 640;
 /// The noise added to a profile, per unit-vector component (provisional).
 pub const FUZZ_SIGMA: f32 = 0.03;
 
-/// The cosine thresholds a verdict is read at (provisional, design
-/// §7.4.4): SFace's published operating point is 0.363; the band around
-/// it is the inconclusive answer the design asks for.
+/// The cosine thresholds a verdict is read at (design §7.4.4; §22.2
+/// leaves them to the implementation).
+///
+/// **Loosened for production** [author, 2026-10-13]: the bench's genuine
+/// comparisons ran 0.732 to 0.876, and every one of them is the same
+/// person, in one room, within a few days — a sample that says nothing
+/// about the same face a year later, in other light, on another phone.
+/// Thresholds chosen to clear that margin would reject the ordinary case.
+///
+/// `match_at` is **SFace's own published operating point**, which is the
+/// only figure here that was measured against impostors; this bench has
+/// one face and so bounds no false-accept rate at all, and nothing below
+/// that point can be justified from what it shows. `no_match_below` sits
+/// well under it because the two errors are not alike: a `NoMatch` is
+/// signed evidence against a person, carried in a record — the design has
+/// to warn that one mismatch is not proof of fraud — while an
+/// `Inconclusive` asserts nothing. A weak capture of the right person
+/// belongs in the band, not in an accusation.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Thresholds {
     /// At or above: `Match`.
@@ -56,8 +71,8 @@ pub struct Thresholds {
 impl Default for Thresholds {
     fn default() -> Self {
         Thresholds {
-            match_at: 0.40,
-            no_match_below: 0.30,
+            match_at: 0.363,
+            no_match_below: 0.20,
         }
     }
 }
@@ -344,16 +359,39 @@ impl Matcher for Cosine {
             return Verdict::Unavailable;
         }
         let (Some(t), Some(p)) = (decode(template), dequantise(profile)) else {
+            // neither is of the length this version fixes: a third road to
+            // `inconclusive`, and one a run should not have to guess at
+            tracing::warn!(
+                target: "engine",
+                template = template.len(),
+                profile = profile.len(),
+                "engine.compare.unreadable"
+            );
             return Verdict::Inconclusive;
         };
         let c = cosine(&t, &p);
-        if c >= self.0.match_at {
+        let verdict = if c >= self.0.match_at {
             Verdict::Match
         } else if c < self.0.no_match_below {
             Verdict::NoMatch
         } else {
             Verdict::Inconclusive
-        }
+        };
+        // **the number, where a run can read it.** The thresholds of
+        // §22.2 are provisional and the author's to set, and a verdict
+        // alone says nothing about how far from one it fell: on the bench
+        // two version-2 captures of one person answered inconclusive
+        // [2026-10-12].  A field build's own records; no subscriber is
+        // installed in a releasable one.
+        tracing::info!(
+            target: "engine",
+            score = f64::from(c),
+            match_at = f64::from(self.0.match_at),
+            no_match_below = f64::from(self.0.no_match_below),
+            verdict = ?verdict,
+            "engine.compare"
+        );
+        verdict
     }
 }
 
@@ -622,6 +660,50 @@ mod tests {
             Verdict::Inconclusive
         );
         assert_eq!(fuzz(&p), Vec::<u8>::new(), "a profile is not a template");
+    }
+
+    /// **The three regions, at the numbers production ships with.** The
+    /// pair is a decision [author, 2026-10-13] and not an accident, so a
+    /// score either side of each line is held here: a comparison at the
+    /// model's published operating point is a match, one below it carries
+    /// its doubt as `Inconclusive`, and only a clearly different face
+    /// earns the signed negative.
+    #[test]
+    fn the_chosen_thresholds_read_a_match_a_doubt_and_a_negative() {
+        let t = unit(3);
+        // a profile at a chosen cosine to t: t mixed with an orthogonal
+        // direction, quantised as a profile is
+        let at = |c: f32| {
+            let mut o = unit(7);
+            let d = cosine(&t, &o);
+            for (x, y) in o.iter_mut().zip(t.iter()) {
+                *x -= d * y;
+            }
+            let o = normalise(o);
+            let mut mix = [0f32; DIM];
+            for i in 0..DIM {
+                mix[i] = c * t[i] + (1.0 - c * c).sqrt() * o[i];
+            }
+            normalise(mix)
+                .iter()
+                .map(|x| (x * 127.0).round() as i8 as u8)
+                .collect::<Vec<u8>>()
+        };
+        let m = Cosine(Thresholds::default());
+        let template = encode(&t);
+        for (c, want) in [
+            (0.42, Verdict::Match),
+            (0.37, Verdict::Match),
+            (0.30, Verdict::Inconclusive),
+            (0.22, Verdict::Inconclusive),
+            (0.10, Verdict::NoMatch),
+        ] {
+            assert_eq!(
+                m.compare(&template, &at(c), TEMPLATE_VERSION),
+                want,
+                "a comparison at {c}"
+            );
+        }
     }
 
     #[test]

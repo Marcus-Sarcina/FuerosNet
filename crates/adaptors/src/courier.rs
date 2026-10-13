@@ -94,6 +94,19 @@ pub struct Courier {
     /// grant, by id: who asked, so the answer goes back the way the query
     /// came.
     awaiting: Mutex<Awaiting>,
+    /// Run after every arrival this courier put through the client, to
+    /// write what it changed.
+    ///
+    /// **It cannot be left to whatever the arrival becomes.** A delivery
+    /// advances a ratchet whether or not anything is handed up: a query
+    /// and a grant are answered here and go to no application channel at
+    /// all, so a verifier that served a whole ceremony produced nothing a
+    /// caller could save on. On the bench a verifier opened sessions on
+    /// two re-sent messages, answered a query on one of them, and was
+    /// restarted by its platform still holding neither [2026-10-12].
+    ///
+    /// Blocking: whoever wires it decides what a write costs.
+    wrote: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
 }
 
 /// How many queries may wait for their grant at once.  A session peer can
@@ -157,9 +170,24 @@ impl Courier {
                 verifiers: Mutex::new(None),
                 offered: Mutex::new(HashSet::new()),
                 awaiting: Mutex::new(Awaiting::default()),
+                wrote: Mutex::new(None),
             }),
             rx,
         )
+    }
+
+    /// What to run after every arrival, once the client has taken it: the
+    /// state written. Nothing runs where nobody wires one.
+    pub fn write_after_arrivals(&self, wrote: Arc<dyn Fn() + Send + Sync>) {
+        *self.wrote.lock().unwrap() = Some(wrote);
+    }
+
+    /// Write what an arrival changed, where a writer is wired.
+    fn wrote(&self) {
+        let w = self.wrote.lock().unwrap().clone();
+        if let Some(w) = w {
+            w();
+        }
     }
 
     pub(crate) fn report_grants_to(&self, v: Arc<Verifiers>) {
@@ -304,6 +332,9 @@ impl Courier {
                 (d, c.outbox())
             })
             .await;
+        // **the state goes down before anything else happens**: the ratchet
+        // this arrival moved, the session it opened, the query it answered
+        self.wrote();
         if !owed.is_empty() {
             self.carry(owed).await;
         }

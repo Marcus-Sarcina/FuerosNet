@@ -640,11 +640,15 @@ impl Net {
         // what the courier hands up joins the one event stream, and the
         // session is watched for the failover the kernel drives itself
         let mut live = live;
-        let persist = self.persist.lock().unwrap().clone();
-        live.tasks.push(
-            self.rt()
-                .spawn(forward(events, self.events_tx.clone(), persist)),
-        );
+        // **every arrival writes the state**, whoever answers it: the
+        // courier answers a query and a grant itself and hands neither up,
+        // so a verifier's whole service reaches no event stream and
+        // nothing else would write the sessions it opened [2026-10-12]
+        if let Some(p) = self.persist.lock().unwrap().clone() {
+            live.courier.write_after_arrivals(p);
+        }
+        live.tasks
+            .push(self.rt().spawn(forward(events, self.events_tx.clone())));
         live.tasks.push(self.rt().spawn(watch(
             session,
             serving_node,
@@ -934,19 +938,9 @@ fn take_readers(session: &mut Session) -> Readers {
     (deliveries, frames)
 }
 
-/// What the courier hands up, on the one event stream — and the state
-/// written first, for every dispatch and not only those that become
-/// events.
-async fn forward(
-    mut from: UnboundedReceiver<(Keyhash, Dispatched)>,
-    to: UnboundedSender<Event>,
-    persist: Option<Arc<dyn Fn() + Send + Sync>>,
-) {
+/// What the courier hands up, on the one event stream.
+async fn forward(mut from: UnboundedReceiver<(Keyhash, Dispatched)>, to: UnboundedSender<Event>) {
     while let Some((k, d)) = from.recv().await {
-        if let Some(p) = &persist {
-            // a snapshot and a write, blocking: off the worker's duty
-            tokio::task::block_in_place(|| p());
-        }
         if let Some(e) = event_of(k, d) {
             let _ = to.send(e);
         }

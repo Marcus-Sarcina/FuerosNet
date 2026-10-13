@@ -18,6 +18,7 @@ use rhtn_client::query::*;
 use rhtn_crypto::verify;
 use rhtn_transport::session::*;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc::UnboundedReceiver;
 
@@ -259,6 +260,55 @@ async fn a_grant_on_the_payload_channel_answers_the_waiting_stream_of_a_hosted_l
     assert!(
         matches!(d, Dispatched::ResponseCopy(Ok(id)) if id == qid),
         "{d:?}"
+    );
+}
+
+/// **An arrival the courier answers itself still writes the state.** A
+/// verifier's service reaches no application channel: the courier answers
+/// a query and takes a grant without handing either up, so a caller that
+/// saved after every event it was given saved nothing for the sessions
+/// those arrivals opened. On the bench a verifier opened a session on a
+/// re-sent grant, answered a query on it, and was restarted by its
+/// platform holding neither [2026-10-12].
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_arrival_the_courier_answers_itself_writes_the_state() {
+    let scene = Scene::new();
+    let node = live_node("bob", scene.table("bob", &["bob"]), "bob", &[]);
+    let inboxes = Inboxes::default();
+    let serving: Arc<dyn Serving> = LocalNode::new(node.clone(), inboxes.clone());
+    let verifiers = Verifiers::new();
+    let mut alice = host("alice", buffered(5000), &serving, &inboxes, &verifiers);
+    let w1 = host("w1", buffered(5000), &serving, &inboxes, &verifiers);
+    verifiers.install(&node);
+    alice.courier.attach(vec![kh("w1")]).await;
+    w1.courier.attach(vec![kh("alice")]).await;
+    alice.courier.sweep(vec![kh("w1")]).await;
+
+    let writes = Arc::new(AtomicUsize::new(0));
+    let counted = writes.clone();
+    alice.courier.write_after_arrivals(Arc::new(move || {
+        counted.fetch_add(1, Ordering::SeqCst);
+    }));
+
+    // w1's grant for a query alice never saw: taken, buffered, and told to
+    // nobody — while the session it arrived on is alice's to keep
+    let grant = KeyGrant {
+        record: [5; 32],
+        query_id: [6; 32],
+        key: [1; 32].into(),
+    }
+    .encode();
+    w1.courier
+        .send(kh("alice"), KIND_KEY_GRANT, grant.to_vec())
+        .await
+        .expect("sent");
+    assert!(
+        until(3000, || writes.load(Ordering::SeqCst) > 0).await,
+        "the arrival wrote what it changed"
+    );
+    assert!(
+        next(&mut alice.app, 300).await.is_none(),
+        "and nothing of it was handed up, which is the whole difficulty"
     );
 }
 

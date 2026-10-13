@@ -13685,6 +13685,107 @@ clock that runs it ticks every ten seconds now rather than every minute.
 
 Families 513.
 
+### 2026-10-12 (a ceremony has two subjects)
+
+**The re-send carried a verifier's answer into a record for the first
+time on hardware**, and the same run exposed two defects in the verifier,
+each already stated in `functional_tests.md`.
+
+**One profile per *subject* per ceremony** (VER-005). The pre-commitment
+is one per ceremony and both parties countersign it, so a mutual ceremony
+has two subjects and either party may pick the same verifier. The state
+pinning the one profile was keyed by the ceremony alone, so that verifier
+answered one query and closed the other as "a second profile within one
+ceremony". It is keyed by ceremony and subject now. What §7.4.1 prices is
+unchanged: one profile of a given subject per ceremony, each needing that
+subject's live consent. The design's own wording at §7.4.1 and §7.4.2
+speaks of "a profile differing from another countersigned under the same
+pre-commitment" without naming the subject, and that sentence is the
+author's to settle.
+
+**Nothing is compared across template versions** (VER-012, VER-013). A
+verifier holding a version-1 capture and asked under version 2 fed the old
+template to the new matcher and answered `inconclusive` — the verdict that
+names a capture which would not read. It answers `unavailable` with no
+basis and no version, decided from the sealed record's own version, which
+is in the clear, so the capture is never opened.
+
+**And the morning's saving fix moved to where arrivals actually pass.**
+It had gone into the ffi's forwarder, which drains what the courier hands
+up — and the courier answers a query and takes a grant itself, handing
+neither up, so a verifier's service still wrote nothing and the bench
+showed it: sessions opened on the re-sent messages with no save after
+either. The courier takes a writer now and runs it as soon as the client
+has taken a delivery.
+
+### 2026-10-12 (one store, one set of parameters)
+
+**No version-2 capture had ever been openable.** A sealed capture is
+`template[template_len] || frames` and the length is not in the record, so
+whoever opens it splits at the number it holds. The capture path seals
+with the client's `seal` parameters, which the platform raises to 512
+bytes where the biometric engine is present; the verifier opened with a
+*second* copy of those parameters that nothing ever set, still at the
+reference default of 32. Every version-2 capture was written at 512 and
+split at 32, its remainder read as frame headers, and the query answered
+`inconclusive` — the verdict that means a capture would not read. On the
+bench that looked for two runs like a matcher threshold wanting
+calibration, and the instrumentation that told them apart named it in one
+run instead.
+
+**The duplicate is gone**: `VerifierConfig` no longer carries seal
+parameters, the verifying context carries the store's own, and a verifier
+now also refuses to open a capture of a version it does not read, which
+is `unavailable` rather than a comparison under the wrong length. The
+field's comment had claimed the verifier seals what it keeps at rest; it
+seals nothing.
+
+### 2026-10-13 (the first match)
+
+**A verifier compared two captures of one person on two phones and
+answered `Match`, at a cosine of 0.750 against a threshold of 0.40**, and
+the record carries it: three signers, txid `0e90ddd7`. Query to verdict
+took 1.6 seconds — consent asked of the subject, the grant to the
+verifier, the consented query, the capture opened, the comparison, the
+signed response back. The run needed no re-send and no session was
+refused, so the heal and the writing of what an arrival changes hold
+together across restarts.
+
+What the number says about §22.2's provisional thresholds, which remain
+the author's to set: a genuine pair across two different cameras, one of
+them the cheaper phone, sits far above the 0.40 match threshold and
+further still above OpenCV's own operating point for this model, 0.363.
+The no-match side is untested and cannot be tested on this bench, every
+face it has being the same person's.
+
+**And then both sides of one ceremony, from one verifier**: a verifier
+both parties had chosen answered a query about each of them, 0.838 and
+0.813, both `Match`, on a record with four signers. That is the case the
+subject-scoped profile pin opened up, and the weakest of the three
+captures behind these numbers carried a face in one frame of three.
+
+### 2026-10-13 (the comparison thresholds, loosened)
+
+**The author's ruling on §22.2's open pair**: the bench's genuine
+comparisons are all one person, in one room, within a few days, so
+thresholds set to clear that margin would reject the ordinary case — the
+same face a year later, in other light, on another phone. The match point
+is now **SFace's own published operating point, a cosine of 0.363**,
+which is the only figure in hand that was measured against impostors;
+this bench has one face and bounds no false-accept rate at all, so
+nothing below that point could be justified from what it shows.
+
+**The negative moved further, to 0.20**, because the two errors are not
+alike. A `NoMatch` is signed evidence against a person, carried in a
+record — §16.1 has to warn that a single mismatch is not proof of fraud —
+while an `Inconclusive` asserts nothing. A weak capture of the right
+person belongs in the band. The three regions are pinned by a test at the
+shipped numbers, so moving them is a decision and not a drift.
+
+§22.2 still lists the thresholds among what the implementation decides;
+the pair is not written into the design until the author settles the
+numbers there.
+
 ### 2026-10-11 (contacts)
 
 **[author, 2026-10-11] A client keeps contacts, and prunes toward what

@@ -138,6 +138,7 @@ fn a_query_without_consent_or_not_addressed_to_me_closes_the_stream() {
     let m = Recording(RefCell::new(vec![]));
     let mut v = VerifierState::new(VerifierConfig::default());
     let cx = Verifying {
+        seal: &SealParams::default(),
         me: &me,
         ids: &ids(),
         store: &s.b_store,
@@ -182,6 +183,7 @@ fn a_claimed_met_my_own_records_refute_is_answered_unavailable() {
     let m = Recording(RefCell::new(vec![]));
     let mut v = VerifierState::new(VerifierConfig::default());
     let cx = Verifying {
+        seal: &SealParams::default(),
         me: &me,
         ids: &ids(),
         store: &s.b_store,
@@ -222,6 +224,7 @@ fn a_grant_naming_a_record_i_do_not_hold_yields_unavailable() {
     let m = Recording(RefCell::new(vec![]));
     let mut v = VerifierState::new(VerifierConfig::default());
     let cx = Verifying {
+        seal: &SealParams::default(),
         me: &me,
         ids: &ids(),
         store: &s.b_store,
@@ -256,6 +259,7 @@ fn only_the_capture_the_grant_names_is_opened() {
     let m = Recording(RefCell::new(vec![]));
     let mut v = VerifierState::new(VerifierConfig::default());
     let cx = Verifying {
+        seal: &SealParams::default(),
         me: &me,
         ids: &ids(),
         store: &s.b_store,
@@ -293,6 +297,7 @@ fn a_grant_from_anyone_but_the_subject_is_rejected_and_the_first_stands() {
     let m = Recording(RefCell::new(vec![]));
     let mut v = VerifierState::new(VerifierConfig::default());
     let cx = Verifying {
+        seal: &SealParams::default(),
         me: &me,
         ids: &ids(),
         store: &s.b_store,
@@ -336,6 +341,7 @@ fn a_grant_unattached_to_a_countersigned_query_opens_nothing_and_is_discarded() 
     };
     let mut v = VerifierState::new(cfg);
     let cx = Verifying {
+        seal: &SealParams::default(),
         me: &me,
         ids: &ids(),
         store: &s.b_store,
@@ -373,6 +379,7 @@ fn no_released_key_is_retained_after_answering() {
     };
     let mut v = VerifierState::new(cfg);
     let cx = Verifying {
+        seal: &SealParams::default(),
         me: &me,
         ids: &ids(),
         store: &s.b_store,
@@ -422,6 +429,7 @@ fn a_failed_decryption_is_inconclusive_never_no_match() {
     let sealed = s.b_store.sealed.get_mut(&s.r2).unwrap();
     sealed.ciphertext.truncate(sealed.ciphertext.len() - 5);
     let cx = Verifying {
+        seal: &SealParams::default(),
         me: &me,
         ids: &ids(),
         store: &s.b_store,
@@ -456,6 +464,7 @@ fn a_second_different_profile_within_one_ceremony_is_rejected() {
     let m = Recording(RefCell::new(vec![]));
     let mut v = VerifierState::new(VerifierConfig::default());
     let cx = Verifying {
+        seal: &SealParams::default(),
         me: &me,
         ids: &ids(),
         store: &s.b_store,
@@ -496,6 +505,238 @@ fn a_second_different_profile_within_one_ceremony_is_rejected() {
     assert!(v.awaiting().is_empty());
 }
 
+// acceptance: CER-16
+/// **A ceremony has two subjects, and one verifier may be asked about
+/// both.** The pre-commitment is one per ceremony and both parties
+/// countersign it, so carol asking about alice and alice asking about
+/// carol carry the same ceremony with different subjects, each profile
+/// countersigned by its own subject (VER-005). Pinned per ceremony alone,
+/// the second was closed: on the bench a verifier both parties had chosen
+/// answered one query and refused the other [2026-10-12].
+#[test]
+fn each_of_a_ceremonys_two_subjects_gets_its_own_profile() {
+    let mut s = setup();
+    let me = id("bob");
+    let m = Recording(RefCell::new(vec![]));
+    let mut v = VerifierState::new(VerifierConfig::default());
+
+    // bob holds a capture of carol too, from a meeting of their own, and
+    // carol holds its seed
+    let cb = s.w.meet("carol", "bob");
+    let mut b_store = s.b_store.clone();
+    b_store.records.insert(cb.txid, cb.bytes.clone());
+    let (cc, sc) = ([33u8; 32], [34u8; 32]);
+    let tc = vec![3u8; 32];
+    let key = capture_key(&sc, &kh("carol"), &kh("bob"), &cc);
+    let cap = Capture {
+        modality: 0,
+        template_version: 1,
+        template: tc.clone(),
+        frames: vec![Frame {
+            at_ms: 1,
+            bytes: b"a frame".to_vec(),
+        }],
+    };
+    b_store.sealed.insert(
+        cb.txid,
+        seal(
+            &SealParams::default(),
+            &key,
+            kh("carol"),
+            kh("bob"),
+            cc,
+            &cap,
+        ),
+    );
+    let cx = Verifying {
+        seal: &SealParams::default(),
+        me: &me,
+        ids: &ids(),
+        store: &b_store,
+        matcher: &m,
+    };
+
+    let ceremony = [7u8; 32];
+    // carol asks bob about alice, alice consenting
+    let q1 = query(&s.t2, ceremony, "bob");
+    assert_eq!(
+        v.take_query(&cx, kh("carol"), &request(&q1, "alice", 1), 0),
+        QueryOutcome::AwaitingGrant
+    );
+    let GrantOutcome::Answered(a1) =
+        v.take_grant(&cx, kh("alice"), &grant(&s, s.r2, s.c2, q1.query_id()), 1)
+    else {
+        panic!("alice's side is answered")
+    };
+    assert_eq!(verdict_of(&a1.to_querier).0, Verdict::Match);
+
+    // and alice asks bob about carol under the very same ceremony, carol
+    // consenting: a second subject, not a second profile of the first
+    let q2 = VerificationQuery {
+        subject: kh("carol"),
+        querier: kh("alice"),
+        ..query(&tc, ceremony, "bob")
+    };
+    assert_eq!(
+        v.take_query(&cx, kh("alice"), &request(&q2, "carol", 1), 2),
+        QueryOutcome::AwaitingGrant,
+        "the other subject's query is taken, not closed"
+    );
+    let g = KeyGrant {
+        record: cb.txid,
+        query_id: q2.query_id(),
+        key: capture_key(&sc, &kh("carol"), &kh("bob"), &cc),
+    }
+    .encode()
+    .to_vec();
+    let GrantOutcome::Answered(a2) = v.take_grant(&cx, kh("carol"), &g, 3) else {
+        panic!("carol's side is answered too")
+    };
+    assert_eq!(verdict_of(&a2.to_querier).0, Verdict::Match);
+
+    // what the rule still refuses: a second, different profile of one of
+    // those subjects in that ceremony
+    let q3 = query(&s.t1, ceremony, "bob");
+    assert_eq!(
+        v.take_query(&cx, kh("carol"), &request(&q3, "alice", 1), 4),
+        QueryOutcome::Closed("a second profile for one subject in one ceremony")
+    );
+}
+
+// acceptance: CER-08
+/// **The length the store seals with is the length the verifier reads
+/// with.** A sealed capture is `template[template_len] || frames`, and the
+/// length is not in the record: whoever opens it splits at the number it
+/// holds. The verifier held a second copy of those parameters that nothing
+/// kept in step, so a 512-byte template was written by the capture path
+/// and split at 32 here, the rest read as frame headers — every
+/// version-2 capture came back as one that would not open, which the
+/// bench showed as `inconclusive` against a verifier that held a good
+/// capture of the person in front of the camera [2026-10-12].
+#[test]
+fn a_capture_sealed_at_the_stores_template_length_opens_at_the_verifier() {
+    let mut s = setup();
+    let me = id("bob");
+    let m = Recording(RefCell::new(vec![]));
+    // the engine's numbers: a 512-byte template, compared under version 2
+    let p512 = SealParams {
+        template_len: 512,
+        ..SealParams::default()
+    };
+    let rec = s.w.meet("alice", "bob");
+    let (cid, seed) = ([44u8; 32], [45u8; 32]);
+    let template = vec![7u8; 512];
+    let key = capture_key(&seed, &kh("alice"), &kh("bob"), &cid);
+    let cap = Capture {
+        modality: 0,
+        template_version: 2,
+        template: template.clone(),
+        frames: vec![Frame {
+            at_ms: 9,
+            bytes: b"a frame of the person".to_vec(),
+        }],
+    };
+    let mut b_store = s.b_store.clone();
+    b_store.records.insert(rec.txid, rec.bytes.clone());
+    b_store.sealed.insert(
+        rec.txid,
+        seal(&p512, &key, kh("alice"), kh("bob"), cid, &cap),
+    );
+    let cfg = VerifierConfig {
+        template_versions: BTreeSet::from([2]),
+        ..VerifierConfig::default()
+    };
+    let mut v = VerifierState::new(cfg);
+    let cx = Verifying {
+        seal: &p512,
+        me: &me,
+        ids: &ids(),
+        store: &b_store,
+        matcher: &m,
+    };
+    // the profile is that template, so the recording matcher calls it a
+    // match if and only if what it was shown is what was sealed
+    let q = VerificationQuery {
+        template_version: 2,
+        ..query(&template, [8; 32], "bob")
+    };
+    assert_eq!(
+        v.take_query(&cx, kh("carol"), &request(&q, "alice", 1), 0),
+        QueryOutcome::AwaitingGrant
+    );
+    let g = KeyGrant {
+        record: rec.txid,
+        query_id: q.query_id(),
+        key,
+    }
+    .encode()
+    .to_vec();
+    let GrantOutcome::Answered(a) = v.take_grant(&cx, kh("alice"), &g, 1) else {
+        panic!("answered")
+    };
+    assert_eq!(
+        verdict_of(&a.to_querier),
+        (Verdict::Match, Some(Basis::PhotoMatch), Some(2)),
+        "the capture opened and compared"
+    );
+    assert_eq!(
+        m.0.borrow().as_slice(),
+        &[template],
+        "and what the matcher was shown is the whole template, not a prefix"
+    );
+}
+
+// acceptance: CER-15
+/// **A capture taken under another template version is unavailable, and is
+/// not opened.** The verifier here compares under versions 1 and 2 both,
+/// holds a version-1 capture, and is asked under version 2: the answer
+/// carries no basis and no version (VER-012), the old template is not
+/// reinterpreted under the new matcher (VER-013), and `inconclusive` —
+/// which names a capture that would not read — is not what this produces.
+/// On the bench the cross-version comparison answered inconclusive
+/// [2026-10-12].
+#[test]
+fn a_capture_of_another_template_version_is_unavailable_and_unopened() {
+    let s = setup();
+    let me = id("bob");
+    let m = Recording(RefCell::new(vec![]));
+    let cfg = VerifierConfig {
+        template_versions: BTreeSet::from([1, 2]),
+        ..VerifierConfig::default()
+    };
+    let mut v = VerifierState::new(cfg);
+    let cx = Verifying {
+        seal: &SealParams::default(),
+        me: &me,
+        ids: &ids(),
+        store: &s.b_store,
+        matcher: &m,
+    };
+    let q = VerificationQuery {
+        template_version: 2,
+        ..query(&s.t2, [7; 32], "bob")
+    };
+    assert_eq!(
+        v.take_query(&cx, kh("carol"), &request(&q, "alice", 1), 0),
+        QueryOutcome::AwaitingGrant,
+        "the version it declares is one this verifier compares under"
+    );
+    let GrantOutcome::Answered(a) =
+        v.take_grant(&cx, kh("alice"), &grant(&s, s.r2, s.c2, q.query_id()), 1)
+    else {
+        panic!("answered")
+    };
+    assert_eq!(
+        verdict_of(&a.to_querier),
+        (Verdict::Unavailable, None, None),
+        "unavailable, with no comparison basis and no version"
+    );
+    assert!(
+        m.0.borrow().is_empty(),
+        "the version-1 template was never shown to the version-2 matcher"
+    );
+}
+
 // acceptance: CER-14
 #[test]
 fn a_copy_of_the_signed_response_goes_to_the_subject() {
@@ -504,6 +745,7 @@ fn a_copy_of_the_signed_response_goes_to_the_subject() {
     let m = Recording(RefCell::new(vec![]));
     let mut v = VerifierState::new(VerifierConfig::default());
     let cx = Verifying {
+        seal: &SealParams::default(),
         me: &me,
         ids: &ids(),
         store: &s.b_store,
