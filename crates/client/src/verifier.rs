@@ -129,7 +129,7 @@ struct Pending {
 }
 
 /// A verifier's state across queries: which profile each subject carries
-/// in each ceremony,
+/// in each ceremony, which ceremony is asking about a subject now,
 /// the requester counters for the window, the queries waiting for grants
 /// and the grants waiting for queries, and which queries were answered.
 /// No key is kept: a grant's key lives until it is used or the buffer bound
@@ -139,8 +139,14 @@ pub struct VerifierState {
     /// This verifier's own numbers.
     pub cfg: VerifierConfig,
     /// The one profile pinned for a subject in a ceremony, by
-    /// `(ceremony, subject)`.
-    ceremonies: BTreeMap<([u8; 32], Keyhash), [u8; 32]>,
+    /// `(ceremony, subject)`, with when it was pinned: a lock for the
+    /// window and not a log of who asked about whom
+    /// (`light-client-requirements.md` §1.4).
+    pinned: BTreeMap<([u8; 32], Keyhash), ([u8; 32], u64)>,
+    /// The ceremony with a question open about a subject, by subject:
+    /// held from the query until it is answered either way, which is what
+    /// makes it **one ceremony at a time** about one subject.
+    asking: BTreeMap<Keyhash, [u8; 32]>,
     counters: BTreeMap<Keyhash, (u64, u32)>,
     pending_queries: BTreeMap<[u8; 32], Pending>,
     pending_grants: BTreeMap<[u8; 32], (Keyhash, KeyGrant, u64)>,
@@ -153,7 +159,8 @@ impl VerifierState {
     pub fn new(cfg: VerifierConfig) -> Self {
         VerifierState {
             cfg,
-            ceremonies: BTreeMap::new(),
+            pinned: BTreeMap::new(),
+            asking: BTreeMap::new(),
             counters: BTreeMap::new(),
             pending_queries: BTreeMap::new(),
             pending_grants: BTreeMap::new(),
@@ -235,31 +242,48 @@ impl VerifierState {
         if !query::consent_verifies(subject, &req.consent, &qid) {
             return QueryOutcome::Closed("consent does not verify under the subject");
         }
-        // **One profile per subject per ceremony** (design §7.4.1, §7.4.2;
-        // functional row VER-005, where it is the *subject* that authorizes
-        // one profile under the pre-commitment and keeps the state that
-        // prevents variants).  The pre-commitment is one per ceremony and
-        // both parties countersign it (design §7.4.1's derivation), so a
-        // ceremony has two subjects: each party is asked about the other,
-        // and both may choose the same verifier.  Pinned per ceremony
-        // alone, the second of those two legitimate queries is refused —
-        // on the bench a verifier picked by both parties answered one and
-        // closed the other [2026-10-12].
+        // **The limit is per subject, never per ceremony** [author,
+        // 2026-10-13]: "two participants in the same ceremony calling the
+        // same verifier should be treated the same as two subjects asking
+        // for verification in separate ceremonies.  The verifier enforces
+        // only one ceremony calling to verify a given subject at a time,
+        // not a limit on the verification calls per ceremony."
         //
-        // The price §7.4.1 sets is unchanged: a probe of one subject's
-        // likeness still costs a ceremony with that subject's live
-        // consent, since this verifier compares one profile of that
-        // subject and no other until the ceremony is over.
+        // The pre-commitment is one per ceremony and both parties
+        // countersign it (§7.4.1's derivation), so a ceremony has two
+        // subjects and either party may choose this verifier.  Keyed by
+        // the ceremony alone, the second of two legitimate queries was
+        // refused: on the bench a verifier both parties had picked
+        // answered one and closed the other [2026-10-12].
+        //
+        // Two things are held here, and they are not the same thing:
+        //
+        // * **one profile for a subject in a ceremony** — the anti-oracle
+        //   rule itself, which stops a hostile counterparty probing with
+        //   several schemas under one pre-commitment; and
+        // * **one ceremony asking about a subject at a time** — two
+        //   ceremonies holding a probe on one subject at once "is
+        //   precisely the oracle leakage we were trying to prevent"
+        //   [author, 2026-10-13].  Released when the question is answered
+        //   either way, since §7.4.1 already prices *successive*
+        //   ceremonies at one probe each.
         let digest = sha256(&q.profile);
-        match self.ceremonies.get(&(q.ceremony_id, q.subject)) {
-            Some(d) if *d != digest => {
+        if let Some(c) = self.asking.get(&q.subject)
+            && *c != q.ceremony_id
+        {
+            return QueryOutcome::Closed("another ceremony is verifying this subject");
+        }
+        match self.pinned.get(&(q.ceremony_id, q.subject)) {
+            Some((d, _)) if *d != digest => {
                 return QueryOutcome::Closed("a second profile for one subject in one ceremony");
             }
             Some(_) => {}
             None => {
-                self.ceremonies.insert((q.ceremony_id, q.subject), digest);
+                self.pinned
+                    .insert((q.ceremony_id, q.subject), (digest, now_ms));
             }
         }
+        self.asking.insert(q.subject, q.ceremony_id);
         // the requester's allowance in this window (design §7.4.1)
         let entry = self.counters.entry(peer).or_insert((now_ms, 0));
         if now_ms.saturating_sub(entry.0) >= self.cfg.window_ms {
@@ -385,6 +409,11 @@ impl VerifierState {
         let window = self.cfg.window_ms;
         self.counters
             .retain(|_, (opened, _)| now_ms.saturating_sub(*opened) < window);
+        // a lock for the window, not a log: a ceremony runs in minutes, and
+        // the profile it pinned is not kept past the window the counters
+        // use (`light-client-requirements.md` §1.4)
+        self.pinned
+            .retain(|_, (_, at)| now_ms.saturating_sub(*at) < window);
         let due: Vec<[u8; 32]> = self
             .pending_queries
             .iter()
@@ -487,6 +516,12 @@ impl VerifierState {
         }
         .sign(cx.me);
         self.answered.insert(qid);
+        // **the question about this subject is settled**, so the next
+        // ceremony may ask — what stays is the profile this one pinned.
+        // Two ceremonies holding a probe on one subject at once is the
+        // oracle leakage the rule exists for [author, 2026-10-13]; two
+        // in succession is what §7.4.1 already prices at a ceremony each.
+        self.asking.remove(&q.subject);
         Answer {
             query_id: qid,
             to_querier: bytes.clone(),

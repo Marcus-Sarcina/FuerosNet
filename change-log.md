@@ -13698,10 +13698,11 @@ pinning the one profile was keyed by the ceremony alone, so that verifier
 answered one query and closed the other as "a second profile within one
 ceremony". It is keyed by ceremony and subject now. What §7.4.1 prices is
 unchanged: one profile of a given subject per ceremony, each needing that
-subject's live consent. The design's own wording at §7.4.1 and §7.4.2
-speaks of "a profile differing from another countersigned under the same
-pre-commitment" without naming the subject, and that sentence is the
-author's to settle.
+subject's live consent. The enforcement sentence is §7.4.1's, and it
+scopes the rule by the pre-commitment — which that same section derives
+as one per ceremony, countersigned by both parties — while §7.4.2 states
+the rule from the subject's own side and is unambiguous. The sentence is
+the author's to settle.
 
 **Nothing is compared across template versions** (VER-012, VER-013). A
 verifier holding a version-1 capture and asked under version 2 fed the old
@@ -13785,6 +13786,49 @@ shipped numbers, so moving them is a decision and not a drift.
 §22.2 still lists the thresholds among what the implementation decides;
 the pair is not written into the design until the author settles the
 numbers there.
+
+### 2026-10-13 (one subject at a time, and where a threshold lives)
+
+**Two rulings, both on §7.4.1's and §22.2's open ground.**
+
+**The anti-oracle limit is per subject, and a ceremony has two of them**
+[author, 2026-10-13]: "two participants in the same ceremony calling the
+same verifier should be treated the same as two subjects asking for
+verification in separate ceremonies. The verifier enforces only one
+ceremony calling to verify a given subject at a time, not a limit on the
+verification calls per ceremony." And on the first attempt, which keyed
+the pin by ceremony and subject together and so let two ceremonies pin
+one subject at once: "this is precisely the oracle leakage we were trying
+to prevent."
+
+So a verifier holds two things that are not the same thing. One profile
+for a subject under one pre-commitment, which is the rule as written, kept
+only for the window the requester counters use so that it stays a lock
+rather than a log. And one ceremony with a question open about a subject,
+refused to any other pre-commitment whoever sends it and whatever profile
+it carries, released as soon as that question is answered either way —
+successive ceremonies are untouched, each paying a full ceremony for its
+one probe, which §7.4.1 already priced. §7.4.1 says per subject in both
+places now, its enforcement clause names the subject, VER-005 carries the
+verifier's half, and the acceptance catalogue gained CER-56 beside a
+restated CER-16, whose verbatim quote was the sentence that changed.
+
+**The matching threshold is not a standard** [author, 2026-10-13]. The
+extractor, template format and length, fuzzing algorithm, matcher, version
+registry and the store's cipher parameters all decide what crosses the
+wire or what another client's matcher must read, so those are a standard;
+where a verifying client reads its verdict is internal to it and
+enforceable by nobody (§1.1), and what travels is the verdict and not the
+score. §22.2 no longer lists thresholds among what remains to decide, and
+says instead that an implementer may be more or less selective than the
+reference client — whose own pair, reasoning and prior art are documented
+in the engine: the figure OpenCV's SFace demo compares at, the repository
+and model file the weights come from, the paper, the five bench scores,
+and why one person in one room inside a few days bounds nothing about
+impostors.
+
+Catalogue 489 entries, 469 implemented. Vectors regenerated; the code pin
+re-accepted.
 
 ### 2026-10-11 (contacts)
 

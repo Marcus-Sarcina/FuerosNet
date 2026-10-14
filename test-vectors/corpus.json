@@ -2,7 +2,7 @@
  "format": "rhtn-test-corpus/1",
  "pins": {
   "wire-format.md": "b3bb1303e003140700a368231dc576c1fc6a5995896c7fbbe1fbf8b1da5c9a58",
-  "network-design.md": "b2d528833f58dd93da68d0e3ff464751ddce3978a4d44bcb81534569362a8d73",
+  "network-design.md": "f6ba1c767eb84346fbbb466faf43442e078b74554cb94e492b362ac294469f0a",
   "light-client-requirements.md": "1bc5d22d61b45f1506050caef1ad80b7928eb1af51ac0a08b31500795c31260e"
  },
  "classes": {

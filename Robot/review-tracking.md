@@ -17192,10 +17192,48 @@ on hardware.
    `(ceremony, subject)` now and the refusal reads "a second profile for
    one subject in one ceremony". §7.4.1's price is unchanged: one profile
    of a given subject per ceremony, that subject's live consent each time.
-   **Owed to the author**: §7.4.1/§7.4.2 say "a profile differing from
-   another countersigned under the same pre-commitment" without naming
-   the subject, and that wording wants his clarification; the code
-   follows VER-005 meanwhile.
+   **Owed to the author**: the enforcement sentence is §7.4.1's alone —
+   "every verifier rejects a profile differing from another countersigned
+   under the same pre-commitment" — and it scopes the rule by the
+   pre-commitment, which §7.4.1 itself derives as one per ceremony that
+   *both* parties countersign. §7.4.2 Consent states the same rule from
+   the subject's side ("the subject signs each request, they see the
+   profile in each and can require that all queries from one ceremony
+   carry the identical profile"), which is unambiguous and is the reading
+   the code follows, with VER-005. The wording wants his clarification:
+   one clause, "countersigned **by that subject** under the same
+   pre-commitment", closes it. [citation corrected 2026-10-13: an earlier
+   note put the quoted clause in both sections.]
+
+   **[author, 2026-10-13] Ruled, and stronger than what was built**: "Two
+   participants in the same ceremony calling the same verifier should be
+   treated the same as two subjects asking for verification in separate
+   ceremonies. The verifier enforces only one ceremony calling to verify a
+   given subject at a time, not a limit on the verification calls per
+   ceremony." And on the version keyed by `(ceremony, subject)` alone,
+   which let two ceremonies pin one subject at once: "This is precisely
+   the oracle leakage we were trying to prevent."
+
+   So the verifier holds **two** things, which are not the same thing:
+   `pinned` by `(ceremony, subject)` — the anti-oracle rule, one profile
+   for a subject under one pre-commitment, expiring with the requester
+   window so it stays a lock and not a log (`light-client-requirements.md`
+   §1.4) — and `asking` by subject, the ceremony with a question open,
+   released in `answer` whichever way the verdict went, since §7.4.1
+   already prices *successive* ceremonies at one probe each. Tests:
+   `each_of_a_ceremonys_two_subjects_gets_its_own_profile` and
+   `only_one_ceremony_at_a_time_may_ask_about_a_subject` (a concurrent
+   ceremony refused from either querier and with the identical profile,
+   then taken once the first is answered).
+
+   Landed in the documents: §7.4.1 says one profile per *subject* in both
+   places, its enforcement clause names the subject, and a new paragraph
+   carries the ruling verbatim in substance; VER-005 gained the verifier's
+   half with its three tests; the acceptance catalogue's **CER-16** was
+   restated (its verbatim quote had been the old sentence, which is how
+   `check.py` caught the sweep I had missed) and **CER-56** added for the
+   concurrency half, claimed by the new test. Catalogue 489 entries, 469
+   implemented, 0 flags.
 2. **The answered query was Inconclusive, from a comparison across
    template versions.** 4VC holds a version-1 capture of ZU8 (taken
    before the engine) and was asked under version 2; `answer` checked only
@@ -17270,7 +17308,26 @@ asserts a template against its own fuzzed profile stays above 0.95, and
 the arithmetic agrees (σ 0.03 over 128 dimensions is a noise norm of
 0.34, which costs about a twentieth of the cosine).
 
-**Owed to the author, now with evidence coming**: §22.2's thresholds
+**[author, 2026-10-13] Ruled on where the thresholds live**: "Extractor,
+template format and length, fuzzing algorithm, matcher, version registry,
+and the sealed store's cipher parameters — these all effect what goes on
+the wire, so we can set a standard. The matching threshold remains an
+implementation choice. We document our process and reasoning for the
+reference implementation and provide citations to prior art, but the
+implementer can choose to be more or less selective, since this is
+internal functionality of the verifying client and cannot be enforced."
+Applied: §22.2's biometric entry now calls that set a standard rather
+than a local choice, strikes `thresholds` from what remains to decide,
+and says where a verifying client reads its verdict is internal to it and
+enforceable by nobody (§1.1), the wire carrying the verdict and not the
+score. The reference client's pair, reasoning and prior art are in the
+engine's module documentation: the figure OpenCV's own SFace demo
+compares at (0.363), the repository and model file the weights come from,
+the paper's title, the five bench scores and why one person in one room
+inside a few days bounds nothing on the impostor side, and why the signed
+negative sits lower than the match point.
+
+**Superseded, kept for the record**: §22.2's thresholds
 0.40/0.30 are his provisional choices and I have not touched them. For
 the weighing: OpenCV's own SFace operating point is a cosine of 0.363,
 below our match threshold, so a genuine pair on a cheap camera can fall

@@ -1784,7 +1784,7 @@ person in front of them as continuous with a history.
     (`wire-format.md` §5.6), minted by the subject's client during the ceremony
     (§7.3's automatic querying), so each probe requires the subject's live
     cooperation **from whoever holds that key**. The ceremony pre-commitment travels
-    with it and pins the fuzzed profile — one profile per ceremony, or the verifier
+    with it and pins the fuzzed profile — one profile per subject, or the verifier
     rejects. Witness countersignatures are deliberately not
     carried: a distant verifier could not tell real witnesses from an attacker's
     keys, while the subject's signature is checkable from the identity the query
@@ -1818,11 +1818,22 @@ person in front of them as continuous with a history.
     dozens of exchanges they cannot evaluate and did not initiate.
 
   Selection by recognition (§8.1.2) changes the *reference* side of this attack,
-  and nothing else. **One profile per ceremony is unchanged**: the
+  and nothing else. **One profile per subject is unchanged**: the
   pre-commitment pins it, the subject countersigns that one profile or none,
-  and every verifier rejects a profile differing from another countersigned
-  under the same pre-commitment, so a hostile counterparty can never probe
-  with multiple schemas in one ceremony, under any selection rule. What the
+  and every verifier rejects a profile differing from another *that subject*
+  countersigned under the same pre-commitment, so a hostile counterparty can
+  never probe with multiple schemas in one ceremony, under any selection rule.
+
+  **The limit is per subject, and a ceremony has two of them** [author,
+  2026-10-13]. Two participants of one ceremony querying the same verifier are
+  two subjects, and are treated exactly as two subjects querying from separate
+  ceremonies; what a verifier holds against is **one ceremony asking about a
+  given subject at a time**, never a count of the calls one ceremony makes.
+  Concurrent pre-commitments probing one subject are the leakage the rule is
+  for, so a query is refused while another ceremony's question about that
+  subject is open, and released when that question is answered either way —
+  successive ceremonies are untouched, each paying a full ceremony for its one
+  probe. What the
   selector's choice permits is aiming **successive ceremonies'** single probes
   at the *same* verifier's stored captures, where the seed used to scatter
   them — a cleaner gradient against one reference set, still priced at a full
@@ -8211,16 +8222,23 @@ order and refusal behaviour, with the role row consulted as a lookup.
   capture framing (§7.5.2). **Cross-client verification depends on the whole
   set**: a fuzzed profile one engine produces must be comparable by another's
   matcher, or verifier queries only work between clients sharing an
-  implementation. **The extractor and matcher are chosen** [author,
+  implementation, and each of those is therefore a **standard** rather than a
+  local choice [author, 2026-10-13] — each decides what crosses the wire, or
+  what another client's matcher must be able to read. **The extractor and matcher are chosen** [author,
   2026-09-29]: OpenCV SFace, int8, with YuNet for detection and alignment —
   112×112 input, a 128-dimension template compared by cosine distance, and
   Apache-2.0 for code and model weights alike. The rule that selected it:
   the model weights themselves must carry a permissive grant from their
   distributor, most published face models being trained on
   research-restricted data whatever their code licence says. The rest of
-  the set — template registry entry, fuzzing algorithm, thresholds, and the
+  the set — template registry entry, fuzzing algorithm, and the
   sealed store's AEAD parameters — remains to decide with the
-  implementation. *The channel and size question
+  implementation. **The matching threshold is not among them** [author,
+  2026-10-13]: where a verifying client reads its verdict is internal to that
+  client and enforceable by nobody (§1.1), and what travels is the verdict
+  rather than the score, so an implementer may be more or less selective than
+  the reference client — which documents its own pair, its reasoning and its
+  prior art. *The channel and size question
   is closed: any channel carries 32 bytes.*
 - **Whether a subject may re-derive and re-release a capture key after a device
   restore** (§7.5.2).

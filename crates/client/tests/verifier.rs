@@ -603,6 +603,74 @@ fn each_of_a_ceremonys_two_subjects_gets_its_own_profile() {
     );
 }
 
+// acceptance: CER-56
+/// **One ceremony at a time may ask about a subject.** Two ceremonies
+/// holding a probe on one subject at once is the oracle leakage the rule
+/// exists for [author, 2026-10-13], and it is not the same thing as the
+/// profile pin: the pin stops several schemas under one pre-commitment,
+/// this stops concurrent pre-commitments multiplying what one ceremony's
+/// price buys. Successive ceremonies are not touched — §7.4.1 prices
+/// those at one probe each — so the lock lifts when the question is
+/// answered, either way.
+#[test]
+fn only_one_ceremony_at_a_time_may_ask_about_a_subject() {
+    let s = setup();
+    let me = id("bob");
+    let m = Recording(RefCell::new(vec![]));
+    let mut v = VerifierState::new(VerifierConfig::default());
+    let cx = Verifying {
+        seal: &SealParams::default(),
+        me: &me,
+        ids: &ids(),
+        store: &s.b_store,
+        matcher: &m,
+    };
+    // carol asks about alice and the query waits for its grant
+    let q1 = query(&s.t2, [1; 32], "bob");
+    assert_eq!(
+        v.take_query(&cx, kh("carol"), &request(&q1, "alice", 1), 0),
+        QueryOutcome::AwaitingGrant
+    );
+    // another ceremony about the same subject, while that one is open:
+    // refused, whoever asks and whatever profile it carries
+    let q2 = query(&s.t1, [2; 32], "bob");
+    assert_eq!(
+        v.take_query(&cx, kh("carol"), &request(&q2, "alice", 1), 1),
+        QueryOutcome::Closed("another ceremony is verifying this subject")
+    );
+    let q3 = VerificationQuery {
+        querier: kh("w1"),
+        ..query(&s.t2, [2; 32], "bob")
+    };
+    assert_eq!(
+        v.take_query(&cx, kh("w1"), &request(&q3, "alice", 1), 2),
+        QueryOutcome::Closed("another ceremony is verifying this subject"),
+        "another querier's ceremony is refused too, and the same profile \
+         under another pre-commitment is still a second probe"
+    );
+    assert!(m.0.borrow().is_empty(), "nothing was compared for either");
+
+    // the first question is answered, and the next ceremony may ask
+    let GrantOutcome::Answered(_) =
+        v.take_grant(&cx, kh("alice"), &grant(&s, s.r2, s.c2, q1.query_id()), 3)
+    else {
+        panic!("answered")
+    };
+    assert_eq!(
+        v.take_query(&cx, kh("carol"), &request(&q2, "alice", 1), 4),
+        QueryOutcome::AwaitingGrant,
+        "successive ceremonies are priced at a ceremony each, not refused"
+    );
+    // and that second ceremony's own pin holds within itself
+    let q4 = query(&s.t1, [2; 32], "bob");
+    assert_eq!(q4.query_id(), q2.query_id(), "the same query repeated");
+    let other_profile = query(&s.t2, [2; 32], "bob");
+    assert_eq!(
+        v.take_query(&cx, kh("carol"), &request(&other_profile, "alice", 1), 5),
+        QueryOutcome::Closed("a second profile for one subject in one ceremony")
+    );
+}
+
 // acceptance: CER-08
 /// **The length the store seals with is the length the verifier reads
 /// with.** A sealed capture is `template[template_len] || frames`, and the

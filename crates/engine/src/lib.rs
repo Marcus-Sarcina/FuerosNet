@@ -10,9 +10,35 @@
 //! little-endian, 512 bytes; the profile a query carries is the template
 //! quantised to `i8` with seeded noise, 128 bytes (§7.5's fuzzing target);
 //! the verdict is categorical at two cosine thresholds with an
-//! inconclusive band between (§7.4.4). The thresholds and the fuzz are
-//! the part §22.2 leaves to implementation, and they are [`Thresholds`]
-//! and [`FUZZ_SIGMA`] here, chosen provisionally.
+//! inconclusive band between (§7.4.4). The fuzz is the part §22.2 still
+//! leaves to implementation and is [`FUZZ_SIGMA`] here, provisional.
+//!
+//! **The thresholds are this client's own policy and not a standard**
+//! [author, 2026-10-13]. What has to be shared is everything up to the
+//! comparison — the template's format and length, the fuzzing algorithm,
+//! the matcher — because a profile one engine produces must be readable
+//! by another's. Where the verdict is read is internal to the verifying
+//! client and enforceable by nobody (design §1.1), and the wire carries
+//! the verdict rather than the score, so another implementer may be
+//! stricter or looser than this one is.
+//!
+//! **What this client chose, and on what.** [`Thresholds`] takes
+//! `match_at` from the figure OpenCV's own SFace demo compares at, 0.363
+//! cosine, in the repository these weights come from
+//! (`github.com/opencv/opencv_zoo`, `face_recognition_sface_2021dec.onnx`,
+//! the model of the paper "SFace: Sigmoid-Constrained Hypersphere Loss
+//! for Robust Face Recognition"). It is the one number within reach that
+//! was set against impostors, which is what a match threshold has to be
+//! set against. The bench's genuine comparisons — 0.732, 0.750, 0.813,
+//! 0.838 and 0.876, across four phones — bound nothing on that side:
+//! they are one person, in one room, inside a few days, and a threshold
+//! drawn to clear that margin would reject the ordinary case of the same
+//! face a year later in other light [author, 2026-10-13]. `no_match_below`
+//! sits well under the match point because the two errors are not alike:
+//! a `NoMatch` is signed evidence against a person, carried in a record,
+//! and one mismatch is not proof of fraud (functional row POL-016), while
+//! an `Inconclusive` asserts nothing — so a weak capture of the right
+//! person belongs in the band.
 //!
 //! The frames the kernel hands over are the camera's luminance plane at
 //! a geometry the platform states when it builds the engine; the models
