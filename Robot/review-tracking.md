@@ -17789,3 +17789,57 @@ under it. §12 separates ownership from hosting, so the node's operator is
 not necessarily the resource's owner, and what principal an invocation
 carries is a disclosure question (§10.6, §10.7) rather than an
 implementation detail. Not settled here.
+
+## The intake and the anchor table (2026-10-13) — review item 3 of 7
+
+**Built**: `Client::take_introduction` (§2.3), `Client::take_endpoint`
+(§7.6 — nothing in the client could take one before; only a conformance
+test ever called `Horizon::ingest_endpoint`),
+`Client::take_anchored_introduction` and `Client::own_card` (§2.4), one
+`Participant::take_intake` over the ffi that decides the kind by parsing,
+and `PeopleActivity` where the placeholder was.
+
+**What the design already answered, and what it did not.** §12.3 Case 1
+step 2 names the local table outright — "his contacts" — so the anchor
+table was never a new structure; what it lacked was a place for an
+address, since a `Contact` held material and locator only. It holds the
+signed `EndpointRecord` and `AnchorEntry` now, and `reach_for` puts the
+anchor first among the askable. **The horizon is not that table**:
+`ingest_endpoint` and `endpoints_of` both gate on `distance(me, node, 2)`,
+so a record for a stranger's anchor is refused by design.
+
+**The open question the review flagged is closed** [author, 2026-10-13]:
+"one code should carry the introduction and its anchor records". Hence
+§2.4. Nothing new was needed on the wire beyond the container — both
+records were already objects of this format — and the shell's carriage
+(base45 in a QR) stays the shell's own, as §14.3.1 leaves it.
+
+**Closed the same day**: the walk from the anchor onward was already
+built on both sides — the node's `resolve_for_client` (answer, refer, or
+proxy the descent itself) and the client's `Beyond::descend` — and the
+anchor table had already joined them, since `upstream()` turns an
+`Upstream::Position` into a descent over `reach.ask`. So the chain ran
+end to end for an introduced party without another line.
+
+**What was added** [author, 2026-10-14]: the descent reports every node
+it went through (`note_hops_with`, wired at attach beside the arrival
+writer) and `Client::note_hop` files each as a contact — the referrer,
+its referral's target, and the serving node named. A referral's addresses
+go in `heard`, apart from `endpoint_record`, offered after it, capped at
+eight, never in a card. `reach_for` offers published then heard.
+
+**And the question the author asked, answered against the code**: no, the
+session does not share key material. `tls::peer_key` reads the peer's
+Ed25519 key from the handshake, and `KeyMaterial` is `[COSE_Key,
+COSE_Key]` — classical *and* ML-DSA-65 — with the keyhash over the whole
+encoding (§2.2). So a dial yields one member of two, cannot name the
+keyhash, and `verify_presented` can only bind a dial whose material was
+pinned beforehand. Hence a hop referred without material is kept by
+keyhash alone (`Contact::named_only`, `Contact::named()`), which is what
+the author then ruled. `introductions()` guards on `named()` so such a
+contact is never handed on.
+
+**Caught before the pipeline**: the hop closure tripped clippy's
+`type_complexity` under the gate's `-D warnings`, in the flavour lints
+only. It has a name now (`beyond::Noting`).
+

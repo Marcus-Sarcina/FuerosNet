@@ -411,3 +411,52 @@ fn a_restarted_client_has_still_met_whom_it_met() {
     assert_eq!(at.met(None), vec![kh("bob")], "loaded: still met bob");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// **A client's own code, for somebody to scan** (`wire-format.md` §2.4):
+/// its introduction, and the anchor of its own locator with the record of
+/// where that anchor answers. Refused where it holds no such record,
+/// because a card that could not be acted on is not worth showing
+/// [author, 2026-10-13: "one code should carry the introduction and its
+/// anchor records"].
+#[test]
+fn a_client_makes_a_card_of_its_own_once_it_knows_where_its_anchor_answers() {
+    let mut s = setup(&PARTIES, &[ChannelKind::Nfc]);
+    let patron = kh("alice");
+    met(&mut s, "bob", "alice");
+    s.h.run_adoption(kh("bob"), patron, vec![kh("w2")], vec![kh("w3")], 1)
+        .expect("bob is adopted");
+
+    // bob sits under alice and can say so, but has no address for her yet
+    assert!(s.client("bob").own_locator().is_ok());
+    assert!(
+        s.client("bob").own_card().is_err(),
+        "no record of where the anchor answers: nothing to show"
+    );
+
+    // alice publishes where she answers; bob takes it
+    let mut point = Vec::new();
+    rhtn_transport::session::NetworkPoint::new([127, 0, 0, 1], Some(7447)).encode(&mut point);
+    let record = rhtn_archive::endpoint::endpoint_record(
+        &id("alice"),
+        &[point],
+        rhtn_archive::tx::Seqno {
+            series: 1,
+            counter: 1,
+        },
+    );
+    s.client("bob").take_endpoint(&record).expect("alice's own");
+    let card = s.client("bob").own_card().expect("a card to show");
+
+    // and carol, who has met nobody, can act on that one code
+    let who = s
+        .client("carol")
+        .take_anchored_introduction(&card)
+        .expect("one code");
+    assert_eq!(who, kh("bob"));
+    let reach = s.client("carol").reach_for(&kh("bob"));
+    assert_eq!(
+        reach.ask.first().map(|a| a.node),
+        Some(patron),
+        "carol starts the walk at bob's anchor, which the card named"
+    );
+}

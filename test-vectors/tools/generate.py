@@ -2240,6 +2240,15 @@ vs_mismatch = e_arr([e_uint(1), alice.key_material, _signed_locator_by(IDS['c1']
 vs_self = _introduction(alice, locator(alice.keyhash, b'\x40', seqno(1, 0)))
 vs_bundle = [vs_c1, vs_carol, vs_c1_later, vs_bob, vs_mismatch, vs_self]
 
+# §2.4's anchored introduction: c1's introduction, whose locator is anchored
+# at bob, with bob's key material and bob's own endpoint record — the code a
+# party hands over at a meeting [author, 2026-10-13]. The anchor entry slot
+# is null here: a holder offers one where it has one.
+vs_anchored = e_arr([e_uint(1), vs_c1, bob.key_material, endpoint_record, NULL])
+# and the negative: the same introduction with carol's material in the anchor
+# slot, which hashes to no anchor the locator names
+vs_anchored_crossed = e_arr([e_uint(1), vs_c1, carol.key_material, endpoint_record, NULL])
+
 emit('verifier-selection.md', f"""# Verifier selection — the reasonableness criterion
 
 {PIN}
@@ -4065,6 +4074,7 @@ for fid, by, kind, note in [
     ('P-vs-bundle-2', vs_carol, 'Introduction', 'bar 3, entry 2: carol'),
     ('P-vs-bundle-3', vs_c1_later, 'Introduction', 'bar 3, entry 3: c1 again at seqno [2, 9], counted once'),
     ('P-vs-bundle-4', vs_bob, 'Introduction', 'bar 3, entry 4: bob, the current counterparty, counted and never a candidate'),
+    ('P-anchored-introduction', vs_anchored, 'AnchoredIntroduction', "the code handed over at a meeting (§2.4): c1's introduction, the anchor its locator names, and that anchor's endpoint record"),
     ('P-intent-exchange', intent_x, 'IntentExchange', 'echoes the optical contribution; one introduction in the bundle; the sender\'s own signed locator last'),
     ('P-intent-exchange-responder', intent_r, 'IntentExchange', "the responder's: echoes bob's contribution, an empty bundle, initiator false; the flags of the pair differ"),
     ('P-bundle-continuation', cont_x, 'BundleContinuation', 'the bundle past its first carriage, anchored and numbered from one'),
@@ -4210,6 +4220,14 @@ reg('P-vs-bundle-6', 'bytes', ACC('Introduction', 'bar 3, entry 6: alice introdu
 reg('N-introduction-bare-locator', 'bytes',
     REJ('Introduction', 'schema', 'a bare locator presented alone is rejected (§2.3)'),
     e_arr([e_uint(1), IDS['c1'].key_material, locator(bob.keyhash, p_odd, seqno(2, 7))]))
+reg('N-anchored-introduction-crossed', 'bytes',
+    REJ('AnchoredIntroduction', 'schema',
+        "the anchor material hashes to the anchor the locator names (§2.4)"),
+    vs_anchored_crossed)
+reg('N-anchored-introduction-other-node', 'bytes',
+    REJ('AnchoredIntroduction', 'schema',
+        "each record names the anchor and no other node (§2.4)"),
+    e_arr([e_uint(1), vs_carol, carol.key_material, endpoint_record, NULL]))
 reg('N-continuation-index-0', 'bytes',
     REJ('BundleContinuation', 'schema', "a continuation's index starts at one"),
     e_arr([e_uint(1), e_bstr(pc_demo), e_uint(0), e_arr([intro_c1])]))

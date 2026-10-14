@@ -103,6 +103,79 @@ impl Introduction {
     }
 }
 
+/// An `AnchoredIntroduction` (`wire-format.md` §2.4) as a holder reads it:
+/// an introduction, and the anchor its locator names with the records
+/// that say where that anchor answers.
+///
+/// **What a code handed over at a meeting carries** [author, 2026-10-13]:
+/// "one code should carry the introduction and its anchor records". An
+/// introduction names an anchor and a path and no address, and a holder
+/// with no node of its own has nothing to dial without these.
+#[derive(Clone)]
+pub struct AnchoredIntroduction {
+    /// The introduction itself.
+    pub introduction: Introduction,
+    /// The anchor's identity, from its key material.
+    pub anchor: rhtn_crypto::Identity,
+    /// The anchor's endpoint record, verified under that material.
+    pub endpoint: crate::endpoint::EndpointRecord,
+    /// Its anchor entry, where one came.
+    pub entry: Option<Vec<u8>>,
+}
+
+impl AnchoredIntroduction {
+    /// Parse and verify one: the codec's shape check binds the anchor
+    /// material to the anchor the locator names and each record to that
+    /// node, the introduction verifies under its own material, and the
+    /// endpoint record verifies under the anchor's.
+    pub fn parse(b: &[u8]) -> Result<Self, String> {
+        let item = parse_all(b).map_err(|e| e.0)?;
+        schema::check_kind(b, "AnchoredIntroduction", &item).map_err(|e| e.0)?;
+        let parts = array_item_ranges(b, 0).ok_or("not an array")?;
+        let introduction = Introduction::parse(&b[parts[1].clone()])?;
+        let material = b[parts[2].clone()].to_vec();
+        let anchor = rhtn_crypto::Identity::from_key_material(&material)
+            .ok_or("the anchor's key material does not name an identity")?;
+        let endpoint = crate::endpoint::EndpointRecord::parse(&b[parts[3].clone()])?;
+        if endpoint.signature_checks(std::slice::from_ref(&anchor)) != Some(true) {
+            return Err("the endpoint record is not the anchor's".into());
+        }
+        let entry = match &b[parts[4].clone()] {
+            [0xf6] => None,
+            bytes => Some(bytes.to_vec()),
+        };
+        Ok(AnchoredIntroduction {
+            introduction,
+            anchor,
+            endpoint,
+            entry,
+        })
+    }
+}
+
+/// Compose an `AnchoredIntroduction` from an introduction, the key
+/// material of the anchor its locator names, and that anchor's published
+/// records.  The entry is optional; everything else is not.
+pub fn anchored_introduction(
+    introduction: &[u8],
+    anchor_material: &[u8],
+    endpoint_record: &[u8],
+    anchor_entry: Option<&[u8]>,
+) -> Vec<u8> {
+    let mut out = Vec::new();
+    emit_array_head(&mut out, 5);
+    emit_uint(&mut out, 1);
+    out.extend_from_slice(introduction);
+    out.extend_from_slice(anchor_material);
+    out.extend_from_slice(endpoint_record);
+    match anchor_entry {
+        Some(e) => out.extend_from_slice(e),
+        None => out.push(0xf6),
+    }
+    out
+}
+
+/// Compose an `Introduction` from a subject's key material and a
 /// Compose an `Introduction` from a subject's key material and a
 /// `SignedLocator` of theirs, as a holder hands it on.
 pub fn introduction(material: &[u8], signed_locator: &[u8]) -> Vec<u8> {

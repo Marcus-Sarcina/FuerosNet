@@ -274,6 +274,12 @@ fn implemented_kind(kind: &str) -> bool {
             | "CandidateHandover"
             | "CaptureKeyHandover"
             | "DeviceIntroduction"
+            // **both introduction kinds, so a reject entry that started
+            // passing would fail here** rather than be skipped as a kind
+            // this side does not read: the schema implements each
+            // (`wire-format.md` §§2.3, 2.4) [2026-10-13]
+            | "Introduction"
+            | "AnchoredIntroduction"
             | "DeviceCredential"
             | "ConsentReply"
             | "FishingProposal"

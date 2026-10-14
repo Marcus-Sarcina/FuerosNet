@@ -170,6 +170,81 @@ object Kernel {
         return said
     }
 
+    // ---- intake: a party who was never met ----------------------------
+
+    /** One contact, as the People screen draws it. */
+    data class Person(
+        val who: String,
+        val how: String,
+        val located: Boolean,
+        val addressed: Boolean,
+        val count: ULong,
+        val lastAt: ULong,
+    )
+
+    private fun howOf(n: UByte): String = when (n.toInt()) {
+        0 -> "met"
+        1 -> "introduced"
+        2 -> "nominee"
+        3 -> "verifier"
+        4 -> "a node"
+        5 -> "declined"
+        else -> "named at start"
+    }
+
+    /** Everyone this client holds, most recently dealt with first. */
+    fun people(): List<Person> {
+        val p = participant ?: return emptyList()
+        return call("contacts", { emptyList() }) {
+            p.contacts().map {
+                Person(
+                    who = Provision.hex(it.who).take(8),
+                    how = howOf(it.how),
+                    located = it.located,
+                    addressed = false,
+                    count = it.count,
+                    lastAt = it.lastAt,
+                )
+            }
+        }
+    }
+
+    /**
+     * **Take whatever an intake code carries.** An `AnchoredIntroduction`
+     * (`wire-format.md` §2.4) is somebody's key and locator together with
+     * the anchor that locator names and where it answers — which is what a
+     * code handed over at a meeting carries [author, 2026-10-13] — and a
+     * bare `Introduction` (§2.3) or a node's `EndpointRecord` (§7.6) are
+     * taken too. The kernel decides which by parsing, so a person scans a
+     * code without being asked what kind it is.
+     *
+     * One line saying what was taken, or why not.
+     */
+    fun takeIntake(bytes: ByteArray): String {
+        val p = participant ?: return "the kernel is not running"
+        var why = ""
+        val took = call<uniffi.rhtn_ffi.Intake?>("takeIntake", { why = it.reason; null }) {
+            p.takeIntake(bytes)
+        }
+        return if (took == null) {
+            "that code is not one of these: $why"
+        } else {
+            "took ${took.kind}: ${Provision.hex(took.who).take(8)}"
+        }
+    }
+
+    /**
+     * **This client's own code to hand over** (`wire-format.md` §2.4), or
+     * null where it has none to make: a card names the anchor of its own
+     * locator and where that anchor answers, and a client that cannot say
+     * either has nothing another party could act on.
+     */
+    fun ownCard(): ByteArray? {
+        val p = participant ?: return null
+        return call<ByteArray?>("ownCard", { null }) { p.ownCard() }
+    }
+
+    /** A `NetworkPoint` for `host:port`, encoded, or null. */
     /** A `NetworkPoint` for `host:port`, encoded, or null. */
     private fun point(hostPort: String): ByteArray? {
         val host = hostPort.substringBeforeLast(':', "")

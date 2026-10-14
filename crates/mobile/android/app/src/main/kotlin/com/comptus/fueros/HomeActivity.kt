@@ -43,7 +43,7 @@ class HomeActivity : Activity() {
     private val destinations = listOfNotNull(
         "Conversations" to { open(ConversationsActivity::class.java) },
         "Meet" to { open(MeetActivity::class.java) },
-        "People" to { placeholder("People", "Your horizon — later.") },
+        "People" to { open(PeopleActivity::class.java) },
         "Catalog" to { placeholder("Catalog", "Resources your node serves — later.") },
         "Settings" to { placeholder("Settings", "Wake endpoint, backup — later.") },
         "Operator" to { open(OperatorActivity::class.java) },

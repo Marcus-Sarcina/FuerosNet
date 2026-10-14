@@ -1168,6 +1168,79 @@ fn introduction_ok(b: &[u8], at: usize) -> Result<(), Error> {
     Ok(())
 }
 
+/// An `AnchoredIntroduction` (§2.4) at offset `at`: version 1, an
+/// `Introduction`, and the key material and published records of the
+/// anchor its locator names.
+///
+/// **This is what a code handed over at a meeting carries** [author,
+/// 2026-10-13]: "one code should carry the introduction and its anchor
+/// records". An introduction alone names an anchor and a path and no
+/// address, and the anchor's material is not in it either, so a holder
+/// with no node of its own has nobody to dial — the records here are what
+/// make §12.3 Case 1's "address to start from" available at Case 0's
+/// meeting, and both were already objects of this format (§7.6).
+///
+/// The bindings are structural and an object failing one is not this
+/// kind: the anchor material hashes to the anchor the locator names, and
+/// each record names that same node. The signatures are the holder's to
+/// verify, as an introduction's is.
+fn anchored_introduction_ok(b: &[u8], at: usize) -> Result<(), Error> {
+    let p = Parser { b };
+    let (v, _) = p.item(at)?;
+    let Item::Array(a) = &v else {
+        return Err(Error("an anchored introduction is an array"));
+    };
+    if a.len() != 5 {
+        return Err(Error("an anchored introduction has five fields"));
+    }
+    if as_uint(&a[0]) != Some(1) {
+        return Err(Error("version 1"));
+    }
+    let parts = array_item_ranges(b, at).ok_or(Error("array walk"))?;
+    introduction_ok(b, parts[1].start)?;
+    check_type(b, parts[2].start, KeyMaterial)?;
+    let anchor_material = &b[parts[2].clone()];
+    let anchor = crate::cose::sha256(anchor_material);
+
+    // the anchor the introduction's locator names, reached through the
+    // introduction's own shape, which `introduction_ok` has just checked
+    let intro = array_item_ranges(b, parts[1].start).ok_or(Error("introduction walk"))?;
+    let sl = &b[intro[2].clone()];
+    // the locator is field 2 of the signed locator and field 1 of the
+    // locator is the anchor (§2.1); the archive's own reader is above this
+    // crate, so the walk is done here rather than borrowed
+    let inner = value_slice(sl, 2).ok_or(Error("locator field"))?;
+    let locator = &sl[inner];
+    let lm = parse_all(locator)?;
+    let Item::Map(lm) = &lm else {
+        return Err(Error("a locator is a map"));
+    };
+    let named = bs(locator, map_get(lm, 1).ok_or(Error("locator anchor"))?)
+        .ok_or(Error("locator anchor"))?;
+    if named != anchor {
+        return Err(Error(
+            "the anchor material does not hash to the anchor the locator names",
+        ));
+    }
+    // each record is that node's own, in this format's own shapes
+    for (field, kind) in [(3usize, "EndpointRecord"), (4usize, "AnchorEntry")] {
+        let r = &b[parts[field].clone()];
+        if field == 4 && r == [0xf6] {
+            continue;
+        }
+        let item = parse_all(r)?;
+        check_kind(r, kind, &item)?;
+        let Item::Map(rm) = &item else {
+            return Err(Error("a published record is a map"));
+        };
+        if keyhash_at(r, rm, 1) != Some(&anchor[..]) {
+            return Err(Error("a record of another node than the anchor"));
+        }
+    }
+    Ok(())
+}
+
+/// Every entry of the array at top-level field `field` is an introduction.
 /// Every entry of the array at top-level field `field` is an introduction.
 fn introductions_ok(b: &[u8], field: usize) -> Result<(), Error> {
     let top = array_item_ranges(b, 0).ok_or(Error("array walk"))?;
@@ -1467,6 +1540,7 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             introductions_ok(b, 3)
         }
         "Introduction" => introduction_ok(b, 0),
+        "AnchoredIntroduction" => anchored_introduction_ok(b, 0),
         "ProximityOutcomes" => {
             let Item::Array(a) = item else {
                 return Err(Error("not array"));

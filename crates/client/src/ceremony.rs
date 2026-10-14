@@ -871,6 +871,237 @@ impl Client {
         })
     }
 
+    /// **Take an introduction** (`wire-format.md` §2.3): a party's key
+    /// material and a `SignedLocator` of theirs, as a holder hands one on
+    /// and as the first of the four things a person must be able to do
+    /// from the installed app (`light-client-requirements.md` §1.4's
+    /// bundle, and the intake the client review of 2026-10-11 found had
+    /// no call at all).
+    ///
+    /// **This is Case 0 of the design's resolution sequence** (§12.3):
+    /// the locator travels with the key, out of band — an optical code at
+    /// a meeting, a referral from a mutual contact — and no lookup occurs.
+    /// What it leaves behind is an identity this client verifies by and a
+    /// contact holding the most recent locator for it, which is the local
+    /// table §12.3 Case 1 looks an anchor up in and which
+    /// [`Client::reach_for`] reads.
+    ///
+    /// The introduction is verified before anything is kept: the codec
+    /// binds the material to the locator's subject and the signature is
+    /// checked under that material alone. Whose it is, or why not.
+    pub fn take_introduction(&mut self, bytes: &[u8]) -> Result<Keyhash, String> {
+        let intro = rhtn_archive::locator::Introduction::parse(bytes)?;
+        let who = intro.identity.keyhash;
+        if who == self.keyhash() {
+            return Err("an introduction to myself".into());
+        }
+        self.contact(&intro.identity, crate::contacts::How::Introduced, true);
+        // the §2.3 rule decides whether this replaces a locator already
+        // held: the same series with a greater counter, never outright
+        self.hold_locator(&who, &intro.locator.bytes, false)
+            .map_err(|e| format!("{e:?}"))?;
+        tracing::info!(
+            target: "cer",
+            who = %id8(&who),
+            anchor = %id8(&intro.locator.locator.anchor),
+            "cer.introduction.taken"
+        );
+        Ok(who)
+    }
+
+    /// **Take an anchored introduction** (`wire-format.md` §2.4): an
+    /// introduction together with the key material and published records
+    /// of the anchor its locator names.
+    ///
+    /// **One code carries both** [author, 2026-10-13]. An introduction on
+    /// its own leaves a holder with a position and nobody to dial — the
+    /// anchor is named by keyhash, its material is elsewhere, and its
+    /// address is in neither — so a code that carried only the
+    /// introduction could not be acted on by a client with no node of its
+    /// own, which is the case the intake exists for.
+    ///
+    /// The anchor is taken first, because the introduction is only useful
+    /// once there is somewhere to start the walk from.
+    pub fn take_anchored_introduction(&mut self, bytes: &[u8]) -> Result<Keyhash, String> {
+        let card = rhtn_archive::locator::AnchoredIntroduction::parse(bytes)?;
+        // the anchor's identity, so its records check and a dial to it
+        // binds (`wire-format.md` §9.1)
+        if !self.known.iter().any(|i| i.keyhash == card.anchor.keyhash) {
+            self.known.push(card.anchor.clone());
+        }
+        self.take_endpoint(&card.endpoint.bytes)?;
+        // the entry says what subtree the anchor claims, which a caching
+        // policy reads (design §12.5); nothing in this client reads one
+        // yet, so it is kept beside the address it came with
+        if let (Some(entry), Some(c)) = (
+            &card.entry,
+            self.store.contacts.get_mut(&card.anchor.keyhash),
+        ) {
+            c.anchor_entry = Some(entry.clone());
+        }
+        let introduction = rhtn_archive::locator::introduction(
+            &card.introduction.material,
+            &card.introduction.locator.bytes,
+        );
+        let who = self.take_introduction(&introduction)?;
+        tracing::info!(
+            target: "cer",
+            who = %id8(&who),
+            anchor = %id8(&card.anchor.keyhash),
+            "cer.card.taken"
+        );
+        Ok(who)
+    }
+
+    /// **This client's own code to hand over** (`wire-format.md` §2.4): its
+    /// introduction, and the anchor of its own locator with the records it
+    /// holds of where that anchor answers.
+    ///
+    /// Refused where this client cannot say where it sits, or holds no
+    /// endpoint record for its own anchor — a card that could not be acted
+    /// on is not offered.
+    pub fn own_card(&self) -> Result<Vec<u8>, Abort> {
+        let locator = self.own_locator()?;
+        let anchor = self.anchor();
+        let material = self
+            .known
+            .iter()
+            .find(|i| i.keyhash == anchor)
+            .map(|i| i.key_material())
+            .ok_or(Abort::NoRelationship(anchor))?;
+        let record = self
+            .store
+            .contacts
+            .get(&anchor)
+            .and_then(|c| c.endpoint_record.clone())
+            .ok_or(Abort::NoRelationship(anchor))?;
+        let intro = rhtn_archive::locator::introduction(&self.public.key_material(), &locator);
+        Ok(rhtn_archive::locator::anchored_introduction(
+            &intro, &material, &record, None,
+        ))
+    }
+
+    /// **Note a node the resolution walk went through** (§7.7's descent;
+    /// `light-client-requirements.md` §4.3 already asks for "the
+    /// infrastructure you went through to reach any of them").
+    ///
+    /// **Why the walk's hops are worth keeping** [author, 2026-10-14]:
+    /// they make the pruning effective later. §4.3 drops a contact that
+    /// stays discoverable from an upstream it holds, and the nodes between
+    /// an anchor and a serving node are exactly those upstreams — a store
+    /// that never saw them can only prune by age.
+    ///
+    /// **Material that hashes to the keyhash is that node's**, the same
+    /// binding a dial rests on (`wire-format.md` §9.1), so a hop whose
+    /// referral carried its material is filed; one that did not is
+    /// counted and dropped, a contact being filed under the material it
+    /// holds. §7.7.3 makes that field optional on purpose.
+    ///
+    /// The addresses are the referrer's assertion, and are kept as that.
+    pub fn note_hop(&mut self, node: Keyhash, material: Option<Vec<u8>>, endpoints: Vec<Vec<u8>>) {
+        let named = material
+            .as_deref()
+            .and_then(rhtn_crypto::Identity::from_key_material)
+            .filter(|i| i.keyhash == node);
+        match named {
+            Some(identity) => self.contact(&identity, crate::contacts::How::Infra, true),
+            // **kept by keyhash alone** [author, 2026-10-14]. §7.7.3
+            // leaves the material optional and the session does not
+            // supply it: a dial presents the classical key, where
+            // `KeyMaterial` is the classical and post-quantum pair the
+            // keyhash is taken over (§2.2). So this is a name and a place
+            // to try — never verified by, never introduced, and dialled
+            // unbound as §7.7.3 allows a referral's hop to be.
+            None => {
+                let now = self.now_s();
+                self.store
+                    .contacts
+                    .entry(node)
+                    .and_modify(|c| c.touch(now))
+                    .or_insert_with(|| {
+                        crate::contacts::Contact::named_only(crate::contacts::How::Infra, now)
+                    });
+                tracing::debug!(target: "cer", node = %id8(&node), "cer.hop.unnamed");
+            }
+        }
+        if let Some(c) = self.store.contacts.get_mut(&node) {
+            for e in endpoints {
+                if !c.heard.contains(&e) {
+                    c.heard.push(e);
+                }
+            }
+            c.heard.truncate(crate::contacts::HEARD_PER_CONTACT);
+        }
+        tracing::debug!(target: "cer", node = %id8(&node), "cer.hop.noted");
+    }
+
+    /// **Take a node's endpoint record** (`wire-format.md` §7.6): where a
+    /// node answers, signed by that node.
+    ///
+    /// **A participant holds these for the same reason a node does**
+    /// (`light-client-requirements.md` §4.2): routing around a node that
+    /// is not answering is a thing a client must do without asking
+    /// anyone. It is also what makes an introduction actionable with no
+    /// node of one's own — a locator names an anchor and a path, never an
+    /// address, so §12.3 Case 1's "address to start from" has to arrive
+    /// some other way, and this is the object the design already has for
+    /// it. Nothing here was reachable from the client until now: the
+    /// horizon could ingest one and no call did [2026-10-13].
+    pub fn take_endpoint(&mut self, bytes: &[u8]) -> Result<Keyhash, String> {
+        let er = rhtn_archive::endpoint::EndpointRecord::parse(bytes)?;
+        let node = er.node;
+        // **signed by the node it names, or it is nothing**: the material
+        // has to be held to check that, so a node whose key this client
+        // does not hold cannot be taken on trust (`wire-format.md` §9.1
+        // binds a dial by the same material).
+        match er.signature_checks(&self.known) {
+            Some(true) => {}
+            Some(false) => return Err("the record is not that node's".into()),
+            None => return Err("no key material held for that node".into()),
+        }
+        // the horizon takes it where the node is in this client's own
+        // neighbourhood, and refuses anything further off: that bound is
+        // the horizon's purpose, not a defect
+        let took = self.horizon.ingest_endpoint(bytes, &self.known);
+        // **and the contact holds it either way**, which is the local
+        // table of §12.3 Case 1 — the one an anchor outside the
+        // neighbourhood is looked up in
+        let held = self
+            .store
+            .contacts
+            .get(&node)
+            .and_then(|c| c.endpoint_record.as_deref())
+            .and_then(|b| rhtn_archive::endpoint::EndpointRecord::parse(b).ok())
+            .map(|r| r.seqno);
+        // §10.1.2's ordering: the same series with a greater counter
+        // supersedes, and series do not rank against each other
+        let fresh = match held {
+            None => true,
+            Some(s) => s.series == er.seqno.series && er.seqno.counter > s.counter,
+        };
+        if fresh {
+            let identity = self
+                .known
+                .iter()
+                .find(|i| i.keyhash == node)
+                .cloned()
+                .ok_or("no identity held for that node")?;
+            self.contact(&identity, crate::contacts::How::Infra, true);
+            if let Some(c) = self.store.contacts.get_mut(&node) {
+                c.endpoint_record = Some(bytes.to_vec());
+            }
+        }
+        tracing::info!(
+            target: "cer",
+            node = %id8(&node),
+            took = ?took,
+            points = er.endpoints.len(),
+            kept = fresh,
+            "cer.endpoint.taken"
+        );
+        Ok(node)
+    }
+
     /// The introductions this client can make: **its prior counterparties**
     /// (`wire-format.md` §5.4) — the parties it has met, as its records
     /// say — for whom it holds a locator and the material; the counterparty
@@ -886,6 +1117,9 @@ impl Client {
             .iter()
             .filter(|(who, _)| self.acquaintance.met.contains(*who))
             .filter_map(|(_, c)| {
+                if !c.named() {
+                    return None;
+                }
                 let sl = c.locator.as_deref()?;
                 Some(rhtn_archive::locator::introduction(&c.material, sl))
             })
@@ -3536,17 +3770,54 @@ impl Client {
         };
         // only a bare position needs somebody asked, and nothing is
         // prepared for the other two cases
-        let ask = match &upstream {
-            Upstream::Position { .. } => self
-                .horizon
-                .reachable_infra()
-                .into_iter()
-                .map(|(node, endpoints)| Askable {
-                    key_material: binds(&node),
-                    node,
-                    endpoints,
-                })
-                .collect(),
+        let ask: Vec<Askable> = match &upstream {
+            Upstream::Position { anchor, .. } => {
+                let mut out: Vec<Askable> = self
+                    .horizon
+                    .reachable_infra()
+                    .into_iter()
+                    .map(|(node, endpoints)| Askable {
+                        key_material: binds(&node),
+                        node,
+                        endpoints,
+                    })
+                    .collect();
+                // **the anchor's own address, where the contacts hold one**
+                // (design §12.3 Case 1 step 2: "Bob looks up `anchor` in
+                // his local table for an address to start from — his
+                // contacts"). The horizon keeps endpoints for its own
+                // neighbourhood alone, so an anchor further off is here or
+                // nowhere, and a client with no node of its own has only
+                // this [2026-10-13]. First, because it is the step the
+                // design starts the walk at.
+                if let Some(c) = self.store.contacts.get(anchor)
+                    && !out.iter().any(|a| a.node == *anchor)
+                {
+                    // what it published first, then what a referral said
+                    // of it: signed before asserted
+                    let published = c
+                        .endpoint_record
+                        .as_deref()
+                        .and_then(|b| rhtn_archive::endpoint::EndpointRecord::parse(b).ok())
+                        .map(|r| r.endpoints)
+                        .unwrap_or_default();
+                    let endpoints: Vec<Vec<u8>> = published
+                        .into_iter()
+                        .chain(c.heard.iter().cloned())
+                        .collect();
+                    if !endpoints.is_empty() {
+                        out.insert(
+                            0,
+                            Askable {
+                                node: *anchor,
+                                endpoints,
+                                key_material: binds(anchor),
+                            },
+                        );
+                    }
+                }
+                out
+            }
             _ => Vec::new(),
         };
         Reach { upstream, ask }

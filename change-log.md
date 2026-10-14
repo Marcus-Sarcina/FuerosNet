@@ -13830,6 +13830,79 @@ impostors.
 Catalogue 489 entries, 469 implemented. Vectors regenerated; the code pin
 re-accepted.
 
+### 2026-10-13 (the intake, and the code that carries an anchor)
+
+**The first of the four things a person must be able to do from the
+installed app** (`light-client-requirements.md` §1.4): bring in a party
+they have never met. The client review of the 11th found there was no
+screen for it and no kernel call either, so both exist now — and building
+it turned up what an introduction cannot do on its own.
+
+**An introduction is a key and a position, and a position is not an
+address.** The locator names its anchor by hash; neither that anchor's key
+material nor where it answers is in the object. Design §12.3 Case 1 has
+the holder "look up `anchor` in his local table for an address to start
+from", which a party with no node of its own has no way to fill. So a code
+handed over at a meeting carries both [author, 2026-10-13]: "one code
+should carry the introduction and its anchor records". That is
+`wire-format.md` §2.4's **anchored introduction** — the introduction, the
+anchor's key material, its endpoint record, and its anchor entry where the
+holder has one — with the bindings structural, so an object whose halves
+name different parties is not of the kind.
+
+**The local table is the contacts, as the design says.** A contact holds
+the signed records themselves rather than a copy of what they say, and
+`reach_for` offers the anchor's own address first among those to ask. The
+horizon is not that table and was never going to be: it holds endpoints
+for its own neighbourhood and refuses a record for a node further off,
+which is its purpose.
+
+A client also makes its own card and refuses to where it holds neither a
+position nor a record for its anchor, since a card nobody could act on is
+worse than none. The People screen takes any of the three objects, the
+kind decided by parsing, and shows the card as a code.
+
+Families 515, with TOP-042 and TOP-043. One canonical vector and two
+rejections in the corpus, and both introduction kinds are listed in the
+corpus runner so a rejection that starts passing fails rather than being
+skipped.
+
+### 2026-10-14 (the walk's hops become contacts)
+
+**Most of the referral chain was already there.** A node answers a
+resolution request with a serving answer, a referral or a failure, and
+will drive the walk itself for a light client; the client's own descent
+reuses one nonce across endpoints and referrals, follows referrals under
+a bound, refuses one that advances nothing, honours the failure
+dispositions and takes the terminal answer. The anchor table of the 13th
+had already completed the chain for an introduced party: the position
+comes from the contact's locator and the anchor is first among those to
+ask.
+
+**What was missing is the capture** [author, 2026-10-14]: "light client
+should continue to capture intermediate nodes as contacts in the walk, to
+allow the most effective pruning later". The descent now reports every
+node it went through — the referrer, the node it referred to and the
+serving node the terminal answer named — and the client files each.
+`light-client-requirements.md` §4.3 already asked for "the infrastructure
+you went through"; these are the upstreams its pruning drops a contact
+against, and nothing else shows them.
+
+**A referral's addresses are kept as what they are**: the referrer's
+assertion, apart from a record the node signed, offered after it and
+never handed on in a card. Eight per contact, which is the referral's own
+ceiling.
+
+**And a hop referred without key material is kept by keyhash alone**
+[author, 2026-10-14] — a name and a place to try, never verified by,
+never dialled bound, never introduced. **The session does not supply what
+the referral omitted**: reaching the hop presents its classical key,
+where key material is the classical and post-quantum pair whose whole
+encoding the keyhash is taken over (`wire-format.md` §2.2). One member
+cannot be had from the other, which is also why binding a dial needs
+material pinned in advance, and why §7.7.3 leaves that field optional
+rather than requiring what no exchange can provide.
+
 ### 2026-10-11 (contacts)
 
 **[author, 2026-10-11] A client keeps contacts, and prunes toward what

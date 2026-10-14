@@ -107,7 +107,22 @@ pub struct Beyond {
     /// **Bounded in time rather than in size**: an entry is a record of
     /// who this client looked for and when (design §19.4).
     resolved: Mutex<HashMap<Keyhash, (Upstreamed, Instant)>>,
+    /// Run for every node the descent went through: the referral hops and
+    /// the serving node it ended at, each with whatever material and
+    /// addresses the reply carried.
+    ///
+    /// **The walk is where the upstreams become visible** [author,
+    /// 2026-10-14]: a client that notes them can prune later by what stays
+    /// discoverable from an upstream it holds
+    /// (`light-client-requirements.md` §4.3), and one that does not can
+    /// only prune by age. Nothing runs where nobody wires one.
+    noted: Mutex<Option<Noting>>,
 }
+
+/// What a descent calls for each node it went through: the node, its key
+/// material where the reply carried any, and the addresses it was reached
+/// or offered at.
+pub type Noting = Arc<dyn Fn(Keyhash, Option<Vec<u8>>, Vec<Vec<u8>>) + Send + Sync>;
 
 impl Beyond {
     /// A view of the network beyond, dialled through `distant`.
@@ -116,7 +131,23 @@ impl Beyond {
             distant,
             nonce,
             resolved: Mutex::new(HashMap::new()),
+            noted: Mutex::new(None),
         })
+    }
+
+    /// What to run for every node a descent goes through: the hop, its
+    /// key material where the reply carried any, and the addresses it was
+    /// reached or offered at.
+    pub fn note_hops_with(&self, noted: Noting) {
+        *self.noted.lock().unwrap() = Some(noted);
+    }
+
+    /// Tell whoever is noting hops about one.
+    fn note(&self, node: Keyhash, material: Option<Vec<u8>>, endpoints: Vec<Vec<u8>>) {
+        let n = self.noted.lock().unwrap().clone();
+        if let Some(n) = n {
+            n(node, material, endpoints);
+        }
     }
 
     /// Hand `bytes` to the node that serves `to`, for `to`'s `device`.
@@ -284,11 +315,15 @@ impl Beyond {
                 }
                 match reply {
                     ResolveReply::Serving { serving, .. } => {
-                        return Some(Upstreamed {
+                        let up = Upstreamed {
                             node: serving.node,
                             endpoints: encoded(&serving.endpoints),
                             key_material: serving.key_material,
-                        });
+                        };
+                        // the node that answered, and the one it named
+                        self.note(at.node, at.key_material.clone(), at.endpoints.clone());
+                        self.note(up.node, up.key_material.clone(), up.endpoints.clone());
+                        return Some(up);
                     }
                     // **a referral that advances nothing is a loop** and a
                     // node with nothing to add reports failure instead, so
@@ -297,6 +332,8 @@ impl Beyond {
                         if referral.advances == 0 || referral.endpoints.is_empty() {
                             break;
                         }
+                        // the node that referred, before following it
+                        self.note(at.node, at.key_material.clone(), at.endpoints.clone());
                         at = Upstreamed {
                             node: referral.next,
                             endpoints: encoded(&referral.endpoints),
@@ -619,6 +656,69 @@ mod tests {
         });
         let b = Beyond::new(script, nonces());
         assert!(!b.carry(kh(3), [0; 32], vec![1], known(kh(2)), None).await);
+    }
+
+    /// **Every node the descent went through is reported**, so the client
+    /// can file it as a contact: the node that referred, and the serving
+    /// node the terminal answer named [author, 2026-10-14]. A client that
+    /// notes its upstreams can prune by what stays discoverable from one
+    /// (`light-client-requirements.md` §4.3); one that does not can only
+    /// prune by age.
+    #[tokio::test]
+    async fn the_nodes_a_descent_went_through_are_reported_for_the_contacts() {
+        let referral = ResolveReply::Referral {
+            nonce: [7; 16],
+            referral: Referral {
+                next: kh(5),
+                endpoints: vec![point(9003)],
+                advances: 1,
+                key_material: None,
+            },
+        }
+        .encode();
+        let serving = ResolveReply::Serving {
+            nonce: [7; 16],
+            serving: ServingInfra {
+                node: kh(6),
+                endpoints: vec![point(9004)],
+                residual: Path::empty(),
+                key_material: None,
+            },
+        }
+        .encode();
+        let script = Arc::new(Script {
+            answers: HashMap::from([(kh(4), referral), (kh(5), serving), (kh(6), accepted())]),
+            asked: Mutex::new(Vec::new()),
+        });
+        let b = Beyond::new(script, nonces());
+        let seen: Arc<Mutex<Vec<(Keyhash, usize)>>> = Arc::new(Mutex::new(Vec::new()));
+        let noting = seen.clone();
+        b.note_hops_with(Arc::new(move |node, _material, endpoints| {
+            noting.lock().unwrap().push((node, endpoints.len()));
+        }));
+        assert!(
+            b.carry(
+                kh(3),
+                [0; 32],
+                vec![1],
+                position(vec![askable(kh(4))]),
+                None
+            )
+            .await
+        );
+        assert_eq!(
+            seen.lock()
+                .unwrap()
+                .iter()
+                .map(|(n, _)| *n)
+                .collect::<Vec<_>>(),
+            vec![kh(4), kh(5), kh(6)],
+            "the referrer, the node it referred to, and the serving node it named"
+        );
+        assert!(
+            seen.lock().unwrap().iter().all(|(_, points)| *points == 1),
+            "each with the address it was reached or offered at"
+        );
     }
 
     /// A referral is followed, the terminal answer is taken, and the

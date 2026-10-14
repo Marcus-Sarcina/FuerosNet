@@ -522,6 +522,44 @@ Introduction = [
   word from the subject, which is why a bundle names the most recent held
   (§5.4) and why resolution still runs by seqno (§2.3).
 
+### 2.4 Anchored introduction
+
+**One code carries the introduction and its anchor records** [author,
+2026-10-13]. An introduction gives a holder a key and a position, and a
+position is not an address: the locator names its anchor by hash, and
+neither that anchor's key material nor where it answers is anywhere in
+the object. Design §12.3 Case 1 has the holder "look up `anchor` in his
+local table for an address to start from", which a party with no node of
+its own has no way to fill — so an introduction handed over at a meeting,
+which is Case 0 and the dominant case, could not be acted on at all. What
+travels at a meeting therefore carries both:
+
+```
+AnchoredIntroduction = [
+  uint,              ; version, 1
+  Introduction,      ; §2.3
+  KeyMaterial,       ; the anchor's key material (§2.2); its hash is the
+                     ;   anchor the introduction's locator names
+  EndpointRecord,    ; where that anchor answers (§7.6), signed by it
+  AnchorEntry / nil  ; what subtree it claims (§7.6), where the holder has one
+]
+```
+
+- **The anchor material's hash MUST equal the anchor the locator names**,
+  and each record MUST name that same node; an object failing either is
+  not of this kind, as an introduction whose halves disagree is not an
+  introduction.
+- **Each record verifies under that material**, which is the same material
+  a dial to the anchor binds (§9.1): without it a holder could neither
+  check what it was handed nor use it.
+- **The holder's statement, again.** The records are as fresh as the
+  holder's last word from the anchor, and the receiver advances them like
+  any others by seqno (§2.3). An anchor that has moved is Case 2, which no
+  object repairs.
+- **Carriage is not fixed here.** An optical code is one way and the only
+  one the design names (§12.3 Case 0, §14.3.1); the bytes are the same
+  wherever they travel.
+
 ---
 
 ## 3. Common envelope and structural verification

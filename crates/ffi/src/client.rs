@@ -346,6 +346,16 @@ pub struct Consented {
     pub grant: Option<Vec<u8>>,
 }
 
+/// What an intake code turned out to carry (`wire-format.md` §§2.3, 2.4,
+/// 7.6).
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct Intake {
+    /// What the code carried, in words a screen can show.
+    pub kind: String,
+    /// Whom it was about: the party introduced, or the node.
+    pub who: Id,
+}
+
 /// One contact as the shell lists it (`light-client-requirements.md` §4.3).
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct ContactRow {
@@ -1914,6 +1924,88 @@ impl Participant {
                     theirs: theirs.iter().map(id_of).collect(),
                 }
             })
+        })
+    }
+
+    /// **Take an introduction** (`wire-format.md` §2.3): somebody's key
+    /// material and a locator of theirs, scanned or pasted, which is the
+    /// one way a person brings a party into this client without having
+    /// met them (`light-client-requirements.md` §1.4). The party, or why
+    /// not.
+    ///
+    /// The state is written here, so an intake survives a restart.
+    pub fn take_introduction(&self, bytes: Vec<u8>) -> Result<Id, Refused> {
+        crate::diag::call("take_introduction", || {
+            let who = self
+                .handle
+                .with_blocking(move |c| c.take_introduction(&bytes))
+                .map_err(Refused::new)?;
+            self.save()?;
+            Ok(id_of(&who))
+        })
+    }
+
+    /// **Take whatever an intake code carries**: an anchored introduction
+    /// (`wire-format.md` §2.4), a bare introduction (§2.3), or a node's
+    /// endpoint record (§7.6). The kernel decides which by parsing, so
+    /// nobody has to be asked what kind of code they were handed.
+    ///
+    /// What it was, and whom it was about.
+    pub fn take_intake(&self, bytes: Vec<u8>) -> Result<Intake, Refused> {
+        crate::diag::call("take_intake", || {
+            let took = self.handle.with_blocking(move |c| {
+                if let Ok(who) = c.take_anchored_introduction(&bytes) {
+                    return Ok(Intake {
+                        kind: "an introduction, with where its anchor answers".into(),
+                        who: id_of(&who),
+                    });
+                }
+                if let Ok(who) = c.take_introduction(&bytes) {
+                    return Ok(Intake {
+                        kind: "an introduction".into(),
+                        who: id_of(&who),
+                    });
+                }
+                match c.take_endpoint(&bytes) {
+                    Ok(node) => Ok(Intake {
+                        kind: "where a node answers".into(),
+                        who: id_of(&node),
+                    }),
+                    Err(why) => Err(why),
+                }
+            });
+            let took = took.map_err(Refused::new)?;
+            self.save()?;
+            Ok(took)
+        })
+    }
+
+    /// **This client's own code to hand over** (`wire-format.md` §2.4):
+    /// its introduction with the anchor of its own locator and the record
+    /// of where that anchor answers. Refused where it cannot say where it
+    /// sits, or holds no record for its anchor — a card nobody could act
+    /// on is not offered.
+    pub fn own_card(&self) -> Result<Vec<u8>, Refused> {
+        crate::diag::call("own_card", || {
+            self.handle
+                .with_blocking(|c| c.own_card())
+                .map_err(|a| Refused::new(format!("{a:?}")))
+        })
+    }
+
+    /// **Take a node's endpoint record** (`wire-format.md` §7.6): where
+    /// **Take a node's endpoint record** (`wire-format.md` §7.6): where
+    /// that node answers, signed by it. What gives an introduction an
+    /// address to start from where this client holds no node of its own
+    /// (design §12.3 Case 1). The node, or why not.
+    pub fn take_endpoint(&self, bytes: Vec<u8>) -> Result<Id, Refused> {
+        crate::diag::call("take_endpoint", || {
+            let node = self
+                .handle
+                .with_blocking(move |c| c.take_endpoint(&bytes))
+                .map_err(Refused::new)?;
+            self.save()?;
+            Ok(id_of(&node))
         })
     }
 

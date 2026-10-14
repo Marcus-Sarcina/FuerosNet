@@ -49,7 +49,19 @@ impl How {
 /// One contact, as the store keeps it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Contact {
-    /// The party's `KeyMaterial`, whose hash is the key this is filed under.
+    /// The party's `KeyMaterial`, whose hash is the key this is filed
+    /// under — **empty where only the keyhash is known**.
+    ///
+    /// **A hop of a resolution walk can be that** [author, 2026-10-14].
+    /// §7.7.3 leaves a referral's key material optional, and the session
+    /// that reaches the hop does not supply it: a dial presents the
+    /// classical Ed25519 key alone, while `KeyMaterial` is the pair of
+    /// COSE keys, classical and post-quantum, whose whole encoding the
+    /// keyhash is taken over (`wire-format.md` §2.2). One member cannot
+    /// be reconstructed from the other, and there is no fetch path. Such
+    /// a contact is a name and a place to try, nothing more: it cannot
+    /// verify a signature, cannot bind a dial (§9.1), and is never
+    /// introduced or handed on.
     pub material: Vec<u8>,
     /// The most recent `SignedLocator` held for them, where one has been.
     pub locator: Option<Vec<u8>>,
@@ -59,9 +71,57 @@ pub struct Contact {
     pub count: u64,
     /// How the contact came to be held.
     pub how: How,
+    /// This party's `EndpointRecord` (`wire-format.md` §7.6), signed by
+    /// it, where one is held: **where it answers**.
+    ///
+    /// **This is the local table design §12.3 Case 1 looks an anchor up
+    /// in**: "Bob looks up `anchor` in his local table for an address to
+    /// start from — his contacts". A locator names an anchor and a path
+    /// and never an address, so a party introduced out of band cannot be
+    /// reached until some record of where its anchor answers is held, and
+    /// the horizon is not that place: it keeps endpoints for its own
+    /// neighbourhood alone (distance 2) and refuses a record for anything
+    /// further off [2026-10-13]. None for the ordinary contact, which is a
+    /// person and answers nowhere.
+    ///
+    /// **The record and not a copy of its contents**: the points, the
+    /// series and the counter are all in it, and it is what this client
+    /// hands on in a card of its own (§2.4).
+    pub endpoint_record: Option<Vec<u8>>,
+    /// Its `AnchorEntry`, where one came with that record: what subtree
+    /// it claims, which a caching policy reads (design §12.5).
+    pub anchor_entry: Option<Vec<u8>>,
+    /// Addresses **heard in a referral** and signed by nobody, as the
+    /// `NetworkPoint`s were encoded (`wire-format.md` §7.7.3).
+    ///
+    /// **Kept apart from the record for what they are.** A referral's
+    /// endpoints are the referrer's assertion, and §7.7.3 says so
+    /// deliberately: the key material of a hop is optional there because
+    /// "a referrer's identity is not what protects the requester". They
+    /// are worth keeping — a node this client reached once is a place a
+    /// later walk can start — and they are not a publication, so they are
+    /// never handed on in a card (§2.4) and are offered after anything
+    /// signed.
+    pub heard: Vec<Vec<u8>>,
 }
 
 impl Contact {
+    /// A contact that is a keyhash and no more: a hop whose referral
+    /// carried no key material, kept for the walk it was on and for what
+    /// it says about where another contact sits.
+    pub fn named_only(how: How, now: u64) -> Contact {
+        Contact {
+            material: Vec::new(),
+            ..Contact::new(Vec::new(), how, now)
+        }
+    }
+
+    /// Whether the key material is held, and so whether this contact can
+    /// be verified by, dialled bound, or introduced.
+    pub fn named(&self) -> bool {
+        !self.material.is_empty()
+    }
+
     /// A contact just learned, dealt with once, now.
     pub fn new(material: Vec<u8>, how: How, now: u64) -> Contact {
         Contact {
@@ -70,6 +130,9 @@ impl Contact {
             last_at: now,
             count: 1,
             how,
+            endpoint_record: None,
+            anchor_entry: None,
+            heard: Vec::new(),
         }
     }
 
@@ -97,7 +160,7 @@ impl Contact {
     /// The bytes the store writes: `[1, material, locator or null, last_at, count, how]`.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
-        emit_array_head(&mut out, 6);
+        emit_array_head(&mut out, 9);
         emit_uint(&mut out, 1);
         emit_bstr(&mut out, &self.material);
         match &self.locator {
@@ -107,6 +170,16 @@ impl Contact {
         emit_uint(&mut out, self.last_at);
         emit_uint(&mut out, self.count);
         emit_uint(&mut out, self.how as u64);
+        for held in [&self.endpoint_record, &self.anchor_entry] {
+            match held {
+                Some(b) => emit_bstr(&mut out, b),
+                None => out.push(0xf6),
+            }
+        }
+        emit_array_head(&mut out, self.heard.len());
+        for h in &self.heard {
+            emit_bstr(&mut out, h);
+        }
         out
     }
 
@@ -114,7 +187,10 @@ impl Contact {
     pub fn decode(b: &[u8]) -> Option<Contact> {
         let item = parse_all(b).ok()?;
         let Item::Array(a) = &item else { return None };
-        if a.len() != 6 || as_uint(&a[0]) != Some(1) {
+        // six before a contact could hold an address, eight with the
+        // records it publishes, nine with the addresses a referral
+        // asserted
+        if !matches!(a.len(), 6 | 8 | 9) || as_uint(&a[0]) != Some(1) {
             return None;
         }
         let bytes = |it: &Item| match it {
@@ -125,15 +201,35 @@ impl Contact {
             Item::Null => None,
             it => Some(bytes(it)?),
         };
+        let held = |it: Option<&Item>| match it {
+            None | Some(Item::Null) => Ok(None),
+            Some(it) => bytes(it).map(Some).ok_or(()),
+        };
+        let endpoint_record = held(a.get(6)).ok()?;
+        let anchor_entry = held(a.get(7)).ok()?;
+        let mut heard = Vec::new();
+        if let Some(Item::Array(hs)) = a.get(8) {
+            for h in hs {
+                heard.push(bytes(h)?);
+            }
+        }
         Some(Contact {
             material: bytes(&a[1])?,
             locator,
             last_at: as_uint(&a[3])?,
             count: as_uint(&a[4])?,
             how: How::of(as_uint(&a[5])?)?,
+            endpoint_record,
+            anchor_entry,
+            heard,
         })
     }
 }
+
+/// How many heard addresses one contact keeps: a referral names at most
+/// eight endpoints (`wire-format.md` §7.7.3) and a node this client keeps
+/// reaching by other paths should not grow a list without end.
+pub const HEARD_PER_CONTACT: usize = 8;
 
 /// Whether `who` would still be discoverable from a contact kept here: its
 /// anchor is held, or another held contact under the same anchor sits on

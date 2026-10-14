@@ -694,12 +694,49 @@ them. This is the "local table" design §12.3 Case 1 has you look an
 anchor up in, and it is what you hand onward in a bundle (§1.1,
 `wire-format.md` §5.4).
 
+- **Hold where a node answers, beside the locator.** A contact for a node
+  keeps that node's `EndpointRecord` (`wire-format.md` §7.6) and its
+  `AnchorEntry` where one came, the signed records and not a copy of what
+  they say. A locator names an anchor and a path and never an address, so
+  this is what makes design §12.3 Case 1's "address to start from"
+  available at all — and your horizon is not the place for it, since a
+  horizon holds endpoints for its own neighbourhood and refuses a record
+  for a node further off, which is its purpose rather than a limitation.
+  Order two records of one node by seqno as you order locators.
+- **Take an introduction, and take it with its anchor.** A person must be
+  able to bring in a party they have never met, from a code or a referral:
+  that is an `AnchoredIntroduction` (`wire-format.md` §2.4) — the
+  introduction with the anchor its locator names, that anchor's key
+  material, and where it answers — and a bare introduction or a bare
+  endpoint record is taken too, the kind decided by parsing rather than by
+  asking the person what they were handed. **Verify before keeping any of
+  it**: the material against the hash it must equal, each record against
+  the material it must be signed by.
+- **Offer a code of your own.** It is the same object about yourself: your
+  introduction, the anchor of your own locator, and the record of where
+  that anchor answers. Offer none where you hold neither a position nor
+  that record, because a code nobody could act on is worse than no code.
 - **Capture a locator from every party that becomes visible, until the
   store is full.** A counterparty's, from its intent; every party a
   bundle introduces, whether or not you selected it; every nominee that
   answered, attesting or declining; every verifier that answered; the
-  infrastructure you went through to reach any of them; and a candidate
-  proposed in fishing and declined. Capturing is cheap, each is a party
+  infrastructure you went through to reach any of them — **including every
+  node a resolution walk went through**, the node that referred and the
+  serving node the terminal answer named (`wire-format.md` §7.7), which
+  are the upstreams the pruning below needs and which nothing else shows
+  you; and a candidate proposed in fishing and declined. **A referral's
+  addresses are the referrer's assertion**: keep them as that, apart from
+  a record the node signed, and never hand them on in a card
+  (`wire-format.md` §2.4). **A hop whose referral carried no key material
+  is kept by keyhash alone** [author, 2026-10-14] — a name and a place to
+  try, never verified by, never dialled bound (`wire-format.md` §9.1) and
+  never introduced. **The session does not supply what the referral
+  omitted**: reaching the hop presents its classical key, where key
+  material is the classical and post-quantum pair whose whole encoding the
+  keyhash is taken over (`wire-format.md` §2.2), and one member cannot be
+  had from the other. `wire-format.md` §7.7.3 leaves that field optional
+  for its own reason, so this is the state to hold rather than a gap to
+  close. Capturing is cheap, each is a party
   you could later be asked about or need to reach, and a store that holds
   only the parties a ceremony happened to need is one that cannot route
   the next ceremony's witness.

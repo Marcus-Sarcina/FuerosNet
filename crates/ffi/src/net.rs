@@ -647,6 +647,15 @@ impl Net {
         if let Some(p) = self.persist.lock().unwrap().clone() {
             live.courier.write_after_arrivals(p);
         }
+        // **every node a resolution walk goes through becomes a contact**
+        // (`light-client-requirements.md` §4.3's capture list; [author,
+        // 2026-10-14] for the pruning it makes possible, since these are
+        // the upstreams §4.3 prunes by and nothing else shows them). Not
+        // saved per hop: the state is written on the next arrival or
+        // maintenance round, and a walk of several hops should not write
+        // the whole store several times over.
+        self.beyond
+            .note_hops_with(self.handle_for_hops(handle.clone()));
         live.tasks
             .push(self.rt().spawn(forward(events, self.events_tx.clone())));
         live.tasks.push(self.rt().spawn(watch(
@@ -829,6 +838,14 @@ impl Net {
                 .await
                 .ok()
                 .flatten()
+        })
+    }
+
+    /// The closure the dialler calls for every hop of a descent: the
+    /// client files it as a contact.
+    fn handle_for_hops(&self, handle: Handle) -> rhtn_adaptors::beyond::Noting {
+        Arc::new(move |node, material, endpoints| {
+            handle.with_blocking(move |c| c.note_hop(node, material, endpoints));
         })
     }
 

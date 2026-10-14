@@ -61,6 +61,7 @@
             android:screenOrientation="portrait" />
         <activity android:name=".ConversationActivity" android:exported="false" />
         <activity android:name=".PlaceholderActivity" android:exported="false" />
+        <activity android:name=".PeopleActivity" android:exported="false" />
         <!-- H3's provisioning pages, and the frame the node's own pages are
              presented in (PRD-12, PRD-13; §8.3). The frame is a separate
              Activity so that what it holds is a WebView and nothing else. -->
