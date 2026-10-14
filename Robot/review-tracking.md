@@ -17192,7 +17192,11 @@ on hardware.
    `(ceremony, subject)` now and the refusal reads "a second profile for
    one subject in one ceremony". §7.4.1's price is unchanged: one profile
    of a given subject per ceremony, that subject's live consent each time.
-   **Owed to the author**: the enforcement sentence is §7.4.1's alone —
+   **Settled the next day, and no longer owed** [author, 2026-10-13]: the
+   ruling below scopes the rule per subject and §7.4.1 says so in both
+   places now. What follows is the question as it stood, kept because the
+   wording it describes is what the ruling changed. The enforcement
+   sentence was §7.4.1's alone —
    "every verifier rejects a profile differing from another countersigned
    under the same pre-commitment" — and it scopes the rule by the
    pre-commitment, which §7.4.1 itself derives as one per ceremony that
