@@ -299,6 +299,18 @@ class Meet(
         val proposer: Boolean,
         /** Queries issued and not yet answered. */
         val queriesOutstanding: Int,
+        /** Whether this side has opened the conversation already. */
+        val opened: Boolean = false,
+        /** Whether it has handed the proposer what it gathered already. */
+        val handed: Boolean = false,
+        /** Whether proposing would now produce a body: asked, never found
+         *  out by proposing [client review, 2026-10-11]. */
+        val proposable: Boolean = false,
+        /** Whether a proposal is otherwise ready and no nominee has
+         *  attested. */
+        val noWitness: Boolean = false,
+        /** What a proposal waits on, to show a person. */
+        val waitingOn: String? = null,
         /** Nominees that will attest. */
         val attesting: List<String> = listOf(),
         /** Nominees that declined. */
@@ -365,21 +377,29 @@ class Meet(
     private var chosen: List<Chosen> = listOf()
     private var selectionRun = false
     private val queriesAboutMe = mutableListOf<String>()
-    /** The conversation on the courier, as far as this side has taken it:
-     *  `opening` guards the one entry, `opened` is set once the queries are
-     *  out, and nothing is polled before that, since a poll between the
-     *  two would read no query outstanding and move too early. */
+    /** **This side's own entry to the conversation**, which is not what
+     *  the kernel's `opened` means: the kernel knows the conversation is
+     *  open once `open()` has gone, and the flow must not act between
+     *  that and the queries — a poll in the gap reads no query
+     *  outstanding and moves too early. `opening` guards the one entry,
+     *  `entered` says both calls went.
+     *
+     *  What the flow used to track and no longer does: handed over,
+     *  waiting on, and no witness, all of which are the conversation's
+     *  and arrive in [Progress] [client review, 2026-10-11]. */
     private var opening = false
-    private var opened = false
-    private var gathered = false
+    private var entered = false
     private var nomineesMine: List<String> = listOf()
     private var nomineesTheirs: List<String> = listOf()
     private var progress: Progress? = null
-    /** What the kernel said it waits on, the last time it refused to
-     *  propose; cleared once it does not. */
-    private var waitingOn: String? = null
-    /** The kernel would propose and no nominee has agreed to attest. */
-    private var noWitness = false
+    /** Whether an arrival has come in since the last poll: what makes the
+     *  flow try again, rather than the turn of a timer. */
+    private var arrived = false
+    /** The last thing said about waiting, and whether the witnessless
+     *  notice has gone out: so a state that holds for a minute is said
+     *  once rather than every time the flow looks. */
+    private var said: String? = null
+    private var saidNoWitness = false
     /** When the queries went out and when the last answer landed, on the
      *  caller's clock; what the patience is measured from. */
     private var queriesOutAt = 0L
@@ -455,10 +475,10 @@ class Meet(
 
     /** Whether the conversation is open on the courier: the request to
      *  witness and the queries are out, and the flow polls from here. */
-    fun opened(): Boolean = synchronized(lock) { opened }
+    fun opened(): Boolean = synchronized(lock) { entered }
 
     /** What the kernel waits on before it will propose, or null. */
-    fun waitingOn(): String? = synchronized(lock) { waitingOn }
+    fun waitingOn(): String? = synchronized(lock) { progress?.waitingOn }
 
     /**
      * How long, on the caller's clock, before the flow goes on without the
@@ -467,7 +487,7 @@ class Meet(
      */
     fun patienceLeftMs(nowMs: Long = System.currentTimeMillis()): Long? = synchronized(lock) {
         val p = progress ?: return null
-        if (!opened || p.queriesOutstanding == 0) return null
+        if (!entered || p.queriesOutstanding == 0) return null
         if (goOn) return 0L
         (maxOf(queriesOutAt, lastAnswerAt) + patienceMs - nowMs).coerceAtLeast(0L)
     }
@@ -491,7 +511,7 @@ class Meet(
 
     /** Whether the kernel would propose and no nominee has agreed to
      *  attest: surfaced, because the person decides whether to wait. */
-    fun noWitness(): Boolean = synchronized(lock) { noWitness }
+    fun noWitness(): Boolean = synchronized(lock) { progress?.noWitness == true }
 
     /** Every nominee, either side's, with what it has answered. */
     fun witnesses(): List<Nominee> = synchronized(lock) {
@@ -542,6 +562,7 @@ class Meet(
             if (i < 0) return
             chosen = chosen.toMutableList().also { it[i] = it[i].copy(verdict = verdict) }
             lastAnswerAt = nowMs
+            arrived = true
             changed()
         }
     }
@@ -826,7 +847,7 @@ class Meet(
         c.queries()?.let { return stop("the queries could not be put: $it") }
         note("the queries are with $counterpartyName for consent.")
         synchronized(lock) {
-            opened = true
+            entered = true
             queriesOutAt = nowMs
         }
         poll(c, nowMs)
@@ -875,9 +896,10 @@ class Meet(
      * `nowMs` from the queries going out or the last answer landing.
      */
     fun poll(c: Courier, nowMs: Long = System.currentTimeMillis()) {
-        val live = synchronized(lock) { opened && (step == Step.VERIFIERS || step == Step.REVIEW) }
+        val live = synchronized(lock) { entered && (step == Step.VERIFIERS || step == Step.REVIEW) }
         if (!live) return
         val p = c.progress() ?: return
+        synchronized(lock) { arrived = false }
         val stale = synchronized(lock) {
             // **anything at all moving is progress** — `Progress` compares
             // by value, so this is every figure the conversation exposes
@@ -918,26 +940,33 @@ class Meet(
             }
         }
         if (!p.proposer) {
-            val send = synchronized(lock) { if (gathered) false else { gathered = true; true } }
-            if (send) {
+            if (!p.handed) {
                 c.gathered()?.let { return stop("the responses could not be handed over: $it") }
                 note("my gathered responses are with the proposer.")
             }
             return
         }
-        val refused = c.propose()
+        // **the kernel says whether a body would come of it.** Asking by
+        // proposing and reading the refusal had the proposer calling 28
+        // times in 3 s on the bench [client review, 2026-10-11]; what it
+        // waits on is in [Progress] for the person to read, not for this
+        // to parse.
+        if (p.proposable) {
+            val refused = c.propose()
+            if (refused != null) {
+                // between the two calls an arrival can move the
+                // conversation past proposing, which is not an error
+                if (!refused.startsWith("Waiting(")) {
+                    return stop("the body could not be proposed: $refused")
+                }
+                return
+            }
+            note("the body is proposed and shown to every signer.")
+            moved(Step.VERIFIERS, Step.REVIEW)
+            return
+        }
         when {
-            refused == null -> {
-                synchronized(lock) { waitingOn = null; noWitness = false }
-                note("the body is proposed and shown to every signer.")
-                moved(Step.VERIFIERS, Step.REVIEW)
-            }
-            refused.startsWith("Waiting(") -> {
-                val on = refused.removePrefix("Waiting(").removeSuffix(")").trim('"')
-                val fresh = synchronized(lock) { (waitingOn != on).also { waitingOn = on } }
-                if (fresh) note("not yet proposed: waiting on $on.")
-            }
-            refused == "NoWitness" -> {
+            p.noWitness -> {
                 // **the body waits on a witness only where one can still
                 // arrive.** Nobody nominated, or every nominee declined, is
                 // a ceremony that cannot finalize (`wire-format.md` §3.2:
@@ -950,10 +979,16 @@ class Meet(
                     nominees.all { it.answer == Answer.DECLINED } ->
                         return stop("every nominee declined to attest, and a meeting past genesis needs a witness")
                 }
-                val fresh = synchronized(lock) { (!noWitness).also { noWitness = true; changed() } }
+                val fresh = synchronized(lock) { (!saidNoWitness).also { saidNoWitness = true; changed() } }
                 if (fresh) note("no nominee has agreed to attest yet; the body waits on one.")
             }
-            else -> stop("the body could not be proposed: $refused")
+            // what it waits on is the kernel's word and the screen shows
+            // it; said once, not once per turn
+            p.waitingOn != null -> {
+                val on = p.waitingOn
+                val fresh = synchronized(lock) { (said != on).also { said = on } }
+                if (fresh) note("not yet proposed: waiting on $on.")
+            }
         }
     }
 
@@ -967,6 +1002,7 @@ class Meet(
      * notice line's.
      */
     fun conversed(what: String, turn: Turn) {
+        synchronized(lock) { arrived = true }
         when (turn) {
             is Turn.Finalized -> finalized(turn.txid)
             is Turn.BodyRefused ->
@@ -1093,5 +1129,21 @@ class Meet(
      */
     fun stepStale(nowMs: Long = System.currentTimeMillis()): Boolean = synchronized(lock) {
         (step == Step.PROXIMITY || step == Step.CAPTURE) && nowMs - steppedAtMs > STALE_MS
+    }
+
+    /**
+     * **Whether the flow has anything to do now.** The conversation is the
+     * kernel's and moves when something arrives; a turn of a timer is not
+     * a reason to ask it again [client review, 2026-10-11]. So: an arrival
+     * since the last look, or the patience run out with queries still
+     * unanswered, which is the one deadline that is the flow's own.
+     *
+     * The staleness deadline is not here: [stepStale] is the caller's to
+     * watch on its own clock, and it has to run whether or not anything
+     * arrived — that being the case it exists for.
+     */
+    fun pollDue(nowMs: Long = System.currentTimeMillis()): Boolean = synchronized(lock) {
+        if (!entered || (step != Step.VERIFIERS && step != Step.REVIEW)) return false
+        arrived || patienceLeftMs(nowMs) == 0L
     }
 }

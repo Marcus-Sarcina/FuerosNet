@@ -11,6 +11,8 @@
 mod common;
 
 use common::fixture;
+use common::harness::setup;
+use common::kh;
 use rhtn_client::ceremony::{Msg, Proposed, conversation_from, conversation_payload};
 use rhtn_client::conversation::*;
 use rhtn_client::device::{ChannelKind, ChannelResult};
@@ -438,4 +440,63 @@ fn a_refusal_carries_its_particular_only_where_it_names_one() {
         let bytes = SigningReply { reply: Err(r) }.encode();
         assert_eq!(bytes[2] as u64, code, "field 2 of the map is the code");
     }
+}
+
+/// **What `converse_propose` would do, reported rather than refused**
+/// [client review, 2026-10-11]: a caller that asked by proposing and read
+/// the refusal called the kernel 28 times in 3 s on the bench, and had to
+/// parse `Waiting(...)` to tell a wait from a fault. `progress()` answers
+/// the same question from the same state.
+#[test]
+fn progress_says_whether_a_proposal_would_produce_a_body() {
+    let mut s = setup(&["alice", "bob", "w1", "w2"], &[ChannelKind::Nfc]);
+    // a prior meeting, so neither party is at genesis and a witness is
+    // required: the witnessless shape is the formation case alone
+    s.run("alice", "bob", &["w1"], &["w2"])
+        .expect("a first record");
+    s.face_off("alice", "bob");
+    let (a, b) = (kh("alice"), kh("bob"));
+    let ia = s
+        .client("alice")
+        .begin(Some(b), vec![kh("w1")], true)
+        .unwrap();
+    let ib = s
+        .client("bob")
+        .begin(Some(a), vec![kh("w2")], false)
+        .unwrap();
+    s.client("bob").take_intent(a, &ia).unwrap();
+    s.client("alice").take_intent(b, &ib).unwrap();
+
+    // before the conversation opens: this side proposes, and waits on the
+    // counterparty's responses
+    let p = s
+        .client("alice")
+        .progress()
+        .expect("a ceremony is under way");
+    assert!(p.proposer && !p.opened && !p.handed);
+    assert_eq!(
+        p.waiting_on.as_deref(),
+        Some("the counterparty's responses")
+    );
+    assert!(
+        !p.proposable && !p.no_witness,
+        "nothing is proposable while something is waited on"
+    );
+
+    // opening it is the kernel's own fact, not the caller's to remember
+    s.client("alice").converse_open().expect("opens");
+    let p = s.client("alice").progress().unwrap();
+    assert!(p.opened);
+    assert_eq!(
+        p.waiting_on.as_deref(),
+        Some("the counterparty's responses")
+    );
+
+    // the responder's side says what it has done too
+    s.client("bob").converse_open().expect("opens");
+    let p = s.client("bob").progress().unwrap();
+    assert!(!p.proposer && p.opened && !p.handed);
+    assert_eq!(p.waiting_on, None, "only a proposer waits to propose");
+    s.client("bob").converse_gathered().expect("hands over");
+    assert!(s.client("bob").progress().unwrap().handed);
 }

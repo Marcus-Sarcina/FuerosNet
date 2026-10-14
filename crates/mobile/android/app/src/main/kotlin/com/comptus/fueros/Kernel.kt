@@ -479,6 +479,11 @@ object Kernel {
                 Meet.Progress(
                     proposer = pr.proposer,
                     queriesOutstanding = pr.queriesOutstanding.toInt(),
+                    opened = pr.opened,
+                    handed = pr.handed,
+                    proposable = pr.proposable,
+                    noWitness = pr.noWitness,
+                    waitingOn = pr.waitingOn,
                     attesting = pr.attesting.map { hex(it) },
                     declined = pr.declined.map { hex(it) },
                     backFrom = pr.backFrom.map { hex(it) },
@@ -1159,7 +1164,11 @@ object Kernel {
                 if (t == Meet.Step.VERIFIERS || t == Meet.Step.REVIEW) {
                     drainBearer(p, m)
                 }
-                if (m.opened()) m.poll(courier(p))
+                // **only where it has something to do**: an arrival since
+                // the last look, or the patience run out. Polling every
+                // turn had the proposer asking the kernel 28 times in 3 s
+                // on the bench [client review, 2026-10-11].
+                if (m.pollDue()) m.poll(courier(p))
                 if (m.stepStale()) {
                     m.stop("nothing has moved for ${Meet.STALE_MS / 1000} s at ${m.step().name.lowercase()}; the other phone may have stopped")
                 }

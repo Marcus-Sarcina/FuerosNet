@@ -64,6 +64,12 @@ pub(crate) struct Conversation {
     pub(crate) entries: BTreeMap<Keyhash, Vec<u8>>,
     /// At the proposer: the signers that refused (kind 17).
     pub(crate) refused: BTreeMap<Keyhash, Refusal>,
+    /// Whether this side has opened the conversation: its nominees asked
+    /// and its back-pointers handed over (kinds 12 and 15).
+    pub(crate) opened: bool,
+    /// Whether this side has handed the proposer what it gathered (kind
+    /// 14), which only the side that did not begin does.
+    pub(crate) handed: bool,
     /// What this side sent a verifier and awaits an answer to, by query:
     /// its grant as subject, its query as selector.  Cleared by the
     /// response or its copy; re-sent once on a fresh session when neither
@@ -221,6 +227,23 @@ impl std::fmt::Display for Conversed {
 pub struct Progress {
     /// Whether this side proposes.
     pub proposer: bool,
+    /// Whether this side has opened the conversation already.
+    pub opened: bool,
+    /// Whether it has handed over what it gathered already.
+    pub handed: bool,
+    /// **Whether a proposal would now produce a body.** The shell asks
+    /// this rather than asking the kernel to propose and reading the
+    /// refusal: the conversation is the kernel's, and a refusal used as a
+    /// poll result had the proposer calling 28 times in 3 s on the bench
+    /// [client review, 2026-10-11].
+    pub proposable: bool,
+    /// Whether a proposal is otherwise ready and no nominee has attested,
+    /// which past genesis is a record that cannot finalize
+    /// (`wire-format.md` §3.2) and is the person's to wait out or stop.
+    pub no_witness: bool,
+    /// What a proposal waits on, in words for the person — never for a
+    /// caller to parse.
+    pub waiting_on: Option<String>,
     /// Queries issued and not yet answered.
     pub queries_outstanding: usize,
     /// Nominees that answered: the flags each will sign under, or a
@@ -409,6 +432,12 @@ impl Client {
         let mut out = self.converse_or_abort(&Msg::WitnessRequest(req), &all, counterparty)?;
         let back = self.back_pointers();
         out.extend(self.converse_or_abort(&Msg::BackPointers(back), &all, counterparty)?);
+        // **what this side has done is the kernel's to remember**: a
+        // caller that kept its own flag for it had one more thing to get
+        // wrong, and the conversation is here [client review, 2026-10-11]
+        if let Some(a) = self.active.as_mut() {
+            a.conversation.opened = true;
+        }
         Ok(out)
     }
 
@@ -422,7 +451,11 @@ impl Client {
             return Ok(Vec::new());
         }
         let gathered = self.responses();
-        self.converse_or_abort(&Msg::Responses(gathered), &all, counterparty)
+        let out = self.converse_or_abort(&Msg::Responses(gathered), &all, counterparty)?;
+        if let Some(a) = self.active.as_mut() {
+            a.conversation.handed = true;
+        }
+        Ok(out)
     }
 
     /// Step 7 on the path, the proposer's: the body from the responses
@@ -522,8 +555,50 @@ impl Client {
             .filter_map(|r| Response::read(r).ok().map(|r| r.query_id))
             .collect();
         let c = &a.conversation;
+        // **what `converse_propose` would do, decided here instead of
+        // there** [client review, 2026-10-11]: the same conditions, in the
+        // same order, reported rather than refused.
+        let counterparty = a.peer().ok();
+        let waiting_on = if !a.initiator {
+            None
+        } else if c.proposed.is_some() {
+            Some("the body is out and its signatures are awaited")
+        } else if c.their_responses.is_none() {
+            Some("the counterparty's responses")
+        } else if counterparty.is_some_and(|p| !c.back.contains_key(&p)) {
+            Some("the counterparty's back-pointers")
+        } else {
+            None
+        };
+        // a nominee counts where it answered with flags, handed its
+        // back-pointers over, and was named by one of the two
+        let witnesses = c
+            .answers
+            .iter()
+            .filter(|(w, flags)| {
+                flags.is_some()
+                    && c.back.contains_key(*w)
+                    && (a.my_nominees.contains(*w) || a.their_nominees.contains(*w))
+            })
+            .count();
+        // the witnessless shape `propose` allows: two new joiners, whose
+        // first meeting no horizon could offer a witness for
+        let formation = witnesses == 0
+            && a.responses.is_empty()
+            && self.back_pointers() == vec![rhtn_archive::genesis(&self.keyhash())]
+            && counterparty.is_none_or(|p| {
+                c.back
+                    .get(&p)
+                    .is_none_or(|t| *t == vec![rhtn_archive::genesis(&p)])
+            });
+        let ready = a.initiator && waiting_on.is_none();
         Some(Progress {
             proposer: a.initiator,
+            opened: c.opened,
+            handed: c.handed,
+            proposable: ready && (witnesses > 0 || formation),
+            no_witness: ready && witnesses == 0 && !formation,
+            waiting_on: waiting_on.map(str::to_string),
             queries_outstanding: a.issued.iter().filter(|q| !answered.contains(*q)).count(),
             answered: c.answers.iter().map(|(k, f)| (*k, *f)).collect(),
             back_from: c.back.keys().copied().collect(),

@@ -68,7 +68,7 @@ class MeetTest {
         assertThrows(IllegalStateException::class.java) { m.finalized("tx") }
         m.crossBootstrap(); m.accept()
         m.intentSent(); m.intentReceived(); m.proximityDone(); m.captureDone()
-        val c = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0))
+        val c = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0, proposable = true))
         m.converse(c)
         assertEquals(Meet.Step.REVIEW, m.step())
         m.finalized("tx01")
@@ -161,7 +161,7 @@ class MeetTest {
         val m = atVerifiers()
         m.selected(listOf())
         // no tap moves to review: the body going out does
-        m.converse(FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0)))
+        m.converse(FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0, proposable = true)))
         assertEquals(Meet.Step.REVIEW, m.step())
     }
 
@@ -193,12 +193,29 @@ class FakeCourier(var progress: Meet.Progress? = null) : Meet.Courier {
     var gatheredRefusal: String? = null
     /** Each propose's answer in turn; null is success. Exhausted, it succeeds. */
     val proposeAnswers = ArrayDeque<String?>()
+    /** **What the kernel remembers, as the kernel remembers it**: opening
+     *  the conversation and handing over the gathered responses are its
+     *  own facts and arrive in `Progress`, so a fake that did not report
+     *  them would be testing a contract nothing has [client review,
+     *  2026-10-11]. */
+    private var opened = false
+    private var handed = false
 
-    override fun open(): String? { calls += "open"; return openRefusal }
+    override fun open(): String? {
+        calls += "open"
+        if (openRefusal == null) opened = true
+        return openRefusal
+    }
     override fun queries(): String? { calls += "queries"; return queriesRefusal }
-    override fun gathered(): String? { calls += "gathered"; return gatheredRefusal }
+    override fun gathered(): String? {
+        calls += "gathered"
+        if (gatheredRefusal == null) handed = true
+        return gatheredRefusal
+    }
     override fun propose(): String? { calls += "propose"; return proposeAnswers.removeFirstOrNull() }
-    override fun progress(): Meet.Progress? = progress
+    override fun progress(): Meet.Progress? =
+        // what the test declared, or what this fake has since seen go
+        progress?.let { it.copy(opened = it.opened || opened, handed = it.handed || handed) }
 
     fun count(call: String) = calls.count { it == call }
 }
@@ -244,7 +261,12 @@ class MeetConversationTest {
         m.poll(c)
         assertEquals("queries outstanding: no proposal yet", 0, c.count("propose"))
         assertEquals(0, c.count("gathered"))
-        c.progress = Meet.Progress(proposer = true, queriesOutstanding = 0, attesting = listOf("w1"))
+        c.progress = Meet.Progress(
+            proposer = true,
+            queriesOutstanding = 0,
+            attesting = listOf("w1"),
+            proposable = true,
+        )
         m.poll(c)
         assertEquals(1, c.count("propose"))
         assertEquals(Meet.Step.REVIEW, m.step())
@@ -265,7 +287,9 @@ class MeetConversationTest {
     @Test
     fun a_conversation_that_stops_moving_is_given_up_on() {
         val m = atVerifiers(Meet.Role.RESPONDER)
-        val c = FakeCourier(Meet.Progress(proposer = false, queriesOutstanding = 0))
+        // handed over already, so nothing of this side's is pending and
+        // the only thing that could move is the counterparty
+        val c = FakeCourier(Meet.Progress(proposer = false, queriesOutstanding = 0, handed = true))
         val t0 = 1_000_000L
         m.converse(c, t0)
         // polling with the same progress is not progress, however long
@@ -284,11 +308,16 @@ class MeetConversationTest {
     @Test
     fun progress_of_any_kind_restarts_the_allowance() {
         val m = atVerifiers(Meet.Role.RESPONDER)
-        val c = FakeCourier(Meet.Progress(proposer = false, queriesOutstanding = 0))
+        val c = FakeCourier(Meet.Progress(proposer = false, queriesOutstanding = 0, handed = true))
         val t0 = 1_000_000L
         m.converse(c, t0)
         // one nominee agrees to attest, well into the allowance
-        c.progress = Meet.Progress(proposer = false, queriesOutstanding = 0, attesting = listOf("w1"))
+        c.progress = Meet.Progress(
+            proposer = false,
+            queriesOutstanding = 0,
+            handed = true,
+            attesting = listOf("w1"),
+        )
         m.poll(c, t0 + Meet.STALE_MS - 1)
         assertEquals(Meet.Step.VERIFIERS, m.step())
         // the clock runs from there, not from the start
@@ -296,6 +325,46 @@ class MeetConversationTest {
         assertEquals("the allowance began again", Meet.Step.VERIFIERS, m.step())
         m.poll(c, t0 + 2 * Meet.STALE_MS)
         assertEquals(Meet.Step.STOPPED, m.step())
+    }
+
+    /**
+     * **A turn of a timer is not a reason to ask the kernel again**
+     * [client review, 2026-10-11]. The conversation is the kernel's and
+     * moves when something arrives, so the flow says when it is due: an
+     * arrival since the last look, or the patience run out with queries
+     * still unanswered.
+     */
+    @Test
+    fun the_flow_is_due_on_an_arrival_or_the_patience_and_not_on_the_turn() {
+        val m = Meet("aa", "carol", Meet.Kind(), Meet.Role.INITIATOR, patienceMs = 1_000).apply {
+            crossBootstrap(); accept(); intentSent(); intentReceived(); proximityDone(); captureDone()
+        }
+        m.selected(listOf(Meet.Chosen("v1", Meet.Basis.MET)))
+        val c = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 1))
+        assertFalse("nothing is due before the conversation is entered", m.pollDue(10_000))
+        m.converse(c, nowMs = 10_000)
+        assertFalse("and not on the turn after it", m.pollDue(10_500))
+
+        // a verifier answering is an arrival
+        m.responded("v1", Meet.Verdict.MATCH, nowMs = 10_600)
+        assertTrue(m.pollDue(10_600))
+        m.poll(c, 10_600)
+        assertFalse("the look clears it", m.pollDue(10_700))
+
+        // and the patience is the flow's own deadline, which falls due
+        // with a query still out
+        assertFalse(m.pollDue(11_500))
+        assertTrue("the patience ran out", m.pollDue(11_601))
+
+        // a message of the conversation is an arrival too
+        val n = Meet("bb", "carol", Meet.Kind(), Meet.Role.RESPONDER).apply {
+            crossBootstrap(); accept(); intentSent(); intentReceived(); proximityDone(); captureDone()
+        }
+        val c2 = FakeCourier(Meet.Progress(proposer = false, queriesOutstanding = 0, handed = true))
+        n.converse(c2, nowMs = 20_000)
+        assertFalse(n.pollDue(20_500))
+        n.conversed("a witness will attest", Meet.Turn.Other)
+        assertTrue(n.pollDue(20_500))
     }
 
     /**
@@ -333,6 +402,7 @@ class MeetConversationTest {
         m.converse(c)
         assertEquals(0, c.count("gathered"))
         c.progress = Meet.Progress(proposer = false, queriesOutstanding = 0)
+        // the fake reports `handed` once it has gone, as the kernel does
         m.poll(c)
         m.poll(c)
         assertEquals("gathered goes once, not per tick", 1, c.count("gathered"))
@@ -349,20 +419,30 @@ class MeetConversationTest {
     }
 
     @Test
-    fun a_proposal_refused_as_waiting_is_retried_and_the_wait_is_said_once() {
+    fun what_a_proposal_waits_on_is_the_kernels_word_and_is_said_once() {
         val m = atVerifiers()
-        val c = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0))
-        c.proposeAnswers += "Waiting(\"the counterparty's responses\")"
-        c.proposeAnswers += "Waiting(\"the counterparty's responses\")"
-        c.proposeAnswers += null
+        // **not a refusal used as a poll result** [client review,
+        // 2026-10-11]: the proposer asked 28 times in 3 s on the bench and
+        // was told `Waiting` each time. The kernel says what it waits on,
+        // and nothing is proposed until it does not.
+        val c = FakeCourier(
+            Meet.Progress(
+                proposer = true,
+                queriesOutstanding = 0,
+                waitingOn = "the counterparty's responses",
+            ),
+        )
         m.converse(c)
         assertEquals(Meet.Step.VERIFIERS, m.step())
         assertEquals("the counterparty's responses", m.waitingOn())
         m.poll(c)
-        assertEquals(Meet.Step.VERIFIERS, m.step())
-        assertEquals(1, m.log().count { it.contains("waiting on the counterparty's responses") })
         m.poll(c)
-        assertEquals(3, c.count("propose"))
+        assertEquals("never asked while it waits", 0, c.count("propose"))
+        assertEquals(1, m.log().count { it.contains("waiting on the counterparty's responses") })
+        // the responses land, so a body would come of it now
+        c.progress = Meet.Progress(proposer = true, queriesOutstanding = 0, proposable = true)
+        m.poll(c)
+        assertEquals(1, c.count("propose"))
         assertEquals(Meet.Step.REVIEW, m.step())
         assertNull(m.waitingOn())
     }
@@ -388,22 +468,31 @@ class MeetConversationTest {
     }
 
     @Test
-    fun no_witness_is_surfaced_to_the_person_and_the_proposal_kept_trying() {
+    fun no_witness_is_surfaced_to_the_person_and_nothing_is_proposed_meanwhile() {
         val m = atVerifiers()
         // a nominee is outstanding, so an answer can still arrive
         m.nominated(mine = listOf("w1"), theirs = listOf())
-        val c = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0))
-        c.proposeAnswers += "NoWitness"
-        c.proposeAnswers += "NoWitness"
+        val c = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0, noWitness = true))
         m.converse(c)
         assertEquals(Meet.Step.VERIFIERS, m.step())
         assertTrue(m.noWitness())
         assertNull("not a stop: the person decides", m.stopReason())
         m.poll(c)
-        assertEquals(2, c.count("propose"))
-        // a late nominee answers and the next attempt goes
-        c.progress = Meet.Progress(proposer = true, queriesOutstanding = 0, attesting = listOf("w1"))
+        // **the kernel's word, not a refusal to collect** [client review,
+        // 2026-10-11]: a body that cannot be proposed is not proposed, and
+        // the person is told once
+        assertEquals("never asked while it could not answer", 0, c.count("propose"))
+        assertEquals(1, m.log().count { it.contains("no nominee has agreed to attest") })
+        // a late nominee answers, the kernel says a body would come of it,
+        // and the one attempt goes
+        c.progress = Meet.Progress(
+            proposer = true,
+            queriesOutstanding = 0,
+            attesting = listOf("w1"),
+            proposable = true,
+        )
         m.poll(c)
+        assertEquals(1, c.count("propose"))
         assertEquals(Meet.Step.REVIEW, m.step())
         assertFalse(m.noWitness())
     }
@@ -415,22 +504,26 @@ class MeetConversationTest {
     @Test
     fun no_witness_with_nobody_nominated_stops_the_meeting_and_says_why() {
         val m = atVerifiers()
-        val c = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0))
-        c.proposeAnswers += "NoWitness"
-        c.proposeAnswers += "NoWitness"
+        val c = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0, noWitness = true))
         m.converse(c)
         assertEquals(Meet.Step.STOPPED, m.step())
         assertTrue(m.stopReason()!!, m.stopReason()!!.contains("neither side nominated"))
         m.poll(c)
-        assertEquals("not asked again once stopped", 1, c.count("propose"))
+        assertEquals("and the kernel is never asked to propose it", 0, c.count("propose"))
     }
 
     @Test
     fun no_witness_with_every_nominee_declined_stops_the_meeting_and_says_why() {
         val m = atVerifiers()
         m.nominated(mine = listOf("w1"), theirs = listOf("w2"))
-        val c = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0, declined = listOf("w1", "w2")))
-        c.proposeAnswers += "NoWitness"
+        val c = FakeCourier(
+            Meet.Progress(
+                proposer = true,
+                queriesOutstanding = 0,
+                declined = listOf("w1", "w2"),
+                noWitness = true,
+            ),
+        )
         m.converse(c)
         assertEquals(Meet.Step.STOPPED, m.step())
         assertTrue(m.stopReason()!!, m.stopReason()!!.contains("every nominee declined"))
@@ -463,14 +556,14 @@ class MeetConversationTest {
     @Test
     fun any_other_refusal_stops_the_meeting_with_its_code_shown() {
         val m = atVerifiers()
-        val c = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0))
+        val c = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0, proposable = true))
         c.proposeAnswers += "RootMismatch"
         m.converse(c)
         assertEquals(Meet.Step.STOPPED, m.step())
         assertTrue(m.stopReason()!!.contains("RootMismatch"))
         // an open or queries refusal is terminal too, with its reason
         val m2 = atVerifiers()
-        val c2 = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0))
+        val c2 = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0, proposable = true))
         c2.openRefusal = "Payload(\"no session to 1a2b3c4d\")"
         m2.converse(c2)
         assertEquals(Meet.Step.STOPPED, m2.step())
@@ -511,7 +604,7 @@ class MeetConversationTest {
         assertTrue("the wire code is shown", m.stopReason()!!.contains("refusal 4"))
         // the proposer, told a signer refused: the record will not finalize
         val p = atVerifiers()
-        p.converse(FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0)))
+        p.converse(FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0, proposable = true)))
         assertEquals(Meet.Step.REVIEW, p.step())
         p.conversed("1a2b3c4d refused: NotVerified", Meet.Turn.SignerRefused("1a2b3c4d5e6f7a8b", 4, "NotVerified"))
         assertEquals(Meet.Step.STOPPED, p.step())
@@ -522,7 +615,7 @@ class MeetConversationTest {
     @Test
     fun a_person_may_stop_at_review_and_the_record_no_longer_moves_the_flow() {
         val m = atVerifiers()
-        val c = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0))
+        val c = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0, proposable = true))
         m.converse(c)
         assertEquals(Meet.Step.REVIEW, m.step())
         m.stop("you stopped at review")
@@ -541,14 +634,14 @@ class MeetConversationTest {
             crossBootstrap(); accept(); intentSent(); intentReceived(); proximityDone(); captureDone()
         }
         m.selected(listOf(Meet.Chosen("v1", Meet.Basis.MET), Meet.Chosen("v2", Meet.Basis.MET)))
-        val c = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 2))
+        val c = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 2, proposable = true))
         m.converse(c, nowMs = 10_000)
         assertEquals(0, c.count("propose"))
         assertEquals(1_000L, m.patienceLeftMs(10_000))
         m.poll(c, nowMs = 10_900)
         assertEquals("still patient", 0, c.count("propose"))
         // an answer landing resets the wait: the other may be a moment behind
-        c.progress = Meet.Progress(proposer = true, queriesOutstanding = 1)
+        c.progress = Meet.Progress(proposer = true, queriesOutstanding = 1, proposable = true)
         m.responded("v1", Meet.Verdict.MATCH, nowMs = 10_950)
         m.poll(c, nowMs = 11_000)
         assertEquals("the answer bought another second", 0, c.count("propose"))
@@ -591,7 +684,7 @@ class MeetConversationTest {
         // a finished meeting is not abandoned
         val done = atVerifiers()
         done.onStopped = { told++ }
-        done.converse(FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0)))
+        done.converse(FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0, proposable = true)))
         done.finalized("tx")
         done.stop("late")
         assertEquals(1, told)
@@ -657,7 +750,7 @@ class MeetConversationTest {
         var renders = 0
         m.bind(object : Meet.Ui { override fun render() { renders++ } })
         val atBind = renders
-        val c = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0))
+        val c = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0, proposable = true))
         m.converse(c)
         assertTrue("the notes, the progress and the step each render", renders > atBind)
         val atReview = renders
@@ -763,7 +856,7 @@ class MeetRowsTest {
 
     private fun atReview(m: Meet): Meet {
         m.crossBootstrap(); m.accept(); m.intentSent(); m.intentReceived(); m.proximityDone(); m.captureDone()
-        m.converse(FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0)))
+        m.converse(FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0, proposable = true)))
         check(m.step() == Meet.Step.REVIEW)
         return m
     }

@@ -17847,3 +17847,35 @@ contact is never handed on.
 `type_complexity` under the gate's `-D warnings`, in the flavour lints
 only. It has a name now (`beyond::Noting`).
 
+## Review item 1.2, the polled conversation (2026-10-14)
+
+**Built**: `sequence::Progress` gains `opened`, `handed`, `proposable`,
+`no_witness` and `waiting_on`; `Conversation` records `opened` and
+`handed` where the two sends happen; `progress()` computes the
+proposability from `converse_propose`'s own conditions, the witness count
+from answers-with-flags intersected with back-pointers, and the formation
+shape from `propose`'s own test. The shell proposes only on `proposable`,
+narrates `waiting_on` once, stops on `no_witness` where no answer can
+still arrive, and `Kernel`'s loop calls `poll` only when `Meet.pollDue`
+says so — an arrival since the last look, or the patience run out.
+
+**Where the review was wrong, and it matters**: it says to make the shell
+attempt propose "only on a `Conversed` arrival or the patience timer" and
+treats `opened` as absorbable. The kernel's `opened` is true as soon as
+`converse_open` returns, but the flow must not act between that and
+`converse_queries` — `nothing_is_polled_until_the_queries_are_out` is the
+test, and the bug it guards is a poll in the gap reading no query
+outstanding and handing over early. So one shell flag stays (`entered`,
+both entry calls gone) and is named for what it is.
+
+**Nine fields, honestly counted**: `opened`, `gathered`, `waitingOn` and
+`noWitness` are gone as state; `queriesOutAt`, `lastAnswerAt`, `goOn` and
+`wentOnWithout` remain, being the shell's own clock and the person's
+decision; `opening` and `entered` are its own sequencing. Two new flags
+(`said`, `saidNoWitness`) are narration dedupe, not state — the review's
+"half the nine fields fall away" is fair about the decisions and optimistic
+about the count.
+
+**Still owed on this item**: nothing. 1.3 (the harness drives the
+conversation) is next and is the larger half.
+

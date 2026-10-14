@@ -13903,6 +13903,50 @@ cannot be had from the other, which is also why binding a dial needs
 material pinned in advance, and why §7.7.3 leaves that field optional
 rather than requiring what no exchange can provide.
 
+### 2026-10-14 (the conversation moves on arrivals, not on a timer)
+
+**Review item 1.2.** `Meet.poll` ran on the turn of a timer and on every
+arrival, and the proposer asked the kernel to propose 28 times in 3 s on
+the bench, being told `Waiting("the counterparty's responses")` each time
+— a refusal used as a poll result, and parsed out of a string to tell a
+wait from a fault.
+
+**The kernel reports what it would do.** `Progress` carries whether this
+side has opened the conversation, whether it has handed over what it
+gathered, whether a proposal would now produce a body, whether a proposal
+is otherwise ready with no nominee attesting, and what it waits on in
+words for the person. The proposability test is `converse_propose`'s own
+conditions in the same order, including the witnessless shape only two
+new joiners are allowed.
+
+**The flow asks nothing it has not been told is possible**, and says when
+it is due: an arrival since the last look, or the patience run out with a
+query still unanswered. The staleness deadline stays on the caller's
+clock, since it exists for the case where nothing arrives at all.
+
+**One correction to the review**, which treated the shell's "opened" as
+the kernel's. They are not the same fact: the kernel knows the
+conversation is open when its first call returns, and the flow must not
+act between that and the queries going out, since a look in the gap reads
+no query outstanding and moves too early — there is a test for that. So
+the shell keeps one flag for its own two entry calls, and takes the
+conversation's state from the kernel.
+
+Seventeen shell tests encoded the old contract and are restated, one
+renamed: a proposal that cannot succeed is no longer retried, and the test
+now asserts the kernel is never asked while it waits. Shell tests 168.
+
+### 2026-10-14 (fifteen advisories in two dependencies)
+
+Three against `rustls` 0.23.45 — `Debug` impls exposing TLS secrets,
+buffered application data sent to the outer server after an ECH
+rejection, and brotli certificate decompression allocating up to a
+gigabyte before authentication — and twelve against `wasmtime` 48.0.5,
+each a host panic a guest or a cancellation can provoke. Patch updates
+fix all fifteen: 0.23.46 and 48.0.6, no manifest change. The gate had
+reported advisories clean an hour earlier, which is the second time in
+two days that the database moved under a green tree.
+
 ### 2026-10-11 (contacts)
 
 **[author, 2026-10-11] A client keeps contacts, and prunes toward what

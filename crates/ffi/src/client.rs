@@ -387,6 +387,23 @@ pub struct Nominees {
 pub struct Progress {
     /// Whether this side proposes: the initiator does.
     pub proposer: bool,
+    /// Whether this side has opened the conversation already: its
+    /// nominees asked and its back-pointers handed over.
+    pub opened: bool,
+    /// Whether it has handed the proposer what it gathered already.
+    pub handed: bool,
+    /// **Whether proposing would now produce a body.** Ask this; do not
+    /// propose to find out. A refusal used as a poll result had the
+    /// proposer asking 28 times in 3 s on the bench [client review,
+    /// 2026-10-11].
+    pub proposable: bool,
+    /// Whether a proposal is otherwise ready and no nominee has attested:
+    /// past genesis that is a record which cannot finalize, and is the
+    /// person's to wait out or stop.
+    pub no_witness: bool,
+    /// What a proposal waits on, in words to show a person — not to
+    /// parse.
+    pub waiting_on: Option<String>,
     /// Queries issued and not yet answered.
     pub queries_outstanding: u32,
     /// Nominees that will attest.
@@ -410,6 +427,11 @@ impl Progress {
         let ids = |v: &[Keyhash]| v.iter().map(id_of).collect();
         Progress {
             proposer: p.proposer,
+            opened: p.opened,
+            handed: p.handed,
+            proposable: p.proposable,
+            no_witness: p.no_witness,
+            waiting_on: p.waiting_on.clone(),
             queries_outstanding: p.queries_outstanding as u32,
             attesting: p
                 .answered
