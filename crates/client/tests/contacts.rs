@@ -365,7 +365,7 @@ fn a_card_carries_an_introduction_and_the_records_of_its_anchor() {
     };
     let record = rhtn_archive::endpoint::endpoint_record(
         &id("w1"),
-        &[point.clone()],
+        std::slice::from_ref(&point),
         Seqno {
             series: 1,
             counter: 3,
