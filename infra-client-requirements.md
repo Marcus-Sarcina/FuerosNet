@@ -343,8 +343,8 @@ serving node.
   the weight of a reusable-material fetch and is not logged (§1's
   process-and-discard).
 - **Take a profile only from the subject it names**, as a prekey publication
-  (`wire-format.md` §7.10), and replace the one you hold only by a greater
-  counter in the same series (`wire-format.md` §2.3). A subnet's profile is
+  (`wire-format.md` §7.10), and replace the one you hold only by one
+  published later (`wire-format.md` §7.11). A subnet's profile is
   taken from whoever signed it: that the signer is the root is a convention
   (design §12.8), and this node checks the signature and not the convention.
 - **Bound what you hold.** An image is at most 64 KiB and an alias 64

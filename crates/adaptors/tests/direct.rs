@@ -71,6 +71,12 @@ impl Serving for Counting {
     fn prekey<'a>(&'a self, from: Keyhash, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {
         self.inner.prekey(from, body)
     }
+    fn publish_profile<'a>(&'a self, bytes: &'a [u8]) -> Answer<'a, bool> {
+        self.inner.publish_profile(bytes)
+    }
+    fn profile<'a>(&'a self, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {
+        self.inner.profile(body)
+    }
     fn relay<'a>(
         &'a self,
         from: Keyhash,

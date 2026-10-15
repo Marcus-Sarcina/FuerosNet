@@ -120,6 +120,7 @@ pub fn family_by_name(name: &str) -> Option<Family> {
         "CurrencyReply" => Family::CurrencyReply,
         "ResourceRegistrationReply" => Family::ResourceRegistrationReply,
         "SubmissionReply" => Family::SubmissionReply,
+        "ProfileReply" => Family::ProfileReply,
         _ => return None,
     })
 }

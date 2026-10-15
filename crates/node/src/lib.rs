@@ -38,6 +38,8 @@ pub mod peering;
 /// The prekey pool a node serves on a subject's behalf
 /// (`wire-format.md` §7.8).
 pub mod prekeys;
+/// The profiles a node holds and serves (`wire-format.md` §7.11).
+pub mod profiles;
 /// The forwarding rule and the rootward memo (`wire-format.md` §10.1,
 /// §10.2; design §15).
 pub mod propagation;

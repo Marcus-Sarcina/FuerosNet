@@ -11,6 +11,7 @@ use crate::actor::Handle;
 use crate::serving::{Answer, Inbound, Serving};
 use rhtn_archive::Keyhash;
 use rhtn_archive::prekey::REQUEST_PREKEY;
+use rhtn_archive::profile::REQUEST_PROFILE;
 use rhtn_archive::submission::*;
 use std::sync::Arc;
 
@@ -136,6 +137,22 @@ impl Serving for AttachedNode {
 
     fn prekey<'a>(&'a self, _from: Keyhash, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {
         Box::pin(async move { self.ask(REQUEST_PREKEY, body.to_vec()).await })
+    }
+
+    fn publish_profile<'a>(&'a self, bytes: &'a [u8]) -> Answer<'a, bool> {
+        Box::pin(async move {
+            let nonce = (self.nonce)();
+            let body = ProfilePublication {
+                profile: bytes.to_vec(),
+                nonce,
+            }
+            .encode();
+            self.submit(REQUEST_PROFILE_PUBLICATION, nonce, body).await
+        })
+    }
+
+    fn profile<'a>(&'a self, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {
+        Box::pin(async move { self.ask(REQUEST_PROFILE, body.to_vec()).await })
     }
 
     fn catalog<'a>(&'a self, _from: Keyhash, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {

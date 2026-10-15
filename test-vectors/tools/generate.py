@@ -2797,6 +2797,26 @@ _msg_pairs = [
     ('AttachAck (NO SIBLINGS): field 2 absent, the single-child topology; absence means none, and an empty list is unencodable (§8.2, §1)', f_ack_nosib),
 ]
 CONTROL_NAMES = ('Attach', 'Heartbeat', 'SiblingUpdate', 'TopologyPush', 'TopologyMemo', 'Delegation')
+# Profiles (§7.11) [2026-10-15]: alice's own in the vectors' subnet, with a
+# small PNG-tagged image, signed classically under "rhtn/1:profile".
+AAD_PROFILE = b'rhtn/1:profile'
+def _profile(subject, kind, alias, image, at):
+    fields = [(e_uint(1), e_bstr(subject.keyhash)), (e_uint(2), e_bstr(SUBNET)),
+              (e_uint(3), e_uint(kind)), (e_uint(4), e_tstr(alias))]
+    if image is not None:
+        fields.append((e_uint(5), e_arr([e_uint(image[0]), e_bstr(image[1])])))
+    fields.append((e_uint(6), e_uint(at)))
+    payload = e_map(fields)
+    prot = sig_protected(-8)
+    sig = subject.sign(sig_structure_sign1(prot, AAD_PROFILE, payload))
+    return e_map(fields + [(e_uint(7), e_arr([e_bstr(prot), b'\xa0', NULL, e_bstr(sig)]))])
+profile_alice = _profile(alice, 0, 'Alice', (1, bytes.fromhex('89504e470d0a1a0a')), TS_2026)
+profile_league = _profile(bob, 1, 'Bowling League', None, TS_2026)
+f_profile_pub = frame(13, e_map([(e_uint(1), profile_alice), (e_uint(2), e_bstr(NONCE(b'profile')))]))
+f_profile_req = frame(14, e_map([(e_uint(1), e_bstr(alice.keyhash)), (e_uint(2), e_bstr(SUBNET)),
+                                 (e_uint(3), e_uint(0)), (e_uint(4), e_bstr(NONCE(b'profile-fetch')))]))
+r_profile = e_map([(e_uint(1), e_bstr(NONCE(b'profile-fetch'))), (e_uint(2), profile_alice)])
+r_profile_none = e_map([(e_uint(1), e_bstr(NONCE(b'profile-fetch'))), (e_uint(3), e_uint(0))])
 def hkdf_sha256(ikm, info, length=32):
     prk = hmac.new(b'\x00' * 32, ikm, hashlib.sha256).digest()  # empty salt
     out, t, i = b'', b'', 1
@@ -2850,6 +2870,16 @@ _reply_pairs = [
     # appended 2026-10-02
     ('SubmissionReply (1 refused): echoing the relay submission\'s nonce, a recipient this node holds no record of, and no reason given (§7.10)', r_sub_refused),
 ]
+_msg_pairs.extend([
+    # appended 2026-10-15
+    ('ProfilePublication (request 13) — alice\'s own profile for the subnet, signed by alice (§7.11)', f_profile_pub),
+    ('ProfileRequest (request 14) — alice\'s own profile in the subnet, read-only (§7.11)', f_profile_req),
+])
+_reply_pairs.extend([
+    # appended 2026-10-15
+    ('ProfileReply — the profile held, echoing the fetch\'s nonce (§7.11)', r_profile),
+    ('ProfileReply — 0 unknown: nothing held for that triple (§7.11)', r_profile_none),
+])
 # the ceremony's conversation (s7.10.1 kinds 9-18; the structures are
 # s7.10.2): what the two participants and their witnesses say to one another
 # after the local exchanges, on the end-to-end path. The normal alice-bob
@@ -3361,6 +3391,22 @@ reg('B-locator-lone', 'bytes', ACC('Locator', 'self-anchored, no subnet: a lone 
     locator(bob.keyhash, path([]), seqno(1, 0), subnet=None))
 reg('B-locator-first', 'bytes', ACC('Locator', "one nibble down, no subnet: a root's first adoption"),
     locator(bob.keyhash, path([3]), seqno(1, 0), subnet=None))
+# A profile (§7.11): alias of 1 to 64 bytes, image of at most 64 KiB in a
+# named format, kind 0 or 1 [2026-10-15].
+reg('B-profile', 'bytes', ACC('Profile', "alice's own, with a PNG-tagged image"), profile_alice)
+reg('B-profile-subnet', 'bytes', ACC('Profile', "the subnet's, kind 1, signed by bob"), profile_league)
+reg('B-profile-alias-64', 'bytes', ACC('Profile', 'an alias of 64 bytes, the ceiling'),
+    _profile(alice, 0, 'a' * 64, None, TS_2026))
+reg('B-profile-alias-65', 'bytes', REJ('Profile', 'schema', '65 bytes exceed the alias ceiling'),
+    _profile(alice, 0, 'a' * 65, None, TS_2026))
+reg('B-profile-image-max', 'bytes', ACC('Profile', 'an image of 65,536 bytes, the ceiling'),
+    _profile(alice, 0, 'Alice', (2, b'\x00' * 65536), TS_2026))
+reg('B-profile-image-over', 'bytes', REJ('Profile', 'schema', '65,537 bytes exceed the image ceiling'),
+    _profile(alice, 0, 'Alice', (2, b'\x00' * 65537), TS_2026))
+reg('B-profile-format', 'bytes', REJ('Profile', 'schema', 'image format 4 is not one the wire names'),
+    _profile(alice, 0, 'Alice', (4, b'x'), TS_2026))
+reg('B-profile-kind', 'bytes', REJ('Profile', 'schema', 'kind 2 is neither the subject\'s own nor the subnet\'s'),
+    _profile(alice, 2, 'Alice', None, TS_2026))
 def _adopt_ext(nkeys, vlen):
     ext = [(e_uint(100 + i), e_bstr(b'x')) for i in range(nkeys)]
     if vlen:

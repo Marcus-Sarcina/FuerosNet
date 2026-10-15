@@ -45,6 +45,28 @@ pub fn publication(
     Some(SubmissionReply::code(p.nonce, code).encode())
 }
 
+/// Take a profile from the client that sent it: one naming another
+/// party is refused, and so is one not later than what is held
+/// (`wire-format.md` §7.10, §7.11; `infra-client-requirements.md` §6.2).
+/// A subnet's profile is taken from whoever signed it: that the signer is
+/// the root is a convention the node does not check (design §12.8).
+pub fn profile(
+    view: &mut NodeView,
+    ids: &[rhtn_crypto::identity::Identity],
+    peer: &Keyhash,
+    body: &[u8],
+) -> Option<Vec<u8>> {
+    let p = ProfilePublication::decode(body).ok()?;
+    let names_peer = rhtn_archive::profile::Profile::parse(&p.profile)
+        .is_ok_and(|parsed| parsed.subject == *peer);
+    let code = if names_peer && view.profiles.publish(ids, &p.profile).is_ok() {
+        SUBMISSION_ACCEPTED
+    } else {
+        SUBMISSION_REFUSED
+    };
+    Some(SubmissionReply::code(p.nonce, code).encode())
+}
+
 /// Take one-time keys into the sender's own pool, bounded.  Over the
 /// bound the deposit is refused with the code rather than silently
 /// trimmed, so a client knows what its pool holds.

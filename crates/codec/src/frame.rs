@@ -84,6 +84,8 @@ pub fn family_of(stream: Stream, frame_type: u64) -> Option<Family> {
         (Stream::Request, 10) => OneTimeDeposit,
         (Stream::Request, 11) => RelaySubmission,
         (Stream::Request, 12) => WakeRegistration,
+        (Stream::Request, 13) => ProfilePublication,
+        (Stream::Request, 14) => ProfileRequest,
         _ => return None,
     })
 }

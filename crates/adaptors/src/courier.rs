@@ -257,6 +257,23 @@ impl Courier {
             .await
     }
 
+    async fn their_profile(&self, body: &[u8]) -> Option<Vec<u8>> {
+        let beyond = self.beyond.lock().unwrap().clone()?;
+        let subject = rhtn_archive::profile::ProfileRequest::decode(body)
+            .ok()?
+            .subject;
+        let reach = self.handle.with(move |c| c.reach_for(&subject)).await;
+        beyond
+            .ask_their_node(
+                subject,
+                reach,
+                Some(self.serving.me()),
+                rhtn_archive::profile::REQUEST_PROFILE,
+                body.to_vec(),
+            )
+            .await
+    }
+
     /// The identity this courier carries for.
     pub fn me(&self) -> Keyhash {
         self.handle.me()
@@ -582,6 +599,27 @@ impl Courier {
                     Msg::StockOneTime(keys) => {
                         if !me.serving.stock(me.me(), keys.clone()).await {
                             out.refused.push(Msg::StockOneTime(keys));
+                        }
+                    }
+                    Msg::PublishProfile(b) => {
+                        if !me.serving.publish_profile(&b).await {
+                            out.refused.push(Msg::PublishProfile(b));
+                        }
+                    }
+                    // a profile is fetched from where the subject's locator
+                    // leads (`wire-format.md` §7.11): the subject's own node
+                    // first, and this client's where that one could not be
+                    // reached
+                    Msg::ProfileRequest(b) => {
+                        let answered = match me.their_profile(&b).await {
+                            Some(reply) => Some(reply),
+                            None => me.serving.profile(&b).await,
+                        };
+                        match answered {
+                            Some(reply) => {
+                                let _ = me.handle.with(move |c| c.take_profile_reply(&reply)).await;
+                            }
+                            None => out.refused.push(Msg::ProfileRequest(b)),
                         }
                     }
                     Msg::PrekeyRequest(b) => {

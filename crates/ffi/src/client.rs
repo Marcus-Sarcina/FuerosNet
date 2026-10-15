@@ -370,6 +370,10 @@ pub struct ContactRow {
     pub count: u64,
     /// Whether a locator is held, which is what makes it introducible.
     pub located: bool,
+    /// The alias it published for the subnet its locator is in, where one
+    /// has reached this client (`wire-format.md` §7.11); **the keyhash
+    /// stands in where none has** (`light-client-requirements.md` §4.3).
+    pub alias: Option<String>,
 }
 
 /// The two nominee lists a ceremony holds: this side's and the other's.
@@ -2046,11 +2050,56 @@ impl Participant {
                         last_at: v.last_at,
                         count: v.count,
                         located: v.locator.is_some(),
+                        alias: v.alias.clone(),
                     })
                     .collect();
                 rows.sort_by_key(|r| std::cmp::Reverse(r.last_at));
                 rows
             })
+        })
+    }
+
+    /// Publish an alias and, if the person chooses, an image, for the
+    /// subnet named — this client's own where `kind` is 0, the subnet's
+    /// where 1 — signed now and handed to the serving node
+    /// (`wire-format.md` §7.11; `light-client-requirements.md` §4.4).  The
+    /// image is a format tag (1 PNG, 2 JPEG, 3 WebP) and its bytes, at most
+    /// 64 KiB.  Published again at every attach.
+    pub fn publish_profile(
+        &self,
+        subnet: Id,
+        kind: u64,
+        alias: String,
+        image_format: Option<u64>,
+        image: Option<Vec<u8>>,
+    ) -> Result<(), Refused> {
+        crate::diag::call("publish_profile", || {
+            let s = keyhash(&subnet).ok_or_else(|| Refused::new("a subnet is 32 bytes"))?;
+            let img = match (image_format, image) {
+                (Some(f), Some(b)) => Some((f, b)),
+                (None, None) => None,
+                _ => return Err(Refused::new("an image is a format and its bytes together")),
+            };
+            self.converse(move |c| c.publish_profile(s, kind, &alias, img))
+        })
+    }
+
+    /// Fetch every contact's profile for the subnet its locator names,
+    /// from where that locator leads (`wire-format.md` §7.11).  What comes
+    /// back is kept beside the contact and shows in `contacts`.
+    pub fn request_profiles(&self) -> Result<(), Refused> {
+        crate::diag::call("request_profiles", || {
+            self.converse(move |c| Ok(c.profile_requests()))
+        })
+    }
+
+    /// The alias a subnet's profile carries, where this client holds one
+    /// (`wire-format.md` §7.11 kind 1).
+    #[must_use]
+    pub fn subnet_alias(&self, subnet: Id) -> Option<String> {
+        crate::diag::call_plain("subnet_alias", || {
+            let s = keyhash(&subnet)?;
+            self.handle.with_blocking(move |c| c.subnet_alias(&s))
         })
     }
 

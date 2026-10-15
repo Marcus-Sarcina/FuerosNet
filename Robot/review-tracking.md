@@ -18173,3 +18173,36 @@ v2 with the subnet id and the claimed aliases, the brief's label, the
 invitation asking which subnet, the multi-instance Operator screen); the
 node's `positions`/`anchors()` stay anchor-keyed because routing reads the
 anchor, and the design now has one instance per subnet.
+
+**Push 2, the profile object (2026-10-15).** `Profile`/`ProfileRequest`/
+`ProfileReply` in `archive/src/profile.rs`, `ProfilePublication` beside
+the other submissions; codec `T::Profile`, `PROFILE` as a signed map with
+`profile_ok` for the kind, the image format and the image bound, families
+`ProfilePublication`/`ProfileRequest`/`ProfileReply`, frame types 13 and
+14, `aad::PROFILE`, bounds `PROFILE_ALIAS_BYTES`/`PROFILE_IMAGE_BYTES`;
+node `profiles::ProfileStore` (write-through under the prekeys directory,
+`profiles/<subject>/<subnet>-<kind>`), `submissions::profile` (subject
+must be the session's peer), runtime arms; daemon loads and saves it;
+adaptors `Serving::publish_profile`/`profile` on `AttachedNode` and
+`LocalNode` (the latter asking the node beyond where it holds nothing),
+courier carrying `Msg::PublishProfile`/`Msg::ProfileRequest` (the
+subject's own node first, as a prekey fetch); client `publish_profile`,
+`request_profile`, `profile_requests` (every contact with a located
+subnet), `take_profile_reply` (verified under `known`, kept on the
+contact or by subnet), `contact_label`, `subnet_alias`, own profiles
+republished at attach, `Contact` fields alias/image/profile_at (encoding
+length 12, 6|8|9|12 accepted), `ClientStore` collections 8 and 9
+(`profiles`, `subnet-profiles`; 6|7|9 accepted); FFI `publish_profile`,
+`request_profiles`, `subnet_alias`, `ContactRow.alias`; shell `Person.alias`
+shown in People, keyhash where none. Vectors: `B-profile*` (8 entries),
+frames 13/14 and two `ProfileReply` fixtures appended; verify.py's
+withdrawal index no longer assumes the wake withdrawal is the last frame.
+
+**A drafting correction made here**: §7.11 field 6 was written as the
+subject's §2.3 seqno, which would have made every alias change a position
+change; it is a publication time now, as §7.8's bundle orders. Not the
+author's ruling; flagged in the change-log as a drafting correction.
+
+**Still owed from this push**: a profile is fetched when the shell asks
+(`request_profiles`) and at nobody's locator-taking yet; the brief's
+label and the bootstrap's claimed aliases are push 3.

@@ -250,6 +250,8 @@ pub fn msg(m: &crate::ceremony::Msg) -> &'static str {
         StockOneTime(_) => "StockOneTime",
         PrekeyRequest(_) => "PrekeyRequest",
         CatalogQuery(_) => "CatalogQuery",
+        PublishProfile(_) => "PublishProfile",
+        ProfileRequest(_) => "ProfileRequest",
         PrekeyReply(_) => "PrekeyReply",
         PoolExhausted => "PoolExhausted",
         Payload { .. } => "Payload",

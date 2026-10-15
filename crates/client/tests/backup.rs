@@ -504,10 +504,19 @@ fn a_store_written_before_locators_were_kept_still_opens() {
     let back = ClientStore::decode(&seven).expect("the current shape opens");
     assert_eq!(back, st, "and round-trips, contacts included");
 
-    // the same store as the earlier shape wrote it: the first six
-    // collections, no seventh
+    // the same store as the earlier shapes wrote it: the first six
+    // collections, no seventh; and the first seven, before profiles
+    // were kept (2026-10-15)
     let items = rhtn_codec::cbor::array_item_ranges(&seven, 0).unwrap();
-    assert_eq!(items.len(), 7);
+    assert_eq!(items.len(), 9);
+    let mut seven_shape = Vec::new();
+    rhtn_codec::encode::emit_array_head(&mut seven_shape, 7);
+    for r in &items[..7] {
+        seven_shape.extend_from_slice(&seven[r.clone()]);
+    }
+    let opened = ClientStore::decode(&seven_shape).expect("the seven-shape opens");
+    assert_eq!(opened.contacts, st.contacts, "with its contacts");
+    assert!(opened.profiles.is_empty());
     let mut six = Vec::new();
     rhtn_codec::encode::emit_array_head(&mut six, 6);
     for r in &items[..6] {

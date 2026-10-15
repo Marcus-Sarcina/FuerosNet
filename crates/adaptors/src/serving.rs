@@ -79,6 +79,12 @@ pub trait Serving: Send + Sync {
     /// A `PrekeyRequest` from `from` (`wire-format.md` §7.8): the node's
     /// reply, or nothing where it answers none.
     fn prekey<'a>(&'a self, from: Keyhash, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>>;
+    /// Publish the caller's own profile (`wire-format.md` §7.11); whether
+    /// the node took it.
+    fn publish_profile<'a>(&'a self, bytes: &'a [u8]) -> Answer<'a, bool>;
+    /// A `ProfileRequest` (`wire-format.md` §7.11): the node's reply, or
+    /// nothing where it answers none.
+    fn profile<'a>(&'a self, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>>;
     /// A `CatalogQuery` from `from` (`wire-format.md` §6.4): the node's
     /// reply, or nothing where it answers none.
     fn catalog<'a>(&'a self, from: Keyhash, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>>;
@@ -172,6 +178,34 @@ impl Serving for LocalNode {
 
     fn stock<'a>(&'a self, subject: Keyhash, keys: Vec<Vec<u8>>) -> Answer<'a, bool> {
         Box::pin(async move { self.node.view.lock().unwrap().prekeys.stock(subject, keys) })
+    }
+
+    fn publish_profile<'a>(&'a self, bytes: &'a [u8]) -> Answer<'a, bool> {
+        Box::pin(async move {
+            let mut view = self.node.view.lock().unwrap();
+            let ids = self.node.ids.lock().unwrap();
+            view.profiles.publish(&*ids, bytes).is_ok()
+        })
+    }
+
+    fn profile<'a>(&'a self, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {
+        Box::pin(async move {
+            // held here, or asked of the node beyond where a subject's
+            // locator leads there and this node holds nothing
+            let held = self.node.view.lock().unwrap().profiles.answer(body);
+            match held {
+                Some(reply)
+                    if rhtn_archive::profile::ProfileReply::decode(&reply)
+                        .is_ok_and(|r| r.profile.is_some()) =>
+                {
+                    Some(reply)
+                }
+                other => match self.beyond() {
+                    Some(b) => b.profile(body).await.or(other),
+                    None => other,
+                },
+            }
+        })
     }
 
     /// The node beside this client takes it the way it takes one off the

@@ -3748,9 +3748,10 @@ Profile = {
                                ; image: a format tag (1 = PNG, 2 = JPEG, 3 =
                                ;   WebP; others malformed) and its bytes, at
                                ;   most 64 KiB (§1.3)
-  6: seqno,                    ; the subject's own counter (§2.3): a later
-                               ;   profile replaces an earlier one, equal and
-                               ;   different is malformed (§7.7.3's rule)
+  6: uint,                     ; when it was published, seconds: a later
+                               ;   one replaces an earlier, as §7.8's bundle,
+                               ;   and one no later than the one held does
+                               ;   not replace it
   7: COSE_Sign1                ; BY THE SUBJECT over canonical CBOR of fields
                                ;   1-6; external_aad = "rhtn/1:profile".
                                ;   Classical only: relevance ends on
@@ -3772,7 +3773,7 @@ ProfileReply = {
 }
 ```
 
-**One per (subject, subnet, kind), the latest by seqno.** A node keeps the
+**One per (subject, subnet, kind), the latest by publication time.** A node keeps the
 newest it has taken and serves it to anyone who asks, as it serves reusable
 prekey material (§7.8): a profile is published to be read, and the fetch is a
 metadata event of the same weight as a reusable-material fetch, which is to say

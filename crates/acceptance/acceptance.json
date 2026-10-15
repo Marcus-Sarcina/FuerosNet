@@ -13922,7 +13922,7 @@
   "id": "SES-32",
   "area": "session",
   "gap": "session",
-  "title": "Take a profile publication from its subject alone, and replace only by a greater counter",
+  "title": "Take a profile publication from its subject alone, and replace only by a later one",
   "milestone": "after-5",
   "kind": "negative",
   "spec": [
@@ -13937,11 +13937,11 @@
    },
    {
     "where": "infra-client-requirements.md §6.2",
-    "text": "replace the one you hold only by a greater counter in the same series"
+    "text": "replace the one you hold only by one\n  published later"
    }
   ],
   "given": "A client attached to its serving node.",
-  "when": "It publishes a profile naming itself, then one naming another party, then one at a lower counter, then one at a higher counter.",
+  "when": "It publishes a profile naming itself, then one naming another party, then one published no later, then one published later.",
   "then": "The first is accepted; the second is refused with the code; the third is refused; the fourth replaces the first.",
   "oracle": "behaviour",
   "interpretation": "A profile is a statement by its subject and the node checks that, not who the subject is to the subnet."
@@ -13960,7 +13960,7 @@
   "rule": [
    {
     "where": "wire-format.md §7.11",
-    "text": "One per (subject, subnet, kind), the latest by seqno"
+    "text": "One per (subject, subnet, kind), the latest by publication time"
    },
    {
     "where": "infra-client-requirements.md §6.2",

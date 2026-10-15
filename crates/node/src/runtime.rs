@@ -666,6 +666,17 @@ impl LiveNode {
                         let mut view = v.lock().unwrap();
                         crate::submissions::wake(&mut view, &peer, &device, &body)
                     }
+                    Family::ProfilePublication => {
+                        let mut view = v.lock().unwrap();
+                        let i = ids_for_requests.lock().unwrap();
+                        crate::submissions::profile(&mut view, &i, &peer, &body)
+                    }
+                    // read-only: anyone fetches, nobody is logged
+                    // (`wire-format.md` §7.11)
+                    Family::ProfileRequest => {
+                        let view = v.lock().unwrap();
+                        view.profiles.answer(&body)
+                    }
                     Family::ResolveRequest => {
                         let req = ResolveRequest::decode(&body).ok()?;
                         let started = v

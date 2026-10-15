@@ -1,6 +1,6 @@
 # Unsigned message families (`wire-format.md` §§6–11)
 
-Generated against `wire-format.md` `38b141966a063b86…`, `network-design.md` `215cd3358e1f6c65…` and `light-client-requirements.md` `e68503c02fbebe19…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `df16bf494ac148a3…`, `network-design.md` `215cd3358e1f6c65…` and `light-client-requirements.md` `e68503c02fbebe19…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Canonical. Spec-derived, reproduced by the independent harness.** Canonical bar 9:
 one positive known-answer encoding per framed message family. Framing is
@@ -1306,6 +1306,25 @@ e89ad6654f61554a2cf202582018564c22b6674f09a7ca123ddfd4b071a45df4
 
 ```
 00000015820ca101505bb3999edb24fe7ca438a873fafa8e37
+```
+**ProfilePublication (request 13) — alice's own profile for the subnet, signed by alice (§7.11)** (198 bytes, length prefix included):
+
+```
+000000c2820da201a70158208410def778a5de3a25991aba399716bc8eccfda9
+ad57d4ea8a0c8dcfc852aa6a0258203f438083da65968113a3ddace3e7f735d8
+607a8edb392cbbb069aca5a92cd6fa03000465416c6963650582014889504e47
+0d0a1a0a061a6955b900078443a10127a0f65840da65b4807f82d709a0503974
+a7ab995d501ec1cb6cb7f570124d0ba866cb6aee27f093c4d3d6fc1e49bdfa63
+652909dc34cf52c5ddfba563d9a4014f3b78a70b025059f53eca12b926487d08
+f6533cf6c866
+```
+**ProfileRequest (request 14) — alice's own profile in the subnet, read-only (§7.11)** (97 bytes, length prefix included):
+
+```
+0000005d820ea40158208410def778a5de3a25991aba399716bc8eccfda9ad57
+d4ea8a0c8dcfc852aa6a0258203f438083da65968113a3ddace3e7f735d8607a
+8edb392cbbb069aca5a92cd6fa03000450b4cec386b6e9c1a3a7204781aab74d
+6a
 ```
 
 ## What the node delivers for a relay submission
@@ -3910,6 +3929,21 @@ ce9a4bee6970726f78696d697479a20182a201020200a201030200020203f4
 
 ```
 a20150eee185c6d2aaa010d92f3b656634ca910201
+```
+**ProfileReply — the profile held, echoing the fetch's nonce (§7.11)** (192 bytes — replies carry no type tag and no length prefix here; on the wire the same u32-be prefix applies):
+
+```
+a20150b4cec386b6e9c1a3a7204781aab74d6a02a70158208410def778a5de3a
+25991aba399716bc8eccfda9ad57d4ea8a0c8dcfc852aa6a0258203f438083da
+65968113a3ddace3e7f735d8607a8edb392cbbb069aca5a92cd6fa0300046541
+6c6963650582014889504e470d0a1a0a061a6955b900078443a10127a0f65840
+da65b4807f82d709a0503974a7ab995d501ec1cb6cb7f570124d0ba866cb6aee
+27f093c4d3d6fc1e49bdfa63652909dc34cf52c5ddfba563d9a4014f3b78a70b
+```
+**ProfileReply — 0 unknown: nothing held for that triple (§7.11)** (21 bytes — replies carry no type tag and no length prefix here; on the wire the same u32-be prefix applies):
+
+```
+a20150b4cec386b6e9c1a3a7204781aab74d6a0300
 ```
 
 ## End-to-end payloads

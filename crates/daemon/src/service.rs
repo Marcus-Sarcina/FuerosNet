@@ -463,6 +463,10 @@ impl Service {
         // stop between snapshots cannot bring a served key back
         let prekeys = PrekeyService::at(&cfg.prekeys, PrekeyConfig::default())
             .map_err(|e| Startup::State(format!("{}: {e}", cfg.prekeys.display())))?;
+        // the profiles beside the prekeys: published to be read, written
+        // as they are taken (`wire-format.md` §7.11)
+        let profiles = rhtn_node::profiles::ProfileStore::at(&cfg.prekeys)
+            .map_err(|e| Startup::State(format!("{}: {e}", cfg.prekeys.display())))?;
         let store = match TopologyStore::load(&cfg.topology) {
             Ok(s) => s,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => TopologyStore::new(),
@@ -490,6 +494,7 @@ impl Service {
             view.ack_policy = Some(Arc::new(|_, _| true));
         }
         view.prekeys = prekeys;
+        view.profiles = profiles;
         // this key's own signed history, kept apart from the seen-set: the
         // horizon bounds one and nothing bounds the other [author,
         // 2026-09-13]
@@ -822,6 +827,7 @@ impl Service {
     fn write_back(&self) -> Result<(), std::io::Error> {
         let view = self.node.view.lock().unwrap();
         view.prekeys.save(&self.prekeys)?;
+        view.profiles.save(&self.prekeys)?;
         view.archive.save(&self.archive)?;
         view.store.save(&self.topology)?;
         // the derived state last, so it is never newer than the store it

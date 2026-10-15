@@ -183,6 +183,8 @@ object Kernel {
     /** One contact, as the People screen draws it. */
     data class Person(
         val who: String,
+        /** The alias it published, or null: the keyhash stands in. */
+        val alias: String?,
         val how: String,
         val located: Boolean,
         val addressed: Boolean,
@@ -207,6 +209,7 @@ object Kernel {
             p.contacts().map {
                 Person(
                     who = Provision.hex(it.who).take(8),
+                    alias = it.alias,
                     how = howOf(it.how),
                     located = it.located,
                     addressed = false,

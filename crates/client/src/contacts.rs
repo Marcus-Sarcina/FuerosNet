@@ -103,6 +103,14 @@ pub struct Contact {
     /// never handed on in a card (§2.4) and are offered after anything
     /// signed.
     pub heard: Vec<Vec<u8>>,
+    /// The alias this party published for the subnet its locator is in
+    /// (`wire-format.md` §7.11), where one has reached this client.
+    /// **Display only**: nothing here is keyed by it.
+    pub alias: Option<String>,
+    /// Its published image, a format tag and the bytes, where one has.
+    pub image: Option<(u64, Vec<u8>)>,
+    /// When the profile held was published, so a later one replaces it.
+    pub profile_at: u64,
 }
 
 impl Contact {
@@ -133,7 +141,22 @@ impl Contact {
             endpoint_record: None,
             anchor_entry: None,
             heard: Vec::new(),
+            alias: None,
+            image: None,
+            profile_at: 0,
         }
+    }
+
+    /// Take a profile this party published, where it is later than the
+    /// one held (`wire-format.md` §7.11).
+    pub fn take_profile(&mut self, p: &rhtn_archive::profile::Profile) -> bool {
+        if p.published_at <= self.profile_at && self.alias.is_some() {
+            return false;
+        }
+        self.alias = Some(p.alias.clone());
+        self.image = p.image.clone();
+        self.profile_at = p.published_at;
+        true
     }
 
     /// One more dealing, now.
@@ -157,10 +180,12 @@ impl Contact {
         Some((l.anchor, out))
     }
 
-    /// The bytes the store writes: `[1, material, locator or null, last_at, count, how]`.
+    /// The bytes the store writes: `[1, material, locator or null, last_at,
+    /// count, how, endpoint record, anchor entry, heard, alias or null,
+    /// image or null, profile_at]`.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
-        emit_array_head(&mut out, 9);
+        emit_array_head(&mut out, 12);
         emit_uint(&mut out, 1);
         emit_bstr(&mut out, &self.material);
         match &self.locator {
@@ -180,6 +205,19 @@ impl Contact {
         for h in &self.heard {
             emit_bstr(&mut out, h);
         }
+        match &self.alias {
+            Some(a) => emit_tstr(&mut out, a),
+            None => out.push(0xf6),
+        }
+        match &self.image {
+            Some((f, b)) => {
+                emit_array_head(&mut out, 2);
+                emit_uint(&mut out, *f);
+                emit_bstr(&mut out, b);
+            }
+            None => out.push(0xf6),
+        }
+        emit_uint(&mut out, self.profile_at);
         out
     }
 
@@ -189,8 +227,8 @@ impl Contact {
         let Item::Array(a) = &item else { return None };
         // six before a contact could hold an address, eight with the
         // records it publishes, nine with the addresses a referral
-        // asserted
-        if !matches!(a.len(), 6 | 8 | 9) || as_uint(&a[0]) != Some(1) {
+        // asserted, twelve with the profile it published
+        if !matches!(a.len(), 6 | 8 | 9 | 12) || as_uint(&a[0]) != Some(1) {
             return None;
         }
         let bytes = |it: &Item| match it {
@@ -213,6 +251,15 @@ impl Contact {
                 heard.push(bytes(h)?);
             }
         }
+        let alias = match a.get(9) {
+            Some(Item::Text(r)) => Some(std::str::from_utf8(&b[r.clone()]).ok()?.to_string()),
+            _ => None,
+        };
+        let image = match a.get(10) {
+            Some(Item::Array(i)) if i.len() == 2 => Some((as_uint(&i[0])?, bytes(&i[1])?)),
+            _ => None,
+        };
+        let profile_at = a.get(11).and_then(as_uint).unwrap_or(0);
         Some(Contact {
             material: bytes(&a[1])?,
             locator,
@@ -222,6 +269,9 @@ impl Contact {
             endpoint_record,
             anchor_entry,
             heard,
+            alias,
+            image,
+            profile_at,
         })
     }
 }

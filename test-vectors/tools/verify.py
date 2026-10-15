@@ -629,7 +629,7 @@ check(len(blocks) == len(control) + len(requests) + len(relayed_blocks) + len(re
 # control frames first, as messages.md sections them; the no-siblings
 # AttachAck is the last control frame [2026-10-02]
 EXPECT_FRAMES = [1, 2, 3, 4, 4, 5, 6, 6, 1, 2, 7, 5, 5, 2,
-                 1, 2, 3, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 12]
+                 1, 2, 3, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 12, 13, 14]
 framed = control + requests
 check(len(framed) == len(EXPECT_FRAMES),
       f'messages: {len(EXPECT_FRAMES)} framed fixtures, one per family and variant')
@@ -664,9 +664,21 @@ dep = frame_objs[EXPECT_FRAMES.index(10)][1]
 check(isinstance(dep[1], list) and 1 <= len(dep[1]) <= 256,
       'OneTimeDeposit: field 1 is one to 256 keys')
 wake_on = frame_objs[EXPECT_FRAMES.index(12)][1]
-wake_off = frame_objs[len(EXPECT_FRAMES) - 1][1]
+wake_off = frame_objs[[i for i, f in enumerate(EXPECT_FRAMES) if f == 12][1]][1]
 check(2 in wake_on and 3 in wake_on, 'WakeRegistration: an endpoint arrives with its key')
 check(set(wake_off) == {1}, 'WakeRegistration: a withdrawal is the nonce alone')
+# a profile (§7.11): published as the object, fetched read-only, and the
+# signature is the subject's under "rhtn/1:profile" [2026-10-15]
+prof_pub = frame_objs[EXPECT_FRAMES.index(13)][1]
+check(isinstance(prof_pub[1], dict) and prof_pub[1][3] in (0, 1) and 1 <= len(prof_pub[1][4]) <= 64,
+      'ProfilePublication: field 1 is the profile object, kind 0 or 1, alias within 64')
+prof = prof_pub[1]
+pp = enc({k: prof[k] for k in (1, 2, 3, 4, 5, 6) if k in prof})
+check(verify_sig(BY[prof[1]], -8, bytes.fromhex(prof[7][3]),
+                 sig_sign1(bytes.fromhex(prof[7][0]), b'rhtn/1:profile', pp)),
+      'Profile: signed by its subject under the profile tag')
+prof_req = frame_objs[EXPECT_FRAMES.index(14)][1]
+check(set(prof_req) == {1, 2, 3, 4}, 'ProfileRequest: subject, subnet, kind and nonce')
 
 # the second end-to-end block is the LateResponse; the conversation's kinds
 # follow it [2026-10-02]
@@ -1043,7 +1055,7 @@ check(len(_bp8) == 8 and _bp8 == sorted(_bp8), 'BackPointers: the eight-entry ce
 # the peering between a server and a light client (s4.4): the server named
 # by a network point in field 3, the light client by its locator in field 4
 _pl = canonical(bytes.fromhex(byid['P-peering-light']['hex']))
-check(isinstance(_pl[3], dict) and 1 in _pl[3] and isinstance(_pl[4], dict) and set(_pl[4]) == {1, 2, 3},
+check(isinstance(_pl[3], dict) and 1 in _pl[3] and isinstance(_pl[4], dict) and set(_pl[4]) == {1, 2, 3, 4},
       's4.4: P-peering-light names the server by network point and the light client by locator')
 # SigningReply: the lowest-keyhash signer's two entries, classical then
 # post-quantum, over the body under rhtn/1:envelope; they are the entries

@@ -13910,6 +13910,12 @@ its operator runs** (design §3.3; `light-client-requirements.md` §10;
 client infers no instance from a position, since an operator in one subnet
 is an ordinary participant in the next [author, 2026-10-15].
 
+**The profile orders by its publication time, as a bundle does** (§7.8),
+not by the subject's position counter as first written: a change of alias
+is not a change of position, and tying the two would have had a person
+re-sign their locator to rename themselves. [2026-10-15, drafting
+correction]
+
 In code, the first of three pushes: the locator's fourth field in the
 codec, the archive and the vectors (three new, `B-locator-no-subnet`,
 `B-locator-lone` and `B-locator-first`); the client holds its positions by
@@ -13917,7 +13923,15 @@ subnet, derives its scope id in each subnet it has adopted somebody in,
 names the subnet at proposal and refuses to sign an address in a subnet
 other than its patron's; a departure leaves it the root of the scope it
 carried; the node names its own at its first adoption and reads it back
-from the archive after a restart. Functional tests TOP-044/045, NET-029,
+from the archive after a restart. **Push 2**: the `Profile` object and
+its fetch in the archive crate, request types 13 and 14 in the codec, the
+node's profile store (written through beside the prekeys, served
+read-only to anyone, taken from the subject alone and replaced only by a
+later one), the serving trait's two methods on both the attached and the
+local node, the client's own profiles published at attach and on change,
+its contacts carrying the alias and image fetched for the subnet their
+locator names, and the shell's people list showing the alias where one
+reached it and the keyhash where none did. Functional tests TOP-044/045, NET-029,
 UX-015/016; catalogue TOP-48/49/50, SES-32/33, PRD-14/15.
 
 ### 2026-10-15 (the adoption after the record, and what a client checks before signing one)

@@ -65,6 +65,8 @@ pub enum T {
     CurrencyAttestation,
     /// A prekey bundle (§7.8), checked as its own kind.
     PrekeyBundle,
+    /// A signed profile (§7.11), held to the `Profile` kind.
+    Profile,
     /// One catalog entry (§6.1), checked as its own kind.
     CatalogEntry,
     /// A scope, checked as its own kind: what a catalog entry's access
@@ -128,6 +130,13 @@ pub enum Family {
     RelaySubmission,
     /// Request frame 12: where to ring this client (§14.1.5).
     WakeRegistration,
+    /// Request frame 13: the client's own profile, published to the node
+    /// serving it (§7.10, §7.11).
+    ProfilePublication,
+    /// Request frame 14: a profile fetched, read-only (§7.11).
+    ProfileRequest,
+    /// The answer to a [`ProfileRequest`](Family::ProfileRequest).
+    ProfileReply,
     /// The answer to a submission: accepted, over bound, or refused.
     SubmissionReply,
     /// Request frame 8: a currency attestation requested (§7.1).
@@ -229,6 +238,25 @@ const WAKE_REGISTRATION: Fields = &[
     (4, false, Uint),
 ];
 const SUBMISSION_REPLY: Fields = &[(1, true, Nonce16), (2, true, Uint)];
+const PROFILE_PUBLICATION: Fields = &[(1, true, Profile), (2, true, Nonce16)];
+const PROFILE_REQUEST: Fields = &[
+    (1, true, Keyhash),
+    (2, true, Bytes32),
+    (3, true, Uint),
+    (4, true, Nonce16),
+];
+const PROFILE_REPLY: Fields = &[(1, true, Nonce16), (2, false, Profile), (3, false, Uint)];
+// §7.11: a signed map, its image checked by hand, so extensions above 7
+// are admitted by `check_map_signed`
+const PROFILE: Fields = &[
+    (1, true, Keyhash),
+    (2, true, Bytes32),
+    (3, true, Uint),
+    (4, true, Tstr(crate::bounds::PROFILE_ALIAS_BYTES)),
+    (5, false, Any),
+    (6, true, Uint),
+    (7, true, Any),
+];
 const CURRENCY_REQUEST: Fields = &[(1, true, Keyhash), (2, true, Nonce16)];
 const RESOLVE_REPLY: Fields = &[
     (1, true, Nonce16),
@@ -331,6 +359,9 @@ pub fn fields(f: Family) -> Option<Fields> {
         OneTimeDeposit => ONE_TIME_DEPOSIT,
         RelaySubmission => RELAY_SUBMISSION,
         WakeRegistration => WAKE_REGISTRATION,
+        ProfilePublication => PROFILE_PUBLICATION,
+        ProfileRequest => PROFILE_REQUEST,
+        ProfileReply => PROFILE_REPLY,
         SubmissionReply => SUBMISSION_REPLY,
         CurrencyRequest => CURRENCY_REQUEST,
         ResolveReply => RESOLVE_REPLY,
@@ -690,6 +721,7 @@ pub fn check_type(b: &[u8], at: usize, t: T) -> Result<(), Error> {
         }
         CurrencyAttestation => nested("CurrencyAttestation")?,
         PrekeyBundle => nested("PrekeyBundle")?,
+        Profile => nested("Profile")?,
         Delegation => nested("Delegation")?,
         Txids => {
             let Item::Array(ref a) = v else {
@@ -912,6 +944,36 @@ pub fn check_unsigned(f: Family, b: &[u8], at: usize) -> Result<(), Error> {
     }
 }
 
+/// §7.11's rules a schema cannot say: the kind is 0 or 1, the alias is
+/// not empty, and the image, where one is carried, is a format the wire
+/// names and at most 64 KiB of bytes.
+fn profile_ok(b: &[u8], m: &[(Item, Item)]) -> Result<(), Error> {
+    if map_get(m, 3)
+        .and_then(as_uint)
+        .ok_or(Error("profile kind"))?
+        > 1
+    {
+        return Err(Error("profile kind out of range"));
+    }
+    if let Some(img) = map_get(m, 5) {
+        let Item::Array(a) = img else {
+            return Err(Error("profile image not an array"));
+        };
+        if a.len() != 2 {
+            return Err(Error("profile image is a format and its bytes"));
+        }
+        match as_uint(&a[0]) {
+            Some(1..=3) => {}
+            _ => return Err(Error("profile image format")),
+        }
+        match bs(b, &a[1]).map(|s| s.len()) {
+            Some(n) if (1..=crate::bounds::PROFILE_IMAGE_BYTES).contains(&n) => {}
+            _ => return Err(Error("profile image bytes out of range")),
+        }
+    }
+    Ok(())
+}
+
 /// (signature slot, role tag, signer field) per standalone signed kind (§7).
 pub fn sign1_profile(kind: &str) -> Option<(u64, &'static [u8], u64)> {
     use crate::cose::aad;
@@ -922,6 +984,7 @@ pub fn sign1_profile(kind: &str) -> Option<(u64, &'static [u8], u64)> {
         "AnchorEntry" => (5, aad::ANCHOR, 1),
         "SubtreeAck" => (5, aad::SUBTREE_ACK, 2),
         "PrekeyBundle" => (6, aad::PREKEY, 1),
+        "Profile" => (7, aad::PROFILE, 1),
         "EndpointRecord" => (4, aad::ENDPOINTS, 1),
         "SignedLocator" => (3, aad::LOCATOR, 1),
         _ => return None,
@@ -989,6 +1052,7 @@ fn record_extension_bounds(b: &[u8], kind: &str, item: &Item) -> Result<(), Erro
     let top: Option<u64> = match kind {
         "CurrencyAttestation" => Some(8),
         "PrekeyBundle" => Some(6),
+        "Profile" => Some(7),
         "AnchorEntry" | "SubtreeAck" | "AbuseReport" | "Witness" | "Delegation" => Some(5),
         "EndpointRecord" => Some(4),
         "CatalogEntry" => Some(9),
@@ -2063,6 +2127,13 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
                 return Err(Error("not map"));
             };
             prekey_bundle_payload_ok(b, m)
+        }
+        "Profile" => {
+            let Item::Map(m) = item else {
+                return Err(Error("not map"));
+            };
+            check_map_signed(b, 0, PROFILE)?;
+            profile_ok(b, m)
         }
         "VerificationQuery" => {
             let Item::Map(m) = item else {

@@ -11,6 +11,7 @@ use rhtn_adaptors::attached::AttachedNode;
 use rhtn_adaptors::serving::Serving;
 use rhtn_archive::Keyhash;
 use rhtn_archive::prekey::*;
+use rhtn_archive::profile::{KIND_OWN, Profile, ProfileReply, ProfileRequest};
 use rhtn_archive::submission::*;
 use rhtn_archive::tx::{Locator, Seqno};
 use rhtn_node::resolution::{AnchorTable, Ingestion, Path};
@@ -675,5 +676,64 @@ async fn what_the_serving_node_floods_reaches_the_clients_horizon_and_nothing_el
             .await
             .is_ok(),
         "the task ends when the channel closes"
+    );
+}
+
+// acceptance: SES-32
+// acceptance: SES-33
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_profile_is_published_over_the_wire_and_fetched_by_anyone() {
+    let node = node_with("bob", |_, _| {});
+    let carol = attach_light("carol", &node).await;
+    let alice = attach_light("alice", &node).await;
+    // carol's own, published by carol: taken
+    let carols = Profile::build(
+        &id("carol"),
+        &SUBNET,
+        KIND_OWN,
+        "Carol",
+        None,
+        1_800_000_000,
+    );
+    assert!(
+        carol.serving.publish_profile(&carols).await,
+        "the node takes it"
+    );
+    // alice's, published by carol: refused, and nothing held for alice
+    let alices = Profile::build(
+        &id("alice"),
+        &SUBNET,
+        KIND_OWN,
+        "Alice",
+        None,
+        1_800_000_000,
+    );
+    assert!(!carol.serving.publish_profile(&alices).await);
+    // anyone fetches carol's, read-only, and alice's is unknown
+    let fetch = |subject: &str| {
+        ProfileRequest {
+            subject: kh(subject),
+            subnet: SUBNET,
+            kind: KIND_OWN,
+            nonce: [4; 16],
+        }
+        .encode()
+    };
+    let reply = alice
+        .serving
+        .profile(&fetch("carol"))
+        .await
+        .expect("answered");
+    let r = ProfileReply::decode(&reply).unwrap();
+    assert_eq!(r.profile.as_deref(), Some(carols.as_slice()));
+    let reply = alice
+        .serving
+        .profile(&fetch("alice"))
+        .await
+        .expect("answered");
+    let r = ProfileReply::decode(&reply).unwrap();
+    assert_eq!(
+        (r.profile, r.code),
+        (None, Some(rhtn_archive::profile::FAIL_UNKNOWN))
     );
 }

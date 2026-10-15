@@ -310,6 +310,12 @@ pub struct ClientStore {
     /// §4.3): every party whose locator became visible, with the material
     /// that verifies it, bounded and pruned toward what still resolves.
     pub contacts: BTreeMap<Keyhash, crate::contacts::Contact>,
+    /// This client's own profiles, by subnet (`wire-format.md` §7.11):
+    /// what it publishes to its serving node at attach and on change.
+    pub profiles: BTreeMap<Txid, Vec<u8>>,
+    /// The subnets' own profiles held, by subnet: this client's where it
+    /// is the root that set one, and otherwise the latest fetched.
+    pub subnet_profiles: BTreeMap<Txid, Vec<u8>>,
 }
 
 impl ClientStore {
@@ -403,6 +409,14 @@ impl ClientStore {
             &dir.join("contacts"),
             self.contacts.iter().map(|(k, c)| (*k, c.encode())),
         )?;
+        rewrite(
+            &dir.join("profiles"),
+            self.profiles.iter().map(|(k, b)| (*k, b.clone())),
+        )?;
+        rewrite(
+            &dir.join("subnet-profiles"),
+            self.subnet_profiles.iter().map(|(k, b)| (*k, b.clone())),
+        )?;
         Ok(())
     }
 
@@ -412,7 +426,7 @@ impl ClientStore {
     pub fn encode(&self) -> Vec<u8> {
         use rhtn_codec::encode::*;
         let mut out = Vec::new();
-        emit_array_head(&mut out, 7);
+        emit_array_head(&mut out, 9);
         keyed(&mut out, self.records.iter().map(|(t, b)| (*t, b.clone())));
         keyed(
             &mut out,
@@ -442,6 +456,11 @@ impl ClientStore {
             &mut out,
             self.contacts.iter().map(|(k, c)| (*k, c.encode())),
         );
+        keyed(&mut out, self.profiles.iter().map(|(k, b)| (*k, b.clone())));
+        keyed(
+            &mut out,
+            self.subnet_profiles.iter().map(|(k, b)| (*k, b.clone())),
+        );
         out
     }
 
@@ -454,9 +473,9 @@ impl ClientStore {
             return None;
         };
         // six collections before locators were kept (2026-10-11), seven
-        // since: a store written by the earlier shape opens with no
-        // locators held, which is what that client had
-        if f.len() != 6 && f.len() != 7 {
+        // since, nine with profiles (2026-10-15): a store written by an
+        // earlier shape opens with none of what it did not hold
+        if !matches!(f.len(), 6 | 7 | 9) {
             return None;
         }
         let m = |i: usize| unkeyed(b, &f[i]);
@@ -479,13 +498,21 @@ impl ClientStore {
         for (t, v) in m(5)? {
             st.disclosures.insert(t, decode_disclosures(&v)?);
         }
-        if f.len() == 7 {
+        if f.len() >= 7 {
             // a seventh collection that held bare locators (2026-10-11,
             // for a day) reads as no contacts: nothing there verified
             for (k, v) in m(6)? {
                 if let Some(c) = crate::contacts::Contact::decode(&v) {
                     st.contacts.insert(k, c);
                 }
+            }
+        }
+        if f.len() == 9 {
+            for (k, v) in m(7)? {
+                st.profiles.insert(k, v);
+            }
+            for (k, v) in m(8)? {
+                st.subnet_profiles.insert(k, v);
             }
         }
         Some(st)
@@ -529,6 +556,12 @@ impl ClientStore {
             if let Some(c) = crate::contacts::Contact::decode(&b) {
                 st.contacts.insert(k, c);
             }
+        }
+        for (k, b) in read_dir_of(&dir.join("profiles"))? {
+            st.profiles.insert(k, b);
+        }
+        for (k, b) in read_dir_of(&dir.join("subnet-profiles"))? {
+            st.subnet_profiles.insert(k, b);
         }
         Ok(st)
     }

@@ -192,7 +192,9 @@ class PeopleActivity : Activity() {
                     if (p.how == "a node") add("answers somewhere")
                 }
                 val tail = if (marks.isEmpty()) "" else " — ${marks.joinToString(", ")}"
-                "${p.who}  ${p.how}  ×${p.count}$tail"
+                // the alias it published where one reached us, and the
+                // keyhash where none did (light-client §4.3)
+                "${p.alias ?: p.who}  ${p.how}  ×${p.count}$tail"
             }
         }
     }

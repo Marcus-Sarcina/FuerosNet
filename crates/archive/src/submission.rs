@@ -18,6 +18,8 @@ pub const REQUEST_ONE_TIME_DEPOSIT: u64 = 10;
 pub const REQUEST_RELAY: u64 = 11;
 /// Request frame 12: where to ring this client.
 pub const REQUEST_WAKE: u64 = 12;
+/// Request frame 13: the client's own profile (`wire-format.md` §7.11).
+pub const REQUEST_PROFILE_PUBLICATION: u64 = 13;
 
 /// A client publishing its own bundle to the node that serves it
 /// (`wire-format.md` §7.10).
@@ -27,6 +29,43 @@ pub struct PrekeyPublication {
     pub bundle: Vec<u8>,
     /// The nonce the reply must echo.
     pub nonce: [u8; 16],
+}
+
+/// A client publishing its own profile to the node that serves it
+/// (`wire-format.md` §7.10, §7.11).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProfilePublication {
+    /// The signed profile being published.
+    pub profile: Vec<u8>,
+    /// The nonce the reply must echo.
+    pub nonce: [u8; 16],
+}
+
+impl ProfilePublication {
+    /// The publication's bytes.
+    pub fn encode(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        emit_map_head(&mut out, 2);
+        emit_uint(&mut out, 1);
+        out.extend_from_slice(&self.profile);
+        emit_uint(&mut out, 2);
+        emit_bstr(&mut out, &self.nonce);
+        out
+    }
+
+    /// A publication from its bytes.
+    pub fn decode(b: &[u8]) -> Result<Self, String> {
+        let item = parse_all(b).map_err(|e| e.0)?;
+        schema::check_unsigned(Family::ProfilePublication, b, 0).map_err(|e| e.0)?;
+        let Item::Map(m) = &item else {
+            return Err("not a map".into());
+        };
+        let profile = value_slice(b, 1).ok_or("field 1")?;
+        Ok(ProfilePublication {
+            profile: b[profile].to_vec(),
+            nonce: nonce_at(b, m, 2)?,
+        })
+    }
 }
 
 /// A client stocking its node's pool.

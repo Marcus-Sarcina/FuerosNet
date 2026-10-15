@@ -271,6 +271,12 @@ pub enum Msg {
     PrekeyRequest(Vec<u8>),
     /// A `CatalogQuery` (`wire-format.md` §6.4), to the serving node.
     CatalogQuery(Vec<u8>),
+    /// This client's own signed `Profile` (`wire-format.md` §7.11), to
+    /// the serving node.
+    PublishProfile(Vec<u8>),
+    /// A `ProfileRequest` (`wire-format.md` §7.11), to where the
+    /// subject's locator leads.
+    ProfileRequest(Vec<u8>),
     /// The reply, from the serving node.
     PrekeyReply(Vec<u8>),
     /// The serving node's word that the pool ran dry.
@@ -340,6 +346,8 @@ impl Msg {
             | Msg::AdoptionBody(b)
             | Msg::Seal(b)
             | Msg::PublishBundle(b)
+            | Msg::PublishProfile(b)
+            | Msg::ProfileRequest(b)
             | Msg::PrekeyRequest(b)
             | Msg::PrekeyReply(b)
             | Msg::Transport(b) => b.clone(),
@@ -3601,8 +3609,174 @@ impl Client {
         self.payload.pool_reported = n;
         let mut out: Vec<Msg> = self.bundle_to_publish(now).into_iter().collect();
         out.push(Msg::StockOneTime(keys));
+        // the profiles this client holds for the subnet it acts in, as
+        // its bundle is: at attach and whenever they change
+        // (`light-client-requirements.md` §4.4)
+        out.extend(self.profiles_to_publish());
         out.extend(self.sweep(population));
         out
+    }
+
+    /// This client's own profile for the subnet it acts in, and the
+    /// subnet's where it set one, as publications.
+    fn profiles_to_publish(&self) -> Vec<Msg> {
+        let Some(subnet) = self.subnet() else {
+            return Vec::new();
+        };
+        self.store
+            .profiles
+            .get(&subnet)
+            .into_iter()
+            .chain(self.store.subnet_profiles.get(&subnet).filter(|b| {
+                rhtn_archive::profile::Profile::parse(b).is_ok_and(|p| p.subject == self.keyhash())
+            }))
+            .map(|b| Msg::PublishProfile(b.clone()))
+            .collect()
+    }
+
+    /// Publish an alias and, if the person chooses, an image, for
+    /// `subnet` — this client's own (kind 0) or the subnet's (kind 1,
+    /// the root's by convention, design §12.8) — signed now and handed to
+    /// the serving node (`wire-format.md` §7.11;
+    /// `light-client-requirements.md` §4.4).  **Into no transaction**: the
+    /// profile is held beside the records, never among them.
+    pub fn publish_profile(
+        &mut self,
+        subnet: Txid,
+        kind: u64,
+        alias: &str,
+        image: Option<(u64, Vec<u8>)>,
+    ) -> Result<Vec<Msg>, Abort> {
+        if alias.is_empty() || alias.len() > rhtn_codec::bounds::PROFILE_ALIAS_BYTES {
+            return Err(Abort::Malformed("an alias is 1 to 64 bytes".into()));
+        }
+        if image.as_ref().is_some_and(|(f, b)| {
+            !(1..=3).contains(f)
+                || b.is_empty()
+                || b.len() > rhtn_codec::bounds::PROFILE_IMAGE_BYTES
+        }) {
+            return Err(Abort::Malformed(
+                "an image is a format the wire names and at most 64 KiB".into(),
+            ));
+        }
+        if kind > 1 {
+            return Err(Abort::Malformed(
+                "a profile is the subject's own or the subnet's".into(),
+            ));
+        }
+        let now = self.now_s();
+        // later than whatever this client published before, so a node
+        // holding the earlier one replaces it
+        let last = match kind {
+            0 => self.store.profiles.get(&subnet),
+            _ => self.store.subnet_profiles.get(&subnet),
+        }
+        .and_then(|b| rhtn_archive::profile::Profile::parse(b).ok())
+        .map(|p| p.published_at)
+        .unwrap_or(0);
+        let at = now.max(last + 1);
+        let bytes = rhtn_archive::profile::Profile::build(
+            self.signer()?,
+            &subnet,
+            kind,
+            alias,
+            image.as_ref().map(|(f, b)| (*f, b.as_slice())),
+            at,
+        );
+        match kind {
+            0 => self.store.profiles.insert(subnet, bytes.clone()),
+            _ => self.store.subnet_profiles.insert(subnet, bytes.clone()),
+        };
+        Ok(vec![Msg::PublishProfile(bytes)])
+    }
+
+    /// Fetch the profile `subject` published for `subnet`, or the
+    /// subnet's own where `kind` is 1 (`wire-format.md` §7.11).
+    pub fn request_profile(&self, subject: Keyhash, subnet: Txid, kind: u64) -> Msg {
+        Msg::ProfileRequest(
+            rhtn_archive::profile::ProfileRequest {
+                subject,
+                subnet,
+                kind,
+                nonce: self.nonce(),
+            }
+            .encode(),
+        )
+    }
+
+    /// The fetches for every contact's own profile in the subnet its
+    /// locator names: what a client asks after it takes a locator
+    /// (`light-client-requirements.md` §4.3).
+    pub fn profile_requests(&self) -> Vec<Msg> {
+        self.store
+            .contacts
+            .iter()
+            .filter_map(|(k, c)| {
+                let l = rhtn_archive::locator::SignedLocator::parse(c.locator.as_deref()?).ok()?;
+                let subnet = l.locator.subnet?;
+                Some(self.request_profile(*k, subnet, rhtn_archive::profile::KIND_OWN))
+            })
+            .collect()
+    }
+
+    /// Take a `ProfileReply`: a profile is verified under the subject it
+    /// names, which must be a party this client knows, and kept beside the
+    /// contact (its own) or by subnet (the subnet's) where it is later
+    /// than what is held.  **Never shown unverified**, and the keyhash
+    /// stands in where nothing came (`light-client-requirements.md` §4.3).
+    pub fn take_profile_reply(&mut self, bytes: &[u8]) -> Result<bool, String> {
+        let reply = rhtn_archive::profile::ProfileReply::decode(bytes)?;
+        let Some(p) = reply.profile else {
+            return Ok(false);
+        };
+        let profile = rhtn_archive::profile::Profile::parse(&p)?;
+        profile.verify(&self.known)?;
+        let taken = match profile.kind {
+            rhtn_archive::profile::KIND_OWN => {
+                match self.store.contacts.get_mut(&profile.subject) {
+                    Some(c) => c.take_profile(&profile),
+                    None => return Err("a profile of a party that is not a contact".into()),
+                }
+            }
+            _ => {
+                let later = self
+                    .store
+                    .subnet_profiles
+                    .get(&profile.subnet)
+                    .and_then(|b| rhtn_archive::profile::Profile::parse(b).ok())
+                    .is_none_or(|held| held.published_at < profile.published_at);
+                if later {
+                    self.store.subnet_profiles.insert(profile.subnet, p);
+                }
+                later
+            }
+        };
+        if taken {
+            tracing::info!(target: "cer", subject = %hex8(&profile.subject), kind = profile.kind, "cer.profile");
+        }
+        Ok(taken)
+    }
+
+    /// What a contact is shown as: the alias it published for the subnet
+    /// its locator is in, or its keyhash where none has reached this
+    /// client (`light-client-requirements.md` §4.3).
+    #[must_use]
+    pub fn contact_label(&self, who: &Keyhash) -> String {
+        self.store
+            .contacts
+            .get(who)
+            .and_then(|c| c.alias.clone())
+            .unwrap_or_else(|| hex8(who))
+    }
+
+    /// What a subnet is shown as: its alias where its profile is held.
+    #[must_use]
+    pub fn subnet_alias(&self, subnet: &Txid) -> Option<String> {
+        self.store
+            .subnet_profiles
+            .get(subnet)
+            .and_then(|b| rhtn_archive::profile::Profile::parse(b).ok())
+            .map(|p| p.alias)
     }
 
     /// Sweep the population's reusable material (`light-client-requirements.md`

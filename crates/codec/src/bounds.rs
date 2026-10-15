@@ -29,6 +29,11 @@ pub const PATH_NIBBLES: u64 = 24;
 /// roughly 1.5 to 2 KB, so 4 KB is a denial-of-service ceiling with
 /// headroom rather than a capacity figure.
 pub const PREKEY_BUNDLE_BLOB: usize = 4096;
+/// A profile's alias (§7.11): a name, not a biography.
+pub const PROFILE_ALIAS_BYTES: usize = 64;
+/// A profile's image (§7.11): a small picture, near a prekey fetch in
+/// cost, and what §3.3's horizon of 221 multiplies.
+pub const PROFILE_IMAGE_BYTES: usize = 65_536;
 /// Back-pointers per signer in a merge (§1.3).  Longer than one means the
 /// transaction reunites that many branch heads (§3.1).
 pub const MERGE_BACK_POINTERS_PER_SIGNER: usize = 8;
