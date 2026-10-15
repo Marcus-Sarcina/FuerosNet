@@ -409,6 +409,7 @@ The Cargo workspace has **16 crates**. Components below follow responsibilities 
 | CER-028 | C | The bundle a party hands is introductions: for each prior counterparty it chooses to name, that party's key material with the most recent `SignedLocator` the sender holds for them, never the position at the time they met and never a record of the meeting. A held locator is replaced by one of the same series with a greater counter, and by the subject's own statement in its intent outright. | W §§2.3, 5.4, 14.3.2 |
 | CER-029 | C | The sender's own current `SignedLocator` rides its `IntentExchange`; the receiver verifies it under the key pinned from the screen, keeps it as the locator it holds for the counterparty, and hands it onward in later bundles. An intent whose locator is not the sender's own, or does not verify, is refused where it is read. | W §14.3.2 |
 | CER-030 | C | A verified introduction pins the subject's key by hash for the ceremony's verifier path, so a verifier the bundle named can be queried and its response verified without any other source of its material. | W §§2.3, 5.3 |
+| CER-031 | C | **A client checks an adoption body before it signs it.** The patron builds the body (D §6.1.1: an adoption carries both signatures) and the party being adopted is shown it, so a signature here is this key's consent to a patron, a series and an address it did not choose. Refused, each with its reason and none of them a protocol failure: a body naming another party as the node; one whose field 8 names a record this client does not hold, one that is not a presence record, or one whose participants are not these two; an address that is not one hop below the patron's own position in the patron's own anchor, the patron's position being the `SignedLocator` its intent carried; a series this key has occupied, or a counter that is not zero; back-pointers in the node's list that are not this archive's next; a timestamp before the meeting's effective time or further ahead of this clock than the client's tolerance; and a body carrying a recovery block or a transfer statement, which their own subjects assemble rather than being shown. A body that passes is signed, and the record the patron returns is taken, which is what tells this client where it now sits. | L §§2, 7; D §6.1.1; W §§2.1, 2.3, 3.1, 4.1, 14.3.2 |
 
 ### VerifierQuery, consent, key grants and response processing
 
@@ -987,7 +988,7 @@ Open local parameters are not all specification defects: cache TTLs, queue cap, 
 
 ## 10. Document baseline and coverage totals
 
-This specification contains **515 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
+This specification contains **516 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
 
 | Prefix | Families |
 |---|---:|
@@ -1001,7 +1002,7 @@ This specification contains **515 numbered requirement/test families** across **
 | NET | 28 |
 | SES | 16 |
 | MAIL | 27 |
-| CER | 30 |
+| CER | 31 |
 | VER | 18 |
 | CAP | 17 |
 | REC | 12 |

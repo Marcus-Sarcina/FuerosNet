@@ -235,7 +235,7 @@ async fn two_light_clients_beside_their_serving_node_join_the_direct_path_from_t
     let (from, d) = next(&mut w1.app, 3000).await.expect("delivered");
     assert_eq!(from, kh("carol"));
     assert!(
-        matches!(&d, Dispatched::Application(b) if b == b"over the direct path"),
+        matches!(&d, Dispatched::Application { bytes, .. } if bytes == b"over the direct path"),
         "{d:?}"
     );
     assert_eq!(counting.relayed(), relayed, "nothing more relayed");
@@ -288,7 +288,7 @@ async fn two_nodes_that_are_participants_join_the_direct_path_on_their_own_socke
     let (from, d) = next(&mut p2.app, 3000).await.expect("delivered");
     assert_eq!(from, kh("w1"));
     assert!(
-        matches!(&d, Dispatched::Application(b) if b == b"node to node"),
+        matches!(&d, Dispatched::Application { bytes, .. } if bytes == b"node to node"),
         "{d:?}"
     );
     assert_eq!(c1.relayed() + c2.relayed(), relayed, "nothing more relayed");
@@ -342,7 +342,7 @@ async fn a_direct_path_the_local_decision_refuses_opens_in_neither_direction() {
     let (from, d) = next(&mut w1.app, 3000).await.expect("delivered");
     assert_eq!(from, kh("carol"));
     assert!(
-        matches!(&d, Dispatched::Application(b) if b == b"over the relay"),
+        matches!(&d, Dispatched::Application { bytes, .. } if bytes == b"over the relay"),
         "{d:?}"
     );
     assert!(counting.relayed() > relayed, "the serving node carried it");
@@ -558,5 +558,7 @@ async fn top_43_a_light_client_holds_delegations_and_binds_a_direct_peer_by_one(
         .expect("sent");
     let (from, d) = next(&mut desktop.app, 3000).await.expect("delivered");
     assert_eq!(from, kh("carol"));
-    assert!(matches!(&d, Dispatched::Application(b) if b == b"to the desktop, directly"));
+    assert!(
+        matches!(&d, Dispatched::Application { bytes, .. } if bytes == b"to the desktop, directly")
+    );
 }

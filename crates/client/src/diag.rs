@@ -120,7 +120,7 @@ pub fn kind_name(kind: u64) -> &'static str {
 pub fn abort(a: &crate::ceremony::Abort) -> String {
     use crate::ceremony::Abort::*;
     match a {
-        Malformed(s) | Record(s) | PatronRefused(s) | Payload(s) => {
+        Malformed(s) | Record(s) | PatronRefused(s) | NodeRefused(s) | Payload(s) => {
             format!("{}({s})", variant(a))
         }
         Refused(r) => format!("Refused({r:?})"),
@@ -158,6 +158,7 @@ pub fn variant(a: &crate::ceremony::Abort) -> &'static str {
         CounterExhausted => "CounterExhausted",
         NotRecognised => "NotRecognised",
         PatronRefused(_) => "PatronRefused",
+        NodeRefused(_) => "NodeRefused",
         NoCounterparty => "NoCounterparty",
         InitiatorClaim => "InitiatorClaim",
         Waiting(_) => "Waiting",
@@ -191,7 +192,7 @@ pub fn dispatched(d: &crate::ceremony::Dispatched) -> String {
     use crate::ceremony::Dispatched::*;
     use crate::verifier::{GrantOutcome, QueryOutcome};
     match d {
-        Application(b) => format!("Application({} bytes)", b.len()),
+        Application { kind, bytes } => format!("Application(kind {kind}, {} bytes)", bytes.len()),
         Grant(GrantOutcome::Answered(a)) => format!("Grant(answered {})", id8(&a.query_id)),
         Grant(GrantOutcome::Buffered) => "Grant(buffered)".into(),
         Grant(GrantOutcome::Ignored) => "Grant(ignored)".into(),

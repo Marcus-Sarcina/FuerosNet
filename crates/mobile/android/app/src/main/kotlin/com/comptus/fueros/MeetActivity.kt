@@ -956,26 +956,65 @@ class MeetActivity : Activity() {
 
     private fun done(m: Meet) {
         para("The record: ${m.recordTxid()}")
-        when {
-            // PRD-05: two people who each chose to be the patron have not
-            // hit a protocol failure, and the screen must not say they have
-            m.opposedAdoptions() && m.direction() == null -> {
-                heading("You both offered to be the patron")
-                para("Each of you chose a direction before seeing the other's, so this is two intentions rather than a fault — nothing malformed has happened, and the meeting itself stands whichever way this goes.")
-                para("Choose a direction between you, or leave the authority question alone.")
-                button("I will be the patron") { m.chooseDirection(Meet.Adopt.THEM_UNDER_ME) }
-                button("${m.counterpartyName} will be the patron") {
-                    m.chooseDirection(Meet.Adopt.ME_UNDER_THEM)
-                }
-                button("Neither — just the meeting") { m.chooseDirection(Meet.Adopt.NONE) }
-                return
+        // PRD-05: two people who each chose to be the patron have not hit
+        // a protocol failure, and the screen must not say they have
+        if (m.opposedAdoptions() && m.direction() == null) {
+            heading("You both offered to be the patron")
+            para("Each of you chose a direction before seeing the other's, so this is two intentions rather than a fault — nothing malformed has happened, and the meeting itself stands whichever way this goes.")
+            para("Choose a direction between you, or leave the authority question alone.")
+            button("I will be the patron") {
+                m.chooseDirection(Meet.Adopt.THEM_UNDER_ME)
+                Kernel.adoptionBegins()
             }
-            m.direction() == Meet.Adopt.NONE ->
-                para("You left the authority question alone. The meeting stands on its own, which costs neither of you anything you had.")
-            m.direction() != null || m.adopt != Meet.Adopt.NONE ->
-                para("The adoption would now be proposed and taken in the direction settled here.")
+            button("${m.counterpartyName} will be the patron") {
+                m.chooseDirection(Meet.Adopt.ME_UNDER_THEM)
+                Kernel.adoptionBegins()
+            }
+            button("Neither — just the meeting") {
+                m.chooseDirection(Meet.Adopt.NONE)
+                Kernel.adoptionBegins()
+            }
+            return
         }
+        adoption(m, Kernel.adoption())
         button("Done") { Kernel.stopMeet("done"); finish() }
+    }
+
+    /** What the adoption the meeting carried came to, where it carried one. */
+    private fun adoption(m: Meet, a: Adoption?) {
+        if (m.direction() == Meet.Adopt.NONE && a == null) {
+            para("You left the authority question alone. The meeting stands on its own, which costs neither of you anything you had.")
+            return
+        }
+        if (a == null) {
+            if (m.adopt != Meet.Adopt.NONE) {
+                para("The adoption is next: this screen will say what it came to.")
+            }
+            return
+        }
+        heading(
+            when (a.direction()) {
+                Meet.Adopt.THEM_UNDER_ME -> "${m.counterpartyName} under you"
+                Meet.Adopt.ME_UNDER_THEM -> "You under ${m.counterpartyName}"
+                else -> "The authority question"
+            },
+        )
+        a.said().forEach { para("· $it") }
+        when (a.step()) {
+            Adoption.Step.HELD -> {
+                val t = a.txid()
+                if (t == null) {
+                    para("Nothing was proposed, and nothing is owed: the meeting stands on its own.")
+                } else {
+                    para("The adoption is recorded: $t")
+                    a.position()?.let { para("Where you sit now: $it") }
+                    para("Your device will hand the record to its node when it has one. Until then it is held here, which is where it is evidence.")
+                }
+            }
+            Adoption.Step.REFUSED ->
+                para("The adoption did not happen: ${a.reason()}. The meeting itself is untouched — the record above stands, and the two of you can try the adoption again from either side.")
+            else -> para("Waiting on ${m.counterpartyName}'s device.")
+        }
     }
 
     private fun stopped(m: Meet) {

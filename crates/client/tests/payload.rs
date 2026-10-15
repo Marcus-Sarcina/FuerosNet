@@ -492,7 +492,7 @@ fn an_initial_session_opens_only_under_the_identity_key_bound_to_its_named_sende
             .receive_payload(kh("carol"), &carols)
             .expect("carol's own message");
     assert!(
-        matches!(&d, Dispatched::Application(b) if b == b"not from alice"),
+        matches!(&d, Dispatched::Application { bytes, .. } if bytes == b"not from alice"),
         "{d:?}"
     );
     // a sender whose binding this client does not hold: refused, and the
@@ -546,7 +546,7 @@ fn a_one_time_prekey_is_spent_only_when_the_message_it_opened_authenticates() {
             .receive_payload(kh("alice"), &good)
             .expect("the original still opens");
     assert!(
-        matches!(&d, Dispatched::Application(b) if b == b"the real one"),
+        matches!(&d, Dispatched::Application { bytes, .. } if bytes == b"the real one"),
         "{d:?}"
     );
     // spent now: the same bytes a second time find no pair and no session
@@ -1155,7 +1155,7 @@ fn a_replayed_initial_message_is_refused_and_the_live_session_stands() {
         n.s.client("bob")
             .receive_payload(kh("carol"), &initial)
             .expect("the initial opens a session");
-    assert!(matches!(&d, Dispatched::Application(b) if b == b"first"));
+    assert!(matches!(&d, Dispatched::Application { bytes, .. } if bytes == b"first"));
     let live = n.s.client("bob").payload.sessions.encode();
     // the same bytes again — a captured initial re-sent.  Refused, and the
     // session it opened is untouched: accepting it replaced the live
@@ -1182,7 +1182,7 @@ fn a_replayed_initial_message_is_refused_and_the_live_session_stands() {
         n.s.client("bob")
             .receive_payload(kh("carol"), &next)
             .expect("the session continues");
-    assert!(matches!(&d, Dispatched::Application(b) if b == b"second"));
+    assert!(matches!(&d, Dispatched::Application { bytes, .. } if bytes == b"second"));
     // **and the refusal survives a restart** [2026-09-30].  Held only in
     // memory, the cache emptied on every start and the window reopened
     // with it: the same captured bytes would take the session over on the

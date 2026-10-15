@@ -249,9 +249,9 @@ fn main() {
 
     loop {
         match me.next_event(1000) {
-            Some(rhtn_ffi::net::Event::Payload { from, bytes }) => {
+            Some(rhtn_ffi::net::Event::Payload { from, kind, bytes }) => {
                 let text = String::from_utf8_lossy(&bytes).to_string();
-                eprintln!("payload from {}: {text}", hex(&from));
+                eprintln!("payload from {} (kind {kind}): {text}", hex(&from));
                 let mut reply = b"echo: ".to_vec();
                 reply.extend_from_slice(&bytes);
                 if let Err(e) = me.send(from, rhtn_ffi::types::kind_application(), reply) {

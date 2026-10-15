@@ -638,8 +638,12 @@ impl Instrument {
                         }
                     }
                 }
-                rhtn_ffi::net::Event::Payload { from, bytes } => {
-                    format!("payload from={} bytes={}", hex(&from), hex(&bytes))
+                rhtn_ffi::net::Event::Payload { from, kind, bytes } => {
+                    format!(
+                        "payload from={} kind={kind} bytes={}",
+                        hex(&from),
+                        hex(&bytes)
+                    )
                 }
                 rhtn_ffi::net::Event::ResponseCopy {
                     from,

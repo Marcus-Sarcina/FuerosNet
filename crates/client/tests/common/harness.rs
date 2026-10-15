@@ -349,7 +349,10 @@ impl Setup {
     /// `w` witnesses that meeting: the record as test data, then the
     /// adoption, which is its own exchange and not the ceremony's.
     pub fn adopted(&mut self, node: &str, patron: &str, w: &str, series: u32) -> Txid {
-        let pop = self.met(node, patron, w);
+        // **in person**: the patron's own position reaches the node in the
+        // intent (`wire-format.md` §14.3.2), and the node refuses a body
+        // whose address nothing says is the patron's to issue
+        let pop = self.met_in_person(node, patron, w);
         self.h
             .adopt(kh(node), kh(patron), pop, series)
             .expect("the patron adopts")

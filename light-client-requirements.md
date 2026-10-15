@@ -843,6 +843,32 @@ anchor up in, and it is what you hand onward in a bundle (§1.1,
   opposite directions (each becoming the other's superior), ask them to choose one
   direction rather than reporting a protocol failure.** Two people setting up
   together will each reasonably try to adopt the other (design §6.2.5).
+- **Check an adoption body before you sign it.** The patron builds the body and
+  you are shown it, and design §6.1.1 has an adoption carry both signatures — so
+  what your signature says is that *this* patron, *this* series and *this*
+  address are yours to accept. Refuse a body that names another party as the
+  node; one whose evidence is not a presence record you hold between the two of
+  you; an address that is not one hop below the patron's own position, in the
+  patron's own anchor, as the `SignedLocator` their intent carried states it
+  (`wire-format.md` §§2.1, 2.3, 14.3.2); a series you have occupied or a counter
+  that is not zero (§2 above; `wire-format.md` §2.3); a node back-pointer list
+  that is not your archive's own next (`wire-format.md` §3.1); and a timestamp
+  before the meeting's effective time, or further ahead of your clock than you
+  tolerate. **Every one of these you can check**, which is §1.1's test answered:
+  the patron's claim about where it sits came from the patron, signed, and
+  everything else is in your own archive.
+- **Say which series you can enter, because your patron cannot know.** A series
+  is yours never to reuse (§2) and your patron holds no record of the ones you
+  have occupied, so an adoption it proposes into one of them is a body you must
+  refuse. Offer a free series rather than making them guess.
+- **A refusal here is an answer and not a fault.** Tell the patron why in words
+  it can show its own person, and leave the meeting alone: the presence record
+  the adoption rested on is complete without it, and either side may propose
+  again.
+- **A recovery adoption and a transfer are assembled by their own subjects**
+  (design §9.0, §6.2), who hold the material that makes them. A body carrying
+  somebody else's recovery block or transfer statement is not one you were shown
+  to sign.
 
 ---
 

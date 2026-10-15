@@ -1,6 +1,6 @@
 # Verifier selection — the reasonableness criterion
 
-Generated against `wire-format.md` `257b4e8a1840b628…`, `network-design.md` `f6ba1c767eb84346…` and `light-client-requirements.md` `9a6b6bdfac063100…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `257b4e8a1840b628…`, `network-design.md` `f6ba1c767eb84346…` and `light-client-requirements.md` `c86ed50694b8ed17…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Canonical. Spec-derived, reproduced by the independent harness.** See
 [README.md](README.md). *The nonce-commitment, seed and hash-rank vectors that

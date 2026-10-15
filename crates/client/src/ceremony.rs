@@ -27,8 +27,8 @@ use rhtn_archive::chain::Archive;
 use rhtn_archive::prekey::{PrekeyReply, decode_batch_reply};
 use rhtn_archive::record::Record;
 use rhtn_archive::tx::{
-    Adoption, Evidence, Locator, Seqno, TYPE_ADOPTION, TYPE_DEPARTURE, Witness, adoption_body,
-    departure_body, envelope, envelope_from_entries, recovery_block,
+    Adoption, Evidence, Locator, Seqno, TYPE_ADOPTION, TYPE_DEPARTURE, TYPE_PRESENCE, Witness,
+    adoption_body, departure_body, envelope, envelope_from_entries, recovery_block,
     recovery_response_with_consent,
 };
 use rhtn_codec::cose::aad;
@@ -157,6 +157,13 @@ pub enum Abort {
     /// The patron's check of the evidence against the adoption's own
     /// fields failed, or it holds no position to adopt under.
     PatronRefused(String),
+    /// **The party being adopted refused the body it was shown**, with
+    /// the reason: an adoption of somebody else, evidence that is not a
+    /// meeting of these two, a position that is not the patron's to
+    /// issue, a series this key has occupied, or back-pointers that are
+    /// not this archive's.  Not a protocol failure and not a fault of the
+    /// patron's necessarily — the reason is what the person is shown.
+    NodeRefused(String),
     /// No code has been read yet, so the counterparty is not known: the
     /// step needs the first QR (`wire-format.md` §14.3.1).
     NoCounterparty,
@@ -580,8 +587,17 @@ pub struct Client {
 /// (design §14.2.4.6).
 #[derive(Debug)]
 pub enum Dispatched {
-    /// Application payload, for whatever is above this client.
-    Application(Vec<u8>),
+    /// Application payload, for whatever is above this client, with the
+    /// kind it arrived under: 0 is application payload proper, and **any
+    /// kind this client does not know is application payload to it**
+    /// (`wire-format.md` §7.10.1), which the application can only place
+    /// if it is told which [author, 2026-10-14].
+    Application {
+        /// The kind on the wire.
+        kind: u64,
+        /// The plaintext.
+        bytes: Vec<u8>,
+    },
     /// A `KeyGrant`, and what it came to at this verifier.
     Grant(GrantOutcome),
     /// A `LateResponse`: the record it attached to, or why it did not.
@@ -2699,6 +2715,202 @@ impl Client {
         })
     }
 
+    /// **As the party being adopted: check the body before signing it**
+    /// (`light-client-requirements.md` §7; design §6.1.1, where every
+    /// adoption carries both signatures).
+    ///
+    /// [`Client::sign_body`] signs what it is handed, which is right for
+    /// a caller that built the body itself. **A body that arrived is a
+    /// different object**: a signature on it puts this key under a
+    /// patron, in a series, at an address this device did not choose, so
+    /// a device that signed whatever reached it would be adopted by
+    /// anybody able to reach it. Every field is checked against what this
+    /// client holds, and a body that fails is refused with its reason —
+    /// which the person is shown and the proposer is told, since a
+    /// refusal here is an ordinary answer and not a fault.
+    ///
+    /// **What is checked, and why each is checkable here.** The node is
+    /// me, the patron is somebody I have met, and the evidence is the
+    /// presence record of *that* meeting, which my own archive holds. The
+    /// position extends the patron's own by one nibble in the patron's
+    /// anchor — their locator came with their intent (§14.3.2) and is
+    /// signed, so the claim is theirs and not the body's. The series is
+    /// one this key has never occupied (`light-client-requirements.md`
+    /// §2), the counter opens at zero (`wire-format.md` §2.3), and the
+    /// back-pointers the body carries for me are my archive's own, since
+    /// a signature over somebody else's is a commitment to a position in
+    /// the DAG I am not at.
+    pub fn review_and_sign_adoption(&mut self, body: &[u8]) -> Result<Vec<u8>, Abort> {
+        use rhtn_codec::cbor::{Item, map_get, parse_all};
+        let me = self.keyhash();
+        let item = parse_all(body).map_err(|e| Abort::Malformed(format!("adoption body: {e}")))?;
+        rhtn_codec::schema::check_body_of_type(body, &item, TYPE_ADOPTION)
+            .map_err(|e| Abort::Malformed(format!("adoption body: {}", e.0)))?;
+        let Item::Map(m) = &item else {
+            return Err(Abort::Malformed("adoption body is not a map".into()));
+        };
+        let bytes_at = |k: u64| match map_get(m, k) {
+            Some(Item::Bytes(r)) => Some(body[r.clone()].to_vec()),
+            _ => None,
+        };
+        let key_at = |k: u64| -> Option<Keyhash> { bytes_at(k)?.try_into().ok() };
+        let refused = |why: String| Abort::NodeRefused(why);
+
+        // 1. an adoption of me, by somebody else
+        let node = key_at(1).ok_or_else(|| Abort::Malformed("field 1".into()))?;
+        if node != me {
+            return Err(refused("an adoption of another party".into()));
+        }
+        let patron = key_at(2).ok_or_else(|| Abort::Malformed("field 2".into()))?;
+        if patron == me {
+            return Err(refused("a patron is somebody else".into()));
+        }
+
+        // 2. **the evidence is a meeting of these two that I hold.** A
+        // recovery or a transfer is the subject's own to assemble
+        // (design §9.0, §6.2), so a body carrying one did not come from
+        // this path and is not signed on it
+        if rhtn_codec::cbor::value_slice(body, 6).is_some() {
+            return Err(refused(
+                "a recovery adoption is assembled by its subject, not proposed to it".into(),
+            ));
+        }
+        if rhtn_codec::cbor::value_slice(body, 9).is_some() {
+            return Err(refused(
+                "a transfer carries the former patron's statement; this path adopts on a meeting"
+                    .into(),
+            ));
+        }
+        let pop: Txid = bytes_at(8)
+            .ok_or_else(|| refused("no presence evidence (field 8)".into()))?
+            .try_into()
+            .map_err(|_| Abort::Malformed("field 8 is not a txid".into()))?;
+        let held = self
+            .store
+            .records
+            .get(&pop)
+            .ok_or_else(|| refused(format!("no record {} is held here", hex8(&pop))))?;
+        let meeting = Record::parse(held).map_err(Abort::Record)?;
+        if meeting.tx_type != TYPE_PRESENCE {
+            return Err(refused("the evidence is not a presence record".into()));
+        }
+        // **as a set, not a sequence**: field 3 has no canonical order
+        // and carries the proposer's (`wire-format.md` §4.5), so which of
+        // the two is first says nothing about who they are
+        let mut met = meeting.participants();
+        met.sort();
+        if met != participants(me, patron).to_vec() {
+            return Err(refused("the evidence is a meeting of other parties".into()));
+        }
+
+        // 3. the position is the patron's to issue: one nibble below
+        // their own, in their own anchor
+        let r3 = rhtn_codec::cbor::value_slice(body, 3)
+            .ok_or_else(|| Abort::Malformed("field 3".into()))?;
+        let loc = Locator::decode(&body[r3]).map_err(Abort::Malformed)?;
+        let theirs = self
+            .store
+            .contacts
+            .get(&patron)
+            .and_then(|c| c.locator.as_deref())
+            .ok_or_else(|| {
+                refused("no position of the patron's own is held, so nothing says this address is theirs to issue".into())
+            })?;
+        let theirs = rhtn_archive::locator::SignedLocator::parse(theirs)
+            .map_err(Abort::Malformed)?
+            .locator;
+        if loc.anchor != theirs.anchor || loc.nibbles != theirs.nibbles + 1 {
+            return Err(refused(format!(
+                "the address is not one hop below the patron's own position in {}",
+                hex8(&theirs.anchor)
+            )));
+        }
+        // and the hops above the last are the patron's own, nibble by
+        // nibble (`wire-format.md` §2.1: packed four bits, high first)
+        let nibble = |path: &[u8], i: u64| -> Option<u8> {
+            let byte = *path.get(usize::try_from(i / 2).ok()?)?;
+            Some(if i.is_multiple_of(2) {
+                byte >> 4
+            } else {
+                byte & 0x0f
+            })
+        };
+        for i in 0..theirs.nibbles {
+            if nibble(&loc.path, i) != nibble(&theirs.path, i) {
+                return Err(refused(
+                    "the address does not extend the patron's own path".into(),
+                ));
+            }
+        }
+
+        // 4. a series this key has never occupied, opening at zero
+        if loc.seqno.counter != 0 {
+            return Err(refused("an adoption opens a series at counter zero".into()));
+        }
+        if self.archive.series_occupied().contains(&loc.seqno.series) {
+            return Err(refused(format!(
+                "series {} is one this key has occupied",
+                loc.seqno.series
+            )));
+        }
+
+        // 5. my own back-pointers, and a timestamp my clock can hold
+        let mine = self.archive.next_back_pointers();
+        // **the first list is the node's** (`wire-format.md` §3.1: an
+        // adoption's signer order is node, then patron), and this body
+        // adopts me
+        let Some(Item::Array(lists)) = map_get(m, 0) else {
+            return Err(Abort::Malformed("key 0".into()));
+        };
+        let Some(Item::Array(ours)) = lists.first() else {
+            return Err(Abort::Malformed(
+                "key 0 carries no list for the node".into(),
+            ));
+        };
+        let carried: Vec<Txid> = ours
+            .iter()
+            .filter_map(|it| match it {
+                Item::Bytes(r) => <Txid>::try_from(&body[r.clone()]).ok(),
+                _ => None,
+            })
+            .collect();
+        if carried != mine {
+            return Err(refused(
+                "the body carries back-pointers that are not this archive's".into(),
+            ));
+        }
+        let when = match map_get(m, 4) {
+            Some(it) => {
+                rhtn_codec::cbor::as_uint(it).ok_or_else(|| Abort::Malformed("field 4".into()))?
+            }
+            None => return Err(Abort::Malformed("field 4".into())),
+        };
+        if when < meeting.effective {
+            return Err(refused(
+                "the adoption is timestamped before the meeting it rests on".into(),
+            ));
+        }
+        let now = self.now_s();
+        if when > now.saturating_add(self.cfg.clock_tolerance_s) {
+            return Err(refused(format!(
+                "the adoption is timestamped {} s ahead of this clock",
+                when - now
+            )));
+        }
+        verify::adoption_evidence(&self.known, body)
+            .map_err(|e| refused(format!("the evidence does not verify: {e}")))?;
+
+        let entries = self.signer()?.sign_entries(aad::ENVELOPE, body);
+        tracing::info!(
+            target: "cer",
+            role = "node",
+            patron = %id8(&patron),
+            series = loc.seqno.series,
+            "cer.adoption.signed"
+        );
+        Ok(entries)
+    }
+
     /// Sign a body I proposed or was shown, as its subject or its patron.
     pub fn sign_body(&self, body: &[u8]) -> Result<Vec<u8>, Abort> {
         Ok(self.signer()?.sign_entries(aad::ENVELOPE, body))
@@ -4428,7 +4640,10 @@ impl Client {
             k @ payload::KIND_CONSENT_REQUEST..=payload::KIND_RECORD => {
                 Dispatched::Conversation(self.converse_in(from, k, &inner))
             }
-            _ => Dispatched::Application(inner),
+            k => Dispatched::Application {
+                kind: k,
+                bytes: inner,
+            },
         })
     }
 }
@@ -4712,7 +4927,9 @@ impl Harness {
         let Msg::AdoptionBody(body) = m else {
             unreachable!()
         };
-        let n_entries = self.client(&node).sign_body(&body).unwrap();
+        // **the node checks what it signs**, as it does on a phone: the
+        // body arrived from the patron and nothing else vouches for it
+        let n_entries = self.client(&node).review_and_sign_adoption(&body)?;
         self.send(node, patron, Msg::Signed(Ok(n_entries.clone())));
         let p_entries = self.client(&patron).sign_body(&body).unwrap();
         let envelope = envelope_from_entries(

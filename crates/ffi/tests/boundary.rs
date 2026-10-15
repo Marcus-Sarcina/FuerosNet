@@ -539,6 +539,7 @@ async fn the_kernel_holds_the_session_and_no_wire_byte_crosses_outward() {
         got,
         Some(Event::Payload {
             from: id("alice"),
+            kind: 0,
             bytes: b"for carol".to_vec()
         }),
         "decrypted here, and the ciphertext never left"
@@ -922,6 +923,7 @@ async fn a_kernel_restarts_from_the_storage_seam_with_its_session_and_its_queue_
         next(carol.clone()).await.unwrap(),
         Some(Event::Payload {
             from: id("alice"),
+            kind: 0,
             bytes: b"first".to_vec()
         })
     );
@@ -933,6 +935,7 @@ async fn a_kernel_restarts_from_the_storage_seam_with_its_session_and_its_queue_
         next(alice.clone()).await.unwrap(),
         Some(Event::Payload {
             from: id("carol"),
+            kind: 0,
             bytes: b"second".to_vec()
         })
     );
@@ -978,6 +981,7 @@ async fn a_kernel_restarts_from_the_storage_seam_with_its_session_and_its_queue_
         next(carol2.clone()).await.unwrap(),
         Some(Event::Payload {
             from: id("alice"),
+            kind: 0,
             bytes: b"third".to_vec()
         }),
         "decrypted on the ratchet the first process wrote"
@@ -990,6 +994,7 @@ async fn a_kernel_restarts_from_the_storage_seam_with_its_session_and_its_queue_
         next(alice.clone()).await.unwrap(),
         Some(Event::Payload {
             from: id("carol"),
+            kind: 0,
             bytes: b"fourth".to_vec()
         }),
         "the same session, continued"

@@ -95,10 +95,17 @@ pub enum Event {
     /// The connection changed: a failover began, landed on a sibling, or
     /// found none.
     Connection(Status),
-    /// Application payload from `from`.
+    /// Application payload from `from`, with the kind it came under.
+    ///
+    /// **The kind is the application's to read** (`wire-format.md`
+    /// §7.10.1): 0 is application payload proper, and a kind this client
+    /// does not know arrives here too, so a shell that puts its own
+    /// traffic on one of its own numbers can tell the two apart.
     Payload {
         /// Who sent it.
         from: Id,
+        /// The kind it came under.
+        kind: u64,
         /// The plaintext.
         bytes: Vec<u8>,
     },
@@ -1048,7 +1055,7 @@ fn hex4(k: &Keyhash) -> String {
 fn event_of(from: Keyhash, d: Dispatched) -> Option<Event> {
     let from = id_of(&from);
     match d {
-        Dispatched::Application(bytes) => Some(Event::Payload { from, bytes }),
+        Dispatched::Application { kind, bytes } => Some(Event::Payload { from, kind, bytes }),
         Dispatched::ResponseCopy(Ok(q)) => Some(Event::ResponseCopy {
             from,
             query: Some(q.to_vec()),

@@ -81,7 +81,11 @@ fn two_participant_processes_exchange_payload_through_a_daemon() {
             .must(&format!("send {} 0 {}", hex(&kh("carol")), hex(body))),
         ["sent"]
     );
-    let want = format!("payload from={} bytes={}", hex(&kh("alice")), hex(body));
+    let want = format!(
+        "payload from={} kind=0 bytes={}",
+        hex(&kh("alice")),
+        hex(body)
+    );
     let mut got = Vec::new();
     for _ in 0..300 {
         got = set.get("carol").must("events 200");

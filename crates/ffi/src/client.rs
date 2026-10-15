@@ -2222,6 +2222,17 @@ impl Participant {
         })
     }
 
+    /// **The subnet this client acts in**: the first it was adopted
+    /// into, or its own self-anchored one where it has no patron
+    /// (`wire-format.md` §2.1). What a patron adopts into unless its
+    /// person says otherwise.
+    #[must_use]
+    pub fn anchor(&self) -> Id {
+        crate::diag::call_plain("anchor", || {
+            self.handle.with_blocking(|c| id_of(&c.anchor()))
+        })
+    }
+
     /// Every subnet this client has a position in, its own first.
     #[must_use]
     pub fn anchors(&self) -> Vec<Id> {
@@ -2265,6 +2276,43 @@ impl Participant {
                 )
                 .map_err(|e| Refused::new(format!("{e:?}")))
             })
+        })
+    }
+
+    /// **As the party being adopted: check the body, then sign it**
+    /// (`light-client-requirements.md` §7). The patron built it and this
+    /// device is shown it, so every field is checked against what this
+    /// client holds — the node is me, the patron is somebody I met, the
+    /// evidence is that meeting, the address is one hop below the
+    /// patron's own, the series is one I have never occupied and the
+    /// back-pointers are my archive's. A refusal carries its reason, for
+    /// the person to read and the patron to be told.
+    ///
+    /// [`Client::sign_body`] is the unchecked one, for a body this device
+    /// built itself.
+    pub fn review_and_sign_adoption(&self, body: Vec<u8>) -> Result<Vec<u8>, Refused> {
+        crate::diag::call("review_and_sign_adoption", || {
+            let entries = self
+                .handle
+                .with_blocking(move |c| c.review_and_sign_adoption(&body))
+                .map_err(|e| Refused::new(rhtn_client::diag::abort(&e)))?;
+            // the signature is this key's act and the store holds what it
+            // was over: a restart between signing and the record arriving
+            // must not lose the series this key has now entered
+            self.save()?;
+            Ok(entries)
+        })
+    }
+
+    /// **A series this key has never occupied** (`light-client-requirements.md`
+    /// §2), the lowest of `candidates` that is free, or nothing where
+    /// every one of them is taken: what a party being adopted tells its
+    /// patron to propose, the patron having no way to know.
+    #[must_use]
+    pub fn fresh_series(&self, candidates: Vec<u32>) -> Option<u32> {
+        crate::diag::call_plain("fresh_series", || {
+            self.handle
+                .with_blocking(move |c| rhtn_client::rotation::fresh_series(&c.archive, candidates))
         })
     }
 

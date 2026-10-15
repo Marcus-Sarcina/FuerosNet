@@ -45,6 +45,11 @@ object Kernel {
      *  connection: a font change mid-ceremony must not lose it. */
     @Volatile private var meet: Meet? = null
 
+    /** The adoption after the record (D7), or null where the meeting
+     *  carried none. Outlives the ceremony: the record closes the
+     *  ceremony and the adoption rests on it. */
+    @Volatile private var adoption: Adoption? = null
+
     /** Whether the counterparty's contribution has been read off their
      *  screen, which is what decides the second QR from the first. */
     @Volatile private var opticalTaken = false
@@ -83,6 +88,9 @@ object Kernel {
 
     /** The meeting in progress, where one is open. */
     fun meet(): Meet? = meet
+
+    /** The adoption after the record, where the meeting carried one. */
+    fun adoption(): Adoption? = adoption
 
     /** Whether the counterparty's contribution is in, which is what the
      *  screen's second QR at D2 is: the meeting id rather than ours. */
@@ -337,6 +345,101 @@ object Kernel {
             onRefused(e)
         }
     }
+
+    // ---- D7, the adoption the meeting carried --------------------------
+
+    /**
+     * **Start the adoption the meeting carried**, once the record is held
+     * (D7): the responder states the direction the two people's choices
+     * came to and the initiator is told it, after which the party being
+     * adopted offers its series and the patron proposes.
+     *
+     * Called where the record lands and again where a person resolves an
+     * opposition from the screen (PRD-05); the second call does nothing,
+     * an adoption being begun once.
+     *
+     * **Nothing happens for a meeting that carried no adoption**, and
+     * nothing happens while an opposition is unresolved: the question is
+     * the two people's and the screen is asking it.
+     */
+    fun adoptionBegins() {
+        val p = participant ?: return
+        val m = meet ?: return
+        val txid = m.recordTxid() ?: return
+        val them = m.counterpartyKey ?: return
+        if (adoption != null) return
+        val settled = if (m.role == Meet.Role.RESPONDER) (m.settled() ?: return) else null
+        // **a meeting that was never going to move authority says
+        // nothing.** A *resolved* "neither" is different: the other
+        // device is waiting to be told, and it is
+        if (settled == Meet.Adopt.NONE && m.direction() == null) return
+        if (m.role == Meet.Role.INITIATOR && m.adopt == Meet.Adopt.NONE) {
+            // the initiator's own choice is the transaction's kind; where
+            // it asked for no adoption the responder has nothing to settle
+            return
+        }
+        val a = Adoption(
+            role = m.role,
+            counterparty = them,
+            counterpartyName = m.counterpartyName,
+            presence = txid,
+            kern = adoptionKern(p),
+            post = { bytes ->
+                call("send", { e -> Diag.warn("adopt.send", "refused" to e.reason); false }) {
+                    p.send(unhex(them), Adoption.KIND, bytes)
+                    true
+                }
+            },
+        )
+        a.onChanged = { m.rendered() }
+        adoption = a
+        m.rendered()
+        // off the caller's thread: every leg of this sends
+        Thread { if (settled != null) a.settle(settled) else a.begin() }.start()
+    }
+
+    /** The kernel calls an [Adoption] makes, bracketed like every other. */
+    private fun adoptionKern(p: Participant): Adoption.Kern = object : Adoption.Kern {
+        override fun freshSeries(): Int? =
+            call("freshSeries", { null }) { p.freshSeries((1u..16u).toList()) }?.toInt()
+
+        override fun backPointers(): List<ByteArray> =
+            call("backPointers", { emptyList() }) { p.backPointers() }
+
+        override fun anchor(): String = hex(p.anchor())
+
+        override fun propose(
+            node: String,
+            presence: String,
+            series: Int,
+            nodeBack: List<ByteArray>,
+        ): Adoption.Result<ByteArray> = result("proposeAdoption") {
+            p.proposeAdoption(p.anchor(), unhex(node), unhex(presence), series.toUInt(), nodeBack)
+        }
+
+        override fun reviewAndSign(body: ByteArray): Adoption.Result<ByteArray> =
+            result("reviewAndSignAdoption") { p.reviewAndSignAdoption(body) }
+
+        override fun envelope(
+            body: ByteArray,
+            entries: List<Pair<String, ByteArray>>,
+        ): Adoption.Result<ByteArray> = result("adoptionEnvelope") {
+            val mine = p.signBody(body)
+            val all = entries.map { (who, e) -> uniffi.rhtn_ffi.SignedEntries(unhex(who), e) } +
+                uniffi.rhtn_ffi.SignedEntries(p.me(), mine)
+            uniffi.rhtn_ffi.adoptionEnvelope(body, all)
+        }
+
+        override fun take(envelope: ByteArray): Adoption.Result<String> =
+            result("takeAdoption") { hex(p.takeAdoption(envelope)) }
+
+        override fun positionIn(anchor: String): String? =
+            call("positionIn", { null }) { p.positionIn(unhex(anchor)) }?.let { hex(it) }
+    }
+
+    /** One kernel call whose refusal is the adoption's to carry. */
+    private inline fun <T> result(method: String, body: () -> T): Adoption.Result<T> =
+        call(method, { Adoption.Result.Refused(it.reason) }) { Adoption.Result.Ok(body()) }
 
     // ---- the bootstrap, which is the shell's own object ----------------
 
@@ -593,6 +696,10 @@ object Kernel {
         meet?.stop(reason)
         val work = synchronized(lock) {
             meet = null
+            // **the adoption goes with the meeting it rested on**: a frame
+            // of the next meeting's would otherwise reach the last one's,
+            // which refuses it for coming from the wrong party
+            adoption = null
             opticalTaken = false
             transcriptTaken = false
             ble?.close()
@@ -1123,7 +1230,20 @@ object Kernel {
                 is Event.Payload -> {
                     val from = hex(e.from)
                     val who = if (from == peerKey) peerName else from.take(16)
-                    front.incoming(from, who, String(e.bytes))
+                    // **the kind says where it goes** (`wire-format.md`
+                    // §7.10.1): the adoption's legs are this shell's own
+                    // frames on their own number, and everything else is
+                    // what a person sent a person
+                    if (e.kind == Adoption.KIND) {
+                        val a = adoption
+                        when {
+                            a == null -> front.note("· a message of an adoption arrived with no meeting to put it in")
+                            from != a.counterparty -> front.note("· a message of an adoption arrived from somebody who is not party to it")
+                            else -> a.frame(e.bytes)
+                        }
+                    } else {
+                        front.incoming(from, who, String(e.bytes))
+                    }
                 }
                 is Event.Connection -> show(p, e.v1)
                 // a verifier answered on the end-to-end path: the kernel
@@ -1169,6 +1289,10 @@ object Kernel {
                 // turn had the proposer asking the kernel 28 times in 3 s
                 // on the bench [client review, 2026-10-11].
                 if (m.pollDue()) m.poll(courier(p))
+                // **the record is what an adoption rests on**, so D7
+                // begins where the ceremony ends; begun once, and nothing
+                // where the meeting carried none
+                if (t == Meet.Step.DONE) adoptionBegins()
                 if (m.stepStale()) {
                     m.stop("nothing has moved for ${Meet.STALE_MS / 1000} s at ${m.step().name.lowercase()}; the other phone may have stopped")
                 }

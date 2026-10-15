@@ -470,6 +470,7 @@ async fn the_kernel_joins_the_direct_path_honours_the_override_and_sweeps_the_ca
         next(carol.clone()).await.unwrap(),
         Some(Event::Payload {
             from: idv("alice"),
+            kind: 0,
             bytes: b"first".to_vec()
         })
     );
@@ -492,6 +493,7 @@ async fn the_kernel_joins_the_direct_path_honours_the_override_and_sweeps_the_ca
         next(carol.clone()).await.unwrap(),
         Some(Event::Payload {
             from: idv("alice"),
+            kind: 0,
             bytes: b"second".to_vec()
         })
     );
@@ -503,6 +505,7 @@ async fn the_kernel_joins_the_direct_path_honours_the_override_and_sweeps_the_ca
         next(alice.clone()).await.unwrap(),
         Some(Event::Payload {
             from: idv("carol"),
+            kind: 0,
             bytes: b"third".to_vec()
         })
     );

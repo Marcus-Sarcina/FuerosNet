@@ -533,7 +533,7 @@ fn connected_clients() -> (Client, Client) {
         .unwrap();
     assert!(matches!(
         b.receive_payload(a.keyhash(), &wire).unwrap(),
-        rhtn_client::ceremony::Dispatched::Application(_)
+        rhtn_client::ceremony::Dispatched::Application { .. }
     ));
     (a, b)
 }

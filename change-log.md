@@ -13867,6 +13867,66 @@ rejections in the corpus, and both introduction kinds are listed in the
 corpus runner so a rejection that starts passing fails rather than being
 skipped.
 
+### 2026-10-15 (the adoption after the record, and what a client checks before signing one)
+
+**D7 is wired**, which is the first time an adoption can be made from the
+UI. The presence record is what an adoption is evidence of, so this begins
+where the ceremony ends: the responder states the direction the two
+people's choices came to, the party being adopted offers a series it can
+enter, the patron proposes the body, the other reviews it and signs or
+refuses with a reason, and the patron assembles the record, takes it and
+sends it. Both screens then say where each device sits. PRD-05's three
+answers all work and *"neither — just the meeting"* leaves the presence
+record exactly as it was.
+
+**A hole had to be closed before any of that could be safe.**
+`Client::sign_body` signs whatever it is handed, which is right for a body
+this device built and wrong for one that arrived: a shell wiring D7 to it
+would have had a phone sign an adoption of itself under whoever could
+reach it. `review_and_sign_adoption` is the checked path. The node is me;
+the patron is somebody I have met; the evidence is the presence record of
+*that* meeting, held here; the address is one hop below the patron's own
+position, in the patron's own anchor, as the `SignedLocator` their intent
+carried states it; the series is one this key has never occupied and the
+counter opens at zero; the node's back-pointer list is this archive's own
+next, which §3.1 warns is the thing that goes wrong silently; the
+timestamp sits between the meeting's effective time and this clock's
+tolerance; and a body carrying a recovery block or a transfer statement is
+refused outright, those being assembled by their own subjects. Every one
+of these is checkable with what the client already holds, which is §1.1's
+test answered rather than waved at.
+
+**The patron cannot know which series**, and that is why the party being
+adopted speaks first. A series is never reused and only its own key knows
+which it has occupied, so a patron proposing into one of them would be
+proposing a body that must be refused. `light-client-requirements.md` §7
+says to offer a free one rather than making them guess.
+
+**Who states the direction, and why it is the responder.** The kind is the
+initiator's choice and the responder's to refuse [author, 2026-09-29], and
+the responder is the only side holding both choices — its own from its
+D1a, the initiator's from the bootstrap it read. So it settles and says
+so, and the initiator is told rather than guessing; where both had chosen
+to be the patron, the question goes to the two people first (PRD-05) and
+the answer travels the same way.
+
+**The kind an application payload arrived under is now the application's
+to read.** `Dispatched::Application` and the FFI's `Event::Payload` carry
+it: §7.10.1 makes any kind a client does not know application payload, and
+a shell that cannot see which kind cannot place it. The shell's own
+adoption frames ride a number of their own, so a person's message and a
+leg of an adoption are never confused for one another.
+
+**Owed to the author**: whether those legs should carry registered kinds —
+everything in them is the protocol's and nothing is the shell's, which
+argues for it, against a registry that grows per act. The implementation
+is a constant and one branch either way, and the case either way is
+written up for him.
+
+Functional tests 515 → 516 families (CER-031), catalogue 495 entries with
+475 implemented (CER-57 to CER-62). Client tests 162, shell tests 177. The
+bench's A2 is no longer blocked by the code; the phones need this build.
+
 ### 2026-10-14 (the harness stops running the ceremony)
 
 **[author, 2026-10-14] "The goal is to get the harness completely out of

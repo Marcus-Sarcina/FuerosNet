@@ -443,6 +443,10 @@ class Meet(
         ui?.render()
     }
 
+    /** Render whatever is bound: what something beside the flow — the
+     *  adoption at D7 — calls when its own state moved. */
+    fun rendered() = synchronized(lock) { changed() }
+
     // ---- accessors ------------------------------------------------------
 
     fun step(): Step = synchronized(lock) { step }
@@ -1046,6 +1050,32 @@ class Meet(
         synchronized(lock) {
             theirAdopt = theirs
             changed()
+        }
+    }
+
+    /**
+     * **What the two people's choices came to**, in this device's own
+     * frame, or null while an opposition is still to be resolved.
+     *
+     * **The responder's question to answer**, since it is the only side
+     * holding both choices: its own from its D1a and the initiator's from
+     * the bootstrap it read. The initiator is told the answer
+     * ([Adoption]'s direction frame) rather than working it out, which it
+     * could not do.
+     */
+    fun settled(): Adopt? = synchronized(lock) {
+        direction?.let { return it }
+        if (opposedAdoptions()) return null
+        // **the kind is the initiator's choice and the responder's to
+        // refuse** [author, 2026-09-29], and the brief is where it was
+        // accepted: so what the two came to is the initiator's, mirrored
+        // into this device's frame. Where no bootstrap was read this side
+        // *is* the initiator, and its own choice is the one.
+        when (theirAdopt) {
+            Adopt.THEM_UNDER_ME -> Adopt.ME_UNDER_THEM
+            Adopt.ME_UNDER_THEM -> Adopt.THEM_UNDER_ME
+            Adopt.NONE -> Adopt.NONE
+            null -> kind.adopt
         }
     }
 

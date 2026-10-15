@@ -17937,3 +17937,80 @@ the test says so.
 meeting is two people face to face with no node and no kernel-driven
 conversation in it, so there is nothing there that production would
 orchestrate differently.
+
+## D7, the adoption after the record (2026-10-15)
+
+**Built**, and operable from the UI for the first time: the shell proposes,
+reviews, signs and takes an adoption after the presence record, in the
+direction the two people settled.
+
+**The hole that had to be closed first.** `Client::sign_body` signs
+whatever it is handed, which is right for a body this device built, and
+wrong for one that arrived: a shell wiring D7 to it would have had the
+phone sign an adoption of itself under whoever could reach it.
+`Client::review_and_sign_adoption` is the checked path — the node is me,
+the patron is somebody I met, the evidence is *that* meeting, the address
+is one hop below the patron's own position in the patron's own anchor (the
+`SignedLocator` their intent carried), the series is one this key has
+never occupied at counter zero, the node's back-pointer list is this
+archive's own next, the timestamp sits between the meeting and this
+clock, and a recovery or transfer body is refused outright, those being
+assembled by their own subjects. Nine tests, `client/tests/adoption.rs`;
+the harness's own adoption now goes through it, which is why
+`Setup::adopted` meets in person (a record alone carries no locator, and
+without the patron's locator nothing says the address is theirs to
+issue).
+
+**Five legs, and the direction is one of them.** The responder is the only
+side holding both people's choices — its own from its D1a and the
+initiator's from the bootstrap it read — so it states the direction and
+the initiator is told it (`Meet.settled`, mirrored on arrival). Then the
+party being adopted offers a series it can enter, which is the one thing
+its patron cannot work out for itself; the patron proposes; the other
+reviews and signs or refuses with a reason; the patron assembles, takes
+and sends the record. PRD-05's three answers all work, *"neither"*
+included, and a refusal leaves the presence record alone.
+
+**OWED TO THE AUTHOR: do these legs get registered kinds?**
+
+The frames are the shell's own and ride the end-to-end channel the prekey
+handover left between the two devices (`wire-format.md` §14.3.4) under
+kind 1000, which no document claims — §7.10.1's own rule makes an unknown
+kind application payload to a recipient that does not know it, so this
+degrades correctly and interoperates with nothing, which is the point of
+asking.
+
+- **For registering them** (say kinds 19 to 23): everything in them is the
+  protocol's — an adoption body (§4.1), a signing reply, an envelope — and
+  nothing is the shell's. The bootstrap object at D1 is the shell's own
+  because *"there is nothing in it for the kernel to check"*; here the
+  kernel checks all of it. A second implementation's shell cannot adopt
+  with this one until the numbers are fixed.
+- **Against**: an adoption rests on a meeting, so the two parties are
+  together with a local session already open, and kinds 9 to 18 were ruled
+  *"the ceremony's conversation"* — these are after it, and a registry
+  that grows per act invites the next one.
+- **What the implementation would cost either way**: the kind constant and
+  the router, in `Adoption.KIND` and one `when` branch. The objects are
+  already encoded; nothing in the body or the envelope changes.
+
+**Recommendation**: register them. The argument from the bootstrap cuts
+the other way here, and the alternative leaves a protocol act carried on a
+number the standard does not know.
+
+**Also owed, smaller**: whether a patron should be able to propose an
+adoption to a party it is *not* face to face with (a node adopting a
+client that is merely reachable). Nothing in the design forbids it and
+nothing asks for it; the evidence rule (§6.1.1) needs a meeting either
+way, so the question is only whether the legs may cross the network long
+after it. The implementation is indifferent.
+
+**Not persisted, like the meeting it rests on.** `Meet` is process-scoped
+and so is this: a shell restarted between the body and the record loses
+the adoption, and the presence record it rested on survives, so either
+side can propose again. The adoption goes with the meeting in `stopMeet`,
+or a frame of the next meeting's would reach the last one's.
+
+**What the bench can now run**: A2, both directions, nodeless. The phones
+are four builds behind (this one included), so the APK has to go on them
+first.

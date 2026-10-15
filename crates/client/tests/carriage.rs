@@ -381,7 +381,7 @@ fn a_handover_opens_an_end_to_end_channel_with_no_node_asked() {
         .receive_payload(kh("alice"), bytes)
         .expect("bob opens it");
     assert!(
-        matches!(&d, Dispatched::Application(p) if p == b"met you just now"),
+        matches!(&d, Dispatched::Application { bytes, .. } if bytes == b"met you just now"),
         "what crossed: {d:?}"
     );
 }

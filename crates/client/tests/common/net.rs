@@ -79,7 +79,9 @@ pub fn net_of(s: Setup, nodes: &[&'static str], serving: &[(&'static str, &'stat
 /// What arrived, legibly: application text as text.
 pub fn describe(d: &Dispatched) -> String {
     match d {
-        Dispatched::Application(b) => format!("Application({})", String::from_utf8_lossy(b)),
+        Dispatched::Application { bytes, .. } => {
+            format!("Application({})", String::from_utf8_lossy(bytes))
+        }
         Dispatched::Grant(o) => format!("Grant({o:?})"),
         Dispatched::Late(r) => format!("Late({r:?})"),
         Dispatched::Candidates(b) => format!("Candidates({} bytes)", b.len()),
