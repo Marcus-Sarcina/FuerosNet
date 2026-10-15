@@ -3769,6 +3769,18 @@ impl Client {
             .unwrap_or_else(|| hex8(who))
     }
 
+    /// The alias this client published for itself in `subnet`, where it
+    /// has: what an invitation carries as this device's claim
+    /// (`light-client-requirements.md` §7).
+    #[must_use]
+    pub fn own_alias(&self, subnet: &Txid) -> Option<String> {
+        self.store
+            .profiles
+            .get(subnet)
+            .and_then(|b| rhtn_archive::profile::Profile::parse(b).ok())
+            .map(|p| p.alias)
+    }
+
     /// What a subnet is shown as: its alias where its profile is held.
     #[must_use]
     pub fn subnet_alias(&self, subnet: &Txid) -> Option<String> {

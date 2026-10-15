@@ -252,4 +252,14 @@ class AdoptionTest {
         assertNull(Adoption.Frame.read(byteArrayOf(2, 1, 0, 0, 0, 5, 0)))
         assertNull(Adoption.Frame.read(ByteArray(0)))
     }
+
+    /** The direction frame carries the subnet's label, in words, so the
+     *  initiator's acceptance can state it (`light-client-requirements.md` §7). */
+    @Test
+    fun the_direction_frame_carries_the_subnet_label_and_reads_back() {
+        val with = Adoption.Frame.read(Adoption.Frame.direction(1, "Dana's Bowling League"))
+        assertEquals(Adoption.Frame.Direction(1, "Dana's Bowling League"), with)
+        val without = Adoption.Frame.read(Adoption.Frame.direction(2))
+        assertEquals(Adoption.Frame.Direction(2, null), without)
+    }
 }

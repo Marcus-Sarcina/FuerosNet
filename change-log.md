@@ -13931,7 +13931,16 @@ later one), the serving trait's two methods on both the attached and the
 local node, the client's own profiles published at attach and on change,
 its contacts carrying the alias and image fetched for the subnet their
 locator names, and the shell's people list showing the alias where one
-reached it and the keyhash where none did. Functional tests TOP-044/045, NET-029,
+reached it and the keyhash where none did. **Push 3**, the shell: the
+bootstrap QR's second version carries which subnet an adoption is into
+and the inviter's alias and the subnet's as the inviter's claim; a
+patron in several subnets is asked which before the code is shown, or at
+its brief where it is the responder; the party being adopted is told
+"*[patron alias]*'s *[subnet alias]*" and that it is a claim until the
+signed profile replaces it; the adoption's direction frame carries the
+label so the initiator's acceptance states it too; and the Operator
+screen lists every instance the operator administers under the subnet it
+serves. Functional tests TOP-044/045, NET-029,
 UX-015/016; catalogue TOP-48/49/50, SES-32/33, PRD-14/15.
 
 ### 2026-10-15 (the adoption after the record, and what a client checks before signing one)

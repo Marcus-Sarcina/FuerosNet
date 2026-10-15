@@ -398,8 +398,20 @@ class MeetActivity : Activity() {
         }
         heading("Patronage")
         para("An adoption moves authority. What it costs is listed before either of you agrees.")
-        button("I will be the Patron") {
-            start(Meet.Kind(Meet.Adopt.THEM_UNDER_ME), Meet.Role.INITIATOR)
+        // **which subnet** [author, 2026-10-15]: a patron in several asks
+        // itself before it shows the code; one in none roots a new one
+        val scopes = Kernel.scopes()
+        if (scopes.isEmpty()) {
+            button("I will be the Patron") {
+                start(Meet.Kind(Meet.Adopt.THEM_UNDER_ME, scope = Meet.Scope.OWN), Meet.Role.INITIATOR)
+            }
+        } else {
+            para("Invite them into:")
+            (scopes + Meet.Scope.OWN).forEach { s ->
+                button("I will be the Patron — ${s.label()}") {
+                    start(Meet.Kind(Meet.Adopt.THEM_UNDER_ME, scope = s), Meet.Role.INITIATOR)
+                }
+            }
         }
         button("I will be the Client") {
             start(Meet.Kind(Meet.Adopt.ME_UNDER_THEM), Meet.Role.INITIATOR)
@@ -650,17 +662,28 @@ class MeetActivity : Activity() {
         // **what the two of them are about to do**, which for a responder
         // is what the initiator's invitation asked for and not what this
         // device chose [bench, 2026-10-15]
+        val into = m.subnetLabel()?.let { " — into $it" } ?: ""
         heading(
             when (m.settled()) {
                 null -> "One of you as the other's patron"
                 Meet.Adopt.NONE -> "A regular meeting with ${m.counterpartyName}"
-                Meet.Adopt.ME_UNDER_THEM -> "${m.counterpartyName} as your patron"
-                Meet.Adopt.THEM_UNDER_ME -> "You as ${m.counterpartyName}'s patron"
+                Meet.Adopt.ME_UNDER_THEM -> "${m.counterpartyName} as your patron$into"
+                Meet.Adopt.THEM_UNDER_ME -> "You as ${m.counterpartyName}'s patron$into"
             },
         )
         // every item the model says this ceremony earns, and no reassurance
         // it has not earned
         m.brief().forEach { para("• ${it.text}") }
+        // the responder as patron chooses which subnet here, the first
+        // place it can [author, 2026-10-15]; nothing is accepted before
+        if (m.settled() == Meet.Adopt.THEM_UNDER_ME && m.scope() == null) {
+            heading("Which of your subnets?")
+            (Kernel.scopes() + Meet.Scope.OWN).forEach { s ->
+                button(s.label()) { m.chooseScope(s) }
+            }
+            changeMind()
+            return
+        }
         heading("What may be weak in this meeting")
         para("• Nominated witnesses: none, until your horizon can offer them. The record carries that it had none.")
         para("• Verifiers and proximity are weighed, not required; a thin meeting is honest, not malformed.")
@@ -996,10 +1019,11 @@ class MeetActivity : Activity() {
             }
             return
         }
+        val into = (a.into() ?: m.subnetLabel())?.let { " — $it" } ?: ""
         heading(
             when (a.direction()) {
-                Meet.Adopt.THEM_UNDER_ME -> "${m.counterpartyName} under you"
-                Meet.Adopt.ME_UNDER_THEM -> "You under ${m.counterpartyName}"
+                Meet.Adopt.THEM_UNDER_ME -> "${m.counterpartyName} under you$into"
+                Meet.Adopt.ME_UNDER_THEM -> "You under ${m.counterpartyName}$into"
                 else -> "The authority question"
             },
         )

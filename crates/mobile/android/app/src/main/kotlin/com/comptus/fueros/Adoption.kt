@@ -107,6 +107,7 @@ class Adoption(
     private var step: Step = Step.OFFERED
     private var reason: String? = null
     private var txid: String? = null
+    private var into: String? = null
     private var body: ByteArray? = null
     private var mine: ByteArray? = null
     private val said = mutableListOf<String>()
@@ -117,6 +118,10 @@ class Adoption(
 
     /** The direction, as this device sees it, once it is settled. */
     fun direction(): Meet.Adopt? = synchronized(lock) { direction }
+
+    /** The subnet the adoption is into, as the responder labelled it
+     *  (`light-client-requirements.md` §7), once it has. */
+    fun into(): String? = synchronized(lock) { into }
 
     fun step(): Step = synchronized(lock) { step }
 
@@ -159,15 +164,20 @@ class Adoption(
      * the bootstrap and knows its own, so it is the only side that can
      * say what the two came to. The initiator learns it from the frame.
      */
-    fun settle(settled: Meet.Adopt) {
+    fun settle(settled: Meet.Adopt, label: String? = null) {
         check(role == Meet.Role.RESPONDER) { "the responder states the direction" }
-        synchronized(lock) { direction = settled }
+        synchronized(lock) {
+            direction = settled
+            into = label
+        }
         val told = when (settled) {
             Meet.Adopt.NONE -> 0
             Meet.Adopt.THEM_UNDER_ME -> 1
             Meet.Adopt.ME_UNDER_THEM -> 2
         }
-        if (!post(Frame.direction(told))) {
+        // and which subnet, in words, so the other side's acceptance can
+        // state it (`light-client-requirements.md` §7)
+        if (!post(Frame.direction(told, label))) {
             refuse("the direction could not be sent to $counterpartyName")
             return
         }
@@ -246,7 +256,10 @@ class Adoption(
             2 -> Meet.Adopt.THEM_UNDER_ME
             else -> Meet.Adopt.NONE
         }
-        synchronized(lock) { direction = mirrored }
+        synchronized(lock) {
+            direction = mirrored
+            into = d.label
+        }
         if (mirrored == Meet.Adopt.NONE) {
             note("$counterpartyName left the authority question alone; the meeting stands on its own.")
             synchronized(lock) { step = Step.HELD }
@@ -254,9 +267,9 @@ class Adoption(
         }
         note(
             if (mirrored == Meet.Adopt.THEM_UNDER_ME) {
-                "$counterpartyName asks to be adopted here."
+                "$counterpartyName asks to be adopted here" + (d.label?.let { ", into $it" } ?: "") + "."
             } else {
-                "$counterpartyName will be the patron."
+                "$counterpartyName will be the patron" + (d.label?.let { ", in $it" } ?: "") + "."
             },
         )
         begin()
@@ -377,14 +390,15 @@ class Adoption(
         private const val RECORD: Byte = 5
 
         sealed class Read
-        data class Direction(val who: Int) : Read()
+        data class Direction(val who: Int, val label: String?) : Read()
         data class Offer(val series: Int, val back: List<ByteArray>) : Read()
         data class Body(val body: ByteArray) : Read()
         data class Signed(val entries: ByteArray) : Read()
         data class Refused(val why: String) : Read()
         data class Record(val envelope: ByteArray) : Read()
 
-        fun direction(who: Int): ByteArray = byteArrayOf(VERSION, DIRECTION, who.toByte())
+        fun direction(who: Int, label: String? = null): ByteArray =
+            byteArrayOf(VERSION, DIRECTION, who.toByte()) + (label ?: "").toByteArray()
 
         fun offer(series: Int, back: List<ByteArray>): ByteArray {
             val head = byteArrayOf(
@@ -417,7 +431,7 @@ class Adoption(
             if (!mine(bytes)) return null
             val rest = bytes.copyOfRange(2, bytes.size)
             return when (bytes[1]) {
-                DIRECTION -> if (rest.size != 1) null else Direction(rest[0].toInt())
+                DIRECTION -> if (rest.isEmpty()) null else Direction(rest[0].toInt(), String(rest.copyOfRange(1, rest.size)).ifEmpty { null })
                 OFFER -> {
                     if (rest.size < 5) return null
                     val series = (rest[0].toInt() and 0xff shl 24) or

@@ -897,6 +897,60 @@ class MeetRowsTest {
         assertTrue("and when it is decided", text.contains("after the record"))
     }
 
+    /**
+     * **The acceptance states which subnet** [author, 2026-10-15]: the
+     * party being adopted reads the inviter's claim off the bootstrap and
+     * is told it is a claim.
+     */
+    // acceptance: PRD-15
+    @Test
+    fun the_brief_of_the_party_being_adopted_names_the_subnet_as_the_inviters_claim() {
+        val m = meet(Meet.Adopt.NONE, role = Meet.Role.RESPONDER)
+        m.counterparty("bb")
+        m.theirAdopt(Meet.Adopt.THEM_UNDER_ME)
+        m.invitedBy(Meet.Claim("cd".repeat(32), "Dana", "Bowling League"))
+        assertEquals(Meet.Adopt.ME_UNDER_THEM, m.settled())
+        assertEquals("Dana's Bowling League", m.subnetLabel())
+        val text = m.brief().joinToString(" ") { it.text }
+        assertTrue(rows(m.brief()).contains("UX-016"))
+        assertTrue("names it: $text", text.contains("invited into Dana's Bowling League"))
+        assertTrue("and calls it a claim", text.contains("claim until their signed profile"))
+    }
+
+    @Test
+    fun an_invitation_that_named_no_subnet_is_said_to_have_named_none() {
+        val m = meet(Meet.Adopt.NONE, role = Meet.Role.RESPONDER)
+        m.counterparty("bb")
+        m.theirAdopt(Meet.Adopt.THEM_UNDER_ME)
+        val text = m.brief().joinToString(" ") { it.text }
+        assertTrue(text.contains("has not named"))
+        // the claim of a lone root: no subnet, so "a new subnet"
+        m.invitedBy(Meet.Claim(null, "Dana", null))
+        assertEquals("Dana's a new subnet", m.subnetLabel())
+    }
+
+    /** The patron chooses which subnet, at D1a or at its brief, and the
+     *  brief says what it chose or that it must. */
+    // acceptance: PRD-15
+    @Test
+    fun the_patron_chooses_a_subnet_and_the_brief_states_the_choice() {
+        val m = Meet("aa", "carol", Meet.Kind(Meet.Adopt.THEM_UNDER_ME), Meet.Role.INITIATOR)
+        m.counterparty("bb")
+        var text = m.brief().joinToString(" ") { it.text }
+        assertTrue("asks for the choice: $text", text.contains("chosen below"))
+        assertNull(m.subnetLabel())
+        m.chooseScope(Meet.Scope("ef".repeat(32), "Games & Amusements", "Alice"))
+        assertEquals("Games & Amusements", m.subnetLabel())
+        text = m.brief().joinToString(" ") { it.text }
+        assertTrue(text.contains("inviting carol into Games & Amusements"))
+        // a new subnet under its own key is a choice too
+        m.chooseScope(Meet.Scope.OWN)
+        assertEquals("a new subnet under your own key", m.subnetLabel())
+        // and a kind chosen at D1a with its scope needs no choosing
+        val chosen = Meet("aa", "carol", Meet.Kind(Meet.Adopt.THEM_UNDER_ME, scope = Meet.Scope.OWN), Meet.Role.INITIATOR)
+        assertEquals(Meet.Scope.OWN, chosen.scope())
+    }
+
     @Test
     fun a_meeting_that_asks_for_no_adoption_still_carries_none_for_a_responder() {
         // the other half of PRD-02: a regular meeting warns about nothing,

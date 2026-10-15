@@ -218,22 +218,3 @@ fn prd_13_ship_the_provisioning_pages_and_no_other_adminis() {
 fn prd_14_show_a_contact_by_its_published_alias_and_image() {
     todo!("PRD-14: Show a contact by its published alias and image, or by keyhash, and never by a name not received")
 }
-
-/// Label subnets, ask which one an invitation is into, and state it in the brief
-///
-/// Spec: light-client-requirements.md §7; light-client-requirements.md §10
-/// Milestone: manual.  Kind: manual.  Oracle: behaviour.
-///
-/// Rule (light-client-requirements.md §7): "Ask which subnet before you invite, and say which subnet before you accept"
-/// Rule (light-client-requirements.md §10): "assume nothing from running one"
-///
-/// Given: A patron holding positions in two subnets, one of which it runs an instance in.
-/// When: It invites a party to be adopted, and the party reads the brief.
-/// Then: The inviter is asked which subnet by its label, the patron's alias there and the subnet's; the invited party's brief states that label; the operator's screen lists the one instance under its subnet and offers none for the other.
-///
-/// Interpretation: An operator in one subnet is an ordinary light client in the next.
-#[test]
-#[ignore = "acceptance PRD-15: owed at milestone manual"]
-fn prd_15_label_subnets_ask_which_one_an_invitation_is_int() {
-    todo!("PRD-15: Label subnets, ask which one an invitation is into, and state it in the brief")
-}

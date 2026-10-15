@@ -18206,3 +18206,22 @@ author's ruling; flagged in the change-log as a drafting correction.
 **Still owed from this push**: a profile is fetched when the shell asks
 (`request_profiles`) and at nobody's locator-taking yet; the brief's
 label and the bootstrap's claimed aliases are push 3.
+
+**Push 3, the shell (2026-10-15).** `Bootstrap.kt` (pure, tested):
+version 2 = `2, kind, backup, me, subnet or zeros, alias, subnet alias`,
+version 1 still read. `Meet.Scope` (id, alias, own alias; `OWN` for a new
+subnet under the device's key), `Meet.Claim` (what the invitation said;
+`label()` = "[patron alias]'s [subnet alias]"), `Kind.scope`,
+`chooseScope`, `invitedBy`, `subnetLabel()`; brief items under UX-016
+for both sides. D1a lists the patron's subnets (plus a new one) before
+the code; the responder as patron chooses at its brief and cannot accept
+before. `Adoption.Frame.direction(who, label)` carries the label; the
+initiator's screen shows "into …". `OperatorActivity` lists instances
+(SharedPreferences, tab-separated) with a subnet chooser at enrolment.
+FFI `SubnetRow`/`subnet_rows`/`subnet`; client `own_alias`.
+
+**Owed after push 3**: the records an enrolment signs are over the
+acting position, not the chosen subnet's (`endpoint_record_in`); the
+Adoption screen's chooser is buttons, not a picker; `request_profiles`
+is called by no screen yet (People should call it on open); PRD-14 has
+no shell test claiming it.

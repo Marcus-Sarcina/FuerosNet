@@ -376,6 +376,18 @@ pub struct ContactRow {
     pub alias: Option<String>,
 }
 
+/// One subnet this client holds a position in, as a chooser lists it
+/// (`light-client-requirements.md` §7, §10).
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SubnetRow {
+    /// The subnet's id (design §13.8).
+    pub id: Id,
+    /// Its alias, where its profile is held (`wire-format.md` §7.11).
+    pub alias: Option<String>,
+    /// This client's own alias there, where it published one.
+    pub own_alias: Option<String>,
+}
+
 /// The two nominee lists a ceremony holds: this side's and the other's.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Nominees {
@@ -2290,6 +2302,33 @@ impl Participant {
         crate::diag::call_plain("subnets", || {
             self.handle
                 .with_blocking(|c| c.subnets().iter().map(id_of).collect())
+        })
+    }
+
+    /// The same, each with the aliases a chooser labels it by: the
+    /// subnet's own and this client's there, where either is held.
+    #[must_use]
+    pub fn subnet_rows(&self) -> Vec<SubnetRow> {
+        crate::diag::call_plain("subnet_rows", || {
+            self.handle.with_blocking(|c| {
+                c.subnets()
+                    .iter()
+                    .map(|s| SubnetRow {
+                        id: id_of(s),
+                        alias: c.subnet_alias(s),
+                        own_alias: c.own_alias(s),
+                    })
+                    .collect()
+            })
+        })
+    }
+
+    /// The subnet this client acts in when nothing names one: the first
+    /// it was adopted into, else the one under its own key, else none.
+    #[must_use]
+    pub fn subnet(&self) -> Option<Id> {
+        crate::diag::call_plain("subnet", || {
+            self.handle.with_blocking(|c| c.subnet().map(|s| id_of(&s)))
         })
     }
 

@@ -398,7 +398,9 @@ object Kernel {
         adoption = a
         m.rendered()
         // off the caller's thread: every leg of this sends
-        Thread { if (settled != null) a.settle(settled) else a.begin() }.start()
+        // the responder states the direction and which subnet, in words
+        val label = m.subnetLabel()
+        Thread { if (settled != null) a.settle(settled, label) else a.begin() }.start()
     }
 
     /** The kernel calls an [Adoption] makes, bracketed like every other. */
@@ -417,7 +419,10 @@ object Kernel {
             series: Int,
             nodeBack: List<ByteArray>,
         ): Adoption.Result<ByteArray> = result("proposeAdoption") {
-            p.proposeAdoption(null, unhex(node), unhex(presence), series.toUInt(), nodeBack)
+            // into the subnet this device chose as patron: one it holds a
+            // position in, or none for a new one under its own key
+            val into = meet?.scope()?.id?.takeIf { it.length == 64 }?.let { unhex(it) }
+            p.proposeAdoption(into, unhex(node), unhex(presence), series.toUInt(), nodeBack)
         }
 
         override fun reviewAndSign(body: ByteArray): Adoption.Result<ByteArray> =
@@ -465,8 +470,26 @@ object Kernel {
             Meet.Adopt.THEM_UNDER_ME -> 1
             Meet.Adopt.ME_UNDER_THEM -> 2
         }
-        val backup = if (m.kind.askBackup) 1 else 0
-        return byteArrayOf(1, kind.toByte(), backup.toByte()) + me
+        // which subnet, and what this device calls itself and the subnet
+        // there, as its claim: the scope chosen as patron, or the subnet
+        // this device acts in otherwise, so a regular meeting carries a
+        // name too (`light-client-requirements.md` §7)
+        val scope = m.scope() ?: scopes().firstOrNull { it.id == subnet() }
+        return Bootstrap.encode(me, kind, m.kind.askBackup, scope)
+    }
+
+    /** The subnets this device holds a position in, labelled. */
+    fun scopes(): List<Meet.Scope> {
+        val p = participant ?: return emptyList()
+        return call("subnetRows", { emptyList() }) {
+            p.subnetRows().map { Meet.Scope(hex(it.id), it.alias, it.ownAlias) }
+        }
+    }
+
+    /** The subnet this device acts in, hex, where it is in one. */
+    fun subnet(): String? {
+        val p = participant ?: return null
+        return call("subnet", { null }) { p.subnet()?.let { hex(it) } }
     }
 
     /**
@@ -478,19 +501,21 @@ object Kernel {
      * takes the choice without agreeing to it.
      */
     fun takeBootstrap(bytes: ByteArray): String? {
-        if (bytes.size != 35 || bytes[0] != 1.toByte()) {
-            return "that code is not a meeting invitation this build knows"
-        }
+        val read = Bootstrap.decode(bytes)
+            ?: return "that code is not a meeting invitation this build knows"
         val m = meet ?: return "no meeting is open here"
         // the code is who is being met: the first one names them
-        m.counterparty(hex(bytes.copyOfRange(3, 35)))?.let { return it }
+        m.counterparty(read.me)?.let { return it }
         m.theirAdopt(
-            when (bytes[1].toInt()) {
+            when (read.kind) {
                 1 -> Meet.Adopt.THEM_UNDER_ME
                 2 -> Meet.Adopt.ME_UNDER_THEM
                 else -> Meet.Adopt.NONE
             },
         )
+        // and what it claimed about where it leads, which the brief states
+        // as a claim (`light-client-requirements.md` §7)
+        m.invitedBy(Meet.Claim(read.subnet, read.alias, read.subnetAlias))
         return null
     }
 

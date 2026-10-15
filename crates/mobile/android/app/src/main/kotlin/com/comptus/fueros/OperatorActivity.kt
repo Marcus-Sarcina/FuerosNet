@@ -38,7 +38,95 @@ class OperatorActivity : Activity() {
 
     private lateinit var narration: TextView
     private lateinit var open: Button
+    private lateinit var roll: LinearLayout
     private var pageAt: String? = null
+    private var chosen: Meet.Scope? = null
+
+    /**
+     * **One instance this operator administers**, as this screen keeps
+     * it: where it is, and the subnet it serves by the label it was
+     * enrolled under (`light-client-requirements.md` §10). The list is
+     * the shell's own state — an operator in several subnets runs one
+     * instance in each, and nothing here infers an instance from a
+     * position.
+     */
+    data class Instance(val at: String, val subnet: String?, val label: String)
+
+    private fun instances(): List<Instance> =
+        getSharedPreferences("operator", MODE_PRIVATE)
+            .getString("instances", "")!!
+            .lines()
+            .filter { it.isNotBlank() }
+            .map { line ->
+                val parts = line.split('\t')
+                Instance(parts[0], parts.getOrNull(1)?.ifEmpty { null }, parts.getOrElse(2) { parts[0] })
+            }
+
+    private fun remember(i: Instance) {
+        val kept = instances().filter { it.at != i.at } + i
+        getSharedPreferences("operator", MODE_PRIVATE).edit()
+            .putString("instances", kept.joinToString("\n") { "${it.at}\t${it.subnet ?: ""}\t${it.label}" })
+            .apply()
+    }
+
+    private fun forget(at: String) {
+        val kept = instances().filter { it.at != at }
+        getSharedPreferences("operator", MODE_PRIVATE).edit()
+            .putString("instances", kept.joinToString("\n") { "${it.at}\t${it.subnet ?: ""}\t${it.label}" })
+            .apply()
+    }
+
+    private fun drawInstances() {
+        roll.removeAllViews()
+        val held = instances()
+        if (held.isEmpty()) {
+            roll.addView(
+                TextView(this).apply {
+                    textSize = 13f
+                    setTextColor(Color.GRAY)
+                    text = "none yet — an instance serves one subnet, and this is where every one you run is administered"
+                },
+            )
+            return
+        }
+        held.forEach { i ->
+            roll.addView(
+                TextView(this).apply {
+                    textSize = 15f
+                    typeface = Typeface.DEFAULT_BOLD
+                    text = i.label
+                },
+            )
+            roll.addView(
+                TextView(this).apply {
+                    textSize = 13f
+                    typeface = Typeface.MONOSPACE
+                    setTextColor(Color.GRAY)
+                    text = i.at
+                },
+            )
+            roll.addView(
+                Button(this).apply {
+                    text = "Open its administration page"
+                    setOnClickListener {
+                        startActivity(
+                            Intent(this@OperatorActivity, NodePageActivity::class.java)
+                                .putExtra("at", i.at),
+                        )
+                    }
+                },
+            )
+            roll.addView(
+                Button(this).apply {
+                    text = "Forget it here"
+                    setOnClickListener {
+                        forget(i.at)
+                        drawInstances()
+                    }
+                },
+            )
+        }
+    }
 
     private fun field(hint: String, value: String = "", numeric: Boolean = false): EditText =
         EditText(this).apply {
@@ -80,9 +168,41 @@ class OperatorActivity : Activity() {
                 }
             }
         }
+        // **which subnet the instance serves** [author, 2026-10-15]: one
+        // it holds a position in, chosen here; where it holds one, that one
+        val scopes = Kernel.scopes()
+        chosen = scopes.singleOrNull()
+        val choice = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            if (scopes.size > 1) {
+                addView(
+                    TextView(this@OperatorActivity).apply {
+                        textSize = 13f
+                        setTextColor(Color.GRAY)
+                        text = "It serves:"
+                    },
+                )
+                val group = android.widget.RadioGroup(this@OperatorActivity)
+                scopes.forEachIndexed { n, s ->
+                    group.addView(
+                        android.widget.RadioButton(this@OperatorActivity).apply {
+                            id = n + 1
+                            text = s.label()
+                            setOnClickListener { chosen = s }
+                        },
+                    )
+                }
+                addView(group)
+            }
+        }
+
         val go = Button(this).apply {
             text = "Check the proof, then enrol"
             setOnClickListener {
+                if (scopes.size > 1 && chosen == null) {
+                    narration.text = "choose which subnet the instance serves first"
+                    return@setOnClickListener
+                }
                 isEnabled = false
                 narration.text = "asking ${at.text}…"
                 open.isEnabled = false
@@ -110,6 +230,13 @@ class OperatorActivity : Activity() {
                         // the page is offered only where the run was taken
                         pageAt = ask.at.takeIf { said.any { l -> l.startsWith("credential") } }
                         open.isEnabled = pageAt != null
+                        // and an instance that took its run is one this
+                        // operator administers from now, under its subnet
+                        if (pageAt != null) {
+                            val s = chosen
+                            remember(Instance(ask.at, s?.id, s?.label() ?: "an instance (subnet not named)"))
+                            drawInstances()
+                        }
                     }
                 }.start()
             }
@@ -137,7 +264,29 @@ class OperatorActivity : Activity() {
                         "the key is that instance's."
                 },
             )
+            addView(
+                TextView(this@OperatorActivity).apply {
+                    setPadding(0, 8, 0, 8)
+                    textSize = 12f
+                    typeface = Typeface.DEFAULT_BOLD
+                    setTextColor(Color.GRAY)
+                    text = "Instances you run"
+                },
+            )
+            roll = LinearLayout(this@OperatorActivity).apply { orientation = LinearLayout.VERTICAL }
+            addView(roll)
+            drawInstances()
+            addView(
+                TextView(this@OperatorActivity).apply {
+                    setPadding(0, 32, 0, 8)
+                    textSize = 12f
+                    typeface = Typeface.DEFAULT_BOLD
+                    setTextColor(Color.GRAY)
+                    text = "Enrol another"
+                },
+            )
             listOf(at, token, credentials, endpoint, subtree).forEach { addView(it) }
+            addView(choice)
             addView(go)
             addView(open)
             addView(

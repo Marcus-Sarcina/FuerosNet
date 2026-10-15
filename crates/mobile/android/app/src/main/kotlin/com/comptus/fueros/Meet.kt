@@ -192,6 +192,40 @@ class Meet(
     }
 
     /**
+     * **A subnet this device holds a position in**, as the patron's
+     * chooser lists it (`light-client-requirements.md` §7): its id, its
+     * alias where held, and this device's own alias there. [OWN] is the
+     * one under this device's own key where no adoption has named it yet.
+     */
+    data class Scope(val id: String, val alias: String?, val ownAlias: String?) {
+        /** What the chooser shows. */
+        fun label(): String = when {
+            this == OWN -> "a new subnet under your own key"
+            alias != null -> alias
+            else -> "subnet ${id.take(8)}…"
+        }
+
+        companion object {
+            val OWN = Scope("", null, null)
+        }
+    }
+
+    /**
+     * **What an invitation claimed about where it leads** [author,
+     * 2026-10-15]: the subnet, and the inviter's alias and the subnet's as
+     * the inviter states them. **A claim until the signed profile replaces
+     * it**, and the brief says so.
+     */
+    data class Claim(val subnet: String?, val patronAlias: String?, val subnetAlias: String?) {
+        /** "*[patron alias]*'s *[subnet alias]*", with what is missing said. */
+        fun label(counterpartyName: String): String {
+            val who = patronAlias ?: counterpartyName
+            val what = subnetAlias ?: subnet?.let { "subnet ${it.take(8)}…" } ?: "a new subnet"
+            return "$who's $what"
+        }
+    }
+
+    /**
      * Which side of the bootstrap this device is on, and therefore which
      * camera it uses and whether it chose the kind of transaction.
      *
@@ -215,6 +249,10 @@ class Meet(
         val adopt: Adopt = Adopt.NONE,
         /** *"Ask this person to backup my user data"* — the checkbox. */
         val askBackup: Boolean = false,
+        /** Which subnet the other is being invited into, where this
+         *  device is the patron and chose at D1a; the responder as patron
+         *  chooses at its brief ([chooseScope]). */
+        val scope: Scope? = null,
     )
 
     /**
@@ -363,6 +401,8 @@ class Meet(
     private var step = Step.INTENT
     private var briefAcknowledged = false
     private var bootstrapCrossed = false
+    private var scope: Scope? = kind.scope
+    private var claim: Claim? = null
     /** What the counterparty proposed, where they proposed the opposite. */
     private var theirAdopt: Adopt? = null
     private var direction: Adopt? = null
@@ -675,6 +715,17 @@ class Meet(
             }
             Adopt.NONE -> {}
             Adopt.ME_UNDER_THEM -> {
+                // UX-016: which subnet, by the inviter's claim, said before
+                // the person accepts [author, 2026-10-15]
+                out += Item(
+                    "UX-016",
+                    claim?.let { c ->
+                        "You are being invited into ${c.label(counterpartyName)} — as " +
+                            "$counterpartyName's invitation names it; the names are their " +
+                            "claim until their signed profile replaces them."
+                    } ?: "You are being invited into a subnet $counterpartyName has not named; " +
+                        "their device will say which before you sign.",
+                )
                 out += Item(
                     "PRD-02",
                     "$counterpartyName becomes your patron. They will hold authority " +
@@ -689,6 +740,13 @@ class Meet(
                 )
             }
             Adopt.THEM_UNDER_ME -> {
+                out += Item(
+                    "UX-016",
+                    scope?.let { s ->
+                        "You are inviting $counterpartyName into " +
+                            (if (s == Scope.OWN) "a new subnet under your own key" else s.label()) + "."
+                    } ?: "Which of your subnets $counterpartyName joins is chosen below, before you accept.",
+                )
                 out += Item(
                     "PRD-02",
                     "You become $counterpartyName's patron. Your outage cascades to " +
@@ -1105,6 +1163,46 @@ class Meet(
             Adopt.ME_UNDER_THEM -> Adopt.THEM_UNDER_ME
             Adopt.NONE -> Adopt.NONE
             null -> kind.adopt
+        }
+    }
+
+    /** The subnet this device, as patron, invites the other into, once
+     *  chosen. */
+    fun scope(): Scope? = synchronized(lock) { scope }
+
+    /** As the patron: which subnet. The responder chooses at its brief,
+     *  the initiator at D1a (`light-client-requirements.md` §7). */
+    fun chooseScope(s: Scope) {
+        synchronized(lock) {
+            scope = s
+            changed()
+        }
+    }
+
+    /** What the invitation claimed about where it leads, where one was
+     *  read. */
+    fun claim(): Claim? = synchronized(lock) { claim }
+
+    /** The responder read the initiator's claim off the bootstrap. */
+    fun invitedBy(c: Claim) {
+        synchronized(lock) {
+            claim = c
+            changed()
+        }
+    }
+
+    /**
+     * **The label of the subnet this adoption is into**, as this device
+     * can say it: as patron, the scope it chose; as the party being
+     * adopted, the inviter's claim; null where neither is known yet.
+     */
+    fun subnetLabel(): String? = synchronized(lock) {
+        when (settled()) {
+            Adopt.THEM_UNDER_ME -> scope?.let { s ->
+                if (s == Scope.OWN) "a new subnet under your own key" else s.label()
+            }
+            Adopt.ME_UNDER_THEM -> claim?.label(counterpartyName)
+            else -> null
         }
     }
 
