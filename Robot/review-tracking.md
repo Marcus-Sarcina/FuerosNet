@@ -18014,3 +18014,87 @@ or a frame of the next meeting's would reach the last one's.
 **What the bench can now run**: A2, both directions, nodeless. The phones
 are four builds behind (this one included), so the APK has to go on them
 first.
+
+## The bench: both S21s cannot get UDP out of the app (2026-10-15)
+
+**Found while standing A2 up.** The two TCLs attach to the daemon in about
+1.6 s; both Samsung S21s fail every time with *"the serving node is
+unreachable (dial timed out)"* after 10 s, and the daemon's log shows no
+handshake arriving at all.
+
+**It is not the network and not the code.** From an S21's shell, ICMP to
+the daemon's host passes, a 1200-byte UDP datagram passes, and an
+ECN-marked ping passes. The app's own TCP passes too: the diagnostic
+stream reaches the collector from the same phone, 34 lines of it. What
+fails is UDP **from the app's uid**:
+
+```
+run-as com.comptus.fueros sh -c 'echo x | nc -u -w 2 192.168.0.8 7452'
+nc: xwrite: Operation not permitted
+```
+
+The kernel's own account of the first send, from the phone's diagnostics:
+
+```
+sendmsg error: Os { code: 5, kind: Uncategorized, message: "I/O error" },
+Transmit: { destination: 192.168.0.8:7447, src_ip: None, ecn: Some(Ect0),
+            len: 2400, segment_size: Some(1200) }
+`libc::sendmsg` failed with I/O error (os error 5); halting segmentation offload
+```
+
+quinn then retries without segmentation offload, in single 1200-byte
+datagrams, and those produce no error and no arrival.
+
+**What splits the bench is the OS**: both failing phones are Android 15,
+both working phones Android 12. No always-on VPN, `secure_wifi_state`
+null, `Restrict background: false`, and no network-related appop on the
+app. Android 15's local-network-access restriction is the first thing to
+check — `dumpsys connectivity` on an S21 shows a `Forbidden: LOCAL_NETWORK`
+request capability, and the app's manifest declares no local-network
+permission. The next steps, in order: declare it in the manifest and
+reinstall; failing that, reach the daemon over the USB tether address,
+which is not a LAN address from the phone's point of view; failing that,
+pcap the S21's wlan0 while the app dials.
+
+**Two hypotheses tested on the phones and eliminated** (2026-10-15),
+both reverted afterwards so the tree carries no dead accommodation:
+
+1. **ECN and segmentation offload.** A client endpoint whose datagrams
+   carry neither (a `quinn::AsyncUdpSocket` wrapper clearing `ecn` and
+   `segment_size`, `max_transmit_segments` 1) removed the `sendmsg` EIO
+   entirely — nine clean single-datagram sends, no error of any kind —
+   and the attach still timed out with nothing at the node. So the EIO
+   was a symptom and not the cause; quinn's own fallback already handled
+   it.
+2. **A local-network permission.** `LOCAL_NETWORK_ACCESS` declared in the
+   manifest is unknown to Android 15 (`pm grant` throws on it) and
+   changed nothing. `ACCESS_NETWORK_STATE` beside it changed nothing
+   either. Android 16's restriction is not what these phones are
+   applying.
+
+Also checked and clear: the OEM deny chain (`cmd connectivity
+get-chain3-enabled` disabled, the package `allow`), background
+restriction, always-on VPN, `secure_wifi_state`.
+
+**IT WAS USB TETHERING** [author turned it off, 2026-10-15; confirmed
+here]. The correlation was exact — both failing phones had `rndis0` up,
+both working phones only `wlan0` — and with tethering off in Settings
+both S21s attach at once: GXV 1.36 s, MRK 1.31 s, beside the TCLs' 1.57
+and 1.53. Nothing in the tree changed to make that true.
+
+**What it means, and the standing bench rule**: an app's socket on a
+tethering phone is marked for a network that is not the upstream, so the
+kernel's datagrams left the phone for somewhere that never reached the
+node while the shell's own traffic took the ordinary route — which is why
+every lower-level probe passed and only the app failed. **Never leave USB
+tethering on a bench phone.** The two signatures to recognise: `rndis0`
+in `ip addr`, and an attach that times out at 10 s with the node's log
+showing no handshake at all.
+
+I could not turn it off over adb: this build has no `stop-tethering`
+under `cmd connectivity`, and `svc usb setFunctions adb` leaves `rndis0`
+up. It is a Settings toggle.
+
+**A2 is set up on the intended pair**, GXV × ZU8, with MRK × 4VC beside
+them as the second pair: run `722519a-a2-adoption-7`, all four attached,
+each paired with the other and nominating its own witness instrument.
