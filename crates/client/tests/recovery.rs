@@ -25,11 +25,9 @@ const PARTIES: [&str; 6] = ["alice", "alice2", "bob", "carol", "w1", "w2"];
 /// adoption's messages begin.
 fn recovered() -> (Setup, [u8; 32], usize) {
     let mut s = setup(&PARTIES, &[ChannelKind::Nfc]);
-    s.run("alice", "bob", &["w2"], &[]).unwrap();
-    s.run("alice", "carol", &["w2"], &[]).unwrap();
-    s.face_off("alice", "w1");
-    s.h.run_adoption(kh("alice"), kh("w1"), vec![kh("w2")], vec![], 3)
-        .expect("alice adopted under w1");
+    s.met("alice", "bob", "w2");
+    s.met("alice", "carol", "w2");
+    s.adopted("alice", "w1", "w2", 3);
     // alice's device is alice2's now: the prior key and its archive
     let old_archive = s.client("alice").archive.clone();
     s.client("alice2").rotation = Some(Box::new(Rotation::begin(
@@ -171,7 +169,7 @@ fn a_recovery_response_is_signed_hybrid_by_the_verifier_and_its_consent_classica
 #[test]
 fn the_recovery_meeting_is_a_ceremony_in_which_the_verifier_is_its_own_querier() {
     let mut s = setup(&PARTIES, &[ChannelKind::Nfc]);
-    s.run("alice", "bob", &["w2"], &[]).unwrap();
+    s.met("alice", "bob", "w2");
     let old_archive = s.client("alice").archive.clone();
     s.client("alice2").rotation = Some(Box::new(Rotation::begin(
         Box::new(id("alice")),

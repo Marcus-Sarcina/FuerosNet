@@ -1,10 +1,16 @@
-//! The field-test build's redaction, over a whole harness ceremony
-//! (`Robot/field-test-diagnostics.md`, section 2): every event a ceremony,
-//! a payload session and a recovery raise is rendered by the field build's
-//! own renderer and collected; then every secret those runs produced is
-//! searched for in the rendering, eight bytes at a time, as hex in either
-//! case and as a `Debug` byte list.  Not one run may appear.  The timeline
-//! is then checked for the step sequence the plan's section 3 names.
+//! The field-test build's redaction, over the meetings this crate's tests
+//! make (`Robot/field-test-diagnostics.md`, section 2): every event two
+//! meetings, an adoption, a payload session and a recovery raise is
+//! rendered by the field build's own renderer and collected; then every
+//! secret those runs produced is searched for in the rendering, eight
+//! bytes at a time, as hex in either case and as a `Debug` byte list.
+//! Not one run may appear.  The timeline is then checked for the step
+//! sequence the plan's section 3 names.
+//!
+//! **The conversation's own events are swept where it runs**
+//! (`adaptors/tests/redaction.rs`): the queries, the grants, the answers
+//! and the body were rendered here while a driver gathered the signatures
+//! in this process, and that driver is gone [author, 2026-10-14].
 //!
 //! Built and run only in the field-test flavour, which is the one that has
 //! events: `cargo test -p rhtn-client --no-default-features --features
@@ -164,13 +170,9 @@ fn no_secret_of_a_whole_ceremony_appears_in_any_event_and_the_timeline_is_comple
     // meetings and the recovery adoption, all rendered
     let s = tracing::subscriber::with_default(subscriber, || {
         let mut s = setup(&PARTIES, &[ChannelKind::Nfc]);
-        s.run("alice", "bob", &["w2"], &[])
-            .expect("alice meets bob");
-        s.run("alice", "carol", &["w2"], &[])
-            .expect("alice meets carol");
-        s.face_off("alice", "w1");
-        s.h.run_adoption(kh("alice"), kh("w1"), vec![kh("w2")], vec![], 3)
-            .expect("alice adopted under w1");
+        s.met_in_person("alice", "bob", "w2");
+        s.met_in_person("alice", "carol", "w2");
+        s.adopted("alice", "w1", "w2", 3);
         session(&mut s, "alice", "bob");
         let old_archive = s.client("alice").archive.clone();
         s.client("alice2").rotation = Some(Box::new(Rotation::begin(
@@ -189,7 +191,7 @@ fn no_secret_of_a_whole_ceremony_appears_in_any_event_and_the_timeline_is_comple
     });
     let lines = lines.lock().unwrap().clone();
     assert!(
-        lines.len() > 200,
+        lines.len() > 100,
         "{} events is not a timeline",
         lines.len()
     );
@@ -244,10 +246,6 @@ fn no_secret_of_a_whole_ceremony_appears_in_any_event_and_the_timeline_is_comple
         }
     }
     assert!(
-        secrets.iter().filter(|(w, _)| *w == "granted key").count() >= 1,
-        "the runs released at least one key"
-    );
-    assert!(
         secrets.iter().filter(|(w, _)| *w == "sessions").count() == PARTIES.len(),
         "every party's sessions"
     );
@@ -281,18 +279,6 @@ fn no_secret_of_a_whole_ceremony_appears_in_any_event_and_the_timeline_is_comple
             "cer.proximity",
             "cer.proximity.done",
             "cer.capture",
-            "cer.select",
-            "cer.query.issued",
-            "sub.consented",
-            "sub.grant",
-            "ver.grant",
-            "ver.query.answered",
-            "cer.response",
-            "sub.response_copy",
-            "cer.witness.asked",
-            "cer.witness.answered",
-            "cer.propose",
-            "cer.review",
             "cer.finalize",
             "pay.session",
             "pay.receive",
@@ -303,9 +289,13 @@ fn no_secret_of_a_whole_ceremony_appears_in_any_event_and_the_timeline_is_comple
         lines.iter().any(|l| l.contains("\"msg\":\"Seal\"")),
         "the recovery's seal travelled on the harness"
     );
+    let aborts: Vec<&serde_json::Value> = parsed
+        .iter()
+        .filter(|v| v["event"] == "cer.abort" || v["event"] == "pay.error")
+        .collect();
     assert!(
-        !names.iter().any(|n| n == "cer.abort" || n == "pay.error"),
-        "a clean run aborts nothing and loses no payload"
+        aborts.is_empty(),
+        "a clean run aborts nothing and loses no payload: {aborts:?}"
     );
     assert!(
         lines.iter().any(|l| l.contains("\"state\":\"opened\"")),

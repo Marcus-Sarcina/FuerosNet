@@ -452,8 +452,7 @@ fn progress_says_whether_a_proposal_would_produce_a_body() {
     let mut s = setup(&["alice", "bob", "w1", "w2"], &[ChannelKind::Nfc]);
     // a prior meeting, so neither party is at genesis and a witness is
     // required: the witnessless shape is the formation case alone
-    s.run("alice", "bob", &["w1"], &["w2"])
-        .expect("a first record");
+    s.met("alice", "bob", "w1");
     s.face_off("alice", "bob");
     let (a, b) = (kh("alice"), kh("bob"));
     let ia = s

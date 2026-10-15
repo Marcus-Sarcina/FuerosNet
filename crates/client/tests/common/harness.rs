@@ -199,6 +199,8 @@ pub struct Setup {
     pub clock: Rc<Cell<u64>>,
     /// The clock reading when the last ceremony began.
     pub last_start: u64,
+    /// Records as test data: what [`Setup::met`] builds from.
+    pub world: crate::common::World,
 }
 
 pub fn setup(names: &[&'static str], channels: &[ChannelKind]) -> Setup {
@@ -233,6 +235,7 @@ pub fn setup_with(
         handles,
         clock,
         last_start: 0,
+        world: crate::common::World::new(),
     }
 }
 
@@ -245,24 +248,113 @@ impl Setup {
         *self.handles[a].cam.facing.borrow_mut() = face(b);
         *self.handles[b].cam.facing.borrow_mut() = face(a);
     }
-    pub fn run(
+    /// **The local exchanges alone**: the two intents, the channels and
+    /// the captures, which are a user's acts and a device's. What follows
+    /// them is the conversation, which the kernel drives from arrivals
+    /// (`adaptors/tests/conversation.rs`) [author, 2026-10-14].
+    pub fn meet_locally(
         &mut self,
         a: &str,
         b: &str,
         a_nom: &[&str],
         b_nom: &[&str],
-    ) -> Result<[u8; 32], Abort> {
+    ) -> Result<(), Abort> {
         self.face_off(a, b);
-        self.h.run(
+        self.h.exchanges(
             kh(a),
             kh(b),
             a_nom.iter().map(|n| kh(n)).collect(),
             b_nom.iter().map(|n| kh(n)).collect(),
         )
     }
+
     pub fn client(&mut self, n: &str) -> &mut Client {
         self.h.client(&kh(n))
     }
+
+    /// **A meeting whose capture each party keeps**: the local exchanges,
+    /// which are a user's acts and a device's, and then the record of the
+    /// meeting arriving — which is what moves the sealed capture, the
+    /// seed and the acquaintance into the store (`Client::finalize`).
+    ///
+    /// What a record says of itself is the conversation's business and is
+    /// asserted where the conversation runs (`adaptors/tests/ceremony.rs`).
+    /// What this is for is the *evidence* a later ceremony needs: a
+    /// verifier that holds a capture of a subject, and a subject with a
+    /// key to release for it.
+    pub fn met_in_person(&mut self, a: &str, b: &str, w: &str) -> Txid {
+        self.meet_locally(a, b, &[], &[])
+            .expect("the local exchanges");
+        self.met(a, b, w)
+    }
+
+    /// **A record of `a` and `b` having met, as test data** — not as a
+    /// ceremony run.
+    ///
+    /// **Why a fixture and not a run** [author, 2026-10-14]: the harness
+    /// is to "only drive actions as user or network inputs might and
+    /// gather results", and a test that needs a prior meeting needs the
+    /// *evidence* of one, not a second implementation of the process that
+    /// produces it. The ceremony itself is driven by the kernel over real
+    /// sessions in the adaptors' tests, which is the path the phones run.
+    ///
+    /// Both parties hold the record and read their acquaintance from it,
+    /// as a client restarting from storage does; the witness `w` signs it
+    /// where the pair is not at its genesis.
+    pub fn met(&mut self, a: &str, b: &str, w: &str) -> Txid {
+        let (rec, finalized) = {
+            let world = &mut self.world;
+            let t = world.tick();
+            let rec = if world.archives[&kh(a)].is_empty() && world.archives[&kh(b)].is_empty() {
+                world.formation_at(a, b, t, t + 600)
+            } else {
+                world.normal_at(a, b, w, t, t + 600)
+            };
+            (rec, t + 600)
+        };
+        // **the devices' clock is after the meeting it is told about**: a
+        // record whose effective time is in this device's future is one no
+        // successor of it may be timestamped before, and the fixture's
+        // records are the past.
+        let after = (finalized + 60) * 1000;
+        if self.clock.get() < after {
+            self.clock.set(after);
+            self.last_start = after;
+        }
+        // **handed to each client as the record arriving**, not poked into
+        // its store: `finalize` is what a party does with an envelope that
+        // reached it, and everything it keeps of a meeting — the contact,
+        // the acquaintance, the horizon — is its own doing from there.
+        for who in [a, b, w] {
+            // **to its signers**: a formation carries no witness entry,
+            // and a record handed to a party that did not sign it is one
+            // that party refuses — the refusal is right, and so is not
+            // sending it
+            if !self.h.clients.contains_key(&kh(who)) || !rec.signers.contains(&kh(who)) {
+                continue;
+            }
+            let bytes = rec.bytes.clone();
+            let c = self.h.client(&kh(who));
+            let _ = c.finalize(&bytes, None);
+            // **and each reads its records as a start from storage does**
+            // (`Client::at`): `finalize` refreshes the acquaintance only
+            // where a ceremony was active, which is the live case and not
+            // this one — here the record is evidence that arrived, and
+            // what the client makes of it is its own.
+            c.refresh_acquaintance();
+        }
+        rec.txid
+    }
+    /// **`node` adopted under `patron` on a meeting they hold**, where
+    /// `w` witnesses that meeting: the record as test data, then the
+    /// adoption, which is its own exchange and not the ceremony's.
+    pub fn adopted(&mut self, node: &str, patron: &str, w: &str, series: u32) -> Txid {
+        let pop = self.met(node, patron, w);
+        self.h
+            .adopt(kh(node), kh(patron), pop, series)
+            .expect("the patron adopts")
+    }
+
     pub fn notices(&self, n: &str) -> Vec<(u64, Notice)> {
         self.handles[n].hook.notices.borrow().clone()
     }

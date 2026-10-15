@@ -13867,6 +13867,83 @@ rejections in the corpus, and both introduction kinds are listed in the
 corpus runner so a rejection that starts passing fails rather than being
 skipped.
 
+### 2026-10-14 (the harness stops running the ceremony)
+
+**[author, 2026-10-14] "The goal is to get the harness completely out of
+the business of orchestrating anything that the kernel+app would be
+orchestrating in production. The harness should only drive actions as user
+or network inputs might and gather results."** The concern was that the
+test harness carried process logic, "if indirectly", and it did:
+`Harness::run` selected the verifiers, put the queries, asked the
+nominees, gathered the responses, proposed, collected the signatures and
+finalized — a second implementation of the sequence the kernel drives from
+arrivals, against which the kernel's own version was never the thing under
+test.
+
+**It was hiding a defect, which is how the question got asked and
+answered in the same day.** The first case moved to the end-to-end path —
+a nominee both participants name — failed there: `converse_propose`
+attributed the witness to the proposer rather than to each nominator, so
+the body differed depending on which phone proposed. The driver had put
+one entry per nominee and never produced the shape. One entry per
+nominator now, `propose` ranking the duplicates by what each carries.
+
+**A second, found by the fixture that replaced it.** `adopt_own_positions`
+folded the archive in iteration order, which is by txid and so is a hash:
+a departure that happened to sort before the adoption it ends removed
+nothing and the adoption put the position back. The fold reads the
+relationship's own order now — one series per patron relationship
+(`wire-format.md` §2.3), every record this key signs in it at the next
+counter, so (series, counter) says which word is the last one. The pair in
+the test that found it is the adversarial order.
+
+**What the harness may still drive**: the local exchanges of a meeting,
+which are a user's acts and a device's over an interface no node takes
+part in (`Harness::exchanges`, `wire-format.md` §14.3); an adoption on a
+presence record already held (`Harness::adopt`, which no longer runs a
+ceremony to get one); and a recovery meeting, which is two people face to
+face with nothing for a node or a kernel to carry. `run` and the query
+sub-sequence it called are gone.
+
+**Where a test needs a meeting as evidence** it takes the evidence:
+`Setup::met` hands each signer the record of one, which is what a record
+arriving does and all a later horizon, position or adoption needs; and
+`Setup::met_in_person` runs the local exchanges first, so the capture is
+sealed and the seed kept when the record arrives — which is what a
+verifier asked about a subject must hold, and what a party must have to
+release a key. A record is handed only to its signers, because a party
+that did not sign one refuses it, rightly.
+
+**Thirteen tests moved to where the conversation runs**
+(`adaptors/tests/ceremony.rs`): beside a node, over the sessions the query
+path uses, with only the local exchanges by hand. Their fixture sequences
+nothing — it is the shell's own loop (`Meet.converse`, `Meet.poll`),
+calling the kernel's entry points when `progress()` says each is due,
+while a bearer per party carries what they produce. CER-01, 02, 03, 06,
+17, 23, 24, 26, 48 and 50 are asserted there now, and so are the
+witnessless shapes and the record's disclosable fields. Two assertions
+were restated rather than transplanted, because the real path answers a
+different question better: a grant is not a message any application is
+shown, so what the path can be asked is what came of it — one answer about
+the subject, which the subject knows from its copy, and the released key
+in no other party's storage.
+
+**The redaction sweep split with them.** The client's own
+(`client/tests/diag.rs`) covers what crosses a local interface, the
+adoption, a payload session and the recovery; a new sweep in the adaptors
+(`tests/redaction.rs`, the diagnostics flavour) covers the conversation's
+own events over a whole ceremony with a verifier and a witness, asserts
+that every hook the plan names fired, and finds no eight-byte run of any
+identity seed, ceremony seed, capture key, payload material or session in
+anything the field build rendered. It sets a global subscriber, since each
+client runs on a thread of its own and a thread-local one would collect
+almost nothing.
+
+Client tests 153; adaptors 42, of which 13 are the moved ceremony cases
+and one is the new sweep. The `Net` fixture — clients attached to serving
+nodes holding their prekeys and their mail — is shared now
+(`client/tests/common/net.rs`), being a network and not a sequence.
+
 ### 2026-10-14 (the walk's hops become contacts)
 
 **Most of the referral chain was already there.** A node answers a

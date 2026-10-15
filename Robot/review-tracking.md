@@ -17879,3 +17879,61 @@ about the count.
 **Still owed on this item**: nothing. 1.3 (the harness drives the
 conversation) is next and is the larger half.
 
+## Review item 1.3, the harness drove the conversation (2026-10-14)
+
+**Ruled** [author, 2026-10-14], after being asked which design reflects
+the deployed condition: "Confirmed, do it in that order. The goal is to
+get the harness completely out of the business of orchestrating anything
+that the kernel+app would be orchestrating in production. The harness
+should only drive actions as user or network inputs might and gather
+results."
+
+**The order, and what each step came to.**
+
+1. *The only full-path case lacking coverage, run for real first.* A
+   nominee both participants name now runs in
+   `adaptors/tests/conversation.rs`, and it failed: `converse_propose`
+   attributed the witness to the proposer, so the body differed by
+   proposer. Fixed (one entry per nominator; `propose` ranks the
+   duplicates by `parts`). The client suite was unaffected either way,
+   which is the whole argument for the move.
+2. *Convert the tests whose assertions are about one kernel method.*
+   `Setup::met` (a record as evidence, handed to its signers),
+   `Setup::met_in_person` (the local exchanges, then the record, which is
+   what moves the seal and the seed into the store), `Setup::adopted`,
+   `Setup::meet_locally`; `Harness::exchanges` and `Harness::adopt`
+   (which takes the presence txid rather than running a ceremony for
+   one). Converted: `contacts.rs`, `position.rs`, `recovery.rs`,
+   `payload.rs`, `conversation.rs`, `diag.rs`, and what remains of
+   `ceremony.rs`.
+3. *Delete the conversation half.* `Harness::run`, its `queries` and the
+   `expire_now` only they used are gone. Thirteen record-content tests
+   moved to `adaptors/tests/ceremony.rs` on a new `Meeting` fixture whose
+   only sequencing is the shell's own loop.
+
+**A second defect, from the fixture.** `adopt_own_positions` folded
+`archive.records()`, which is txid order — a hash — so a departure
+sorting before its adoption removed nothing. It folds by (series,
+counter) now. The fixture's txids happen to be the adversarial order, and
+the test says so.
+
+**What could not simply move, and what was done instead.**
+
+- A grant is not dispatched to any application (the courier takes it into
+  the kernel and answers), so CER-24's "one grant, from alice, to bob"
+  could not be read off the real path. Restated as what came of it: one
+  response copy at the subject, bob's Match in the record, bob holding
+  exactly one capture of her, and the released key in no other party's
+  store.
+- The step *order* of the timeline is not assertable over two concurrent
+  parties without flakiness. The adaptors redaction sweep asserts every
+  hook fired; the order stays where it was already tested, on the
+  conversation test's kinds 9 to 18 in arrival order.
+- CER-03 asks for the real capture length, so that one test runs at it:
+  two ceremonies at the default parameters, about 33 s.
+
+**Still owed on this item**: nothing. `run_recovery_meeting` and
+`run_recovery_adoption` stay in the harness deliberately — a recovery
+meeting is two people face to face with no node and no kernel-driven
+conversation in it, so there is nothing there that production would
+orchestrate differently.

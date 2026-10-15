@@ -9,181 +9,20 @@ mod common;
 
 use common::*;
 use rhtn_adaptors::actor::Handle;
-use rhtn_adaptors::courier::Courier;
-use rhtn_adaptors::direct::{NoDirect, Reachable};
+use rhtn_adaptors::direct::Reachable;
 use rhtn_adaptors::serving::{Inboxes, LocalNode, Serving};
 use rhtn_archive::record::Record;
 use rhtn_archive::tx::Witness;
 use rhtn_archive::{Keyhash, Txid};
-use rhtn_client::ceremony::{
-    Abort, Client, Config, Dispatched, Msg, Proposed, conversation_payload,
-};
+use rhtn_client::ceremony::{Abort, Client, Dispatched, Msg, Proposed, conversation_payload};
 use rhtn_client::conversation::{BackPointers, proposal_from_body};
-use rhtn_client::device::{CaptureParams, ChannelKind};
+use rhtn_client::device::ChannelKind;
 use rhtn_client::payload::KIND_BACK_POINTERS;
 use rhtn_client::query::{Response, Verdict};
 use rhtn_client::record::Refusal;
 use rhtn_client::sequence::Conversed;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use tokio::sync::mpsc::UnboundedReceiver;
-
-struct Party {
-    handle: Handle,
-    courier: Arc<Courier>,
-    app: UnboundedReceiver<(Keyhash, Dispatched)>,
-    /// Everything that arrived, in order, once drained.
-    seen: Vec<(Keyhash, Dispatched)>,
-}
-
-impl Party {
-    async fn with<R: Send + 'static>(
-        &self,
-        f: impl FnOnce(&mut Client) -> R + Send + 'static,
-    ) -> R {
-        self.handle.with(f).await
-    }
-
-    /// Take a step on the client and carry what it returns.
-    async fn step(
-        &self,
-        f: impl FnOnce(&mut Client) -> Result<Vec<rhtn_client::ceremony::Msg>, Abort> + Send + 'static,
-    ) -> Result<(), Abort> {
-        let msgs = self.handle.with(f).await?;
-        let carried = self.courier.carry(msgs).await;
-        assert!(carried.complete(), "{carried:?}");
-        Ok(())
-    }
-
-    /// Poll `f` on the client until it holds or `ms` elapse.
-    async fn holds(
-        &self,
-        ms: u64,
-        f: impl Fn(&mut Client) -> bool + Send + Sync + 'static,
-    ) -> bool {
-        let f = Arc::new(f);
-        let end = Instant::now() + Duration::from_millis(ms);
-        loop {
-            let g = f.clone();
-            if self.handle.with(move |c| g(c)).await {
-                return true;
-            }
-            if Instant::now() >= end {
-                return false;
-            }
-            tokio::time::sleep(Duration::from_millis(20)).await;
-        }
-    }
-
-    /// Take whatever has arrived, without waiting.
-    fn drain(&mut self) {
-        while let Ok(e) = self.app.try_recv() {
-            self.seen.push(e);
-        }
-    }
-
-    /// What the conversation came to here, by sender, in arrival order.
-    fn conversed(&self) -> Vec<(Keyhash, Conversed)> {
-        self.seen
-            .iter()
-            .filter_map(|(k, d)| match d {
-                Dispatched::Conversation(c) => Some((*k, c.clone())),
-                _ => None,
-            })
-            .collect()
-    }
-}
-
-/// **Run the bearer for the life of the test**, which is what a shell's
-/// radio does and what no node can.
-///
-/// Since 2026-10-05 the counterparty's leg of kinds 9 to 18 is sealed
-/// under the local session and carried locally (design §7.1), so the
-/// kernel hands it out through `Client::carriages` and something outside
-/// the kernel has to move it. A step taken directly and a step answered
-/// inside a delivery both land in that drain, at moments a test cannot
-/// enumerate, so this runs continuously rather than at chosen points.
-///
-/// It also drains the node-bound half, as `carry_outbox` does in the FFI
-/// and for the same reason: a delivery queues what it owes and somebody
-/// has to carry it.
-fn bearing(a: &Party, b: &Party) -> tokio::task::JoinHandle<()> {
-    let pair = [
-        (a.handle.clone(), a.courier.clone(), b.courier.clone()),
-        (b.handle.clone(), b.courier.clone(), a.courier.clone()),
-    ];
-    tokio::spawn(async move {
-        loop {
-            for (from, mine, theirs) in &pair {
-                for bytes in from.with(|c| c.carriages()).await {
-                    // through the recipient's courier, so the outcome
-                    // reaches the application exactly as a network-borne
-                    // step's does
-                    theirs.take_carriage(bytes).await;
-                }
-                let msgs = from.with(|c| c.outbox()).await;
-                if !msgs.is_empty() {
-                    let out = mine.carry(msgs).await;
-                    // **a refused conversation leg is a lost message**, and
-                    // the FFI's `carry_outbox` reports one; a test bearer
-                    // that swallowed it would hide exactly the loss this
-                    // test exists to catch [reviewer, 2026-10-08]. A
-                    // refused *record* is the node declining to store a
-                    // subject outside its reach (`OutOfStore`), which this
-                    // scene's table makes of both participants and which
-                    // the signers' own archives are the assertion for
-                    let lost: Vec<&Msg> = out
-                        .refused
-                        .iter()
-                        .filter(|m| !matches!(m, Msg::Record(_)))
-                        .collect();
-                    assert!(lost.is_empty(), "the courier refused {lost:?}");
-                }
-            }
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-    })
-}
-
-/// A light client beside the node with no direct path, on a device with
-/// `channels` and a clock `skew_s` from the wall.
-fn host(
-    name: &'static str,
-    serving: &Arc<dyn Serving>,
-    inboxes: &Inboxes,
-    channels: Vec<ChannelKind>,
-    skew_s: i64,
-) -> Party {
-    let reachable = Reachable::default();
-    let handle = spawn_client_with(name, cfg(), reachable.clone(), channels, skew_s);
-    let (courier, app) = Courier::new(
-        handle.clone(),
-        serving.clone(),
-        Arc::new(NoDirect(reachable)),
-    );
-    inboxes.host(kh(name), courier.inbound());
-    Party {
-        handle,
-        courier,
-        app,
-        seen: Vec::new(),
-    }
-}
-
-/// The client's numbers for a quick run: a short grant buffer, and a
-/// capture over a fraction of a second.  The capture's own figures are
-/// CER-03's to test.
-fn cfg() -> Config {
-    let mut c = Config::default();
-    c.verifier.grant_buffer_ms = 300;
-    c.capture = CaptureParams {
-        min_frames: 3,
-        max_frames: 3,
-        min_span_ms: 20,
-        max_span_ms: 20,
-    };
-    c
-}
 
 fn kinds_from(seen: &[(Keyhash, Conversed)], from: &str) -> Vec<u64> {
     seen.iter()
@@ -330,7 +169,10 @@ async fn the_conversation_runs_over_the_payload_path_to_a_record_every_signer_ho
     );
     ra.expect("alice captures bob");
     rb.expect("bob captures alice");
-    let _bearer = bearing(&alice, &bob);
+    let _bearer = bearing(vec![
+        (kh("alice"), alice.handle.clone(), alice.courier.clone()),
+        (kh("bob"), bob.handle.clone(), bob.courier.clone()),
+    ]);
 
     // from here nothing is moved by hand.  The conversation opens: each
     // asks its nominee and hands over its back-pointers, to the
@@ -424,6 +266,33 @@ async fn the_conversation_runs_over_the_payload_path_to_a_record_every_signer_ho
         0,
         "a witness that declined holds nothing"
     );
+    // **what the participants kept of the parties the conversation
+    // brought them** (`light-client-requirements.md` §4.3): a nominee
+    // that answered is a contact, attesting or declining, and so is every
+    // signer of the record [author, 2026-10-14: the harness that used to
+    // assert this drove the conversation itself].
+    let (nominee, declined, signer) = alice
+        .with(|c| {
+            (
+                c.store.contacts.get(&kh("w1")).map(|x| x.how),
+                c.store.contacts.get(&kh("w2")).map(|x| x.how),
+                c.store.contacts.get(&kh("bob")).map(|x| x.how),
+            )
+        })
+        .await;
+    assert_eq!(
+        nominee,
+        Some(rhtn_client::contacts::How::Counterparty),
+        "alice had met w1 before, and a contact keeps the first way it \
+         came to be held, never a rank"
+    );
+    assert_eq!(
+        declined,
+        Some(rhtn_client::contacts::How::Nominee),
+        "w2 she had never met: a nominee that answered is a contact, and \
+         it declined"
+    );
+    assert_eq!(signer, Some(rhtn_client::contacts::How::Counterparty));
     // the record: the two participants and w1, nominated by alice; w2
     // absent; one response, w1 about alice, unavailable since alice
     // released no key for records she never sealed a capture under
@@ -648,7 +517,10 @@ async fn a_signer_whose_root_check_fails_answers_and_the_proposer_records_it() {
     );
     ra.expect("alice captures bob");
     rb.expect("bob captures alice");
-    let _bearer = bearing(&alice, &bob);
+    let _bearer = bearing(vec![
+        (kh("alice"), alice.handle.clone(), alice.courier.clone()),
+        (kh("bob"), bob.handle.clone(), bob.courier.clone()),
+    ]);
 
     // the conversation opens and nobody has a verifier to ask, so bob
     // hands over nothing gathered
@@ -847,7 +719,7 @@ async fn a_stopped_participant_does_not_witness_its_own_ceremony() {
         );
         // and nothing distinguishes that from a device which never began:
         // the same refusal, carrying nothing about what was asked
-        let never = spawn_client_with("carol", cfg(), Reachable::default(), vec![], 0);
+        let never = spawn_client_with("carol", ceremony_cfg(), Reachable::default(), vec![], 0);
         let b2 = bytes.clone();
         let r2 = never
             .with(move |c| c.take_conversation_carriage(&b2).map(|_| ()))
@@ -894,14 +766,14 @@ async fn net_026_a_formation_ceremony_completes_with_no_node_reachable() {
     let (alice, bob) = (
         spawn_client_with(
             "alice",
-            cfg(),
+            ceremony_cfg(),
             Reachable::default(),
             vec![ChannelKind::Optical],
             0,
         ),
         spawn_client_with(
             "bob",
-            cfg(),
+            ceremony_cfg(),
             Reachable::default(),
             vec![ChannelKind::Optical],
             0,
@@ -1008,4 +880,139 @@ async fn net_026_a_formation_ceremony_completes_with_no_node_reachable() {
         bob.with(|c| c.archive.records().next().unwrap().bytes.clone())
     );
     assert_eq!(ta, tb, "and it is the same record, byte for byte");
+}
+
+// acceptance: CER-16
+/// **A witness both participants nominated signs once** (`wire-format.md`
+/// §3.2's canonical order; design §7.1). A nominee named by each side
+/// answers both requests and is handed to `propose` twice; the record has
+/// one place for it, attributed to the participant that sorts first so
+/// the body is the same whichever side proposes.
+///
+/// **Here, and not only in process** [author, 2026-10-14]: the client's
+/// own harness walks the ceremony by hand and builds its witness list
+/// itself, so a defect in gathering showed up in one driver and not the
+/// other — this one is the driver the phones run, over real sessions,
+/// with the counterparty's leg as a carriage and the witness's as
+/// payload.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_witness_both_participants_nominated_signs_once() {
+    trace();
+    let now_s = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let mut scene = Scene::starting(now_s - 30 * 86_400);
+    // each participant has met the witness before, so neither is at its
+    // genesis and a witness is what the record needs
+    let a_w1 = scene.meet("alice", "w1");
+    let b_w1 = scene.meet("bob", "w1");
+    let node = live_node(
+        "witness",
+        scene.table("witness", &["witness"]),
+        "witness",
+        &[],
+    );
+    let inboxes = Inboxes::default();
+    let serving: Arc<dyn Serving> = LocalNode::new(node.clone(), inboxes.clone());
+    let optical = vec![ChannelKind::Optical];
+    let alice = host("alice", &serving, &inboxes, optical.clone(), 0);
+    let bob = host("bob", &serving, &inboxes, optical, 0);
+    let w1 = host("w1", &serving, &inboxes, vec![], 0);
+    let population: Vec<Keyhash> = ["alice", "bob", "w1"].iter().map(|n| kh(n)).collect();
+    for p in [&alice, &bob, &w1] {
+        p.courier.attach(population.clone()).await;
+    }
+    for p in [&alice, &bob, &w1] {
+        p.courier.sweep(population.clone()).await;
+    }
+    // each holds the record of its own prior meeting, so its back-pointers
+    // are that and not a genesis claim
+    for (p, rec) in [(&alice, &a_w1), (&bob, &b_w1)] {
+        let (t, b) = (rec.txid, rec.bytes.clone());
+        p.with(move |c| {
+            c.store.records.insert(t, b);
+            c.refresh_acquaintance();
+        })
+        .await;
+    }
+
+    // the local exchanges, by hand (§14.3), both naming w1
+    let ia = alice
+        .with(|c| c.begin(Some(kh("bob")), vec![kh("w1")], true))
+        .await
+        .expect("alice begins");
+    let ib = bob
+        .with(|c| c.begin(Some(kh("alice")), vec![kh("w1")], false))
+        .await
+        .expect("bob begins");
+    alice
+        .with(move |c| c.take_intent(kh("bob"), &ib))
+        .await
+        .expect("alice takes bob's intent");
+    bob.with(move |c| c.take_intent(kh("alice"), &ia))
+        .await
+        .expect("bob takes alice's intent");
+    let ch = alice.with(|c| c.proximity()).await.expect("channels");
+    bob.with(move |c| c.take_channels(&ch))
+        .await
+        .expect("bob agrees");
+    let ka = alice.with(|c| c.capture_key()).await.expect("alice's key");
+    let kb = bob.with(|c| c.capture_key()).await.expect("bob's key");
+    let (ra, rb) = tokio::join!(
+        alice.with(move |c| c.capture(kb)),
+        bob.with(move |c| c.capture(ka))
+    );
+    ra.expect("alice captures bob");
+    rb.expect("bob captures alice");
+    let _bearer = bearing(vec![
+        (kh("alice"), alice.handle.clone(), alice.courier.clone()),
+        (kh("bob"), bob.handle.clone(), bob.courier.clone()),
+    ]);
+
+    // from here the kernel's own driver: each opens, the responder hands
+    // over what it gathered, and the proposer proposes once w1's answer
+    // and both sets of back-pointers are in
+    for p in [&alice, &bob] {
+        p.step(|c| c.converse_open()).await.expect("opens");
+    }
+    bob.step(|c| c.converse_gathered())
+        .await
+        .expect("hands over");
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        match alice.step(|c| c.converse_propose()).await {
+            Ok(()) => break,
+            Err(Abort::Waiting(_)) | Err(Abort::NoWitness) if Instant::now() < deadline => {
+                tokio::time::sleep(Duration::from_millis(50)).await
+            }
+            Err(e) => panic!("propose: {e:?}"),
+        }
+    }
+
+    // every signer holds one record, and the witness is in it once
+    for (p, who) in [(&alice, "alice"), (&bob, "bob"), (&w1, "w1")] {
+        assert!(
+            p.holds(10_000, |c| c.archive.len() == 1).await,
+            "{who} holds the record"
+        );
+    }
+    let env = alice
+        .with(|c| c.archive.records().next().unwrap().bytes.clone())
+        .await;
+    let rec = Record::parse(&env).expect("a record");
+    assert_eq!(rec.signers.len(), 3, "alice, bob and w1 once");
+    let (proposal, _) = rhtn_client::conversation::proposal_from_body(&rec.bytes[rec.body.clone()])
+        .expect("the body reads back");
+    assert_eq!(proposal.witnesses.len(), 1, "one place for one party");
+    assert_eq!(proposal.witnesses[0].keyhash, kh("w1"));
+    let first = {
+        let mut both = [kh("alice"), kh("bob")];
+        both.sort();
+        both[0]
+    };
+    assert_eq!(
+        proposal.witnesses[0].nominated_by, first,
+        "attributed to the participant that sorts first"
+    );
 }

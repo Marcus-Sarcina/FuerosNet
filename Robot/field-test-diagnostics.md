@@ -310,7 +310,18 @@ against a positive control under `fieldtest`. The redaction test runs two
 ceremonies, an adoption, a payload session and a recovery under a collecting
 subscriber and asserts no eight-byte window of any seed, capture key, consent,
 profile or session key appears, in hex or as a byte list: 218 events, 0 hits.
-The gate passes on the releasable default. Next: M2 (daemon `[log]`, node
+The gate passes on the releasable default.
+
+**The sweep is in two halves since 2026-10-14**, when the test harness
+stopped running the ceremony's conversation: `client/tests/diag.rs` covers
+the local exchanges, an adoption, a payload session and a recovery, and
+`adaptors/tests/redaction.rs` covers the conversation's own events — the
+selection, the query, the grant, the answer, the body and the signatures
+— over a ceremony the kernel runs beside a node. The second sets a global
+subscriber, each client being on a thread of its own, and asserts that
+every hook named in section 3 fired.
+
+Next: M2 (daemon `[log]`, node
 events, the merge tool) and M3 (the shell's writer, flavour, counters, crash
 handlers, Report action), independent of each other.
 

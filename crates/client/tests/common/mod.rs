@@ -5,6 +5,7 @@
 #![allow(dead_code)]
 
 pub mod harness;
+pub mod net;
 
 use rhtn_archive::chain::Archive;
 use rhtn_archive::record::Record;

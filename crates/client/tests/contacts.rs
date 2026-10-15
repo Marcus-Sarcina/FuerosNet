@@ -16,7 +16,12 @@ use std::collections::BTreeMap;
 #[test]
 fn a_meeting_leaves_each_party_a_contact_of_the_other_with_a_locator() {
     let mut s = setup(&["alice", "bob"], &[ChannelKind::Nfc]);
-    s.run("alice", "bob", &[], &[]).expect("alice meets bob");
+    // the local exchanges are what pin a counterparty and hold its
+    // locator: the code read from its screen and the intent it sent. The
+    // record of the meeting is evidence, and it is what says they met
+    s.met("alice", "bob", "w1");
+    s.meet_locally("alice", "bob", &[], &[])
+        .expect("alice and bob exchange");
     let c = s
         .client("alice")
         .store
@@ -53,16 +58,25 @@ fn a_meeting_leaves_each_party_a_contact_of_the_other_with_a_locator() {
 #[test]
 fn an_introduced_stranger_is_a_contact_with_material_to_verify_by() {
     let mut s = setup(&["alice", "bob", "carol", "w1"], &[ChannelKind::Nfc]);
-    s.run("alice", "bob", &[], &[]).expect("alice meets bob");
-    // carol has never met alice; bob's bundle introduces her. bob is past
-    // his genesis, so this meeting needs a witness: w1, named by both
-    s.run("bob", "carol", &["w1"], &["w1"])
-        .expect("bob meets carol");
-    assert_eq!(
-        s.client("bob").store.contacts.get(&kh("w1")).map(|c| c.how),
-        Some(How::Nominee),
-        "a nominee that answered is a contact"
-    );
+    // alice and bob have met: the record of it is evidence, built as test
+    // data rather than by running a second ceremony driver
+    s.met("alice", "bob", "w1");
+    s.meet_locally("alice", "bob", &[], &[])
+        .expect("and they hold each other's locators");
+    // carol has never met alice; bob's bundle introduces her. Their own
+    // meeting is evidence too, so carol can introduce bob afterwards
+    s.met("bob", "carol", "w1");
+    s.meet_locally("bob", "carol", &["w1"], &["w1"])
+        .expect("bob and carol exchange");
+    // (that a nominee which answered becomes a contact is asserted where
+    // the conversation runs: `adaptors/tests/conversation.rs`)
+    //
+    // **selecting verifiers is what pins an introduced party**: a verified
+    // introduction brings the key to check its answer by and the position
+    // to reach it at, so the pool is where the contact comes from
+    s.client("carol")
+        .select_verifiers()
+        .expect("carol selects from what bob introduced");
     let c = s
         .client("carol")
         .store
@@ -90,7 +104,9 @@ fn an_introduced_stranger_is_a_contact_with_material_to_verify_by() {
 #[test]
 fn contacts_survive_a_restart_and_introductions_still_build() {
     let mut s = setup(&["alice", "bob"], &[ChannelKind::Nfc]);
-    s.run("alice", "bob", &[], &[]).expect("alice meets bob");
+    s.met("alice", "bob", "w1");
+    s.meet_locally("alice", "bob", &[], &[])
+        .expect("alice and bob exchange");
     let blob = s.client("alice").durable();
     let (dev, _h) = common::harness::device(vec![ChannelKind::Nfc], s.clock.clone(), 23, 0);
     // started knowing nobody, as a phone is
@@ -514,4 +530,30 @@ fn a_hop_of_the_walk_is_filed_with_the_address_it_was_heard_at() {
             .any(|i| i.windows(4).any(|w| w == &kh("w2")[..4])),
         "a contact with no material is not handed on"
     );
+}
+
+/// **A record arriving is what leaves a contact** — the fixture hands the
+/// envelope to each party and the kernel does the rest, which is what a
+/// client does with a record that reached it. The ceremony that produces
+/// one is driven by the kernel over real sessions in the adaptors' tests
+/// [author, 2026-10-14].
+#[test]
+fn a_record_that_arrives_leaves_every_signer_a_contact() {
+    let mut s = setup(&["alice", "bob", "witness"], &[ChannelKind::Nfc]);
+    let t = s.met("alice", "bob", "witness");
+    for (who, other) in [("alice", "bob"), ("bob", "alice")] {
+        let c = s.client(who);
+        assert!(c.store.records.contains_key(&t), "{who} holds the record");
+        let contact = c
+            .store
+            .contacts
+            .get(&kh(other))
+            .unwrap_or_else(|| panic!("{who} holds a contact for {other}"));
+        assert_eq!(contact.how, How::Counterparty);
+        assert!(contact.named(), "with the material to verify by");
+        assert!(
+            c.met(None).contains(&kh(other)),
+            "and counts them among the parties met"
+        );
+    }
 }

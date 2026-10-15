@@ -489,18 +489,31 @@ impl Client {
             if !a.conversation.back.contains_key(w) {
                 continue;
             }
-            let nominated_by = if a.my_nominees.contains(w) {
-                me
-            } else if a.their_nominees.contains(w) {
-                counterparty
-            } else {
+            // **one entry per nominator, and `propose` settles the rest.**
+            // A nominee both sides named is nominated twice, and the rule
+            // for which nomination the record carries lives in `propose`:
+            // the participant that sorts first, so the body is the same
+            // whichever side proposes. Taking `my_nominees` first here
+            // instead attributed such a witness to whoever happened to be
+            // proposing — a different body for the same ceremony, which
+            // the client's own harness could not show because it built
+            // this list itself [2026-10-14].
+            let named = [
+                (me, a.my_nominees.contains(w)),
+                (counterparty, a.their_nominees.contains(w)),
+            ];
+            if named.iter().all(|(_, yes)| !yes) {
                 continue;
-            };
-            witnesses.push(Witness {
-                keyhash: *w,
-                nominated_by,
-                flags: *flags,
-            });
+            }
+            for (who, yes) in named {
+                if yes {
+                    witnesses.push(Witness {
+                        keyhash: *w,
+                        nominated_by: who,
+                        flags: *flags,
+                    });
+                }
+            }
         }
         // no witness: `propose` builds a formation record where the two
         // are at their genesis, and refuses `NoWitness` otherwise

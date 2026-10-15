@@ -206,7 +206,7 @@ flavourlint() {
 }
 flavourlint "fieldtest" --no-default-features \
   -p rhtn-client -p rhtn-daemon -p rhtn-participant -p rhtn-ffi \
-  --features rhtn-client/fieldtest,rhtn-daemon/fieldtest,rhtn-participant/fieldtest,rhtn-ffi/fieldtest
+  --features rhtn-client/fieldtest,rhtn-adaptors/fieldtest,rhtn-daemon/fieldtest,rhtn-participant/fieldtest,rhtn-ffi/fieldtest
 flavourlint "ffi harness, cli" -p rhtn-ffi --features harness,cli
 
 echo "=== 3c. Licences and advisories ==="

@@ -8,16 +8,12 @@
 
 mod common;
 
-use common::harness::{Setup, setup};
+use common::harness::setup;
 use common::{id, ids, kh};
 use rhtn_client::ceremony::Adopting;
 use rhtn_client::device::ChannelKind;
 
 const PARTIES: [&str; 6] = ["alice", "bob", "carol", "w1", "w2", "w3"];
-
-fn met(s: &mut Setup, a: &str, b: &str) {
-    s.face_off(a, b);
-}
 
 // acceptance: CER-33
 #[test]
@@ -50,9 +46,7 @@ fn a_client_self_anchors_until_it_is_adopted_and_a_newly_minted_root_can_adopt()
 
     // so adopting as a newly minted root is ordinary: no genesis, no
     // configuration, nothing to be granted
-    met(&mut s, "bob", "alice");
-    s.h.run_adoption(kh("bob"), kh("alice"), vec![kh("w1")], vec![kh("w2")], 1)
-        .expect("a root adopts");
+    s.adopted("bob", "alice", "w1", 1);
 
     // and the subordinate sits one hop below it, in the root's subnet
     let p = s
@@ -77,12 +71,8 @@ fn a_client_adopted_into_two_trees_holds_a_position_in_each() {
     // two roots, and bob adopted under both: `wire-format.md` §2.3 has one
     // series per patron relationship, so this is two lines and not a
     // replacement of one by the other
-    met(&mut s, "bob", "alice");
-    s.h.run_adoption(kh("bob"), kh("alice"), vec![kh("w1")], vec![kh("w2")], 1)
-        .expect("adopted under alice");
-    met(&mut s, "bob", "carol");
-    s.h.run_adoption(kh("bob"), kh("carol"), vec![kh("w1")], vec![kh("w3")], 2)
-        .expect("adopted under carol");
+    s.adopted("bob", "alice", "w1", 1);
+    s.adopted("bob", "carol", "w1", 2);
 
     let under_alice = s
         .client("bob")
@@ -110,10 +100,7 @@ fn a_client_adopted_into_two_trees_holds_a_position_in_each() {
     // **and which tree an adoption goes into is the patron's to say.**
     // Adopting under one anchor puts the subordinate in that subnet; the
     // other subnet cannot read an address issued in the first.
-    met(&mut s, "w1", "bob");
-    let pop =
-        s.h.run(kh("w1"), kh("bob"), vec![kh("w2")], vec![kh("w3")])
-            .expect("w1 meets bob");
+    let pop = s.met("w1", "bob", "w2");
     let back = s.client("bob").back_pointers();
     let what = || Adopting {
         evidence: rhtn_archive::tx::Evidence::Presence(pop),
@@ -162,9 +149,7 @@ fn a_patron_issues_each_subordinate_its_own_index_and_stops_at_ten() {
     // one address.
     let mut issued = std::collections::BTreeSet::new();
     for n in ["bob", "carol", "w1"] {
-        met(&mut s, n, "alice");
-        s.h.run_adoption(kh(n), me, vec![kh("w2")], vec![kh("w3")], 1)
-            .unwrap_or_else(|e| panic!("{n}: {e:?}"));
+        s.adopted(n, "alice", "w2", 1);
         let loc = s.client(n).position_in(&me).expect("where it was put");
         assert_eq!(loc.anchor, me, "in the patron's own subnet");
         assert_eq!(loc.nibbles, 1, "one hop below a root");
@@ -259,12 +244,8 @@ fn a_client_leaves_a_patron_on_its_own_signature_and_holds_no_position_there_aft
     use rhtn_client::ceremony::{Abort, Msg};
 
     let mut s = setup(&PARTIES, &[ChannelKind::Nfc]);
-    met(&mut s, "bob", "alice");
-    s.h.run_adoption(kh("bob"), kh("alice"), vec![kh("w1")], vec![kh("w2")], 1)
-        .expect("adopted under alice");
-    met(&mut s, "bob", "carol");
-    s.h.run_adoption(kh("bob"), kh("carol"), vec![kh("w1")], vec![kh("w3")], 2)
-        .expect("and under carol");
+    s.adopted("bob", "alice", "w1", 1);
+    s.adopted("bob", "carol", "w1", 2);
     let under_alice = s
         .client("bob")
         .position_in(&kh("alice"))
@@ -304,6 +285,8 @@ fn a_client_leaves_a_patron_on_its_own_signature_and_holds_no_position_there_aft
 
     // and bob is no longer at the address it left, while the other line
     // is untouched: one series per patron relationship
+    // (and this pair's txids are the adversarial order for the fold:
+    // the departure sorts before the adoption it ends)
     assert_eq!(
         s.client("bob").position_in(&kh("alice")),
         None,
@@ -348,9 +331,8 @@ fn a_client_that_is_handed_no_nominee_nominates_the_parties_it_has_met() {
         s.client("alice").met(None).is_empty(),
         "nobody met, nobody to nominate"
     );
-    s.run("alice", "bob", &[], &[]).expect("alice meets bob");
-    s.run("alice", "carol", &["bob"], &["bob"])
-        .expect("alice meets carol, bob witnessing");
+    s.met("alice", "bob", "carol");
+    s.met("alice", "carol", "bob");
     let pool = s.client("alice").met(None);
     assert!(
         pool.contains(&kh("bob")) && pool.contains(&kh("carol")),
@@ -389,7 +371,7 @@ fn a_client_that_is_handed_no_nominee_nominates_the_parties_it_has_met() {
 #[test]
 fn a_restarted_client_has_still_met_whom_it_met() {
     let mut s = setup(&["alice", "bob"], &[ChannelKind::Nfc]);
-    s.run("alice", "bob", &[], &[]).expect("alice meets bob");
+    s.met("alice", "bob", "carol");
     assert_eq!(s.client("alice").met(None), vec![kh("bob")]);
     let blob = s.client("alice").durable();
     let clock = s.clock.clone();
@@ -422,9 +404,7 @@ fn a_restarted_client_has_still_met_whom_it_met() {
 fn a_client_makes_a_card_of_its_own_once_it_knows_where_its_anchor_answers() {
     let mut s = setup(&PARTIES, &[ChannelKind::Nfc]);
     let patron = kh("alice");
-    met(&mut s, "bob", "alice");
-    s.h.run_adoption(kh("bob"), patron, vec![kh("w2")], vec![kh("w3")], 1)
-        .expect("bob is adopted");
+    s.adopted("bob", "alice", "w2", 1);
 
     // bob sits under alice and can say so, but has no address for her yet
     assert!(s.client("bob").own_locator().is_ok());
