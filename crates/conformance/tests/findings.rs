@@ -6,6 +6,9 @@ use rhtn_crypto::{identity::testkit::test_identity, SigningIdentity};
 use rhtn_node::view::NodeView;
 use std::sync::Arc;
 
+/// The subnet the fixtures' positions are in (`wire-format.md` §2.3 field 4).
+const SUBNET: [u8; 32] = [0xdb; 32];
+
 struct Missing;
 impl rhtn_archive::walk::Fetch for Missing {
     fn fetch(&self, _: &[u8; 32]) -> Option<Vec<u8>> { None }
@@ -19,7 +22,7 @@ fn adoption(n: &SigningIdentity, p: &SigningIdentity, evidence: Evidence) -> Vec
     let bp = [cose::sha256(&p.public.keyhash)];
     adoption_body(&Adoption {
         node: n.public.keyhash, patron: p.public.keyhash,
-        locator: Locator { anchor: p.public.keyhash, path: vec![0], nibbles: 1, seqno: Seqno { series: 1, counter: 0 } },
+        locator: Locator { anchor: p.public.keyhash, path: vec![0], nibbles: 1, seqno: Seqno { series: 1, counter: 0 }, subnet: Some(SUBNET) },
         timestamp: 100, key_material: None, evidence, presented_head: None, back: [&bn, &bp],
     })
 }
@@ -201,7 +204,7 @@ fn f02_adoption_with_malformed_locator_must_be_rejected() {
     let body = adoption(&n,&p,Evidence::Presence([1;32]));
     let loc = value_slice(&body,3).unwrap();
     // Empty path bytes paired with a declared length of one nibble.
-    let invalid = Locator { anchor:p.public.keyhash,path:vec![],nibbles:1,seqno:Seqno{series:1,counter:0} };
+    let invalid = Locator { anchor:p.public.keyhash,path:vec![],nibbles:1,seqno:Seqno{series:1,counter:0}, subnet: Some(SUBNET) };
     let mut encoded = vec![]; invalid.emit(&mut encoded);
     let body = [body[..loc.start].to_vec(),encoded,body[loc.end..].to_vec()].concat();
     let raw = envelope(TYPE_ADOPTION,&body,&[&n,&p]);
@@ -404,7 +407,7 @@ fn f04_old_series_departure_must_not_clear_a_new_relationship_slot() {
     let departed=envelope(TYPE_DEPARTURE,&departure_body(&[a.txid],&n.public.keyhash,&p.public.keyhash,Seqno{series:1,counter:1},101,None),&[&n]);
     let d=Record::parse(&departed).unwrap();
     let bn=[d.txid];let bp=[a.txid];
-    let later=adoption_body(&Adoption { node:n.public.keyhash,patron:p.public.keyhash,locator:Locator{anchor:p.public.keyhash,path:vec![0],nibbles:1,seqno:Seqno{series:2,counter:0}},timestamp:200,key_material:None,evidence:Evidence::Presence([8;32]),presented_head:None,back:[&bn,&bp] });
+    let later=adoption_body(&Adoption { node:n.public.keyhash,patron:p.public.keyhash,locator:Locator{anchor:p.public.keyhash,path:vec![0],nibbles:1,seqno:Seqno{series:2,counter:0},subnet:Some(SUBNET)},timestamp:200,key_material:None,evidence:Evidence::Presence([8;32]),presented_head:None,back:[&bn,&bp] });
     let a2=envelope(TYPE_ADOPTION,&later,&[&n,&p]);
     let mut view=NodeView::new(p.clone(),Locator::root(p.public.keyhash,Seqno{series:3,counter:0}));
     let ids=vec![n.public.clone(),p.public.clone(),old.public];
@@ -482,7 +485,7 @@ fn f04_old_adoption_received_last_must_not_clear_a_new_relationship_slot() {
     let departed=envelope(TYPE_DEPARTURE,&departure_body(&[a.txid],&n.public.keyhash,&p.public.keyhash,Seqno{series:1,counter:1},101,None),&[&n]);
     let d=Record::parse(&departed).unwrap();
     let bn=[d.txid];let bp=[a.txid];
-    let later=adoption_body(&Adoption { node:n.public.keyhash,patron:p.public.keyhash,locator:Locator{anchor:p.public.keyhash,path:vec![0],nibbles:1,seqno:Seqno{series:2,counter:0}},timestamp:200,key_material:None,evidence:Evidence::Presence([8;32]),presented_head:None,back:[&bn,&bp] });
+    let later=adoption_body(&Adoption { node:n.public.keyhash,patron:p.public.keyhash,locator:Locator{anchor:p.public.keyhash,path:vec![0],nibbles:1,seqno:Seqno{series:2,counter:0},subnet:Some(SUBNET)},timestamp:200,key_material:None,evidence:Evidence::Presence([8;32]),presented_head:None,back:[&bn,&bp] });
     let a2=envelope(TYPE_ADOPTION,&later,&[&n,&p]);
     let mut view=NodeView::new(p.clone(),Locator::root(p.public.keyhash,Seqno{series:3,counter:0}));
     let ids=vec![n.public.clone(),p.public.clone(),old.public];

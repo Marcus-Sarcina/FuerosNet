@@ -15,6 +15,9 @@ use rhtn_codec::cbor::*;
 use rhtn_codec::encode::*;
 use rhtn_crypto::identity::testkit::test_identity;
 
+/// The subnet the fixtures' positions are in (`wire-format.md` §2.3 field 4).
+const SUBNET: [u8; 32] = [0xdb; 32];
+
 fn bundle(name: &str) -> Vec<u8> {
     PrekeyBundle::build(
         &test_identity(name),
@@ -90,6 +93,7 @@ fn a_value_outside_its_declared_range_is_refused_not_narrowed() {
             series: u32::MAX,
             counter: u32::MAX,
         },
+        subnet: Some(SUBNET),
     }
     .emit(&mut inside);
     let back = Locator::decode(&inside).expect("the top of the range is inside it");

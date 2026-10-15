@@ -52,6 +52,9 @@ use rhtn_codec::cbor::{map_without_key, value_slice};
 use rhtn_codec::encode::*;
 use rhtn_codec::schema::check_body;
 
+/// The subnet the fixtures' positions are in (`wire-format.md` §2.3 field 4).
+const SUBNET: [u8; 32] = [0xdb; 32];
+
 /// An adoption body of `node` under `patron` on the world's back-pointers.
 fn adoption_bytes(w: &World, node: &str, patron: &str, evidence: Evidence, series: u32) -> Vec<u8> {
     let (bn, bp) = (w.back(node), w.back(patron));
@@ -63,6 +66,7 @@ fn adoption_bytes(w: &World, node: &str, patron: &str, evidence: Evidence, serie
             path: vec![0x10],
             nibbles: 2,
             seqno: Seqno { series, counter: 0 },
+            subnet: Some(SUBNET),
         },
         timestamp: w.clock + 1,
         key_material: None,
@@ -425,6 +429,7 @@ fn nested_signed_structures_are_checked_inside_a_body() {
                 series: 1,
                 counter: 0,
             },
+            subnet: Some(SUBNET),
         },
         timestamp: t,
         key_material: None,

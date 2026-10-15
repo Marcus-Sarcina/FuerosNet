@@ -289,10 +289,22 @@ def seqno(series, counter):
     assert 0 <= series < 2**32 and 0 <= counter < 2**32, 'seqno: u32 ranges (§2.3)'
     return e_arr([e_uint(series), e_uint(counter)])
 
-def locator(anchor_kh, path_bytes, seqno_bytes):
-    return e_map([(e_uint(1), e_bstr(anchor_kh)),
-                  (e_uint(2), path_bytes),
-                  (e_uint(3), seqno_bytes)])
+# The subnet a positioned locator names (wire §2.3 field 4): the root's scope
+# id, the txid of the first adoption that gave the root a subordinate (design
+# §13.8).  The vectors' positions are structural, so one fixed txid stands for
+# it.
+SUBNET = H(b'rhtn test-vectors: the first adoption under the root')
+
+def locator(anchor_kh, path_bytes, seqno_bytes, subnet=SUBNET):
+    """subnet=None for a lone identity's self-anchored locator and for the
+    locator of a root's first adoption; a locator two or more nibbles down
+    without one is malformed."""
+    fields = [(e_uint(1), e_bstr(anchor_kh)),
+              (e_uint(2), path_bytes),
+              (e_uint(3), seqno_bytes)]
+    if subnet is not None:
+        fields.append((e_uint(4), e_bstr(subnet)))
+    return e_map(fields)
 
 def genesis(keyhash):
     """Over the raw 32 keyhash bytes, not a CBOR encoding of them (wire §3.1,
@@ -858,6 +870,7 @@ code40_txid = H(code40_body)
 ext_loc = e_map([(e_uint(1), e_bstr(bob.keyhash)),
                  (e_uint(2), path([3, 1, 4, 1, 5])),
                  (e_uint(3), seqno(5, 0)),
+                 (e_uint(4), e_bstr(SUBNET)),
                  (e_uint(99), e_bstr(bytes.fromhex('beef')))])  # NESTED unknown key
 ext_body = e_map([
     (e_uint(0), backptrs([genesis(alice.keyhash)], [genesis(bob.keyhash)])),
@@ -2237,7 +2250,7 @@ vs_c1_later = _introduction(IDS['c1'], locator(bob.keyhash, p_odd, seqno(2, 9)))
 vs_carol = _introduction(carol, locator(carol.keyhash, b'\x40', seqno(1, 0)))
 vs_bob = _introduction(bob, locator(bob.keyhash, b'\x40', seqno(1, 0)))
 vs_mismatch = e_arr([e_uint(1), alice.key_material, _signed_locator_by(IDS['c1'], locator(bob.keyhash, p_odd, seqno(2, 7)))])
-vs_self = _introduction(alice, locator(alice.keyhash, b'\x40', seqno(1, 0)))
+vs_self = _introduction(alice, locator(alice.keyhash, b'\x40', seqno(1, 0), subnet=None))  # a lone identity names no subnet
 vs_bundle = [vs_c1, vs_carol, vs_c1_later, vs_bob, vs_mismatch, vs_self]
 
 # §2.4's anchored introduction: c1's introduction, whose locator is anchored
@@ -3335,9 +3348,19 @@ def _pth(n):
     if n % 2: packed.append(nb[-1] << 4)
     return e_map([(e_uint(1), e_bstr(bytes(packed))), (e_uint(2), e_uint(n))])
 reg('B-path-24', 'bytes', ACC('Locator', 'path at the 24-nibble ceiling'),
-    e_map([(e_uint(1), e_bstr(bob.keyhash)), (e_uint(2), _pth(24)), (e_uint(3), seqno(5, 0))]))
+    locator(bob.keyhash, _pth(24), seqno(5, 0)))
 reg('B-path-25', 'bytes', REJ('Locator', 'schema', '25 nibbles exceed the ceiling'),
-    e_map([(e_uint(1), e_bstr(bob.keyhash)), (e_uint(2), _pth(25)), (e_uint(3), seqno(5, 0))]))
+    locator(bob.keyhash, _pth(25), seqno(5, 0)))
+# A locator two or more nibbles down that names no subnet is malformed (§2.3,
+# field 4); a self-anchored one may leave it out, since a lone identity is in
+# none, and so may one a single nibble down, which may be the root's first
+# adoption — the record whose own txid names the subnet.
+reg('B-locator-no-subnet', 'bytes', REJ('Locator', 'schema', 'five nibbles down and no subnet'),
+    locator(bob.keyhash, p_odd, seqno(5, 0), subnet=None))
+reg('B-locator-lone', 'bytes', ACC('Locator', 'self-anchored, no subnet: a lone identity'),
+    locator(bob.keyhash, path([]), seqno(1, 0), subnet=None))
+reg('B-locator-first', 'bytes', ACC('Locator', "one nibble down, no subnet: a root's first adoption"),
+    locator(bob.keyhash, path([3]), seqno(1, 0), subnet=None))
 def _adopt_ext(nkeys, vlen):
     ext = [(e_uint(100 + i), e_bstr(b'x')) for i in range(nkeys)]
     if vlen:

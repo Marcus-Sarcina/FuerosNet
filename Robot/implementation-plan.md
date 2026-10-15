@@ -646,7 +646,7 @@ seconds. So the order is fixed by the cost of the test cycle and not by the
 dependency graph — the rules are written in the documents now so that the
 later pass implements what was decided rather than what it remembers.
 
-The two decisions they wait on are in `light-client-requirements.md` §10:
+The two decisions they wait on are in `light-client-requirements.md` §11:
 what a witness's four minutes run from, and whether the continuity window
 replaces design §7.5's guided burst or sits beside it.
 

@@ -20,6 +20,9 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+/// The subnet the fixtures' positions are in (`wire-format.md` §2.3 field 4).
+const SUBNET: [u8; 32] = [0xdb; 32];
+
 const CAST: [&str; 6] = ["alice", "bob", "carol", "w1", "w2", "witness"];
 
 fn id(n: &str) -> SigningIdentity {
@@ -145,6 +148,7 @@ impl Signers {
                     series: 1,
                     counter: 0,
                 },
+                subnet: Some(SUBNET),
             },
             timestamp: t,
             key_material: None,

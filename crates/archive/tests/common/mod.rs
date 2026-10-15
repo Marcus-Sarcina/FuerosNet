@@ -15,6 +15,9 @@ use rhtn_crypto::identity::testkit::test_identity;
 use rhtn_crypto::{Identity, SigningIdentity};
 use std::collections::BTreeMap;
 
+/// The subnet the fixtures' positions are in (`wire-format.md` §2.3 field 4).
+pub const SUBNET: [u8; 32] = [0xdb; 32];
+
 pub struct World {
     pub ids: BTreeMap<String, SigningIdentity>,
     pub archives: BTreeMap<Keyhash, Archive>,
@@ -96,6 +99,7 @@ impl World {
                 path: vec![0x10 | slot],
                 nibbles: 2,
                 seqno: Seqno { series, counter: 0 },
+                subnet: Some(SUBNET),
             },
             timestamp: t,
             key_material: None,
@@ -115,6 +119,7 @@ impl World {
             path: vec![0x10 | slot],
             nibbles: 2,
             seqno: Seqno { series, counter: 0 },
+            subnet: Some(SUBNET),
         }
     }
 

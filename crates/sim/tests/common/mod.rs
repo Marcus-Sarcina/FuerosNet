@@ -139,6 +139,9 @@ use rhtn_archive::tx::*;
 use rhtn_archive::{Keyhash, Txid};
 use rhtn_crypto::Identity;
 
+/// The subnet the fixtures' positions are in (`wire-format.md` §2.3 field 4).
+pub const SUBNET: [u8; 32] = [0xdb; 32];
+
 pub fn ids() -> Vec<Identity> {
     NAMES.iter().map(|n| test_identity(n).public).collect()
 }
@@ -245,6 +248,7 @@ impl Signers {
                 path: p.bytes,
                 nibbles: p.nibbles,
                 seqno: Seqno { series, counter: 0 },
+                subnet: Some(SUBNET),
             },
             timestamp: t,
             key_material: None,
@@ -277,6 +281,7 @@ impl Signers {
                 path: p.bytes,
                 nibbles: p.nibbles,
                 seqno: Seqno { series, counter: 0 },
+                subnet: Some(SUBNET),
             },
             timestamp: t,
             key_material: None,
@@ -320,6 +325,7 @@ pub fn view_of(
                 series: 1,
                 counter: 0,
             },
+            subnet: Some(SUBNET),
         },
     );
     v.table = table;

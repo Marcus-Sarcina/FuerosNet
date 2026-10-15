@@ -557,15 +557,17 @@ impl Instrument {
 
             // the adoption, on the record the ceremony produced
             ["where"] => Ok(c
-                .anchors()
+                .subnets()
                 .iter()
-                .map(|a| format!("anchor {}", hex(a)))
+                .map(|s| format!("subnet {}", hex(s)))
+                .chain(std::iter::once(format!("position {}", hex(&c.position()))))
                 .collect()),
-            ["where", anchor] => Ok(vec![match c.position_in(id(anchor)?) {
+            ["where", subnet] => Ok(vec![match c.position_in(id(subnet)?) {
                 None => "position none".into(),
                 Some(p) => format!("position {}", hex(&p)),
             }]),
-            ["adopt", anchor, node, presence, series, back] => {
+            // the subnet, or `-` for the one under this client's own key
+            ["adopt", subnet, node, presence, series, back] => {
                 let s: u32 = series
                     .parse()
                     .map_err(|_| format!("`{series}` is not a series"))?;
@@ -574,7 +576,13 @@ impl Instrument {
                 Ok(vec![format!(
                     "adoption {}",
                     hex(&c
-                        .propose_adoption(id(anchor)?, id(node)?, id(presence)?, s, back?)
+                        .propose_adoption(
+                            (*subnet != "-").then(|| id(subnet)).transpose()?,
+                            id(node)?,
+                            id(presence)?,
+                            s,
+                            back?
+                        )
                         .map_err(|e| e.reason().to_string())?)
                 )])
             }

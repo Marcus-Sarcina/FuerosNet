@@ -758,6 +758,15 @@ anchor up in, and it is what you hand onward in a bundle (§1.1,
   a contact with no upstream among your holdings goes last, because
   pruning it is losing it: that party you will need introduced again,
   which is the ordinary way of meeting anybody (design §12.3 Case 0).
+- **Show a contact by the alias and image it published for the subnet its
+  locator is in, and by keyhash where none has reached you** [author,
+  2026-10-15]. A locator names a subnet (`wire-format.md` §2.3), and a
+  profile is published per subnet and hosted where the locator leads
+  (`wire-format.md` §7.11), so holding a locator is what lets you fetch one:
+  fetch it when you take the locator and again when the party's counter
+  moves, keep it beside the contact, and never show a name you have not
+  received. The alias is display only: nothing you do is keyed by it, and
+  two contacts may carry the same one.
 - **Persist contacts as you persist records.** They are state, not a
   cache: a client that forgot its contacts between starts could not name
   a witness, select a verifier it had met, or introduce anyone, and
@@ -766,6 +775,28 @@ anchor up in, and it is what you hand onward in a bundle (§1.1,
   ceremony ends with the live state as it was, plus the contacts it
   taught you, the record, and the meeting's outcome, all persisted — and
   nothing of the ceremony in a live variable that a later one could read.
+
+### 4.4 Your profile
+
+- **Publish an alias and, if you choose, an image, for each subnet you hold a
+  position in** (`wire-format.md` §7.11; design §12.8) — to your serving node
+  in that subnet, as you publish your prekeys (§4.1), at attach and whenever
+  it changes, each one at a higher counter than the last. Both are the
+  person's to pick, and neither is expected to be anything in particular: a
+  picture of the face is not asked for, and how much to show is the person's
+  own decision, made separately for each subnet, as the postal model has
+  each institution holding its own name for you (design §3.1.1).
+- **It goes in no transaction.** A profile is a statement about now, replaced
+  when the person changes their mind; a record is forever. Nothing you sign
+  into an archive carries an alias or an image, and a counterparty that
+  wants your name fetches it.
+- **Where you are the root, publish the subnet's profile too**: its alias
+  and, if you choose, a logo, as the subnet's own (`wire-format.md` §7.11
+  kind 1). **By convention the root alone sets or changes it.** Nothing
+  enforces that, since any party can sign a profile naming the subnet
+  (design §1.1), and the client says so plainly rather than pretending the
+  convention is a rule; where two reach you, prefer the one signed by the
+  root, whose key you hold.
 
 ---
 
@@ -869,6 +900,14 @@ anchor up in, and it is what you hand onward in a bundle (§1.1,
   (design §9.0, §6.2), who hold the material that makes them. A body carrying
   somebody else's recovery block or transfer statement is not one you were shown
   to sign.
+- **Ask which subnet before you invite, and say which subnet before you
+  accept** [author, 2026-10-15]. A patron holding positions in several subnets
+  adopts into one of them (design §3.1.1), so an invitation to be adopted asks
+  the inviter which, by the label the client gives each: *the patron's alias
+  in that subnet, and the subnet's own* — *Dana's Bowling League*. The party
+  invited is shown that label in the brief it accepts or refuses, from the
+  claim the invitation carried until the signed profile replaces it
+  (`wire-format.md` §7.11), and a regular meeting shows none.
 
 ---
 
@@ -994,7 +1033,26 @@ on the wire.
 
 ---
 
-## 10. Open
+## 10. The instances you run
+
+- **Administer every instance you run, and assume nothing from running one**
+  [author, 2026-10-15]. An instance serves one subnet (design §3.3), so an
+  operator bound in several subnets who serves more than one runs an instance
+  in each, and this client is where all of them are administered
+  (`infra-client-requirements.md` §8.2): a list of instances, each with the
+  subnet it serves, its address and the run of delegations it holds. Holding a
+  position in a subnet says nothing about running infrastructure there — an
+  operator in one subnet is an ordinary light client in the next — so the
+  client never infers an instance from a position, never offers to administer
+  one it was not told about, and never addresses its own traffic in a subnet
+  to an instance it runs in another.
+- **Show each instance under the subnet's label** (§4.4, §7), since an
+  operator with two instances needs to know which is which by something other
+  than an address.
+
+---
+
+## 11. Open
 
 - Whether recovery should restore archive history, and how, without handing an
   attacker the same path (design §22).

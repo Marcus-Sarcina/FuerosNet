@@ -228,14 +228,12 @@ fn a_newly_minted_root_adopts_on_the_record_it_just_made() {
     // **alice has been configured as nothing and adopted by nobody.** Its
     // position is the self-anchor, which is a position like any other, and
     // is the whole of what it needs to be a patron.
-    assert_eq!(
-        set.get("alice").must("where"),
-        [format!("anchor {a}")],
-        "one subnet, its own"
-    );
+    // a lone identity names no subnet (design §13.8): the one under its
+    // key is named by its first adoption's txid
+    let lone = set.get("alice").must("where");
     assert!(
-        set.get("alice").must(&format!("where {a}"))[0].starts_with("position "),
-        "and it knows where it sits in it"
+        lone.len() == 1 && lone[0].starts_with("position "),
+        "no subnet yet, and a position of its own: {lone:?}"
     );
     assert_eq!(
         set.get("alice").must(&format!("where {b}")),
@@ -250,7 +248,7 @@ fn a_newly_minted_root_adopts_on_the_record_it_just_made() {
     let back = line(set.get("bob").must("back-pointers"), "back-pointers ");
     let body = line(
         set.get("alice")
-            .must(&format!("adopt {a} {b} {pop} 1 {back}")),
+            .must(&format!("adopt - {b} {pop} 1 {back}")),
         "adoption ",
     );
     let sig_b = line(set.get("bob").must(&format!("sign {body}")), "signed ");
@@ -273,16 +271,20 @@ fn a_newly_minted_root_adopts_on_the_record_it_just_made() {
     // **and taking it is what tells the subordinate where it now sits.**
     // Nothing was configured on either side and nothing was granted: the
     // record says it.
-    let anchors = set.get("bob").must("where");
+    // The subnet is named by the root's first adoption, this one, by its
+    // own txid (design §13.8), and both parties name it.
+    let subnets = set.get("bob").must("where");
     assert!(
-        anchors.contains(&format!("anchor {a}")),
-        "bob is in alice's subnet now: {anchors:?}"
+        subnets.contains(&format!("subnet {t_a}")),
+        "bob is in alice's subnet now, named by the adoption: {subnets:?}"
     );
     assert!(
-        anchors.contains(&format!("anchor {b}")),
-        "and still in its own"
+        set.get("alice")
+            .must("where")
+            .contains(&format!("subnet {t_a}")),
+        "and alice holds the name from then on"
     );
-    assert!(set.get("bob").must(&format!("where {a}"))[0].starts_with("position "));
+    assert!(set.get("bob").must(&format!("where {t_a}"))[0].starts_with("position "));
 }
 
 /// One ceremony between alice and bob, witnessed by carol and w1, to the
@@ -474,7 +476,7 @@ fn a_record_a_client_makes_reaches_the_node_that_serves_it() {
     let back = line(set.get("carol").must("back-pointers"), "back-pointers ");
     let body = line(
         set.get("alice")
-            .must(&format!("adopt {a} {c} {pop} 1 {back}")),
+            .must(&format!("adopt - {c} {pop} 1 {back}")),
         "adoption ",
     );
     let sig_c = line(set.get("carol").must(&format!("sign {body}")), "signed ");

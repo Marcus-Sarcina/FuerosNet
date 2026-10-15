@@ -284,7 +284,12 @@ const LATE_RESPONSE: Fields = &[
     (2, true, Keyhash),
     (3, true, VerifierResponse),
 ];
-const LOCATOR: Fields = &[(1, true, Keyhash), (2, true, Path), (3, true, Seqno)];
+const LOCATOR: Fields = &[
+    (1, true, Keyhash),
+    (2, true, Path),
+    (3, true, Seqno),
+    (4, false, Bytes32),
+];
 const PATH: Fields = &[(1, true, Bstr), (2, true, Uint)];
 const SIBLING_REF: Fields = &[
     (1, true, Keyhash),
@@ -347,6 +352,27 @@ fn bs<'a>(b: &'a [u8], it: &Item) -> Option<&'a [u8]> {
         Item::Bytes(r) => Some(&b[r.clone()]),
         _ => None,
     }
+}
+
+/// A locator two or more hops below its anchor names its subnet
+/// (`wire-format.md` §2.3 field 4); one without is malformed.  A
+/// self-anchored locator may leave the field out, since a lone identity
+/// is in no subnet, and so may a locator one hop down: a root's first
+/// adoption is the record whose own txid names the subnet, and cannot
+/// carry it.  Whether a given one-hop locator *is* that first adoption is
+/// nothing a decoder can know, so the nibble count is the whole of the
+/// test here; the reviewing client checks the rest against the patron's
+/// own position.
+fn locator_names_its_subnet(v: &Item) -> Result<(), Error> {
+    let Item::Map(m) = v else { unreachable!() };
+    let nibbles = match map_get(m, 2) {
+        Some(Item::Map(pm)) => map_get(pm, 2).and_then(as_uint).unwrap_or(0),
+        _ => 0,
+    };
+    if nibbles >= 2 && map_get(m, 4).is_none() {
+        return Err(Error("a positioned locator names no subnet"));
+    }
+    Ok(())
 }
 
 /// An unsigned map at offset `at` against its schema: no unknown keys
@@ -554,7 +580,10 @@ pub fn check_type(b: &[u8], at: usize, t: T) -> Result<(), Error> {
             _ => return Err(Error("tstr shape")),
         },
         Any => {}
-        Locator => check_map(b, at, LOCATOR)?,
+        Locator => {
+            check_map(b, at, LOCATOR)?;
+            locator_names_its_subnet(&v)?;
+        }
         Path => {
             check_map(b, at, PATH)?;
             let Item::Map(ref m) = v else { unreachable!() };
@@ -963,17 +992,20 @@ fn record_extension_bounds(b: &[u8], kind: &str, item: &Item) -> Result<(), Erro
         "AnchorEntry" | "SubtreeAck" | "AbuseReport" | "Witness" | "Delegation" => Some(5),
         "EndpointRecord" => Some(4),
         "CatalogEntry" => Some(9),
-        "KeyGrant" | "SignedLocator" | "LateResponse" | "Locator" | "NetworkPoint" => Some(3),
+        "Locator" => Some(4),
+        "KeyGrant" | "SignedLocator" | "LateResponse" | "NetworkPoint" => Some(3),
         "VerifierResponse" => Some(10),
         _ => None,
     };
     let Some(top) = top else { return Ok(()) };
     extension_bounds(b, 0, |k| (1..=top).contains(&k))?;
     match kind {
-        // network points, and a locator, are maps of their own
-        "AnchorEntry" | "EndpointRecord" | "SignedLocator" => {
+        // network points are maps of their own, three keys each
+        "AnchorEntry" | "EndpointRecord" => {
             nested_extension_bounds(b, 0, 2, &|k| (1..=3).contains(&k))
         }
+        // and so is a locator, four (§2.3)
+        "SignedLocator" => nested_extension_bounds(b, 0, 2, &|k| (1..=4).contains(&k)),
         _ => Ok(()),
     }
 }
@@ -2225,7 +2257,8 @@ pub fn check_body_of_type(b: &[u8], item: &Item, tx_type: u64) -> Result<(), Err
             // the locator's own shape, its packed path included (§2.1,
             // §2.3), its unknown keys the extensions a signed body keeps
             check_map_signed(b, r3.start, LOCATOR)?;
-            extension_bounds(b, r3.start, |k| (1..=3).contains(&k))?;
+            locator_names_its_subnet(&Item::Map(loc.clone()))?;
+            extension_bounds(b, r3.start, |k| (1..=4).contains(&k))?;
             map_get(m, 4)
                 .and_then(as_uint)
                 .ok_or(Error("adoption timestamp uint"))?;
@@ -2320,8 +2353,8 @@ pub fn check_body_of_type(b: &[u8], item: &Item, tx_type: u64) -> Result<(), Err
                 }
             }
             let r3 = value_slice(b, 3).ok_or(Error("field 3"))?;
-            extension_bounds(b, r3.start, |k| (1..=3).contains(&k))?;
-            nested_extension_bounds(b, 0, 4, &|k| (1..=3).contains(&k))?;
+            extension_bounds(b, r3.start, |k| (1..=4).contains(&k))?;
+            nested_extension_bounds(b, 0, 4, &|k| (1..=4).contains(&k))?;
             map_get(m, 5)
                 .and_then(as_uint)
                 .ok_or(Error("peering timestamp uint"))?;

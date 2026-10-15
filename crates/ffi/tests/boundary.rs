@@ -299,6 +299,9 @@ use rhtn_node::view::NodeView;
 use rhtn_transport::session::{Log, NodeConfig};
 use rhtn_transport::tls::Pins;
 
+/// The subnet the fixtures' positions are in (`wire-format.md` §2.3 field 4).
+const SUBNET: [u8; 32] = [0xdb; 32];
+
 fn sid(name: &str) -> rhtn_crypto::SigningIdentity {
     rhtn_crypto::identity::testkit::test_identity(name)
 }
@@ -324,6 +327,7 @@ fn serving_with(name: &str, tweak: impl FnOnce(&mut NodeConfig)) -> Arc<LiveNode
                 series: 1,
                 counter: 0,
             },
+            subnet: Some(SUBNET),
         },
     );
     // alice and carol are bob's own light clients: in its subtree, so
@@ -362,6 +366,7 @@ fn serving(name: &str) -> Arc<LiveNode> {
                 series: 1,
                 counter: 0,
             },
+            subnet: Some(SUBNET),
         },
     );
     // alice and carol are bob's own light clients: in its subtree, so

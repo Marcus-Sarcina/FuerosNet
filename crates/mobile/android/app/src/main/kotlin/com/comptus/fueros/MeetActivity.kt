@@ -647,8 +647,12 @@ class MeetActivity : Activity() {
 
     private fun brief(m: Meet) {
         para("This is what is about to happen. Both of you are being shown it, and both of you answer.")
+        // **what the two of them are about to do**, which for a responder
+        // is what the initiator's invitation asked for and not what this
+        // device chose [bench, 2026-10-15]
         heading(
-            when (m.adopt) {
+            when (m.settled()) {
+                null -> "One of you as the other's patron"
                 Meet.Adopt.NONE -> "A regular meeting with ${m.counterpartyName}"
                 Meet.Adopt.ME_UNDER_THEM -> "${m.counterpartyName} as your patron"
                 Meet.Adopt.THEM_UNDER_ME -> "You as ${m.counterpartyName}'s patron"
@@ -1007,7 +1011,7 @@ class MeetActivity : Activity() {
                     para("Nothing was proposed, and nothing is owed: the meeting stands on its own.")
                 } else {
                     para("The adoption is recorded: $t")
-                    a.position()?.let { para("Where you sit now: $it") }
+                    para("Where you sit now: ${a.position()}")
                     para("Your device will hand the record to its node when it has one. Until then it is held here, which is where it is evidence.")
                 }
             }

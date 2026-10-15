@@ -73,9 +73,13 @@ fn the_body_the_patron_proposed_on_the_meeting_they_had_is_signed_and_taken() {
     for n in ["bob", "alice"] {
         assert!(s.client(n).store.records.contains_key(&t), "{n} holds it");
     }
+    // the subnet is named by the root's first adoption: this one
+    let subnet = s.client("alice").subnets()[0];
+    assert_eq!(subnet, t, "by its own txid");
+    assert_eq!(subnet, s.client("bob").subnet().expect("bob is in it"));
     let pos = s
         .client("bob")
-        .position_in(&kh("alice"))
+        .position_in(&subnet)
         .expect("a position in the patron's subnet");
     assert_eq!(pos.anchor, kh("alice"));
     assert_eq!(pos.nibbles, 1, "one hop below a root");
@@ -106,6 +110,7 @@ fn a_body_adopting_another_party_is_not_this_clients_to_sign() {
                 series: 1,
                 counter: 0,
             },
+            subnet: None,
         },
         s.clock.get() / 1000,
         Evidence::Presence(pop),
@@ -138,6 +143,7 @@ fn a_body_resting_on_a_meeting_with_somebody_else_is_refused() {
                 series: 1,
                 counter: 0,
             },
+            subnet: None,
         },
         s.clock.get() / 1000,
         Evidence::Presence(elsewhere),
@@ -159,7 +165,7 @@ fn a_series_this_key_has_occupied_is_refused() {
     let body = s
         .client("carol")
         .propose_adoption_in(
-            kh("carol"),
+            None,
             kh("bob"),
             &node_back,
             Adopting {
@@ -176,7 +182,7 @@ fn a_series_this_key_has_occupied_is_refused() {
     let body = s
         .client("carol")
         .propose_adoption_in(
-            kh("carol"),
+            None,
             kh("bob"),
             &node_back,
             Adopting {
@@ -197,7 +203,7 @@ fn an_address_that_is_not_the_patrons_to_issue_is_refused() {
     let pop = s.met_in_person("bob", "alice", "w2");
     let where_alice = held_position(&mut s, "bob", "alice");
     let now = s.clock.get() / 1000;
-    let at = |anchor, path: Vec<u8>, nibbles| {
+    let at = |anchor, path: Vec<u8>, nibbles, subnet| {
         body_of(
             "bob",
             "alice",
@@ -209,6 +215,7 @@ fn an_address_that_is_not_the_patrons_to_issue_is_refused() {
                     series: 1,
                     counter: 0,
                 },
+                subnet,
             },
             now,
             Evidence::Presence(pop),
@@ -219,21 +226,22 @@ fn an_address_that_is_not_the_patrons_to_issue_is_refused() {
     // another subnet altogether
     let why = refusal(
         s.client("bob")
-            .review_and_sign_adoption(&at(kh("carol"), vec![0x10], 1))
+            .review_and_sign_adoption(&at(kh("carol"), vec![0x10], 1, None))
             .unwrap_err(),
     );
     assert!(why.contains("one hop below"), "{why}");
     // the patron's own subnet, two hops down: not a slot of the patron's
+    // (named, as two hops down must be, so that the shape is what fails)
     let why = refusal(
         s.client("bob")
-            .review_and_sign_adoption(&at(where_alice.anchor, vec![0x12], 2))
+            .review_and_sign_adoption(&at(where_alice.anchor, vec![0x12], 2, Some(pop)))
             .unwrap_err(),
     );
     assert!(why.contains("one hop below"), "{why}");
     // and the address the patron would issue is taken
     assert!(
         s.client("bob")
-            .review_and_sign_adoption(&at(where_alice.anchor, vec![0x10], 1))
+            .review_and_sign_adoption(&at(where_alice.anchor, vec![0x10], 1, None))
             .is_ok()
     );
 }
@@ -255,6 +263,7 @@ fn back_pointers_that_are_not_this_archives_are_refused() {
                 series: 1,
                 counter: 0,
             },
+            subnet: None,
         },
         s.clock.get() / 1000,
         Evidence::Presence(pop),
@@ -283,6 +292,7 @@ fn a_timestamp_this_clock_cannot_hold_is_refused() {
                     series: 1,
                     counter: 0,
                 },
+                subnet: None,
             },
             when,
             Evidence::Presence(pop),
@@ -327,6 +337,7 @@ fn a_patron_whose_own_position_is_not_held_is_refused() {
                 series: 1,
                 counter: 0,
             },
+            subnet: None,
         },
         s.clock.get() / 1000,
         Evidence::Presence(pop),
@@ -373,7 +384,7 @@ fn a_body_carrying_a_recovery_block_is_refused_on_this_path() {
     let body = s
         .client("w1")
         .propose_adoption_in(
-            kh("w1"),
+            None,
             kh("alice2"),
             &node_back,
             Adopting {

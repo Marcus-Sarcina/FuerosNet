@@ -1,6 +1,6 @@
 # Primitives
 
-Generated against `wire-format.md` `257b4e8a1840b628…`, `network-design.md` `f6ba1c767eb84346…` and `light-client-requirements.md` `c86ed50694b8ed17…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `38b141966a063b86…`, `network-design.md` `215cd3358e1f6c65…` and `light-client-requirements.md` `e68503c02fbebe19…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Canonical. Spec-derived, reproduced by the independent harness.** See
 [README.md](README.md).
@@ -53,11 +53,12 @@ then the mandatory zero) · `02 05` length **in nibbles**.
 ## Locator (§2.3)
 
 `{1: anchor keyhash, 2: path, 3: seqno}` — anchor is bob, path is the odd
-example, seqno `[5, 42]` (50 bytes):
+example, seqno `[5, 42]` (85 bytes):
 
 ```
-a30158206bcf8a3e8899fc206bc603744414d58b01db857986d82f611b0794ac
-9c32c37502a201433141500205038205182a
+a40158206bcf8a3e8899fc206bc603744414d58b01db857986d82f611b0794ac
+9c32c37502a201433141500205038205182a0458203f438083da65968113a3dd
+ace3e7f735d8607a8edb392cbbb069aca5a92cd6fa
 ```
 
 ## SignedLocator (§2.3) — a complete classical signature, end to end
@@ -69,8 +70,9 @@ Payload — the map of exactly fields 1–2, per §1's fields-X–Y rule:
 
 ```
 a20158208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8dcf
-c852aa6a02a30158206bcf8a3e8899fc206bc603744414d58b01db857986d82f
-611b0794ac9c32c37502a201433141500205038205182a
+c852aa6a02a40158206bcf8a3e8899fc206bc603744414d58b01db857986d82f
+611b0794ac9c32c37502a201433141500205038205182a0458203f438083da65
+968113a3ddace3e7f735d8607a8edb392cbbb069aca5a92cd6fa
 ```
 
 Protected header `{1: -8}` → `a10127` (no `kid`: the surrounding
@@ -81,28 +83,30 @@ payload]`):
 
 ```
 846a5369676e61747572653143a101274e7268746e2f313a6c6f6361746f7258
-57a20158208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8d
-cfc852aa6a02a30158206bcf8a3e8899fc206bc603744414d58b01db857986d8
-2f611b0794ac9c32c37502a201433141500205038205182a
+7aa20158208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8d
+cfc852aa6a02a40158206bcf8a3e8899fc206bc603744414d58b01db857986d8
+2f611b0794ac9c32c37502a201433141500205038205182a0458203f438083da
+65968113a3ddace3e7f735d8607a8edb392cbbb069aca5a92cd6fa
 ```
 
 Ed25519 signature by alice over those bytes:
 
 ```
-b1f23b2bddef8e8103053ba97143ff22c700bae923dc1ee7182dd8705196e2c0
-9ef1ee1ec5a1064bc5a7191aff4a8c302fb983ffe1c2c366d08e603898a23f00
+615e2f85e82d8ef95dc10648dc55dfb229775eef4948764a919d5b02af85a5b7
+a8e591b3e8f23f9bdaf846ec2467a611432ee0d2b9953ed961f974663cbbdd0b
 ```
 
-Complete `SignedLocator` (161 bytes) — field 3 is the untagged
+Complete `SignedLocator` (196 bytes) — field 3 is the untagged
 `COSE_Sign1` `[protected, {}, null, signature]` with detached payload:
 
 ```
 a30158208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8dcf
-c852aa6a02a30158206bcf8a3e8899fc206bc603744414d58b01db857986d82f
-611b0794ac9c32c37502a201433141500205038205182a038443a10127a0f658
-40b1f23b2bddef8e8103053ba97143ff22c700bae923dc1ee7182dd8705196e2
-c09ef1ee1ec5a1064bc5a7191aff4a8c302fb983ffe1c2c366d08e603898a23f
-00
+c852aa6a02a40158206bcf8a3e8899fc206bc603744414d58b01db857986d82f
+611b0794ac9c32c37502a201433141500205038205182a0458203f438083da65
+968113a3ddace3e7f735d8607a8edb392cbbb069aca5a92cd6fa038443a10127
+a0f65840615e2f85e82d8ef95dc10648dc55dfb229775eef4948764a919d5b02
+af85a5b7a8e591b3e8f23f9bdaf846ec2467a611432ee0d2b9953ed961f97466
+3cbbdd0b
 ```
 
 ## Same-series counter jump — MUST ACCEPT (§2.3)
@@ -113,25 +117,27 @@ previous+1, since a verifier may have missed intervening updates. An
 implementation requiring contiguity rejects this valid supersession and is
 non-conforming (negative suite, D6).
 
-Payload (87 bytes):
+Payload (122 bytes):
 
 ```
 a20158208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8dcf
-c852aa6a02a30158206bcf8a3e8899fc206bc603744414d58b01db857986d82f
-611b0794ac9c32c37502a2014331415002050382051864
+c852aa6a02a40158206bcf8a3e8899fc206bc603744414d58b01db857986d82f
+611b0794ac9c32c37502a20143314150020503820518640458203f438083da65
+968113a3ddace3e7f735d8607a8edb392cbbb069aca5a92cd6fa
 ```
 
-Signature: `2dd2909258174e682345dffee0e5b3818fbff0a78fa01642f1d6c87a925cd261a25397b4a2d18adc851c19a27d7a86603d59716843f028038cea6feabbf09109`
+Signature: `51f7933d20d9f0fc4dd02154f3a3a61f8631562a8ced028c6aea184194cfaaf4c7a383c9fa5a72c2d1c22eb2f70d4adcf11e54b9027f0ea74e5821c841b93404`
 
-Complete object (161 bytes):
+Complete object (196 bytes):
 
 ```
 a30158208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8dcf
-c852aa6a02a30158206bcf8a3e8899fc206bc603744414d58b01db857986d82f
-611b0794ac9c32c37502a2014331415002050382051864038443a10127a0f658
-402dd2909258174e682345dffee0e5b3818fbff0a78fa01642f1d6c87a925cd2
-61a25397b4a2d18adc851c19a27d7a86603d59716843f028038cea6feabbf091
-09
+c852aa6a02a40158206bcf8a3e8899fc206bc603744414d58b01db857986d82f
+611b0794ac9c32c37502a20143314150020503820518640458203f438083da65
+968113a3ddace3e7f735d8607a8edb392cbbb069aca5a92cd6fa038443a10127
+a0f6584051f7933d20d9f0fc4dd02154f3a3a61f8631562a8ced028c6aea1841
+94cfaaf4c7a383c9fa5a72c2d1c22eb2f70d4adcf11e54b9027f0ea74e5821c8
+41b93404
 ```
 
 ## The `SignedLocator` equal-seqno conflict partner (V12)
@@ -139,14 +145,16 @@ c852aa6a02a30158206bcf8a3e8899fc206bc603744414d58b01db857986d82f
 Same subject, same `[5, 100]`, **different path** than the counter-jump
 locator above — each individually valid, holding both is the equal-`seqno`
 conflict, on the **locator path** as V6 is on the endpoint-record path: two
-separate decoding routes, each needing the rule. (159 bytes):
+separate decoding routes, each needing the rule. (194 bytes):
 
 ```
 a30158208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8dcf
-c852aa6a02a30158206bcf8a3e8899fc206bc603744414d58b01db857986d82f
-611b0794ac9c32c37502a201412702020382051864038443a10127a0f658405a
-7e4a1e7fed8b75c3703dbb7fdbf134f2f200d3e48a949e466a96fff45a0730d3
-0aee8ab60f5483d063fbd5b19d58269d9f358f56bc7a726ebeb4aab60b0903
+c852aa6a02a40158206bcf8a3e8899fc206bc603744414d58b01db857986d82f
+611b0794ac9c32c37502a2014127020203820518640458203f438083da659681
+13a3ddace3e7f735d8607a8edb392cbbb069aca5a92cd6fa038443a10127a0f6
+5840f40119fc0f8865574a7a620225a14bf84f7c029b8757624aa4d32e5e44db
+fd5b1dcd6d14690121c4df861952f95551b9bfa9ea9cb652038971537838d86c
+b105
 ```
 
 ## A root's self-anchored `SignedLocator` — MUST ACCEPT (D13)
@@ -154,14 +162,15 @@ c852aa6a02a30158206bcf8a3e8899fc206bc603744414d58b01db857986d82f
 **Roots legitimately self-anchor** [author, 2026-09-01]: bob names himself as
 anchor with the **empty path** — zero nibbles, empty byte string, count 0
 (`a2 01 40 02 00`) — the case §2.1 now states. An implementation asserting a
-minimum path length rejects every root's locator. (157 bytes):
+minimum path length rejects every root's locator. (192 bytes):
 
 ```
 a30158206bcf8a3e8899fc206bc603744414d58b01db857986d82f611b0794ac
-9c32c37502a30158206bcf8a3e8899fc206bc603744414d58b01db857986d82f
-611b0794ac9c32c37502a20140020003820903038443a10127a0f65840667b63
-1a592a87fef3f4215c291669766a55917e0ada709dcee7b98241989a9128a5e9
-63b0405c108c24a14f416cfdf8ac2542d26004f9799081c837d1a88602
+9c32c37502a40158206bcf8a3e8899fc206bc603744414d58b01db857986d82f
+611b0794ac9c32c37502a201400200038209030458203f438083da65968113a3
+ddace3e7f735d8607a8edb392cbbb069aca5a92cd6fa038443a10127a0f65840
+8150265272f37636c46d871c98211418cd902e56bacda9f8866a935d3f2dbcdd
+6031c699b6f54ae183f5e2b330d0510e63b6c9ac5223e079f76fb48453b2d50e
 ```
 
 ## A `SignedLocator` carrying an unknown extension — MUST ACCEPT (D9)
@@ -170,15 +179,16 @@ Unknown key **4** — deliberately the nearest uint above the signature slot
 (field 3), so any implementation that *infers* the signature slot from key
 magnitude instead of the schema misreads the extension as the signature
 (eighth review). The key is inside the signed payload per §1's global rule;
-mutating it breaks the signature (E14). (164 bytes):
+mutating it breaks the signature (E14). (199 bytes):
 
 ```
 a40158208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8dcf
-c852aa6a02a30158206bcf8a3e8899fc206bc603744414d58b01db857986d82f
-611b0794ac9c32c37502a201433141500205038205182a038443a10127a0f658
-40e1d5e3d9a23027b1ed5334487e489fc1fbd8ba88a4bc654ec410ab163e10b0
-ea2708dbab19c4635c3cc17c5a3205106800677d4b5d9703bd93d6d51d3b4078
-0b0441aa
+c852aa6a02a40158206bcf8a3e8899fc206bc603744414d58b01db857986d82f
+611b0794ac9c32c37502a201433141500205038205182a0458203f438083da65
+968113a3ddace3e7f735d8607a8edb392cbbb069aca5a92cd6fa038443a10127
+a0f65840d73e144eddeaa126d683408d14b920d88886cdf79514856c703d8e72
+58f694f12c99e1adb1bbdc6e9a2133a09484c0e053859fef5244e299b5cd045b
+1256f10d0441aa
 ```
 
 ## A wrong-signer `SignedLocator` — MUST REJECT (S23)
@@ -188,15 +198,16 @@ cryptographically valid signature over exactly the right payload under the
 right tag. The only defect is the binding: the signer is not the named subject.
 An implementation that verifies the signature against "whatever key it
 resolves" instead of the key field 1 names accepts this object
-(161 bytes):
+(196 bytes):
 
 ```
 a30158208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8dcf
-c852aa6a02a30158206bcf8a3e8899fc206bc603744414d58b01db857986d82f
-611b0794ac9c32c37502a201433141500205038205182a038443a10127a0f658
-405c7b50d5c267c53fdd8ca15b1b8eed1228a8b61053badb69e20cf8d80d1e9f
-78cad168759f575457c8db7eca95f14956b76fe4cc34bc9f37e191e9178bc0ee
-08
+c852aa6a02a40158206bcf8a3e8899fc206bc603744414d58b01db857986d82f
+611b0794ac9c32c37502a201433141500205038205182a0458203f438083da65
+968113a3ddace3e7f735d8607a8edb392cbbb069aca5a92cd6fa038443a10127
+a0f65840f143b1f0a81c57add2f62859ebe89b4cf1b0d4ce4ad30095aaa9fcb4
+fb2e78609e1acc1663587ca89b19e7396080b381a85a08c75723314ebfbf1867
+341e7b05
 ```
 
 ## Genesis back-pointer (§3.1)

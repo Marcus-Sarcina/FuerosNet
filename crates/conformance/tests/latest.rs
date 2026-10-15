@@ -3,6 +3,9 @@ use rhtn_crypto::identity::testkit::test_identity;
 use rhtn_archive::{tx::*, prekey::*};
 use std::sync::Arc;
 
+/// The subnet the fixtures' positions are in (`wire-format.md` §2.3 field 4).
+const SUBNET: [u8; 32] = [0xdb; 32];
+
 #[test]
 fn r11_snapshot_save_must_remove_consumed_one_time_keys() {
     use rhtn_node::prekeys::{PrekeyService,PrekeyConfig};
@@ -74,7 +77,7 @@ fn r12_departure_in_reissued_series_must_end_the_same_relationship() {
     impl rhtn_archive::walk::Fetch for Missing { fn fetch(&self,_:&[u8;32])->Option<Vec<u8>> {None} }
     let (n,p,f)=(test_identity("alice"),test_identity("bob"),test_identity("carol"));
     let bn=[rhtn_archive::genesis(&n.public.keyhash)];let bp=[rhtn_archive::genesis(&p.public.keyhash)];
-    let a=envelope(TYPE_ADOPTION,&adoption_body(&Adoption {node:n.public.keyhash,patron:p.public.keyhash,locator:Locator {anchor:p.public.keyhash,path:vec![0],nibbles:1,seqno:Seqno {series:1,counter:0}},timestamp:100,key_material:None,evidence:Evidence::Transfer {former:f.public.keyhash,block:transfer_block(&f,&n.public.keyhash,&p.public.keyhash)},presented_head:None,back:[&bn,&bp]}),&[&n,&p]);
+    let a=envelope(TYPE_ADOPTION,&adoption_body(&Adoption {node:n.public.keyhash,patron:p.public.keyhash,locator:Locator {anchor:p.public.keyhash,path:vec![0],nibbles:1,seqno:Seqno {series:1,counter:0}, subnet: Some(SUBNET) },timestamp:100,key_material:None,evidence:Evidence::Transfer {former:f.public.keyhash,block:transfer_block(&f,&n.public.keyhash,&p.public.keyhash)},presented_head:None,back:[&bn,&bp]}),&[&n,&p]);
     let a=Record::parse(&a).unwrap();let backs=[a.txid];
     let r=envelope(TYPE_REISSUE,&reissue_body([&backs,&backs],&n.public.keyhash,&p.public.keyhash,Seqno {series:1,counter:0},2,101),&[&n,&p]);
     let r=Record::parse(&r).unwrap();

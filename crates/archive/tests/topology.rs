@@ -16,6 +16,9 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
+/// The subnet the fixtures' positions are in (`wire-format.md` §2.3 field 4).
+const SUBNET: [u8; 32] = [0xdb; 32];
+
 fn set(v: &[Keyhash]) -> BTreeSet<Keyhash> {
     v.iter().copied().collect()
 }
@@ -1108,7 +1111,8 @@ fn a_filled_slot_refuses_a_second_occupant_and_keeps_the_one_it_holds() {
             seqno: Seqno {
                 series: 1,
                 counter: 0
-            }
+            },
+            subnet: Some(SUBNET),
         }
         .slot(),
         Some(10),

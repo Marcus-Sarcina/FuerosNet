@@ -69,7 +69,8 @@ pub fn compare(prev: Seqno, next: Seqno) -> Order {
     }
 }
 
-/// A `Locator` (`wire-format.md` §2.3): anchor, nibble path, seqno.
+/// A `Locator` (`wire-format.md` §2.3): anchor, nibble path, seqno, and
+/// the subnet the position is in.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Locator {
     /// The anchor the path is relative to.
@@ -81,16 +82,39 @@ pub struct Locator {
     pub nibbles: u64,
     /// The sequence number, which orders two locators for one subject.
     pub seqno: Seqno,
+    /// The subnet the position is in (design §13.8): the root's scope
+    /// id, the txid of the first adoption that gave the root a
+    /// subordinate.  `None` on a self-anchored locator of a node that has
+    /// adopted nobody, and on the locator of a root's first adoption,
+    /// whose own txid is the id; a locator two or more hops down without
+    /// one does not decode.
+    pub subnet: Option<Txid>,
 }
 
 impl Locator {
-    /// A root's self-anchored locator: empty path, the given seqno.
+    /// A root's self-anchored locator: empty path, the given seqno, and
+    /// no subnet — the position of a node that has adopted nobody.
     pub fn root(anchor: Keyhash, seqno: Seqno) -> Self {
+        Self::root_in(anchor, seqno, None)
+    }
+
+    /// A root's self-anchored locator naming the subnet under it (design
+    /// §13.8): what a root holds once it has adopted anybody.
+    pub fn root_in(anchor: Keyhash, seqno: Seqno, subnet: Option<Txid>) -> Self {
         Locator {
             anchor,
             path: Vec::new(),
             nibbles: 0,
             seqno,
+            subnet,
+        }
+    }
+
+    /// The same position in another seqno.
+    pub fn at(&self, seqno: Seqno) -> Self {
+        Locator {
+            seqno,
+            ..self.clone()
         }
     }
 
@@ -110,7 +134,7 @@ impl Locator {
     }
     /// Emit the locator into `out`.
     pub fn emit(&self, out: &mut Vec<u8>) {
-        emit_map_head(out, 3);
+        emit_map_head(out, 3 + usize::from(self.subnet.is_some()));
         emit_uint(out, 1);
         emit_bstr(out, &self.anchor);
         emit_uint(out, 2);
@@ -121,6 +145,10 @@ impl Locator {
         emit_uint(out, self.nibbles);
         emit_uint(out, 3);
         self.seqno.emit(out);
+        if let Some(subnet) = &self.subnet {
+            emit_uint(out, 4);
+            emit_bstr(out, subnet);
+        }
     }
 }
 
@@ -162,11 +190,25 @@ impl Locator {
             series: narrow(as_uint(sq.first().ok_or("series")?).ok_or("series")?)?,
             counter: narrow(as_uint(sq.get(1).ok_or("counter")?).ok_or("counter")?)?,
         };
+        let subnet: Option<Txid> = match map_get(m, 4) {
+            Some(Item::Bytes(r)) if r.len() == 32 => {
+                Some(<[u8; 32]>::try_from(&b[r.clone()]).map_err(|_| "subnet width")?)
+            }
+            Some(_) => return Err("locator field 4".into()),
+            None => None,
+        };
+        // a locator two or more hops down names its subnet
+        // (`wire-format.md` §2.3); one hop down may be the root's first
+        // adoption, which cannot carry its own txid
+        if nibbles >= 2 && subnet.is_none() {
+            return Err("a positioned locator names no subnet".into());
+        }
         Ok(Locator {
             anchor,
             path,
             nibbles,
             seqno,
+            subnet,
         })
     }
 }

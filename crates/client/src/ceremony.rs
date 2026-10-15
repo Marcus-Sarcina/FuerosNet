@@ -540,7 +540,16 @@ pub struct Client {
     /// relationship, §7.6's one record per line) and a subordinate's
     /// locator is its patron's path *in that subnet* with a nibble added.
     /// A single position could not say which tree an adoption was into.
-    positions: BTreeMap<Keyhash, Locator>,
+    positions: BTreeMap<Txid, Locator>,
+    /// The subnet under this client's own key where it is a root: its
+    /// scope id there, the txid of its first adoption as a lone root
+    /// (design §13.8); none while it has adopted nobody.
+    root_subnet: Option<Txid>,
+    /// This client's scope id in each subnet it has adopted somebody in,
+    /// by subnet (design §13.8): the txid of its first adoption there.
+    /// Latent while it sits under a patron, and the name its subtree goes
+    /// by once it has departed.
+    scopes: BTreeMap<Txid, Txid>,
     /// The catalog this client has browsed, and the sweep of its serving
     /// node that produced it (`wire-format.md` §6.4).
     ///
@@ -728,6 +737,8 @@ impl Client {
             cfg,
             device,
             positions: BTreeMap::new(),
+            root_subnet: None,
+            scopes: BTreeMap::new(),
             outbox: Vec::new(),
             catalog: crate::catalog::View::default(),
             browsing: None,
@@ -978,7 +989,7 @@ impl Client {
     /// on is not offered.
     pub fn own_card(&self) -> Result<Vec<u8>, Abort> {
         let locator = self.own_locator()?;
-        let anchor = self.anchor();
+        let anchor = self.acting_position().anchor;
         let material = self
             .known
             .iter()
@@ -1216,9 +1227,7 @@ impl Client {
     /// position there, or the self-anchor while it has no patron
     /// (`wire-format.md` §2.1, §2.3).
     pub fn own_locator(&self) -> Result<Vec<u8>, Abort> {
-        let position = self
-            .position_in(&self.anchor())
-            .ok_or(Abort::NoRelationship(self.anchor()))?;
+        let position = self.acting_position();
         Ok(rhtn_archive::locator::signed_locator(
             self.signer()?,
             &position,
@@ -2603,19 +2612,22 @@ impl Client {
         node_back: &[Txid],
         what: Adopting,
     ) -> Result<Vec<u8>, Abort> {
-        self.propose_adoption_in(self.anchor(), node, node_back, what)
+        self.propose_adoption_in(self.subnet(), node, node_back, what)
     }
 
-    /// The same, naming the subnet to adopt into.
+    /// The same, naming the subnet to adopt into: one this client holds a
+    /// position in, or none for the one under its own key.
     ///
     /// **Which tree matters and is the patron's to say.** A patron in two
     /// subnets sits at a different path in each, and the locator it issues
     /// is its path in the one it is adopting into; adopting "somewhere"
     /// would put the subordinate at an address the other subnet cannot
-    /// read.
+    /// read.  The locator names the subnet (`wire-format.md` §2.3): the
+    /// patron's own; a lone root's first adoption names none, its own
+    /// txid being the id from then on (design §13.8).
     pub fn propose_adoption_in(
         &self,
-        anchor: Keyhash,
+        subnet: Option<Txid>,
         node: Keyhash,
         node_back: &[Txid],
         what: Adopting,
@@ -2626,10 +2638,13 @@ impl Client {
             presented_head,
             key_material,
         } = what;
-        let pos = self
-            .position_in(&anchor)
-            .ok_or_else(|| Abort::PatronRefused(format!("no position under {}", hex8(&anchor))))?;
-        let index = self.free_index(&anchor)?;
+        let pos = match subnet {
+            Some(s) => self
+                .position_in(&s)
+                .ok_or_else(|| Abort::PatronRefused(format!("no position in {}", hex8(&s))))?,
+            None => self.own_position(),
+        };
+        let index = self.free_index(&pos)?;
         let mut path = pos.path.clone();
         let nibbles = pos.nibbles + 1;
         if pos.nibbles.is_multiple_of(2) {
@@ -2643,6 +2658,7 @@ impl Client {
             path,
             nibbles,
             seqno: Seqno { series, counter: 0 },
+            subnet: pos.subnet,
         };
         let back = self.archive.next_back_pointers();
         let a = Adoption {
@@ -2674,7 +2690,7 @@ impl Client {
     /// record of what it has issued. A holder elsewhere may not have the
     /// other adoptions and so cannot check this; the patron always can,
     /// which is design §1.1's test answered in the patron's favour.
-    fn free_index(&self, anchor: &Keyhash) -> Result<u8, Abort> {
+    fn free_index(&self, pos: &Locator) -> Result<u8, Abort> {
         let me = self.keyhash();
         // a relationship this client can see has ended frees the index it
         // held.  **Where it can see none, every index it issued stays
@@ -2700,7 +2716,13 @@ impl Client {
             else {
                 continue;
             };
-            if patron != me || loc.anchor != *anchor || ended.contains(&node) {
+            // a subordinate of this position: one hop below it, in its
+            // subnet — or the first adoption under a lone root, which
+            // names the subnet by its own txid (design §13.8)
+            let below = loc.anchor == pos.anchor
+                && loc.nibbles == pos.nibbles + 1
+                && (loc.subnet == pos.subnet || Some(rec.txid) == pos.subnet);
+            if patron != me || !below || ended.contains(&node) {
                 continue;
             }
             if let Some(i) = loc.slot() {
@@ -2824,6 +2846,19 @@ impl Client {
                 "the address is not one hop below the patron's own position in {}",
                 hex8(&theirs.anchor)
             )));
+        }
+        // and in the patron's subnet: the one its own position names, or
+        // none where the patron is a lone root adopting for the first
+        // time, this record's own txid being the id (`wire-format.md`
+        // §2.3, §4.1; design §13.8)
+        if loc.subnet != theirs.subnet {
+            return Err(refused(match theirs.subnet {
+                Some(s) => format!(
+                    "the address is in a subnet other than the patron's, {}",
+                    hex8(&s)
+                ),
+                None => "the patron is a lone root, whose first adoption names no subnet".into(),
+            }));
         }
         // and the hops above the last are the patron's own, nibble by
         // nibble (`wire-format.md` §2.1: packed four bits, high first)
@@ -3134,6 +3169,8 @@ impl Client {
         self.horizon = horizon;
         self.provider_credential = provider;
         self.positions.clear();
+        self.root_subnet = None;
+        self.scopes.clear();
         self.adopt_own_positions();
         // derived state is derived at every start (see `at`)
         self.sync_known_from_contacts();
@@ -3190,6 +3227,8 @@ impl Client {
         self.store = std::mem::take(&mut contents.store);
         self.provider_credential = contents.provider.take();
         self.positions.clear();
+        self.root_subnet = None;
+        self.scopes.clear();
         self.adopt_own_positions();
         Ok(n)
     }
@@ -3258,11 +3297,18 @@ impl Client {
         // **the archive shows every relationship this key ever had**, and
         // one it has already left is not one it can leave again — a second
         // departure would advance the counter over a binding that closed.
-        // The position is where that is known: one subnet, one patron, so
-        // the anchor answers it.
+        // The position is where that is known: one address, one patron,
+        // so the address the adoption gave answers it — by address and
+        // not by subnet, because a root's first adoption names none
+        // (design §13.8) and the position held fills it in
         let held = self
             .positions
-            .get(&rel.position.anchor)
+            .values()
+            .find(|p| {
+                p.anchor == rel.position.anchor
+                    && p.path == rel.position.path
+                    && p.nibbles == rel.position.nibbles
+            })
             .ok_or(Abort::NoRelationship(patron))?;
         let counter = held
             .seqno
@@ -3341,49 +3387,70 @@ impl Client {
         Ok(self.converse_in(from, kind, &inner))
     }
 
-    /// Where this client sits in the subnet `anchor` names.
-    ///
-    /// **A party with no ancestor names itself**, so asking for a position
-    /// under this client's own key always answers: that is the
-    /// self-anchor, not a missing value (`wire-format.md` §2.1).
+    /// Where this client sits in the subnet `subnet` names (design §13.8):
+    /// the position it was adopted into there, or its own self-anchored
+    /// one where that is the subnet under its own key.
     #[must_use]
-    pub fn position_in(&self, anchor: &Keyhash) -> Option<Locator> {
-        if let Some(p) = self.positions.get(anchor) {
+    pub fn position_in(&self, subnet: &Txid) -> Option<Locator> {
+        if let Some(p) = self.positions.get(subnet) {
             return Some(p.clone());
         }
-        (*anchor == self.keyhash()).then(|| {
-            Locator::root(
-                self.keyhash(),
-                Seqno {
-                    series: 1,
-                    counter: 0,
-                },
-            )
-        })
+        (self.root_subnet == Some(*subnet)).then(|| self.own_position())
     }
 
-    /// Every subnet this client has a position in, its own first.
+    /// This client's position under its own key.
+    ///
+    /// **A party with no ancestor names itself** (`wire-format.md` §2.1):
+    /// the empty path, and the subnet its first adoption as a lone root
+    /// named by its txid, or none while it has adopted nobody.
     #[must_use]
-    pub fn anchors(&self) -> Vec<Keyhash> {
-        let mut out = vec![self.keyhash()];
-        out.extend(
-            self.positions
-                .keys()
-                .copied()
-                .filter(|a| *a != self.keyhash()),
-        );
-        out
+    pub fn own_position(&self) -> Locator {
+        Locator::root_in(
+            self.keyhash(),
+            Seqno {
+                series: 1,
+                counter: 0,
+            },
+            self.root_subnet,
+        )
+    }
+
+    /// Where this client acts when nothing names a subnet: its position
+    /// in the first it was adopted into, or its own while it has no
+    /// patron.
+    #[must_use]
+    pub fn acting_position(&self) -> Locator {
+        self.positions
+            .values()
+            .next()
+            .cloned()
+            .unwrap_or_else(|| self.own_position())
     }
 
     /// The subnet this client acts in when nothing names one: the first it
-    /// was adopted into, or its own while it has no patron.
+    /// was adopted into, else the one under its own key, else none.
     #[must_use]
-    pub fn anchor(&self) -> Keyhash {
-        self.positions
-            .keys()
-            .copied()
-            .find(|a| *a != self.keyhash())
-            .unwrap_or_else(|| self.keyhash())
+    pub fn subnet(&self) -> Option<Txid> {
+        self.positions.keys().next().copied().or(self.root_subnet)
+    }
+
+    /// Every subnet this client has a position in: the one under its own
+    /// key first where it names one, then each it was adopted into, and
+    /// each scope it now roots after departing the subnet it was in.
+    #[must_use]
+    pub fn subnets(&self) -> Vec<Txid> {
+        let mut out: Vec<Txid> = self.root_subnet.into_iter().collect();
+        out.extend(self.positions.keys().copied());
+        out
+    }
+
+    /// This client's scope id in `subnet` (design §13.8): the txid of its
+    /// first adoption there, or none where it has adopted nobody there.
+    /// Latent while it sits under a patron, and the subnet's own id once
+    /// it has departed.
+    #[must_use]
+    pub fn scope_in(&self, subnet: &Txid) -> Option<Txid> {
+        self.scopes.get(subnet).copied()
     }
 
     /// Fold this client's own adoptions and departures into where it
@@ -3408,12 +3475,41 @@ impl Client {
         // next counter, so (series, counter) is the order in which the
         // relationship advances, and the last word in it is what is held.
         let mut last: BTreeMap<Keyhash, (u32, u32, Option<Locator>)> = BTreeMap::new();
+        // **a scope is named by the first adoption that gave this key a
+        // subordinate in a subnet** (design §13.8): the earliest by the
+        // record's own time, the txid deciding a tie, per subnet — and
+        // the lone root's own, whose first adoption names no subnet
+        let mut first: BTreeMap<Option<Txid>, (u64, Txid)> = BTreeMap::new();
+        // the subnet each relationship this key was adopted into is in,
+        // for the scope a departure leaves this key the root of
+        let mut subnet_under: BTreeMap<Keyhash, Txid> = BTreeMap::new();
         for rec in self.archive.records() {
+            if rec.tx_type == TYPE_ADOPTION
+                && rec.field_hash(2) == Some(me)
+                && let Some(loc) = rec.locator()
+            {
+                let at = (rec.effective, rec.txid);
+                let e = first.entry(loc.subnet).or_insert(at);
+                if at < *e {
+                    *e = at;
+                }
+            }
             if rec.field_hash(1) != Some(me) {
                 continue;
             }
             let said = match rec.tx_type {
-                TYPE_ADOPTION => Some(rec.locator()),
+                TYPE_ADOPTION => Some(rec.locator().map(|l| {
+                    // the root's first adoption names its subnet by its
+                    // own txid; this key's position says so from here on
+                    let subnet = l.subnet.unwrap_or(rec.txid);
+                    if let Some(p) = rec.field_hash(2) {
+                        subnet_under.insert(p, subnet);
+                    }
+                    Locator {
+                        subnet: Some(subnet),
+                        ..l
+                    }
+                })),
                 TYPE_DEPARTURE => Some(None),
                 _ => None,
             };
@@ -3429,11 +3525,37 @@ impl Client {
                 }
             }
         }
-        self.positions = last
-            .into_values()
-            .filter_map(|(_, _, loc)| loc)
-            .map(|l| (l.anchor, l))
+        self.root_subnet = first.get(&None).map(|(_, t)| *t);
+        self.scopes = first
+            .iter()
+            .filter_map(|(s, (_, t))| Some(((*s)?, *t)))
             .collect();
+        self.positions = last
+            .iter()
+            .filter_map(|(_, (_, _, loc))| loc.clone())
+            .filter_map(|l| Some((l.subnet?, l)))
+            .collect();
+        // **a departure roots the scope this key carried** (design §13.8,
+        // §12.7.7): where it had subordinates in the subnet it left, it is
+        // now the root of a subnet named by its scope id there, at the
+        // self-anchor
+        for (patron, (_, _, held)) in &last {
+            if held.is_some() {
+                continue;
+            }
+            let Some(scope) = subnet_under.get(patron).and_then(|s| self.scopes.get(s)) else {
+                continue;
+            };
+            let root = Locator::root_in(
+                me,
+                Seqno {
+                    series: 1,
+                    counter: 0,
+                },
+                Some(*scope),
+            );
+            self.positions.entry(*scope).or_insert(root);
+        }
     }
 
     /// The chain proving my series under `patron`, presented when asked

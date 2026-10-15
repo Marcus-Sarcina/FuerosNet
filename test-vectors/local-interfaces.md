@@ -1,6 +1,6 @@
 # Local device-to-device interfaces (`wire-format.md` §14.3)
 
-Generated against `wire-format.md` `257b4e8a1840b628…`, `network-design.md` `f6ba1c767eb84346…` and `light-client-requirements.md` `c86ed50694b8ed17…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `38b141966a063b86…`, `network-design.md` `215cd3358e1f6c65…` and `light-client-requirements.md` `e68503c02fbebe19…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Canonical. Spec-derived, reproduced by the independent harness.** The encodings
 of `wire-format.md` §14.3, as one coherent exchange: **alice initiates with
@@ -177,7 +177,7 @@ e5ca2b18
 **IntentExchange — alice's, echoing her optical contribution; carol
 nominated, one introduction carried (c1, with the most recent locator
 she holds for them), retention 2, initiator true, no continuations, and
-her own signed locator last** (2389 bytes):
+her own signed locator last** (2459 bytes):
 
 ```
 89015057c54784788abe36a304be6d2eff43d481582071591ef14497c49bd95f
@@ -245,36 +245,39 @@ d250c8c2268237f0370cd923e2810234747572ba495f1d99f3d3c53c10f8b128
 8a0663e70d67a7a000290bbceea2f7e1a77f02c746ccd8a1e447a532362646eb
 5c80fe413c89a82d0edc2240e3fe8bed1d4b3306baa7876fcf4ebd30b8ca0b64
 3d5e63744864ead265474d92a301582096664caec817f958a439b6d326c45f5a
-b7bbb3671ebb447eca25a411b975e73a02a30158206bcf8a3e8899fc206bc603
+b7bbb3671ebb447eca25a411b975e73a02a40158206bcf8a3e8899fc206bc603
 744414d58b01db857986d82f611b0794ac9c32c37502a2014331415002050382
-0207038443a10127a0f65840fa6bce380fa9c7fcd16225429ddd6abe80584ac6
-db67f43abf6a5873d2d9a5b8243a2f779cedec52af3fbe1c5678a54fe823524f
-0e07eca1bb6c236645a70a0b1a6a43151002f500a30158208410def778a5de3a
-25991aba399716bc8eccfda9ad57d4ea8a0c8dcfc852aa6a02a30158206bcf8a
-3e8899fc206bc603744414d58b01db857986d82f611b0794ac9c32c37502a201
-433141500205038205182a038443a10127a0f65840b1f23b2bddef8e8103053b
-a97143ff22c700bae923dc1ee7182dd8705196e2c09ef1ee1ec5a1064bc5a719
-1aff4a8c302fb983ffe1c2c366d08e603898a23f00
+02070458203f438083da65968113a3ddace3e7f735d8607a8edb392cbbb069ac
+a5a92cd6fa038443a10127a0f65840bf7a8919bbeb1323c1b9e9646847d11b09
+5acdd08ec87d1f51e82740aaea6c862485ac1d02ecaf3f521122edff0bfc1630
+e154723ec58b86cc07b1e6daaebd0b1a6a43151002f500a30158208410def778
+a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8dcfc852aa6a02a4015820
+6bcf8a3e8899fc206bc603744414d58b01db857986d82f611b0794ac9c32c375
+02a201433141500205038205182a0458203f438083da65968113a3ddace3e7f7
+35d8607a8edb392cbbb069aca5a92cd6fa038443a10127a0f65840615e2f85e8
+2d8ef95dc10648dc55dfb229775eef4948764a919d5b02af85a5b7a8e591b3e8
+f23f9bdaf846ec2467a611432ee0d2b9953ed961f974663cbbdd0b
 ```
 
 **IntentExchange — bob's, the responder's: echoing his optical
 contribution, one nominee from alice's neighbourhood, an empty bundle,
 retention 3, initiator false, no continuations, his own signed locator**
-(216 bytes).
+(251 bytes).
 The two flags differ; a device refuses an intent carrying its own value:
 
 ```
 890150d43a0b07379cf934c8b7e4b54629f95c81582000511331b14dfd14aa36
 7a79e3896c8d5ac89838549b563effb7fafedc7c91cc801a6a43151003f400a3
 0158206bcf8a3e8899fc206bc603744414d58b01db857986d82f611b0794ac9c
-32c37502a30158206bcf8a3e8899fc206bc603744414d58b01db857986d82f61
-1b0794ac9c32c375024003820100038443a10127a0f65840ebe914d0cc7940ea
-04b7fdd503d42b3a43a702e78941fa8ff0c02cfb7463178fc18128300fe64f62
-65f7d5d27a80f7b5164f32f57f2f7411d8ec68def48cf902
+32c37502a40158206bcf8a3e8899fc206bc603744414d58b01db857986d82f61
+1b0794ac9c32c3750240038201000458203f438083da65968113a3ddace3e7f7
+35d8607a8edb392cbbb069aca5a92cd6fa038443a10127a0f658409c60c6f93f
+dfba8cffe2bbf3d28ee616236aba6840ec7c42d42684492c59c82b3ff76ecef4
+d3368bf27eb2dc5705104303e3c6507ce497e97fb2f26dd8438405
 ```
 
 **BundleContinuation — the first continuation of a larger bundle, one
-introduction, anchored to the ceremony-id** (2203 bytes):
+introduction, anchored to the ceremony-id** (2238 bytes):
 
 ```
 84015820cb8ea88ad0a089017394c291f918217c4dc8d754a4639eb024f23662
@@ -342,10 +345,11 @@ a7135f9b22f37200bcc4ec1502dece8a0663e70d67a7a000290bbceea2f7e1a7
 7f02c746ccd8a1e447a532362646eb5c80fe413c89a82d0edc2240e3fe8bed1d
 4b3306baa7876fcf4ebd30b8ca0b643d5e63744864ead265474d92a301582096
 664caec817f958a439b6d326c45f5ab7bbb3671ebb447eca25a411b975e73a02
-a30158206bcf8a3e8899fc206bc603744414d58b01db857986d82f611b0794ac
-9c32c37502a20143314150020503820207038443a10127a0f65840fa6bce380f
-a9c7fcd16225429ddd6abe80584ac6db67f43abf6a5873d2d9a5b8243a2f779c
-edec52af3fbe1c5678a54fe823524f0e07eca1bb6c236645a70a0b
+a40158206bcf8a3e8899fc206bc603744414d58b01db857986d82f611b0794ac
+9c32c37502a201433141500205038202070458203f438083da65968113a3ddac
+e3e7f735d8607a8edb392cbbb069aca5a92cd6fa038443a10127a0f65840bf7a
+8919bbeb1323c1b9e9646847d11b095acdd08ec87d1f51e82740aaea6c862485
+ac1d02ecaf3f521122edff0bfc1630e154723ec58b86cc07b1e6daaebd0b
 ```
 
 ## The anchored exchanges (§14.3.2)

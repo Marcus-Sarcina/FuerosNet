@@ -2204,16 +2204,14 @@ impl Participant {
         })
     }
 
-    /// Where this client sits in the subnet `anchor` names, or nothing
-    /// where it is in no such subnet.  **Asking under its own key always
-    /// answers**: a party with no ancestor names itself
-    /// (`wire-format.md` §2.1).
+    /// Where this client sits in the subnet `subnet` names (design
+    /// §13.8), as a `Locator`, or nothing where it is in no such subnet.
     #[must_use]
-    pub fn position_in(&self, anchor: Id) -> Option<Vec<u8>> {
+    pub fn position_in(&self, subnet: Id) -> Option<Vec<u8>> {
         crate::diag::call_plain("position_in", || {
-            let a = keyhash(&anchor)?;
+            let s = keyhash(&subnet)?;
             self.handle.with_blocking(move |c| {
-                c.position_in(&a).map(|p| {
+                c.position_in(&s).map(|p| {
                     let mut out = Vec::new();
                     p.emit(&mut out);
                     out
@@ -2222,42 +2220,50 @@ impl Participant {
         })
     }
 
-    /// **The subnet this client acts in**: the first it was adopted
-    /// into, or its own self-anchored one where it has no patron
-    /// (`wire-format.md` §2.1). What a patron adopts into unless its
-    /// person says otherwise.
+    /// **Where this client acts**, as a `Locator`: its position in the
+    /// first subnet it was adopted into, or its own self-anchored one
+    /// where it has no patron (`wire-format.md` §2.1).
     #[must_use]
-    pub fn anchor(&self) -> Id {
-        crate::diag::call_plain("anchor", || {
-            self.handle.with_blocking(|c| id_of(&c.anchor()))
+    pub fn position(&self) -> Vec<u8> {
+        crate::diag::call_plain("position", || {
+            self.handle.with_blocking(|c| {
+                let mut out = Vec::new();
+                c.acting_position().emit(&mut out);
+                out
+            })
         })
     }
 
-    /// Every subnet this client has a position in, its own first.
+    /// Every subnet this client has a position in: the one under its own
+    /// key first, where its first adoption as a lone root has named one.
     #[must_use]
-    pub fn anchors(&self) -> Vec<Id> {
-        crate::diag::call_plain("anchors", || {
+    pub fn subnets(&self) -> Vec<Id> {
+        crate::diag::call_plain("subnets", || {
             self.handle
-                .with_blocking(|c| c.anchors().iter().map(id_of).collect())
+                .with_blocking(|c| c.subnets().iter().map(id_of).collect())
         })
     }
 
     /// As a patron: the adoption body putting `node` one hop below this
-    /// client, in the subnet `anchor` names.
+    /// client, in the subnet `subnet` names, or under its own key where
+    /// none is named.
     ///
     /// **Which tree is the patron's to say**, because a patron in two
     /// subnets sits at a different path in each and the address it issues
     /// is its path in the one it is adopting into.
     pub fn propose_adoption(
         &self,
-        anchor: Id,
+        subnet: Option<Id>,
         node: Id,
         presence: Id,
         series: u32,
         node_back: Vec<Vec<u8>>,
     ) -> Result<Vec<u8>, Refused> {
         crate::diag::call("propose_adoption", || {
-            let a = keyhash(&anchor).ok_or_else(|| Refused::new("an anchor is 32 bytes"))?;
+            let a = match subnet {
+                Some(s) => Some(keyhash(&s).ok_or_else(|| Refused::new("a subnet is 32 bytes"))?),
+                None => None,
+            };
             let n = keyhash(&node).ok_or_else(|| Refused::new("a subordinate is 32 bytes"))?;
             let p = keyhash(&presence)
                 .ok_or_else(|| Refused::new("a presence record is named by a 32-byte txid"))?;

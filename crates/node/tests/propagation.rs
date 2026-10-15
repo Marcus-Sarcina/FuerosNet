@@ -14,6 +14,9 @@ use rhtn_node::view::NodeView;
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
+/// The subnet the fixtures' positions are in (`wire-format.md` §2.3 field 4).
+const SUBNET: [u8; 32] = [0xdb; 32];
+
 /// P (alice) over N (bob) over S1 (carol) and S2 (w1); S3 (w2) under S1 and
 /// FAR (w4) under S3, three adoption edges from N.  Q (w3) is N's peer and
 /// C (c1) its attached client.
@@ -315,6 +318,7 @@ fn equal_seqnos_with_different_contents_retire_the_pair() {
             series: 2,
             counter: 5,
         },
+        subnet: Some(SUBNET),
     };
     assert_eq!(
         s.n.locators
@@ -417,6 +421,7 @@ fn memo(patron: &str, anchor: &str, slot: u64, timestamp: u64, occupant: Option<
                 series: 1,
                 counter: 0,
             },
+            subnet: Some(SUBNET),
         },
         slot,
         timestamp,
@@ -790,6 +795,7 @@ fn memo_at(patron: &str, path: &[u8], slot: u64, t: u64, occupant: Option<&str>)
                 series: 1,
                 counter: 0,
             },
+            subnet: Some(SUBNET),
         },
         slot,
         timestamp: t,
@@ -966,6 +972,7 @@ fn an_object_whose_embedded_signer_key_is_missing_waits_and_then_flows() {
                 series: 2,
                 counter: 0,
             },
+            subnet: Some(SUBNET),
         },
         timestamp: w.clock + 10,
         key_material: None,

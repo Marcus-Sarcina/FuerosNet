@@ -11,6 +11,9 @@ use rhtn_archive::walk::{self, BatchEnd, Fetch, Root};
 use rhtn_archive::{Txid, WINDOW_SECONDS, genesis};
 use std::collections::BTreeMap;
 
+/// The subnet the fixtures' positions are in (`wire-format.md` §2.3 field 4).
+const SUBNET: [u8; 32] = [0xdb; 32];
+
 /// A world where alice and bob have formed, and alice adopted bob: both
 /// hold chains of two records.
 fn formed() -> (World, Txid) {
@@ -116,6 +119,7 @@ fn swapped_lists_verify_and_do_not_reach_back() {
                 series: 6,
                 counter: 0,
             },
+            subnet: Some(SUBNET),
         },
         timestamp: t,
         key_material: None,

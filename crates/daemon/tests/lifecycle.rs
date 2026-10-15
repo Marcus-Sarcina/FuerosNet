@@ -15,6 +15,9 @@ use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+/// The subnet the fixtures' positions are in (`wire-format.md` §2.3 field 4).
+const SUBNET: [u8; 32] = [0xdb; 32];
+
 fn kh(n: &str) -> [u8; 32] {
     test_identity(n).public.keyhash
 }
@@ -289,6 +292,7 @@ fn adoption_under_slot(patron: &str, child: &str, slot: u8) -> (Vec<u8>, Vec<u8>
                 series: 1,
                 counter: 0,
             },
+            subnet: Some(SUBNET),
         },
         timestamp: 1_800_003_600,
         key_material: None,
@@ -443,6 +447,7 @@ fn bare(cfg: &rhtn_daemon::config::Config) -> rhtn_node::view::NodeView {
                 series: 1,
                 counter: 0,
             },
+            subnet: Some(SUBNET),
         },
     );
     view.store = rhtn_node::store::TopologyStore::load(&cfg.topology).expect("the store reads");
@@ -836,6 +841,7 @@ async fn a_derived_view_belonging_to_another_identity_is_discarded() {
                 series: 1,
                 counter: 0,
             },
+            subnet: Some(SUBNET),
         },
     );
     theirs.store = rhtn_node::store::TopologyStore::load(&cfg.topology).unwrap();

@@ -10,6 +10,9 @@ use rhtn_archive::topology::Snapshot;
 use rhtn_archive::tx::*;
 use rhtn_client::horizon::{Horizon, Took, Upstream, Woke};
 
+/// The subnet the fixtures' positions are in (`wire-format.md` §2.3 field 4).
+const SUBNET: [u8; 32] = [0xdb; 32];
+
 /// The transaction identifiers a horizon holds, in the order a fold takes
 /// them.
 fn sorted_txids(h: &Horizon) -> Vec<[u8; 32]> {
@@ -42,6 +45,7 @@ fn adopt_at(
             path,
             nibbles,
             seqno: Seqno { series, counter: 0 },
+            subnet: Some(SUBNET),
         },
         timestamp: t,
         key_material: None,

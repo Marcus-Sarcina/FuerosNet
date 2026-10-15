@@ -32,6 +32,12 @@ documents. Where a requirement leaves a visible artifact, that is noted in place
 
 ## 1. Serving
 
+- **An instance serves one subnet** [author, 2026-10-15]. Its position is in
+  one (`wire-format.md` §2.3 field 4), and so is everything it serves, holds
+  and forwards for its subordinates; an operator who serves two subnets runs
+  two instances (design §3.3). Nothing here is partitioned by subnet because
+  nothing here spans two.
+
 - **Accept attachment from any node whose nearest infrastructure ancestor is this
   node**, and from siblings' clients in failover (design §14.1.2).
 - **Determine the attachment mode from local topology.** A client not in this
@@ -329,6 +335,25 @@ serving node.
   (design §19.4).
 - **Do not log doorbells.** When you rang is when that client had mail, and a
   log of it is the queue event log §2 already refuses, one step removed.
+
+### 6.2 Profiles
+
+- **Hold the latest profile per (subject, subnet, kind) and serve it to anyone
+  who asks** (`wire-format.md` §7.11). It is published to be read: a fetch is
+  the weight of a reusable-material fetch and is not logged (§1's
+  process-and-discard).
+- **Take a profile only from the subject it names**, as a prekey publication
+  (`wire-format.md` §7.10), and replace the one you hold only by a greater
+  counter in the same series (`wire-format.md` §2.3). A subnet's profile is
+  taken from whoever signed it: that the signer is the root is a convention
+  (design §12.8), and this node checks the signature and not the convention.
+- **Bound what you hold.** An image is at most 64 KiB and an alias 64
+  characters (`wire-format.md` §1.3); refuse over the bound with the code
+  rather than trimming, as a deposit is refused (§6.1).
+- **The profile is opaque to what you do with it.** You serve bytes a subject
+  signed; you do not render, match, or index by the alias, and you do not read
+  the image. Anything a profile says is between the subject and whoever
+  fetches it.
 
 ---
 

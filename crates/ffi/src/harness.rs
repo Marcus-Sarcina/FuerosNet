@@ -6,7 +6,7 @@
 //! its own language, against a real node, with no Rust test in the loop.
 
 use crate::types::Id;
-use rhtn_node::resolution::{AnchorTable, Ingestion, Path};
+use rhtn_node::resolution::{AnchorTable, Ingestion};
 use rhtn_node::runtime::LiveNode;
 use rhtn_node::view::NodeView;
 use rhtn_transport::session::{Log, NodeConfig};
@@ -104,18 +104,15 @@ impl TestNode {
         let pins = Pins::new();
         let mut known = vec![me.public.clone()];
         pins.pin_identity(&me.public);
-        let p = Path::from_indices(&[]);
         let mut view = NodeView::new(
             me.clone(),
-            rhtn_archive::tx::Locator {
-                anchor: me.public.keyhash,
-                path: p.bytes,
-                nibbles: p.nibbles,
-                seqno: rhtn_archive::tx::Seqno {
+            rhtn_archive::tx::Locator::root(
+                me.public.keyhash,
+                rhtn_archive::tx::Seqno {
                     series: 1,
                     counter: 0,
                 },
-            },
+            ),
         );
         let mut slot = 0u64;
         for c in clients.iter() {

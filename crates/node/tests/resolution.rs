@@ -12,6 +12,9 @@ use rhtn_node::store::KIND_ENDPOINT_RECORD;
 use rhtn_node::view::NodeView;
 use std::sync::Arc;
 
+/// The subnet the fixtures' positions are in (`wire-format.md` §2.3 field 4).
+const SUBNET: [u8; 32] = [0xdb; 32];
+
 fn nonce(n: u8) -> [u8; 16] {
     [n; 16]
 }
@@ -286,7 +289,7 @@ fn fixture(id: &str) -> Vec<u8> {
 /// `[5, 100]` locator with a different path, rebuilt here and checked
 /// against the bytes the vectors document.
 fn v12() -> Vec<u8> {
-    let documented = "a30158208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8dcfc852aa6a02a30158206bcf8a3e8899fc206bc603744414d58b01db857986d82f611b0794ac9c32c37502a201412702020382051864038443a10127a0f658405a7e4a1e7fed8b75c3703dbb7fdbf134f2f200d3e48a949e466a96fff45a0730d30aee8ab60f5483d063fbd5b19d58269d9f358f56bc7a726ebeb4aab60b0903";
+    let documented = "a30158208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea8a0c8dcfc852aa6a02a40158206bcf8a3e8899fc206bc603744414d58b01db857986d82f611b0794ac9c32c37502a201412702020382051864045820821f6dddcd7980426dd66adc2f3b90a074b0eb71d5063bc0ab043fa7ca9e6c74038443a10127a0f65840156241a762eedc134d9cf4424ae899f4d4a093e2571709443552e9126f5973bb8678ad5fb45e37e0e0698e103698f9c0b30b8c00150f6ae3e61928122fe2fc09";
     let built = signed_locator(
         &id("alice"),
         &Locator {
@@ -297,6 +300,13 @@ fn v12() -> Vec<u8> {
                 series: 5,
                 counter: 100,
             },
+            // the vectors' own subnet (`test-vectors/tools/generate.py`)
+            subnet: Some(
+                hex::decode("821f6dddcd7980426dd66adc2f3b90a074b0eb71d5063bc0ab043fa7ca9e6c74")
+                    .unwrap()
+                    .try_into()
+                    .unwrap(),
+            ),
         },
     );
     assert_eq!(
@@ -376,6 +386,7 @@ fn two_series_do_not_rank_and_the_holder_says_so() {
                 series: 9,
                 counter: 3,
             },
+            subnet: Some(SUBNET),
         },
     );
     assert_eq!(store.offer(&other, &ids()), LocatorOutcome::Incomparable);
@@ -897,6 +908,7 @@ fn a_resolve_request_with_a_malformed_path_is_refused_before_any_path_operation(
             series: 1,
             counter: 0,
         },
+        subnet: Some(SUBNET),
     }
     .emit(&mut loc);
     assert!(Locator::decode(&loc).unwrap_err().contains("pad nibble"));
@@ -909,6 +921,7 @@ fn a_resolve_request_with_a_malformed_path_is_refused_before_any_path_operation(
             series: 1,
             counter: 0,
         },
+        subnet: Some(SUBNET),
     }
     .emit(&mut good);
     assert!(Locator::decode(&good).is_ok());
@@ -967,6 +980,7 @@ fn own_endpoint_publication_replays_or_advances_per_relationship_line() {
                 series: 7,
                 counter: 0,
             },
+            subnet: Some(SUBNET),
         },
     );
     let other = c
@@ -1076,6 +1090,7 @@ fn alice_at(series: u32, counter: u32) -> Vec<u8> {
             path: vec![0x91],
             nibbles: 2,
             seqno: Seqno { series, counter },
+            subnet: Some(SUBNET),
         },
     )
 }

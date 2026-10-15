@@ -56,8 +56,8 @@ class Adoption(
         /** This archive's next back-pointers. */
         fun backPointers(): List<ByteArray>
 
-        /** The subnet this device adopts into. */
-        fun anchor(): String
+        /** Where this device sits, as a `Locator`, in the subnet it acts in. */
+        fun position(): String
 
         /** As the patron: the body, or the kernel's reason. */
         fun propose(node: String, presence: String, series: Int, nodeBack: List<ByteArray>): Result<ByteArray>
@@ -358,7 +358,7 @@ class Adoption(
      * patron the one it issued in, for the other the one it was put in,
      * which is the same subnet and the kernel's answer either way.
      */
-    fun position(): String? = kern.positionIn(kern.anchor())
+    fun position(): String = kern.position()
 
     /**
      * **The frames, versioned, this shell's own.** A version byte, a type

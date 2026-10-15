@@ -642,8 +642,37 @@ class Meet(
             )
         }
         // PRD-02: an adoption moves authority, and the resources whose
-        // predicates reach upward are named before it is agreed
-        when (kind.adopt) {
+        // predicates reach upward are named before it is agreed.
+        //
+        // **What the two people are being asked about, not what this
+        // device chose** [bench, 2026-10-15]: the kind is the initiator's
+        // and the responder reads it off the bootstrap, so a responder
+        // whose own D1a asked for nothing was shown a regular meeting's
+        // brief while the other phone proposed to adopt it. The brief is
+        // where that is said or it is said nowhere.
+        when (settled()) {
+            // both asked to be the patron, which is not settled until D7
+            // (PRD-05): the meeting carries one of the two and the
+            // consequences of each are what there is to warn about
+            null -> {
+                out += Item(
+                    "PRD-02",
+                    "You both asked to be the other's patron. One of you will be, " +
+                        "and the two of you choose which after the record — so both " +
+                        "of the next two items may turn out to be yours.",
+                )
+                out += Item(
+                    "PRD-02",
+                    "If $counterpartyName becomes your patron they hold authority " +
+                        "over your position, and resources whose access reaches " +
+                        "upward will reach through them.",
+                )
+                out += Item(
+                    "PRD-02",
+                    "If you become theirs, your outage cascades to them and to " +
+                        "anyone beneath them, which is their risk and not only yours.",
+                )
+            }
             Adopt.NONE -> {}
             Adopt.ME_UNDER_THEM -> {
                 out += Item(

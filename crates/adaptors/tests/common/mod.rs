@@ -30,6 +30,9 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc::UnboundedReceiver;
 
+/// The subnet the fixtures' positions are in (`wire-format.md` §2.3 field 4).
+pub const SUBNET: [u8; 32] = [0xdb; 32];
+
 pub const NAMES: [&str; 6] = ["alice", "bob", "carol", "w1", "w2", "witness"];
 
 pub fn id(n: &str) -> SigningIdentity {
@@ -99,6 +102,7 @@ pub fn live_node(name: &str, table: Table, anchor: &str, path: &[u8]) -> Arc<Liv
                 series: 1,
                 counter: 0,
             },
+            subnet: Some(SUBNET),
         },
     );
     view.table = table;
@@ -221,6 +225,7 @@ impl Scene {
                     series: 1,
                     counter: 0,
                 },
+                subnet: Some(SUBNET),
             },
             timestamp: t,
             key_material: None,

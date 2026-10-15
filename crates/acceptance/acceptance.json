@@ -10916,7 +10916,7 @@
   "rule": [
    {
     "where": "wire-format.md §7.10",
-    "text": "It cannot publish its own\nprekey bundle, stock its own one-time pool, hold its own mail, or be woken by a\nservice it is not connected to."
+    "text": "It cannot publish its own\nprekey bundle, stock its own one-time pool, hold its own mail, be woken by a\nservice it is not connected to, or hold its own profile where a stranger can\nfetch it."
    },
    {
     "where": "wire-format.md §7.8",
@@ -13836,5 +13836,196 @@
   "then": "It is refused with the reason; the recovery adoption's own path, where the subject assembled the block itself, is unaffected.",
   "oracle": "behaviour",
   "interpretation": "The subject of a recovery holds what makes it, so a block it did not assemble is one it has no grounds to sign [author, 2026-10-14]."
+ },
+ {
+  "id": "TOP-48",
+  "area": "topology",
+  "gap": "topology",
+  "title": "Carry the subnet id in a locator, and refuse a locator two or more hops down without one",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §2.3",
+   "design §13.8"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §2.3",
+    "text": "A locator with a\n                  ;   path of two or more nibbles and no field 4 is\n                  ;   MALFORMED"
+   },
+   {
+    "where": "wire-format.md §2.3",
+    "text": "the locator of a root's first adoption, the record\n                  ;   whose own txid names the subnet"
+   }
+  ],
+  "given": "A locator with a non-empty path.",
+  "when": "It is decoded, with and without field 4, at one nibble and at two.",
+  "then": "With a 32-byte txid in field 4 it decodes and the subnet is read back; at two or more nibbles without it the decoder refuses it as malformed; at one nibble without it — a root's first adoption — it decodes, as does a self-anchored locator with an empty path and no field 4.",
+  "oracle": "behaviour",
+  "interpretation": "The subnet is named by the locator and read by nobody who routes [author, 2026-10-15]."
+ },
+ {
+  "id": "TOP-49",
+  "area": "topology",
+  "gap": "topology",
+  "title": "Name a scope by the first adoption that gave its patron a subordinate, and a subnet by its root's",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "design §13.8",
+   "wire-format.md §4.1"
+  ],
+  "rule": [
+   {
+    "where": "design §13.8",
+    "text": "A subnet's id\nis its root's scope id"
+   },
+   {
+    "where": "wire-format.md §4.1",
+    "text": "where the patron is a lone root\n                       ;   adopting for the first time there is none"
+   }
+  ],
+  "given": "Two parties at genesis, one of them R with no subordinate.",
+  "when": "R adopts the other, and the adopted party later adopts a third.",
+  "then": "The first adoption's locator carries no subnet and its txid becomes R's scope id; R's own locator carries it from then on; the second adoption's locator carries it; the third party's position is keyed by it; and the adopted party's own scope id, latent, is the second adoption's txid.",
+  "oracle": "behaviour",
+  "interpretation": "One rule for a formed subnet and for a node that became a root some other way [author, 2026-10-15]."
+ },
+ {
+  "id": "TOP-50",
+  "area": "topology",
+  "gap": "topology",
+  "title": "Keep one key's positions apart by subnet, not by anchor",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "design §3.1.1",
+   "design §12.1"
+  ],
+  "rule": [
+   {
+    "where": "design §3.1.1",
+    "text": "every locator says which subnet its position is in"
+   },
+   {
+    "where": "design §12.1",
+    "text": "what a client bound in several keeps its positions apart by"
+   }
+  ],
+  "given": "A client adopted under two roots in two subnets.",
+  "when": "It folds its positions from its archive.",
+  "then": "It holds a position per subnet id, reports both, answers position_in by subnet id, and a departure from one leaves the other untouched.",
+  "oracle": "behaviour",
+  "interpretation": "The protocol names subnets and models nothing across them [author, 2026-10-15]."
+ },
+ {
+  "id": "SES-32",
+  "area": "session",
+  "gap": "session",
+  "title": "Take a profile publication from its subject alone, and replace only by a greater counter",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §7.10",
+   "wire-format.md §7.11",
+   "infra-client-requirements.md §6.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.10",
+    "text": "a node takes one only from the subject it names"
+   },
+   {
+    "where": "infra-client-requirements.md §6.2",
+    "text": "replace the one you hold only by a greater counter in the same series"
+   }
+  ],
+  "given": "A client attached to its serving node.",
+  "when": "It publishes a profile naming itself, then one naming another party, then one at a lower counter, then one at a higher counter.",
+  "then": "The first is accepted; the second is refused with the code; the third is refused; the fourth replaces the first.",
+  "oracle": "behaviour",
+  "interpretation": "A profile is a statement by its subject and the node checks that, not who the subject is to the subnet."
+ },
+ {
+  "id": "SES-33",
+  "area": "session",
+  "gap": "session",
+  "title": "Serve the latest profile for a (subject, subnet, kind) to anyone, read-only",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §7.11",
+   "infra-client-requirements.md §6.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.11",
+    "text": "One per (subject, subnet, kind), the latest by seqno"
+   },
+   {
+    "where": "infra-client-requirements.md §6.2",
+    "text": "serve it to anyone who asks"
+   }
+  ],
+  "given": "A node holding a profile for S in subnet X.",
+  "when": "A stranger requests (S, X, 0), then (S, X, 1), then (T, X, 0) for a T it holds nothing of.",
+  "then": "The first returns the profile with the nonce echoed; the second and third return code 0, unknown; nothing is logged of who asked.",
+  "oracle": "behaviour",
+  "interpretation": "A profile is published to be read, and a fetch is the weight of a reusable-material fetch."
+ },
+ {
+  "id": "PRD-14",
+  "area": "product",
+  "gap": "product",
+  "title": "Show a contact by its published alias and image, or by keyhash, and never by a name not received",
+  "milestone": "manual",
+  "kind": "manual",
+  "spec": [
+   "light-client-requirements.md §4.3",
+   "light-client-requirements.md §4.4",
+   "design §12.8"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §4.3",
+    "text": "never show a name you have not received"
+   },
+   {
+    "where": "light-client-requirements.md §4.4",
+    "text": "Publish an alias and, if you choose, an image, for each subnet you hold a position in"
+   }
+  ],
+  "given": "A client holding two contacts, one whose profile it fetched and one whose it could not.",
+  "when": "It renders them.",
+  "then": "The first is shown by alias and image, the second by keyhash; its own alias is published per subnet at attach and on change and appears in no record.",
+  "oracle": "behaviour",
+  "interpretation": "The alias is display only and the keyhash is what a counterparty pinned."
+ },
+ {
+  "id": "PRD-15",
+  "area": "product",
+  "gap": "product",
+  "title": "Label subnets, ask which one an invitation is into, and state it in the brief",
+  "milestone": "manual",
+  "kind": "manual",
+  "spec": [
+   "light-client-requirements.md §7",
+   "light-client-requirements.md §10"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §7",
+    "text": "Ask which subnet before you invite, and say which subnet before you accept"
+   },
+   {
+    "where": "light-client-requirements.md §10",
+    "text": "assume nothing from running one"
+   }
+  ],
+  "given": "A patron holding positions in two subnets, one of which it runs an instance in.",
+  "when": "It invites a party to be adopted, and the party reads the brief.",
+  "then": "The inviter is asked which subnet by its label, the patron's alias there and the subnet's; the invited party's brief states that label; the operator's screen lists the one instance under its subnet and offers none for the other.",
+  "oracle": "behaviour",
+  "interpretation": "An operator in one subnet is an ordinary light client in the next."
  }
 ]

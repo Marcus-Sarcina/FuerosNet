@@ -36,7 +36,7 @@ class AdoptionTest {
             return listOf(ByteArray(32) { 9 })
         }
 
-        override fun anchor(): String = "a".repeat(64)
+        override fun position(): String = "a".repeat(64)
 
         override fun propose(
             node: String,

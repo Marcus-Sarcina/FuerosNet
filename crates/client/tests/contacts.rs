@@ -12,6 +12,9 @@ use rhtn_client::contacts::{Contact, How, prune, upstream_held};
 use rhtn_client::device::ChannelKind;
 use std::collections::BTreeMap;
 
+/// The subnet the fixtures' positions are in (`wire-format.md` §2.3 field 4).
+const SUBNET: [u8; 32] = [0xdb; 32];
+
 // acceptance: TOP-040
 #[test]
 fn a_meeting_leaves_each_party_a_contact_of_the_other_with_a_locator() {
@@ -143,6 +146,7 @@ fn placed(
             series: 1,
             counter: 0,
         },
+        subnet: Some(SUBNET),
     };
     let mut c = Contact::new(id(who).public.key_material(), How::Introduced, last_at);
     c.locator = Some(signed_locator(&id(who), &loc));
@@ -232,6 +236,7 @@ fn an_introduction_taken_leaves_an_identity_a_contact_and_a_position() {
             series: 1,
             counter: 4,
         },
+        subnet: Some(SUBNET),
     };
     let intro = rhtn_archive::locator::introduction(
         &id("bob").public.key_material(),
@@ -294,6 +299,7 @@ fn an_endpoint_record_gives_an_introduced_party_an_address_to_start_from() {
             series: 1,
             counter: 4,
         },
+        subnet: Some(SUBNET),
     };
     let intro = rhtn_archive::locator::introduction(
         &id("bob").public.key_material(),
@@ -396,6 +402,7 @@ fn a_card_carries_an_introduction_and_the_records_of_its_anchor() {
             series: 1,
             counter: 1,
         },
+        subnet: Some(SUBNET),
     };
     let card = rhtn_archive::locator::anchored_introduction(
         &rhtn_archive::locator::introduction(
@@ -492,6 +499,7 @@ fn a_hop_of_the_walk_is_filed_with_the_address_it_was_heard_at() {
             series: 1,
             counter: 1,
         },
+        subnet: Some(SUBNET),
     };
     a.take_introduction(&rhtn_archive::locator::introduction(
         &id("bob").public.key_material(),

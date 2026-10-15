@@ -230,8 +230,9 @@ joined** (§2), and membership in one is not exclusive of others.
 > *Illustrative. The formal version is flow across shared vertices (§16.2).*
 
 **Two distinct axes, easily conflated:**
-- *Membership plurality*, meaning presence in several subnets at once. Ordinary,
-  and not modelled by the protocol (§3.1.1). The teams analogy explains it.
+- *Membership plurality*, meaning presence in several subnets at once. Ordinary;
+  the protocol names the subnets and models nothing across them (§3.1.1). The
+  teams analogy explains it.
 - *Key forking*, meaning one archive with two live keys. Orthogonal to plurality,
   and
   closer to using the same password on two mutually non-interacting sites, then
@@ -461,6 +462,9 @@ latency for a stranger's key**, not bandwidth.
 | **Light client** | The participant-facing client software, and by extension a node with no infrastructure of its own (§3.3). **Every user runs the client software, infra operators included**; it is where user actions happen, so the term names software, or a node's lack of a static device. It is never a tier and never a class of person |
 | **Peer** | A user joined to this one by a peering record (§6.3): voluntary, cross-tree, carrying an encrypted backup and, where both run instances, a topology edge |
 | **Anchor** | An ancestor a node names in its locator so a recipient can route to it, or itself: **a root self-anchors**, with an empty path (`wire-format.md` §2.1). Not a status a node holds — relative to whoever is resolving, and subject to that party's caching policy (§12.2, §12.7.3) |
+| **Subnet** | The tree of authority under one root (§3.1), named by its **subnet id**: its root's scope id, the txid of the first adoption that gave the root a subordinate (§13.8). A locator carries the id of the subnet its position is in (§12.1), so one key bound in several subnets holds several positions that nothing confuses [author, 2026-10-15] |
+| **Scope** | A patron's own subtree, wherever the patron sits: named by its **scope id**, the txid of the first adoption that gave that patron a subordinate in that subnet, latent while the patron has a patron and the subnet's own id once it stands alone (§13.8) |
+| **Alias** | A display name a participant chooses for itself in one subnet, and a root chooses for the subnet; carried with the locator in a self-signed profile, hosted by serving infrastructure, never in a transaction, and never matched by anything (§12.8) |
 | **Trust horizon** | Every node within a **two-edge walk** over adoption and sibling edges, centred on the observer. At f = 10, **221** (§15.1). Not a subtree, not a tier band, and not a fixed set — every user's horizon is different and centred on themselves. **The operative term in mechanical text** [author, 2026-09-01]; *Dunbar Org* names the same set where the thesis and theory chapters speak of it as a team |
 | **Dunbar Org** | The introductory and theory name for a trust horizon — the framing *a team you have joined* (§1.4). Same set, same walk |
 | **Witness** | A node nominated by the *counterparty* to notarise a presence ceremony (§7.1) |
@@ -510,7 +514,13 @@ latency for a stranger's key**, not bandwidth.
 A user can be bound into several subnets at once, and neither the protocol nor
 any patron can prevent it. **This is an accidental consequence of other design
 choices** (network partitionability, permissionless infrastructure and free
-exit) rather than an intended feature, and the protocol does not model it.
+exit) rather than an intended feature. **The protocol names subnets and models
+nothing across them** [author, 2026-10-15]: every subnet has an id (§13.8) and
+every locator says which subnet its position is in (§12.1), so a client bound
+in several holds several positions it can tell apart, label and address its
+infrastructure under — and that is the whole of what is modelled. Nothing
+compares, ranks or reconciles a user's bindings against one another, which is
+what the deletions below protect.
 
 > **Vignette V7 — A power, not a right.**
 > Juries can refuse to convict against the evidence. Statutes do not generally
@@ -553,9 +563,9 @@ addresses are legitimate.
 **Consequences, all of them deletions:**
 - There is no soft-fork transaction. Being adopted in another subnet is ordinary
   adoption (§6.1).
-- Locators carry one `{anchor, path}` (§12.1); a protocol-defined transaction
-  presents one name and one address. Mixing several would be a malformed
-  introduction.
+- Locators carry one `{anchor, path, subnet}` (§12.1); a protocol-defined
+  transaction presents one name and one address, in one subnet. Mixing several
+  would be a malformed introduction.
 - No cross-subnet fanout accounting, no patron-privilege tiebreak, no down-line
   credit reconciliation.
 - **Key rotation is per-subnet** (§13.6).
@@ -598,6 +608,15 @@ payload, so apex load scales with churn and introductions, not with usage.
 - **Each server corresponds to a user.** Infra operators are people.
 - Expected deployment: container or VM image, mostly in cloud datacentres, each
   instance requiring a unique static IP. **No centralised operator.**
+- **An instance serves one subnet, and an operator may run several** [author,
+  2026-10-15]. A node's position is in one subnet (§12.1) and so is everything
+  it serves, holds and forwards for its subordinates; a person bound in two
+  subnets who wants to serve both runs two instances, each priced as above,
+  rather than one node partitioned between them. Their client administers every
+  instance they run and **assumes nothing from the fact**: holding a position
+  in a subnet says nothing about running infrastructure there, and an operator
+  in one subnet is an ordinary light client in the next
+  (`light-client-requirements.md` §11).
 
 > **Why there can be only 110 light client users under an infra node.**
 > I will admit to having a particular social agenda with this project, and it involves
@@ -4417,14 +4436,20 @@ relationship it is not party to (§1.1).
 ## 12. Addressing, resolution, and reachability under change
 
 ### 12.1 Locator format
-A locator is three fields — a topological position, with no address in it:
+A locator is four fields — a topological position, with no address in it:
 
 ```
-{ anchor, path, sequence }
+{ anchor, path, sequence, subnet }
 ```
 
 - **anchor.** Key hash of the anchor whose subtree contains the node — a
   root names itself, with an empty path
+- **subnet.** The id of the subnet the position is in (§13.8): what a client
+  bound in several keeps its positions apart by, what its infrastructure in
+  each is addressed under, and what a profile is for (§12.8). **Routing never
+  reads it** — the anchor and path are the address, as before — and a
+  self-anchored locator of a node that has adopted nobody has none, a lone
+  identity being in no subnet yet [author, 2026-10-15]
 - **path.** Position beneath the anchor; **truncatable** to a prefix
   sufficient to route to the right region (this is where aggregation savings
   come from). Truncation lives in distant nodes' unsigned aggregate state only —
@@ -4510,7 +4535,7 @@ occurs. Bob pins Alice's full public key on first contact and uses the hash
 thereafter.
 
 **Case 1 — Cached locator, still valid.**
-1. Bob verifies Alice's signature over `{key, anchor, path, sequence}`.
+1. Bob verifies Alice's signature over `{key, anchor, path, sequence, subnet}`.
 2. Bob looks up `anchor` in his local table for an address to start from —
    his contacts, which a client keeps and bounds as `light-client-requirements.md`
    §4.3 says.
@@ -5219,6 +5244,48 @@ what they already hold. Beyond it, cached locators into that subtree fail and th
 holders re-resolve from a higher anchor (§12.3 Case 3). No flood, and no pointer
 left behind.
 
+### 12.8 Profiles: an alias and an image, per position
+
+**A participant is named by a keyhash and shown as one until it says
+otherwise** [author, 2026-10-15]. What it may say is a **profile**: an alias
+and, if it chooses, an image, each its own to pick and neither expected to be
+anything in particular — a picture of the person's face is not asked for, and a
+user decides their own exposure as they would anywhere else. The alias is
+**display only and never matched**: nothing resolves it, nothing compares it,
+nothing routes by it, and two participants may carry the same one.
+
+**It goes with the locator, not with the identity.** A profile names the
+subject and the subnet (§13.8) and is signed by the subject, so a user bound in
+several subnets decides an alias and an image for each binding separately — the
+postal model (§3.1.1), where each institution holds its own name for you. **It
+is hosted as local data on the subnet's infrastructure and compiled into no
+transaction**: a client publishes its profile to its serving node as it
+publishes its prekeys (§14.2.4), anyone holding the locator fetches it from
+there, and the archive never carries it. A name is replaceable; a record is
+not, and a name in a record would outlive every reason it was chosen.
+
+**A subnet has one too**, an alias and a logo, signed by the root. **By
+convention the root patron alone sets or changes it** — a convention and not a
+rule, since nothing enforces who signs a profile for a subnet (§1.1), and the
+document says so rather than issuing a MUST nobody can check. A client that
+receives two is left to prefer the root's, which it can recognise.
+
+**What a client shows.** A contact whose locator it holds is shown by the
+alias and image fetched for that locator's subnet; one for which none has been
+received is shown by keyhash, as every contact was before. A subnet the client
+holds a position in is labelled by its patron's alias in that subnet and the
+subnet's own alias, *Dana's Bowling League*, which is what the person reads at
+every place a position is chosen or offered (`light-client-requirements.md`
+§4.4, §7).
+
+**What this is not.** Not a face in network state: §7.2's bar on biometrics is
+untouched, a profile image being what its subject chose to publish about
+itself and no more biometric than any photograph a person posts. Not an
+identity: a profile proves nothing, since anyone may claim any alias, and the
+key it is signed by is what a counterparty pinned at a meeting (§12.3 Case 0).
+And not propagated: it reaches whoever asks the hosting node, which is the
+catalog's reach (§11.5) and not topology's.
+
 ---
 
 ## 13. Subnet formation and lifecycle
@@ -5301,8 +5368,9 @@ own name change form" property of §3.1.1.
 **Hazard:** a compromised user must rotate separately everywhere, and an attacker
 continues operating in any subnet where they have not. **Mitigation is
 application-level**, consistent with §3.1.1: the client already tracks all
-bindings locally in order to present the right name and address to the right
-person, so it can prompt rotation across all of them on compromise.
+bindings locally, by subnet id (§13.8), in order to present the right name and
+address to the right person — its alias in each is its own (§12.8) — so it can
+prompt rotation across all of them on compromise.
 
 ### 13.7 Two consequences of the postal model
 
@@ -5440,6 +5508,82 @@ classic examples rather than the only options. Social recovery also has a poor p
 Note that backup and presence-based recovery (§9.1) are complementary rather
 than redundant: backup covers key *loss*, recovery covers key *compromise*, and
 a compromised backup is itself a compromise path.
+
+### 13.8 The subnet's identity
+
+**A subnet is named by a record, not by a key** [author, 2026-10-15], and
+the record is an adoption. **Every patron has a scope**: the subtree of its
+own subordinates, wherever the patron itself happens to sit. **A scope comes
+into being with the first adoption that gives its patron a subordinate in a
+subnet, and is named from then on by that adoption's txid** — its *scope id*,
+fixed once, surviving every departure and disavowal the patron goes through
+afterwards and every subnet the patron later carries it into. **A subnet's id
+is its root's scope id.** For a subnet two people formed, that is the
+adoption §13.1 step 4 makes on their formation record; for a node that became
+a root some other way (§12.7), it is the scope it already had. In both the id
+is a thing every holder of the chain can compute and nobody can mint: a txid is
+two-signed, permanent, and unique.
+
+**Why not the root's key.** The root's keyhash is what a locator names as its
+anchor, and it was what told one subnet from another by default. But a key
+rotates and a subnet does not; a root with a new key would leave every
+position beneath it naming a dead anchor and nothing saying the subnet was
+the same one. And an anchor is relative to whoever resolves (§12.2), any
+ancestor serving as one, so "which subnet" was only well defined along the
+adoption chain. The record is older than any key the root will hold, and the
+same from every direction.
+
+**What a position shows is the outermost scope it is in.** A locator carries
+the id of the subnet its position is in (`wire-format.md` §2.3), which is the
+root's scope id, however many scopes nest between the root and the position:
+every adoption carries the id its patron's own position carries, so a
+subordinate's locator says which subnet it is in without consulting anyone
+(`wire-format.md` §4.1). A patron's own scope id is **latent** while the
+patron sits under somebody: computable from the chain, carried by no locator,
+and the name the scope will go by on the day it stands alone.
+
+**The one locator that names no subnet.** A root's first adoption is the
+record whose txid names the subnet, and a record cannot carry its own hash:
+that adoption's locator carries no field 4, and it is the only positioned
+locator that may not. A lone identity's self-anchored locator carries none
+either, since a lone identity is in no subnet. Every other positioned locator
+names its subnet, and a decoder refuses one that does not
+(`wire-format.md` §2.3).
+
+**Re-rooting makes a subnet, and joining dissolves one into another**
+(§12.7.7). When a patron departs or is disavowed, the scope it carries becomes
+a subnet named by the scope id it already had, and every position in it
+re-derives on the patron as root with that id — history its subordinates
+already hold through the chain (`wire-format.md` §4.6.1), so the new id is as
+computable as the old. When a root is adopted into a larger subnet with its
+scope, every position in the scope comes to show the larger subnet's id, and
+the scope's own id goes latent again; when the root departs, they show its
+own id once more.
+
+**Worked through** [author, 2026-10-15], with aliases as §12.8 shows them and
+ids abbreviated:
+
+1. Alice joins the existing subnet *BowlingLeague* `[ABC123]` under Bob, and
+   sees it as *Bob's BowlingLeague*.
+2. Alice adopts Claire. That adoption's txid, `[321CBA]`, is Alice's scope id
+   in `[ABC123]` from now on — latent, since Alice has a patron. Claire is a
+   member of *Alice's BowlingLeague* and her locator carries `[ABC123]`.
+3. Alice departs Bob's subnet. Her scope stands alone: a subnet named
+   `[321CBA]`, Claire's position re-derived on Alice as root, and the alias
+   still *BowlingLeague* until somebody changes it.
+4. Alice renames it *WinterSports* `[321CBA]`. The id did not move.
+5. Alice joins *Games&Amusements* `[789XYZ]` under Devon — with her
+   `[321CBA]` scope, rather than as an individual or with another scope she
+   holds. Alice is now a member of *Devon's Games&Amusements* `[789XYZ]` and
+   Claire of *Alice's Games&Amusements* `[789XYZ]`; `[321CBA]` is latent again.
+6. Alice departs Devon's subnet. The Alice–Claire scope is *Alice's
+   Games&Amusements* `[321CBA]` once more.
+
+The same league, the same id throughout, and nothing in it needed renaming.
+
+**What the id is for**: keeping a user's positions apart (§3.1.1), addressing
+the infrastructure that serves each (§12.6.3), and carrying a name (§12.8). It
+is not a route, not a credential, and not a claim about anyone.
 
 ---
 
@@ -6276,8 +6420,8 @@ an ancestor accumulating them holds structure and no routable or identifying
 information, and adding peering for symmetry would silently remove that property.
 **It is a constraint on what may travel rootward, not a scoping convenience.**
 
-**A memo never leaves its subnet.** Its anchor names the subnet and rootward travel
-terminates at that subnet's root. That is what keeps the mechanism clear of §3.1.1:
+**A memo never leaves its subnet.** Its locator says which subnet (§13.8) and its
+anchor is the root rootward travel terminates at. That is what keeps the mechanism clear of §3.1.1:
 nothing compares a node's binding in one subnet against its binding in another, and
 no node adjudicates between them.
 
@@ -8291,7 +8435,7 @@ order and refusal behaviour, with the role row consulted as a lookup.
 This chapter names them; the obligations stay where the party bound by them will look.
 
 - **`wire-format.md` §13** — encoding items: the queue cap value, which §21.1.1 classes as freely tunable.
-- **`light-client-requirements.md` §10** — participant-client behaviour still to settle.
+- **`light-client-requirements.md` §11** — participant-client behaviour still to settle.
 - **`infra-client-requirements.md` §12** — operator-side behaviour still to settle.
 
 ---

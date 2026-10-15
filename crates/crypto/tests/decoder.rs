@@ -440,10 +440,11 @@ fn dec_18_extension_bounds_hold_in_every_nested_signed_map() {
     );
 }
 
-/// A Locator over `packed` with `nibbles`, anchored at a fixed keyhash at seqno [5, 0].
+/// A Locator over `packed` with `nibbles`, anchored at a fixed keyhash at
+/// seqno [5, 0], naming a subnet wherever the path is not empty (§2.3).
 fn locator_with_path(packed: &[u8], nibbles: u64) -> Vec<u8> {
     let mut out = Vec::new();
-    emit_map_head(&mut out, 3);
+    emit_map_head(&mut out, if nibbles > 0 { 4 } else { 3 });
     emit_uint(&mut out, 1);
     emit_bstr(&mut out, &[0xbb; 32]);
     emit_uint(&mut out, 2);
@@ -456,6 +457,10 @@ fn locator_with_path(packed: &[u8], nibbles: u64) -> Vec<u8> {
     emit_array_head(&mut out, 2);
     emit_uint(&mut out, 5);
     emit_uint(&mut out, 0);
+    if nibbles > 0 {
+        emit_uint(&mut out, 4);
+        emit_bstr(&mut out, &[0xdb; 32]);
+    }
     out
 }
 

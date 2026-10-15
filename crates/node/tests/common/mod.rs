@@ -19,6 +19,9 @@ use rhtn_node::{Adjacency, resolution::NetworkPoint};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex};
 
+/// The subnet the fixtures' positions are in (`wire-format.md` §2.3 field 4).
+pub const SUBNET: [u8; 32] = [0xdb; 32];
+
 pub const NAMES: [&str; 26] = [
     "alice", "bob", "carol", "alice2", "w1", "w2", "w3", "w4", "w5", "w6", "w7", "w8", "w9", "w10",
     "w11", "w12", "w13", "w14", "w15", "w16", "c1", "c2", "c3", "c4", "c5", "witness",
@@ -278,6 +281,7 @@ impl World {
                 path: vec![0x10 | slot],
                 nibbles: 2,
                 seqno: Seqno { series, counter: 0 },
+                subnet: Some(SUBNET),
             },
             timestamp: t,
             key_material: None,
@@ -310,6 +314,7 @@ impl World {
                 path: vec![0x10 | slot],
                 nibbles: 2,
                 seqno: Seqno { series, counter: 0 },
+                subnet: Some(SUBNET),
             },
             timestamp: t,
             key_material: None,
@@ -375,6 +380,7 @@ pub fn view(name: &str, table: Table, anchor: &str, path: &[u8]) -> NodeView {
                 series: 1,
                 counter: 0,
             },
+            subnet: Some(SUBNET),
         },
     );
     v.table = table;

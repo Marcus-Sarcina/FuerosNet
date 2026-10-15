@@ -213,14 +213,9 @@ pub const COUNTER_MAX: u32 = u32::MAX;
 /// counter.  Unilateral, needing no patron; final for everyone who takes
 /// it, the subject included.
 pub fn seal(identity: &rhtn_crypto::SigningIdentity, position: &Locator, series: u32) -> Vec<u8> {
-    let sealed = Locator {
-        anchor: position.anchor,
-        path: position.path.clone(),
-        nibbles: position.nibbles,
-        seqno: crate::tx::Seqno {
-            series,
-            counter: COUNTER_MAX,
-        },
-    };
+    let sealed = position.at(crate::tx::Seqno {
+        series,
+        counter: COUNTER_MAX,
+    });
     signed_locator(identity, &sealed)
 }

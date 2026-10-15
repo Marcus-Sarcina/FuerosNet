@@ -22,6 +22,9 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
+/// The subnet the fixtures' positions are in (`wire-format.md` §2.3 field 4).
+const SUBNET: [u8; 32] = [0xdb; 32];
+
 /// A node for `name` that serves exactly `clients` and nobody else.
 ///
 /// **The served set is the operator's** (`infra-client-requirements.md`
@@ -39,6 +42,7 @@ fn node_serving(name: &str, clients: &[&str]) -> Arc<LiveNode> {
                 series: 1,
                 counter: 0,
             },
+            subnet: Some(SUBNET),
         },
     );
     let mut cfg = NodeConfig::defaults(Arc::new(id(name)), pins(), 30);

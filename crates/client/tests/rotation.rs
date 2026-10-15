@@ -13,6 +13,9 @@ use rhtn_archive::tx::*;
 use rhtn_client::rotation::*;
 use rhtn_codec::cbor::*;
 
+/// The subnet the fixtures' positions are in (`wire-format.md` §2.3 field 4).
+const SUBNET: [u8; 32] = [0xdb; 32];
+
 /// Adopt `node` under `patron` on a meeting, into `series`.
 fn adopt(w: &mut World, node: &str, patron: &str, series: u32) -> Record {
     let pop = w.meet(node, patron);
@@ -26,6 +29,7 @@ fn adopt(w: &mut World, node: &str, patron: &str, series: u32) -> Record {
             path: vec![0x10],
             nibbles: 2,
             seqno: Seqno { series, counter: 0 },
+            subnet: Some(SUBNET),
         },
         timestamp: t,
         key_material: None,

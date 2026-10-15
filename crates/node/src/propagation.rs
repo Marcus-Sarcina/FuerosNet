@@ -785,6 +785,9 @@ impl NodeView {
                     series: b.series,
                     counter: loc.seqno.counter,
                 };
+                // a root's first adoption names its subnet by its own
+                // txid (design §13.8), and this node's position says so
+                loc.subnet = loc.subnet.or(Some(b.adoption));
                 Some(loc)
             })
             .collect();
@@ -807,8 +810,33 @@ impl NodeView {
                 series: self.position.seqno.series,
                 counter: self.position.seqno.counter.saturating_add(1),
             };
-            self.position = Locator::root(me, seqno);
+            // **a departure roots the scope this node carried** (design
+            // §13.8): the subnet it now heads is named by its scope id in
+            // the one it left
+            let scope = self.scope_in(self.position.subnet);
+            self.position = Locator::root_in(me, seqno, scope);
         }
+        // **a lone root's subnet is named by its first adoption** (design
+        // §13.8), by that record's own txid, so the archive answers after
+        // a restart as it does for the position
+        if self.position.anchor == me && self.position.subnet.is_none() {
+            self.position.subnet = self.scope_in(None);
+        }
+    }
+
+    /// This node's scope id in `subnet` (design §13.8): the txid of its
+    /// first adoption as patron there, by the record's own time and then
+    /// its txid; `None` names the scope under its own key as a lone root.
+    fn scope_in(&self, subnet: Option<Txid>) -> Option<Txid> {
+        let me = self.me();
+        self.archive
+            .records()
+            .filter(|r| r.tx_type == rhtn_archive::tx::TYPE_ADOPTION)
+            .filter(|r| r.field_hash(2) == Some(me))
+            .filter(|r| r.locator().is_some_and(|l| l.subnet == subnet))
+            .map(|r| (r.effective, r.txid))
+            .min()
+            .map(|(_, t)| t)
     }
 
     /// Take the reply to a repair, back on its request stream: the

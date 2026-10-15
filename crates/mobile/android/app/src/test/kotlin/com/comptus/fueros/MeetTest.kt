@@ -844,6 +844,71 @@ class MeetRowsTest {
         assertTrue("whose risk it is", o.contains("their risk"))
     }
 
+    /**
+     * **The responder is told about the patronage it is being offered**
+     * [bench, 2026-10-15: GXV proposed to adopt ZU8 and ZU8's brief said
+     * nothing about it]. The kind is the initiator's choice, read off the
+     * bootstrap; a responder whose own D1a asked for nothing was shown a
+     * regular meeting's brief while the other phone was proposing to be
+     * its patron.
+     */
+    @Test
+    fun the_responder_is_briefed_on_the_patronage_the_initiator_asked_for() {
+        // this device asked for nothing; the invitation it read did
+        val m = meet(role = Meet.Role.RESPONDER)
+        m.counterparty("bb")
+        m.theirAdopt(Meet.Adopt.THEM_UNDER_ME)
+        assertEquals(
+            "the initiator is the patron, which at this device is the other way",
+            Meet.Adopt.ME_UNDER_THEM,
+            m.settled(),
+        )
+        val text = m.brief().joinToString(" ") { it.text }
+        assertTrue("PRD-02 is answered", rows(m.brief()).contains("PRD-02"))
+        assertTrue("names them as patron: $text", text.contains("becomes your patron"))
+        assertTrue("names the upward-reaching resources", text.contains("reaches upward"))
+
+        // and the other way round, the responder being asked to be patron
+        val over = meet(role = Meet.Role.RESPONDER)
+        over.counterparty("bb")
+        over.theirAdopt(Meet.Adopt.ME_UNDER_THEM)
+        assertEquals(Meet.Adopt.THEM_UNDER_ME, over.settled())
+        val o = over.brief().joinToString(" ") { it.text }
+        assertTrue("names the cascade downward: $o", o.contains("outage cascades"))
+    }
+
+    /**
+     * **Both asking to be the patron is a brief of its own** (PRD-05): the
+     * question is settled at D7, so what the brief can say is that one of
+     * the two will hold authority and both consequences are in play.
+     */
+    @Test
+    fun an_unresolved_opposition_briefs_both_consequences() {
+        val m = meet(Meet.Adopt.THEM_UNDER_ME, role = Meet.Role.RESPONDER)
+        m.counterparty("bb")
+        m.theirAdopt(Meet.Adopt.THEM_UNDER_ME)
+        assertTrue("the two cannot both be patron", m.opposedAdoptions())
+        assertNull("and nothing is settled until they choose", m.settled())
+        val text = m.brief().joinToString(" ") { it.text }
+        assertTrue(rows(m.brief()).contains("PRD-02"))
+        assertTrue("says both asked: $text", text.contains("You both asked"))
+        assertTrue("names the one consequence", text.contains("becomes your patron"))
+        assertTrue("and the other", text.contains("outage cascades"))
+        assertTrue("and when it is decided", text.contains("after the record"))
+    }
+
+    @Test
+    fun a_meeting_that_asks_for_no_adoption_still_carries_none_for_a_responder() {
+        // the other half of PRD-02: a regular meeting warns about nothing,
+        // whichever side reads the brief
+        val m = meet(role = Meet.Role.RESPONDER)
+        m.counterparty("bb")
+        m.theirAdopt(Meet.Adopt.NONE)
+        assertEquals(Meet.Adopt.NONE, m.settled())
+        assertFalse(rows(m.brief()).contains("PRD-02"))
+        assertFalse(m.brief().joinToString(" ") { it.text }.contains("patron"))
+    }
+
     @Test
     fun a_backup_request_says_what_leaves_and_what_does_not() {
         val text = meet(backup = true).brief().joinToString(" ") { it.text }

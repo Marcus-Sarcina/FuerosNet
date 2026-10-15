@@ -17,6 +17,9 @@ use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::sync::{Arc, Mutex};
 
+/// The subnet the fixtures' positions are in (`wire-format.md` §2.3 field 4).
+const SUBNET: [u8; 32] = [0xdb; 32];
+
 /// A peering transaction between two infra nodes, each asserting its own
 /// address and ASN.
 fn peering(a: &str, b: &str, a_point: NetworkPoint, b_point: NetworkPoint) -> Record {
@@ -427,6 +430,7 @@ fn a_move_inside_the_replication_horizon_needs_no_archive_presentation() {
                 series: 9,
                 counter: 0,
             },
+            subnet: Some(SUBNET),
         },
         timestamp: t.now(),
         key_material: None,

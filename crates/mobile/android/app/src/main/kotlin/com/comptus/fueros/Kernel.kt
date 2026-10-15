@@ -406,7 +406,7 @@ object Kernel {
         override fun backPointers(): List<ByteArray> =
             call("backPointers", { emptyList() }) { p.backPointers() }
 
-        override fun anchor(): String = hex(p.anchor())
+        override fun position(): String = hex(p.position())
 
         override fun propose(
             node: String,
@@ -414,7 +414,7 @@ object Kernel {
             series: Int,
             nodeBack: List<ByteArray>,
         ): Adoption.Result<ByteArray> = result("proposeAdoption") {
-            p.proposeAdoption(p.anchor(), unhex(node), unhex(presence), series.toUInt(), nodeBack)
+            p.proposeAdoption(null, unhex(node), unhex(presence), series.toUInt(), nodeBack)
         }
 
         override fun reviewAndSign(body: ByteArray): Adoption.Result<ByteArray> =

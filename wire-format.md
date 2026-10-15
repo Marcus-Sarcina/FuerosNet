@@ -204,6 +204,7 @@ malformed, not merely unusual.
 | Witnesses per presence record | 16 |
 | Path length | 24 nibbles (depth 24 at f=10 exceeds any plausible network) |
 | Prekey bundle blob | 4 KB. A PQXDH bundle is an ML-KEM-768 encapsulation key (1,184 B) plus signed prekeys and their signatures — roughly 1.5–2 KB, so this is a DoS ceiling with headroom rather than a capacity figure |
+| Profile image | 64 KiB, and an alias 64 characters (§7.11): a small picture and a name, fetched per contact, which the horizon multiplies |
 | Merge back-pointers per signer | 8 |
 | Verifier responses per presence record | 32 — **two subjects × a per-subject threshold capped at 10**, with headroom. Sixteen does not fit: two well-connected participants require ten each |
 | Asserted locations per record | 4 |
@@ -424,9 +425,25 @@ Algorithm profile (design §5):
 Locator = {
   1: keyhash,     ; anchor
   2: path,
-  3: seqno        ; the node's own {series, counter} pair
+  3: seqno,       ; the node's own {series, counter} pair
+  4: ? txid       ; the SUBNET the position is in (design §13.8): the
+                  ;   root's scope id, the txid of the first adoption
+                  ;   that gave the root a subordinate. ABSENT only on a
+                  ;   self-anchored locator of a node that has adopted
+                  ;   nobody — a lone identity is in no subnet — and on
+                  ;   the locator of a root's first adoption, the record
+                  ;   whose own txid names the subnet. A locator with a
+                  ;   path of two or more nibbles and no field 4 is
+                  ;   MALFORMED [author, 2026-10-15]
 }
 ```
+
+**The subnet is named by the locator and read by nobody who routes** (design
+§12.1): the anchor and path are the address, exactly as before, and field 4 is
+what a client holding positions in several subnets keeps them apart by, what a
+profile is for (§7.11), and what a memo is scoped by (§10.2). A root's own
+locator carries the id once it has adopted anybody, and every adoption beneath
+it carries the id of its patron's position (§4.1).
 
 The `seqno` here **is** design §6.2.1's sequence number, not a separate field
 (design §6.2). Its **counter** is incremented on every position change **and on every
@@ -977,7 +994,11 @@ Subsumes key rotation and recovery.
   2: keyhash,          ; patron
   3: Locator,          ; node's resulting position. Its seqno opens the
                        ;   relationship's series at counter 0 — the same rule
-                       ;   a series reissue states for its new series (§4.6)
+                       ;   a series reissue states for its new series (§4.6).
+                       ;   Its subnet (§2.3 field 4) is the patron's own
+                       ;   position's; where the patron is a lone root
+                       ;   adopting for the first time there is none, this
+                       ;   record's own txid being the id (design §13.8)
   4: timestamp,
   5: ? KeyMaterial,    ; the ADOPTED NODE's key material, never the patron's
                        ;   — there is no discriminator on the wire, so the profile
@@ -3409,22 +3430,24 @@ batch, matching the archive-reference bound it replaces.
 
 ### 7.10 What a client hands its serving node
 
-**Four things a light client cannot do for itself.** It cannot publish its own
-prekey bundle, stock its own one-time pool, hold its own mail, or be woken by a
-service it is not connected to. Each is an act the node it is already attached
-to performs on its behalf, and each needs a message. §6.2 gives the fifth member
-of this family, a catalog registration, its own request type and says why:
-without a message, the one act that matters would be the one thing an attached
-client cannot say, and every implementation would invent its own.
+**Five things a light client cannot do for itself.** It cannot publish its own
+prekey bundle, stock its own one-time pool, hold its own mail, be woken by a
+service it is not connected to, or hold its own profile where a stranger can
+fetch it. Each is an act the node it is already attached to performs on its
+behalf, and each needs a message. §6.2 gives a sixth member of this family, a
+catalog registration, its own request type and says why: without a message,
+the one act that matters would be the one thing an attached client cannot say,
+and every implementation would invent its own.
 
-**Four request types, not one submission carrying a kind** [2026-09-13]. The
+**Five request types, not one submission carrying a kind** [2026-09-13]. The
 request table is explicit for every other message and a kind tag inside a body
 is the sender-supplied discriminator §10.1 refuses for pushes, for the same
 reason: it is state every receiver must trust before it knows what it is
 reading.
 
 **None of them is read-only** (§9.2). Each changes state at the node or spends
-something, so none may be processed in early data.
+something, so none may be processed in early data. (A profile *fetch*, §7.11,
+is read-only and is not in this family.)
 
 ```
 PrekeyPublication = {          ; type 9
@@ -3457,7 +3480,12 @@ WakeRegistration = {           ; type 12
   4: ? timestamp,              ; when the client expects the endpoint to lapse
 }
 
-SubmissionReply = {            ; the answer to any of the four
+ProfilePublication = {         ; type 13
+  1: Profile,                  ; §7.11, signed by its subject
+  2: bstr .size 16,            ; nonce
+}
+
+SubmissionReply = {            ; the answer to any of the five
   1: bstr .size 16,            ; echoes the request nonce
   2: uint                      ; 0 accepted | 1 refused | 2 over a bound
                                ;   this node applies
@@ -3479,7 +3507,10 @@ requester, **and one whose device is not the key this session presented**
 [author, 2026-09-22]: a device publishes its own bundle, stocks its own pool and
 registers its own wake endpoint, each on the session it holds, so none of the
 three carries a device field and the node attributes each to the device on the
-session.
+session. A profile names its subject the same way, and a node takes one only
+from the subject it names — **for a subnet's profile too**, whose subject is
+the party signing it: that the signer is the subnet's root is a convention the
+node does not check (§7.11).
 
 **A deposit is bounded by the array limits like everything else** (§1.3), and a
 node applies its own storage bound on top: the pool is space it lends.
@@ -3694,6 +3725,71 @@ which has not yet seen the by-products of the steps it was sent, sends no
 §1.2) [author, 2026-10-08]: its answer to the request acknowledged the
 ceremony, its signature is its readiness, and the proposer's wait on an
 unanswered signer (§7.10.1) covers the interval.
+
+### 7.11 Profile
+
+**A display name and an image, per position, signed by the one it is about,
+hosted by the serving node, and in no transaction** (design §12.8). What a
+client shows a person instead of a keyhash, once the party has said what to
+show.
+
+```
+Profile = {
+  1: keyhash,                  ; subject: the party, or for a subnet's own
+                               ;   profile the party that signed it (by
+                               ;   convention the root — design §12.8)
+  2: txid,                     ; the subnet (§2.3 field 4, design §13.8)
+  3: uint,                     ; 0 = the subject's own profile in that subnet
+                               ; 1 = the subnet's profile
+  4: tstr .size (1..64),       ; alias. DISPLAY ONLY, NEVER MATCHED: nothing
+                               ;   resolves, compares or routes by it, and two
+                               ;   parties may carry the same one
+  5: ? [ uint, bstr .size (1..65536) ],
+                               ; image: a format tag (1 = PNG, 2 = JPEG, 3 =
+                               ;   WebP; others malformed) and its bytes, at
+                               ;   most 64 KiB (§1.3)
+  6: seqno,                    ; the subject's own counter (§2.3): a later
+                               ;   profile replaces an earlier one, equal and
+                               ;   different is malformed (§7.7.3's rule)
+  7: COSE_Sign1                ; BY THE SUBJECT over canonical CBOR of fields
+                               ;   1-6; external_aad = "rhtn/1:profile".
+                               ;   Classical only: relevance ends on
+                               ;   replacement, so §7.1's horizon does not apply
+}
+
+ProfileRequest = {             ; request type 14, read-only
+  1: keyhash,                  ; subject
+  2: txid,                     ; subnet
+  3: uint,                     ; kind, as field 3 above
+  4: bstr .size 16,            ; nonce
+}
+
+ProfileReply = {
+  1: bstr .size 16,            ; echoes the request nonce
+  2: ? Profile,                ; the latest the node holds for that triple
+  3: ? uint                    ; failure code when field 2 absent:
+                               ;   0 unknown | 1 refused
+}
+```
+
+**One per (subject, subnet, kind), the latest by seqno.** A node keeps the
+newest it has taken and serves it to anyone who asks, as it serves reusable
+prekey material (§7.8): a profile is published to be read, and the fetch is a
+metadata event of the same weight as a reusable-material fetch, which is to say
+none worth logging (`infra-client-requirements.md` §6).
+
+**It travels nowhere else.** Not in a bundle (§5.4), not in an intent
+(§14.3.2), not in the topology class and not rootward: a party that wants a
+name shown fetches it from where the subject's locator leads, and a party that
+holds no locator for the subject has nothing to fetch by and shows the
+keyhash. **A shell may carry a claimed alias in an object of its own** for the
+one moment before any session exists — the invitation at a meeting (design
+§7.1.1) — and treats it as the inviter's claim until the signed profile
+replaces it.
+
+**Bounds** (§1.3): the alias at 64 characters, which is a name and not a
+biography; the image at 64 KiB, which holds a small picture and keeps a fetch
+near a prekey fetch in cost, and which design §3.3's horizon of 221 multiplies.
 
 ## 8. Session messages
 
@@ -4297,6 +4393,8 @@ no continuation to preserve.
 | 10 | `OneTimeDeposit` (§7.10) |
 | 11 | `RelaySubmission` (§7.10) |
 | 12 | `WakeRegistration` (§7.10) |
+| 13 | `ProfilePublication` (§7.10) |
+| 14 | `ProfileRequest` (§7.11), read-only |
 
 **The reply carries no type tag and is framed identically otherwise**: the same
 `u32-be` length prefix and CBOR body. It answers a request whose type the requester
@@ -4557,9 +4655,9 @@ no upstream table can need it. This costs a little latency on a genuinely late
 out-of-order memo — repaired by the next one or by reconciliation, the failure this
 section already accepts, and it stops a **replayed** memo at the first table-holding
 hop above wherever it was injected, rather than letting it travel to the party it
-names. **A memo never leaves its subnet**,
-because its anchor names the subnet and rootward travel terminates at that subnet's
-root. This is what keeps the mechanism clear of design §3.1.1: nothing compares a
+names. **A memo never leaves its subnet**:
+its locator says which (§2.3 field 4) and its anchor is the root rootward travel
+terminates at. This is what keeps the mechanism clear of design §3.1.1: nothing compares a
 node's binding in one subnet against its binding in another, and nothing adjudicates
 between them.
 

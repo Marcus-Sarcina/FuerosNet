@@ -13867,6 +13867,59 @@ rejections in the corpus, and both introduction kinds are listed in the
 corpus runner so a rejection that starts passing fails rather than being
 skipped.
 
+### 2026-10-15 (the subnet is named, and profiles are hosted beside the locator)
+
+**[ruled, author, 2026-10-15] Three things the protocol had no word for.**
+A party in two subnets had nothing that told them apart but the root's
+key; an operator in two had no statement of what an instance serves; and
+nobody had a name a person could read. Each was raised by the author
+after the first adoption ran on the bench and the device being adopted
+could say nothing about where it was being put.
+
+**Every patron has a scope, named by the first adoption that gave it a
+subordinate; a subnet is named by its root's scope** (design §13.8), and
+every locator two or more hops down carries the subnet's id as a fourth
+field (`wire-format.md` §2.3). The id is a txid because a txid exists at
+the moment the scope starts existing and nobody has to agree on it
+afterwards; it is fixed once and survives departure, disavowal and every
+later join, latent while the patron sits under somebody and the subnet's
+own name once it stands alone — a bowling league carried into a sports
+association and out again keeps its id throughout [author, 2026-10-15].
+The root's key would not do, because a key names a party and a party can
+root more than one tree over its life. Two locators carry no field 4: a
+lone identity's self-anchored one, since it is in no subnet, and the
+locator of a root's first adoption, the record whose own txid names the
+subnet and cannot carry its own hash; any other positioned locator without
+it is malformed. Routing reads the anchor and the path and never the
+subnet [author, 2026-10-15].
+
+**A profile is an alias and, if the person chooses, an image, published
+per subnet and hosted on the serving node** (design §12.8; `wire-format.md`
+§7.11): a signed object in no transaction, replaced by counter, fetched by
+anyone who holds the locator it goes with. Display only — nothing is keyed
+by an alias and two contacts may share one — and shown only where
+received, the keyhash standing in otherwise. A subnet's own alias and logo
+are the root's to set **by convention**, which the design records as a
+convention because nothing enforces it (§1.1). The client labels a subnet
+"*[patron alias]*'s *[subnet alias]*", an invitation asks which subnet, and
+the brief states it [author, 2026-10-15].
+
+**An instance serves one subnet, and a client administers every instance
+its operator runs** (design §3.3; `light-client-requirements.md` §10;
+`infra-client-requirements.md` §1): the node is not partitioned, and a
+client infers no instance from a position, since an operator in one subnet
+is an ordinary participant in the next [author, 2026-10-15].
+
+In code, the first of three pushes: the locator's fourth field in the
+codec, the archive and the vectors (three new, `B-locator-no-subnet`,
+`B-locator-lone` and `B-locator-first`); the client holds its positions by
+subnet, derives its scope id in each subnet it has adopted somebody in,
+names the subnet at proposal and refuses to sign an address in a subnet
+other than its patron's; a departure leaves it the root of the scope it
+carried; the node names its own at its first adoption and reads it back
+from the archive after a restart. Functional tests TOP-044/045, NET-029,
+UX-015/016; catalogue TOP-48/49/50, SES-32/33, PRD-14/15.
+
 ### 2026-10-15 (the adoption after the record, and what a client checks before signing one)
 
 **D7 is wired**, which is the first time an adoption can be made from the

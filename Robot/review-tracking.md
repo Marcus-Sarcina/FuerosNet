@@ -18098,3 +18098,78 @@ up. It is a Settings toggle.
 **A2 is set up on the intended pair**, GXV × ZU8, with MRK × 4VC beside
 them as the second pair: run `722519a-a2-adoption-7`, all four attached,
 each paired with the other and nominating its own witness instrument.
+
+## The rework: subnets named, profiles hosted, instances per subnet (2026-10-15)
+
+**Raised by the author after A2's first pass** — the device being adopted
+said nothing about the patronage, and three things were found missing
+"all the way back to the core spec": a unique subnet id, a way for one
+operator to serve several subnets, and human-legible names and images.
+
+**Rulings** [author, 2026-10-15]: the formation txid is the subnet id
+(generalised, with the author's accepted default, to the txid of the
+presence record the root's first adoption rests on, so an unformed root
+gets one by the same rule); the root alone sets the subnet's alias or
+logo, recorded as a convention since it is not enforceable; the light
+client labels a subnet "[patron alias]'s [subnet alias]", the invitation
+asks which subnet, the acceptance states it; the node stays one instance
+per subnet and the client administers several; a profile is user-selected
+like any social network's, goes with the locator, is hosted on infra and
+compiled into no transaction, is chosen per subnet, and the keyhash
+stands in where none was received. Accepted defaults: the id is a fourth
+`Locator` field; alias 64 chars, image 64 KiB; the subnet alias at D1.5
+rides in the bootstrap QR as the inviter's claim.
+
+**Documents**: design §2 (Subnet, Alias), §1.2, §3.1.1, §3.3, §12.1,
+§12.3, new §12.8, §13.6, new §13.8, §15; wire §1.3, §2.3, §4.1, §7.10,
+new §7.11, §9.2, §10.2; light-client §4.3, new §4.4, §7, new §10 (Open is
+§11 now; the six citations moved); infra §1, new §6.2; functional tests
+TOP-044/045, NET-029, UX-015/016 (521 families); catalogue TOP-48/49/50,
+SES-32/33, PRD-14/15 (502 rows).
+
+**Code, push 1 of 3** (this one): `Locator { subnet: Option<Txid> }`,
+`Locator::root` (none) and `root_in`; codec `LOCATOR` field 4 with the
+positioned-without-subnet refusal in both the schema and the archive
+decoder, and the adoption, peering-endpoint and `SignedLocator` extension
+bounds widened to 4; the client's `positions` keyed by subnet with
+`position_in(subnet)`, `own_position`, `acting_position`, `subnet`,
+`subnets`, `propose_adoption_in(Option<Txid>, …)` (none = under its own
+key), `free_index` by subnet, `adopt_own_positions` learning the root
+subnet from any adoption it signed as a root, and the review rule "in the
+patron's subnet, or the evidence's txid for a root's first"; the node's
+`propose_adoption` naming the subnet and the fold reading it back; FFI
+`position`, `position_in`, `subnets`, `propose_adoption(subnet?)`;
+participant CLI `where`/`adopt <subnet|->`; shell `Kern.position()`.
+Fixtures carry a fixed `SUBNET` constant per test file, 56 literals in 25
+files, by a sweep that walks each literal's braces (the first attempt
+matched `-> Locator {` function bodies, and was redone from git).
+
+**Ruled the same day** [author, 2026-10-15], on the question whether a
+root's first adoption must rest on a presence record: no such rule. A root
+is neither transferred nor recovered; the "first adoption" is the first
+adoption *by that patron in a given subnet*, even one before a later
+departure or disavowal, and its hash is the latent identifier of that
+patron's scope and of any subnet descending from it. The worked example
+(Alice under Bob's BowlingLeague adopts Claire; departs and her scope
+becomes a subnet named by the Alice–Claire adoption; joins Devon's
+Games&Amusements with it, whereupon Claire shows Devon's id; departs and
+it reverts) is now design §13.8. **The hash is the adoption's own txid**,
+which a locator in that adoption cannot carry: so a root's first adoption
+names no subnet (one nibble down, field 4 absent), and the codec's rule is
+"two or more nibbles down requires field 4" — the reviewing client checks
+the one-hop case against the patron's own position (a lone root's names
+none; a root with a scope names it). "First" is by the record's effective
+time, the txid deciding a tie. The client derives `scopes` (subnet →
+scope id) in its fold and roots a self-anchored position per scope it
+carried out of a subnet it departed; the node does the same on falling
+back to root. Not yet modelled: the subordinates' re-derivation under the
+departed patron (their locators still name the old anchor until the
+existing re-rooting path runs), and a disavowal's effect on the client's
+own fold, which reads only records this key signed.
+
+**Still owed in this rework**: push 2 (the `Profile` object, types 13 and
+14, the node's store and the client's contacts) and push 3 (bootstrap QR
+v2 with the subnet id and the claimed aliases, the brief's label, the
+invitation asking which subnet, the multi-instance Operator screen); the
+node's `positions`/`anchors()` stay anchor-keyed because routing reads the
+anchor, and the design now has one instance per subnet.

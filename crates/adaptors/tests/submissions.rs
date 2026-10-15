@@ -20,6 +20,9 @@ use rhtn_transport::session::*;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, Ordering};
 
+/// The subnet the fixtures' positions are in (`wire-format.md` §2.3 field 4).
+const SUBNET: [u8; 32] = [0xdb; 32];
+
 /// A node for `name` whose configuration a test may adjust before it
 /// starts: the served set and the prekey bounds are the two an operator
 /// chooses and these tests exercise.
@@ -35,6 +38,7 @@ fn node_with(name: &str, tweak: impl FnOnce(&mut NodeConfig, &mut NodeView)) -> 
                 series: 1,
                 counter: 0,
             },
+            subnet: Some(SUBNET),
         },
     );
     let mut cfg = NodeConfig::defaults(Arc::new(id(name)), pins(), 30);

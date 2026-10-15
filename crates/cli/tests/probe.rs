@@ -15,6 +15,9 @@ use rhtn_transport::tls::Pins;
 use std::process::Command;
 use std::sync::Arc;
 
+/// The subnet the fixtures' positions are in (`wire-format.md` §2.3 field 4).
+const SUBNET: [u8; 32] = [0xdb; 32];
+
 fn kh(n: &str) -> [u8; 32] {
     test_identity(n).public.keyhash
 }
@@ -112,6 +115,7 @@ async fn a_probe_resolves_fetches_an_archive_and_queries_a_catalog_over_a_real_s
                     series: 1,
                     counter: 0,
                 },
+                subnet: Some(SUBNET),
             },
             timestamp: 1_800_003_600,
             key_material: None,
@@ -141,6 +145,7 @@ async fn a_probe_resolves_fetches_an_archive_and_queries_a_catalog_over_a_real_s
                 series: 1,
                 counter: 0,
             },
+            subnet: Some(SUBNET),
         },
     );
     view.table = table;

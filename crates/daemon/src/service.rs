@@ -878,15 +878,13 @@ impl Service {
 /// position a root holds, and what a subordinate carries until its
 /// adoption is stored (`wire-format.md` §2.3).
 fn position_of(me: &Keyhash) -> rhtn_archive::tx::Locator {
-    rhtn_archive::tx::Locator {
-        anchor: *me,
-        path: Vec::new(),
-        nibbles: 0,
-        seqno: rhtn_archive::tx::Seqno {
+    rhtn_archive::tx::Locator::root(
+        *me,
+        rhtn_archive::tx::Seqno {
             series: 1,
             counter: 0,
         },
-    }
+    )
 }
 
 fn client_config(

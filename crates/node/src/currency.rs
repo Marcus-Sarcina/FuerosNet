@@ -718,6 +718,10 @@ impl NodeView {
         .indices();
         indices.push(slot);
         let path = crate::resolution::Path::from_indices(&indices);
+        // the locator names the subnet this node's own position is in;
+        // a lone root's first adoption names none, its own txid being the
+        // id from then on (design §13.8; `wire-format.md` §4.1)
+        let subnet = self.position.subnet;
         let back_self = self.archive.next_back_pointers();
         let a = rhtn_archive::tx::Adoption {
             node: *subject,
@@ -727,6 +731,7 @@ impl NodeView {
                 path: path.bytes,
                 nibbles: path.nibbles,
                 seqno: rhtn_archive::tx::Seqno { series, counter: 0 },
+                subnet,
             },
             timestamp: self.now(),
             key_material: None,
