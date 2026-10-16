@@ -9,7 +9,6 @@ use crate::view::NodeView;
 use rhtn_archive::record::Record;
 use rhtn_archive::tx::{self, TYPE_PEERING};
 use rhtn_codec::cbor::*;
-use rhtn_codec::encode::*;
 use std::collections::BTreeSet;
 
 /// A peering record (`wire-format.md` §4.4) as a holder reads it.  Both
@@ -78,26 +77,21 @@ pub fn peering_body(
     commitment: Option<u64>,
     pop: &[u8; 32],
 ) -> Vec<u8> {
-    let mut out = Vec::new();
-    emit_map_head(&mut out, 7 + commitment.is_some() as usize);
-    tx::emit_back_pointers(&mut out, &[back[0].to_vec(), back[1].to_vec()]);
-    emit_uint(&mut out, 1);
-    emit_bstr(&mut out, a);
-    emit_uint(&mut out, 2);
-    emit_bstr(&mut out, b);
-    emit_uint(&mut out, 3);
-    a_point.encode(&mut out);
-    emit_uint(&mut out, 4);
-    b_point.encode(&mut out);
-    emit_uint(&mut out, 5);
-    emit_uint(&mut out, timestamp);
-    if let Some(c) = commitment {
-        emit_uint(&mut out, 6);
-        emit_uint(&mut out, c);
-    }
-    emit_uint(&mut out, 8);
-    emit_bstr(&mut out, pop);
-    out
+    let encoded = |p: &NetworkPoint| {
+        let mut b = Vec::new();
+        p.encode(&mut b);
+        tx::PeerAt::Point(b)
+    };
+    tx::peering_body(&tx::Peering {
+        back,
+        a: *a,
+        b: *b,
+        a_at: encoded(a_point),
+        b_at: encoded(b_point),
+        timestamp,
+        commitment,
+        pop: *pop,
+    })
 }
 
 /// Which path payload takes to a peer (design §12.6.3).

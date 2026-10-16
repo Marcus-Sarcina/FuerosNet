@@ -45,6 +45,9 @@ object Provision {
         val phase: String,
         /** How many credentials its run already carries. */
         val credentials: Int,
+        /** When its run ends, in seconds, or 0 where it holds none: what a
+         *  renewal starts from (`infra-client-requirements.md` §7). */
+        val runEnds: Long,
         /** `held`, `wanted` or `unconfigured`, for each of §4.4's records. */
         val endpointRecord: String,
         val anchorEntry: String,
@@ -68,6 +71,7 @@ object Provision {
             nonce = nonce,
             phase = field(said, "phase") ?: "unknown",
             credentials = field(said, "credentials")?.toIntOrNull() ?: 0,
+            runEnds = field(said, "run-ends")?.toLongOrNull() ?: 0,
             endpointRecord = field(said, "endpoint-record") ?: "unconfigured",
             anchorEntry = field(said, "anchor-entry") ?: "unconfigured",
         )

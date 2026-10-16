@@ -52,6 +52,21 @@ class OperatorActivity : Activity() {
      */
     data class Instance(val at: String, val subnet: String?, val label: String)
 
+    /**
+     * **The token this screen was given for an instance**, kept so a
+     * renewal need not be retyped. It is the instance's configuration
+     * secret, not an identity's: what it authorises is signing a run for
+     * **that** instance's key, and the proof is checked against it on
+     * every exchange (§8.2).
+     */
+    private fun tokenFor(at: String): String? =
+        getSharedPreferences("operator", MODE_PRIVATE).getString("token:$at", null)
+
+    private fun rememberToken(at: String, token: String) {
+        getSharedPreferences("operator", MODE_PRIVATE).edit()
+            .putString("token:$at", token).apply()
+    }
+
     private fun instances(): List<Instance> =
         getSharedPreferences("operator", MODE_PRIVATE)
             .getString("instances", "")!!
@@ -113,6 +128,32 @@ class OperatorActivity : Activity() {
                             Intent(this@OperatorActivity, NodePageActivity::class.java)
                                 .putExtra("at", i.at),
                         )
+                    }
+                },
+            )
+            roll.addView(
+                Button(this).apply {
+                    // **a run is 45 × 48 h and nothing renewed it**
+                    // (`infra-client-requirements.md` §7): the next run
+                    // starts where this one ends, which the instance says
+                    text = "Renew its run"
+                    setOnClickListener {
+                        isEnabled = false
+                        narration.text = "asking ${i.at} where its run ends…"
+                        val token = tokenFor(i.at)
+                        if (token == null) {
+                            narration.text = "this screen holds no token for ${i.at}; " +
+                                "paste it above and enrol again, which renews too"
+                            isEnabled = true
+                        } else {
+                            Thread {
+                                val said = Kernel.renew(i.at, token, 45)
+                                runOnUiThread {
+                                    narration.text = said.joinToString("\n")
+                                    isEnabled = true
+                                }
+                            }.start()
+                        }
                     }
                 },
             )
@@ -212,6 +253,8 @@ class OperatorActivity : Activity() {
                     credentials = credentials.text.toString().trim().toIntOrNull() ?: 7,
                     endpoint = endpoint.text.toString().trim().ifEmpty { null },
                     subtree = subtree.text.toString().trim().toLongOrNull(),
+                    // the line the records are signed on (§7.6)
+                    subnet = chosen?.id?.takeIf { it.length == 64 },
                 )
                 // **off the main thread**: this is several round trips to a
                 // host that may not answer, and a screen that froze while
@@ -223,6 +266,7 @@ class OperatorActivity : Activity() {
                         ask.credentials,
                         ask.endpoint,
                         ask.subtree,
+                        ask.subnet,
                     )
                     runOnUiThread {
                         narration.text = said.joinToString("\n")
@@ -235,6 +279,7 @@ class OperatorActivity : Activity() {
                         if (pageAt != null) {
                             val s = chosen
                             remember(Instance(ask.at, s?.id, s?.label() ?: "an instance (subnet not named)"))
+                            rememberToken(ask.at, ask.token)
                             drawInstances()
                         }
                     }
@@ -310,5 +355,6 @@ class OperatorActivity : Activity() {
         val credentials: Int,
         val endpoint: String?,
         val subtree: Long?,
+        val subnet: String?,
     )
 }

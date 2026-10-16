@@ -376,6 +376,27 @@ pub struct ContactRow {
     pub alias: Option<String>,
 }
 
+/// What a resource answered (`wire-format.md` §11.1).
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ResourceAnswer {
+    /// 0 delivered, 1 refused, 2 unavailable, 3 malformed, 4 no subtree
+    /// acknowledgement, 5 no matching role.
+    pub status: u64,
+    /// The application's answer, where one was delivered.
+    pub body: Option<Vec<u8>>,
+}
+
+/// One candidate provider, as a provisioning screen orders them
+/// (`light-client-requirements.md` §6; PRD-11).
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ProviderRow {
+    /// The provider's ASN, as the caller named it.
+    pub asn: u64,
+    /// How many parties inside this client's own horizon are already seen
+    /// peering from inside that ASN.
+    pub nodes: u32,
+}
+
 /// One subnet this client holds a position in, as a chooser lists it
 /// (`light-client-requirements.md` §7, §10).
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -2115,6 +2136,60 @@ impl Participant {
         })
     }
 
+    /// **Candidate providers ordered by concentration inside this
+    /// client's own horizon, least first** (PRD-11): each ASN the caller
+    /// names, with how many parties in the horizon already run inside it.
+    /// Nothing is hidden and nothing is scored — the screen marks the
+    /// crowded and says what the ordering does not cover.
+    #[must_use]
+    pub fn providers_by_concentration(&self, asns: Vec<u64>) -> Vec<ProviderRow> {
+        crate::diag::call_plain("providers_by_concentration", || {
+            self.handle.with_blocking(move |c| {
+                c.providers_by_concentration(&asns)
+                    .into_iter()
+                    .map(|(asn, nodes)| ProviderRow {
+                        asn,
+                        nodes: u32::try_from(nodes).unwrap_or(u32::MAX),
+                    })
+                    .collect()
+            })
+        })
+    }
+
+    /// **Ask a resource for something, through the node hosting it**
+    /// (`wire-format.md` §11.1): the message is the application's own
+    /// HTTP/1.1 request and nothing here reads it. What comes back is the
+    /// status §11.1 fixes — 0 delivered, 1 refused, 2 unavailable, 3
+    /// malformed, 4 no subtree acknowledgement, 5 no matching role — and
+    /// the application's answer where one was delivered.
+    ///
+    /// **Held nowhere.** A resource's answer is the application's
+    /// business; this client keeps none of it.
+    pub fn request_resource(
+        &self,
+        node: Id,
+        resource: Id,
+        message: Vec<u8>,
+    ) -> Result<ResourceAnswer, Refused> {
+        crate::diag::call("request_resource", || {
+            let n = keyhash(&node).ok_or_else(|| Refused::new("a node is 32 bytes"))?;
+            let r = keyhash(&resource).ok_or_else(|| Refused::new("a resource is 32 bytes"))?;
+            let msg = self
+                .handle
+                .with_blocking(move |c| c.request_resource(n, r, message));
+            let answers = self.net.carry_for_answer(vec![msg])?;
+            let reply = answers
+                .into_iter()
+                .next()
+                .ok_or_else(|| Refused::new("the node hosting it answered nothing"))?;
+            let (status, body) = self
+                .handle
+                .with_blocking(move |c| c.take_resource_response(&reply))
+                .map_err(Refused::new)?;
+            Ok(ResourceAnswer { status, body })
+        })
+    }
+
     /// What this client asks its nominees to witness.
     pub fn witness_ask(&self) -> Result<WitnessAsk, Refused> {
         crate::diag::call("witness_ask", || {
@@ -2449,28 +2524,93 @@ impl Participant {
     /// operator's, because the instance holds no seed to make its own, so
     /// a change of address is a thing this device signs and hands over.
     /// §8.3 has the client ship the pages that do it.
-    pub fn endpoint_record(&self, points: Vec<Vec<u8>>, counter: u32) -> Result<Vec<u8>, Refused> {
+    /// **One record per patron relationship** (`wire-format.md` §7.6):
+    /// the `subnet` names which line the instance serves, and the
+    /// record carries that line's series. `None` is the subnet under
+    /// this client's own key. Refused where it holds no position there.
+    pub fn endpoint_record(
+        &self,
+        subnet: Option<Id>,
+        points: Vec<Vec<u8>>,
+        counter: u32,
+    ) -> Result<Vec<u8>, Refused> {
         crate::diag::call("endpoint_record", || {
-            let seqno = rhtn_archive::tx::Seqno { series: 0, counter };
+            let s = subnet_of(subnet)?;
             self.handle
-                .with_blocking(move |c| c.endpoint_record(&points, seqno))
+                .with_blocking(move |c| c.endpoint_record_in(s, &points, counter))
                 .map_err(|e| Refused::new(format!("{e:?}")))
         })
     }
 
     /// **An anchor entry for the same instance**, claiming a subtree of
-    /// `subtree_size`, signed by the same operator for the same reason.
+    /// `subtree_size`, signed by the same operator for the same reason,
+    /// on the same line (`wire-format.md` §7.6).
     pub fn anchor_entry(
         &self,
+        subnet: Option<Id>,
         points: Vec<Vec<u8>>,
         subtree_size: u64,
         counter: u32,
     ) -> Result<Vec<u8>, Refused> {
         crate::diag::call("anchor_entry", || {
-            let seqno = rhtn_archive::tx::Seqno { series: 0, counter };
+            let s = subnet_of(subnet)?;
             self.handle
-                .with_blocking(move |c| c.anchor_entry(&points, subtree_size, seqno))
+                .with_blocking(move |c| c.anchor_entry_in(s, &points, subtree_size, counter))
                 .map_err(|e| Refused::new(format!("{e:?}")))
+        })
+    }
+
+    /// **As either party: the peering body between this client and
+    /// `other`** (`wire-format.md` §4.4; design §6.3). A light client
+    /// peers by locator — its own position in its field, the position it
+    /// holds for the other in theirs — and the peering rests on a meeting
+    /// of the two, unconditionally. `other_back` is the other party's own
+    /// back-pointers, which only they can supply.
+    pub fn propose_peering(
+        &self,
+        other: Id,
+        presence: Id,
+        other_back: Vec<Vec<u8>>,
+        commitment: Option<u64>,
+    ) -> Result<Vec<u8>, Refused> {
+        crate::diag::call("propose_peering", || {
+            let o = keyhash(&other).ok_or_else(|| Refused::new("a peer is 32 bytes"))?;
+            let p = keyhash(&presence)
+                .ok_or_else(|| Refused::new("a presence record is named by a 32-byte txid"))?;
+            let back = back_inward(&[other_back])?.remove(0);
+            self.handle
+                .with_blocking(move |c| c.propose_peering(o, p, &back, commitment))
+                .map_err(|e| Refused::new(rhtn_client::diag::abort(&e)))
+        })
+    }
+
+    /// **As the other party: check the peering body, then sign it.** The
+    /// record is between this client and somebody else, the meeting it
+    /// rests on is one of the pair held here, the position written for
+    /// this key is the one it holds, its back-pointers are this archive's
+    /// next and the timestamp is one this clock can hold.
+    pub fn review_and_sign_peering(&self, body: Vec<u8>) -> Result<Vec<u8>, Refused> {
+        crate::diag::call("review_and_sign_peering", || {
+            let entries = self
+                .handle
+                .with_blocking(move |c| c.review_and_sign_peering(&body))
+                .map_err(|e| Refused::new(rhtn_client::diag::abort(&e)))?;
+            self.save()?;
+            Ok(entries)
+        })
+    }
+
+    /// Take a finalised peering, which this client holds and hands to its
+    /// serving node to flood. A peering is no part of a position, so
+    /// nothing about where this client sits changes.
+    pub fn take_peering(&self, envelope: Vec<u8>) -> Result<Id, Refused> {
+        crate::diag::call("take_peering", || {
+            let t = self
+                .handle
+                .with_blocking(move |c| c.take_peering(&envelope))
+                .map_err(|e| Refused::new(rhtn_client::diag::abort(&e)))?;
+            self.save()?;
+            Ok(id_of(&t))
         })
     }
 
@@ -2543,6 +2683,18 @@ pub fn presence_envelope(body: Vec<u8>, entries: Vec<SignedEntries>) -> Result<V
     ))
 }
 
+/// The envelope a peering travels in, over its body and the two peers'
+/// entries.
+#[uniffi::export]
+pub fn peering_envelope(body: Vec<u8>, entries: Vec<SignedEntries>) -> Result<Vec<u8>, Refused> {
+    let e = signer_entries(entries)?;
+    Ok(rhtn_archive::tx::envelope_from_entries(
+        rhtn_archive::tx::TYPE_PEERING,
+        &body,
+        &e,
+    ))
+}
+
 /// The envelope an adoption travels in.
 #[uniffi::export]
 pub fn adoption_envelope(body: Vec<u8>, entries: Vec<SignedEntries>) -> Result<Vec<u8>, Refused> {
@@ -2552,6 +2704,16 @@ pub fn adoption_envelope(body: Vec<u8>, entries: Vec<SignedEntries>) -> Result<V
         &body,
         &e,
     ))
+}
+
+/// A subnet id from the boundary, where one was named.
+fn subnet_of(subnet: Option<Id>) -> Result<Option<Keyhash>, Refused> {
+    match subnet {
+        Some(s) => Ok(Some(
+            keyhash(&s).ok_or_else(|| Refused::new("a subnet is 32 bytes"))?,
+        )),
+        None => Ok(None),
+    }
 }
 
 fn signer_entries(entries: Vec<SignedEntries>) -> Result<Vec<(Keyhash, Vec<u8>)>, Refused> {

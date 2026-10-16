@@ -41,15 +41,39 @@ pub struct Ask {
     pub subtree: Option<u64>,
 }
 
-/// Run the exchange, and say what happened at each step.
-pub fn enrol(me: &SigningIdentity, ask: &Ask) -> Result<String, String> {
+/// **Renew a run before it lapses** (`infra-client-requirements.md` §7):
+/// the instance says where its run ends, and the next run opens exactly
+/// there, contiguous as §8.2 requires. The proof is checked again first —
+/// a key that is not this instance's gets no signature of this operator's,
+/// renewal or not — and nothing else is re-signed: the two records of §4.4
+/// are an enrolment's business and a renewal is about the credential.
+pub fn renew(me: &SigningIdentity, ask: &Ask) -> Result<String, String> {
     let addr = resolve(&ask.at)?;
     let mut out = String::new();
+    let (key, key_hex, ends) = checked(addr, &ask.token, &mut out)?;
+    if ends == 0 {
+        return Err(format!(
+            "the instance at {} holds no run to renew: `node enrol` signs its first",
+            ask.at
+        ));
+    }
+    out.push_str(&format!("the run ends at {ends}; the next opens there\n"));
+    let _ = key_hex;
+    let run = issue_run(me, &key, ends, ask.credentials);
+    for (i, d) in run.iter().enumerate() {
+        let said = push(addr, "/node/run", d)?;
+        out.push_str(&format!("credential {} of {}: {said}\n", i + 1, run.len()));
+    }
+    Ok(out)
+}
 
-    // **the fetch, and the proof over it.** A nonce of this caller's
-    // choosing is what makes the answer unreplayable, and the token it is
-    // checked under is what makes the key this instance's rather than
-    // whatever answered (`rhtn_daemon::administration`).
+/// The fetch and its proof, which both commands do first: the transport
+/// key this instance minted, as hex too, and when its run ends.
+fn checked(
+    addr: SocketAddr,
+    token: &[u8; 32],
+    out: &mut String,
+) -> Result<([u8; 32], String, u64), String> {
     let nonce: [u8; 16] = rhtn_transport::tls::random_bytes::<16>();
     let got = ask_surface(
         addr,
@@ -64,9 +88,7 @@ pub fn enrol(me: &SigningIdentity, ask: &Ask) -> Result<String, String> {
     let key: [u8; 32] = unhex(&key_hex)
         .and_then(|b| b.try_into().ok())
         .ok_or("the transport key is not 32 bytes of hex")?;
-    let want = hex(&rhtn_daemon::administration::proof(
-        &ask.token, &nonce, &key,
-    ));
+    let want = hex(&rhtn_daemon::administration::proof(token, &nonce, &key));
     if want != shown {
         return Err(format!(
             "**the proof did not check**: something answered at {addr} that does not hold the \
@@ -75,6 +97,22 @@ pub fn enrol(me: &SigningIdentity, ask: &Ask) -> Result<String, String> {
         ));
     }
     out.push_str(&format!("transport key {key_hex}, proof checks\n"));
+    let ends = field(&got, "run-ends")
+        .and_then(|s| s.parse::<u64>().ok())
+        .unwrap_or(0);
+    Ok((key, key_hex, ends))
+}
+
+/// Run the exchange, and say what happened at each step.
+pub fn enrol(me: &SigningIdentity, ask: &Ask) -> Result<String, String> {
+    let addr = resolve(&ask.at)?;
+    let mut out = String::new();
+
+    // **the fetch, and the proof over it.** A nonce of this caller's
+    // choosing is what makes the answer unreplayable, and the token it is
+    // checked under is what makes the key this instance's rather than
+    // whatever answered (`rhtn_daemon::administration`).
+    let (key, _key_hex, _ends) = checked(addr, &ask.token, &mut out)?;
 
     // **the records first and the run last**: taking the run is what ends
     // the instance's wait, and the node then reads the two records from the

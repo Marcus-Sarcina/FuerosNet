@@ -416,6 +416,22 @@ fn an_instance_is_enrolled_over_its_own_surface_and_then_serves() {
         field(&after, "credentials").unwrap(),
         "the two credentials of the run it was handed"
     );
+    // **and when that run ends, which is where a renewal opens**
+    // (`infra-client-requirements.md` §7): the last credential's
+    // `not_after`, so an operator need not guess and the run stays
+    // contiguous (`wire-format.md` §8.2)
+    let ends: u64 = field(&after, "run-ends").unwrap().parse().unwrap();
+    assert!(
+        ends > now(),
+        "the run ends in the future, at {ends}, now being {}",
+        now()
+    );
+    // two 48-hour credentials from `now()`, so the end is two windows out
+    assert!(
+        ends >= now() + 2 * 172_800 - 60 && ends <= now() + 2 * 172_800 + 60,
+        "two windows of 48 hours: {ends} against {}",
+        now() + 2 * 172_800
+    );
 
     // **and once it serves, the page is the node's own state** (§8.3): what
     // it is, what it holds, who is attached, and §8's exposure disclosure
@@ -836,4 +852,66 @@ fn a_grant_is_made_and_withdrawn_from_the_page_and_is_written_back() {
     assert!(bad.contains("is not a clause"), "{bad}");
 
     d.stop();
+}
+
+/// **A run is renewed from where it ends, not from now**
+/// (`infra-client-requirements.md` §7; `wire-format.md` §8.2's contiguous
+/// run). The instance says where that is, so the operator's client need
+/// not guess — and a run signed from the clock again overlaps what is
+/// held and is refused.
+// acceptance: DMN-28
+#[tokio::test]
+async fn dmn_28_a_renewal_opens_where_the_run_ends_and_an_overlap_is_refused() {
+    let l = layout("renew", &TOKEN, 37449);
+    let d = spawn(&l);
+    let at = d.surface_at();
+    let bob = test_identity("bob");
+
+    // enrolled with two credentials, as an instance is
+    let got = ask(
+        at,
+        &format!("GET /node?nonce={} HTTP/1.1", hex(&[1u8; 16])),
+        b"",
+    );
+    let key: [u8; 32] = unhex(&field(&got, "transport").unwrap())
+        .as_slice()
+        .try_into()
+        .expect("a transport key");
+    for c in issue_run(&bob, &key, now(), 2) {
+        assert_eq!(200, status(&ask(at, "PUT /node/run HTTP/1.1", &c)));
+    }
+    let after = ask(
+        at,
+        &format!("GET /node?nonce={} HTTP/1.1", hex(&[2u8; 16])),
+        b"",
+    );
+    let ends: u64 = field(&after, "run-ends").unwrap().parse().unwrap();
+    assert_eq!("2", field(&after, "credentials").unwrap());
+
+    // **the renewal opens exactly there**, and is taken
+    for c in issue_run(&bob, &key, ends, 3) {
+        let put = ask(at, "PUT /node/run HTTP/1.1", &c);
+        assert_eq!(200, status(&put), "the renewal is taken: {put}");
+    }
+    let third = ask(
+        at,
+        &format!("GET /node?nonce={} HTTP/1.1", hex(&[3u8; 16])),
+        b"",
+    );
+    assert_eq!("5", field(&third, "credentials").unwrap(), "two and three");
+    let ends_now: u64 = field(&third, "run-ends").unwrap().parse().unwrap();
+    assert_eq!(
+        ends_now,
+        ends + 3 * 172_800,
+        "the run ends three 48-hour windows later"
+    );
+
+    // and a run that straddles hours already held is the enrolling-twice
+    // case `Credential::add` refuses. **The identical window re-sent is
+    // not that case** and is taken once, silently, as it always was — so
+    // this one opens mid-window, which no held credential matches
+    let overlap = issue_run(&bob, &key, now() + 86_400, 1);
+    let put = ask(at, "PUT /node/run HTTP/1.1", &overlap[0]);
+    assert_eq!(400, status(&put), "an overlapping credential: {put}");
+    assert!(body(&put).contains("not taken into the run"), "{put}");
 }

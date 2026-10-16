@@ -271,6 +271,14 @@ pub enum Msg {
     PrekeyRequest(Vec<u8>),
     /// A `CatalogQuery` (`wire-format.md` §6.4), to the serving node.
     CatalogQuery(Vec<u8>),
+    /// A `ResourceRequest` (`wire-format.md` §11.1), to the node hosting
+    /// the resource it names.
+    ResourceRequest {
+        /// The node asked, which hosts the resource.
+        node: Keyhash,
+        /// The request's bytes.
+        bytes: Vec<u8>,
+    },
     /// This client's own signed `Profile` (`wire-format.md` §7.11), to
     /// the serving node.
     PublishProfile(Vec<u8>),
@@ -351,7 +359,9 @@ impl Msg {
             | Msg::PrekeyRequest(b)
             | Msg::PrekeyReply(b)
             | Msg::Transport(b) => b.clone(),
-            Msg::Payload { bytes, .. } | Msg::Relay { bytes, .. } => bytes.clone(),
+            Msg::Payload { bytes, .. }
+            | Msg::Relay { bytes, .. }
+            | Msg::ResourceRequest { bytes, .. } => bytes.clone(),
             Msg::StockOneTime(v) => v.concat(),
             Msg::RecoveryProposal { block, .. } => block.clone(),
             Msg::Consent { consent, .. } => consent.clone(),
@@ -2994,6 +3004,246 @@ impl Client {
         Ok(t)
     }
 
+    /// **As either party: the peering body between this client and
+    /// `other`** (`wire-format.md` §4.4; design §6.3).
+    ///
+    /// **A light client peers by locator.** Field 3 and field 4 take "a
+    /// network point where that party runs an instance, its locator
+    /// otherwise" [author, 2026-09-29], and a phone runs none: this
+    /// client's own position goes in its field and the position it holds
+    /// for `other` in theirs, each a snapshot at signing that the record
+    /// is never reissued for.
+    ///
+    /// **The presence record is required unconditionally** (design §6.3):
+    /// peers share no prior relationship to draw on, so a meeting is the
+    /// whole of what a peering rests on. `other_back` is the other
+    /// party's own back-pointers, which only they can supply.
+    ///
+    /// A peering carries none of the subnet's authority (design §15.1),
+    /// so nothing here consults a patron and nothing asks one.
+    pub fn propose_peering(
+        &self,
+        other: Keyhash,
+        pop: Txid,
+        other_back: &[Txid],
+        commitment: Option<u64>,
+    ) -> Result<Vec<u8>, Abort> {
+        let me = self.keyhash();
+        if other == me {
+            return Err(Abort::Malformed("a peering is with somebody else".into()));
+        }
+        // the meeting it rests on, held here and of these two
+        self.presence_of(&me, &other, &pop)?;
+        let mine = self.acting_position();
+        let theirs = self.position_held_for(&other)?;
+        let back = self.archive.next_back_pointers();
+        let (a, b, a_at, b_at, back_a, back_b) = if me <= other {
+            (me, other, mine, theirs, back.clone(), other_back.to_vec())
+        } else {
+            (other, me, theirs, mine, other_back.to_vec(), back.clone())
+        };
+        let at = |l: &Locator| {
+            let mut out = Vec::new();
+            l.emit(&mut out);
+            rhtn_archive::tx::PeerAt::Position(out)
+        };
+        Ok(rhtn_archive::tx::peering_body(&rhtn_archive::tx::Peering {
+            back: [&back_a, &back_b],
+            a,
+            b,
+            a_at: at(&a_at),
+            b_at: at(&b_at),
+            timestamp: self.now_s(),
+            commitment,
+            pop,
+        }))
+    }
+
+    /// **As the other party: check the peering body, then sign it.**
+    ///
+    /// What this client can check is what it holds: that the record is
+    /// between it and somebody else, that the meeting it rests on is one
+    /// of this pair held here, that the address written for *this* party
+    /// is this party's own position — nobody else writes where I am — and
+    /// that my back-pointers are my archive's next and the timestamp is
+    /// one my clock can hold. **The other party's address is theirs to
+    /// state** (§4.4's snapshot), so a locator of theirs older than the
+    /// one held here is not a fault.
+    pub fn review_and_sign_peering(&mut self, body: &[u8]) -> Result<Vec<u8>, Abort> {
+        use rhtn_codec::cbor::{Item, map_get, parse_all};
+        let me = self.keyhash();
+        let item = parse_all(body).map_err(|e| Abort::Malformed(format!("peering body: {e}")))?;
+        rhtn_codec::schema::check_body_of_type(body, &item, rhtn_archive::tx::TYPE_PEERING)
+            .map_err(|e| Abort::Malformed(format!("peering body: {}", e.0)))?;
+        let Item::Map(m) = &item else {
+            return Err(Abort::Malformed("peering body is not a map".into()));
+        };
+        let key_at = |k: u64| -> Option<Keyhash> {
+            match map_get(m, k) {
+                Some(Item::Bytes(r)) => body[r.clone()].to_vec().try_into().ok(),
+                _ => None,
+            }
+        };
+        let refused = |why: String| Abort::NodeRefused(why);
+
+        // 1. a peering of mine, with somebody else
+        let a = key_at(1).ok_or_else(|| Abort::Malformed("field 1".into()))?;
+        let b = key_at(2).ok_or_else(|| Abort::Malformed("field 2".into()))?;
+        let (mine_at, other) = if a == me {
+            (3u64, b)
+        } else if b == me {
+            (4u64, a)
+        } else {
+            return Err(refused("a peering between other parties".into()));
+        };
+
+        // 2. the meeting it rests on, held here and of these two
+        let pop: Txid =
+            key_at(8).ok_or_else(|| refused("no presence evidence (field 8)".into()))?;
+        self.presence_of(&me, &other, &pop)?;
+
+        // 3. where it says I am is where I am: my own position, which is
+        //    mine to state and nobody else's
+        let r = rhtn_codec::cbor::value_slice(body, mine_at)
+            .ok_or_else(|| Abort::Malformed(format!("field {mine_at}")))?;
+        let stated = Locator::decode(&body[r]).map_err(|_| {
+            refused("the address written for this key is not a locator of its own".into())
+        })?;
+        let held = self.acting_position();
+        if (
+            stated.anchor,
+            stated.path.as_slice(),
+            stated.nibbles,
+            stated.subnet,
+        ) != (held.anchor, held.path.as_slice(), held.nibbles, held.subnet)
+        {
+            return Err(refused(
+                "the position written for this key is not the one it holds".into(),
+            ));
+        }
+
+        // 4. my back-pointers, and a timestamp my clock can hold
+        let mine = self.archive.next_back_pointers();
+        // **key 0 holds one list per signer, in signer order**
+        // (`wire-format.md` §3.1), which for a peering is A then B — so
+        // the list that is mine is the one at my own side
+        let Some(Item::Array(lists)) = map_get(m, 0) else {
+            return Err(Abort::Malformed("key 0".into()));
+        };
+        let whose = usize::from(mine_at == 4);
+        let Some(Item::Array(ours)) = lists.get(whose) else {
+            return Err(Abort::Malformed(
+                "key 0 carries no list for this key".into(),
+            ));
+        };
+        let carried: Vec<Txid> = ours
+            .iter()
+            .filter_map(|it| match it {
+                Item::Bytes(r) => <Txid>::try_from(&body[r.clone()]).ok(),
+                _ => None,
+            })
+            .collect();
+        if carried != mine {
+            return Err(refused(
+                "the back-pointers for this key are not this archive's next".into(),
+            ));
+        }
+        let when = map_get(m, 5)
+            .and_then(rhtn_codec::cbor::as_uint)
+            .ok_or_else(|| Abort::Malformed("field 5".into()))?;
+        let now = self.now_s();
+        if when > now.saturating_add(self.cfg.clock_tolerance_s) {
+            return Err(refused(format!(
+                "the peering is timed {} seconds ahead of this clock",
+                when - now
+            )));
+        }
+        self.sign_body(body)
+    }
+
+    /// Take a finalised peering: held, and handed to the serving node to
+    /// flood (`wire-format.md` §10.1). A peering is no part of this
+    /// client's position, so nothing refolds.
+    pub fn take_peering(&mut self, envelope: &[u8]) -> Result<Txid, Abort> {
+        let rec = Record::parse(envelope).map_err(Abort::Record)?;
+        if rec.tx_type != rhtn_archive::tx::TYPE_PEERING {
+            return Err(Abort::Malformed("not a peering".into()));
+        }
+        verify::envelope(&self.known, envelope).map_err(|e| Abort::Record(e.to_string()))?;
+        let t = rec.txid;
+        self.archive.append(rec).map_err(Abort::Record)?;
+        self.store.records.insert(t, envelope.to_vec());
+        self.outbox.push(Msg::Record(envelope.to_vec()));
+        Ok(t)
+    }
+
+    /// The presence record `pop` as this client holds it, refused where it
+    /// is not held here or is not a meeting of `one` and `two`.
+    fn presence_of(&self, one: &Keyhash, two: &Keyhash, pop: &Txid) -> Result<(), Abort> {
+        let held =
+            self.store.records.get(pop).ok_or_else(|| {
+                Abort::NodeRefused(format!("no record {} is held here", hex8(pop)))
+            })?;
+        let rec = Record::parse(held).map_err(Abort::Record)?;
+        if rec.tx_type != TYPE_PRESENCE {
+            return Err(Abort::NodeRefused(
+                "the evidence is not a presence record".into(),
+            ));
+        }
+        let mut met = rec.participants();
+        met.sort();
+        if met != participants(*one, *two).to_vec() {
+            return Err(Abort::NodeRefused(
+                "the evidence is a meeting of other parties".into(),
+            ));
+        }
+        Ok(())
+    }
+
+    /// The position this client holds for `who`, from the locator it was
+    /// handed (§2.3): what a peering writes in that party's field.
+    fn position_held_for(&self, who: &Keyhash) -> Result<Locator, Abort> {
+        let sl = self
+            .store
+            .contacts
+            .get(who)
+            .and_then(|c| c.locator.as_deref())
+            .ok_or_else(|| {
+                Abort::NodeRefused(format!(
+                    "no position is held for {}, so nothing says where to reach them",
+                    hex8(who)
+                ))
+            })?;
+        Ok(rhtn_archive::locator::SignedLocator::parse(sl)
+            .map_err(Abort::Malformed)?
+            .locator)
+    }
+
+    /// **Candidate providers ordered by how concentrated each already is
+    /// inside this client's own horizon, least first**
+    /// (`light-client-requirements.md` §6; PRD-11): each candidate's ASN
+    /// with how many parties in the horizon are already seen peering from
+    /// inside it. Ties keep the caller's order, so a list arrives back in
+    /// a stable shape.
+    ///
+    /// **Nothing is hidden and nothing is scored.** Every candidate comes
+    /// back, with its count beside it, because the screen marks the
+    /// crowded rather than withholding them — and because what counts as
+    /// crowded is a judgement this client has no figure for. The ordering
+    /// speaks to one operator's own redundancy and not to the network's:
+    /// visibility does not compose (design §16.2.1, §16.3.1).
+    #[must_use]
+    pub fn providers_by_concentration(&self, candidates: &[u64]) -> Vec<(u64, usize)> {
+        let seen = self.horizon.asns_seen();
+        let mut out: Vec<(usize, u64, usize)> = candidates
+            .iter()
+            .enumerate()
+            .map(|(i, asn)| (i, *asn, seen.get(asn).map_or(0, |s| s.len())))
+            .collect();
+        out.sort_by_key(|(i, _, n)| (*n, *i));
+        out.into_iter().map(|(_, asn, n)| (asn, n)).collect()
+    }
+
     /// Write this client's own state where it can be read back: its
     /// archive, and the store beside it.
     ///
@@ -3910,6 +4160,32 @@ impl Client {
                 self.nonce(),
             ))],
         }
+    }
+
+    /// **Ask a resource for something** (`wire-format.md` §11.1): the
+    /// request goes to the node hosting it, which parses and re-serialises
+    /// the application message and evaluates the asker's reach before the
+    /// resource ever sees it (§11.2). The message is the application's
+    /// own — an HTTP/1.1 request — and nothing here reads it.
+    ///
+    /// **The node asked is the one that served the entry.** A catalog
+    /// entry names its resource and the node that answered for it
+    /// (§6.1), and a resource is reached through its host and not
+    /// directly.
+    pub fn request_resource(&self, node: Keyhash, resource: Keyhash, message: Vec<u8>) -> Msg {
+        Msg::ResourceRequest {
+            node,
+            bytes: rhtn_archive::catalog::ResourceRequest { resource, message }.encode(),
+        }
+    }
+
+    /// Take a `ResourceResponse`: the status and the application's answer
+    /// where one was delivered. **Held nowhere** — a resource's answer is
+    /// the application's business and no part of this client's state.
+    pub fn take_resource_response(&self, bytes: &[u8]) -> Result<(u64, Option<Vec<u8>>), String> {
+        let r = rhtn_archive::catalog::ResourceResponse::decode(bytes)?;
+        tracing::info!(target: "cer", status = r.status, "cer.resource");
+        Ok((r.status, r.body))
     }
 
     /// Browse the catalog of the node this client is attached to
@@ -4919,6 +5195,53 @@ impl Client {
             points,
             seqno,
         ))
+    }
+
+    /// **The series an endpoint record or anchor entry must carry for an
+    /// instance serving `subnet`** (`wire-format.md` §7.6): the
+    /// relationship line's own, since there is **one record per patron
+    /// relationship** and a record's series "is unprovable in the other
+    /// relationship's subnet". `None` names the subnet under this
+    /// client's own key.
+    ///
+    /// Refused where this client holds no position there: an operator
+    /// cannot claim an address in a subnet it is not in.
+    pub fn line_in(&self, subnet: Option<Txid>) -> Result<u32, Abort> {
+        let pos = match subnet {
+            Some(s) => self.position_in(&s).ok_or(Abort::NoRelationship(s))?,
+            None => self.own_position(),
+        };
+        Ok(pos.seqno.series)
+    }
+
+    /// An endpoint record for an instance serving `subnet`, on that
+    /// line's series (`wire-format.md` §7.6).
+    pub fn endpoint_record_in(
+        &self,
+        subnet: Option<Txid>,
+        points: &[Vec<u8>],
+        counter: u32,
+    ) -> Result<Vec<u8>, Abort> {
+        let seqno = rhtn_archive::tx::Seqno {
+            series: self.line_in(subnet)?,
+            counter,
+        };
+        self.endpoint_record(points, seqno)
+    }
+
+    /// An anchor entry for the same instance, on the same line.
+    pub fn anchor_entry_in(
+        &self,
+        subnet: Option<Txid>,
+        points: &[Vec<u8>],
+        subtree_size: u64,
+        counter: u32,
+    ) -> Result<Vec<u8>, Abort> {
+        let seqno = rhtn_archive::tx::Seqno {
+            series: self.line_in(subnet)?,
+            counter,
+        };
+        self.anchor_entry(points, subtree_size, seqno)
     }
 
     /// **An anchor entry for the same instance**, claiming a subtree of

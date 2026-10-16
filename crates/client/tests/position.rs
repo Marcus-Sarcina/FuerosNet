@@ -570,3 +570,36 @@ fn a_scope_brought_under_a_patron_dissolves_and_returns_on_departure() {
         Some((kh("alice"), 0, Some(scope)))
     );
 }
+
+/// **One record per patron relationship** (`wire-format.md` §7.6): an
+/// instance serving a subnet publishes on that line's series, so the
+/// operator signs the record on the series of its position there.
+#[test]
+fn an_endpoint_record_is_signed_on_the_line_of_the_subnet_it_serves() {
+    let mut s = setup(&PARTIES, &[ChannelKind::Nfc]);
+    s.adopted("bob", "alice", "w1", 4);
+    s.adopted("bob", "carol", "w1", 9);
+    let alices = subnet_under(&mut s, "alice");
+    let carols = subnet_under(&mut s, "carol");
+    assert_eq!(s.client("bob").line_in(Some(alices)).expect("in it"), 4);
+    assert_eq!(s.client("bob").line_in(Some(carols)).expect("in it"), 9);
+    // and a subnet it is in none of has no line to publish on
+    assert!(s.client("bob").line_in(Some([7; 32])).is_err());
+
+    // the record carries that series, and the counter it was given
+    let point = {
+        let mut b = Vec::new();
+        rhtn_transport::session::NetworkPoint::new([10, 0, 0, 1], Some(7449)).encode(&mut b);
+        b
+    };
+    let bytes = s
+        .client("bob")
+        .endpoint_record_in(Some(carols), &[point], 3)
+        .expect("signed");
+    let rec = rhtn_archive::endpoint::EndpointRecord::parse(&bytes).expect("parses");
+    assert_eq!(
+        rec.seqno.series, 9,
+        "carol's line, not alice's and not zero"
+    );
+    assert_eq!(rec.seqno.counter, 3);
+}

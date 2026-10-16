@@ -759,6 +759,23 @@ impl Net {
     ///
     /// Anything that genuinely wanted the network is still refused, and
     /// named: dropping it silently would lose a witness's request.
+    /// The same, keeping what came back for a caller whose request has an
+    /// answer of its own: a `ResourceResponse` (`wire-format.md` §11.1),
+    /// which belongs to the application and to no state here.
+    pub(crate) fn carry_for_answer(
+        &self,
+        msgs: Vec<rhtn_client::ceremony::Msg>,
+    ) -> Result<Vec<Vec<u8>>, Refused> {
+        let courier = self.courier()?;
+        let carried = self.rt().block_on(async move { courier.carry(msgs).await });
+        if !carried.refused.is_empty() {
+            return Err(Refused::new(
+                "the node hosting it did not answer the request",
+            ));
+        }
+        Ok(carried.answers)
+    }
+
     pub(crate) fn carry(&self, msgs: Vec<rhtn_client::ceremony::Msg>) -> Result<(), Refused> {
         let courier = match self.courier() {
             Ok(c) => c,

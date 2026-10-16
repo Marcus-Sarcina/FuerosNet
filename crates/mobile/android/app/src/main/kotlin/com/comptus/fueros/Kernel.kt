@@ -124,6 +124,10 @@ object Kernel {
         credentials: Int,
         endpoint: String?,
         subtree: Long?,
+        /** The subnet the instance serves, hex, or null for the one under
+         *  this device's own key: the records are signed on that line's
+         *  series (`wire-format.md` §7.6). */
+        subnet: String? = null,
     ): List<String> {
         val p = participant ?: return listOf("the kernel is not running")
         val said = mutableListOf<String>()
@@ -153,15 +157,17 @@ object Kernel {
         // no seed to sign its own
         if (endpoint != null) {
             val point = point(endpoint) ?: return said + "`$endpoint` is not host:port"
-            val record = call("endpointRecord", { null }) { p.endpointRecord(listOf(point), 1u) }
+            val line = subnet?.takeIf { it.length == 64 }?.let { unhex(it) }
+            val record = call("endpointRecord", { null }) { p.endpointRecord(line, listOf(point), 1u) }
                 ?: return said + "the endpoint record was not signed"
             said += "endpoint record naming $endpoint: " +
                 Provision.put(at, "/node/endpoint-record", record).fold({ it }, { "${it.message}" })
         }
         if (subtree != null) {
             val point = point(endpoint ?: at) ?: return said + "`$at` is not host:port"
+            val line2 = subnet?.takeIf { it.length == 64 }?.let { unhex(it) }
             val entry = call("anchorEntry", { null }) {
-                p.anchorEntry(listOf(point), subtree.toULong(), 1u)
+                p.anchorEntry(line2, listOf(point), subtree.toULong(), 1u)
             } ?: return said + "the anchor entry was not signed"
             said += "anchor entry claiming a subtree of $subtree: " +
                 Provision.put(at, "/node/anchor-entry", entry).fold({ it }, { "${it.message}" })
@@ -175,6 +181,53 @@ object Kernel {
                 Provision.put(at, "/node/run", credential).fold({ it }, { "${it.message}" })
         }
         said += "its administration page is at http://$at/"
+        return said
+    }
+
+    /**
+     * **Renew an instance's run before it lapses**
+     * (`infra-client-requirements.md` §7): a run is 45 credentials of 48
+     * hours, contiguous, and **the next starts where the last ends** —
+     * which is what the instance reports, so nothing here guesses. The
+     * proof is checked again first: a key that is not this instance's own
+     * gets no signature of this operator's, renewal or not.
+     *
+     * Nothing else is re-signed. The endpoint record and the anchor entry
+     * are what §4.4 asks of an operator once, and a renewal is about the
+     * credential alone.
+     */
+    fun renew(at: String, tokenHex: String, credentials: Int): List<String> {
+        val p = participant ?: return listOf("the kernel is not running")
+        val token = runCatching { Provision.unhex(tokenHex.trim()) }.getOrElse {
+            return listOf("the token is 64 lower-case hex digits")
+        }
+        if (token.size != 32) return listOf("the token is 64 lower-case hex digits")
+        val got = Provision.fetch(at).getOrElse { return listOf("${it.message}") }
+        val checks = call("enrolmentProofChecks", { false }) {
+            uniffi.rhtn_ffi.enrolmentProofChecks(token, got.nonce, got.transportKey, got.proof)
+        }
+        if (!checks) {
+            return listOf(
+                "the proof did not check: whatever answered at $at does not hold the token " +
+                    "this instance was configured with. Nothing was signed.",
+            )
+        }
+        if (got.runEnds == 0L) {
+            return listOf(
+                "that instance holds no run to renew: enrol it, which signs its first.",
+            )
+        }
+        val said = mutableListOf(
+            "it holds ${got.credentials} credential(s), the last ending at ${got.runEnds}",
+        )
+        // **contiguous**: the next window opens exactly where the run ends
+        val run = call("delegate", { null }) {
+            p.delegate(got.transportKey, got.runEnds.toULong(), credentials.toUInt())
+        } ?: return said + "the renewal was not signed"
+        run.forEachIndexed { i, credential ->
+            said += "credential ${i + 1} of ${run.size}: " +
+                Provision.put(at, "/node/run", credential).fold({ it }, { "${it.message}" })
+        }
         return said
     }
 
@@ -483,6 +536,75 @@ object Kernel {
         // name too (`light-client-requirements.md` §7)
         val scope = m.scope() ?: scopes().firstOrNull { it.id == subnet() }
         return Bootstrap.encode(me, kind, m.kind.askBackup, scope)
+    }
+
+    /**
+     * **Fetch what every located contact published** (`wire-format.md`
+     * §7.11): from wherever each locator leads, kept beside the contact
+     * and shown by [People]. Whatever does not answer leaves the keyhash
+     * standing.
+     */
+    fun requestProfiles() {
+        val p = participant ?: return
+        call("requestProfiles", { }) { p.requestProfiles() }
+    }
+
+    /** One catalog entry, as the Catalog screen draws it. */
+    data class Offered(
+        val node: String,
+        val resource: String,
+        val owner: String,
+        val serviceType: String,
+        val instance: String,
+        /** The serving node holds more than one page carries for a type. */
+        val truncated: Boolean,
+        /** It could not be reached on the last sweep. */
+        val stale: Boolean,
+    )
+
+    /** What a resource answered: §11.1's status, and the body where one
+     *  was delivered. */
+    data class Answered(val status: ULong, val body: ByteArray?)
+
+    /** Sweep the serving node's catalog (`wire-format.md` §6.4). */
+    fun browse(): String? {
+        val p = participant ?: return "the kernel is not running"
+        var why: String? = null
+        call("browse", { why = it.reason }) { p.browse() }
+        return why
+    }
+
+    /** The catalog as this device holds it, most recently swept. */
+    fun catalog(): List<Offered> {
+        val p = participant ?: return emptyList()
+        return call("catalog", { emptyList() }) {
+            p.catalog().map {
+                Offered(
+                    node = Provision.hex(it.node).take(8),
+                    resource = Provision.hex(it.resource),
+                    owner = Provision.hex(it.owner).take(8),
+                    serviceType = it.serviceType,
+                    instance = it.instance,
+                    truncated = it.truncated,
+                    stale = it.stale,
+                )
+            }
+        }
+    }
+
+    /**
+     * **Ask a resource for something** (`wire-format.md` §11.1), through
+     * the node that served its entry. The message is an HTTP/1.1 request
+     * and this shell composes the simplest one there is; what the resource
+     * answers is the application's, and nothing is kept of it.
+     */
+    fun ask(node: String, resource: String, path: String): Answered? {
+        val p = participant ?: return null
+        val request = ("GET $path HTTP/1.1\r\nhost: resource\r\n\r\n").toByteArray()
+        return call("requestResource", { null }) {
+            val a = p.requestResource(unhex(node), unhex(resource), request)
+            Answered(a.status, a.body)
+        }
     }
 
     /** The scopes this device roots and could bring under a patron. */

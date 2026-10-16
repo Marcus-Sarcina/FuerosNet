@@ -10,6 +10,7 @@
 use crate::actor::Handle;
 use crate::serving::{Answer, Inbound, Serving};
 use rhtn_archive::Keyhash;
+use rhtn_archive::catalog::REQUEST_RESOURCE;
 use rhtn_archive::prekey::REQUEST_PREKEY;
 use rhtn_archive::profile::REQUEST_PROFILE;
 use rhtn_archive::submission::*;
@@ -153,6 +154,10 @@ impl Serving for AttachedNode {
 
     fn profile<'a>(&'a self, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {
         Box::pin(async move { self.ask(REQUEST_PROFILE, body.to_vec()).await })
+    }
+
+    fn resource<'a>(&'a self, _from: Keyhash, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {
+        Box::pin(async move { self.ask(REQUEST_RESOURCE, body.to_vec()).await })
     }
 
     fn catalog<'a>(&'a self, _from: Keyhash, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {

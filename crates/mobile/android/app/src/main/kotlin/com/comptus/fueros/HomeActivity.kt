@@ -44,7 +44,7 @@ class HomeActivity : Activity() {
         "Conversations" to { open(ConversationsActivity::class.java) },
         "Meet" to { open(MeetActivity::class.java) },
         "People" to { open(PeopleActivity::class.java) },
-        "Catalog" to { placeholder("Catalog", "Resources your node serves — later.") },
+        "Catalog" to { open(CatalogActivity::class.java) },
         "Settings" to { placeholder("Settings", "Wake endpoint, backup — later.") },
         "Operator" to { open(OperatorActivity::class.java) },
         // the diagnostics bundle, fieldtest flavour only

@@ -14054,5 +14054,60 @@
   "then": "While adopted, A holds one position, in B's subnet, and lists its own scope no more; A refuses to sign a body naming a scope it does not root; after the departure A roots its scope again at the self-anchor, keyed by the same id.",
   "oracle": "behaviour",
   "interpretation": "A party rooting a scope chooses whether to bring it, and a party rooting none has nothing to choose [author, 2026-10-15]."
+ },
+ {
+  "id": "REP-17",
+  "area": "replication-peering",
+  "gap": "replication-peering",
+  "title": "Peer by locator where neither party runs an instance, and refuse a body that misstates one's own side",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §4.4",
+   "design §6.3"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §4.4",
+    "text": "its network point where A runs an instance, its\n                       ;   locator (§2) otherwise"
+   },
+   {
+    "where": "wire-format.md §4.4",
+    "text": "proof-of-presence record between the two peers.\n                       ;   REQUIRED, and unconditionally so"
+   }
+  ],
+  "given": "Two light clients that have met, each holding a position and the other's locator.",
+  "when": "One proposes a peering on that meeting and the other reviews it; then bodies resting on a meeting of other parties, on a record the signer does not hold, and carrying back-pointers that are not the signer's.",
+  "then": "The body names the two in keyhash order with each party's locator in its own field, the reviewer signs it, both hold the finalised record and neither position changes; each malformed or misaddressed body is refused with its reason, and a party with no locator held for the other has nothing to write.",
+  "oracle": "behaviour",
+  "interpretation": "A peering carries none of the subnet's authority, so nothing consults a patron [design §15.1]."
+ },
+ {
+  "id": "DMN-28",
+  "area": "daemon",
+  "gap": "daemon",
+  "title": "Report when the run ends, take a renewal that opens there, and refuse one that straddles hours held",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "infra-client-requirements.md §7",
+   "wire-format.md §8.2",
+   "light-client-requirements.md §10"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §7",
+    "text": "telling your operator before the last one is the obligation"
+   },
+   {
+    "where": "light-client-requirements.md §10",
+    "text": "The next run opens exactly where the\n  held run ends"
+   }
+  ],
+  "given": "An instance enrolled with two credentials over the key it minted.",
+  "when": "Its administration surface is fetched; a renewal is signed from the end it reports; and a credential straddling hours already held is pushed.",
+  "then": "The fetch names how many credentials are held and when the run ends; the renewal is taken and the reported end moves by the renewal's own windows; the straddling credential is refused with its reason, while the identical window re-sent is still taken once.",
+  "oracle": "behaviour",
+  "interpretation": "A renewal is about the credential alone: neither §4.4 record is re-signed [author, 2026-10-16]."
  }
 ]

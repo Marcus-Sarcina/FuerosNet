@@ -53,12 +53,17 @@ pub struct Carried {
     pub left: Vec<Msg>,
     /// Handed to the serving node and refused by it.
     pub refused: Vec<Msg>,
+    /// **Answers to requests that answer to their caller** rather than to
+    /// this client's state: a `ResourceResponse` is the application's
+    /// (`wire-format.md` §11.1), held nowhere and handed back as it came.
+    pub answers: Vec<Vec<u8>>,
 }
 
 impl Carried {
     fn absorb(&mut self, other: Carried) {
         self.left.extend(other.left);
         self.refused.extend(other.refused);
+        self.answers.extend(other.answers);
     }
 
     /// Whether everything travelled.
@@ -652,6 +657,17 @@ impl Courier {
                     Msg::Relay { to, bytes, device } => {
                         if !me.relayed(to, &bytes, device).await {
                             out.refused.push(Msg::Relay { to, bytes, device });
+                        }
+                    }
+                    // **a resource is reached through its host** (§11.1):
+                    // the node that served the entry is the node asked,
+                    // and the answer goes to the caller rather than into
+                    // any state of this client's
+                    Msg::ResourceRequest { node, bytes } => {
+                        let answered = me.serving.resource(me.me(), &bytes).await;
+                        match answered {
+                            Some(reply) => out.answers.push(reply),
+                            None => out.refused.push(Msg::ResourceRequest { node, bytes }),
                         }
                     }
                     // a sweep of the serving node's catalog: each reply

@@ -88,6 +88,9 @@ pub trait Serving: Send + Sync {
     /// A `CatalogQuery` from `from` (`wire-format.md` §6.4): the node's
     /// reply, or nothing where it answers none.
     fn catalog<'a>(&'a self, from: Keyhash, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>>;
+    /// A `ResourceRequest` from `from` (`wire-format.md` §11.1): the
+    /// node's `ResourceResponse`, or nothing where it answers none.
+    fn resource<'a>(&'a self, from: Keyhash, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>>;
     /// Carry `bytes` from `from` to `to`; whether anything took them.
     /// `device`: the recipient's device the ciphertext is for
     /// (`wire-format.md` §7.10 field 4).
@@ -244,6 +247,15 @@ impl Serving for LocalNode {
                 me,
             };
             view.catalog.answer(&from, body, &scopes)
+        })
+    }
+
+    fn resource<'a>(&'a self, from: Keyhash, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {
+        Box::pin(async move {
+            let mut view = self.node.view.lock().unwrap();
+            let me = view.me();
+            let table = view.table.clone_for(me);
+            Some(view.resources.serve(&me, &table, &from, body).encode())
         })
     }
 

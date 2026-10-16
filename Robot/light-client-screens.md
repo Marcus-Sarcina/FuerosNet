@@ -161,6 +161,15 @@ a reason and a way back (UX-013 validates these by walking them).
 
 ## F. Catalog and resources
 
+**Built, 2026-10-16** (`CatalogActivity`, `Catalog`): the sweep
+(`Client::browse`), what it holds with each entry's type, instance, owner
+and serving node, **a truncated or stale portion said rather than
+smoothed over** (`wire-format.md` §6.4), and one request to a resource
+through the node that served its entry (`wire-format.md` §11.1) with the six statuses in
+words. The request is the simplest HTTP/1.1 there is; an application's own
+screen is the resource's business. Owed: the grant-side cases (a sub
+reaching one under a grant), which need a hosted package on the bench.
+
 | Step | Elements | Beneath | Owes |
 |---|---|---|---|
 | F1 Browse | Cached entries render **without opening a connection**; per-host *stale* and *truncated* chips; a deliberate Refresh, one query session at a time | `catalog`, then `browse` | UX-011; `light-client-requirements.md` §8 |
@@ -182,7 +191,7 @@ a reason and a way back (UX-013 validates these by walking them).
 
 | Step | Elements | Beneath | Owes |
 |---|---|---|---|
-| H1 Provision an instance | Provider and zone choices **ordered by concentration inside this operator's own horizon**, least first, crowded marked and never hidden; and the caveat said: the ordering speaks to one operator's redundancy, not the network's | Owed in part | PRD-11; `light-client-requirements.md` §6 |
+| H1 Provision an instance | Provider and zone choices **ordered by concentration inside this operator's own horizon**, least first, crowded marked and never hidden; and the caveat said: the ordering speaks to one operator's redundancy, not the network's. **The kernel half is built (2026-10-16)**: `Horizon::asns_seen` reads the ASNs of every peering this client holds and `Client::providers_by_concentration` orders a caller's candidates least-first, hiding none and scoring none. **Owed**: the screen, and the list of candidates to order — nothing supplies providers and zones yet, the cloud flow being "later and larger" (`Robot/field-test-sequence.md` C1). **No crowding threshold is set**: the count is reported and the screen says it, since what counts as crowded is nobody's figure yet | Owed in part | PRD-11; `light-client-requirements.md` §6 |
 | H2 Delegations | The run's issuance and renewal state (45 × 48 h, contiguous); what the delegated key signs and what stays on this phone | `delegate`, `presented_key` | `infra-client-requirements.md` §7 |
 | H3 Enrol an instance | **Built, 2026-10-10** (`OperatorActivity`): the address and token out of band, the fetch, **the proof checked before anything is signed**, then `infra-client-requirements.md` §4.4's two records and the run, each step narrated. **Several instances, 2026-10-15** [author]: the screen lists every instance this operator administers under the subnet each serves, chosen at enrolment where the operator holds positions in several (`light-client-requirements.md` §10), and infers none from a position; the list is the shell's own state. **Owed**: the two records and the run are signed over the position this device acts in, not the chosen subnet's — a kernel `endpoint_record_in(subnet)` is wanted before an operator in two subnets enrols in the second | `enrolment_proof_checks`, `network_point`, `endpoint_record`, `anchor_entry`, `delegate` | PRD-13; `infra-client-requirements.md` §8.2, §8.3, §4.4 |
 | H3a The node's own pages | **Built, 2026-10-10** (`NodePageActivity`): the node serves them and this frames them — no script, no bridge, no file or content access, no storage, and navigation confined to the instance's own origin | | PRD-12; `infra-client-requirements.md` §8.3; design §18.1, §23.3 |

@@ -22,6 +22,10 @@ usage: rhtn <command> [...]
         These are not secret.
 
   node enrol <identity> <host:port> --token <64 hex> [...]
+  node renew <identity> <host:port> --token <64 hex> [--credentials <n>]
+        Sign the next run for an instance already enrolled, opening where
+        its current run ends (I §7). The proof is checked again; neither
+        record of §4.4 is re-signed.
         Enrol an instance over its administration surface: fetch the
         transport key it minted, check the proof that it holds the token
         its configuration carried, and hand back a run signed over that
@@ -166,11 +170,11 @@ fn do_keys(rest: &[&str]) -> Result<String, String> {
 /// surface ([`enrol`]).
 fn do_node(rest: &[&str]) -> Result<String, String> {
     let [sub, identity, at, opts @ ..] = rest else {
-        return Err("node enrol <identity> <host:port> --token <64 hex> [...]".into());
+        return Err("node enrol|renew <identity> <host:port> --token <64 hex> [...]".into());
     };
-    if *sub != "enrol" {
+    if *sub != "enrol" && *sub != "renew" {
         return Err(format!(
-            "`node {sub}` is not a command; there is `node enrol`"
+            "`node {sub}` is not a command; there are `node enrol` and `node renew`"
         ));
     }
     let (mut token, mut credentials, mut endpoint, mut subtree) = (None, 7usize, None, None);
@@ -201,7 +205,7 @@ fn do_node(rest: &[&str]) -> Result<String, String> {
                         .map_err(|_| "--anchor takes a subtree size".to_string())?,
                 )
             }
-            other => return Err(format!("{other} is not an option of `node enrol`")),
+            other => return Err(format!("{other} is not an option of `node {sub}`")),
         }
         i += 2;
     }
@@ -210,16 +214,17 @@ fn do_node(rest: &[&str]) -> Result<String, String> {
         return Err("a run of no credentials would enrol nothing".into());
     }
     let me = read_identity(identity)?;
-    enrol::enrol(
-        &me,
-        &enrol::Ask {
-            at: at.to_string(),
-            token,
-            credentials,
-            endpoint,
-            subtree,
-        },
-    )
+    let ask = enrol::Ask {
+        at: at.to_string(),
+        token,
+        credentials,
+        endpoint,
+        subtree,
+    };
+    if *sub == "renew" {
+        return enrol::renew(&me, &ask);
+    }
+    enrol::enrol(&me, &ask)
 }
 
 fn do_probe(rest: &[&str]) -> Result<String, String> {

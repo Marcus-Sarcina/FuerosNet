@@ -1060,6 +1060,18 @@ on the wire.
 - **Show each instance under the subnet's label** (§4.4, §7), since an
   operator with two instances needs to know which is which by something other
   than an address.
+- **Renew a run before it lapses, from where it ends** [author,
+  2026-10-16]. An instance holds 45 credentials of 48 hours and signs none
+  of them: it tells its operator before the last one
+  (`infra-client-requirements.md` §7) and **this client is the only thing
+  that can answer**, since the key that signs a credential stays on the
+  ceremony device (design §23.3). The next run opens exactly where the
+  held run ends, which the instance reports, so the run stays contiguous
+  (`wire-format.md` §8.2) and nothing guesses from a clock; the proof over
+  the instance's transport key is checked again first, a renewal being no
+  more an occasion to sign for a stranger's key than an enrolment was; and
+  neither record of `infra-client-requirements.md` §4.4 is re-signed, a
+  renewal being about the credential alone.
 
 ---
 

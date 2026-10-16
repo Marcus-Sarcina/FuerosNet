@@ -655,10 +655,17 @@ impl Surface {
             Some(p) if p.exists() => "held",
             Some(_) => "wanted",
         };
+        // **when the run ends, so the operator can renew before it
+        // lapses** (`infra-client-requirements.md` §7: "telling your
+        // operator before the last one is the obligation"). A renewal
+        // starts where the run ends, and the fetch is where this instance
+        // says where that is.
+        let issued = self.credential.issued();
+        let ends = issued.iter().map(|i| i.not_after).max().unwrap_or(0);
         (
             200,
             format!(
-                "transport {}\nproof {}\nphase {}\ncredentials {}\nendpoint-record {}\nanchor-entry {}\n",
+                "transport {}\nproof {}\nphase {}\ncredentials {}\nrun-ends {}\nendpoint-record {}\nanchor-entry {}\n",
                 hex(&key),
                 hex(&proof(&self.token, &nonce, &key)),
                 if self.running().is_some() {
@@ -666,7 +673,8 @@ impl Surface {
                 } else {
                     "enrolling"
                 },
-                self.credential.issued().len(),
+                issued.len(),
+                ends,
                 held(&self.endpoint_record),
                 held(&self.anchor_entry),
             ),

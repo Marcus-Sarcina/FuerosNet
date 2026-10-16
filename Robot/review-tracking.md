@@ -18247,3 +18247,108 @@ choose, `chooseCarrying`, the offer frame carrying 32 bytes after the
 lists, `Kern.carrying()`, `MeetActivity.choice()`. The opposition case
 remains model-only: with D1b fixing the reader's kind to none it cannot
 arise on the bench, and the author's ruling did not add a D1b kind.
+
+## The enrolment's line, the profiles fetched, and a peering a phone can make (2026-10-15)
+
+**Item 1, three gaps the rework left.**
+
+`wire-format.md` §7.6 is explicit — **one record per patron relationship**,
+the seqno being that line's, and "partitioning records and locators between
+subtrees is the anticipated use" [author, 2026-09-02] — and the enrolment
+signed both records with `series: 0` whatever subnet the instance served.
+`Client::line_in(subnet)` is the series of the position there (refused where
+it holds none), `endpoint_record_in` and `anchor_entry_in` sign on it, the
+ffi's two record builders take the subnet, and `Kernel.enrol` passes what
+the Operator screen already chose.
+
+**Profiles are fetched where names are shown**: `PeopleActivity.onResume`
+asks `Kernel.requestProfiles` off the main thread and redraws as answers
+land. The roll's text moved to `People.roll`/`People.line`, which is pure
+and tested — the alias where one was received, the keyhash where none was.
+
+**PRD-14 stays unmarked, deliberately.** It is a manual row, and the
+manual rows are claimed by a walkthrough on a release build, not by a unit
+test: PRD-02 to PRD-13 are all unmarked for that reason, two of them
+(PRD-12, PRD-13) built on 2026-10-10. Marking PRD-14 from `PeopleTest`
+would overstate the same way. The owed note I wrote on 2026-10-15 called
+this a missing test; the test exists now and the row is still owed.
+
+**Item 2, the peering act.** `wire-format.md` §4.4 fields 3 and 4 take "a
+network point where that party runs an instance, **its locator otherwise**"
+[author, 2026-09-29], so two phones can peer with positions standing where
+addresses would. Built: `rhtn_archive::tx::peering_body` with a `PeerAt`
+of either form — **one emitter for one object**, the node's own
+`peering_body` now calling it — and on the client `propose_peering`
+(parties in keyhash order, my acting position in my field, the position I
+hold for them in theirs, the meeting unconditionally, the commitment
+optional), `review_and_sign_peering` (a peering of mine with somebody
+else; the meeting of this pair held here; **the position written for my
+key is the one I hold**, since nobody else writes where I am; my
+back-pointers are my archive's next at my own side of key 0; the timestamp
+within the configured tolerance — and the other party's address is theirs
+to state, §4.4's snapshot, so an older locator of theirs is no fault) and
+`take_peering` (held, flooded, no position refolded). Three over the ffi
+with `peering_envelope` beside `adoption_envelope`. Functional NET-030,
+catalogue REP-17, `client/tests/peering.rs` (3).
+
+**What is still owed on A3**: the shell. The Meet flow's `DONE` step is
+where it belongs, as the adoption's five frames are, and the frames
+themselves would be a second shell-own object — or the author's ruling on
+registered kinds, which the adoption's note already asks for.
+
+**The B blocker was not one.** The co-signer question the sequence called
+owed was ruled on 2026-10-11 and built: the bundle is introductions
+carrying material and locator, and `selection::pool` pins each. Corrected
+in the sequence note.
+
+## The run renewed, providers counted, and the catalog reached (2026-10-16)
+
+**Item 3, C1's build half.**
+
+**Renewal.** The daemon side was already there — DMN-23/24, the instance
+minting its key and telling its operator before the last credential — and
+the operator's half did not exist: `Kernel.enrol` signed a run from
+`now()` and nothing signed another. The instance now reports `run-ends`
+on its administration fetch (the last credential's `not_after`), the CLI
+gains `node renew` opening exactly there, `Kernel.renew` does the same
+from the shell with the token the Operator screen remembers, and the
+screen offers it per instance. `Credential::add` already refused an
+overlap, so a renewal that straddles held hours is refused and the
+identical window re-sent is still taken once — both asserted. Functional
+UX-017, catalogue DMN-28, `daemon/tests/administration.rs` (5).
+
+**The obligation was unstated.** `infra-client-requirements.md` §7 has the
+instance tell its operator and names the client as the signer, and nothing
+asked the client to answer. `light-client-requirements.md` §10 now does,
+with the reasons that were already in the documents: the key stays on the
+ceremony device (design §23.3), the run is contiguous (`wire-format.md`
+§8.2), and a renewal is about the credential alone.
+
+**PRD-11's kernel half.** `Horizon::asns_seen` reads each peering this
+client holds for the ASN in either address field — a locator there means
+that peer runs no instance and counts nowhere — and
+`Client::providers_by_concentration` orders a caller's candidates
+least-first, stable on ties, hiding none. **No threshold**: what counts as
+crowded is a figure nobody has set, so the count is reported and the
+screen is to say it. The screen itself and the candidate list are owed:
+nothing supplies providers and zones yet. The row stays unmarked, being
+manual.
+
+**Item 4, the catalog and the resource round trip.** The kernel had
+`browse` and `catalog` and no way to ask a resource anything. Built:
+`Msg::ResourceRequest`, `Client::request_resource` /
+`take_resource_response` (held nowhere — a resource's answer is the
+application's), `Serving::resource` on both node kinds, the courier
+carrying it and handing the answer back in `Carried::answers`, ffi
+`request_resource` with `ResourceAnswer`, and `CatalogActivity` with a
+pure `Catalog` for the roll and the six statuses. A truncated or stale
+portion is said, which §6.4 makes the client's job. Functional UX-018;
+`adaptors/tests/submissions.rs` proves the round trip over a real session
+(a resource the node hosts none of comes back refused) and
+`CatalogTest` the rendering. **No new catalogue row**: RSC-11/12 cover the
+node's evaluation and one-request-per-stream, and what is new here is the
+client's path to them, which the functional row records.
+
+**Owed after this**: the grant-side half of C3 (a sub reaching a resource
+under a grant) needs a hosted package on the bench, and H1's screen needs
+a provider list that nothing supplies.

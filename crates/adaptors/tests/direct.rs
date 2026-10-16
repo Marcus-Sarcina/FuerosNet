@@ -77,6 +77,9 @@ impl Serving for Counting {
     fn profile<'a>(&'a self, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {
         self.inner.profile(body)
     }
+    fn resource<'a>(&'a self, from: Keyhash, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {
+        self.inner.resource(from, body)
+    }
     fn relay<'a>(
         &'a self,
         from: Keyhash,

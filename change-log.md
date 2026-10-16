@@ -13867,6 +13867,62 @@ rejections in the corpus, and both introduction kinds are listed in the
 corpus runner so a rejection that starts passing fails rather than being
 skipped.
 
+### 2026-10-16 (the run renewed, providers counted, and the catalog reached)
+
+**Nothing renewed a run.** An instance holds 45 credentials of 48 hours,
+signs none, and tells its operator before the last — and the operator's
+client had no answer to give: it signed a run from the clock at
+enrolment and never again. The instance now reports when its run ends,
+the next run opens exactly there, and the CLI, the kernel and the
+Operator screen each do it; a credential straddling hours already held
+is refused, as it was, while the identical window re-sent is still taken
+once. The obligation is stated where it belongs
+(`light-client-requirements.md` §10), the reasons being ones the
+documents already carried: the signing key stays on the ceremony device,
+the run is contiguous, and a renewal is about the credential alone.
+
+**What one operator can see of provider concentration** (PRD-11): the
+ASNs of every peering a client holds, counted per provider, ordering a
+caller's candidates least-crowded first and hiding none. **No threshold
+is set** — what counts as crowded is nobody's figure — so the count is
+reported for a screen to say. The screen and its candidate list are owed.
+
+**The catalog is reached, and a resource with it.** The client could
+sweep a node's catalog and had no way to ask a resource anything: now a
+request addresses the resource, goes to the node that served its entry,
+carries the application's own HTTP/1.1 message unread, and comes back as
+one of §11.1's six statuses, kept nowhere. The shell's Catalog screen
+shows what is held, **says when a portion is truncated or stale** rather
+than presenting it as complete (§6.4), and asks one. Functional UX-017
+and UX-018 (524 families), catalogue DMN-28.
+
+### 2026-10-15 (one record per line, profiles fetched, and a peering a phone can make)
+
+**Three things the rework left owed, and the peering act the bench
+needed.** The enrolment signed its endpoint record and anchor entry with
+series 0 whatever subnet the instance served, where `wire-format.md` §7.6
+has **one record per patron relationship** on that line's series: the
+client computes the line from its position in the subnet chosen and
+refuses where it holds none. The People screen asks for the profiles of
+every located contact when it opens, which nothing did before, and the
+line it draws is a pure function with a test. PRD-14 stays owed, being a
+manual row that a release-build walkthrough claims and not a unit test.
+
+**A party that runs no instance peers by locator** (`wire-format.md` §4.4
+fields 3 and 4, "its locator otherwise" [author, 2026-09-29]): the
+archive is the one emitter of a peering body now, with either address
+form, and the node's own wrapper calls it. A client proposes a peering on
+a meeting of the two, reviews one shown to it — the meeting is of this
+pair and held here, the position written for its own key is the one it
+holds, its back-pointers are its archive's next — and takes the finished
+record, which is no part of any position. Functional NET-030 (522
+families), catalogue REP-17. The shell screen is owed.
+
+**And the ruling the field-test sequence called owed was already made**
+[author, 2026-10-11]: §5.4's bundle is introductions, each carrying the
+candidate's material and locator, so a candidate's key arrives with the
+candidate. The `pool: 0` on the bench was who had met whom.
+
 ### 2026-10-15 (the subnet is named, and profiles are hosted beside the locator)
 
 **[ruled, author, 2026-10-15] Three things the protocol had no word for.**

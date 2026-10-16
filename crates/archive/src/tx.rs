@@ -476,6 +476,81 @@ pub fn recovery_block(
     out
 }
 
+/// Where a peer is reachable, as `wire-format.md` §4.4 fields 3 and 4
+/// admit it: **a network point where that party runs an instance, and its
+/// locator otherwise** [author, 2026-09-29]. Both forms are carried here
+/// already encoded, since each has its own emitter.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PeerAt {
+    /// An encoded `NetworkPoint`: the party runs an instance there.
+    Point(Vec<u8>),
+    /// An encoded `Locator`: the party runs none, so its position is
+    /// where a peer reaches it.
+    Position(Vec<u8>),
+}
+
+impl PeerAt {
+    fn emit(&self, out: &mut Vec<u8>) {
+        match self {
+            PeerAt::Point(b) | PeerAt::Position(b) => out.extend_from_slice(b),
+        }
+    }
+}
+
+/// A peering's fields (`wire-format.md` §4.4): the two parties, where
+/// each is reachable **as a snapshot at signing**, when, what each
+/// commits to replicating where they did, and the presence record the
+/// peering rests on, which is required unconditionally (design §6.3).
+///
+/// **One emitter for one object.** The node's own convenience wrapper
+/// calls [`peering_body`], so a client peering by locator and an instance
+/// peering by address cannot drift apart.
+pub struct Peering<'a> {
+    /// Back-pointers: the lower keyhash's list, then the higher's, in
+    /// signer order (`wire-format.md` §3.1).
+    pub back: [&'a [Txid]; 2],
+    /// Field 1: the party whose keyhash sorts first.
+    pub a: Keyhash,
+    /// Field 2: the other.
+    pub b: Keyhash,
+    /// Field 3: where `a` is reachable, as a snapshot at signing.
+    pub a_at: PeerAt,
+    /// Field 4: where `b` is.
+    pub b_at: PeerAt,
+    /// Field 5: when.
+    pub timestamp: u64,
+    /// Field 6: what each commits to replicating of the other, where they
+    /// did.
+    pub commitment: Option<u64>,
+    /// Field 8: the presence record the peering rests on, required
+    /// unconditionally (design §6.3).
+    pub pop: Txid,
+}
+
+/// The body of a peering (`wire-format.md` §4.4), ready to sign.
+pub fn peering_body(p: &Peering) -> Vec<u8> {
+    let mut out = Vec::new();
+    emit_map_head(&mut out, 7 + p.commitment.is_some() as usize);
+    emit_back_pointers(&mut out, &[p.back[0].to_vec(), p.back[1].to_vec()]);
+    emit_uint(&mut out, 1);
+    emit_bstr(&mut out, &p.a);
+    emit_uint(&mut out, 2);
+    emit_bstr(&mut out, &p.b);
+    emit_uint(&mut out, 3);
+    p.a_at.emit(&mut out);
+    emit_uint(&mut out, 4);
+    p.b_at.emit(&mut out);
+    emit_uint(&mut out, 5);
+    emit_uint(&mut out, p.timestamp);
+    if let Some(c) = p.commitment {
+        emit_uint(&mut out, 6);
+        emit_uint(&mut out, c);
+    }
+    emit_uint(&mut out, 8);
+    emit_bstr(&mut out, &p.pop);
+    out
+}
+
 /// A departure body (`wire-format.md` §4.2): the node leaving `patron` at
 /// `seqno`, optionally with a reason code.
 pub fn departure_body(

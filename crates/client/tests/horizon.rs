@@ -1164,3 +1164,85 @@ fn a_client_says_who_serves_a_peer_from_its_own_copy_and_asks_nobody() {
     // position to resolve from and nobody to dial
     assert_eq!(h.upstream_of(&kh("dave")), Upstream::Unknown);
 }
+
+/// A peering between `a` and `b`, each at a network point inside `asn`
+/// where an ASN is given and at its locator where it is not
+/// (`wire-format.md` §4.4).
+fn peering(w: &mut World, a: &str, b: &str, a_asn: Option<u64>, b_asn: Option<u64>) -> Record {
+    let pop = w.meet(a, b).txid;
+    let t = w.tick();
+    let at = |who: &str, asn: Option<u64>| match asn {
+        Some(n) => {
+            let mut out = Vec::new();
+            rhtn_transport::session::NetworkPoint::new([10, 0, 0, 1], Some(7447))
+                .with_asn(n)
+                .encode(&mut out);
+            PeerAt::Point(out)
+        }
+        None => {
+            let mut out = Vec::new();
+            Locator {
+                anchor: kh(who),
+                path: Vec::new(),
+                nibbles: 0,
+                seqno: Seqno {
+                    series: 1,
+                    counter: 0,
+                },
+                subnet: Some(SUBNET),
+            }
+            .emit(&mut out);
+            PeerAt::Position(out)
+        }
+    };
+    let (lo, hi) = if kh(a) <= kh(b) { (a, b) } else { (b, a) };
+    let (lo_asn, hi_asn) = if kh(a) <= kh(b) {
+        (a_asn, b_asn)
+    } else {
+        (b_asn, a_asn)
+    };
+    let (back_lo, back_hi) = (w.back(lo), w.back(hi));
+    let body = peering_body(&Peering {
+        back: [&back_lo, &back_hi],
+        a: kh(lo),
+        b: kh(hi),
+        a_at: at(lo, lo_asn),
+        b_at: at(hi, hi_asn),
+        timestamp: t,
+        commitment: None,
+        pop,
+    });
+    w.commit(TYPE_PEERING, &body, &[lo, hi])
+}
+
+/// **Providers ordered by concentration inside this operator's own
+/// horizon, least first, nothing hidden** (`light-client-requirements.md`
+/// §6; PRD-11, whose own row is claimed by a walkthrough on a release
+/// build and not by this).
+#[test]
+fn candidate_providers_are_ordered_by_what_the_horizon_already_holds() {
+    let mut w = World::new();
+    let adoptions = vec![
+        adopt(&mut w, "alice", "bob", vec![0x10], 1),
+        adopt(&mut w, "carol", "bob", vec![0x20], 1),
+        adopt(&mut w, "w1", "bob", vec![0x30], 1),
+    ];
+    // bob and carol peer from inside 64500; w1 peers from 64501; and one
+    // peer runs no instance at all, so it is inside no provider
+    let peerings = vec![
+        peering(&mut w, "bob", "carol", Some(64500), Some(64500)),
+        peering(&mut w, "w1", "carol", Some(64501), Some(64500)),
+        peering(&mut w, "alice", "w1", None, Some(64501)),
+    ];
+    let mut recs = adoptions;
+    recs.extend(peerings);
+    let h = fed("alice", &recs);
+    let seen = h.asns_seen();
+    assert_eq!(
+        seen.get(&64500).map(|s| s.len()),
+        Some(2),
+        "bob and carol are both seen inside 64500"
+    );
+    assert_eq!(seen.get(&64501).map(|s| s.len()), Some(1), "w1 alone");
+    assert_eq!(seen.get(&64502), None, "nothing is held of an unseen ASN");
+}

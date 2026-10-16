@@ -249,6 +249,23 @@ pub struct Horizon {
     conflicts: BTreeSet<(Keyhash, u32, u32)>,
 }
 
+/// The ASN in a peering's address field, where that field is a network
+/// point carrying one (`wire-format.md` §4.4: a point's field 2, absent
+/// where the peer did not state it). **Nothing where the field is a
+/// locator**: that peer runs no instance, so it is inside no provider.
+fn asn_at(body: &[u8], field: u64) -> Option<u64> {
+    use rhtn_codec::cbor::{Item, as_uint, map_get, parse_all, value_slice};
+    let r = value_slice(body, field)?;
+    let item = parse_all(&body[r]).ok()?;
+    let Item::Map(m) = &item else { return None };
+    // a locator's field 1 is a 32-byte anchor; a point's is four octets
+    match map_get(m, 1) {
+        Some(Item::Bytes(b)) if b.len() == 4 => {}
+        _ => return None,
+    }
+    map_get(m, 2).and_then(as_uint)
+}
+
 impl Horizon {
     /// An empty horizon belonging to `me`, holding no record.
     pub fn new(me: Keyhash) -> Horizon {
@@ -820,6 +837,38 @@ impl Horizon {
             .into_iter()
             .filter(|k| *k != self.me)
             .collect()
+    }
+    /// **Where this horizon has seen each party peering from, by ASN**
+    /// (`light-client-requirements.md` §6; design §3.4): a peering record
+    /// carries each endpoint's address and, where that endpoint runs an
+    /// instance, its ASN, so this is the whole of what one operator can
+    /// see of provider concentration. A party seen at two ASNs counts at
+    /// both; a party whose field holds a locator rather than a point runs
+    /// no instance and counts nowhere.
+    ///
+    /// **Nothing beyond the horizon is counted**, which is design
+    /// §16.3.1's bound read the honest way: what is held is what was
+    /// propagated here.
+    pub fn asns_seen(&self) -> BTreeMap<u64, BTreeSet<Keyhash>> {
+        let mut out: BTreeMap<u64, BTreeSet<Keyhash>> = BTreeMap::new();
+        for bytes in self.records.values() {
+            let Ok(rec) = Record::parse(bytes) else {
+                continue;
+            };
+            if rec.tx_type != rhtn_archive::tx::TYPE_PEERING {
+                continue;
+            }
+            let body = &rec.bytes[rec.body.clone()];
+            for (party, field) in [(1u64, 3u64), (2, 4)] {
+                let Some(who) = rec.field_hash(party) else {
+                    continue;
+                };
+                if let Some(asn) = asn_at(body, field) {
+                    out.entry(asn).or_default().insert(who);
+                }
+            }
+        }
+        out
     }
 
     /// How many adoption or sibling edges away `other` is; nothing beyond

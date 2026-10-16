@@ -737,3 +737,32 @@ async fn a_profile_is_published_over_the_wire_and_fetched_by_anyone() {
         (None, Some(rhtn_archive::profile::FAIL_UNKNOWN))
     );
 }
+
+/// **A resource reached through the node hosting it, over a real session**
+/// (`wire-format.md` §11.1): the request crosses as a request frame, the
+/// node evaluates the asker's reach before the resource sees anything
+/// (§11.2), and the status comes back as §11.1 fixes it. A resource this
+/// node hosts none of is refused, which is the honest answer and not a
+/// fault of the path.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_resource_request_crosses_a_session_and_comes_back_with_its_status() {
+    let node = node_with("bob", |_, _| {});
+    let carol = attach_light("carol", &node).await;
+    let body = rhtn_archive::catalog::ResourceRequest {
+        resource: [0x1a; 32],
+        message: b"GET / HTTP/1.1\r\nhost: r1\r\n\r\n".to_vec(),
+    }
+    .encode();
+    let reply = carol
+        .serving
+        .resource(carol.me, &body)
+        .await
+        .expect("the node answers a request frame");
+    let r = rhtn_archive::catalog::ResourceResponse::decode(&reply).expect("a response");
+    assert_eq!(
+        r.status,
+        rhtn_archive::catalog::STATUS_REFUSED,
+        "a resource this node hosts none of: refused, and nothing invented"
+    );
+    assert_eq!(r.body, None, "and no application answer with it");
+}

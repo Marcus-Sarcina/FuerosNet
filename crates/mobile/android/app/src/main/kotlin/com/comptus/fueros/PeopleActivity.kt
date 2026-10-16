@@ -182,21 +182,23 @@ class PeopleActivity : Activity() {
     }
 
     private fun draw() {
-        val held = Kernel.people()
-        roll.text = if (held.isEmpty()) {
-            "nobody yet"
-        } else {
-            held.joinToString("\n") { p ->
-                val marks = buildList {
-                    if (p.located) add("placed")
-                    if (p.how == "a node") add("answers somewhere")
-                }
-                val tail = if (marks.isEmpty()) "" else " — ${marks.joinToString(", ")}"
-                // the alias it published where one reached us, and the
-                // keyhash where none did (light-client §4.3)
-                "${p.alias ?: p.who}  ${p.how}  ×${p.count}$tail"
-            }
-        }
+        roll.text = People.roll(Kernel.people())
+    }
+
+    /**
+     * **Ask for what each contact published, on opening** (§4.3): holding
+     * a locator is what lets this device fetch a profile, so the screen
+     * that shows names is where the asking belongs. Off the main thread,
+     * since each fetch is a round trip to wherever that locator leads;
+     * the roll is redrawn as answers land.
+     */
+    override fun onResume() {
+        super.onResume()
+        draw()
+        Thread {
+            Kernel.requestProfiles()
+            runOnUiThread { if (!isFinishing) draw() }
+        }.start()
     }
 
     override fun onStop() {
