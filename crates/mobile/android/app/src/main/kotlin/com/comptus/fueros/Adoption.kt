@@ -56,11 +56,16 @@ class Adoption(
         /** This archive's next back-pointers. */
         fun backPointers(): List<ByteArray>
 
+        /** The scope this device brings under the patron, hex, or null
+         *  where it joins as an individual (`wire-format.md` §4.1). */
+        fun carrying(): String?
+
         /** Where this device sits, as a `Locator`, in the subnet it acts in. */
         fun position(): String
 
-        /** As the patron: the body, or the kernel's reason. */
-        fun propose(node: String, presence: String, series: Int, nodeBack: List<ByteArray>): Result<ByteArray>
+        /** As the patron: the body, or the kernel's reason. `carrying` is
+         *  the scope the other brings, their claim, copied into the body. */
+        fun propose(node: String, presence: String, series: Int, nodeBack: List<ByteArray>, carrying: String?): Result<ByteArray>
 
         /** As the party being adopted: the entries, or the reason it refused. */
         fun reviewAndSign(body: ByteArray): Result<ByteArray>
@@ -214,11 +219,15 @@ class Adoption(
             return
         }
         val back = kern.backPointers()
-        if (!post(Frame.offer(series, back))) {
+        val carrying = kern.carrying()
+        if (!post(Frame.offer(series, back, carrying))) {
             refuse("the offer could not be sent to ${counterpartyName}")
             return
         }
-        note("offered series $series to $counterpartyName.")
+        note(
+            "offered series $series to $counterpartyName" +
+                (carrying?.let { ", bringing scope ${it.take(8)}…" } ?: ", as an individual") + ".",
+        )
     }
 
     /**
@@ -281,8 +290,11 @@ class Adoption(
             refuse("an offer arrived at the party being adopted")
             return
         }
-        note("$counterpartyName can enter series ${o.series}.")
-        when (val b = kern.propose(counterparty, presence, o.series, o.back)) {
+        note(
+            "$counterpartyName can enter series ${o.series}" +
+                (o.carrying?.let { ", bringing scope ${it.take(8)}…" } ?: "") + ".",
+        )
+        when (val b = kern.propose(counterparty, presence, o.series, o.back, o.carrying)) {
             is Result.Refused -> refuse("this device would not propose the adoption: ${b.reason}")
             is Result.Ok -> {
                 synchronized(lock) {
@@ -391,7 +403,7 @@ class Adoption(
 
         sealed class Read
         data class Direction(val who: Int, val label: String?) : Read()
-        data class Offer(val series: Int, val back: List<ByteArray>) : Read()
+        data class Offer(val series: Int, val back: List<ByteArray>, val carrying: String?) : Read()
         data class Body(val body: ByteArray) : Read()
         data class Signed(val entries: ByteArray) : Read()
         data class Refused(val why: String) : Read()
@@ -400,7 +412,7 @@ class Adoption(
         fun direction(who: Int, label: String? = null): ByteArray =
             byteArrayOf(VERSION, DIRECTION, who.toByte()) + (label ?: "").toByteArray()
 
-        fun offer(series: Int, back: List<ByteArray>): ByteArray {
+        fun offer(series: Int, back: List<ByteArray>, carrying: String? = null): ByteArray {
             val head = byteArrayOf(
                 VERSION,
                 OFFER,
@@ -412,6 +424,8 @@ class Adoption(
             )
             var out = head
             back.forEach { out += it }
+            // the scope brought, 32 bytes after the lists, where one is
+            carrying?.let { out += Provision.unhex(it) }
             return out
         }
 
@@ -439,9 +453,11 @@ class Adoption(
                         (rest[2].toInt() and 0xff shl 8) or
                         (rest[3].toInt() and 0xff)
                     val n = rest[4].toInt() and 0xff
-                    if (rest.size != 5 + n * 32) return null
+                    val lists = 5 + n * 32
+                    if (rest.size != lists && rest.size != lists + 32) return null
                     val back = (0 until n).map { i -> rest.copyOfRange(5 + i * 32, 37 + i * 32) }
-                    Offer(series, back)
+                    val carrying = if (rest.size == lists + 32) Provision.hex(rest.copyOfRange(lists, lists + 32)) else null
+                    Offer(series, back, carrying)
                 }
                 BODY -> if (rest.isEmpty()) null else Body(rest)
                 SIGNED -> if (rest.isEmpty()) null else Signed(rest)

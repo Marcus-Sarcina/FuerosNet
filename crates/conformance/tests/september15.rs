@@ -10,7 +10,7 @@ use rhtn_node::{view::NodeView,store::{Decision,KIND_TRANSACTION}};
 const SUBNET: [u8; 32] = [0xdb; 32];
 fn adoption(n:&SigningIdentity,p:&SigningIdentity,f:&SigningIdentity,slot:u8,time:u64)->Record {
  let bn=[rhtn_archive::genesis(&n.public.keyhash)];let bp=[rhtn_archive::genesis(&p.public.keyhash)];
- Record::parse(&envelope(TYPE_ADOPTION,&adoption_body(&Adoption{node:n.public.keyhash,patron:p.public.keyhash,locator:Locator{anchor:p.public.keyhash,path:vec![slot<<4],nibbles:1,seqno:Seqno{series:1,counter:0},subnet:Some(SUBNET)},timestamp:time,key_material:None,evidence:Evidence::Transfer{former:f.public.keyhash,block:transfer_block(f,&n.public.keyhash,&p.public.keyhash)},presented_head:None,back:[&bn,&bp]}),&[n,p])).unwrap()
+ Record::parse(&envelope(TYPE_ADOPTION,&adoption_body(&Adoption{node:n.public.keyhash,patron:p.public.keyhash,locator:Locator{anchor:p.public.keyhash,path:vec![slot<<4],nibbles:1,seqno:Seqno{series:1,counter:0},subnet:Some(SUBNET)},timestamp:time,key_material:None,evidence:Evidence::Transfer{former:f.public.keyhash,block:transfer_block(f,&n.public.keyhash,&p.public.keyhash)},presented_head:None,back:[&bn,&bp],carrying:None}),&[n,p])).unwrap()
 }
 fn endpoint(n:&SigningIdentity,series:u32,counter:u32,port:u16)->Vec<u8>{
  let mut p=vec![];rhtn_transport::session::NetworkPoint::new([127,0,0,1],Some(port as u64)).encode(&mut p);
@@ -69,7 +69,7 @@ fn s02_recovery_must_forget_the_superseded_clients_wake_endpoint(){
  assert_eq!(v.wake.register(old.public.keyhash,[0;32],Some("https://wake.example/old".into()),Some(vec![8;32]),None),rhtn_node::wake::Registered::Held);
  let response=recovery_response(&p,&new,&[7;32],&old.public.keyhash);let mut statement=vec![];emit_array_head(&mut statement,3);for k in [&old.public.keyhash,&new.public.keyhash,&p.public.keyhash]{emit_bstr(&mut statement,k);}
  let mut block=vec![];emit_map_head(&mut block,3);emit_uint(&mut block,1);emit_bstr(&mut block,&old.public.keyhash);emit_uint(&mut block,2);emit_array_head(&mut block,1);block.extend(response);emit_uint(&mut block,3);block.extend(sign_block(&old,cose::aad::SUCCESSOR,&statement));
- let bn=[rhtn_archive::genesis(&new.public.keyhash)];let bp=[a.txid];let body=adoption_body(&Adoption{node:new.public.keyhash,patron:p.public.keyhash,locator:Locator{anchor:p.public.keyhash,path:vec![0],nibbles:1,seqno:Seqno{series:2,counter:0},subnet:Some(SUBNET)},timestamp:101,key_material:None,evidence:Evidence::Recovery(block),presented_head:None,back:[&bn,&bp]});let raw=envelope(TYPE_ADOPTION,&body,&[&new,&p]);
+ let bn=[rhtn_archive::genesis(&new.public.keyhash)];let bp=[a.txid];let body=adoption_body(&Adoption{node:new.public.keyhash,patron:p.public.keyhash,locator:Locator{anchor:p.public.keyhash,path:vec![0],nibbles:1,seqno:Seqno{series:2,counter:0},subnet:Some(SUBNET)},timestamp:101,key_material:None,evidence:Evidence::Recovery(block),presented_head:None,back:[&bn,&bp],carrying:None});let raw=envelope(TYPE_ADOPTION,&body,&[&new,&p]);
  assert_eq!(v.take_object(&adj,&p.public.keyhash,KIND_TRANSACTION,&raw,&ids),Decision::Stored);assert!(v.is_superseded(&old.public.keyhash),"control: recovery was effective");assert_eq!(v.slot_of(&new.public.keyhash),Some(0));
  assert!(v.wake.get(&old.public.keyhash).is_none(),"I 6.1: recovery ended the old serving relationship but retained its wake URL/key");
 }

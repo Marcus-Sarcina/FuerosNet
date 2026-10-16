@@ -411,6 +411,9 @@ object Kernel {
         override fun backPointers(): List<ByteArray> =
             call("backPointers", { emptyList() }) { p.backPointers() }
 
+        override fun carrying(): String? =
+            meet?.carrying()?.id?.takeIf { it.length == 64 }
+
         override fun position(): String = hex(p.position())
 
         override fun propose(
@@ -418,11 +421,13 @@ object Kernel {
             presence: String,
             series: Int,
             nodeBack: List<ByteArray>,
+            carrying: String?,
         ): Adoption.Result<ByteArray> = result("proposeAdoption") {
             // into the subnet this device chose as patron: one it holds a
-            // position in, or none for a new one under its own key
+            // position in, or none for a new one under its own key; and
+            // the scope the other brings, their claim, copied
             val into = meet?.scope()?.id?.takeIf { it.length == 64 }?.let { unhex(it) }
-            p.proposeAdoption(into, unhex(node), unhex(presence), series.toUInt(), nodeBack)
+            p.proposeAdoption(into, unhex(node), unhex(presence), series.toUInt(), nodeBack, carrying?.let { unhex(it) })
         }
 
         override fun reviewAndSign(body: ByteArray): Adoption.Result<ByteArray> =
@@ -476,6 +481,14 @@ object Kernel {
         // name too (`light-client-requirements.md` §7)
         val scope = m.scope() ?: scopes().firstOrNull { it.id == subnet() }
         return Bootstrap.encode(me, kind, m.kind.askBackup, scope)
+    }
+
+    /** The scopes this device roots and could bring under a patron. */
+    fun scopesRooted(): List<Meet.Scope> {
+        val p = participant ?: return emptyList()
+        return call("scopesRooted", { emptyList() }) {
+            p.scopesRooted().map { Meet.Scope(hex(it.id), it.alias, it.ownAlias) }
+        }
     }
 
     /** The subnets this device holds a position in, labelled. */

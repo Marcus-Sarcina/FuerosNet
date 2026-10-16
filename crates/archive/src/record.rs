@@ -222,6 +222,15 @@ impl Record {
         })
     }
 
+    /// The scope an adoption's node brings under its patron (field 10),
+    /// where it brings one (design §13.8).
+    pub fn carried_scope(&self) -> Option<Txid> {
+        if self.tx_type != TYPE_ADOPTION {
+            return None;
+        }
+        self.field_hash(10)
+    }
+
     /// The locator an adoption or peering carries in field 3.
     pub fn locator(&self) -> Option<Locator> {
         if self.tx_type != TYPE_ADOPTION {

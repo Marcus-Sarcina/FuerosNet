@@ -231,6 +231,7 @@ async fn a_degraded_session_produces_no_countersignature() {
             evidence: rhtn_archive::tx::Evidence::Presence(pop.txid),
             presented_head: None,
             back: [&bn, &bp],
+            carrying: None,
         };
         rhtn_archive::tx::adoption_body(&a)
     };

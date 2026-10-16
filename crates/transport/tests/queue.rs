@@ -291,6 +291,7 @@ fn recovery_evidence(old: &str, new: &str, patron: &str, verifier: &str) -> Supe
         evidence: Evidence::Recovery(block),
         presented_head: None,
         back: [&[genesis(&n.public.keyhash)], &[genesis(&p.public.keyhash)]],
+        carrying: None,
     };
     let env = envelope(TYPE_ADOPTION, &adoption_body(&a), &[&n, &p]);
     let rec = Record::parse(&env).unwrap();
@@ -415,6 +416,7 @@ async fn a_light_client_under_a_light_client_attaches_to_the_nearest_infra() {
             evidence: Evidence::Presence(pop.txid),
             presented_head: None,
             back: [&[pop.txid], &[pop.txid]],
+            carrying: None,
         };
         let rec = Record::parse(&envelope(TYPE_ADOPTION, &adoption_body(&a), &[&n, &p])).unwrap();
         heads.insert(n.public.keyhash, rec.txid);

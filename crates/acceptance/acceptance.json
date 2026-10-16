@@ -14027,5 +14027,32 @@
   "then": "The inviter is asked which subnet by its label, the patron's alias there and the subnet's; the invited party's brief states that label; the operator's screen lists the one instance under its subnet and offers none for the other.",
   "oracle": "behaviour",
   "interpretation": "An operator in one subnet is an ordinary light client in the next."
+ },
+ {
+  "id": "TOP-51",
+  "area": "topology",
+  "gap": "topology",
+  "title": "Carry the scope a node brings in its adoption, dissolve it into the subnet joined, and restore it on departure",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §4.1",
+   "design §13.8"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §4.1",
+    "text": "the SCOPE the node brings under this patron"
+   },
+   {
+    "where": "design §13.8",
+    "text": "The adoption says which scope the node brings"
+   }
+  ],
+  "given": "A lone root A that has adopted C, so roots a scope named by that adoption; a root B.",
+  "when": "B adopts A with A's scope in field 10, and A later departs B.",
+  "then": "While adopted, A holds one position, in B's subnet, and lists its own scope no more; A refuses to sign a body naming a scope it does not root; after the departure A roots its scope again at the self-anchor, keyed by the same id.",
+  "oracle": "behaviour",
+  "interpretation": "A party rooting a scope chooses whether to bring it, and a party rooting none has nothing to choose [author, 2026-10-15]."
  }
 ]

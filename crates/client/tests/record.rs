@@ -794,6 +794,7 @@ fn a_presence_record_takes_classical_response_signatures_and_a_recovery_takes_hy
             &[rhtn_archive::genesis(&kh("alice"))],
             &[rhtn_archive::genesis(&kh("bob"))],
         ],
+        carrying: None,
     };
     let env = tx::envelope(
         rhtn_archive::tx::TYPE_ADOPTION,

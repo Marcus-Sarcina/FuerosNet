@@ -436,6 +436,9 @@ pub struct Adopting {
     /// The key material of a party the patron is introducing, where the
     /// adoption carries it.
     pub key_material: Option<Vec<u8>>,
+    /// The scope the node brings under the patron, where it brings one
+    /// (`wire-format.md` §4.1 field 10): the node's own claim, copied.
+    pub carrying: Option<Txid>,
 }
 
 /// The state of the one ceremony this client is a participant in.
@@ -558,6 +561,10 @@ pub struct Client {
     /// Latent while it sits under a patron, and the name its subtree goes
     /// by once it has departed.
     scopes: BTreeMap<Txid, Txid>,
+    /// Whether the scope under this client's own key is carried under a
+    /// patron now (`wire-format.md` §4.1 field 10): while it is, it is no
+    /// subnet of its own.
+    root_carried: bool,
     /// The catalog this client has browsed, and the sweep of its serving
     /// node that produced it (`wire-format.md` §6.4).
     ///
@@ -747,6 +754,7 @@ impl Client {
             positions: BTreeMap::new(),
             root_subnet: None,
             scopes: BTreeMap::new(),
+            root_carried: false,
             outbox: Vec::new(),
             catalog: crate::catalog::View::default(),
             browsing: None,
@@ -2645,6 +2653,7 @@ impl Client {
             series,
             presented_head,
             key_material,
+            carrying,
         } = what;
         let pos = match subnet {
             Some(s) => self
@@ -2678,6 +2687,7 @@ impl Client {
             evidence,
             presented_head,
             back: [node_back, &back],
+            carrying,
         };
         let body = adoption_body(&a);
         verify::adoption_evidence(&self.known, &body)
@@ -2884,6 +2894,18 @@ impl Client {
                     "the address does not extend the patron's own path".into(),
                 ));
             }
+        }
+
+        // 3b. the scope the body says I bring is one I root
+        // (`wire-format.md` §4.1 field 10): my own claim, copied by the
+        // patron, and not a scope of anybody else's
+        if let Some(carried) = key_at(10)
+            && !self.scopes_rooted().contains(&carried)
+        {
+            return Err(refused(format!(
+                "the body says this key brings scope {}, which it does not root",
+                hex8(&carried)
+            )));
         }
 
         // 4. a series this key has never occupied, opening at zero
@@ -3179,6 +3201,7 @@ impl Client {
         self.positions.clear();
         self.root_subnet = None;
         self.scopes.clear();
+        self.root_carried = false;
         self.adopt_own_positions();
         // derived state is derived at every start (see `at`)
         self.sync_known_from_contacts();
@@ -3237,6 +3260,7 @@ impl Client {
         self.positions.clear();
         self.root_subnet = None;
         self.scopes.clear();
+        self.root_carried = false;
         self.adopt_own_positions();
         Ok(n)
     }
@@ -3403,7 +3427,9 @@ impl Client {
         if let Some(p) = self.positions.get(subnet) {
             return Some(p.clone());
         }
-        (self.root_subnet == Some(*subnet)).then(|| self.own_position())
+        // the subnet under its own key, while that scope is not carried
+        // under a patron (`wire-format.md` §4.1 field 10)
+        (self.root_subnet == Some(*subnet) && !self.root_carried).then(|| self.own_position())
     }
 
     /// This client's position under its own key.
@@ -3439,7 +3465,11 @@ impl Client {
     /// was adopted into, else the one under its own key, else none.
     #[must_use]
     pub fn subnet(&self) -> Option<Txid> {
-        self.positions.keys().next().copied().or(self.root_subnet)
+        self.positions
+            .keys()
+            .next()
+            .copied()
+            .or(self.root_subnet.filter(|_| !self.root_carried))
     }
 
     /// Every subnet this client has a position in: the one under its own
@@ -3447,8 +3477,33 @@ impl Client {
     /// each scope it now roots after departing the subnet it was in.
     #[must_use]
     pub fn subnets(&self) -> Vec<Txid> {
-        let mut out: Vec<Txid> = self.root_subnet.into_iter().collect();
+        let mut out: Vec<Txid> = self
+            .root_subnet
+            .filter(|_| !self.root_carried)
+            .into_iter()
+            .collect();
         out.extend(self.positions.keys().copied());
+        out
+    }
+
+    /// The scopes this client roots and could bring under a patron
+    /// (`wire-format.md` §4.1 field 10): the one under its own key where
+    /// its first adoption named it and it is not carried already, and
+    /// each it carried out of a subnet it departed.
+    #[must_use]
+    pub fn scopes_rooted(&self) -> Vec<Txid> {
+        let mut out: Vec<Txid> = self
+            .root_subnet
+            .filter(|_| !self.root_carried)
+            .into_iter()
+            .collect();
+        out.extend(
+            self.positions
+                .iter()
+                .filter(|(_, l)| l.anchor == self.keyhash() && l.nibbles == 0)
+                .map(|(s, _)| *s)
+                .filter(|s| Some(*s) != self.root_subnet),
+        );
         out
     }
 
@@ -3483,6 +3538,9 @@ impl Client {
         // next counter, so (series, counter) is the order in which the
         // relationship advances, and the last word in it is what is held.
         let mut last: BTreeMap<Keyhash, (u32, u32, Option<Locator>)> = BTreeMap::new();
+        // the scope each open relationship carried under its patron
+        // (`wire-format.md` §4.1 field 10), by patron
+        let mut carried: BTreeMap<Keyhash, Txid> = BTreeMap::new();
         // **a scope is named by the first adoption that gave this key a
         // subordinate in a subnet** (design §13.8): the earliest by the
         // record's own time, the txid deciding a tie, per subnet — and
@@ -3512,6 +3570,14 @@ impl Client {
                     let subnet = l.subnet.unwrap_or(rec.txid);
                     if let Some(p) = rec.field_hash(2) {
                         subnet_under.insert(p, subnet);
+                        match rec.carried_scope() {
+                            Some(s) => {
+                                carried.insert(p, s);
+                            }
+                            None => {
+                                carried.remove(&p);
+                            }
+                        }
                     }
                     Locator {
                         subnet: Some(subnet),
@@ -3543,6 +3609,18 @@ impl Client {
             .filter_map(|(_, (_, _, loc))| loc.clone())
             .filter_map(|l| Some((l.subnet?, l)))
             .collect();
+        // **a scope carried under a patron is no subnet of its own while
+        // the relationship is open** (design §13.8): every position in it
+        // shows the patron's subnet, and this key lists it no more
+        let open_carried: BTreeSet<Txid> = last
+            .iter()
+            .filter(|(_, (_, _, held))| held.is_some())
+            .filter_map(|(p, _)| carried.get(p).copied())
+            .collect();
+        self.root_carried = self.root_subnet.is_some_and(|s| open_carried.contains(&s));
+        for s in &open_carried {
+            self.positions.remove(s);
+        }
         // **a departure roots the scope this key carried** (design §13.8,
         // §12.7.7): where it had subordinates in the subnet it left, it is
         // now the root of a subnet named by its scope id there, at the
@@ -3551,18 +3629,28 @@ impl Client {
             if held.is_some() {
                 continue;
             }
-            let Some(scope) = subnet_under.get(patron).and_then(|s| self.scopes.get(s)) else {
-                continue;
-            };
-            let root = Locator::root_in(
-                me,
-                Seqno {
-                    series: 1,
-                    counter: 0,
-                },
-                Some(*scope),
-            );
-            self.positions.entry(*scope).or_insert(root);
+            // the scope it had there, and the one it brought there, both
+            // stand alone again; the one under its own key is its own
+            // position already
+            let had = subnet_under
+                .get(patron)
+                .and_then(|s| self.scopes.get(s))
+                .copied();
+            let brought = carried.get(patron).copied();
+            for scope in had.into_iter().chain(brought) {
+                if Some(scope) == self.root_subnet {
+                    continue;
+                }
+                let root = Locator::root_in(
+                    me,
+                    Seqno {
+                        series: 1,
+                        counter: 0,
+                    },
+                    Some(scope),
+                );
+                self.positions.entry(scope).or_insert(root);
+            }
         }
     }
 
@@ -5229,6 +5317,7 @@ impl Harness {
                 series,
                 presented_head: None,
                 key_material: None,
+                carrying: None,
             },
         )?;
         let m = self.send(patron, node, Msg::AdoptionBody(body));
@@ -5359,6 +5448,7 @@ impl Harness {
                 series,
                 presented_head,
                 key_material: Some(km),
+                carrying: None,
             },
         )?;
         let m = self.send(patron, subject, Msg::AdoptionBody(body));

@@ -13940,7 +13940,15 @@ its brief where it is the responder; the party being adopted is told
 signed profile replaces it; the adoption's direction frame carries the
 label so the initiator's acceptance states it too; and the Operator
 screen lists every instance the operator administers under the subnet it
-serves. Functional tests TOP-044/045, NET-029,
+serves. **And the subordinate's own choice** [author, 2026-10-15]: an
+adoption names the scope the node brings under its patron (wire §4.1
+field 10) or none where it joins as an individual, which §13.8's example
+needed and nothing expressed; the client dissolves a carried scope into
+the subnet joined while the relationship is open and roots it again on
+departure, refuses to sign a body naming a scope it does not root, and
+the shell asks *adopt into which scope?* of the patron and *submit as
+which scope?* of the subordinate on a screen of its own, before the
+invitation or before the acceptance. Functional tests TOP-044/045, NET-029,
 UX-015/016; catalogue TOP-48/49/50, SES-32/33, PRD-14/15.
 
 ### 2026-10-15 (the adoption after the record, and what a client checks before signing one)

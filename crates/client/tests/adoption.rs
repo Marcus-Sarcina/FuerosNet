@@ -54,6 +54,7 @@ fn body_of(
         evidence,
         presented_head: None,
         back: [node_back, patron_back],
+        carrying: None,
     })
 }
 
@@ -173,6 +174,7 @@ fn a_series_this_key_has_occupied_is_refused() {
                 series: 1,
                 presented_head: None,
                 key_material: None,
+                carrying: None,
             },
         )
         .expect("the patron will propose it");
@@ -190,6 +192,7 @@ fn a_series_this_key_has_occupied_is_refused() {
                 series: 2,
                 presented_head: None,
                 key_material: None,
+                carrying: None,
             },
         )
         .expect("proposed");
@@ -392,6 +395,7 @@ fn a_body_carrying_a_recovery_block_is_refused_on_this_path() {
                 series: 7,
                 presented_head: head,
                 key_material: Some(material),
+                carrying: None,
             },
         )
         .expect("the patron proposes the recovery adoption");

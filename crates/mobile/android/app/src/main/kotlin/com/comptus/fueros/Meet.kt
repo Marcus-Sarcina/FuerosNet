@@ -206,8 +206,25 @@ class Meet(
         }
 
         companion object {
+            /** A new subnet under this device's own key. */
             val OWN = Scope("", null, null)
+
+            /** Joining as an individual: no scope brought. */
+            val INDIVIDUAL = Scope("-", null, null)
         }
+    }
+
+    /**
+     * **The one question a scope raises before anything is shown**
+     * [author, 2026-10-15]: *adopt into which scope?* for the would-be
+     * patron, *submit as which scope?* for the would-be subordinate.
+     * Asked between the choice of transaction and the invitation for the
+     * initiator, and between the scan and the acceptance for the party
+     * that read it; asked of nobody who has nothing to choose.
+     */
+    enum class Choice {
+        ADOPT_INTO,
+        SUBMIT_AS,
     }
 
     /**
@@ -217,11 +234,16 @@ class Meet(
      * it**, and the brief says so.
      */
     data class Claim(val subnet: String?, val patronAlias: String?, val subnetAlias: String?) {
-        /** "*[patron alias]*'s *[subnet alias]*", with what is missing said. */
+        /** "*[patron alias]*'s *[subnet alias]*", with what is missing said:
+         *  a subnet with no alias by its id, and a lone root's by "a new
+         *  subnet under …" [bench, 2026-10-15: "X's a new subnet" read badly]. */
         fun label(counterpartyName: String): String {
             val who = patronAlias ?: counterpartyName
-            val what = subnetAlias ?: subnet?.let { "subnet ${it.take(8)}…" } ?: "a new subnet"
-            return "$who's $what"
+            return when {
+                subnetAlias != null -> "$who's $subnetAlias"
+                subnet != null -> "$who's subnet ${subnet.take(8)}…"
+                else -> "a new subnet under $who"
+            }
         }
     }
 
@@ -403,6 +425,7 @@ class Meet(
     private var bootstrapCrossed = false
     private var scope: Scope? = kind.scope
     private var claim: Claim? = null
+    private var carrying: Scope? = null
     /** What the counterparty proposed, where they proposed the opposite. */
     private var theirAdopt: Adopt? = null
     private var direction: Adopt? = null
@@ -726,6 +749,18 @@ class Meet(
                     } ?: "You are being invited into a subnet $counterpartyName has not named; " +
                         "their device will say which before you sign.",
                 )
+                carrying?.let { c ->
+                    out += Item(
+                        "UX-016",
+                        if (c == Scope.INDIVIDUAL) {
+                            "You join as an individual: any scope you root stands as it is."
+                        } else {
+                            "You bring your scope ${c.label()} with you: everyone in it comes " +
+                                "to sit in the subnet you are joining, and it stands alone again " +
+                                "if you leave."
+                        },
+                    )
+                }
                 out += Item(
                     "PRD-02",
                     "$counterpartyName becomes your patron. They will hold authority " +
@@ -745,7 +780,7 @@ class Meet(
                     scope?.let { s ->
                         "You are inviting $counterpartyName into " +
                             (if (s == Scope.OWN) "a new subnet under your own key" else s.label()) + "."
-                    } ?: "Which of your subnets $counterpartyName joins is chosen below, before you accept.",
+                    } ?: "Which of your subnets $counterpartyName joins is asked before you accept.",
                 )
                 out += Item(
                     "PRD-02",
@@ -1176,6 +1211,48 @@ class Meet(
         synchronized(lock) {
             scope = s
             changed()
+        }
+    }
+
+    /** The scope this device brings under the patron, once chosen:
+     *  [Scope.INDIVIDUAL] where it joins with none. */
+    fun carrying(): Scope? = synchronized(lock) { carrying }
+
+    /** As the party being adopted: which scope, if any, it submits as. */
+    fun chooseCarrying(s: Scope) {
+        synchronized(lock) {
+            carrying = s
+            changed()
+        }
+    }
+
+    /**
+     * **Which choice this device owes before it goes on**, given the
+     * scopes it holds (`rooted`: those it could bring; `held`: those it
+     * could adopt into), or null where none is owed. A device with
+     * nothing to choose is answered for it here, so the screen never
+     * asks a question with one answer.
+     */
+    fun pendingChoice(held: List<Scope>, rooted: List<Scope>): Choice? = synchronized(lock) {
+        val side = settled() ?: return null
+        when (side) {
+            Adopt.THEM_UNDER_ME -> {
+                if (scope != null) return null
+                if (held.isEmpty()) {
+                    scope = Scope.OWN
+                    return null
+                }
+                Choice.ADOPT_INTO
+            }
+            Adopt.ME_UNDER_THEM -> {
+                if (carrying != null) return null
+                if (rooted.isEmpty()) {
+                    carrying = Scope.INDIVIDUAL
+                    return null
+                }
+                Choice.SUBMIT_AS
+            }
+            Adopt.NONE -> null
         }
     }
 

@@ -132,6 +132,7 @@ fn a_client_adopted_into_two_trees_holds_a_position_in_each() {
         series: 1,
         presented_head: None,
         key_material: None,
+        carrying: None,
     };
     let in_alice = s
         .client("bob")
@@ -234,6 +235,7 @@ fn an_eleventh_subordinate_has_no_slot_to_be_put_in() {
         series: 1,
         presented_head: None,
         key_material: None,
+        carrying: None,
     };
 
     // ten adoptions this client signed as patron, each one landing in its
@@ -483,5 +485,88 @@ fn a_client_makes_a_card_of_its_own_once_it_knows_where_its_anchor_answers() {
         reach.ask.first().map(|a| a.node),
         Some(patron),
         "carol starts the walk at bob's anchor, which the card named"
+    );
+}
+
+/// **A scope brought under a patron dissolves into the subnet joined, and
+/// stands alone again on departure** (design §13.8; `wire-format.md` §4.1
+/// field 10); a body naming a scope this key does not root is refused.
+// acceptance: TOP-51
+#[test]
+fn a_scope_brought_under_a_patron_dissolves_and_returns_on_departure() {
+    use rhtn_client::ceremony::Abort;
+    let mut s = setup(&PARTIES, &[ChannelKind::Nfc]);
+    // alice roots a scope: her first adoption, carol under her
+    let scope = s.adopted("carol", "alice", "w1", 1);
+    assert_eq!(s.client("alice").subnets(), vec![scope]);
+    assert_eq!(s.client("alice").scopes_rooted(), vec![scope]);
+    // bob, a lone root, adopts alice, who brings her scope
+    let pop = s.met_in_person("alice", "bob", "w2");
+    let node_back = s.client("alice").back_pointers();
+    // series 2: alice's first line is the one she opened as carol's patron
+    let bring = |carrying| Adopting {
+        evidence: rhtn_archive::tx::Evidence::Presence(pop),
+        series: 2,
+        presented_head: None,
+        key_material: None,
+        carrying,
+    };
+    // a body naming a scope alice does not root is refused by alice
+    let wrong = s
+        .client("bob")
+        .propose_adoption_in(None, kh("alice"), &node_back, bring(Some([7; 32])))
+        .expect("the patron copies the claim");
+    let e = s
+        .client("alice")
+        .review_and_sign_adoption(&wrong)
+        .expect_err("not a scope she roots");
+    assert!(
+        matches!(e, Abort::NodeRefused(ref why) if why.contains("does not root")),
+        "{e:?}"
+    );
+    // the right one is signed, and the record taken by both
+    let body = s
+        .client("bob")
+        .propose_adoption_in(None, kh("alice"), &node_back, bring(Some(scope)))
+        .expect("proposed");
+    let entries = s
+        .client("alice")
+        .review_and_sign_adoption(&body)
+        .expect("alice roots it");
+    let theirs = s.client("bob").sign_body(&body).expect("bob signs");
+    let env = rhtn_archive::tx::envelope_from_entries(
+        rhtn_archive::tx::TYPE_ADOPTION,
+        &body,
+        &[(kh("alice"), entries), (kh("bob"), theirs)],
+    );
+    let t = s.client("bob").take_adoption(&env).expect("bob takes");
+    assert_eq!(
+        s.client("alice").take_adoption(&env).expect("alice takes"),
+        t
+    );
+    // while adopted, alice's scope is no subnet of its own: one position,
+    // in bob's subnet, which is named by this adoption
+    let bobs = s.client("bob").subnets()[0];
+    assert_eq!(bobs, t);
+    assert_eq!(
+        s.client("alice").subnets(),
+        vec![bobs],
+        "the scope dissolved into bob's"
+    );
+    assert!(
+        s.client("alice").scopes_rooted().is_empty(),
+        "nothing left to bring"
+    );
+    assert_eq!(s.client("alice").position_in(&scope), None);
+    // alice departs bob: her scope stands alone again, by the same id
+    s.client("alice")
+        .depart(kh("bob"), None)
+        .expect("nobody to ask");
+    assert_eq!(s.client("alice").subnets(), vec![scope]);
+    assert_eq!(
+        s.client("alice")
+            .position_in(&scope)
+            .map(|l| (l.anchor, l.nibbles, l.subnet)),
+        Some((kh("alice"), 0, Some(scope)))
     );
 }

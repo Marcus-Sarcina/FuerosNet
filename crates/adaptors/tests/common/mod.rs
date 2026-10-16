@@ -232,6 +232,7 @@ impl Scene {
             evidence: Evidence::Presence(pop.txid),
             presented_head: None,
             back: [&bn, &bp],
+            carrying: None,
         };
         self.commit(TYPE_ADOPTION, &adoption_body(&a), &[node, patron])
     }

@@ -35,7 +35,7 @@ class BootstrapTest {
         assertNull(read.subnet)
         assertNull(read.alias)
         assertEquals(true, read.askBackup)
-        assertEquals("carol's a new subnet", Meet.Claim(read.subnet, read.alias, read.subnetAlias).label("carol"))
+        assertEquals("a new subnet under carol", Meet.Claim(read.subnet, read.alias, read.subnetAlias).label("carol"))
         // no scope at all, a regular meeting: the same empty claim
         assertNull(Bootstrap.decode(Bootstrap.encode(me, 0, false, null))!!.subnet)
     }

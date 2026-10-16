@@ -982,6 +982,7 @@ fn an_object_whose_embedded_signer_key_is_missing_waits_and_then_flows() {
         },
         presented_head: None,
         back: [&ba, &bc],
+        carrying: None,
     });
     let xfer = rhtn_archive::tx::envelope(
         rhtn_archive::tx::TYPE_ADOPTION,

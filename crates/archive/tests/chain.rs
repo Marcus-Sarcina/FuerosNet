@@ -125,7 +125,8 @@ fn swapped_lists_verify_and_do_not_reach_back() {
         key_material: None,
         evidence: Evidence::Presence(pop.txid),
         presented_head: None,
-        back: [&[h_p], &[h_n]], // swapped
+        back: [&[h_p], &[h_n]], // swapped,
+        carrying: None,
     };
     let body = adoption_body(&a);
     let env = envelope(TYPE_ADOPTION, &body, &[w.id("bob"), w.id("alice")]);

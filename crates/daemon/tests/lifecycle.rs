@@ -299,6 +299,7 @@ fn adoption_under_slot(patron: &str, child: &str, slot: u8) -> (Vec<u8>, Vec<u8>
         evidence: Evidence::Presence(pop_id),
         presented_head: None,
         back: [&bc, &bp],
+        carrying: None,
     };
     (pop, envelope(TYPE_ADOPTION, &adoption_body(&a), &[&c, &p]))
 }

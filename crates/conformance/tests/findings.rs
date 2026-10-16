@@ -24,6 +24,7 @@ fn adoption(n: &SigningIdentity, p: &SigningIdentity, evidence: Evidence) -> Vec
         node: n.public.keyhash, patron: p.public.keyhash,
         locator: Locator { anchor: p.public.keyhash, path: vec![0], nibbles: 1, seqno: Seqno { series: 1, counter: 0 }, subnet: Some(SUBNET) },
         timestamp: 100, key_material: None, evidence, presented_head: None, back: [&bn, &bp],
+        carrying: None,
     })
 }
 fn recovery(n: &SigningIdentity, p: &SigningIdentity, old: &SigningIdentity, response_subject: &SigningIdentity) -> Vec<u8> {
@@ -407,7 +408,7 @@ fn f04_old_series_departure_must_not_clear_a_new_relationship_slot() {
     let departed=envelope(TYPE_DEPARTURE,&departure_body(&[a.txid],&n.public.keyhash,&p.public.keyhash,Seqno{series:1,counter:1},101,None),&[&n]);
     let d=Record::parse(&departed).unwrap();
     let bn=[d.txid];let bp=[a.txid];
-    let later=adoption_body(&Adoption { node:n.public.keyhash,patron:p.public.keyhash,locator:Locator{anchor:p.public.keyhash,path:vec![0],nibbles:1,seqno:Seqno{series:2,counter:0},subnet:Some(SUBNET)},timestamp:200,key_material:None,evidence:Evidence::Presence([8;32]),presented_head:None,back:[&bn,&bp] });
+    let later=adoption_body(&Adoption { node:n.public.keyhash,patron:p.public.keyhash,locator:Locator{anchor:p.public.keyhash,path:vec![0],nibbles:1,seqno:Seqno{series:2,counter:0},subnet:Some(SUBNET)},timestamp:200,key_material:None,evidence:Evidence::Presence([8;32]),presented_head:None,back:[&bn,&bp], carrying: None });
     let a2=envelope(TYPE_ADOPTION,&later,&[&n,&p]);
     let mut view=NodeView::new(p.clone(),Locator::root(p.public.keyhash,Seqno{series:3,counter:0}));
     let ids=vec![n.public.clone(),p.public.clone(),old.public];
@@ -485,7 +486,7 @@ fn f04_old_adoption_received_last_must_not_clear_a_new_relationship_slot() {
     let departed=envelope(TYPE_DEPARTURE,&departure_body(&[a.txid],&n.public.keyhash,&p.public.keyhash,Seqno{series:1,counter:1},101,None),&[&n]);
     let d=Record::parse(&departed).unwrap();
     let bn=[d.txid];let bp=[a.txid];
-    let later=adoption_body(&Adoption { node:n.public.keyhash,patron:p.public.keyhash,locator:Locator{anchor:p.public.keyhash,path:vec![0],nibbles:1,seqno:Seqno{series:2,counter:0},subnet:Some(SUBNET)},timestamp:200,key_material:None,evidence:Evidence::Presence([8;32]),presented_head:None,back:[&bn,&bp] });
+    let later=adoption_body(&Adoption { node:n.public.keyhash,patron:p.public.keyhash,locator:Locator{anchor:p.public.keyhash,path:vec![0],nibbles:1,seqno:Seqno{series:2,counter:0},subnet:Some(SUBNET)},timestamp:200,key_material:None,evidence:Evidence::Presence([8;32]),presented_head:None,back:[&bn,&bp], carrying: None });
     let a2=envelope(TYPE_ADOPTION,&later,&[&n,&p]);
     let mut view=NodeView::new(p.clone(),Locator::root(p.public.keyhash,Seqno{series:3,counter:0}));
     let ids=vec![n.public.clone(),p.public.clone(),old.public];

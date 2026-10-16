@@ -104,6 +104,7 @@ fn recovery(old: &str, new: &str, patron: &str, verifier: &str) -> Record {
             &[rhtn_archive::genesis(&n.public.keyhash)],
             &[rhtn_archive::genesis(&p.public.keyhash)],
         ],
+        carrying: None,
     };
     Record::parse(&tx::envelope(
         tx::TYPE_ADOPTION,

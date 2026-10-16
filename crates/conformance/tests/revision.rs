@@ -16,7 +16,7 @@ impl rhtn_node::Adjacency for Quiet {
 }
 fn adoption(n:&SigningIdentity,p:&SigningIdentity,f:&SigningIdentity,slot:u8,time:u64)->Record {
     let bn=[rhtn_archive::genesis(&n.public.keyhash)];let bp=[rhtn_archive::genesis(&p.public.keyhash)];
-    Record::parse(&envelope(TYPE_ADOPTION,&adoption_body(&Adoption {node:n.public.keyhash,patron:p.public.keyhash,locator:Locator {anchor:p.public.keyhash,path:vec![slot<<4],nibbles:1,seqno:Seqno {series:1,counter:0}, subnet: Some(SUBNET) },timestamp:time,key_material:None,evidence:Evidence::Transfer {former:f.public.keyhash,block:transfer_block(f,&n.public.keyhash,&p.public.keyhash)},presented_head:None,back:[&bn,&bp]}),&[n,p])).unwrap()
+    Record::parse(&envelope(TYPE_ADOPTION,&adoption_body(&Adoption {node:n.public.keyhash,patron:p.public.keyhash,locator:Locator {anchor:p.public.keyhash,path:vec![slot<<4],nibbles:1,seqno:Seqno {series:1,counter:0}, subnet: Some(SUBNET) },timestamp:time,key_material:None,evidence:Evidence::Transfer {former:f.public.keyhash,block:transfer_block(f,&n.public.keyhash,&p.public.keyhash)},presented_head:None,back:[&bn,&bp], carrying: None }),&[n,p])).unwrap()
 }
 fn view(id:Arc<SigningIdentity>)->NodeView { NodeView::new(id.clone(),Locator::root(id.public.keyhash,Seqno {series:1,counter:0})) }
 

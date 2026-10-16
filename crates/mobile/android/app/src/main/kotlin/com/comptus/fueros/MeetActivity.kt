@@ -260,16 +260,27 @@ class MeetActivity : Activity() {
                 Meet.Step.STOPPED -> "Stopped"
             },
         )
-        when (m.step()) {
-            Meet.Step.INTENT -> intent(m)
-            Meet.Step.BRIEF -> brief(m)
-            Meet.Step.OPTICAL -> optical(m)
-            Meet.Step.PROXIMITY -> proximity(m)
-            Meet.Step.CAPTURE -> capture(m)
-            Meet.Step.VERIFIERS -> verifiers(m)
-            Meet.Step.REVIEW -> review(m)
-            Meet.Step.DONE -> done(m)
-            Meet.Step.STOPPED -> stopped(m)
+        // **the scope question comes first** [author, 2026-10-15]: for the
+        // initiator between the choice of transaction and the invitation,
+        // for the party that read it between the scan and the acceptance
+        val choice = if (m.step() == Meet.Step.INTENT || m.step() == Meet.Step.BRIEF) {
+            m.pendingChoice(Kernel.scopes(), Kernel.scopesRooted())
+        } else {
+            null
+        }
+        when {
+            choice != null -> choice(m, choice)
+            else -> when (m.step()) {
+                Meet.Step.INTENT -> intent(m)
+                Meet.Step.BRIEF -> brief(m)
+                Meet.Step.OPTICAL -> optical(m)
+                Meet.Step.PROXIMITY -> proximity(m)
+                Meet.Step.CAPTURE -> capture(m)
+                Meet.Step.VERIFIERS -> verifiers(m)
+                Meet.Step.REVIEW -> review(m)
+                Meet.Step.DONE -> done(m)
+                Meet.Step.STOPPED -> stopped(m)
+            }
         }
         // **the switch to capture is cued**, once, as it happens: with the
         // phones face to face for ranging, nobody is looking at either
@@ -398,20 +409,10 @@ class MeetActivity : Activity() {
         }
         heading("Patronage")
         para("An adoption moves authority. What it costs is listed before either of you agrees.")
-        // **which subnet** [author, 2026-10-15]: a patron in several asks
-        // itself before it shows the code; one in none roots a new one
-        val scopes = Kernel.scopes()
-        if (scopes.isEmpty()) {
-            button("I will be the Patron") {
-                start(Meet.Kind(Meet.Adopt.THEM_UNDER_ME, scope = Meet.Scope.OWN), Meet.Role.INITIATOR)
-            }
-        } else {
-            para("Invite them into:")
-            (scopes + Meet.Scope.OWN).forEach { s ->
-                button("I will be the Patron — ${s.label()}") {
-                    start(Meet.Kind(Meet.Adopt.THEM_UNDER_ME, scope = s), Meet.Role.INITIATOR)
-                }
-            }
+        // which scope, either way, is the next screen's question
+        // ([choice]), asked only of a device with something to choose
+        button("I will be the Patron") {
+            start(Meet.Kind(Meet.Adopt.THEM_UNDER_ME), Meet.Role.INITIATOR)
         }
         button("I will be the Client") {
             start(Meet.Kind(Meet.Adopt.ME_UNDER_THEM), Meet.Role.INITIATOR)
@@ -655,6 +656,38 @@ class MeetActivity : Activity() {
         cam.readOne(facing, surface, which, onFailed, continuous, found = found)?.let { why -> para(why) }
     }
 
+    // ---- the scope question, one screen in two versions ---------------
+
+    /**
+     * **"Adopt into which scope?" or "Submit as which scope?"** [author,
+     * 2026-10-15]: the would-be patron chooses which of its subnets the
+     * other joins, a new one under its own key among them; the would-be
+     * subordinate chooses which scope it roots it brings along, or none.
+     * Shown before the invitation for the initiator and before the
+     * acceptance for the party that read it; a device with nothing to
+     * choose never sees it.
+     */
+    private fun choice(m: Meet, c: Meet.Choice) {
+        when (c) {
+            Meet.Choice.ADOPT_INTO -> {
+                heading("Adopt into which scope?")
+                para("${m.counterpartyName} will sit one hop below you. Which of your subnets do they join?")
+                (Kernel.scopes() + Meet.Scope.OWN).forEach { s ->
+                    button(s.label()) { m.chooseScope(s) }
+                }
+            }
+            Meet.Choice.SUBMIT_AS -> {
+                heading("Submit as which scope?")
+                para("${m.counterpartyName} will be your patron. Do you bring a scope you root with you — everyone in it coming to sit in their subnet — or join as an individual, your scopes standing as they are?")
+                Kernel.scopesRooted().forEach { s ->
+                    button("Bring ${s.label()}") { m.chooseCarrying(s) }
+                }
+                button("Join as an individual") { m.chooseCarrying(Meet.Scope.INDIVIDUAL) }
+            }
+        }
+        changeMind()
+    }
+
     // ---- D1.5 the brief: everything front-loaded -----------------------
 
     private fun brief(m: Meet) {
@@ -674,16 +707,7 @@ class MeetActivity : Activity() {
         // every item the model says this ceremony earns, and no reassurance
         // it has not earned
         m.brief().forEach { para("• ${it.text}") }
-        // the responder as patron chooses which subnet here, the first
-        // place it can [author, 2026-10-15]; nothing is accepted before
-        if (m.settled() == Meet.Adopt.THEM_UNDER_ME && m.scope() == null) {
-            heading("Which of your subnets?")
-            (Kernel.scopes() + Meet.Scope.OWN).forEach { s ->
-                button(s.label()) { m.chooseScope(s) }
-            }
-            changeMind()
-            return
-        }
+
         heading("What may be weak in this meeting")
         para("• Nominated witnesses: none, until your horizon can offer them. The record carries that it had none.")
         para("• Verifiers and proximity are weighed, not required; a thin meeting is honest, not malformed.")

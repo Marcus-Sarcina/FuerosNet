@@ -2293,8 +2293,9 @@ pub fn check_body_of_type(b: &[u8], item: &Item, tx_type: u64) -> Result<(), Err
             prev = Some(this);
         }
     }
-    // extension bounds on the body map (§1.3): bodies name keys 0 through 9
-    extension_bounds(b, 0, |k| k <= 9)?;
+    // extension bounds on the body map (§1.3): bodies name keys 0 through
+    // 9, and an adoption the scope it brings in 10 (§4.1)
+    extension_bounds(b, 0, |k| k <= 9 || (tx_type == 1 && k == 10))?;
     // every two-party type names two distinct parties in fields 1 and 2
     // (§4.1): a node cannot hold authority over itself
     if matches!(tx_type, 1 | 2 | 3 | 4 | 7) {
@@ -2335,6 +2336,13 @@ pub fn check_body_of_type(b: &[u8], item: &Item, tx_type: u64) -> Result<(), Err
                 .ok_or(Error("adoption timestamp uint"))?;
             if seqno_of(map_get(loc, 3))?.1 != 0 {
                 return Err(Error("adoption counter not 0"));
+            }
+            // the scope the node brings, where it brings one (§4.1 field
+            // 10): a txid
+            if let Some(it) = map_get(m, 10)
+                && bs(b, it).map(|s| s.len()) != Some(32)
+            {
+                return Err(Error("adoption field 10 is a txid"));
             }
             // exactly one evidence form (§4.1, design §6.1.1): a recovery's
             // own block, a presence record's txid, or a former patron's

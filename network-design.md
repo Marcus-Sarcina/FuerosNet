@@ -5558,7 +5558,11 @@ already hold through the chain (`wire-format.md` §4.6.1), so the new id is as
 computable as the old. When a root is adopted into a larger subnet with its
 scope, every position in the scope comes to show the larger subnet's id, and
 the scope's own id goes latent again; when the root departs, they show its
-own id once more.
+own id once more. **The adoption says which scope the node brings**
+(`wire-format.md` §4.1 field 10), or none where it joins as an individual
+and its own scopes stand as they were: a party rooting two scopes chooses
+which, if either, it submits as, and a party rooting none has nothing to
+choose [author, 2026-10-15].
 
 **Worked through** [author, 2026-10-15], with aliases as §12.8 shows them and
 ids abbreviated:

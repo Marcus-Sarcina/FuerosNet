@@ -1,6 +1,6 @@
 # Transaction bodies, txids, and one full envelope
 
-Generated against `wire-format.md` `df16bf494ac148a3…`, `network-design.md` `215cd3358e1f6c65…` and `light-client-requirements.md` `e68503c02fbebe19…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `435e1e26927e4033…`, `network-design.md` `313459ec74d5da93…` and `light-client-requirements.md` `6cab185830dccfe1…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Canonical. Spec-derived, reproduced by the independent harness.** See
 [README.md](README.md).
@@ -3017,10 +3017,10 @@ to field 1 per §4.1), an archive head, and a proof-of-presence reference.
 landed 2026-09-02): dereference evaluation (§3.4) finds a record naming exactly
 these two parties — context fixture V9's *pass* case. The mismatch case lives
 on the divergence adoption above, whose field 8 references the alice–carol
-formation record (context fixture V9a). (2308 bytes):
+formation record (context fixture V9a). (2343 bytes):
 
 ```
-a80082815820819a3ccd925a384a47b4efec09bec2932730dc300fb6c9782ed6
+a90082815820819a3ccd925a384a47b4efec09bec2932730dc300fb6c9782ed6
 20a58d2d6efa815820ab3e6198fe328056a6be08da4d807999465436b8aa96c7
 dd657b3bbd995165b80158208410def778a5de3a25991aba399716bc8eccfda9
 ad57d4ea8a0c8dcfc852aa6a0258206bcf8a3e8899fc206bc603744414d58b01
@@ -3092,10 +3092,11 @@ b8366fcc9dfa07e747acd1cac06d6679eccd1469206405601e1d67d2b41ca9dd
 97c529df897c5e8c751d8228d7bb74e88c3fbba662e531991fd95c1350380758
 20d5bc0dde0b0e950acb19b01fcd1d5bdfe2f237c3fe276b256caf8df416b265
 2b085820ec6f2539c0d97605a520898fea0b6289f3b3dd6d31a2ecb58c059f26
-6c0ac2af
+6c0ac2af0a58203f438083da65968113a3ddace3e7f735d8607a8edb392cbbb0
+69aca5a92cd6fa
 ```
 
-txid: `6898e5de4ef6e7555e2599f189fe4e361228c43f4af1d7d5a73290a9ebf3fb1b`
+txid: `d144b1e64352449cde45c1a03dae783b56a10c29e9257a501eb6e33db0fa458b`
 
 **Departure with a reason code** (2, same enumeration as §4.3;
 121 bytes):

@@ -1305,6 +1305,7 @@ adopt_full_body = e_map([
     (e_uint(5), alice.key_material),
     (e_uint(7), e_bstr(depart_txid)),
     (e_uint(8), e_bstr(npr_txid)),
+    (e_uint(10), e_bstr(SUBNET)),   # the scope alice brings (§4.1 field 10)
 ])
 adopt_full_txid = H(adopt_full_body)
 depart_r_body = e_map([

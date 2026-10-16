@@ -926,7 +926,7 @@ class MeetRowsTest {
         assertTrue(text.contains("has not named"))
         // the claim of a lone root: no subnet, so "a new subnet"
         m.invitedBy(Meet.Claim(null, "Dana", null))
-        assertEquals("Dana's a new subnet", m.subnetLabel())
+        assertEquals("a new subnet under Dana", m.subnetLabel())
     }
 
     /** The patron chooses which subnet, at D1a or at its brief, and the
@@ -937,7 +937,7 @@ class MeetRowsTest {
         val m = Meet("aa", "carol", Meet.Kind(Meet.Adopt.THEM_UNDER_ME), Meet.Role.INITIATOR)
         m.counterparty("bb")
         var text = m.brief().joinToString(" ") { it.text }
-        assertTrue("asks for the choice: $text", text.contains("chosen below"))
+        assertTrue("asks for the choice: $text", text.contains("asked before you accept"))
         assertNull(m.subnetLabel())
         m.chooseScope(Meet.Scope("ef".repeat(32), "Games & Amusements", "Alice"))
         assertEquals("Games & Amusements", m.subnetLabel())
@@ -949,6 +949,45 @@ class MeetRowsTest {
         // and a kind chosen at D1a with its scope needs no choosing
         val chosen = Meet("aa", "carol", Meet.Kind(Meet.Adopt.THEM_UNDER_ME, scope = Meet.Scope.OWN), Meet.Role.INITIATOR)
         assertEquals(Meet.Scope.OWN, chosen.scope())
+    }
+
+    /**
+     * **The scope question, each way** [author, 2026-10-15]: the patron
+     * is asked which scope to adopt into, the subordinate which to submit
+     * as, and a device with nothing to choose is not asked.
+     */
+    // acceptance: PRD-15
+    @Test
+    fun the_scope_question_is_asked_of_whoever_has_something_to_choose() {
+        val a = Meet.Scope("ab".repeat(32), "Bowling League", null)
+        val b = Meet.Scope("cd".repeat(32), null, "Alice")
+        // the initiator as patron, before its invitation
+        val patron = Meet("aa", "carol", Meet.Kind(Meet.Adopt.THEM_UNDER_ME), Meet.Role.INITIATOR)
+        assertEquals(Meet.Choice.ADOPT_INTO, patron.pendingChoice(listOf(a), emptyList()))
+        patron.chooseScope(a)
+        assertNull(patron.pendingChoice(listOf(a), emptyList()))
+        // a patron in no subnet roots a new one, unasked
+        val lone = Meet("aa", "carol", Meet.Kind(Meet.Adopt.THEM_UNDER_ME), Meet.Role.INITIATOR)
+        assertNull(lone.pendingChoice(emptyList(), emptyList()))
+        assertEquals(Meet.Scope.OWN, lone.scope())
+        // the responder as subordinate, after the scan and before the brief
+        val sub = meet(Meet.Adopt.NONE, role = Meet.Role.RESPONDER)
+        sub.counterparty("bb")
+        sub.theirAdopt(Meet.Adopt.THEM_UNDER_ME)
+        assertEquals(Meet.Choice.SUBMIT_AS, sub.pendingChoice(emptyList(), listOf(b)))
+        sub.chooseCarrying(b)
+        assertNull(sub.pendingChoice(emptyList(), listOf(b)))
+        assertTrue(sub.brief().joinToString(" ") { it.text }.contains("bring your scope"))
+        // one rooting nothing joins as an individual, unasked
+        val alone = meet(Meet.Adopt.NONE, role = Meet.Role.RESPONDER)
+        alone.counterparty("bb")
+        alone.theirAdopt(Meet.Adopt.THEM_UNDER_ME)
+        assertNull(alone.pendingChoice(emptyList(), emptyList()))
+        assertEquals(Meet.Scope.INDIVIDUAL, alone.carrying())
+        assertTrue(alone.brief().joinToString(" ") { it.text }.contains("as an individual"))
+        // a regular meeting asks nothing
+        val plain = meet(Meet.Adopt.NONE, role = Meet.Role.INITIATOR)
+        assertNull(plain.pendingChoice(listOf(a), listOf(b)))
     }
 
     @Test

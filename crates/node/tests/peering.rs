@@ -440,6 +440,7 @@ fn a_move_inside_the_replication_horizon_needs_no_archive_presentation() {
         },
         presented_head: None,
         back: [&back_l, &back_t],
+        carrying: None,
     };
     let rec = Record::parse(&tx::envelope(
         tx::TYPE_ADOPTION,

@@ -1021,6 +1021,13 @@ Subsumes key rotation and recovery.
                        ;   none of the three, or more than one, is malformed
   9: ? Transfer        ; present iff this adoption is a transfer — the former
                        ;   patron vouching in place of a meeting
+  10: ? txid           ; the SCOPE the node brings under this patron (design
+                       ;   §13.8): the id of a scope it roots, every position
+                       ;   in which comes to show this subnet's id. ABSENT
+                       ;   where the node joins as an individual, its own
+                       ;   scopes standing as they were. The node's own
+                       ;   claim, which the patron copies and the node
+                       ;   checks before signing [author, 2026-10-15]
 }
 
 Transfer = {

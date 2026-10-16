@@ -908,6 +908,17 @@ anchor up in, and it is what you hand onward in a bundle (§1.1,
   invited is shown that label in the brief it accepts or refuses, from the
   claim the invitation carried until the signed profile replaces it
   (`wire-format.md` §7.11), and a regular meeting shows none.
+- **Ask which scope to submit as, before you are adopted** [author,
+  2026-10-15]. A party rooting a scope may bring it under the patron, every
+  position in it coming to show the patron's subnet, or join as an
+  individual with its scopes standing as they were (design §13.8); the
+  choice is the party's, made before the body is proposed, carried to the
+  patron as its claim (`wire-format.md` §4.1 field 10), and checked against
+  what it holds before it signs: a body naming a scope it does not root is
+  refused. Where it roots none there is nothing to ask. **Two screens, one
+  each way**: *adopt into which scope?* for the would-be patron and *submit
+  as which scope?* for the would-be subordinate, shown before the invitation
+  is offered or, for the party that read it, before the acceptance.
 
 ---
 

@@ -36,6 +36,7 @@ fn adopt(w: &mut World, node: &str, patron: &str, series: u32) -> Record {
         evidence: Evidence::Presence(pop.txid),
         presented_head: None,
         back: [&bn, &bp],
+        carrying: None,
     };
     let body = adoption_body(&a);
     w.commit(TYPE_ADOPTION, &body, &[node, patron])

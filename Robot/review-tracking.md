@@ -18225,3 +18225,25 @@ acting position, not the chosen subnet's (`endpoint_record_in`); the
 Adoption screen's chooser is buttons, not a picker; `request_profiles`
 is called by no screen yet (People should call it on open); PRD-14 has
 no shell test claiming it.
+
+**Push 4, the scope question (2026-10-15).** Ruled on the opposition
+case being unreachable: not a D1b choice of kind, but a separate
+selection screen in two versions, *Adopt into which scope?* (patron) and
+*Submit as which scope?* (subordinate), between the choice and the
+invitation for the initiator and between the scan and the acceptance for
+the reader, covering every variation. The subordinate's version needed a
+wire field — nothing in an adoption said which scope the node brings, and
+§13.8's "joins with her organisation" had no carrier — so `wire-format.md`
+§4.1 gains `10: ? txid` (the node's claim, copied by the patron, checked by
+the node against the scopes it roots), design §13.8 says so, light-client
+§7 asks for it, TOP-045/UX-016 extended, catalogue TOP-51. Code:
+`Adoption.carrying`, `Record::carried_scope`, codec field 10 and the body
+key bound, client `Adopting.carrying`, `scopes_rooted()`, the review rule
+(3b), the fold dissolving an open carried scope (`root_carried`,
+self-anchored entries removed) and restoring it on departure; FFI
+`propose_adoption(.., carrying)` and `scopes_rooted`; shell `Meet.Choice`,
+`pendingChoice(held, rooted)` answering for a device with nothing to
+choose, `chooseCarrying`, the offer frame carrying 32 bytes after the
+lists, `Kern.carrying()`, `MeetActivity.choice()`. The opposition case
+remains model-only: with D1b fixing the reader's kind to none it cannot
+arise on the bench, and the author's ruling did not add a D1b kind.

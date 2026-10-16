@@ -265,12 +265,19 @@ pub struct Adoption<'a> {
     pub presented_head: Option<Txid>,
     /// Back-pointers: node's list, then patron's list.
     pub back: [&'a [Txid]; 2],
+    /// Field 10: the scope the node brings under this patron, where it
+    /// brings one (design §13.8).
+    pub carrying: Option<Txid>,
 }
 
 /// The body of an adoption, ready to sign.
 pub fn adoption_body(a: &Adoption) -> Vec<u8> {
     let mut out = Vec::new();
-    let n = 5 + a.key_material.is_some() as usize + a.presented_head.is_some() as usize + 1;
+    let n = 5
+        + a.key_material.is_some() as usize
+        + a.presented_head.is_some() as usize
+        + 1
+        + a.carrying.is_some() as usize;
     emit_map_head(&mut out, n);
     emit_back_pointers(&mut out, &[a.back[0].to_vec(), a.back[1].to_vec()]);
     emit_uint(&mut out, 1);
@@ -307,6 +314,10 @@ pub fn adoption_body(a: &Adoption) -> Vec<u8> {
             out.extend_from_slice(block);
         }
         Evidence::Recovery(_) => {}
+    }
+    if let Some(s) = &a.carrying {
+        emit_uint(&mut out, 10);
+        emit_bstr(&mut out, s);
     }
     out
 }

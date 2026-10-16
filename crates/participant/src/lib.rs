@@ -581,7 +581,9 @@ impl Instrument {
                             id(node)?,
                             id(presence)?,
                             s,
-                            back?
+                            back?,
+                            // the CLI's party brings no scope
+                            None,
                         )
                         .map_err(|e| e.reason().to_string())?)
                 )])

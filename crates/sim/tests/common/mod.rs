@@ -255,6 +255,7 @@ impl Signers {
             evidence: Evidence::Recovery(block),
             presented_head: None,
             back: [&bn, &bp],
+            carrying: None,
         };
         self.commit(TYPE_ADOPTION, &adoption_body(&a), &[new, patron])
     }
@@ -288,6 +289,7 @@ impl Signers {
             evidence: Evidence::Presence(pop.txid),
             presented_head: None,
             back: [&bn, &bp],
+            carrying: None,
         };
         self.commit(TYPE_ADOPTION, &adoption_body(&a), &[node, patron])
     }

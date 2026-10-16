@@ -31,7 +31,7 @@ async fn d01_daemon_restart_must_restore_the_accepted_child_slot() {
     let l=layout("topology");
     let (n,p,old)=(test_identity("alice"),test_identity("bob"),test_identity("carol"));
     let bn=[cose::sha256(&n.public.keyhash)]; let bp=[cose::sha256(&p.public.keyhash)];
-    let raw=envelope(TYPE_ADOPTION,&adoption_body(&Adoption { node:n.public.keyhash,patron:p.public.keyhash,locator:Locator { anchor:p.public.keyhash,path:vec![0],nibbles:1,seqno:Seqno {series:1,counter:0}, subnet: Some(SUBNET) },timestamp:100,key_material:None,evidence:Evidence::Transfer { former:old.public.keyhash,block:transfer_block(&old,&n.public.keyhash,&p.public.keyhash) },presented_head:None,back:[&bn,&bp] }),&[&n,&p]);
+    let raw=envelope(TYPE_ADOPTION,&adoption_body(&Adoption { node:n.public.keyhash,patron:p.public.keyhash,locator:Locator { anchor:p.public.keyhash,path:vec![0],nibbles:1,seqno:Seqno {series:1,counter:0}, subnet: Some(SUBNET) },timestamp:100,key_material:None,evidence:Evidence::Transfer { former:old.public.keyhash,block:transfer_block(&old,&n.public.keyhash,&p.public.keyhash) },presented_head:None,back:[&bn,&bp], carrying: None }),&[&n,&p]);
     let service=Service::start(&l.cfg,&l.peers).await.unwrap();
     assert_eq!(service.node.originate_transaction(&raw),Decision::Stored);
     assert_eq!(service.node.view.lock().unwrap().slot_of(&n.public.keyhash),Some(0),"control: the running daemon accepted the child");
@@ -83,7 +83,7 @@ async fn d03_daemon_must_verify_its_own_signature_without_a_self_peer_entry() {
     std::fs::write(&l.peers,text).unwrap();
     let (n,p,old)=(test_identity("alice"),test_identity("bob"),test_identity("carol"));
     let bn=[cose::sha256(&n.public.keyhash)]; let bp=[cose::sha256(&p.public.keyhash)];
-    let raw=envelope(TYPE_ADOPTION,&adoption_body(&Adoption { node:n.public.keyhash,patron:p.public.keyhash,locator:Locator { anchor:p.public.keyhash,path:vec![0],nibbles:1,seqno:Seqno {series:1,counter:0}, subnet: Some(SUBNET) },timestamp:100,key_material:None,evidence:Evidence::Transfer { former:old.public.keyhash,block:transfer_block(&old,&n.public.keyhash,&p.public.keyhash) },presented_head:None,back:[&bn,&bp] }),&[&n,&p]);
+    let raw=envelope(TYPE_ADOPTION,&adoption_body(&Adoption { node:n.public.keyhash,patron:p.public.keyhash,locator:Locator { anchor:p.public.keyhash,path:vec![0],nibbles:1,seqno:Seqno {series:1,counter:0}, subnet: Some(SUBNET) },timestamp:100,key_material:None,evidence:Evidence::Transfer { former:old.public.keyhash,block:transfer_block(&old,&n.public.keyhash,&p.public.keyhash) },presented_head:None,back:[&bn,&bp], carrying: None }),&[&n,&p]);
     let service=Service::start(&l.cfg,&l.peers).await.unwrap();
     let decision=service.node.originate_transaction(&raw);
     service.node.endpoint.close(0u32.into(),b"done");
@@ -114,7 +114,7 @@ async fn d01_restart_must_restore_the_reissued_own_locator_series() {
     let l=layout("own-series");
     let (n,p,old)=(test_identity("bob"),test_identity("alice"),test_identity("carol"));
     let bn=[cose::sha256(&n.public.keyhash)];let bp=[cose::sha256(&p.public.keyhash)];
-    let a=envelope(TYPE_ADOPTION,&adoption_body(&Adoption {node:n.public.keyhash,patron:p.public.keyhash,locator:Locator {anchor:p.public.keyhash,path:vec![0],nibbles:1,seqno:Seqno {series:1,counter:0}, subnet: Some(SUBNET) },timestamp:100,key_material:None,evidence:Evidence::Transfer {former:old.public.keyhash,block:transfer_block(&old,&n.public.keyhash,&p.public.keyhash)},presented_head:None,back:[&bn,&bp]}),&[&n,&p]);
+    let a=envelope(TYPE_ADOPTION,&adoption_body(&Adoption {node:n.public.keyhash,patron:p.public.keyhash,locator:Locator {anchor:p.public.keyhash,path:vec![0],nibbles:1,seqno:Seqno {series:1,counter:0}, subnet: Some(SUBNET) },timestamp:100,key_material:None,evidence:Evidence::Transfer {former:old.public.keyhash,block:transfer_block(&old,&n.public.keyhash,&p.public.keyhash)},presented_head:None,back:[&bn,&bp], carrying: None }),&[&n,&p]);
     let aid=rhtn_archive::record::Record::parse(&a).unwrap().txid;
     let backs=[aid];
     let reissued=envelope(TYPE_REISSUE,&reissue_body([&backs,&backs],&n.public.keyhash,&p.public.keyhash,Seqno {series:1,counter:0},2,101),&[&n,&p]);

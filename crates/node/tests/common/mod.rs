@@ -288,6 +288,7 @@ impl World {
             evidence: Evidence::Presence(pop.txid),
             presented_head: None,
             back: [&bn, &bp],
+            carrying: None,
         };
         let body = adoption_body(&a);
         let rec = self.commit(TYPE_ADOPTION, &body, &[node, patron]);
@@ -321,6 +322,7 @@ impl World {
             evidence: Evidence::Presence(pop.txid),
             presented_head: None,
             back: [&bn, &bp],
+            carrying: None,
         };
         let rec = self.commit(TYPE_ADOPTION, &adoption_body(&a), &[node, patron]);
         (rec, pop)

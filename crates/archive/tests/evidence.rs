@@ -73,6 +73,7 @@ fn adoption_bytes(w: &World, node: &str, patron: &str, evidence: Evidence, serie
         evidence,
         presented_head: None,
         back: [&bn, &bp],
+        carrying: None,
     })
 }
 
@@ -436,6 +437,7 @@ fn nested_signed_structures_are_checked_inside_a_body() {
         evidence: Evidence::Presence(pop.txid),
         presented_head: None,
         back: [&bn, &bp],
+        carrying: None,
     });
     let e = parsed(&w, TYPE_ADOPTION, &body, &["alice", "bob"]).unwrap_err();
     assert!(e.contains("byte length"), "{e}");

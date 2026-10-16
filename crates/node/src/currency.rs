@@ -738,6 +738,9 @@ impl NodeView {
             evidence,
             presented_head: None,
             back: [subject_back, &back_self],
+            // a node proposing for itself brings nothing: the scope a
+            // subordinate carries is the subordinate's claim (§4.1)
+            carrying: None,
         };
         Ok(rhtn_archive::tx::adoption_body(&a))
     }

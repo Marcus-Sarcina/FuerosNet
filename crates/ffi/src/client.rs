@@ -2346,10 +2346,15 @@ impl Participant {
         presence: Id,
         series: u32,
         node_back: Vec<Vec<u8>>,
+        carrying: Option<Id>,
     ) -> Result<Vec<u8>, Refused> {
         crate::diag::call("propose_adoption", || {
             let a = match subnet {
                 Some(s) => Some(keyhash(&s).ok_or_else(|| Refused::new("a subnet is 32 bytes"))?),
+                None => None,
+            };
+            let carrying = match carrying {
+                Some(s) => Some(keyhash(&s).ok_or_else(|| Refused::new("a scope is 32 bytes"))?),
                 None => None,
             };
             let n = keyhash(&node).ok_or_else(|| Refused::new("a subordinate is 32 bytes"))?;
@@ -2366,9 +2371,28 @@ impl Participant {
                         series,
                         presented_head: None,
                         key_material: None,
+                        carrying,
                     },
                 )
                 .map_err(|e| Refused::new(format!("{e:?}")))
+            })
+        })
+    }
+
+    /// The scopes this client roots and could bring under a patron
+    /// (`wire-format.md` §4.1 field 10), with their aliases where held.
+    #[must_use]
+    pub fn scopes_rooted(&self) -> Vec<SubnetRow> {
+        crate::diag::call_plain("scopes_rooted", || {
+            self.handle.with_blocking(|c| {
+                c.scopes_rooted()
+                    .iter()
+                    .map(|s| SubnetRow {
+                        id: id_of(s),
+                        alias: c.subnet_alias(s),
+                        own_alias: c.own_alias(s),
+                    })
+                    .collect()
             })
         })
     }

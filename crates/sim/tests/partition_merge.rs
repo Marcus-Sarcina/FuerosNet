@@ -109,6 +109,7 @@ impl Signers {
             evidence: Evidence::Presence(pop),
             presented_head: None,
             back: [&bn, &bp],
+            carrying: None,
         };
         self.commit(TYPE_ADOPTION, &adoption_body(&a), &[node, patron])
     }

@@ -52,6 +52,7 @@ fn adopt_at(
         evidence: Evidence::Presence(pop.txid),
         presented_head: None,
         back: [&bn, &bp],
+        carrying: None,
     };
     w.commit(TYPE_ADOPTION, &adoption_body(&a), &[node, patron])
 }

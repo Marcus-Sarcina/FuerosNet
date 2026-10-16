@@ -36,6 +36,8 @@ class AdoptionTest {
             return listOf(ByteArray(32) { 9 })
         }
 
+        override fun carrying(): String? = null
+
         override fun position(): String = "a".repeat(64)
 
         override fun propose(
@@ -43,6 +45,7 @@ class AdoptionTest {
             presence: String,
             series: Int,
             nodeBack: List<ByteArray>,
+            carrying: String?,
         ): Adoption.Result<ByteArray> {
             asked.add("propose:$series:${nodeBack.size}")
             refuseProposal?.let { return Adoption.Result.Refused(it) }
@@ -261,5 +264,18 @@ class AdoptionTest {
         assertEquals(Adoption.Frame.Direction(1, "Dana's Bowling League"), with)
         val without = Adoption.Frame.read(Adoption.Frame.direction(2))
         assertEquals(Adoption.Frame.Direction(2, null), without)
+    }
+
+    /** The offer frame carries the scope brought, where one is. */
+    @Test
+    fun the_offer_frame_carries_the_scope_brought_and_reads_back() {
+        val back = listOf(ByteArray(32) { 1 })
+        val plain = Adoption.Frame.read(Adoption.Frame.offer(3, back)) as Adoption.Frame.Offer
+        assertEquals(3, plain.series)
+        assertEquals(null, plain.carrying)
+        val scope = "ef".repeat(32)
+        val with = Adoption.Frame.read(Adoption.Frame.offer(3, back, scope)) as Adoption.Frame.Offer
+        assertEquals(scope, with.carrying)
+        assertEquals(1, with.back.size)
     }
 }

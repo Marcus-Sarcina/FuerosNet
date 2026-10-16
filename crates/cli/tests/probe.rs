@@ -122,6 +122,7 @@ async fn a_probe_resolves_fetches_an_archive_and_queries_a_catalog_over_a_real_s
             evidence: Evidence::Presence(pop_id),
             presented_head: None,
             back: [&[pop_id], &[pop_id]],
+            carrying: None,
         };
         envelope(
             TYPE_ADOPTION,
