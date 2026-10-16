@@ -398,8 +398,10 @@ object Kernel {
         adoption = a
         m.rendered()
         // off the caller's thread: every leg of this sends
-        // the responder states the direction and which subnet, in words
-        val label = m.subnetLabel()
+        // the responder states the direction and which subnet, in words,
+        // in the other side's frame: "a new subnet under <me>", not "under
+        // your own key" [bench, 2026-10-15]
+        val label = m.labelForCounterparty(hex(p.me()).take(8))
         Thread { if (settled != null) a.settle(settled, label) else a.begin() }.start()
     }
 

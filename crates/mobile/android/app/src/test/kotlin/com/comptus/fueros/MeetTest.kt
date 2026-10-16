@@ -990,6 +990,21 @@ class MeetRowsTest {
         assertNull(plain.pendingChoice(listOf(a), listOf(b)))
     }
 
+    /** The frame's label is in the other side's frame [bench, 2026-10-15]. */
+    @Test
+    fun the_label_sent_to_the_counterparty_names_this_device_and_not_you() {
+        val m = meet(Meet.Adopt.NONE, role = Meet.Role.RESPONDER)
+        m.counterparty("bb")
+        m.theirAdopt(Meet.Adopt.ME_UNDER_THEM)
+        m.chooseScope(Meet.Scope.OWN)
+        assertEquals("a new subnet under your own key", m.subnetLabel())
+        assertEquals("a new subnet under c9b44cb4", m.labelForCounterparty("c9b44cb4"))
+        m.chooseScope(Meet.Scope("ab".repeat(32), "Bowling League", "Dana"))
+        assertEquals("Dana's Bowling League", m.labelForCounterparty("c9b44cb4"))
+        m.chooseScope(Meet.Scope("ab".repeat(32), null, null))
+        assertEquals("c9b44cb4's subnet abababab…", m.labelForCounterparty("c9b44cb4"))
+    }
+
     @Test
     fun a_meeting_that_asks_for_no_adoption_still_carries_none_for_a_responder() {
         // the other half of PRD-02: a regular meeting warns about nothing,

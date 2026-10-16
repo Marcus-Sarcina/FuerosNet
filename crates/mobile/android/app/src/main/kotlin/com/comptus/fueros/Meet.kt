@@ -1283,6 +1283,24 @@ class Meet(
         }
     }
 
+    /**
+     * **The same label, in the counterparty's frame** [bench, 2026-10-15]:
+     * what the direction frame carries, so the other side reads "a new
+     * subnet under *me*" and not "under your own key". `me` is how this
+     * device is named to them: its alias in the scope, or its keyhash's
+     * first characters.
+     */
+    fun labelForCounterparty(me: String): String? = synchronized(lock) {
+        when (settled()) {
+            Adopt.THEM_UNDER_ME -> scope?.let { s ->
+                val id = s.id.takeIf { it.length == 64 }
+                Claim(id, s.ownAlias ?: me, s.alias).label(me)
+            }
+            Adopt.ME_UNDER_THEM -> claim?.label(counterpartyName)
+            else -> null
+        }
+    }
+
     /** Whether both sides proposed to adopt the other. */
     fun opposedAdoptions(): Boolean = synchronized(lock) {
         val theirs = theirAdopt ?: return false
