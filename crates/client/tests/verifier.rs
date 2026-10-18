@@ -7,7 +7,7 @@ mod common;
 use common::*;
 use rhtn_client::keys::capture_key;
 use rhtn_client::query::*;
-use rhtn_client::store::{Capture, ClientStore, Frame, OwnSeed, SealParams, seal};
+use rhtn_client::store::{Capture, ClientStore, Frame, OwnCapture, SealParams, seal};
 use rhtn_client::verifier::*;
 use rhtn_codec::encode::*;
 use rhtn_crypto::verify;
@@ -46,12 +46,14 @@ fn setup() -> Setup {
     let rec2 = w.meet("alice", "bob");
     let cb = w.meet("carol", "bob"); // C and B have met: C's claimed `met` holds
     let (c1, c2) = ([11u8; 32], [22u8; 32]);
-    let (s1, s2) = ([31u8; 32], [32u8; 32]);
+    // one root for every capture of alice: the key is derived from her
+    // identity, not from anything kept per ceremony (design §7.5.2.6)
+    let a_root = *rhtn_crypto::identity::testkit::test_identity("alice").identity_root();
     let p = SealParams::default();
     let (t1, t2) = (vec![1u8; 32], vec![2u8; 32]);
     let mut b_store = ClientStore::default();
-    for (rec, c, s, t) in [(&rec1, c1, s1, &t1), (&rec2, c2, s2, &t2)] {
-        let key = capture_key(&s, &kh("alice"), &kh("bob"), &c);
+    for (rec, c, t) in [(&rec1, c1, &t1), (&rec2, c2, &t2)] {
+        let key = capture_key(&a_root, &kh("alice"), &kh("bob"), &c);
         let cap = Capture {
             modality: 0,
             template_version: 1,
@@ -68,11 +70,10 @@ fn setup() -> Setup {
     }
     b_store.records.insert(cb.txid, cb.bytes.clone());
     let mut a_store = ClientStore::default();
-    for (rec, c, s) in [(&rec1, c1, s1), (&rec2, c2, s2)] {
-        a_store.seeds.insert(
+    for (rec, c) in [(&rec1, c1), (&rec2, c2)] {
+        a_store.own.insert(
             rec.txid,
-            OwnSeed {
-                seed: s,
+            OwnCapture {
                 counterparty: kh("bob"),
                 ceremony_id: c,
                 finalized_at: rec.effective,
@@ -114,11 +115,12 @@ fn request(q: &VerificationQuery, consenter: &str, basis: u64) -> Vec<u8> {
 }
 
 fn grant(s: &Setup, record: [u8; 32], ceremony: [u8; 32], qid: [u8; 32]) -> Vec<u8> {
-    let seed = s.a_store.seeds[&record].seed;
+    let _ = &s.a_store.own[&record];
+    let root = *rhtn_crypto::identity::testkit::test_identity("alice").identity_root();
     KeyGrant {
         record,
         query_id: qid,
-        key: capture_key(&seed, &kh("alice"), &kh("bob"), &ceremony),
+        key: capture_key(&root, &kh("alice"), &kh("bob"), &ceremony),
     }
     .encode()
     .to_vec()

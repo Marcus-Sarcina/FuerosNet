@@ -293,6 +293,14 @@ serving node.
 - **Serve reusable material freely.** It is returned any number of times to anyone
   and consumes nothing — clients prefetch it org-wide by default so that fetching
   carries no intent signal (design §14.2.4).
+- **Serve a one-time key only for a subject you serve** [author, 2026-10-16].
+  Serving one is a metadata event (below; design §14.2.2, C11), so the party
+  that learns it is the one already serving that subject: a sibling holding a
+  copy would widen who sees it for nothing. **Reusable material is different
+  and may be served by a sibling** — it is published to be fetched and carries
+  no intent — so a cache of it costs the subject no disclosure. Asked for a
+  one-time key for a subject you do not serve, answer that you hold none,
+  which is what you would answer anyway.
 - **Consume one-time keys on serving them**, and only when one is requested.
 - **Rate-limit one-time key issuance per requester per subject.** You cannot tell
   whether a requester is really opening a session, and binding consumption to
@@ -817,16 +825,12 @@ not who answers for it (design §11.5), and that asker may see. Nothing floods, 
 
 ---
 
-## 12. Open
+## 12. What a user can learn about a gateway before using one
 
-- Whether a user can evaluate a gateway operator before routing external traffic
-  through them (`resource-requirements.md` §11, design P24) — **largely answered**
-  [2026-09-03]: the signed catalog entry carries the owner's declared
-  `data_practice` and reaches an in-scope user at catalog lookup, which precedes
-  any connection (design §11.5). What stays open is what P24 already prices: the
-  declaration is a claim rather than a guarantee (design §1.1), and a user
-  outside the entry's `discover_scope` cannot see it at all.
-
-**Closed:** queue lifecycle (design §14.1.6 settles ceiling behaviour,
-crash copies, metadata and logging; only the cap value is yours to choose) and
-owner-movement semantics (design §11.2 carries the general rule).
+- **The declaration reaches them before any connection, and it is a claim**
+  (design §11.5, P24). A signed catalog entry carries the owner's declared
+  `data_practice` and an in-scope user reads it at catalog lookup, which
+  precedes connecting; what the declaration is worth is what design §1.1
+  prices — nothing here can enforce it. **A user outside the entry's
+  `discover_scope` sees no entry at all**, so the question of evaluating that
+  operator does not arise for them: they cannot reach the resource either.

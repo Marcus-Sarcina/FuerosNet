@@ -944,6 +944,34 @@ pub fn check_unsigned(f: Family, b: &[u8], at: usize) -> Result<(), Error> {
     }
 }
 
+/// **Which transaction a proposed body is** (§7.10.2): the body carries
+/// no type tag — its envelope does (§3) — and a proposal has no envelope
+/// yet, so the type follows from the fields present. A presence record
+/// (type 5) carries the two uints §4.5 opens with; an adoption (type 1) a
+/// locator in field 3; a peering (type 4) an address in fields 3 and 4
+/// and the presence record field 8 requires. Nothing else is proposed
+/// over these kinds, and a body that matches none is refused rather than
+/// guessed at.
+fn proposed_type(item: &Item) -> Option<u64> {
+    let Item::Map(m) = item else { return None };
+    match map_get(m, 3) {
+        // §4.5: field 3 is the participant list, field 1 a timestamp
+        Some(Item::Array(_)) if map_get(m, 1).and_then(as_uint).is_some() => Some(5),
+        // §4.1: field 3 is the node's resulting position
+        Some(Item::Map(_))
+            if map_get(m, 8).is_some() || map_get(m, 6).is_some() || map_get(m, 9).is_some() =>
+        {
+            Some(1)
+        }
+        _ => None,
+    }
+    .or_else(|| {
+        // §4.4: both addresses present and a presence record in field 8
+        let Item::Map(m) = item else { return None };
+        (map_get(m, 3).is_some() && map_get(m, 4).is_some() && map_get(m, 8).is_some()).then_some(4)
+    })
+}
+
 /// §7.11's rules a schema cannot say: the kind is 0 or 1, the alias is
 /// not empty, and the image, where one is carried, is a format the wire
 /// names and at most 64 KiB of bytes.
@@ -1057,7 +1085,9 @@ fn record_extension_bounds(b: &[u8], kind: &str, item: &Item) -> Result<(), Erro
         "EndpointRecord" => Some(4),
         "CatalogEntry" => Some(9),
         "Locator" => Some(4),
-        "KeyGrant" | "SignedLocator" | "LateResponse" | "NetworkPoint" => Some(3),
+        "KeyGrant" | "SignedLocator" | "LateResponse" | "NetworkPoint" | "AdoptionDirection" => {
+            Some(3)
+        }
         "VerifierResponse" => Some(10),
         _ => None,
     };
@@ -1855,6 +1885,31 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             }
             Ok(())
         }
+        "AdoptionDirection" => {
+            // §7.10.2, kind 19: which way an adoption runs, the subnet the
+            // patron adopts into, and the series the party being adopted
+            // can enter. **Each field is stated by one party only**, which
+            // no decoder can check — it checks the shapes and the range
+            let Item::Map(m) = item else {
+                return Err(Error("not map"));
+            };
+            match map_get(m, 1).and_then(as_uint) {
+                Some(0..=2) => {}
+                _ => return Err(Error("a direction is 0, 1 or 2")),
+            }
+            if let Some(it) = map_get(m, 2)
+                && bs(b, it).map(|s| s.len()) != Some(32)
+            {
+                return Err(Error("a subnet is a txid"));
+            }
+            if let Some(it) = map_get(m, 3) {
+                let series = as_uint(it).ok_or(Error("a series is a uint"))?;
+                if u32::try_from(series).is_err() {
+                    return Err(Error("a series is in the u32 range"));
+                }
+            }
+            Ok(())
+        }
         "BackPointers" => {
             let Item::Array(hs) = item else {
                 return Err(Error("not array"));
@@ -1874,18 +1929,32 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             let Item::Map(m) = item else {
                 return Err(Error("not map"));
             };
-            if m.len() != 2 {
-                return Err(Error("keys 1 and 2"));
+            if m.is_empty() || m.len() > 2 {
+                return Err(Error("key 1, and key 2 for a presence record"));
             }
             let Some(Item::Bytes(r)) = map_get(m, 1) else {
                 return Err(Error("the body is a byte string"));
             };
-            // the body is §4.5's map as every signer will sign it, so it is
-            // checked here as every archive will check it: a signer shown
-            // a body the archives refuse has nothing to sign
+            // the body is the map every signer will sign, so it is checked
+            // here as every archive will check it: a signer shown a body
+            // the archives refuse has nothing to sign.  **Which type it is
+            // follows from what it carries** — the arranging of any
+            // two-signature transaction rides these kinds (§7.10.1), and
+            // the body says which it is by its own fields
             let body = &b[r.clone()];
             let inner = parse_all(body).map_err(|_| Error("the body does not parse"))?;
-            check_body_of_type(body, &inner, 5)?;
+            let tx_type = proposed_type(&inner).ok_or(Error("the body is of no known type"))?;
+            check_body_of_type(body, &inner, tx_type)?;
+            // **the disclosure set is present iff the body is a presence
+            // record** (§7.10.2): §4.5.1's slots are a presence record's,
+            // and an adoption or a peering has none to commit to
+            if tx_type != 5 {
+                return if map_get(m, 2).is_some() {
+                    Err(Error("a disclosure set over a body that has none"))
+                } else {
+                    Ok(())
+                };
+            }
             let Some(Item::Array(set)) = map_get(m, 2) else {
                 return Err(Error("disclosures not array"));
             };

@@ -423,8 +423,8 @@ fn uint(it: &Item) -> Option<u64> {
 pub struct Discarded {
     /// Sealed captures past their retention.
     pub captures: usize,
-    /// Seeds the reader would not take.
-    pub seeds: usize,
+    /// Rows for the subject's own captures that the reader would not take.
+    pub own: usize,
 }
 
 /// The seeds go with the contents: a backup assembled and then dropped,
@@ -483,14 +483,14 @@ impl Contents {
         }
         let spent: Vec<crate::Txid> = self
             .store
-            .seeds
+            .own
             .iter()
             .filter(|(_, s)| now.saturating_sub(s.finalized_at) >= own_window_s)
             .map(|(t, _)| *t)
             .collect();
         for t in spent {
-            self.store.seeds.remove(&t);
-            out.seeds += 1;
+            self.store.own.remove(&t);
+            out.own += 1;
         }
         out
     }

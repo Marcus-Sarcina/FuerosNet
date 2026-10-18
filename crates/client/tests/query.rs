@@ -59,7 +59,7 @@ fn the_grant_and_the_late_response_decode_and_round_trip() {
     let g = KeyGrant::decode(&fixture("P-e2e-01")).unwrap();
     assert_eq!(
         hex::encode(*g.key),
-        "6157379db20e9b35da24fbab9ab4c8bc8676dc8f8c22c89d2b1fe2fea7b2985c",
+        "9c888d1708577e49f971625f42909fcbdb59a7652665e422fb7c91d31377d451",
         "the known capture key"
     );
     assert_eq!(

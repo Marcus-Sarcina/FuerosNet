@@ -218,7 +218,7 @@ fn no_secret_of_a_whole_ceremony_appears_in_any_event_and_the_timeline_is_comple
         }
     }
     for (k, c) in &s.h.clients {
-        for seed in c.store.seeds.values() {
+        for seed in c.store.own.values() {
             secrets.push(("ceremony seed", seed.seed.to_vec()));
             secrets.push((
                 "capture key",

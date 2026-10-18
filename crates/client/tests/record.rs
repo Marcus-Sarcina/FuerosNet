@@ -10,7 +10,7 @@ use rhtn_archive::tx::{TYPE_PRESENCE, Witness};
 use rhtn_client::notice::{Notice, Notifier};
 use rhtn_client::query::*;
 use rhtn_client::record::*;
-use rhtn_client::store::{ClientStore, OwnSeed};
+use rhtn_client::store::{ClientStore, OwnCapture};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -358,10 +358,9 @@ fn a_late_response_is_kept_beside_its_record_and_goes_with_it() {
     store.records.insert(rec.txid, rec.bytes.clone());
     let ceremony = [7u8; 32];
     // the record's own ceremony, which its seed names
-    store.seeds.insert(
+    store.own.insert(
         rec.txid,
-        OwnSeed {
-            seed: [3; 32],
+        OwnCapture {
             counterparty: kh("bob"),
             ceremony_id: ceremony,
             finalized_at: 0,
@@ -957,10 +956,9 @@ fn a_client_saves_its_archive_and_its_store_and_comes_back_the_same_participant(
     let mut before = ClientStore::default();
     before.records.insert(rec.txid, rec.bytes.clone());
     before.disclosures.insert(rec.txid, set.clone());
-    before.seeds.insert(
+    before.own.insert(
         rec.txid,
-        OwnSeed {
-            seed: [9; 32],
+        OwnCapture {
             counterparty: kh("bob"),
             ceremony_id: [4; 32],
             finalized_at: 1_800_000_600,
@@ -999,7 +997,7 @@ fn a_client_saves_its_archive_and_its_store_and_comes_back_the_same_participant(
         "the records come back byte for byte"
     );
     assert_eq!(
-        after.seeds, before.seeds,
+        after.own, before.own,
         "and the seeds, which are what release a capture key"
     );
     assert_eq!(
@@ -1013,26 +1011,24 @@ fn a_client_saves_its_archive_and_its_store_and_comes_back_the_same_participant(
         "salts and values, with the labels taken from their fixed order"
     );
 
-    // **a seed is the only secret here** (design §7.5.2), and its file says so
+    // **nothing here is secret** [author, 2026-10-17]: the capture key
+    // derives from the identity root rather than being stored (design
+    // §7.5.2.6), so no file in the store is written private
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         let name: String = rec.txid.iter().map(|b| format!("{b:02x}")).collect();
-        let mode = std::fs::metadata(dir.join("seeds").join(&name))
-            .unwrap()
-            .permissions()
-            .mode()
-            & 0o777;
-        assert_eq!(mode, 0o600, "the seed is not world-readable");
-        let sealed_mode = std::fs::metadata(dir.join("sealed").join(&name))
-            .unwrap()
-            .permissions()
-            .mode()
-            & 0o777;
-        assert_ne!(
-            sealed_mode, 0o600,
-            "ciphertext this client cannot open needs no such care"
-        );
+        for sub in ["own", "sealed", "records"] {
+            let mode = std::fs::metadata(dir.join(sub).join(&name))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777;
+            assert_ne!(
+                mode, 0o600,
+                "{sub} holds nothing this client has to keep from its own user"
+            );
+        }
     }
 
     // a second save over the same directory is uneventful, and what was

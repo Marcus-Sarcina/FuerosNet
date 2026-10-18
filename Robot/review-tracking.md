@@ -18352,3 +18352,219 @@ client's path to them, which the functional row records.
 **Owed after this**: the grant-side half of C3 (a sub reaching a resource
 under a grant) needs a hosted package on the bench, and H1's screen needs
 a provider list that nothing supplies.
+
+## 2026-10-16 — the four posed questions, answered
+
+The last of the posed rulings. All four were asked in chat, per
+`CLAUDE.md`'s rule, and answered in one message.
+
+**The register is the exception to the no-tombstone instruction.** The
+no-tombstone rule reaches the narrative — "repeated mentions in the
+narrative of alternatives and obsolete designs" — and not a numbered
+register, where a citation must resolve to *resolved* rather than to a
+different finding. The author noted that the never-reuse rule was never
+his instruction but has stood long enough to keep. O-013 restored as a
+resolved row; O-012 resolved in place; O-011 and O-015 narrowed rather
+than cut.
+
+**The capture profile's two remaining values, as proposed.** Template
+version 1 = `face/sface-int8-v1` (design §7.5); the sealed store is
+XChaCha20-Poly1305 with a stored random 24-byte nonce, AAD the
+pre-commitment then the slot label, framing version-nonce-ciphertext
+(§7.5.2.6). **One value I filled in myself and flagged**: the slot
+labels, written as `template` and `image` plus the index from one. The
+fuzzing algorithm stays owed until CAP-016 measures one against §7.5's
+99% figure. CAP-015 becomes a C row; §7.5.2.10 keeps only the
+restore question.
+
+**Replication reaches everything.** Archive, the view beside it, and
+sealed captures, on contact. The author's reason: a person's one ceremony
+device is not guaranteed, and only one of several is powered up at a time.
+**Where I had to read past the ruling**: the seed. "Replicate it all"
+against §23.3's "seeds sit on the device that performs ceremonies and
+nowhere else" — resolved by routing a second ceremony device's seeds
+through §13.7.1's backup, which §7.5.2.9 already says carries them, so no
+object carries a seed over a contact. Raised in chat. APP-014 is the
+functional row; nothing implements it yet, so it is owed work and not a
+claim.
+
+**Role 3 keeps its one signature.** The ruling: a false assertion about a
+root's key costs the asserter and not the root, so nothing need stop it.
+That inverts the finding — the single signature was the answer, not the
+gap. §12.7.2 and wire §7.1 field 5 say so; a validator imposes no count
+and refuses none for standing alone.
+
+**Raised and unanswered**: §9.2's social revocation still says *"Needs
+specifying alongside the rotation format"*, and its "threshold of the
+down-line co-signing a revocation" sits against §9.2's own list calling
+disavowal *"the network's only negative attestation"*. The role-3 ruling
+suggests the same shape — each voucher disavowing for itself, nothing
+co-signed — but it is the author's.
+
+**The seed's route, corrected (2026-10-16).** I had read "replicate it all"
+as sending the seeds through §13.7.1's backup. Wrong: **the identity seed
+goes on paper as a phrase and is entered by hand on a new signing device**
+[author]. No object carries it, and a device given the whole dataset can
+read everything and sign nothing. The phrase is **new mechanism** — nothing
+in the five documents had a mnemonic, a word list or a seed phrase of any
+kind before this — so it needed a home: design §13.7.1 beside the archive
+backup, light-client §2 for the show-once rule, and OPS-019.
+
+**The distinction the ruling forced**: the *identity* seed and the
+*per-ceremony capture* seeds are different classes. A phrase cannot restore
+32 random bytes drawn per ceremony (§7.5.2.6), and the device that is up
+cannot release a capture key without them, so the capture seeds cross with
+the dataset while the identity seed does not. Written that way.
+
+**Posed, not decided**: whether the capture seed should be derived from the
+identity seed — `HKDF(identity_seed, ceremony_id)` in place of the random
+draw — which would put every capture key behind the phrase, make the
+capture seeds need neither replication nor backup, and answer §7.5.2.10's
+restore question outright. That is a wire-level change to §7.5.2.6's
+construction and is the author's.
+
+**Social revocation resolved (2026-10-16).** Ruled as recommended: each
+voucher disavows for itself, nothing is co-signed, the note about needing
+specification alongside the rotation format is gone with the clause. §9.2
+rewritten, §9.3's "social revocation via the patron" retargeted to the
+disavowal, TX-011 extended. **No new row**: the mechanism is §6.2.2's
+disavowal, which TX-011 already covers; what is new is the absence of a
+second object.
+
+**Open questions remaining after this pass** — both posed in chat, neither
+answered:
+1. Whether the per-ceremony capture seed should be `HKDF(identity_seed,
+   ceremony_id)` instead of §7.5.2.6's 32 random bytes. Would put every
+   capture key behind the phrase, remove the capture seeds from both
+   replication and backup, and close §7.5.2.10's restore question. A
+   wire-level change to a construction stated to the byte.
+2. The phrase's own format — word list and length, and how one seed
+   generates both halves of §5.1's hybrid pair. Proposed: 24 words, BIP-39
+   English, 256 bits, both keypairs under labelled HKDF.
+
+**Corrected (2026-10-17): the phrase is UX, not new protocol.** I had called
+it new mechanism needing a home in the design, and written a paragraph into
+§13.7.1 plus a §10.2 gloss. Wrong framing [author]: a word list over a seed
+is standard — multicurrency wallets derive keys for arbitrary chains from one
+phrase — and it adapts nothing about the cryptosystem. Both design paragraphs
+are gone; §13.7.1 now says only that it is the archive's backup and not the
+key's, §23.3 says only that the seed is never sent device to device, and the
+phrase lives in `light-client-requirements.md` §2 as a client commitment with
+BIP-39 English named as the reference client's choice. **The format question
+is withdrawn, not owed**: it was never the author's to rule.
+
+**The lesson for the next one**: "nothing in the documents mentions X" is not
+evidence that X is protocol. Standard client practice is absent from these
+documents because it belongs to the client, and writing it into the design is
+the over-propagation CLAUDE.md warns about, arriving by a different door.
+
+## 2026-10-17 — the capture seed derived from the identity
+
+Ruled as recommended. The design change is §7.5.2.6's seed: no longer 32
+random bytes per ceremony, now the subject's **identity root**.
+
+**The one choice I had to make, and flagged.** "The identity seed" needed a
+value, because the construction is pinned to the byte and two clients of one
+subject that disagreed could not release each other's captures. Pinning the
+phrase's own entropy would have made the phrase protocol, which the
+2026-10-17 UX ruling had just put in the client. So the root is a function
+of key material every client already holds: `SHA-256("rhtn/1:identity-root"
+|| ed_seed || pq_seed)`. One-way, so holding it does not yield a signing key.
+Stated in chat as the assumption.
+
+**Why `from_seeds` was not changed to take one root.** The alternative was to
+make the identity seed the stored thing and derive the two algorithm seeds
+from it — conceptually tidier, and it would have changed the on-disk key
+material at twelve call sites across daemon, participant, ffi and cli, plus
+every key in the corpus. The root as a function of the two seeds costs
+nothing and changes no published key. **The vectors did move**: the capture
+key's IKM and the key itself, which is a real construction change and not
+churn.
+
+**What came out.** `OwnSeed` → `OwnCapture` with no secret in it, so the
+client store holds no capture secret at rest at all; `random_seed` deleted;
+`ClientStore::holds_bytes` lost its seed arm; the store's on-disk `seeds/`
+directory became `own/` with a three-field row. `Discarded::seeds` →
+`Discarded::own`.
+
+**Zeroize walk** (the memory note's rule): the root is `Zeroizing` in
+`SigningIdentity` and in the free `identity_root`; `capture_key` already
+returned `Zeroizing`; `OwnCapture` needs no `Drop` because it holds nothing
+private, and its hand-written `Debug` is gone with the seed it was hiding.
+Kotlin holds no capture material — the ffi's `capture_key` returns bytes the
+shell does not store.
+
+**Corrected same day: "never final" was wrong.** I wrote that losing the
+erasable seed left the subject with withholding alone, revocable and never
+final. The author's correction: a subject can still sequester permanently by
+**sequence refresh plus deletion of the older archive**, because the
+derivation needs the ceremony pre-commitment, no transaction carries one
+(wire §4.5 holds modality, count, liveness — not the ceremony id) and
+nothing serves one back. So the final form survives; what changed is its
+**granularity and its price** — all-or-nothing across a window, costing the
+records themselves, which is the cost of sequestering any other history. The
+deletable seed had made captures the one class sequestrable for free and one
+at a time.
+
+Written into §7.5.2.6 (the cost paragraph), §7.5.2.3 (the subject now has a
+reversible control and a final one), §23.3 (per-capture deletion state does
+not exist; what makes a window final is ordinary cross-device deletion of the
+archive), light-client §2's one-way-door bullet, UX-008 and OPS-007.
+
+**Check that made it safe to assert**: grepped wire-format for every
+pre-commitment mention — VerificationQuery field 3 and the local-interface
+objects only, never a record field — so the subject's own store row is its
+only copy and deleting it is irreversible within the protocol.
+
+**Two edits were silently lost and had to be re-applied.** A python script
+did three replacements and asserted on the third; the assert failed *after*
+the first two had been made in memory and *before* the file was written, so
+§22.2's restore bullet and §23.3's capture-seed sentence never landed, and I
+reported them done. Caught by grepping `capture seed` across the set rather
+than by trusting the earlier "ok".
+
+**The lesson, which is CLAUDE.md's own**: an edit script must write before it
+asserts anything else, or assert everything before it edits. And "the script
+printed ok" is not evidence an edit landed — the grep is.
+
+The same sweep found three more stale mentions the earlier passes had not
+touched: §10.1's pruning licence ("or capture seeds"), §18.3's theft
+composition ("the key, the archive and the capture seeds at once"), and an
+ffi `Drop` comment naming `OwnSeed`. All corrected. One stale pinned hex in
+`client/tests/query.rs` for the grant fixture's key, which the gate caught.
+
+**The gate found the consequence I had not followed through.** The store's
+persistence test asserted `seeds/` was mode 0600 as "the only secret here".
+With the seed gone that premise was false, and the right answer was not to
+move the assertion to `own/` but to invert it: **no file in the client store
+is written private any more**, because none of it is secret. `write_once`
+for `own/` goes from `private: true` to `false`; the test now walks `own`,
+`sealed` and `records` and asserts none is 0600; the store's module comment,
+ARC-022's catalogue entry and functional ARC-017 all say so.
+
+That is the real shape of the ruling's effect on the implementation: the
+client store went from holding exactly one secret to holding none.
+
+**Corrected again (2026-10-17): the phrase is a severable feature, not a
+client requirement.** My §2 bullet had made it an obligation and named
+BIP-39 English as the reference client's choice — still too far in. The
+author's shape: roots are constructed as before; an interpreter above the
+kernel encodes the identity's key material as words and reads it back; it
+must come out cleanly, with everything working when the material is given as
+a file instead. §2 now has two bullets — the material enters as bytes from a
+source the application names, and a phrase is a feature nothing depends on —
+and OPS-019's test is the severability itself. §13.7.1 puts the carrying
+outside the design entirely.
+
+**Verified rather than assumed**: grepped every crate for phrase, mnemonic,
+wordlist and BIP-39 — only `Wrap::Passphrase`, which is §13.7.1's backup KEK
+and a different thing. There is no interpreter to remove, so severability
+holds today by construction. `cli::keys::mint` already writes the two
+32-byte seeds as a 64-byte 0600 file and the daemon reads it, which is the
+"as a text file" path the author asked for.
+
+**The wording I had to interpret**: he wrote "the identity root provided as
+raw text input or as a text file". The derived 32-byte root cannot sign — it
+is one-way from the two algorithm seeds — so the thing a file carries is the
+two seeds, and the root follows from them. Read it that way and flagged in
+chat.

@@ -19,7 +19,7 @@ use crate::record::{
 };
 use crate::rotation::Rotation;
 use crate::selection::{self, Acquaintance, SelectionBasis, required};
-use crate::store::{Capture, ClientStore, OwnSeed, SealParams, SealedCapture, seal};
+use crate::store::{Capture, ClientStore, OwnCapture, SealParams, SealedCapture, seal};
 use crate::subject::{SubjectConfig, SubjectState};
 use crate::verifier::{GrantOutcome, QueryOutcome, VerifierConfig, VerifierState, Verifying};
 use crate::{Keyhash, Txid};
@@ -472,7 +472,6 @@ pub(crate) struct Active {
     pub(crate) their_nominees: Vec<Keyhash>,
     their_bundle: Vec<Vec<u8>>,
     their_retention: u64,
-    seed: [u8; 32],
     channels: Vec<ChannelOutcome>,
     strongest: Option<ChannelKind>,
     sealed: Option<SealedCapture>,
@@ -490,18 +489,20 @@ pub(crate) struct Active {
 impl Drop for Active {
     /// **The ceremony's key material goes with the ceremony**
     /// [reviewer, 2026-10-06]. The two contributions key the local session
-    /// (`wire-format.md` §14.3.2), the seed derives the capture keys
-    /// (design §7.5.2), and the template is a likeness; none has a use once
-    /// this ceremony is over, and §14.3.2 gives the session key exactly the
-    /// ceremony's lifetime. Dropping `Active` is every way one ends:
-    /// finished, stopped, abandoned, or replaced by the next.
+    /// (`wire-format.md` §14.3.2) and the template is a likeness; neither
+    /// has a use once this ceremony is over, and §14.3.2 gives the session
+    /// key exactly the ceremony's lifetime. Dropping `Active` is every way
+    /// one ends: finished, stopped, abandoned, or replaced by the next.
+    ///
+    /// **No capture seed is here to wipe** [author, 2026-10-17]: the
+    /// capture key derives from the identity root (design §7.5.2.6), so
+    /// what this ceremony held was never a secret of its own.
     fn drop(&mut self) {
         use zeroize::Zeroize;
         self.contribution.zeroize();
         if let Some(theirs) = self.their_contribution.as_mut() {
             theirs.zeroize();
         }
-        self.seed.zeroize();
         if let Some(t) = self.template.as_mut() {
             t.zeroize();
         }
@@ -536,7 +537,8 @@ pub struct Client {
     pub known: Vec<Identity>,
     /// Its own archive.
     pub archive: Archive,
-    /// Its persisted state: sealed captures, seeds, records, disclosures.
+    /// Its persisted state: sealed captures, own-capture rows, records,
+    /// disclosures.
     pub store: ClientStore,
     /// Its state as a subject.
     pub subject: SubjectState,
@@ -862,7 +864,6 @@ impl Client {
             nominees
         };
         let contribution = self.random::<16>();
-        let seed = self.random::<32>();
         let started_at = self.now_s();
         let began_ms = self.device.clock.now_ms();
         tracing::info!(
@@ -887,7 +888,6 @@ impl Client {
             their_nominees: vec![],
             their_bundle: vec![],
             their_retention: 0,
-            seed,
             channels: vec![],
             strongest: None,
             sealed: None,
@@ -1760,11 +1760,21 @@ impl Client {
     }
 
     /// The key the counterparty seals its captures of me under (design
-    /// §7.5.2.6), derived from my seed for this ceremony.
+    /// §7.5.2.6), derived from my identity root and this ceremony's id.
+    ///
+    /// **Nothing is drawn for it and nothing is kept** [author,
+    /// 2026-10-17]: the same three inputs derive it again whenever this
+    /// subject wants to release, on this device or another of the same
+    /// identity.
     pub fn capture_key(&self) -> Result<Zeroizing<[u8; 32]>, Abort> {
         let cid = self.anchored_id()?;
         let a = self.active.as_ref().ok_or(Abort::NotActive)?;
-        Ok(capture_key(&a.seed, &self.keyhash(), &a.peer()?, &cid))
+        Ok(capture_key(
+            self.signer()?.identity_root(),
+            &self.keyhash(),
+            &a.peer()?,
+            &cid,
+        ))
     }
 
     /// Step 5: tell the person what the record will contain and who can
@@ -2437,7 +2447,7 @@ impl Client {
     }
 
     /// Drop the ceremony under way without a record: nothing sealed is
-    /// filed, the seed is gone with it.
+    /// filed, and the contributions and the template go with it.
     pub fn abandon(&mut self) {
         tracing::info!(
             target: "cer",
@@ -2450,8 +2460,9 @@ impl Client {
     }
 
     /// The record, finalized: appended to my archive and kept; as a
-    /// participant, the sealed capture of the counterparty and my own seed
-    /// are filed under it, the disclosure set is kept as record state, and
+    /// participant, the sealed capture of the counterparty and the row for
+    /// the capture they hold of me are filed under it, the disclosure set
+    /// is kept as record state, and
     /// the ceremony's window closes with everything it counted.
     pub fn finalize(
         &mut self,
@@ -2500,18 +2511,18 @@ impl Client {
         );
         // taken, not moved out of: `Active`'s `Drop` wipes the ceremony's
         // key material, and a type with a destructor cannot be dismantled
-        // field by field.  The seed is copied on the way past, which is
-        // what `store.seeds` is for; what the drop then wipes is this
-        // ceremony's copy
+        // field by field.  Nothing secret is copied on the way past: what
+        // `store.own` keeps is the counterparty and the ceremony's id, the
+        // capture key being derived from the identity root when wanted
+        // (design §7.5.2.6)
         if let Some(mut a) = self.active.take_if(|_| mine) {
             let peer = a.peer()?;
             if let Some(sealed) = a.sealed.take() {
                 self.store.sealed.insert(txid, sealed);
             }
-            self.store.seeds.insert(
+            self.store.own.insert(
                 txid,
-                OwnSeed {
-                    seed: a.seed,
+                OwnCapture {
                     counterparty: peer,
                     ceremony_id: a.ceremony_id.unwrap_or([0; 32]),
                     finalized_at,
@@ -5420,7 +5431,10 @@ pub fn conversation_payload(msg: &Msg) -> Option<(u64, Vec<u8>)> {
                 payload::KIND_PROPOSED_BODY,
                 ProposedBody {
                     body: p.proposal.body(&p.back),
-                    set: p.set.clone(),
+                    // a presence record's proposal carries its set; the
+                    // same kind arranging an adoption or a peering carries
+                    // none (`wire-format.md` §7.10.2)
+                    set: Some(p.set.clone()),
                 }
                 .encode(),
             )
@@ -5476,9 +5490,14 @@ pub fn conversation_from(kind: u64, bytes: &[u8]) -> Result<Msg, Abort> {
         payload::KIND_PROPOSED_BODY => {
             let pb = ProposedBody::decode(bytes).map_err(malformed)?;
             let (proposal, back) = proposal_from_body(&pb.body).map_err(malformed)?;
+            let set = pb.set.ok_or_else(|| {
+                malformed(String::from(
+                    "a presence proposal carries its disclosure set",
+                ))
+            })?;
             Msg::Proposal(Box::new(Proposed {
                 proposal,
-                set: pb.set,
+                set,
                 back,
             }))
         }

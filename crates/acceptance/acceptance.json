@@ -425,13 +425,13 @@
   "when": "I issues the currency query to both and receives both attestations.",
   "then": "I's result for X reports a fork: both attestations are retained and neither is silently chosen as X's current key. I sends a notification to P1 and a notification to P2.",
   "oracle": "behaviour",
-  "interpretation": "The notice is unspecified (design §22.3 item 3 records it as open); the test observes that a message is sent to each patron and checks neither its content nor its encoding."
+  "interpretation": "No notice object exists and none is coming [author, 2026-10-16]: every node on the rootward path sees the same divergence, and an artefact would not compel a malicious one to speak (design §9.0.2). The test observes that a message is sent to each patron and checks neither its content nor its encoding."
  },
  {
   "id": "ARC-16",
   "area": "archive",
   "gap": "archive",
-  "title": "Keep presence records, sealed captures and seeds when the chain is pruned at a checkpoint",
+  "title": "Keep presence records and sealed captures when the chain is pruned at a checkpoint",
   "milestone": 3,
   "kind": "positive",
   "spec": [
@@ -442,16 +442,16 @@
   "rule": [
    {
     "where": "light-client-requirements.md §2",
-    "text": "Pruning the chain must not delete presence records, sealed captures or capture seeds."
+    "text": "Pruning the chain must not delete presence records or sealed captures."
    },
    {
     "where": "design §10.1",
     "text": "Pruning is therefore permitted only beyond the window"
    }
   ],
-  "given": "A client for S whose chain holds a patron-countersigned series reissue r_c dated more than 730 days ago, with presence records before r_c, each with a sealed capture and a capture seed in the local store.",
+  "given": "A client for S whose chain holds a patron-countersigned series reissue r_c dated more than 730 days ago, with presence records before r_c, each with a sealed capture in the local store.",
   "when": "The user prunes the chain at r_c through the client's deliberate retention control.",
-  "then": "A backward walk from S's head now stops at r_c and the chain records before it are no longer served. Every presence record, sealed capture and capture seed dated before r_c is still present in the local store and returned by lookup by txid.",
+  "then": "A backward walk from S's head now stops at r_c and the chain records before it are no longer served. Every presence record and sealed capture dated before r_c is still present in the local store and returned by lookup by txid, each with the ceremony-id its capture key is derived under.",
   "oracle": "behaviour",
   "interpretation": null
  },
@@ -639,11 +639,11 @@
     "text": "**The subject holds the key to their own likeness on someone else's device.**"
    }
   ],
-  "given": "A client holding a presence record, its disclosure set, its own seed for that ceremony, a sealed capture of a counterparty, a late response and an arrival it could not attach.",
+  "given": "A client holding a presence record, its disclosure set, its row for the capture a counterparty holds of it, a sealed capture of a counterparty, a late response and an arrival it could not attach.",
   "when": "The store is written to a directory and read back, and written a second time over the same directory.",
-  "then": "Every map comes back as it went: records byte for byte, seeds, ciphertext, late responses, unattached arrivals, and disclosure salts and values with the labels taken from their fixed order. The seed's file is not world-readable and the ciphertext's need not be. A second save over the same directory rewrites nothing that was written once.",
+  "then": "Every map comes back as it went: records byte for byte, own-capture rows, ciphertext, late responses, unattached arrivals, and disclosure salts and values with the labels taken from their fixed order. No file in the store is written private, because none of it is secret. A second save over the same directory rewrites nothing that was written once.",
   "oracle": "behaviour",
-  "interpretation": "The seed is the only secret of the six, because §7.5.2 makes it what releases a capture key; sealed captures are ciphertext this client cannot open. Nothing ages out on load: §13.7.1 puts deletion at import, not on live data."
+  "interpretation": "None of the six is secret [author, 2026-10-17]: the capture key is derived from the identity root rather than stored (design §7.5.2.6), so what a row keeps is the counterparty, the ceremony id and the finalization time, and sealed captures are ciphertext this client cannot open. Nothing ages out on load: §13.7.1 puts deletion at import, not on live data."
  },
  {
   "id": "ARC-23",
@@ -940,6 +940,37 @@
   "interpretation": null
  },
  {
+  "id": "CER-63",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "Derive the capture key's seed from the identity, not from a per-ceremony random",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "design §7.5.2.6",
+   "design §7.5.2.9"
+  ],
+  "rule": [
+   {
+    "where": "design §7.5.2.6",
+    "text": "The seed is the subject's identity seed and not a per-ceremony random"
+   },
+   {
+    "where": "design §7.5.2.6",
+    "text": "SHA-256 of the ASCII tag `rhtn/1:identity-root` followed by the\nidentity's two algorithm seeds, the classical one then the post-quantum"
+   },
+   {
+    "where": "design §7.5.2.9",
+    "text": "There is nothing per-ceremony to keep"
+   }
+  ],
+  "given": "A subject's two algorithm seeds, and a record of a ceremony it performed with a counterparty.",
+  "when": "The subject's client derives the identity root and then the capture key for that counterparty and ceremony, and a second client of the same identity does the same from the same two seeds.",
+  "then": "The root is SHA-256 of the tag and the two seeds in that order, the two clients derive the same capture key, and the subject's store holds no per-capture secret — only the counterparty, the ceremony-id and the finalization time. A different identity's seeds yield a different key.",
+  "oracle": "fixture",
+  "interpretation": null
+ },
+ {
   "id": "CER-05",
   "area": "ceremony",
   "gap": "ceremony",
@@ -986,9 +1017,9 @@
     "text": "A compliant client holds no decryptable likeness of another person"
    }
   ],
-  "given": "Client B has completed a ceremony with A and sealed its captures of A. The biometric engine, template format and sealed-store AEAD parameters are undecided (design §22.2) and are supplied to the test as parameters.",
+  "given": "Client B has completed a ceremony with A and sealed its captures of A. The template format and the sealed store's AEAD are design §7.5.2's, the fuzzing algorithm alone being undecided (design §22.2) and supplied to the test as a parameter.",
   "when": "The test inspects B's persistent storage and asks B to open A's capture without a grant.",
-  "then": "Storage holds the sealed capture and A's seed for B's own captures only; no plaintext frame, no plaintext template and no k_capture for A's capture is present, and the open attempt fails.",
+  "then": "Storage holds the sealed capture of A and nothing that opens it: no plaintext frame, no plaintext template and no k_capture for A's capture is present, and the open attempt fails. Where B is itself a subject its storage holds no capture seed either, B deriving its own capture keys from its identity (design §7.5.2.6).",
   "oracle": "behaviour",
   "interpretation": null
  },
@@ -1232,7 +1263,7 @@
     "text": "Truncated or unauthenticated ciphertext is a decryption failure"
    }
   ],
-  "given": "Verifier B's sealed capture of A has been truncated on disk, and a consented query with a valid grant arrives. The biometric engine, template format and sealed-store AEAD parameters are undecided (design §22.2) and are supplied to the test as parameters.",
+  "given": "Verifier B's sealed capture of A has been truncated on disk, and a consented query with a valid grant arrives. The template format and the sealed store's AEAD are design §7.5.2's, the fuzzing algorithm alone being undecided (design §22.2) and supplied to the test as a parameter.",
   "when": "B attempts to open and compare.",
   "then": "B's signed response carries `inconclusive` with basis 0 and the query's template version, and never `no-match`.",
   "oracle": "behaviour",
@@ -1499,7 +1530,7 @@
     "text": "Strip metadata from captured images before storing them, and do not rely on camera-pipeline defaults."
    }
   ],
-  "given": "The harness camera returns frames carrying EXIF location, timestamp and device identifiers. The biometric engine, template format and sealed-store AEAD parameters are undecided (design §22.2) and are supplied to the test as parameters.",
+  "given": "The harness camera returns frames carrying EXIF location, timestamp and device identifiers. The template format and the sealed store's AEAD are design §7.5.2's, the fuzzing algorithm alone being undecided (design §22.2) and supplied to the test as a parameter.",
   "when": "Client B captures and seals, and the test opens the capture with the subject's key.",
   "then": "No frame in the opened capture carries EXIF or other metadata.",
   "oracle": "behaviour",
@@ -4885,7 +4916,7 @@
   "rule": [
    {
     "where": "design §23.3",
-    "text": "Seeds sit on the device that performs ceremonies and nowhere else"
+    "text": "The identity seed sits on the devices that perform ceremonies and nowhere else"
    },
    {
     "where": "light-client-requirements.md §4.1",

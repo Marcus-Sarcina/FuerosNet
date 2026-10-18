@@ -21,6 +21,13 @@ use rhtn_client::record::{LABELS, read_presentation};
 use rhtn_client::store::open;
 use rhtn_codec::cbor::*;
 
+/// A test identity's identity root, which is what a capture key derives
+/// from (design §7.5.2.6).  Nothing is stored per capture, so a test that
+/// wants the key recomputes it the way the subject's client does.
+fn root(name: &str) -> [u8; 32] {
+    *rhtn_crypto::identity::testkit::test_identity(name).identity_root()
+}
+
 /// The proximity field of a record's disclosure set, as (kind, result).
 async fn proximity_of(m: &Meeting, who: &str, t: rhtn_archive::Txid) -> (Vec<(u64, u64)>, u64) {
     let v = m
@@ -160,24 +167,25 @@ async fn a_client_holds_no_decryptable_likeness_and_no_sealing_key() {
     let t = m.meet("alice", "bob", &[], &[]).await.expect("a record");
     let a_seed = m
         .party("alice")
-        .with(move |c| c.store.seeds[&t].clone())
+        .with(move |c| c.store.own[&t].clone())
         .await;
+    let a_root = root("alice");
     let k_capture =
-        rhtn_client::keys::capture_key(&a_seed.seed, &kh("alice"), &kh("bob"), &a_seed.ceremony_id);
-    // what bob holds: the sealed capture, the record, and bob's own seed
+        rhtn_client::keys::capture_key(&a_root, &kh("alice"), &kh("bob"), &a_seed.ceremony_id);
+    // what bob holds: the sealed capture, the record, and its own row for
+    // the capture alice holds of it
     let (sealed, b_seed) = m
         .party("bob")
         .with(move |c| {
             (
                 c.store.sealed.get(&t).cloned(),
-                c.store.seeds.get(&t).cloned(),
+                c.store.own.get(&t).cloned(),
             )
         })
         .await;
     let sealed = sealed.expect("bob's sealed capture of alice");
-    let b_seed = b_seed.expect("bob's seed for alice's captures of bob");
-    assert_ne!(b_seed.seed, a_seed.seed);
-    // and not: any frame, the template, alice's seed, or the key alice
+    let _ = b_seed.expect("bob's own row for alice's capture of bob");
+    // and not: any frame, the template, alice's root, or the key alice
     // supplied
     let cap =
         open(&Default::default(), &k_capture, &sealed).expect("opens under the subject's key");
@@ -188,7 +196,7 @@ async fn a_client_holds_no_decryptable_likeness_and_no_sealing_key() {
         .chain([
             cap.template.clone(),
             k_capture[..].to_vec(),
-            a_seed.seed.to_vec(),
+            a_root.to_vec(),
         ])
         .collect();
     let held = m
@@ -204,9 +212,9 @@ async fn a_client_holds_no_decryptable_likeness_and_no_sealing_key() {
         held.iter().all(|h| !h),
         "bob holds something of alice's in the clear: {held:?}"
     );
-    // opening without a grant: bob's own seed derives nothing that opens it
+    // opening without a grant: bob's own root derives nothing that opens it
     let wrong =
-        rhtn_client::keys::capture_key(&b_seed.seed, &kh("alice"), &kh("bob"), &a_seed.ceremony_id);
+        rhtn_client::keys::capture_key(&root("bob"), &kh("alice"), &kh("bob"), &a_seed.ceremony_id);
     assert!(open(&Default::default(), &wrong, &sealed).is_err());
     assert!(open(&Default::default(), &[0; 32], &sealed).is_err());
 }
@@ -218,10 +226,10 @@ async fn captured_frames_are_stripped_of_metadata_before_sealing() {
     let t = m.meet("alice", "bob", &[], &[]).await.expect("a record");
     let seed = m
         .party("alice")
-        .with(move |c| c.store.seeds[&t].clone())
+        .with(move |c| c.store.own[&t].clone())
         .await;
     let key =
-        rhtn_client::keys::capture_key(&seed.seed, &kh("alice"), &kh("bob"), &seed.ceremony_id);
+        rhtn_client::keys::capture_key(&root("alice"), &kh("alice"), &kh("bob"), &seed.ceremony_id);
     let sealed = m
         .party("bob")
         .with(move |c| c.store.sealed[&t].clone())
@@ -394,10 +402,14 @@ async fn the_guided_capture_takes_three_to_five_frames_over_ten_to_fifteen_secon
     for t in [t1, t2] {
         let seed = m
             .party("alice")
-            .with(move |c| c.store.seeds[&t].clone())
+            .with(move |c| c.store.own[&t].clone())
             .await;
-        let key =
-            rhtn_client::keys::capture_key(&seed.seed, &kh("alice"), &kh("bob"), &seed.ceremony_id);
+        let key = rhtn_client::keys::capture_key(
+            &root("alice"),
+            &kh("alice"),
+            &kh("bob"),
+            &seed.ceremony_id,
+        );
         let sealed = m
             .party("bob")
             .with(move |c| c.store.sealed[&t].clone())
@@ -493,10 +505,10 @@ async fn the_capture_key_goes_directly_to_the_selected_verifier_and_nowhere_else
     assert_eq!(copies.len(), 1, "one answer about alice: {copies:?}");
     let seed = m
         .party("alice")
-        .with(move |c| c.store.seeds[&ab].clone())
+        .with(move |c| c.store.own[&ab].clone())
         .await;
     let released =
-        rhtn_client::keys::capture_key(&seed.seed, &kh("alice"), &kh("bob"), &seed.ceremony_id);
+        rhtn_client::keys::capture_key(&root("alice"), &kh("alice"), &kh("bob"), &seed.ceremony_id);
     for who in ["carol", "w1", "w2"] {
         let k = released[..].to_vec();
         assert!(
@@ -510,7 +522,7 @@ async fn the_capture_key_goes_directly_to_the_selected_verifier_and_nowhere_else
         .party("bob")
         .with(|c| {
             c.store
-                .seeds
+                .own
                 .iter()
                 .filter(|(_, s)| s.counterparty == kh("alice"))
                 .map(|(t, _)| *t)

@@ -235,21 +235,26 @@ impl BackPointers {
 pub struct ProposedBody {
     /// The body as every signer will sign it, back-pointers in place.
     pub body: Vec<u8>,
-    /// The disclosure set its root commits to, every slot revealed.
-    pub set: DisclosureSet,
+    /// The disclosure set its root commits to, every slot revealed —
+    /// **a presence record's alone** (`wire-format.md` §7.10.2): an
+    /// adoption or a peering body has no slots to commit to, and the
+    /// field is absent for one.
+    pub set: Option<DisclosureSet>,
 }
 
 impl ProposedBody {
     /// The bytes of this `ProposedBody`, as its kind composes them.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
-        emit_map_head(&mut out, 2);
+        emit_map_head(&mut out, 1 + usize::from(self.set.is_some()));
         emit_uint(&mut out, 1);
         emit_bstr(&mut out, &self.body);
-        emit_uint(&mut out, 2);
-        emit_array_head(&mut out, self.set.len());
-        for d in &self.set {
-            out.extend_from_slice(&d.encode());
+        if let Some(set) = &self.set {
+            emit_uint(&mut out, 2);
+            emit_array_head(&mut out, set.len());
+            for d in set {
+                out.extend_from_slice(&d.encode());
+            }
         }
         out
     }
@@ -263,8 +268,13 @@ impl ProposedBody {
             return Err("ProposedBody is not a map".into());
         };
         let body = bs(b, map_get(m, 1).ok_or("body")?).ok_or("body")?;
-        let set_at = value_slice(b, 2).ok_or("disclosures")?.start;
-        let slots = array_item_ranges(b, set_at).ok_or("disclosures not an array")?;
+        // **a presence record's set, and nothing else's** (§7.10.2): an
+        // adoption or a peering body carries none, and the schema has
+        // already refused one that carries a set it should not
+        let Some(r2) = value_slice(b, 2) else {
+            return Ok(ProposedBody { body, set: None });
+        };
+        let slots = array_item_ranges(b, r2.start).ok_or("disclosures not an array")?;
         let mut set: Vec<Disclosure> = Vec::with_capacity(LABELS.len());
         for (r, label) in slots.into_iter().zip(LABELS) {
             let parts = array_item_ranges(b, r.start).ok_or("a disclosure is an array")?;
@@ -288,7 +298,10 @@ impl ProposedBody {
         let set: DisclosureSet = set
             .try_into()
             .map_err(|_| String::from("exactly seven disclosures"))?;
-        Ok(ProposedBody { body, set })
+        Ok(ProposedBody {
+            body,
+            set: Some(set),
+        })
     }
 }
 

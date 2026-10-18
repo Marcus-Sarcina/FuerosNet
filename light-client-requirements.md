@@ -344,17 +344,49 @@ job.
   §9.0). Otherwise it keeps the ability to redirect anyone still holding a stale
   locator, indefinitely and with no other source of truth available to them. One
   self-signed locator at the maximum counter; no patron needed.
-- **Pruning the chain must not delete presence records, sealed captures or capture
-  seeds.** A checkpoint bounds what the *chain* must retain; presence evidence is a
+- **The identity's key material comes in and goes out as bytes, from a source
+  the application names** [author, 2026-10-17]. A new identity is made the way
+  it always was, and a second signing device comes to hold it because its
+  holder put the material there and not because a device sent it (design
+  §23.3). **Everything below the application takes it as bytes** — handed in at
+  start (§9), or read from a file — and nothing in the kernel knows where a
+  person kept it. What a restore of it restores is the key and every key the
+  identity derives, the capture keys that unlock your likeness on other
+  people's devices among them (design §7.5.2.6); what it does not restore is
+  the archive, which comes from the backup or not at all (design §10.2; §6).
+  Say both.
+
+- **A seed phrase, if you offer one, is a feature of its own and nothing
+  depends on it** [author, 2026-10-17]. It encodes the identity's key material
+  as words for a person to store, and reads those words back into the same
+  bytes; **that is the whole of its contract**. It lives above the kernel, has
+  no surface inside it, and **deleting it must leave the client working** with
+  the material given as a file instead — which is the test of whether it was
+  built as a feature or wired into the identity. Making an identity may offer
+  it, and doing so is a display of the material and not a different way of
+  making one. Show it once, when the identity is made, and never again on
+  demand: **a phrase a screen will redisplay is a phrase anyone holding the
+  unlocked device can take**. A client that offers none is conforming.
+- **Pruning the chain must not delete presence records or sealed captures.** A
+  checkpoint bounds what the *chain* must retain; presence evidence is a
   separate kind of history that stays usable under any sequence and in any subtree
-  (design §10.0). Deleting it with the chain would discard the evidence a later
+  (design §10.0). **There are no capture seeds to keep**: a capture key is
+  derived from your own identity and the ceremony's id when you want it (design
+  §7.5.2.6), so what a pruned record must still yield is the record and its
+  ceremony-id, not a secret stored beside it. Deleting it with the chain would discard the evidence a later
   adoption and a later recovery both depend on, and would put a patron's willingness
   to countersign a series reissue astride evidence design §6.4 says it must not gate.
 - **Keep retention and disclosure as separate controls.** Choosing how far back to
   *disclose* must never delete anything: disclosure is reversible and can be widened
   later, up to what is retained. Deleting is the one-way door, and it caps every
   future disclosure, so it belongs behind its own deliberate control, never as a
-  side effect of choosing what to show today.
+  side effect of choosing what to show today. **Say that it takes the window's
+  capture keys with it** [author, 2026-10-17]: those derive from ceremony
+  pre-commitments you keep beside the records and nothing serves one back
+  (design §7.5.2.6), so deleting a window makes every capture sealed in it
+  permanently inert on every counterparty's device. That is the one way to put
+  old captures beyond your own reach, it is all-or-nothing across the window,
+  and it is the same price as putting any other history beyond reach.
 - **Treat a series reissue as deliberate, not routine.** It costs nothing in routing, since
   the path is unchanged, but it is the boundary beyond which you may prune, and
   pruning is irreversible. **Never prune inside the 730-day window**: those records are
@@ -381,8 +413,9 @@ job.
 - **Hold a peer's backup as ciphertext, and give a peer only what a peer holds**
   [author, 2026-09-29]: the contacts and the transaction records, under design
   §13.7.1's envelope. Not the sealed captures — those go to a desktop or
-  third-party backup with the archive (design §23.3) — and never a seed, which
-  leaves the ceremony device for nowhere (design §23.3). Peering is priced in a
+  third-party backup with the archive (design §23.3) — and never your identity
+  seed, which leaves the device that performs ceremonies for nowhere (design
+  §23.3). Peering is priced in a
   meeting and memorialised in a record (design §6.3); the backup is what the
   record entitles the two of you to, and nothing else does.
 - **Keep your peers' endpoints current, and tell them yours** [author,
@@ -622,7 +655,32 @@ only party who can tell them is their own client.
 
 ---
 
-### 4.2 What you keep of your horizon
+### 4.2 What you keep of your horizon, and what you hand your own other devices
+
+- **Bring another device of your own identity up to date whenever you are in
+  contact with it** [author, 2026-10-16]. A device that can see another is
+  behind is in contact with it, so it does not wait to be asked and it does not
+  ask the person: it hands over what the other lacks — design §10.3's merge
+  where the two have forked, a plain append where one is simply short — over
+  the archive fetch any reader uses (`wire-format.md` §7.9), or across the
+  local interface where the two are side by side (`wire-format.md` §14.3.3).
+  **The subject is reading its own archive**, so no new permission and no new
+  object arises. What remains for a screen is the residual alone: what one
+  device signed while the other was away (design §23.3).
+
+- **Hand over everything you hold of it, not the archive alone** [author,
+  2026-10-16]. The other device is brought to your whole state: the archive,
+  the view you keep beside it — your contacts and the aliases you have fetched
+  for them (§4.3), the locators you hold, the profiles you publish (§4.4),
+  your portion of the resource catalogue —
+  and your sealed captures, which cross as the ciphertext they are. **The identity seed does not cross**:
+  a new signing device comes to hold the identity because its holder put the
+  seed there (§2), never because another device sent it (design §23.3).
+  Assume the
+  other device is the one that will be powered up next and yours the one that
+  will be away, because that is the ordinary multi-device shape (design
+  §23.3) — anything you keep back is something its holder will find missing
+  with no way to ask for it.
 
 - **Persist enough to resolve every node in your trust horizon directly**
   (design §15.1.1), for routing around a patron that is not answering and for
@@ -828,6 +886,14 @@ anchor up in, and it is what you hand onward in a bundle (§1.1,
 ---
 
 ## 6. Warnings before irreversible or surprising actions
+
+- **Say that recovery restores standing and not history** [author,
+  2026-10-16]. Presence-based recovery returns the key; the archive comes
+  from the person's own backup or not at all, because a protocol path that
+  restored it would hand the same history to whoever completes the same
+  recovery (design §10.2, §22). So a client that has recovered an identity
+  says what came back and what did not, and a restored archive is shown as
+  recovered on trust rather than as verified-complete (PRD-09).
 
 - **Encourage a second independent adoption early**, while the user can still reach
   one freely. Subnet plurality is what defeats patron eclipse (design §18.4), and
@@ -1074,12 +1140,3 @@ on the wire.
   renewal being about the credential alone.
 
 ---
-
-## 11. Open
-
-- Whether recovery should restore archive history, and how, without handing an
-  attacker the same path (design §22).
-- How a user understands an archive spanning several devices. **Which device
-  holds what is settled** (design §23.3): seeds sit on the ceremony device, and
-  archives, sealed captures and caches go where the storage is. How that is
-  presented to the person is not.

@@ -419,7 +419,7 @@ fn f04_old_series_departure_must_not_clear_a_new_relationship_slot() {
 
 #[test]
 fn r06_late_response_must_belong_to_the_records_ceremony() {
-    use rhtn_client::{query::*,subject::{SubjectState,SubjectConfig},notice::Silent,store::{ClientStore,OwnSeed},record::take_late_response};
+    use rhtn_client::{query::*,subject::{SubjectState,SubjectConfig},notice::Silent,store::{ClientStore,OwnCapture},record::take_late_response};
     let (a,b,v)=(test_identity("alice"),test_identity("bob"),test_identity("carol"));
     let backs=vec![vec![[1;32]],vec![[2;32]],vec![[3;32]]];
     let body=presence_record_body(&backs,[&a.public.keyhash,&b.public.keyhash],&[Witness{keyhash:v.public.keyhash,nominated_by:a.public.keyhash,flags:3}],100,101,&[3;32]);
@@ -428,7 +428,7 @@ fn r06_late_response_must_belong_to_the_records_ceremony() {
     assert_eq!(rec.check_signatures(&ids),SigStatus::Verified);
     let mut store=ClientStore::default();
     store.records.insert(rec.txid,rec.bytes.clone());
-    store.seeds.insert(rec.txid,OwnSeed{seed:[5;32],counterparty:b.public.keyhash,ceremony_id:[6;32],finalized_at:101});
+    store.own.insert(rec.txid,OwnCapture{counterparty:b.public.keyhash,ceremony_id:[6;32],finalized_at:101});
     let mut subject=SubjectState::new(SubjectConfig::default());
     subject.open_window([7;32]);
     let q=VerificationQuery{subject:a.public.keyhash,querier:b.public.keyhash,ceremony_id:[7;32],profile:vec![1],template_version:1,verifier:v.public.keyhash};

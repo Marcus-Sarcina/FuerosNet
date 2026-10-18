@@ -403,6 +403,12 @@ pub fn encode_batch_reply(replies: &[PrekeyReply]) -> Vec<u8> {
 pub fn decode_batch_reply(b: &[u8]) -> Result<Vec<PrekeyReply>, String> {
     parse_all(b).map_err(|e| e.0)?;
     let parts = array_item_ranges(b, 0).ok_or("batch reply not an array")?;
+    // **one reply per subject asked, and the population is bounded**
+    // (`wire-format.md` §7.8: `[ 1*256 PrekeyReply ]`, the request's own
+    // ascending order associating each reply with its subject)
+    if parts.is_empty() || parts.len() > 256 {
+        return Err("a batch reply carries one to 256 replies".into());
+    }
     parts
         .into_iter()
         .map(|r| PrekeyReply::decode(&b[r]))

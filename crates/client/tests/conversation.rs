@@ -100,15 +100,18 @@ fn the_conversation_objects_encode_to_the_canonical_bytes_and_read_back() {
 
     let fx = fixture("P-proposed-body");
     let read = ProposedBody::decode(&fx).expect("decodes");
+    // **a presence record's proposal carries its set** and another
+    // transaction's carries none (`wire-format.md` §7.10.2)
+    let set = read.set.clone().expect("a presence proposal's set");
     assert_eq!(
-        read.set.iter().map(|d| d.label).collect::<Vec<_>>(),
+        set.iter().map(|d| d.label).collect::<Vec<_>>(),
         LABELS,
         "seven slots in label order"
     );
     let (proposal, back) = proposal_from_body(&read.body).expect("the body reads back");
     assert_eq!(
         proposal.root,
-        disclosure_root(&read.set),
+        disclosure_root(&set),
         "the root is the root of the set shown"
     );
     assert_eq!(proposal.witnesses.len(), 16);
@@ -261,7 +264,7 @@ fn a_message_crosses_as_its_kind_and_comes_back_the_same() {
             let (proposal, back) = proposal_from_body(&pb.body).unwrap();
             Msg::Proposal(Box::new(Proposed {
                 proposal,
-                set: pb.set,
+                set: pb.set.expect("a presence proposal's set"),
                 back,
             }))
         }),

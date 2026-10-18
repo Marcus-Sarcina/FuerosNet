@@ -54,6 +54,29 @@ document before changing anything.
 
 ---
 
+## Decisions that are the author's [author, 2026-10-16]
+
+When a decision belongs to him — a protocol choice, a parameter, anything
+a document would have to state — **ask, do not file it**:
+
+1. **If it blocks the current task, ask at the moment**, in the output,
+   and stop on that point alone while the rest of the work continues.
+2. **If it does not block, ask in that same output anyway**, as a plain
+   question with the options and what you will assume meanwhile.
+3. **If he does not answer, ask again in every subsequent output** until
+   he does.
+4. **Only an explicit deferral moves it out of the conversation**, into
+   `Robot/deferred-decisions.md`, with enough explanation to be decided
+   cold — what prompted it, the options, what was done meanwhile, and
+   what changes if it goes the other way.
+
+**Why this rule exists**: the habit it replaces was to pick the
+conservative option, write "owed to the author" into
+`Robot/review-tracking.md`, and carry on — so the question surfaced weeks
+later as a blocker, with the context that made it answerable gone.
+
+---
+
 ## Failure modes to expect in yourself
 
 These are drawn from a fortnight of this work. Each cost real time.

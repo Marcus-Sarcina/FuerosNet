@@ -13867,6 +13867,212 @@ rejections in the corpus, and both introduction kinds are listed in the
 corpus runner so a rejection that starts passing fails rather than being
 skipped.
 
+### 2026-10-16 (nine rulings, and the open questions retired with them)
+
+**The arranging of a transaction is registered now.** An adoption and a
+peering were always first-order transactions (§4.1, §4.4); what had no
+encoding was the conversation that settles one after the record, so D7's
+shell minted five frames under a kind of its own. `ProposedBody`'s
+disclosure set becomes **present if and only if the body is a presence
+record** — §4.5.1's slots are a presence record's — which frees kinds 15
+to 18 to carry any two-signature transaction's arranging, and kind **19
+`AdoptionDirection`** is registered for the one thing they did not cover:
+which way an adoption runs, the subnet the patron adopts into, and the
+series the party being adopted can enter, each field stated by the party
+it belongs to [author, 2026-10-16]. A peering needs no kind 19 at all.
+Five vectors, NET-031, SCH-026 amended.
+
+**Nine rulings, and every question they answer is gone from the
+documents** [author, 2026-10-16]:
+
+- **A peer audit is advisory and never a trust input** (§6.3): unannounced,
+  randomised, calibrated over paths that avoid the auditee — and still only
+  evidence of availability, because the auditee controls the timing and
+  another replica holder can serve the block. §1.1 is the reason.
+- **Replication depth beyond the floor is freely tunable** (§3.4), the
+  reference client shipping the floor plus one, to be refined by
+  measurement rather than argument.
+- **A fork needs no notice object** (§9.0.2). Every node on the rootward
+  path sees the same divergence, so the honest case is covered; a malicious
+  node that withholds the memo would not be compelled by an artefact
+  either. An object that changes neither case is machinery for its own sake.
+- **No protocol path restores an archive** (§10.2): recovery returns the
+  key, and anything that returned the history would hand it to whoever
+  completes the same recovery. The client says **standing, not history**
+  (`light-client-requirements.md` §6).
+- **Two devices of one identity replicate on contact** (§23.3,
+  `light-client-requirements.md` §4.2): a device that can see another is
+  behind is in contact with it, so it hands over what is missing — §10.3's
+  merge where they forked, a plain append where one is short — over §7.9's
+  archive fetch or §14.3.3's local interface. No new object and no new
+  permission: the subject is reading its own archive. What is left for a
+  screen is the residual one device signed while the other was away.
+- **One-time keys come from the patron alone; reusable material may come
+  from a sibling** (§14.2.4.6, `infra-client-requirements.md` §6). Serving a
+  one-time key is a metadata event; reusable material is published to be
+  fetched and a cache of it discloses nothing.
+- **A prekey batch reply is `[ 1*256 PrekeyReply ]`** in the request's own
+  ascending order, a subject that could not be answered carrying its own
+  failure code rather than being omitted (`wire-format.md` §7.8). The
+  implementation had invented this framing; the document defines it now and
+  the decoder holds the bound. SCH-027.
+- **The post-quantum provider is RustCrypto behind the trait**, revisited
+  when aws-lc-rs ships ML-DSA.
+- **Parameters stay open** (§21.1), to be refined empirically.
+
+**What the retirement removed, with no tombstone left**: design §22.3's
+four questions and the section itself (§22.4 renumbered to §22.3), the four
+classification bullets that pointed into it,
+`light-client-requirements.md` §11 entire, `wire-format.md` §13's second
+item, `infra-client-requirements.md` §12's open framing and its "Closed:"
+history. **The test register is the one exception** [author, 2026-10-16]:
+its numbers are never reused, so a resolved entry keeps a row saying
+*resolved* rather than being deleted, and O-013 keeps one. Five citations
+that dangled after the cuts were retargeted — one of them a mis-citation of the design's own
+(§619 named light-client §11 for a rule that lives in §10). Three stale
+claims were corrected: CAP-015 still asked for a matcher §22.2 had chosen,
+O-011 called payload typing open after the kind registry settled it, and
+O-014 cited an infra section that no longer describes peer backup. O-012
+narrowed to its one live clause.
+
+### 2026-10-16 (the capture profile named, the dataset whole, the lone signature enough)
+
+**Four rulings closed the last of the posed questions** [author,
+2026-10-16].
+
+**The register keeps its tombstones.** The no-tombstone rule applies to the
+narrative — repeated mentions of alternatives and obsolete designs — and not
+to a numbered register, where a citation must resolve to *resolved* rather
+than to a different finding. O-013 is restored as a resolved row.
+
+**The capture profile is named but for its fuzzing.** Template version 1 is
+`face/sface-int8-v1` (§7.5): the extractor §22.2 already chose, a
+128-dimension int8 template of exactly 128 bytes compared by cosine
+distance, over a YuNet detection aligned to 112×112. The number travels and
+the entry is what it names, so a verifier on another engine answers
+*unavailable* rather than comparing under its own. The sealed store is
+**XChaCha20-Poly1305** (§7.5.2.6): a 24-byte nonce drawn at random per
+sealing and stored beside the ciphertext, associated data the ceremony
+pre-commitment followed by the slot's label, framing a version byte then
+the nonce then the ciphertext. The extended nonce is what lets the draw be
+random rather than counted. **The fuzzing algorithm alone remains**, and it
+waits on a measurement rather than a preference: CAP-016 against §7.5's
+99% target. CAP-015 becomes a requirement; O-011 narrows to the fuzzing and
+the ratchet binding; §7.5.2.10's first open item is gone.
+
+**The dataset that crosses between a person's devices is the whole of it**
+(§23.3, `light-client-requirements.md` §4.2): the archive, the view kept
+beside it — contacts, held locators, fetched profiles, the catalogue's
+portion — and the sealed captures. The reason is the author's: a person's
+one ceremony device is not guaranteed, and what is ordinary about having
+several is that one is powered up at a time, so the device that is up is
+the only one that can be current. **What does not cross is the identity
+seed**: it goes on paper as a phrase, and **entering the phrase is how a new
+signing device comes to hold the identity** [author, 2026-10-16] — the act of
+the person rather than anything one device hands another, so no object carries
+a seed over a contact and a device given the dataset can read everything and
+sign nothing (§13.7.1, `light-client-requirements.md` §2, OPS-019). The
+per-ceremony capture seeds are not that seed and do cross, since without them
+the device that is up cannot release a capture key for a ceremony the other
+performed. A replicated
+capture is ciphertext, so **deletion stays the destruction of a key** and
+needs no message between devices. APP-014; O-015 narrows to restoration
+alone and §8's exclusion list no longer calls multi-device synchronization
+unspecified.
+
+**One signature was the answer, not the gap.** Issuer role 3 was described
+as a threshold of a root's down-line co-signing its key, and the object
+carries one signature. It keeps the one (§12.7.2, `wire-format.md` §7.1):
+a member of the down-line asserts its root's key under its own signature,
+and **a false assertion reaches nobody but the party making it** — the root
+is what its own transactions say it is, and a node that cached the wrong
+key simply finds that reach fail. Nothing collects a quorum and no
+validator refuses an attestation for standing alone. O-012 resolves.
+
+**The key goes on paper, not over a contact** [author, 2026-10-16]. The
+follow-on to the ruling above: the identity's key material stays out of
+automatic replication, and a new signing device comes to hold the identity
+because its holder put the material there. **A seed phrase is a severable
+feature of a light client and interpenetrates nothing** [author, 2026-10-17]:
+roots are made as they always were, and an interpreter above the kernel
+encodes the material as words for a person to store and reads those words
+back into the same bytes. That is its whole contract. So the design says only
+that the material is never sent from one device to another (§23.3) and that
+§13.7.1 is the archive's backup rather than the key's, with how a holder
+carries it put outside the design entirely; the feature and its severability
+are a commitment in `light-client-requirements.md` §2 — **delete it and the
+client still starts from a file**, which is the test of whether it was built
+as a feature or wired into the identity — with the show-once rule beside it,
+and OPS-019. Nothing in any crate mentions a phrase, and the key file is the
+two algorithm seeds as it already was. **The two classes of seed part company here**: a phrase cannot restore
+32 random bytes drawn per ceremony (§7.5.2.6), and the device that is up cannot
+release a capture key without them, so the capture seeds cross with the dataset
+while the identity seed does not. §23.3's seed sentence narrows to the identity
+seed accordingly.
+
+**And it cost an argument.** §23.3 had deletion state needing no allocation
+because one device held the seed. With the capture seeds replicating that is no
+longer true, so the section now says what is the case: **what a subject
+enforces is withholding rather than erasure** (§7.5.2.3), the declared
+retention travelling with the record so every device of theirs declines on the
+same terms — while **erasing a capture seed is the one act that does not
+replicate**, a seed the other device still holds being a key it can still
+release. Cross-device deletion stays unpromised for a stated reason instead of
+by omission. OPS-007.
+
+**Social revocation is each voucher disavowing for itself** [author,
+2026-10-16]. §9.2 had *"the patron and/or a threshold of the down-line
+co-signing a revocation"* and a note that it needed specifying alongside the
+rotation format, against the same section's list calling disavowal *"the
+network's only negative attestation"*. Resolved the way role 3 was, and for the
+same reason: nothing is co-signed, a member of the down-line that wants to
+repudiate signs its own, and a reader counts what reached it. The co-signing
+clause and the note are gone together and nothing is owed. TX-011.
+
+**The capture seed is derived from the identity, not drawn per ceremony**
+[author, 2026-10-17]. The last of the seed rulings, and the one that removed a
+class of state: §7.5.2.6's seed was 32 random bytes per ceremony, which made
+every capture key a secret to keep, replicate to the subject's other devices
+and carry through a restore. It is now the subject's **identity root** —
+`SHA-256` of the ASCII tag `rhtn/1:identity-root` followed by the identity's
+classical seed and then its post-quantum one — so **a subject who can sign can
+release**, and nothing is stored for a capture at all. Pinned to the byte like
+the rest of the construction, because two clients of one subject that
+disagreed on the seed would derive different keys and neither could release
+what the other's counterparty holds. **It is a function of key material every
+client of the identity already has**, which is what keeps the phrase out of
+it: how a person carries their identity to a device stays the client's
+(`light-client-requirements.md` §2).
+
+What it settles, in one move: §7.5.2.9 stops asking for a backup of seeds
+and §7.5.2.10 is gone, its restore question answered by construction; §22.2
+loses the same question; §23.3 says no capture seed crosses because none is
+kept, and **there is no deletion state to allocate** — the argument that
+replication had broken twice over now rests on nothing being stored. **What it
+costs is the per-capture erasure and not the final form** [author,
+2026-10-17]: a subject could put one capture beyond their own recall by
+deleting its seed, and now the way to do it is to take a series reissue and
+delete the archive behind it, which takes that window's ceremony
+pre-commitments with it — no transaction carries one (`wire-format.md` §4.5)
+and nothing serves one back, so every capture sealed in that window goes inert
+everywhere. **The price is the records**, which is the point: sequestering old
+captures now costs what sequestering any other history costs, all-or-nothing
+across a period, where the deletable seed had made captures the one class a
+subject could put beyond reach for free and one at a time. Within what the
+subject still holds the control is withholding, reversible in either
+direction. The exposure is unchanged, the old per-ceremony seeds having sat in
+the same backup as the keys.
+
+In the code: `SigningIdentity` computes and keeps the root and hands it out
+through `identity_root()`, which is one-way and no accessor for either signing
+key; `OwnSeed` becomes `OwnCapture` and **holds no secret** — the
+counterparty, the ceremony-id and the finalization time, which is all a grant
+needs — so the client store now has no capture secret at rest; `random_seed`
+is gone. The vectors publish the root as the capture key's IKM and the key
+moves with it. CER-63, CAP-004, ARC-017, OPS-001, OPS-007, O-015 resolved.
+
+Families 528, with APP-014 and OPS-019.
+
 ### 2026-10-16 (the run renewed, providers counted, and the catalog reached)
 
 **Nothing renewed a run.** An instance holds 45 credentials of 48 hours,

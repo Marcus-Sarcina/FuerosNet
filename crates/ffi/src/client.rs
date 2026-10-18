@@ -24,8 +24,9 @@ use std::sync::Arc;
 impl Drop for Participant {
     /// The seeds go with the participant [2026-09-30]. They are held for
     /// the backup alone (design §13.7.1) and only on the ceremony device;
-    /// on the way out they are wiped, for the reason `OwnSeed` is wiped in
-    /// the client: freed memory keeps no keys (design §3).
+    /// on the way out they are wiped, for the reason every holder of key
+    /// material in the client wipes: freed memory keeps no keys (design
+    /// §3).
     fn drop(&mut self) {
         use zeroize::Zeroize;
         if let Some(seeds) = &mut self.seeds {
@@ -395,6 +396,14 @@ pub struct ProviderRow {
     /// How many parties inside this client's own horizon are already seen
     /// peering from inside that ASN.
     pub nodes: u32,
+    /// **The display tag `light-client-requirements.md` §6 asks for** —
+    /// "mark the crowded ones rather than hiding them" — set where this
+    /// operator already has presence inside that provider. **How it is
+    /// styled, and whether a share of the horizon rather than any
+    /// presence at all should set it, are screen-design decisions**
+    /// [author, 2026-10-16]: the count is beside it either way, and
+    /// nothing is hidden.
+    pub crowded: bool,
 }
 
 /// One subnet this client holds a position in, as a chooser lists it
@@ -998,7 +1007,7 @@ impl Participant {
                     let records = c.install(contents)?;
                     Ok::<_, String>(Restored {
                         records: records as u64,
-                        discarded: (discarded.captures + discarded.seeds) as u64,
+                        discarded: (discarded.captures + discarded.own) as u64,
                     })
                 })
                 .map_err(Refused::new)?;
@@ -2150,6 +2159,7 @@ impl Participant {
                     .map(|(asn, nodes)| ProviderRow {
                         asn,
                         nodes: u32::try_from(nodes).unwrap_or(u32::MAX),
+                        crowded: nodes > 0,
                     })
                     .collect()
             })

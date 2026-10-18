@@ -592,6 +592,11 @@ pub const KIND_PROPOSED_BODY: u64 = 16;
 pub const KIND_SIGNING_REPLY: u64 = 17;
 /// The finalised `Envelope` (§3), proposer to every signer.
 pub const KIND_RECORD: u64 = 18;
+/// `AdoptionDirection` (`wire-format.md` §7.10.2): what only the other
+/// side can state before a patron can build an adoption body — which way
+/// it runs, which subnet, and the series the party being adopted can
+/// enter.
+pub const KIND_ADOPTION_DIRECTION: u64 = 19;
 
 /// A plaintext with its kind in front.
 pub fn wrap(kind: u64, bytes: &[u8]) -> Vec<u8> {

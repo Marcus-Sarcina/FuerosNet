@@ -1,6 +1,6 @@
 # Standalone signed records (`wire-format.md` §7)
 
-Generated against `wire-format.md` `435e1e26927e4033…`, `network-design.md` `313459ec74d5da93…` and `light-client-requirements.md` `07f0a32e32134fd7…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `381823a91a3edfc7…`, `network-design.md` `5892663d8bf02592…` and `light-client-requirements.md` `1fd5a16699168bb0…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Canonical. Spec-derived, reproduced by the independent harness.** See
 [README.md](README.md). Each **signed** §7 object is a standalone `COSE_Sign1`
@@ -667,10 +667,16 @@ pre-commitment, output 32 bytes. Subject alice, holder c1, ceremony the
 **prior alice–c1 meeting's** contributory pre-commitment (`transactions.md`) —
 the ceremony that sealed the capture, never the one under assembly.
 
-seed:
+**The seed is the subject's identity root**, `SHA-256` of the ASCII tag
+`rhtn/1:identity-root` followed by alice's classical seed and then her
+post-quantum one (design §7.5.2.6). Nothing is drawn per ceremony and nothing
+is stored for a capture: a subject who can sign can derive, so the key comes
+back wherever the identity comes back.
+
+identity root (the seed):
 
 ```
-298a1bd33f525f98915dd373e76cfe00badeb753751b7a11622284adc63e466d
+f2cb7407b6a33b1eca36af86aa893dedbc43bd1360c13c26fddc662195a1d03c
 ```
 
 info (14-byte tag + 3 × 32 bytes):
@@ -685,7 +691,7 @@ e4df0f53f5a29829855d4d1d58f5
 k_capture:
 
 ```
-6157379db20e9b35da24fbab9ab4c8bc8676dc8f8c22c89d2b1fe2fea7b2985c
+9c888d1708577e49f971625f42909fcbdb59a7652665e422fb7c91d31377d451
 ```
 
 The `KeyGrant` in `messages.md` carries exactly this key, bound to the normal

@@ -195,8 +195,8 @@ impl SubjectState {
         query_id: [u8; 32],
         now: u64,
     ) -> Option<KeyGrant> {
-        let (record, seed) = store
-            .seeds
+        let (record, own) = store
+            .own
             .iter()
             .filter(|(_, s)| {
                 s.counterparty == *verifier
@@ -206,7 +206,14 @@ impl SubjectState {
         Some(KeyGrant {
             record: *record,
             query_id,
-            key: capture_key(&seed.seed, &me.public.keyhash, verifier, &seed.ceremony_id),
+            // derived here and not read from the store: the seed is the
+            // identity root (design §7.5.2.6)
+            key: capture_key(
+                me.identity_root(),
+                &me.public.keyhash,
+                verifier,
+                &own.ceremony_id,
+            ),
         })
     }
 
@@ -252,7 +259,7 @@ pub fn eligible_captures(
     now: u64,
 ) -> Vec<Txid> {
     let mut v: Vec<(u64, Txid)> = store
-        .seeds
+        .own
         .iter()
         .filter(|(_, s)| {
             s.counterparty == *verifier && now.saturating_sub(s.finalized_at) < retention_seconds

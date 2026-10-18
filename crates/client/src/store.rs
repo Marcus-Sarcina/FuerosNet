@@ -8,7 +8,7 @@
 //!
 //! [`ClientStore`] is the client's persistent state, laid out so a test can
 //! see what a compliant client holds: sealed captures of others, its own
-//! seeds, its records and the late responses beside them, and never a
+//! own captures, its records and the late responses beside them, and never a
 //! plaintext likeness or a released key.
 
 use crate::record::DisclosureSet;
@@ -242,44 +242,28 @@ pub fn open(
     })
 }
 
-/// A subject's own seed for one of its records (design §7.5.2, §7.5.2.9):
-/// what unlocks its likeness on that counterparty's device, with what a
-/// grant needs to name the capture and derive its key.
-#[derive(Clone, PartialEq, Eq)]
-pub struct OwnSeed {
-    /// The seed itself, which is the one secret a store holds.
-    pub seed: [u8; 32],
-    /// Whose device holds the capture it unlocks.
+/// A capture of the subject that a counterparty holds (design §7.5.2,
+/// §7.5.2.9): what a grant needs to name it and derive its key.
+///
+/// **It holds no secret** [author, 2026-10-17]. This carried a per-ceremony
+/// seed, which was the one secret in a store; design §7.5.2.6 now derives
+/// the capture key from the identity root, so what is kept per capture is
+/// the counterparty, the ceremony it is bound to and when the record
+/// finalized — the three inputs a grant needs, none of them private.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct OwnCapture {
+    /// Whose device holds the capture.
     pub counterparty: Keyhash,
-    /// The ceremony the capture is bound to.
+    /// The ceremony the capture is bound to, which the key derives under.
     pub ceremony_id: [u8; 32],
     /// When the record finalized, which is what retention is counted from.
     pub finalized_at: u64,
 }
 
-// the seed is the one secret in a store, and a derived Debug put all 32
-// bytes of it into any log line that ever formatted one
-impl std::fmt::Debug for OwnSeed {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("OwnSeed")
-            .field("seed", &"<32 bytes, not shown>")
-            .field("counterparty", &self.counterparty)
-            .field("ceremony_id", &self.ceremony_id)
-            .field("finalized_at", &self.finalized_at)
-            .finish()
-    }
-}
-
-impl Drop for OwnSeed {
-    fn drop(&mut self) {
-        zeroize::Zeroize::zeroize(&mut self.seed);
-    }
-}
-
 /// A compliant client's persistent state (design §7.5.2, §7.5.2.9;
 /// `light-client-requirements.md` §1.3): the sealed captures it holds of
-/// others, by record; its own seeds, by record, which unlock its likeness
-/// on others' devices; the presence records it keeps; and the late
+/// others, by record; the captures of itself that others hold, by record,
+/// which its identity root unlocks; the presence records it keeps; and the late
 /// responses kept beside them and discarded with them; and the disclosure
 /// sets of its own records, which are ordinary record state
 /// (`wire-format.md` §4.5.1.2).  No plaintext likeness and no released key
@@ -288,8 +272,9 @@ impl Drop for OwnSeed {
 pub struct ClientStore {
     /// The sealed captures this client holds of others, by record.
     pub sealed: BTreeMap<Txid, SealedCapture>,
-    /// Its own seeds, by record, which unlock its likeness elsewhere.
-    pub seeds: BTreeMap<Txid, OwnSeed>,
+    /// The captures of itself that others hold, by record: what a grant
+    /// names, the key being derived rather than stored (design §7.5.2.6).
+    pub own: BTreeMap<Txid, OwnCapture>,
     /// The presence records it keeps.
     pub records: BTreeMap<Txid, Vec<u8>>,
     /// Late responses attached to a record, kept and discarded with it.
@@ -326,7 +311,6 @@ impl ClientStore {
         self.sealed
             .values()
             .any(|s| find(&s.ciphertext) || find(&s.nonce))
-            || self.seeds.values().any(|s| find(&s.seed))
             || self.records.values().any(|r| find(r))
             || self.late.values().flatten().any(|l| find(l))
     }
@@ -354,16 +338,19 @@ impl ClientStore {
 /// Where a client's own state goes, and how it comes back.
 ///
 /// **Three shapes, because the five maps have three lifetimes.** Records,
-/// sealed captures and seeds are written once and never rewritten — the
+/// sealed captures and own-capture rows are written once and never rewritten — the
 /// archive is append-only (design §13.7.1) and so is everything keyed
 /// beside it. Late responses, the arrivals that could not be attached and
 /// the disclosure sets accumulate against a record, so their file is
 /// rewritten when it grows.
 ///
-/// **A seed is the only secret here** (design §7.5.2: the subject holds
-/// the key to their own likeness on someone else's device), so its file is
-/// written 0600 like the identity's. Sealed captures are ciphertext this
-/// client cannot open and records are public by construction.
+/// **Nothing here is secret** [author, 2026-10-17], so no file is written
+/// 0600. This store held one secret, a per-ceremony capture seed; design
+/// §7.5.2.6 derives the capture key from the identity root instead, so a
+/// row keeps the counterparty, the ceremony id and the finalization time —
+/// the three inputs a grant needs, none of them private. Sealed captures
+/// are ciphertext this client cannot open and records are public by
+/// construction.
 ///
 /// **Nothing ages out on load.** design §13.7.1 is explicit that
 /// age-based flushing of live data is the wrong fix and **import** is
@@ -384,10 +371,13 @@ impl ClientStore {
             self.sealed.iter().map(|(t, c)| (*t, encode_sealed(c))),
             false,
         )?;
+        // not private: a row holds the counterparty, the ceremony id and
+        // the finalization time, and the key derives from the identity
+        // root (design §7.5.2.6)
         write_once(
-            &dir.join("seeds"),
-            self.seeds.iter().map(|(t, s)| (*t, encode_seed(s))),
-            true,
+            &dir.join("own"),
+            self.own.iter().map(|(t, s)| (*t, encode_own(s))),
+            false,
         )?;
         rewrite(
             &dir.join("late"),
@@ -432,10 +422,7 @@ impl ClientStore {
             &mut out,
             self.sealed.iter().map(|(t, c)| (*t, encode_sealed(c))),
         );
-        keyed(
-            &mut out,
-            self.seeds.iter().map(|(t, s)| (*t, encode_seed(s))),
-        );
+        keyed(&mut out, self.own.iter().map(|(t, s)| (*t, encode_own(s))));
         keyed(
             &mut out,
             self.late.iter().map(|(t, v)| (*t, encode_blobs(v))),
@@ -487,7 +474,7 @@ impl ClientStore {
             st.sealed.insert(t, decode_sealed(&v)?);
         }
         for (t, v) in m(2)? {
-            st.seeds.insert(t, decode_seed(&v)?);
+            st.own.insert(t, decode_own(&v)?);
         }
         for (t, v) in m(3)? {
             st.late.insert(t, decode_blobs(&v)?);
@@ -532,9 +519,9 @@ impl ClientStore {
                 st.sealed.insert(t, c);
             }
         }
-        for (t, b) in read_dir_of(&dir.join("seeds"))? {
-            if let Some(s) = decode_seed(&b) {
-                st.seeds.insert(t, s);
+        for (t, b) in read_dir_of(&dir.join("own"))? {
+            if let Some(s) = decode_own(&b) {
+                st.own.insert(t, s);
             }
         }
         for (t, b) in read_dir_of(&dir.join("late"))? {
@@ -669,24 +656,22 @@ fn decode_sealed(b: &[u8]) -> Option<SealedCapture> {
     })
 }
 
-fn encode_seed(s: &OwnSeed) -> Vec<u8> {
+fn encode_own(s: &OwnCapture) -> Vec<u8> {
     use rhtn_codec::encode::*;
     let mut out = Vec::new();
-    emit_array_head(&mut out, 4);
-    emit_bstr(&mut out, &s.seed);
+    emit_array_head(&mut out, 3);
     emit_bstr(&mut out, &s.counterparty);
     emit_bstr(&mut out, &s.ceremony_id);
     emit_uint(&mut out, s.finalized_at);
     out
 }
 
-fn decode_seed(b: &[u8]) -> Option<OwnSeed> {
-    let a = array_of(b, 4)?;
-    Some(OwnSeed {
-        seed: kh_at(b, &a[0])?,
-        counterparty: kh_at(b, &a[1])?,
-        ceremony_id: kh_at(b, &a[2])?,
-        finalized_at: uint_at(&a[3])?,
+fn decode_own(b: &[u8]) -> Option<OwnCapture> {
+    let a = array_of(b, 3)?;
+    Some(OwnCapture {
+        counterparty: kh_at(b, &a[0])?,
+        ceremony_id: kh_at(b, &a[1])?,
+        finalized_at: uint_at(&a[2])?,
     })
 }
 

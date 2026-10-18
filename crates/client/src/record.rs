@@ -405,7 +405,7 @@ pub fn take_late_response<L: Lookup + ?Sized>(
     }
     rhtn_crypto::verify::response(ids, &late.response, false).map_err(|e| e.to_string())?;
     // the ceremony is the record's, and consent is read within it
-    let Some(seed) = store.seeds.get(&late.record) else {
+    let Some(own) = store.own.get(&late.record) else {
         store
             .unattached_late
             .entry(late.record)
@@ -413,7 +413,7 @@ pub fn take_late_response<L: Lookup + ?Sized>(
             .push(r.verifier);
         return Err("the record's ceremony is not resolvable here".into());
     };
-    let ceremony = seed.ceremony_id;
+    let ceremony = own.ceremony_id;
     if !consented
         .get(&ceremony)
         .is_some_and(|qs| qs.contains(&r.query_id))

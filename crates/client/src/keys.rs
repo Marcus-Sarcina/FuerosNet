@@ -72,6 +72,13 @@ pub fn session_key(a: (&Keyhash, &[u8; 16]), b: (&Keyhash, &[u8; 16])) -> Zeroiz
 /// the raw subject and holder keyhashes and the ceremony pre-commitment,
 /// 32 bytes out.  Bound to subject, holder and ceremony, so a key released
 /// to one holder opens nobody else's copy and no later ceremony's.
+///
+/// **The seed is the subject's identity root and not a per-ceremony
+/// random** [author, 2026-10-17]:
+/// [`rhtn_crypto::SigningIdentity::identity_root`]. So nothing is
+/// generated for a capture and nothing is stored for one — a subject who
+/// can sign can release, and the key comes back wherever the identity
+/// comes back (design §7.5.2.9).
 pub fn capture_key(
     seed: &[u8; 32],
     subject: &Keyhash,
@@ -92,16 +99,6 @@ pub fn capture_key(
         .fill(&mut out[..])
         .expect("filled");
     out
-}
-
-/// A subject's seed for one ceremony: 32 random bytes only the subject
-/// holds (design §7.5.2), kept in its own record of the transaction.
-pub fn random_seed() -> [u8; 32] {
-    let mut s = [0u8; 32];
-    SystemRandom::new()
-        .fill(&mut s)
-        .expect("the system's random source");
-    s
 }
 
 /// A participant's contribution to the pre-commitment: 16 random bytes.

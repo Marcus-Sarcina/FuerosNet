@@ -2830,7 +2830,11 @@ def hkdf_sha256(ikm, info, length=32):
 # ceremony (pc1) - released against the CURRENT query. Field 1 names the prior
 # record; the current record's txid cannot appear, since it embeds the very
 # response this grant unlocks [0.6 phase 2, 2026-09-02].
-demo_seed = H(b'rhtn-test-vectors:capture-seed:alice:c1')
+# the seed is alice's IDENTITY ROOT, not a per-ceremony random (design
+# §7.5.2.6): SHA-256 of the tag and her two algorithm seeds, classical
+# first.  So nothing is stored for a capture and the key comes back
+# wherever the identity does [author, 2026-10-17].
+demo_seed = H(b'rhtn/1:identity-root' + ed25519_seed('alice') + mldsa_seed('alice'))
 demo_k = hkdf_sha256(demo_seed, b'rhtn/1:capture' + alice.keyhash
                      + IDS['c1'].keyhash + pc1_precommit)
 kg = e_map([(e_uint(1), e_bstr(pc1_txid)),
@@ -2920,6 +2924,18 @@ gathered_responses = e_arr(npr_responses)
 back_pointers = e_arr([e_bstr(h) for h in sorted(_npr_head(alice))])
 proposed_slots = [npr_slots[lab][0] for lab in LABELS]
 proposed_body = e_map([(e_uint(1), e_bstr(npr_body)), (e_uint(2), e_arr(proposed_slots))])
+# The same kind arranges a two-signature transaction after the record (§7.10.1,
+# kinds 15 to 19) [author, 2026-10-16]: an adoption body carries NO disclosure
+# set, §4.5.1's slots being a presence record's, and one over it is malformed.
+proposed_adoption = e_map([(e_uint(1), e_bstr(adopt_body))])
+proposed_adoption_set = e_map([(e_uint(1), e_bstr(adopt_body)),
+                               (e_uint(2), e_arr(proposed_slots))])
+# AdoptionDirection (kind 19): which way it runs, the subnet from the patron,
+# and the series from the party being adopted.
+adoption_direction = e_map([(e_uint(1), e_uint(1)), (e_uint(2), e_bstr(SUBNET))])
+adoption_direction_series = e_map([(e_uint(1), e_uint(2)), (e_uint(3), e_uint(5))])
+adoption_direction_none = e_map([(e_uint(1), e_uint(0))])
+adoption_direction_bad = e_map([(e_uint(1), e_uint(3))])
 signer_entries = e_arr([cose_signature_entry(p, s) for _, _, p, _, s in npr_entries[:2]])
 signing_reply_signed = e_map([(e_uint(1), signer_entries)])
 signing_reply_refused = e_map([(e_uint(2), e_uint(1)), (e_uint(3), e_bstr(IDS['w1'].keyhash))])
@@ -3408,6 +3424,14 @@ reg('B-profile-format', 'bytes', REJ('Profile', 'schema', 'image format 4 is not
     _profile(alice, 0, 'Alice', (4, b'x'), TS_2026))
 reg('B-profile-kind', 'bytes', REJ('Profile', 'schema', 'kind 2 is neither the subject\'s own nor the subnet\'s'),
     _profile(alice, 2, 'Alice', None, TS_2026))
+# A disclosure set belongs to a presence record's proposal alone (§7.10.2), and
+# a direction outside 0 to 2 is no direction [author, 2026-10-16].
+reg('B-proposed-set-over-adoption', 'bytes',
+    REJ('ProposedBody', 'schema', 'a disclosure set over a body that has none'),
+    proposed_adoption_set)
+reg('B-adoption-direction-3', 'bytes',
+    REJ('AdoptionDirection', 'schema', 'direction 3 is neither of the two ways nor neither'),
+    adoption_direction_bad)
 def _adopt_ext(nkeys, vlen):
     ext = [(e_uint(100 + i), e_bstr(b'x')) for i in range(nkeys)]
     if vlen:
@@ -3802,7 +3826,13 @@ pre-commitment, output 32 bytes. Subject alice, holder c1, ceremony the
 **prior alice–c1 meeting's** contributory pre-commitment (`transactions.md`) —
 the ceremony that sealed the capture, never the one under assembly.
 
-seed:
+**The seed is the subject's identity root**, `SHA-256` of the ASCII tag
+`rhtn/1:identity-root` followed by alice's classical seed and then her
+post-quantum one (design §7.5.2.6). Nothing is drawn per ceremony and nothing
+is stored for a capture: a subject who can sign can derive, so the key comes
+back wherever the identity comes back.
+
+identity root (the seed):
 
 ```
 {hx(demo_seed)}
@@ -4217,6 +4247,10 @@ for fid, by, kind, note in [
     ('P-gathered-responses', gathered_responses, 'GatheredResponses', "the normal record's three responses in body order"),
     ('P-back-pointers', back_pointers, 'BackPointers', "alice's one head for the normal record, the merge; what the body's key 0 names for her"),
     ('P-proposed-body', proposed_body, 'ProposedBody', "the normal record's body and its seven revealed slots"),
+    ('P-proposed-adoption', proposed_adoption, 'ProposedBody', "an adoption body proposed over the same kind, with no disclosure set (s7.10.2)"),
+    ('P-adoption-direction', adoption_direction, 'AdoptionDirection', "the recipient under the sender, in the subnet the patron adopts into"),
+    ('P-adoption-direction-series', adoption_direction_series, 'AdoptionDirection', "the sender under the recipient, offering the series it can enter"),
+    ('P-adoption-direction-none', adoption_direction_none, 'AdoptionDirection', "the authority question left alone, which is an answer"),
     ('P-signing-reply-signed', signing_reply_signed, 'SigningReply', "the lowest-keyhash signer's two entries"),
     ('P-signing-reply-refused', signing_reply_refused, 'SigningReply', 'refusal 1 with the witness keyhash'),
     ('P-signing-reply-refused-4', signing_reply_refused_4, 'SigningReply', 'refusal 4, the body does not verify against what this signer holds; no particular'),

@@ -1,6 +1,6 @@
 # Local device-to-device interfaces (`wire-format.md` §14.3)
 
-Generated against `wire-format.md` `435e1e26927e4033…`, `network-design.md` `313459ec74d5da93…` and `light-client-requirements.md` `07f0a32e32134fd7…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `381823a91a3edfc7…`, `network-design.md` `5892663d8bf02592…` and `light-client-requirements.md` `1fd5a16699168bb0…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Canonical. Spec-derived, reproduced by the independent harness.** The encodings
 of `wire-format.md` §14.3, as one coherent exchange: **alice initiates with
@@ -387,8 +387,8 @@ ceremony's pre-commitment; one such message crosses each way at capture time:
 
 ```
 83015820cb8ea88ad0a089017394c291f918217c4dc8d754a4639eb024f23662
-e5ca2b185820feb5bf5d3660e99d4ea3deff87546d52c0e1cee5cbb007ae04ac
-2c39bf902466
+e5ca2b18582052cdd360e2329063ee032c2394b25f2b540692349ac55ad11640
+ddcfdcdcb11d
 ```
 
 ## The handover between one identity's devices (§14.3.3)

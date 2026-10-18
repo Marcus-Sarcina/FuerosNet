@@ -2,6 +2,8 @@ use ed25519_dalek::{Signature as EdSig, Signer, Verifier, VerifyingKey as EdVk};
 use ml_dsa::MlDsa65;
 use ml_dsa::signature::Keypair as _;
 use rhtn_codec::cose;
+use rhtn_codec::cose::sha256;
+use zeroize::Zeroizing;
 
 /// The public half: what a counterparty pins.
 ///
@@ -30,6 +32,7 @@ pub struct SigningIdentity {
     pub public: Identity,
     ed_sk: ed25519_dalek::SigningKey,
     pq_sk: ml_dsa::ExpandedSigningKey<MlDsa65>,
+    root: Zeroizing<[u8; 32]>,
 }
 
 impl Identity {
@@ -93,9 +96,26 @@ impl Identity {
     }
 }
 
+/// The identity root (design §7.5.2.6): `SHA-256` of the ASCII tag
+/// `rhtn/1:identity-root` followed by the classical seed and then the
+/// post-quantum one.  **Pinned to the byte**, because two clients of one
+/// subject that disagreed on it would derive different capture keys and
+/// neither could release what the other's counterparty holds.
+pub fn identity_root(ed_seed: &[u8; 32], pq_seed: &[u8; 32]) -> Zeroizing<[u8; 32]> {
+    let mut pre = Zeroizing::new(Vec::with_capacity(IDENTITY_ROOT_TAG.len() + 64));
+    pre.extend_from_slice(IDENTITY_ROOT_TAG);
+    pre.extend_from_slice(ed_seed);
+    pre.extend_from_slice(pq_seed);
+    Zeroizing::new(sha256(&pre))
+}
+
+/// The ASCII tag [`identity_root`] hashes first.
+pub const IDENTITY_ROOT_TAG: &[u8] = b"rhtn/1:identity-root";
+
 impl SigningIdentity {
     /// From a 32-byte Ed25519 seed and a 32-byte ML-DSA seed (FIPS 204
-    /// `KeyGen_internal`).
+    /// `KeyGen_internal`).  The identity root (design §7.5.2.6) is computed
+    /// from the two and kept.
     pub fn from_seeds(ed_seed: &[u8; 32], pq_seed: &[u8; 32]) -> Self {
         let ed_sk = ed25519_dalek::SigningKey::from_bytes(ed_seed);
         let seed: ml_dsa::Seed = (*pq_seed).into();
@@ -106,7 +126,21 @@ impl SigningIdentity {
             public,
             ed_sk,
             pq_sk,
+            root: identity_root(ed_seed, pq_seed),
         }
+    }
+
+    /// The identity root a capture key is derived from (design §7.5.2.6).
+    ///
+    /// **This is not a third secret and it is not an accessor for either
+    /// signing key.** It is `SHA-256` of the tag and the two algorithm
+    /// seeds, so it is one-way: a holder of the root cannot sign, and a
+    /// subject who can sign can always recompute it. That is the whole of
+    /// why the capture key derives from it rather than from a value stored
+    /// per ceremony — the key comes back wherever the identity comes back,
+    /// with nothing else to carry (design §7.5.2.9).
+    pub fn identity_root(&self) -> &[u8; 32] {
+        &self.root
     }
 
     /// The classical signing key, for a transport that presents it as a raw

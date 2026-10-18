@@ -2694,8 +2694,14 @@ CurrencyAttestation = {
   3: timestamp,        ; issued_at
   4: timestamp,        ; expires_at — ~10 h default; hours, not days (design §12.6.5)
   5: uint,             ; issuer role: 0 patron, 1 sibling (secondhand),
-                       ;   2 grandpatron, 3 down-line threshold (root):
-                       ;   optional, an anchor-caching input (design §12.7.2)
+                       ;   2 grandpatron, 3 down-line member attesting its own
+                       ;   ROOT's key: optional, an anchor-caching input
+                       ;   (design §12.7.2). NO THRESHOLD IS CARRIED [author,
+                       ;   2026-10-16] — field 7 is one signature, so a role-3
+                       ;   attestation is one party's claim about a key that is
+                       ;   not its own. A reader wanting more than one voice
+                       ;   weighs more than one attestation; a validator
+                       ;   imposes no count and refuses none for being alone
   6: keyhash,          ; ISSUER identity, the signature below is by this party,
                        ; who is not otherwise named
   7: COSE_Sign1        ; BY THE ISSUER over canonical CBOR of fields 1-6;
@@ -3305,6 +3311,17 @@ PrekeyBatchRequest = {
   2: bstr .size 16        ; nonce
 }
 
+PrekeyBatchReply = [ 1*256 PrekeyReply ]
+                       ; the answer to a PrekeyBatchRequest [author,
+                       ;   2026-10-16]: one reply per subject asked, **in the
+                       ;   request's own ascending keyhash order**, which is
+                       ;   what associates a reply with its subject — every
+                       ;   reply echoes the one request nonce, so position is
+                       ;   the association. A subject the node could not
+                       ;   answer for carries its own failure code in field 4
+                       ;   rather than being omitted, so the orders cannot
+                       ;   drift apart
+
 PrekeyReply = {
   1: bstr .size 16,    ; echoes the request nonce
   2: ? [ 1*8 PrekeyBundle ],
@@ -3618,6 +3635,7 @@ attribute it; here nothing is read before attribution.
 | 16 | `ProposedBody` (§7.10.2) | Proposer to every signer |
 | 17 | `SigningReply` (§7.10.2) | Each signer to the proposer |
 | 18 | `Envelope` (§3), the finalised record | Proposer to every signer |
+| 19 | `AdoptionDirection` (§7.10.2) | Between the two parties arranging an adoption after the record |
 
 An unknown kind is application payload to a recipient that does not know it,
 and a kind whose body does not decode is dropped by the recipient that
@@ -3625,7 +3643,20 @@ opened it: the sender is attributed, and the message is not evidence.
 
 **Kinds 9 to 18 are the ceremony's conversation** [author, 2026-10-02]:
 everything the two participants and their witnesses say to one another after
-the local exchanges (§14.3). **Who hears what.** Each one a participant sends
+the local exchanges (§14.3).
+
+**Kinds 15 to 19 also arrange a two-signature transaction after the record**
+[author, 2026-10-16]. An adoption (§4.1) and a peering (§4.4) each carry two
+signatures and each rests on a meeting, so the two parties settle one *after*
+the record they rest on: the party being adopted states which way it runs and
+what series it can enter (kind 19), each signer sends its own back-pointers
+(kind 15), the proposer shows the body (kind 16), each signer answers (kind
+17), and the proposer hands back the finalised envelope (kind 18). **Nothing
+new is needed for the body, the signatures or the record**: those four kinds
+were never the presence ceremony's alone, and what distinguishes a presence
+record's proposal is a disclosure set that only a presence record has. A
+peering needs no kind 19 at all, neither party being under the other. The
+`ProposedBody`'s own rule says the rest. **Who hears what.** Each one a participant sends
 goes to its counterparty and to every witness either of them nominated, which
 is how a witness observes the sequence it attests (design §7.1), with these
 particulars. The consent request (kind 9) goes to its subject alone, stated in
@@ -3650,7 +3681,7 @@ off:
 
 | Recipient of the leg | Interface | Envelope |
 |---|---|---|
-| The co-present **counterparty**, for every one of kinds 9 to 18 it is sent | The local interface of §14.1, on the bearer the shell chose (§14.3.1) | The plaintext below, sealed under the local session (§14.3.2) and listed in §14.2 as a carriage |
+| The co-present **counterparty**, for every one of kinds 9 to 19 it is sent | The local interface of §14.1, on the bearer the shell chose (§14.3.1) | The plaintext below, sealed under the local session (§14.3.2) and listed in §14.2 as a carriage |
 | A **witness** or a **verifier**, for every kind either is sent | The end-to-end payload path (§7.8, design §14.2.4), reached through that party's own locator and its upstream node | This section's plaintext inside the payload session, as it always was |
 
 **The plaintext is the same object either way**: `uint kind || bytes`, built
@@ -3705,9 +3736,35 @@ BackPointers = [ 1*8 bstr .size 32 ]   ; one signer's list (§3.1)
 ProposedBody = {
   1: bstr,             ; the record body, §4.5's map as every signer will
                        ;   sign it, back-pointers in place
-  2: [ 7*7 Disclosure ]  ; the set the body's root commits to (§4.5.1),
+  2: ? [ 7*7 Disclosure ]  ; the set the body's root commits to (§4.5.1),
                          ;   every slot revealed, so a signer recomputes the
-                         ;   root before signing
+                         ;   root before signing. PRESENT IFF field 1 is a
+                         ;   presence record: §4.5.1's slots are a presence
+                         ;   record's, and an adoption or a peering body has
+                         ;   none to commit to [author, 2026-10-16]
+}
+
+AdoptionDirection = {  ; kind 19. **What only the other side can state**,
+                       ;   before the patron can build an adoption body
+                       ;   (§4.1): sent once by each party that has
+                       ;   something to say, and a field set by a party it
+                       ;   is not for is ignored
+  1: uint,             ; which way it runs, IN THE SENDER'S FRAME: 0 neither
+                       ;   — the authority question is left alone, which is
+                       ;   an answer; 1 the recipient under the sender; 2 the
+                       ;   sender under the recipient. **Stated by the side
+                       ;   holding both parties' choices**, which is the one
+                       ;   that read the other's first (design §7.1.1)
+  2: ? txid,           ; the subnet the patron adopts into (§2.3 field 4),
+                       ;   from the PATRON. Absent where the patron is a lone
+                       ;   root, whose first adoption names the subnet by its
+                       ;   own txid (design §13.8). A display name for it is
+                       ;   nobody's to assert here: an alias is a profile
+                       ;   (§7.11), fetched or absent
+  3: ? uint            ; a series this sender has never occupied, from the
+                       ;   PARTY BEING ADOPTED (§2.3, §4.1): the one thing a
+                       ;   patron cannot work out, sent with that party's
+                       ;   back-pointers (kind 15)
 }
 
 SigningReply = {
@@ -5052,20 +5109,6 @@ verifiable for decades. A few hundred per user per decade is under 10 MB lifetim
 
 1. **Queue cap value.** A per-node policy value; design §21.1.1 classifies it
    *freely tunable, forever*, and nothing here fixes one.
-2. **Test vectors: canonical, not open** [author, 2026-10-02]. The set at
-   `test-vectors/` is spec-derived and generated, every computed value
-   reproduced by a second harness in a different language over independent
-   cryptographic implementations (`rhtn-crypto`'s corpus test, RustCrypto
-   ML-DSA against the generator's dilithium-py), and traced by ten clean-room
-   implementation reviews against independently written code. That is the
-   whole of the bar. An implementation is held to the corpus byte for byte
-   (`functional_tests.md` SCH-023); a disagreement between a vector and a
-   specification is a finding against one of them; and the set is regenerated
-   under the specification pins whenever the encoding changes, so it follows
-   the specification rather than freezing it. Both sides of the reproduction
-   share an author, so an interpretation both encode would pass both, which is
-   what the README's stated interpretations and the clean-room reviews exist
-   to catch. Kept here because this is where the vectors' status is stated.
 
 ---
 
@@ -5123,7 +5166,7 @@ design already depends on.
 | Traversal candidates | Two participants' devices | design §12.6.3 [author, 2026-09-25] | `CandidateHandover` (§14.3.2), carrying the `Candidate` structure this document now defines; the same candidates travel the end-to-end payload path when a direct connection is set up remotely (design §12.6.3, §14.1.1) |
 | The capture-key handover — the key each participant derived for the captures the other holds of them, handed across at capture time | Two participants' devices | design §7.5.2, design §7.5.2.6 | `CaptureKeyHandover` (§14.3.2): the 32-byte key design §7.5.2.6 derives, anchored to the ceremony-id like the proximity outcomes and the candidates [author, 2026-10-02] |
 | A delegated device's payload material, and the ceremony device's signature over it | Two devices of one identity | design §23.3, §7.8 | `DeviceIntroduction` then `DeviceCredential` (§14.3.3): §7.8's bundle unsigned and then signed, beside §8.2's delegations |
-| **The participants' own legs of the ceremony's conversation** — kinds 9 to 18 of §7.10.1, each one addressed to the co-present counterparty | Two participants' devices | §7.10.1, design §7.1 [author, 2026-10-05] | The kind-tagged plaintext §7.10.1 defines, **unchanged**, sealed under the local session (§14.3.2) and carried by the same bearer. A witness's or verifier's leg of the same kind travels the end-to-end payload path instead; the leg is chosen by who the recipient is |
+| **The participants' own legs of the conversation** — kinds 9 to 19 of §7.10.1, each one addressed to the co-present counterparty, the arranging of an adoption among them | Two participants' devices | §7.10.1, design §7.1 [author, 2026-10-05] | The kind-tagged plaintext §7.10.1 defines, **unchanged**, sealed under the local session (§14.3.2) and carried by the same bearer. A witness's or verifier's leg of the same kind travels the end-to-end payload path instead; the leg is chosen by who the recipient is |
 | **The post-quantum prekey handover** — the sender's signed bundle and one one-time key, so a co-present pair can open an end-to-end channel afterwards without a node | Two participants' devices | §7.8, design §14.2.4.3 [author, 2026-10-05] | `PrekeyHandover` (§14.3.4), anchored to the ceremony-id and sealed under the local session like every other carriage |
 
 **The last row is the one that is not between two people.** A phone
@@ -5133,7 +5176,7 @@ care whether the parties either side of a local interface are two people or
 one person's two devices.
 
 **The inventory was complete when the conversation crossed no local
-interface. It no longer is** [author, 2026-10-05]: kinds 9 to 18 of §7.10.1
+interface. It no longer is** [author, 2026-10-05]: kinds 9 to 19 of §7.10.1
 now travel **by who the recipient is**, so a participant's leg to the
 co-present counterparty is a local carriage — the two rows above — while a
 witness's or a verifier's leg of the same kind travels the end-to-end

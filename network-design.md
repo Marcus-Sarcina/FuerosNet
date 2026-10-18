@@ -616,7 +616,7 @@ payload, so apex load scales with churn and introductions, not with usage.
   instance they run and **assumes nothing from the fact**: holding a position
   in a subnet says nothing about running infrastructure there, and an operator
   in one subnet is an ordinary light client in the next
-  (`light-client-requirements.md` §11).
+  (`light-client-requirements.md` §10).
 
 > **Why there can be only 110 light client users under an infra node.**
 > I will admit to having a particular social agenda with this project, and it involves
@@ -651,6 +651,12 @@ payload, so apex load scales with churn and introductions, not with usage.
 - Sibling replication provides **locality and latency, not fault independence**.
   Every replica set contained within a subtree has a vertex cut of 1 (the
   subtree root). Cousins share a grandparent; same problem one level up.
+- **Depth beyond the floor is the operator's, and freely tunable** [author,
+  2026-10-16]. The floor is what this section argues for; how much further a
+  node replicates trades resilience against resource use, and no figure here
+  would survive contact with a real deployment. **The reference client ships
+  the floor plus one** and leaves it adjustable, to be refined by
+  measurement rather than by argument (§21.1.1's freely-tunable class).
 - Therefore **genuine redundancy requires at least 2 cross-tree peers** (§6.3):
   replicas reachable without traversing one's own ancestors. **This is a statement
   about what redundancy costs, not a participation requirement**: peering is
@@ -1249,6 +1255,20 @@ consequence of subnet plurality, not a gap in this mechanism.
   meeting**, which is also what closes the question §16.3 once left open: a
   peering edge and a proof-of-presence edge now cost the same thing to
   acquire, and there is no asymmetry left for anything to price.
+- **An audit is advisory, and never a trust input** [author, 2026-10-16]. A
+  peer may challenge what it replicates for another and record the outcome
+  (`wire-format.md` §4.4 field 7), and that is the whole of what an audit
+  is: nothing in the metric consumes it, as nothing consumes concentration
+  (§3.4). **Latency-bounded challenge-response cannot be made into
+  evidence of storage.** The peer being audited controls the timing of
+  anything routed through it, so it can inflate the baseline a challenge is
+  judged against; and another replica holder can serve the block
+  challenged, so what the audit shows is availability rather than storage.
+  Run them **unannounced and randomised, indistinguishable from routine
+  traffic, and calibrated over paths that do not traverse the auditee** —
+  which makes an audit worth running and still not worth trusting. §1.1 is
+  the whole reason: storage by a party you share no state with is not a
+  thing this protocol can enforce.
 - Attests investment in the network. **What it contributes to trust is the
   meeting it required, not a second edge beside it** (§16.2.1's collapse rule):
   the pair is joined once however many relationships join them. **At what
@@ -2082,6 +2102,17 @@ of somebody else's face for no purpose the rule states, where a lookback longer
 than the maximum gap is all that establishing continuity needs
 (`light-client-requirements.md` §1.3).
 
+**Template version 1 is the registry's first entry** [author, 2026-10-16]:
+`face/sface-int8-v1` — the extractor and matcher §22.2 chose, producing a
+128-dimension int8 template of exactly 128 bytes, compared by cosine distance,
+over a YuNet detection aligned to 112×112. **The number is what travels and
+the entry is what it names** (`wire-format.md` §4.5, query field 5): a verifier
+whose engine is not this one answers *unavailable* rather than comparing under
+its own (§7.4.4), and the entry is what tells it which it holds. The fixed
+length is also what §7.5.2.7's layout depends on — a holder reading its own
+sealed store knows from the version how many bytes in front of the images are
+the template.
+
 **Modality versioning.** Retaining source photographs rather than templates
 means any future still-image algorithm can be applied to old records. A break
 occurs only at a generational change in capture modality — stereoscopic, depth,
@@ -2161,9 +2192,10 @@ ceremony's conversation does (§7.1); the key-release step and the client's
 review duty both need it.
 
 So A's images sit on B's device sealed under keys **only A can derive**. B
-stores ciphertext. A stores the seed, privately, in its own record of the
-transaction. B can decrypt only when A releases a capture key and hands it over
-directly, which happens during a subsequent ceremony involving A.
+stores ciphertext. A stores nothing for it — the key is derived from A's own
+identity and the ceremony's id when A wants it (§7.5.2.6). B can decrypt only
+when A releases a capture key and hands it over directly, which happens during
+a subsequent ceremony involving A.
 
 **Retention stops being a promise and becomes a consequence of meeting cadence.**
 If A never releases the key again — no further ceremony with B, and no later
@@ -2219,6 +2251,13 @@ This inverts who holds the retention policy. §7.5.1's window was a commitment
 **B** made about material B controlled; it is now a decision **A** takes about
 material A holds the key to. A can enforce the declared period, enforce a shorter
 one, or extend by continuing to supply.
+
+**And A can make it irrevocable, at the price of the records** [author,
+2026-10-17]. Declining is a standing decision A may reverse; deleting the
+archive behind a series reissue is not, because the capture keys for that
+window derive from pre-commitments A no longer holds (§7.5.2.6). So A has both
+a reversible control and a final one, and the final one costs A the whole
+window's history rather than the captures alone.
 
 **So the declared window is a default rather than a rule.** Two years is what a
 compliant client does absent instruction from the subject, and the value of a
@@ -2285,7 +2324,7 @@ keystream the subject hands over in pieces.** Describing it as *N bytes of
 keystream* left three things unspecified and one of them dangerous.
 
 ```
-seed            32 random bytes, generated by the SUBJECT per ceremony
+seed            the SUBJECT's own, derived from their identity key material
 ceremony_id     the ceremony pre-commitment both parties countersign (§7.1)
 k_capture   =   HKDF(seed, "rhtn/1:capture" || subject || holder || ceremony_id)
 ```
@@ -2295,6 +2334,49 @@ seed, info the ASCII tag `rhtn/1:capture` followed by the raw 32-byte subject
 and holder keyhashes and the raw 32-byte ceremony pre-commitment, output
 length 32. Stated to the byte because any divergence derives a different key
 and the holder cannot decrypt what it sealed.
+
+**The seed is the subject's identity seed and not a per-ceremony random**
+[author, 2026-10-17]. It was 32 random bytes drawn per ceremony, which made
+every capture key a piece of state that had to be kept, replicated to the
+subject's other devices and survive a restore. Deriving it from the identity
+instead means **a subject who can sign can release**: the key comes back
+wherever the identity comes back, by the same act and with nothing else to
+carry. The seed is pinned to the byte for the same reason the rest of the
+construction is — two clients of one subject that disagreed on it would derive
+different keys and neither could release what the other's counterparty holds —
+and it is **SHA-256 of the ASCII tag `rhtn/1:identity-root` followed by the
+identity's two algorithm seeds, the classical one then the post-quantum**
+(§5.1). That it is a function of key material every client of the identity
+already holds is the point: how a person carries their identity to a device is
+the client's (§13.7.1), and pinning the phrase instead would have made the
+client's business into the protocol's.
+
+**What this costs is the per-capture erasure, not the final form** [author,
+2026-10-17]. A subject could previously put one capture beyond their own recall
+by deleting its seed. **Sequestration survives, priced in periods rather than
+captures.** The derivation needs the ceremony pre-commitment, and no
+transaction carries one — a record holds the capture's modality, count and
+liveness (`wire-format.md` §4.5) and never the ceremony's id, which is why
+§7.5.2.6 had to say where the subject keeps it — so a subject who takes a
+series reissue and then deletes the archive behind it loses those
+pre-commitments with the records, and every capture sealed in that window goes
+permanently inert on every counterparty's device. Nothing in the protocol
+serves a pre-commitment back: `wire-format.md` §7.9's fetch returns records,
+and the subject has disarmed itself.
+
+**The price is the records**, which is the point. It is all-or-nothing across
+the window, it caps every future disclosure in that window rather than the
+captures alone (`light-client-requirements.md` §2), and it is exactly the price
+of putting any other history beyond reach — where the deletable seed made old
+captures the one class a subject could sequester for free, one at a time, while
+keeping the record that referred to them. **Within what the subject still
+holds, their control is withholding** (§7.5.2.3): revocable in either
+direction, as often as they like, and never a thing a counterparty can tell
+from unavailability.
+
+The exposure is unchanged by any of it: the per-ceremony seeds were ordinary
+device state in the same backup as the keys (§7.5.2.9), so anyone who held the
+one already held the other.
 
 **Bound to the ceremony, not the transaction.** **Deriving it from `txid` would
 be circular**: `txid` hashes the finalized
@@ -2322,6 +2404,18 @@ value. Stated exactly because both clients must compute the same 32 bytes.
 The capture is sealed under an AEAD. **The subject grants access by releasing the
 key, and withholds it by not**: there is nothing partial to grant.
 
+**The AEAD is XChaCha20-Poly1305, exactly** [author, 2026-10-16]: a 24-byte
+nonce drawn at random per sealing and stored beside the ciphertext rather than
+derived, associated data the 32-byte ceremony pre-commitment followed by the
+ASCII label of the slot being sealed, and the stored framing one version byte,
+then the nonce, then the ciphertext. The extended nonce is what lets the draw be
+random: 24 bytes do not collide at any capture count a device reaches, where a
+96-bit nonce would want a counter and a counter wants durable state the holder
+has no other reason to keep. **The associated data binds a slot to its ceremony
+and to its place in the layout** (§7.5.2.7), so a slot lifted from another
+ceremony and a template presented as a source image both fail to verify; the
+labels are `template` and `image` followed by the index from one.
+
 **Three problems this fixes.**
 
 **Encryption is now authenticated.** A raw keystream is XOR, and XOR is malleable —
@@ -2344,9 +2438,11 @@ it. **Any channel carries 32 bytes.**
 ##### 7.5.2.7 Layout: the template comes first and has a fixed length
 
 **B derives the template at capture time and stores it ahead of the source images**,
-under the same seal. The template has a fixed length per modality version so a holder
-knows what it is reading; nothing about decryption depends on the ordering, since one
-key opens the whole capture.
+under the same key. Each slot is sealed on its own, under its own nonce and its
+own label (§7.5.2.6), so the ordering is what a holder reads by and not what
+decryption depends on: **one key opens every slot of the capture**, and the
+template's fixed length per modality version is what tells a holder where the
+images begin.
 
 §7.5.1 sets the retention window at two years and describes it as a commitment a
 holder makes. **It is a capability the subject grants**, and the subject can close a
@@ -2375,23 +2471,20 @@ matches worse and says less. Nothing forbids a subject granting against an older
 one; that is theirs to choose, and choosing an older capture discloses less recent
 appearance.
 
-##### 7.5.2.9 Seeds are backed up with everything else
+##### 7.5.2.9 The seed needs no backup of its own
 
-**A participant's seeds are ordinary device state and belong in the backup**
-(§10.2). Losing a backup costs the seeds along with the keys and the archive, which
-breaks the ability to unlock one's likeness on every counterparty's device.
+**There is nothing per-ceremony to keep** [author, 2026-10-17]. The seed is
+derived from the identity's own key material (§7.5.2.6), so whatever carries the
+identity to a device carries the ability to unlock one's likeness on every
+counterparty's device with it, and no separate store of seeds exists to be
+backed up, replicated or lost on its own.
 
-**That is expected behaviour, not a failure mode to engineer around.** It is the
-same loss, for the same reason, as losing portable standing: rotation and recovery
-never carry state forward from beyond the local trust horizon (§9).
-
-##### 7.5.2.10 Open
-
-- **Fixed template length per modality version**, so a holder knows what it is
-  reading, and the AEAD parameters (cipher, nonce derivation, framing).
-- **Whether a subject may re-derive and re-release a key after a device restore**,
-  which turns on whether the seed survives backup intact — §9's rotation rule says
-  a recovered key inherits only local standing, and the seed is not a key.
+**Losing the identity still costs it, and that is expected behaviour rather
+than a failure mode to engineer around.** A user who loses their key material
+and recovers by presence (§9.1) returns under a new key, which derives none of
+the old capture keys: it is the same loss, for the same reason, as losing
+portable standing, since rotation and recovery never carry state forward from
+beyond the local trust horizon (§9).
 
 ### 7.6 Route latency — what it can and cannot show
 
@@ -3124,6 +3217,18 @@ successor statement travel inside the adoption itself (`wire-format.md` §4.1
 field 6), which is topology class and forwarded byte-for-byte
 (`wire-format.md` §10.1).
 
+**A fork needs no notice object, because the path sees it** [author,
+2026-10-16]. Fork detection rests on an inquirer who receives divergent
+assertions telling both patrons (§9.0.2's rule below), and an inquirer-signed
+notice naming the two conflicting assertions was considered as a way to make
+that observation durable. **It was not adopted.** The resilience is not one
+inquirer's diligence: a rootward memo passes every node on the path (§15), so
+**every upstream node sees the same divergence** and the first to act is
+whichever acts. A malicious node on the path could withhold the memo and
+notify nobody — and a notice object would not compel it either, since nothing
+makes a party speak (§1.1). An artefact that changes neither the honest case
+nor the dishonest one is machinery for its own sake.
+
 **So within the horizon a recovery adoption replaces the binding, and does not
 sit beside it** [author, 2026-09-05]: members holding the old key **remove it
 from their records and overwrite it with the new one**. The publication
@@ -3380,11 +3485,18 @@ What remains is a thief cashing out **in place**, which notification and
 behavioural anomaly weighting surface rather than prevent, with presence-based
 recovery (§9.1) as the backstop and disavowal as the response.
 
-**Social revocation.** The patron and/or a threshold of the down-line co-signing a
-revocation is native to the hierarchy: the parties who vouched can un-vouch. Note
-this is **repudiation, not prevention.** A co-signed revocation says the vouchers
-withdraw their support, and the repudiated identity's own client is unaffected. Needs specifying alongside the rotation format. Subject to the
-same departure exemption above.
+**Social revocation is each voucher disavowing for itself** [author,
+2026-10-16]. The shape is native to the hierarchy — the parties who vouched can
+un-vouch — and it needs no object of its own, because §6.2.2's disavowal
+already is one and **the disavowal remains the network's only negative
+attestation**. A patron disavows; a member of the down-line that wants to say
+the same thing signs its own; and a reader counts what reached it. **Nothing is
+co-signed**, so no threshold has to be collected and nothing waits on a quorum
+that may never arrive — the same reason issuer role 3 carries one signature
+(§12.7.2), and the reason this needs nothing specified alongside the rotation
+format. **It remains repudiation and not prevention**: the vouchers withdraw
+their support, the repudiated identity's own client is unaffected, and a
+disavowal reaches no act of departure, by the exemption above.
 
 ### 9.3 Scope boundary: weak-tie-only participants
 
@@ -3399,7 +3511,7 @@ architecture; it deliberately favours in-person, long-running relationships, and
 degraded service for participants who have none is the thesis working as
 specified rather than a defect to engineer around.
 
-Social revocation via the patron partly covers the case anyway, since a patron
+A patron's disavowal (§9.2) partly covers the case anyway, since a patron
 is a relationship the user can probably reach, though that places weight on the
 patron relationship being geographically local, an assumption the topology makes
 nowhere else.
@@ -3561,8 +3673,10 @@ the same terms.
 kind of history (§10.0): a PoP is a transaction and sits in the archive, but its use —
 identifying validators for a later ceremony, and standing as evidence that two people
 met — does not depend on the chain's continuity. Pruning the chain therefore does not
-license discarding presence records, sealed captures or capture seeds, and
-`light-client-requirements.md` §2 requires they be kept.
+license discarding presence records or sealed captures, and
+`light-client-requirements.md` §2 requires they be kept — **the record's own
+ceremony id among them**, since that and the identity root are what derive a
+capture key (§7.5.2.6).
 
 **Except inside the 730-day window, where they are still required.** What a
 subject holds inside the window is its own recovery substrate (§9), and the
@@ -3617,7 +3731,15 @@ oversight.
 restores the *key*, not the archive, so a user who loses their device and recovers
 their key returns with standing intact in their existing subnets and **nothing
 portable to a new one**. This makes §13.7.1's backup requirements
-load-bearing. *(Whether recovery should restore history is an open question — §22.3.)*
+load-bearing.
+
+**And no protocol path restores the archive** [author, 2026-10-16]. Recovery
+returns the key, and any mechanism that returned the history with it would hand
+an attacker who completes the same recovery the same history — the archive being
+the second factor this section exists to describe. So the archive is restored
+from the user's own backup or not at all, and a client says plainly that
+recovery restores **standing, not history**
+(`light-client-requirements.md` §6, PRD-09).
 
 ### 10.3 Merges. The archive is a DAG, not a chain
 
@@ -5118,13 +5240,25 @@ stored and forwarded by the same rule as anyone's (§15.1), and no staple gates
 any transaction (§12.6.5).
 
 **A root with subordinates has a constituency that can attest its current
-key.** The shape is §9.2's social revocation inverted: a threshold of the
-down-line co-signing *"our root's current key is K"*, carried as issuer role 3
-(`wire-format.md` §7.1). **It is an optional input to a node's anchor-caching
-rule (§12.7.3), not a currency requirement** [author, 2026-09-10]. A node
-choosing which roots to cache may weigh such an attestation as it weighs
-subtree size; a root that presents none is cached, or not, under the same
-policy, and nothing else in the protocol asks for one.
+key.** A member of the down-line says *"our root's current key is K"* and
+signs it itself, carried as issuer role 3 (`wire-format.md` §7.1). **It is an
+optional input to a node's anchor-caching rule (§12.7.3), not a currency
+requirement** [author, 2026-09-10]. A node choosing which roots to cache may
+weigh such an attestation as it weighs subtree size; a root that presents none
+is cached, or not, under the same policy, and nothing else in the protocol asks
+for one.
+
+**One signature is the whole of it, and no threshold is collected** [author,
+2026-10-16]. The object carries one issuer signature (`wire-format.md` §7.1
+fields 6 and 7), so role 3 is one party's claim about a key that is not its
+own, and that is what it is meant to be: **a false claim reaches nobody but
+the party making it.** The root is unaffected — its key is what its own
+transactions say it is, and a node that cached the wrong one finds its reach
+to that root fails and tries again (§12.7.3). Nothing has to stop a member
+asserting a root key that is wrong, because the assertion costs the asserter
+its credibility with whoever weighed it and costs the root nothing. A reader
+that wants more than one voice weighs more than one attestation; collecting
+them is the reader's arithmetic and not a quorum the object claims to carry.
 
 **What the attestation does not reach, it does not need to.** A disavowed leaf
 has history and no issuer, so parties beyond its horizon cannot confirm its key
@@ -5439,6 +5573,15 @@ The local store is **not dynamic.** The transaction archive (§16.7) and photo
 records (§7.2) are append-only, and cached locators and anchor tables are
 re-derivable rather than needing preservation. So ordinary file backup is
 sufficient in mechanism, and no continuous sync is required.
+
+**This section is the archive's backup and not the key's.** The identity's key
+material is its holder's to carry to a new device and is never sent from one
+device to another (§23.3). **How they carry it is outside this design
+entirely** [author, 2026-10-17]: the material is bytes, a client takes it as
+bytes, and whether a person keeps those bytes in a file or behind some
+encoding of its own is a feature of that client and not a part of the protocol
+or of anything below it (`light-client-requirements.md` §2). Nothing about it
+reaches the cryptosystem or the wire.
 
 **But the default mechanisms are wrong for this payload**, for two reasons:
 
@@ -6163,15 +6306,23 @@ conversation, that is still the better trade.
 intent signal returns, since blanket prefetch does not scale past a bounded set —
 but given A2 that is the rarer case, and such traffic is relayed anyway (§12.6.3).
 
-##### 14.2.4.6 Still to settle
+##### 14.2.4.6 Who serves prekey material, and what is still to settle
+
+**One-time keys come from the patron alone; reusable material may come from a
+sibling too** [author, 2026-10-16]. Serving a one-time key is a metadata event
+(§14.2.2, C11) — it says somebody is about to open a channel with that subject
+— so the party that learns it is the one already serving them, and spreading it
+across siblings would widen who sees it for nothing. Reusable material leaks
+nothing of the kind: it is published to be fetched, and a sibling holding a copy
+is a cache that costs the subject no disclosure. A node asked for a one-time key
+for a subject it does not serve answers that it holds none, which is what it
+would answer in any case.
+
 
 - **Prekey rotation and last-resort policy.** Cadence, and the accepted reduction
   in forward secrecy when the last-resort key is used.
 - **Binding the session to §5.1's hybrid identity**, per the authentication point
   above.
-- **Whether prekeys are served only by the patron** or also by siblings. Serving
-  a **one-time key** is a metadata event (§14.2.2, C11), and spreading it changes
-  who sees it. Serving reusable material is not.
 - **Crate maturity.** §5.2's audit caveat applies here too.
 
 ---
@@ -7369,7 +7520,8 @@ several at once, not one per acquisition.
   it wanted to block with every one of them.** Residual: the patron must not countersign
   a reissue for a thief, which is the same social check adoption and recovery rest on.
 - **A stolen device composes into false presence evidence and fraudulent recovery.**
-  Theft grants the key, the archive and the capture seeds at once, and the pieces
+  Theft grants the key and the archive at once, the key deriving every capture
+  key with it (§7.5.2.6), and the pieces
   compose further than any of them registers alone. With a colluding counterparty, the
   thief runs a real ceremony that real witnesses observe: witnesses attest that the
   protocol ran and that two humans responded, not that the queried profile came from
@@ -8359,88 +8511,49 @@ order and refusal behaviour, with the role row consulted as a lookup.
   actually are. **None is currently in the class that hardens on first deployment**,
   which is a change worth noting rather than a permanent property.
 - **`§14.2.4`'s remaining integration decisions**: binding the session to §5.1's hybrid
-  identity; whether prekeys are served only by the patron or also by siblings; prekey
-  rotation cadence and last-resort policy; and §5.2's crate-maturity caveat.
+  identity; prekey rotation cadence and last-resort policy; and §5.2's
+  crate-maturity caveat. **Who serves which prekey material is settled**
+  (§14.2.4.6).
   **Payload-type demultiplexing is settled** [2026-09-30]: `wire-format.md`
-  §7.10.1 registers the kind tag and its nineteen values, the ceremony's own
-  conversation (§7.1) among them.
-- **The canonical biometric profile** (§7.5): extractor, template format and
-  fixed length per modality version, fuzzing algorithm, matcher and version
-  registry, plus the sealed store's AEAD parameters — cipher, nonce derivation,
-  capture framing (§7.5.2). **Cross-client verification depends on the whole
-  set**: a fuzzed profile one engine produces must be comparable by another's
-  matcher, or verifier queries only work between clients sharing an
-  implementation, and each of those is therefore a **standard** rather than a
-  local choice [author, 2026-10-13] — each decides what crosses the wire, or
-  what another client's matcher must be able to read. **The extractor and matcher are chosen** [author,
-  2026-09-29]: OpenCV SFace, int8, with YuNet for detection and alignment —
-  112×112 input, a 128-dimension template compared by cosine distance, and
-  Apache-2.0 for code and model weights alike. The rule that selected it:
-  the model weights themselves must carry a permissive grant from their
-  distributor, most published face models being trained on
-  research-restricted data whatever their code licence says. The rest of
-  the set — template registry entry, fuzzing algorithm, and the
-  sealed store's AEAD parameters — remains to decide with the
-  implementation. **The matching threshold is not among them** [author,
+  §7.10.1 registers the kind tag and its twenty values, the ceremony's own
+  conversation (§7.1) among them and the arranging of an adoption after the
+  record with it.
+- **The canonical biometric profile** (§7.5) is settled but for its fuzzing
+  algorithm. **Cross-client verification depends on the whole set**: a fuzzed
+  profile one engine produces must be comparable by another's matcher, or
+  verifier queries only work between clients sharing an implementation, which
+  is why each part is a **standard** rather than a local choice [author,
+  2026-10-13] — each decides what crosses the wire, or what another client's
+  matcher must be able to read. **The extractor and matcher are chosen**
+  [author, 2026-09-29]: OpenCV SFace, int8, with YuNet for detection and
+  alignment — 112×112 input, a 128-dimension template compared by cosine
+  distance, and Apache-2.0 for code and model weights alike. The rule that
+  selected it: the model weights themselves must carry a permissive grant from
+  their distributor, most published face models being trained on
+  research-restricted data whatever their code licence says. **The template
+  registry entry and the sealed store's AEAD parameters are chosen too**
+  [author, 2026-10-16]: `face/sface-int8-v1` at version 1 (§7.5) and
+  XChaCha20-Poly1305 with a stored random 24-byte nonce (§7.5.2.6). **The
+  fuzzing algorithm waits on a measurement rather than a preference**: §7.5's
+  target is discrimination from about 99% of humans, and a candidate is picked
+  once one has been measured against that figure (CAP-016). **The matching
+  threshold is not among them** [author,
   2026-10-13]: where a verifying client reads its verdict is internal to that
   client and enforceable by nobody (§1.1), and what travels is the verdict
   rather than the score, so an implementer may be more or less selective than
   the reference client — which documents its own pair, its reasoning and its
   prior art. *The channel and size question
   is closed: any channel carries 32 bytes.*
-- **Whether a subject may re-derive and re-release a capture key after a device
-  restore** (§7.5.2).
-- **Peering audit calibration** and **replication distance** (§22.3), both tuning problems
-  over working mechanisms.
-- **Divergence-notice object** (§22.3), which would make fork detection a durable artifact
-  rather than assumed behaviour.
-- **Archive recovery after device loss** (§22.3), a gap in user experience rather than in
-  the protocol.
 - **Queue cap value** (§14.1.6), freely tunable per node.
 
 ---
 
-### 22.3 The open questions in detail
-
-**Currently open only.** Resolved and dissolved questions are recorded in
-`change-log.md`; an entry appearing here means the question is live.
-
-1. **Peering audit calibration.** Latency-bounded challenge-response is
-   adversary-influenced: a peer being audited controls the timing of anything
-   routed through it, so it can inflate the calibration baseline. Calibrate
-   against paths not traversing the auditee, and use randomised, unannounced
-   challenges indistinguishable from routine traffic. Note also that other
-   replica holders can serve the challenged block, so the audit proves
-   availability rather than storage.
-2. **Replication distance rules.** Balance of resilience against resource use;
-   currently only a floor is defined.
-3. **Divergence-notice object.** §9.0.2's fork detection depends on a
-   conforming inquirer notifying both patrons, which nothing compels and no patron
-   can detect the absence of. **An inquirer-signed notice** naming the two
-   conflicting currency assertions would make the observation durable and
-   forwardable — evidence rather than assumed behaviour. Patron acknowledgements
-   would additionally make successful notification visible. Neither compels an
-   inquirer to speak; both replace an unenforceable expectation with a checkable
-   artifact.
-
-4. **Archive recovery after device loss** (§10.2). Presence-based recovery
-   restores the key, not the archive, so a user who loses their device returns
-   with standing in existing subnets and nothing portable to a new one. **The
-   keystream scheme widens this**: seeds are device state too (§7.5.2), so a lost
-   device also loses the ability to unlock one's likeness on every counterparty's
-   machine. Whether
-   recovery should restore history, and how, without handing an attacker the
-   same path — is undecided. §13.7.1's backup requirements are load-bearing
-   because of it.
-
-### 22.4 Open items held in other documents
+### 22.3 Open items held in other documents
 
 **Not absorbed, because each belongs to its own document's authority** (Appendix A).
 This chapter names them; the obligations stay where the party bound by them will look.
 
-- **`wire-format.md` §13** — encoding items: the queue cap value, which §21.1.1 classes as freely tunable.
-- **`light-client-requirements.md` §11** — participant-client behaviour still to settle.
-- **`infra-client-requirements.md` §12** — operator-side behaviour still to settle.
+- **`wire-format.md` §13** — the queue cap value, which §21.1.1 classes as freely tunable.
 
 ---
 
@@ -8551,6 +8664,47 @@ own two phones**: it is the ordinary condition of everyone in §3.3's tier. *(Th
 primary device, a head-check before signing, published per-device key bindings —
 are superseded; Appendix B.1.)*
 
+**Two devices of one identity replicate on contact, and neither waits to be
+asked** [author, 2026-10-16]. Which device holds what is settled above; what
+remained was how a person understands an archive spread over several of them,
+and the answer is that mostly they should not have to. **A device that knows
+another is behind is in contact with it**, which is the whole of the
+opportunity: it brings that device to the latest dataset then and there —
+§10.3's merge where the two have forked, a plain append where one is simply
+short — over the same archive fetch any reader uses (`wire-format.md` §7.9,
+and `wire-format.md` §14.3.3's interface where the two are side by side). Nothing is a new
+object and nothing is a new permission: the subject is reading its own
+archive.
+
+**The latest dataset is the whole of it** [author, 2026-10-16]: the archive, the
+derived view the client keeps beside it — contacts, held locators, profiles, the
+resource catalogue's portion — and the sealed captures. The reason is that a
+person's one ceremony device is not guaranteed: having several is ordinary, and
+what is ordinary about it is that only one of them is powered up and on the
+network at a time, so the device that is up is the only one that can be current
+and the one that was down has to be caught up from it rather than from the
+network. **The classes stay where this section puts
+them all the same**, because what crosses is the dataset and not the identity
+seed. **A new signing device is brought up by the person and not by another
+device** [author, 2026-10-16]: the seed is restored by its holder, and no
+object carries one over a contact. The delegated devices that hold a transport
+credential acquire none either, so a device given the dataset and not the seed
+can read everything and sign nothing. How the holder keeps it and puts it on a
+new device is the client's and not this document's
+(`light-client-requirements.md` §2). **No capture seed crosses either, because
+none is kept**: a capture key is derived from the identity when its subject
+wants it (§7.5.2.6), so the device holding the identity can release for any
+ceremony whose record it holds. The captures that cross are ciphertext: a replica of a sealed capture whose key its subject
+has stopped releasing is as inert on the second device as on the first, so
+replication copies the seal and **deletion remains the destruction of the key**
+(§7.5.2).
+
+**What is left for a screen is therefore the residual delta alone** — the
+transactions one device signed while the other was offline or out of reach —
+and presenting *that* is a product decision (`light-client-requirements.md`
+§4.2, PRD-09). A device list enumerating what each holds is not what a person
+needs when the devices keep each other current.
+
 **Residual.** A user who never merges leaves branches outstanding, and an evaluator
 seeing one branch sees a valid truncation — permitted and self-defeating (§10), so
 no rule is needed; the reference client merges automatically on noticing
@@ -8564,15 +8718,23 @@ for anyone in §3.3's tier. Past three is the unusual case by construction, whic
 is the whole of the shaping needed: a warning about replication a user has not
 performed would be noise.
 
-**Which device holds what is settled** [author, 2026-09-16]. **Seeds sit on the
-device that performs ceremonies and nowhere else**: an instance, a desktop and a
-terminal instrument each carry a delegated transport credential instead, so the
-only device holding the key that signs is the one its owner keeps on them.
-**Deletion state needs no separate allocation**, because §7.5.2 makes a capture
-decryptable only when its subject releases a key derived from a seed only they
-hold, so the device holding the seed is the device holding deletion state, and a
-deletion on one device saying nothing about another was a consequence of
-scattering seeds rather than a property of replication. **Archives, sealed
+**Which device holds what is settled** [author, 2026-09-16].
+**The identity seed sits on the devices that perform ceremonies and nowhere else**:
+an instance, a desktop and a terminal instrument each carry a delegated
+transport credential instead, so the only device holding the key that signs is
+the one its owner keeps on them, and it holds it because its holder put it
+there.
+
+**No per-capture deletion state has to be allocated**, because §7.5.2 makes a
+capture decryptable only when its subject releases a key and **the ordinary
+control is withholding rather than erasure** (§7.5.2.3): the retention the
+record declares travels with the record, every device of theirs declines on the
+same terms, and the decision is the subject's standing one rather than a secret
+that has to agree across devices. **What a subject deletes to make a window
+final is the archive itself** (§7.5.2.3), and that is ordinary cross-device
+deletion with nothing special about captures in it — a device still holding
+that window still holds the pre-commitments, so a sequestration reaches only as
+far as the deletion did. **Archives, sealed
 captures and caches go where the storage is**, §13.7.1's envelope being what makes
 anywhere safe to put them, and a personal computer is the obvious place: a phone
 is lost, broken and stolen, and neither the transaction record nor the captures
@@ -8593,11 +8755,17 @@ delegation; an identity with several devices has a prekey bundle per device
 
 ### 23.4 Test vectors, and what a test suite would add
 
-**The test vectors are canonical** (`test-vectors/`, `wire-format.md` §13)
-[author, 2026-10-02]. They are spec-derived, reproduced by an independent
-harness over independent cryptographic implementations, traced by clean-room
-review, and regenerated under the specification pins whenever the encoding
-changes. Cross-artefact drift is this project's dominant failure mode, and the
+**The test vectors are canonical** (`test-vectors/`) [author, 2026-10-02].
+They are spec-derived and generated, every computed value reproduced by a
+second harness in another language over independent cryptographic
+implementations, traced by ten clean-room implementation reviews against
+independently written code, and regenerated under the specification pins
+whenever the encoding changes. **That is the whole of the bar.** An
+implementation is held to the corpus byte for byte (`functional_tests.md`
+SCH-023), and a disagreement between a vector and a specification is a
+finding against one of them. Both sides of the reproduction share an
+author, so an interpretation both encode would pass both, which is what the
+set's stated interpretations and the clean-room reviews exist to catch. Cross-artefact drift is this project's dominant failure mode, and the
 pins are what hold the vectors to the specification rather than freezing
 either. Vectors do not block *building*; they are what **demonstrating** that
 two implementations agree rests on. **Tests written by the author encode the
@@ -8754,7 +8922,7 @@ read before re-proposing anything here.
 | **Rotation as a distinct operation from adoption** | Archive ingestion is already optional in adoption, so rotation is just adoption where the presented archive belongs to another key (§9.0) |
 | **An explicit haircut on inherited standing** | Redundant, a rotated key's trust is capped by its attesters' capacity, which is far narrower than the original's accumulated paths (§9.0) |
 | **Delegated verification authority** | Verification is evidence, not authority; a signed "same person" fact is an input to an adoption someone else signs (§9.0) |
-| **A second veto keypair per identity** | Superseded: there is no veto at all (§9.2). Retained because the original reasoning, a second key adds something to steal without adding a power anyone can exercise — survives the mechanism it was arguing about. The down-line threshold survives as an optional input to anchor caching for a root that has a down-line (§12.7.2), and a root without one propagates regardless; departure is self-punishing for a thief |
+| **A second veto keypair per identity** | Superseded: there is no veto at all (§9.2). Retained because the original reasoning, a second key adds something to steal without adding a power anyone can exercise — survives the mechanism it was arguing about. A down-line member's attestation of its own root's key survives as an optional input to anchor caching for a root that has a down-line (§12.7.2), and a root without one propagates regardless; departure is self-punishing for a thief |
 | **Biometrics in network state** | Irrevocable, fuzzing does not survive combination with timestamp and location, and it would invert the design's own metadata-resistance property (§7.2) |
 | **A published trust-policy descriptor** | A node's account of its own policy is unverifiable, so a positive claim is what an attacker asserts; a bad-news-only variant generated attack surface (policy shopping) for documentation value this entry provides instead. **Per-observer trust has no consumer for a published policy** — a resource consumes its own owner's decision, evidence is pulled and evaluated locally |
 | **Fuzzy commitments / secure sketches for retained verification capability** | The theoretically correct tool for verifying without retaining the biometric, and face entropy is low enough that their security margins are weak. Would have served §7.5.1's retention problem |

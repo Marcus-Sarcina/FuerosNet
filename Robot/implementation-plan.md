@@ -247,8 +247,9 @@ ceremony itself over a device interface — proximity channels, camera,
 clock, randomness, operator, notifier and engine — with an in-process
 harness that carries the direct channel and logs every path. The engine
 is a stand-in that hashes a frame's leading bytes (design §22.2 is
-undecided); the sealed store's AEAD, nonce and framing are the
-implementation's choice pending design §7.5.2.10. All 29 ceremony entries pass;
+undecided); the sealed store's AEAD, nonce and framing are now
+design §7.5.2.6's: XChaCha20-Poly1305, a stored random 24-byte nonce, the
+pre-commitment and the slot label as associated data. All 29 ceremony entries pass;
 224 of 286 entries pass. One reading is open to the author: design §7.3
 says a verifier's operator is not told they were sampled, and design
 §19.6 says a verifier is told, when asked, that answering records them;
@@ -646,9 +647,12 @@ seconds. So the order is fixed by the cost of the test cycle and not by the
 dependency graph — the rules are written in the documents now so that the
 later pass implements what was decided rather than what it remembers.
 
-The two decisions they wait on are in `light-client-requirements.md` §11:
-what a witness's four minutes run from, and whether the continuity window
-replaces design §7.5's guided burst or sits beside it.
+**Both rules they wait on are settled**: a witness's four minutes run from
+the ceremony on that witness's own clock (`light-client-requirements.md`
+§1.2, functional CER-026), and the continuity window sits beside design
+§7.5's guided burst rather than replacing it (`light-client-requirements.md`
+§1.3, CAP-017). What waits is the implementation, for the test-cycle reason
+above and nothing else.
 
 **Then the split** (section 2), on its trigger rather than on a date.
 
@@ -710,8 +714,9 @@ replaces design §7.5's guided burst or sits beside it.
   if an audited permissive implementation appears. The ratchet sits behind a
   trait so the default implementation ships with the library and an
   application may supply another (design §14.2.4.3's floor, `PAY-22`).
-- The post-quantum provider: RustCrypto now, aws-lc-rs when, or both behind the
-  trait.
+- ~~The post-quantum provider~~ — **RustCrypto, behind the trait** [author,
+  2026-10-16], revisited when aws-lc-rs ships ML-DSA. The trait is what makes
+  that a swap rather than a migration.
 - ~~The binding generator for the mobile shells~~ — **uniffi** [author,
   2026-09-16]. MPL-2.0, whose copyleft reaches modifications to uniffi's
   own files and not what links them; the client carries libsignal's AGPL

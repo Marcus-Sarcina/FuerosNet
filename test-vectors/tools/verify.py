@@ -730,7 +730,7 @@ def _hkdf(ikm, info, length=32):
         t = _hmac.new(prk, t + info + bytes([i]), hashlib.sha256).digest()
         out += t; i += 1
     return out[:length]
-hk = re.search(r'## Capture-key derivation.*?seed:\n\n```\n([0-9a-f\n]+?)```.*?info[^`]*```\n([0-9a-f\n]+?)```.*?k_capture:\n\n```\n([0-9a-f\n]+?)```', rc, re.S)
+hk = re.search(r'## Capture-key derivation.*?identity root \(the seed\):\n\n```\n([0-9a-f\n]+?)```.*?info[^`]*```\n([0-9a-f\n]+?)```.*?k_capture:\n\n```\n([0-9a-f\n]+?)```', rc, re.S)
 _seed = bytes.fromhex(hk.group(1).replace('\n', ''))
 _info = bytes.fromhex(hk.group(2).replace('\n', ''))
 _k = hk.group(3).replace('\n', '')
@@ -1093,8 +1093,14 @@ check(len(canonical(bytes.fromhex(byid['B-witness-request-channels-8']['hex']))[
 # SHA-256 of its label, the pre-commitment the contributory known answer,
 # and the key HKDF-SHA-256 with an empty salt over tag, subject, holder and
 # ceremony.
-_demo_seed = H(b'rhtn-test-vectors:capture-seed:alice:c1')
-check(_demo_seed == _seed, "capture-key handover: records.md's seed is SHA-256 of its stated label")
+# the seed is alice's identity root (design §7.5.2.6), not a per-ceremony
+# random: SHA-256 of the tag and her two algorithm seeds, classical first
+_demo_seed = H(b'rhtn/1:identity-root'
+               + H(b'rhtn-test-vectors:alice:ed25519-seed')
+               + H(b'rhtn-test-vectors:alice:ml-dsa-65-seed'))
+check(_demo_seed == _seed,
+      "capture-key handover: records.md's seed is alice's identity root, "
+      "SHA-256 of rhtn/1:identity-root and her two algorithm seeds")
 _pc_a, _pc_b = bytes.fromhex(pcm.group(1)), bytes.fromhex(pcm.group(2))
 _pc_demo = H(b'rhtn/1:ceremony' + ((_pc_a + _pc_b) if KH['alice'] < KH['bob'] else (_pc_b + _pc_a)))
 _ckh = canonical(bytes.fromhex(byid['P-capture-key-handover']['hex']))

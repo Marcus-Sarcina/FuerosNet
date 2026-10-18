@@ -7,7 +7,7 @@ mod common;
 use common::*;
 use rhtn_client::notice::{Notice, Notifier};
 use rhtn_client::query::*;
-use rhtn_client::store::{ClientStore, OwnSeed};
+use rhtn_client::store::{ClientStore, OwnCapture};
 use rhtn_client::subject::*;
 use std::cell::RefCell;
 
@@ -18,17 +18,16 @@ impl Notifier for Hook {
     }
 }
 
-/// Alice's seeds for two records with bob, R1 then R2.
+/// Alice's own captures for two records with bob, R1 then R2.
 fn alice_store() -> (ClientStore, [u8; 32], [u8; 32], u64) {
     let mut w = World::new();
     let r1 = w.meet("alice", "bob");
     let r2 = w.meet("alice", "bob");
     let mut store = ClientStore::default();
-    for (rec, c, s) in [(&r1, [11u8; 32], [31u8; 32]), (&r2, [22u8; 32], [32u8; 32])] {
-        store.seeds.insert(
+    for (rec, c) in [(&r1, [11u8; 32]), (&r2, [22u8; 32])] {
+        store.own.insert(
             rec.txid,
-            OwnSeed {
-                seed: s,
+            OwnCapture {
                 counterparty: kh("bob"),
                 ceremony_id: c,
                 finalized_at: rec.effective,
@@ -88,7 +87,7 @@ fn the_grant_names_the_most_recent_eligible_capture_by_default() {
     );
     // R2's seed discarded with its record: R1 is the most recent left
     let mut fewer = store.clone();
-    fewer.seeds.remove(&r2);
+    fewer.own.remove(&r2);
     assert_eq!(
         subject
             .grant_for(&me, &fewer, &kh("bob"), [5; 32], now)
@@ -100,11 +99,17 @@ fn the_grant_names_the_most_recent_eligible_capture_by_default() {
         subject.grant_for(&me, &store, &kh("carol"), [5; 32], now),
         None
     );
-    // the key is the capture key for that record's seed, subject and holder
-    let s = &store.seeds[&r2];
+    // the key is derived from alice's identity root, not from anything the
+    // store holds (design §7.5.2.6)
+    let s = &store.own[&r2];
     assert_eq!(
         g.key,
-        rhtn_client::keys::capture_key(&s.seed, &kh("alice"), &kh("bob"), &s.ceremony_id)
+        rhtn_client::keys::capture_key(
+            me.identity_root(),
+            &kh("alice"),
+            &kh("bob"),
+            &s.ceremony_id
+        )
     );
 }
 

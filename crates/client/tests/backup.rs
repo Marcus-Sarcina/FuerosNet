@@ -7,7 +7,7 @@ use common::*;
 use rhtn_archive::tx::{TYPE_PRESENCE, Witness};
 use rhtn_client::backup::{self, Contents, Cost, Failure, Wrap};
 use rhtn_client::record::*;
-use rhtn_client::store::{Capture, ClientStore, Frame, OwnSeed, SealParams, seal};
+use rhtn_client::store::{Capture, ClientStore, Frame, OwnCapture, SealParams, seal};
 
 /// Cheap enough to run in a test and still Argon2id: the cost is the
 /// operator's number, and a test asserting a shape has no business
@@ -57,10 +57,9 @@ fn contents(w: &mut World) -> (Contents, [u8; 32]) {
     let mut store = ClientStore::default();
     store.records.insert(rec.txid, rec.bytes.clone());
     store.disclosures.insert(rec.txid, set);
-    store.seeds.insert(
+    store.own.insert(
         rec.txid,
-        OwnSeed {
-            seed: [9; 32],
+        OwnCapture {
             counterparty: kh("bob"),
             ceremony_id: [4; 32],
             finalized_at: t + 600,
@@ -297,7 +296,7 @@ fn rewrite_header_field(blob: &[u8], index: usize, value: u64) -> Vec<u8> {
 fn a_scan_on_import_discards_what_is_past_its_window_and_keeps_the_history() {
     let mut w = World::new();
     let (before, txid) = contents(&mut w);
-    let finalized = before.store.seeds[&txid].finalized_at;
+    let finalized = before.store.own[&txid].finalized_at;
     let two_years = 2 * 365 * 86_400;
 
     // inside the window, everything lands
@@ -316,7 +315,7 @@ fn a_scan_on_import_discards_what_is_past_its_window_and_keeps_the_history() {
         out,
         backup::Discarded {
             captures: 1,
-            seeds: 1
+            own: 1
         },
         "the capture and the seed"
     );
@@ -325,7 +324,7 @@ fn a_scan_on_import_discards_what_is_past_its_window_and_keeps_the_history() {
         "no likeness past the window it was committed under"
     );
     assert!(
-        aged.store.seeds.is_empty(),
+        aged.store.own.is_empty(),
         "nor the seed that would release one"
     );
 
@@ -351,7 +350,7 @@ fn a_scan_on_import_discards_what_is_past_its_window_and_keeps_the_history() {
 fn a_client_scans_what_it_imports_and_reports_what_it_dropped() {
     let mut w = World::new();
     let (before, txid) = contents(&mut w);
-    let finalized = before.store.seeds[&txid].finalized_at;
+    let finalized = before.store.own[&txid].finalized_at;
     let blob =
         backup::export(&before, &Wrap::passphrase(cheap()), b"a passphrase").expect("exports");
 
@@ -369,7 +368,7 @@ fn a_client_scans_what_it_imports_and_reports_what_it_dropped() {
         dropped,
         backup::Discarded {
             captures: 1,
-            seeds: 1
+            own: 1
         },
         "reported, not swallowed"
     );

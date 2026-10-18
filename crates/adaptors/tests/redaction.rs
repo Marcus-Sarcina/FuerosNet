@@ -139,7 +139,7 @@ async fn no_secret_of_a_whole_ceremony_appears_in_any_event() {
             .party(n)
             .with(move |c| {
                 let mut out: Vec<(&'static str, Vec<u8>)> = Vec::new();
-                for seed in c.store.seeds.values() {
+                for seed in c.store.own.values() {
                     out.push(("ceremony seed", seed.seed.to_vec()));
                     out.push((
                         "capture key",

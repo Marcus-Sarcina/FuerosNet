@@ -1,6 +1,6 @@
 # Unsigned message families (`wire-format.md` §§6–11)
 
-Generated against `wire-format.md` `435e1e26927e4033…`, `network-design.md` `313459ec74d5da93…` and `light-client-requirements.md` `07f0a32e32134fd7…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `381823a91a3edfc7…`, `network-design.md` `5892663d8bf02592…` and `light-client-requirements.md` `1fd5a16699168bb0…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Canonical. Spec-derived, reproduced by the independent harness.** Canonical bar 9:
 one positive known-answer encoding per framed message family. Framing is
@@ -3957,8 +3957,8 @@ request/reply stream. On the channel each is preceded by a `uint` kind tag
 ```
 a3015820909e353c25bcfb5abbbc2040bade7d2c03e1d4126c94f7dfefa35938
 ebaaddb60258206e8929881f4fef5cac9185fdc78abf443ddd8cc21e5186fd00
-8a8614b0742edb0358206157379db20e9b35da24fbab9ab4c8bc8676dc8f8c22
-c89d2b1fe2fea7b2985c
+8a8614b0742edb0358209c888d1708577e49f971625f42909fcbdb59a7652665
+e422fb7c91d31377d451
 ```
 **LateResponse — the normal record supplemented by a late `inconclusive` from a fourth verifier; private information for the participants, never part of the record** (334 bytes — an END-TO-END PAYLOAD, not a stream reply: the bytes are the object alone; on the channel a `uint` kind tag precedes them, §7.10.1's registry — kind 2 for this object — and no prefix is included below):
 
