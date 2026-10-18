@@ -971,6 +971,60 @@
   "interpretation": null
  },
  {
+  "id": "CER-64",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "Seal each slot of a capture on its own, under the specified AEAD and framing",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "design §7.5.2.6",
+   "design §7.5.2.7"
+  ],
+  "rule": [
+   {
+    "where": "design §7.5.2.6",
+    "text": "a 24-byte\nnonce drawn at random per sealing and stored beside the ciphertext"
+   },
+   {
+    "where": "design §7.5.2.7",
+    "text": "one key opens every slot of the capture"
+   }
+  ],
+  "given": "A capture of one template and three frames, a capture key, and a ceremony pre-commitment.",
+  "when": "The holder seals the capture and opens it again under the same key.",
+  "then": "There is one slot for the template and one per frame, in that order; each begins with the framing's version byte and carries its own 24-byte nonce, no nonce repeating across the capture; one key opens every slot; the capture comes back as it went; another key opens nothing; and no frame appears in the clear in any slot.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
+  "id": "CER-65",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "Refuse a slot from another ceremony, a slot out of its place, and a slot tampered with",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "design §7.5.2.6",
+   "design §7.5.2.7"
+  ],
+  "rule": [
+   {
+    "where": "design §7.5.2.6",
+    "text": "so a slot lifted from another\nceremony and a template presented as a source image both fail to verify"
+   },
+   {
+    "where": "design §7.5.2.7",
+    "text": "Truncated or unauthenticated ciphertext is a decryption failure"
+   }
+  ],
+  "given": "A sealed capture, and a second capture of the same frames sealed under the same key but another ceremony's pre-commitment.",
+  "when": "A slot of the second is put in place of a slot of the first; the template's slot and an image's are exchanged; the stored ceremony id is edited; a slot is truncated, a ciphertext byte is flipped, and a slot's version byte is set to one the reader does not know; and the template's length is read as another version's.",
+  "then": "Each is a decryption failure reported as such and never as a no-match or a short template: the lifted slot, the exchanged slots and the edited ceremony id fail to authenticate, a truncated slot shorter than a nonce and a tag is refused as truncated, and an unknown version byte and a template of the wrong length are refused as framing.",
+  "oracle": "behaviour",
+  "interpretation": null
+ },
+ {
   "id": "CER-05",
   "area": "ceremony",
   "gap": "ceremony",
@@ -2425,7 +2479,30 @@
   "when": "Four runs: the face withdrawn for longer than the maximum gap; a second person's face substituted while the first is absent; the face withdrawn repeatedly for gaps each inside the maximum but summing past the ratio; and a compliant run with pruning of intermediate samples enabled.",
   "then": "The first three are abandoned by the client's own decision, the third at the end of the window and not before, with nothing of the check entering any transaction and no counterparty or witness able to tell that it ran. The compliant run's retained captures coincide with the prompts spread through the window rather than clustering in its final minutes, and no unretained sample survives the ceremony's close.",
   "oracle": "behaviour",
-  "deferred": "a camera and two people over four minutes: the reference camera returns the same synthetic frame every time, which can prove the gap and ratio arithmetic and nothing about whose face was in front of the lens. The same-face comparison itself is verification's own matcher at an easier operating point and waits on CAP-015's pin, not on a capability of its own",
+  "deferred": "a camera and two people over the window: the reference camera returns a synthetic frame, so what waits here is whose face was in front of the lens. The arithmetic — the gap, the substitution and the ratio, and the prompts spread through the window — is held now over a controlled source (CER-66). The same-face comparison itself is verification's own matcher at an easier operating point and waits on no capability of its own",
+  "interpretation": null
+ },
+ {
+  "id": "CER-66",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "Hold the counterparty across the window, and abandon the meeting by the three rules",
+  "milestone": "after-5",
+  "kind": "negative",
+  "spec": [
+   "design §7.5",
+   "light-client-requirements.md §1.3"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §1.3",
+    "text": "Abandon the meeting where no face is visible for longer than the maximum gap; where a different face appears while the one being held is absent"
+   }
+  ],
+  "given": "A controlled camera whose frame names who is in front of it, an engine that reads it, and the continuity parameters with the duration floor inactive so the window is the capture's own span.",
+  "when": "Five runs: one face present throughout; nobody at all; a face withdrawn past the maximum gap; a second face substituted while the first is away; and gaps each inside the maximum but summing past the presence ratio.",
+  "then": "The first keeps one frame per prompt, in the order taken, spread through the window rather than clustered; the others are abandoned by this party's own decision and nothing of the check enters a transaction. With the floor inactive the maximum gap exceeds the window, so the ratio is what catches a long absence and the gap rule is exercised against a shorter maximum; a floor set to the reference duration lengthens the window and changes nothing else.",
+  "oracle": "behaviour",
   "interpretation": null
  },
  {
@@ -14058,6 +14135,33 @@
   "then": "The inviter is asked which subnet by its label, the patron's alias there and the subnet's; the invited party's brief states that label; the operator's screen lists the one instance under its subnet and offers none for the other.",
   "oracle": "behaviour",
   "interpretation": "An operator in one subnet is an ordinary light client in the next."
+ },
+ {
+  "id": "PRD-16",
+  "area": "product",
+  "gap": "product",
+  "title": "Offer a peering after a meeting, either way round, and never as the adoption's alternative",
+  "milestone": "manual",
+  "kind": "manual",
+  "spec": [
+   "light-client-requirements.md §7",
+   "design §6.3"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §7",
+    "text": "Offer a peering after a meeting, either way round, and never as the\n  adoption's alternative"
+   },
+   {
+    "where": "light-client-requirements.md §7",
+    "text": "order the pair as the record itself does"
+   }
+  ],
+  "given": "Two people whose meeting has finalised a record, on devices whose keyhashes order one below the other.",
+  "when": "Each reads the screen the meeting ends on, and one of them offers a peering.",
+  "then": "Both screens offer it, with no direction asked and nothing said about a replication commitment; the lower keyhash builds the body and the other sends its back-pointers; both end holding the record, and the adoption's own section is unaffected whichever way it went — a meeting carries a peering, an adoption, both or neither. A refusal is shown with its reason and leaves the record standing.",
+  "oracle": "behaviour",
+  "interpretation": null
  },
  {
   "id": "TOP-51",

@@ -47,6 +47,10 @@ pub trait Proximity: Send + Sync {
 pub trait Camera: Send + Sync {
     /// The pixels of one frame answering `ask`.
     fn capture(&self, ask: Ask) -> Vec<u8>;
+    /// **The pixels of one frame with nothing asked** (design §7.5): the
+    /// continuity loop's probe, which shows the person nothing.  Stated
+    /// apart from `capture` because a probe is not a prompt.
+    fn probe(&self) -> Vec<u8>;
 }
 
 /// The platform's clock.
@@ -270,6 +274,20 @@ impl dev::Camera for CameraIn {
         );
         // metadata is empty because none crosses: there is nothing to
         // strip that was not already left on the platform's side
+        dev::RawFrame {
+            pixels,
+            metadata: Default::default(),
+        }
+    }
+
+    fn probe(&self) -> dev::RawFrame {
+        let pixels = self.0.probe();
+        // the size alone, and not even a prompt: a probe asks nothing
+        tracing::debug!(
+            target: "platform",
+            bytes = pixels.len(),
+            "platform.camera.probe"
+        );
         dev::RawFrame {
             pixels,
             metadata: Default::default(),

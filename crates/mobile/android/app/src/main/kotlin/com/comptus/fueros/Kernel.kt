@@ -49,6 +49,7 @@ object Kernel {
      *  carried none. Outlives the ceremony: the record closes the
      *  ceremony and the adoption rests on it. */
     @Volatile private var adoption: Adoption? = null
+    @Volatile private var peering: Peering? = null
 
     /** Whether the counterparty's contribution has been read off their
      *  screen, which is what decides the second QR from the first. */
@@ -91,6 +92,9 @@ object Kernel {
 
     /** The adoption after the record, where the meeting carried one. */
     fun adoption(): Adoption? = adoption
+
+    /** The peering the meeting carried, once one has begun (A3). */
+    fun peering(): Peering? = peering
 
     /** Whether the counterparty's contribution is in, which is what the
      *  screen's second QR at D2 is: the meeting id rather than ours. */
@@ -508,6 +512,82 @@ object Kernel {
     /** One kernel call whose refusal is the adoption's to carry. */
     private inline fun <T> result(method: String, body: () -> T): Adoption.Result<T> =
         call(method, { Adoption.Result.Refused(it.reason) }) { Adoption.Result.Ok(body()) }
+
+    // ---- A3, the peering the meeting carried ---------------------------
+
+    /**
+     * **Start the peering the meeting carried**, once the record is held
+     * (A3; design §6.3). A peering has no direction to settle, so this
+     * needs nothing from either person beyond the decision to make one:
+     * the lower keyhash builds the body and the other sends what its
+     * archive chains to.
+     *
+     * Called from the screen, and a second call does nothing — a peering
+     * is begun once. **A peering and an adoption are not alternatives**:
+     * a meeting can carry either, both or neither, and nothing here
+     * consults the adoption's state.
+     */
+    fun peeringBegins() {
+        val p = participant ?: return
+        val m = meet ?: return
+        val txid = m.recordTxid() ?: return
+        val them = m.counterpartyKey ?: return
+        if (peering != null) return
+        val pr = Peering(
+            me = hex(p.me()),
+            counterparty = them,
+            counterpartyName = m.counterpartyName,
+            presence = txid,
+            kern = peeringKern(p),
+            post = { bytes ->
+                call("send", { e -> Diag.warn("peer.send", "refused" to e.reason); false }) {
+                    p.send(unhex(them), Peering.KIND, bytes)
+                    true
+                }
+            },
+        )
+        pr.onChanged = { m.rendered() }
+        peering = pr
+        m.rendered()
+        // off the caller's thread: the first leg sends
+        Thread { pr.begin() }.start()
+    }
+
+    /** The kernel calls a [Peering] makes, bracketed like every other. */
+    private fun peeringKern(p: Participant): Peering.Kern = object : Peering.Kern {
+        override fun backPointers(): List<ByteArray> =
+            call("backPointers", { emptyList() }) { p.backPointers() } ?: emptyList()
+
+        override fun propose(
+            other: String,
+            presence: String,
+            otherBack: List<ByteArray>,
+        ): Peering.Result<ByteArray> = peered("proposePeering") {
+            // no replication commitment: `wire-format.md` §4.4 field 6 is
+            // optional and what it promises is an operator's to offer
+            p.proposePeering(unhex(other), unhex(presence), otherBack, null)
+        }
+
+        override fun reviewAndSign(body: ByteArray): Peering.Result<ByteArray> =
+            peered("reviewAndSignPeering") { p.reviewAndSignPeering(body) }
+
+        override fun envelope(
+            body: ByteArray,
+            entries: List<Pair<String, ByteArray>>,
+        ): Peering.Result<ByteArray> = peered("peeringEnvelope") {
+            val mine = p.signBody(body)
+            val all = entries.map { (who, e) -> uniffi.rhtn_ffi.SignedEntries(unhex(who), e) } +
+                uniffi.rhtn_ffi.SignedEntries(p.me(), mine)
+            uniffi.rhtn_ffi.peeringEnvelope(body, all)
+        }
+
+        override fun take(envelope: ByteArray): Peering.Result<String> =
+            peered("takePeering") { hex(p.takePeering(envelope)) }
+    }
+
+    /** One kernel call whose refusal is the peering's to carry. */
+    private inline fun <T> peered(method: String, body: () -> T): Peering.Result<T> =
+        call(method, { Peering.Result.Refused(it.reason) }) { Peering.Result.Ok(body()) }
 
     // ---- the bootstrap, which is the shell's own object ----------------
 
@@ -1405,6 +1485,13 @@ object Kernel {
                             a == null -> front.note("· a message of an adoption arrived with no meeting to put it in")
                             from != a.counterparty -> front.note("· a message of an adoption arrived from somebody who is not party to it")
                             else -> a.frame(e.bytes)
+                        }
+                    } else if (e.kind == Peering.KIND) {
+                        val pr = peering
+                        when {
+                            pr == null -> front.note("· a message of a peering arrived with no meeting to put it in")
+                            from != pr.counterparty -> front.note("· a message of a peering arrived from somebody who is not party to it")
+                            else -> pr.frame(e.bytes)
                         }
                     } else {
                         front.incoming(from, who, String(e.bytes))

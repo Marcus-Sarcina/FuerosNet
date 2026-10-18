@@ -1,10 +1,18 @@
 //! The sealed capture store (design §7.5.2, §7.5.2.6 to §7.5.2.8;
 //! `light-client-requirements.md` §1.3): one sealed capture per presence
-//! record, under a key derived from the depicted subject's seed, which the
-//! holder discards once the capture is sealed and regains only when the
-//! subject releases it again.  The AEAD, its nonce and the framing are
-//! undecided by the design (design §22.2), so they are parameters here with
-//! the reference client's defaults; a test supplies its own.
+//! record, under a key derived from the depicted subject's identity root,
+//! which the holder discards once the capture is sealed and regains only
+//! when the subject releases it again.
+//!
+//! **The AEAD is XChaCha20-Poly1305, and the design fixes it** [author,
+//! 2026-10-16]: each slot of the capture is sealed on its own under a
+//! 24-byte nonce drawn at random and stored in front of its ciphertext,
+//! with the ceremony's pre-commitment and the slot's ASCII label as
+//! associated data, framed as one version byte then the nonce then the
+//! ciphertext (design §7.5.2.6).  **One key opens every slot** and the
+//! label is its position's: `template` first, then `image1`, `image2` and
+//! so on (design §7.5.2.7), so a slot lifted from another ceremony and a
+//! template presented as an image both fail to open where they land.
 //!
 //! [`ClientStore`] is the client's persistent state, laid out so a test can
 //! see what a compliant client holds: sealed captures of others, its own
@@ -13,38 +21,44 @@
 
 use crate::record::DisclosureSet;
 use crate::{Keyhash, Txid};
-use aws_lc_rs::aead::{AES_256_GCM, Aad, CHACHA20_POLY1305, LessSafeKey, Nonce, UnboundKey};
 use aws_lc_rs::rand::{SecureRandom, SystemRandom};
+use chacha20poly1305::aead::{Aead as _, KeyInit, Payload};
+use chacha20poly1305::{XChaCha20Poly1305, XNonce};
 use std::collections::BTreeMap;
 
-/// The AEAD a store seals under: a parameter (design §22.2).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Aead {
-    /// AES-256-GCM.
-    Aes256Gcm,
-    /// ChaCha20-Poly1305.
-    ChaCha20Poly1305,
-}
+/// The framing's version byte, first of every sealed slot
+/// (design §7.5.2.6).
+pub const SLOT_VERSION: u8 = 1;
+/// The nonce's width: XChaCha20-Poly1305's extended nonce, which is what
+/// lets it be drawn at random rather than counted (design §7.5.2.6).
+pub const NONCE_LEN: usize = 24;
 
-/// The sealed store's parameters: the AEAD, and the template's fixed length
-/// for the modality version in use (design §7.5.2.7), so a holder knows
-/// what it is reading.
+/// The sealed store's parameters: the template's fixed length for the
+/// modality version in use (design §7.5.2.7), so a holder knows what it is
+/// reading.  **The AEAD is not among them**: design §7.5.2.6 fixes it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SealParams {
-    /// The AEAD the store seals under.
-    pub aead: Aead,
     /// The template's fixed length for the modality version in use.
     pub template_len: usize,
 }
 
 impl Default for SealParams {
-    /// The reference client's defaults: AES-256-GCM and a 32-byte template,
-    /// chosen values with nothing behind them yet (design §22.2).
+    /// A 32-byte template, which is the stand-in engine's
+    /// ([`crate::device::HashEngine`]).  A platform supplying a real
+    /// engine states its own length.
     fn default() -> Self {
-        SealParams {
-            aead: Aead::Aes256Gcm,
-            template_len: 32,
-        }
+        SealParams { template_len: 32 }
+    }
+}
+
+/// The ASCII label of slot `i`: `template` first, then `image1` onward
+/// (design §7.5.2.6).  It is the slot's position, so a slot moved to
+/// another position does not open there.
+pub fn slot_label(i: usize) -> String {
+    if i == 0 {
+        "template".to_string()
+    } else {
+        format!("image{i}")
     }
 }
 
@@ -89,10 +103,12 @@ pub struct SealedCapture {
     pub modality: u64,
     /// The template version it was derived under.
     pub template_version: u64,
-    /// The AEAD nonce.
-    pub nonce: [u8; 12],
-    /// The sealed capture.
-    pub ciphertext: Vec<u8>,
+    /// The sealed slots, the template's first and then one per frame,
+    /// each framed as one version byte, its 24-byte nonce and its
+    /// ciphertext (design §7.5.2.6).  The label a slot was sealed under
+    /// is its position's ([`slot_label`]), so the order is part of what
+    /// authenticates.
+    pub slots: Vec<Vec<u8>>,
 }
 
 /// Why a sealed capture did not open: each is a decryption failure, which a
@@ -108,36 +124,74 @@ pub enum OpenFailure {
     Framing,
 }
 
-const SEAL_AAD_TAG: &[u8] = b"rhtn/1:sealed-capture";
-
-fn aad_of(
-    subject: &Keyhash,
-    holder: &Keyhash,
-    ceremony_id: &[u8; 32],
-    modality: u64,
-    template_version: u64,
-) -> Vec<u8> {
-    let mut aad = Vec::with_capacity(SEAL_AAD_TAG.len() + 96 + 16);
-    aad.extend_from_slice(SEAL_AAD_TAG);
-    aad.extend_from_slice(subject);
-    aad.extend_from_slice(holder);
+/// The associated data a slot is sealed under: the ceremony's 32-byte
+/// pre-commitment then the slot's ASCII label (design §7.5.2.6).
+///
+/// **Subject and holder are bound by the key and not here.** The capture
+/// key's own derivation names both along with the ceremony
+/// ([`crate::keys::capture_key`]), so what the associated data has left to
+/// do is separate the slots of one capture from each other.  Modality and
+/// template version sit outside both: a holder editing its own copy of
+/// those reads a template under the wrong version and its own matcher
+/// answers `unavailable`, which costs nobody else.
+fn aad_of(ceremony_id: &[u8; 32], label: &str) -> Vec<u8> {
+    let mut aad = Vec::with_capacity(32 + label.len());
     aad.extend_from_slice(ceremony_id);
-    aad.extend_from_slice(&modality.to_be_bytes());
-    aad.extend_from_slice(&template_version.to_be_bytes());
+    aad.extend_from_slice(label.as_bytes());
     aad
 }
 
-fn key_of(aead: Aead, key: &[u8; 32]) -> LessSafeKey {
-    let alg = match aead {
-        Aead::Aes256Gcm => &AES_256_GCM,
-        Aead::ChaCha20Poly1305 => &CHACHA20_POLY1305,
-    };
-    LessSafeKey::new(UnboundKey::new(alg, key).expect("a 32-byte key"))
+fn seal_slot(key: &[u8; 32], ceremony_id: &[u8; 32], i: usize, plain: &[u8]) -> Vec<u8> {
+    let mut nonce = [0u8; NONCE_LEN];
+    SystemRandom::new()
+        .fill(&mut nonce)
+        .expect("the system's random source");
+    let aad = aad_of(ceremony_id, &slot_label(i));
+    let ct = XChaCha20Poly1305::new(key.into())
+        .encrypt(
+            &XNonce::try_from(&nonce[..]).expect("24 bytes"),
+            Payload {
+                msg: plain,
+                aad: &aad,
+            },
+        )
+        .expect("sealing cannot fail");
+    let mut out = Vec::with_capacity(1 + NONCE_LEN + ct.len());
+    out.push(SLOT_VERSION);
+    out.extend_from_slice(&nonce);
+    out.extend_from_slice(&ct);
+    out
 }
 
-/// Seal `capture` under `key`: the template, which must be exactly the
-/// parameters' length, then each frame as its instant and its
-/// length-prefixed bytes, under a fresh nonce.
+fn open_slot(
+    key: &[u8; 32],
+    ceremony_id: &[u8; 32],
+    i: usize,
+    framed: &[u8],
+) -> Result<Vec<u8>, OpenFailure> {
+    // a version byte, a nonce and at least a tag
+    if framed.len() < 1 + NONCE_LEN + 16 {
+        return Err(OpenFailure::Truncated);
+    }
+    if framed[0] != SLOT_VERSION {
+        return Err(OpenFailure::Framing);
+    }
+    let aad = aad_of(ceremony_id, &slot_label(i));
+    XChaCha20Poly1305::new(key.into())
+        .decrypt(
+            &XNonce::try_from(&framed[1..1 + NONCE_LEN]).expect("24 bytes"),
+            Payload {
+                msg: &framed[1 + NONCE_LEN..],
+                aad: &aad,
+            },
+        )
+        .map_err(|_| OpenFailure::Unauthenticated)
+}
+
+/// Seal `capture` under `key`, one slot at a time: the template first,
+/// which must be exactly the parameters' length, then each frame as its
+/// instant and its bytes.  Each slot takes its own nonce and its own
+/// label (design §7.5.2.6).
 pub fn seal(
     p: &SealParams,
     key: &[u8; 32],
@@ -151,39 +205,21 @@ pub fn seal(
         p.template_len,
         "the template has the modality version's fixed length"
     );
-    let mut plain = Vec::new();
-    plain.extend_from_slice(&capture.template);
-    for f in &capture.frames {
+    let mut slots = Vec::with_capacity(1 + capture.frames.len());
+    slots.push(seal_slot(key, &ceremony_id, 0, &capture.template));
+    for (i, f) in capture.frames.iter().enumerate() {
+        let mut plain = Vec::with_capacity(8 + f.bytes.len());
         plain.extend_from_slice(&f.at_ms.to_be_bytes());
-        plain.extend_from_slice(&(f.bytes.len() as u32).to_be_bytes());
         plain.extend_from_slice(&f.bytes);
+        slots.push(seal_slot(key, &ceremony_id, i + 1, &plain));
     }
-    let mut nonce = [0u8; 12];
-    SystemRandom::new()
-        .fill(&mut nonce)
-        .expect("the system's random source");
-    let aad = aad_of(
-        &subject,
-        &holder,
-        &ceremony_id,
-        capture.modality,
-        capture.template_version,
-    );
-    key_of(p.aead, key)
-        .seal_in_place_append_tag(
-            Nonce::assume_unique_for_key(nonce),
-            Aad::from(&aad),
-            &mut plain,
-        )
-        .expect("sealing cannot fail");
     SealedCapture {
         subject,
         holder,
         ceremony_id,
         modality: capture.modality,
         template_version: capture.template_version,
-        nonce,
-        ciphertext: plain,
+        slots,
     }
 }
 
@@ -194,45 +230,23 @@ pub fn open(
     key: &[u8; 32],
     sealed: &SealedCapture,
 ) -> Result<Capture, OpenFailure> {
-    if sealed.ciphertext.len() < 16 {
-        return Err(OpenFailure::Truncated);
-    }
-    let mut buf = sealed.ciphertext.clone();
-    let aad = aad_of(
-        &sealed.subject,
-        &sealed.holder,
-        &sealed.ceremony_id,
-        sealed.modality,
-        sealed.template_version,
-    );
-    let plain = key_of(p.aead, key)
-        .open_in_place(
-            Nonce::assume_unique_for_key(sealed.nonce),
-            Aad::from(&aad),
-            &mut buf,
-        )
-        .map_err(|_| OpenFailure::Unauthenticated)?;
-    if plain.len() < p.template_len {
+    let Some(first) = sealed.slots.first() else {
+        return Err(OpenFailure::Framing);
+    };
+    let template = open_slot(key, &sealed.ceremony_id, 0, first)?;
+    if template.len() != p.template_len {
         return Err(OpenFailure::Framing);
     }
-    let template = plain[..p.template_len].to_vec();
-    let mut frames = Vec::new();
-    let mut at = p.template_len;
-    while at < plain.len() {
-        if plain.len() - at < 12 {
-            return Err(OpenFailure::Framing);
-        }
-        let at_ms = u64::from_be_bytes(plain[at..at + 8].try_into().unwrap());
-        let n = u32::from_be_bytes(plain[at + 8..at + 12].try_into().unwrap()) as usize;
-        at += 12;
-        if plain.len() - at < n {
+    let mut frames = Vec::with_capacity(sealed.slots.len() - 1);
+    for (i, slot) in sealed.slots.iter().enumerate().skip(1) {
+        let plain = open_slot(key, &sealed.ceremony_id, i, slot)?;
+        if plain.len() < 8 {
             return Err(OpenFailure::Framing);
         }
         frames.push(Frame {
-            at_ms,
-            bytes: plain[at..at + n].to_vec(),
+            at_ms: u64::from_be_bytes(plain[..8].try_into().unwrap()),
+            bytes: plain[8..].to_vec(),
         });
-        at += n;
     }
     Ok(Capture {
         modality: sealed.modality,
@@ -310,7 +324,7 @@ impl ClientStore {
         let find = |hay: &[u8]| hay.windows(needle.len()).any(|w| w == needle);
         self.sealed
             .values()
-            .any(|s| find(&s.ciphertext) || find(&s.nonce))
+            .any(|s| s.slots.iter().any(|slot| find(slot)))
             || self.records.values().any(|r| find(r))
             || self.late.values().flatten().any(|l| find(l))
     }
@@ -632,27 +646,34 @@ fn read_dir_of(root: &std::path::Path) -> std::io::Result<Vec<(Txid, Vec<u8>)>> 
 fn encode_sealed(c: &SealedCapture) -> Vec<u8> {
     use rhtn_codec::encode::*;
     let mut out = Vec::new();
-    emit_array_head(&mut out, 7);
+    emit_array_head(&mut out, 6);
     emit_bstr(&mut out, &c.subject);
     emit_bstr(&mut out, &c.holder);
     emit_bstr(&mut out, &c.ceremony_id);
     emit_uint(&mut out, c.modality);
     emit_uint(&mut out, c.template_version);
-    emit_bstr(&mut out, &c.nonce);
-    emit_bstr(&mut out, &c.ciphertext);
+    emit_array_head(&mut out, c.slots.len());
+    for slot in &c.slots {
+        emit_bstr(&mut out, slot);
+    }
     out
 }
 
 fn decode_sealed(b: &[u8]) -> Option<SealedCapture> {
-    let a = array_of(b, 7)?;
+    let a = array_of(b, 6)?;
+    let rhtn_codec::cbor::Item::Array(slots) = &a[5] else {
+        return None;
+    };
     Some(SealedCapture {
         subject: kh_at(b, &a[0])?,
         holder: kh_at(b, &a[1])?,
         ceremony_id: kh_at(b, &a[2])?,
         modality: uint_at(&a[3])?,
         template_version: uint_at(&a[4])?,
-        nonce: bytes_at(b, &a[5])?.try_into().ok()?,
-        ciphertext: bytes_at(b, &a[6])?,
+        slots: slots
+            .iter()
+            .map(|it| bytes_at(b, it))
+            .collect::<Option<Vec<_>>>()?,
     })
 }
 

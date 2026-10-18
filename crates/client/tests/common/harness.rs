@@ -41,6 +41,10 @@ pub struct Cam {
     pub facing: RefCell<Vec<u8>>,
     pub clock: Rc<Cell<u64>>,
     pub captures: RefCell<Vec<(u64, Prompt)>>,
+    /// Probes, counted apart from prompted captures: the continuity loop
+    /// asks for a frame between prompts and the person is shown nothing
+    /// (design §7.5), so a probe must not read as a prompt.
+    pub probes: Cell<u64>,
 }
 impl Cam {
     pub fn prompts(&self) -> Vec<Prompt> {
@@ -68,6 +72,15 @@ impl Camera for Cam {
             ("Model".to_string(), b"HarnessCam 1".to_vec()),
         ]);
         RawFrame { pixels, metadata }
+    }
+
+    fn probe(&self) -> RawFrame {
+        // a probe is recorded as a probe and never as a prompt
+        self.probes.set(self.probes.get() + 1);
+        RawFrame {
+            pixels: self.facing.borrow().clone(),
+            metadata: BTreeMap::new(),
+        }
     }
 }
 
@@ -159,6 +172,7 @@ pub fn device(
         facing: RefCell::new(vec![]),
         clock: clock.clone(),
         captures: RefCell::new(vec![]),
+        probes: Cell::new(0),
     });
     let person = Rc::new(Person(RefCell::new(vec![])));
     let hook = Rc::new(Hook {

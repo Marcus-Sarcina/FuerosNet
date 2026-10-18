@@ -1028,7 +1028,39 @@ class MeetActivity : Activity() {
             return
         }
         adoption(m, Kernel.adoption())
+        peering(m, Kernel.peering())
         button("Done") { Kernel.stopMeet("done"); finish() }
+    }
+
+    /**
+     * **The peering, which the meeting can carry alongside anything else**
+     * (A3; design §6.3): an edge between two parties where neither is over
+     * the other, priced in the same meeting the record above rests on.
+     *
+     * Offered rather than assumed, and offered either way round: a peering
+     * has no direction, so there is nothing for the two to agree beyond
+     * making one. It is **not an alternative to the adoption** — a meeting
+     * can carry both — so this sits beside that section rather than
+     * replacing it.
+     */
+    private fun peering(m: Meet, p: Peering?) {
+        if (p == null) {
+            heading("A peering with ${m.counterpartyName}")
+            para("You met, which is what a peering is priced in (design §6.3). Neither of you would be over the other: it is an edge between you, and it says nothing about authority.")
+            button("Peer with ${m.counterpartyName}") { Kernel.peeringBegins() }
+            return
+        }
+        heading("A peering with ${m.counterpartyName}")
+        p.said().forEach { para("· $it") }
+        when (p.step()) {
+            Peering.Step.HELD -> {
+                para("The peering is recorded: ${p.txid()}")
+                para("Your device will hand the record to its node when it has one. Until then it is held here, which is where it is evidence.")
+            }
+            Peering.Step.REFUSED ->
+                para("The peering did not happen: ${p.reason()}. The meeting itself is untouched — the record above stands, and either of you can offer again.")
+            else -> para("Waiting on ${m.counterpartyName}'s device.")
+        }
     }
 
     /** What the adoption the meeting carried came to, where it carried one. */

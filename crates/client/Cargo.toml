@@ -38,6 +38,10 @@ rhtn-crypto = { path = "../crypto" }
 rhtn-archive = { path = "../archive" }
 rhtn-policy = { path = "../policy" }
 aws-lc-rs = "1.18"
+# the sealed store's AEAD is XChaCha20-Poly1305 (design §7.5.2.6), whose
+# extended nonce is what lets the nonce be drawn at random per sealing;
+# aws-lc-rs offers the IETF 12-byte ChaCha20-Poly1305 and not this one
+chacha20poly1305 = { version = "0.11", features = ["zeroize"] }
 argon2 = "0.6.0"
 # MIT; already in the graph through quinn.  No `attributes`, no `log`.
 tracing = { version = "0.1", default-features = false, features = ["std"] }

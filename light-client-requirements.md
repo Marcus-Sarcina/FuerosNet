@@ -166,7 +166,14 @@ shell exists.
       the one stretch a sample of the whole was supposed not to be.
   The reference parameters are **four minutes, a ninety per cent presence
   ratio and a twenty-second maximum gap**, and they are the client's to adjust
-  [author, 2026-10-06]. **Use the profile and the matcher verification already
+  [author, 2026-10-06]. **A client that sets no duration holds the window the
+  capture itself takes** [author, 2026-10-18], which is the setting to use
+  while a bench is run often: the loop and its three rules are unchanged, and
+  the only difference is the length of what they run over. Note what follows
+  from it rather than meeting it by surprise — against a window of ten to
+  fifteen seconds a twenty-second maximum gap cannot be exceeded, so the
+  presence ratio is what catches a long absence there and the gap rule bites
+  only once the window is longer than it. **Use the profile and the matcher verification already
   needs** (design §7.3, §7.5) [author, 2026-10-06]: comparing two of your own
   samples taken seconds apart is the same question a verifier answers, at its
   easiest — one camera, one light, one minute — against the cross-device
@@ -962,6 +969,20 @@ anchor up in, and it is what you hand onward in a bundle (§1.1,
   it can show its own person, and leave the meeting alone: the presence record
   the adoption rested on is complete without it, and either side may propose
   again.
+- **Offer a peering after a meeting, either way round, and never as the
+  adoption's alternative** [author, 2026-10-18]. A peering joins two parties
+  where neither is over the other (design §6.3), so there is no direction for
+  the two to settle and nothing to ask beyond whether to make one: offer it
+  on the meeting the record rests on, to both people, and let a meeting carry
+  a peering, an adoption, both or neither. **Somebody has to build the body**,
+  since it carries one timestamp, and nothing in the protocol makes either
+  side the builder — so order the pair as the record itself does
+  (`wire-format.md` §4.4, by keyhash) and let the lower build, which needs no
+  role and no new agreement. The other side sends what its archive chains to,
+  which is the one thing the builder cannot work out for itself. **Say nothing
+  of a replication commitment here**: §4.4's field is optional and what it
+  promises is bytes held for a peer (design §3.4), which is an operator's
+  offer and not this meeting's.
 - **A recovery adoption and a transfer are assembled by their own subjects**
   (design §9.0, §6.2), who hold the material that makes them. A body carrying
   somebody else's recovery block or transfer statement is not one you were shown

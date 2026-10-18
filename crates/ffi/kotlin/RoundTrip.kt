@@ -13,6 +13,7 @@ class Shell : Proximity, Camera, Clock, Random, Operator, Notices, Storage, Cust
     override fun `run`(`channel`: Channel, `peer`: ByteArray): ChannelOutcome = ChannelOutcome.UNAVAILABLE
     override fun `resolutionM`(`channel`: Channel): ULong? = null
     override fun `capture`(`ask`: Ask): ByteArray = ByteArray(64) { 7 }
+    override fun `probe`(): ByteArray = ByteArray(64) { 7 }
     override fun `nowMs`(): ULong = System.currentTimeMillis().toULong()
     override fun `waitMs`(`ms`: ULong) {}
     override fun `fill`(`n`: UInt): ByteArray { val b = ByteArray(n.toInt()); rng.nextBytes(b); return b }

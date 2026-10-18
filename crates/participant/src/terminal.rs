@@ -146,6 +146,11 @@ impl Camera for Terminal {
         let tag = format!("rhtn-instrument:frame:{ask:?}");
         tag.into_bytes().repeat(16)
     }
+
+    /// A probe's frame: the same frame, with nothing asked.
+    fn probe(&self) -> Vec<u8> {
+        b"rhtn-instrument:probe".repeat(16).to_vec()
+    }
 }
 
 impl Clock for Terminal {

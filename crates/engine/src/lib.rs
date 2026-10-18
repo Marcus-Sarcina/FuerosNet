@@ -60,7 +60,7 @@ pub const PROFILE_LEN: usize = 128;
 /// The embedding's dimension.
 pub const DIM: usize = 128;
 /// SFace's input side.
-const SIDE: usize = 112;
+pub const SIDE: usize = 112;
 /// YuNet's input side: the graph declares its shapes at 640×640, so a
 /// frame is placed top-left on a black canvas of that size and the
 /// coordinates read back are the frame's own.

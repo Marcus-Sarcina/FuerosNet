@@ -86,6 +86,10 @@ impl Camera for Shell {
         self.asked.lock().unwrap().push(ask);
         vec![7u8; 64]
     }
+
+    fn probe(&self) -> Vec<u8> {
+        vec![7u8; 64]
+    }
 }
 
 impl Clock for Shell {

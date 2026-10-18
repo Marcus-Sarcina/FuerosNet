@@ -8,7 +8,7 @@ impl Proximity for Shell {
  fn run(&self,_:Channel,_:Vec<u8>)->ChannelOutcome {ChannelOutcome::Unavailable}
  fn resolution_m(&self,_:Channel)->Option<u64> {None}
 }
-impl Camera for Shell {fn capture(&self,_:Ask)->Vec<u8>{vec![7;64]}}
+impl Camera for Shell {fn capture(&self,_:Ask)->Vec<u8>{vec![7;64]} fn probe(&self)->Vec<u8>{vec![7;64]}}
 impl Clock for Shell {fn now_ms(&self)->u64 {1_800_000_000_000} fn wait_ms(&self,_:u64){}}
 impl Random for Shell {fn fill(&self,n:u32)->Vec<u8>{vec![19;n as usize]}}
 impl Operator for Shell {fn ask(&self,_:String)->bool {true}}

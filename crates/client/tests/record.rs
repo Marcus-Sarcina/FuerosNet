@@ -1092,3 +1092,54 @@ fn a_revealed_integrity_value_is_held_to_its_evidence_width() {
         assert!(read_presentation(&ids(), &present(&rec.bytes, &set, &[])).is_ok());
     }
 }
+
+/// **The guided capture's prompts are drawn from the source it is given**
+/// (design §7.5), held here against a controlled one rather than against
+/// two live ceremonies agreeing by chance.
+#[test]
+fn the_guided_captures_prompts_come_from_its_random_source() {
+    use rhtn_client::device::{Camera, CaptureParams, Clock, Prompt, Random, guided_capture};
+    use std::cell::Cell;
+
+    /// A source that returns one byte value, repeated: a fixed stream, so
+    /// the draw is a function of it alone.
+    struct Fixed(u8);
+    impl Random for Fixed {
+        fn fill(&self, out: &mut [u8]) {
+            out.fill(self.0);
+        }
+    }
+    struct Still;
+    impl Camera for Still {
+        fn capture(&self, _: Prompt) -> rhtn_client::device::RawFrame {
+            rhtn_client::device::RawFrame {
+                pixels: vec![1u8; 8],
+                metadata: Default::default(),
+            }
+        }
+        fn probe(&self) -> rhtn_client::device::RawFrame {
+            self.capture(Prompt::Neutral)
+        }
+    }
+    struct Ticks(Cell<u64>);
+    impl Clock for Ticks {
+        fn now_ms(&self) -> u64 {
+            let t = self.0.get();
+            self.0.set(t + 1000);
+            t
+        }
+        fn wait_ms(&self, _: u64) {}
+    }
+
+    let p = CaptureParams::default();
+    let run = |b: u8| guided_capture(&Still, &Ticks(Cell::new(0)), &Fixed(b), &p).1;
+    // the same source twice is the same sequence: the draw is the source's
+    let a = run(3);
+    assert_eq!(a, run(3), "one source, one sequence");
+    // a different source is a different sequence, so nothing is fixed
+    let differs = (0u8..=255).any(|b| run(b) != a);
+    assert!(differs, "the prompts do not come from the source at all");
+    // and every prompt drawn is one of the eight
+    assert!(a.iter().all(|x| Prompt::ALL.contains(x)));
+    assert!((p.min_frames..=p.max_frames).contains(&(a.len() as u64)));
+}

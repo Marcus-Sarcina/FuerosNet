@@ -86,6 +86,13 @@ class AndroidShell(private val context: Context) :
         return cam.frame()
     }
 
+    /** A frame with nothing asked of the person: the continuity loop's
+     *  probe (design §7.5). The camera is already open for the capture
+     *  this runs inside, so a probe neither opens it nor retries — a
+     *  frame it cannot give is an absent face, which is what the loop is
+     *  there to notice. */
+    override fun probe(): ByteArray = face?.frame() ?: ByteArray(0)
+
     /** The meeting is over: give the camera back. Called by the Kernel when
      *  a ceremony stops or finishes. */
     fun endCapture() {

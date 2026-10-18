@@ -262,6 +262,13 @@ impl Camera for Cam {
             metadata: BTreeMap::new(),
         }
     }
+
+    fn probe(&self) -> RawFrame {
+        RawFrame {
+            pixels: vec![0; 64],
+            metadata: BTreeMap::new(),
+        }
+    }
 }
 
 /// The wall clock, since the adaptors' bounds elapse in real time.
@@ -431,6 +438,13 @@ impl Camera for Watching {
         ]);
         RawFrame { pixels, metadata }
     }
+
+    fn probe(&self) -> RawFrame {
+        RawFrame {
+            pixels: vec![0; 64],
+            metadata: BTreeMap::new(),
+        }
+    }
 }
 
 /// The face a camera is looking at.
@@ -504,6 +518,9 @@ struct KeptCam(Arc<Watching>);
 impl Camera for KeptCam {
     fn capture(&self, p: Prompt) -> RawFrame {
         self.0.capture(p)
+    }
+    fn probe(&self) -> RawFrame {
+        self.0.probe()
     }
 }
 struct KeptAsk(Arc<Asked>);

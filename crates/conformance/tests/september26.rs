@@ -29,6 +29,9 @@ impl Camera for Shell {
     fn capture(&self, _: Ask) -> Vec<u8> {
         vec![7; 64]
     }
+    fn probe(&self) -> Vec<u8> {
+        vec![7; 64]
+    }
 }
 impl Clock for Shell {
     fn now_ms(&self) -> u64 {

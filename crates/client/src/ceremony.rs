@@ -6,7 +6,7 @@
 //! in-process [`Harness`] moves them and records every path they take.
 
 use crate::backup;
-use crate::device::{ChannelKind, ChannelOutcome, ChannelResult, Device, guided_capture};
+use crate::device::{ChannelKind, ChannelOutcome, ChannelResult, Device, Held, hold_continuity};
 use crate::diag::id8;
 use crate::horizon::{Askable, Horizon, Reach, Upstream};
 use crate::keys::{capture_key, pre_commitment};
@@ -51,6 +51,9 @@ pub struct Config {
     pub capture: crate::device::CaptureParams,
     /// How what it keeps at rest is sealed.
     pub seal: SealParams,
+    /// The window a capture is held across (design §7.5).  The floor is
+    /// inactive by default [author, 2026-10-18].
+    pub continuity: crate::device::Continuity,
     /// Its numbers as a subject.
     pub subject: SubjectConfig,
     /// Its numbers as a verifier.
@@ -84,6 +87,7 @@ impl Default for Config {
             template_version: 1,
             capture: Default::default(),
             seal: SealParams::default(),
+            continuity: crate::device::Continuity::default(),
             subject: SubjectConfig::default(),
             verifier: VerifierConfig::default(),
             payload: payload::PayloadConfig::default(),
@@ -127,6 +131,10 @@ pub enum Abort {
     Malformed(String),
     /// The engine produced a template of the wrong length.
     TemplateLength,
+    /// This party could not hold its counterparty across the window
+    /// (design §7.5): the meeting ends, since a party that lost the face
+    /// it was holding has nothing to attest.
+    LostHold(crate::device::Lost),
     /// A party refused to sign.
     Refused(Refusal),
     /// The proposed root is not the root of the agreed disclosure set.
@@ -1791,12 +1799,25 @@ impl Client {
             role: Role::Participant,
         });
         let t0 = self.device.clock.now_ms();
-        let (frames, _prompts) = guided_capture(
+        // **held across the window, not taken in a burst** (design §7.5):
+        // the prompts fall at random through it and the retained frames
+        // are the ones taken at them, while between prompts the loop
+        // satisfies this party that it met one person continuously
+        let frames = match hold_continuity(
             self.device.camera.as_ref(),
             self.device.clock.as_ref(),
             self.device.random.as_ref(),
+            self.device.engine.as_ref(),
+            self.cfg.template_version,
             &self.cfg.capture,
-        );
+            &self.cfg.continuity,
+        ) {
+            Held::Kept(frames, _prompts) => frames,
+            Held::Lost(why) => {
+                tracing::info!(target: "cer", ?why, "cer.capture.lost");
+                return Err(abort("capture", Abort::LostHold(why)));
+            }
+        };
         let ms = self.device.clock.now_ms().saturating_sub(t0);
         let template = self.device.engine.template(&frames);
         // the count and the version, never a frame or the template

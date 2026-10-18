@@ -165,6 +165,12 @@ pub fn strip(raw: RawFrame) -> Vec<u8> {
 pub trait Camera {
     /// One frame, taken while `prompt` was being shown.
     fn capture(&self, prompt: Prompt) -> RawFrame;
+    /// **One frame with nothing asked of the person** (design §7.5): what
+    /// [`hold_continuity`] probes with between prompts.  A probe is not a
+    /// prompt — the person is shown nothing and asked for nothing — so a
+    /// camera states it separately rather than having a prompt stand in
+    /// for it [2026-10-18].
+    fn probe(&self) -> RawFrame;
 }
 
 /// The clock.  What it reports is what the ceremony reads.
@@ -196,6 +202,15 @@ pub trait Engine {
     /// The template `frames` yield, of this modality version's fixed
     /// length.
     fn template(&self, frames: &[Frame]) -> Vec<u8>;
+    /// **Whoever is in front of the lens right now**, as the template one
+    /// frame yields, or `None` where no face is there (design §7.5).  It
+    /// is what [`hold_continuity`] probes with: deciding that a face is
+    /// present rather than a blank wall is a capability the capture needs
+    /// anyway.
+    fn sample(&self, frame: &Frame) -> Option<Vec<u8>> {
+        let t = self.template(std::slice::from_ref(frame));
+        (!t.is_empty()).then_some(t)
+    }
     /// The fuzzed profile a query carries, derived from `template`.
     fn profile(&self, template: &[u8]) -> Vec<u8>;
     /// The comparison this engine does.
@@ -223,6 +238,8 @@ impl HashEngine {
 }
 
 impl Engine for HashEngine {
+    // `sample` is the default: the stand-in finds a face in anything,
+    // which is what lets a ceremony run end to end on a synthetic frame
     fn template(&self, frames: &[Frame]) -> Vec<u8> {
         let first = frames.first().map(|f| f.bytes.as_slice()).unwrap_or(&[]);
         sha256(&first[..first.len().min(self.face_bytes)]).to_vec()
@@ -259,6 +276,172 @@ impl Default for CaptureParams {
             max_span_ms: 15_000,
         }
     }
+}
+
+/// **The window a capture is held across** (design §7.5): the figures a
+/// party uses to satisfy itself that it met one person continuously.
+///
+/// **This is each party enforcing its own interest and no part of the
+/// record**: nothing about it enters a transaction, no counterparty or
+/// witness can tell that it ran, and a client that skips it weakens only
+/// the standing of the user who ran it — which is why it is a commitment
+/// in `light-client-requirements.md` §1.3 and not a rule anybody issues.
+#[derive(Debug, Clone)]
+pub struct Continuity {
+    /// The window to hold the counterparty across.  **Zero leaves the
+    /// floor unenforced** [author, 2026-10-18]: the loop then runs for as
+    /// long as the capture takes and the two checks below still apply
+    /// over that window, which is the setting to use while the bench is
+    /// run often.  The reference client's own figure is the four minutes
+    /// design §7.1 prices a meeting in.
+    pub duration_ms: u64,
+    /// The longest a face may be absent before the meeting is abandoned.
+    pub max_gap_ms: u64,
+    /// The least share of the window a face must be present for, in
+    /// hundredths: the reference figure is ninety per cent.
+    pub presence_pct: u64,
+    /// How often the loop probes for a face.
+    pub probe_ms: u64,
+}
+
+impl Default for Continuity {
+    /// **The floor is inactive** [author, 2026-10-18], the ratio and the
+    /// gap are design §7.5's reference figures, and the probe is this
+    /// client's own.
+    fn default() -> Self {
+        Continuity {
+            duration_ms: 0,
+            max_gap_ms: 20_000,
+            presence_pct: 90,
+            probe_ms: 500,
+        }
+    }
+}
+
+/// Why a party gave up holding its counterparty (design §7.5).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Lost {
+    /// A face was absent for longer than the maximum gap.
+    Gap,
+    /// A different face appeared while the one being held was away.
+    Another,
+    /// The gaps summed past the allowed share of the window.
+    Ratio,
+    /// No face was ever there.
+    None_,
+}
+
+/// What a held capture came to.
+#[derive(Debug)]
+pub enum Held {
+    /// The frames retained at the prompts, and the prompts given.
+    Kept(Vec<Frame>, Vec<Prompt>),
+    /// Abandoned, and why.  **The meeting ends**: a party that could not
+    /// hold its counterparty has nothing to attest.
+    Lost(Lost),
+}
+
+/// **Hold the counterparty across the window, and retain the frames taken
+/// at the prompts** (design §7.5).
+///
+/// One mechanism rather than two: the prompts fall at random through the
+/// window and the retained images are the ones taken at them, so the
+/// randomness that spreads the archive and the prompts that make the
+/// capture a liveness check are the same thing.  Between prompts the loop
+/// probes for a face and compares what it finds against the face it is
+/// holding — **the same comparison a verifier makes** (§7.3), at its
+/// easiest point, so nothing new is pinned for it.
+///
+/// What is not retained does not survive: a probe's sample is compared and
+/// dropped, never stored, which is what keeps a compliant client holding
+/// no decryptable likeness it was not given a key for (§7.5.2).
+pub fn hold_continuity(
+    cam: &dyn Camera,
+    clock: &dyn Clock,
+    rng: &dyn Random,
+    engine: &dyn Engine,
+    version: u64,
+    p: &CaptureParams,
+    c: &Continuity,
+) -> Held {
+    let n = draw(rng, p.min_frames, p.max_frames);
+    // the window: the floor where one is set, and the capture's own span
+    // where it is not
+    let window = if c.duration_ms == 0 {
+        draw(rng, p.min_span_ms, p.max_span_ms)
+    } else {
+        c.duration_ms
+    };
+    // the prompts' instants, drawn through the window and taken in order
+    let mut at: Vec<u64> = (0..n).map(|_| draw(rng, 0, window)).collect();
+    at.sort_unstable();
+    let start = clock.now_ms();
+    let (mut frames, mut prompts) = (Vec::new(), Vec::new());
+    let (mut held, mut next) = (None::<Vec<u8>>, 0usize);
+    let (mut away_since, mut away_total) = (None::<u64>, 0u64);
+    loop {
+        let now = clock.now_ms().saturating_sub(start);
+        // a prompt falls here: show it, keep the frame, and let the frame
+        // itself serve as this tick's probe
+        let prompt = (next < at.len() && now >= at[next]).then(|| {
+            next += 1;
+            Prompt::ALL[draw(rng, 0, Prompt::ALL.len() as u64 - 1) as usize]
+        });
+        // prompted where a prompt falls here, and a bare probe otherwise:
+        // the person is asked nothing between prompts
+        let raw = match prompt {
+            Some(p) => cam.capture(p),
+            None => cam.probe(),
+        };
+        let frame = Frame {
+            at_ms: now,
+            bytes: strip(raw),
+        };
+        match engine.sample(&frame) {
+            Some(seen) => {
+                if let Some(h) = &held {
+                    // a different face while the one held was away is the
+                    // substitution the loop exists to catch
+                    if away_since.is_some()
+                        && engine.matcher().compare(h, &engine.profile(&seen), version)
+                            == crate::query::Verdict::NoMatch
+                    {
+                        return Held::Lost(Lost::Another);
+                    }
+                } else {
+                    held = Some(seen);
+                }
+                if let Some(since) = away_since.take() {
+                    away_total += now.saturating_sub(since);
+                }
+            }
+            None => {
+                let since = *away_since.get_or_insert(now);
+                if now.saturating_sub(since) > c.max_gap_ms {
+                    return Held::Lost(Lost::Gap);
+                }
+            }
+        }
+        if let Some(prompt) = prompt {
+            prompts.push(prompt);
+            frames.push(frame);
+        }
+        if now >= window {
+            break;
+        }
+        clock.wait_ms(c.probe_ms);
+    }
+    if let Some(since) = away_since {
+        away_total += window.saturating_sub(since);
+    }
+    if held.is_none() {
+        return Held::Lost(Lost::None_);
+    }
+    // the gaps, summed, against the share the window allows
+    if away_total * 100 > window * (100 - c.presence_pct.min(100)) {
+        return Held::Lost(Lost::Ratio);
+    }
+    Held::Kept(frames, prompts)
 }
 
 fn draw(rng: &dyn Random, lo: u64, hi: u64) -> u64 {

@@ -13867,6 +13867,88 @@ rejections in the corpus, and both introduction kinds are listed in the
 corpus runner so a rejection that starts passing fails rather than being
 skipped.
 
+### 2026-10-18 (the peering's screen, and who builds the body)
+
+**A3's shell is built.** The kernel act was there since 2026-10-15 and the
+screen was owed; the Meet flow's `DONE` step now offers a peering on the
+record just finalised, to both people. `Peering` is `Adoption`'s shape with
+**four legs rather than five**, because a peering has no direction to settle:
+one side sends what its archive chains to, the other builds the body and
+shows it, the first signs or refuses, and the builder assembles the record,
+takes it and sends the copy. A separate kind of the shell's own, so no device
+reads one conversation as the other.
+
+**The lower keyhash builds** [2026-10-18]. Somebody has to, since the body
+carries one timestamp and the two sides would otherwise each build their own,
+and nothing in the protocol makes either side the builder — so the pair is
+ordered as the record orders itself (`wire-format.md` §4.4, by keyhash) and
+the lower builds. That needs no role and no new agreement, where leaning on
+the initiator would have made a shell's handshake value into a rule. **And a
+peering is not the adoption's alternative**: a meeting carries a peering, an
+adoption, both or neither, and the two sections of the screen are
+independent. No replication commitment is offered — §4.4's field is optional
+and what it promises is an operator's to promise.
+
+`light-client-requirements.md` §7 carries the commitment, UX-019 the
+functional row, PRD-16 the catalogue entry; `PeeringTest` holds the four
+legs, the builder rule, a leg arriving at the wrong side, and the kernel's
+refusals. 203 shell tests, up from 196.
+
+### 2026-10-18 (the sealed store built to its specification, and a registry entry corrected)
+
+**The store seals by the slot now, under the AEAD the design fixes.** It
+sealed the whole capture as one AES-GCM blob under a 12-byte nonce, with the
+AEAD and the template's length both parameters "with nothing behind them
+yet"; §7.5.2.6 has fixed them since 2026-10-16, so the implementation follows:
+**XChaCha20-Poly1305, one slot at a time** — the template first, then one per
+frame — each under its own 24-byte nonce drawn at random and stored in front
+of its ciphertext, framed as a version byte then the nonce then the
+ciphertext, with the ceremony's pre-commitment and the slot's ASCII label as
+associated data. `SealParams` keeps only the template's length; the AEAD is no
+longer a choice. **Subject and holder are bound by the key rather than the
+associated data**, which is what the capture key's own derivation already did,
+and the section says so. CER-64 and CER-65 are new, with the three refusals
+functional row CAP-015 asks for: a slot lifted from another ceremony, the
+template's slot read as an image's, and a truncated or tampered slot — each a
+decryption failure and never a short template or a no-match.
+
+**And a correction to the registry entry.** §7.5 said template version 1 was
+`face/sface-int8-v1` with a 128-dimension int8 template of 128 bytes. That
+described the **profile** and not the template, and the number was wrong:
+`rhtn-engine` has been at **version 2** since it was written, its template is
+128 × `f32` little-endian at **512 bytes**, and the 128-byte int8 object is
+the fuzzed profile a query carries. Version 1 is the stand-in's and
+interoperates with nothing. The entry now fixes both lengths, because the two
+are not the same object, and §22.2 says the fuzzing has a candidate and a
+provisional figure rather than nothing at all. **Nothing had compared the
+design's stated entry against the engine's constants**, which is how the two
+drifted; `crates/engine/tests/registry.rs` holds the document to them now, so
+changing a constant means rewriting the entry in the same commit. **The
+empirical result from the implementation is what the specification adopts**
+[author, 2026-10-18], which is the rule that settled it.
+
+**The capture is held across a window rather than taken in a burst.** §7.5
+replaced ten-to-fifteen seconds with the ceremony's duration on 2026-10-06
+and nothing had followed: `guided_capture` still drew its frames over a
+fifteen-second span and nothing probed for a face between them. `hold_continuity`
+now runs the window — the prompts falling at random through it, the retained
+frames being the ones taken at them, and a probe between — and **abandons the
+meeting** on a gap past the maximum, on a different face appearing while the
+one held was away, or on the gaps summing past the presence ratio. The
+comparison is verification's own matcher at its easiest point, so nothing new
+is pinned; a sample is compared and dropped. `Engine` gains `sample`, the
+ceremony's `capture` aborts on a lost hold, and CER-66 holds the three rules
+over a controlled source. CER-53 keeps its deferral, narrowed to the one thing
+a synthetic frame cannot show: whose face was in front of the lens.
+
+**The four-minute floor is inactive while the bench is run often** [author,
+2026-10-18]. A client setting no duration holds the window the capture itself
+takes, and the loop is otherwise unchanged. The consequence is stated rather
+than left to be discovered: against a window of ten to fifteen seconds a
+twenty-second maximum gap cannot be exceeded, so the presence ratio is what
+catches a long absence there. CER-52, the witness's own four-minute wait,
+stays unbuilt for the same reason.
+
 ### 2026-10-16 (nine rulings, and the open questions retired with them)
 
 **The arranging of a transaction is registered now.** An adoption and a

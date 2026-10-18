@@ -246,10 +246,12 @@ withholds by default, and late responses beside a record; and the
 ceremony itself over a device interface — proximity channels, camera,
 clock, randomness, operator, notifier and engine — with an in-process
 harness that carries the direct channel and logs every path. The engine
-is a stand-in that hashes a frame's leading bytes (design §22.2 is
-undecided); the sealed store's AEAD, nonce and framing are now
-design §7.5.2.6's: XChaCha20-Poly1305, a stored random 24-byte nonce, the
-pre-commitment and the slot label as associated data. All 29 ceremony entries pass;
+is a stand-in that hashes a frame's leading bytes where `rhtn-engine`
+is not supplied (template version 1, which interoperates with nothing);
+the sealed store's AEAD, nonce and framing are now design §7.5.2.6's and
+implemented: XChaCha20-Poly1305 per slot, a stored random 24-byte nonce,
+the pre-commitment and the slot label as associated data (CER-64,
+CER-65). All 29 ceremony entries pass;
 224 of 286 entries pass. One reading is open to the author: design §7.3
 says a verifier's operator is not told they were sampled, and design
 §19.6 says a verifier is told, when asked, that answering records them;

@@ -14,6 +14,8 @@ impl Proximity for DeviceStub {
 }
 impl Camera for DeviceStub {
     fn capture(&self,_:Prompt)->RawFrame { RawFrame{pixels:vec![],metadata:Default::default()} }
+
+    fn probe(&self)->RawFrame { RawFrame{pixels:vec![],metadata:Default::default()} }
 }
 impl Clock for DeviceStub {
     fn now_ms(&self)->u64 { 0 }

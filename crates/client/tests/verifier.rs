@@ -429,7 +429,8 @@ fn a_failed_decryption_is_inconclusive_never_no_match() {
     let mut v = VerifierState::new(VerifierConfig::default());
     // R2's sealed capture truncated on disk
     let sealed = s.b_store.sealed.get_mut(&s.r2).unwrap();
-    sealed.ciphertext.truncate(sealed.ciphertext.len() - 5);
+    let n = sealed.slots[0].len();
+    sealed.slots[0].truncate(n - 5);
     let cx = Verifying {
         seal: &SealParams::default(),
         me: &me,
@@ -689,10 +690,7 @@ fn a_capture_sealed_at_the_stores_template_length_opens_at_the_verifier() {
     let me = id("bob");
     let m = Recording(RefCell::new(vec![]));
     // the engine's numbers: a 512-byte template, compared under version 2
-    let p512 = SealParams {
-        template_len: 512,
-        ..SealParams::default()
-    };
+    let p512 = SealParams { template_len: 512 };
     let rec = s.w.meet("alice", "bob");
     let (cid, seed) = ([44u8; 32], [45u8; 32]);
     let template = vec![7u8; 512];

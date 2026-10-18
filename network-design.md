@@ -2102,13 +2102,24 @@ of somebody else's face for no purpose the rule states, where a lookback longer
 than the maximum gap is all that establishing continuity needs
 (`light-client-requirements.md` §1.3).
 
-**Template version 1 is the registry's first entry** [author, 2026-10-16]:
-`face/sface-int8-v1` — the extractor and matcher §22.2 chose, producing a
-128-dimension int8 template of exactly 128 bytes, compared by cosine distance,
-over a YuNet detection aligned to 112×112. **The number is what travels and
-the entry is what it names** (`wire-format.md` §4.5, query field 5): a verifier
-whose engine is not this one answers *unavailable* rather than comparing under
-its own (§7.4.4), and the entry is what tells it which it holds. The fixed
+**Template version 2 is the registry's first real entry**
+[author, 2026-10-16]: `face/sface-int8-v1`, the extractor and matcher §22.2
+chose, over a YuNet detection aligned to 112×112. **Version 1 is the
+reference stand-in's** and names no modality: it recognises nobody, exists so
+the ceremony runs end to end, and interoperates with nothing — a client met
+under it answers *unavailable*. The entry fixes two lengths, because the
+profile and the template are not the same object:
+
+| | What it is | Length |
+|---|---|---|
+| **The profile** | 128 dimensions quantised to `int8`, fuzzed (§7.5) — what a query carries and what another client's matcher must read | 128 bytes |
+| **The template** | the same 128 dimensions as `f32`, little-endian — what the holder's sealed store keeps and compares against | 512 bytes |
+
+The comparison is **cosine** between the two, the template read directly and
+the profile dequantised. **The number is what travels and the entry is what
+it names** (`wire-format.md` §4.5, query field 5): a verifier whose engine is
+not this one answers *unavailable* rather than comparing under its own
+(§7.4.4), and the entry is what tells it which it holds. The template's fixed
 length is also what §7.5.2.7's layout depends on — a holder reading its own
 sealed store knows from the version how many bytes in front of the images are
 the template.
@@ -8532,11 +8543,13 @@ order and refusal behaviour, with the role row consulted as a lookup.
   their distributor, most published face models being trained on
   research-restricted data whatever their code licence says. **The template
   registry entry and the sealed store's AEAD parameters are chosen too**
-  [author, 2026-10-16]: `face/sface-int8-v1` at version 1 (§7.5) and
+  [author, 2026-10-16]: `face/sface-int8-v1` at version 2 (§7.5) and
   XChaCha20-Poly1305 with a stored random 24-byte nonce (§7.5.2.6). **The
-  fuzzing algorithm waits on a measurement rather than a preference**: §7.5's
-  target is discrimination from about 99% of humans, and a candidate is picked
-  once one has been measured against that figure (CAP-016). **The matching
+  fuzzing algorithm has a candidate and waits on a measurement rather than a
+  preference**: §7.5's target is discrimination from about 99% of humans, the
+  reference client quantises the template to `int8` after seeded noise per
+  component, and the noise figure is provisional until one has been measured
+  against that target (CAP-016). **The matching
   threshold is not among them** [author,
   2026-10-13]: where a verifying client reads its verdict is internal to that
   client and enforceable by nobody (§1.1), and what travels is the verdict

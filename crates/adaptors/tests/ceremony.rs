@@ -393,10 +393,19 @@ async fn the_guided_capture_takes_three_to_five_frames_over_ten_to_fifteen_secon
         .await
         .expect("a witnessed record");
     let second = m.party("bob").kept.cam.prompts()[first.len()..].to_vec();
-    assert_ne!(
-        first, second,
-        "independent randomness, different prompt sequences"
-    );
+    // **the prompts are drawn, not fixed**, which is held deterministically
+    // in `rhtn-client`'s own tests against a controlled source: two live
+    // ceremonies agreeing by chance is a 1-in-1250 event over eight
+    // prompts and three to five frames, so asserting they differ here was
+    // a flake waiting to happen [2026-10-18]. What this run shows is that
+    // each ceremony drew its own sequence from the set.
+    for seq in [&first, &second] {
+        assert!((3..=5).contains(&seq.len()), "{} prompts", seq.len());
+        assert!(
+            seq.iter()
+                .all(|p| rhtn_client::device::Prompt::ALL.contains(p))
+        );
+    }
     // each of bob's sealed captures of alice opens under alice's key and
     // holds 3–5 frames spanning 10–15 s
     for t in [t1, t2] {
@@ -420,8 +429,21 @@ async fn the_guided_capture_takes_three_to_five_frames_over_ten_to_fifteen_secon
             "{} frames",
             cap.frames.len()
         );
-        let span = cap.frames.last().unwrap().at_ms - cap.frames[0].at_ms;
-        assert!((10_000..=15_000).contains(&span), "span {span} ms");
+        // **the prompts fall at random through the window** (design §7.5),
+        // so what the retained frames span is a fraction of it rather
+        // than the whole: three to five uniform draws over ten to fifteen
+        // seconds span about half of it on average, and asserting the
+        // frames span the window itself was asserting the even spacing
+        // the burst used to have [2026-10-18]. What holds here is that
+        // every frame falls inside the window, in the order taken; the
+        // spread itself is held over many draws in `rhtn-client`'s own
+        // continuity tests.
+        assert!(
+            cap.frames.windows(2).all(|w| w[0].at_ms <= w[1].at_ms),
+            "in the order taken"
+        );
+        let last = cap.frames.last().unwrap().at_ms;
+        assert!(last <= 15_000, "a frame at {last} ms, past the window");
     }
 }
 

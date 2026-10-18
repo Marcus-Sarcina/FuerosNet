@@ -146,6 +146,7 @@ pub fn variant(a: &crate::ceremony::Abort) -> &'static str {
         CeremonyIdMismatch => "CeremonyIdMismatch",
         Malformed(_) => "Malformed",
         TemplateLength => "TemplateLength",
+        LostHold(_) => "LostHold",
         Refused(_) => "Refused",
         RootMismatch => "RootMismatch",
         BackPointers => "BackPointers",

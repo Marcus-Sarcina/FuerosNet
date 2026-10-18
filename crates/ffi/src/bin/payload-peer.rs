@@ -78,6 +78,10 @@ impl Camera for Shell {
     fn capture(&self, _ask: Ask) -> Vec<u8> {
         vec![]
     }
+
+    fn probe(&self) -> Vec<u8> {
+        vec![]
+    }
 }
 impl Clock for Shell {
     fn now_ms(&self) -> u64 {

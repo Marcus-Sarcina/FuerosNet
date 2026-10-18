@@ -61,15 +61,17 @@ With A having met B earlier, B meets C and A is selected:
 **C1 Launch a node.** The proven half: phone-to-container enrolment
 (hardware, 2026-10-10). The **build** half: H1 — creating the instance from
 the client; on the bench, the client launching a container on this machine
-(`local.sh` is the stand-in); the cloud flow later and larger. Also owed:
-**renewal** — a run is 7 × 48 h and nothing renews it.
+(`local.sh` is the stand-in); the cloud flow later and larger. ~~Also owed: renewal~~ — **built 2026-10-16**: the instance
+reports `run-ends`, the next run opens exactly there, and the CLI, the
+kernel and the Operator screen each do it (`light-client-requirements.md`
+§10).
 
 **C2 Node-to-node peering** — two containers; proven in-process
 (`a_new_root_peers_floods_and_is_reached_over_real_sessions`).
 
 **C3 The integrated chain**, as runs:
 - patron attached to the node — proven (`attach_to`); hardware is the `field-run.sh` shape
-- patron accesses a resource; a sub accesses one under a grant — the node side proven (hosted package served, grants by predicate, a resource on its own port); **build**: the client's Catalog screen is a placeholder, so the phone side is a build before it is a test
+- patron accesses a resource; a sub accesses one under a grant — the node side proven (hosted package served, grants by predicate, a resource on its own port); ~~build: the client's Catalog screen is a placeholder~~ — **built 2026-10-16**: `CatalogActivity` with a pure `Catalog` for the roll and `wire-format.md` §11.1's six statuses, and `Client::request_resource` behind it. What is still owed on the bench is the **grant-side** half, a sub reaching a resource under a grant, which needs a hosted package
 - the node's address held as anchor by an unconnected user; that user reaches the sub through the patron's node — anchor entry and payload relay proven; on hardware, the "payload demo" peer with a third phone that knows only the anchor
 - the node caches for an absent sub — `material_queues_for_a_client_marked_unreachable` and redelivery across a restart, proven; on hardware, airplane mode on the sub; the **failover sibling** case beside it, which has its own proven test
 
