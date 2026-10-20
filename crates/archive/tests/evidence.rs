@@ -225,7 +225,7 @@ fn an_adoption_carries_one_evidence_form_and_a_recovery_names_its_parties() {
 
 // acceptance: DEC-21
 #[test]
-fn a_formation_is_genesis_rooted_and_a_normal_record_is_witnessed() {
+fn a_formation_is_genesis_rooted_and_carries_no_evidence_arrays() {
     let mut w = World::new(&["alice", "bob", "carol"]);
     let (ka, kb, kc) = (w.kh("alice"), w.kh("bob"), w.kh("carol"));
     let root = [7u8; 32];
@@ -278,11 +278,14 @@ fn a_formation_is_genesis_rooted_and_a_normal_record_is_witnessed() {
         body_err(&with_uint(normal, 6, 1)).contains("no witnesses"),
         "formation with witnesses"
     );
-    // (d) a formation's subtype flipped to normal: no witnesses, and a
-    // normal record carries one to sixteen
+    // (d) a formation's subtype flipped to normal: with no witness floor
+    // [author, 2026-10-19] the body check passes — it reads as a witnessless
+    // normal record whose genesis back-pointers name no transaction, held at
+    // the chain as any fork at genesis
+    let flipped = with_uint(&f, 6, 0);
     assert!(
-        body_err(&with_uint(&f, 6, 0)).contains("carries witnesses"),
-        "normal record without witnesses"
+        check_body(&flipped, &rhtn_codec::cbor::parse_all(&flipped).unwrap()).is_ok(),
+        "a witnessless normal record is valid"
     );
     // (e) the two participants one identity
     let same = formation_body(

@@ -233,7 +233,10 @@ impl Proposal {
             return out;
         }
         let mut out = Vec::new();
-        emit_map_head(&mut out, 7 + (!self.responses.is_empty()) as usize);
+        emit_map_head(
+            &mut out,
+            6 + usize::from(!self.witnesses.is_empty()) + usize::from(!self.responses.is_empty()),
+        );
         emit_back_pointers(&mut out, back);
         emit_uint(&mut out, 1);
         emit_uint(&mut out, self.started_at);
@@ -246,16 +249,20 @@ impl Proposal {
             emit_uint(&mut out, 1);
             emit_bstr(&mut out, p);
         }
-        emit_uint(&mut out, 4);
-        emit_array_head(&mut out, self.witnesses.len());
-        for w in &self.witnesses {
-            emit_map_head(&mut out, 3);
-            emit_uint(&mut out, 1);
-            emit_bstr(&mut out, &w.keyhash);
-            emit_uint(&mut out, 2);
-            emit_bstr(&mut out, &w.nominated_by);
-            emit_uint(&mut out, 3);
-            emit_uint(&mut out, w.flags);
+        // zero witnesses omit the key (§1's empty rule; no floor [author,
+        // 2026-10-19]) — the absence is in the signed body, permanently
+        if !self.witnesses.is_empty() {
+            emit_uint(&mut out, 4);
+            emit_array_head(&mut out, self.witnesses.len());
+            for w in &self.witnesses {
+                emit_map_head(&mut out, 3);
+                emit_uint(&mut out, 1);
+                emit_bstr(&mut out, &w.keyhash);
+                emit_uint(&mut out, 2);
+                emit_bstr(&mut out, &w.nominated_by);
+                emit_uint(&mut out, 3);
+                emit_uint(&mut out, w.flags);
+            }
         }
         if !self.responses.is_empty() {
             emit_uint(&mut out, 5);

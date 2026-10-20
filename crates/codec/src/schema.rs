@@ -2666,8 +2666,10 @@ fn check_recovery(b: &[u8], m: &[(Item, Item)], rm: &[(Item, Item)]) -> Result<(
 }
 
 /// A presence record's body rules (§3.2, §4.5): two distinct participants,
-/// the subtype's conditional fields, the witness floor, the responses
-/// bound, and a formation's genesis back-pointers.
+/// the subtype's conditional fields, the witness and response bounds, and a
+/// formation's genesis back-pointers.  **There is no witness floor**
+/// [author, 2026-10-19]: a normal record with no witnesses omits field 4
+/// and is valid, the absence readable in the signed body forever.
 fn check_presence(b: &[u8], m: &[(Item, Item)], lists: &[Item]) -> Result<(), Error> {
     nested_extension_bounds(b, 0, 3, &|k| k == 1)?;
     nested_extension_bounds(b, 0, 4, &|k| (1..=5).contains(&k))?;
@@ -2736,15 +2738,20 @@ fn check_presence(b: &[u8], m: &[(Item, Item)], lists: &[Item]) -> Result<(), Er
         }
         return Ok(());
     }
-    // a normal record carries witnesses, one to sixteen, and at least one
-    // attesting that the protocol ran and both were responsive
-    let Some(Item::Array(ws)) = map_get(m, 4) else {
-        return Err(Error("a normal record carries witnesses"));
+    // witnesses, where any signed: zero omit the key (§1's empty rule, as
+    // field 5), one to sixteen where present, and no floor [author,
+    // 2026-10-19]
+    let ws: &[Item] = match map_get(m, 4) {
+        None => &[],
+        Some(Item::Array(ws)) => ws,
+        Some(_) => return Err(Error("witnesses not array")),
     };
-    if ws.is_empty() || ws.len() > WITNESSES_PER_RECORD {
-        return Err(Error("witnesses out of 1..=16"));
+    if map_get(m, 4).is_some() && ws.is_empty() {
+        return Err(Error("empty witness array must be omitted"));
     }
-    let mut affirmative = false;
+    if ws.len() > WITNESSES_PER_RECORD {
+        return Err(Error("witnesses over 16"));
+    }
     // §3.2: a witness is named once, and is neither participant
     let mut seen_witnesses: std::collections::BTreeSet<_> = std::collections::BTreeSet::new();
     for w in ws {
@@ -2766,12 +2773,6 @@ fn check_presence(b: &[u8], m: &[(Item, Item)], lists: &[Item]) -> Result<(), Er
             Some(n) if keys.contains(&n) => {}
             _ => return Err(Error("a witness's nominator is not a participant")),
         }
-        if map_get(wm, 3).and_then(as_uint).is_some_and(|x| x & 3 == 3) {
-            affirmative = true;
-        }
-    }
-    if !affirmative {
-        return Err(Error("witness floor: no affirmative attestation"));
     }
     if let Some(Item::Array(resp)) = map_get(m, 5) {
         if resp.len() > VERIFIER_RESPONSES_PER_RECORD {

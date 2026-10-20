@@ -124,10 +124,13 @@ async fn a_weaker_channel_is_never_presented_as_a_stronger_one() {
 }
 
 /// Two new joiners, nobody to nominate and nobody to ask: their first
-/// meeting is a formation record, the one witnessless shape (design
-/// §13.2; `wire-format.md` §3.2), and their second, no longer at genesis,
-/// waits for a witness.  The first field run stopped here, on a
-/// `NoWitness` that no horizon could ever answer [2026-10-04].
+/// meeting is a formation record, the genesis pair's shape, and their
+/// second — no longer at genesis — **finalises as a witnessless normal
+/// record**, since no floor requires a witness [author, 2026-10-19]
+/// (design §13.2; `wire-format.md` §3.2).  The first field run once
+/// stopped here, on a `NoWitness` that no horizon could ever answer
+/// [2026-10-04]; the rule that stopped it is gone, and the record now
+/// says what happened instead of refusing to exist.
 // acceptance: CER-50
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn two_new_joiners_form_a_record_with_no_witness_and_only_once() {
@@ -152,12 +155,25 @@ async fn two_new_joiners_form_a_record_with_no_witness_and_only_once() {
         "each participant's back-pointer is the genesis value"
     );
     assert_eq!(m.record("bob", t).await, env, "the same record at both");
-    // the same two again: no longer at their genesis, no witness is a wait
-    assert_eq!(
-        m.meet("alice", "bob", &[], &[]).await.err(),
-        Some(rhtn_client::ceremony::Abort::NoWitness),
-        "a second witnessless meeting is not a formation"
+    // the same two again: no longer at their genesis, and a witnessless
+    // normal record rather than a second formation or a refusal
+    let t2 = m
+        .meet("alice", "bob", &[], &[])
+        .await
+        .expect("a witnessless normal record");
+    assert_ne!(t2, t, "a new record, not the formation again");
+    let env2 = m.record("alice", t2).await;
+    let rec2 = Record::parse(&env2).expect("a record");
+    assert_eq!(rec2.signers.len(), 2, "still only the two participants");
+    assert_ne!(
+        rec2.back,
+        vec![
+            vec![rhtn_archive::genesis(&rec2.signers[0])],
+            vec![rhtn_archive::genesis(&rec2.signers[1])]
+        ],
+        "its back-pointers chain to the first record: not a formation"
     );
+    assert_eq!(m.record("bob", t2).await, env2, "the same record at both");
 }
 
 // acceptance: CER-06

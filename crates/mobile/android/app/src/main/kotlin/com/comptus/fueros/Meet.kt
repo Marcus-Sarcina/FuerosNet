@@ -263,14 +263,24 @@ class Meet(
 
     /**
      * What the meeting is for, as the author's dialogue puts it: a regular
-     * meeting by default, optionally asking the other to hold a backup, or
-     * a patronage action in a named direction.
+     * meeting by default with a peering offered beside it, or a patronage
+     * action in a named direction.
      */
     data class Kind(
         /** Which way a patronage action goes, if it is one. */
         val adopt: Adopt = Adopt.NONE,
-        /** *"Ask this person to backup my user data"* — the checkbox. */
-        val askBackup: Boolean = false,
+        /**
+         * **Whether this meeting also carries a peering** — the checkbox
+         * on the regular meeting (design §6.3; A3).
+         *
+         * It was `askBackup`, a flag that put one line in the brief and
+         * did nothing else [bench, 2026-10-18]: the box asked the other
+         * person to hold a backup, which design §3.4 makes **what a
+         * peering record entitles the two of you to**, so the box was
+         * promising a transaction the flow never made. It asks for the
+         * peering now, and the backup is what follows from it.
+         */
+        val peering: Boolean = false,
         /** Which subnet the other is being invited into, where this
          *  device is the patron and chose at D1a; the responder as patron
          *  chooses at its brief ([chooseScope]). */
@@ -332,7 +342,7 @@ class Meet(
      * the four steps a participant takes (`crates/client/src/sequence.rs`)
      * and where the conversation stands. Each step answers null where it
      * went and the kernel's refusal otherwise, in the kernel's own words
-     * (`Abort`'s debug form: `Waiting("...")`, `NoWitness`, and so on),
+     * (`Abort`'s debug form: `Waiting("...")` and so on),
      * which this flow reads and the screen shows. **No binding here**: the
      * kernel implements this over `Participant`, and a test with a fake.
      */
@@ -428,6 +438,7 @@ class Meet(
     private var carrying: Scope? = null
     /** What the counterparty proposed, where they proposed the opposite. */
     private var theirAdopt: Adopt? = null
+    private var theirPeering = false
     private var direction: Adopt? = null
     /** Facts the pre-sign warnings are drawn from, as the flow learns them. */
     private var witnessesMine = 0
@@ -514,7 +525,15 @@ class Meet(
 
     fun step(): Step = synchronized(lock) { step }
 
-    /** The meeting's own log lines, oldest first. */
+    /**
+     * The meeting's own log lines, oldest first.
+     *
+     * **No screen draws these** [author, 2026-10-18]. Every line goes to
+     * the diagnostic stream as it is made ([note]), which is where a bench
+     * run is read; the list is here so a test can assert that something
+     * was noted once and not twice. Drawing it put the controls above the
+     * fold on every render, which is why it came off the screen.
+     */
     fun log(): List<String> = synchronized(lock) { log.toList() }
 
     /** The finalised record's txid in hex, once there is one. */
@@ -696,12 +715,14 @@ class Meet(
             "From the next screen this phone faces $counterpartyName and takes " +
                 "nothing from you until the capture is done.",
         )
-        if (kind.askBackup) {
+        if (peeringAsked()) {
             out += Item(
                 "UX-001",
-                "You are asking $counterpartyName to hold an encrypted backup of " +
-                    "your contacts and records — not your biometrics and not your " +
-                    "secrets, which never leave this device.",
+                "This meeting also makes a peering between you and " +
+                    "$counterpartyName: an edge where neither of you is over the " +
+                    "other, and what lets either of you hold an encrypted backup " +
+                    "of the other's contacts and records — not your biometrics " +
+                    "and not your secrets, which never leave this device.",
             )
         }
         // PRD-02: an adoption moves authority, and the resources whose
@@ -1008,8 +1029,9 @@ class Meet(
      * said to go on or the patience ran out with some still out: the
      * responder hands over what it gathered, once; the initiator proposes,
      * and is refused while the kernel waits on something (`Waiting`),
-     * which is retried next poll, or because no nominee will attest
-     * (`NoWitness`), which is the person's to wait out or stop. Any other
+     * which is retried next poll. **A missing witness refuses nothing**
+     * [author, 2026-10-19]: there is no floor, and a record nobody
+     * attests finalises saying so. Any other
      * refusal stops the meeting with its code. The body out, or shown, is
      * what moves to review; a signer's refusal at the proposer arrives as
      * a message, in [conversed].
@@ -1093,20 +1115,13 @@ class Meet(
         }
         when {
             p.noWitness -> {
-                // **the body waits on a witness only where one can still
-                // arrive.** Nobody nominated, or every nominee declined, is
-                // a ceremony that cannot finalize (`wire-format.md` §3.2:
-                // past genesis a record needs a witness), and asking the
-                // kernel again every turn would not change that.
-                val nominees = witnesses()
-                when {
-                    nominees.isEmpty() ->
-                        return stop("neither side nominated a witness, and a meeting past genesis needs one")
-                    nominees.all { it.answer == Answer.DECLINED } ->
-                        return stop("every nominee declined to attest, and a meeting past genesis needs a witness")
-                }
+                // **a missing witness stops nothing** [author, 2026-10-19]:
+                // there is no floor (`wire-format.md` §3.2), and the
+                // record's absent witness field says what happened to
+                // every later reader — which is the one thing the person
+                // is told here, once, before they sign it.
                 val fresh = synchronized(lock) { (!saidNoWitness).also { saidNoWitness = true; changed() } }
-                if (fresh) note("no nominee has agreed to attest yet; the body waits on one.")
+                if (fresh) note("no witness attests this meeting; the record will say so, permanently.")
             }
             // what it waits on is the kernel's word and the screen shows
             // it; said once, not once per turn
@@ -1173,6 +1188,34 @@ class Meet(
             theirAdopt = theirs
             changed()
         }
+    }
+
+    /**
+     * **Whether the inviter asked for a peering**, as its bootstrap said
+     * (`Bootstrap.Read.peering`). Only a responder is told this; an
+     * initiator knows its own answer.
+     */
+    fun theirPeering(theirs: Boolean) {
+        synchronized(lock) {
+            theirPeering = theirs
+            changed()
+        }
+    }
+
+    /**
+     * **Whether this meeting carries a peering: the inviter's choice.**
+     *
+     * The box is on the inviter's screen and the other person scans
+     * (§7), so the kind is the initiator's and the responder reads it off
+     * the bootstrap — the same rule the adoption's direction follows.
+     * **The responder's own `kind` is not the answer** [bench,
+     * 2026-10-19]: it was consulted, so a responder never learned that a
+     * peering had been asked for, its brief said nothing about one, and
+     * its screen showed nothing after the record while the inviter's
+     * device waited for back-pointers that were never coming.
+     */
+    fun peeringAsked(): Boolean = synchronized(lock) {
+        if (role == Role.INITIATOR) kind.peering else theirPeering
     }
 
     /**

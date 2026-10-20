@@ -733,22 +733,23 @@ Rules a validator checks from the record alone. All were previously unstated.
   wrong, and the canonical vectors reverse field 3 against the keyhashes to
   catch it.
 - **Witness identities MUST be distinct**, and **MUST NOT include either
-  participant.** A witness named twice would be counted twice toward the
-  witness floor below; a
+  participant.** A witness named twice would make one attestation read as two; a
   participant witnessing their own ceremony is not an independent witness, which is
   the entire role.
-- **A normal record MUST carry at least one witness whose attestation sets both
-  `protocol_ran` and `both_responsive`** (bits 0 and 1) [author, 2026-09-03].
-  Zero witnesses is the
-  formation case and nothing else, a normal record with none is malformed rather
-  than merely weak, since the subtype is what separates an uncorroborated bootstrap
-  from an uncorroborated ordinary meeting (design §13.2), **and a witness
-  attesting nothing is not corroboration**: an entry with neither bit set is
-  representable as partial or negative evidence, but it does not satisfy this
-  floor, or the count rule would let a formally normal record carry no
-  affirmative witness statement at all. `latency_bound` remains genuinely
-  optional. The uncorroborated meeting stays expressible: as a formation
-  record, where it is visible as exactly what it is.
+- **There is no witness floor** [author, 2026-10-19]. A normal record with no
+  witnesses is valid: field 4 is simply absent, under §1's empty rule, and the
+  absence sits inside the signed body — permanently visible to every reader,
+  which is all the rule it needs (design §13.2). The floor this replaces made a
+  witnessless normal record malformed; what that bought was enforcement of a
+  thing the record's consumers — the participants, and the patrons who later
+  review their archives — already read for themselves, and what it cost was
+  real: a meeting between parties with one or two contacts failing at the end
+  because a witness went offline, or unable to begin because no particular
+  witness was awake. **An attestation's bits remain what they are**: an entry
+  with neither `protocol_ran` nor `both_responsive` set is partial or negative
+  evidence, never corroboration, and an evaluator counts affirmative
+  attestations rather than entries. `latency_bound` remains genuinely
+  optional.
 - **One identity is one logical signer regardless of how many roles it holds.** A
   party that is both a witness and a verifier signs once **in each capacity it
   signs in** — as a witness it is an envelope signer, as a verifier it signs an
@@ -1518,8 +1519,11 @@ Field-for-field per design §8.1.
                        ;   ceremony's day in every presentation
   2: timestamp,        ; finalized_at
   3: [ Participant, Participant ],
-  4: ? [ + Witness ],  ; PRESENT on a normal record (1..=16), ABSENT on a
-                       ;   formation — subtype-conditional, never free choice
+  4: ? [ + Witness ],  ; PRESENT iff at least one witness signed (1..=16):
+                       ;   ZERO WITNESSES OMIT THE KEY, §1's empty rule, as
+                       ;   field 5 — no floor [author, 2026-10-19], the
+                       ;   absence readable in the signed body forever.
+                       ;   ABSENT always on a formation
   5: ? [ + VerifierResponse ],
                        ;   sorted ascending by verifier keyhash, ties broken by
                        ;   ascending subject keyhash [2026-09-02] — the tie is
@@ -1528,12 +1532,13 @@ Field-for-field per design §8.1.
                        ;   one response arrived: ZERO RESPONSES OMIT THE KEY —
                        ;   §1's empty rule extended to this subtype-conditional
                        ;   field, so one logical record has one encoding, and a
-                       ;   normal record with none is announced by key 4 and
+                       ;   normal record with none is announced by the
                        ;   subtype regardless. ABSENT always on a formation
   6: uint,             ; record subtype: 0 = normal, 1 = formation
                        ;   (design §13.2). In the body, not disclosable: structurally
-                       ;   load-bearing, and a formation record's absent keys 4
-                       ;   and 5 announce it regardless
+                       ;   load-bearing, and with no witness floor the absent
+                       ;   keys 4 and 5 cannot announce it [author, 2026-10-19] —
+                       ;   this field and the genesis back-pointers do
   ; key 7 (the seed-window ordinal) was RETIRED 2026-09-01 with deterministic
   ; selection; the number is not reused — and a decoder meeting it REJECTS
   ; [2026-09-02]: retired numbers are tombstones, not extension space, the
@@ -1626,10 +1631,11 @@ Witness = {
                        ;   bit 2 latency_bound
                        ;   bits 3+ reserved; a decoder retains them and
                        ;   interprets only 0-2.
-                       ;   A NORMAL record's witness floor counts only entries
-                       ;   with bits 0 AND 1 set (§3.2) [author, 2026-09-03];
-                       ;   entries without them are partial evidence, present
-                       ;   but not corroborating
+                       ;   An entry corroborates only with bits 0 AND 1 set
+                       ;   [author, 2026-09-03]; entries without them are
+                       ;   partial evidence, present but not corroborating —
+                       ;   a reading for the record's consumers, there being
+                       ;   no witness floor (§3.2) [author, 2026-10-19]
   ; fields 4-5 (nonce commitment and reveal) were RETIRED 2026-09-01 with
   ; deterministic selection; the numbers are not reused — and a decoder
   ; meeting either REJECTS [2026-09-02]: tombstones, not extension space
@@ -5162,7 +5168,7 @@ design already depends on.
 |---|---|---|---|
 | The ceremony's intent exchange — the contribution, the nominees, the bundle of introductions, the sender's locator, the timing and who initiated | Two participants' devices | design §7.1, §7.5.2, §8.1.2 | `IntentExchange` (§14.3.2), carried by the shell's chosen bearer (§14.3.1) and bound to the pre-commitment. The CBOR is specified; two vendors' clients compute the same pre-commitment, the ceremony-id (design §7.5.2.6), either way |
 | The optical transcript — each device's key material and contribution, then the derived ceremony-id, screen to camera | Two participants' devices | design §7.1 item 3, design §7.5.2, design §12.3 | `OpticalContribution` then `TranscriptConfirm` (§14.3.2): the key material is pinned at this first contact, the contribution is the key-exchange input, the ceremony-id is the transcript hash both display and check |
-| Proximity channel outcomes — the UWB, NFC or optical result and its ranking | Two participants' devices | §3.2, design §7.1 item 4 | `ProximityOutcomes` (§14.3.2): the §4.5 `Channel` maps as measured, anchored to the ceremony-id. The record's `strongest` (§3.2) is not carried — each device computes it from the outcomes, as each computes the ceremony-id |
+| Proximity channel outcomes — the UWB, NFC or optical result and its ranking | Two participants' devices | §3.2, design §7.1 item 5 | `ProximityOutcomes` (§14.3.2): the §4.5 `Channel` maps as measured, anchored to the ceremony-id. The record's `strongest` (§3.2) is not carried — each device computes it from the outcomes, as each computes the ceremony-id |
 | Traversal candidates | Two participants' devices | design §12.6.3 [author, 2026-09-25] | `CandidateHandover` (§14.3.2), carrying the `Candidate` structure this document now defines; the same candidates travel the end-to-end payload path when a direct connection is set up remotely (design §12.6.3, §14.1.1) |
 | The capture-key handover — the key each participant derived for the captures the other holds of them, handed across at capture time | Two participants' devices | design §7.5.2, design §7.5.2.6 | `CaptureKeyHandover` (§14.3.2): the 32-byte key design §7.5.2.6 derives, anchored to the ceremony-id like the proximity outcomes and the candidates [author, 2026-10-02] |
 | A delegated device's payload material, and the ceremony device's signature over it | Two devices of one identity | design §23.3, §7.8 | `DeviceIntroduction` then `DeviceCredential` (§14.3.3): §7.8's bundle unsigned and then signed, beside §8.2's delegations |
@@ -5202,7 +5208,7 @@ the protocol does not name which, the way design §7.1 already leaves the
 carriage to *whatever means the two have*.
 
 **Bluetooth as a bearer is not Bluetooth as proximity evidence.** design
-§7.1 item 4 bars Bluetooth RSSI from the *distance* channel because signal
+§7.1 item 5 bars Bluetooth RSSI from the *distance* channel because signal
 strength is attacker-controllable (design §7.6.3). That bar is about evidence of
 nearness. A bearer moving data that is already bound to the optical anchor
 needs no distance guarantee of its own: a *remote* man in the middle of the
@@ -5431,7 +5437,7 @@ ProximityOutcomes = [          ; what the distance channels measured
 
 The device that drove the channels reports what they measured, and the
 counterparty weighs it — the outcome is each device's claim, as everywhere
-(design §7.1 item 4). The record's `strongest` (§3.2) is no part of the
+(design §7.1 item 5). The record's `strongest` (§3.2) is no part of the
 exchange: each device computes it from the same outcomes, and a value both
 sides derive needs no carriage.
 

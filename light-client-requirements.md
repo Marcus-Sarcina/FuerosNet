@@ -56,39 +56,64 @@ shell exists.
 
 ### 1.1 Nomination
 
-- **Nominate witnesses only from the counterparty's neighbourhood, never from your
-  own** (design §7.1). Nominating your own is the failure mode the rule exists to
-  prevent, and it destroys the only property the witness set gives you.
-- **Spread nominations across as many independent branches of that neighbourhood as
-  you can, and include a random element.** A selection concentrated on one branch is
-  caught by a correspondingly smaller fake region; a spread one forces a much larger
-  occupation (design §7.1.1).
-- **Probe your selections for availability; do not nominate from a set of nodes that
-  advertised themselves.** Many nodes worth nominating are inactive or not running
-  at ceremony time, so availability is something you discover after selecting. A
-  node that solicits nomination is self-selecting (design §7.1.1).
-- **Check the `nominated_by` split before you sign, and tell the user when your own
-  nominees are absent or outnumbered.** The witness set is only representative to
-  the extent you nominated half of it; where the counterparty nominated all of it,
-  the attestation rests entirely on their nominees (design §7.1.1). This
-  is not a validity condition — such a record is well-formed, which is why the
-  client has to surface it.
+- **Nominate witnesses from your own contacts, up to eight, before the
+  counterparty has accepted anything** [author, 2026-10-19]. The pool is the
+  acting subnet's trust horizon — held as contacts you reach directly (§4.2) —
+  and the parties you have met in person anywhere; your horizons in other
+  subnets, and any node you have ever learned of, widen it at the person's
+  choice, the client saying what feeding a wider sample discloses (design
+  §7.1.1, §19.2). Engage the nominees with the intent: they are observers from
+  before the ceremony-id exists, and that is their value — a witness shown
+  only finished records adds no friction to a replay (design §7.1).
+- **Spread nominations across as many independent branches of the pool as you
+  can, and include a random element.** A selection concentrated on one branch
+  hands the counterparty's prune nothing to keep but that branch, and a
+  predictable selection is one a well-placed node can sit in wait for (design
+  §7.1.1).
+- **Probe your selections for availability; do not nominate from a set of
+  nodes that advertised themselves.** Many nodes worth nominating are inactive
+  or not running at ceremony time, so availability is something you discover
+  after selecting. A node that solicits nomination is self-selecting, and the
+  counterparty's prune is what it now has to get past (design §7.1.1).
+- **Stream the opening to your nominees as it happens** [author, 2026-10-19]:
+  the intent; then the optical exchange's shape — the number of blocks you
+  have to transmit, the number the counterparty declares, the index of each
+  inbound block as it lands and of each outbound block as the counterparty's
+  display acknowledges it — and **never its content**: not a contribution,
+  which is half of what keys the local session (`wire-format.md` §14.3.2), and
+  not the bundle. When the transcript confirmation fixes the ceremony-id, send
+  it to each nominee against the engagement's handle, so what they watched
+  binds to the record they may later sign.
+- **Exchange witness sets by locator over the local channel, then prune the
+  counterparty's to three** [author, 2026-10-19] — `min(3, offered)` — keeping
+  spread rather than convenience, since their locators are in your hand
+  exactly so your choice can be blind to their loyalties and sighted on their
+  diversity. Relay survival or dismissal to your own nominees yourself: they
+  are your contacts, reached by your routes. From here, send every leg to the
+  surviving witnesses of both sides.
+- **Aim for two of your witnesses signing at the end; the third is margin.**
+  All who remain live sign — nothing promotes an alternate, and a role would
+  need machinery the margin does not. Check the `nominated_by` split before
+  you sign, and tell the user when your own nominees are absent or
+  outnumbered: a record attested only by the counterparty's survivors is a
+  record your side of the story did not witness, which design §6.1.1 leaves
+  visible rather than mandatory.
 - **Refuse to sign a record attributing to you a witness you did not nominate**
-  [author, 2026-09-03]. Your client knows exactly which witnesses it nominated;
-  an entry claiming `nominated_by = you` outside that set is the counterparty
-  dressing its own curation in your name, and it defeats the split check above
-  from inside an apparently balanced record. The wire cannot check this
-  (`nominated_by` is a recorded claim); you can, and you are the only party
-  who can.
+  [author, 2026-09-03]. Your client knows exactly which witnesses it nominated
+  and which survived the counterparty's prune; an entry claiming
+  `nominated_by = you` outside that set is the counterparty dressing its own
+  curation in your name. The wire cannot check this (`nominated_by` is a
+  recorded claim); you can, and you are the only party who can.
 
 - **Send each message of the ceremony's conversation to your counterparty and
-  to every witness either of you nominated** (`wire-format.md` §7.10.1, kinds 9
-  to 18): the consent each query needs, the fishing proposals, the witness
+  to every surviving witness either of you engaged** (`wire-format.md`
+  §7.10.1): the consent each query needs, the fishing proposals, the witness
   request and answer, the responses you gathered, your back-pointers, the
-  proposed body, your signature entry and the finalised record. The consent
-  request alone goes to its subject only: it carries the fuzzed profile, which
-  reaches the one verifier the query names and nobody else (`wire-format.md`
-  §5.6).
+  proposed body, your signature entry and the finalised record — **as each
+  happens, never batched**, because the arrival pattern on the witnesses'
+  clocks is the evidence (design §7.1). The consent request alone goes to its
+  subject only: it carries the fuzzed profile, which reaches the one verifier
+  the query names and nobody else (`wire-format.md` §5.6).
 
 ### 1.2 Acting as a witness
 
@@ -97,12 +122,18 @@ shell exists.
   and the chronology bound (`wire-format.md` §3.3) is worth nothing unless
   witnesses apply it. No later validator can check that you did: set the
   tolerance you can defend and refuse outside it.
-- **Attest from what reached you.** The ceremony's conversation is sent to you
-  as it runs (`wire-format.md` §7.10.1, kinds 12 to 18 and the rest): the
-  request, the proposed body and the finalised record among them. What you sign
-  is that the protocol ran and both parties were responsive as the sequence you
-  received shows (design §7.1), without asking your operator, who saw none of
-  it (design Appendix A.3).
+- **Attest from what reached you, and from when it reached you** [author,
+  2026-10-19]. The ceremony's conversation is sent to you as it runs
+  (`wire-format.md` §7.10.1): the engagement before the counterparty accepted,
+  the optical exchange's block trace at screen-and-camera pace, the
+  ceremony-id when it is fixed, the request, the channel outcomes, the queries
+  and responses, the proposed body and the finalised record. What you sign is
+  that the protocol ran and both parties were responsive as the sequence you
+  received shows (design §7.1) — the arrival pattern on your own clock being
+  the one thing a replay cannot cheaply counterfeit — without asking your
+  operator, who saw none of it (design Appendix A.3). A dismissal at the prune
+  ends your part: keep nothing you were sent except what your own records
+  policy keeps of anything.
 - **Do not sign before four minutes of ceremony have passed on your own
   clock** [author, 2026-10-06]. Four minutes, whatever the participants, the
   other witnesses or the verifiers say, and however early the conversation
@@ -116,9 +147,10 @@ shell exists.
   clock, with no fudge factor** [author, 2026-10-06]: the arrival is the only
   instant of the ceremony your clock witnessed, where `started_at` is a claim
   the parties made. The participants will have been at it longer than four
-  minutes by then — the codes, the channels and the capture all precede your
-  request — and that is the intended shape, so do not discount your four
-  minutes by what they claim to have already spent. **And withhold your
+  minutes by then — the engagement and the codes precede your request, while
+  the channels, the capture and the verification run inside the interval you
+  are timing [author, 2026-10-19] — and that is the intended shape, so do not
+  discount your four minutes by what they claim to have already spent. **And withhold your
   reply rather than refuse** [author, 2026-10-08]: your answer to the request
   acknowledged the ceremony; your signature, once your clock has matured and
   you have seen the by-products of the steps you were sent, is your readiness.
@@ -969,12 +1001,19 @@ anchor up in, and it is what you hand onward in a bundle (§1.1,
   it can show its own person, and leave the meeting alone: the presence record
   the adoption rested on is complete without it, and either side may propose
   again.
-- **Offer a peering after a meeting, either way round, and never as the
-  adoption's alternative** [author, 2026-10-18]. A peering joins two parties
-  where neither is over the other (design §6.3), so there is no direction for
-  the two to settle and nothing to ask beyond whether to make one: offer it
-  on the meeting the record rests on, to both people, and let a meeting carry
-  a peering, an adoption, both or neither. **Somebody has to build the body**,
+- **Ask for a peering at the invitation, as a choice beside the plain
+  meeting, and never as the adoption's alternative** [author, 2026-10-19]. A
+  peering joins two parties where neither is over the other (design §6.3), so
+  there is no direction for the two to settle and nothing to ask beyond
+  whether to make one — which makes it a box to tick on the regular meeting
+  rather than a question of its own. **The choice is the inviter's and the
+  other person reads it**: it travels with the kind, the brief states it
+  before anything is signed (§1.5), and the peering itself is made after the
+  record it rests on. A meeting carries a peering, an adoption, both or
+  neither. **What the box must say is what it does**: ticking it makes a
+  transaction, and the backup either party may then hold is what the peering
+  entitles them to (design §3.4) rather than a thing the box arranges by
+  itself. **Somebody has to build the body**,
   since it carries one timestamp, and nothing in the protocol makes either
   side the builder — so order the pair as the record itself does
   (`wire-format.md` §4.4, by keyhash) and let the lower build, which needs no

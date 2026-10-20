@@ -19,7 +19,7 @@ class BootstrapTest {
         val read = Bootstrap.decode(code)!!
         assertEquals("ab".repeat(32), read.me)
         assertEquals(1, read.kind)
-        assertEquals(false, read.askBackup)
+        assertEquals(false, read.peering)
         assertEquals(subnet, read.subnet)
         assertEquals("Alice", read.alias)
         assertEquals("Bowling League", read.subnetAlias)
@@ -34,7 +34,7 @@ class BootstrapTest {
         val read = Bootstrap.decode(code)!!
         assertNull(read.subnet)
         assertNull(read.alias)
-        assertEquals(true, read.askBackup)
+        assertEquals(true, read.peering)
         assertEquals("a new subnet under carol", Meet.Claim(read.subnet, read.alias, read.subnetAlias).label("carol"))
         // no scope at all, a regular meeting: the same empty claim
         assertNull(Bootstrap.decode(Bootstrap.encode(me, 0, false, null))!!.subnet)

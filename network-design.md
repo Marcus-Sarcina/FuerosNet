@@ -1335,8 +1335,9 @@ actually has is not intended behaviour under any reading of this design.**
 accepted risk is eclipse of a **new joiner**, whose view is controlled from day
 one. A new joiner has no prior counterparties, so `min(floor(n/2), 10, |candidates|)`
 is zero (§8.1)
-and a **witnessless, verifierless ceremony is valid** — as a formation record, subtype 1, the one witnessless shape
-`wire-format.md` §3.2 admits. The formation path of
+and a **witnessless, verifierless ceremony is valid** — a formation record at
+genesis, a normal record with its witness field absent any time after
+[author, 2026-10-19] (`wire-format.md` §3.2). The formation path of
 §13.2. They can therefore memorialise a meeting with anyone they physically
 encounter, and the eclipsing patron cannot suppress it. **The false social
 universe is permeable wherever the victim meets a human being.**
@@ -1409,29 +1410,60 @@ Trust does not emanate from these transactions. It is deduced outward by each
 end node, starting from its own local records of people it has met.
 
 ### 7.1 Ceremony (summary)
-1. Participants announce intent, and each participant **nominates witnesses from
-   the other party's neighbourhood** — never from its own. A party choosing its
-   own witnesses is the classic failure mode. What cross-nomination buys is
-   **representativeness of the sample, not honesty**: in a balanced set, half the
-   witnesses are each party's own nominees and are therefore uncurated by the
-   counterparty. It needs no global randomness, and it is not a Sybil defence —
-   no topology rule can be (§17.2). Procedure and residual: §7.1.1.
+1. Participants announce intent, and each participant **engages up to eight
+   witnesses drawn from its own contacts** [author, 2026-10-19] — the acting
+   subnet's trust horizon, held as contacts it can reach directly, and the
+   parties it has met in person anywhere; its horizons in other subnets and
+   any other node it has ever learned of — scraped in a lookup included — join
+   the pool by its choice (§7.1.1, §19.2). The nominees observe from here, before the counterparty
+   has accepted anything: the intent, and then the exchange as it runs. A
+   party choosing its own witnesses was once this design's named failure mode;
+   what replaces the cross-nomination it feared is the counterparty's prune at
+   step 4, which makes the surviving set **nominated by one side and selected
+   by the other** (§7.1.1). **Either party may begin** [author, 2026-10-02]:
+   one device shows an invite and the other reads it, and which did has no
+   bearing on the ceremony's outcome or on the polarity of any adoption that
+   follows, beyond that the one who began proposes the body for signature
+   (§8.1.2).
 2. Route-latency plausibility check (§7.6), weak evidence, modest weight.
 3. Optical channel: 2D codes exchanged screen-to-camera. Carries key exchange
-   and the transcript hash. Inherently short-range and line-of-sight. **Either
-   party may begin** [author, 2026-10-02]: one device shows an invite and the
-   other reads it, and which did has no bearing on the ceremony's outcome or
-   on the polarity of any adoption that follows, beyond that the one who began
-   proposes the body for signature (§8.1.2).
-4. **Proximity channel: UWB secure ranging (802.15.4z) where available, NFC tap
-   as fallback.** UWB is the **strongest** channel but **not categorically
-   relay-resistant.** Deployed 802.15.4z HRP implementations have been defeated by
-   physical-layer distance-reduction attacks (§7.6.3). NFC provides
-   physical-range friction and no distance-bounding guarantee. Bluetooth RSSI is
-   NOT usable: received signal strength is attacker-controllable, since an
-   amplifier raises it without changing distance. For the participants' own
-   assurance; not remotely verifiable.
-5. **Guided face capture**, locally on each device (§7.2, §7.5). Each party
+   and the transcript hash. Inherently short-range and line-of-sight. **Each
+   party streams the exchange's shape to its nominees as it happens** [author,
+   2026-10-19]: the number of blocks it has to transmit, the number the
+   counterparty declares, then the index of each inbound block as it lands and
+   of each outbound block as the counterparty's display acknowledges it — and
+   never the content, since one side's contribution is half of what keys the
+   local session (§7.5.2.6; `wire-format.md` §14.3.2). A witness watching
+   block indices land at screen-and-camera pace, from a party it knows, is
+   observing the one thing a replay cannot cheaply counterfeit: **the
+   transaction happening**. When the transcript confirmation fixes the
+   ceremony-id, each nominee receives it, bound to the engagement it has been
+   watching; the local duplex channel bootstraps off the exchange and carries
+   the rest of what the pair must fix between themselves.
+4. **The witness sets cross, and each party prunes the other's** [author,
+   2026-10-19]. The sets travel by locator over the local channel; each party
+   keeps `min(3, offered)` of the *counterparty's* nominees and dismisses the
+   rest, each nominator relaying survival or dismissal to its own. Three
+   survive a side so that **two signing at the end** — the reference target —
+   tolerates one going offline across the window; all who remain live sign,
+   the third being margin and not a role (§7.1.1). **The four-minute window
+   opens here**, with the witness request that carries the ceremony-id, and
+   from this point the surviving witnesses receive every leg of the
+   conversation as it is sent.
+5. **Proximity channels, run inside the window and never waited on** [author,
+   2026-10-19]: UWB secure ranging (802.15.4z) where available, an NFC tap
+   polled opportunistically for a few seconds alongside the rest rather than
+   holding the ceremony. UWB is the **strongest** channel but **not
+   categorically relay-resistant** — deployed 802.15.4z HRP implementations
+   have been defeated by physical-layer distance-reduction attacks (§7.6.3) —
+   and NFC provides physical-range friction and no distance-bounding
+   guarantee. Bluetooth RSSI is NOT usable: received signal strength is
+   attacker-controllable, since an amplifier raises it without changing
+   distance. Each outcome is streamed to the surviving witnesses as it lands,
+   so the channel evidence arrives on their clocks too; the channels remain
+   for the participants' own assurance and are not remotely verifiable.
+6. **Guided face capture**, locally on each device (§7.2, §7.5), run across
+   the window concurrently with the channels and the verification below. Each party
    retains 3–5 images of the counterparty, taken **under randomised prompts
    spread through the capture, which runs for the ceremony's enforced duration**
    [author, 2026-10-06] — turn slightly, change expression, which supplies both
@@ -1446,7 +1478,11 @@ end node, starting from its own local records of people it has met.
    likeness of anyone but itself. Images stay on the device **for the declared
    retention period** (§7.5.1) and are then deleted; nothing biometric enters the
    record at any point.
-6. **Verifier queries**, run automatically by the client (§7.3). Each party
+7. **Verifier queries**, run automatically by the client (§7.3), inside the
+   same window: selection starts when the bundle is handed over, the first
+   query fires as soon as a captured frame yields a template, and responses
+   land while the capture continues — each leg reaching the surviving
+   witnesses as it is sent. Each party
    hands the other a bundle of introductions to its prior counterparties —
    each one's key with the most recent locator held for them (§8.1.2,
    `wire-format.md` §5.4) — and each party's client sends a fuzzed profile of
@@ -1465,17 +1501,23 @@ end node, starting from its own local records of people it has met.
    acquaintances where the bundles surface none, and filling the remainder at
    their own discretion — each response carrying the selector's claim of which
    it was.
-7. **Each party reviews the other's selection before signing.** Because A selects
+8. **Each party reviews the other's selection before signing.** Because A selects
    B's verifiers and B selects A's, a participant who signs without looking may be
    left holding a record whose responders they cannot stand behind. And cannot
    repair it, since the record is immutable. This is one of the ceremony's checks that
    protect a signer **against their counterparty** rather than against outsiders
    or against the pair colluding; `light-client-requirements.md` §1.4 counts
    them.
-8. Witnesses attest only to what they observed: that the protocol ran, both
-   parties were live and responsive, and the sequence was well-formed. They
-   **cannot** attest that two humans were in a room, and the record must not
-   claim they did.
+9. Witnesses attest only to what they observed: that the protocol ran, both
+   parties were live and responsive, **and that the sequence arrived on the
+   witness's own clock as a live run would deliver it** — the engagement, the
+   optical trace at screen-and-camera pace, the channels, the queries and the
+   responses, in order, across the window, from two origins [author,
+   2026-10-19]. They **cannot** attest that two humans were in a room, and the
+   record must not claim they did. **A witness shown only finished records
+   would add no friction to a replay**; the arrival pattern is the evidence,
+   which is why the witnesses are engaged before the counterparty has even
+   accepted and kept in the stream to the end.
 
 **A witness's operator is not involved and need not know it happened.** The witness *client* observes the procedure, tests the evidence at each
 point, checks what it receives against the enforced timing, and signs — without
@@ -1505,7 +1547,9 @@ by the adversarial selection that chose the verifier, so putting either in
 the message stream costs the ceremony nothing. **What would cost it
 everything is needing your own patron's cooperation to meet somebody**, and
 §6.4 depends on that not being so, by the formation path §13.2 defines: a
-witnessless formation record is how a
+witnessless record — a formation at
+genesis, a normal record with its witness field absent any time after
+[author, 2026-10-19] — is how a
 party inside a false social universe memorialises a meeting with anyone they
 physically encounter, and an eclipsing patron that was merely absent would
 otherwise suppress it.
@@ -1515,12 +1559,16 @@ each query needs, which also tells the subject who was selected, the fishing
 proposals, the witness request and the witness's answer, the responses one
 party gathered for the proposer, each signer's back-pointers, the proposed
 body, each signer's signature entry and the finalised record. Each one a
-participant sends goes to the counterparty and to every witness either party
-nominated, the consent request alone excepted: the fuzzed profile it carries reaches the
+participant sends goes to the counterparty and to every surviving witness
+either party engaged, the consent request alone excepted: the fuzzed profile it carries reaches the
 subject and the one verifier the query names, and nobody who holds no capture
-to compare it against (`wire-format.md` §5.6). The witness request goes first,
-so a witness holds the ceremony before the rest of it arrives. That is what a
-witness observes: the sequence as it ran, proposals that did not land
+to compare it against (`wire-format.md` §5.6). **The engagement precedes the
+ceremony-id itself** [author, 2026-10-19]: a nominee is watching before the
+counterparty has accepted anything, under a handle the engagement mints, and
+the witness request that opens the window carries the ceremony-id against that
+handle — so a witness holds the ceremony before the rest of it arrives, and
+then watches the rest of it arrive. That is what a witness observes: the
+sequence as it ran, on its own clock, proposals that did not land
 included, which is what lets it attest that the protocol ran and both parties
 were responsive, and nothing beyond that.
 
@@ -1541,10 +1589,14 @@ unanswered signer is what covers the interval. **Local receipt
 against the local clock, with no fudge factor** [author, 2026-10-06]: the
 arrival is the only instant of the ceremony the witness's own clock witnessed,
 where the `started_at` the request carries is a claim the parties made. The
-consequence is that a ceremony runs longer than four minutes from where the
-participants stand — the optical exchange, the channels and the capture all
-precede the request — **and that is the intended shape** and not a cost to
-tune away. A duration the parties assert is a
+request that starts this clock is the one that opens the window (step 4), so
+the witnesses' four minutes and the participants' window now largely coincide:
+the channels, the capture and the verification run **inside** the interval the
+witnesses are timing, which is what makes the interval observable rather than
+merely asserted [author, 2026-10-19]. A ceremony still runs longer than four
+minutes from where the participants stand — the engagement and the optical
+exchange precede the request — **and that is the intended shape** and not a
+cost to tune away. A duration the parties assert is a
 duration an automated pair asserts in a second; the witnesses' clocks are the
 only ones at a ceremony that the parties do not hold, which is the same reason
 §1.2 already has them police the claimed start. **Unverifiable from the record
@@ -1604,56 +1656,115 @@ witness is that neither participant chose it (§7.1.1).
 
 #### 7.1.1 Nominating witnesses
 
-**What the nomination approximates.** The witness sample would ideally be drawn at
-random from the whole userbase. No node can enumerate the userbase, so each party
-draws from the nodes it can see in its counterparty's neighbourhood, and the two
-draws together stand in for that sample.
+**What a witness is for** [author, 2026-10-19]. A witness's value is that it
+observed the transaction *happen*: the intent before acceptance, the optical
+exchange's blocks landing at screen-and-camera pace, the channels, the queries
+and the responses, in order, across the window, from two origins, on a clock
+the participants do not hold. **A witness shown only finished records adds no
+friction to a replay.** The earlier design selected witnesses adversarially —
+each party nominating from the *counterparty's* neighbourhood — to make the
+witness set price a fabricated region. That optimised the record for a reader
+who could score the counterparty's region: a global reader this network
+refuses to have (§16.1). Under per-observer trust, the readers a record
+actually has are each party's own region, and a witness is worth what the
+reader's own graph says it is — so witnesses are now drawn where they are
+**reachable by their nominator and legible to the record's readers**, and the
+anti-fabrication duty sits where it always fit better: the verifier queries,
+which test the counterparty's claimed history against the evaluator's own
+graph (§8.1.2), and the capture, which holds a face (§7.5).
 
-**Two things the reference client optimises when nominating.** A **random element**,
-so the counterparty cannot predict which of its neighbours will be asked; and
-**spread across as many independent branches of the counterparty's graph as
-possible**, because catching every one of a party's nominations then requires a
-correspondingly larger fake neighbourhood rather than one well-placed node. Branch
-spread, not the flow metric — is what raises the cost of the Potemkin case in
-§18.4.
+**The pool is the nominator's own contacts** [author, 2026-10-19]: the acting
+subnet's trust horizon, which the client holds as contacts it reaches
+*directly* (§15.1.1; `light-client-requirements.md` §4.2), and the parties it
+has met in person anywhere. Its horizons in its other subnets, and any other
+node it has ever learned of — a locator scraped in a prior lookup included —
+widen the pool at its choice. **A witness's appearance in a set is therefore
+not evidence that the nominator belongs to that witness's subnet** [author,
+2026-10-19]: anyone a node ever resolved is nominable, including parties with
+no knowledge of the nominator at all, and that breadth is itself what blunts
+the membership inference a locator-named set invites. What survives of the
+leak is statistical — across many records a nominator's sets sample where its
+attention and standing live — and the reference client's default pool, the
+acting subnet's horizon plus met parties, is hygiene against feeding that
+sample more than the meeting needs (§19.2, P42). **An eclipsing patron
+cannot filter this pool, only have populated it**: the horizon is held as
+direct routes that do not transit the patron, the met-parties list is history
+the patron never mediated, and the other subnets' horizons are other patrons'
+work. The node whose entire pool is one adversary's sockpuppets is the node
+with one subnet, one patron and no history — see the residual below.
 
-**Availability is discovered by the nominator, not advertised by the candidate.**
-A large fraction of the nodes a party would like to nominate are inactive, or
-light-client-only and not running at the time of the ceremony, so the client probes
-its selections and keeps those able to serve. The filter comes *after* selection and
-is a property the nominator finds; a node making itself conspicuously available to
-be nominated would be self-selecting, which is the thing cross-nomination exists to
-prevent.
+**Two things the reference client optimises when nominating.** A **random
+element**, so nobody — the nominator's own habits included — can predict which
+contacts will be asked; and **spread across as many independent branches of
+the pool as possible**, so that no one well-placed node sits in every
+nomination. Branch spread is read from the locators, which is also what lets
+the counterparty read it (below).
+
+**Availability is discovered by the nominator, not advertised by the
+candidate.** A large fraction of the nodes a party would like to nominate are
+inactive, or light-client-only and not running at the time of the ceremony, so
+the client probes its selections and keeps those able to serve. The filter
+comes *after* selection and is a property the nominator finds; a node making
+itself conspicuously available to be nominated is self-selecting, and the
+prune below is what blunts self-selection now that nomination is local.
 
 **The filter is not uptime-neutral, and cannot be** [author, 2026-09-03]: a
 witness that is not there cannot be nominated, so any selection of live
 witnesses weights by availability intrinsically — what probing-after-draw
-removes is *advertisement*, not the weight. A high-uptime attacker inside a
-branch therefore raises its conditional share of the final set above its share
-of the draw, and the fraction of honest candidates asleep at ceremony time —
-an unsourced figure (§20.2) — sets how much. The standing defences are the two
-that never depended on uptime: branch spread, and the attacker's inability to
-choose which ceremonies draw it.
+removes is *advertisement*, not the weight. A high-uptime attacker among a
+party's contacts therefore raises its conditional share of the final set above
+its share of the draw. The standing defences are branch spread, the attacker's
+inability to choose which ceremonies draw it, and the counterparty's prune.
 
-**Balance is what the property depends on, and nothing enforces it.**
-`wire-format.md` §3.2 requires at least one witness attesting that the protocol
-ran and both parties were responsive on a normal record [author, 2026-09-03] —
-zero witnesses is the formation case and nothing else, and a witness attesting
-nothing does not satisfy the floor, and requires each
-`nominated_by` to name one of the participants; it does not require both
-participants to be represented. Where one party nominated every witness — a
-one-witness record being the smallest case — the other party has none of its own
-nominees present and the "half the set is uncurated" property is simply absent, not
-merely weakened. This is left **visible rather than mandatory**, for §6.1.1's
-reason: a balanced set is what a party should insist on, not what the encoding can
-require, and a meeting where only one other node could serve is a real case a hard
-rule would invalidate. `nominated_by` is in the record, so the split reads directly.
+**Each party engages up to eight, and the counterparty keeps three** [author,
+2026-10-19]. The eight observe the opening — the intent and the optical
+trace — and after the sets cross, each party dismisses all but
+`min(3, offered)` of the *other's* nominees, each nominator relaying survival
+or dismissal to its own. **Every surviving witness was therefore nominated by
+one side and selected by the other**, which is the old cross-nomination
+property rebuilt on a reachable pool: a party curating its set no longer needs
+three friendly witnesses but most of eight, since the counterparty, blind to
+which are friendly, picks the survivors — three corrupt nominees of eight
+survive intact once in fifty-six draws, and even five of eight fail four times
+in five. The prune also gives the diversity reading teeth without a rule: the
+counterparty holds the locators and can simply keep the spread.
 
-**The split is a signing check before it is an evaluator's.** It bears on the
-attestation's representativeness: a party whose counterparty nominated every
-witness holds a record attested entirely by that counterparty's nominees.
-§8.1.2's review-before-signing is the same posture for the same reason — it
-protects the signer against their counterparty, not against an outsider.
+**Three survive so that two can sign.** The reference target is **two of each
+party's witnesses signing at the end**; the third is margin against one going
+offline across the window, not a role — all who remain live sign, and nothing
+promotes anybody. **The margin is honest about what it absorbs**: to a later
+evaluator, a witness that refused looks like a witness that dropped, so a pair
+of corrupt survivors plus one silent honest one reads clean *after the fact*.
+What covers that case is the live half of this design — a refusal is a leg,
+and legs reach the counterparty and the counterparty's witnesses as they
+happen, so an in-ceremony refusal is loud to everyone honest in the circuit.
+The only reader it stays mute to is the post-hoc evaluator of a record both
+participants wanted, which is bilateral collusion and out of scope (§7).
+
+**The residual: a node with nothing nominates nobody, and that is the correct
+value** [author, 2026-10-19]. A fresh node with one subnet, one patron and no
+met history offers a thin set or none; the meeting is still legitimate, the
+counterparty's survivors still observe it live, and the record finalises
+visibly thin on one side. **The depth of witness selection scales with the
+pool of users who have an interest in the party being witnessed** — a witness
+set is a reading of its nominator's standing, and a node with no history has
+none to read. **And no floor enforces a count** [author, 2026-10-19]: a
+normal record with no witnesses is valid, the absent field permanently
+readable in the signed body (§13.2; `wire-format.md` §3.2). A meeting between
+a new user and one with two contacts must not fail because a witness went
+offline at minute three, or be unable to start because no particular witness
+was awake — the record's consumers are the participants and the patrons who
+later review their archives, and **a witnessless meeting after a period of
+claimed activity is itself suspicious** without the software preventing the
+meeting.
+
+**Balance is visible, not mandatory**, as before and for §6.1.1's reason:
+`nominated_by` names each witness's side, the record shows what each party's
+pool produced and what the counterparty kept, and a party whose own side is
+absent should see that before signing — but a meeting where only one side
+could field witnesses is a real case a hard rule would invalidate. The split
+reads directly from the record, and an evaluator prices it with everything
+else it reads (§8.1).
 
 ### 7.2 Local face storage, no biometrics in network state
 
@@ -5457,17 +5568,23 @@ cycle hazard of §6.2.5 structurally: the ceremony is symmetric, and the adoptio
 that follows is a single deliberate asymmetric choice.
 
 ### 13.2 Formation records are permanently distinct
-A record with empty `witnesses[]` and empty `verifier_responses[]` carries no
+A record with no `witnesses[]` and no `verifier_responses[]` carries no
 third-party attestation, and still carries none in twenty years. **Evidence
 created when the participants had no independent witnesses and no prior
 counterparties must remain permanently distinguishable from evidence created with
 independent corroboration.** Regardless of its age or of how much the network
-has grown since. The record's subtype field is the present encoding of that
-invariant, not the invariant itself.
+has grown since. **The invariant has two encodings, both inside the signed
+body and both permanent** [author, 2026-10-19]: the formation subtype, which
+marks the genesis case — two keys at their first record — and the absent
+witness field on any later record, since no floor requires one
+(`wire-format.md` §3.2). What separates the two is the back-pointers: a
+formation's are the genesis value and nothing else's are, so an uncorroborated
+bootstrap and an uncorroborated ordinary meeting stay distinguishable without
+a rule forbidding the latter.
 
-Two colluding parties can mint these at will, so the honest position is that a
-**formation record is evidence only to its two participants**. It bootstraps
-their mutual trust and confers nothing on anyone else.
+Two colluding parties can mint either at will, so the honest position is that
+an **uncorroborated record is evidence only to its two participants**. It
+bootstraps their mutual trust and confers nothing on anyone else.
 
 This needs no special rule under the flow metric (§16.2): a fresh pair has no
 edges into anyone else's territory, so nothing flows to them regardless of what
@@ -7903,15 +8020,17 @@ endpoint is online by definition.
 
 A presence record discloses more than the encounter it records. **It names a
 sample of the subject's *prior* counterparties** (the verifiers, who can only be
-verifiers because they met the subject before) **and a set of witnesses drawn
-from both participants' neighbourhoods.** Correlating verifier lists across
-several records reconstructs the subject's historical meeting graph; correlating
-witness sets maps neighbourhoods.
+verifiers because they met the subject before) **and each participant's
+surviving witnesses, drawn from that participant's own contacts** (§7.1.1).
+Correlating verifier lists across several records reconstructs the subject's
+historical meeting graph; correlating witness sets samples each party's own
+contact graph — the same class of leak the old cross-nominated sets carried,
+now pointed at the nominator rather than at both neighbourhoods.
 
 Both properties are load-bearing and were adopted for good reasons — verifier
 responses sit in the record because named responders are the evidence an
-evaluator weighs by recognition (§8.1, §16.1), and cross-nomination stops a
-*participant* choosing friendly witnesses (§7.1). **Neither was assessed for
+evaluator weighs by recognition (§8.1, §16.1), and the counterparty's prune
+stops a *participant* choosing friendly witnesses (§7.1.1). **Neither was assessed for
 what it leaks.** The visibility requirement was once described as strictly
 dominating the alternative; under composition it is a trade, not a dominance.
 
@@ -8009,6 +8128,8 @@ and a citation to a missing number resolves there.
 | P31 | **A hostile infra extension is inside the trust boundary** (`infra-client-requirements.md` §9.2) | Medium | Narrowed from a claim about joining separated datasets, which the design does not permit — no binding exposes network primitives to a package. The residual is that **installed code runs inside the boundary the threat model draws around operator conduct**, and whether an isolation mechanism holds against a hostile module is an engineering question this document does not settle |
 | P32 | **Client-side caches have no stated lifetimes** — resolved locators, catalog answers, session and capability history, currency queries (§12.6.1, §11.5) | Medium | Each is a record of who a user looked for and when, held on a device that can be seized. **A cache with no expiry is a retention decision made by omission**, and the endpoint-aggregation problem (C9) is what it feeds. Client obligation added; the values are unset |
 | P33 | **Multi-device replication semantics are unspecified** (§23.3) | Undetermined | **Answered at §23.3** [author, 2026-09-16]: seeds sit on the ceremony device alone and every other device carries a delegated transport credential; deletion state follows the seed, §7.5.2 making a capture decryptable only when its subject releases a key derived from one; archives, captures and caches go where the storage is, under §13.7.1's envelope. Retention and deletion commitments can be assessed now, being a property of one device rather than of an unspecified set. Severity is left as filed rather than restated |
+| P41 | **Witness engagement discloses the intent before anything exists** (§7.1) | Medium | Up to eight of each party's own contacts learn who that party is meeting, the transaction's kind and its start — before the counterparty has accepted, and for meetings that never complete. The ten dismissed at the prune retain what they saw: the intent, the ceremony-id, and one side's optical trace, whose block counts also say roughly how large each party's bundle was. **Accepted as the price of live observation** [author, 2026-10-19]: the recipients are contacts the nominator chose, which is the disclosure model everywhere else; a client should say that engaging witnesses is telling them |
+| P42 | **A witness set samples its nominator's knowledge graph** (§7.1.1) | Low | A witness set travels by locator and a locator names the witness's subnet, which invites reading the nominator's memberships off its nominations. **The pool's breadth is what breaks that reading** [author, 2026-10-19]: anyone ever learned of is nominable, lookup-scraped strangers included, so an appearance in a set is not evidence the nominator belongs to that subnet — §3.1.1's personas are suggested at most, never linked. What remains is statistical: many records' sets together sample where the nominator's attention and standing live. The reference pool defaults to the acting subnet's horizon plus met parties as hygiene, and widening is the person's choice |
 | **P35** | **An ancestor accumulates a key→position index for its whole subtree** (§15.2.1), so a subnet's root can look up any member without an introduction | Medium | **Accepted, with the boundary stated.** The disclosure content is unchanged — §12.1 already has a locator disclosing patron, depth and subtree to anyone you introduce yourself to, and what changes is that an ancestor stops needing the introduction. **Joining a subnet is a choice to be structurally visible to it**; the property defended is that this never crosses a subnet boundary, which §3.1.1 guarantees by construction. **The memo carries no address**, and that depends on peering being excluded from rootward travel (§15.2) |
 | **P36** | **`seqno` gaps disclose out-of-subnet activity** (`wire-format.md` §2.3) | Low–Medium, **largely answered** by the `{series, counter}` split | The threat was that a node sharing **one** counter across two bindings advances it in both, so an observer in one subnet sees jumps it cannot account for and learns the node is active elsewhere. **Distinct from P3**, which needs an observer present in both subnets; this works from inside one. **The `{series, counter}` split answers it** by giving each patron relationship its own series and so its own counter (`wire-format.md` §2.3, `wire-format.md` §4.6): a per-binding counter, which was previously rejected as breaking `seqno`'s double duty as freshness test and stale-cache detector — until the series tag made within-series the only comparison and cross-series unrankable, which is what removes the breakage. **Residuals**: a node that has not yet reissued since binding elsewhere still shares a line, and the *number* of reissues it has taken is itself visible in the chain. See C19 for what sharpens the pre-split case |
 | **P37** | **A ceremony counterparty is handed a bundle of the subject's prior counterparties — who they have met, and where each can be reached — and credibility pushes that bundle wide** (§8.1.2, §19.2) | Medium | Selecting the other's verifiers needs a candidate set, and the subject supplies it as introductions (`wire-format.md` §2.3, §5.4): a party's key and the most recent locator held for them, nothing of the meeting — no record, no witnesses, no verifiers, no time. **The disclosure is elective, not compelled** — nobody walks another party's archive, but the incentive runs one way: a bundle holding nobody the selector recognises is worth nothing to them (§16.1), so being believed means showing counterparties in common. **Bounded by design to a handful** [author, 2026-10-11]: the bundle is meant to suffice at a few names, and what it leaves unmet is fished one candidate at a time, in turns, so a party is never asked for its history in the bundle and cannot have it drawn out in successive ones — it accepts the next proposal and stops. **Distinct from P19**, which is the *adoption* disclosure a prospective patron drives by fetching and walking; this one the subject hands over. **Distinct from P2/C2**, which price the verifier set carried *in the record* rather than the pool it was drawn from. **The floor is a real choice**, since what a ceremony gives its participants is a face they will know again (§7), which no bundle affects. Disclosing narrowly costs third-party weight and the counterparty's continuity assurance, not the relationship |

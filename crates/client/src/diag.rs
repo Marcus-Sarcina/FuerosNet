@@ -150,7 +150,6 @@ pub fn variant(a: &crate::ceremony::Abort) -> &'static str {
         Refused(_) => "Refused",
         RootMismatch => "RootMismatch",
         BackPointers => "BackPointers",
-        NoWitness => "NoWitness",
         Record(_) => "Record",
         NoPriorKey => "NoPriorKey",
         NoSeed => "NoSeed",

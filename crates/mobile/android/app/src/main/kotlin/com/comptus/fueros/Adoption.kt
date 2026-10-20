@@ -135,7 +135,14 @@ class Adoption(
     /** The adoption's txid once it is held. */
     fun txid(): String? = synchronized(lock) { txid }
 
-    /** What has happened, for the screen's notice lines. */
+    /**
+     * What has happened here, oldest first.
+     *
+     * **No screen draws these** [author, 2026-10-18]: each line reaches
+     * the diagnostic stream as it is made, and what the screen shows is
+     * where the adoption stands and what the person can do about it. The
+     * list is the record a test asserts against.
+     */
     fun said(): List<String> = synchronized(lock) { said.toList() }
 
     private fun note(line: String) {

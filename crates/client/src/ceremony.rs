@@ -141,8 +141,6 @@ pub enum Abort {
     RootMismatch,
     /// The body does not carry this signer's own back-pointers.
     BackPointers,
-    /// Every nominee declined.
-    NoWitness,
     /// The record did not parse or append.
     Record(String),
     /// The recovering subject holds no prior key to rotate from.
@@ -2308,12 +2306,12 @@ impl Client {
         let mut responses = a.responses.clone();
         responses.extend(their_responses);
         sort_responses(&mut responses);
-        // **No witness is a formation record or nothing** (design §13.2;
-        // `wire-format.md` §3.2): two identities each at their genesis,
-        // with no response either way, memorialise their meeting as the one
-        // witnessless shape, and that is the first meeting of two new
-        // joiners, whom no horizon can offer a witness.  Any other pair
-        // without a witness waits for one.
+        // **No witness proposes anyway** [author, 2026-10-19]: there is
+        // no floor (`wire-format.md` §3.2), the absent field stays
+        // readable in the signed body forever, and the readers it matters
+        // to — the participants and the patrons who later review their
+        // archives — weigh it there (design §7.1.1, §13.2).  The
+        // formation subtype remains the genesis pair's shape alone.
         let formation = witnesses.is_empty() && {
             let counterparty = a.peer()?;
             // the counterparty's back-pointers where the conversation has
@@ -2324,9 +2322,6 @@ impl Client {
                 && mine_back == vec![rhtn_archive::genesis(&me)]
                 && theirs.is_none_or(|t| *t == vec![rhtn_archive::genesis(&counterparty)])
         };
-        if witnesses.is_empty() && !formation {
-            return Err(abort("propose", Abort::NoWitness));
-        }
         // **a party signs once.** A nominee both participants named answers
         // both and is handed here twice; the record has one place for it,
         // and the body must be the same whichever side proposes, so the

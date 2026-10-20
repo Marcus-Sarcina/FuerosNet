@@ -288,7 +288,7 @@ class MeetActivity : Activity() {
         // [author, 2026-10-11]
         if (m.step() == Meet.Step.CAPTURE && drawnStep != Meet.Step.CAPTURE) cueCapture()
         drawnStep = m.step()
-        logLines(m)
+        atTop()
     }
 
     /**
@@ -399,13 +399,20 @@ class MeetActivity : Activity() {
         // it, and patronage a separate option that then asks the direction.
         para("A meeting establishes a presence record with the other person, in person. What this meeting is for is chosen now and cannot change once it begins.")
         heading("Regular meeting")
-        val backup = CheckBox(this).apply {
-            text = "Ask this person to backup my user data"
+        // **the peering is the checkbox on the regular meeting**, as the
+        // author's dialogue has it [author, 2026-10-19]. It read "Ask this
+        // person to backup my user data" and set a flag that reached the
+        // brief and nothing else; the backup is what a peering entitles
+        // the two of you to (design §3.4), so the box asks for the
+        // peering and the backup follows from it.
+        val peer = CheckBox(this).apply {
+            text = "Also peer with this person"
             setTextColor(Color.DKGRAY)
         }
-        body.addView(backup)
+        body.addView(peer)
+        para("A peering is an edge between the two of you where neither is over the other, priced in this meeting (design §6.3). It is what lets either of you hold an encrypted backup of the other's contacts and records.")
         button("Show my code") {
-            start(Meet.Kind(Meet.Adopt.NONE, backup.isChecked), Meet.Role.INITIATOR)
+            start(Meet.Kind(Meet.Adopt.NONE, peer.isChecked), Meet.Role.INITIATOR)
         }
         heading("Patronage")
         para("An adoption moves authority. What it costs is listed before either of you agrees.")
@@ -919,7 +926,7 @@ class MeetActivity : Activity() {
                 button("Go on without them") { m.goOn() }
             }
             p.proposer && m.noWitness() ->
-                para("No nominee has agreed to attest, and the body cannot be proposed without one. Your device keeps asking as the answers land. Wait for one, or stop and leave this meeting unrecorded.")
+                para("No witness attests this meeting — nobody could be nominated, or none agreed. The record still finalises, and says so permanently; anyone reviewing it later will see an unwitnessed meeting and weigh it as one.")
             p.proposer && m.waitingOn() != null -> para("Not yet proposed: waiting on ${m.waitingOn()}.")
             p.proposer -> para("Proposing the body to every signer.")
             else -> para("Your gathered responses are with ${m.counterpartyName}, whose device proposes the body. It is shown here when it arrives, reviewed and signed by this device as it does.")
@@ -1037,21 +1044,22 @@ class MeetActivity : Activity() {
      * (A3; design §6.3): an edge between two parties where neither is over
      * the other, priced in the same meeting the record above rests on.
      *
-     * Offered rather than assumed, and offered either way round: a peering
-     * has no direction, so there is nothing for the two to agree beyond
-     * making one. It is **not an alternative to the adoption** — a meeting
-     * can carry both — so this sits beside that section rather than
-     * replacing it.
+     * **Asked for at the invitation, not here** [author, 2026-10-19]: the
+     * checkbox on the regular meeting is where the two choose it, as the
+     * adoption's direction is chosen there, so this section reports what
+     * it came to. A peering has no direction, so there was nothing else
+     * for the two to settle. It is **not an alternative to the adoption**
+     * — a meeting can carry both — so this sits beside that section
+     * rather than replacing it, and a meeting that asked for none shows
+     * nothing at all.
      */
     private fun peering(m: Meet, p: Peering?) {
+        if (!m.peeringAsked() && p == null) return
+        heading("A peering with ${m.counterpartyName}")
         if (p == null) {
-            heading("A peering with ${m.counterpartyName}")
-            para("You met, which is what a peering is priced in (design §6.3). Neither of you would be over the other: it is an edge between you, and it says nothing about authority.")
-            button("Peer with ${m.counterpartyName}") { Kernel.peeringBegins() }
+            para("The peering is next: this screen will say what it came to.")
             return
         }
-        heading("A peering with ${m.counterpartyName}")
-        p.said().forEach { para("· $it") }
         when (p.step()) {
             Peering.Step.HELD -> {
                 para("The peering is recorded: ${p.txid()}")
@@ -1083,7 +1091,6 @@ class MeetActivity : Activity() {
                 else -> "The authority question"
             },
         )
-        a.said().forEach { para("· $it") }
         when (a.step()) {
             Adoption.Step.HELD -> {
                 val t = a.txid()
@@ -1175,26 +1182,18 @@ class MeetActivity : Activity() {
         },
     )
 
-    private fun logLines(m: Meet) {
-        // the ceremony's running commentary is not drawn while the code
-        // is up: it costs module size, which costs range ([para])
-        if (optical) return
-        m.log().forEach { line ->
-            body.addView(
-                TextView(this).apply {
-                    text = line
-                    textSize = 12f
-                    typeface = Typeface.MONOSPACE
-                    setTextColor(Color.GRAY)
-                    setPadding(0, 2, 0, 2)
-                },
-            )
-        }
-        // **the optical package is never scrolled away from**: the code
-        // and its rows are the instrument the other person is aiming at,
-        // so the page stays at the top while they are up and ends at the
-        // bottom otherwise [author, 2026-10-07]
-        if (optical) scroll.post { scroll.fullScroll(ScrollView.FOCUS_UP) }
-        else scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) }
-    }
+    /**
+     * **The page stays where the person's content is: the top.**
+     *
+     * The ceremony's running commentary used to be drawn here, in grey,
+     * and the page was scrolled to the bottom to keep its newest line in
+     * sight — which put the controls above the fold on every render
+     * [author, 2026-10-18]. The commentary was for reading a bench run
+     * off a screen, and a bench run is read from the diagnostic stream
+     * now (`Meet.note` emits every line to it, as `Adoption` and
+     * `Peering` do), so the screen keeps none of it and nothing is lost.
+     * What the person needs is the step they are in, what it is waiting
+     * on, and the controls — all of which are at the top.
+     */
+    private fun atTop() = scroll.post { scroll.fullScroll(ScrollView.FOCUS_UP) }
 }

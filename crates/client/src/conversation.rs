@@ -445,8 +445,9 @@ pub fn proposal_from_body(body: &[u8]) -> Result<(Proposal, Vec<Vec<Txid>>), Str
             }
         }
         Some(_) => return Err("witnesses".into()),
-        None if formation => {}
-        None => return Err("witnesses".into()),
+        // zero witnesses omit the key, formation or not (wire-format s3.2:
+        // there is no witness floor)
+        None => {}
     }
     let responses = match value_slice(body, 5) {
         Some(r) => array_item_ranges(body, r.start)

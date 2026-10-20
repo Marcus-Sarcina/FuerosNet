@@ -238,7 +238,7 @@ async fn the_conversation_runs_over_the_payload_path_to_a_record_every_signer_ho
             Ok(()) => {
                 break;
             }
-            Err(Abort::Waiting(_)) | Err(Abort::NoWitness) if Instant::now() < deadline => {
+            Err(Abort::Waiting(_)) if Instant::now() < deadline => {
                 tokio::time::sleep(Duration::from_millis(50)).await
             }
             Err(e) => panic!("propose: {e:?}"),
@@ -983,7 +983,7 @@ async fn a_witness_both_participants_nominated_signs_once() {
     loop {
         match alice.step(|c| c.converse_propose()).await {
             Ok(()) => break,
-            Err(Abort::Waiting(_)) | Err(Abort::NoWitness) if Instant::now() < deadline => {
+            Err(Abort::Waiting(_)) if Instant::now() < deadline => {
                 tokio::time::sleep(Duration::from_millis(50)).await
             }
             Err(e) => panic!("propose: {e:?}"),

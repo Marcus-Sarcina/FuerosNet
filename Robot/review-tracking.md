@@ -18568,3 +18568,108 @@ raw text input or as a text file". The derived 32-byte root cannot sign — it
 is one-way from the two algorithm seeds — so the thing a file carries is the
 two seeds, and the root follows from them. Read it that way and flagged in
 chat.
+
+**The screen's commentary removed (2026-10-18).** The author asked whether
+the log/status lines in the UI were necessary, noting the controls scroll
+out of view. They were not: `Meet.note`, `Adoption.note` and `Peering.note`
+each already emit to the diagnostic stream, which is how a bench run is
+read (`field-run.sh` and the streams, not the screen), so the on-screen
+copy was duplication that cost the fold. Removed: `MeetActivity.logLines`
+and the two `said().forEach` blocks. **The scroll was the actual culprit** —
+`fullScroll(FOCUS_DOWN)` on every render, to keep the newest grey line in
+sight; the page now pins to the top, which is where the step and the
+controls are.
+
+**Kept, deliberately**: `Front.notices()` on the Conversations screen,
+which draws only in the empty state and is the provisioning guidance there
+— the key material to paste, "unprovisioned: nobody to send to", "restart
+for it to take effect" — with no content for it to push away. And the
+in-memory lists, which six `MeetTest` assertions and the adoption's own
+tests read; each getter now documents that no screen draws it, so a later
+reader does not restore the rendering on the assumption that something must.
+
+## 2026-10-19 — the witness reorder: design layer done, cascade open
+
+The author reversed witness nomination and reordered the ceremony around
+live observation. Rulings, in his words where they matter:
+- witnesses "observe the live transaction flow" > adversarial selection; "a
+  witness who only observes static records doesn't add any friction to a
+  replay attack"
+- pool = own contacts: acting-subnet horizon (direct connections) + met
+  parties; other subnets' horizons and anything ever learned of by explicit
+  choice. "The appearance of a user in the witness set is not evidence that
+  the participant belongs to that witness's subnet" — scraped contacts are
+  nominable, which blunts the membership inference (P42 down to Low).
+- witnesses see: intent pre-acceptance; the optical exchange as a TRACE
+  (block counts both ways, inbound indices as they land, outbound as acks
+  are read off the counterparty's rows) — never contributions (half the
+  session key; tamarin covers ONE leak, two sets jointly hold both);
+  TranscriptConfirm/ceremony-id bound to an engagement handle.
+- 8 engaged, counterparty prunes to min(3, offered); survivors = nominated
+  by one side, selected by the other; target 2-per-side signing, third is
+  margin not a role; dismissals relayed by the nominator.
+- window = four minutes from the id-bearing request; proximity (NFC
+  opportunistic, never waited), capture, verifier selection + queries all
+  inside it, every leg streamed to survivors as sent.
+- fresh node: thin/empty set is the correct value; "the depth of witness
+  selection scales with the pool of users who have an interest in the user
+  engaged in the meeting." Wire §3.2 one-witness floor kept (zero =
+  formation only) — ASSUMED, asked in chat 2026-10-19, not yet answered.
+
+**Done this pass**: design §7.1 (steps rewritten + renumbered — citations of
+"item 4" retargeted to item 5), §7.1.1 rewritten whole, §19.2 amended, P41 +
+P42 added; light-client §1.1 rewritten whole, §1.2 attest/4-minute bullets
+amended; functional CER-002 rewritten, NET-022/023 clauses; catalogue CER-21
+rewritten, PRT-04 quote retargeted (substance already compatible: "each
+nominee answers its own nominator's ask"). All checkers 0 flags.
+
+**Open cascade, in order**: wire (engagement kind w/ handle, set-exchange +
+keep-list, proximity-update, WitnessRequest gains handle binding; leg table;
+§7.10.1 registry), vectors for each, functional rows for the new legs +
+concurrency + timing inference, catalogue entries + stubs, kernel reorder
+(engage→trace→id→exchange/prune→window w/ concurrent tracks;
+query-at-first-template), ffi, shell (Step machine → phases; nominate before
+showing the code; opportunistic NFC in ProximityChannels — ordered earlier,
+folded in here), models re-check, bench run whose witness diag shows SPREAD
+arrivals (the inverse of the 2.9 s burst), pins + gate at each commit point.
+
+**Gate state**: document checkers green; the full gate has NOT been run
+since the reorder landed in the documents — the wire/kernel/shell still
+describe and implement the old flow, which the documents no longer do. The
+set is internally consistent (design + light-client agree) but ahead of the
+code; pins must be re-accepted with the next vector regeneration.
+
+## 2026-10-20 — the floor answered: there is none
+
+The assumed "one-witness floor kept" above was answered the other way
+[author, 2026-10-19]: "No, we don't need to enforce witness count." A
+witnessless NORMAL record is valid — field 4 absent under §1's empty rule —
+and the formation/normal distinction rests on subtype 6 plus genesis
+back-pointers, never on witness count. Rationale in his words: the meeting
+must not fail because "a witness going offline" at the end, nor fail to
+start for want of an awake witness; the record's consumers (participants,
+future patrons) read the absence themselves, and "a witnessless meeting
+after a period of claimed activity is itself suspicious" without software
+enforcement.
+
+**Cascade closed this pass**: wire §3.2 floor bullet → "There is no witness
+floor"; §4.5 field 4 PRESENT iff a witness signed; field-5/field-6 comments
+that leaned on key-4 presence corrected; the Witness-bitfield floor comment
+rewritten (bits 0+1 = corroborating, a consumer's reading). Design §6.4 "the
+one witnessless shape" aligned (1338); §7.1.1 already carried it. Codec:
+check_presence floor + affirmative-attestation count removed; empty key-4
+array rejects. Kernel: Abort::NoWitness deleted, propose ungated, body
+builder omits empty key 4, conversation parser takes absence (this last was
+CER-50's actual blocker — bob could not parse the witnessless body).
+Vectors: T52 retired (tombstone, id not reused), T60 added
+(empty-array complement of T51), P-normal-witnessless +
+N-witness-empty-array registered, U-witness-no-affirmative dropped,
+verify.py floor check removed, README over-strict row added. Catalogue:
+CER-50 and DEC-21 rewritten (DEC-21's flipped-formation case inverted to
+pass). Functional: TX-020 restated, CER-025's waiting clause replaced.
+Tests: CER-50 passes as a witnessless normal record; evidence.rs DEC-21
+test renamed and reshaped. Corpus regenerated, pins re-accepted.
+
+**Still open**: the witness-reorder code cascade listed above (wire kinds →
+kernel reorder → ffi → shell → bench SPREAD run) — unchanged by this pass
+except that no leg of it may reintroduce a floor.

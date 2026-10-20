@@ -522,14 +522,18 @@ object Kernel {
      * the lower keyhash builds the body and the other sends what its
      * archive chains to.
      *
-     * Called from the screen, and a second call does nothing — a peering
-     * is begun once. **A peering and an adoption are not alternatives**:
-     * a meeting can carry either, both or neither, and nothing here
-     * consults the adoption's state.
+     * Called where the record lands, and a second call does nothing — a
+     * peering is begun once. **Nothing happens for a meeting that asked
+     * for none**: the checkbox at the invitation is where the two chose
+     * it [author, 2026-10-19], the responder reading the initiator's
+     * choice off the bootstrap. **A peering and an adoption are not
+     * alternatives**: a meeting can carry either, both or neither, and
+     * nothing here consults the adoption's state.
      */
     fun peeringBegins() {
         val p = participant ?: return
         val m = meet ?: return
+        if (!m.peeringAsked()) return
         val txid = m.recordTxid() ?: return
         val them = m.counterpartyKey ?: return
         if (peering != null) return
@@ -615,7 +619,7 @@ object Kernel {
         // this device acts in otherwise, so a regular meeting carries a
         // name too (`light-client-requirements.md` §7)
         val scope = m.scope() ?: scopes().firstOrNull { it.id == subnet() }
-        return Bootstrap.encode(me, kind, m.kind.askBackup, scope)
+        return Bootstrap.encode(me, kind, m.kind.peering, scope)
     }
 
     /**
@@ -730,6 +734,9 @@ object Kernel {
                 else -> Meet.Adopt.NONE
             },
         )
+        // and whether it asked for a peering, which is the inviter's
+        // choice and the brief's to state (A3; design §6.3)
+        m.theirPeering(read.peering)
         // and what it claimed about where it leads, which the brief states
         // as a claim (`light-client-requirements.md` §7)
         m.invitedBy(Meet.Claim(read.subnet, read.alias, read.subnetAlias))
@@ -1544,7 +1551,12 @@ object Kernel {
                 // **the record is what an adoption rests on**, so D7
                 // begins where the ceremony ends; begun once, and nothing
                 // where the meeting carried none
-                if (t == Meet.Step.DONE) adoptionBegins()
+                if (t == Meet.Step.DONE) {
+                    adoptionBegins()
+                    // and the peering the invitation's checkbox asked for,
+                    // which is independent of the adoption
+                    peeringBegins()
+                }
                 if (m.stepStale()) {
                     m.stop("nothing has moved for ${Meet.STALE_MS / 1000} s at ${m.step().name.lowercase()}; the other phone may have stopped")
                 }

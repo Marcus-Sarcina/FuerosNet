@@ -25,7 +25,7 @@ object Bootstrap {
         val me: String,
         /** 0 none, 1 they will be the patron, 2 they will be the client. */
         val kind: Int,
-        val askBackup: Boolean,
+        val peering: Boolean,
         /** The subnet the adoption is into, hex, or null where the inviter
          *  named none (a lone root, or a regular meeting). */
         val subnet: String?,
@@ -37,11 +37,11 @@ object Bootstrap {
 
     private val ZERO = "0".repeat(64)
 
-    fun encode(me: ByteArray, kind: Int, askBackup: Boolean, scope: Meet.Scope?): ByteArray {
+    fun encode(me: ByteArray, kind: Int, peering: Boolean, scope: Meet.Scope?): ByteArray {
         val subnet = scope?.id?.takeIf { it.length == 64 }?.let { Provision.unhex(it) } ?: ByteArray(32)
         val alias = (scope?.ownAlias ?: "").toByteArray().take(64).toByteArray()
         val subnetAlias = (scope?.alias ?: "").toByteArray().take(64).toByteArray()
-        return byteArrayOf(V2, kind.toByte(), (if (askBackup) 1 else 0).toByte()) +
+        return byteArrayOf(V2, kind.toByte(), (if (peering) 1 else 0).toByte()) +
             me + subnet +
             byteArrayOf(alias.size.toByte()) + alias +
             byteArrayOf(subnetAlias.size.toByte()) + subnetAlias

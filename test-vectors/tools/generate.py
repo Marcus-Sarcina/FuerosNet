@@ -1140,6 +1140,24 @@ fin_ab_body = e_map([
 fin_ab_txid = H(fin_ab_body)
 fin_ab_env, _ = envelope(1, 5, fin_ab_body, fin_ab_signers)
 
+# --- A witnessless normal record (s3.2: there is no witness floor [author,
+# 2026-10-19]): key 4 absent beside key 5, subtype 0, the two participants
+# its only signers.  The over-strictness complement is N-witness-empty-array
+# (T60): the same logical record spelt with key 4 as an empty array.
+nw_slots, nw_root = disclosure_set('no-witness', npr_values)
+nw_signers = [n_hi, n_lo]
+nw_fields = [
+    (e_uint(0), backptrs(*[_npr_head(s) for s in nw_signers])),
+    (e_uint(1), e_uint(TS_C2 + 9 * 86400)),
+    (e_uint(2), e_uint(TS_C2 + 9 * 86400 + 1800)),
+    (e_uint(3), e_arr([participant(n_hi), participant(n_lo)])),
+    (e_uint(6), e_uint(0)),
+    (e_uint(8), e_bstr(nw_root)),
+]
+nw_body = e_map(nw_fields)
+nw_env, _ = envelope(1, 5, nw_body, nw_signers)
+nw_empty_body = e_map(nw_fields + [(e_uint(4), e_arr([]))])
+
 # --- Two more alice-carol normal records (canonical bar 3's repeated
 # counterparty), minimal shape: one witness, no responses. ac2 continues ac1
 # on both chains; ac1 forks alice from her merge and carol from the formation.
@@ -3111,7 +3129,8 @@ for fid, by, kind in [
     ('P-reissue', reissue_body, 'body'), ('P-formation', formation_env, 'envelope'),
     ('P-normal-record', npr_env, 'envelope'), ('P-fin-nomatch', fin_nm_env, 'envelope'),
     ('P-dual-capacity', d14_env, 'envelope'), ('P-verifier-both-participants', d15_env, 'envelope'),
-    ('P-fin-absent', fin_ab_env, 'envelope'), ('P-ac1', ac1_env, 'envelope'),
+    ('P-fin-absent', fin_ab_env, 'envelope'),
+    ('P-normal-witnessless', nw_env, 'envelope'), ('P-ac1', ac1_env, 'envelope'),
     ('P-ac2', ac2_env, 'envelope'), ('P-recovery-adoption', rec_env, 'envelope'),
     ('P-transfer-adoption', xfer_env, 'envelope'),
     ('P-formation-ab', ab_form_env, 'envelope'),
@@ -3194,11 +3213,6 @@ reg('N-retired-witness-key-4', 'bytes',
            (e_uint(2), e_bstr(alice.keyhash)),
            (e_uint(3), e_uint(7)),
            (e_uint(4), e_bstr(H(b'rhtn-test-vectors:dead-nonce-commitment')))]))
-reg('U-witness-no-affirmative', 'unit',
-    REJ('body', 'schema',
-        'a normal record none of whose witnesses set both protocol_ran and both_responsive fails the witness floor'),
-    note='recipe: any normal record where no field-4 entry has attestation bits 0 and 1 both set; such entries are partial evidence, not corroboration (s3.2, T52, 2026-09-03)')
-
 reg('U-corroboration-non-witness', 'unit',
     REJ('presentation', 'semantic',
         'a revealed location naming a corroborator absent from body field 4 attests nothing'),
@@ -3717,6 +3731,10 @@ reg('N-responses-empty-array', 'bytes',
     REJ('body', 'schema', 'zero responses OMIT key 5 - the empty-array spelling is the second encoding of one logical record (s4.5, T51)'),
     os_empty_body,
     note='Stress: an implementer reading field 5 as required-with-empty-array emits and accepts this; P-fin-absent is the one valid spelling.')
+reg('N-witness-empty-array', 'bytes',
+    REJ('body', 'schema', 'zero witnesses OMIT key 4 - the empty-array spelling is the second encoding of one logical record (s3.2, T60)'),
+    nw_empty_body,
+    note='Stress: an implementer reading field 4 as required-with-empty-array emits and accepts this; P-normal-witnessless is the one valid spelling, there being no witness floor (2026-10-19).')
 
 retry_values = dict(npr_values)
 retry_values['proximity'] = e_map([(e_uint(1), e_arr([

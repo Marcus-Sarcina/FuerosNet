@@ -112,6 +112,15 @@ fn params() -> CaptureParams {
     }
 }
 
+/// A window long enough for the rules to be measured over: zero turns the
+/// check off, which is the bench's setting and not what these assert.
+fn enforcing() -> Continuity {
+    Continuity {
+        duration_ms: 10_000,
+        ..Continuity::default()
+    }
+}
+
 fn run(faces: Vec<u8>, c: &Continuity) -> Held {
     hold_continuity(
         &Who(faces, Cell::new(0)),
@@ -127,7 +136,7 @@ fn run(faces: Vec<u8>, c: &Continuity) -> Held {
 // acceptance: CER-66
 #[test]
 fn one_face_across_the_window_is_kept_and_a_long_gap_is_not() {
-    let c = Continuity::default();
+    let c = enforcing();
     // present throughout: the frames taken at the prompts are retained
     match run(vec![7], &c) {
         Held::Kept(frames, prompts) => {
@@ -148,7 +157,7 @@ fn one_face_across_the_window_is_kept_and_a_long_gap_is_not() {
     // capture's own ten to fifteen seconds and the reference maximum gap
     // is twenty, so no gap inside it can exceed the maximum — what bites
     // on the bench is the ratio below
-    assert!(c.max_gap_ms > params().max_span_ms);
+    assert!(c.max_gap_ms > c.duration_ms);
     let mut faces = vec![7];
     faces.extend(std::iter::repeat_n(0u8, 60));
     assert!(
@@ -159,7 +168,7 @@ fn one_face_across_the_window_is_kept_and_a_long_gap_is_not() {
     // sound, and a party setting the floor gets it
     let tight = Continuity {
         max_gap_ms: 2_000,
-        ..Continuity::default()
+        ..enforcing()
     };
     assert!(matches!(run(faces, &tight), Held::Lost(Lost::Gap)));
 }
@@ -167,7 +176,7 @@ fn one_face_across_the_window_is_kept_and_a_long_gap_is_not() {
 // acceptance: CER-66
 #[test]
 fn another_face_while_the_one_held_was_away_ends_the_meeting() {
-    let c = Continuity::default();
+    let c = enforcing();
     // held 7, away, then 9 appears: a substitution, which is the case the
     // loop exists to catch
     let mut faces = vec![7, 7];
@@ -184,7 +193,7 @@ fn the_gaps_summing_past_the_allowed_share_ends_it_too() {
     // exceed it without any single one passing the maximum
     let c = Continuity {
         presence_pct: 95,
-        ..Continuity::default()
+        ..enforcing()
     };
     let mut faces = Vec::new();
     for _ in 0..12 {
@@ -256,4 +265,39 @@ fn the_prompts_spread_through_the_window_over_many_draws() {
         last_fifth * 5 < 200,
         "{last_fifth} of 200 captures came wholly from the window's last fifth"
     );
+}
+
+/// **With no window set the check is off, and the capture still happens**
+/// [author, 2026-10-18]. This is the bench's setting: a run that loses the
+/// face for most of a short capture gets its frames anyway, because the
+/// ratio design §7.5 states is a figure for four minutes and a ten-second
+/// window measures nothing like it. Two probes without a face is a fifth
+/// of such a window, and two probes is what a real detector costs.
+// acceptance: CER-66
+#[test]
+fn a_window_of_zero_abandons_nothing() {
+    let off = Continuity::default();
+    assert_eq!(off.duration_ms, 0, "the floor is inactive by default");
+    // away for most of it, a second face, and nobody at all: each would
+    // have ended the meeting under an enforced window
+    let mostly_away = {
+        let mut v = vec![7u8];
+        v.extend(std::iter::repeat_n(0u8, 60));
+        v
+    };
+    for faces in [mostly_away, vec![7, 0, 0, 9, 9, 9, 9, 9], vec![0]] {
+        match run(faces.clone(), &off) {
+            Held::Kept(frames, prompts) => {
+                assert_eq!(frames.len(), prompts.len());
+                assert!((3..=5).contains(&frames.len()), "{} frames", frames.len());
+            }
+            Held::Lost(why) => panic!("abandoned with the check off: {why:?} on {faces:?}"),
+        }
+    }
+    // and the same inputs under a window do end it, so the rules are
+    // gated and not deleted
+    assert!(matches!(
+        run(vec![0], &enforcing()),
+        Held::Lost(Lost::None_)
+    ));
 }

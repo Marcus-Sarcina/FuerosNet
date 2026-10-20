@@ -237,9 +237,10 @@ pub struct Progress {
     /// poll result had the proposer calling 28 times in 3 s on the bench
     /// [client review, 2026-10-11].
     pub proposable: bool,
-    /// Whether a proposal is otherwise ready and no nominee has attested,
-    /// which past genesis is a record that cannot finalize
-    /// (`wire-format.md` §3.2) and is the person's to wait out or stop.
+    /// Whether a proposal is ready with no nominee attesting: information
+    /// for a screen, never a gate — there is no floor [author,
+    /// 2026-10-19], and the record finalises saying permanently that
+    /// nobody witnessed it (`wire-format.md` §3.2).
     pub no_witness: bool,
     /// What a proposal waits on, in words for the person — never for a
     /// caller to parse.
@@ -516,7 +517,8 @@ impl Client {
             }
         }
         // no witness: `propose` builds a formation record where the two
-        // are at their genesis, and refuses `NoWitness` otherwise
+        // are at their genesis, and a witnessless normal record otherwise
+        // — there is no floor [author, 2026-10-19]
         let a = self.active.as_ref().ok_or(Abort::NotActive)?;
         if !a.conversation.back.contains_key(&counterparty) {
             return Err(abort(
@@ -609,7 +611,9 @@ impl Client {
             proposer: a.initiator,
             opened: c.opened,
             handed: c.handed,
-            proposable: ready && (witnesses > 0 || formation),
+            // no floor [author, 2026-10-19]: a witnessless body proposes,
+            // and `no_witness` is information for a screen, not a gate
+            proposable: ready,
             no_witness: ready && witnesses == 0 && !formation,
             waiting_on: waiting_on.map(str::to_string),
             queries_outstanding: a.issued.iter().filter(|q| !answered.contains(*q)).count(),

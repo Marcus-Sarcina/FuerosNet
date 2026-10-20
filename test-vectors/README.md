@@ -12,7 +12,7 @@ their purpose: **a disagreement between a vector and the specification is a
 finding against one of them**, and either answer is progress. Review rounds
 have produced specification fixes.
 
-**Pinned**: wire-format.md `381823a91a3edfc7b7f83f4f8ea1c85a80bd1a9c282d18bb8c330315efd02e58` · network-design.md `7a9252b216c63fae90b9a392ce3705126b02b72e62a084bd815232b2636b7e04`
+**Pinned**: wire-format.md `ce0078a95a10515dc8a2a346fc5198ff7c7e7572e7e02cf659428345b455aaed` · network-design.md `e7f289d2058761d923e565296943ba9fbfcffd3e974a8808fb25aeddf5f3bf70`
 
 **Scope**: wire-format/protocol **interoperability** vectors.
 `light-client-requirements.md` is pinned alongside the two protocol documents
@@ -179,6 +179,7 @@ loudly.
 | attach (heartbeat sketch) | accept only the exact expected counter | TR12 — a gapped beat resets liveness; TR7 states the rule |
 | attach (noted trap) | infer degraded mode from having dialled a sibling | TR13 — the server's mode determination is authoritative |
 | presence #11 | field 5 required-with-empty-array; reject the absent spelling | P-fin-absent (valid absent) + N-responses-empty-array / T51 (the empty spelling rejects) |
+| presence (witness floor, retired 2026-10-19) | field 4 required on a normal record, or required-with-empty-array | P-normal-witnessless (valid absent) + N-witness-empty-array / T60 (the empty spelling rejects) |
 | presence #3 | one Proximity entry per channel kind | P-channel-retry / D19 — optical failed, retried, passed |
 | presence phase 1 (first run) | reject counters that skip (`+1` contiguity) | D6 — `[5,42] → [5,100]` is a valid supersession |
 | general (frame decode) | closed deserializing enum over control-frame types | TR1 — unknown frames are skipped, the session survives |

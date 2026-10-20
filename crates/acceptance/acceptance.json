@@ -1528,7 +1528,7 @@
   "id": "CER-21",
   "area": "ceremony",
   "gap": "ceremony",
-  "title": "Tell the user when your own nominees are absent or outnumbered",
+  "title": "Tell the user when their own nominees are absent or outnumbered",
   "milestone": "after-5",
   "kind": "positive",
   "spec": [
@@ -1537,12 +1537,16 @@
   "rule": [
    {
     "where": "light-client-requirements.md §1.1",
-    "text": "Check the `nominated_by` split before you sign, and tell the user when your own nominees are absent or outnumbered."
+    "text": "tell the user when your own nominees are absent or\n  outnumbered"
+   },
+   {
+    "where": "light-client-requirements.md §1.1",
+    "text": "a record attested only by the counterparty's survivors is a\n  record your side of the story did not witness"
    }
   ],
-  "given": "Participant A nominated two witnesses; the proposed body carries five witnesses of which one is A's, with a notification hook on A's client.",
-  "when": "A's client checks the split before signing.",
-  "then": "The hook records a notice to the user that A's nominees are outnumbered, before any signature is produced.",
+  "given": "A ceremony whose prune left none of this party's nominees surviving, and another where two of its three survived.",
+  "when": "Each reaches review.",
+  "then": "The first shows the person, before signing, that no witness of their own remains; the second shows nothing special. Neither is blocked: the imbalance is visible, not mandatory.",
   "oracle": "behaviour",
   "interpretation": "The form of the notice is not specified; the test asserts that one is raised before signing."
  },
@@ -2387,26 +2391,26 @@
   "id": "CER-50",
   "area": "ceremony",
   "gap": "ceremony",
-  "title": "Form a record with no witness where both are at their genesis, and wait for one otherwise",
+  "title": "Form a record with no witness: a formation at genesis, a normal record any time after",
   "milestone": 4,
   "kind": "positive",
   "spec": [
    "design §6.4",
-   "wire-format.md §4.5"
+   "wire-format.md §3.2"
   ],
   "rule": [
    {
     "where": "design §6.4",
-    "text": "a **witnessless, verifierless ceremony is valid** — as a formation record, subtype 1, the one witnessless shape"
+    "text": "a **witnessless, verifierless ceremony is valid** — a formation record at\ngenesis, a normal record with its witness field absent any time after\n[author, 2026-10-19] (`wire-format.md` §3.2)"
    },
    {
-    "where": "wire-format.md §4.5",
-    "text": "PRESENT on a normal record (1..=16), ABSENT on a\n                       ;   formation — subtype-conditional, never free choice"
+    "where": "wire-format.md §3.2",
+    "text": "**There is no witness floor** [author, 2026-10-19]. A normal record with no\n  witnesses is valid: field 4 is simply absent, under §1's empty rule"
    }
   ],
   "given": "Two clients with no transaction of their own, nominating nobody, or whose nominees all decline; and the same two again after that record.",
   "when": "Each runs the ceremony to the proposal.",
-  "then": "The first meeting finalizes as a formation record signed by the two alone, with no witness array, no response array and the genesis value as each participant's back-pointer; the second, the two no longer at their genesis, is refused as NoWitness until a witness attests.",
+  "then": "The first meeting finalizes as a formation record signed by the two alone, with no witness array, no response array and the genesis value as each participant's back-pointer; the second finalizes as a normal record signed by the two alone, its witness field absent, the absence permanently readable in the signed body.",
   "oracle": "behaviour",
   "interpretation": ""
  },
@@ -3739,7 +3743,7 @@
   "id": "DEC-21",
   "area": "decoder",
   "gap": "decoder",
-  "title": "Check a presence record's subtype rules: a formation is genesis-rooted and carries no evidence arrays, a normal record is witnessed, and the participants differ",
+  "title": "Check a presence record's subtype rules: a formation is genesis-rooted and carries no evidence arrays, and the participants differ",
   "milestone": 5,
   "kind": "negative",
   "spec": [
@@ -3760,13 +3764,13 @@
     "text": "The two participant identities MUST differ."
    },
    {
-    "where": "wire-format.md §4.5",
-    "text": "PRESENT on a normal record (1..=16)"
+    "where": "wire-format.md §3.2",
+    "text": "**There is no witness floor** [author, 2026-10-19]."
    }
   ],
   "given": "A formation between two fresh keys on genesis back-pointers; the same with arbitrary hashes in key 0; a formation for a key that already has a transaction; a witnessed normal record with its subtype flipped to formation; a formation with its subtype flipped to normal; and a formation naming one identity as both participants.",
   "when": "Each is parsed as a record, or checked as a body.",
-  "then": "The genesis-rooted formation parses. Each variant is rejected: the arbitrary and the established key's back-pointers as not the genesis value, the flipped normal record as a formation carrying witnesses, the flipped formation as a normal record without witnesses, and the equal participants as one identity. An implementation that checks the subtype's range and nothing the subtype conditions fails.",
+  "then": "The genesis-rooted formation parses. The arbitrary and the established key's back-pointers are rejected as not the genesis value, the flipped normal record as a formation carrying witnesses, and the equal participants as one identity. The flipped formation passes the body check — there is no witness floor, so it reads as a witnessless normal record whose genesis back-pointers name no transaction, held at the chain as any fork at genesis. An implementation that checks the subtype's range and nothing the subtype conditions fails.",
   "oracle": "fixture",
   "interpretation": null,
   "holds": [
@@ -7187,7 +7191,7 @@
   "rule": [
    {
     "where": "light-client-requirements.md §1.1",
-    "text": "Nominate witnesses only from the counterparty's neighbourhood, never from your\n  own"
+    "text": "Nominate witnesses from your own contacts, up to eight, before the\n  counterparty has accepted anything"
    },
    {
     "where": "design §7.5.2",
@@ -14140,7 +14144,7 @@
   "id": "PRD-16",
   "area": "product",
   "gap": "product",
-  "title": "Offer a peering after a meeting, either way round, and never as the adoption's alternative",
+  "title": "Ask for a peering at the invitation, as a box on the plain meeting",
   "milestone": "manual",
   "kind": "manual",
   "spec": [
@@ -14150,16 +14154,16 @@
   "rule": [
    {
     "where": "light-client-requirements.md §7",
-    "text": "Offer a peering after a meeting, either way round, and never as the\n  adoption's alternative"
+    "text": "Ask for a peering at the invitation, as a choice beside the plain\n  meeting, and never as the adoption's alternative"
    },
    {
     "where": "light-client-requirements.md §7",
     "text": "order the pair as the record itself does"
    }
   ],
-  "given": "Two people whose meeting has finalised a record, on devices whose keyhashes order one below the other.",
-  "when": "Each reads the screen the meeting ends on, and one of them offers a peering.",
-  "then": "Both screens offer it, with no direction asked and nothing said about a replication commitment; the lower keyhash builds the body and the other sends its back-pointers; both end holding the record, and the adoption's own section is unaffected whichever way it went — a meeting carries a peering, an adoption, both or neither. A refusal is shown with its reason and leaves the record standing.",
+  "given": "Two people meeting, on devices whose keyhashes order one below the other, the inviter's screen offering a plain meeting with a peering beside it.",
+  "when": "The inviter ticks the box and shows its code; the other reads the brief and accepts; the record finalises. Then a second meeting with the box left clear.",
+  "then": "The brief the other person reads names the peering and what it entitles them to, before anything is signed; after the record the peering is made without either being asked again, the lower keyhash building the body and the other sending its back-pointers; both end holding it. The adoption's own section is unaffected whichever way it went — a meeting carries a peering, an adoption, both or neither. The second meeting says nothing of a peering anywhere and makes none. A refusal is shown with its reason and leaves the record standing.",
   "oracle": "behaviour",
   "interpretation": null
  },

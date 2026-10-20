@@ -997,17 +997,10 @@ impl Meeting {
                         Ok(()) | Err(Abort::Waiting(_)) => {}
                         Err(e) => return Err(e),
                     }
-                } else if p.no_witness
-                    && (self.nominated == 0
-                        || (p.answered.len() == self.nominated
-                            && p.answered.iter().all(|(_, f)| f.is_none()))
-                        || Instant::now() >= queries_by)
-                {
-                    // past genesis with no nominee attesting, a record
-                    // cannot finalize (`wire-format.md` §3.2): the shell
-                    // stops the meeting, and so does this
-                    return Err(Abort::NoWitness);
                 }
+                // a missing witness gates nothing [author, 2026-10-19]:
+                // `proposable` no longer waits on one, and the record
+                // finalises saying nobody attested
             }
             if let Some(t) = self.held(a).await {
                 // **the record is the proposer's to send** (kind 18), and

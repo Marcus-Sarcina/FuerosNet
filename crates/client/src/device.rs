@@ -288,12 +288,22 @@ impl Default for CaptureParams {
 /// in `light-client-requirements.md` §1.3 and not a rule anybody issues.
 #[derive(Debug, Clone)]
 pub struct Continuity {
-    /// The window to hold the counterparty across.  **Zero leaves the
-    /// floor unenforced** [author, 2026-10-18]: the loop then runs for as
-    /// long as the capture takes and the two checks below still apply
-    /// over that window, which is the setting to use while the bench is
-    /// run often.  The reference client's own figure is the four minutes
-    /// design §7.1 prices a meeting in.
+    /// The window to hold the counterparty across.  **Zero turns the
+    /// continuity check off** [author, 2026-10-18], which is the setting
+    /// to use while the bench is run often: the capture runs, the loop
+    /// still probes and says what it saw, and **nothing is abandoned**.
+    /// The reference client's own figure is the four minutes design §7.1
+    /// prices a meeting in.
+    ///
+    /// **Why off rather than re-scaled onto the capture's own span**
+    /// [bench, 2026-10-18]: the ratio is design §7.5's figure for four
+    /// minutes, where a lapse is a small share of a long window.  Over
+    /// ten seconds the same ninety per cent is a different rule — a probe
+    /// costs the detector about 430 ms on an S21, so a cycle is near a
+    /// second and two probes without a face is already a fifth of the
+    /// window.  Two bad probes ending a meeting is not what the figure
+    /// means, so a window too short to measure a ratio over measures
+    /// none.
     pub duration_ms: u64,
     /// The longest a face may be absent before the meeting is abandoned.
     pub max_gap_ms: u64,
@@ -305,9 +315,9 @@ pub struct Continuity {
 }
 
 impl Default for Continuity {
-    /// **The floor is inactive** [author, 2026-10-18], the ratio and the
-    /// gap are design §7.5's reference figures, and the probe is this
-    /// client's own.
+    /// **The check is off** [author, 2026-10-18]; the ratio and the gap
+    /// are design §7.5's reference figures for when it is on, and the
+    /// probe interval is this client's own.
     fn default() -> Self {
         Continuity {
             duration_ms: 0,
@@ -375,6 +385,9 @@ pub fn hold_continuity(
     // the prompts' instants, drawn through the window and taken in order
     let mut at: Vec<u64> = (0..n).map(|_| draw(rng, 0, window)).collect();
     at.sort_unstable();
+    // **nothing is abandoned where no window was set**: see
+    // [`Continuity::duration_ms`] for why a short window measures no ratio
+    let enforced = c.duration_ms != 0;
     let start = clock.now_ms();
     let (mut frames, mut prompts) = (Vec::new(), Vec::new());
     let (mut held, mut next) = (None::<Vec<u8>>, 0usize);
@@ -402,7 +415,8 @@ pub fn hold_continuity(
                 if let Some(h) = &held {
                     // a different face while the one held was away is the
                     // substitution the loop exists to catch
-                    if away_since.is_some()
+                    if enforced
+                        && away_since.is_some()
                         && engine.matcher().compare(h, &engine.profile(&seen), version)
                             == crate::query::Verdict::NoMatch
                     {
@@ -417,7 +431,7 @@ pub fn hold_continuity(
             }
             None => {
                 let since = *away_since.get_or_insert(now);
-                if now.saturating_sub(since) > c.max_gap_ms {
+                if enforced && now.saturating_sub(since) > c.max_gap_ms {
                     return Held::Lost(Lost::Gap);
                 }
             }
@@ -434,13 +448,25 @@ pub fn hold_continuity(
     if let Some(since) = away_since {
         away_total += window.saturating_sub(since);
     }
-    if held.is_none() {
+    if enforced && held.is_none() {
         return Held::Lost(Lost::None_);
     }
     // the gaps, summed, against the share the window allows
-    if away_total * 100 > window * (100 - c.presence_pct.min(100)) {
+    let short = away_total * 100 > window * (100 - c.presence_pct.min(100));
+    if enforced && short {
         return Held::Lost(Lost::Ratio);
     }
+    // **off, and still said**: a run wants to know what the loop saw even
+    // where nothing turns on it, the check being the party's own (§7.5)
+    tracing::info!(
+        target: "cer",
+        enforced,
+        window_ms = window,
+        away_ms = away_total,
+        held = held.is_some(),
+        would_abandon = short,
+        "cer.continuity"
+    );
     Held::Kept(frames, prompts)
 }
 

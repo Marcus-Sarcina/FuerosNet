@@ -31,7 +31,7 @@ class MeetTest {
         // after the flow has begun
         assertEquals(Meet.Adopt.THEM_UNDER_ME, meet(Meet.Adopt.THEM_UNDER_ME).adopt)
         assertEquals(Meet.Adopt.NONE, meet().adopt)
-        assertTrue(meet(backup = true).kind.askBackup)
+        assertTrue(meet(backup = true).kind.peering)
     }
 
     @Test
@@ -468,7 +468,7 @@ class MeetConversationTest {
     }
 
     @Test
-    fun no_witness_is_surfaced_to_the_person_and_nothing_is_proposed_meanwhile() {
+    fun no_witness_is_surfaced_to_the_person_and_the_record_will_say_so() {
         val m = atVerifiers()
         // a nominee is outstanding, so an answer can still arrive
         m.nominated(mine = listOf("w1"), theirs = listOf())
@@ -476,13 +476,15 @@ class MeetConversationTest {
         m.converse(c)
         assertEquals(Meet.Step.VERIFIERS, m.step())
         assertTrue(m.noWitness())
-        assertNull("not a stop: the person decides", m.stopReason())
+        assertNull("not a stop: there is no witness floor", m.stopReason())
         m.poll(c)
         // **the kernel's word, not a refusal to collect** [client review,
-        // 2026-10-11]: a body that cannot be proposed is not proposed, and
-        // the person is told once
+        // 2026-10-11]: a body the kernel does not call proposable is not
+        // proposed, and the person is told once what the record will say
         assertEquals("never asked while it could not answer", 0, c.count("propose"))
-        assertEquals(1, m.log().count { it.contains("no nominee has agreed to attest") })
+        assertEquals(1, m.log().count { it.contains("no witness attests this meeting") })
+        m.poll(c)
+        assertEquals("said once, not once per turn", 1, m.log().count { it.contains("no witness attests this meeting") })
         // a late nominee answers, the kernel says a body would come of it,
         // and the one attempt goes
         c.progress = Meet.Progress(
@@ -497,23 +499,24 @@ class MeetConversationTest {
         assertFalse(m.noWitness())
     }
 
-    /** **The body waits only where a witness can still arrive.** On the
-     *  bench two phones that had each met somebody sat at the verifiers
-     *  with `nominees: 0`, the proposer asking the kernel every turn for
-     *  a witness nobody had been asked to be. */
+    /** **A missing witness stops nothing** [author, 2026-10-19]: there is
+     *  no witness floor, and with nobody nominated the meeting proceeds to
+     *  a witnessless body the moment the kernel calls it proposable — the
+     *  absent witness field says what happened to every later reader. */
     @Test
-    fun no_witness_with_nobody_nominated_stops_the_meeting_and_says_why() {
+    fun no_witness_with_nobody_nominated_proposes_the_witnessless_body() {
         val m = atVerifiers()
         val c = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0, noWitness = true))
         m.converse(c)
-        assertEquals(Meet.Step.STOPPED, m.step())
-        assertTrue(m.stopReason()!!, m.stopReason()!!.contains("neither side nominated"))
+        assertEquals("not a stop", Meet.Step.VERIFIERS, m.step())
+        c.progress = Meet.Progress(proposer = true, queriesOutstanding = 0, noWitness = true, proposable = true)
         m.poll(c)
-        assertEquals("and the kernel is never asked to propose it", 0, c.count("propose"))
+        assertEquals(1, c.count("propose"))
+        assertEquals(Meet.Step.REVIEW, m.step())
     }
 
     @Test
-    fun no_witness_with_every_nominee_declined_stops_the_meeting_and_says_why() {
+    fun no_witness_with_every_nominee_declined_proposes_the_witnessless_body() {
         val m = atVerifiers()
         m.nominated(mine = listOf("w1"), theirs = listOf("w2"))
         val c = FakeCourier(
@@ -522,11 +525,13 @@ class MeetConversationTest {
                 queriesOutstanding = 0,
                 declined = listOf("w1", "w2"),
                 noWitness = true,
+                proposable = true,
             ),
         )
         m.converse(c)
-        assertEquals(Meet.Step.STOPPED, m.step())
-        assertTrue(m.stopReason()!!, m.stopReason()!!.contains("every nominee declined"))
+        // not a stop: the body goes out witnessless at once
+        assertEquals(1, c.count("propose"))
+        assertEquals(Meet.Step.REVIEW, m.step())
     }
 
     /** **An exchange is handed to the kernel once**, whichever path saw it
@@ -1017,12 +1022,44 @@ class MeetRowsTest {
         assertFalse(m.brief().joinToString(" ") { it.text }.contains("patron"))
     }
 
+    /**
+     * **The inviter's box is what the meeting carries**, and a responder
+     * learns it from the bootstrap [bench, 2026-10-19]: its own `kind` is
+     * its own screen's answer, which it never gave — it scanned.
+     */
     @Test
-    fun a_backup_request_says_what_leaves_and_what_does_not() {
+    fun a_responder_takes_the_peering_from_the_inviters_code() {
+        val them = meet(role = Meet.Role.RESPONDER)
+        them.counterparty("bb")
+        assertFalse("nothing asked for yet", them.peeringAsked())
+        assertFalse(them.brief().joinToString(" ") { it.text }.contains("peering"))
+        // the inviter's code said it did
+        them.theirPeering(true)
+        assertTrue("the inviter asked", them.peeringAsked())
+        assertTrue(
+            "and the brief says so before anything is signed",
+            them.brief().joinToString(" ") { it.text }.contains("peering"),
+        )
+        // the responder's own kind stays what it was: it chose nothing
+        assertFalse(them.kind.peering)
+        // and an inviter answers from its own box, not from a code
+        assertTrue(meet(backup = true).peeringAsked())
+        assertFalse(meet().peeringAsked())
+    }
+
+    @Test
+    fun the_peering_the_checkbox_asked_for_is_in_the_brief() {
         val text = meet(backup = true).brief().joinToString(" ") { it.text }
+        // **the peering is named**, not only the backup it entitles them
+        // to: the box asked for a transaction [author, 2026-10-19]
+        assertTrue("the peering is named", text.contains("peering"))
+        assertTrue("neither is over the other", text.contains("over the"))
         assertTrue(text.contains("encrypted backup"))
         assertTrue("biometrics and secrets stay", text.contains("never leave this device"))
-        assertFalse(meet().brief().joinToString(" ") { it.text }.contains("encrypted backup"))
+        // and a meeting that asked for none says nothing of either
+        val plain = meet().brief().joinToString(" ") { it.text }
+        assertFalse(plain.contains("encrypted backup"))
+        assertFalse(plain.contains("peering"))
     }
 
     // ---- D6: UX-003 ---------------------------------------------------

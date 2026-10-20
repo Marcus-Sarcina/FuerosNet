@@ -3,7 +3,7 @@
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md).
 
-**Pinned**: wire-format.md `381823a91a3edfc7b7f83f4f8ea1c85a80bd1a9c282d18bb8c330315efd02e58` · network-design.md `7a9252b216c63fae90b9a392ce3705126b02b72e62a084bd815232b2636b7e04`
+**Pinned**: wire-format.md `ce0078a95a10515dc8a2a346fc5198ff7c7e7572e7e02cf659428345b455aaed` · network-design.md `e7f289d2058761d923e565296943ba9fbfcffd3e974a8808fb25aeddf5f3bf70`
 
 ## The result model is structured, not a single status
 
@@ -181,7 +181,8 @@ photo comparison without its template version is unverifiable as evidence:
 | T59 | An `AnchorEntry` whose field 1 is not 32 bytes (`N-anchor-keyhash-width`) | §7.2: field 1 is a `keyhash`, 32 bytes by §2.2; the network points beside it were checked for shape and the signer's own identifier was not [2026-10-01] |
 | T50 | A presence body carrying retired key 7, or a `Witness` carrying retired key 4 or 5 | §4.5 [2026-09-02]: retired numbers are tombstones, not extension space — a decoder meeting one rejects, the §4 type-6 rule. An unknown key is one the schema never assigned; a retired key is one it remembers |
 | T51 | A normal presence record whose key 5 is an **empty array** | §4.5 [2026-09-02]: zero responses omit the key — the empty-array spelling gives one logical record two encodings. The over-strictness complement: an implementation reading field 5 as required-with-empty emits this and rejects the valid absent spelling |
-| T52 | A normal presence record none of whose witnesses set both `protocol_ran` and `both_responsive` | §3.2 [author, 2026-09-03]: the witness floor counts only entries with bits 0 and 1 both set — a witness attesting nothing (or latency alone) is partial evidence, present but not corroborating, and a normal record with no affirmative witness fails. The uncorroborated meeting remains expressible as a formation record, visible as what it is. `latency_bound` (bit 2) stays genuinely optional: the existing bits-3 fixtures are positives |
+| T60 | A normal presence record whose key 4 is an **empty array** (`N-witness-empty-array`) | §3.2 [author, 2026-10-19]: there is no witness floor and zero witnesses omit the key — §1's empty rule, as field 5 (T51). The over-strictness complement: an implementation reading field 4 as required-with-empty emits this and rejects the valid absent spelling |
+| T52 | ~~A normal presence record none of whose witnesses set both `protocol_ran` and `both_responsive`~~ | **Retired 2026-10-19** [author]: the witness floor is gone (§3.2) and the affirmative-attestation count went with it — an entry without bits 0 and 1 both set is partial evidence, a reading for the record's consumers, not a validity rule, and a record with no corroborating witness is valid and permanently reads as what it is. The id is not reused |
 | T53 | A response whose `subject` names neither participant | §5.5's binding: the subject must be one of the record's two participants — with history held, malformed |
 | T54 | A response transplanted under a `query_id` the subject never countersigned | §5.5's binding: the query_id must match one the subject consented to — a valid response to a different query is a forged slot |
 | T55 | A presence record or `Recovery` block whose verifier responses are not sorted ascending by verifier keyhash, ties by ascending subject keyhash | §4.5/§4.1 [2026-09-02]: the witness rule — one set, one encoding; the tie is D15's one-verifier-both-participants case. An implementation preserving assembly order emits bytes a validator rejects |

@@ -13867,6 +13867,137 @@ rejections in the corpus, and both introduction kinds are listed in the
 corpus runner so a rejection that starts passing fails rather than being
 skipped.
 
+### 2026-10-20 (the floor removed from under the witness count)
+
+**There is no witness floor** [author, 2026-10-19]: "No, we don't need to
+enforce witness count." A non-formation meeting between a new user and a
+user with one or two prior contacts could fail at the end of its run
+because a witness went offline, or be unable to begin because no particular
+witness was awake — and the only consumers of a meeting record are the
+participants and the future patrons reviewing their archives, to whom **a
+witnessless meeting after a period of claimed activity is itself
+suspicious** without the software preventing the meeting. A normal record
+with no witnesses is therefore valid: field 4 absent under §1's empty rule,
+as field 5, the absence inside the signed body and permanently readable.
+
+What moved. Wire §3.2's floor bullet replaced and §4.5's field 4 made
+conditional on a witness having signed; the subtype comment corrected,
+since absent keys 4 and 5 no longer announce a formation — field 6 and the
+genesis back-pointers do; the Witness bitfield comment no longer counts
+toward a floor, bits 0 and 1 marking a corroborating entry as a reading for
+the record's consumers. Design §6.4's "the one witnessless shape" aligned
+with §13.2's two shapes. The codec dropped the floor and the
+affirmative-attestation count with it; the kernel's NoWitness abort is
+gone, `propose` no longer refuses, the body builder omits the empty key and
+the conversation parser accepts its absence. T52 retired with the count it
+enforced; T60 added as the over-strictness complement (key 4's empty-array
+spelling rejects, as T51 for key 5), with `P-normal-witnessless` and
+`N-witness-empty-array` in the corpus. CER-50's second meeting finalizes as
+a witnessless normal record where it used to wait for a witness; DEC-21's
+flipped-formation case inverted — the body check passes, and the shape is
+held at the chain as any fork at genesis. TX-020 and CER-025 restated.
+
+### 2026-10-19 (the witness watches the transaction happen)
+
+**The ceremony is reordered around what a witness is for, and the nomination
+rule is reversed** [author, 2026-10-19]. The run data forced the question: the
+witness was asked 45 seconds into a 70-second ceremony and received the whole
+conversation in a 2.9-second burst at the end — a reader of finished records,
+adding no friction to a replay. The author's ruling: for the witness role to
+do its job, observing the live flow matters more than adversarial selection,
+which optimised the record for a global reader this network refuses to have.
+
+**The new shape of §7.1.** Each party engages **up to eight witnesses from its
+own contacts** before the counterparty has accepted — the acting subnet's
+horizon held as direct contacts, parties met in person anywhere, anything else
+by explicit choice. The nominees watch from the intent on: the optical
+exchange reaches them as a **trace** — block counts declared, each inbound
+index as it lands, each outbound index as the counterparty's display
+acknowledges it — and never as content, one contribution being half the local
+session's key. The transcript confirmation binds the trace to the ceremony-id
+under the engagement's handle. **The sets then cross by locator and each party
+prunes the other's to `min(3, offered)`**: every survivor nominated by one
+side and selected by the other, which is cross-nomination's property rebuilt
+on a reachable pool — three corrupt of eight survive intact once in fifty-six.
+The id-bearing request opens the **four-minute window**, inside which the
+proximity channels (NFC now polled opportunistically, never waited on), the
+guided capture and the verifier queries all run concurrently, every leg
+reaching the six survivors as it is sent. Three survive a side so two can
+sign; the third is margin, not a role.
+
+**What the reversal concedes, written down rather than discovered.** §7.1.1's
+fake-region sizing lever is given up; the anti-fabrication duty sits with the
+verifier queries, which test the counterparty's history against the
+evaluator's own graph, and with the capture. The dropout margin absorbs a
+refusal as readily as an outage for a *post-hoc* reader — the live circuit is
+what hears a refusal loudly, and the reader it stays mute to is the evaluator
+of a record both participants wanted, which is bilateral collusion and out of
+scope. A witness set is not evidence of its nominator's subnet memberships,
+the pool including anyone ever learned of; what remains is statistical and the
+default pool is hygiene against it (P42). Witness engagement discloses the
+intent to one's own chosen contacts before acceptance, meetings that never
+complete included (P41). **The depth of witness selection scales with the pool
+of users who have an interest in the party being witnessed** [author]: a fresh
+node's thin set is its correct value, the meeting stands, and `wire-format.md`
+§3.2's one-witness floor on a normal record is unchanged, zero remaining the
+formation case alone.
+
+Design §7.1, §7.1.1, §19.2, P41, P42; `light-client-requirements.md` §1.1
+rewritten and §1.2's witness obligations extended to arrival times; CER-002
+rewritten, NET-022/NET-023's ordering clauses, §7.1's step numbering followed
+by its citations. **The wire, the kernel and the shell do not yet implement
+this**: the engagement, trace, set-exchange and proximity-update legs need
+registered kinds and the ceremony engine reordered, which is the next pass.
+
+### 2026-10-19 (the checkbox asks for the peering, and the continuity check is off)
+
+**The box on the plain meeting is the peering, as it was always meant to be**
+[author, 2026-10-19]. It read *"Ask this person to backup my user data"* and
+set a flag that put one line in the brief and did nothing else — while design
+§3.4 makes that backup **what a peering record entitles the two of you to**,
+so the box promised a transaction the flow never made. The author's own
+dialogue had the peering as a checkbox on the regular meeting from the start.
+So `Kind.askBackup` becomes `Kind.peering`, the box reads *"Also peer with
+this person"*, the brief names the peering and what follows from it, and the
+peering is begun where the record lands — beside the adoption and independent
+of it. **A3's offer moves off the end screen**, which now reports rather than
+asks; a meeting that asked for none shows nothing. The flag already crossed in
+the bootstrap, so the responder read the inviter's choice all along; only the
+meaning was missing. L §7, UX-019, PRD-16.
+
+**And the continuity check is off where no window is set** [author,
+2026-10-18, as the bench read it]. Two bench attempts died at
+`cer.capture.lost why=Ratio`: a probe costs the real detector about 430 ms on
+an S21, so a cycle is near a second, and two probes without a face is already
+a fifth of a ten-second window against a ninety per cent ratio. **Design
+§7.5's ratio is a figure for four minutes**, where a lapse is a small share of
+a long window; re-scaled onto the capture's own span it meant something far
+harsher, which was a mistake in how the inactive floor was read rather than
+anything the engine did. A window of zero now abandons nothing: the capture
+runs, the loop still probes and reports what it saw on a new `cer.continuity`
+line, and all three rules return the moment a duration is set. CER-66 holds
+both halves.
+
+### 2026-10-18 (the commentary off the screen)
+
+**The ceremony's running commentary is no longer drawn** [author,
+2026-10-18]. The Meet screen rendered every log line in grey and scrolled
+the page to the bottom to keep the newest in sight, which put the person's
+own content and the controls above the fold on every render; the adoption's
+and the peering's notice lines did the same inside their sections. It was
+there to read a bench run off a screen, and a bench run is read from the
+diagnostic stream now — `Meet.note`, `adopt.note` and `peer.note` each emit
+every line as it is made, so **nothing is lost and one duplicate view is
+gone**. The page now stays at the top, where the step, what it is waiting on
+and the controls are.
+
+**What stays, and why.** The Conversations screen's notice lines are drawn
+only in its empty state, where they are the provisioning guidance and there
+is no content for them to push away. The in-memory lists stay too: they are
+what a test asserts against, and each now says in its own documentation that
+no screen draws it, so the rendering is not re-added by somebody reading the
+getter and assuming a reader.
+
 ### 2026-10-18 (the peering's screen, and who builds the body)
 
 **A3's shell is built.** The kernel act was there since 2026-10-15 and the
