@@ -2928,10 +2928,36 @@ intro_c1 = e_arr([e_uint(1), IDS['c1'].key_material, sl_c1])
 sl_bob = signed_locator_by(bob, locator(bob.keyhash, b'\x40', seqno(1, 0)))
 # one candidate per proposal, in turns (§5.1): the proposal is the introduction
 fishing_proposal = intro_c1
+# the opening's kinds (s7.10.1, 20-25) [author, 2026-10-19]: what a
+# participant and its own nominees say to one another from the intent, and
+# the prune's two legs between the participants. One handle per nominating
+# side per ceremony attempt; the request's field 5 closes the loop.
+conv_handle = H(b'rhtn-test-vectors:engagement-handle:alice')
 witness_request = e_map([(e_uint(1), e_bstr(npr_precommit)),
                          (e_uint(2), e_arr([e_bstr(i.keyhash) for i in conv_parts])),
                          (e_uint(3), e_uint(TS_C2)),
-                         (e_uint(4), e_arr(conv_channels))])
+                         (e_uint(4), e_arr(conv_channels)),
+                         (e_uint(5), e_bstr(conv_handle))])
+witness_engagement = e_map([(e_uint(1), e_bstr(conv_handle)),
+                            (e_uint(2), e_uint(TS_C2)),
+                            (e_uint(3), e_bstr(bob.keyhash))])
+witness_engagement_blind = e_map([(e_uint(1), e_bstr(conv_handle)),
+                                  (e_uint(2), e_uint(TS_C2))])
+trace_shape = e_map([(e_uint(1), e_bstr(conv_handle)), (e_uint(2), e_uint(0)),
+                     (e_uint(3), e_uint(7)), (e_uint(4), e_uint(5))])
+trace_inbound = e_map([(e_uint(1), e_bstr(conv_handle)), (e_uint(2), e_uint(1)),
+                       (e_uint(3), e_uint(3))])
+trace_outbound = e_map([(e_uint(1), e_bstr(conv_handle)), (e_uint(2), e_uint(2)),
+                        (e_uint(3), e_uint(6))])
+trace_confirmed = e_map([(e_uint(1), e_bstr(conv_handle)), (e_uint(2), e_uint(3)),
+                         (e_uint(5), e_bstr(npr_precommit))])
+trace_confirmed_bad = e_map([(e_uint(1), e_bstr(conv_handle)), (e_uint(2), e_uint(3)),
+                             (e_uint(3), e_uint(3)), (e_uint(5), e_bstr(npr_precommit))])
+intro_w1 = introduction(IDS['w1'], locator(bob.keyhash, b'\x30', seqno(1, 2)))
+witness_set = e_arr([intro_c1, intro_w1])
+witness_keep = e_arr([e_bstr(i) for i in sorted([IDS['c1'].keyhash, IDS['w1'].keyhash])])
+witness_standdown = e_map([(e_uint(1), e_bstr(conv_handle))])
+proximity_update = e_map([(e_uint(1), e_bstr(npr_precommit)), (e_uint(2), conv_channels[0])])
 witness_answer_yes = e_map([(e_uint(1), b'\xf5'), (e_uint(2), e_uint(7))])
 witness_answer_no = e_map([(e_uint(1), b'\xf4')])
 gathered_responses = e_arr(npr_responses)
@@ -2972,7 +2998,7 @@ _conv_pairs = [
     ('VerificationQuery, kind 9 — the normal record\'s first query as the querier sends it to the subject for consent; to the subject alone, never to a witness (§5.6)', npr_query0, 9),
     ('ConsentReply, kind 10 — the subject\'s consent over that query_id', consent_reply, 10),
     ('FishingProposal, kind 11 — one candidate offered in turn: an introduction to c1', fishing_proposal, 11),
-    ('WitnessRequest, kind 12 — the normal record\'s ceremony put to a nominee: its pre-commitment as ceremony-id, the participants in body order, the claimed start, NFC and optical passing', witness_request, 12),
+    ('WitnessRequest, kind 12 — the normal record\'s ceremony put to a nominee: its pre-commitment as ceremony-id, the participants in body order, the claimed start, NFC and optical passing, and the engagement handle the request closes (field 5)', witness_request, 12),
     ('WitnessAnswer, kind 13 — witnessing, with the attestation bits it will set (7: protocol ran, both responsive, latency bound)', witness_answer_yes, 13),
     ('WitnessAnswer, kind 13 — declining; no bits', witness_answer_no, 13),
     ('GatheredResponses, kind 14 — the normal record\'s three responses in body order, for the proposer', gathered_responses, 14),
@@ -2980,6 +3006,13 @@ _conv_pairs = [
     ('ProposedBody, kind 16 — the normal record\'s body with its seven revealed disclosure slots', proposed_body, 16),
     ('SigningReply, kind 17 — the lowest-keyhash signer\'s two envelope entries over that body', signing_reply_signed, 17),
     ('SigningReply, kind 17 — a refusal: a witness attributed to this party that it did not nominate, with the witness keyhash', signing_reply_refused, 17),
+    ('WitnessEngagement, kind 20 — the nomination itself, sent with the intent before the counterparty has accepted anything; the handle every message of the opening carries', witness_engagement, 20),
+    ('ExchangeTrace, kind 21 — event 0, the shape: seven blocks to transmit, five declared by the counterparty', trace_shape, 21),
+    ('ExchangeTrace, kind 21 — event 3, the transcript confirmed: the ceremony-id, which the request\'s field 1 repeats', trace_confirmed, 21),
+    ('WitnessSet, kind 22 — the sender\'s nominees by locator, between the participants on the local interface, for the counterparty\'s prune', witness_set, 22),
+    ('WitnessKeep, kind 23 — of the counterparty\'s set, the ones the sender keeps: min(3, offered)', witness_keep, 23),
+    ('WitnessStanddown, kind 24 — a nominee that did not survive the prune; its part ends here', witness_standdown, 24),
+    ('ProximityUpdate, kind 25 — one channel\'s outcome to the surviving witnesses of both sides, as it lands inside the window', proximity_update, 25),
 ]
 # kind 18 is the finalised Envelope, `P-normal-record` in records.md
 _ctrl_md, _req_md, _msg_md = [], [], []
@@ -4272,6 +4305,16 @@ for fid, by, kind, note in [
     ('P-signing-reply-signed', signing_reply_signed, 'SigningReply', "the lowest-keyhash signer's two entries"),
     ('P-signing-reply-refused', signing_reply_refused, 'SigningReply', 'refusal 1 with the witness keyhash'),
     ('P-signing-reply-refused-4', signing_reply_refused_4, 'SigningReply', 'refusal 4, the body does not verify against what this signer holds; no particular'),
+    ('P-witness-engagement', witness_engagement, 'WitnessEngagement', 'the nomination with the intent; the counterparty already read off their code (s7.10.2)'),
+    ('P-witness-engagement-blind', witness_engagement_blind, 'WitnessEngagement', 'the nominator has only shown a code: no counterparty yet'),
+    ('P-exchange-trace-shape', trace_shape, 'ExchangeTrace', 'event 0: seven blocks to transmit, five declared'),
+    ('P-exchange-trace-inbound', trace_inbound, 'ExchangeTrace', 'event 1: inbound block 3 landed'),
+    ('P-exchange-trace-outbound', trace_outbound, 'ExchangeTrace', "event 2: outbound block 6 acknowledged on the counterparty's display"),
+    ('P-exchange-trace-confirmed', trace_confirmed, 'ExchangeTrace', "event 3: the ceremony-id fixed, equal to the request's field 1"),
+    ('P-witness-set', witness_set, 'WitnessSet', "two nominees by locator, for the counterparty's prune"),
+    ('P-witness-keep', witness_keep, 'WitnessKeep', "both of the counterparty's two kept: min(3, offered)"),
+    ('P-witness-standdown', witness_standdown, 'WitnessStanddown', 'a nominee dismissed at the prune'),
+    ('P-proximity-update', proximity_update, 'ProximityUpdate', "one channel's outcome inside the window, to the surviving witnesses"),
 ]:
     reg(fid, 'bytes', ACC(kind, note), by)
 # sorted ascending bytewise, as a list longer than one is (§3.1)
@@ -4289,13 +4332,33 @@ reg('B-witness-request-channels-8', 'bytes',
     e_map([(e_uint(1), e_bstr(npr_precommit)),
            (e_uint(2), e_arr([e_bstr(i.keyhash) for i in conv_parts])),
            (e_uint(3), e_uint(TS_C2)),
-           (e_uint(4), e_arr(conv_channels * 4))]))
+           (e_uint(4), e_arr(conv_channels * 4)),
+           (e_uint(5), e_bstr(conv_handle))]))
 reg('B-witness-request-channels-9', 'bytes',
     REJ('WitnessRequest', 'schema', 'nine channels exceed the ceiling of eight'),
     e_map([(e_uint(1), e_bstr(npr_precommit)),
            (e_uint(2), e_arr([e_bstr(i.keyhash) for i in conv_parts])),
            (e_uint(3), e_uint(TS_C2)),
-           (e_uint(4), e_arr(conv_channels * 4 + conv_channels[:1]))]))
+           (e_uint(4), e_arr(conv_channels * 4 + conv_channels[:1])),
+           (e_uint(5), e_bstr(conv_handle))]))
+reg('N-witness-request-no-handle', 'bytes',
+    REJ('WitnessRequest', 'schema', 'field 5 is required: the request closes an engagement (s7.10.2, T63, 2026-10-19)'),
+    e_map([(e_uint(1), e_bstr(npr_precommit)),
+           (e_uint(2), e_arr([e_bstr(i.keyhash) for i in conv_parts])),
+           (e_uint(3), e_uint(TS_C2)),
+           (e_uint(4), e_arr(conv_channels))]))
+reg('N-trace-confirmed-with-index', 'bytes',
+    REJ('ExchangeTrace', 'schema', "the event's fields are its own: a confirmation carries the ceremony-id and no index (s7.10.2, T62)"),
+    trace_confirmed_bad)
+reg('B-witness-set-9', 'bytes',
+    REJ('WitnessSet', 'schema', 'nine nominees exceed the ceiling of eight (s7.10.2, T61)'),
+    e_arr([intro_c1] * 9))
+reg('B-witness-keep-4', 'bytes',
+    REJ('WitnessKeep', 'schema', "four kept exceed the prune's three (s7.10.2, T61)"),
+    e_arr([e_bstr(H(b'rhtn-test-vectors:kept:' + bytes([i]))) for i in range(4)]))
+reg('N-witness-keep-duplicate', 'bytes',
+    REJ('WitnessKeep', 'schema', 'a kept nominee is named once (s7.10.2, T61)'),
+    e_arr([e_bstr(IDS['c1'].keyhash), e_bstr(IDS['c1'].keyhash)]))
 reg('B-gathered-responses-32', 'bytes',
     ACC('GatheredResponses', "thirty-two responses, the per-record ceiling: the normal record's first, repeated"),
     e_arr([npr_responses[0]] * 32))

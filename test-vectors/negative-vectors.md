@@ -3,7 +3,7 @@
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md).
 
-**Pinned**: wire-format.md `ce0078a95a10515dc8a2a346fc5198ff7c7e7572e7e02cf659428345b455aaed` · network-design.md `e7f289d2058761d923e565296943ba9fbfcffd3e974a8808fb25aeddf5f3bf70`
+**Pinned**: wire-format.md `09c7102431ecab5bef3d1a0f1bf54c8f43b6f5d122d3067a4bb0db90d850e8b3` · network-design.md `e7f289d2058761d923e565296943ba9fbfcffd3e974a8808fb25aeddf5f3bf70`
 
 ## The result model is structured, not a single status
 
@@ -183,6 +183,9 @@ photo comparison without its template version is unverifiable as evidence:
 | T51 | A normal presence record whose key 5 is an **empty array** | §4.5 [2026-09-02]: zero responses omit the key — the empty-array spelling gives one logical record two encodings. The over-strictness complement: an implementation reading field 5 as required-with-empty emits this and rejects the valid absent spelling |
 | T60 | A normal presence record whose key 4 is an **empty array** (`N-witness-empty-array`) | §3.2 [author, 2026-10-19]: there is no witness floor and zero witnesses omit the key — §1's empty rule, as field 5 (T51). The over-strictness complement: an implementation reading field 4 as required-with-empty emits this and rejects the valid absent spelling |
 | T52 | ~~A normal presence record none of whose witnesses set both `protocol_ran` and `both_responsive`~~ | **Retired 2026-10-19** [author]: the witness floor is gone (§3.2) and the affirmative-attestation count went with it — an entry without bits 0 and 1 both set is partial evidence, a reading for the record's consumers, not a validity rule, and a record with no corroborating witness is valid and permanently reads as what it is. The id is not reused |
+| T61 | A `WitnessSet` of nine nominees, a `WitnessKeep` of four, or a keep naming one nominee twice (`B-witness-set-9`, `B-witness-keep-4`, `N-witness-keep-duplicate`) | §7.10.2 [author, 2026-10-19]: a participant engages up to eight, the counterparty keeps `min(3, offered)`, and a nominee kept twice would read as two survivors. The keep's membership in the set it answers is contextual — the bytes alone cannot carry it — so the shape bounds are what a decoder holds |
+| T62 | An `ExchangeTrace` whose fields are not the event's own (`N-trace-confirmed-with-index`) | §7.10.2's conditional-field matrix: the shape event carries both block counts, a block event its index alone, the confirmation the ceremony-id alone. The fixture is a confirmation carrying an index — schema-valid field widths whose combination no event admits |
+| T63 | A `WitnessRequest` without field 5 | §7.10.2 [author, 2026-10-19]: the request closes an engagement and the handle is required — the pre-reorder four-key encoding, which a decoder now rejects rather than reads as a request from nowhere |
 | T53 | A response whose `subject` names neither participant | §5.5's binding: the subject must be one of the record's two participants — with history held, malformed |
 | T54 | A response transplanted under a `query_id` the subject never countersigned | §5.5's binding: the query_id must match one the subject consented to — a valid response to a different query is a forged slot |
 | T55 | A presence record or `Recovery` block whose verifier responses are not sorted ascending by verifier keyhash, ties by ascending subject keyhash | §4.5/§4.1 [2026-09-02]: the witness rule — one set, one encoding; the tie is D15's one-verifier-both-participants case. An implementation preserving assembly order emits bytes a validator rejects |

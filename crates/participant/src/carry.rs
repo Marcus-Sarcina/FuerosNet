@@ -158,11 +158,12 @@ pub fn take_channels(s: &str) -> Result<Vec<Achieved>, String> {
 /// A witness request as one line a terminal can carry.
 pub fn pack_ask(a: &WitnessAsk) -> String {
     format!(
-        "{}|{}|{}|{}",
+        "{}|{}|{}|{}|{}",
         hex(&a.ceremony),
         list(a.participants.iter().map(|p| hex(p)).collect()),
         a.started_at,
-        pack_channels(&a.channels)
+        pack_channels(&a.channels),
+        hex(&a.handle)
     )
 }
 
@@ -174,6 +175,7 @@ pub fn take_ask(s: &str) -> Result<WitnessAsk, String> {
         participants: ids(field(&f, 1, "an ask")?, "a participant")?,
         started_at: num(field(&f, 2, "an ask")?, "time")?,
         channels: take_channels(field(&f, 3, "an ask")?)?,
+        handle: bytes(field(&f, 4, "an ask")?, "a handle")?,
     })
 }
 

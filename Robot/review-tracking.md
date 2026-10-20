@@ -18673,3 +18673,27 @@ test renamed and reshaped. Corpus regenerated, pins re-accepted.
 **Still open**: the witness-reorder code cascade listed above (wire kinds →
 kernel reorder → ffi → shell → bench SPREAD run) — unchanged by this pass
 except that no leg of it may reintroduce a floor.
+
+
+## 2026-10-20 — the reorder's wire layer landed
+
+Kinds 20-25 (engagement w/ handle, trace w/ events 0-3 and its
+conditional-field matrix, set by Introduction, keep ≤3 distinct,
+standdown, proximity-update), WitnessRequest field 5 REQUIRED (T63; the
+old four-key encoding rejects). Who-hears-what written into §7.10.1:
+20/21/24 nominator→own nominees only, 22/23 participants-local only (no
+witness sees the prune), 25 to both sides' survivors, ceremony-id twice
+and MUST agree. §14.2 inventory split stated. Codec checks all six +
+request field 5 (bounds WITNESSES_ENGAGED=8, WITNESSES_KEPT=3); kernel
+mints the handle at begin and carries it (Active.handle) — the opening's
+SENDING is heading C. ffi WitnessAsk + handle; participant carry packs it
+as field 5. Corpus: 11 positives, 5 negatives, T61-63 registered;
+verify.py conversation block now 17 entries + handle/keep-subset checks.
+Catalogue: DEC-37 (implemented, decoder.rs), CER-67/68/69/70 (stubs, the
+kernel reorder's queue); CER-47 requoted after the §7.10.1 edit.
+Functional: NET-032 new, NET-022/SCH-026 amended, counts 530/NET-32.
+
+**Next (heading C, kernel)**: engage at begin → trace events off the
+optical exchange → id-fix event → set/keep legs over the local channel →
+standdown/request split → stream legs to survivors → proximity updates →
+witness-side CER-70 checks (handle binding, id agreement) → ffi/shell.

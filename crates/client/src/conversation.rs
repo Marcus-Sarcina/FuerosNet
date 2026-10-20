@@ -90,7 +90,7 @@ impl WitnessRequest {
     /// measured.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
-        emit_map_head(&mut out, 4);
+        emit_map_head(&mut out, 5);
         emit_uint(&mut out, 1);
         emit_bstr(&mut out, &self.ceremony_id);
         emit_uint(&mut out, 2);
@@ -102,6 +102,8 @@ impl WitnessRequest {
         emit_uint(&mut out, self.started_at);
         emit_uint(&mut out, 4);
         emit_channels(&mut out, &self.channels);
+        emit_uint(&mut out, 5);
+        emit_bstr(&mut out, &self.handle);
         out
     }
 
@@ -120,6 +122,7 @@ impl WitnessRequest {
             participants,
             started_at: map_get(m, 3).and_then(as_uint).ok_or("started_at")?,
             channels: read_channels(map_get(m, 4).ok_or("channels")?)?,
+            handle: fixed32(b, map_get(m, 5).ok_or("handle")?)?,
         })
     }
 }

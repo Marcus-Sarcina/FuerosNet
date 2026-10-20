@@ -278,6 +278,9 @@ pub struct WitnessAsk {
     pub started_at: u64,
     /// What the participants' proximity channels achieved.
     pub channels: Vec<Achieved>,
+    /// The engagement handle the request closes (`wire-format.md`
+    /// §7.10.2 field 5).
+    pub handle: Id,
 }
 
 /// The record two parties are proposing, before anybody has signed it.
@@ -563,6 +566,7 @@ impl WitnessAsk {
                     resolution_m: c.resolution_m,
                 })
                 .collect(),
+            handle: r.handle.to_vec(),
         }
     }
 
@@ -582,6 +586,11 @@ impl WitnessAsk {
             participants,
             started_at: self.started_at,
             channels: self.channels.iter().map(inward_channel).collect(),
+            handle: self
+                .handle
+                .as_slice()
+                .try_into()
+                .map_err(|_| Refused::new("a handle is 32 bytes"))?,
         })
     }
 }

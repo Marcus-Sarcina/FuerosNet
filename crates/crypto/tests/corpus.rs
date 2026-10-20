@@ -285,6 +285,13 @@ fn implemented_kind(kind: &str) -> bool {
             | "FishingProposal"
             | "WitnessRequest"
             | "WitnessAnswer"
+            // the opening's kinds (s7.10.1, 20 to 25) [author, 2026-10-19]
+            | "WitnessEngagement"
+            | "ExchangeTrace"
+            | "WitnessSet"
+            | "WitnessKeep"
+            | "WitnessStanddown"
+            | "ProximityUpdate"
             | "GatheredResponses"
             | "BackPointers"
             | "ProposedBody"

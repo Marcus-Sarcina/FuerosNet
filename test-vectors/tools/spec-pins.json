@@ -1,25 +1,25 @@
 {
  "specs": {
-  "wire-format.md": "ce0078a95a10515dc8a2a346fc5198ff7c7e7572e7e02cf659428345b455aaed",
+  "wire-format.md": "09c7102431ecab5bef3d1a0f1bf54c8f43b6f5d122d3067a4bb0db90d850e8b3",
   "network-design.md": "e7f289d2058761d923e565296943ba9fbfcffd3e974a8808fb25aeddf5f3bf70",
   "light-client-requirements.md": "1df489e245f3776ebd00b5e145d8c9aef1beada032d96d444b04ff0d050f4faf"
  },
- "generator": "a158b6ce301d0e23fee04e97b874a4a5138c56558c642899774dfa8247d3b080",
- "verifier": "c64344431eea165c90c532b6ff7e8022ae6d3c134d9ba32fd8d60be07eaf5e5c",
+ "generator": "8ab752d6214920c0b6bf5cef234bf4dc94ba45c4b4a383a6f79a7b50cd07f5b2",
+ "verifier": "7e0536515aa219b595a6ec3cf007c2433cd44637039e039a89e2e352e0516269",
  "deps": {
   "dilithium-py": "1.4.0",
   "cryptography": "41.0.7"
  },
  "outputs": {
-  "keys.md": "632e5a7234e5b582aa05ad9673b0bfbdbf151ebc8c372feb4141cbc5546adad9",
-  "primitives.md": "40b5ef15f1811abc1bdf104f613f5e8ec1b4a81c036ab3e4225fb5e67bf36df3",
-  "transactions.md": "a51946295bbd75d2216f478d5445340a192498412a93fbe59e1933edde89f92f",
-  "records.md": "8831947c31d05f1090859c82a7280dd59e3dc4cda123fa0eba2b3ec350233ce8",
-  "verifier-selection.md": "269c5735d26953e661274c0b11d4de1824315b5b5fce46a4b16ed8d931cc874a",
-  "messages.md": "901ce498c4c531617101d343f24d5cd5977b8f3dcb81ffc25257f7bfec2a9d96",
-  "local-interfaces.md": "3a0d00dd12f8a6ef2e38d387b1605585e171cb97578ab2b90146bc43c269db92",
-  "corpus.json": "cd1fd8ce13e1ac2d2c7736647f1c7536cd8a59394bc31d4271ecedfe9cfe462f",
-  "README.md": "70ea3ff08f6753fc7248a7d2c926ba10dd52c6491e5023e39d1f74b2a0059dcf",
-  "negative-vectors.md": "8921dc0207a35b400d8dae636e6c355ec705c4f1831eec1b7b7983982ea32a71"
+  "keys.md": "82af7093b382078e7d56a8b7171198df5c77f9ae44bcb5fe929a2ca4291d650d",
+  "primitives.md": "ce6354f84aadc0d60763512531fee628a86006ecda3f2e9037d295ae95931a73",
+  "transactions.md": "d5c6e7f0cb28491a0c1a17c73e2e082d5d603a58e8eb2484bfe6f9dfa4462393",
+  "records.md": "bb5e6b37b2c6e523407e07a94a8e97aca06f0c401e92c92a1e672e5fa9700e56",
+  "verifier-selection.md": "17049701a2d1e0c90a4d37427d0a36ecff5cc1e47bd88f98bff08a3591d19ab5",
+  "messages.md": "ff82bba6368c2d1ac74f85a6fd61f9d99d8f1ba61cbdd69ac897d56a0a7b02c6",
+  "local-interfaces.md": "b5b9997cfd115b80fce3294e99b96bcbc69720d15bd703dd82289734acdc5147",
+  "corpus.json": "8d0cc5759cd9a9e306fab7917858ed9d01794863265aeb95fe56de595b1271ce",
+  "README.md": "9c05fe146c77540b5e55f758b0abea79244587d8d497638a6d6c3a7b9fa4b610",
+  "negative-vectors.md": "9cec7ec4c44ec1098d10c1cabca7976db2bf7399eb9b4030c3b8088fc4cf15cd"
  }
 }

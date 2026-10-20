@@ -1820,12 +1820,135 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
         // one candidate per proposal, in turns (§5.1): the proposal is the
         // introduction itself
         "FishingProposal" => introduction_ok(b, 0),
+        // ---- the opening's kinds (§7.10.1, 20 to 25) [author, 2026-10-19]
+        "WitnessEngagement" => {
+            let Item::Map(m) = item else {
+                return Err(Error("not map"));
+            };
+            if keyhash_at(b, m, 1).map(|k| k.len()) != Some(32) {
+                return Err(Error("a handle is 32 bytes"));
+            }
+            map_get(m, 2)
+                .and_then(as_uint)
+                .ok_or(Error("the claimed start"))?;
+            let counterparty = map_get(m, 3).is_some();
+            if counterparty && keyhash_at(b, m, 3).map(|k| k.len()) != Some(32) {
+                return Err(Error("a counterparty is a keyhash"));
+            }
+            if m.len() != 2 + usize::from(counterparty) {
+                return Err(Error("keys 1 to 3 only"));
+            }
+            Ok(())
+        }
+        "ExchangeTrace" => {
+            let Item::Map(m) = item else {
+                return Err(Error("not map"));
+            };
+            if keyhash_at(b, m, 1).map(|k| k.len()) != Some(32) {
+                return Err(Error("a handle is 32 bytes"));
+            }
+            let event = map_get(m, 2).and_then(as_uint).ok_or(Error("the event"))?;
+            // the conditional-field matrix: the shape carries both counts, a
+            // block event its index, the confirmation the ceremony-id, and
+            // nothing an event does not name
+            let (index, declared, id) = (
+                map_get(m, 3).is_some(),
+                map_get(m, 4).is_some(),
+                map_get(m, 5).is_some(),
+            );
+            let fields_ok = match event {
+                0 => index && declared && !id,
+                1 | 2 => index && !declared && !id,
+                3 => !index && !declared && id,
+                _ => return Err(Error("an event is 0 to 3")),
+            };
+            if !fields_ok {
+                return Err(Error("the event's fields are its own"));
+            }
+            if index {
+                map_get(m, 3)
+                    .and_then(as_uint)
+                    .ok_or(Error("a count or index is a uint"))?;
+            }
+            if declared {
+                map_get(m, 4)
+                    .and_then(as_uint)
+                    .ok_or(Error("a declared count is a uint"))?;
+            }
+            if id && keyhash_at(b, m, 5).map(|k| k.len()) != Some(32) {
+                return Err(Error("a ceremony-id is 32 bytes"));
+            }
+            if m.len() != 2 + usize::from(index) + usize::from(declared) + usize::from(id) {
+                return Err(Error("keys 1 to 5 only"));
+            }
+            Ok(())
+        }
+        "WitnessSet" => {
+            let Item::Array(a) = item else {
+                return Err(Error("not array"));
+            };
+            if a.len() > WITNESSES_ENGAGED {
+                return Err(Error("nominees over eight"));
+            }
+            for r in array_item_ranges(b, 0).ok_or(Error("array walk"))? {
+                introduction_ok(b, r.start)?;
+            }
+            Ok(())
+        }
+        "WitnessKeep" => {
+            let Item::Array(hs) = item else {
+                return Err(Error("not array"));
+            };
+            if hs.len() > WITNESSES_KEPT {
+                return Err(Error("kept over three"));
+            }
+            let mut seen: Vec<&[u8]> = Vec::with_capacity(hs.len());
+            for h in hs {
+                match h {
+                    Item::Bytes(r) if r.len() == 32 => {
+                        let k = &b[r.clone()];
+                        if seen.contains(&k) {
+                            return Err(Error("a kept nominee is named once"));
+                        }
+                        seen.push(k);
+                    }
+                    _ => return Err(Error("a kept nominee is a keyhash")),
+                }
+            }
+            Ok(())
+        }
+        "WitnessStanddown" => {
+            let Item::Map(m) = item else {
+                return Err(Error("not map"));
+            };
+            if m.len() != 1 || keyhash_at(b, m, 1).map(|k| k.len()) != Some(32) {
+                return Err(Error("one key, a 32-byte handle"));
+            }
+            Ok(())
+        }
+        "ProximityUpdate" => {
+            let Item::Map(m) = item else {
+                return Err(Error("not map"));
+            };
+            if m.len() != 2 {
+                return Err(Error("keys 1 and 2"));
+            }
+            if keyhash_at(b, m, 1).map(|k| k.len()) != Some(32) {
+                return Err(Error("a ceremony-id is 32 bytes"));
+            }
+            let ch = map_get(m, 2).ok_or(Error("the channel"))?;
+            channels_ok(std::slice::from_ref(ch), false)
+        }
         "WitnessRequest" => {
             let Item::Map(m) = item else {
                 return Err(Error("not map"));
             };
-            if m.len() != 4 || !(1..=4).all(|k| map_get(m, k).is_some()) {
-                return Err(Error("keys 1 to 4"));
+            if m.len() != 5 || !(1..=5).all(|k| map_get(m, k).is_some()) {
+                return Err(Error("keys 1 to 5"));
+            }
+            // the engagement handle this request closes [author, 2026-10-19]
+            if keyhash_at(b, m, 5).map(|k| k.len()) != Some(32) {
+                return Err(Error("a handle is 32 bytes"));
             }
             if keyhash_at(b, m, 1).map(|k| k.len()) != Some(32) {
                 return Err(Error("a ceremony-id is 32 bytes"));
@@ -3052,7 +3175,7 @@ mod shapes {
 
     fn witness_request(ch: &[u8]) -> Vec<u8> {
         let mut o = Vec::new();
-        emit_map_head(&mut o, 4);
+        emit_map_head(&mut o, 5);
         emit_uint(&mut o, 1);
         bstr(&mut o, 32, 5);
         emit_uint(&mut o, 2);
@@ -3064,6 +3187,8 @@ mod shapes {
         emit_uint(&mut o, 4);
         emit_array_head(&mut o, 1);
         o.extend_from_slice(ch);
+        emit_uint(&mut o, 5);
+        bstr(&mut o, 32, 8);
         o
     }
 

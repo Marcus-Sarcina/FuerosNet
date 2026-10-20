@@ -989,11 +989,14 @@ def _sig_env(prot, payload):
 CONV = ['P-consent-reply', 'P-fishing-proposal', 'P-witness-request',
         'P-witness-answer-witnessing', 'P-witness-answer-declining',
         'P-gathered-responses', 'P-back-pointers', 'P-proposed-body',
-        'P-signing-reply-signed', 'P-signing-reply-refused']
+        'P-signing-reply-signed', 'P-signing-reply-refused',
+        'P-witness-engagement', 'P-exchange-trace-shape',
+        'P-exchange-trace-confirmed', 'P-witness-set', 'P-witness-keep',
+        'P-witness-standdown', 'P-proximity-update']
 conv_blocks = [h.replace('\n', '') for h in e2e[2:]]
 check(len(conv_blocks) == 1 + len(CONV) and conv_blocks[1:] == [byid[f]['hex'] for f in CONV],
-      'conversation: the ten typed corpus entries are byte-identical to the messages.md '
-      'blocks, kinds 10 to 17 in order after the kind-9 query')
+      'conversation: the seventeen typed corpus entries are byte-identical to the messages.md '
+      'blocks, kinds 10 to 17 and the opening 20 to 25 in order after the kind-9 query')
 check(conv_blocks[0] == enc(n_query).hex(),
       "conversation kind 9: the query sent for consent is the normal record's first worked query")
 npr_c = canonical(bytes.fromhex(byid['P-normal-record']['hex']))
@@ -1017,6 +1020,19 @@ check(wr[1] == n_query[3],
       "WitnessRequest: the ceremony-id is the normal record's pre-commitment (query field 3)")
 check(wr[2] == [pp[1] for pp in npr_c[3][3]] and wr[3] == npr_c[3][1],
       "WitnessRequest: the participants are the record's, in body field 3's order, and started_at is body field 1")
+# the opening (s7.10.1, 20-25): one handle through engagement, trace and
+# request; the trace's confirmation carries the id the request repeats
+eng = canonical(bytes.fromhex(byid['P-witness-engagement']['hex']))
+tc = canonical(bytes.fromhex(byid['P-exchange-trace-confirmed']['hex']))
+check(len(bytes.fromhex(eng[1])) == 32 and eng[1] == wr[5] == tc[1],
+      'opening: one engagement handle through the engagement, the trace and the request (field 5)')
+check(tc[5] == wr[1],
+      "opening: the trace confirmation's ceremony-id is the request's field 1")
+wset = canonical(bytes.fromhex(byid['P-witness-set']['hex']))
+wkeep = canonical(bytes.fromhex(byid['P-witness-keep']['hex']))
+check(len(wset) == 2 and sorted(wkeep) == sorted([KH['c1'], KH['w1']])
+      and all(i[2][1] in wkeep for i in wset),
+      'opening: the kept keyhashes are c1 and w1, each the subject of a nominee of the set it answers')
 # ProposedBody: the body as signed, and all seven slots revealed
 pb = canonical(bytes.fromhex(byid['P-proposed-body']['hex']))
 pb_body = bytes.fromhex(pb[1])

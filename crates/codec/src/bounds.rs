@@ -95,6 +95,12 @@ pub const DELEGATIONS_PER_CREDENTIAL: usize = 45;
 pub const WITNESS_REQUEST_CHANNELS: usize = 8;
 /// `VerifierResponse` entries per `GatheredResponses`: the per-record bound.
 pub const GATHERED_RESPONSES: usize = 32;
+/// Nominees a participant engages, and `Introduction` entries per
+/// `WitnessSet` (§7.10.2): eight, of which the counterparty keeps
+/// `min(3, offered)` (design §7.1 item 4).
+pub const WITNESSES_ENGAGED: usize = 8;
+/// Keyhashes per `WitnessKeep` (§7.10.2): the survivors of the prune.
+pub const WITNESSES_KEPT: usize = 3;
 /// `COSE_Signature` entries per `SigningReply`: one logical signer (§3.5).
 pub const SIGNING_REPLY_ENTRIES: usize = 2;
 /// A `DeviceCredential` delegation entry: a hybrid signature and its

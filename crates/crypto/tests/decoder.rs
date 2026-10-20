@@ -502,3 +502,117 @@ fn dec_23_a_packed_path_departing_from_its_encoding_is_rejected() {
         "a nonzero pad nibble, three nibbles"
     );
 }
+
+// acceptance: DEC-37
+#[test]
+fn dec_37_the_openings_structures_hold_their_shapes() {
+    let ids = identities();
+    let chk = |kind: &str, b: &[u8]| decode(&ids, "", kind, b);
+    fn b32(o: &mut Vec<u8>, fill: u8) {
+        emit_bstr(o, &[fill; 32]);
+    }
+    // an engagement: handle and start, the counterparty optional
+    let eng = |cp: bool| {
+        let mut o = Vec::new();
+        emit_map_head(&mut o, 2 + usize::from(cp));
+        emit_uint(&mut o, 1);
+        b32(&mut o, 1);
+        emit_uint(&mut o, 2);
+        emit_uint(&mut o, 1_700_000_000);
+        if cp {
+            emit_uint(&mut o, 3);
+            b32(&mut o, 2);
+        }
+        o
+    };
+    assert!(chk("WitnessEngagement", &eng(false)).is_ok());
+    assert!(chk("WitnessEngagement", &eng(true)).is_ok());
+    // a trace event carries exactly its own fields (the corpus holds the
+    // positives and the confirmation-with-index; these are the rest)
+    let trace = |event: u64, idx: Option<u64>, declared: Option<u64>, id: bool| {
+        let n = 2 + usize::from(idx.is_some()) + usize::from(declared.is_some()) + usize::from(id);
+        let mut o = Vec::new();
+        emit_map_head(&mut o, n);
+        emit_uint(&mut o, 1);
+        b32(&mut o, 3);
+        emit_uint(&mut o, 2);
+        emit_uint(&mut o, event);
+        if let Some(i) = idx {
+            emit_uint(&mut o, 3);
+            emit_uint(&mut o, i);
+        }
+        if let Some(d) = declared {
+            emit_uint(&mut o, 4);
+            emit_uint(&mut o, d);
+        }
+        if id {
+            emit_uint(&mut o, 5);
+            b32(&mut o, 4);
+        }
+        o
+    };
+    assert!(chk("ExchangeTrace", &trace(0, Some(7), Some(5), false)).is_ok());
+    assert!(chk("ExchangeTrace", &trace(1, Some(3), None, false)).is_ok());
+    assert!(chk("ExchangeTrace", &trace(2, Some(6), None, false)).is_ok());
+    assert!(chk("ExchangeTrace", &trace(3, None, None, true)).is_ok());
+    assert!(
+        chk("ExchangeTrace", &trace(4, None, None, true)).is_err(),
+        "event 4"
+    );
+    assert!(
+        chk("ExchangeTrace", &trace(0, Some(7), None, false)).is_err(),
+        "a shape without the declared count"
+    );
+    assert!(
+        chk("ExchangeTrace", &trace(1, Some(3), Some(5), false)).is_err(),
+        "a block event carrying the declared count"
+    );
+    assert!(
+        chk("ExchangeTrace", &trace(3, None, None, false)).is_err(),
+        "a confirmation without the ceremony-id"
+    );
+    // a standdown is one key, a 32-byte handle
+    let sd_ok = {
+        let mut o = Vec::new();
+        emit_map_head(&mut o, 1);
+        emit_uint(&mut o, 1);
+        b32(&mut o, 5);
+        o
+    };
+    let sd_extra = {
+        let mut o = Vec::new();
+        emit_map_head(&mut o, 2);
+        emit_uint(&mut o, 1);
+        b32(&mut o, 5);
+        emit_uint(&mut o, 2);
+        emit_uint(&mut o, 0);
+        o
+    };
+    assert!(chk("WitnessStanddown", &sd_ok).is_ok());
+    assert!(chk("WitnessStanddown", &sd_extra).is_err(), "a second key");
+    // an update is the ceremony-id and one channel map
+    let upd = |channel_key: u64| {
+        let mut o = Vec::new();
+        emit_map_head(&mut o, 2);
+        emit_uint(&mut o, 1);
+        b32(&mut o, 6);
+        emit_uint(&mut o, 2);
+        emit_map_head(&mut o, 2);
+        // the inner map sorted either way, so the unknown key is what fails
+        let (first, second) = if channel_key < 2 {
+            (channel_key, 2)
+        } else {
+            (2, channel_key)
+        };
+        emit_uint(&mut o, first);
+        emit_uint(&mut o, if first == channel_key { 2 } else { 0 });
+        emit_uint(&mut o, second);
+        emit_uint(&mut o, if second == channel_key { 2 } else { 0 });
+        o
+    };
+    assert!(chk("ProximityUpdate", &upd(1)).is_ok());
+    assert!(
+        chk("ProximityUpdate", &upd(9)).is_err(),
+        "an unknown channel key, refused unsigned as in a request"
+    );
+}

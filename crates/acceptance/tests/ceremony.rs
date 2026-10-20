@@ -50,3 +50,67 @@ fn cer_53_the_camera_holds_one_counterparty_present_across() {
 fn cer_55_two_shells_cross_the_optical_channel_only_if_the() {
     todo!("CER-55: Two shells cross the optical channel only if they share one framing (provisional)")
 }
+
+/// Engage own nominees at the intent and stream the opening to them as it happens
+///
+/// Spec: wire-format.md §7.10.1; design §7.1; light-client-requirements.md §1.1
+/// Milestone: 4.  Kind: positive.  Oracle: behaviour.
+///
+/// Rule (wire-format.md §7.10.1): "**Kinds 20 to 25 are its opening** [author, 2026-10-19]: what a participant and its own nominees say to one another from the intent"
+///
+/// Given: A participant with nominees drawn from its own contacts, beginning a ceremony.
+/// When: The intent goes out and the optical exchange runs.
+/// Then: Each nominee receives the engagement with its handle before the counterparty has accepted anything; the exchange's shape follows as kind-21 events — both block counts, then each index as it lands or is acknowledged, one event per message, never batched; and the confirmation event carries the ceremony-id the later request repeats.
+#[test]
+#[ignore = "acceptance CER-67: owed at milestone 4"]
+fn cer_67_engage_own_nominees_at_the_intent_and_stream_the() {
+    todo!("CER-67: Engage own nominees at the intent and stream the opening to them as it happens")
+}
+
+/// Cross the witness sets on the local interface, prune to three, and relay survival or dismissal
+///
+/// Spec: wire-format.md §7.10.1; design §7.1
+/// Milestone: 4.  Kind: positive.  Oracle: behaviour.
+///
+/// Rule (wire-format.md §7.10.1): "The witness sets and the keep-lists (kinds 22 and 23) pass **between the participants only**, on the local interface: they are the prune, and no witness sees them"
+///
+/// Given: Two participants past the transcript confirmation, one with four nominees and one with two.
+/// When: The sets cross by locator and each party answers with its keep.
+/// Then: Each keep names at most min(3, offered) of the counterparty's set and nothing outside it; every kept nominee of a side receives that side's request, field 5 closing its engagement, and every dismissed one its standdown; no witness receives a set or a keep; and the window opens with the request.
+#[test]
+#[ignore = "acceptance CER-68: owed at milestone 4"]
+fn cer_68_cross_the_witness_sets_on_the_local_interface_pr() {
+    todo!("CER-68: Cross the witness sets on the local interface, prune to three, and relay survival or dismissal")
+}
+
+/// Stream each proximity outcome to the surviving witnesses as it lands inside the window
+///
+/// Spec: wire-format.md §7.10.1; design §7.1
+/// Milestone: 4.  Kind: positive.  Oracle: behaviour.
+///
+/// Rule (wire-format.md §7.10.1): "Proximity updates (kind 25) go from each participant to the surviving witnesses of both sides as each outcome lands"
+///
+/// Given: A ceremony past the prune, with surviving witnesses on both sides and proximity channels still running.
+/// When: A channel's outcome lands after the request went out.
+/// Then: Each participant sends the outcome as a kind-25 update to the surviving witnesses of both sides, on the witnesses' clocks as it lands and never held for the next leg; the counterparty receives none, measuring its own; and the request carried whatever the opening had already measured.
+#[test]
+#[ignore = "acceptance CER-69: owed at milestone 4"]
+fn cer_69_stream_each_proximity_outcome_to_the_surviving_w() {
+    todo!("CER-69: Stream each proximity outcome to the surviving witnesses as it lands inside the window")
+}
+
+/// As witness: hold the request to the engagement it closes and to the trace's ceremony-id
+///
+/// Spec: wire-format.md §7.10.1; light-client-requirements.md §1.2
+/// Milestone: 4.  Kind: negative.  Oracle: behaviour.
+///
+/// Rule (wire-format.md §7.10.1): "the ceremony-id reaches every nominee twice, once as the trace's closing event and again in the request, and the two MUST agree"
+///
+/// Given: A witness that watched an engagement through to the trace's confirmation; then a request whose field 5 names a handle it never saw, and another whose ceremony-id disagrees with the confirmation it holds.
+/// When: Each request arrives.
+/// Then: Both are declined: a request from nowhere binds nothing the witness watched, and a disagreeing ceremony-id means the sequence it observed is not the ceremony it is being asked to sign. A request agreeing on both is answered as always.
+#[test]
+#[ignore = "acceptance CER-70: owed at milestone 4"]
+fn cer_70_as_witness_hold_the_request_to_the_engagement_it() {
+    todo!("CER-70: As witness: hold the request to the engagement it closes and to the trace's ceremony-id")
+}

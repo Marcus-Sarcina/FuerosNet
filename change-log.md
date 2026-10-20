@@ -13867,6 +13867,36 @@ rejections in the corpus, and both introduction kinds are listed in the
 corpus runner so a rejection that starts passing fails rather than being
 skipped.
 
+### 2026-10-20 (the opening gets its kinds)
+
+**The witness reorder reaches the wire** [author, 2026-10-19]. Kinds 20 to
+25 join `wire-format.md` §7.10.1 as the ceremony's opening — what a
+participant and its own nominees say to one another from the intent, and
+the one exchange the prune needs between the participants: the
+`WitnessEngagement` with its 32-byte handle, minted per ceremony attempt;
+the `ExchangeTrace`, one event per message — the shape with both block
+counts, each inbound index as it lands, each outbound as the counterparty's
+display acknowledges it, and the confirmation carrying the ceremony-id —
+never content; the `WitnessSet` by locator and the `WitnessKeep` answering
+it, between the participants only, on the local interface; the
+`WitnessStanddown` for a dismissed nominee; the `ProximityUpdate` to the
+surviving witnesses of both sides as each channel lands inside the window.
+`WitnessRequest` gains field 5, required: the handle the request closes, so
+what a witness watched binds to what it may sign, and the ceremony-id
+reaches every nominee twice — the trace's closing event and the request —
+which MUST agree. §14.2's inventory splits the opening the same way the
+conversation already split: the prune's legs local, every nominee leg on
+the payload path.
+
+The codec checks all six shapes and the request's fifth field; the kernel
+mints the handle at `begin` and carries it in the request (the opening's
+sending is the kernel reorder, still ahead). Corpus: eleven positives, five
+negatives (T61 the prune bounds, T62 the trace's conditional-field matrix,
+T63 the request without its handle), verify.py holding one handle through
+engagement, trace and request. Catalogue DEC-37 implemented and CER-67 to
+CER-70 opened for the kernel; functional NET-032 added, NET-022 and SCH-026
+restated. Families 530.
+
 ### 2026-10-20 (the floor removed from under the witness count)
 
 **There is no witness floor** [author, 2026-10-19]: "No, we don't need to

@@ -432,8 +432,15 @@ pub struct WitnessRequest {
     pub participants: [Keyhash; 2],
     /// The claimed start, which a witness checks its own clock against.
     pub started_at: u64,
-    /// What the distance channels measured.
+    /// What the distance channels measured so far: the channels run inside
+    /// the window and later outcomes follow as updates (`wire-format.md`
+    /// §7.10.2) [author, 2026-10-19].
     pub channels: Vec<ChannelOutcome>,
+    /// The engagement handle this request closes (`wire-format.md`
+    /// §7.10.2 field 5) [author, 2026-10-19]: minted by the nominating
+    /// side at `begin`, one per ceremony attempt, so what the witness
+    /// watched under it binds to the record it may later sign.
+    pub handle: [u8; 32],
 }
 
 /// What a patron is proposing, beside who and into which subnet.
@@ -474,6 +481,10 @@ pub(crate) struct Active {
     /// checked against it, which is the whole of what the anchor buys.
     their_contribution: Option<[u8; 16]>,
     ceremony_id: Option<[u8; 32]>,
+    /// The engagement handle (`wire-format.md` §7.10.2) this side minted
+    /// at `begin`: one per ceremony attempt, carried by every message of
+    /// the opening and closed by the witness request's field 5.
+    handle: [u8; 32],
     pub(crate) my_nominees: BTreeSet<Keyhash>,
     pub(crate) their_nominees: Vec<Keyhash>,
     their_bundle: Vec<Vec<u8>>,
@@ -870,6 +881,7 @@ impl Client {
             nominees
         };
         let contribution = self.random::<16>();
+        let handle = self.random::<32>();
         let started_at = self.now_s();
         let began_ms = self.device.clock.now_ms();
         tracing::info!(
@@ -890,6 +902,7 @@ impl Client {
             contribution,
             their_contribution: None,
             ceremony_id: None,
+            handle,
             my_nominees: nominees.iter().copied().collect(),
             their_nominees: vec![],
             their_bundle: vec![],
@@ -2184,6 +2197,7 @@ impl Client {
             participants: participants(self.keyhash(), a.peer()?),
             started_at: a.started_at,
             channels: a.channels.clone(),
+            handle: a.handle,
         };
         tracing::info!(
             target: "cer",

@@ -228,6 +228,7 @@ fn a_witness_holds_a_bounded_number_of_pending_requests_and_the_oldest_goes_firs
         participants: participants(kh("alice"), kh("bob")),
         started_at: now - 100 + i,
         channels: vec![],
+        handle: [0xe0 | i as u8; 32],
     };
     for i in 0..bound {
         assert_eq!(w.take_witness_request(&req(i)), Some(3));

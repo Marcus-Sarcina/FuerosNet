@@ -2320,7 +2320,7 @@
   "rule": [
    {
     "where": "wire-format.md §7.10.1",
-    "text": "**A participant takes\nthe conversation only from its counterparty and its ceremony's witnesses, and\na witness only from the two participants the request named**; from anyone\nelse these kinds are application payload from a stranger, and are dropped"
+    "text": "**A participant takes\nthe conversation only from its counterparty and its ceremony's witnesses, and\na witness only from the two participants the request named — and takes kinds\n20, 21 and 24 only from the party that engaged it**"
    },
    {
     "where": "light-client-requirements.md §1.2",
@@ -14248,5 +14248,125 @@
   "then": "The fetch names how many credentials are held and when the run ends; the renewal is taken and the reported end moves by the renewal's own windows; the straddling credential is refused with its reason, while the identical window re-sent is still taken once.",
   "oracle": "behaviour",
   "interpretation": "A renewal is about the credential alone: neither §4.4 record is re-signed [author, 2026-10-16]."
+ },
+ {
+  "id": "DEC-37",
+  "area": "decoder",
+  "gap": "decoder",
+  "title": "Check the opening's structures: the engagement, the trace, the sets, the standdown, the update, and the request's fifth field",
+  "milestone": 4,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §7.10.2",
+   "wire-format.md §7.10.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.10.2",
+    "text": "5: bstr .size 32     ; the engagement handle this request closes [author,"
+   },
+   {
+    "where": "wire-format.md §7.10.2",
+    "text": "WitnessKeep = [ 0*3 keyhash ]   ; kind 23: of the COUNTERPARTY's set, the"
+   }
+  ],
+  "given": "The opening's fixtures: an engagement with and without a counterparty; a trace's shape, block and confirmation events; a two-nominee set and a keep naming both; a standdown; an update; and the negatives — a request without field 5, a confirmation carrying an index, nine nominees, four kept, a nominee kept twice.",
+  "when": "Each is checked as its kind.",
+  "then": "Every positive passes and every negative is refused: the request requires its handle, a trace event carries exactly its own fields, a set holds at most eight, a keep at most three with no name twice.",
+  "oracle": "fixture",
+  "interpretation": null
+ },
+ {
+  "id": "CER-67",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "Engage own nominees at the intent and stream the opening to them as it happens",
+  "milestone": 4,
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §7.10.1",
+   "design §7.1",
+   "light-client-requirements.md §1.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.10.1",
+    "text": "**Kinds 20 to 25 are its opening** [author,\n2026-10-19]: what a participant and its own nominees say to one another from\nthe intent"
+   }
+  ],
+  "given": "A participant with nominees drawn from its own contacts, beginning a ceremony.",
+  "when": "The intent goes out and the optical exchange runs.",
+  "then": "Each nominee receives the engagement with its handle before the counterparty has accepted anything; the exchange's shape follows as kind-21 events — both block counts, then each index as it lands or is acknowledged, one event per message, never batched; and the confirmation event carries the ceremony-id the later request repeats.",
+  "oracle": "behaviour",
+  "interpretation": ""
+ },
+ {
+  "id": "CER-68",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "Cross the witness sets on the local interface, prune to three, and relay survival or dismissal",
+  "milestone": 4,
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §7.10.1",
+   "design §7.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.10.1",
+    "text": "The witness sets and the keep-lists (kinds 22 and 23) pass **between\nthe participants only**, on the local interface: they are the prune, and no\nwitness sees them"
+   }
+  ],
+  "given": "Two participants past the transcript confirmation, one with four nominees and one with two.",
+  "when": "The sets cross by locator and each party answers with its keep.",
+  "then": "Each keep names at most min(3, offered) of the counterparty's set and nothing outside it; every kept nominee of a side receives that side's request, field 5 closing its engagement, and every dismissed one its standdown; no witness receives a set or a keep; and the window opens with the request.",
+  "oracle": "behaviour",
+  "interpretation": ""
+ },
+ {
+  "id": "CER-69",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "Stream each proximity outcome to the surviving witnesses as it lands inside the window",
+  "milestone": 4,
+  "kind": "positive",
+  "spec": [
+   "wire-format.md §7.10.1",
+   "design §7.1"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.10.1",
+    "text": "Proximity updates (kind 25) go from each participant to the surviving\nwitnesses of both sides as each outcome lands"
+   }
+  ],
+  "given": "A ceremony past the prune, with surviving witnesses on both sides and proximity channels still running.",
+  "when": "A channel's outcome lands after the request went out.",
+  "then": "Each participant sends the outcome as a kind-25 update to the surviving witnesses of both sides, on the witnesses' clocks as it lands and never held for the next leg; the counterparty receives none, measuring its own; and the request carried whatever the opening had already measured.",
+  "oracle": "behaviour",
+  "interpretation": ""
+ },
+ {
+  "id": "CER-70",
+  "area": "ceremony",
+  "gap": "ceremony",
+  "title": "As witness: hold the request to the engagement it closes and to the trace's ceremony-id",
+  "milestone": 4,
+  "kind": "negative",
+  "spec": [
+   "wire-format.md §7.10.1",
+   "light-client-requirements.md §1.2"
+  ],
+  "rule": [
+   {
+    "where": "wire-format.md §7.10.1",
+    "text": "the ceremony-id reaches every nominee twice,\nonce as the trace's closing event and again in the request, and the two MUST\nagree"
+   }
+  ],
+  "given": "A witness that watched an engagement through to the trace's confirmation; then a request whose field 5 names a handle it never saw, and another whose ceremony-id disagrees with the confirmation it holds.",
+  "when": "Each request arrives.",
+  "then": "Both are declined: a request from nowhere binds nothing the witness watched, and a disagreeing ceremony-id means the sequence it observed is not the ceremony it is being asked to sign. A request agreeing on both is answered as always.",
+  "oracle": "behaviour",
+  "interpretation": ""
  }
 ]

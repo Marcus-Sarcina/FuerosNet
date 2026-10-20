@@ -3642,6 +3642,12 @@ attribute it; here nothing is read before attribution.
 | 17 | `SigningReply` (§7.10.2) | Each signer to the proposer |
 | 18 | `Envelope` (§3), the finalised record | Proposer to every signer |
 | 19 | `AdoptionDirection` (§7.10.2) | Between the two parties arranging an adoption after the record |
+| 20 | `WitnessEngagement` (§7.10.2) | A participant to a witness it nominates, with the intent, before the counterparty has accepted anything (design §7.1 item 1) |
+| 21 | `ExchangeTrace` (§7.10.2) | The nominating participant to its own nominees: the optical exchange's shape as it happens, and the ceremony-id when the transcript confirmation fixes it (design §7.1 item 3) |
+| 22 | `WitnessSet` (§7.10.2) | Participant to participant, on the local interface: the sender's nominees by locator, for the counterparty's prune (design §7.1 item 4) |
+| 23 | `WitnessKeep` (§7.10.2) | Participant to participant, on the local interface: which of the counterparty's nominees the sender keeps |
+| 24 | `WitnessStanddown` (§7.10.2) | A participant to a nominee of its own that did not survive the counterparty's prune |
+| 25 | `ProximityUpdate` (§7.10.2) | Each participant to the surviving witnesses of both sides, as a proximity channel's outcome lands inside the window (design §7.1 item 5) |
 
 An unknown kind is application payload to a recipient that does not know it,
 and a kind whose body does not decode is dropped by the recipient that
@@ -3649,7 +3655,11 @@ opened it: the sender is attributed, and the message is not evidence.
 
 **Kinds 9 to 18 are the ceremony's conversation** [author, 2026-10-02]:
 everything the two participants and their witnesses say to one another after
-the local exchanges (§14.3).
+the local exchanges (§14.3). **Kinds 20 to 25 are its opening** [author,
+2026-10-19]: what a participant and its own nominees say to one another from
+the intent, and the one exchange the prune needs between the participants
+themselves — sent before the four-minute window opens, which is why they are
+their own kinds rather than early uses of the nine.
 
 **Kinds 15 to 19 also arrange a two-signature transaction after the record**
 [author, 2026-10-16]. An adoption (§4.1) and a peering (§4.4) each carry two
@@ -3676,9 +3686,22 @@ nobody. The proposed body and the finalised record (kinds 16 and 18) go to
 every signer: the counterparty and the witnesses that answered yes. **The
 initiator proposes**: both intents carry which side began (§14.3.2), so the
 two agree on the proposer without a message. Which verifier was selected needs
-no kind of its own: the subject learns it from kind 9. **A participant takes
+no kind of its own: the subject learns it from kind 9. **Who hears the opening** [author, 2026-10-19]. The engagement, the trace
+and the standdown (kinds 20, 21 and 24) go from a nominator to its **own**
+nominees alone — never to the counterparty, who is watching the exchange
+itself, and never to the other side's nominees, whom the sender cannot yet
+reach. The witness sets and the keep-lists (kinds 22 and 23) pass **between
+the participants only**, on the local interface: they are the prune, and no
+witness sees them — a witness learns of its survival from the request that
+follows, bound by field 5 to the engagement it was watching, and of its
+dismissal from the standdown; the ceremony-id reaches every nominee twice,
+once as the trace's closing event and again in the request, and the two MUST
+agree. Proximity updates (kind 25) go from each participant to the surviving
+witnesses of both sides as each outcome lands; the counterparty needs none,
+measuring its own (§14.3.2's `ProximityOutcomes`). **A participant takes
 the conversation only from its counterparty and its ceremony's witnesses, and
-a witness only from the two participants the request named**; from anyone
+a witness only from the two participants the request named — and takes kinds
+20, 21 and 24 only from the party that engaged it**; from anyone
 else these kinds are application payload from a stranger, and are dropped.
 
 **Which interface each leg takes is decided by who the recipient is**
@@ -3687,8 +3710,8 @@ off:
 
 | Recipient of the leg | Interface | Envelope |
 |---|---|---|
-| The co-present **counterparty**, for every one of kinds 9 to 19 it is sent | The local interface of §14.1, on the bearer the shell chose (§14.3.1) | The plaintext below, sealed under the local session (§14.3.2) and listed in §14.2 as a carriage |
-| A **witness** or a **verifier**, for every kind either is sent | The end-to-end payload path (§7.8, design §14.2.4), reached through that party's own locator and its upstream node | This section's plaintext inside the payload session, as it always was |
+| The co-present **counterparty**, for every one of kinds 9 to 19, 22 and 23 it is sent | The local interface of §14.1, on the bearer the shell chose (§14.3.1) | The plaintext below, sealed under the local session (§14.3.2) and listed in §14.2 as a carriage |
+| A **witness**, a **nominee** or a **verifier**, for every kind any of them is sent | The end-to-end payload path (§7.8, design §14.2.4), reached through that party's own locator and its upstream node | This section's plaintext inside the payload session, as it always was |
 
 **The plaintext is the same object either way**: `uint kind || bytes`, built
 once and then either sealed under the local session or sent through the
@@ -3720,11 +3743,76 @@ ConsentReply = [
 
 FishingProposal = Introduction            ; §2.3; one candidate per proposal, in turns (§5.1)
 
+WitnessEngagement = {   ; kind 20: the nomination itself, sent with the
+                       ;   intent, before the counterparty has accepted
+                       ;   anything (design §7.1 item 1)
+  1: bstr .size 32,    ; the engagement handle: minted fresh by the
+                       ;   nominating party for this ceremony attempt, one
+                       ;   handle for all its nominees; every message of the
+                       ;   opening carries it, and the request's field 5
+                       ;   closes the loop
+  2: uint,             ; the claimed start, the intent's time (§4.5 field 1)
+  ? 3: keyhash         ; the counterparty, where the nominator has already
+                       ;   read its code; absent where it has only shown one
+}
+
+ExchangeTrace = {      ; kind 21: one event of the optical exchange's shape,
+                       ;   sent to the sender's own nominees as it happens,
+                       ;   never batched — the arrival pace is the evidence
+                       ;   (design §7.1 items 3 and 9). Never content: not a
+                       ;   contribution, which is half of what keys the local
+                       ;   session (§14.3.2), and not the bundle
+  1: bstr .size 32,    ; the engagement handle
+  2: uint,             ; the event: 0 the shape — both block counts known;
+                       ;   1 an inbound block landed; 2 an outbound block was
+                       ;   acknowledged on the counterparty's display; 3 the
+                       ;   transcript confirmed — the ceremony-id is fixed
+  ? 3: uint,           ; event 0: the blocks this sender has to transmit;
+                       ;   events 1 and 2: the block's index. ABSENT on 3
+  ? 4: uint,           ; event 0 only: the blocks the counterparty declares
+  ? 5: bstr .size 32   ; event 3 only: the ceremony-id (§14.3.1), which the
+                       ;   request's field 1 MUST repeat
+}
+
+WitnessSet = [ 0*8 Introduction ]   ; kind 22: the sender's nominees by
+                       ;   locator (§2.3), between the participants on the
+                       ;   local interface, for the counterparty's prune —
+                       ;   in the sender's hand so the choice is blind to
+                       ;   loyalties and sighted on diversity (design §7.1.1)
+
+WitnessKeep = [ 0*3 keyhash ]   ; kind 23: of the COUNTERPARTY's set, the
+                       ;   ones the sender keeps — `min(3, offered)`; every
+                       ;   keyhash MUST name an entry of the set it answers
+
+WitnessStanddown = {   ; kind 24: a nominee of the sender's that did not
+                       ;   survive the counterparty's prune; its part ends
+                       ;   here (`light-client-requirements.md` §1.2)
+  1: bstr .size 32     ; the engagement handle
+}
+
 WitnessRequest = {
-  1: bstr .size 32,    ; the ceremony-id (§14.3.1)
+  1: bstr .size 32,    ; the ceremony-id (§14.3.1), equal to the trace's
+                       ;   closing event where one was sent
   2: [ 2 keyhash ],    ; the participants, in body field 3's order (§4.5)
   3: uint,             ; started_at, the claimed start (§4.5 field 1)
-  4: [ 0*8 Channel ]   ; the proximity channels as measured (§4.5)
+  4: [ 0*8 Channel ],  ; the proximity channels as measured SO FAR (§4.5):
+                       ;   the channels run inside the window and are never
+                       ;   waited on (design §7.1 item 5), so later outcomes
+                       ;   follow as kind 25 while this carries what the
+                       ;   opening already measured
+  5: bstr .size 32     ; the engagement handle this request closes [author,
+                       ;   2026-10-19]: the window opens with this request,
+                       ;   and what the witness watched under the handle is
+                       ;   what it may later sign
+}
+
+ProximityUpdate = {    ; kind 25: one channel's outcome, sent to the
+                       ;   surviving witnesses of both sides as it lands —
+                       ;   on their clocks, inside the window (design §7.1
+                       ;   item 5). The counterparty is not a recipient: it
+                       ;   measures its own (§14.3.2 `ProximityOutcomes`)
+  1: bstr .size 32,    ; the ceremony-id
+  2: Channel           ; §4.5: the channel and its outcome as measured
 }
 
 WitnessAnswer = {
@@ -5172,7 +5260,7 @@ design already depends on.
 | Traversal candidates | Two participants' devices | design §12.6.3 [author, 2026-09-25] | `CandidateHandover` (§14.3.2), carrying the `Candidate` structure this document now defines; the same candidates travel the end-to-end payload path when a direct connection is set up remotely (design §12.6.3, §14.1.1) |
 | The capture-key handover — the key each participant derived for the captures the other holds of them, handed across at capture time | Two participants' devices | design §7.5.2, design §7.5.2.6 | `CaptureKeyHandover` (§14.3.2): the 32-byte key design §7.5.2.6 derives, anchored to the ceremony-id like the proximity outcomes and the candidates [author, 2026-10-02] |
 | A delegated device's payload material, and the ceremony device's signature over it | Two devices of one identity | design §23.3, §7.8 | `DeviceIntroduction` then `DeviceCredential` (§14.3.3): §7.8's bundle unsigned and then signed, beside §8.2's delegations |
-| **The participants' own legs of the conversation** — kinds 9 to 19 of §7.10.1, each one addressed to the co-present counterparty, the arranging of an adoption among them | Two participants' devices | §7.10.1, design §7.1 [author, 2026-10-05] | The kind-tagged plaintext §7.10.1 defines, **unchanged**, sealed under the local session (§14.3.2) and carried by the same bearer. A witness's or verifier's leg of the same kind travels the end-to-end payload path instead; the leg is chosen by who the recipient is |
+| **The participants' own legs of the conversation** — kinds 9 to 19 of §7.10.1, each one addressed to the co-present counterparty, the arranging of an adoption among them, and the prune's two legs, kinds 22 and 23, which no witness sees [author, 2026-10-19] | Two participants' devices | §7.10.1, design §7.1 [author, 2026-10-05] | The kind-tagged plaintext §7.10.1 defines, **unchanged**, sealed under the local session (§14.3.2) and carried by the same bearer. A witness's or verifier's leg of the same kind travels the end-to-end payload path instead; the leg is chosen by who the recipient is |
 | **The post-quantum prekey handover** — the sender's signed bundle and one one-time key, so a co-present pair can open an end-to-end channel afterwards without a node | Two participants' devices | §7.8, design §14.2.4.3 [author, 2026-10-05] | `PrekeyHandover` (§14.3.4), anchored to the ceremony-id and sealed under the local session like every other carriage |
 
 **The last row is the one that is not between two people.** A phone
@@ -5187,7 +5275,11 @@ now travel **by who the recipient is**, so a participant's leg to the
 co-present counterparty is a local carriage — the two rows above — while a
 witness's or a verifier's leg of the same kind travels the end-to-end
 payload path and is reached through that party's own locator and upstream
-node. The content did not change and neither did its encoding; what changed
+node. The opening's kinds — 20 to 25 of §7.10.1 — split the same way [author,
+2026-10-19]: the prune's two legs are between the participants and
+therefore local, while every leg to a nominee — the engagement, the trace,
+the standdown, the updates — is to a party who is somewhere else, and
+travels the payload path through that nominee's own node. The content did not change and neither did its encoding; what changed
 is which of the two interfaces each leg takes. **Every leg a witness hears
 still reaches it**, which is how a witness observes the sequence it attests
 (§7.10.1, design §7.1), and that is what the ruling turned on: never whether

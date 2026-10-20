@@ -1,6 +1,6 @@
 # Unsigned message families (`wire-format.md` §§6–11)
 
-Generated against `wire-format.md` `ce0078a95a10515d…`, `network-design.md` `e7f289d2058761d9…` and `light-client-requirements.md` `1df489e245f3776e…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `09c7102431ecab5b…`, `network-design.md` `e7f289d2058761d9…` and `light-client-requirements.md` `1df489e245f3776e…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Canonical. Spec-derived, reproduced by the independent harness.** Canonical bar 9:
 one positive known-answer encoding per framed message family. Framing is
@@ -4067,13 +4067,14 @@ a1e447a532362646eb5c80fe413c89a82d0edc2240e3fe8bed1d4b3306baa787
 c1b9e9646847d11b095acdd08ec87d1f51e82740aaea6c862485ac1d02ecaf3f
 521122edff0bfc1630e154723ec58b86cc07b1e6daaebd0b
 ```
-**WitnessRequest, kind 12 — the normal record's ceremony put to a nominee: its pre-commitment as ceremony-id, the participants in body order, the claimed start, NFC and optical passing** (124 bytes — an END-TO-END PAYLOAD, not a stream reply: the bytes are the object alone; on the channel a `uint` kind tag precedes them, §7.10.1's registry — kind 12 for this object — and no prefix is included below):
+**WitnessRequest, kind 12 — the normal record's ceremony put to a nominee: its pre-commitment as ceremony-id, the participants in body order, the claimed start, NFC and optical passing, and the engagement handle the request closes (field 5)** (159 bytes — an END-TO-END PAYLOAD, not a stream reply: the bytes are the object alone; on the channel a `uint` kind tag precedes them, §7.10.1's registry — kind 12 for this object — and no prefix is included below):
 
 ```
-a4015820e583bc9b190ee9eff334cb1d21a75e128105cbcaf366e955766750a0
+a5015820e583bc9b190ee9eff334cb1d21a75e128105cbcaf366e955766750a0
 9bcb0ba5028258208410def778a5de3a25991aba399716bc8eccfda9ad57d4ea
 8a0c8dcfc852aa6a58206bcf8a3e8899fc206bc603744414d58b01db857986d8
-2f611b0794ac9c32c375031a6a35e6100482a201020200a201030200
+2f611b0794ac9c32c375031a6a35e6100482a201020200a201030200055820a9
+2399625975031fad4b589748096985c1f3ac019ddeadb758550e70d0cac5cc
 ```
 **WitnessAnswer, kind 13 — witnessing, with the attestation bits it will set (7: protocol ran, both responsive, latency bound)** (5 bytes — an END-TO-END PAYLOAD, not a stream reply: the bytes are the object alone; on the channel a `uint` kind tag precedes them, §7.10.1's registry — kind 13 for this object — and no prefix is included below):
 
@@ -4337,6 +4338,187 @@ c3e6e8f516373aafc6426694e400000000000000000000000000000000000000
 ```
 a20201035820efe7876868352e6f8cabae9ba591a3e5ca61cf64950d19eb40ab
 82120738587f
+```
+**WitnessEngagement, kind 20 — the nomination itself, sent with the intent before the counterparty has accepted anything; the handle every message of the opening carries** (77 bytes — an END-TO-END PAYLOAD, not a stream reply: the bytes are the object alone; on the channel a `uint` kind tag precedes them, §7.10.1's registry — kind 20 for this object — and no prefix is included below):
+
+```
+a3015820a92399625975031fad4b589748096985c1f3ac019ddeadb758550e70
+d0cac5cc021a6a35e6100358206bcf8a3e8899fc206bc603744414d58b01db85
+7986d82f611b0794ac9c32c375
+```
+**ExchangeTrace, kind 21 — event 0, the shape: seven blocks to transmit, five declared by the counterparty** (42 bytes — an END-TO-END PAYLOAD, not a stream reply: the bytes are the object alone; on the channel a `uint` kind tag precedes them, §7.10.1's registry — kind 21 for this object — and no prefix is included below):
+
+```
+a4015820a92399625975031fad4b589748096985c1f3ac019ddeadb758550e70
+d0cac5cc020003070405
+```
+**ExchangeTrace, kind 21 — event 3, the transcript confirmed: the ceremony-id, which the request's field 1 repeats** (73 bytes — an END-TO-END PAYLOAD, not a stream reply: the bytes are the object alone; on the channel a `uint` kind tag precedes them, §7.10.1's registry — kind 21 for this object — and no prefix is included below):
+
+```
+a3015820a92399625975031fad4b589748096985c1f3ac019ddeadb758550e70
+d0cac5cc0203055820e583bc9b190ee9eff334cb1d21a75e128105cbcaf366e9
+55766750a09bcb0ba5
+```
+**WitnessSet, kind 22 — the sender's nominees by locator, between the participants on the local interface, for the counterparty's prune** (4394 bytes — an END-TO-END PAYLOAD, not a stream reply: the bytes are the object alone; on the channel a `uint` kind tag precedes them, §7.10.1's registry — kind 22 for this object — and no prefix is included below):
+
+```
+82830182a3010120062158202b00306803c7f23192ae6272729a088ef1d8d267
+48a1f9ecce506fe8a7b97c8ea30107033830205907a085713e62095a5c29e189
+8f233569729fe0c4f54c8fe1b29d7662248308a1446a6ed496294e515bcc6fe1
+51fe0fb01e52249edf21fe955d1bb85b706a5f2b37c7be449b7c7aeff83da8b2
+4da2004b24e06798b04c7afb7e0b5a596f3cffcaeb412d25d037b021bd55e685
+c497c32021a08de2118c5671dd3440aeff6f0a5c9a0c329e2e3f6fdd09428f0b
+06e556ed8f45c9b0f23f5a0726d4e0ca1373a5d9f9739d85e1ced78541232950
+a73ec2b72682b970f0a69db3d4621d3e59347bfdedf85e19c0a2b9719c0f61d1
+eff23b913527bab10f8345c6d560f6ab188af3144bdeb8198d7daad37a08a35b
+15b32f4bc423e6bddeac9fe478a6d7a3f268895556d4cfec61fd7c6b37be8880
+68efc4f32545a2dc04de29cc50756cf3f0ef72f858b0f95fd093d1ce05546b45
+c3b3f436b10008dd5e1146862635410a937f887db6e1cdde66dc1f0822c595dd
+215fb4527c1c494b82cef1380e5fcca6f55dcfa7e890a51a6319405967f6cc62
+43f258e9a08940118f93f3ba467eb8581928df688f8d7c6ef60fdce0851170a9
+6e14e6657cf9224732dec5a5d921211ed16abf55494559f51fb4d6139454e4cc
+353a9f176315058fed5681e7bb7744dac1c7073dcdfbd73cc62d91cd71e910e7
+a249210f9aba0c1b938c056c73331ffaa39aa63bfd2238c7ea6bc1ef6e11080c
+61d67cd886dd133ea022e1c596f86b66997b716a86dd17f978adf1c30f634b37
+4ce135dc665408fd0d063a0c849d2012ea0f1bfca98362c4048a24d2e69fd38c
+16b113567a1d322346b1d28822c73cc901438605a3cf36046ee23ad7f5b121dc
+9bc122ffe04df22e1e9222a5cd2d8a1b128350cd2c8a31a1233a29dfb0b4a348
+65e47f39f41ebe0703905352739f5ef723ec5e15ae586a84dd39c0c2d4ad6ddd
+10014a251f85d3ec4b7a802709d58af1657f5bfd111cff9457d57a6fc9c50029
+a24c3144a33c96a174cabd1edbddcf3bf0c4b254b3ffbbc6d48844c2231469f6
+1c5dc1dc36760d556ff0aae350da37decb65f35f99adacfefa6f0edad951079f
+2503be7a54599218e0272c37d05b6be9ec8201075acb4ef963150a9b5567bd49
+f15cd0613d5c842efc64027acb943f8389bf9e1f5a37f331b8bf05fba75ed558
+25de208c097cab7dac79c4cffc7f9a1b81d636a81371b55a7823872ba9b438b6
+fbe2f1ef1d9fa1c4493abee5b686816c75683ff65e45cea4bab2a8299f1ef33b
+db6797054d7b8b413402cce6f9423f9b83bfbf4de2a1bcf32739cb319ccc78c7
+15de05c03f24cff133d1f1e71d910d7f4d72c1a4d957f34c5d7851c34359e72a
+08ecff0284148983c6ece2c27d4d58d3f7cebef707c307e2ab77bf54a0f2fa77
+36c6873ee1f4273b42123bc0b83a5ec1618f4ccfc1aef0c594c3afebadf3e9af
+7bacabd335df3da18987690cd317bc032f7a7dfb2e73f20b3dd407421b3287e3
+bc65af3571c593cd1c0f36faa5d81458eb12ec5248d999e68513b3d8bd596041
+3e96143eb443e1189e713a0e6ef3fbc59841aadab6f66432ea2a30dafabe65ab
+9f9fd91326d1cf0d65760b3558fab6cdce02e07237b5366601955b6dab7f47a3
+3541d7788cbc2a2dc691cefc89ea079b5d14f32e77a3792c35e1a58c1dc1eae3
+ef5a9a5e559ec6620297fa56dccde64c602d82769169ef8a0a10e5988a49475b
+2621eaa39e86582fb1ee6802a107afb15ad2f87d829ff80e3dfb2dad6ef686d4
+2ff97555e3a03fe71d068d4847fdaf4d268328d8c9450223860cfcc74ee9d15b
+f5a5c41f252622c8c55a3902947eafd238b5e87e7634cf5c374cc73077827c51
+45e14cce0d65a3874fa70e90953215c60d7275234fc4a7212cba439d144bd08c
+27ec17d76f6915a767dcb558cb4e18e54e74084e8d28ed95177539cd2e729063
+57934993af938d3992ae7b66b9f2a6bde11e7347f8294d7d523f6e7b21c36da8
+57e95a868ea557240e2a8837250f207be10013537710d11c6811d29d92ba8c89
+2931fc6a767a3ea81a825fa92e4398209107a46fed3ef7b917771b7b69b184ab
+ebb770a7388b5bc921fcdc7ea5bb39bcb067f43e4778f7bc62ec4c8f3b54ab81
+b2010c7eef18a99ad01d5a2e1daa87ec29251695e50438a9f9dc980194f6cfcb
+c68f350f15c8a8ffbea45db842e0d8271de1b08e820930c66098c13d9bb41317
+4018e9dc3944166fce5eeb2b5eb9c5fd390cd8d9e32a5c4fddab167ce2916daf
+38b48bf78f79e3c3aa747c763be4fb7b2d0b34d02ae7fdb258ed086db9bf78bf
+2f87b0c396c4d90ecaacd250c8c2268237f0370cd923e2810234747572ba495f
+1d99f3d3c53c10f8b128675092fecb2733933a53ec8aff9ef9abd0d1ee983bae
+f29f2737faf15a4a4e3f899a83ed931329cc54cc1734f75a75ea94a7a3001b5b
+b41a12e5b9509b19fc2e7b9078132fe4da59f2b161b473613946db462a309a60
+fa2912336e0d2b7419653f1ec93bbb7e85003cb608575146d6dd9658577542e0
+652479497b802530ce012d240b74a01350870aca38d959708b003cbb3eda0737
+a38813e4156a704d6ac273ef13f8140241beef87e08927774b3de5d936290b7c
+d1365ca738041349a43e31d3a5db8d84decb8add5095d2a035f3fca7135f9b22
+f37200bcc4ec1502dece8a0663e70d67a7a000290bbceea2f7e1a77f02c746cc
+d8a1e447a532362646eb5c80fe413c89a82d0edc2240e3fe8bed1d4b3306baa7
+876fcf4ebd30b8ca0b643d5e63744864ead265474d92a301582096664caec817
+f958a439b6d326c45f5ab7bbb3671ebb447eca25a411b975e73a02a40158206b
+cf8a3e8899fc206bc603744414d58b01db857986d82f611b0794ac9c32c37502
+a201433141500205038202070458203f438083da65968113a3ddace3e7f735d8
+607a8edb392cbbb069aca5a92cd6fa038443a10127a0f65840bf7a8919bbeb13
+23c1b9e9646847d11b095acdd08ec87d1f51e82740aaea6c862485ac1d02ecaf
+3f521122edff0bfc1630e154723ec58b86cc07b1e6daaebd0b830182a3010120
+06215820a0855987914434fb5942870ba72be8d90d9aca2ff8dac412f8a90f54
+b149d5c0a30107033830205907a0d44921a3ae81b7e8393547f5ad5fdd1a2a66
+c9fee642081780ed77084d28ec54acb140a2c953b03d99daec25df9df652c081
+fed432fca21e1eb567aab1745faa07b6d51271fa475a99ccd2dc8a0e5c67ba09
+7d214ea40f524cf755f9a18f1d4963c4942554e19f251eec7bc04ddc1b9ead48
+8a60e69007f45aaae30178ea988400dc1e23a845cad12f34afc88a868903d2fc
+873e5332fdfb3845680a1a00d39be810d0e1d09c92c10b0391f8d0ec0f3294b4
+8370330cf053d2a1a1d5b0eb524306b56417e14959019a4ea6a08bbeba5feb79
+01f43aaddef5c7f4196b64278d135912fa971967b79fca44100b06ad44481915
+8d7fb528ffc36f4c69e93e60564c38b5fbc11ac8db1e6fa1a0d624d5168473bf
+86a66680761a61fc46c0bf107bfe4a70ed81859a875c3b8e93e072806582fd72
+32dbf5b293ff7bb1c1607441a5bf27be3344262e4617ebd14cc066cdc3ed4f87
+9177304b110a49aecaacac9d168daf1c9db88d18d1d5fe21467455148eeb898e
+bb468f7661d15eba0b46f2c99b32dfa661882be8d7abd45f3fbe10e7f27da484
+5f2d14075401e13400eef285035e6347174c51cef258143ce65d31e9f483d938
+612abe9130f045080282f932c860cd969ea0f364cdc82e1645d5e8706004a237
+ee26318ffc1a077ccb5fa516110f852a39180f9ace176af35a56ffdd0c1c46a5
+faa67ab224871ae411cd6783164a9a0370f5c6c16c3c280218b545045bd79610
+db22269784fa66479c78b5621ea0f027dafb4c3455d8fc7f277044705c7cf89f
+2b901ec53f5cf4e686ad84124d3cc98ee7cdb81b8bf31737ffe9e53dff64a2be
+2792e437acbd2cd09f1c023ce5deac18d5d09948ec49db0ba54833358fc77bb1
+02be3e5eab2f87151d0ffb5dca1d8c44bfa4084e512fb5e8612060f842789195
+730079f41c8e2a67a902aa1516cc3aadf7f5b63b69d5d165f6415c59d1ebad96
+376b93f302eec4426e6bfad93301188c3ea604b14c4d48303eb018c43eb64eca
+8f0fd85252627b88ad741d05e79af6845cfe55c6572d9a58eee3ac9ef980af4b
+8456601367b3cd8974343fb9693fadc0d06ef7c3f493b6972d739fa1943ad241
+97232388772da48d6b3c51932fc1f3d0b4afa062adf56894cadcaabcf02e12d6
+8cb08fa34b7f99edf48034718604c1ebc443e9d16fc9b95533108c0e3d0ca64c
+b835317ca5ad51d2519c374daf70f9d2cfdd1e9681d6cce29961b51c52b583f9
+fea29a1da97bc2facbcd8024070c4ef7ad3c57a9411319656a4f8ca2c5471e92
+40a57ee67bd85ba00f542c71b20b514a91875df20e76cdcc1e7c1dbf9ab0c0e3
+94763ac2154fb41fe031ab4480d750158fcdeba002a39caacd815554e202f07c
+d978b80570d916a83b0b6eebc54986d60a0bf150b6a14f08da926adcea65c99b
+b195d2c7e06cadde8ea871f1d5837a188b05ac0bb36970375f71dcbdf4f88855
+28929ebe2ac25e8fbed6f3d30093162d4fbec49c724040648430aa42232e60c2
+ceae6c58ac38ba94aeb163b34f2686c680615d63afd1ec170799a87d07be251a
+436760b7e4da7a2f3fef3051756f39001ef1f158900a09780387ca9cf19663ce
+2b43b3684aee7f04602188a59a79d79eb5dbc386d1ba2dd89d9a2ae83fcf0a33
+feb7b0179dd09c7f758ce639008d1abb1ead19e68bcb3740b5cec7612879b14e
+6a3b9aabd52e5e7ccb8c5009e9c28c7e79036b4a55d719b7747425f55e61c2ad
+7e3e9975c577b823b1af34cb7f8de682f42457b5f8e88fecee0efd248757c25c
+635501ddcf0c668fe1f1391a88b172174a6a8390a5b4a7c8b37f0fc6932c29f2
+6b48227745c4c8239bf6960290429bb2f3cc7e6333ed7c91afe104628648d083
+7640ec4d572b598da4d8494d725b18597fb6c80f2a2977906d472412f5f4225e
+0815a1cf51df54f1b19cba330749cd28ccf47a8e486907571b7cf70fb2362659
+28eab15ca9d50c059ad2b99a2d21465d36a0f4659c3323b13534887c69fc2b6e
+4b8e86ba9415fbeece81c9283467c3c0645376dcba819b9d7cf740a754695112
+db344deb91943df7f919b88b548528f61e8cfa755e4b61e00a5873950c00718e
+66103047b49d75ea119112c1b0adf9c41eecbe1253502079066004add70008a0
+c1d8e9734d37ed1ba725060d00ee4a6b95838c77a9c0a7ee7e8778c35e602e52
+79f299e73edac67cbd1eec0de9bf9fe2895ef16a59ac320be6fb6f3ddbfcf7ac
+b777b20c7c73708703b9c679bc62ebe5e52ac937872ee9c69754288b577e3b02
+a1af4c324e138600d4b8f983b8a8ed582e7b0e1236fe8ea7722c66f09ec9794d
+926620058909b2296afb0b3ae44ccbdd91c5de731a6b8e0070da948c188c168a
+48d7c3b72ec417adf8466e82577b3fbe6ec0bb17cf307771d34eb9362fbcbf27
+e1561895d40f8ed89fc6bf550e948705bc198b2b91af024db49ff8ef8eadeb3d
+73b8a7879156facd2de99768df105a548f03c804a7bf43060c5c97e2a4f5e851
+cb8144f2093bf4822a1b284d38bf137469020360bbe0932559385938194c3769
+1c8b955f2954af8d281948b555fa9fd7c5960e9c5583d092fee3e76dbeb2d39f
+d0195946838329a183356023a141705f27fc61146637fee74803e31a029faf87
+b4169d1068dae2a9bf4c5a356aa5f1f94cd697159e8bf7b5be2d75d5e0682b64
+e1e3c4e3041bd2b768a05046cab3645881af4e00f5ca81f9de2c5ac79a00cd37
+7aebe42f577168d38592e2f14882a3015820efe7876868352e6f8cabae9ba591
+a3e5ca61cf64950d19eb40ab82120738587f02a40158206bcf8a3e8899fc206b
+c603744414d58b01db857986d82f611b0794ac9c32c375023003820102045820
+3f438083da65968113a3ddace3e7f735d8607a8edb392cbbb069aca5a92cd6fa
+038443a10127a0f658400b724d15e2a46a9b00d56d594d9ea8c934515b272d7d
+753ec62176db4e36a43745098943735d4eff3bc2de0087b1fc75afb39f793675
+f4034ea0ebe8989c7107
+```
+**WitnessKeep, kind 23 — of the counterparty's set, the ones the sender keeps: min(3, offered)** (69 bytes — an END-TO-END PAYLOAD, not a stream reply: the bytes are the object alone; on the channel a `uint` kind tag precedes them, §7.10.1's registry — kind 23 for this object — and no prefix is included below):
+
+```
+82582096664caec817f958a439b6d326c45f5ab7bbb3671ebb447eca25a411b9
+75e73a5820efe7876868352e6f8cabae9ba591a3e5ca61cf64950d19eb40ab82
+120738587f
+```
+**WitnessStanddown, kind 24 — a nominee that did not survive the prune; its part ends here** (36 bytes — an END-TO-END PAYLOAD, not a stream reply: the bytes are the object alone; on the channel a `uint` kind tag precedes them, §7.10.1's registry — kind 24 for this object — and no prefix is included below):
+
+```
+a1015820a92399625975031fad4b589748096985c1f3ac019ddeadb758550e70
+d0cac5cc
+```
+**ProximityUpdate, kind 25 — one channel's outcome to the surviving witnesses of both sides, as it lands inside the window** (42 bytes — an END-TO-END PAYLOAD, not a stream reply: the bytes are the object alone; on the channel a `uint` kind tag precedes them, §7.10.1's registry — kind 25 for this object — and no prefix is included below):
+
+```
+a2015820e583bc9b190ee9eff334cb1d21a75e128105cbcaf366e955766750a0
+9bcb0ba502a201020200
 ```
 
 ## Session traces (canonical bar 9's trace class)
