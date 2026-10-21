@@ -2778,15 +2778,18 @@ a trust-raising attribute weighted by attestation, never treated as a fact.
 **Witnesses notarise; they do not verify proximity.** Under the corrected
 physics of §7.6, the co-presence evidence that matters is generated *between
 the two devices* and merely reported to witnesses. Witnesses timestamp, make the
-event non-repudiable, and — being nominated from the counterparty's
-neighbourhood — cannot be friendly notaries chosen by an attacker. That is a
+event non-repudiable, and — each party's nominees being pruned by the other, so
+that every survivor was nominated by one side and selected by the other
+[author, 2026-10-19] — are not notaries a party simply chose for itself; what
+curating a set past the prune costs is §7.1.1's. That is a
 narrower role than the original sketch implied, and the record format must not
 imply otherwise.
 
 **Privacy cost:** traceroute exposes each participant's network path — ISP,
 corporate network, approximate region, to whichever nodes are witnessing. This
-is directed probing at a known moment, correlated to an identity, by nodes the
-counterparty's neighbourhood nominated, which differs from ambient exposure.
+is directed probing at a known moment, correlated to an identity, by nodes each
+participant drew from its own contacts and the counterparty kept (§7.1.1),
+which differs from ambient exposure.
 A disclosure item for the consent surface, not a design constraint.
 
 **What persists.** Witnesses compare their bounds during the ceremony, but **raw
@@ -7772,12 +7775,16 @@ several at once, not one per acquisition.
   **The reach is not zero, and the earlier reason — that a fake region "harms
   nobody who is not engaging with it" — was wrong.** Witness eligibility is
   not a function of standing, so a node placed by a single boundary adoption,
-  valid without a proof of presence (§6.1.1), sits in a neighbourhood *someone
-  else's counterparty* will nominate from. The harm then lands on a party that
-  never engaged with it: the C1 and C2 disclosures of §19.8, and a withheld
-  signature (§8.1.2). What bounds this is the nomination heuristic of §7.1.1
-  and not the flow metric — the operator must occupy enough independent branches
-  to catch a spread selection, which is a far larger region than one adoption.
+  valid without a proof of presence (§6.1.1), sits in a neighbourhood whose own
+  parties nominate from it [author, 2026-10-19: each party draws its witnesses
+  from its own contacts, §7.1.1]. The harm then lands on the *counterparty* of
+  whoever engaged it — a party that never engaged with it at all: the C1 and C2
+  disclosures of §19.8, and a withheld signature (§8.1.2). What bounds this is
+  the nomination heuristic of §7.1.1 and not the flow metric — the operator must
+  occupy enough independent branches to catch a spread selection, which is a far
+  larger region than one adoption — and the counterparty is no longer merely
+  exposed to the other side's choices: it **prunes** them, holding the locators
+  and able to keep the spread rather than the branch (§7.1.1).
 
   **Uptime cheapens the path in** [author, 2026-09-03]: the availability probe
   after the draw weights the final witness set toward whoever is reachable

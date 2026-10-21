@@ -13867,6 +13867,57 @@ rejections in the corpus, and both introduction kinds are listed in the
 corpus runner so a rejection that starts passing fails rather than being
 skipped.
 
+### 2026-10-21 (the model proves the prune, and two threat passages turn round)
+
+**The ceremony theory proved a rule the design had reversed.**
+`models/tamarin/compliant/ceremony.spthy` carried
+`no_nominee_from_the_nominators_own_neighbourhood` and its twin — design
+§7.1's old "you nominate from the OTHER party's neighbourhood, never your
+own", modelled as a restriction standing for the check a client ran
+against its own neighbour list. The reorder inverts exactly that, so both
+lemmas are **deleted rather than weakened**: a lemma that proves a rule
+the design has reversed is worse than no lemma.
+
+**What replaces them is the prune, which is now what the split rests on.**
+The nomination rule draws from the nominator's own contacts; a new rule
+is the counterparty's keep, carrying the inequality that a party does not
+prune its own set; and the signature guard consults nomination **and**
+keep, which is what the obligation names — "which it nominated and which
+survived the counterparty's prune". Two lemmas state it:
+`a_signed_witness_was_nominated_by_one_side_and_kept_by_the_other`, and
+the twin showing the check is load-bearing,
+`an_unkept_nominee_is_signed_without_the_check`. The gate's mutation was
+retargeted to the new premise and still falsifies
+`no_signature_over_a_misattributed_nominee`, which is unchanged and still
+holds. Tamarin 1.12.0: nine lemmas verified in that theory, and the whole
+suite — ten theories, two bounded companions, twelve mutations — passes.
+
+**Two threat-model passages said the old direction and now say the new
+one.** §7.6's privacy note had witnesses unable to be "friendly notaries
+chosen by an attacker" *because* they came from the counterparty's
+neighbourhood; they are now not notaries a party simply chose for itself
+because the other side prunes, with what curating a set past the prune
+costs left to §7.1.1 rather than restated. §18.4's eclipse item had a
+cheaply placed node sitting in a neighbourhood "someone else's
+counterparty will nominate from"; it sits in one whose own parties
+nominate from it, the harm lands on their counterparty, and that
+counterparty now prunes rather than merely being exposed.
+
+**And one wire comment was exactly backwards**: `Witness` field 2 said
+that `nominated_by` being the witness's counterparty is the ceremony's
+cross-nomination claim. It names the side whose own contacts the witness
+came from, and what the record claims is that the entry survived the
+counterparty's keep — neither half checkable from the record, which is
+what there is for a reader to weigh.
+
+Functional CER-032 added: the window opens with the request and the
+channels, the capture and the verification run inside it, so the four
+minutes a witness waits are spent on the ceremony's work rather than
+appended to it. CER-52 stays deferred for the reason it always had — a
+four-minute wall clock in a test. Families 532. The models README's
+`local/` count was four and the tool says seven, the same drift the
+`compliant/` figure had in September.
+
 ### 2026-10-21 (the tap stands, and UWB is not owed)
 
 **The NFC tap stays as it is** [author, 2026-10-21]. The question was

@@ -382,6 +382,7 @@ The Cargo workspace has **16 crates**. Components below follow responsibilities 
 |---|---|---|---|
 | CER-001 | C | Require both participants' intentional live participation before asserting their presence or adoption. Ordinary witness/verifier work and infrastructure bookkeeping run automatically under standing policy rather than repeatedly asking an operator to approve traffic. | D §§7.1, Appendix A.3; L §1 |
 | CER-002 | C | **Each participant engages up to eight witnesses from its own contacts, before the counterparty has accepted, and the counterparty prunes them to `min(3, offered)`** [author, 2026-10-19]. The pool is the acting subnet's horizon held as direct contacts plus parties met in person anywhere, widened to other subnets' horizons or any known node only by the person's choice; selection is branch-spread and random, availability probed after drawing, never taken from an advertised willing-witness list. Nominees observe the intent and the optical trace from engagement; after the sets cross by locator, each party keeps three of the other's — every survivor nominated by one side and selected by the other — and relays survival or dismissal to its own. Target two of each side signing, the third being dropout margin and not a role. Report unavailability and imbalance; a thin or empty set is the correct value of a thin pool, never a block. | D §7.1.1; L §1.1 |
+| CER-032 | C | **The window opens with the request, and the rest of the ceremony happens inside it** [author, 2026-10-19]. The witness request carries the ceremony-id and closes each nominee's engagement; from there the proximity channels, the guided capture, and the verifier selection and queries all run **inside** the window and concurrently rather than in sequence, and every leg reaches the surviving witnesses as it is sent. A witness therefore attests from the arrival pattern on its own clock — the engagement before the counterparty accepted anything, the optical trace at screen-and-camera pace, the ceremony-id, the request, each channel outcome as it lands, the queries and the responses, the body and the record — and never from a finished record, which would add no friction to a replay (D §7.1 items 4 to 9). Test: the request precedes the first channel; an outcome measured after the request reaches the survivors as its own message while one measured before it rides in the request's own field 4; the capture and the queries overlap the window rather than following it; and nothing is held back to be sent together at the end. **The four minutes a witness waits are therefore spent on the ceremony's own work** rather than appended to it, which is what a bench run reads as spread arrivals. | D §7.1; L §§1.1, 1.2; W §§7.10.1, 7.10.2 |
 | CER-003 | C | Keep nomination attribution through collection and signing. A participant refuses a final body claiming it nominated someone it did not nominate; do not silently relabel the other participant's choices to make the record look balanced. | W §4.5; L §1.1 |
 | CER-004 | C | Witness clients observe the protocol evidence, responsiveness and local clock tolerance automatically and record which participant(s) they observed. They do not claim their operators physically attended the meeting. | D §§6.4, 7.1; L §1.2 |
 | CER-005 | C | Establish the common ceremony ID before capture from both independently contributed 16-byte random values, ordered by participant keyhash, using SHA-256 with rhtn/1:ceremony. Changing either contribution or order changes the ID; do not substitute the later transaction ID. | D §7.5.2; L §1.3 |
@@ -1003,7 +1004,7 @@ Open local parameters are not all specification defects: cache TTLs, queue cap, 
 
 ## 10. Document baseline and coverage totals
 
-This specification contains **531 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
+This specification contains **532 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
 
 | Prefix | Families |
 |---|---:|
@@ -1017,7 +1018,7 @@ This specification contains **531 numbered requirement/test families** across **
 | NET | 32 |
 | SES | 16 |
 | MAIL | 27 |
-| CER | 31 |
+| CER | 32 |
 | VER | 18 |
 | CAP | 17 |
 | REC | 12 |

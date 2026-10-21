@@ -16,10 +16,13 @@ verification result comes from the tool." Re-run everything with
 
 Current status: 3 Python assertion families, 5 TLA+ models (invariants +
 temporal properties), and **10 Tamarin theories in three trees** —
-`wire-only/` (42 lemmas), `compliant/` (33) and `local/` (4). Counted from
+`wire-only/` (42 lemmas), `compliant/` (33) and `local/` (7). Counted from
 what the tool reported in `results/`, not from the source: the
 `compliant/` figure had stood at 29 since before `attach.spthy` and
-`recovery.spthy` grew, and is corrected here [2026-09-29].
+`recovery.spthy` grew, and is corrected here [2026-09-29]; `local/` had
+stood at 4 since before `exchange.spthy` grew, corrected to the tool's 7
+[2026-10-21], which is the same drift twice and the reason the figure
+says where it came from.
 
 **`local/` is the third tree, added 2026-09-29** with `exchange.spthy`:
 `wire-format.md` §14.3's device-to-device exchange, where the optical

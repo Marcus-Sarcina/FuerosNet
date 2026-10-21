@@ -23,29 +23,16 @@ rule (modulo E) Neighbour:
   /* has exactly the trivial AC variant */
 
 rule (modulo E) Nominate:
-   [ !InNeighbourhood( $Other, $W ) ]
-  --[ Nominated( $P, $Other, $W ), CheckedOwnNeighbourhood( $P, $W ) ]->
+   [ !InNeighbourhood( $P, $W ) ]
+  --[ Nominated( $P, $Other, $W ) ]->
    [ !Nomination( $P, $Other, $W ) ]
 
   /* has exactly the trivial AC variant */
 
-restriction CheckedOwnNeighbourhood:
-  "∀ P W #i.
-    (CheckedOwnNeighbourhood( P, W ) @ #i) ⇒
-    (¬(∃ #j. (IsNeighbour( P, W ) @ #j) ∧ (#j < #i)))"
-  // safety formula
-
-  /*
-  expanded formula:
-  "∀ P W #i.
-    (CheckedOwnNeighbourhood( P, W ) @ #i) ⇒
-    (¬(∃ #j. (IsNeighbour( P, W ) @ #j) ∧ (#j < #i)))"
-  */
-
-rule (modulo E) Nominate_Without_Checking:
-   [ !InNeighbourhood( $Other, $W ) ]
-  --[ Nominated( $P, $Other, $W ), SkippedTheNeighbourhoodCheck( $P ) ]->
+rule (modulo E) Keep:
    [ !Nomination( $P, $Other, $W ) ]
+  --[ Kept( $Other, $P, $W ), Neq( $P, $Other ) ]->
+   [ !Survivor( $P, $Other, $W ) ]
 
   /* has exactly the trivial AC variant */
 
@@ -67,8 +54,8 @@ restriction Inequality:
 
 rule (modulo E) Sign_Record:
    [
-   !Record( rec, $W1, $W2, $P, $Other ), !Nomination( $P, $Other, $W1 ),
-   !Nomination( $P, $Other, $W1 )
+   !Record( rec, $W1, $W2, $P, $Other ), !Survivor( $P, $Other, $W1 ),
+   !Survivor( $P, $Other, $W1 )
    ]
   --[
   Signed( rec, $P ), SignedAttributing( rec, $P, $W1 ),
@@ -107,46 +94,53 @@ solve( SignedAttributing( rec, P, W ) @ #i )
   case Sign_Record_case_2
   solve( !Record( rec, $W1, $W2, $P, $Other ) ▶₀ #i )
     case Propose_Record
-    solve( !Nomination( $P, $Other, $W1 ) ▶₁ #i )
-      case Nominate
-      solve( !Nomination( $P, $Other, $W1 ) ▶₂ #i )
-        case Nominate
+    solve( !Survivor( $P, $Other, $W1 ) ▶₁ #i )
+      case Keep
+      solve( !Survivor( $P, $Other, $W1 ) ▶₂ #i )
+        case Keep
         SOLVED // trace found
       qed
     qed
   qed
 qed
 
-lemma no_nominee_from_the_nominators_own_neighbourhood:
+lemma a_signed_witness_was_nominated_by_one_side_and_kept_by_the_other:
   all-traces
-  "∀ P Other W #i #j.
-    ((((Nominated( P, Other, W ) @ #i) ∧ (IsNeighbour( P, W ) @ #j)) ∧
-      (#j < #i)) ∧
-     (¬(∃ #s. SkippedTheNeighbourhoodCheck( P ) @ #s))) ⇒
-    (⊥)"
+  "∀ rec P W #i.
+    ((SignedAttributing( rec, P, W ) @ #i) ∧
+     (¬(∃ #s. SkippedTheCheck( P ) @ #s))) ⇒
+    (∃ Other #n #k.
+      (((Nominated( P, Other, W ) @ #n) ∧ (Kept( Other, P, W ) @ #k)) ∧
+       (#n < #k)) ∧
+      (#k < #i))"
 /*
 guarded formula characterizing all counter-examples:
-"∃ P Other W #i #j.
-  (Nominated( P, Other, W ) @ #i) ∧ (IsNeighbour( P, W ) @ #j)
+"∃ rec P W #i.
+  (SignedAttributing( rec, P, W ) @ #i)
  ∧
-  (#j < #i) ∧ (∀ #s. (SkippedTheNeighbourhoodCheck( P ) @ #s) ⇒ ⊥)"
+  (∀ #s. (SkippedTheCheck( P ) @ #s) ⇒ ⊥) ∧
+  (∀ Other #n #k.
+    (Nominated( P, Other, W ) @ #n) ∧ (Kept( Other, P, W ) @ #k)
+   ⇒
+    ((¬(#n < #k)) ∨ (¬(#k < #i))))"
 */
 by sorry
 
-lemma an_own_neighbour_is_nominated_without_the_check:
+lemma an_unkept_nominee_is_signed_without_the_check:
   exists-trace
-  "∃ P Other W #i #j.
-    (((Nominated( P, Other, W ) @ #i) ∧ (IsNeighbour( P, W ) @ #j)) ∧
-     (#j < #i)) ∧
-    (SkippedTheNeighbourhoodCheck( P ) @ #i)"
+  "∃ rec P Other W #i #n.
+    (((SignedAttributing( rec, P, W ) @ #i) ∧
+      (Nominated( P, Other, W ) @ #n)) ∧
+     (SkippedTheCheck( P ) @ #i)) ∧
+    (¬(∃ O2 #k. Kept( O2, P, W ) @ #k))"
 /*
 guarded formula characterizing all satisfying traces:
-"∃ P Other W #i #j.
-  (Nominated( P, Other, W ) @ #i) ∧
-  (IsNeighbour( P, W ) @ #j) ∧
-  (SkippedTheNeighbourhoodCheck( P ) @ #i)
+"∃ rec P Other W #i #n.
+  (SignedAttributing( rec, P, W ) @ #i) ∧
+  (Nominated( P, Other, W ) @ #n) ∧
+  (SkippedTheCheck( P ) @ #i)
  ∧
-  #j < #i"
+  ∀ O2 #k. (Kept( O2, P, W ) @ #k) ⇒ ⊥"
 */
 by sorry
 
@@ -302,11 +296,11 @@ summary of summaries:
 
 analyzed: /home/aspiringsavage/Documents/FuerosNet/models/results/mutant-7-compliant-ceremony-no_signature_over_a_misattributed_nominee.spthy
 
-  processing time: 0.35s
+  processing time: 0.34s
   
   no_signature_over_a_misattributed_nominee (all-traces): falsified - found trace (6 steps)
-  no_nominee_from_the_nominators_own_neighbourhood (all-traces): analysis incomplete (1 steps)
-  an_own_neighbour_is_nominated_without_the_check (exists-trace): analysis incomplete (1 steps)
+  a_signed_witness_was_nominated_by_one_side_and_kept_by_the_other (all-traces): analysis incomplete (1 steps)
+  an_unkept_nominee_is_signed_without_the_check (exists-trace): analysis incomplete (1 steps)
   an_honest_signature_is_reachable (exists-trace): analysis incomplete (1 steps)
   misattribution_is_possible_without_the_check (exists-trace): analysis incomplete (1 steps)
   a_record_between_conforming_participants_implies_a_meeting (all-traces): analysis incomplete (1 steps)

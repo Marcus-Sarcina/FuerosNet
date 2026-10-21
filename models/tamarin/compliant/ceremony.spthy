@@ -32,34 +32,41 @@ begin
 
 /*
 --------------------------------------------------------------------------------
-  NEIGHBOURHOODS AND NOMINATION
+  NOMINATION FROM ONE'S OWN, AND THE COUNTERPARTY'S PRUNE
 --------------------------------------------------------------------------------
-  design 7.1's rule is directional: you nominate from the OTHER party's
-  neighbourhood.  A witness drawn from your own is the failure mode the split
-  exists to prevent.  Overlap is possible in the real graph -- horizons
-  intersect -- and the rule resolves it the strict way: "never from your own"
-  is not weakened by the node also being in theirs.
+  THE DIRECTIONAL RULE IS GONE, AND ITS REVERSAL IS THE POINT [author,
+  2026-10-19].  This theory used to prove design 7.1's "you nominate from the
+  OTHER party's neighbourhood, never your own", with a restriction standing
+  for the check a client ran against its own neighbour list.  The design now
+  says the opposite: each participant engages up to eight witnesses drawn
+  from ITS OWN contacts, before the counterparty has accepted anything,
+  because what a witness is for is observing the live transaction rather than
+  being adversarially chosen -- "a witness who only observes static records
+  doesn't add any friction to a replay attack".  The two lemmas that proved
+  the old direction are therefore deleted rather than weakened; a lemma that
+  proves a rule the design has reversed is worse than no lemma.
 
-  WHAT THE CONFORMING RULE CHECKS, AND HOW.  Membership of the counterparty's
-  neighbourhood is a fact the rule consumes.  Non-membership of the
-  nominator's own cannot be a premise -- Tamarin has no negative premises --
-  so it is the semantics of the check the client runs against its own
-  neighbour list, as a restriction on the action that says the check ran:
-  no neighbour record for that witness EXISTED AT THE TIME.  Time-scoped,
-  because a reconfigurable topology can put the witness in the nominator's
-  neighbourhood later, and the obligation is about eligibility when the
-  nomination was made.  An earlier version read "never in the trace", which
-  is a different and stronger claim than the client can make.
+  WHAT REPLACES IT, AND IS MODELLED HERE.  The counterparty's prune.  Each
+  side offers its nominees by locator and the other keeps min(3, offered),
+  so every surviving witness is NOMINATED BY ONE SIDE AND SELECTED BY THE
+  OTHER (design 7.1 item 4, 7.1.1).  That is the structural property the
+  split now rests on, and it is what this theory proves: a conforming
+  signature over a witness attributed to a party implies both that the party
+  nominated it and that the counterparty kept it.
 
-  WHAT THIS IS NOT.  It is not the theorem smuggled in as an axiom, and an
-  earlier version was exactly that: the conforming rule checked only the
-  counterparty's side, the restriction forbade the own-neighbourhood case
-  outright, and the lemma restated the restriction.  A cross-family review
-  found it.  The obligation here IS a check and nothing deeper, so the lemma
-  is the check's contract; what makes the pair say something is
-  `Nominate_Without_Checking`, the client that does not run it, from which
-  an own-neighbour nominee is reachable -- so the lemma holds because of the
-  check and not because the model cannot write the failure down.
+  WHAT THE CONFORMING RULE CHECKS, AND HOW.  `!Nomination` is the client's own
+  memory of what it nominated and `!Survivor` is that memory intersected with
+  the keep it received -- which is exactly what the obligation names: "your
+  client knows exactly which witnesses it nominated and which survived the
+  counterparty's prune".  Both are persistent, since consulting a memory does
+  not consume it.  The prune is the counterparty's act and so is a rule of its
+  own, carrying the inequality that a party does not prune its own set.
+
+  WHAT THIS IS NOT.  It is not the theorem smuggled in as an axiom.  What
+  makes the pair say something is `Sign_Without_Checking`, the client that
+  consults neither memory, from which both a misattributed nominee and an
+  unkept one are reachable -- so the lemmas hold because of the checks and
+  not because the model cannot write the failures down.
 */
 
 rule Neighbour:
@@ -67,23 +74,27 @@ rule Neighbour:
   --[ IsNeighbour($X, $W) ]->
     [ !InNeighbourhood($X, $W) ]
 
+/*  A participant nominates from ITS OWN contacts [author, 2026-10-19]: the
+    acting subnet's horizon, the parties it has met anywhere, and whatever
+    else it chose to widen to.  There is no eligibility check left to skip
+    here -- 7.1.1 makes even a scraped contact nominable, so that the
+    appearance of a party in a witness set is not evidence of membership of
+    anybody's subnet -- which is why the rule has no non-conforming twin.  */
 rule Nominate:
-    [ !InNeighbourhood($Other, $W) ]
-  --[ Nominated($P, $Other, $W)
-    , CheckedOwnNeighbourhood($P, $W) ]->
+    [ !InNeighbourhood($P, $W) ]
+  --[ Nominated($P, $Other, $W) ]->
     [ !Nomination($P, $Other, $W) ]
 
-restriction CheckedOwnNeighbourhood:
-  "All P W #i. CheckedOwnNeighbourhood(P, W) @ #i
-      ==> not(Ex #j. IsNeighbour(P, W) @ #j & #j < #i)"
-
-/*  The client that skips the directional check and nominates from wherever
-    it likes.  Well formed on the wire, which has no way to tell.          */
-rule Nominate_Without_Checking:
-    [ !InNeighbourhood($Other, $W) ]
-  --[ Nominated($P, $Other, $W)
-    , SkippedTheNeighbourhoodCheck($P) ]->
+/*  THE PRUNE, which is the counterparty's and not the nominator's: it keeps
+    some of what the other side offered and dismisses the rest, and what
+    survives is nominated by one side and selected by the other.  The count
+    (three of eight) is a bound this theory does not need: the property is
+    the crossing of the two acts, not the arithmetic, and 7.1.1 carries the
+    arithmetic.  Neq says a party does not prune its own set.             */
+rule Keep:
     [ !Nomination($P, $Other, $W) ]
+  --[ Kept($Other, $P, $W), Neq($P, $Other) ]->
+    [ !Survivor($P, $Other, $W) ]
 
 /*
 --------------------------------------------------------------------------------
@@ -120,16 +131,17 @@ restriction Inequality:
   "All x #i. Neq(x, x) @ #i ==> F"
 
 /*  THE OBLIGATION AS A GUARD.  Signing consumes nothing and asserts one
-    thing per attribution: a nomination of that witness by $P really
-    happened.  BOTH premises, because the check is per attributed witness;
-    a record attributing to $P any witness $P never nominated cannot reach
-    this rule.  MUTATION (run-all.sh 3c): make the second premise check $W1
-    again -- the signer that validates one element and authorises the body
-    -- and no_signature_over_a_misattributed_nominee falsifies for $W2.   */
+    thing per attribution: that witness survived $P's own nomination and the
+    counterparty's keep.  BOTH premises, because the check is per attributed
+    witness; a record attributing to $P any witness $P never nominated, or
+    one the counterparty never kept, cannot reach this rule.  MUTATION
+    (run-all.sh 3c): make the second premise check $W1 again -- the signer
+    that validates one element and authorises the body -- and
+    no_signature_over_a_misattributed_nominee falsifies for $W2.          */
 rule Sign_Record:
     [ !Record(rec, $W1, $W2, $P, $Other)
-    , !Nomination($P, $Other, $W1)
-    , !Nomination($P, $Other, $W2) ]
+    , !Survivor($P, $Other, $W1)
+    , !Survivor($P, $Other, $W2) ]
   --[ Signed(rec, $P)
     , SignedAttributing(rec, $P, $W1), SignedAttributing(rec, $P, $W2) ]->
     [ Out(<'signed', rec, $P>) ]
@@ -164,28 +176,35 @@ lemma no_signature_over_a_misattributed_nominee:
       & not(Ex #s. SkippedTheCheck(P) @ #s)
         ==> Ex Other #n. Nominated(P, Other, W) @ #n & #n < #i"
 
-/*  THE DIRECTIONAL RULE.  No witness a participant that ran the check
-    nominated was in its own neighbourhood when it nominated -- design 7.1's
-    "never from your own", which is what makes the split mean anything.
-    The carve-out names the participant, as the other lemmas here do, and
-    the time order says WHEN: a witness that joins the nominator's
-    neighbourhood afterwards does not break a nomination already made.    */
-lemma no_nominee_from_the_nominators_own_neighbourhood:
+/*  THE CUT AND CHOOSE.  A witness a conforming participant signed for was
+    nominated by that participant and KEPT BY THE COUNTERPARTY -- design
+    7.1.1's "nominated by one side and selected by the other", which is what
+    makes the split mean anything now that the pool is each party's own
+    (7.1 item 4).  The carve-out names the participant, as the other lemmas
+    here do, and the order says the acts happened in the order the ceremony
+    puts them: nominated, then kept, then signed over.                    */
+lemma a_signed_witness_was_nominated_by_one_side_and_kept_by_the_other:
   all-traces
-  "All P Other W #i #j.
-      Nominated(P, Other, W) @ #i & IsNeighbour(P, W) @ #j & #j < #i
-      & not(Ex #s. SkippedTheNeighbourhoodCheck(P) @ #s)
-        ==> F"
+  "All rec P W #i.
+      SignedAttributing(rec, P, W) @ #i
+      & not(Ex #s. SkippedTheCheck(P) @ #s)
+        ==> Ex Other #n #k.
+              Nominated(P, Other, W) @ #n
+            & Kept(Other, P, W) @ #k
+            & #n < #k & #k < #i"
 
-/*  AND THE WITNESS THAT THE CHECK IS WHAT HOLDS IT.  Skip it and an
-    own-neighbour nominee is reachable.  If this ever falsifies, the rule
-    above is true because the model cannot express the failure, which is
-    where this file started.                                               */
-lemma an_own_neighbour_is_nominated_without_the_check:
+/*  AND THE WITNESS THAT THE CHECK IS WHAT HOLDS IT.  Skip it and a nominee
+    the counterparty never kept is signed for anyway -- the party that
+    offered eight and signed over all eight, whatever the prune said.  If
+    this ever falsifies, the lemma above is true because the model cannot
+    express the failure, which is where this file started.                */
+lemma an_unkept_nominee_is_signed_without_the_check:
   exists-trace
-  "Ex P Other W #i #j.
-      Nominated(P, Other, W) @ #i & IsNeighbour(P, W) @ #j & #j < #i
-    & SkippedTheNeighbourhoodCheck(P) @ #i"
+  "Ex rec P Other W #i #n.
+      SignedAttributing(rec, P, W) @ #i
+    & Nominated(P, Other, W) @ #n
+    & SkippedTheCheck(P) @ #i
+    & not(Ex O2 #k. Kept(O2, P, W) @ #k)"
 
 /*  ANTI-VACUITY.  An honest participant signs a record.                   */
 lemma an_honest_signature_is_reachable:

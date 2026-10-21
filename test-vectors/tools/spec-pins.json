@@ -1,7 +1,7 @@
 {
  "specs": {
-  "wire-format.md": "b2ff43ca60af8beb9c1020f1e8f0ab0f9bc709ba5a296d6474081bfc1feaa93f",
-  "network-design.md": "e7f289d2058761d923e565296943ba9fbfcffd3e974a8808fb25aeddf5f3bf70",
+  "wire-format.md": "e59f38e064a12e19f07cccefd7e2db9bdb425d0c58157f79afb664819adcecd8",
+  "network-design.md": "6a7c009e00519febcbd65a463512594bd06ac2a6a73a5ece4ca077fc1c1713dd",
   "light-client-requirements.md": "be2b9e7beae44a5970409ea3feaa98dd124cbe6fe946cddda5955d53681160de"
  },
  "generator": "efe67c5b4fd6b9fb0656f83937795e133b7522af7f0379a5afc1a1f53af85dbf",
@@ -11,15 +11,15 @@
   "cryptography": "41.0.7"
  },
  "outputs": {
-  "keys.md": "457378f8df7d90ea13e12e02582abc8aee3c29f6fa705871f7e015bc71122266",
-  "primitives.md": "6a11de157a48b410284a5932eed04ca2cdafe64e4cdb0920682a76e2b65841c2",
-  "transactions.md": "bc91b9e84781f8ecc42f62530fb013abd8764831574d5fcf608b590f68d0b735",
-  "records.md": "3a63bcfcc7b0d64dffa493fafe8b9c0d2ab11e0c2e2950e0d80bef3930bab26c",
-  "verifier-selection.md": "3e4a59615a89ea88c59c9d3d995dad75e90fbeeb56a85ba6ccdb91004a2ba5a1",
-  "messages.md": "81bbf8593af110d42a205dd0e4ab7ebc505e3213ae6ae798872e24d65dc00095",
-  "local-interfaces.md": "9c6fd7238c500f8e3f086b312ce4d4d3cbe0459bd06f517423c790ca4dfd8b2b",
-  "corpus.json": "f5f1ecfb70c036f725e32eb94884cc8971bd7052bf6c7762df4bf96f0523cede",
-  "README.md": "dcb3c870a846384ab5b085193b1ae7ff6d5965e024f3d19f748a708229101003",
-  "negative-vectors.md": "c657df12d2c95c4bbd5e4660d8271f804e17f0afca9b508dcbf2885bc94229c5"
+  "keys.md": "0eb23469a6cb289abd90e0c2d8287225aba398dff5a7562c44aec9d47f9cfc50",
+  "primitives.md": "52e182565d1893f4179ea7dea160b00f91d594ac568ac9b3803eea091027dc11",
+  "transactions.md": "5cfbc2bdd7c0c4bb182f5a0b243a963834fff3560a7470579620196826cc7abe",
+  "records.md": "ee9e6d15849bb9eb3b605f978b895908cab8ca30aca51a5bd098464e9253491e",
+  "verifier-selection.md": "5c8444413a3195894aa32ea4705ccf3d354b856a04a4cc8604a4fca55c502f43",
+  "messages.md": "8718c9f313634436a14c0fb684261884a6405fcfc22bbf890b6cf354d20f2a52",
+  "local-interfaces.md": "d926251225a03f09dbfce58f4cdd9afc9c1dbc41367429d2e9d1ec1a71a00bed",
+  "corpus.json": "29158a0a24270a93baeb6503e0e83bbcf55761eeacc475dceb2673b2b60b45c3",
+  "README.md": "5a70042d157924fad889feb565759f612a314c83598bda97ca31d498d97cc88d",
+  "negative-vectors.md": "d1e953b42b6c539a910b6b69419479438a8aee6f72488f11471cb3b127eaae7c"
  }
 }

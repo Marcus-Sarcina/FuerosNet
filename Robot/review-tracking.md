@@ -18831,3 +18831,37 @@ formation vs witnessless normal, not whether the run completes),
 added there for heading F, and `light-client-screens.md`'s wait-or-stop
 line. `client-review-2026-10-11.md` left alone: a dated findings document,
 not an operational one.
+
+
+## 2026-10-21 — heading E: the models and the threat passages
+
+**The compliant ceremony theory was proving the reversed rule.** Deleted
+`no_nominee_from_the_nominators_own_neighbourhood` and
+`an_own_neighbour_is_nominated_without_the_check`, with the restriction
+`CheckedOwnNeighbourhood` and the rule `Nominate_Without_Checking` that
+served them. `Nominate` now draws from `!InNeighbourhood($P, $W)` (own),
+a new `Keep` rule is the counterparty's prune producing `!Survivor`, and
+`Sign_Record` consults `!Survivor` for both attributed witnesses. New:
+`a_signed_witness_was_nominated_by_one_side_and_kept_by_the_other` and
+`an_unkept_nominee_is_signed_without_the_check`. run-all.sh's mutation
+retargeted from `!Nomination($P, $Other, $W2) ]` to `!Survivor(...)`.
+
+**Tool verdicts** (Tamarin 1.12.0, ~/tools): compliant-ceremony 9 lemmas
+verified, 0.87 s; the mutation falsifies `no_signature_over_a_mis...` in
+6 steps; `./run-all.sh` ends ALL MODELS PASS — wire-only 42, compliant
+33, local 7, two bounded companions, twelve mutations falsified. The
+wire-only ceremony theory needed nothing: it models attributability and
+the witness as a remote notary, not the nomination's direction.
+
+**Documents swept for the old direction**: §7.6's "friendly notaries"
+sentence and its privacy note, §18.4's eclipse item, and
+`wire-format.md`'s `Witness` field-2 comment, which was exactly
+backwards. §23.2 (autonomous participation) and §8.1.2 (verifier
+selection from the counterparty's handed pool, which is unchanged)
+needed nothing. Added functional CER-032 for the window's contents,
+which nothing stated as a requirement.
+
+**Left alone deliberately**: CER-52, still deferred on test cost (a
+four-minute wall clock), though the reorder is what makes the wait
+overlap the ceremony's own work rather than follow it — which CER-032 now
+says and a bench run is what reads.

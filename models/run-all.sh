@@ -299,7 +299,7 @@ MUTATIONS=(
   'compliant/attach|a_conforming_server_binds_only_after_the_handshake|Handshaken($N, $C, conn), !EarlyData($N, $C, conn, a)|Handshaken($N, $C, connT), !EarlyData($N, $C, conn, a)'
   'compliant/attach|delivery_is_to_the_credential_it_was_queued_for|Queued($N, $C, k, m) ]|Queued($N, $C, kq, m) ]'
   'compliant/attach|no_attach_after_supersession|--[ EvidenceHeld($N, $C, k), Terminated($N, $C, k) ]->\n    [ ]|--[ EvidenceHeld($N, $C, k), Terminated($N, $C, k) ]->\n    [ Binding($N, $C, k) ]|bounded'
-  'compliant/ceremony|no_signature_over_a_misattributed_nominee|, !Nomination($P, $Other, $W2) ]|, !Nomination($P, $Other, $W1) ]'
+  'compliant/ceremony|no_signature_over_a_misattributed_nominee|, !Survivor($P, $Other, $W2) ]|, !Survivor($P, $Other, $W1) ]'
   'wire-only/attach|a_delegated_bind_names_a_key_the_identity_delegated|, Eq(named, presented)             // (c)|, Eq(presented, presented)         // (c)'
   'wire-only/attach|a_delegated_bind_names_a_key_the_identity_delegated|    , Eq(namedC, presentedC)\n    , Eq(verify(csig|    , Eq(presentedC, presentedC)\n    , Eq(verify(csig'
   'wire-only/attach|a_delegated_bind_names_a_key_the_identity_delegated|Eq(verify(del, <'"'"'delegation'"'"', k, $S>, fst(km)), true)|Eq(true, true)'

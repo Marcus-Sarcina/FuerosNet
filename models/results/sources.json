@@ -56,7 +56,7 @@
       "tamarin/compliant/attach.spthy": "9e337b30868bea526b4158717324ec69136e7dc4e9dd1cc1e3530a7da44c5258"
     },
     "compliant-ceremony.txt": {
-      "tamarin/compliant/ceremony.spthy": "167b9940de06de78d86150aed325f9111b31117aafee44cfaef38b83542aa9ab"
+      "tamarin/compliant/ceremony.spthy": "709b112e6387af11d74b3747cf4315ce7892076c59a26a44a340b17cbfe9ebd6"
     },
     "compliant-currency.txt": {
       "tamarin/compliant/currency.spthy": "dc6bfa57dc6ef6495a12c8a93e0476931551f4eb2c681b850d9de71507cc46ff"
@@ -98,7 +98,7 @@
       "tamarin/compliant/attach.spthy": "9e337b30868bea526b4158717324ec69136e7dc4e9dd1cc1e3530a7da44c5258"
     },
     "mutant-7-compliant-ceremony-no_signature_over_a_misattributed_nominee.txt": {
-      "tamarin/compliant/ceremony.spthy": "167b9940de06de78d86150aed325f9111b31117aafee44cfaef38b83542aa9ab"
+      "tamarin/compliant/ceremony.spthy": "709b112e6387af11d74b3747cf4315ce7892076c59a26a44a340b17cbfe9ebd6"
     },
     "mutant-8-wire-only-attach-a_delegated_bind_names_a_key_the_identity_delegated.txt": {
       "tamarin/wire-only/attach.spthy": "4dee963df4af6726f85e40119538dbcedc2de8d5952d6aef38afb37866f7e0fc"

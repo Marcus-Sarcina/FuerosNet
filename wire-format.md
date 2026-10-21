@@ -1620,10 +1620,15 @@ Corroboration = { 1: keyhash, 2: uint, 3: uint }  ; witness, method, radius_km.
 Witness = {
   1: keyhash,
   2: keyhash,          ; nominated_by — MUST be one of the two participants
-                       ;   (§3.2). That it is the witness's counterparty is the
-                       ;   ceremony's cross-nomination claim (design §7.1),
-                       ;   not checkable from the record; evaluation is the
-                       ;   reader's
+                       ;   (§3.2). It names the side whose OWN contacts the
+                       ;   witness came from [author, 2026-10-19]: each party
+                       ;   nominates its own and the other prunes, so the
+                       ;   claim the record makes is that this entry survived
+                       ;   the COUNTERPARTY's keep — nominated by one side and
+                       ;   selected by the other (design §7.1.1). Neither half
+                       ;   is checkable from the record; evaluation is the
+                       ;   reader's, and the split across the two participants
+                       ;   is what there is to read
   3: uint              ; attestation bitfield:
                        ;   bit 0 protocol_ran
                        ;   bit 1 both_responsive
