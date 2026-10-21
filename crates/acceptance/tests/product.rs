@@ -218,3 +218,58 @@ fn prd_13_ship_the_provisioning_pages_and_no_other_adminis() {
 fn prd_14_show_a_contact_by_its_published_alias_and_image() {
     todo!("PRD-14: Show a contact by its published alias and image, or by keyhash, and never by a name not received")
 }
+
+/// Engage the nominees before the code is shown, and stream the exchange to them as it runs
+///
+/// Spec: light-client-requirements.md §1.1; design §7.1
+/// Milestone: manual.  Kind: manual.  Oracle: behaviour.
+///
+/// Rule (light-client-requirements.md §1.1): "Engage the nominees with the intent: they are observers from before the ceremony-id exists, and that is their value"
+/// Rule (light-client-requirements.md §1.1): "**Stream the opening to your nominees as it happens**"
+///
+/// Given: A person starting a meeting on a device that holds contacts to nominate, with a nominee reachable and another whose session material is not held yet.
+/// When: The ceremony begins and the two codes cross.
+/// Then: Each reachable nominee is engaged before the code is shown, the unreachable one is retried while its binding is fetched, and the person is told how many of the nominated are watching. As the codes cross, each nominee receives the exchange's shape — both block counts, then each part as it lands and each part the other display acknowledges — one message per event and never the content.
+///
+/// Interpretation: A device run shows the nominee's diagnostics spread across the exchange rather than batched at its end; the kernel's own entries (CER-67) assert the ordering.
+#[test]
+#[ignore = "acceptance PRD-17: owed at milestone manual"]
+fn prd_17_engage_the_nominees_before_the_code_is_shown_and() {
+    todo!("PRD-17: Engage the nominees before the code is shown, and stream the exchange to them as it runs")
+}
+
+/// Open the window before the channels, and run them inside it without waiting on a tap
+///
+/// Spec: design §7.1; light-client-requirements.md §1.3
+/// Milestone: manual.  Kind: manual.  Oracle: behaviour.
+///
+/// Rule (design §7.1): "**Proximity channels, run inside the window and never waited on**"
+/// Rule (design §7.1): "an NFC tap polled opportunistically for a few seconds alongside the rest rather than holding the ceremony"
+///
+/// Given: Two phones whose codes have crossed, one with NFC enabled and one without, neither person touching the phones together.
+/// When: The ceremony-id fixes and the flow goes on to the channels, the capture and the verification.
+/// Then: The request opens the window before any channel runs, so every later leg reaches the surviving witnesses on their own clocks; the tap is armed while the phones are already facing each other and whatever it catches is cached; and where it was not caught the ladder polls for a few seconds and goes on. Nobody is asked to hold two phones together, and a channel that did not happen weakens the record without stalling the meeting.
+///
+/// Interpretation: The four-minute wait is a witness's own and is unverifiable from the record (CER-026); what this row holds is that the participants' work happens inside the window rather than before it.
+#[test]
+#[ignore = "acceptance PRD-18: owed at milestone manual"]
+fn prd_18_open_the_window_before_the_channels_and_run_them() {
+    todo!("PRD-18: Open the window before the channels, and run them inside it without waiting on a tap")
+}
+
+/// Show who witnessed the record and whose nominees they were, saying a witnessless one plainly
+///
+/// Spec: light-client-requirements.md §1.1; wire-format.md §3.2
+/// Milestone: manual.  Kind: manual.  Oracle: behaviour.
+///
+/// Rule (light-client-requirements.md §1.1): "Check the `nominated_by` split before you sign, and tell the user when your own nominees are absent or outnumbered"
+/// Rule (wire-format.md §3.2): "**There is no witness floor** [author, 2026-10-19]."
+///
+/// Given: Three records: one witnessed by both sides' survivors, one by the counterparty's alone, and one by nobody.
+/// When: Each meeting reaches its end screen.
+/// Then: The first states how many attested and how the nominated_by split fell; the second says so and that this side's own nominees are absent from it; the third says nobody witnessed it and that the record says so permanently. None of the three is presented as a fault.
+#[test]
+#[ignore = "acceptance PRD-19: owed at milestone manual"]
+fn prd_19_show_who_witnessed_the_record_and_whose_nominees() {
+    todo!("PRD-19: Show who witnessed the record and whose nominees they were, saying a witnessless one plainly")
+}

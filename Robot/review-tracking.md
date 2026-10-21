@@ -18739,3 +18739,31 @@ needs the Step machine → phases, nomination before the code is shown,
 the trace fed from the optical exchange's own block accounting,
 opportunistic NFC in ProximityChannels, and the Done screen reflecting
 survivors. Then heading F's bench run showing SPREAD arrivals.
+
+
+## 2026-10-20 — heading D: the shell's opening
+
+`OpticalExchange.Event` (Shape/Inbound/Outbound) accumulated in `take()`
+and drained by `MeetActivity.opticalChanged` → `Kernel.opticalTrace` →
+ffi `optical_trace`. `Courier` gained `engage()` and `trace(e)`.
+`Kernel.beginCeremony` engages before the code is shown
+(`engageNominees`, 12 tries × 250 ms, reporting from
+`p.nomineesEngaged()`). `Meet.openWindow(c)` + `windowOpen()` called from
+`drainBearer`'s PROXIMITY arm — the window precedes the channels, and
+`converse()` opens it only if some other path reached the verifiers
+without it (which keeps the older tests honest). `Meet.attested()` and
+`MeetActivity.witnessed()` for the Done screen.
+
+NFC: `ProximityChannels.arm(context)` at the id (ARM_MS 45 s in the
+background, PASS cached), `POLL_MS` 4 s where the ladder has to ask, and
+`read`/`serve` take the wait as a parameter. The 30-second latch is gone.
+
+Tests: `OpticalTraceTest` (3), the window pair and the attested split in
+`MeetConversationTest`; 210 Android tests. PRD-17/18/19 are manual rows —
+the device is the only oracle for the arrival spread, which is heading F.
+
+**Next (heading E/F)**: the models re-check against the reordered flow,
+then the bench run whose witness diagnostics must show SPREAD trace
+arrivals rather than the 2.9-second burst that started all this. The
+`cer.witness.*` events are already emitted for it (`engaged`,
+`set_sent`, `pruned`, `kept`, `asked`, `answered`, `engaged_by`).

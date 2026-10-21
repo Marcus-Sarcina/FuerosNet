@@ -39,6 +39,16 @@ import timber.log.Timber
  * building its own outcomes, once weighing the counterparty's — and a
  * second run must not demand a second tap, so the outcome is cached per
  * ceremony-id and the radio runs once.
+ *
+ * **The tap is opportunistic and never waited on** [author, 2026-10-19].
+ * It is armed as soon as the ceremony-id fixes, while the two phones are
+ * already held facing each other for the optical exchange, and whatever
+ * it catches is cached ([arm]); when the ladder asks, a cached outcome
+ * answers at once and an unarmed one is polled for [POLL_MS] and no
+ * longer. Nobody is asked to hold two phones together for half a minute:
+ * design §7.1 item 5 runs the channels inside the window alongside the
+ * capture, and a channel that did not happen is a weaker record, never a
+ * stalled ceremony.
  */
 object ProximityChannels {
 
@@ -47,6 +57,52 @@ object ProximityChannels {
     @Volatile private var reader = false
     @Volatile private var anchorAgreed = false
     private val cachedTap = AtomicReference<ChannelOutcome?>(null)
+
+    /** **How long the ladder waits on a tap it has to poll for**: a few
+     *  seconds, where this once blocked for thirty [author, 2026-10-19].
+     *  The channels run inside the window and are never waited on, so a
+     *  tap that has not happened by now is one the record does without. */
+    const val POLL_MS = 4_000L
+
+    /** Whether a tap is already being listened for ([arm]). */
+    private val arming = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /**
+     * **Listen for a tap from now on, alongside whatever else is running**
+     * [author, 2026-10-19]. Called where the ceremony-id fixes — the two
+     * phones are facing each other for the optical exchange at that
+     * moment, which is exactly when a tap costs nobody anything. The
+     * outcome lands in the cache, so the ladder finds it waiting rather
+     * than asking the two people to touch phones again.
+     *
+     * Does nothing where a tap is already cached or already being
+     * listened for, and never blocks the caller.
+     */
+    fun arm(context: Context) {
+        if (cachedTap.get() != null || !arming.compareAndSet(false, true)) return
+        val cid = ceremonyId
+        val adapter = NfcAdapter.getDefaultAdapter(context)
+        if (cid == null || adapter?.isEnabled != true) {
+            arming.set(false)
+            return
+        }
+        Thread {
+            try {
+                Diag.event("nfc", "op" to "arm", "side" to if (reader) "reader" else "card")
+                val outcome = if (reader) read(adapter, cid, ARM_MS) else serve(ARM_MS)
+                if (outcome == ChannelOutcome.PASS) cachedTap.set(outcome)
+                Diag.event("nfc", "op" to "arm", "outcome" to outcome)
+            } finally {
+                arming.set(false)
+            }
+        }.start()
+    }
+
+    /** **How long the opportunistic listener stays up**: the span of the
+     *  optical exchange and the window's early seconds, so a tap at any
+     *  point while the phones are together is caught.  A FAIL here is not
+     *  cached — the ladder may still poll, and the people may still tap. */
+    private const val ARM_MS = 45_000L
 
     /** Run channels for `a` from now on. */
     fun host(a: Activity) {
@@ -121,7 +177,10 @@ object ProximityChannels {
             ?: return unavailable("no adapter")
         if (!adapter.isEnabled) return unavailable("adapter off")
         val started = Diag.ms()
-        val outcome = if (reader) read(adapter, cid) else serve()
+        // **polled, not waited on**: a few seconds for a tap the armed
+        // listener has not already caught, and then the record does
+        // without it (design §7.1 item 5)
+        val outcome = if (reader) read(adapter, cid, POLL_MS) else serve(POLL_MS)
         Diag.event(
             "nfc",
             "op" to "tap",
@@ -144,7 +203,7 @@ object ProximityChannels {
      * it is generous, and a timeout is a FAIL rather than UNAVAILABLE: the
      * hardware was there and the tap did not happen.
      */
-    private fun read(adapter: NfcAdapter, cid: ByteArray): ChannelOutcome {
+    private fun read(adapter: NfcAdapter, cid: ByteArray, waitMs: Long): ChannelOutcome {
         val a = host ?: return unavailable("no foreground screen to read from")
         val done = CountDownLatch(1)
         val result = AtomicReference(ChannelOutcome.FAIL)
@@ -184,8 +243,8 @@ object ProximityChannels {
                 )
             }
             Diag.event("nfc", "op" to "reader_mode", "state" to "on")
-            val tapped = done.await(30, TimeUnit.SECONDS)
-            if (!tapped) Diag.warn("nfc", "op" to "latch", "outcome" to "timeout", "waited_ms" to 30_000)
+            val tapped = done.await(waitMs, TimeUnit.MILLISECONDS)
+            if (!tapped) Diag.warn("nfc", "op" to "latch", "outcome" to "timeout", "waited_ms" to waitMs)
             result.get()
         } catch (e: Exception) {
             Timber.w(e, "nfc reader mode")
@@ -196,14 +255,15 @@ object ProximityChannels {
         }
     }
 
-    /** The card's side: wait for the service to be read in this ceremony. */
-    private fun serve(): ChannelOutcome {
-        val deadline = System.currentTimeMillis() + 30_000
+    /** The card's side: wait `waitMs` for the service to be read in this
+     *  ceremony, and no longer. */
+    private fun serve(waitMs: Long): ChannelOutcome {
+        val deadline = System.currentTimeMillis() + waitMs
         while (System.currentTimeMillis() < deadline) {
             cachedTap.get()?.let { return it }
             Thread.sleep(200)
         }
-        Diag.warn("nfc", "op" to "latch", "side" to "card", "outcome" to "timeout", "waited_ms" to 30_000)
+        Diag.warn("nfc", "op" to "latch", "side" to "card", "outcome" to "timeout", "waited_ms" to waitMs)
         return ChannelOutcome.FAIL
     }
 }

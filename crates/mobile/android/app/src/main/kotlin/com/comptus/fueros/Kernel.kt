@@ -11,6 +11,7 @@ import uniffi.rhtn_ffi.Participant
 import uniffi.rhtn_ffi.Refused
 import uniffi.rhtn_ffi.Status
 import uniffi.rhtn_ffi.Told
+import uniffi.rhtn_ffi.TraceStep
 import uniffi.rhtn_ffi.kindApplication
 
 /**
@@ -371,8 +372,57 @@ object Kernel {
                 m.begunCeremony()
                 m.note("ceremony open; the two codes are ready to cross.")
             }
+            // **the nominees are engaged with the intent, before the code
+            // is shown** [author, 2026-10-19]: they observe from before
+            // the counterparty has accepted anything, which is their
+            // value — a witness shown only finished records adds no
+            // friction to a replay (design §7.1). Retried while their
+            // session material is fetched, and a nominee still unreached
+            // when the ceremony-id fixes is one that does not appear
+            engageNominees(p, m)
         }.start()
     }
+
+    /**
+     * **Engage this side's nominees** (kind 20), retried while the
+     * bindings land: the first attempt on a nominee whose session
+     * material is not held asks for it, so a transient absence is not an
+     * unavailable witness (`light-client-requirements.md` §1.1). The
+     * attempts stop once every nominee is reached, the window opens, or
+     * the tries run out — the kernel closes the set when the ceremony-id
+     * fixes, and reports what it reached.
+     */
+    private fun engageNominees(p: Participant, m: Meet) {
+        val c = courier(p)
+        for (attempt in 0 until ENGAGE_TRIES) {
+            if (m.step() == Meet.Step.STOPPED) return
+            c.engage()?.let { why ->
+                Diag.warn("witness.engage", "why" to why)
+                return
+            }
+            val reached = call("nomineesEngaged", { null }) { p.nomineesEngaged() } ?: return
+            if (reached.engaged == reached.nominated) {
+                if (reached.nominated > 0u) {
+                    m.note("${reached.engaged} of ${reached.nominated} nominees are engaged and watching.")
+                }
+                return
+            }
+            if (attempt == ENGAGE_TRIES - 1) {
+                m.note(
+                    "${reached.engaged} of ${reached.nominated} nominees are engaged; " +
+                        "the rest were not reachable and will not appear.",
+                )
+                return
+            }
+            Thread.sleep(ENGAGE_WAIT_MS)
+        }
+    }
+
+    /** How many turns the engagement is given while the bindings land. */
+    private const val ENGAGE_TRIES = 12
+
+    /** The wait between them, in milliseconds. */
+    private const val ENGAGE_WAIT_MS = 250L
 
     /**
      * One call into the kernel, bracketed for the diagnostics
@@ -766,6 +816,30 @@ object Kernel {
      * refusal at this step is either a bearer disagreeing with a screen or
      * a party who is not the one in front of you.
      */
+    /**
+     * **The optical exchange's trace to this side's nominees** (kind 21)
+     * [author, 2026-10-19], one message per event and never batched: the
+     * flow drains the exchange as each read lands and hands the events
+     * here, where each goes to the nominees this side engaged.
+     *
+     * **A failure is not the meeting's end.** A nominee that cannot be
+     * reached is a witness that does not appear (design §7.1); what the
+     * trace buys is the arrival pattern on the clocks of the nominees it
+     * does reach, and the exchange itself is unaffected.
+     */
+    fun opticalTrace(events: List<OpticalExchange.Event>) {
+        if (events.isEmpty()) return
+        val p = participant ?: return
+        val m = meet ?: return
+        for (e in events) {
+            courier(p).trace(e)?.let { why ->
+                Diag.warn("optical.trace", "why" to why)
+                m.note("a nominee could not be sent the exchange's shape.")
+                return
+            }
+        }
+    }
+
     fun takeOptical(bytes: ByteArray): String? {
         val p = participant ?: return "the kernel is not running"
         val m = meet ?: return "no meeting is open here"
@@ -792,6 +866,13 @@ object Kernel {
         // and the reader/card side follows the bootstrap's own
         // asymmetry — the party that showed the bootstrap reads.
         ProximityChannels.ceremony(id, m.role == Meet.Role.INITIATOR, true)
+        // **and the tap is armed from here, opportunistically** [author,
+        // 2026-10-19]: the two phones are facing each other for the
+        // optical exchange at this moment, so a tap now costs nobody
+        // anything, and whatever it catches is waiting when the ladder
+        // asks. Nothing waits on it — the channels run inside the window
+        // alongside the capture, never holding it
+        appContext?.let { ProximityChannels.arm(it) }
         // THE BEARER'S TURN. The optical step is what the integrity
         // rests on (§14.3.1); from here a radio carries the bulk,
         // and everything it carries is checked against what the
@@ -825,6 +906,18 @@ object Kernel {
         // bearer, drained right after the step whether it went or was
         // refused: a refused propose that is `Waiting` has sent nothing,
         // and a step that went has left its carriage in the kernel
+        override fun engage(): String? = refusal("converseEngage") { p.converseEngage() }
+        override fun trace(e: OpticalExchange.Event): String? =
+            refusal("opticalTrace") {
+                p.opticalTrace(
+                    when (e) {
+                        is OpticalExchange.Event.Shape ->
+                            TraceStep.Shape(e.mine.toULong(), e.theirs.toULong())
+                        is OpticalExchange.Event.Inbound -> TraceStep.Inbound(e.index.toULong())
+                        is OpticalExchange.Event.Outbound -> TraceStep.Outbound(e.index.toULong())
+                    },
+                )
+            }
         override fun open(): String? = refusal("converseOpen") { p.converseOpen() }.also { sendCarriages(p) }
         override fun queries(): String? = refusal("converseQueries") { p.converseQueries() }.also { sendCarriages(p) }
         override fun gathered(): String? = refusal("converseGathered") { p.converseGathered() }.also { sendCarriages(p) }
@@ -1173,13 +1266,23 @@ object Kernel {
                     m.intentReceived()
                 }
             }
-            Meet.Step.PROXIMITY -> live.received(Carriage.Phase.PROXIMITY)?.let { set ->
+            // **the window opens before the channels run** [author,
+            // 2026-10-19]: the request carries the ceremony-id and closes
+            // each engagement, and everything after it — the channels, the
+            // capture, the verification — happens inside it, each leg
+            // reaching the survivors as it is sent. Refused while the
+            // counterparty's prune has not answered, and asked again on
+            // the next turn of this drain
+            Meet.Step.PROXIMITY -> {
+                m.openWindow(courier(p))
+                live.received(Carriage.Phase.PROXIMITY)?.let { set ->
                 set.firstOrNull()?.let { bytes ->
                     call("takeProximity", { e -> m.stop("the carried outcomes were refused: ${e.reason}") }) {
                         p.takeProximity(bytes)
                         m.note("their channel outcomes are in.")
                         m.proximityDone()
                     }
+                }
                 }
             }
             Meet.Step.CAPTURE -> live.received(Carriage.Phase.CAPTURE_KEY)?.let { set ->

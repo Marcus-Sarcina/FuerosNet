@@ -821,6 +821,13 @@ class MeetActivity : Activity() {
      */
     private fun opticalChanged(m: Meet, x: OpticalExchange, name: String) {
         m.opticalMoved()
+        // **the shape goes to this side's nominees as it happens** (kind
+        // 21) [author, 2026-10-19]: one message per event, never batched,
+        // because the arrival pace on their clocks is what they attest
+        // from — the counts once both are known, then each inbound part as
+        // it lands and each outbound part their display acknowledges.
+        // Never the content: a part is half of what keys the session
+        Kernel.opticalTrace(x.drainTrace())
         Diag.event("optical.exchange", "which" to name, "showing" to x.showing(), "received" to x.received(), "theirs" to x.theirCount(), "they_hold" to x.theirReceived())
         if (x.done() && m.handOff(x)) {
             camera?.close()
@@ -1034,9 +1041,36 @@ class MeetActivity : Activity() {
             }
             return
         }
+        witnessed(m)
         adoption(m, Kernel.adoption())
         peering(m, Kernel.peering())
         button("Done") { Kernel.stopMeet("done"); finish() }
+    }
+
+    /**
+     * **Who witnessed it, and whose nominees they were** [author,
+     * 2026-10-19]. The survivors of the prune that signed, split by the
+     * side that nominated each — a record attested only by the
+     * counterparty's survivors is one this side of the story did not
+     * witness, which the person is owed sight of (design §6.1.1, §7.1.1).
+     *
+     * **A witnessless record is said plainly, not apologised for**: there
+     * is no floor, the absence is in the signed body for every later
+     * reader, and a patron reviewing this archive will read it as such
+     * (`wire-format.md` §3.2).
+     */
+    private fun witnessed(m: Meet) {
+        val signed = m.attested()
+        if (signed.isEmpty()) {
+            para("Nobody witnessed this meeting. The record says so, permanently — the two of you are its only signers.")
+            return
+        }
+        val mine = signed.count { it.mine }
+        val theirs = signed.size - mine
+        para(
+            "Witnessed by ${signed.size}: $mine nominated by you, $theirs by ${m.counterpartyName}." +
+                if (mine == 0) " Your own nominees are absent from it." else "",
+        )
     }
 
     /**

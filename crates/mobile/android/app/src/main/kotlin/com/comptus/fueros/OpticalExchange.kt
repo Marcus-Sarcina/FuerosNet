@@ -129,6 +129,27 @@ class OpticalExchange(
         MIRROR,
     }
 
+    /**
+     * **One event of the exchange's shape, as the witnesses are owed it**
+     * (`wire-format.md` §7.10.2, kind 21) [author, 2026-10-19]: the block
+     * counts once both are known, each inbound part as it lands, and each
+     * outbound part the other side's display acknowledges.  **Never the
+     * content**: a part is half of what keys the local session (§14.3.2),
+     * and a witness watching indices land at screen-and-camera pace is
+     * observing the one thing a replay cannot cheaply counterfeit — the
+     * transaction happening (design §7.1 item 3).
+     */
+    sealed interface Event {
+        /** Both counts are known: this side's parts and theirs. */
+        data class Shape(val mine: Int, val theirs: Int) : Event
+
+        /** A part of theirs landed here, by index. */
+        data class Inbound(val index: Int) : Event
+
+        /** A part of this side's is acknowledged on their display. */
+        data class Outbound(val index: Int) : Event
+    }
+
     private val parts: List<ByteArray> = evenly(mine, chunk)
 
     /** How many parts this device shows. */
@@ -147,6 +168,11 @@ class OpticalExchange(
     /** Contiguous parts of theirs held, from the first: what the header
      *  carries, and all it has room to say. */
     private var got = 0
+    /** The events of the trace not yet handed to the kernel, oldest
+     *  first: drained by the flow as each read happens, so what reaches a
+     *  witness arrives at the pace the two screens set and never
+     *  batched ([drainTrace]). */
+    private val trace = ArrayDeque<Event>()
     /** How many of mine their last header said they hold, contiguously
      *  from the first: the floor under [theirHeld]. */
     private var theirGot = 0
@@ -239,6 +265,25 @@ class OpticalExchange(
         }
     }
 
+    /** **Their contiguous hold of this side's parts moved to `n`**: one
+     *  outbound event per index newly acknowledged, since a witness is
+     *  owed each as it happens and the header can carry several at once. */
+    private fun acknowledged(n: Int) {
+        for (i in theirGot until minOf(n, count)) {
+            trace.addLast(Event.Outbound(i))
+        }
+        theirGot = maxOf(theirGot, n)
+    }
+
+    /** **The trace events since the last drain**, oldest first: the flow
+     *  takes them as each read happens and hands each to the kernel, which
+     *  sends it to this side's own nominees (kind 21). */
+    fun drainTrace(): List<Event> = synchronized(lock) {
+        val out = trace.toList()
+        trace.clear()
+        out
+    }
+
     /** Where this exchange's state stands; a screen compares, never reads. */
     fun version(): Long = synchronized(lock) { version }
 
@@ -291,7 +336,7 @@ class OpticalExchange(
             // before it did. Without this the side that finishes second
             // waits for a header that is gone
             if (theirGot != count) version++
-            theirGot = count
+            acknowledged(count)
             return Took.DUPLICATE
         }
         if (bytes[1].toInt() != which) return Took.NOT_OURS
@@ -302,6 +347,7 @@ class OpticalExchange(
         if (theirCount < 0) {
             theirCount = n
             theirs = arrayOfNulls(n)
+            trace.addLast(Event.Shape(mine = count, theirs = n))
             version++
         } else if (n != theirCount) {
             // **a code of this exchange's type with another count is
@@ -313,7 +359,7 @@ class OpticalExchange(
         }
         if (gotOfMine > count) return Took.MALFORMED
         if (gotOfMine > theirGot) version++
-        theirGot = maxOf(theirGot, gotOfMine)
+        acknowledged(gotOfMine)
         // **the header names one part they certainly lack**: `got` is
         // contiguous, so the part at it is not held, and the header knows
         // that better than the rows do. Without this a row misread *set*
@@ -327,6 +373,7 @@ class OpticalExchange(
         }
         if (theirs[index] != null) return Took.DUPLICATE
         theirs[index] = bytes.copyOfRange(HEADER, bytes.size)
+        trace.addLast(Event.Inbound(index))
         version++
         while (got < theirCount && theirs[got] != null) got++
         if (got == theirCount) Took.COMPLETE else Took.ACCEPTED

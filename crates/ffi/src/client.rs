@@ -302,6 +302,18 @@ impl Engaging {
     }
 }
 
+/// **How far the engagement has got** (`wire-format.md` §7.10.2, kind 20)
+/// [author, 2026-10-19]: a shell shows the pair while the opening runs,
+/// and a nominee still unreached when the ceremony-id fixes is one that
+/// does not appear.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Record)]
+pub struct Engaged {
+    /// Nominees the engagement reached.
+    pub engaged: u32,
+    /// Nominees nominated.
+    pub nominated: u32,
+}
+
 /// One event of the optical exchange's shape (`wire-format.md` §7.10.2,
 /// kind 21), as the shell observes it [author, 2026-10-19].
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
@@ -2273,6 +2285,19 @@ impl Participant {
                 .with_blocking(move |c| c.take_resource_response(&reply))
                 .map_err(Refused::new)?;
             Ok(ResourceAnswer { status, body })
+        })
+    }
+
+    /// How far the engagement has got: the nominees reached, of those
+    /// nominated.
+    #[must_use]
+    pub fn nominees_engaged(&self) -> Engaged {
+        crate::diag::call_plain("nominees_engaged", || {
+            let (engaged, nominated) = self.handle.with_blocking(|c| c.nominees_engaged());
+            Engaged {
+                engaged: engaged as u32,
+                nominated: nominated as u32,
+            }
         })
     }
 

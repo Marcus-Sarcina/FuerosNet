@@ -14368,5 +14368,86 @@
   "then": "Both are declined: a request from nowhere binds nothing the witness watched, and a disagreeing ceremony-id means the sequence it observed is not the ceremony it is being asked to sign. A request agreeing on both is answered as always.",
   "oracle": "behaviour",
   "interpretation": ""
+ },
+ {
+  "id": "PRD-17",
+  "area": "product",
+  "gap": "product",
+  "title": "Engage the nominees before the code is shown, and stream the exchange to them as it runs",
+  "milestone": "manual",
+  "kind": "manual",
+  "spec": [
+   "light-client-requirements.md §1.1",
+   "design §7.1"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §1.1",
+    "text": "Engage the nominees with the intent: they are observers from\n  before the ceremony-id exists, and that is their value"
+   },
+   {
+    "where": "light-client-requirements.md §1.1",
+    "text": "**Stream the opening to your nominees as it happens**"
+   }
+  ],
+  "given": "A person starting a meeting on a device that holds contacts to nominate, with a nominee reachable and another whose session material is not held yet.",
+  "when": "The ceremony begins and the two codes cross.",
+  "then": "Each reachable nominee is engaged before the code is shown, the unreachable one is retried while its binding is fetched, and the person is told how many of the nominated are watching. As the codes cross, each nominee receives the exchange's shape — both block counts, then each part as it lands and each part the other display acknowledges — one message per event and never the content.",
+  "oracle": "behaviour",
+  "interpretation": "A device run shows the nominee's diagnostics spread across the exchange rather than batched at its end; the kernel's own entries (CER-67) assert the ordering."
+ },
+ {
+  "id": "PRD-18",
+  "area": "product",
+  "gap": "product",
+  "title": "Open the window before the channels, and run them inside it without waiting on a tap",
+  "milestone": "manual",
+  "kind": "manual",
+  "spec": [
+   "design §7.1",
+   "light-client-requirements.md §1.3"
+  ],
+  "rule": [
+   {
+    "where": "design §7.1",
+    "text": "**Proximity channels, run inside the window and never waited on**"
+   },
+   {
+    "where": "design §7.1",
+    "text": "an NFC tap polled opportunistically for a few seconds alongside the rest rather than\n   holding the ceremony"
+   }
+  ],
+  "given": "Two phones whose codes have crossed, one with NFC enabled and one without, neither person touching the phones together.",
+  "when": "The ceremony-id fixes and the flow goes on to the channels, the capture and the verification.",
+  "then": "The request opens the window before any channel runs, so every later leg reaches the surviving witnesses on their own clocks; the tap is armed while the phones are already facing each other and whatever it catches is cached; and where it was not caught the ladder polls for a few seconds and goes on. Nobody is asked to hold two phones together, and a channel that did not happen weakens the record without stalling the meeting.",
+  "oracle": "behaviour",
+  "interpretation": "The four-minute wait is a witness's own and is unverifiable from the record (CER-026); what this row holds is that the participants' work happens inside the window rather than before it."
+ },
+ {
+  "id": "PRD-19",
+  "area": "product",
+  "gap": "product",
+  "title": "Show who witnessed the record and whose nominees they were, saying a witnessless one plainly",
+  "milestone": "manual",
+  "kind": "manual",
+  "spec": [
+   "light-client-requirements.md §1.1",
+   "wire-format.md §3.2"
+  ],
+  "rule": [
+   {
+    "where": "light-client-requirements.md §1.1",
+    "text": "Check the `nominated_by` split before\n  you sign, and tell the user when your own nominees are absent or\n  outnumbered"
+   },
+   {
+    "where": "wire-format.md §3.2",
+    "text": "**There is no witness floor** [author, 2026-10-19]."
+   }
+  ],
+  "given": "Three records: one witnessed by both sides' survivors, one by the counterparty's alone, and one by nobody.",
+  "when": "Each meeting reaches its end screen.",
+  "then": "The first states how many attested and how the nominated_by split fell; the second says so and that this side's own nominees are absent from it; the third says nobody witnessed it and that the record says so permanently. None of the three is presented as a fault.",
+  "oracle": "behaviour",
+  "interpretation": ""
  }
 ]

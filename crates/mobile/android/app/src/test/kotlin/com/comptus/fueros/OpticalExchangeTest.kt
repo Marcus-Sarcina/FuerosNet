@@ -221,3 +221,87 @@ class OpticalExchangeTest {
         assertEquals(OpticalExchange.Took.MALFORMED, a.take(byteArrayOf(1, 0, 0, 0, 0)))
     }
 }
+
+/**
+ * **The trace the witnesses are owed** (`wire-format.md` §7.10.2, kind 21)
+ * [author, 2026-10-19]: the exchange reports its own shape as it moves —
+ * both counts once they are known, each inbound part as it lands, each
+ * outbound part the other side's display acknowledges — and never its
+ * content, since a part is half of what keys the local session.
+ */
+class OpticalTraceTest {
+
+    private fun bytes(n: Int, seed: Int) = ByteArray(n) { ((it * 7 + seed) and 0xff).toByte() }
+
+    @Test
+    fun the_shape_comes_first_and_then_one_event_per_part() {
+        val a = OpticalExchange(0, bytes(60, 1), chunk = 20)
+        val b = OpticalExchange(0, bytes(40, 2), chunk = 20)
+        assertEquals(3, a.count)
+        assertEquals(2, b.count)
+        // nothing is owed before a code of theirs has been read
+        assertTrue(a.drainTrace().isEmpty())
+        // their first code: both counts are known, and the part it carried
+        a.take(b.frame())
+        val first = a.drainTrace()
+        assertEquals(
+            "the shape precedes the part it arrived with",
+            OpticalExchange.Event.Shape(mine = 3, theirs = 2),
+            first.first(),
+        )
+        assertTrue(
+            "and the part itself, by index: $first",
+            first.drop(1).all { it is OpticalExchange.Event.Inbound },
+        )
+        // **drained, so nothing is sent twice**: the flow hands each event
+        // to the kernel as it happens, and the exchange forgets it
+        assertTrue(a.drainTrace().isEmpty())
+    }
+
+    @Test
+    fun an_acknowledgement_of_this_sides_parts_is_one_event_each() {
+        val a = OpticalExchange(0, bytes(60, 1), chunk = 20)
+        val b = OpticalExchange(0, bytes(60, 2), chunk = 20)
+        // b reads two of a's parts, so a's next read of b's header says so
+        b.take(a.frame())
+        b.take(a.frame())
+        a.drainTrace()
+        a.take(b.frame())
+        val events = a.drainTrace()
+        val out = events.filterIsInstance<OpticalExchange.Event.Outbound>()
+        assertEquals("one event per index newly acknowledged", out.size, out.map { it.index }.distinct().size)
+        assertTrue("and the indices are this side's own: $out", out.all { it.index < a.count })
+    }
+
+    @Test
+    fun a_whole_exchange_traces_every_part_it_moved_and_no_content() {
+        val a = OpticalExchange(0, bytes(100, 1), chunk = 20)
+        val b = OpticalExchange(0, bytes(100, 2), chunk = 20)
+        val seen = mutableListOf<OpticalExchange.Event>()
+        var rounds = 0
+        while (!(a.done() && b.done()) && rounds < 100) {
+            val fa = a.frame()
+            val fb = b.frame()
+            b.take(fa)
+            a.take(fb)
+            seen += a.drainTrace()
+            rounds++
+        }
+        assertTrue("the exchange completed", a.done())
+        // every part of theirs landed exactly once, by index
+        val inbound = seen.filterIsInstance<OpticalExchange.Event.Inbound>().map { it.index }
+        assertEquals(b.count, inbound.distinct().size)
+        assertEquals("never twice", inbound.size, inbound.distinct().size)
+        // one shape, no more
+        assertEquals(1, seen.count { it is OpticalExchange.Event.Shape })
+        // **nothing in the trace is content**: the events carry counts and
+        // indices, which is the whole of what a witness is told
+        assertTrue(
+            seen.all {
+                it is OpticalExchange.Event.Shape ||
+                    it is OpticalExchange.Event.Inbound ||
+                    it is OpticalExchange.Event.Outbound
+            },
+        )
+    }
+}

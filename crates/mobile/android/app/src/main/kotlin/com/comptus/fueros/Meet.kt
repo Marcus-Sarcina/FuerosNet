@@ -347,7 +347,19 @@ class Meet(
      * kernel implements this over `Participant`, and a test with a fake.
      */
     interface Courier {
-        /** Ask every nominee to witness and hand over the back-pointers. */
+        /** **Engage this side's own nominees** (kind 20) [author,
+         *  2026-10-19]: sent with the intent, before the counterparty has
+         *  accepted anything, and retried while a nominee's session
+         *  material is fetched. */
+        fun engage(): String?
+
+        /** **One event of the optical exchange's shape** to this side's
+         *  nominees (kind 21), as it happens and never batched: the
+         *  arrival pace on their clocks is the evidence. */
+        fun trace(e: OpticalExchange.Event): String?
+
+        /** Open the window with the request, its field 5 closing each
+         *  engagement, and hand over the back-pointers. */
         fun open(): String?
 
         /** Select the verifiers and put each query to the subject. */
@@ -604,8 +616,24 @@ class Meet(
      *  attest: surfaced, because the person decides whether to wait. */
     fun noWitness(): Boolean = synchronized(lock) { progress?.noWitness == true }
 
+    /**
+     * **Who attested in the end, and whose side they were nominated by**
+     * [author, 2026-10-19]: the survivors of the prune that signed.  The
+     * `nominated_by` split is the record's own, and a person is owed it —
+     * a record attested only by the counterparty's survivors is one this
+     * side of the story did not witness, which design §6.1.1 leaves
+     * visible rather than mandatory.  Empty where nobody attested, which
+     * is a valid record saying so permanently (there is no floor).
+     */
+    fun attested(): List<Nominee> = synchronized(lock) {
+        val signed = progress?.signed.orEmpty().toSet()
+        witnessesLocked().filter { it.answer == Answer.ATTESTS && it.key in signed }
+    }
+
     /** Every nominee, either side's, with what it has answered. */
-    fun witnesses(): List<Nominee> = synchronized(lock) {
+    fun witnesses(): List<Nominee> = synchronized(lock) { witnessesLocked() }
+
+    private fun witnessesLocked(): List<Nominee> = run {
         val p = progress
         (nomineesMine.map { Nominee(it, true) } + nomineesTheirs.map { Nominee(it, false) })
             .map { n ->
@@ -946,6 +974,8 @@ class Meet(
     /** Whether the invitation has crossed. */
     fun bootstrapCrossed(): Boolean = synchronized(lock) { bootstrapCrossed }
 
+    /** Whether the request has gone and the window is open. */
+    private var windowOpen = false
     private var intentSent = false
     private var intentReceived = false
 
@@ -981,12 +1011,55 @@ class Meet(
     fun captureDone() = advance(Step.CAPTURE, Step.VERIFIERS, "kernel")
 
     /**
-     * **Open the conversation** (design §7.1 step 6 and step 8), once, on
-     * entering [Step.VERIFIERS]: the request to witness and the
-     * back-pointers first, so a witness is holding the ceremony before
-     * anything else of it arrives, then the queries to the subject. A
-     * refusal of either stops the meeting with the kernel's reason: there
-     * is no conversation to continue. Ends with one [poll], so a
+     * **Open the four-minute window** (design §7.1 item 4) [author,
+     * 2026-10-19], once the optical exchange is through and the
+     * counterparty's prune has answered: the request goes to this side's
+     * surviving nominees, carrying the ceremony-id and closing the
+     * engagement each has been watching, and this signer's back-pointers
+     * go with it.
+     *
+     * **Everything after it runs inside the window** — the channels, the
+     * capture and the verification — so each leg reaches the survivors on
+     * their own clocks as it is sent, which is what a witness attests
+     * from. Refused with the kernel's `Waiting` while the keep has not
+     * arrived, and retried on the next turn; any other refusal ends the
+     * meeting. Whether the window is open.
+     */
+    fun openWindow(c: Courier): Boolean {
+        synchronized(lock) {
+            if (windowOpen) return true
+            if (opening) return false
+            opening = true
+        }
+        val why = c.open()
+        if (why != null) {
+            synchronized(lock) { opening = false }
+            // the prune has not answered yet: the kernel says so, and the
+            // next turn asks again
+            if (why.startsWith("Waiting(")) return false
+            stop("the window could not open: $why")
+            return false
+        }
+        synchronized(lock) {
+            windowOpen = true
+            opening = false
+            changed()
+        }
+        note("the window is open: the witnesses that survived the prune are asked, back-pointers sent.")
+        return true
+    }
+
+    /** Whether the window is open: the request has gone, and the channels,
+     *  the capture and the verification run inside it. */
+    fun windowOpen(): Boolean = synchronized(lock) { windowOpen }
+
+    /**
+     * **Put the queries, inside the window** (design §7.1 item 7), once,
+     * on entering [Step.VERIFIERS]. The window opened before the channels
+     * ([openWindow]); where a caller drove the flow without it — a test,
+     * or a path that never reached the channels — it is opened here, since
+     * there is no conversation without the request. A refusal stops the
+     * meeting with the kernel's reason. Ends with one [poll], so a
      * conversation that has nothing to wait on moves at once.
      */
     fun converse(c: Courier, nowMs: Long = System.currentTimeMillis()) {
@@ -994,7 +1067,10 @@ class Meet(
             if (step != Step.VERIFIERS || opening) return
             opening = true
         }
-        c.open()?.let { return stop("the conversation could not open: $it") }
+        if (!synchronized(lock) { windowOpen }) {
+            c.open()?.let { return stop("the conversation could not open: $it") }
+            synchronized(lock) { windowOpen = true }
+        }
         note("the nominees are asked to witness; back-pointers sent.")
         c.queries()?.let { return stop("the queries could not be put: $it") }
         note("the queries are with $counterpartyName for consent.")

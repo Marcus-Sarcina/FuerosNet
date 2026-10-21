@@ -13867,6 +13867,43 @@ rejections in the corpus, and both introduction kinds are listed in the
 corpus runner so a rejection that starts passing fails rather than being
 skipped.
 
+### 2026-10-20 (the shell's opening, and the tap nobody holds)
+
+**The shell drives the reordered ceremony** [author, 2026-10-19]. The
+nominees are engaged at `begin`, before the code is shown — retried
+while a nominee's session material is fetched, with the person told how
+many of the nominated are watching — and the optical exchange reports
+its own shape as it moves: `OpticalExchange` accumulates the counts once
+both are known, each inbound part as it lands and each outbound part the
+other display acknowledges, and the flow drains it on every read and
+hands each event to the kernel. One message per event, never batched,
+never the content.
+
+**The window opens before the channels.** The request went out at the
+verifiers, after the capture; it now goes on the proximity turn, so the
+channels, the capture and the verification all happen inside the window
+and every leg reaches the survivors on their own clocks. A request
+refused while the counterparty's prune has not answered is retried on
+the next turn of the bearer drain; any other refusal ends the meeting.
+
+**And the tap is opportunistic, which is what was asked for** [author,
+2026-10-19: "I don't like the tap and hate the idea of holding them
+together for 30 seconds"]. NFC is armed where the ceremony-id fixes —
+the two phones are facing each other for the exchange at that moment, so
+a tap then costs nobody anything — and whatever it catches is cached.
+Where it was not caught the ladder polls for four seconds, where it
+blocked for thirty before, and goes on. A channel that did not happen
+weakens the record; it no longer stalls the meeting.
+
+**The end screen says who witnessed it**, how the `nominated_by` split
+fell, and when this side's own nominees are absent — and says plainly
+that nobody witnessed a witnessless record, which is a valid record
+saying so permanently rather than a fault.
+
+The ffi gained `nominees_engaged`; the Kotlin binding, the `Courier` and
+the shell's `Progress` follow. PRD-17, PRD-18 and PRD-19 opened as the
+device rows they are; UX-020 states the flow. Android tests 210.
+
 ### 2026-10-20 (the kernel opens with the witnesses watching)
 
 **The ceremony's opening is driven, not just encoded** [author,

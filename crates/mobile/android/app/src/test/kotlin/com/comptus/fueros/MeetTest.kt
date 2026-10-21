@@ -201,6 +201,14 @@ class FakeCourier(var progress: Meet.Progress? = null) : Meet.Courier {
     private var opened = false
     private var handed = false
 
+    /** The engagements and the trace: recorded, never refused. */
+    val traced = mutableListOf<OpticalExchange.Event>()
+    override fun engage(): String? { calls += "engage"; return null }
+    override fun trace(e: OpticalExchange.Event): String? {
+        traced += e
+        return null
+    }
+
     override fun open(): String? {
         calls += "open"
         if (openRefusal == null) opened = true
@@ -585,6 +593,8 @@ class MeetConversationTest {
         val m = atVerifiers(Meet.Role.RESPONDER)
         val c = object : Meet.Courier {
             val calls = mutableListOf<String>()
+            override fun engage(): String? = null
+            override fun trace(e: OpticalExchange.Event): String? = null
             override fun open(): String? { calls += "open"; m.poll(this); return null }
             override fun queries(): String? { calls += "queries"; return null }
             override fun gathered(): String? { calls += "gathered"; return null }
@@ -762,6 +772,81 @@ class MeetConversationTest {
         m.finalized("tx")
         assertEquals(atReview + 1, renders)
     }
+
+    /** **The window opens before the channels run** [author, 2026-10-19]:
+     *  the request carries the ceremony-id and closes each engagement, and
+     *  everything after it — the channels, the capture, the verification —
+     *  happens inside it. Refused while the counterparty's prune has not
+     *  answered, and asked again on the next turn. */
+    @Test
+    fun the_window_opens_with_the_request_and_is_retried_while_the_prune_answers() {
+        val m = Meet("aa", "carol", Meet.Kind()).apply {
+            crossBootstrap(); accept(); intentSent(); intentReceived()
+        }
+        assertEquals("the channels are the window's", Meet.Step.PROXIMITY, m.step())
+        assertFalse(m.windowOpen())
+        // the keep has not arrived: the kernel says so, nothing stops
+        val waiting = FakeCourier()
+        waiting.openRefusal = "Waiting(\"the counterparty's keep of this side's witness set\")"
+        assertFalse(m.openWindow(waiting))
+        assertFalse(m.windowOpen())
+        assertNull("a wait is not a stop", m.stopReason())
+        // the keep arrives, and the window opens once
+        val c = FakeCourier()
+        assertTrue(m.openWindow(c))
+        assertTrue(m.windowOpen())
+        assertTrue(m.openWindow(c))
+        assertEquals("the request goes once", 1, c.count("open"))
+        assertEquals(1, m.log().count { it.contains("the window is open") })
+        // and the queries follow inside it, without a second request
+        m.proximityDone()
+        m.captureDone()
+        c.progress = Meet.Progress(proposer = true, queriesOutstanding = 1)
+        m.converse(c)
+        assertEquals("no second request", 1, c.count("open"))
+        assertEquals(1, c.count("queries"))
+    }
+
+    /** Any other refusal of the request ends the meeting: there is no
+     *  conversation without it. */
+    @Test
+    fun a_refused_window_stops_the_meeting_with_the_kernels_reason() {
+        val m = Meet("aa", "carol", Meet.Kind()).apply {
+            crossBootstrap(); accept(); intentSent(); intentReceived()
+        }
+        val c = FakeCourier()
+        c.openRefusal = "NoCeremonyId"
+        assertFalse(m.openWindow(c))
+        assertEquals(Meet.Step.STOPPED, m.step())
+        assertTrue(m.stopReason()!!, m.stopReason()!!.contains("NoCeremonyId"))
+    }
+
+    /** **Who witnessed it, and whose nominees they were**: the survivors
+     *  that signed, split by the side that nominated each. */
+    @Test
+    fun the_attested_set_is_the_survivors_that_signed_split_by_side() {
+        val m = atVerifiers()
+        m.nominated(mine = listOf("w1"), theirs = listOf("w2", "w3"))
+        val c = FakeCourier(
+            Meet.Progress(
+                proposer = true,
+                queriesOutstanding = 0,
+                attesting = listOf("w1", "w2", "w3"),
+                signed = listOf("w1", "w2"),
+            ),
+        )
+        m.converse(c)
+        val signed = m.attested()
+        assertEquals("w3 attested and has not signed yet", 2, signed.size)
+        assertEquals(1, signed.count { it.mine })
+        assertEquals(1, signed.count { !it.mine })
+        // nobody signing is a valid record saying so: no floor
+        val none = atVerifiers()
+        none.nominated(mine = listOf(), theirs = listOf())
+        none.converse(FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0)))
+        assertTrue(none.attested().isEmpty())
+    }
+
 }
 
 /**
