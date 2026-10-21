@@ -77,8 +77,6 @@ pub const CAPABILITIES_VALUE_BYTES: usize = 1024;
 pub const SIBLING_REFS: usize = 9;
 /// Peering audit history entries (§1.3).
 pub const PEERING_AUDIT_HISTORY: usize = 8;
-/// The local device-to-device interfaces (§14.3).
-pub const INTENT_NOMINEES: usize = 64;
 /// `Introduction` entries per `IntentExchange` or `BundleContinuation`
 /// (§1.3, §14.3.2): a bound on the **carriage**; the bundle itself has none
 /// (§5.4).

@@ -212,7 +212,6 @@ malformed, not merely unusual.
 | Proximity channels per record | 8 |
 | Explicit-scope keyhash list | 256 |
 | NetworkPoint entries per anchor entry or endpoint record (§7.2, §7.6) | 8 — this row is the anchor entry's and the endpoint record's alone; **peering carries exactly one `NetworkPoint` or `Locator` per endpoint** (§4.4) |
-| Nominees per `IntentExchange` (§14.3.2) | 64 |
 | `Introduction` entries per `IntentExchange` or `BundleContinuation` (§14.3.2) | 256 — a bound on the carriage; the bundle itself has none (§5.4) |
 | `Channel` entries per `ProximityOutcomes` (§14.3.2) | 8 — the same ceiling as proximity channels per record, above |
 | `Candidate` entries per `CandidateHandover` or per payload-path candidate exchange (§14.3.2) | 8 |
@@ -5254,7 +5253,7 @@ design already depends on.
 
 | What | Between | Where it is stated | Encoding |
 |---|---|---|---|
-| The ceremony's intent exchange — the contribution, the nominees, the bundle of introductions, the sender's locator, the timing and who initiated | Two participants' devices | design §7.1, §7.5.2, §8.1.2 | `IntentExchange` (§14.3.2), carried by the shell's chosen bearer (§14.3.1) and bound to the pre-commitment. The CBOR is specified; two vendors' clients compute the same pre-commitment, the ceremony-id (design §7.5.2.6), either way |
+| The ceremony's intent exchange — the contribution, the bundle of introductions, the sender's locator, the timing and who initiated; the nominees no longer ride it [author, 2026-10-19], each side's set crossing by locator at the prune (§7.10.1 kind 22) | Two participants' devices | design §7.1, §7.5.2, §8.1.2 | `IntentExchange` (§14.3.2), carried by the shell's chosen bearer (§14.3.1) and bound to the pre-commitment. The CBOR is specified; two vendors' clients compute the same pre-commitment, the ceremony-id (design §7.5.2.6), either way |
 | The optical transcript — each device's key material and contribution, then the derived ceremony-id, screen to camera | Two participants' devices | design §7.1 item 3, design §7.5.2, design §12.3 | `OpticalContribution` then `TranscriptConfirm` (§14.3.2): the key material is pinned at this first contact, the contribution is the key-exchange input, the ceremony-id is the transcript hash both display and check |
 | Proximity channel outcomes — the UWB, NFC or optical result and its ranking | Two participants' devices | §3.2, design §7.1 item 5 | `ProximityOutcomes` (§14.3.2): the §4.5 `Channel` maps as measured, anchored to the ceremony-id. The record's `strongest` (§3.2) is not carried — each device computes it from the outcomes, as each computes the ceremony-id |
 | Traversal candidates | Two participants' devices | design §12.6.3 [author, 2026-09-25] | `CandidateHandover` (§14.3.2), carrying the `Candidate` structure this document now defines; the same candidates travel the end-to-end payload path when a direct connection is set up remotely (design §12.6.3, §14.1.1) |
@@ -5449,9 +5448,12 @@ IntentExchange = [             ; carried by the bearer (§14.3.1), not optical
   uint,                        ; version, 1
   bstr .size 16,               ; the sender's contribution, echoing its
                                ;   OpticalContribution so a bearer that
-                               ;   disagrees with the screen is caught
-  [ * keyhash ],               ; nominees, from the counterparty's
-                               ;   neighbourhood (design §7.1); 0..64
+                               ;   disagrees with the screen is caught.
+                               ;   THE NOMINEES NO LONGER RIDE HERE
+                               ;   [author, 2026-10-19]: each side's set
+                               ;   travels by locator once the id has
+                               ;   fixed (§7.10.2, kind 22), and this
+                               ;   exchange is eight fields
   [ * Introduction ],          ; the bundle's first carriage: the prior
                                ;   counterparties the sender names for
                                ;   verifier selection, each with the most

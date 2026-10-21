@@ -1,25 +1,25 @@
 {
  "specs": {
-  "wire-format.md": "09c7102431ecab5bef3d1a0f1bf54c8f43b6f5d122d3067a4bb0db90d850e8b3",
+  "wire-format.md": "b2ff43ca60af8beb9c1020f1e8f0ab0f9bc709ba5a296d6474081bfc1feaa93f",
   "network-design.md": "e7f289d2058761d923e565296943ba9fbfcffd3e974a8808fb25aeddf5f3bf70",
-  "light-client-requirements.md": "1df489e245f3776ebd00b5e145d8c9aef1beada032d96d444b04ff0d050f4faf"
+  "light-client-requirements.md": "be2b9e7beae44a5970409ea3feaa98dd124cbe6fe946cddda5955d53681160de"
  },
- "generator": "8ab752d6214920c0b6bf5cef234bf4dc94ba45c4b4a383a6f79a7b50cd07f5b2",
- "verifier": "7e0536515aa219b595a6ec3cf007c2433cd44637039e039a89e2e352e0516269",
+ "generator": "efe67c5b4fd6b9fb0656f83937795e133b7522af7f0379a5afc1a1f53af85dbf",
+ "verifier": "cdf84c95b5842f962c173ecb915363eb60834164140b76528c04da63c7c01d2d",
  "deps": {
   "dilithium-py": "1.4.0",
   "cryptography": "41.0.7"
  },
  "outputs": {
-  "keys.md": "82af7093b382078e7d56a8b7171198df5c77f9ae44bcb5fe929a2ca4291d650d",
-  "primitives.md": "ce6354f84aadc0d60763512531fee628a86006ecda3f2e9037d295ae95931a73",
-  "transactions.md": "d5c6e7f0cb28491a0c1a17c73e2e082d5d603a58e8eb2484bfe6f9dfa4462393",
-  "records.md": "bb5e6b37b2c6e523407e07a94a8e97aca06f0c401e92c92a1e672e5fa9700e56",
-  "verifier-selection.md": "17049701a2d1e0c90a4d37427d0a36ecff5cc1e47bd88f98bff08a3591d19ab5",
-  "messages.md": "ff82bba6368c2d1ac74f85a6fd61f9d99d8f1ba61cbdd69ac897d56a0a7b02c6",
-  "local-interfaces.md": "b5b9997cfd115b80fce3294e99b96bcbc69720d15bd703dd82289734acdc5147",
-  "corpus.json": "8d0cc5759cd9a9e306fab7917858ed9d01794863265aeb95fe56de595b1271ce",
-  "README.md": "9c05fe146c77540b5e55f758b0abea79244587d8d497638a6d6c3a7b9fa4b610",
-  "negative-vectors.md": "9cec7ec4c44ec1098d10c1cabca7976db2bf7399eb9b4030c3b8088fc4cf15cd"
+  "keys.md": "457378f8df7d90ea13e12e02582abc8aee3c29f6fa705871f7e015bc71122266",
+  "primitives.md": "6a11de157a48b410284a5932eed04ca2cdafe64e4cdb0920682a76e2b65841c2",
+  "transactions.md": "bc91b9e84781f8ecc42f62530fb013abd8764831574d5fcf608b590f68d0b735",
+  "records.md": "3a63bcfcc7b0d64dffa493fafe8b9c0d2ab11e0c2e2950e0d80bef3930bab26c",
+  "verifier-selection.md": "3e4a59615a89ea88c59c9d3d995dad75e90fbeeb56a85ba6ccdb91004a2ba5a1",
+  "messages.md": "81bbf8593af110d42a205dd0e4ab7ebc505e3213ae6ae798872e24d65dc00095",
+  "local-interfaces.md": "9c6fd7238c500f8e3f086b312ce4d4d3cbe0459bd06f517423c790ca4dfd8b2b",
+  "corpus.json": "f5f1ecfb70c036f725e32eb94884cc8971bd7052bf6c7762df4bf96f0523cede",
+  "README.md": "dcb3c870a846384ab5b085193b1ae7ff6d5965e024f3d19f748a708229101003",
+  "negative-vectors.md": "c657df12d2c95c4bbd5e4660d8271f804e17f0afca9b508dcbf2885bc94229c5"
  }
 }

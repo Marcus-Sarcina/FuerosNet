@@ -121,7 +121,7 @@ fn the_optical_objects_encode_to_the_canonical_bytes_and_read_back() {
 fn the_intent_and_its_continuation_encode_to_the_canonical_bytes() {
     let fx = fixture("P-intent-exchange");
     let read = IntentExchange::decode(&fx).expect("the canonical intent decodes");
-    assert_eq!(read.nominees.len(), 1, "carol nominated");
+    // the nominees no longer ride the intent [author, 2026-10-19]
     assert_eq!(read.bundle.len(), 1, "one introduction carried");
     assert_eq!(read.retention_years, 2);
     assert!(read.initiator);
@@ -288,7 +288,6 @@ fn a_sealed_carriage_opens_only_under_its_own_key_and_ceremony() {
     let cid = [7u8; 32];
     let plain = IntentExchange {
         contribution: [1u8; 16],
-        nominees: vec![],
         bundle: vec![],
         started_at: 5,
         retention_years: 2,

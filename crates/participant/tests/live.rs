@@ -344,6 +344,18 @@ fn ceremony(
     let kb = line(set.get(two).must("capture-key"), "capture-key ");
     set.get(two).must(&format!("capture {ka}"));
     set.get(one).must(&format!("capture {kb}"));
+    // the engagements go with the intent [author, 2026-10-19]: each
+    // nominee holds the opening before the ask that closes it arrives
+    let ea = line(set.get(one).must("engagement"), "engagement ");
+    let eb = line(set.get(two).must("engagement"), "engagement ");
+    assert_eq!(
+        set.get(wa).must(&format!("take-engagement {a} {ea}")),
+        vec!["engaged".to_string()]
+    );
+    assert_eq!(
+        set.get(wb).must(&format!("take-engagement {b} {eb}")),
+        vec!["engaged".to_string()]
+    );
     let ask_a = line(set.get(one).must("witness-ask"), "witness-ask ");
     let ask_b = line(set.get(two).must("witness-ask"), "witness-ask ");
     let f_a = line(
@@ -649,6 +661,10 @@ fn a_verifier_in_a_third_process_answers_and_the_record_carries_it() {
     // witnesses, proposal, signatures, finalization: PRT-04's close, with
     // the one difference that is the point — what carol gathered is no
     // longer empty, and the record is proposed over it
+    let ea = line(set.get("alice").must("engagement"), "engagement ");
+    let ec = line(set.get("carol").must("engagement"), "engagement ");
+    set.get("w1").must(&format!("take-engagement {a} {ea}"));
+    set.get("w2").must(&format!("take-engagement {c} {ec}"));
     let ask_a = line(set.get("alice").must("witness-ask"), "witness-ask ");
     let ask_c = line(set.get("carol").must("witness-ask"), "witness-ask ");
     let f_a = line(

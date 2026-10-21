@@ -17,7 +17,7 @@
 //! lists, and `-` is an empty list. Nothing in it is binary — an
 //! instrument is read by a person as often as by a script.
 
-use rhtn_ffi::client::{Achieved, Proposed, Revealed, WitnessAsk, Witnessing};
+use rhtn_ffi::client::{Achieved, Engaging, Proposed, Revealed, WitnessAsk, Witnessing};
 use rhtn_ffi::types::{Channel, ChannelOutcome};
 
 use crate::terminal::{hex, unhex};
@@ -176,6 +176,36 @@ pub fn take_ask(s: &str) -> Result<WitnessAsk, String> {
         started_at: num(field(&f, 2, "an ask")?, "time")?,
         channels: take_channels(field(&f, 3, "an ask")?)?,
         handle: bytes(field(&f, 4, "an ask")?, "a handle")?,
+    })
+}
+
+// ------------------------------------------------------- engagement
+
+/// An engagement as one line a terminal can carry.
+pub fn pack_engagement(e: &Engaging) -> String {
+    format!(
+        "{}|{}|{}",
+        hex(&e.handle),
+        e.started_at,
+        e.counterparty
+            .as_ref()
+            .map(|k| hex(k))
+            .unwrap_or_else(|| "-".into())
+    )
+}
+
+/// The engagement back out of what [`pack_engagement`] wrote.
+pub fn take_engagement(s: &str) -> Result<Engaging, String> {
+    let f: Vec<&str> = s.split('|').collect();
+    let cp = field(&f, 2, "an engagement")?;
+    Ok(Engaging {
+        handle: bytes(field(&f, 0, "an engagement")?, "a handle")?,
+        started_at: num(field(&f, 1, "an engagement")?, "time")?,
+        counterparty: if cp == "-" {
+            None
+        } else {
+            Some(bytes(cp, "a counterparty")?)
+        },
     })
 }
 

@@ -597,6 +597,23 @@ pub const KIND_RECORD: u64 = 18;
 /// it runs, which subnet, and the series the party being adopted can
 /// enter.
 pub const KIND_ADOPTION_DIRECTION: u64 = 19;
+/// A `WitnessEngagement` (§7.10.2) to one of the sender's own nominees,
+/// with the intent [author, 2026-10-19].
+pub const KIND_WITNESS_ENGAGEMENT: u64 = 20;
+/// An `ExchangeTrace` (§7.10.2): one event of the optical exchange's
+/// shape, to the sender's own nominees as it happens.
+pub const KIND_EXCHANGE_TRACE: u64 = 21;
+/// A `WitnessSet` (§7.10.2): the sender's nominees by locator, between
+/// the participants on the local interface, for the counterparty's prune.
+pub const KIND_WITNESS_SET: u64 = 22;
+/// A `WitnessKeep` (§7.10.2): of the counterparty's set, the kept.
+pub const KIND_WITNESS_KEEP: u64 = 23;
+/// A `WitnessStanddown` (§7.10.2): a nominee that did not survive the
+/// prune.
+pub const KIND_WITNESS_STANDDOWN: u64 = 24;
+/// A `ProximityUpdate` (§7.10.2): one channel's outcome to the surviving
+/// witnesses, as it lands inside the window.
+pub const KIND_PROXIMITY_UPDATE: u64 = 25;
 
 /// A plaintext with its kind in front.
 pub fn wrap(kind: u64, bytes: &[u8]) -> Vec<u8> {

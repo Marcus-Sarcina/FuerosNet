@@ -807,12 +807,13 @@ check(_tc == [1, _cid],
 _ix = canonical(bytes.fromhex(byid['P-intent-exchange']['hex']))
 check(_ix[1] == _oc_a[2],
       "s14.3: the intent echoes alice's optical contribution byte-for-byte")
-check(enc(_ix[3][0]).hex() == byid['P-introduction']['hex'],
+check(enc(_ix[2][0]).hex() == byid['P-introduction']['hex'],
       "s14.3: the intent's bundle entry is the introduction of c1 byte-for-byte")
-check(len(_ix) == 9 and isinstance(_ix[8], dict) and {1, 2, 3} <= set(_ix[8]) and _ix[8][1] == KH['alice'],
-      "s14.3: the intent's last field is the sender's own signed locator, alice's")
+# the nominees no longer ride the intent [author, 2026-10-19]: eight fields
+check(len(_ix) == 8 and isinstance(_ix[7], dict) and {1, 2, 3} <= set(_ix[7]) and _ix[7][1] == KH['alice'],
+      "s14.3: eight fields, the last the sender's own signed locator, alice's")
 _ixr = canonical(bytes.fromhex(byid['P-intent-exchange-responder']['hex']))
-check(_ixr[1] == _oc_b[2] and _ixr[3] == [] and _ixr[4] == _ix[4] and len(_ixr) == 9,
+check(_ixr[1] == _oc_b[2] and _ixr[2] == [] and _ixr[3] == _ix[3] and len(_ixr) == 8,
       "s14.3: the responder's intent echoes bob's contribution, carries an empty bundle, the same start and his locator")
 
 # ---------------------------------------------------------------- curated bundle entries (bar 3, corpus)
@@ -828,7 +829,7 @@ check(all(_intro_ok(byid[f'P-vs-bundle-{i}']['hex']) for i in (1, 2, 3, 4, 6))
 check(canonical(bytes.fromhex(byid['P-vs-bundle-1']['hex']))[2][1]
       == canonical(bytes.fromhex(byid['P-vs-bundle-3']['hex']))[2][1],
       'bundle: entries 1 and 3 introduce one subject, counted once')
-check(_ix[6] is True and _ixr[6] is False,
+check(_ix[5] is True and _ixr[5] is False,
       's14.3: the pair of intents disagree on who began, the initiator true and the responder false')
 for _fid in ('P-proximity-outcomes', 'P-candidate-handover'):
     check(canonical(bytes.fromhex(byid[_fid]['hex']))[1] == _cid,

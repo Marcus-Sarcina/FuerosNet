@@ -253,6 +253,22 @@ pub enum Msg {
     Signed(Result<Vec<u8>, Refusal>),
     /// The finalised envelope, proposer to every signer.
     Record(Vec<u8>),
+    /// A nomination to one of this side's own contacts, with the intent
+    /// (`wire-format.md` §7.10.2, kind 20) [author, 2026-10-19].
+    Engagement(crate::conversation::Engagement),
+    /// One event of the optical exchange's shape, to this side's own
+    /// nominees as it happens (kind 21).
+    Trace(crate::conversation::Trace),
+    /// This side's nominees by locator, for the counterparty's prune
+    /// (kind 22).
+    WitnessSet(Vec<Vec<u8>>),
+    /// Of the counterparty's set, the kept (kind 23).
+    WitnessKeep(Vec<Keyhash>),
+    /// A nominee of this side's that did not survive the prune (kind 24).
+    Standdown([u8; 32]),
+    /// One channel's outcome to the surviving witnesses, inside the
+    /// window (kind 25).
+    ProximityPing(crate::conversation::ProximityPing),
     /// The recovering subject names the prior key whose history it claims.
     ClaimPrior(Keyhash),
     /// A recovery verifier's signed response, hybrid, to the subject.
@@ -390,9 +406,6 @@ impl Msg {
 pub struct Intent {
     /// This party's contribution to the pre-commitment.
     pub contribution: [u8; 16],
-    /// Whom it nominates to witness, from the counterparty's
-    /// neighbourhood.
-    pub nominees: Vec<Keyhash>,
     /// Its bundle: introductions to the prior counterparties it names,
     /// each with the most recent locator it holds for them
     /// (`wire-format.md` §2.3, §5.4), for the counterparty's selection.
@@ -414,7 +427,6 @@ impl std::fmt::Debug for Intent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Intent")
             .field("contribution", &"<redacted>")
-            .field("nominees", &self.nominees)
             .field("bundle", &self.bundle.len())
             .field("started_at", &self.started_at)
             .field("retention_years", &self.retention_years)
@@ -471,7 +483,7 @@ pub(crate) struct Active {
     /// contact), or given at `begin` where a prior code already named them.
     pub(crate) counterparty: Option<Keyhash>,
     pub(crate) initiator: bool,
-    started_at: u64,
+    pub(crate) started_at: u64,
     /// The device's clock when `begin` ran, for the durations the
     /// diagnostic events carry.
     began_ms: u64,
@@ -484,7 +496,29 @@ pub(crate) struct Active {
     /// The engagement handle (`wire-format.md` §7.10.2) this side minted
     /// at `begin`: one per ceremony attempt, carried by every message of
     /// the opening and closed by the witness request's field 5.
-    handle: [u8; 32],
+    pub(crate) handle: [u8; 32],
+    /// The nominees this side's engagement (kind 20) has reached.  A
+    /// nominee whose binding is not held yet stays pending and is
+    /// engaged by the next call, availability being discovered after
+    /// selecting (`light-client-requirements.md` §1.1); one still
+    /// unreached when the set crosses was unavailable, and is not
+    /// offered to the prune [author, 2026-10-19].
+    pub(crate) engaged_to: BTreeSet<Keyhash>,
+    /// Whether this kernel has tried to engage at all.  Where a caller
+    /// carries the engagements itself — the terminal participant hands
+    /// them over as lines — the kernel has discovered nothing about
+    /// availability and the caller's nominee list stands [author,
+    /// 2026-10-19].
+    pub(crate) engage_attempted: bool,
+    /// Whether this side's set (kind 22) has crossed to the counterparty:
+    /// once, when the ceremony-id fixed.
+    pub(crate) set_sent: bool,
+    /// The counterparty's keep of this side's set (kind 23): this side's
+    /// survivors, once the prune has answered.  `None` until it does.
+    pub(crate) my_survivors: Option<BTreeSet<Keyhash>>,
+    /// What this side kept of the counterparty's set (kind 23): their
+    /// survivors.  `None` until their set arrived and was pruned.
+    pub(crate) their_survivors: Option<Vec<Keyhash>>,
     pub(crate) my_nominees: BTreeSet<Keyhash>,
     pub(crate) their_nominees: Vec<Keyhash>,
     their_bundle: Vec<Vec<u8>>,
@@ -634,6 +668,10 @@ pub struct Client {
     /// ceremony-id, at most [`crate::sequence::PENDING_WITNESS_REQUESTS`]
     /// of them.
     pub(crate) witnessing: BTreeMap<[u8; 32], crate::sequence::Witnessing>,
+    /// The engagements this client holds as a nominee (kind 20), by
+    /// handle: the opening it is watching before any request arrives
+    /// [author, 2026-10-19].  Bounded as `witnessing` is.
+    pub(crate) engaged: BTreeMap<[u8; 32], crate::sequence::Engaged>,
 }
 
 /// What arrived on the end-to-end channel, delivered where it belongs
@@ -792,6 +830,7 @@ impl Client {
             recovery_responses: Vec::new(),
             active: None,
             witnessing: BTreeMap::new(),
+            engaged: BTreeMap::new(),
         }
     }
 
@@ -827,7 +866,7 @@ impl Client {
         self.active.as_mut().ok_or(Abort::NotActive)
     }
 
-    fn random<const N: usize>(&self) -> [u8; N] {
+    pub(crate) fn random<const N: usize>(&self) -> [u8; N] {
         let mut b = [0u8; N];
         self.device.random.fill(&mut b);
         b
@@ -903,6 +942,11 @@ impl Client {
             their_contribution: None,
             ceremony_id: None,
             handle,
+            engaged_to: BTreeSet::new(),
+            engage_attempted: false,
+            set_sent: false,
+            my_survivors: None,
+            their_survivors: None,
             my_nominees: nominees.iter().copied().collect(),
             their_nominees: vec![],
             their_bundle: vec![],
@@ -934,7 +978,6 @@ impl Client {
         let a = self.active.as_ref().ok_or(Abort::NotActive)?;
         Ok(Intent {
             contribution: a.contribution,
-            nominees: a.my_nominees.iter().copied().collect(),
             bundle: self.introductions(),
             started_at: a.started_at,
             retention_years: self.cfg.retention_years,
@@ -1420,6 +1463,10 @@ impl Client {
             "cer.id_fixed"
         );
         self.subject.open_window(mine);
+        // the opening moves [author, 2026-10-19]: the confirmation to each
+        // nominee against its engagement, and this side's set to the
+        // counterparty for its prune
+        self.opening_id_fixed(mine);
         Ok(mine)
     }
 
@@ -1432,11 +1479,10 @@ impl Client {
     pub fn intent_carriage(&mut self) -> Result<Vec<Vec<u8>>, Abort> {
         let intent = self.intent()?;
         let cid = self.anchored_id()?;
-        let (nominees, entries) = (intent.nominees.len(), intent.bundle.len());
+        let entries = intent.bundle.len();
         let out = crate::local::intent_carriage(
             &crate::local::IntentExchange {
                 contribution: intent.contribution,
-                nominees: intent.nominees,
                 bundle: intent.bundle,
                 started_at: intent.started_at,
                 retention_years: intent.retention_years,
@@ -1448,7 +1494,6 @@ impl Client {
         );
         tracing::info!(
             target: "cer",
-            nominees,
             entries,
             continuations = out.len().saturating_sub(1),
             retention = intent.retention_years,
@@ -1490,7 +1535,6 @@ impl Client {
             from,
             &Intent {
                 contribution: read.contribution,
-                nominees: read.nominees,
                 bundle: read.bundle,
                 started_at: read.started_at,
                 retention_years: read.retention_years,
@@ -1698,17 +1742,19 @@ impl Client {
         // already checked the echo against, so writing it again changes
         // nothing there [2026-10-05].
         a.their_contribution = Some(intent.contribution);
-        a.their_nominees = intent.nominees.clone();
+        // **the nominees no longer ride the intent** [author, 2026-10-19]:
+        // the sets travel by locator once the id has fixed (kind 22), and
+        // the counterparty's survivors are what this side keeps of them
         a.their_bundle = intent.bundle.clone();
         a.their_retention = intent.retention_years;
         // the sender's own position, kept as the locator held for them:
         // its own statement replaces whatever a third party said of it
         self.hold_locator(&from, &intent.locator, true)?;
         self.touch_contact(&from);
+        self.opening_id_fixed(cid);
         tracing::info!(
             target: "cer",
             from = %id8(&from),
-            nominees = intent.nominees.len(),
             entries = intent.bundle.len(),
             retention = intent.retention_years,
             initiator = intent.initiator,
@@ -1758,6 +1804,27 @@ impl Client {
         a.strongest = strongest;
         if strongest.is_none() {
             return Err(abort("proximity", Abort::NoProximity));
+        }
+        // **each outcome to the surviving witnesses as it lands** [author,
+        // 2026-10-19] (kind 25): inside the window, which the request
+        // opens.  A channel measured before it rides in the request's own
+        // field 4 — "the proximity channels as measured SO FAR", with
+        // later outcomes following as this kind (`wire-format.md`
+        // §7.10.2) — and the survivors are not known until the prune
+        let opened = self.active.as_ref().is_some_and(|a| a.conversation.opened);
+        if let (true, Ok(cid)) = (opened, self.anchored_id()) {
+            let (_, witnesses) = self.conversation_parties()?;
+            if !witnesses.is_empty() {
+                for channel in outcomes.clone() {
+                    self.converse_into_outbox(
+                        &Msg::ProximityPing(crate::conversation::ProximityPing {
+                            ceremony_id: cid,
+                            channel,
+                        }),
+                        &witnesses,
+                    );
+                }
+            }
         }
         Ok(outcomes)
     }
@@ -2189,6 +2256,18 @@ impl Client {
             .unwrap_or_default()
     }
 
+    /// **How far the engagement has got**: the nominees reached, of those
+    /// nominated (kind 20) [author, 2026-10-19].  A shell shows the pair
+    /// while the opening runs; a nominee still unreached when the set
+    /// crosses was unavailable and is not offered to the prune.
+    #[must_use]
+    pub fn nominees_engaged(&self) -> (usize, usize) {
+        self.active
+            .as_ref()
+            .map(|a| (a.engaged_to.len(), a.my_nominees.len()))
+            .unwrap_or_default()
+    }
+
     /// What a nominee is asked to witness.
     pub fn witness_request(&self) -> Result<WitnessRequest, Abort> {
         let a = self.active.as_ref().ok_or(Abort::NotActive)?;
@@ -2209,6 +2288,112 @@ impl Client {
         Ok(req)
     }
 
+    /// The engagement this side sends its nominees (kind 20): the handle
+    /// minted at `begin`, the claimed start, and the counterparty where a
+    /// code has named one.
+    pub fn engagement(&self) -> Result<crate::conversation::Engagement, Abort> {
+        let a = self.active.as_ref().ok_or(Abort::NotActive)?;
+        Ok(crate::conversation::Engagement {
+            handle: a.handle,
+            started_at: a.started_at,
+            counterparty: a.counterparty,
+        })
+    }
+
+    /// As nominee: the engagement itself (kind 20) [author, 2026-10-19],
+    /// held so the trace that follows has somewhere to land and the later
+    /// request something to close.  The claimed start is checked against
+    /// this clock as a request's is; held ceremonies are bounded as
+    /// `witnessing` is, the oldest claimed start going.
+    pub fn take_engagement(&mut self, from: Keyhash, e: &crate::conversation::Engagement) -> bool {
+        if self.engaged.contains_key(&e.handle) {
+            return true;
+        }
+        if witness_check(e.started_at, self.now_s(), self.cfg.clock_tolerance_s).is_err() {
+            tracing::warn!(
+                target: "cer",
+                from = %id8(&from),
+                why = "the claimed start is outside this clock's tolerance",
+                "cer.witness.declined"
+            );
+            return false;
+        }
+        if self.engaged.len() >= crate::sequence::PENDING_WITNESS_REQUESTS {
+            let oldest = self
+                .engaged
+                .iter()
+                .min_by_key(|(_, e)| e.started_at)
+                .map(|(k, _)| *k);
+            if let Some(k) = oldest {
+                self.engaged.remove(&k);
+            }
+        }
+        tracing::info!(
+            target: "cer",
+            from = %id8(&from),
+            held = self.engaged.len() + 1,
+            "cer.witness.engaged_by"
+        );
+        self.engaged.insert(
+            e.handle,
+            crate::sequence::Engaged {
+                from,
+                started_at: e.started_at,
+                counterparty: e.counterparty,
+                ceremony_id: None,
+                trace: Vec::new(),
+            },
+        );
+        true
+    }
+
+    /// **How many ceremonies this client holds as a witness**: the
+    /// requests it accepted and has not closed (`light-client-requirements.md`
+    /// §1.2's bound).
+    #[must_use]
+    pub fn witnessing_count(&self) -> usize {
+        self.witnessing.len()
+    }
+
+    /// **What this client watched under `handle`**: each trace event as
+    /// `(event, value, arrival)`, the arrival by this device's clock in
+    /// milliseconds [author, 2026-10-19].  The pattern is what a witness
+    /// attests from (design §7.1 item 9), so it is the witness's to read.
+    #[must_use]
+    pub fn observed_trace(&self, handle: &[u8; 32]) -> Vec<(u64, u64, u64)> {
+        self.engaged
+            .get(handle)
+            .map(|e| e.trace.clone())
+            .unwrap_or_default()
+    }
+
+    /// As nominee: one event of the trace (kind 21), from the party that
+    /// engaged this client and nobody else.  The confirmation fixes the
+    /// ceremony-id the later request must repeat (CER-70); every event's
+    /// arrival is kept on this clock, the pattern being the evidence
+    /// (design §7.1 item 9).
+    pub fn take_trace(&mut self, from: Keyhash, t: &crate::conversation::Trace) -> bool {
+        let now = self.device.clock.now_ms();
+        let Some(e) = self.engaged.get_mut(&t.handle) else {
+            return false;
+        };
+        if e.from != from {
+            return false;
+        }
+        use crate::conversation::TraceEvent::*;
+        let (code, value) = match t.event {
+            Shape { mine, theirs } => (0, mine.max(theirs)),
+            Inbound(i) => (1, i),
+            Outbound(i) => (2, i),
+            Confirmed(cid) => {
+                e.ceremony_id = Some(cid);
+                (3, 0)
+            }
+        };
+        e.trace.push((code, value, now));
+        true
+    }
+
     /// As nominee: witness, or decline.  The claimed start must be within
     /// tolerance of this clock (`light-client-requirements.md` §1.2); the
     /// person is told, not asked (design Appendix A.3).  The flags attest
@@ -2223,6 +2408,44 @@ impl Client {
     pub fn take_witness_request(&mut self, req: &WitnessRequest) -> Option<u64> {
         if let Some(w) = self.witnessing.get(&req.ceremony_id) {
             return Some(w.flags);
+        }
+        // **The request closes an engagement** [author, 2026-10-19]: a
+        // request whose handle this client never watched binds nothing it
+        // observed, and a ceremony-id disagreeing with the trace's
+        // confirmation means the sequence it watched is not the ceremony
+        // it is asked to sign.  Both decline (CER-70).
+        match self.engaged.get(&req.handle) {
+            None => {
+                tracing::warn!(
+                    target: "cer",
+                    ceremony = %id8(&req.ceremony_id),
+                    why = "a request whose engagement this client never watched",
+                    "cer.witness.declined"
+                );
+                return None;
+            }
+            Some(e) => {
+                if e.ceremony_id.is_some_and(|cid| cid != req.ceremony_id) {
+                    tracing::warn!(
+                        target: "cer",
+                        ceremony = %id8(&req.ceremony_id),
+                        why = "the ceremony-id disagrees with the trace's confirmation",
+                        "cer.witness.declined"
+                    );
+                    return None;
+                }
+                if let Some(cp) = e.counterparty
+                    && !req.participants.contains(&cp)
+                {
+                    tracing::warn!(
+                        target: "cer",
+                        ceremony = %id8(&req.ceremony_id),
+                        why = "the request names a meeting the engagement did not",
+                        "cer.witness.declined"
+                    );
+                    return None;
+                }
+            }
         }
         if witness_check(req.started_at, self.now_s(), self.cfg.clock_tolerance_s).is_err() {
             tracing::warn!(
@@ -5394,10 +5617,13 @@ impl Client {
             payload::KIND_ARCHIVE_REPLY => {
                 Dispatched::Fetched(self.take_archive_reply(from, &inner))
             }
-            // the ceremony's conversation (`wire-format.md` §7.10.1): into
-            // the ceremony's own state, as a participant or a witness, with
-            // what the step owes in answer put in the outbox
-            k @ payload::KIND_CONSENT_REQUEST..=payload::KIND_RECORD => {
+            // the ceremony's conversation and its opening (`wire-format.md`
+            // §7.10.1, kinds 9 to 18 and 20 to 25): into the ceremony's own
+            // state, as a participant or a witness, with what the step owes
+            // in answer put in the outbox.  Kind 19 arranges an adoption
+            // and has its own row above
+            k @ payload::KIND_CONSENT_REQUEST..=payload::KIND_RECORD
+            | k @ payload::KIND_WITNESS_ENGAGEMENT..=payload::KIND_PROXIMITY_UPDATE => {
                 Dispatched::Conversation(self.converse_in(from, k, &inner))
             }
             k => Dispatched::Application {
@@ -5477,6 +5703,24 @@ pub fn conversation_payload(msg: &Msg) -> Option<(u64, Vec<u8>)> {
             .encode(),
         ),
         Msg::Record(envelope) => (payload::KIND_RECORD, envelope.clone()),
+        Msg::Engagement(e) => (payload::KIND_WITNESS_ENGAGEMENT, e.encode()),
+        Msg::Trace(t) => (payload::KIND_EXCHANGE_TRACE, t.encode()),
+        Msg::WitnessSet(nominees) => (
+            payload::KIND_WITNESS_SET,
+            WitnessSet {
+                nominees: nominees.clone(),
+            }
+            .encode(),
+        ),
+        Msg::WitnessKeep(kept) => (
+            payload::KIND_WITNESS_KEEP,
+            WitnessKeep { kept: kept.clone() }.encode(),
+        ),
+        Msg::Standdown(handle) => (
+            payload::KIND_WITNESS_STANDDOWN,
+            Standdown { handle: *handle }.encode(),
+        ),
+        Msg::ProximityPing(u) => (payload::KIND_PROXIMITY_UPDATE, u.encode()),
         _ => return None,
     })
 }
@@ -5537,6 +5781,22 @@ pub fn conversation_from(kind: u64, bytes: &[u8]) -> Result<Msg, Abort> {
         payload::KIND_RECORD => {
             Record::parse(bytes).map_err(malformed)?;
             Msg::Record(bytes.to_vec())
+        }
+        payload::KIND_WITNESS_ENGAGEMENT => {
+            Msg::Engagement(Engagement::decode(bytes).map_err(malformed)?)
+        }
+        payload::KIND_EXCHANGE_TRACE => Msg::Trace(Trace::decode(bytes).map_err(malformed)?),
+        payload::KIND_WITNESS_SET => {
+            Msg::WitnessSet(WitnessSet::decode(bytes).map_err(malformed)?.nominees)
+        }
+        payload::KIND_WITNESS_KEEP => {
+            Msg::WitnessKeep(WitnessKeep::decode(bytes).map_err(malformed)?.kept)
+        }
+        payload::KIND_WITNESS_STANDDOWN => {
+            Msg::Standdown(Standdown::decode(bytes).map_err(malformed)?.handle)
+        }
+        payload::KIND_PROXIMITY_UPDATE => {
+            Msg::ProximityPing(ProximityPing::decode(bytes).map_err(malformed)?)
         }
         _ => {
             return Err(malformed(format!(

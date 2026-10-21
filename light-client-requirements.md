@@ -75,6 +75,13 @@ shell exists.
   or not running at ceremony time, so availability is something you discover
   after selecting. A node that solicits nomination is self-selecting, and the
   counterparty's prune is what it now has to get past (design §7.1.1).
+  **Engaging is where you discover it, and it is retried, not decided once**
+  [author, 2026-10-19]: a nominee you hold no session material for is asked
+  for on the first attempt and reached on a later one, so a transient
+  absence is not an unavailable witness. **The set you offer the prune is
+  the nominees the engagement reached** — one still unreached when the
+  ceremony-id fixes was unavailable, and is a witness that does not appear
+  (design §7.1), never an entry the counterparty is asked to keep blind.
 - **Stream the opening to your nominees as it happens** [author, 2026-10-19]:
   the intent; then the optical exchange's shape — the number of blocks you
   have to transmit, the number the counterparty declares, the index of each

@@ -18697,3 +18697,45 @@ Functional: NET-032 new, NET-022/SCH-026 amended, counts 530/NET-32.
 optical exchange → id-fix event → set/keep legs over the local channel →
 standdown/request split → stream legs to survivors → proximity updates →
 witness-side CER-70 checks (handle binding, id agreement) → ffi/shell.
+
+
+## 2026-10-20 — heading C: the kernel reorder landed
+
+Handle minted at `begin`; `converse_engage` (kind 20) to own nominees at
+the intent; `trace()` + `opening_id_fixed` (kind 21, confirmation at the
+id); set/keep over the local channel (22/23) with `prune_their_set`
+(salted, blind, min(3,offered)); standdown (24) to the dismissed;
+`proximity()` pings survivors (25) ONLY once the window is open — before
+it, field 4 of the request carries what was measured, per §7.10.2.
+`conversation_parties` returns survivors once pruned. `converse_open`
+refuses with Waiting until the counterparty's keep arrives.
+
+Witness side: `Engaged{from,started_at,counterparty,ceremony_id,trace}`,
+`take_engagement`/`take_trace`/`observed_trace`/`witnessing_count`;
+`take_witness_request` declines on unknown handle, id disagreement, or a
+meeting the engagement did not name (CER-70).
+
+**Two things the runs taught, both now in the code and the documents**:
+(1) engaging is retried per nominee — NoBundle on the first attempt is
+not unavailability — and the set closes to `engaged_to` at the id, but
+only where this kernel attempted (`engage_attempted`), since the terminal
+participant carries engagements by hand and its list stands;
+(2) the proposer must be patient — no floor means `propose` fires at once
+and would leave its own witnesses out, so `Progress.witnesses_outstanding`
+exists and every driver paces on it (`await_witnesses` in the harness).
+
+Intent is eight fields now (nominees out, INTENT_NOMINEES retired,
+N-intent-with-nominees negative replaces N-intent-nominees-65).
+
+Harness: NAMES 6 → 8 (w3, w4 added — a party absent from the cast is one
+the node never knew, whose bundle it refuses; that cost an afternoon to
+find). `knows()`, `engage()`, `open_both()`, `await_witnesses()` in
+common; `exchanges()` engages before the intents, `attend()` retries the
+open and waits on witnesses.
+
+**Next (heading D, ffi + shell)**: `converse_engage`/`optical_trace`/
+`engagement`/`take_engagement` are on the ffi already; the shell still
+needs the Step machine → phases, nomination before the code is shown,
+the trace fed from the optical exchange's own block accounting,
+opportunistic NFC in ProximityChannels, and the Done screen reflecting
+survivors. Then heading F's bench run showing SPREAD arrivals.

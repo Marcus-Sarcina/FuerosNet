@@ -33,7 +33,10 @@ use tokio::sync::mpsc::UnboundedReceiver;
 /// The subnet the fixtures' positions are in (`wire-format.md` §2.3 field 4).
 pub const SUBNET: [u8; 32] = [0xdb; 32];
 
-pub const NAMES: [&str; 6] = ["alice", "bob", "carol", "w1", "w2", "witness"];
+// four witnesses, so a four-nominee set can be pruned to three
+// [author, 2026-10-19]: a party absent from this cast is one the
+// node never knew, whose bundle it refuses and whom nobody can reach
+pub const NAMES: [&str; 8] = ["alice", "bob", "carol", "w1", "w2", "w3", "w4", "witness"];
 
 pub fn id(n: &str) -> SigningIdentity {
     test_identity(n)
@@ -792,6 +795,93 @@ impl Who {
     }
 }
 
+/// A party holds `name` as a contact by material and locator: what a
+/// nominator accumulates in use, seeded by hand — the set travels by
+/// locator (kind 22), and a nominee the sender cannot introduce is not
+/// offered to the prune.
+pub async fn knows(p: &Party, name: &'static str) {
+    let loc = rhtn_archive::tx::Locator::root(
+        kh(name),
+        rhtn_archive::tx::Seqno {
+            series: 1,
+            counter: 0,
+        },
+    );
+    let sl = rhtn_archive::locator::signed_locator(&id(name), &loc);
+    let material = id(name).public.key_material();
+    let k = kh(name);
+    p.with(move |c| {
+        let contact = c.store.contacts.entry(k).or_insert_with(|| {
+            rhtn_client::contacts::Contact::new(material, rhtn_client::contacts::How::Nominee, 1)
+        });
+        contact.locator = Some(sl);
+    })
+    .await;
+}
+
+/// **Engage this side's nominees until each is reached** [author,
+/// 2026-10-19]: the first attempt on a nominee whose binding is not held
+/// asks for it, so engaging is retried while the courier fetches — as a
+/// device does over the seconds the optical exchange takes.  A nominee
+/// still unreached at the deadline was unavailable.
+pub async fn engage(p: &Party) -> Result<(), Abort> {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        p.step(|c| c.converse_engage()).await?;
+        let (engaged, nominated) = p.with(|c| c.nominees_engaged()).await;
+        if engaged == nominated || Instant::now() >= deadline {
+            return Ok(());
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+}
+
+/// **The patient proposer** [author, 2026-10-19]: a witness asked and not
+/// yet answered is given the window, as a shell gives it.  There is no
+/// floor and nothing gates — `converse_propose` would build a witnessless
+/// body the moment it could — so a proposer that fires at the first
+/// opportunity leaves every witness out of its own record.
+pub async fn await_witnesses(p: &Party, patience: Duration) -> usize {
+    let deadline = Instant::now() + patience;
+    loop {
+        let outstanding = p
+            .with(|c| c.progress().map(|pr| pr.witnesses_outstanding))
+            .await
+            .unwrap_or_default();
+        if outstanding == 0 || Instant::now() >= deadline {
+            return outstanding;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+}
+
+/// Open the window for both sides [author, 2026-10-19]: engage each
+/// side's nominees, let the prune's legs cross on the bearer, and retry
+/// the open while it waits on the counterparty's keep.
+pub async fn open_both(a: &Party, b: &Party) -> Result<(), Abort> {
+    for p in [a, b] {
+        engage(p).await?;
+    }
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let mut open = [false, false];
+    loop {
+        for (i, p) in [a, b].into_iter().enumerate() {
+            if open[i] {
+                continue;
+            }
+            match p.step(|c| c.converse_open()).await {
+                Ok(()) => open[i] = true,
+                Err(Abort::Waiting(_)) if Instant::now() < deadline => {}
+                Err(e) => return Err(e),
+            }
+        }
+        if open.iter().all(|o| *o) {
+            return Ok(());
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+}
+
 impl Meeting {
     /// `who` hosted beside the node `node`, which holds `table` and
     /// serves them all; everyone attached and swept, so each holds the
@@ -929,6 +1019,36 @@ impl Meeting {
             .party(b)
             .with(move |c| c.begin(Some(ka), nb, false))
             .await?;
+        // **a nominee is a contact the nominator can reach** (design
+        // §7.1.1): the pool is the party's own contacts, held by material
+        // and locator, which is also what the set travels by (kind 22).
+        // The harness seeds what a live client accumulates
+        for (who, noms) in [(a, a_nom), (b, b_nom)] {
+            for n in noms {
+                let sl = self.party(n).with(|c| c.own_locator()).await?;
+                let material = id(n).public.key_material();
+                let k = kh(n);
+                self.party(who)
+                    .with(move |c| {
+                        let contact = c.store.contacts.entry(k).or_insert_with(|| {
+                            rhtn_client::contacts::Contact::new(
+                                material,
+                                rhtn_client::contacts::How::Nominee,
+                                1,
+                            )
+                        });
+                        contact.locator = Some(sl);
+                    })
+                    .await;
+            }
+        }
+        // the engagements go with the intent [author, 2026-10-19]: each
+        // side to its own nominees, over the payload path, before the
+        // counterparty has accepted anything — and retried while the
+        // bindings land, the set closing when the id fixes
+        self.bear();
+        engage(self.party(a)).await?;
+        engage(self.party(b)).await?;
         self.party(a).with(move |c| c.take_intent(kb, &ib)).await?;
         self.party(b).with(move |c| c.take_intent(ka, &ia)).await?;
         let ch = self.party(a).with(|c| c.proximity()).await?;
@@ -970,14 +1090,25 @@ impl Meeting {
     /// sessions the courier opens through the node.
     pub async fn attend(&mut self, a: &'static str, b: &'static str) -> Result<Txid, Abort> {
         self.bear();
-        for who in [a, b] {
-            self.party(who).step(|c| c.converse_open()).await?;
-            self.party(who).step(|c| c.converse_queries()).await?;
-        }
+        // the sets and keeps cross on the bearer once it runs, and the
+        // window opens with the request [author, 2026-10-19]: the open is
+        // retried while it waits on the counterparty's keep
+        let mut opened = std::collections::BTreeSet::new();
         let queries_by = Instant::now() + Duration::from_secs(5);
+        let witnesses_by = Instant::now() + Duration::from_secs(15);
         let deadline = Instant::now() + Duration::from_secs(30);
         loop {
             for who in [a, b] {
+                if !opened.contains(who) {
+                    match self.party(who).step(|c| c.converse_open()).await {
+                        Ok(()) => {
+                            opened.insert(who);
+                            self.party(who).step(|c| c.converse_queries()).await?;
+                        }
+                        Err(Abort::Waiting(_)) => continue,
+                        Err(e) => return Err(e),
+                    }
+                }
                 let Some(p) = self.party(who).with(|c| c.progress()).await else {
                     continue;
                 };
@@ -990,6 +1121,13 @@ impl Meeting {
                     if !p.handed {
                         self.party(who).step(|c| c.converse_gathered()).await?;
                     }
+                    continue;
+                }
+                // **the patient person**: an asked witness that has not
+                // answered is given the window, as the shell gives it —
+                // the floor is gone and nothing gates, but a proposer
+                // that fires the moment it can leaves every witness out
+                if p.witnesses_outstanding > 0 && Instant::now() < witnesses_by {
                     continue;
                 }
                 if p.proposable {

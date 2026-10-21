@@ -111,16 +111,15 @@ impl TranscriptConfirm {
 }
 
 /// What the bearer carries first (§14.3.2): the sender's echoed
-/// contribution, its nominees, the first carriage of its bundle of
-/// introductions, its clock, the retention it commits to, who initiated,
-/// how many `BundleContinuation` messages follow, and the sender's own
-/// `SignedLocator`.
+/// contribution, the first carriage of its bundle of introductions, its
+/// clock, the retention it commits to, who initiated, how many
+/// `BundleContinuation` messages follow, and the sender's own
+/// `SignedLocator`.  The nominees no longer ride it [author, 2026-10-19]:
+/// the sets travel by locator once the id has fixed (§7.10.2, kind 22).
 #[derive(Clone, PartialEq, Eq)]
 pub struct IntentExchange {
     /// The sender's own contribution, echoed.
     pub contribution: [u8; 16],
-    /// Whom it nominates to witness.
-    pub nominees: Vec<Keyhash>,
     /// The first carriage of its bundle: introductions (§2.3, §5.4).
     pub bundle: Vec<Vec<u8>>,
     /// Its clock, in milliseconds since the epoch.
@@ -141,7 +140,6 @@ impl std::fmt::Debug for IntentExchange {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("IntentExchange")
             .field("contribution", &"<redacted>")
-            .field("nominees", &self.nominees)
             .field("bundle", &self.bundle.len())
             .field("started_at", &self.started_at)
             .field("retention_years", &self.retention_years)
@@ -156,13 +154,9 @@ impl IntentExchange {
     /// The bytes of this `IntentExchange`, as §14.3.2 composes them.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
-        emit_array_head(&mut out, 9);
+        emit_array_head(&mut out, 8);
         emit_uint(&mut out, 1);
         emit_bstr(&mut out, &self.contribution);
-        emit_array_head(&mut out, self.nominees.len());
-        for n in &self.nominees {
-            emit_bstr(&mut out, n);
-        }
         emit_array_head(&mut out, self.bundle.len());
         for e in &self.bundle {
             out.extend_from_slice(e);
@@ -181,13 +175,12 @@ impl IntentExchange {
         let a = fields(&it);
         Ok(IntentExchange {
             contribution: fixed16(b, &a[1])?,
-            nominees: keyhashes(b, &a[2])?,
-            bundle: entries(b, 3)?,
-            started_at: as_uint(&a[4]).ok_or("started_at")?,
-            retention_years: as_uint(&a[5]).ok_or("retention")?,
-            initiator: matches!(a[6], Item::Bool(true)),
-            continuations: as_uint(&a[7]).ok_or("continuations")?,
-            locator: raw_field(b, 8)?,
+            bundle: entries(b, 2)?,
+            started_at: as_uint(&a[3]).ok_or("started_at")?,
+            retention_years: as_uint(&a[4]).ok_or("retention")?,
+            initiator: matches!(a[5], Item::Bool(true)),
+            continuations: as_uint(&a[6]).ok_or("continuations")?,
+            locator: raw_field(b, 7)?,
         })
     }
 }
@@ -478,7 +471,6 @@ pub fn intent_carriage(intent: &IntentExchange, ceremony_id: &[u8; 32]) -> Vec<V
         IntentExchange {
             bundle: first,
             continuations: rest.len() as u64,
-            nominees: intent.nominees.clone(),
             locator: intent.locator.clone(),
             ..*intent
         }
@@ -579,13 +571,6 @@ fn array_len(it: &Item) -> Result<usize, String> {
         Item::Array(a) => Ok(a.len()),
         _ => Err("not an array".into()),
     }
-}
-
-fn keyhashes(b: &[u8], it: &Item) -> Result<Vec<Keyhash>, String> {
-    let Item::Array(a) = it else {
-        return Err("nominees not an array".into());
-    };
-    a.iter().map(|n| fixed32(b, n)).collect()
 }
 
 /// The bundle entries as the exact bytes they arrived as.

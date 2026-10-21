@@ -230,12 +230,26 @@ fn a_witness_holds_a_bounded_number_of_pending_requests_and_the_oldest_goes_firs
         channels: vec![],
         handle: [0xe0 | i as u8; 32],
     };
+    // each request closes an engagement this witness watched [author,
+    // 2026-10-19]: engaged just before asked, inside the engagement bound
+    let engage = |w: &mut rhtn_client::ceremony::Client, i: u64| {
+        assert!(w.take_engagement(
+            kh("alice"),
+            &rhtn_client::conversation::Engagement {
+                handle: [0xe0 | i as u8; 32],
+                started_at: now - 100 + i,
+                counterparty: Some(kh("bob")),
+            },
+        ));
+    };
     for i in 0..bound {
+        engage(w, i);
         assert_eq!(w.take_witness_request(&req(i)), Some(3));
     }
     // asked again for the first: the same answer, and nothing displaced
     assert_eq!(w.take_witness_request(&req(0)), Some(3));
     // one past the bound: taken, and the oldest claimed start is gone
+    engage(w, bound);
     assert_eq!(w.take_witness_request(&req(bound)), Some(3));
     let proposal = |i: u64| Proposal {
         started_at: now - 100 + i,
@@ -258,4 +272,143 @@ fn a_witness_holds_a_bounded_number_of_pending_requests_and_the_oldest_goes_firs
     );
     assert!(w.witness_sign(&proposal(1), &back).is_ok());
     assert!(w.witness_sign(&proposal(bound), &back).is_ok());
+}
+
+// acceptance: CER-70
+#[test]
+fn a_request_binds_to_the_engagement_watched_and_its_ceremony_id() {
+    use rhtn_client::conversation::{Engagement, Trace, TraceEvent};
+    let mut s = setup(&EVERYONE, &[ChannelKind::Nfc]);
+    let now = s.clock.get() / 1000;
+    let w = s.client("w1");
+    let engagement = |h: u8| Engagement {
+        handle: [h; 32],
+        started_at: now,
+        counterparty: Some(kh("bob")),
+    };
+    let req = |h: u8, cid: u8| WitnessRequest {
+        ceremony_id: [cid; 32],
+        participants: participants(kh("alice"), kh("bob")),
+        started_at: now,
+        channels: vec![],
+        handle: [h; 32],
+    };
+    // a request whose engagement this client never watched binds nothing
+    // it observed: declined
+    assert_eq!(w.take_witness_request(&req(1, 10)), None, "from nowhere");
+    // engaged and confirmed under one ceremony-id, then asked under
+    // another: the sequence watched is not the ceremony asked about
+    assert!(w.take_engagement(kh("alice"), &engagement(2)));
+    assert!(w.take_trace(
+        kh("alice"),
+        &Trace {
+            handle: [2; 32],
+            event: TraceEvent::Confirmed([20; 32]),
+        }
+    ));
+    assert_eq!(
+        w.take_witness_request(&req(2, 21)),
+        None,
+        "a disagreeing id"
+    );
+    // the trace is the engaging party's alone
+    assert!(!w.take_trace(
+        kh("carol"),
+        &Trace {
+            handle: [2; 32],
+            event: TraceEvent::Confirmed([20; 32]),
+        }
+    ));
+    // a request naming a meeting the engagement did not: declined
+    assert!(w.take_engagement(kh("alice"), &engagement(3)));
+    let mut other = req(3, 30);
+    other.participants = participants(kh("alice"), kh("carol"));
+    assert_eq!(w.take_witness_request(&other), None, "another meeting");
+    // agreeing on the handle, the id and the parties: answered as always
+    assert!(w.take_engagement(kh("alice"), &engagement(4)));
+    assert!(w.take_trace(
+        kh("alice"),
+        &Trace {
+            handle: [4; 32],
+            event: TraceEvent::Confirmed([40; 32]),
+        }
+    ));
+    assert_eq!(w.take_witness_request(&req(4, 40)), Some(3), "it agrees");
+}
+
+// acceptance: CER-67
+#[test]
+fn the_opening_reaches_a_nominee_before_acceptance_and_one_event_at_a_time() {
+    use rhtn_client::conversation::{Trace, TraceEvent};
+    let mut s = setup(&EVERYONE, &[ChannelKind::Nfc]);
+    s.face_off("alice", "bob");
+    let (a, b) = (kh("alice"), kh("bob"));
+    let ib = s
+        .client("bob")
+        .begin(Some(a), vec![], false)
+        .expect("bob begins");
+    s.client("alice")
+        .begin(Some(b), vec![kh("w1")], true)
+        .expect("alice begins");
+    // **the engagement exists before the counterparty has accepted
+    // anything**: no intent has been taken either way, so no ceremony-id
+    // is fixed, and the handle is what the nominee watches under
+    let e = s.client("alice").engagement().expect("an engagement");
+    assert_eq!(e.counterparty, Some(b));
+    assert_eq!(
+        s.client("alice").witness_request().map(|_| ()),
+        Err(Abort::NoCeremonyId),
+        "there is nothing to ask a witness yet"
+    );
+    assert!(s.client("w1").take_engagement(a, &e));
+    // the exchange's shape, one event per message and never batched: each
+    // is recorded as it lands, in order, on the witness's own clock
+    let events = [
+        TraceEvent::Shape { mine: 7, theirs: 5 },
+        TraceEvent::Inbound(0),
+        TraceEvent::Outbound(0),
+        TraceEvent::Inbound(1),
+    ];
+    for (i, event) in events.into_iter().enumerate() {
+        s.clock.set(s.clock.get() + 500);
+        assert!(s.client("w1").take_trace(
+            a,
+            &Trace {
+                handle: e.handle,
+                event,
+            }
+        ));
+        assert_eq!(
+            s.client("w1").observed_trace(&e.handle).len(),
+            i + 1,
+            "one arrival per event"
+        );
+    }
+    let watched = s.client("w1").observed_trace(&e.handle);
+    assert_eq!(
+        watched.iter().map(|(code, _, _)| *code).collect::<Vec<_>>(),
+        vec![0, 1, 2, 1],
+        "the events in the order they were sent"
+    );
+    assert!(
+        watched.windows(2).all(|w| w[0].2 < w[1].2),
+        "spread across the witness's own clock, never batched: {watched:?}"
+    );
+    // the ids agree: the intent fixes the ceremony-id, the confirmation
+    // carries it, and the request repeats it beside the handle (CER-70)
+    let cid = s
+        .client("alice")
+        .take_intent(b, &ib)
+        .expect("alice takes bob's intent");
+    assert!(s.client("w1").take_trace(
+        a,
+        &Trace {
+            handle: e.handle,
+            event: TraceEvent::Confirmed(cid),
+        }
+    ));
+    let req = s.client("alice").witness_request().expect("a request");
+    assert_eq!(req.ceremony_id, cid);
+    assert_eq!(req.handle, e.handle, "the request closes the engagement");
+    assert_eq!(s.client("w1").take_witness_request(&req), Some(3));
 }

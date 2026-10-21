@@ -834,6 +834,7 @@ object Kernel {
                 Meet.Progress(
                     proposer = pr.proposer,
                     queriesOutstanding = pr.queriesOutstanding.toInt(),
+                    witnessesOutstanding = pr.witnessesOutstanding.toInt(),
                     opened = pr.opened,
                     handed = pr.handed,
                     proposable = pr.proposable,

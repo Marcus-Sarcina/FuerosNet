@@ -18,6 +18,7 @@ use common::*;
 use rhtn_archive::record::Record;
 use rhtn_client::device::ChannelKind;
 use rhtn_client::record::{LABELS, read_presentation};
+use rhtn_client::sequence::Conversed;
 use rhtn_client::store::open;
 use rhtn_codec::cbor::*;
 
@@ -715,5 +716,113 @@ async fn a_witness_far_from_the_claimed_start_declines_and_the_others_carry_the_
             )),
         "alice is told her nominee is absent: {:?}",
         m.party("alice").kept.notices()
+    );
+}
+
+/// **Four nominated, three kept, one stood down** (design §7.1 item 4).
+/// The sets cross on the local interface and the counterparty prunes to
+/// `min(3, offered)`: the record carries the two participants and the
+/// three survivors, every survivor nominated by one side and selected by
+/// the other, and the dismissed nominee's part ended at its standdown —
+/// it holds nothing of the ceremony.
+// acceptance: CER-68
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_counterparty_prunes_to_three_and_the_dismissed_stands_down() {
+    let mut m = Meeting::open(
+        vec![
+            Who::with("alice", &[ChannelKind::Nfc]),
+            Who::with("bob", &[ChannelKind::Nfc]),
+            Who::watching("w1"),
+            Who::watching("w2"),
+            Who::watching("w3"),
+            Who::watching("w4"),
+            Who::watching("witness"),
+        ],
+        "witness",
+        Scene::new().table("witness", &["witness"]),
+    )
+    .await;
+    let t = m
+        .meet("alice", "bob", &["w1", "w2", "w3", "w4"], &[])
+        .await
+        .expect("a record");
+    let rec = Record::parse(&m.record("alice", t).await).expect("a record");
+    assert_eq!(
+        rec.signers.len(),
+        5,
+        "two participants and the three kept witnesses"
+    );
+    // every survivor holds the record it attested; the one dismissed
+    // holds nothing, its part over at the standdown
+    let mut held = 0;
+    let mut empty = 0;
+    for w in ["w1", "w2", "w3", "w4"] {
+        match m.party(w).with(|c| c.archive.len()).await {
+            0 => empty += 1,
+            _ => held += 1,
+        }
+    }
+    assert_eq!((held, empty), (3, 1), "three kept, one dismissed");
+}
+
+/// **A channel's outcome lands inside the window and reaches the
+/// survivors** (design §7.1 item 5) [author, 2026-10-19].  Before the
+/// request opens the window nobody has survived the prune, and what was
+/// measured by then rides in the request's own field 4; after it, each
+/// outcome goes to the surviving witnesses of both sides as a kind-25
+/// update, on their clocks as it lands.
+// acceptance: CER-69
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn each_proximity_outcome_reaches_the_survivors_inside_the_window() {
+    let mut m = Meeting::open(
+        vec![
+            Who::with("alice", &[ChannelKind::Nfc]),
+            Who::with("bob", &[ChannelKind::Nfc]),
+            Who::watching("w1"),
+            Who::watching("witness"),
+        ],
+        "witness",
+        Scene::new().table("witness", &["witness"]),
+    )
+    .await;
+    m.exchanges("alice", "bob", &["w1"], &[])
+        .await
+        .expect("the local exchanges");
+    // the channels ran during the exchanges, before the window: w1 has
+    // watched the opening and holds no ceremony yet, so no update is owed
+    // and none is taken
+    fn updates(m: &mut Meeting) -> usize {
+        m.at("w1").drain();
+        m.party("w1")
+            .conversed()
+            .into_iter()
+            .filter(|(_, c)| matches!(c, Conversed::Observed { kind: 25 }))
+            .count()
+    }
+    assert_eq!(updates(&mut m), 0, "nothing before the window");
+    // the window opens with the request; from here a channel's outcome is
+    // the survivors' to hear
+    open_both(m.party("alice"), m.party("bob"))
+        .await
+        .expect("the window opens");
+    assert!(
+        m.party("w1")
+            .holds(5_000, |c| c.witnessing_count() > 0)
+            .await,
+        "w1 holds the ceremony the request named"
+    );
+    m.party("alice")
+        .step(|c| c.proximity().map(|_| Vec::new()))
+        .await
+        .expect("the channels run again inside the window");
+    // the courier is given its turns, and the update is the survivor's
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while updates(&mut m) == 0 && std::time::Instant::now() < deadline {
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    assert!(
+        updates(&mut m) > 0,
+        "each outcome reaches the surviving witness as it lands: {:?}",
+        m.party("w1").conversed()
     );
 }

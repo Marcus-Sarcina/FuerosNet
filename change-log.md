@@ -13867,6 +13867,49 @@ rejections in the corpus, and both introduction kinds are listed in the
 corpus runner so a rejection that starts passing fails rather than being
 skipped.
 
+### 2026-10-20 (the kernel opens with the witnesses watching)
+
+**The ceremony's opening is driven, not just encoded** [author,
+2026-10-19]. The kernel now mints an engagement handle at `begin` and
+sends the engagement to each of its own nominees with the intent, before
+the counterparty has accepted anything; streams the optical exchange as
+single trace events; crosses its witness set by locator when the
+ceremony-id fixes; prunes the counterparty's to `min(3, offered)`;
+relays survival as the request and dismissal as a standdown; and sends
+each later proximity outcome to the surviving witnesses of both sides.
+Every leg after the prune goes to the survivors rather than to every
+nominee.
+
+**The nominees left the intent.** `IntentExchange` is eight fields:
+the sets travel by locator at the prune, so the exchange no longer
+carries a keyhash list, and the pre-reorder nine-field encoding
+rejects. The 64-nominee bound went with it.
+
+**A request closes an engagement.** As nominee, a client holds the
+engagement, records each trace event with its arrival on its own clock,
+and declines a request whose handle it never watched, whose ceremony-id
+disagrees with the confirmation it holds, or which names a meeting the
+engagement did not. A dismissed nominee's part ends at its standdown.
+
+**Two rulings the run forced.** *Engaging is retried, not decided once*:
+the first attempt on a nominee whose session material is not held asks
+for it, so a transient absence is not an unavailable witness — and the
+set offered to the prune is the nominees the engagement actually reached,
+one still unreached when the id fixes being a witness that does not
+appear. Where a caller carries the engagements itself, as the terminal
+participant does, the kernel has discovered nothing and the caller's
+nominee list stands. *And the patient proposer*: with no floor,
+`propose` builds a witnessless body the moment it can, so a proposer
+that fires at the first opportunity leaves its own witnesses out —
+`Progress` gained `witnesses_outstanding`, the one count a flow paces by.
+
+Kinds 20 to 25 dispatch into the conversation; `WitnessRequest` carries
+its handle through the ffi and the terminal carriage; the Kotlin binding
+and the shell's `Progress` follow. CER-67, CER-68, CER-69 and CER-70
+implemented, DEC-37 beside them; NET-032 restated with the binding and
+the availability rule; light-client §1.1 states the engaged set.
+Implemented 494 of 515.
+
 ### 2026-10-20 (the opening gets its kinds)
 
 **The witness reorder reaches the wire** [author, 2026-10-19]. Kinds 20 to

@@ -369,6 +369,11 @@ class Meet(
         val proposer: Boolean,
         /** Queries issued and not yet answered. */
         val queriesOutstanding: Int,
+        /** Surviving witnesses, of either side, whose answer has not
+         *  arrived: what a patient proposer waits on inside the window
+         *  [author, 2026-10-19].  Never a gate — there is no floor — but
+         *  the count the flow paces its proposal by. */
+        val witnessesOutstanding: Int = 0,
         /** Whether this side has opened the conversation already. */
         val opened: Boolean = false,
         /** Whether it has handed the proposer what it gathered already. */

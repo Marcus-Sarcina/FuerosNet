@@ -494,6 +494,24 @@ impl Instrument {
                     joined(&theirs)
                 )])
             }
+            // THE ENGAGEMENT (kind 20) [author, 2026-10-19]: what a
+            // nominee is sent with the intent, carried here as one line,
+            // and taken by the nominee so the later ask has an engagement
+            // to close
+            ["engagement"] => Ok(vec![format!(
+                "engagement {}",
+                carry::pack_engagement(&c.engagement().map_err(|e| e.reason().to_string())?)
+            )]),
+            ["take-engagement", from, blob] => {
+                let e = carry::take_engagement(blob)?;
+                Ok(vec![match c
+                    .take_engagement(id(from)?, e)
+                    .map_err(|e| e.reason().to_string())?
+                {
+                    true => "engaged".into(),
+                    false => "declined".into(),
+                }])
+            }
             ["witness-ask"] => Ok(vec![format!(
                 "witness-ask {}",
                 carry::pack_ask(&c.witness_ask().map_err(|e| e.reason().to_string())?)
@@ -887,6 +905,8 @@ take-response <response>  a verifier's answer about the counterparty
 gathered                  the responses this client holds, to carry
 responses                 the same, as a screen would show them
 nominees                  who each side nominated
+engagement                the nomination to carry to a nominee
+take-engagement <from> <e> hold one, as a nominee
 witness-ask               what to ask a nominee
 take-witness-ask <ask>    answer one, as a nominee
 back-pointers             this signer's back-pointers

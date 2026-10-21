@@ -139,6 +139,10 @@ async fn the_conversation_runs_over_the_payload_path_to_a_record_every_signer_ho
     // w1 is in bob's horizon, so bob's pick among alice's two is w1
     bob.with(|c| c.acquaintance.horizon.insert(kh("w1"))).await;
 
+    // bob holds w2 by material and locator, as a nominator holds its own
+    // contact; the set travels by locator (kind 22)
+    knows(&bob, "w2").await;
+
     // the local exchanges, by hand (§14.3): intent, proximity, capture
     let ia = alice
         .with(|c| c.begin(Some(kh("bob")), vec![kh("w1")], true))
@@ -148,6 +152,11 @@ async fn the_conversation_runs_over_the_payload_path_to_a_record_every_signer_ho
         .with(|c| c.begin(Some(kh("alice")), vec![kh("w2")], false))
         .await
         .expect("bob begins");
+    // the engagements go with the intent [author, 2026-10-19]: each side
+    // to its own nominees over the payload path, before the counterparty
+    // has accepted anything — the set closes when the id fixes
+    engage(&alice).await.expect("alice engages");
+    engage(&bob).await.expect("bob engages");
     let cid = alice
         .with(move |c| c.take_intent(kh("bob"), &ib))
         .await
@@ -177,9 +186,7 @@ async fn the_conversation_runs_over_the_payload_path_to_a_record_every_signer_ho
     // from here nothing is moved by hand.  The conversation opens: each
     // asks its nominee and hands over its back-pointers, to the
     // counterparty and both witnesses (kinds 12 and 15)
-    for p in [&alice, &bob] {
-        p.step(|c| c.converse_open()).await.expect("opens");
-    }
+    open_both(&alice, &bob).await.expect("opens");
     // step 6: each side's consent requests, kind 9 to the subject alone;
     // bob's names w1 about alice, alice has nobody to ask about bob
     for p in [&alice, &bob] {
@@ -232,6 +239,7 @@ async fn the_conversation_runs_over_the_payload_path_to_a_record_every_signer_ho
     carol.courier.carry(stray).await;
     // step 7: alice proposes once w1's answer and back-pointers and bob's
     // responses are in, and says what she waits on until then
+    await_witnesses(&alice, Duration::from_secs(10)).await;
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {
         match alice.step(|c| c.converse_propose()).await {
@@ -288,9 +296,10 @@ async fn the_conversation_runs_over_the_payload_path_to_a_record_every_signer_ho
     );
     assert_eq!(
         declined,
-        Some(rhtn_client::contacts::How::Nominee),
-        "w2 she had never met: a nominee that answered is a contact, and \
-         it declined"
+        Some(rhtn_client::contacts::How::Introduced),
+        "w2 she had never met arrived in the counterparty's set, by \
+         introduction (kind 22) [author, 2026-10-19], before its decline \
+         did — and a contact keeps the first way it came to be held"
     );
     assert_eq!(signer, Some(rhtn_client::contacts::How::Counterparty));
     // the record: the two participants and w1, nominated by alice; w2
@@ -447,9 +456,12 @@ async fn the_conversation_runs_over_the_payload_path_to_a_record_every_signer_ho
         "w2 declined"
     );
     assert!(
-        !w.iter()
-            .any(|(_, c)| matches!(c, Conversed::Observed { .. } | Conversed::Reviewed { .. })),
-        "w2 observed nothing and signed nothing: {w:?}"
+        !w.iter().any(
+            |(_, c)| matches!(c, Conversed::Observed { kind } if *kind <= 18)
+                || matches!(c, Conversed::Reviewed { .. })
+        ),
+        "w2 took nothing of the conversation past its decline — the \
+         engagement it observed (kind 20) preceded it: {w:?}"
     );
 }
 
@@ -488,6 +500,7 @@ async fn a_signer_whose_root_check_fails_answers_and_the_proposer_records_it() {
 
     // the local exchanges, by hand (§14.3); w1 alice's nominee, bob
     // nominating nobody
+    knows(&alice, "w1").await;
     let ia = alice
         .with(|c| c.begin(Some(kh("bob")), vec![kh("w1")], true))
         .await
@@ -496,6 +509,11 @@ async fn a_signer_whose_root_check_fails_answers_and_the_proposer_records_it() {
         .with(|c| c.begin(Some(kh("alice")), vec![], false))
         .await
         .expect("bob begins");
+    // the engagements go with the intent [author, 2026-10-19]: each side
+    // to its own nominees over the payload path, before the counterparty
+    // has accepted anything — the set closes when the id fixes
+    engage(&alice).await.expect("alice engages");
+    engage(&bob).await.expect("bob engages");
     let cid = alice
         .with(move |c| c.take_intent(kh("bob"), &ib))
         .await
@@ -524,9 +542,7 @@ async fn a_signer_whose_root_check_fails_answers_and_the_proposer_records_it() {
 
     // the conversation opens and nobody has a verifier to ask, so bob
     // hands over nothing gathered
-    for p in [&alice, &bob] {
-        p.step(|c| c.converse_open()).await.expect("opens");
-    }
+    open_both(&alice, &bob).await.expect("opens");
     for p in [&alice, &bob] {
         p.step(|c| c.converse_queries()).await.expect("queries");
     }
@@ -681,6 +697,11 @@ async fn a_stopped_participant_does_not_witness_its_own_ceremony() {
         .with(|c| c.begin(Some(kh("alice")), vec![], false))
         .await
         .expect("bob begins");
+    // the engagements go with the intent [author, 2026-10-19]: each side
+    // to its own nominees over the payload path, before the counterparty
+    // has accepted anything — the set closes when the id fixes
+    engage(&alice).await.expect("alice engages");
+    engage(&bob).await.expect("bob engages");
     alice
         .with(move |c| c.take_intent(kh("bob"), &ib))
         .await
@@ -938,6 +959,8 @@ async fn a_witness_both_participants_nominated_signs_once() {
     }
 
     // the local exchanges, by hand (§14.3), both naming w1
+    knows(&alice, "w1").await;
+    knows(&bob, "w1").await;
     let ia = alice
         .with(|c| c.begin(Some(kh("bob")), vec![kh("w1")], true))
         .await
@@ -946,6 +969,11 @@ async fn a_witness_both_participants_nominated_signs_once() {
         .with(|c| c.begin(Some(kh("alice")), vec![kh("w1")], false))
         .await
         .expect("bob begins");
+    // the engagements go with the intent [author, 2026-10-19]: each side
+    // to its own nominees over the payload path, before the counterparty
+    // has accepted anything — the set closes when the id fixes
+    engage(&alice).await.expect("alice engages");
+    engage(&bob).await.expect("bob engages");
     alice
         .with(move |c| c.take_intent(kh("bob"), &ib))
         .await
@@ -973,12 +1001,11 @@ async fn a_witness_both_participants_nominated_signs_once() {
     // from here the kernel's own driver: each opens, the responder hands
     // over what it gathered, and the proposer proposes once w1's answer
     // and both sets of back-pointers are in
-    for p in [&alice, &bob] {
-        p.step(|c| c.converse_open()).await.expect("opens");
-    }
+    open_both(&alice, &bob).await.expect("opens");
     bob.step(|c| c.converse_gathered())
         .await
         .expect("hands over");
+    await_witnesses(&alice, Duration::from_secs(10)).await;
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {
         match alice.step(|c| c.converse_propose()).await {

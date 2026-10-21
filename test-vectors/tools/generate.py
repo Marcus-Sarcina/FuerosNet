@@ -3957,21 +3957,21 @@ oc_bob = e_arr([e_uint(1), bob.key_material, e_bstr(pc_b)])
 tconfirm = e_arr([e_uint(1), e_bstr(pc_demo)])
 
 # the intent alice's bearer carries: her echoed contribution, carol nominated
-# from bob's neighbourhood, her one introduction (c1, a prior counterparty,
-# with the most recent locator she holds for them; §2.3, §5.4), the
-# defaults the documents state, and her own signed locator
+# her one introduction (c1, a prior counterparty, with the most recent
+# locator she holds for them; §2.3, §5.4), the defaults the documents
+# state, and her own signed locator.  The nominees no longer ride the
+# intent [author, 2026-10-19]: the sets travel by locator at the prune
+# (s7.10.2, kind 22)
 intent_x = e_arr([e_uint(1), e_bstr(pc_a),
-                  e_arr([e_bstr(carol.keyhash)]),
                   e_arr([intro_c1]),
                   e_uint(TS_REC), e_uint(2), b'\xf5', e_uint(0),
                   signed_locator])
 
 # the intent bob's bearer carries back, the responder's: his echoed
-# contribution, one nominee from alice's neighbourhood, no prior record (a
-# bundle may be empty, §5.4), the same start, his retention, and initiator
-# false. The two flags differ, which is what both devices check (§14.3.2)
+# contribution, no prior record (a bundle may be empty, §5.4), the same
+# start, his retention, and initiator false. The two flags differ, which
+# is what both devices check (§14.3.2)
 intent_r = e_arr([e_uint(1), e_bstr(pc_b),
-                  e_arr([e_bstr(W16[0].keyhash)]),
                   e_arr([]),
                   e_uint(TS_REC), e_uint(3), b'\xf4', e_uint(0),
                   sl_bob])
@@ -4067,18 +4067,19 @@ computed; a receiver checks it equals its own)** ({len(tconfirm)} bytes):
 
 ## The bearer-carried intent (§14.3.2)
 
-**IntentExchange — alice's, echoing her optical contribution; carol
-nominated, one introduction carried (c1, with the most recent locator
-she holds for them), retention 2, initiator true, no continuations, and
-her own signed locator last** ({len(intent_x)} bytes):
+**IntentExchange — alice's, echoing her optical contribution; one
+introduction carried (c1, with the most recent locator she holds for
+them), retention 2, initiator true, no continuations, and her own signed
+locator last; the nominees no longer ride the intent [author,
+2026-10-19]** ({len(intent_x)} bytes):
 
 ```
 {hexblock(intent_x)}
 ```
 
 **IntentExchange — bob's, the responder's: echoing his optical
-contribution, one nominee from alice's neighbourhood, an empty bundle,
-retention 3, initiator false, no continuations, his own signed locator**
+contribution, an empty bundle, retention 3, initiator false, no
+continuations, his own signed locator**
 ({len(intent_r)} bytes).
 The two flags differ; a device refuses an intent carrying its own value:
 
@@ -4377,22 +4378,22 @@ reg('N-signing-reply-both', 'bytes',
 reg('N-signing-reply-particular-alone', 'bytes',
     REJ('SigningReply', 'schema', 'the particular accompanies a refusal and nothing else'),
     e_map([(e_uint(1), signer_entries), (e_uint(3), e_bstr(IDS['w1'].keyhash))]))
-reg('N-intent-nominees-65', 'bytes',
-    REJ('IntentExchange', 'schema', 'nominees bound at 64'),
+reg('N-intent-with-nominees', 'bytes',
+    REJ('IntentExchange', 'schema', 'the nominees no longer ride the intent - the pre-reorder nine-field encoding rejects (2026-10-19)'),
     e_arr([e_uint(1), e_bstr(pc_a),
-           e_arr([e_bstr(H(b'rhtn-test-vectors:nominee:' + bytes([i]))) for i in range(65)]),
-           e_arr([]), e_uint(TS_REC), e_uint(2), b'\xf5', e_uint(0), signed_locator]))
+           e_arr([e_bstr(carol.keyhash)]),
+           e_arr([intro_c1]), e_uint(TS_REC), e_uint(2), b'\xf5', e_uint(0), signed_locator]))
 reg('N-intent-continuations-missing', 'bytes',
     REJ('IntentExchange', 'schema', 'an intent says how many continuations follow, even none'),
-    e_arr([e_uint(1), e_bstr(pc_a), e_arr([e_bstr(carol.keyhash)]), e_arr([intro_c1]),
+    e_arr([e_uint(1), e_bstr(pc_a), e_arr([intro_c1]),
            e_uint(TS_REC), e_uint(2), b'\xf5', signed_locator]))
 reg('N-intent-locator-missing', 'bytes',
     REJ('IntentExchange', 'schema', "an intent carries the sender's own signed locator"),
-    e_arr([e_uint(1), e_bstr(pc_a), e_arr([e_bstr(carol.keyhash)]), e_arr([intro_c1]),
+    e_arr([e_uint(1), e_bstr(pc_a), e_arr([intro_c1]),
            e_uint(TS_REC), e_uint(2), b'\xf5', e_uint(0)]))
 reg('N-intent-bundle-record', 'bytes',
     REJ('IntentExchange', 'schema', 'a bundle entry is an introduction, not a record'),
-    e_arr([e_uint(1), e_bstr(pc_a), e_arr([e_bstr(carol.keyhash)]), e_arr([pc1_env]),
+    e_arr([e_uint(1), e_bstr(pc_a), e_arr([pc1_env]),
            e_uint(TS_REC), e_uint(2), b'\xf5', e_uint(0), signed_locator]))
 reg('N-introduction-hash-mismatch', 'bytes',
     REJ('Introduction', 'schema', "an introduction's key material hashes to its locator's subject"),

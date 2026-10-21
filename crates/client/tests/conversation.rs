@@ -468,6 +468,17 @@ fn progress_says_whether_a_proposal_would_produce_a_body() {
         .unwrap();
     s.client("bob").take_intent(a, &ia).unwrap();
     s.client("alice").take_intent(b, &ib).unwrap();
+    // the sets cross and the keeps answer them (kinds 22 and 23) [author,
+    // 2026-10-19]: the window cannot open before the prune has answered
+    for _ in 0..2 {
+        for (x, y) in [("alice", "bob"), ("bob", "alice")] {
+            for bytes in s.client(x).carriages() {
+                s.client(y)
+                    .take_conversation_carriage(&bytes)
+                    .expect("the prune's leg is taken");
+            }
+        }
+    }
 
     // before the conversation opens: this side proposes, and waits on the
     // counterparty's responses

@@ -18,6 +18,7 @@
 //! yet, which that side says.
 
 use crate::ceremony::WitnessRequest;
+use crate::device::ChannelOutcome;
 use crate::local::{bs, emit_channels, fixed32, read_channels};
 use crate::record::{Disclosure, DisclosureSet, LABELS, Proposal, Refusal};
 use crate::{Keyhash, Txid};
@@ -123,6 +124,278 @@ impl WitnessRequest {
             started_at: map_get(m, 3).and_then(as_uint).ok_or("started_at")?,
             channels: read_channels(map_get(m, 4).ok_or("channels")?)?,
             handle: fixed32(b, map_get(m, 5).ok_or("handle")?)?,
+        })
+    }
+}
+
+/// The nomination itself (§7.10.2, kind 20) [author, 2026-10-19]: sent to
+/// each of the sender's own nominees with the intent, before the
+/// counterparty has accepted anything.  The handle is minted per ceremony
+/// attempt and every message of the opening carries it; the request's
+/// field 5 closes the loop.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Engagement {
+    /// The engagement handle.
+    pub handle: [u8; 32],
+    /// The claimed start, the intent's time.
+    pub started_at: u64,
+    /// The counterparty, where the nominator has already read its code.
+    pub counterparty: Option<Keyhash>,
+}
+
+impl Engagement {
+    /// The map a nominee is sent.
+    pub fn encode(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        emit_map_head(&mut out, 2 + usize::from(self.counterparty.is_some()));
+        emit_uint(&mut out, 1);
+        emit_bstr(&mut out, &self.handle);
+        emit_uint(&mut out, 2);
+        emit_uint(&mut out, self.started_at);
+        if let Some(cp) = &self.counterparty {
+            emit_uint(&mut out, 3);
+            emit_bstr(&mut out, cp);
+        }
+        out
+    }
+
+    /// Read an `Engagement` from `b`.
+    pub fn decode(b: &[u8]) -> Result<Self, String> {
+        let it = checked(b, "WitnessEngagement")?;
+        let Item::Map(m) = &it else {
+            return Err("WitnessEngagement is not a map".into());
+        };
+        Ok(Engagement {
+            handle: fixed32(b, map_get(m, 1).ok_or("handle")?)?,
+            started_at: map_get(m, 2).and_then(as_uint).ok_or("started_at")?,
+            counterparty: match map_get(m, 3) {
+                Some(it) => Some(fixed32(b, it)?),
+                None => None,
+            },
+        })
+    }
+}
+
+/// One event of the optical exchange's shape (§7.10.2, kind 21): what a
+/// nominee watches land at screen-and-camera pace — never the content.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TraceEvent {
+    /// Event 0: both block counts are known — the sender's to transmit,
+    /// and what the counterparty declares.
+    Shape {
+        /// Blocks this sender has to transmit.
+        mine: u64,
+        /// Blocks the counterparty declares.
+        theirs: u64,
+    },
+    /// Event 1: an inbound block landed, by index.
+    Inbound(u64),
+    /// Event 2: an outbound block was acknowledged on the counterparty's
+    /// display, by index.
+    Outbound(u64),
+    /// Event 3: the transcript confirmed — the ceremony-id is fixed, and
+    /// the request's field 1 MUST repeat it.
+    Confirmed([u8; 32]),
+}
+
+/// The trace message: the handle and one event (§7.10.2, kind 21).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Trace {
+    /// The engagement handle.
+    pub handle: [u8; 32],
+    /// What happened.
+    pub event: TraceEvent,
+}
+
+impl Trace {
+    /// The map a nominee is sent: one event, never batched.
+    pub fn encode(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        match self.event {
+            TraceEvent::Shape { mine, theirs } => {
+                emit_map_head(&mut out, 4);
+                emit_uint(&mut out, 1);
+                emit_bstr(&mut out, &self.handle);
+                emit_uint(&mut out, 2);
+                emit_uint(&mut out, 0);
+                emit_uint(&mut out, 3);
+                emit_uint(&mut out, mine);
+                emit_uint(&mut out, 4);
+                emit_uint(&mut out, theirs);
+            }
+            TraceEvent::Inbound(i) | TraceEvent::Outbound(i) => {
+                emit_map_head(&mut out, 3);
+                emit_uint(&mut out, 1);
+                emit_bstr(&mut out, &self.handle);
+                emit_uint(&mut out, 2);
+                emit_uint(
+                    &mut out,
+                    matches!(self.event, TraceEvent::Outbound(_)) as u64 + 1,
+                );
+                emit_uint(&mut out, 3);
+                emit_uint(&mut out, i);
+            }
+            TraceEvent::Confirmed(cid) => {
+                emit_map_head(&mut out, 3);
+                emit_uint(&mut out, 1);
+                emit_bstr(&mut out, &self.handle);
+                emit_uint(&mut out, 2);
+                emit_uint(&mut out, 3);
+                emit_uint(&mut out, 5);
+                emit_bstr(&mut out, &cid);
+            }
+        }
+        out
+    }
+
+    /// Read a `Trace` from `b`.
+    pub fn decode(b: &[u8]) -> Result<Self, String> {
+        let it = checked(b, "ExchangeTrace")?;
+        let Item::Map(m) = &it else {
+            return Err("ExchangeTrace is not a map".into());
+        };
+        let handle = fixed32(b, map_get(m, 1).ok_or("handle")?)?;
+        let index = || map_get(m, 3).and_then(as_uint).ok_or("index");
+        let event = match map_get(m, 2).and_then(as_uint).ok_or("event")? {
+            0 => TraceEvent::Shape {
+                mine: index()?,
+                theirs: map_get(m, 4).and_then(as_uint).ok_or("declared")?,
+            },
+            1 => TraceEvent::Inbound(index()?),
+            2 => TraceEvent::Outbound(index()?),
+            3 => TraceEvent::Confirmed(fixed32(b, map_get(m, 5).ok_or("ceremony-id")?)?),
+            _ => return Err("an event is 0 to 3".into()),
+        };
+        Ok(Trace { handle, event })
+    }
+}
+
+/// The sender's nominees by locator (§7.10.2, kind 22): raw
+/// `Introduction` bytes (§2.3), between the participants on the local
+/// interface, for the counterparty's prune.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WitnessSet {
+    /// Each nominee's introduction, as the bytes it was produced as.
+    pub nominees: Vec<Vec<u8>>,
+}
+
+impl WitnessSet {
+    /// The array the counterparty prunes.
+    pub fn encode(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        emit_array_head(&mut out, self.nominees.len());
+        for n in &self.nominees {
+            out.extend_from_slice(n);
+        }
+        out
+    }
+
+    /// Read a `WitnessSet` from `b`.
+    pub fn decode(b: &[u8]) -> Result<Self, String> {
+        checked(b, "WitnessSet")?;
+        Ok(WitnessSet {
+            nominees: raw_items(b, 0)?,
+        })
+    }
+}
+
+/// Of the counterparty's set, the kept (§7.10.2, kind 23):
+/// `min(3, offered)`, each naming an entry of the set it answers.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WitnessKeep {
+    /// The kept nominees, by keyhash.
+    pub kept: Vec<Keyhash>,
+}
+
+impl WitnessKeep {
+    /// The array back.
+    pub fn encode(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        emit_array_head(&mut out, self.kept.len());
+        for k in &self.kept {
+            emit_bstr(&mut out, k);
+        }
+        out
+    }
+
+    /// Read a `WitnessKeep` from `b`.
+    pub fn decode(b: &[u8]) -> Result<Self, String> {
+        let it = checked(b, "WitnessKeep")?;
+        let Item::Array(hs) = &it else {
+            return Err("WitnessKeep is not an array".into());
+        };
+        Ok(WitnessKeep {
+            kept: hs.iter().map(|h| fixed32(b, h)).collect::<Result<_, _>>()?,
+        })
+    }
+}
+
+/// A nominee that did not survive the prune (§7.10.2, kind 24): its part
+/// ends here.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Standdown {
+    /// The engagement handle.
+    pub handle: [u8; 32],
+}
+
+impl Standdown {
+    /// The one-key map.
+    pub fn encode(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        emit_map_head(&mut out, 1);
+        emit_uint(&mut out, 1);
+        emit_bstr(&mut out, &self.handle);
+        out
+    }
+
+    /// Read a `Standdown` from `b`.
+    pub fn decode(b: &[u8]) -> Result<Self, String> {
+        let it = checked(b, "WitnessStanddown")?;
+        let Item::Map(m) = &it else {
+            return Err("WitnessStanddown is not a map".into());
+        };
+        Ok(Standdown {
+            handle: fixed32(b, map_get(m, 1).ok_or("handle")?)?,
+        })
+    }
+}
+
+/// One channel's outcome to the surviving witnesses, as it lands inside
+/// the window (§7.10.2, kind 25).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProximityPing {
+    /// The ceremony it belongs to.
+    pub ceremony_id: [u8; 32],
+    /// The channel and its outcome as measured.
+    pub channel: ChannelOutcome,
+}
+
+impl ProximityPing {
+    /// The map a surviving witness is sent.
+    pub fn encode(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        emit_map_head(&mut out, 2);
+        emit_uint(&mut out, 1);
+        emit_bstr(&mut out, &self.ceremony_id);
+        emit_uint(&mut out, 2);
+        // one channel, the §4.5 map emit_channels writes per entry
+        let mut arr = Vec::new();
+        emit_channels(&mut arr, std::slice::from_ref(&self.channel));
+        out.extend_from_slice(&arr[1..]);
+        out
+    }
+
+    /// Read a `ProximityPing` from `b`.
+    pub fn decode(b: &[u8]) -> Result<Self, String> {
+        let it = checked(b, "ProximityUpdate")?;
+        let Item::Map(m) = &it else {
+            return Err("ProximityUpdate is not a map".into());
+        };
+        let ch = map_get(m, 2).ok_or("channel")?;
+        let one = read_channels(&Item::Array(vec![ch.clone()]))?;
+        Ok(ProximityPing {
+            ceremony_id: fixed32(b, map_get(m, 1).ok_or("ceremony-id")?)?,
+            channel: one.into_iter().next().ok_or("channel")?,
         })
     }
 }

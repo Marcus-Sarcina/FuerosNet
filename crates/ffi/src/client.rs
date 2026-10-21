@@ -262,6 +262,69 @@ pub struct Witnessing {
     pub flags: u64,
 }
 
+/// The nomination itself (`wire-format.md` §7.10.2, kind 20) [author,
+/// 2026-10-19]: what a nominee is sent with the intent, before the
+/// counterparty has accepted anything.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct Engaging {
+    /// The engagement handle, minted per ceremony attempt.
+    pub handle: Id,
+    /// The claimed start, the intent's time.
+    pub started_at: u64,
+    /// The counterparty, where the nominator has read its code.
+    pub counterparty: Option<Id>,
+}
+
+impl Engaging {
+    fn of(e: &rhtn_client::conversation::Engagement) -> Engaging {
+        Engaging {
+            handle: e.handle.to_vec(),
+            started_at: e.started_at,
+            counterparty: e.counterparty.map(|k| k.to_vec()),
+        }
+    }
+
+    fn inward(&self) -> Result<rhtn_client::conversation::Engagement, Refused> {
+        Ok(rhtn_client::conversation::Engagement {
+            handle: self
+                .handle
+                .as_slice()
+                .try_into()
+                .map_err(|_| Refused::new("a handle is 32 bytes"))?,
+            started_at: self.started_at,
+            counterparty: match &self.counterparty {
+                Some(k) => {
+                    Some(keyhash(k).ok_or_else(|| Refused::new("a counterparty is 32 bytes"))?)
+                }
+                None => None,
+            },
+        })
+    }
+}
+
+/// One event of the optical exchange's shape (`wire-format.md` §7.10.2,
+/// kind 21), as the shell observes it [author, 2026-10-19].
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum TraceStep {
+    /// Both block counts are known.
+    Shape {
+        /// Blocks this sender has to transmit.
+        mine: u64,
+        /// Blocks the counterparty declares.
+        theirs: u64,
+    },
+    /// An inbound block landed, by index.
+    Inbound {
+        /// The block's index.
+        index: u64,
+    },
+    /// An outbound block was acknowledged on the counterparty's display.
+    Outbound {
+        /// The block's index.
+        index: u64,
+    },
+}
+
 /// What a nominee is asked to witness.
 ///
 /// Like the ceremony's own exchange, the network does not carry this: a
@@ -455,6 +518,9 @@ pub struct Progress {
     pub waiting_on: Option<String>,
     /// Queries issued and not yet answered.
     pub queries_outstanding: u32,
+    /// Surviving witnesses, of either side, whose answer has not arrived:
+    /// the one count a shell paces its proposal by inside the window.
+    pub witnesses_outstanding: u32,
     /// Nominees that will attest.
     pub attesting: Vec<Id>,
     /// Nominees that declined.
@@ -482,6 +548,7 @@ impl Progress {
             no_witness: p.no_witness,
             waiting_on: p.waiting_on.clone(),
             queries_outstanding: p.queries_outstanding as u32,
+            witnesses_outstanding: p.witnesses_outstanding as u32,
             attesting: p
                 .answered
                 .iter()
@@ -2209,6 +2276,30 @@ impl Participant {
         })
     }
 
+    /// The engagement this side sends its nominees (kind 20): the handle
+    /// minted at `begin`, the claimed start, and the counterparty where a
+    /// code has named one.
+    pub fn engagement(&self) -> Result<Engaging, Refused> {
+        crate::diag::call("engagement", || {
+            self.handle.with_blocking(|c| {
+                c.engagement()
+                    .map(|e| Engaging::of(&e))
+                    .map_err(|a| Refused::new(format!("{a:?}")))
+            })
+        })
+    }
+
+    /// As nominee: take an engagement (kind 20), so the trace that follows
+    /// has somewhere to land and the later request something to close.
+    /// False where the claimed start is outside this clock's tolerance.
+    pub fn take_engagement(&self, from: Id, engagement: Engaging) -> Result<bool, Refused> {
+        crate::diag::call("take_engagement", || {
+            let k = keyhash(&from).ok_or_else(|| Refused::new("a party is 32 bytes"))?;
+            let e = engagement.inward()?;
+            Ok(self.handle.with_blocking(move |c| c.take_engagement(k, &e)))
+        })
+    }
+
     /// What this client asks its nominees to witness.
     pub fn witness_ask(&self) -> Result<WitnessAsk, Refused> {
         crate::diag::call("witness_ask", || {
@@ -2311,11 +2402,41 @@ impl Participant {
         })
     }
 
-    /// Open the ceremony's conversation on the end-to-end path
-    /// (`wire-format.md` §7.10.1): ask every nominee to witness and hand
-    /// over this signer's back-pointers, to the counterparty and every
-    /// witness either side nominated.  First after the capture, so the
-    /// witnesses observe what follows.
+    /// Engage this side's nominees (kind 20) [author, 2026-10-19]: one
+    /// message each over the payload path, with the intent, before the
+    /// counterparty has accepted anything.  A nominee that cannot be
+    /// reached was unavailable and is dropped from the set.
+    pub fn converse_engage(&self) -> Result<(), Refused> {
+        crate::diag::call("converse_engage", || self.converse(|c| c.converse_engage()))
+    }
+
+    /// One event of the optical exchange's shape to this side's nominees
+    /// (kind 21), as it happens: the shape once both block counts are
+    /// known, then each inbound block as it lands and each outbound as
+    /// the counterparty's display acknowledges it.  The confirmation
+    /// event is the kernel's own, sent where the ceremony-id fixes.
+    pub fn optical_trace(&self, event: TraceStep) -> Result<(), Refused> {
+        crate::diag::call("optical_trace", || {
+            let ev = match event {
+                TraceStep::Shape { mine, theirs } => {
+                    rhtn_client::conversation::TraceEvent::Shape { mine, theirs }
+                }
+                TraceStep::Inbound { index } => {
+                    rhtn_client::conversation::TraceEvent::Inbound(index)
+                }
+                TraceStep::Outbound { index } => {
+                    rhtn_client::conversation::TraceEvent::Outbound(index)
+                }
+            };
+            self.converse(move |c| c.trace(ev))
+        })
+    }
+
+    /// Open the window (`wire-format.md` §7.10.1) [author, 2026-10-19]:
+    /// the request, its field 5 closing each engagement, to this side's
+    /// surviving nominees, and this signer's back-pointers to everyone.
+    /// Refused, naming the prune, until the counterparty's keep has
+    /// arrived.
     pub fn converse_open(&self) -> Result<(), Refused> {
         crate::diag::call("converse_open", || self.converse(|c| c.converse_open()))
     }

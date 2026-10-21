@@ -1593,8 +1593,11 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             let Item::Array(a) = item else {
                 return Err(Error("not array"));
             };
-            if a.len() != 9 {
-                return Err(Error("nine fields"));
+            // the nominees no longer ride the intent [author, 2026-10-19]:
+            // the sets travel by locator once the id has fixed (§7.10.2,
+            // kind 22), so an intent is eight fields
+            if a.len() != 8 {
+                return Err(Error("eight fields"));
             }
             if as_uint(&a[0]) != Some(1) {
                 return Err(Error("version 1"));
@@ -1603,38 +1606,26 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
                 Item::Bytes(r) if r.len() == 16 => {}
                 _ => return Err(Error("an echoed contribution is 16 bytes")),
             }
-            let Item::Array(noms) = &a[2] else {
-                return Err(Error("nominees not array"));
-            };
-            if noms.len() > INTENT_NOMINEES {
-                return Err(Error("nominees over 64"));
-            }
-            for n in noms {
-                match n {
-                    Item::Bytes(r) if r.len() == 32 => {}
-                    _ => return Err(Error("a nominee is a keyhash")),
-                }
-            }
-            let Item::Array(bundle) = &a[3] else {
+            let Item::Array(bundle) = &a[2] else {
                 return Err(Error("bundle not array"));
             };
             if bundle.len() > INTENT_BUNDLE_ENTRIES {
                 return Err(Error("bundle carriage over 256"));
             }
-            introductions_ok(b, 3)?;
-            as_uint(&a[4]).ok_or(Error("started_at"))?;
-            as_uint(&a[5]).ok_or(Error("retention"))?;
-            match &a[6] {
+            introductions_ok(b, 2)?;
+            as_uint(&a[3]).ok_or(Error("started_at"))?;
+            as_uint(&a[4]).ok_or(Error("retention"))?;
+            match &a[5] {
                 Item::Bool(_) => {}
                 _ => return Err(Error("initiator is a bool")),
             }
             // the bundle itself has no ceiling (§5.4); its carriage does,
             // and the rest follows in numbered continuations
-            as_uint(&a[7]).ok_or(Error("continuations is a count"))?;
+            as_uint(&a[6]).ok_or(Error("continuations is a count"))?;
             // the sender's own position, bare: the receiver pinned the
             // sender's key from the screen (§14.3.2)
             let top = array_item_ranges(b, 0).ok_or(Error("array walk"))?;
-            let r = top.get(8).ok_or(Error("locator"))?;
+            let r = top.get(7).ok_or(Error("locator"))?;
             let sub = &b[r.clone()];
             check_kind(sub, "SignedLocator", &parse_all(sub)?)
                 .map_err(|_| Error("the sender's locator is a SignedLocator"))?;

@@ -88,6 +88,24 @@ pub(crate) struct Outgoing {
     pub(crate) resent: bool,
 }
 
+/// One engagement this client holds as a nominee (kind 20): the opening
+/// it watches before any request arrives [author, 2026-10-19].
+pub(crate) struct Engaged {
+    /// The party that engaged this client: the only one whose trace,
+    /// standdown and request bind to this handle (§7.10.1).
+    pub(crate) from: Keyhash,
+    /// The claimed start, checked against this clock as a request's is.
+    pub(crate) started_at: u64,
+    /// The counterparty, where the nominator had read its code.
+    pub(crate) counterparty: Option<Keyhash>,
+    /// The ceremony-id from the trace's confirmation, once it arrived;
+    /// the request's field 1 MUST agree (CER-70).
+    pub(crate) ceremony_id: Option<[u8; 32]>,
+    /// The trace as it arrived: (event, value, this clock's ms) — the
+    /// arrival pattern is the evidence (design §7.1 item 9).
+    pub(crate) trace: Vec<(u64, u64, u64)>,
+}
+
 /// One ceremony this client was asked to witness and accepted.
 pub(crate) struct Witnessing {
     pub(crate) request: WitnessRequest,
@@ -247,6 +265,11 @@ pub struct Progress {
     pub waiting_on: Option<String>,
     /// Queries issued and not yet answered.
     pub queries_outstanding: usize,
+    /// Surviving witnesses, of either side, whose answer has not arrived:
+    /// what a patient proposer is waiting on inside the window [author,
+    /// 2026-10-19].  Never a gate — the floor is gone — but the one count
+    /// a shell paces its proposal by.
+    pub witnesses_outstanding: usize,
     /// Nominees that answered: the flags each will sign under, or a
     /// decline.
     pub answered: Vec<(Keyhash, Option<u64>)>,
@@ -278,14 +301,24 @@ enum From {
 impl Client {
     /// The counterparty and every witness either side nominated, besides
     /// me: who hears each message of the conversation.
-    fn conversation_parties(&self) -> Result<(Keyhash, Vec<Keyhash>), Abort> {
+    pub(crate) fn conversation_parties(&self) -> Result<(Keyhash, Vec<Keyhash>), Abort> {
         let a = self.active.as_ref().ok_or(Abort::NotActive)?;
         let me = self.keyhash();
-        let witnesses: BTreeSet<Keyhash> = a
-            .my_nominees
-            .iter()
-            .chain(a.their_nominees.iter())
-            .copied()
+        // **the survivors, where the prune has answered** [author,
+        // 2026-10-19]: from the window on, every leg goes to the kept
+        // witnesses of both sides; before it, to the nominees engaged
+        let mine = a
+            .my_survivors
+            .as_ref()
+            .map(|s| s.iter().copied().collect::<Vec<_>>())
+            .unwrap_or_else(|| a.my_nominees.iter().copied().collect());
+        let theirs = a
+            .their_survivors
+            .clone()
+            .unwrap_or_else(|| a.their_nominees.clone());
+        let witnesses: BTreeSet<Keyhash> = mine
+            .into_iter()
+            .chain(theirs)
             .filter(|k| *k != me && Some(*k) != a.counterparty)
             .collect();
         Ok((a.peer()?, witnesses.into_iter().collect()))
@@ -385,7 +418,7 @@ impl Client {
 
     /// The same, from inside a delivery: what goes out waits in the
     /// outbox for the courier.
-    fn converse_into_outbox(&mut self, msg: &Msg, to: &[Keyhash]) {
+    pub(crate) fn converse_into_outbox(&mut self, msg: &Msg, to: &[Keyhash]) {
         let (out, _) = self.converse_to(msg, to);
         self.outbox.extend(out);
     }
@@ -396,6 +429,177 @@ impl Client {
         let (counterparty, mut all) = self.conversation_parties()?;
         all.insert(0, counterparty);
         Ok((counterparty, all))
+    }
+
+    /// Engage this side's nominees (kind 20) [author, 2026-10-19]: one
+    /// message each over the payload path, with the intent, before the
+    /// counterparty has accepted anything.  A nominee that cannot be
+    /// reached was unavailable — availability is discovered after
+    /// selecting (`light-client-requirements.md` §1.1) — and is dropped
+    /// from the set, never offered to the prune.
+    pub fn converse_engage(&mut self) -> Result<Vec<Msg>, Abort> {
+        let (pending, msg) = {
+            let a = self.active.as_ref().ok_or(Abort::NotActive)?;
+            let e = crate::conversation::Engagement {
+                handle: a.handle,
+                started_at: a.started_at,
+                counterparty: a.counterparty,
+            };
+            (
+                a.my_nominees
+                    .iter()
+                    .filter(|k| !a.engaged_to.contains(*k))
+                    .copied()
+                    .collect::<Vec<_>>(),
+                Msg::Engagement(e),
+            )
+        };
+        if let Some(a) = self.active.as_mut() {
+            a.engage_attempted = true;
+        }
+        if pending.is_empty() {
+            return Ok(Vec::new());
+        }
+        let (out, failed) = self.converse_to(&msg, &pending);
+        // **a nominee not reached stays pending** [author, 2026-10-19]: the
+        // first attempt on a peer whose binding is not held asks for it,
+        // so the next call reaches a nominee this one could not, and
+        // availability is what the set's crossing finally reports.  A
+        // nominee dropped on one refusal would make a transient binding
+        // look like an unavailable witness
+        if let Some(a) = self.active.as_mut() {
+            for k in &pending {
+                if !failed.iter().any(|(f, _)| f == k) {
+                    a.engaged_to.insert(*k);
+                }
+            }
+        }
+        let (engaged, nominated) = self.nominees_engaged();
+        tracing::info!(
+            target: "cer",
+            engaged,
+            nominated,
+            pending = failed.len(),
+            "cer.witness.engaged"
+        );
+        Ok(out)
+    }
+
+    /// One event of the optical exchange's shape to this side's nominees
+    /// (kind 21), as it happens and never batched: the arrival pace on the
+    /// nominees' clocks is the evidence (design §7.1 items 3 and 9).  The
+    /// confirmation event is the kernel's own, sent where the ceremony-id
+    /// fixes.
+    pub fn trace(&mut self, event: crate::conversation::TraceEvent) -> Result<Vec<Msg>, Abort> {
+        let (nominees, msg) = {
+            let a = self.active.as_ref().ok_or(Abort::NotActive)?;
+            let t = crate::conversation::Trace {
+                handle: a.handle,
+                event,
+            };
+            (
+                a.my_nominees.iter().copied().collect::<Vec<_>>(),
+                Msg::Trace(t),
+            )
+        };
+        let (out, _) = self.converse_to(&msg, &nominees);
+        Ok(out)
+    }
+
+    /// **The ceremony-id fixed** [author, 2026-10-19]: each nominee gets
+    /// the trace's confirmation, bound to the engagement it has been
+    /// watching, and this side's set crosses to the counterparty for its
+    /// prune (kinds 21 and 22) — an empty set too, since the counterparty
+    /// answers every set with a keep and the prune is not done until it
+    /// has.  Into the outbox, for the courier.
+    pub(crate) fn opening_id_fixed(&mut self, cid: [u8; 32]) {
+        let Some(a) = self.active.as_ref() else {
+            return;
+        };
+        if a.set_sent {
+            return;
+        }
+        let handle = a.handle;
+        // **the set closes here**: the nominees the engagement reached are
+        // the ones offered, and one still unreached was unavailable — a
+        // witness that does not appear (design §7.1).  The confirmation
+        // goes to the same parties: a nominee never engaged has nothing to
+        // bind it to, and would decline the request anyway (CER-70)
+        // where this kernel never tried, it has learnt nothing: the
+        // caller moved the engagements and its nominee list stands
+        let attempted = a.engage_attempted;
+        let nominees: Vec<Keyhash> = match attempted {
+            true => a.engaged_to.iter().copied().collect(),
+            false => a.my_nominees.iter().copied().collect(),
+        };
+        let dropped = a.my_nominees.len() - nominees.len();
+        // the confirmation goes where the engagement went, and nowhere
+        // else: a nominee this kernel never engaged has nothing to bind
+        // it to and would decline the request anyway (CER-70), and where
+        // the caller carries the opening itself it carries this leg too
+        if attempted {
+            self.converse_into_outbox(
+                &Msg::Trace(crate::conversation::Trace {
+                    handle,
+                    event: crate::conversation::TraceEvent::Confirmed(cid),
+                }),
+                &nominees,
+            );
+        }
+        if let Some(a) = self.active.as_mut() {
+            a.my_nominees = nominees.iter().copied().collect();
+        }
+        let set = self.my_witness_set(&nominees);
+        let peer = self.active.as_ref().and_then(|a| a.counterparty);
+        if let Some(peer) = peer {
+            tracing::info!(
+                target: "cer",
+                ceremony = %crate::diag::id8(&cid),
+                offered = set.len(),
+                unreachable = dropped,
+                "cer.witness.set_sent"
+            );
+            self.converse_into_outbox(&Msg::WitnessSet(set), &[peer]);
+        }
+        if let Some(a) = self.active.as_mut() {
+            a.set_sent = true;
+        }
+    }
+
+    /// This side's nominees as introductions (§2.3), by locator, for the
+    /// counterparty's prune.  A nominee whose material or locator is not
+    /// held cannot travel by locator and is not offered.
+    fn my_witness_set(&self, nominees: &[Keyhash]) -> Vec<Vec<u8>> {
+        nominees
+            .iter()
+            .filter_map(|k| {
+                let c = self.store.contacts.get(k)?;
+                let sl = c.locator.as_deref()?;
+                Some(rhtn_archive::locator::introduction(&c.material, sl))
+            })
+            .collect()
+    }
+
+    /// Prune the counterparty's set to `min(3, offered)` [author,
+    /// 2026-10-19]: a random element, blind to loyalties
+    /// (`light-client-requirements.md` §1.1), neither participant ever
+    /// kept.
+    fn prune_their_set(&mut self, offered: &[Keyhash]) -> Vec<Keyhash> {
+        let me = self.keyhash();
+        let peer = self.active.as_ref().and_then(|a| a.counterparty);
+        let salt = self.random::<32>();
+        let mut eligible: Vec<Keyhash> = offered
+            .iter()
+            .copied()
+            .filter(|k| *k != me && Some(*k) != peer)
+            .collect();
+        eligible.sort_by_key(|k| {
+            let mut input = salt.to_vec();
+            input.extend_from_slice(k);
+            rhtn_codec::cose::sha256(&input)
+        });
+        eligible.truncate(rhtn_codec::bounds::WITNESSES_KEPT);
+        eligible
     }
 
     /// Step 6 on the path (design §7.1): select the counterparty's
@@ -429,8 +633,25 @@ impl Client {
     /// (design §7.1 step 8).
     pub fn converse_open(&mut self) -> Result<Vec<Msg>, Abort> {
         let (counterparty, all) = self.everyone()?;
+        // **The request goes to this side's survivors** [author,
+        // 2026-10-19]: nominated by this side, selected by the other
+        // (kind 12's own row), its field 5 closing the engagement each
+        // watched.  With nominees engaged, the prune must have answered.
+        let mine: Vec<Keyhash> = {
+            let a = self.active()?;
+            match (&a.my_survivors, a.my_nominees.is_empty()) {
+                (Some(kept), _) => kept.iter().copied().collect(),
+                (None, true) => Vec::new(),
+                (None, false) => {
+                    return Err(abort(
+                        "converse_open",
+                        Abort::Waiting("the counterparty's keep of this side's witness set"),
+                    ));
+                }
+            }
+        };
         let req = self.witness_request()?;
-        let mut out = self.converse_or_abort(&Msg::WitnessRequest(req), &all, counterparty)?;
+        let mut out = self.converse_or_abort(&Msg::WitnessRequest(req), &mine, counterparty)?;
         let back = self.back_pointers();
         out.extend(self.converse_or_abort(&Msg::BackPointers(back), &all, counterparty)?);
         // **what this side has done is the kernel's to remember**: a
@@ -606,6 +827,15 @@ impl Client {
                     .get(&p)
                     .is_none_or(|t| *t == vec![rhtn_archive::genesis(&p)])
             });
+        // the survivors asked whose answer has not arrived, of both
+        // sides: the other side's answers reach this side too (§7.10.1)
+        let witnesses_outstanding = a
+            .my_survivors
+            .iter()
+            .flat_map(|s| s.iter())
+            .chain(a.their_survivors.iter().flatten())
+            .filter(|w| !c.answers.contains_key(*w))
+            .count();
         let ready = a.initiator && waiting_on.is_none();
         Some(Progress {
             proposer: a.initiator,
@@ -617,6 +847,7 @@ impl Client {
             no_witness: ready && witnesses == 0 && !formation,
             waiting_on: waiting_on.map(str::to_string),
             queries_outstanding: a.issued.iter().filter(|q| !answered.contains(*q)).count(),
+            witnesses_outstanding,
             answered: c.answers.iter().map(|(k, f)| (*k, *f)).collect(),
             back_from: c.back.keys().copied().collect(),
             their_responses: c.their_responses.is_some(),
@@ -719,6 +950,73 @@ impl Client {
             }
             // the counterparty asking its own nominees
             Msg::WitnessRequest(_) => Conversed::Observed { kind },
+            // the counterparty's set, for this side's prune (kind 22)
+            // [author, 2026-10-19]: ingest each introduction, keep
+            // min(3, offered), answer with the keep
+            Msg::WitnessSet(nominees) => {
+                let offered = nominees.len();
+                let mut named = Vec::new();
+                for intro in &nominees {
+                    match self.take_introduction(intro) {
+                        Ok(k) => named.push(k),
+                        Err(why) => {
+                            return refused(format!(
+                                "a nominee's introduction did not read: {why}"
+                            ));
+                        }
+                    }
+                }
+                let kept = self.prune_their_set(&named);
+                if let Some(a) = self.active.as_mut() {
+                    a.their_nominees = named;
+                    a.their_survivors = Some(kept.clone());
+                }
+                tracing::info!(
+                    target: "cer",
+                    offered,
+                    kept = kept.len(),
+                    "cer.witness.pruned"
+                );
+                self.converse_into_outbox(&Msg::WitnessKeep(kept), &[from]);
+                Conversed::Observed { kind }
+            }
+            // the counterparty's keep of this side's set (kind 23): the
+            // survivors; each dismissed nominee gets its standdown
+            Msg::WitnessKeep(kept) => {
+                let (survivors, dismissed, handle) = {
+                    let Some(a) = self.active.as_ref() else {
+                        return refused("no ceremony".into());
+                    };
+                    let survivors: BTreeSet<Keyhash> = kept
+                        .iter()
+                        .copied()
+                        .filter(|k| a.my_nominees.contains(k))
+                        .collect();
+                    if survivors.len() != kept.len() {
+                        return refused("a keep naming a nominee this side never offered".into());
+                    }
+                    let dismissed: Vec<Keyhash> = a
+                        .my_nominees
+                        .iter()
+                        .filter(|k| !survivors.contains(*k))
+                        .copied()
+                        .collect();
+                    (survivors, dismissed, a.handle)
+                };
+                tracing::info!(
+                    target: "cer",
+                    kept = survivors.len(),
+                    dismissed = dismissed.len(),
+                    "cer.witness.kept"
+                );
+                for d in &dismissed {
+                    self.converse_into_outbox(&Msg::Standdown(handle), &[*d]);
+                }
+                if let Some(a) = self.active.as_mut() {
+                    a.my_survivors = Some(survivors);
+                }
+                Conversed::Observed { kind }
+            }
             Msg::WitnessAnswer(_) => refused("a participant does not answer as a witness".into()),
             Msg::Responses(r) => {
                 if !initiator {
@@ -801,6 +1099,14 @@ impl Client {
             }
             Msg::Signed(reply) if initiator => self.signer_replied(from, kind, reply),
             Msg::Signed(_) => Conversed::Observed { kind },
+            // a witness of this side's ceremony can be wearing its other
+            // hat: engaging this client for a meeting of its own.  The
+            // opening's kinds route by the handle they carry, not by the
+            // ceremony this side is in
+            m
+            @ (Msg::Engagement(_) | Msg::Trace(_) | Msg::Standdown(_) | Msg::ProximityPing(_)) => {
+                self.as_witness(from, kind, m)
+            }
             _ => Conversed::Refused {
                 kind,
                 why: "not a kind a witness sends".into(),
@@ -943,6 +1249,19 @@ impl Client {
             .map(|(cid, _)| *cid)
     }
 
+    /// The ceremony a proximity update belongs to, where this client
+    /// witnesses it and `from` is one of its participants.
+    fn witnessing_for_update(
+        &self,
+        u: &crate::conversation::ProximityPing,
+        from: Keyhash,
+    ) -> Option<[u8; 32]> {
+        self.witnessing
+            .get(&u.ceremony_id)
+            .filter(|w| w.request.participants.contains(&from))
+            .map(|_| u.ceremony_id)
+    }
+
     /// Any pending ceremony `from` is a participant of.
     fn witnessing_with(&self, from: Keyhash) -> Option<[u8; 32]> {
         self.witnessing
@@ -968,6 +1287,40 @@ impl Client {
             why: why.into(),
         };
         match msg {
+            // the opening (kinds 20, 21 and 24) [author, 2026-10-19]:
+            // taken only from the party that engaged this client
+            Msg::Engagement(e) => {
+                if e.counterparty == Some(self.keyhash()) {
+                    return refused("a participant is not a witness of its own ceremony");
+                }
+                self.take_engagement(from, &e);
+                Conversed::Observed { kind }
+            }
+            Msg::Trace(t) => {
+                if self.take_trace(from, &t) {
+                    Conversed::Observed { kind }
+                } else {
+                    refused("a trace for no engagement this client watches from that party")
+                }
+            }
+            Msg::Standdown(handle) => {
+                match self.engaged.get(&handle) {
+                    Some(e) if e.from == from => {
+                        // a dismissal at the prune ends this client's part
+                        // (`light-client-requirements.md` §1.2)
+                        self.engaged.remove(&handle);
+                        Conversed::Observed { kind }
+                    }
+                    _ => refused("a standdown for no engagement this client watches"),
+                }
+            }
+            Msg::ProximityPing(u) => match self.witnessing_for_update(&u, from) {
+                Some(cid) => {
+                    self.observe(cid, from, kind);
+                    Conversed::Observed { kind }
+                }
+                None => refused("an update for no ceremony this client witnesses"),
+            },
             Msg::WitnessRequest(req) => {
                 if !req.participants.contains(&from) {
                     return refused("a request from no participant of the ceremony it names");
