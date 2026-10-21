@@ -98,6 +98,12 @@ pub(crate) struct Engaged {
     pub(crate) started_at: u64,
     /// The counterparty, where the nominator had read its code.
     pub(crate) counterparty: Option<Keyhash>,
+    /// This device's clock when the engagement was taken, in
+    /// milliseconds: the datum every later arrival is measured from, since
+    /// **the arrival pattern on this clock is what a witness attests
+    /// from** (design §7.1 item 9) and a reader of a run needs it in the
+    /// stream rather than in memory [author, 2026-10-19].
+    pub(crate) held_ms: u64,
     /// The ceremony-id from the trace's confirmation, once it arrived;
     /// the request's field 1 MUST agree (CER-70).
     pub(crate) ceremony_id: Option<[u8; 32]>,
@@ -1308,6 +1314,14 @@ impl Client {
                     Some(e) if e.from == from => {
                         // a dismissal at the prune ends this client's part
                         // (`light-client-requirements.md` §1.2)
+                        let watched = e.trace.len();
+                        tracing::info!(
+                            target: "cer",
+                            handle = %crate::diag::id8(&handle),
+                            from = %crate::diag::id8(&from),
+                            watched,
+                            "cer.witness.stood_down"
+                        );
                         self.engaged.remove(&handle);
                         Conversed::Observed { kind }
                     }
@@ -1316,6 +1330,16 @@ impl Client {
             }
             Msg::ProximityPing(u) => match self.witnessing_for_update(&u, from) {
                 Some(cid) => {
+                    // a channel's outcome, on this witness's clock, inside
+                    // the window: another arrival a run is read by
+                    tracing::info!(
+                        target: "cer",
+                        ceremony = %crate::diag::id8(&cid),
+                        from = %crate::diag::id8(&from),
+                        channel = ?u.channel.kind,
+                        outcome = ?u.channel.result,
+                        "cer.witness.channel"
+                    );
                     self.observe(cid, from, kind);
                     Conversed::Observed { kind }
                 }

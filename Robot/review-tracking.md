@@ -18865,3 +18865,33 @@ which nothing stated as a requirement.
 four-minute wall clock), though the reorder is what makes the wait
 overlap the ceremony's own work rather than follow it — which CER-032 now
 says and a bench run is what reads.
+
+
+## 2026-10-21 — heading F's instrument, before heading F
+
+**The spread was not readable.** `take_trace` recorded each arrival in
+`Engaged.trace` and emitted nothing, so the arrival pattern — the whole
+evidence the reorder exists to produce — was in memory and invisible to a
+run. Heading F's verdict ("the witness diag shows SPREAD arrivals") could
+not have been read at all.
+
+Added: `Engaged.held_ms`, the witness's clock when it took the
+engagement, and `cer.witness.watched` per arrival carrying
+handle8/from8/event/value/**since_ms**/seen — the offset from the
+engagement on the witness's own clock, which is the column a run is
+judged by. Also `cer.witness.channel` (kind 25 in, an outcome landing
+inside the window) and `cer.witness.stood_down` (kind 24 in, with how
+much it had watched). All four are in the diagnostics table now.
+
+**Proven to flow, with a caveat worth knowing before the bench.** A live
+adaptors run shows `cer.witness.watched ... event="confirmed"
+since_ms=819 seen=1` — but only the confirmation, because the in-process
+harness fixes the ceremony-id by hand and has no optical exchange. The
+shape/inbound/outbound events come from `OpticalExchange.take()` and so
+need two real screens and cameras: **the spread itself is only
+observable on the bench**, which is why F is a bench run and not a test.
+
+**What F needs from the author**: four phones, two people, and a run. The
+instrument is ready; GXV-MRK is the only pair that can tap (both TCL
+units report no NFC), so a tap-bearing run is that pair and any run
+touching ZU8 or 4VC reads optical as its only channel.

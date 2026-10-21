@@ -2328,8 +2328,10 @@ impl Client {
                 self.engaged.remove(&k);
             }
         }
+        let held_ms = self.device.clock.now_ms();
         tracing::info!(
             target: "cer",
+            handle = %id8(&e.handle),
             from = %id8(&from),
             held = self.engaged.len() + 1,
             "cer.witness.engaged_by"
@@ -2342,6 +2344,7 @@ impl Client {
                 counterparty: e.counterparty,
                 ceremony_id: None,
                 trace: Vec::new(),
+                held_ms,
             },
         );
         true
@@ -2391,6 +2394,27 @@ impl Client {
             }
         };
         e.trace.push((code, value, now));
+        // **the arrival, on this clock, in the stream** [author,
+        // 2026-10-19]: what a witness attests from is the pattern these
+        // offsets make, so a run is read by whether they spread across the
+        // exchange or arrive together at its end (design §7.1 items 3, 9)
+        let since_ms = now.saturating_sub(e.held_ms);
+        let seen = e.trace.len();
+        tracing::info!(
+            target: "cer",
+            handle = %id8(&t.handle),
+            from = %id8(&from),
+            event = match code {
+                0 => "shape",
+                1 => "inbound",
+                2 => "outbound",
+                _ => "confirmed",
+            },
+            value,
+            since_ms,
+            seen,
+            "cer.witness.watched"
+        );
         true
     }
 

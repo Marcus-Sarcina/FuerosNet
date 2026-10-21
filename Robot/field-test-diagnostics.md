@@ -108,7 +108,10 @@ anchor.
 | `cer.grant` | qid8, sent or `GrantOutcome` | `take_grant` |
 | `cer.response` | qid8, verifier8, `Verdict`, `Basis`; or `Closed`/`Rejected` reason | `take_response`, `take_response_copy` |
 | `cer.witness.engaged` | engaged, nominated, pending | `converse_engage`, kind 20 out [author, 2026-10-19] |
-| `cer.witness.engaged_by` | from8, held | `take_engagement`, kind 20 in, as nominee |
+| `cer.witness.engaged_by` | handle8, from8, held | `take_engagement`, kind 20 in, as nominee; the clock this witness measures every later arrival from |
+| `cer.witness.watched` | handle8, from8, event (shape/inbound/outbound/confirmed), value, **since_ms**, seen | `take_trace`, kind 21 in [author, 2026-10-19]. **This is the row a run is judged by**: `since_ms` is the offset from the engagement on the witness's own clock, so a column of rising offsets across the exchange is the spread the reorder exists to produce, and a cluster at the end is the burst it replaced. The block events need two real screens, so only `confirmed` appears in an in-process run |
+| `cer.witness.channel` | ceremony8, from8, channel, outcome | kind 25 in: an outcome landing inside the window, on the witness's clock |
+| `cer.witness.stood_down` | handle8, from8, watched | kind 24 in: dismissed at the prune, with how much it had watched by then |
 | `cer.witness.set_sent` | ceremony8, offered, unreachable | `opening_id_fixed`, kind 22 out |
 | `cer.witness.pruned` / `.kept` | offered and kept, or kept and dismissed | kinds 22 in and 23 in; the prune and its answer |
 | `cer.witness.asked` / `.answered` | witness8, flags or declined, evicted (bound 8) | `witness_request`, `take_witness_request` |
