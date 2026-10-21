@@ -262,8 +262,9 @@ the binding and `MeetConversationTest` with a fake.
   within the ceremony does not appear, design §7.1), the responder calls
   `converseGathered()` once; the initiator calls `conversePropose()`,
   retried next tick while it refuses `Waiting(...)` (the wait shown and
-  said once per reason), and `NoWitness` is surfaced to the person as
-  wait-or-stop rather than a stop. Any other refusal stops the meeting
+  said once per reason), and a missing witness is surfaced to the person
+  and gates nothing [author, 2026-10-19: there is no floor] — the body
+  goes out witnessless and the record says so permanently. Any other refusal stops the meeting
   with the kernel's code. Verdicts land as before through
   `Event::Answered`; witness answers show from `progress().attesting` and
   `.declined` against the nominee lists, a declined witness shown as

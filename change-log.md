@@ -13867,6 +13867,39 @@ rejections in the corpus, and both introduction kinds are listed in the
 corpus runner so a rejection that starts passing fails rather than being
 skipped.
 
+### 2026-10-21 (the tap stands, and UWB is not owed)
+
+**The NFC tap stays as it is** [author, 2026-10-21]. The question was
+whether the tap is a capability of the radio or a choice, and whether
+ranging at capture-and-conversation distance is possible instead: it is
+not NFC's to do. The coupling is near-field and magnetic, falling off
+about as the cube of the distance from a coil a few centimetres across
+under a regulatory ceiling on field strength, so ISO 14443's ten
+centimetres is the class a handset implements and a metre takes a reader
+coil the size of a gate. Ranging at a few feet is UWB's, which design
+§7.6.3 already ranks strongest and already records as broken in deployed
+HRP form; **it is not being built**, so the shell's note stops reading as
+owed work. The ladder stays NFC where the hardware has it and optical
+otherwise, with the record saying which was achieved — and the tap no
+longer holds the ceremony in any case (2026-10-20).
+
+**What the bench actually has, measured rather than recalled**: the two
+SM-G996U1 report `android.hardware.uwb` and full NFC with host-card
+emulation; both TCL 30 Z units report no NFC features at all and no UWB.
+The bench notes had this right already, and the consequence is worth
+stating plainly: a tap can only ever be exercised between the two S21
+phones, and every run involving a 30 Z has had the optical channel
+carrying the proximity evidence alone.
+
+**Three stale bench-facing notes went with it**, all left by the
+no-witness-floor ruling: the cold bench no longer needs its phones at
+genesis — the `NoWitness` refusal is gone, so a pair that has met others
+reaches a witnessless normal record and wiping them now chooses the
+record's shape rather than deciding whether the run can finish; the
+diagnostics no longer list `NoWitness` as a propose outcome, and gained
+the opening's own events, which are what a bench reads for the arrival
+spread; and a missing witness is recorded as gating nothing.
+
 ### 2026-10-20 (the shell's opening, and the tap nobody holds)
 
 **The shell drives the reordered ceremony** [author, 2026-10-19]. The

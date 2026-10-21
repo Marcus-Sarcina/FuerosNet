@@ -15,10 +15,14 @@ UWB) and two TCL 30 Z (4188C: Android 12, API 31, 2.7 GB, BLE only), all in
 `crates/tools/phones.conf`. The cold bench is `nodeless.sh --phone A
 --phone B <label>`; the node bench is `field-run.sh`, which provisions a
 daemon, two instrument witnesses, and names a nominee for phones at
-genesis. **The cold bench admits phones at genesis only** (design §6.4's
-witnessless shape): a phone that has met anyone is refused `NoWitness`, so
-a nodeless run wipes its two phones first (`field-setup.sh --conf` on a
-file naming only those two keeps the others' identities).
+genesis. **The cold bench no longer needs phones at genesis** [author,
+2026-10-19: there is no witness floor]: the `NoWitness` refusal is gone, so
+two phones that have met others reach a witnessless *normal* record rather
+than being refused, and the record says permanently that nobody attested
+(`wire-format.md` §3.2). Wiping the two first (`field-setup.sh --conf` on a
+file naming only those two keeps the others' identities) now **chooses the
+shape** — a formation at genesis rather than a witnessless normal record —
+instead of deciding whether the run can finish at all.
 
 ## Two axes, not one sequence
 

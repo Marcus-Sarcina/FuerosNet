@@ -18799,3 +18799,35 @@ second constant, and `engage` has twenty seconds.
 failure exactly, warm cache and all — far faster than guessing from a
 226-second duration. Restore the volume's checkout
 (`git checkout -- <paths>`) afterwards so the next job starts clean.
+
+
+## 2026-10-21 — the tap stands; UWB declined
+
+Asked whether the tap is an NFC constraint or a choice, and whether
+ranging at conversation distance is possible. Answered: the constraint is
+physical (near-field magnetic coupling, ~1/r^3 from a centimetre-scale
+coil, ISO 14443's 10 cm class; the metre-scale class needs a gate-sized
+reader coil), so NFC cannot be stretched. Conversation distance is UWB's,
+which §7.6.3 already ranks first and already records as defeated in
+deployed HRP form.
+
+**Ruling: "Leave the NFC tap as-is"** [author, 2026-10-21]. So UWB is not
+pursued and the shell's "Recorded as owed, 2026-10-01" note is rewritten
+as settled — a later reader would otherwise take it for pending work.
+Nothing in the design changes: it already states the ladder, the ranks
+and that a channel the hardware lacks is not listed.
+
+**Bench hardware, measured by `pm list features`**: SM-G996U1 has
+`android.hardware.uwb` + `samsung.hardware.uwb` + NFC with HCE; both
+4188C (TCL 30 Z) have ZERO nfc and ZERO uwb features. So GXV-MRK is the
+only pair that can tap, and any run touching ZU8 or 4VC has optical as
+its only proximity channel. `field-test-sequence.md` already said "BLE
+only"; this confirms it on the devices.
+
+**Swept with it** (stale since the floor went): `field-test-sequence.md`'s
+cold-bench rule (no `NoWitness` refusal any more - the wipe now chooses
+formation vs witnessless normal, not whether the run completes),
+`field-test-diagnostics.md`'s `cer.propose` row, plus the opening's events
+added there for heading F, and `light-client-screens.md`'s wait-or-stop
+line. `client-review-2026-10-11.md` left alone: a dated findings document,
+not an operational one.

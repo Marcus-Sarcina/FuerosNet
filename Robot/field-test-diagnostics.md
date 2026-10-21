@@ -107,9 +107,13 @@ anchor.
 | `cer.query` | qid8, verifier8, basis, issued / consented / refused (`ProbingRefused`) | `query_for`, `consent`, `take_query` |
 | `cer.grant` | qid8, sent or `GrantOutcome` | `take_grant` |
 | `cer.response` | qid8, verifier8, `Verdict`, `Basis`; or `Closed`/`Rejected` reason | `take_response`, `take_response_copy` |
+| `cer.witness.engaged` | engaged, nominated, pending | `converse_engage`, kind 20 out [author, 2026-10-19] |
+| `cer.witness.engaged_by` | from8, held | `take_engagement`, kind 20 in, as nominee |
+| `cer.witness.set_sent` | ceremony8, offered, unreachable | `opening_id_fixed`, kind 22 out |
+| `cer.witness.pruned` / `.kept` | offered and kept, or kept and dismissed | kinds 22 in and 23 in; the prune and its answer |
 | `cer.witness.asked` / `.answered` | witness8, flags or declined, evicted (bound 8) | `witness_request`, `take_witness_request` |
 | `cer.back_pointers` | signer8, count | `back_pointers`, kind 15 in |
-| `cer.propose` | witnesses, responses, ms since begin | `propose`, `converse_propose`; `Waiting(what)` and `NoWitness` |
+| `cer.propose` | witnesses, responses, ms since begin | `propose`, `converse_propose`; `Waiting(what)` — `NoWitness` is gone [author, 2026-10-19: no floor], a witnessless body proposes |
 | `cer.review` | ok or `RootMismatch` / `BackPointers` / `Refused(variant)` | `review_and_sign`, `witness_sign` |
 | `cer.signed` | signer8, or refusal code 1 to 4 | `Signed`, kind 17 in |
 | `cer.finalize` | txid8, signers, ms since begin | `finalize` |

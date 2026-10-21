@@ -21,7 +21,16 @@ import timber.log.Timber
  * 802.15.4z ranging needs the androidx UWB stack and an out-of-band
  * parameter exchange this shell has not built — so UWB is **not listed**,
  * and the strongest channel recorded is the strongest this shell can
- * attempt, which is the rule's own wording. Recorded as owed, 2026-10-01.
+ * attempt, which is the rule's own wording.
+ *
+ * **Not owed work: the tap stands as it is** [author, 2026-10-21]. Ranging
+ * at conversation distance is UWB's and no stretching of NFC reaches it —
+ * the coupling is near-field and magnetic, falling off about as the cube of
+ * the distance from a coil a few centimetres across, so ISO 14443's ten
+ * centimetres is the class a handset implements and a metre needs a reader
+ * coil the size of a gate. The ladder therefore stays NFC where the
+ * hardware has it, optical otherwise, and the record says which was
+ * achieved (design §7.6.3).
  *
  * Two channels are offered:
  *
