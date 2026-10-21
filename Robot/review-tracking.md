@@ -18767,3 +18767,35 @@ then the bench run whose witness diagnostics must show SPREAD trace
 arrivals rather than the 2.9-second burst that started all this. The
 `cer.witness.*` events are already emitted for it (`engaged`,
 `set_sent`, `pruned`, `kept`, `asked`, `answered`, `engaged_by`).
+
+## 2026-10-21 — the CI failure heading D caused, and how it was found
+
+**f2150c3 failed CI (job 582808) in 226 s while the local gate passed.**
+The project is private, so the trace was unreadable; what found it was
+the runner's own persistent volume on this machine — CI's checkout and
+its warm `crates/target/`. Running `rust:1-bookworm` against that volume
+reproduced the gate step by step. Findings in order:
+
+- CI is **rustc 1.99.1** (2026-10-13); this machine is 1.98.0. Not the
+  cause: `cargo fmt --check` and the gate's clippy both pass under
+  1.99.1 against the same source.
+- CI's kotlinc is 2.4.20, the same as the local one; the Kotlin round
+  trip passes there. Not the cause either. (Local JDK is the JBR's 25,
+  CI's is 17; it made no difference.)
+- The cause was **my own CER-68 prune test**: it counted the four
+  witnesses' archives the instant the record existed. The proposer sends
+  the finalised record (kind 18) to every signer *after* finalising, so
+  on a loaded machine the count was (0, 4) beside a record whose five
+  signers were exactly right. A clean clone under load reproduced it too.
+
+**Fixed by waiting for the state**, which is what the harness is for: the
+test reads which three the record kept, waits for each to hold what it
+signed, and confirms the dismissed one holds nothing. `attend`'s
+proposer patience is now derived from the run's own deadline instead of a
+second constant, and `engage` has twenty seconds.
+
+**Keep for next time**: the runner is this machine, so
+`docker volume ls | grep runner` plus `rust:1-bookworm` reproduces a CI
+failure exactly, warm cache and all — far faster than guessing from a
+226-second duration. Restore the volume's checkout
+(`git checkout -- <paths>`) afterwards so the next job starts clean.

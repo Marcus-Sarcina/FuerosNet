@@ -825,7 +825,7 @@ pub async fn knows(p: &Party, name: &'static str) {
 /// device does over the seconds the optical exchange takes.  A nominee
 /// still unreached at the deadline was unavailable.
 pub async fn engage(p: &Party) -> Result<(), Abort> {
-    let deadline = Instant::now() + Duration::from_secs(5);
+    let deadline = Instant::now() + Duration::from_secs(20);
     loop {
         p.step(|c| c.converse_engage()).await?;
         let (engaged, nominated) = p.with(|c| c.nominees_engaged()).await;
@@ -1095,8 +1095,12 @@ impl Meeting {
         // retried while it waits on the counterparty's keep
         let mut opened = std::collections::BTreeSet::new();
         let queries_by = Instant::now() + Duration::from_secs(5);
-        let witnesses_by = Instant::now() + Duration::from_secs(15);
-        let deadline = Instant::now() + Duration::from_secs(30);
+        let deadline = Instant::now() + Duration::from_secs(60);
+        // **the patient proposer**, paced off the run's own deadline
+        // rather than a constant of its own: a fixed window is a race on
+        // a loaded machine, and the one thing this must not do is propose
+        // before the witnesses it asked have answered
+        let witnesses_by = deadline - Duration::from_secs(20);
         loop {
             for who in [a, b] {
                 if !opened.contains(who) {

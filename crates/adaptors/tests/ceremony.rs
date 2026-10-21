@@ -15,6 +15,7 @@
 mod common;
 
 use common::*;
+use rhtn_archive::Keyhash;
 use rhtn_archive::record::Record;
 use rhtn_client::device::ChannelKind;
 use rhtn_client::record::{LABELS, read_presentation};
@@ -752,17 +753,43 @@ async fn the_counterparty_prunes_to_three_and_the_dismissed_stands_down() {
         5,
         "two participants and the three kept witnesses"
     );
-    // every survivor holds the record it attested; the one dismissed
-    // holds nothing, its part over at the standdown
-    let mut held = 0;
-    let mut empty = 0;
-    for w in ["w1", "w2", "w3", "w4"] {
-        match m.party(w).with(|c| c.archive.len()).await {
-            0 => empty += 1,
-            _ => held += 1,
-        }
+    // **the record names which three were kept**, and the fourth is the
+    // one the prune dismissed: the keyhashes are the record's own word,
+    // not this harness's guess at the salted choice
+    let parties = [kh("alice"), kh("bob")];
+    let kept: Vec<Keyhash> = rec
+        .signers
+        .iter()
+        .copied()
+        .filter(|s| !parties.contains(s))
+        .collect();
+    assert_eq!(kept.len(), 3, "three kept of the four nominated");
+    let nominated = ["w1", "w2", "w3", "w4"];
+    let dismissed: Vec<&str> = nominated
+        .iter()
+        .copied()
+        .filter(|w| !kept.contains(&kh(w)))
+        .collect();
+    assert_eq!(dismissed.len(), 1, "one dismissed at the prune");
+    // **each survivor holds the record it signed** (kind 18 reaches every
+    // signer): awaited, because the proposer sends it after finalising
+    // and arrival is not instantaneous — sampling here instead of waiting
+    // is what made this read (0, 4) on a loaded machine while the record
+    // itself was right
+    for w in nominated.iter().filter(|w| kept.contains(&kh(w))) {
+        assert!(
+            m.party(w).holds(10_000, |c| c.archive.len() == 1).await,
+            "{w} holds the record it attested"
+        );
     }
-    assert_eq!((held, empty), (3, 1), "three kept, one dismissed");
+    // and the dismissed one holds nothing of the ceremony, its part over
+    // at its standdown
+    let gone = dismissed[0];
+    assert_eq!(
+        m.party(gone).with(|c| c.archive.len()).await,
+        0,
+        "{gone} was dismissed and holds nothing"
+    );
 }
 
 /// **A channel's outcome lands inside the window and reaches the
