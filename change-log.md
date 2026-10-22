@@ -13867,6 +13867,39 @@ rejections in the corpus, and both introduction kinds are listed in the
 corpus runner so a rejection that starts passing fails rather than being
 skipped.
 
+### 2026-10-22 (the runner adopted, at sixteen)
+
+**The gate's step 3 runs under `cargo nextest` where it is installed**
+[author, 2026-10-22], at `-j 16`, and under `cargo test` where it is not.
+The measurement that preceded it left the runner a separate question
+because it adds a tool the gate depends on; that is answered, and this is
+the wiring.
+
+**Why the absence is a fallback and not a failure**, unlike cargo-deny's
+and cargo-sweep's, which fail the gate when missing: a licence gate that
+silently did not run is no gate, whereas a suite run one binary at a time
+is the same suite, slower. The gate has to run on a machine that does not
+have the tool, so the step says the tool is missing and runs what it ran
+before.
+
+**It is the same suite, checked rather than assumed.** `cargo nextest
+list` and `cargo test -- --list` name the same 812 tests; the 29 the
+latter also lists are exactly the `#[ignore]d` set, which both skip. The
+one thing nextest does not run is doctests, so the step runs
+`cargo test --doc` beside it — the workspace has none in any of its
+sixteen crates, four seconds establishes that rather than trusting it,
+and the day one appears and breaks, the gate says so.
+
+**The build stays fenced at eight jobs** while the tests run at sixteen:
+`--build-jobs 8` keeps the header's rule, which is about the compiler, and
+the concurrency the runner adds is about the test processes. Sixteen and
+not thirty-two for the reason the measurement found — thirty-two trips the
+decoder's budget of a second per input, which is the property under test.
+
+**CI installs it on the line that installs the other two.** The
+self-hosted runner keeps `CARGO_HOME` inside the project directory and the
+checkout cleaner spares it, so the build from source is paid once.
+
 ### 2026-10-22 (the suite measured, and the signature taken off the critical path)
 
 **The gate was twenty-seven minutes and the test suite was twenty-four of

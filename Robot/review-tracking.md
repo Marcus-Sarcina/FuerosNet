@@ -18954,7 +18954,20 @@ verifications in a debug build — intrinsic, not a sleep.
 opt-level = 3`, as `rhtn-engine` already carries for the same reason.
 One-time rebuild 151 s. Suite 1423 -> 656 s; gate 1634 -> 962 s.
 
-**nextest measured, not adopted**: installed (Apache-2.0/MIT, a dev tool
+**nextest adopted** [author, 2026-10-22], at -j 16, step 3, with a
+fallback to `cargo test` where the tool is absent — unlike cargo-deny and
+cargo-sweep, whose absence fails the gate, because a suite run serially
+is the same suite and a licence check that did not run is not a check.
+`--build-jobs 8` keeps the build inside the header's fence. The set was
+checked and not assumed: `cargo nextest list` and `cargo test -- --list`
+name the same 812 tests, the 29 extra the latter prints are exactly
+`--list --ignored`, and `cargo test --doc` now runs beside nextest (4 s,
+0 doctests across 16 crates) so the one thing nextest skips is still
+covered. CI installs it on the existing `cargo install` line; CARGO_HOME
+lives in the project dir and the checkout cleaner spares it, so the
+from-source build is paid once.
+
+**As measured before adopting**: installed (Apache-2.0/MIT, a dev tool
 and no shipped dependency). 812 tests, zero doctests in the workspace so
 nothing is lost there, and the fixed ports in tests are parsed rather
 than bound so cross-binary parallelism is safe. -j32 391 s but FAILS

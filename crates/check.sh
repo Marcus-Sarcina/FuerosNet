@@ -20,10 +20,12 @@
 #  3b2. The same lint over the other feature flavours, which the default
 #       build does not compile.  Linted, not built and not tested.
 #  3c. Licences and advisories under cargo-deny, against deny.toml.
-#  3. The workspace compiles and its live tests pass.  Stubs are #[ignore] and
-#     are not run: they are the tests still owed, and `cargo test -- --ignored`
-#     lists them by failing each one.  The production-size load tests are
-#     #[ignore] too and are not stubs: tools/load-tests.sh runs them.
+#  3. The workspace compiles and its live tests pass, under cargo-nextest
+#     where it is installed and cargo test where it is not.  Stubs are
+#     #[ignore] and are not run: they are the tests still owed, and
+#     `cargo test -- --ignored` lists them by failing each one.  The
+#     production-size load tests are #[ignore] too and are not stubs:
+#     tools/load-tests.sh runs them.
 #  4. A bounded fuzz run on the decoders, under nightly where present.
 #  5. The build cache swept of what this pass did not build (cargo-sweep,
 #     stamped before step 0): cargo names artifacts by hash and deletes
@@ -37,7 +39,8 @@
 #  block; the word there is cargo's own.
 #
 #  Every long job is fenced, as models/run-all.sh fences the prover: cargo is
-#  niced and capped at 8 jobs.
+#  niced and capped at 8 jobs.  Step 3's test concurrency is separate from
+#  that cap and is 16; the build it runs first is still 8.
 # =============================================================================
 set -u
 # A pipeline's status is its last command's, so `cargo ... | tail` would
@@ -225,10 +228,41 @@ else
 fi
 
 echo "=== 3. Build and live tests ==="
-if (cd "$HERE" && nice -n 19 cargo test -j 8 --workspace --quiet 2>&1 | tail -20); then
-  echo "  cargo test: ok"
+# Under nextest where it is installed: a process per test, so the suite runs
+# at 16-way concurrency instead of one test binary at a time, and the build
+# stays fenced at 8 jobs like every other cargo call here.  It is the same
+# suite -- `cargo nextest list` and `cargo test -- --list` name the same
+# tests, and the #[ignore]d ones are skipped by both (812 and 29 when this
+# was checked, 2026-10-22; the counts drift, the equality is the claim).
+# Not 32-way: that
+# fails the decoder's budget of a second per input, which is the property
+# under test and not a bound to raise, so the concurrency is what comes
+# down.  Absence of the tool is a fallback, not a failure: the gate has to
+# run on a machine that does not have it, and cargo test is what it ran
+# before.
+if cargo nextest --version > /dev/null 2>&1; then
+  if (cd "$HERE" && nice -n 19 cargo nextest run -j 16 --build-jobs 8 \
+        --workspace --status-level fail 2>&1 | tail -20); then
+    echo "  cargo nextest: ok"
+  else
+    echo "  cargo nextest: FAILED"; fail=1
+  fi
+  # nextest does not run doctests.  The workspace has none, in any of its
+  # sixteen crates, and this is the line that establishes that rather than
+  # assuming it: it costs four seconds and it fails if one ever appears
+  # and breaks.
+  if (cd "$HERE" && nice -n 19 cargo test -j 8 --workspace --doc --quiet 2>&1 | tail -3); then
+    echo "  cargo test --doc: ok"
+  else
+    echo "  cargo test --doc: FAILED"; fail=1
+  fi
 else
-  echo "  cargo test: FAILED"; fail=1
+  echo "  cargo-nextest absent: cargo install cargo-nextest --locked (the suite runs under cargo test, slower)"
+  if (cd "$HERE" && nice -n 19 cargo test -j 8 --workspace --quiet 2>&1 | tail -20); then
+    echo "  cargo test: ok"
+  else
+    echo "  cargo test: FAILED"; fail=1
+  fi
 fi
 
 echo "=== 4. Coverage-guided smoke (cargo-fuzz on nightly; skipped where absent) ==="

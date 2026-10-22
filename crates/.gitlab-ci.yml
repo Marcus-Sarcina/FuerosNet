@@ -28,7 +28,7 @@ gate:
   before_script:
     - apt-get update -qq && apt-get install -y -qq python3 openjdk-17-jdk-headless unzip curl > /dev/null
     - rustup component add rustfmt clippy
-    - cargo install cargo-deny cargo-sweep --locked
+    - cargo install cargo-deny cargo-sweep cargo-nextest --locked
     - mkdir -p "$HOME/opt/downloads" && cd "$HOME/opt"
     - curl -sSL -o kotlin.zip "https://github.com/JetBrains/kotlin/releases/download/v$KOTLIN_VERSION/kotlin-compiler-$KOTLIN_VERSION.zip" && unzip -q kotlin.zip
     - curl -sSL -o "downloads/jna-$JNA_VERSION.jar" "https://repo1.maven.org/maven2/net/java/dev/jna/jna/$JNA_VERSION/jna-$JNA_VERSION.jar"

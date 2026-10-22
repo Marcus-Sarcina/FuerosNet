@@ -69,6 +69,17 @@ named by `RHTN_JNA_JAR`). With a nightly toolchain and `cargo-fuzz`, it
 runs five short fuzz passes. Either set absent, those steps report
 themselves skipped, never passed.
 
+With `cargo-nextest` the gate runs its test step through it, a process per
+test and sixteen at a time; without it the same tests run under
+`cargo test`, one binary after another. On a thirty-two-core host that was
+163 s against 656 s (2026-10-22). It is the same suite either way —
+nextest skips the `#[ignore]d` tests `cargo test` skips, and the gate runs
+`cargo test --doc` beside it for the one thing nextest does not do.
+
+```
+cargo install cargo-nextest --locked
+```
+
 **The Android shell** (`crates/mobile/android/`) additionally needs the
 Android SDK (platform 36, build-tools), NDK r30, `cmake`, and the Rust
 cross-targets:
