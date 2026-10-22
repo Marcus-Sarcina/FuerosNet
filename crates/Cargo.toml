@@ -25,6 +25,15 @@ zeroize = "1.9"
 [profile.dev.package.rhtn-policy]
 opt-level = 2
 
+# **The same reasoning, for the hybrid signature** [author, 2026-10-22,
+# measured]: every record, envelope and catalog entry verifies an ML-DSA
+# signature, and unoptimised that is ~1.5 s each — one test registering
+# 113 entries took 190 s of the suite's 649, and the decoder's own
+# one-second-per-input budget was what capped how far the suite could be
+# parallelised. Measured below.
+[profile.dev.package.ml-dsa]
+opt-level = 3
+
 # The engine runs two convolutional graphs per frame; unoptimised, one
 # detection takes seconds on the host, which makes its tests the gate's
 # slowest step for nothing.

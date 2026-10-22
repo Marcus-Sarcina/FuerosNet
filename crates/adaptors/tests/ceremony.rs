@@ -855,7 +855,7 @@ async fn each_proximity_outcome_reaches_the_survivors_inside_the_window() {
         .expect("the window opens");
     assert!(
         m.party("w1")
-            .holds(5_000, |c| c.witnessing_count() > 0)
+            .holds(30_000, |c| c.witnessing_count() > 0)
             .await,
         "w1 holds the ceremony the request named"
     );
@@ -863,8 +863,12 @@ async fn each_proximity_outcome_reaches_the_survivors_inside_the_window() {
         .step(|c| c.proximity().map(|_| Vec::new()))
         .await
         .expect("the channels run again inside the window");
-    // the courier is given its turns, and the update is the survivor's
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    // the courier is given its turns, and the update is the survivor's.
+    // **A generous bound, which costs nothing when the update is prompt**
+    // [author, 2026-10-22]: this read five seconds and was starved the
+    // first time the suite ran its binaries concurrently, which is a
+    // scheduling fact about the host and not an update that failed to go
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
     while updates(&mut m) == 0 && std::time::Instant::now() < deadline {
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
     }

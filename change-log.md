@@ -13867,6 +13867,49 @@ rejections in the corpus, and both introduction kinds are listed in the
 corpus runner so a rejection that starts passing fails rather than being
 skipped.
 
+### 2026-10-22 (the suite measured, and the signature taken off the critical path)
+
+**The gate was twenty-seven minutes and the test suite was twenty-four of
+them.** Timed step by step: every document checker, the formatter, clippy,
+the three flavour lints and cargo-deny together cost **twelve seconds**;
+the fuzz smoke 107 s, the Kotlin round trip 44 s, the Android tests 34 s.
+A warm `--no-run` build is 10.5 s, so the twenty-four minutes was
+execution and not compilation — 812 tests across some forty binaries that
+cargo runs one after another, on a machine with thirty-two cores sitting
+mostly idle.
+
+**The cause was the hybrid signature in a debug build.** Every record,
+envelope and catalog entry verifies an ML-DSA signature, and unoptimised
+each takes on the order of a second: one test registering 113 catalog
+entries took **190 s by itself**, and the next heaviest were a
+three-process ceremony at 89 s and the decoder's seeded mutations at 86 s.
+`ml-dsa` is now pinned to `opt-level = 3`, which is the reasoning this
+file already recorded for `rhtn-engine` — "unoptimised, one detection
+takes seconds on the host, which makes its tests the gate's slowest step
+for nothing" — applied to the other thing that was true of.
+
+**Measured, 812 tests passing in every row:**
+
+| | suite | gate |
+|---|---|---|
+| as it was | 1423 s | 1634 s |
+| `ml-dsa` optimised | 656 s | **962 s** |
+| and under `cargo nextest -j16` | **163 s** | — |
+
+So the profile change alone takes the gate from twenty-seven minutes to
+sixteen, with no new tooling and nothing weakened; the runner is a
+separate question, measured and left open. **Thirty-two-way concurrency
+is too much**: it trips the decoder's own one-second-per-input budget,
+which is a real property of that checker and not a flaky bound, so
+sixteen is where the suite still passes whole.
+
+**And one of this session's own tests was fragile**, found by running the
+suite concurrently: the CER-69 proximity-update test polled five seconds
+for a leg that must cross a courier, which a loaded host does not grant.
+Thirty, which costs nothing when the update is prompt — the third bound
+of this shape in two days, after the prune test's sampling and the
+capture's frame ceiling.
+
 ### 2026-10-21 (the window a witness will not sign inside)
 
 **The four-minute window is implemented, at thirty seconds for now**

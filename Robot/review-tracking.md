@@ -18930,3 +18930,44 @@ tests issue `window 0` beside `answer yes`.
 the client bounded-requests test sets it to 0 because the bound is what
 it holds; and the guided-capture test's hard 15,000 ms ceiling now allows
 scheduling slack, having failed twice on load.
+
+
+## 2026-10-22 — where the gate's time goes, measured
+
+Author asked why the editing passes were taking so long. Timed the gate
+per step (`check.sh` piped through a stamping loop):
+
+- steps 0-3c (pins, catalogue, counts, citations, checklist, references,
+  stubs, fmt, clippy, 3 flavour lints, deny): **12 s all in**
+- step 3 (tests): **1435 s** — 88% of the gate
+- step 4 fuzz 107 s, 4b Kotlin 44 s, 4c Android 34 s, 5 cache 2 s
+- warm `cargo test --no-run`: **10.5 s**, so it is execution not building
+
+Slowest individual tests at -j8: node::resources
+`entries_come_ordered...111_at_a_time` **190 s**, participant::live
+`a_verifier_in_a_third_process` 89 s, crypto::decoder `dec_02` 86 s,
+sim::traversal 56 s, decoder `dec_01` 44 s, three node tests ~38-41 s.
+The 190 s one registers 113 catalog entries, i.e. 113 ML-DSA
+verifications in a debug build — intrinsic, not a sleep.
+
+**Fix with the project's own precedent**: `[profile.dev.package.ml-dsa]
+opt-level = 3`, as `rhtn-engine` already carries for the same reason.
+One-time rebuild 151 s. Suite 1423 -> 656 s; gate 1634 -> 962 s.
+
+**nextest measured, not adopted**: installed (Apache-2.0/MIT, a dev tool
+and no shipped dependency). 812 tests, zero doctests in the workspace so
+nothing is lost there, and the fixed ports in tests are parsed rather
+than bound so cross-binary parallelism is safe. -j32 391 s but FAILS
+crypto::decoder dec_02 on its own one-second-per-input budget (a real
+DoS property; do not raise it). -j16 455 s clean; with ml-dsa optimised
+**163 s** clean. Wiring it into check.sh is the author's call — it adds a
+tool the gate depends on.
+
+**My own waste, for the record**: in the window pass I ran two standalone
+full suites *and* three gates (~2h20m) where one gate would have done —
+the gate runs the same suite. Two of those three gate failures were
+mechanical (unformatted code; stubs not regenerated after a catalogue
+edit), each costing a full cycle. Fixed habits: targeted
+`-p crate --test file` while iterating; fmt + gen_stubs + pincheck + the
+document checkers (12 s) before invoking the gate; one gate per pass; and
+nothing heavy running beside it, since it is niced to 19.
