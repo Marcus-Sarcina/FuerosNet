@@ -18895,3 +18895,38 @@ observable on the bench**, which is why F is a bench run and not a test.
 instrument is ready; GXV-MRK is the only pair that can tap (both TCL
 units report no NFC), so a tap-bearing run is that pair and any run
 touching ZU8 or 4VC reads optical as its only channel.
+
+
+## 2026-10-21 — the witness's window, implemented at 30 s
+
+`Config::witness_window_s`: 240 releasable, **30 under fieldtest**
+[author, 2026-10-21: "write the implementation for the four minute window
+but set the duration to 30 seconds for now"], 0 = off.
+`Witnessing{held_ms, pending}`; `witness_sign` returns
+`Abort::Waiting` inside the window (which `reply_signing` already sends
+nothing for, so withholding needs no new path); `as_witness`'s Proposal
+arm stores `(from, body)` and returns `Observed`; `Client::sign_matured`
+runs on `maintain()` — the only thing that moves when a window matures is
+the clock, so nothing else could prompt it. Diagnostics
+`cer.witness.withheld` (waited_ms, window_s) and `cer.witness.matured`.
+
+**Why the fieldtest split rather than a flat 30**: CER-026 calls the wait
+a release obligation and says a build that relaxes it says nothing about
+that row, so a releasable default of 30 would ship a weakened rule. The
+chain forwards: `participant/fieldtest -> ffi/fieldtest ->
+client/fieldtest`, and `build-native.sh --fieldtest` does the APK, so the
+bench's phones AND its instrument witnesses both carry 30 s — which
+matters, because on the bench the witnesses are instrument processes and
+a window only they could have waited would never be seen.
+
+**CER-52 un-deferred and implemented** (client/tests/ceremony.rs): the
+harness clock is the witness's own, so the four-minute wall clock the row
+was deferred for is not needed. Also added `window <seconds>` to the
+instrument, because process tests own no clock they can move — the live
+tests issue `window 0` beside `answer yes`.
+
+**Collateral, both worth keeping**: the adaptors harness sets
+`witness_window_s = 0` in `ceremony_cfg` (real clock, whole ceremonies);
+the client bounded-requests test sets it to 0 because the bound is what
+it holds; and the guided-capture test's hard 15,000 ms ceiling now allows
+scheduling slack, having failed twice on load.

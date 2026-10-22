@@ -676,6 +676,12 @@ pub fn host_with(
 pub fn ceremony_cfg() -> Config {
     let mut c = Config::default();
     c.verifier.grant_buffer_ms = 300;
+    // **the witness's window off**, the idiom the continuity window uses
+    // [author, 2026-10-21]: these runs drive whole ceremonies against a
+    // real clock and would otherwise wait out the window in every one.
+    // What the window does is asserted where a clock can be moved —
+    // `client/tests/ceremony.rs`, CER-52
+    c.witness_window_s = 0;
     c.capture = CaptureParams {
         min_frames: 3,
         max_frames: 3,

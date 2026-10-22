@@ -3,22 +3,6 @@
 //! still owed for this area.  tests/rustfmt.toml keeps rustfmt off
 //! this directory: the titles are the catalogue's, not hand-laid code.
 
-/// A witness will not sign before four minutes have passed on its own clock
-///
-/// Spec: design §7.1; light-client-requirements.md §1.2
-/// Milestone: after-5.  Kind: negative.  Oracle: behaviour.
-///
-/// Rule (design §7.1): "A witness does not sign before four minutes have passed **on its own clock, from the moment the request to witness reached it**"
-///
-/// Given: A witness holding a ceremony it has agreed to attest, and a conversation driven to the proposed body in well under four minutes.
-/// When: The proposer asks the witness to sign before four minutes have passed since the witness received the request, and again past four minutes; and separately, a participant claims an elapsed time longer than the witness has observed.
-/// Then: The early request yields no reply at all: the witness withholds its signature until its clock has matured and it has seen the steps' by-products, and the proposer, waiting on an unanswered signer, asks again; the request past four minutes is signed; and the claim of a longer elapsed time neither shortens nor lengthens the wait, the witness's own receipt being what starts it. No reader of the record can distinguish a witness that waited from one that did not, so nothing is asserted of the record itself.
-#[test]
-#[ignore = "acceptance CER-52: owed at milestone after-5"]
-fn cer_52_a_witness_will_not_sign_before_four_minutes_have() {
-    todo!("CER-52: A witness will not sign before four minutes have passed on its own clock")
-}
-
 /// The camera holds one counterparty present across the enforced duration, or the meeting is abandoned
 ///
 /// Spec: design §7.5; light-client-requirements.md §1.3

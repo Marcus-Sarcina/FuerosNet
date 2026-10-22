@@ -43,6 +43,19 @@ pub struct Config {
     /// How far a claimed `started_at` may sit from this clock, in seconds
     /// (`light-client-requirements.md` §1.2: the witness's to set).
     pub clock_tolerance_s: u64,
+    /// **The window a witness will not sign inside**, in seconds, measured
+    /// from its own receipt of the request (design §7.1 item 9;
+    /// `light-client-requirements.md` §1.2).  Four minutes is the design's
+    /// figure and the default a releasable build carries; **the field-test
+    /// flavour relaxes it to thirty seconds** [author, 2026-10-21], which
+    /// is what CER-026 anticipates when it says a build that relaxes this
+    /// is a build whose runs say nothing about that row.
+    ///
+    /// **Zero turns the wait off**, the idiom [`crate::device::Continuity`]
+    /// already uses for its own window: the in-process harness drives whole
+    /// ceremonies against a real clock and would otherwise wait out every
+    /// one of them.
+    pub witness_window_s: u64,
     /// The retention this client declares, in years (design §7.5.1).
     pub retention_years: u64,
     /// The template version this client captures and compares under.
@@ -83,6 +96,9 @@ impl Default for Config {
             contacts_limit: 4096,
             query_patience_s: 60,
             clock_tolerance_s: 300,
+            // the design's four minutes, relaxed for a bench that runs
+            // ceremonies back to back [author, 2026-10-21]
+            witness_window_s: if cfg!(feature = "fieldtest") { 30 } else { 240 },
             retention_years: 2,
             template_version: 1,
             capture: Default::default(),
@@ -2510,6 +2526,8 @@ impl Client {
             crate::sequence::Witnessing {
                 request: req.clone(),
                 flags,
+                held_ms: self.device.clock.now_ms(),
+                pending: None,
                 observed: BTreeSet::new(),
             },
         );
@@ -2664,11 +2682,34 @@ impl Client {
         proposal: &Proposal,
         back: &[Vec<Txid>],
     ) -> Result<Vec<u8>, Abort> {
-        if !self.witnessing.values().any(|w| {
+        let held = self.witnessing.values().find(|w| {
             w.request.started_at == proposal.started_at
                 && w.request.participants == proposal.participants
-        }) {
+        });
+        let Some(w) = held else {
             return Err(abort("witness_sign", Abort::NotActive));
+        };
+        // **The window, on this clock, from this client's own receipt of
+        // the request** (design §7.1 item 9;
+        // `light-client-requirements.md` §1.2) [author, 2026-10-21]. The
+        // participants will have been at it longer by now — the engagement
+        // and the codes precede the request, and the channels, the capture
+        // and the verification run inside the interval being timed — and
+        // **a participant's claim about elapsed time neither shortens nor
+        // lengthens it**, which is why `started_at` is not consulted here.
+        // Withheld rather than refused: the answer is a signature or
+        // nothing (`wire-format.md` §7.10.2).
+        let waited_ms = self.device.clock.now_ms().saturating_sub(w.held_ms);
+        let window_ms = self.cfg.witness_window_s * 1_000;
+        if self.cfg.witness_window_s != 0 && waited_ms < window_ms {
+            tracing::info!(
+                target: "cer",
+                ceremony = %id8(&w.request.ceremony_id),
+                waited_ms,
+                window_s = self.cfg.witness_window_s,
+                "cer.witness.withheld"
+            );
+            return Err(Abort::Waiting("the window has not matured on this clock"));
         }
         self.check_back(proposal, back)?;
         let entries = self
@@ -4691,6 +4732,11 @@ impl Client {
     /// elapsed, and replenish the pool when it has fallen low.
     pub fn maintain(&mut self) -> Vec<Msg> {
         let now = self.now_s();
+        // **a witness's window maturing is an event with nothing to
+        // announce it** [author, 2026-10-21]: the body was shown and held,
+        // the proposer has sent what it had, and only this clock moves.
+        // Signed before the outbox is taken, so the leg goes up with it
+        self.sign_matured();
         // anything made since the last carry goes up with the routine
         // traffic, so a record whose own carry was missed is not stranded
         let mut out = self.outbox();

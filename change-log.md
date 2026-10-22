@@ -13867,6 +13867,49 @@ rejections in the corpus, and both introduction kinds are listed in the
 corpus runner so a rejection that starts passing fails rather than being
 skipped.
 
+### 2026-10-21 (the window a witness will not sign inside)
+
+**The four-minute window is implemented, at thirty seconds for now**
+[author, 2026-10-21]. It was the one rule of the reorder with no code at
+all: `witness_sign` signed whenever it was asked, and CER-52 stood
+deferred for want of a four-minute wall clock in a test.
+
+**What a witness now does.** It keeps the clock it took the request on —
+the only instant of the ceremony its own clock witnessed, where
+`started_at` is a claim the parties made — and refuses to sign inside the
+window measured from there. **Withheld, not refused**: no value names
+waiting (`wire-format.md` §7.10.2), so a body shown early is *held* and
+the reply is simply not sent, and the proposer's wait on an unanswered
+signer covers the interval. Nothing else arrives to prompt the signature
+when the clock comes round, so the routine step signs what has matured
+and the leg goes up with it. A participant's claim of a longer elapsed
+time neither shortens nor lengthens the wait, which is the point of
+measuring from receipt.
+
+**The figure, and where it differs.** `Config::witness_window_s` is the
+design's 240 in a releasable build and **30 under the field-test
+flavour**, which is what CER-026 anticipates when it says a build that
+relaxes this is a build whose runs say nothing about that row. The chain
+carries it where the bench needs it: the phones' APK and the instrument
+witnesses are both field-test builds, so a run shows a thirty-second
+window rather than a four-minute one. **Zero is the wait off**, the idiom
+the continuity window already uses, which is what the in-process harness
+runs on — it drives whole ceremonies against a real clock and would
+otherwise wait out every one.
+
+**CER-52 is no longer deferred.** The four-minute wall clock it was
+deferred for is not needed: the harness clock *is* the witness's clock,
+and moving it is precisely what the witness is waiting on. The test holds
+the withholding, that an hour's claimed elapsed time buys nothing, that a
+second short is short, that past it the signature goes, and that a window
+of zero is the check off. Implemented 495 of 518.
+
+**And a flaky assertion fixed while it was in reach**: the guided
+capture's last frame was held to 15,000 ms exactly, on a loop that takes
+a frame when the prompt falls due — a loaded host hands it the CPU late,
+which failed twice, once in CI's own image. It now allows what scheduling
+explains and says so.
+
 ### 2026-10-21 (the model proves the prune, and two threat passages turn round)
 
 **The ceremony theory proved a rule the design had reversed.**

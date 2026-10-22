@@ -512,6 +512,15 @@ impl Instrument {
                     false => "declined".into(),
                 }])
             }
+            // the window a witness will not sign inside, in seconds: the
+            // instrument's to set, since a process test cannot wait four
+            // minutes and a bench run wants it short [author, 2026-10-21]
+            ["window", s] => {
+                let seconds: u64 = s.parse().map_err(|_| "window <seconds>".to_string())?;
+                c.set_witness_window_s(seconds)
+                    .map_err(|e| e.reason().to_string())?;
+                Ok(vec![format!("window {seconds}")])
+            }
             ["witness-ask"] => Ok(vec![format!(
                 "witness-ask {}",
                 carry::pack_ask(&c.witness_ask().map_err(|e| e.reason().to_string())?)
@@ -905,6 +914,7 @@ take-response <response>  a verifier's answer about the counterparty
 gathered                  the responses this client holds, to carry
 responses                 the same, as a screen would show them
 nominees                  who each side nominated
+window <seconds>          the window this client will not sign inside
 engagement                the nomination to carry to a nominee
 take-engagement <from> <e> hold one, as a nominee
 witness-ask               what to ask a nominee

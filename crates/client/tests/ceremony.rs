@@ -223,6 +223,10 @@ fn a_witness_holds_a_bounded_number_of_pending_requests_and_the_oldest_goes_firs
     let now = s.clock.get() / 1000;
     let bound = PENDING_WITNESS_REQUESTS as u64;
     let w = s.client("w1");
+    // the bound is what this holds, not the window: a witness inside its
+    // window withholds every signature, which `a_witness_will_not_sign_
+    // before_its_window_has_passed` is the test of [author, 2026-10-21]
+    w.cfg.witness_window_s = 0;
     let req = |i: u64| WitnessRequest {
         ceremony_id: [i as u8; 32],
         participants: participants(kh("alice"), kh("bob")),
@@ -411,4 +415,113 @@ fn the_opening_reaches_a_nominee_before_acceptance_and_one_event_at_a_time() {
     assert_eq!(req.ceremony_id, cid);
     assert_eq!(req.handle, e.handle, "the request closes the engagement");
     assert_eq!(s.client("w1").take_witness_request(&req), Some(3));
+}
+
+// acceptance: CER-52
+/// **A witness will not sign before the window has passed on its own
+/// clock** (design §7.1 item 9; `light-client-requirements.md` §1.2)
+/// [author, 2026-10-21].  The wait is withheld rather than refused — no
+/// value names waiting (`wire-format.md` §7.10.2) — and it is measured
+/// from this client's own receipt of the request, so a participant's claim
+/// about elapsed time neither shortens nor lengthens it.
+///
+/// **The four-minute wall clock this row was deferred for is not needed**:
+/// the harness clock is this client's clock, and moving it is what the
+/// witness is waiting on.
+#[test]
+fn a_witness_will_not_sign_before_its_window_has_passed() {
+    use rhtn_archive::tx::Witness;
+    use rhtn_client::conversation::Engagement;
+    use rhtn_client::record::Proposal;
+    let mut s = setup(&EVERYONE, &[ChannelKind::Nfc]);
+    let window_s = 30;
+    s.client("w1").cfg.witness_window_s = window_s;
+    let now = s.clock.get() / 1000;
+    let w = s.client("w1");
+    assert!(w.take_engagement(
+        kh("alice"),
+        &Engagement {
+            handle: [9; 32],
+            started_at: now,
+            counterparty: Some(kh("bob")),
+        },
+    ));
+    let req = WitnessRequest {
+        ceremony_id: [9; 32],
+        participants: participants(kh("alice"), kh("bob")),
+        started_at: now,
+        channels: vec![],
+        handle: [9; 32],
+    };
+    assert_eq!(w.take_witness_request(&req), Some(3), "it agreed to attest");
+    let proposal = Proposal {
+        started_at: now,
+        finalized_at: now,
+        participants: participants(kh("alice"), kh("bob")),
+        witnesses: vec![Witness {
+            keyhash: kh("w1"),
+            nominated_by: kh("alice"),
+            flags: 3,
+        }],
+        responses: vec![],
+        formation: false,
+        root: [0; 32],
+    };
+    let back = vec![s.client("w1").back_pointers(); 3];
+    // inside the window: withheld, and withheld is not refused
+    assert_eq!(
+        s.client("w1")
+            .witness_sign(&proposal, &back)
+            .map(|_| ())
+            .map_err(|e| matches!(e, Abort::Waiting(_))),
+        Err(true),
+        "a witness inside its window withholds"
+    );
+    // **a longer claimed elapsed time does not shorten it**: the claim is
+    // the parties', and this clock is what the witness measures
+    let mut older = proposal.clone();
+    older.started_at = now - 3_600;
+    assert!(
+        s.client("w1").witness_sign(&older, &back).is_err(),
+        "a claim of an hour buys nothing"
+    );
+    // one second short: still withheld
+    s.clock.set(s.clock.get() + (window_s - 1) * 1_000);
+    assert!(
+        s.client("w1").witness_sign(&proposal, &back).is_err(),
+        "a second short is short"
+    );
+    // and past it: signed
+    s.clock.set(s.clock.get() + 1_000);
+    assert!(
+        s.client("w1").witness_sign(&proposal, &back).is_ok(),
+        "the window has passed on its own clock"
+    );
+    // a client whose window is zero does not wait at all, which is what
+    // the in-process harness runs on
+    let mut t = setup(&EVERYONE, &[ChannelKind::Nfc]);
+    t.client("w1").cfg.witness_window_s = 0;
+    let tnow = t.clock.get() / 1000;
+    let e2 = Engagement {
+        handle: [8; 32],
+        started_at: tnow,
+        counterparty: Some(kh("bob")),
+    };
+    assert!(t.client("w1").take_engagement(kh("alice"), &e2));
+    let req2 = WitnessRequest {
+        ceremony_id: [8; 32],
+        participants: participants(kh("alice"), kh("bob")),
+        started_at: tnow,
+        channels: vec![],
+        handle: [8; 32],
+    };
+    assert_eq!(t.client("w1").take_witness_request(&req2), Some(3));
+    let mut p2 = proposal.clone();
+    p2.started_at = tnow;
+    p2.finalized_at = tnow;
+    let back2 = vec![t.client("w1").back_pointers(); 3];
+    assert!(
+        t.client("w1").witness_sign(&p2, &back2).is_ok(),
+        "a window of zero is the check off"
+    );
 }

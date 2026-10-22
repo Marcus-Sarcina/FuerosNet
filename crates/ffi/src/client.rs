@@ -1921,6 +1921,31 @@ impl Participant {
         })
     }
 
+    /// **The window this client will not sign inside, as a witness**, in
+    /// seconds, measured from its own receipt of the request (design §7.1
+    /// item 9; `light-client-requirements.md` §1.2).
+    #[must_use]
+    pub fn witness_window_s(&self) -> u64 {
+        crate::diag::call_plain("witness_window_s", || {
+            self.handle.with_blocking(|c| c.cfg.witness_window_s)
+        })
+    }
+
+    /// Set it.  **Not a control a shipped client offers its person** — the
+    /// figure is the design's and a client that shortened it would be
+    /// weakening its own attestation — but the instrument that drives
+    /// process tests and the bench needs it: a four-minute wait is
+    /// untestable in a process whose clock it does not own, and a bench
+    /// run wants the window short enough to repeat [author, 2026-10-21].
+    /// Zero is the wait off.
+    pub fn set_witness_window_s(&self, seconds: u64) -> Result<(), Refused> {
+        crate::diag::call("set_witness_window_s", || {
+            self.handle
+                .with_blocking(move |c| c.cfg.witness_window_s = seconds);
+            Ok(())
+        })
+    }
+
     /// The ceremony this client is in, once both intents have crossed.
     #[must_use]
     pub fn ceremony(&self) -> Option<Id> {

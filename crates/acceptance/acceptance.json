@@ -2457,10 +2457,9 @@
   ],
   "given": "A witness holding a ceremony it has agreed to attest, and a conversation driven to the proposed body in well under four minutes.",
   "when": "The proposer asks the witness to sign before four minutes have passed since the witness received the request, and again past four minutes; and separately, a participant claims an elapsed time longer than the witness has observed.",
-  "then": "The early request yields no reply at all: the witness withholds its signature until its clock has matured and it has seen the steps' by-products, and the proposer, waiting on an unanswered signer, asks again; the request past four minutes is signed; and the claim of a longer elapsed time neither shortens nor lengthens the wait, the witness's own receipt being what starts it. No reader of the record can distinguish a witness that waited from one that did not, so nothing is asserted of the record itself.",
+  "then": "The early request yields no reply at all: the witness withholds its signature until its clock has matured, and the proposer, waiting on an unanswered signer, is answered when the window passes and the witness signs the body it held; the claim of a longer elapsed time neither shortens nor lengthens the wait, the witness's own receipt being what starts it; and a window configured to zero is the check off. No reader of the record can distinguish a witness that waited from one that did not, so nothing is asserted of the record itself.",
   "oracle": "behaviour",
-  "deferred": "a four-minute wall clock in a ceremony test, which is the reason the rule is a release obligation and not a bench one",
-  "interpretation": null
+  "interpretation": "The four-minute wall clock this row was deferred for is not needed: the harness clock is the witness's own clock, and moving it is precisely what the witness is waiting on. A releasable build carries the design's four minutes; the field-test flavour relaxes it to thirty seconds [author, 2026-10-21], which is what CER-026 anticipates."
  },
  {
   "id": "CER-53",

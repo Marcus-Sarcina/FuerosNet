@@ -304,6 +304,12 @@ fn ceremony(
     }
     for n in cast {
         set.get(n).must("answer yes");
+        // **the witness's window off for a process test** [author,
+        // 2026-10-21]: these are separate processes against a real clock,
+        // and a witness that waits its window signs nothing inside one.
+        // What the window does is asserted where a clock can be moved
+        // (`rhtn-client`'s CER-52); a bench build carries thirty seconds
+        set.get(n).must("window 0");
     }
     set.get(one)
         .must(&format!("begin {b} {} initiator", hex(&kh(wa))));

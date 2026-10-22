@@ -117,6 +117,16 @@ pub(crate) struct Witnessing {
     pub(crate) request: WitnessRequest,
     /// The attestation bits answered with (Witness field 3).
     pub(crate) flags: u64,
+    /// **This device's clock when the request arrived**, in milliseconds:
+    /// what the window is measured from, and the only instant of the
+    /// ceremony this clock witnessed — `started_at` is a claim the parties
+    /// made (`light-client-requirements.md` §1.2) [author, 2026-10-21].
+    pub(crate) held_ms: u64,
+    /// A body shown before the window matured, with the party that
+    /// proposed it: held so it can be signed when the clock comes round,
+    /// since **no value names waiting** (`wire-format.md` §7.10.2) and the
+    /// witness's answer is its signature or nothing.
+    pub(crate) pending: Option<(Keyhash, Box<Proposed>)>,
     /// The conversation as it reached this witness: each sender and the
     /// kinds it sent.  A set, since what is attested is that a kind
     /// arrived from a party and not how often, and so bounded by the two
@@ -1120,6 +1130,46 @@ impl Client {
         }
     }
 
+    /// **Sign what the window has matured on**, into the outbox for the
+    /// proposer that showed it [author, 2026-10-21].  A witness shown a
+    /// body inside its window held it and said nothing; this is where the
+    /// clock coming round turns into the signature, and it runs on the
+    /// routine step ([`Client::maintain`]) because nothing else arrives to
+    /// prompt it — the proposer has already sent what it was going to send
+    /// and is waiting on an unanswered signer.
+    pub(crate) fn sign_matured(&mut self) {
+        let ready: Vec<([u8; 32], Keyhash, Box<Proposed>)> = self
+            .witnessing
+            .iter()
+            .filter_map(|(cid, w)| {
+                let (from, p) = w.pending.as_ref()?;
+                let waited = self.device.clock.now_ms().saturating_sub(w.held_ms);
+                let window = self.cfg.witness_window_s * 1_000;
+                (self.cfg.witness_window_s == 0 || waited >= window)
+                    .then(|| (*cid, *from, p.clone()))
+            })
+            .collect();
+        for (cid, from, p) in ready {
+            let signed = self.witness_sign(&p.proposal, &p.back);
+            if matches!(signed, Err(Abort::Waiting(_))) {
+                continue;
+            }
+            if let Some(w) = self.witnessing.get_mut(&cid) {
+                w.pending = None;
+            }
+            tracing::info!(
+                target: "cer",
+                ceremony = %crate::diag::id8(&cid),
+                waited_ms = self.device.clock.now_ms().saturating_sub(
+                    self.witnessing.get(&cid).map_or(0, |w| w.held_ms)
+                ),
+                ok = signed.is_ok(),
+                "cer.witness.matured"
+            );
+            self.reply_signing(crate::payload::KIND_PROPOSED_BODY, signed, &[from]);
+        }
+    }
+
     /// A signer's answer to the body, into the outbox for `to`: its
     /// entries; the party's own refusal as it stands; or, where the body
     /// does not verify against what this signer holds, its root, its
@@ -1379,7 +1429,22 @@ impl Client {
                 let signed = match self.witnessing_for(&p.proposal.participants, from) {
                     Some(cid) => {
                         self.observe(cid, from, kind);
-                        self.witness_sign(&p.proposal, &p.back)
+                        match self.witness_sign(&p.proposal, &p.back) {
+                            // **the window has not matured: hold the body,
+                            // say nothing** [author, 2026-10-21]. No value
+                            // names waiting (`wire-format.md` §7.10.2), so
+                            // the body is kept and signed when this clock
+                            // comes round (`Client::sign_matured`), and the
+                            // proposer's wait on an unanswered signer
+                            // covers the interval
+                            Err(Abort::Waiting(_)) => {
+                                if let Some(w) = self.witnessing.get_mut(&cid) {
+                                    w.pending = Some((from, p.clone()));
+                                }
+                                return Conversed::Observed { kind };
+                            }
+                            other => other,
+                        }
                     }
                     None => Err(Abort::NotActive),
                 };
