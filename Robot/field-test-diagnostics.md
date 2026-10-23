@@ -216,9 +216,11 @@ refresh rate, which is what caps the shutter.
 
 ### 3.7 The bench and the person
 
-The thirteen product rows (PRD-01 to PRD-13), TRV-12, TRV-13 and MET-12 are
-`kind: manual` or need two devices; their `then` texts are the checklist a
-tester fills per run. The bundle header carries: run id, git commit, both pin
+The product rows, TRV-12, TRV-13 and MET-12 are `kind: manual` or need two
+devices; their `then` texts are what a person has to observe. **Not as a
+generated form** [author, 2026-10-23] — one existed, went into thirty-five
+run directories and was never filled in; the observations are written up per
+run in `Robot/field-test-sequence.md`. The bundle header carries: run id, git commit, both pin
 sets, device model, Android version, radios present, build flavour, tester,
 counterparty's run id.
 
@@ -376,7 +378,7 @@ from `shell.start`'s `wall_ms`. `crates/tools/field-checklist.py` writes the
 tester's form from the catalogue's twelve `kind: manual` rows (PRD-02 to
 PRD-13; PRD-01 is a tombstone) plus TRV-12, TRV-13 and MET-12: 15 rows, each
 with id, title, the `when`, the `then`, three boxes and a notes line; its
-eight-case test is gate step 1c. `Robot/field-test-procedure.md` (1,197
+eight-case test was gate step 1c; both were removed on 2026-10-23. `Robot/field-test-procedure.md` (1,197
 words) carries the bench, the build and install commands, the run sequence,
 the failure reading order, consent, the retention declaration and the wipe.
 Dry runs: one without phones (3 sources, 420 events) and three on the

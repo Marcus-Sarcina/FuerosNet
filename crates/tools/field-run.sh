@@ -61,7 +61,6 @@
 #                               from its shell.start event when the file has
 #                               none of its own
 #    timeline.txt, summary.txt  `rhtn diag merge` over merge/*.jsonl
-#    checklist.md               the tester's form (tools/field-checklist.py)
 #    run.json                   commit, pins, devices, addresses, times
 #    build.log, field-run.pid
 #
@@ -239,7 +238,7 @@ await_text() {
 # ----------------------------------------------------------------- tools -----
 need git "the run is named by the commit"
 need cargo "the daemon and instrument are built with it"
-need python3 "the checklist, run.json and the pull need it"
+need python3 "run.json and the pull need it"
 need awk "the merge output is split with it"
 ADB="$(find_adb)" || die "adb is not on PATH and no SDK was found under \$ANDROID_HOME, \$ANDROID_SDK_ROOT or ~/Android/Sdk"
 if [ -z "$ADDR" ]; then
@@ -519,9 +518,6 @@ PY
   say "$s ($model, Android $android): logcat fueros.diag -> phones/$s/logcat.txt"
 done
 [ ${#DEVICES[@]} -gt 0 ] || say "no Android device attached; the run is daemon and witnesses alone"
-
-# ------------------------------------------------------- the checklist -------
-python3 "$HERE/field-checklist.py" --run "$RUN_NAME" -o "$RUN/checklist.md" || die "the checklist generator failed"
 
 # -------------------------------------------------------------- run.json -----
 write_run_json() { # stopped_at or empty

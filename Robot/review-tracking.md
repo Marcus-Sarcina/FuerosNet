@@ -18932,6 +18932,84 @@ it holds; and the guided-capture test's hard 15,000 ms ceiling now allows
 scheduling slack, having failed twice on load.
 
 
+## 2026-10-23 — the nodeless rows re-planned, and a form nobody fills
+
+**The lift, stated precisely.** It bought no new capability. A nodeless
+meeting between phones that had met others was previously bought with two
+identities, because the run had to be preceded by a wipe — and the wipe
+destroyed exactly what series B is assembled from. That was the
+scheduling conflict at the centre of the plan, and the reason it read as
+"the node bench gates nearly everything left": the cheap setting was
+unusable without paying in the expensive currency. Three independent
+changes settle it — the shell stopped waiting where no witness can come
+(10-11), the floor went (10-19), and an empty witness set is answered
+with an empty keep so the prune completes (`opening_id_fixed`, "an empty
+set too"). CER-50 holds the path in process.
+
+**Re-planned**: `field-test-sequence.md`'s A2 row (the nodeless pass no
+longer needs genesis), section B (the genesis exception deleted — all
+four phones keep their state indefinitely and the nodeless rows interleave
+with B instead of competing), and the Order section, which now carries the
+re-plan rather than a note saying one was owed.
+
+**One correction I made to my own framing mid-task**, worth keeping
+because the instinct was wrong and plausible: I first listed "re-run B1
+nodeless" as the newly unblocked run, since B1 nodeless is what hit the
+wall. But B1's *verification* purpose cannot be served nodeless at all —
+a party met nodeless has no route afterwards, so the pool is empty by
+construction and no re-run changes it. What is newly runnable is the
+**ceremony variant**, an A row: does a non-genesis pair finalise
+witnessless on hardware. Re-running B1 would have produced a result that
+looked like a verification outcome and was not one.
+
+**And a finding about the instrument, which is the author's to rule on.**
+`field-run.sh` writes `checklist.md` into every run directory from the
+catalogue's manual rows. Across **35 checklists under `runs/`, not one
+mark is filled in and not one note is written** — zero of 35, checked by
+grep, and no run's findings in the sequence doc came from the form. They
+came from diagnostics. So the tester's form is machinery that is
+generated on every run and has never been used, while the rows it exists
+to record (the PRD series, TRV-12/13, MET-12) have no recorded
+observations anywhere.
+
+Three readings, and I do not know which is true: the form is filled on
+paper or in the author's head and never committed; it is the wrong shape
+for a two-person bench where both hands are holding phones; or it is a
+thing that seemed useful when specified and is not. **Asked in the
+output.**
+
+**Ruled the same day** [author, 2026-10-23]: the third — "it seemed useful
+when specified and isn't. I never authored this directly." Removed:
+`field-checklist.py`, `test_field_checklist.py`, gate step 1c,
+`field-run.sh`'s write, and every live pointer across `check.sh`,
+`field-run.sh`, the procedure, the diagnostics' §3.7, the Android README
+and the sequence doc. The gate's 1c is left as a gap rather than closed,
+because "stage 1d" is cited by name in `housekeeping-plan.md` and here,
+and renaming 1d to take the letter would make those resolve to the wrong
+thing.
+
+**This was not my finding. It was found on 2026-10-05 and sat for
+eighteen days.** Reviewer2's sixth round reported "Every checklist has
+zero marked boxes"; it was verified against every `checklist.md` under
+`runs/` and dispositioned **Right** — and then nothing happened, and the
+form went on being generated into every run after it. The row is still
+there in this file at the sixth round's table.
+
+That is precisely the habit `CLAUDE.md`'s rule about the author's
+decisions was written to replace: verify, record, carry on, and the
+question surfaces weeks later with the context that made it answerable
+gone. It did not even need the author at the time — a confirmed finding
+that a generated artefact is never used is a question to ask in the next
+output, not a row to file. I rediscovered it today by accident, while
+counting how many runs had reached PRD-19, and asked. **What to do
+differently**: a verdict of **Right** on a finding that nothing follows
+from is not a disposition, it is an open question wearing one, and the
+check is whether the row names an action or only a fact. What is not in doubt is that the manual rows are the only
+coverage for what a screen shows, and PRD-17/18/19 — heading F's own
+verdict rows — are among them. If the form is not how they get recorded,
+something else has to be, or heading F's result will live only in my
+reading of a timeline.
+
 ## 2026-10-23 — a red gate I misdiagnosed before I measured it
 
 CI job 586542 failed at 375 s on `4083e4f`, a commit touching three

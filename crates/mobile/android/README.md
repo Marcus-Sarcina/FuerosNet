@@ -88,8 +88,8 @@ alone, zips the run's event files with a `header.json` (run id, commit,
 spec pins, device, Android version, the radios present, flavour, app
 version, the wall-clock anchor) under `filesDir/diag/report/` and offers
 it with `ACTION_SEND` through `ReportProvider`, a one-directory read-only
-content provider declared in the fieldtest manifest. The tester's checklist
-and the run naming are M4's.
+content provider declared in the fieldtest manifest. The run naming is
+M4's.
 
 **The live stream** (`DiagStream.kt`, fieldtest only). Beside the file,
 the same lines go to the bench over one plaintext TCP connection on the

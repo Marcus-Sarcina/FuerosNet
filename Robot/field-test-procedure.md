@@ -2,8 +2,11 @@
 
 How a run goes, for whoever runs it. Milestone M4 of
 `Robot/field-test-diagnostics.md`. The script is `crates/tools/field-run.sh`
-(`--help` prints its options and what a run directory holds); the tester's
-form comes from `crates/tools/field-checklist.py`.
+(`--help` prints its options and what a run directory holds). **There is no
+tester's form** [author, 2026-10-23]: one was generated into every run
+directory for thirty-five runs and filled in not once, and what a person
+observed has always been written up per run in
+`Robot/field-test-sequence.md` instead. That is where it goes.
 
 ## The bench
 
@@ -142,7 +145,7 @@ so install all of them or none.
    network and need not be present [author, 2026-10-05]) and the
    collector as its stream target (the app is stopped and started twice;
    the second start is the one that attaches), starts the logcat captures,
-   writes `checklist.md` and `run.json`, and holds. The run is named
+   writes `run.json`, and holds. The run is named
    `<commit>-<label>-<n>`; its directory is `runs/<run>/`.
 
    While it holds, a second terminal can follow the run:
@@ -165,9 +168,12 @@ so install all of them or none.
 
 3. Check that each phone's status line reads attached. Run the ceremony from
    Meet: one phone meets, the other scans the bootstrap QR, both read the
-   brief and accept, then the captures and the exchange. Fill `checklist.md`
-   as the screens go by; a row is *not reached* when the run ends before its
-   step.
+   brief and accept, then the captures and the exchange. **Write down what
+   the screens showed as they go by** — the manual catalogue rows (the PRD
+   series, TRV-12, TRV-13, MET-12) are the only coverage for what a screen
+   shows, and a run's notes are the only record of them. They go into this
+   run's entry in `Robot/field-test-sequence.md`, in your own words, saying
+   which rows the run never reached as well as which it showed.
 
    **The order the screens go in, since the ceremony was reordered** (design
    §7.1.1): the nominees are engaged *before* the code is shown, so the

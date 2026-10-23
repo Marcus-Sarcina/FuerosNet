@@ -13867,6 +13867,49 @@ rejections in the corpus, and both introduction kinds are listed in the
 corpus runner so a rejection that starts passing fails rather than being
 skipped.
 
+### 2026-10-23 (the tester's form removed, and the nodeless rows re-planned)
+
+**The field-test checklist is gone** [author, 2026-10-23: "it seemed
+useful when specified and isn't. I never authored this directly"].
+`field-checklist.py` generated a form into every run directory from the
+catalogue's `kind: manual` rows — id, title, the `when`, the `then`,
+three boxes and a notes line. Across **thirty-five runs it was filled in
+not once**: no box marked, no note written. Every observation those runs
+produced was written up as prose per run instead. Removed with it: its
+eight-case test, gate step **1c**, `field-run.sh`'s write, and every
+pointer that named it, in `check.sh`, the Android README and the bench's
+own working files.
+
+**The gate keeps a hole where 1c was.** "Stage 1d" is cited by name in two
+working files, so renaming 1d to take the freed letter would make those
+citations resolve to the wrong stage. A gap that says why is cheaper than
+a renumbering that quietly lies.
+
+**What records a manual row now**: the run's own written-up entry, in the
+tester's words, saying which rows a run never reached as well as which it
+showed. This is not a new mechanism
+— it is the one that has carried every finding the bench has produced,
+named now that the unused one is gone.
+
+**The finding was eighteen days old.** Reviewer2's sixth round
+(2026-10-05) reported that every checklist had zero marked boxes; it was
+verified and recorded **Right**, and the form went on being generated for
+every run after it. It surfaced again only by accident, while counting how
+many runs had reached PRD-19.
+
+**And the nodeless rows re-planned against the lifted witness floor.** The
+lift bought no capability: it removed a price. A nodeless meeting between
+phones that had met others had to be preceded by a wipe, and the wipe
+destroyed what series B is assembled from — which is why the plan read as
+"the node bench gates nearly everything left". Three changes settle it
+(the shell stopping where no witness can come, 10-11; the floor, 10-19;
+an empty witness set answered with an empty keep, so the prune completes).
+Unblocked, cheapest first: a nodeless meeting between two met phones —
+an **A** row, not the B re-run the history suggests, since B's
+verification purpose cannot be served nodeless at all; then A2's nodeless
+adoption pass on met phones. A3 still waits on a shell screen, A4 is
+with-node by construction, and C and D do not move.
+
 ### 2026-10-23 (two advisories, one of them on a secret's path)
 
 **The gate went red on a commit that changed no Rust.** CI job 586542

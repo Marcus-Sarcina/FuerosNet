@@ -41,7 +41,7 @@ before adoption and read peering as node-to-node; both wrong.
 | | Proves | Needs | Stands on |
 |---|---|---|---|
 | **A1 Mixed S21/TCL, plain** — **done, `82ffd1b-a1-mixed-1`**; range test still not run | the asymmetric case: a good camera on a dim screen and the reverse; the strongest-channel rule across unequal hardware (the TCL pair passed on Optical alone); **the range test**, still an S21 figure; first mixed-throughput data for the presentation-rate idea | nothing new | hardware: both symmetric pairs |
-| **A2 Adoption, both directions** — **the scope-carrying pass done, `3cd8165-a2-carry-1-1` (2026-10-15)**: two meetings on one run. First GXV adopted ZU8 (record `89745eb3`, adoption `29b0c905`), so GXV rooted a scope; then GXV initiated as the client, was asked *submit as which scope?* and chose to bring it, 4VC scanned and was asked *adopt into which scope?* and chose the subnet it had adopted MRK into (`a9b13bcd…`); record `4a9d181b` with 4 signers (two witnesses this time), GXV offered series 2 "bringing scope 29b0c905…", 4VC proposed with field 10 (13 ms), GXV's kernel checked it as a scope it roots and signed (21 ms), both hold `b1232720`; the daemon stored it at 7240 bytes against 7170 for an adoption carrying nothing — the locator's subnet and field 10. **Reverse direction done, `3cd8165-a2-reverse-1-1` (2026-10-15)**: MRK initiated as the client, 4VC scanned and, holding no subnet, was answered *adopt into which scope?* unasked (a new subnet under its own key); record `c5692877` (3 signers, 90 s), the adoption `a9b13bcd` proposed by 4VC (25 ms), signed by MRK's kernel (14 ms) and held by both; MRK offered series 1 *as an individual*, rooting nothing. One defect, fixed: the direction frame's label was composed in the patron's frame ("under your own key"), now in the counterparty's ("a new subnet under c9b44cb4"). Still to run: a pass where the subordinate brings a scope. **Rerun after the rework, `1807b03-1807b03-a2-adoption-1-1` (2026-10-15)**: GXV patron as a lone root, ZU8 adopted; record `2a6bde34` with 3 signers (one laptop witness, the other side's nominee was the same one), the adoption `2b7a56fd` held by both and stored by the daemon (the presence record `OutOfStore` there, as in the earlier run); the direction frame carried the subnet's label ("into … a new subnet", worded better since), the body named no subnet as a lone root's first adoption must, and ZU8's kernel signed it (`cer.adoption.signed`, series 1). Both S21s logged two `sendmsg … I/O error` warnings at attach with tethering off, and attached in 1.3 s regardless. **First pass with a node, `722519a-a2-adoption-7`**: GXV patron, ZU8 adopted, record `d3ca1939` with 4 signers and both verifiers answering Match, then the adoption `de2b5961` held by both — the node offered series 1, the patron proposed, the node's kernel checked the body and signed it (`cer.adoption.signed`). **One defect, fixed**: the responder's brief said nothing about the patronage, reading this device's own D1a choice instead of the settled direction. Still to run: the reverse direction, the simultaneous-opposite case, and the nodeless pass, which needs two phones at genesis. Whether the legs carry registered kinds is still the author's to rule, and the answer does not change what the bench runs | `THEM_UNDER_ME` and `ME_UNDER_THEM` chosen at D1; a TCL under an S21 that is its own root; then D7's simultaneous-opposite case; then with the patron attached to a node | nothing new nodeless; a node for the second pass | proven: `adoption_under_slot` |
+| **A2 Adoption, both directions** — **the scope-carrying pass done, `3cd8165-a2-carry-1-1` (2026-10-15)**: two meetings on one run. First GXV adopted ZU8 (record `89745eb3`, adoption `29b0c905`), so GXV rooted a scope; then GXV initiated as the client, was asked *submit as which scope?* and chose to bring it, 4VC scanned and was asked *adopt into which scope?* and chose the subnet it had adopted MRK into (`a9b13bcd…`); record `4a9d181b` with 4 signers (two witnesses this time), GXV offered series 2 "bringing scope 29b0c905…", 4VC proposed with field 10 (13 ms), GXV's kernel checked it as a scope it roots and signed (21 ms), both hold `b1232720`; the daemon stored it at 7240 bytes against 7170 for an adoption carrying nothing — the locator's subnet and field 10. **Reverse direction done, `3cd8165-a2-reverse-1-1` (2026-10-15)**: MRK initiated as the client, 4VC scanned and, holding no subnet, was answered *adopt into which scope?* unasked (a new subnet under its own key); record `c5692877` (3 signers, 90 s), the adoption `a9b13bcd` proposed by 4VC (25 ms), signed by MRK's kernel (14 ms) and held by both; MRK offered series 1 *as an individual*, rooting nothing. One defect, fixed: the direction frame's label was composed in the patron's frame ("under your own key"), now in the counterparty's ("a new subnet under c9b44cb4"). Still to run: a pass where the subordinate brings a scope. **Rerun after the rework, `1807b03-1807b03-a2-adoption-1-1` (2026-10-15)**: GXV patron as a lone root, ZU8 adopted; record `2a6bde34` with 3 signers (one laptop witness, the other side's nominee was the same one), the adoption `2b7a56fd` held by both and stored by the daemon (the presence record `OutOfStore` there, as in the earlier run); the direction frame carried the subnet's label ("into … a new subnet", worded better since), the body named no subnet as a lone root's first adoption must, and ZU8's kernel signed it (`cer.adoption.signed`, series 1). Both S21s logged two `sendmsg … I/O error` warnings at attach with tethering off, and attached in 1.3 s regardless. **First pass with a node, `722519a-a2-adoption-7`**: GXV patron, ZU8 adopted, record `d3ca1939` with 4 signers and both verifiers answering Match, then the adoption `de2b5961` held by both — the node offered series 1, the patron proposed, the node's kernel checked the body and signed it (`cer.adoption.signed`). **One defect, fixed**: the responder's brief said nothing about the patronage, reading this device's own D1a choice instead of the settled direction. Still to run: the reverse direction, the simultaneous-opposite case, and the nodeless pass — which **no longer needs two phones at genesis** [author, 2026-10-19]: on phones that have met, it finalises as a witnessless normal record carrying the adoption, which is the cheaper run and the one that keeps B's state. Wiping first would prove the formation shape instead, and that shape is already covered in-process by CER-50's first half and on hardware by the earlier cold runs, so the met-phones pass is the one to run and the genesis one only if the author wants the adoption proved under a formation too. Whether the legs carry registered kinds is still the author's to rule, and the answer does not change what the bench runs | `THEM_UNDER_ME` and `ME_UNDER_THEM` chosen at D1; a TCL under an S21 that is its own root; then D7's simultaneous-opposite case; then with the patron attached to a node | nothing new nodeless; a node for the second pass | proven: `adoption_under_slot` |
 | **A3 Peering** — **the kernel act is built (2026-10-15), the shell is not**: `Client::propose_peering` / `review_and_sign_peering` / `take_peering` and the three over the ffi, a light client peering **by locator** as `wire-format.md` §4.4 field 3 admits, on a meeting of the two; `rhtn-archive` is the one emitter of the body now and the node's own wrapper calls it. Owed: a shell screen, which the Meet flow's `DONE` step is the place for, as D7's adoption is | a peering edge between two phones, nodeless; then with a node | a kernel act, then the shell | proven: peering priced and propagated in-process |
 | **A5 The arrival spread, the witness reorder's own run** — not yet run; this is what heading F is. Each side engages its own nominees *before* the ceremony-id exists and the counterparty keeps at most three of what it is offered (design §7.1.1), so every surviving witness is nominated by one side and selected by the other. What no in-process test can show is the **spread**: `cer.witness.watched` carries `since_ms` per arrival, and the shape/inbound/outbound events come from `OpticalExchange.take()`, which needs two real screens and cameras. A live adaptors run shows `event="confirmed" since_ms=819` and nothing before it, because the harness fixes the ceremony-id by hand and has no optical pass. **The verdict**: `since_ms` spread across the exchange rather than four offsets within milliseconds of each other at its end — the burst that started this work was 2.9 s wide and arrived whole. Reading it is `grep 'cer.witness.watched' runs/<run>/timeline.txt` (`Robot/field-test-procedure.md`, *Reading the arrival spread*). **One thing the run as configured does not prove**: `field-run.sh` provisions **one** nominee per phone, so the counterparty's prune keeps 1 of 1 and the truncation to three is never exercised — a question for the author, below | the four `cer.witness.*` arrival events on a real optical pass; the window opening before the channels (PRD-18); the Done screen's `nominated_by` split (PRD-19) | nothing new: the instrument is built and the diagnostics flow. GXV-MRK for a tap-bearing run, since both TCLs report no NFC; any run touching ZU8 or 4VC reads optical as its only channel | proven in-process: CER-67's ordering, CER-032's window contents, CER-52's withholding |
 | **A4 Witnessed** — **done, `82ffd1b-a4-node-3`**, both pairs (S21s `41e88dba`, TCLs `1a2556fb`), 4 signers each, both bench witnesses attesting; the TCLs' first attempt found the bearer's server side ungated (fixed: `notifyDone`) | the far-node path, with-node only: the nominee must be reachable, and a nominee met nodeless has no route (`reach_for`); nomination from met parties is built (2026-10-11: `Client::met`, a witness both name signs once, the shell stops waiting where no witness can come) | a node on the bench; nomination from met parties | proven: the witness path in-process; `field-run.sh` names nominees |
@@ -51,7 +51,13 @@ before adoption and read peering as node-to-node; both wrong.
 Every test here needs a **prior ceremony**: the verifier holds a sealed
 capture of the subject from an earlier meeting. Four phones make this
 possible; it is also why phones are **not wiped between runs** once B
-begins, except the two a nodeless run requires at genesis.
+begins. **The exception is gone** [author, 2026-10-19]: it used to read
+"except the two a nodeless run requires at genesis", and no nodeless run
+requires genesis any more. This was the scheduling conflict at the centre
+of this plan — a nodeless run cost two phones' identities, and B is built
+out of what those identities accumulate — and it has dissolved rather
+than been resolved. All four phones keep their state indefinitely, and the
+nodeless rows can be interleaved with B instead of competing with it.
 
 With A having met B earlier, B meets C and A is selected:
 
@@ -91,8 +97,65 @@ none run on phones. The iOS client, which has no position until it exists.
 
 ## Order
 
-A1 is done; a second plain pair was met deliberately (`82ffd1b-a2-adoption-1`, mislabelled) for series B. B1 nodeless hung at witness selection and showed that nothing met nodeless is reachable afterwards and no cross-pair verifier can qualify — so **B and A4 are with-node**, and the node bench (C1's proven half plus `field-run.sh`) is now the gate for nearly everything left. **[ruled, author, 2026-10-10]** witnesses are required where available and a witnessless meeting is not genesis-only; proceeding witnessless past genesis needs design §13.2 / `wire-format.md` §3.2 amended, which gates any nodeless meeting between non-genesis phones. **That amendment has since been made** [author, 2026-10-19]: `wire-format.md` §3.2 now states there is no witness floor and design §13.2 reasons from the same case this ruling was about — a meeting that must not fail because a witness went offline at minute three. So the condition the 10-10 ruling named is met and the gate it describes is lifted: a nodeless meeting between non-genesis phones produces a valid witnessless record, with the absence sitting inside the signed body where every reader sees it. What this unblocks on the bench has not been re-planned against the rows below, and should be before the next nodeless pass is chosen. **The node bench is up (2026-10-11, `82ffd1b-a4-node-1`), all four phones re-provisioned at genesis on it; the two met pairs are to be re-met there for B.** A4, B's with-node
+A1 is done; a second plain pair was met deliberately (`82ffd1b-a2-adoption-1`, mislabelled) for series B. B1 nodeless hung at witness selection and showed that nothing met nodeless is reachable afterwards and no cross-pair verifier can qualify — so **B and A4 are with-node**, and the node bench (C1's proven half plus `field-run.sh`) is now the gate for nearly everything left. **[ruled, author, 2026-10-10]** witnesses are required where available and a witnessless meeting is not genesis-only; proceeding witnessless past genesis needs design §13.2 / `wire-format.md` §3.2 amended, which gates any nodeless meeting between non-genesis phones. **That amendment was made** [author, 2026-10-19] — no witness floor, design §13.2 reasoning from the same case the ruling was about — so the condition is met and the gate is lifted, and the rows above are re-planned against it below. **The node bench is up (2026-10-11, `82ffd1b-a4-node-1`), all four phones re-provisioned at genesis on it; the two met pairs are to be re-met there for B.** A4, B's with-node
 half and all of C wait on a node being routine on the bench, which is C1's
 proven half plus `field-run.sh`. B's nodeless half needs only a prior run's
 state kept. Within C, the Catalog screen is the one build that gates a test
 in the middle of a chain.
+
+### Re-planned against the lifted gate, 2026-10-23
+
+**What the lift actually bought.** Not a new capability — a nodeless
+meeting between phones that have met others no longer has to be bought
+with two identities. Before, every such run was preceded by a wipe, and
+the wipe destroyed exactly what B is assembled from. That is why this
+plan read as "the node bench gates nearly everything left": the cheap
+setting was unusable without paying in the expensive currency. Three
+things changed independently and together they settle it — the shell
+stopped waiting where no witness can come (2026-10-11), the floor went
+(2026-10-19), and an empty witness set is answered with an empty keep so
+the prune completes rather than hangs (`sequence.rs`'s
+`opening_id_fixed`, "an empty set too").
+
+**Proven, not hoped**: CER-50 is two parties meeting at genesis and then
+meeting again no longer at genesis, finalising as a witnessless normal
+record. Its own comment names the field run that stopped on `NoWitness`
+on 2026-10-04. So a nodeless bench run is now confirmation on hardware of
+a path the suite holds, which is the right order for a bench.
+
+**What is unblocked, in the order it should run:**
+
+1. **A nodeless meeting between two phones that have met** — the run the
+   gate used to forbid, and an **A row rather than a B one**, which is
+   worth saying because it was B1 nodeless that hit the wall and the
+   instinct is to re-run that. B1's *verification* purpose cannot be
+   served nodeless at all: a party met nodeless has no route afterwards,
+   so the verifier pool is empty by construction and no re-run changes
+   that. What is newly runnable is the **ceremony variant** — does a
+   meeting between non-genesis phones finalise witnessless on hardware,
+   as CER-50 says it does in process. Cheapest run on the bench: no node,
+   no wipe, two phones. What it should show is an empty witness set
+   answered with an empty keep on both sides, `witnesses_outstanding`
+   falling to nothing, a normal record with field 4 absent, and both
+   screens saying plainly that nobody witnessed it — PRD-19's third case,
+   which no run has reached, though for a duller reason than it sounds:
+   PRD-19 postdated every run on the bench, appearing in none of the
+   35 checklists that used to be generated under `runs/` — a form since
+   removed, having never once been filled in [author, 2026-10-23].
+2. **A2's nodeless adoption pass**, on phones that have met, as the row
+   now says. Witnessless normal record carrying the adoption.
+3. **Heading F's arrival spread** (A5) — unaffected by the lift, listed
+   here only because it is the other run waiting on nobody.
+
+**What is not unblocked, and why.** A3's nodeless peering waits on the
+shell, not the gate — the Meet flow's `DONE` step needs a screen. A4 is
+with-node by construction, since a nominee has to be reachable and a
+party met nodeless has no route. All of C needs the node. The lift moves
+nothing in C or D.
+
+**What the author still owns here.** Whether the nodeless adoption pass
+should *also* be run at genesis, to prove the adoption under a formation
+shape as well as under a witnessless normal one. The met-phones pass is
+planned above because it is cheaper and keeps B's state; the genesis pass
+proves a different record shape and costs two identities. Nobody has
+asked for it, and this plan does not assume it.
