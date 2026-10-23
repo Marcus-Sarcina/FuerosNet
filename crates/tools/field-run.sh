@@ -449,6 +449,17 @@ for s in ${DEVICES[@]+"${DEVICES[@]}"}; do
   android="$("$ADB" -s "${ADB_ID[$s]}" shell getprop ro.build.version.release 2> /dev/null | tr -d '\r')"
   DEVICE_MODELS+=("$model")
   DEVICE_ANDROID+=("$android")
+  # The diagnostic mirror is `Timber.tag("fueros.diag").d(...)`, and a ROM
+  # that drops debug for a tag it does not know mirrors nothing: on both
+  # TCL 30 Z units `adb logcat -s fueros.diag` was empty while the event
+  # files under the app's own directory were being written normally
+  # (2026-10-22).  Setting the tag's level fixes it, and the persistent
+  # form survives the reboot that undoes the volatile one.  Both are set
+  # before the app is launched below, since the level is read as a line is
+  # written.  The event files were always the record -- this is what makes
+  # `logcat.txt` and `rhtn diag watch` worth reading on those phones.
+  "$ADB" -s "${ADB_ID[$s]}" shell setprop log.tag.fueros.diag D 2> /dev/null || true
+  "$ADB" -s "${ADB_ID[$s]}" shell setprop persist.log.tag.fueros.diag D 2> /dev/null || true
   provisioned=false
   if i="$(material_of "$s")"; then
     if ! "$ADB" -s "${ADB_ID[$s]}" shell pm path "$APP" 2> /dev/null | grep -q package:; then

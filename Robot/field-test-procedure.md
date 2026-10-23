@@ -93,6 +93,25 @@ By hand, the same from `crates/mobile/android`:
 The debug build is what the pull needs: `run-as` reads a debuggable app's
 private directory. A release-signed APK would leave only the share sheet.
 
+**Prefer the by-hand `install -r` once the B series has begun** [author,
+2026-10-22]. `field-setup.sh`'s uninstall is what wipes the data, and that
+data is what B is made of: the adoptions, the met pairs and the sealed
+captures a verifier needs from an earlier meeting. `install -r` replaces
+the code and keeps all of it, and the identity survives with it — so the
+material already in `phones.conf` stays valid and there is nothing to
+re-read off the Conversations screen. Use `field-setup.sh` when a run
+genuinely wants phones at genesis, and `--address-only` when all that
+changed is an address after a reboot.
+
+What makes this safe to say rather than hope: nothing persisted changed
+shape across the witness reorder. `durable.rs`, `store.rs`, `sealed.rs`
+and `catalog.rs` were untouched by it, and the one edit to `device.rs` was
+to comments. What *did* change is `local.rs`'s IntentExchange, from nine
+fields to eight — which is not stored anywhere but **does** mean every
+phone in a run must carry the same APK. A pair on two builds fails at the
+intent, and it reads like a bearer fault rather than a version mismatch,
+so install all of them or none.
+
 ## One run
 
 1. On each phone, launch the app and open Conversations. While the device is
@@ -150,6 +169,21 @@ private directory. A release-signed APK would leave only the share sheet.
    as the screens go by; a row is *not reached* when the run ends before its
    step.
 
+   **The order the screens go in, since the ceremony was reordered** (design
+   §7.1.1): the nominees are engaged *before* the code is shown, so the
+   first thing to look at is the line saying how many of the nominated are
+   engaged and watching — on the Meet screen, before any code appears. If
+   that line says nothing is engaged, the run will still complete and its
+   record will be witnessless, which is valid and proves nothing about the
+   engagement; stop and find out why rather than reading the rest. Then the
+   codes cross, and as they do each nominee is sent the exchange's shape and
+   then each part as it lands — that traffic is the run's subject and is
+   not visible on either phone. The window opens with the request and the
+   channels run inside it, so nobody is asked to hold the phones still and
+   wait: the tap is armed while the two are already facing each other.
+   Finally the Done screen names who witnessed and how the `nominated_by`
+   split fell, or says plainly that nobody did.
+
 4. On both phones press *Send diagnostics (field test)*, on the home screen
    or a Meet screen. The zip is written before the share sheet opens;
    dismiss the sheet and the file stays on the phone.
@@ -161,6 +195,40 @@ private directory. A release-signed APK would leave only the share sheet.
 
 A second run needs step 2 again (new node identity, new provision), and
 after a wipe `field-setup.sh` again, or step 1 by hand (new material).
+
+## Reading the arrival spread
+
+What PRD-17 is judged on is not on either phone's screen: it is whether the
+nominees' diagnostics arrive *spread across* the exchange or batched at its
+end. The witnesses are the laptop's, so their files are in the run
+directory and the merge puts them on one clock.
+
+        grep 'cer.witness.watched' runs/<run>/timeline.txt
+
+Each line carries `event=` (shape, inbound, outbound or confirmed) and
+**`since_ms=`**, the offset from the moment that witness took the
+engagement, on its own clock. Read the `since_ms` column down the page:
+
+- **spread** is what the reorder is for — the four events at widely
+  separated offsets, the shape early and `confirmed` last, the gaps between
+  them the time the exchange actually took.
+- **batched** is the failure this replaced: four offsets within a few
+  milliseconds of each other, late. The burst that started this work was
+  2.9 seconds wide and arrived whole at the end.
+
+Two cautions, both of which would make a passing run look like a failing
+one. `event="shape"`, `"inbound"` and `"outbound"` come from the optical
+exchange and exist only where two real screens and cameras ran; a run whose
+pair never completed an optical pass shows `confirmed` alone, and that is
+the run's fault and not the kernel's. And the laptop witnesses are reached
+over the network, so a slow LAN widens every offset equally — the shape to
+look for is the *pattern* of gaps, not any one number.
+
+`cer.witness.withheld` and `cer.witness.matured` are the window's own
+record: a witness that was asked inside its window withheld the signature
+and said how long it had waited, and signed when the window matured on its
+own clock. On a `fieldtest` build that window is 30 seconds, not the
+design's four minutes, which is why a run says nothing about CER-026.
 
 ## When a run fails
 
@@ -183,6 +251,21 @@ that event sits at the head of the timeline by its own clock, which the
 summary says. The
 kernel's lines on a phone count from `Participant.start` and sit early by
 that offset, which the `shell.call` for `Participant.start` gives.
+
+**An empty `logcat.txt` is not a phone that did nothing.** The mirror is
+`Timber.tag("fueros.diag").d(...)`, at debug level, and a ROM that drops
+debug for a tag it does not know mirrors nothing while the app runs
+perfectly: both TCL 30 Z units wrote their event files normally and
+mirrored not one line (2026-10-22). `field-run.sh` now sets
+`log.tag.fueros.diag` and its `persist.` form on every phone before it
+launches the app, so this should not recur; by hand it is
+
+        adb -s <serial> shell setprop persist.log.tag.fueros.diag D
+
+and the app must be restarted, since the level is read as each line is
+written. The event files pulled at stop were never affected — they are the
+record, and this only decides whether `logcat.txt` and `rhtn diag watch`
+are worth reading on that phone.
 
 ## Tester consent
 

@@ -18932,6 +18932,108 @@ it holds; and the guided-capture test's hard 15,000 ms ceiling now allows
 scheduling slack, having failed twice on load.
 
 
+## 2026-10-22 — heading F prepared, short of the author's hands
+
+Everything that does not touch a phone, done and checked:
+
+**The bench.** All four phones reachable; GXV had dropped out of `adb` and
+reconnected on the first try (TCP adb intact, so no reboot). Each phone's
+`wlan0` matches its `phones.conf` address — GXV .6, MRK .7, ZU8 .10,
+4VC .11 — and no phone has an `rndis0`/`usb0` up, which is the trap that
+breaks the app's UDP silently. Ports 7447 and 7448 free. The bench address
+is 192.168.0.8, the Wi-Fi one; the default route picks 10.1.10.105, which
+the phones cannot reach.
+
+**Toolchain.** adb, cargo-ndk, NDK 30.0.16248370, JBR under
+~/opt/android-studio/jbr. `kotlinc` is not on PATH and is not needed —
+Gradle carries its own Kotlin. `JAVA_HOME` must be exported for Gradle;
+`field-setup.sh` does that itself (line 183), so only a hand-run of the
+Gradle step needs it, which is how my first attempt failed.
+
+**Built**: the laptop's `rhtn`, `rhtnd` and `rhtnp` into
+`target/fieldtest/release`, and the native library for both ABIs into
+`app/src/fieldtest/jniLibs`. This is step 1 of `field-setup.sh`, which is
+non-destructive, so `--no-build` can be used when the author runs it.
+
+**The engagement chain is intact, checked rather than assumed.**
+`field-run.sh` writes `"nominees": [keyhash]` into each provision and
+`Kernel.kt:1531` still reads that key and feeds `begin()`, which engages
+before the code is shown. Worth checking because `Intent` *lost* its
+nominees in the reorder (9 fields to 8) — the provision's key is the
+shell's own configuration and survived, but a run that engaged nobody
+would have produced no spread and proved nothing while looking like a
+completed ceremony.
+
+**All thirteen `cer.witness.*` events are emitted**, including `watched`
+with `since_ms`. The checklist generator produces 22 rows and carries
+PRD-17, 18 and 19.
+
+**No new reader was needed for the verdict.** `render_timeline` prints
+every field of every line, so `since_ms` appears per `cer.witness.watched`
+in wall order: `grep 'cer.witness.watched' runs/<run>/timeline.txt` is the
+whole instrument. Written up in `field-test-procedure.md`.
+
+**`field-test-procedure.md` was stale and is the tester's own document.**
+Dated 8 October, it mentioned engage, window, spread, watched and
+since_ms zero times each, while `field-test-diagnostics.md` had been
+updated for the reorder on the 21st. Step 3 now states the reordered
+order — the engaged-and-watching line *before* any code, the trace as the
+codes cross, the window opening before the channels, the Done screen's
+split — and a new section, *Reading the arrival spread*, says what spread
+and batched look like and names the two ways a passing run would read as
+a failing one.
+
+**A superseded ruling found in the plan of record.**
+`field-test-sequence.md`'s Order section carried [author, 2026-10-10]:
+witnessless past genesis "needs design §13.2 / `wire-format.md` §3.2
+amended, which gates any nodeless meeting between non-genesis phones".
+That amendment was made on the 19th — there is no witness floor — so the
+condition is met and the gate is lifted. Recorded beside his words, not
+over them. What it unblocks has not been re-planned against the rows.
+
+**Added A5** to the sequence: the arrival-spread run, what it proves, and
+the one thing it does not.
+
+**Both decisions answered the same day** [author, 2026-10-22]:
+**`install -r` to keep the B state**, not `field-setup.sh`'s wipe — the
+adoptions, met pairs and sealed captures stay, and the identities with
+them, so `phones.conf`'s material needs no re-reading. Safe because
+nothing persisted changed shape across the arc (`durable.rs`, `store.rs`,
+`sealed.rs`, `catalog.rs` untouched; `device.rs` comment-only). And
+**one nominee per phone**, as `field-run.sh` already provisions: the
+spread is four events arriving at one witness over time, so one is enough
+to read it, and the prune's truncation to three stays unexercised on the
+bench by choice rather than by oversight. `field-run.sh` is unchanged.
+
+Installed on all four from the fresh APK, data kept; the stored state was
+md5-fingerprinted before and after to show it survived rather than to
+assume it: GXV and MRK 11 files, ZU8 and 4VC 9 (the two extra are
+Android's own `shared_prefs`, not kernel state), every md5 identical, and
+the kernel files — seeds, provision, client, custody, siblings — present
+on all four. Then each app launched and `pay.restored` read off each, so
+the new code is known to open the old state rather than assumed to.
+
+**And that launch found a real defect in the instrument, not the kernel.**
+The two TCLs showed **zero** `fueros.diag` lines in logcat while their
+event files were being written normally — the mirror is
+`Timber.tag("fueros.diag").d(...)` at debug level (`FuerosApp.kt:80`), and
+a MediaTek ROM drops debug for a tag it does not know. `setprop
+log.tag.fueros.diag D` and a relaunch produced 52 and 45 lines, and
+`pay.restored` with them. `field-run.sh` now sets that property and its
+`persist.` form on every phone before launching the app, and *When a run
+fails* says what an empty `logcat.txt` means. **The event files were
+always the record** — this is only whether `logcat.txt` and `rhtn diag
+watch` are worth reading on those two phones, which for a run judged by
+watching arrivals land is worth having. Had heading F been run on a TCL
+pair without this, the live view would have been blank and the obvious
+conclusion — that nothing reached the witnesses — would have been exactly
+wrong.
+
+**One constraint that is not a decision**: `local.rs`'s IntentExchange
+went 9 fields to 8, so **all four phones must carry the same APK**. A
+cross-version pair fails at the intent, and the failure would look like a
+bearer problem.
+
 ## 2026-10-22 — where the gate's time goes, measured
 
 Author asked why the editing passes were taking so long. Timed the gate
