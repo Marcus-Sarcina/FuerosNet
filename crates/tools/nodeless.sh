@@ -23,11 +23,21 @@
 #  `KeyMaterial` from the optical contribution, which carries it in full
 #  (`wire-format.md` §14.3.1, design §12.3).
 #
-#  **What such a pair can form is the witnessless shape** -- two identities
-#  at their genesis, no witnesses and no responses (`wire-format.md` §3.2
-#  subtype 1, design §13.2). Both phones must therefore be freshly wiped;
-#  a phone that has met anyone has back-pointers past its genesis and the
-#  kernel refuses `NoWitness`.
+#  **What such a pair forms is a witnessless record**, no witnesses and no
+#  responses (`wire-format.md` §3.2, design §13.2).  Which *shape* depends
+#  on the phones, and **both now work** [author, 2026-10-19: there is no
+#  witness floor]:
+#
+#    * two freshly wiped phones form a **formation** record at their
+#      genesis (§3.2 subtype 1);
+#    * two phones that have met anyone form a **witnessless normal**
+#      record, which says permanently that nobody attested.
+#
+#  The second used to be refused `NoWitness` and is the reason this script
+#  once said both phones must be wiped.  **It does not say that any more**:
+#  wiping is now a choice of which shape to prove, and the wipe costs the
+#  phones' identities -- which is what the verification series is assembled
+#  from, so do not spend them without meaning to.
 #
 #  Diagnostics still stream: the collector is a plain TCP listener on this
 #  machine and has nothing to do with the node.
