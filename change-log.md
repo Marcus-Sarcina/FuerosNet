@@ -13867,6 +13867,41 @@ rejections in the corpus, and both introduction kinds are listed in the
 corpus runner so a rejection that starts passing fails rather than being
 skipped.
 
+### 2026-10-23 (two advisories, one of them on a secret's path)
+
+**The gate went red on a commit that changed no Rust.** CI job 586542
+failed where 585533 had passed on a byte-identical workspace, and the step
+was 3c: `cargo deny` fetches the advisory database fresh on every run, and
+two advisories had been published between the two jobs. The tests passed
+812 of 812 in the same run. This is the arrangement working — stage 3c's
+advisories block, which is why that word is cargo's there and the
+non-halting findings use another.
+
+**`ctutils` 0.4.2 → 0.4.5, and this one is on a path that handles a
+secret.** `ctutils::Choice`'s mask generation is `const fn` and so cannot
+use the `asm!`-backed path in `cmov`; before 0.4.4 it could compile to a
+branch on common platforms, and its `u128` comparisons branched on 32-bit
+targets. A branch on a secret value is a covert channel. The crate arrives
+under `argon2 → blake2 → digest`, and `argon2` is what `backup.rs` derives
+the backup key with — design §13.7.1's named KDF, over a passphrase. So
+the defect sat on the derivation of a key from a secret, which is the
+place this project would least choose to have it. **32-bit matters here**:
+`build-native.sh` builds arm64 and x86_64 today, but a 32-bit Android ABI
+would have taken the worse of the two cases.
+
+**`tokio` 1.53.1 → 1.54.1, unsound rather than vulnerable.**
+`AsyncFd::new` violates I/O safety two ways, the serious one a
+use-after-free when a duplicated descriptor is closed and the number
+reused while an `AsyncFd` lives. **The project does not use `AsyncFd`
+anywhere** — checked, not assumed — so the exposure is whatever `tokio`
+and `quinn` do internally and is not reachable from this code. Updated
+because an unsound dependency is not a thing to carry knowingly, not
+because a path was found.
+
+`cargo deny check` is clean on all four: advisories, bans, licences,
+sources. The licence check passing is the part worth stating, since a
+version bump is also a licence change until something looks.
+
 ### 2026-10-22 (the runner adopted, at sixteen)
 
 **The gate's step 3 runs under `cargo nextest` where it is installed**

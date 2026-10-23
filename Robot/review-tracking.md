@@ -18932,6 +18932,39 @@ it holds; and the guided-capture test's hard 15,000 ms ceiling now allows
 scheduling slack, having failed twice on load.
 
 
+## 2026-10-23 — a red gate I misdiagnosed before I measured it
+
+CI job 586542 failed at 375 s on `4083e4f`, a commit touching three
+Markdown working files and `field-run.sh`. **My first hypothesis was
+wrong and I said it out loud before checking**: I told the author the
+likely cause was nextest's 16-way concurrency tripping a timing-sensitive
+test, reasoning that the Rust tree was identical to the job that passed,
+so the failure had to be non-deterministic and therefore mine from
+`987aed3`. The reasoning was sound and the conclusion was false. The
+reproduce — `rust:1-bookworm` over the runner's own volume — put it at
+step **3c**, `cargo deny`, with the tests passing 812 of 812 in 159 s.
+
+The lesson is the one already in `CLAUDE.md` under asserting a sweep is
+complete: a plausible mechanism is not evidence. The cheap measurement
+existed (I had the reproduce recipe in hand from last week) and I
+narrated a theory while it ran instead of waiting for it. Nothing was
+broken by that, but the author read a wrong attribution of fault for
+several minutes.
+
+**What it actually was**: `cargo deny` refetches the advisory database
+every run, and two advisories landed between 11:00 and 11:15.
+`ctutils` 0.4.2 (branch on a secret in `const fn` mask generation,
+reaching `backup.rs`'s Argon2id passphrase KDF through
+`argon2 → blake2 → digest`) and `tokio` 1.53.1 (`AsyncFd` I/O-safety
+unsoundness; `AsyncFd` is used nowhere in this workspace, checked).
+Updated to 0.4.5 and 1.54.1; all four deny classes clean.
+
+**Worth keeping for next time**: a gate failure on a commit that changed
+no code is more likely to be the world moving than the commit. The
+advisory database is the one input to the gate that changes without
+anybody here touching anything, which makes 3c the first place to look
+when a green tree goes red on its own.
+
 ## 2026-10-22 — heading F prepared, short of the author's hands
 
 Everything that does not touch a phone, done and checked:
