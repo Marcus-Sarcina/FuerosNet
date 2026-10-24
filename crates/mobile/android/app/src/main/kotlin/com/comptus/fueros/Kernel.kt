@@ -1630,8 +1630,28 @@ object Kernel {
                 // a device that has met nobody attaches with no peers to
                 // follow; the first one is learned at the meeting
                 p.attach(node, listOf(provision?.optString("addr", "") ?: ""), listOfNotNull(to))
-            } ?: return
-            show(p, Status.Attached(node, a.primary))
+            }
+            // **a node named but unreachable is the detached case, not a
+            // reason to stop.** This returned, and the event loop below
+            // never ran — which is the author's own rule broken twelve
+            // lines above, where a provision naming no node skips the
+            // attach and runs the loop anyway [author, 2026-10-07].
+            //
+            // It cost seven attempts at A6. The phones carried
+            // `node=5046da37 addr=192.168.0.8:7447` from an earlier
+            // `field-run`, and a nodeless run has nothing listening
+            // there, so every one of them left the kernel with no loop:
+            // no poll, no staleness watchdog, no heartbeat, and a
+            // conversation that received every byte it needed and acted
+            // on none of it (2026-10-24).
+            if (a == null) {
+                front.note("· the node named in the provision did not answer:")
+                front.note("  this device stays detached, and a meeting crosses")
+                front.note("  the bearer alone (design §6.4).")
+                show(p, Status.Detached)
+            } else {
+                show(p, Status.Attached(node, a.primary))
+            }
         }
         // **the loop's own first word.** Said once, before any turn, so
         // that a run which never reaches the loop is distinguishable from
