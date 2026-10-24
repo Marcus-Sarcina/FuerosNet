@@ -912,11 +912,13 @@ object Kernel {
 
     @Volatile private var lastTurnAt = 0L
 
-    /** [Meet.turnState] into the diagnostics, on change or on the clock. */
-    private fun turnHeartbeat(m: Meet) {
+    /** [Meet.turnState] into the diagnostics, on change or on the clock;
+     *  `meet=null` where there is no meeting, so that a turn always says
+     *  something and silence can only mean the loop. */
+    private fun turnHeartbeat(m: Meet?) {
         if (!Diag.enabled()) return
         val now = System.currentTimeMillis()
-        val s = m.turnState(now)
+        val s = m?.turnState(now) ?: "meet=null"
         if (s == lastTurnState && now - lastTurnAt < turnDiagMs) return
         lastTurnState = s
         lastTurnAt = now
@@ -1668,6 +1670,16 @@ object Kernel {
             // proposer learns its queries are answered and proposes, where
             // the responder hands over, and where the body's arrival moves
             // to review. The poll is nothing outside those steps.
+            // **the heartbeat, outside the null guard on purpose.** Said
+            // every turn whatever the flow is doing, because its job is to
+            // make silence mean one thing: the loop is not turning. Put
+            // inside `meet?.let` first, its silence on A6's fifth attempt
+            // had two readings — the loop stopped, or `meet` was null —
+            // and separating those is the whole reason it exists
+            // (2026-10-24). Said when it changes, and otherwise once every
+            // `turnDiagMs`. Diag is a no-op where no sink is installed,
+            // which is every releasable build.
+            turnHeartbeat(meet)
             meet?.let { m ->
                 // a conversation phase that landed before the flow reached
                 // the conversation is taken on the tick, as is one whose
@@ -1676,15 +1688,6 @@ object Kernel {
                 if (t == Meet.Step.VERIFIERS || t == Meet.Step.REVIEW) {
                     drainBearer(p, m)
                 }
-                // **the heartbeat, before the decision it explains.** A
-                // flow that is alive and waiting says so; one whose loop
-                // has stopped says nothing, and the difference between
-                // those two cost three rounds of forensics on A6
-                // (2026-10-23). Said when it changes, and otherwise once
-                // every TURN_DIAG_MS so silence means the loop and not the
-                // flow. Diag is a no-op where no sink is installed, which
-                // is every releasable build.
-                turnHeartbeat(m)
                 // **only where it has something to do**: an arrival since
                 // the last look, or the patience run out. Polling every
                 // turn had the proposer asking the kernel 28 times in 3 s
