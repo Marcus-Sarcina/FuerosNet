@@ -18984,6 +18984,15 @@ which depends on the current step machine.
 progress; this is the record of the ruling so it is not lost between
 sessions.
 
+**Two tooling nits from the confirmation run, owed and not blocking**:
+`nodeless.sh` says "holding" and then exits — there is nothing after the
+message that holds, so run from a shell it returns at once and leaves the
+collector running (`stop` still works off `collector.pid`). And a
+confirmation of the loop needs no ceremony: `kernel.loop entered` is said
+at `bringUp`, so the launch alone showed `kernel.loop=1`, ~245 turns and
+`meet.turn … meet=null` on both S21s — the loop alive and idle, which
+eight minutes of silence could not have shown the day before.
+
 ## 2026-10-23 — the nodeless rows re-planned, and a form nobody fills
 
 **The lift, stated precisely.** It bought no new capability. A nodeless

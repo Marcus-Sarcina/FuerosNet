@@ -340,6 +340,127 @@ fn a_request_binds_to_the_engagement_watched_and_its_ceremony_id() {
     assert_eq!(w.take_witness_request(&req(4, 40)), Some(3), "it agrees");
 }
 
+/// **The counterparty is never offered as a witness, even when it was the
+/// only party this side had met.** `begin` excludes the counterparty where
+/// it is known; nodeless it is learned from the code afterwards, so two
+/// phones that had only ever met each other each nominated the other —
+/// and each refused the other's set as an introduction to itself, and
+/// waited out the window for a keep that could not come (A6, 2026-10-24).
+/// A participant witnessing its own ceremony is not an independent
+/// witness, which is the whole role (`wire-format.md` §3.2).
+#[test]
+fn the_counterparty_learned_after_begin_is_never_offered_as_a_witness() {
+    let mut s = setup(&["alice", "bob", "w1"], &[ChannelKind::Nfc]);
+    // they have met: each is the other's only met party besides the
+    // witness of that meeting
+    s.met("alice", "bob", "w1");
+    // each holds the other by material *and locator*, as two phones that
+    // had met on a node bench do: a nominee the sender cannot introduce is
+    // never offered, so without this the set would have named nobody and
+    // the defect would not show (the adaptors harness's `knows`)
+    for (holder, known) in [("alice", "bob"), ("bob", "alice")] {
+        let loc = rhtn_archive::tx::Locator::root(
+            kh(known),
+            rhtn_archive::tx::Seqno {
+                series: 1,
+                counter: 0,
+            },
+        );
+        let sl = rhtn_archive::locator::signed_locator(&id(known), &loc);
+        let material = id(known).public.key_material();
+        let k = kh(known);
+        let c = s.client(holder);
+        c.store
+            .contacts
+            .entry(k)
+            .or_insert_with(|| {
+                rhtn_client::contacts::Contact::new(
+                    material,
+                    rhtn_client::contacts::How::Nominee,
+                    1,
+                )
+            })
+            .locator = Some(sl);
+    }
+    s.face_off("alice", "bob");
+    let (a, b) = (kh("alice"), kh("bob"));
+    // nodeless: nobody is named at begin, so the nominees are whoever was
+    // met — which includes the party about to be in front of each
+    let ia = s
+        .client("alice")
+        .begin(None, vec![], true)
+        .expect("alice begins");
+    let ib = s
+        .client("bob")
+        .begin(None, vec![], false)
+        .expect("bob begins");
+    assert!(
+        s.client("alice").nominees().0.contains(&b),
+        "before the code is read the counterparty is among the met, so among the nominees"
+    );
+    // **each engages its nominees before the code is shown** (design
+    // §7.1.1), which is what the bench did: the engagement reached the
+    // party about to be met, and `engaged_to` — not `my_nominees` — is
+    // what the set closes from once an engagement was attempted
+    s.client("alice").converse_engage().expect("alice engages");
+    s.client("bob").converse_engage().expect("bob engages");
+    assert!(
+        s.client("alice").nominees_engaged().0 >= 1,
+        "alice engaged somebody, and the only parties she has met include bob"
+    );
+    // the codes cross: the contribution carries the identity, and this is
+    // where each side learns who it is meeting (`take_optical`)
+    let oa = s
+        .client("alice")
+        .optical_contribution()
+        .expect("alice shows");
+    let ob = s.client("bob").optical_contribution().expect("bob shows");
+    assert_eq!(s.client("alice").take_optical(&ob).expect("alice reads"), b);
+    assert_eq!(s.client("bob").take_optical(&oa).expect("bob reads"), a);
+    s.client("bob")
+        .take_intent(a, &ia)
+        .expect("bob takes the intent");
+    s.client("alice")
+        .take_intent(b, &ib)
+        .expect("alice takes the intent");
+    // the sets cross and the keeps answer them; before the fix bob refused
+    // alice's set here — "an introduction to myself" — and no keep followed
+    for _ in 0..2 {
+        for (x, y) in [("alice", "bob"), ("bob", "alice")] {
+            for bytes in s.client(x).carriages() {
+                let r = s.client(y).take_conversation_carriage(&bytes);
+                let shown = format!("{r:?}");
+                assert!(
+                    r.is_ok() && !shown.contains("efused"),
+                    "a set naming the taker is pruned, never refused: {shown}"
+                );
+            }
+        }
+    }
+    // the set each offered no longer names the party it was offered to
+    assert!(
+        !s.client("alice").nominees().0.contains(&b),
+        "alice did not offer bob to bob"
+    );
+    assert!(
+        !s.client("bob").nominees().0.contains(&a),
+        "bob did not offer alice to alice"
+    );
+    assert!(
+        !s.client("bob").nominees().1.contains(&b),
+        "bob was not offered himself"
+    );
+    assert!(
+        !s.client("alice").nominees().1.contains(&a),
+        "alice was not offered herself"
+    );
+    // both windows open: each side has the other's keep of its set
+    s.client("alice")
+        .converse_open()
+        .expect("alice's window opens");
+    s.client("bob").converse_open().expect("bob's window opens");
+}
+
 // acceptance: CER-67
 #[test]
 fn the_opening_reaches_a_nominee_before_acceptance_and_one_event_at_a_time() {

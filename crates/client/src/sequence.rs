@@ -544,11 +544,27 @@ impl Client {
         // where this kernel never tried, it has learnt nothing: the
         // caller moved the engagements and its nominee list stands
         let attempted = a.engage_attempted;
-        let nominees: Vec<Keyhash> = match attempted {
+        let base: Vec<Keyhash> = match attempted {
             true => a.engaged_to.iter().copied().collect(),
             false => a.my_nominees.iter().copied().collect(),
         };
-        let dropped = a.my_nominees.len() - nominees.len();
+        // **the counterparty is never offered.** A participant witnessing
+        // its own ceremony is not an independent witness, which is the
+        // whole role (`wire-format.md` §3.2), and `begin` excludes the
+        // counterparty where it is known — but nodeless it is learned from
+        // the code *after* `begin`, so a device whose only met party is the
+        // one in front of it nominated exactly that party, and the
+        // counterparty refused the set as an introduction to itself
+        // (A6, 2026-10-24). The id is fixed here, so the peer is known here.
+        let peer = a.counterparty;
+        let nominees: Vec<Keyhash> = base.iter().copied().filter(|k| Some(*k) != peer).collect();
+        if nominees.len() != base.len() {
+            tracing::info!(target: "cer", "cer.witness.counterparty_dropped");
+        }
+        // saturating: `engaged_to` can hold a party `my_nominees` does not
+        // (the counterparty, engaged before it was known), and this read
+        // `unreachable=18446744073709551615` on the bench
+        let dropped = a.my_nominees.len().saturating_sub(base.len());
         // the confirmation goes where the engagement went, and nowhere
         // else: a nominee this kernel never engaged has nothing to bind
         // it to and would decline the request anyway (CER-70), and where
@@ -978,8 +994,21 @@ impl Client {
             // min(3, offered), answer with the keep
             Msg::WitnessSet(nominees) => {
                 let offered = nominees.len();
+                let me = self.keyhash();
                 let mut named = Vec::new();
                 for intro in &nominees {
+                    // **an introduction to this side is dropped, not refused.**
+                    // The prune filters this side and the peer out anyway;
+                    // refusing the whole set for it left the counterparty
+                    // waiting on a keep that never came (A6, 2026-10-24).
+                    // An introduction that does not read at all still refuses.
+                    if rhtn_archive::locator::Introduction::parse(intro)
+                        .map(|i| i.identity.keyhash == me)
+                        .unwrap_or(false)
+                    {
+                        tracing::info!(target: "cer", "cer.witness.offered_myself");
+                        continue;
+                    }
                     match self.take_introduction(intro) {
                         Ok(k) => named.push(k),
                         Err(why) => {
