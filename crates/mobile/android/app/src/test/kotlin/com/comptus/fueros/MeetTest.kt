@@ -779,6 +779,48 @@ class MeetConversationTest {
      *  happens inside it. Refused while the counterparty's prune has not
      *  answered, and asked again on the next turn. */
     /**
+     * **The heartbeat says why a poll is not due.** The three A6 stalls
+     * were each diagnosed from a log that recorded the last thing to
+     * happen and nothing about the waiting; what this holds is that the
+     * line carries the fields those diagnoses needed and that its `due`
+     * is [Meet.pollDue]'s own answer, so the two cannot drift apart.
+     */
+    @Test
+    fun the_turn_state_says_where_the_flow_is_and_whether_a_poll_is_due() {
+        val m = Meet("aa", "carol", Meet.Kind(), openRetryMs = 1L).apply {
+            crossBootstrap(); accept(); intentSent(); intentReceived()
+            proximityDone(); captureDone()
+        }
+        val c = FakeCourier(
+            Meet.Progress(
+                proposer = true,
+                queriesOutstanding = 0,
+                waitingOn = "the counterparty's responses",
+            ),
+        )
+        val t0 = 1_000_000L
+        m.converse(c, t0)
+
+        val idle = m.turnState(t0 + 1_000L)
+        for (field in listOf(
+            "step=VERIFIERS", "entered=true", "arrived=false", "due=false",
+            "outstanding=0", "proposer=true", "proposed=false",
+            "waitingOn=the counterparty's responses",
+        )) {
+            assertTrue("the heartbeat says $field, in: $idle", idle.contains(field))
+        }
+
+        // and `due` is pollDue's own answer, in both directions
+        m.carried()
+        assertTrue(m.turnState(t0 + 1_000L).contains("due=true"))
+        assertEquals(m.pollDue(t0 + 1_000L), m.turnState(t0 + 1_000L).contains("due=true"))
+        // the stale case the watchdog needs, reported before it fires
+        val late = m.turnState(t0 + Meet.STALE_MS + 1_000L)
+        assertTrue("it says how long nothing has moved, in: $late", late.contains("sinceProgressMs="))
+        assertTrue(late.contains("due=true"))
+    }
+
+    /**
      * **A carriage taken from the bearer wakes the poll.** Nodeless the
      * conversation's messages arrive only that way, with no kernel event
      * behind them, and `arrived` was set by [Meet.conversed] and

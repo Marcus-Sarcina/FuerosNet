@@ -901,6 +901,28 @@ object Kernel {
      * on the same path (`wire-format.md` §5.6), and the answer lands here
      * as [Event.Answered].
      */
+    /** How often the turn heartbeat repeats an unchanged state, so that a
+     *  loop which is alive but idle is distinguishable from one that has
+     *  stopped. Five seconds: frequent enough that a tester waiting on a
+     *  screen sees it move, rare enough not to be the chatter a client
+     *  review already objected to [2026-10-11]. */
+    private val turnDiagMs = 5_000L
+
+    @Volatile private var lastTurnState = ""
+
+    @Volatile private var lastTurnAt = 0L
+
+    /** [Meet.turnState] into the diagnostics, on change or on the clock. */
+    private fun turnHeartbeat(m: Meet) {
+        if (!Diag.enabled()) return
+        val now = System.currentTimeMillis()
+        val s = m.turnState(now)
+        if (s == lastTurnState && now - lastTurnAt < turnDiagMs) return
+        lastTurnState = s
+        lastTurnAt = now
+        Diag.event("meet.turn", "state" to s)
+    }
+
     private fun courier(p: Participant): Meet.Courier = object : Meet.Courier {
         // each step's leg to the counterparty is a carriage for the
         // bearer, drained right after the step whether it went or was
@@ -1654,6 +1676,15 @@ object Kernel {
                 if (t == Meet.Step.VERIFIERS || t == Meet.Step.REVIEW) {
                     drainBearer(p, m)
                 }
+                // **the heartbeat, before the decision it explains.** A
+                // flow that is alive and waiting says so; one whose loop
+                // has stopped says nothing, and the difference between
+                // those two cost three rounds of forensics on A6
+                // (2026-10-23). Said when it changes, and otherwise once
+                // every TURN_DIAG_MS so silence means the loop and not the
+                // flow. Diag is a no-op where no sink is installed, which
+                // is every releasable build.
+                turnHeartbeat(m)
                 // **only where it has something to do**: an arrival since
                 // the last look, or the patience run out. Polling every
                 // turn had the proposer asking the kernel 28 times in 3 s

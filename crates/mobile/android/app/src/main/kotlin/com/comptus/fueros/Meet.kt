@@ -1068,6 +1068,30 @@ class Meet(
     }
 
     /**
+     * **Everything the turn loop's heartbeat needs to say where this flow
+     * is and why it is not polling**, in one line.
+     *
+     * A6 went silent at the verifiers three times and each diagnosis cost
+     * a round of forensics over a log that recorded the last thing that
+     * happened and nothing about the waiting (2026-10-23). What was
+     * missing was never the state — every field below was already held —
+     * but a line that said it while nothing was happening. `due` is
+     * [pollDue]'s own answer, so the heartbeat and the decision cannot
+     * drift apart.
+     */
+    fun turnState(nowMs: Long = System.currentTimeMillis()): String = synchronized(lock) {
+        val p = progress
+        val since = maxOf(lastProgressAt, queriesOutAt)
+        "step=$step entered=$entered opening=$opening window=$windowOpen " +
+            "arrived=$arrived due=${pollDue(nowMs)} " +
+            "patienceLeftMs=${patienceLeftMs(nowMs)} " +
+            "sinceProgressMs=${if (since == 0L) -1L else nowMs - since} " +
+            "outstanding=${p?.queriesOutstanding} proposer=${p?.proposer} " +
+            "proposed=${p?.proposed} handed=${p?.handed} " +
+            "attesting=${p?.attesting?.size} waitingOn=${p?.waitingOn}"
+    }
+
+    /**
      * **A carriage of the conversation was taken from the bearer.**
      * Nodeless there are no kernel events for the conversation: its
      * messages arrive as carriages and are ingested by the shell's own
