@@ -1225,6 +1225,18 @@ object Kernel {
                 m.note("intent sent: ${mine.size} message(s) over the radio.")
                 // the capture starts once theirs is in as well
                 m.intentSent()
+                // **and this side's candidates behind it** (design §12.6.3):
+                // the route, anchored, so the two leave with a path to each
+                // other that no node carried — the one the conversation's
+                // legs and an adoption after a nodeless record take. Not
+                // fatal: with nothing to offer the relay stands, and it is said
+                call("candidateOffer", { e -> m.note("no candidates offered: ${e.reason}"); null }) {
+                    p.candidateOffer()
+                }?.let { offer ->
+                    if (carriage?.send(listOf(offer), Carriage.Phase.CANDIDATES) == true) {
+                        m.note("my candidates are sent.")
+                    }
+                }
             } else {
                 m.stop("the radio would not take the intent; nothing crossed")
             }
@@ -1352,6 +1364,20 @@ object Kernel {
             conversationStarted.compareAndSet(false, true)
         ) {
             startConversation(p, m)
+        }
+        // **the counterparty's candidates, off the bearer** (design §12.6.3):
+        // checked against the ceremony's anchor and dialled, so the two
+        // hold a path to each other that no node carried — the one the
+        // conversation's legs and an adoption after the record take when
+        // there is no node [bench, 2026-10-24]
+        live.received(Carriage.Phase.CANDIDATES)?.let { set ->
+            set.firstOrNull()?.let { bytes ->
+                call("takeCandidateOffer", { e -> m.note("their candidates were refused: ${e.reason}") }) {
+                    val held = p.takeCandidateOffer(bytes)
+                    m.note(if (held) "state: a direct path to ${m.counterpartyName} is open." else "state: their candidates did not open a path; the relay stands.")
+                }
+            }
+            live.discard(Carriage.Phase.CANDIDATES)
         }
         // the counterparty's capture key, whenever it lands inside the
         // window: held for the seal, which waits on it and on the hold

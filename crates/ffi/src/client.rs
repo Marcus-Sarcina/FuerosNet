@@ -955,6 +955,8 @@ impl Participant {
                 Client::new(me, known, platform.config(), platform.device(direct))
             })
             .map_err(Refused::new)?;
+            // the payload path with no node, from the start (design §6.4)
+            net.stand_detached(&handle)?;
             let p = Participant {
                 handle,
                 net,
@@ -1161,6 +1163,8 @@ impl Participant {
                 )
             })
             .map_err(Refused::new)?;
+            // the payload path with no node, from the start (design §6.4)
+            net.stand_detached(&handle)?;
             let p = Participant {
                 handle,
                 net,
@@ -1428,6 +1432,40 @@ impl Participant {
                     .map(|n| n as u32)
                     .map_err(|a| Refused::new(format!("{a:?}")))
             })
+        })
+    }
+
+    /// **This side's candidates for the counterparty, anchored, for the
+    /// bearer** (`wire-format.md` §14.3.2, design §12.6.3): gathered on the
+    /// direct socket and sealed under the ceremony, so that two parties who
+    /// met with no node leave with a route to each other.  Refused where no
+    /// counterparty is pinned yet or nothing may be gathered.
+    pub fn candidate_offer(&self) -> Result<Vec<u8>, Refused> {
+        crate::diag::call("candidate_offer", || {
+            let peer = self
+                .handle
+                .with_blocking(|c| c.counterparty())
+                .ok_or_else(|| Refused::new("no counterparty yet"))?;
+            let cands = self.net.offer_bytes(peer)?;
+            self.handle
+                .with_blocking(move |c| c.candidate_carriage(cands))
+                .map_err(|a| Refused::new(format!("{a:?}")))
+        })
+    }
+
+    /// **The counterparty's candidates off the bearer**: checked against the
+    /// ceremony's anchor, then dialled.  Whether a direct path is now held.
+    pub fn take_candidate_offer(&self, bytes: Vec<u8>) -> Result<bool, Refused> {
+        crate::diag::call("take_candidate_offer", || {
+            let peer = self
+                .handle
+                .with_blocking(|c| c.counterparty())
+                .ok_or_else(|| Refused::new("no counterparty yet"))?;
+            let cands = self
+                .handle
+                .with_blocking(move |c| c.take_candidate_carriage(&bytes))
+                .map_err(|a| Refused::new(format!("{a:?}")))?;
+            self.net.open_offered(peer, cands)
         })
     }
 

@@ -523,6 +523,27 @@ impl Courier {
             .is_ok()
     }
 
+    /// **This side's candidates for `peer`, as bytes for a carriage the
+    /// caller owns** (design §12.6.3, "candidates may travel the ceremony's
+    /// local interfaces"): gathered only where the path may be direct, and
+    /// marked offered, so no second offer rides the relay behind them.
+    /// None where nothing may be gathered.
+    pub async fn offer_bytes(self: &Arc<Self>, peer: Keyhash) -> Option<Vec<u8>> {
+        let cands = self.direct.gather(peer).await?;
+        self.offered.lock().unwrap().insert(peer);
+        Some(encode_candidates(&cands))
+    }
+
+    /// **Open the path a peer's candidates name**, the candidates having
+    /// come by a carriage of the caller's rather than as a payload kind.
+    /// Whether a path is now held.
+    pub async fn open_offered(self: &Arc<Self>, peer: Keyhash, bytes: &[u8]) -> bool {
+        let Ok(cands) = decode_candidates(bytes) else {
+            return false;
+        };
+        self.direct.open(peer, cands).await
+    }
+
     /// Send `bytes` of `kind` to `to` from the client, and carry what the
     /// client says out.  What the adaptors do not carry comes back.
     pub async fn send(

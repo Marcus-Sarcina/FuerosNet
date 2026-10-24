@@ -32,8 +32,9 @@ class Carriage(private val radio: Bearer.Link?) {
      * bytes was.
      *
      * Every phase carries `wire-format.md` §14.3.2's encodings, opaque
-     * here: INTENT the intent and its continuations, CAPTURE_KEY the
-     * `CaptureKeyHandover` design §7.5.2.6 requires. Each is anchored to the ceremony-id and the
+     * here: INTENT the intent and its continuations, CANDIDATES the
+     * `CandidateHandover`, CAPTURE_KEY the `CaptureKeyHandover` design
+     * §7.5.2.6 requires. Each is anchored to the ceremony-id and the
      * kernel checks the anchor when it takes the bytes back; the phase
      * number is only this shell's framing, and keeps one phase's packets
      * out of another's assembly.
@@ -51,6 +52,10 @@ class Carriage(private val radio: Bearer.Link?) {
          *  the sender's signed bundle and one one-time key, so the two
          *  can open a channel afterwards without a node. */
         const val PREKEY = 3
+        /** The traversal candidates (`wire-format.md` §14.3.2, design
+         *  §12.6.3), one each way, anchored: the route the two leave with
+         *  that no node carried. */
+        const val CANDIDATES = 4
 
         /**
          * The conversation's carriages, from the capture on: the
@@ -64,7 +69,7 @@ class Carriage(private val radio: Bearer.Link?) {
          * phase as it takes it, so the sender's count wraps round the
          * range without colliding with anything still waiting.
          */
-        const val CONVERSATION = 4
+        const val CONVERSATION = 5
 
         /** How many phases the conversation has to wrap through. */
         const val CONVERSATIONS = Bearer.PHASES - CONVERSATION

@@ -210,6 +210,28 @@ so install all of them or none.
 A second run needs step 2 again (new node identity, new provision), and
 after a wipe `field-setup.sh` again, or step 1 by hand (new material).
 
+## A nodeless run
+
+No `field-run.sh`: stop any daemon (`crates/tools/field-run.sh stop`) and
+leave the phones as the last run provisioned them. The node they name does
+not answer, so each stays **detached** and the loop runs regardless
+[author, 2026-10-07]; the nominees they name are unreachable, so each
+engages nobody and the record is the **witnessless normal** shape. Since
+2026-10-24 a detached client has a payload path of its own (design §6.4,
+§12.6.3): its direct socket is bound at start, the two phones hand each
+other **traversal candidates over the bearer** right behind the intent
+(`Carriage.Phase.CANDIDATES`, the `CandidateHandover` of `wire-format.md`
+§14.3.2) and the prekeys after the capture key, so the legs after the
+record — an adoption, a peering — go point-to-point with no node anywhere.
+Read `pay.route path=direct` on them, and `state: a direct path to … is
+open` on the window screen.
+
+There is no collector and no pull at stop: take each phone's newest
+diagnostics file by hand when the run is over —
+
+    adb -s <serial> shell run-as com.comptus.fueros ls -t files/diag | head -1
+    adb -s <serial> exec-out run-as com.comptus.fueros cat files/diag/<file> > runs/<name>/phones/<serial>.jsonl
+
 ## Reading a stall or a leak
 
 The field-test build carries three instruments for a screen that freezes

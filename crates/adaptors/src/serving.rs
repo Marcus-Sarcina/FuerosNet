@@ -115,6 +115,59 @@ pub trait Serving: Send + Sync {
     fn propagate<'a>(&'a self, bytes: Vec<u8>) -> Answer<'a, bool>;
 }
 
+/// **No serving node at all** (design §6.4): what a detached client's
+/// courier is built over, so that the direct path exists before any
+/// attach and after a detach.  Every question a node would answer is
+/// answered as a node that is not there answers it — nothing published,
+/// nothing relayed, nothing held — and the client's payload goes direct
+/// where a path is held and nowhere otherwise.
+pub struct Nobody;
+
+impl Serving for Nobody {
+    fn me(&self) -> Keyhash {
+        [0; 32]
+    }
+    fn node_device(&self) -> [u8; 32] {
+        [0; 32]
+    }
+    fn holds(&self, _: &Keyhash) -> bool {
+        false
+    }
+    fn serves(&self, _: &Keyhash) -> bool {
+        false
+    }
+    fn publish<'a>(&'a self, _: &'a [u8]) -> Answer<'a, bool> {
+        Box::pin(async { false })
+    }
+    fn stock<'a>(&'a self, _: Keyhash, _: Vec<Vec<u8>>) -> Answer<'a, bool> {
+        Box::pin(async { false })
+    }
+    fn prekey<'a>(&'a self, _: Keyhash, _: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {
+        Box::pin(async { None })
+    }
+    fn publish_profile<'a>(&'a self, _: &'a [u8]) -> Answer<'a, bool> {
+        Box::pin(async { false })
+    }
+    fn profile<'a>(&'a self, _: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {
+        Box::pin(async { None })
+    }
+    fn catalog<'a>(&'a self, _: Keyhash, _: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {
+        Box::pin(async { None })
+    }
+    fn resource<'a>(&'a self, _: Keyhash, _: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {
+        Box::pin(async { None })
+    }
+    fn relay<'a>(&'a self, _: Keyhash, _: Keyhash, _: Vec<u8>, _: [u8; 32]) -> Answer<'a, bool> {
+        Box::pin(async { false })
+    }
+    fn wake<'a>(&'a self, _: Keyhash, _: Option<WakeEndpoint>) -> Answer<'a, bool> {
+        Box::pin(async { false })
+    }
+    fn propagate<'a>(&'a self, _: Vec<u8>) -> Answer<'a, bool> {
+        Box::pin(async { false })
+    }
+}
+
 /// The node this client lives beside, as its serving node.
 pub struct LocalNode {
     /// The node itself.

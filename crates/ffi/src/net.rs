@@ -296,6 +296,18 @@ struct Live {
     tasks: Vec<tokio::task::JoinHandle<()>>,
 }
 
+/// What a detached client carries payload with (see [`Net::stand_detached`]).
+struct Detached {
+    courier: Arc<Courier>,
+    task: tokio::task::JoinHandle<()>,
+}
+
+impl Drop for Detached {
+    fn drop(&mut self) {
+        self.task.abort();
+    }
+}
+
 /// The session in force, read by the attached node's requests and swapped
 /// by a failover without rebuilding what hangs off it.
 type Current = Arc<Mutex<Option<Arc<Session>>>>;
@@ -340,6 +352,12 @@ pub(crate) struct Net {
     /// The peers a direct path is held to: shared with the client, whose
     /// route reads it, and with the socket that fills it.
     reachable: Reachable,
+    /// The courier a detached client carries payload with: the direct
+    /// path over a socket of its own and a serving node that is nobody
+    /// (design §6.4, §12.6.3).  Built once the client's thread exists and
+    /// kept for the life of the process; an attach's courier takes
+    /// precedence while one is live.
+    detached: Mutex<Option<Detached>>,
     /// Nonces for what this client hands its node: the platform's random
     /// source, which is the only one this workspace has.
     nonce: Arc<dyn Fn() -> [u8; 16] + Send + Sync>,
@@ -402,6 +420,7 @@ impl Net {
         let beyond = Beyond::new(beyonder.clone(), nonce.clone());
         Ok(Net {
             reachable: Reachable::default(),
+            detached: Mutex::new(None),
             rt: Some(rt),
             endpoint,
             me,
@@ -435,7 +454,7 @@ impl Net {
     /// §8): the client's queries carried and each reply taken until the
     /// node's portion is complete or truncated.
     pub(crate) fn browse(&self, handle: &Handle) -> Result<(), Refused> {
-        let courier = self.courier()?;
+        let courier = self.live_courier()?;
         let carried = self.rt().block_on(async move {
             let msgs = handle.with(|c| c.browse()).await;
             courier.carry(msgs).await
@@ -498,13 +517,114 @@ impl Net {
         self.current.lock().unwrap().clone()
     }
 
+    /// The courier payload goes by: the attach's while one is live, the
+    /// detached one otherwise (design §6.4).  What needs a serving node asks
+    /// [`Net::live_courier`] instead.
     fn courier(&self) -> Result<Arc<Courier>, Refused> {
+        let live = self
+            .live
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|l| l.courier.clone());
+        live.or_else(|| {
+            self.detached
+                .lock()
+                .unwrap()
+                .as_ref()
+                .map(|d| d.courier.clone())
+        })
+        .ok_or_else(|| Refused::new("no serving node is attached"))
+    }
+
+    /// The attach's courier alone: for what only a serving node can do —
+    /// maintenance, the catalog, a wake, a record to propagate, a request
+    /// that wants an answer.  Refused with its reason where none is live.
+    fn live_courier(&self) -> Result<Arc<Courier>, Refused> {
         self.live
             .lock()
             .unwrap()
             .as_ref()
             .map(|l| l.courier.clone())
             .ok_or_else(|| Refused::new("no serving node is attached"))
+    }
+
+    /// **The payload path with no node** (design §6.4, §12.6.3): the direct
+    /// socket bound on the interface this device routes out of, gated to
+    /// contacts, and a courier over it whose serving node is nobody — so a
+    /// pair that met with nothing reachable but each other, and handed
+    /// candidates across the bearer, can speak afterwards; and so the legs
+    /// after a record (an adoption, a peering) have a path when no node
+    /// does.  Built once; a second call is a no-op.  Before this every
+    /// courier was born at an attach, and a detached client refused every
+    /// send with "no serving node is attached" (bench, 2026-10-24).
+    pub(crate) fn stand_detached(&self, handle: &Handle) -> Result<(), Refused> {
+        if self.detached.lock().unwrap().is_some() {
+            return Ok(());
+        }
+        let cfg = self.cfg.clone();
+        let reachable = self.reachable.clone();
+        let handle_for_task = handle.clone();
+        let events_tx = self.events_tx.clone();
+        let persist = self.persist.lock().unwrap().clone();
+        let built = self.rt().block_on(async move {
+            let inlet = Inlet::default();
+            let gate: Gate = {
+                let h = handle_for_task.clone();
+                Arc::new(move |peer| {
+                    let peer = *peer;
+                    h.with_blocking(move |c| c.store.contacts.contains_key(&peer))
+                })
+            };
+            // the interface the default route leaves by: a host candidate a
+            // peer on the same network can dial, with no node to ask
+            let local = interface_toward("1.1.1.1:443".parse().unwrap());
+            let direct = LightDirect::bind(
+                cfg.me.clone(),
+                cfg.pins.clone(),
+                cfg.bind
+                    .clone()
+                    .with_held(Arc::new(handle_for_task.clone())),
+                reachable,
+                SocketAddr::new(local, 0),
+                None,
+                None,
+                gate,
+                inlet.inbound(),
+            )
+            .map_err(|e| Refused::new(format!("no direct socket: {e}")))?;
+            let (courier, events) = Courier::new(
+                handle_for_task.clone(),
+                Arc::new(rhtn_adaptors::serving::Nobody),
+                Arc::new(direct),
+            );
+            inlet.bind(courier.inbound());
+            if let Some(p) = persist {
+                courier.write_after_arrivals(p);
+            }
+            let task = tokio::spawn(forward(events, events_tx));
+            Ok::<_, Refused>(Detached { courier, task })
+        })?;
+        *self.detached.lock().unwrap() = Some(built);
+        Ok(())
+    }
+
+    /// This side's candidates for `peer`, for a carriage the shell owns
+    /// (design §12.6.3); refused where the path to that party may not be
+    /// direct or nothing could be gathered.
+    pub(crate) fn offer_bytes(&self, peer: Keyhash) -> Result<Vec<u8>, Refused> {
+        let courier = self.courier()?;
+        self.rt()
+            .block_on(async move { courier.offer_bytes(peer).await })
+            .ok_or_else(|| Refused::new("no candidates: the path to that party may not be direct"))
+    }
+
+    /// Open the path `peer`'s candidates name; whether one is now held.
+    pub(crate) fn open_offered(&self, peer: Keyhash, bytes: Vec<u8>) -> Result<bool, Refused> {
+        let courier = self.courier()?;
+        Ok(self
+            .rt()
+            .block_on(async move { courier.open_offered(peer, &bytes).await }))
     }
 
     pub(crate) fn attach(
@@ -700,7 +820,7 @@ impl Net {
     /// the network cannot act on, and the party that made it is the only
     /// one that can offer it.
     pub(crate) fn carry_outbox(&self, handle: &Handle) -> Result<(), Refused> {
-        let Ok(courier) = self.courier() else {
+        let Ok(courier) = self.live_courier() else {
             return Ok(());
         };
         let carried = self.rt().block_on(async move {
@@ -769,7 +889,7 @@ impl Net {
         &self,
         msgs: Vec<rhtn_client::ceremony::Msg>,
     ) -> Result<Vec<Vec<u8>>, Refused> {
-        let courier = self.courier()?;
+        let courier = self.live_courier()?;
         let carried = self.rt().block_on(async move { courier.carry(msgs).await });
         if !carried.refused.is_empty() {
             return Err(Refused::new(
@@ -804,7 +924,7 @@ impl Net {
     }
 
     pub(crate) fn maintain(&self, handle: &Handle) -> Result<(), Refused> {
-        let courier = self.courier()?;
+        let courier = self.live_courier()?;
         self.rt().block_on(async move {
             let msgs = handle.with(|c| c.maintain()).await;
             courier.carry(msgs).await;
@@ -841,7 +961,7 @@ impl Net {
     }
 
     pub(crate) fn wake(&self, endpoint: Option<Wake>) -> Result<(), Refused> {
-        let courier = self.courier()?;
+        let courier = self.live_courier()?;
         let me = courier.me();
         let ep = endpoint.map(|w| WakeEndpoint {
             url: w.url,
@@ -878,7 +998,10 @@ impl Net {
 
     /// What to run after every inbound dispatch: the state written.
     pub(crate) fn persist_with(&self, after: Arc<dyn Fn() + Send + Sync>) {
-        *self.persist.lock().unwrap() = Some(after);
+        *self.persist.lock().unwrap() = Some(after.clone());
+        if let Some(d) = self.detached.lock().unwrap().as_ref() {
+            d.courier.write_after_arrivals(after);
+        }
     }
 
     /// Routine maintenance on the kernel's own clock, while the process

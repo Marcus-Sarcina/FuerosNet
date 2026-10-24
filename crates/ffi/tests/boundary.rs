@@ -224,6 +224,38 @@ fn a_shell_drives_the_client_through_the_boundary_and_gets_values_back() {
         "no continuations followed"
     );
 
+    // **and the candidates cross the bearer, so the two can speak with no
+    // node at all** (design §6.4, §12.6.3): neither participant here is
+    // attached to anything, each is the other's contact from the exchange,
+    // and after the handover a payload goes direct
+    let offer = p.candidate_offer().expect("alice's candidates, anchored");
+    assert!(
+        bob.take_candidate_offer(offer)
+            .expect("anchored to this ceremony"),
+        "bob dials alice's candidates and holds the path"
+    );
+    let back = bob.candidate_offer().expect("bob's candidates, anchored");
+    assert!(
+        p.take_candidate_offer(back).expect("anchored"),
+        "alice holds it too"
+    );
+    // the prekeys cross the bearer as well (`wire-format.md` §14.3.4), so
+    // the session a first message needs opens with no node asked
+    let pk_b = bob.prekey_carriage().expect("bob's prekeys");
+    p.take_prekey_carriage(pk_b).expect("alice takes them");
+    let pk_a = p.prekey_carriage().expect("alice's prekeys");
+    bob.take_prekey_carriage(pk_a).expect("bob takes them");
+    p.send(id("bob"), 0, b"with no node".to_vec())
+        .expect("direct, with no node attached");
+    match bob.next_event(5000) {
+        Some(Event::Payload { from, kind, bytes }) => {
+            assert_eq!(from, id("alice"));
+            assert_eq!(kind, 0);
+            assert_eq!(bytes, b"with no node");
+        }
+        other => panic!("bob got {other:?}"),
+    }
+
     // a refusal is a value carrying its reason, not a failure the shell
     // has to guess at
     let e = p.take_optical(vec![0x00]).unwrap_err();
