@@ -72,11 +72,19 @@ class AndroidShell(private val context: Context) :
     }
 
     /** A frame with nothing asked of the person: the continuity loop's
-     *  probe (design §7.5). The camera is already open for the capture
-     *  this runs inside, so a probe neither opens it nor retries — a
-     *  frame it cannot give is an absent face, which is what the loop is
+     *  probe (design §7.5). **The probe opens the camera too** [bench,
+     *  2026-10-24]: the hold's prompts fall at random through the window
+     *  and the first one fell 18 s into a 30 s window on GXV, so with the
+     *  camera opening on prompts alone every probe before it was an empty
+     *  frame and an absent face (run 1bd1c15-a5-1). Design §7.1 item 5 has
+     *  the camera holding the counterparty present throughout. A frame it
+     *  cannot give once open is an absent face, which is what the loop is
      *  there to notice. */
-    override fun probe(): ByteArray = face?.frame() ?: ByteArray(0)
+    override fun probe(): ByteArray {
+        val cam = face ?: FaceCamera(context).also { face = it }
+        cam.open()?.let { Timber.w("face camera (probe): %s", it) }
+        return cam.frame()
+    }
 
     /** The meeting is over: give the camera back. Called by the Kernel when
      *  a ceremony stops or finishes. */

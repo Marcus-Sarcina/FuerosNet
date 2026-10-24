@@ -588,8 +588,12 @@ impl LiveNode {
                 // about the request is kept — but the refusal is said: a bench
                 // node cut a ceremony's trace off at its 118th event and the
                 // daemon's log held not one line about it (run 58a6883-a5-2,
-                // 2026-10-24)
-                if !lim.allow(&peer) {
+                // 2026-10-24). **Mail is not service** [author, 2026-10-24]: a
+                // payload handed over for a party this node serves, or
+                // carried as the relay traversal fell back to, is outside the
+                // allowance — a serving node holds no policy over what flows
+                // to its own clients (design §12.6.3)
+                if !matches!(family, Family::RelaySubmission) && !lim.allow(&peer) {
                     tracing::info!(target: "node", peer8 = %crate::diag::id8(&peer), "node.allowance");
                     return None;
                 }

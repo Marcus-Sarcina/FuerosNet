@@ -768,11 +768,11 @@ only party who can tell them is their own client.
   uncooperative or eclipsing. Offer it as the disclosure it is — a route
   handed over is an IP the counterparty keeps (design §19.4, P40), whoever
   hands it — and open nothing from candidates that did not come from the
-  party they name. **A candidate taken this way is
-  not gated by the horizon** [author, 2026-09-25]: the party was in front of
-  you, which the gate's disclosure argument does not reach, and an exit must
-  not depend on a horizon the patron being exited controls. One that arrived
-  any other way is gated as before (design §12.6.3). What it discloses is
+  party they name. **A candidate taken this way opens under the same rule as
+  any other** [author, 2026-10-24; the horizon override of 2026-09-25 is
+  subsumed]: the counterparty is a contact from the exchange on, and a party
+  held as a contact may be dialled (design §12.6.3). One that arrived any
+  other way opens only for a party held as a contact. What it discloses is
   design §19.4's P40, and §5's rule covers saying so.
 - **Recommended, and not required** [author, 2026-09-25]: when a local
   connection is being established, prefer the transport that exposes the least
@@ -904,10 +904,11 @@ anchor up in, and it is what you hand onward in a bundle (§1.1,
 ## 5. Path selection
 
 - **Direct is preferred and the relay is the fallback, and neither is a user
-  choice** [author, 2026-09-27]. The direct path opens inside the horizon
-  where one can (design §12.6.3) and payload falls back to the relay where
-  none is held; the client offers no override and raises no per-connection
-  warning. The trade each path carries — an IP to a peer inside the horizon,
+  choice** [author, 2026-09-27]. The direct path opens between contacts
+  where one can (design §12.6.3) — dial any party you hold a contact for, and
+  open the path to one that holds you — and payload falls back to the relay
+  where none is held; the client offers no override and raises no
+  per-connection warning. The trade each path carries — an IP to a contact,
   a communication graph to the serving node — is recorded where trades are
   (design §19.4, P17), not put to the person.
 

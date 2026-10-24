@@ -100,24 +100,27 @@ impl Serving for Counting {
 }
 
 /// A light client beside `node` on a socket of its own; whether the path
-/// may be direct is what the node's table says of its horizon.
+/// may be direct is whether the client holds the peer as a contact.
 fn light(
     name: &'static str,
-    node: &Arc<LiveNode>,
+    _node: &Arc<LiveNode>,
     serving: &Arc<dyn Serving>,
     inboxes: &Inboxes,
 ) -> Party {
     let inlet = Inlet::default();
+    // the gate is the contact rule (design §12.6.3): a party this client
+    // holds a contact for may be dialled, and a path opens to one that
+    // holds this client — read from the client's own table, bound once
+    // the client exists
+    let slot: Arc<std::sync::Mutex<Option<rhtn_adaptors::actor::Handle>>> = Arc::default();
     let gate: Gate = {
-        let node = node.clone();
-        let me = kh(name);
+        let slot = slot.clone();
         Arc::new(move |peer| {
-            node.view
-                .lock()
-                .unwrap()
-                .table
-                .horizon(&me, 2)
-                .contains(peer)
+            let peer = *peer;
+            match slot.lock().unwrap().clone() {
+                Some(h) => h.with_blocking(move |c| c.store.contacts.contains_key(&peer)),
+                None => false,
+            }
         })
     };
     let direct = LightDirect::bind(
@@ -134,6 +137,7 @@ fn light(
     .expect("bound");
     let reachable = direct.reachable();
     let handle = spawn_client(name, Config::default(), reachable.clone());
+    *slot.lock().unwrap() = Some(handle.clone());
     let (courier, app) = Courier::new(handle.clone(), serving.clone(), Arc::new(direct));
     inlet.bind(courier.inbound());
     inboxes.host(kh(name), courier.inbound());
@@ -143,6 +147,14 @@ fn light(
         app,
         reachable,
     }
+}
+
+/// `p` holds `who` as a contact (design §12.6.3): what licenses the direct
+/// path, each side for itself.
+fn hold(p: &Party, who: &str) {
+    let i = id(who).public.clone();
+    p.handle
+        .with_blocking(move |c| c.contact(&i, rhtn_client::contacts::How::Introduced, true));
 }
 
 /// A light client whose local decision refuses every direct path: what a
@@ -210,7 +222,8 @@ async fn next(
 // acceptance: TRV-07
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn two_light_clients_beside_their_serving_node_join_the_direct_path_from_their_own_sends() {
-    // carol and w1 adopted under bob: siblings, inside each other's horizon
+    // carol and w1 adopted under bob, and each holds the other as a
+    // contact, which is what licenses the direct path (design §12.6.3)
     let mut scene = Scene::new();
     scene.adopt("carol", "bob", "bob", &[0]);
     scene.adopt("w1", "bob", "bob", &[1]);
@@ -220,6 +233,8 @@ async fn two_light_clients_beside_their_serving_node_join_the_direct_path_from_t
     let serving: Arc<dyn Serving> = counting.clone();
     let carol = light("carol", &node, &serving, &inboxes);
     let mut w1 = light("w1", &node, &serving, &inboxes);
+    hold(&carol, "w1");
+    hold(&w1, "carol");
     carol.courier.attach(vec![kh("w1")]).await;
     w1.courier.attach(vec![kh("carol")]).await;
     carol.courier.sweep(vec![kh("w1")]).await;
@@ -254,8 +269,8 @@ async fn two_light_clients_beside_their_serving_node_join_the_direct_path_from_t
             .with_blocking(|c| c.device.direct.reachable(&kh("w1"))),
         "the client's own interface says so"
     );
-    // a peer outside the horizon gets no offer at all: nothing gathered,
-    // nothing sent (design §12.6.3)
+    // a peer this client holds no contact for gets no offer at all:
+    // nothing gathered, nothing sent (design §12.6.3)
     assert!(!carol.courier.offer(kh("w2")).await);
     assert_eq!(counting.relayed(), relayed);
 }
@@ -311,8 +326,9 @@ async fn two_nodes_that_are_participants_join_the_direct_path_on_their_own_socke
 // acceptance: TRV-08
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_direct_path_the_local_decision_refuses_opens_in_neither_direction() {
-    // carol and w1 are siblings under bob, so the horizon would allow it;
-    // the gate installed here refuses anyway, as a relay preference does
+    // w1 holds carol as a contact, so the rule would allow it; the gate
+    // installed on carol's side refuses anyway — the local decision design
+    // §12.6.3 leaves each side, which a future blacklist would be
     let mut scene = Scene::new();
     scene.adopt("carol", "bob", "bob", &[0]);
     scene.adopt("w1", "bob", "bob", &[1]);
@@ -322,6 +338,7 @@ async fn a_direct_path_the_local_decision_refuses_opens_in_neither_direction() {
     let serving: Arc<dyn Serving> = counting.clone();
     let carol = light_refusing("carol", &serving, &inboxes);
     let mut w1 = light("w1", &node, &serving, &inboxes);
+    hold(&w1, "carol");
     carol.courier.attach(vec![kh("w1")]).await;
     w1.courier.attach(vec![kh("carol")]).await;
     carol.courier.sweep(vec![kh("w1")]).await;
@@ -409,22 +426,25 @@ async fn an_infrastructure_node_opens_no_direct_path_it_would_not_have_gathered_
 /// where it is a delegated desktop.
 fn light_holding(
     name: &'static str,
-    node: &Arc<LiveNode>,
+    _node: &Arc<LiveNode>,
     serving: &Arc<dyn Serving>,
     inboxes: &Inboxes,
     credential: Option<Arc<rhtn_transport::tls::Credential>>,
 ) -> Party {
     let inlet = Inlet::default();
+    // the gate is the contact rule (design §12.6.3): a party this client
+    // holds a contact for may be dialled, and a path opens to one that
+    // holds this client — read from the client's own table, bound once
+    // the client exists
+    let slot: Arc<std::sync::Mutex<Option<rhtn_adaptors::actor::Handle>>> = Arc::default();
     let gate: Gate = {
-        let node = node.clone();
-        let me = kh(name);
+        let slot = slot.clone();
         Arc::new(move |peer| {
-            node.view
-                .lock()
-                .unwrap()
-                .table
-                .horizon(&me, 2)
-                .contains(peer)
+            let peer = *peer;
+            match slot.lock().unwrap().clone() {
+                Some(h) => h.with_blocking(move |c| c.store.contacts.contains_key(&peer)),
+                None => false,
+            }
         })
     };
     let reachable_cell: Arc<std::sync::Mutex<Option<Reachable>>> = Arc::default();
@@ -435,6 +455,7 @@ fn light_holding(
         *cell.lock().unwrap() = Some(placeholder.clone());
         spawn_client(name, Config::default(), placeholder)
     };
+    *slot.lock().unwrap() = Some(handle.clone());
     let mut binding = rhtn_transport::bind::Binding::default().with_held(Arc::new(handle.clone()));
     if let Some(c) = &credential {
         binding = binding.with_credential(c.clone());
@@ -468,7 +489,7 @@ fn light_holding(
 async fn top_43_a_light_client_holds_delegations_and_binds_a_direct_peer_by_one() {
     use rhtn_crypto::delegation::issue;
     use rhtn_transport::tls::Credential;
-    // carol and w1 adopted under bob: inside each other's horizon; w1 runs
+    // carol and w1 adopted under bob and each other's contact; w1 runs
     // a delegated desktop under key k
     let mut scene = Scene::new();
     scene.adopt("carol", "bob", "bob", &[0]);
@@ -492,6 +513,8 @@ async fn top_43_a_light_client_holds_delegations_and_binds_a_direct_peer_by_one(
         .unwrap();
     let carol = light_holding("carol", &node, &serving, &inboxes, None);
     let mut desktop = light_holding("w1", &node, &serving, &inboxes, Some(desktop_key.clone()));
+    hold(&carol, "w1");
+    hold(&desktop, "carol");
     carol.courier.attach(vec![kh("w1")]).await;
     desktop.courier.attach(vec![kh("carol")]).await;
     carol.courier.sweep(vec![kh("w1")]).await;

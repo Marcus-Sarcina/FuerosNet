@@ -1446,11 +1446,22 @@ object Kernel {
         val lost = { e: Refused.Reason -> m.stop("the capture was lost: ${e.reason}") }
         refusal("captureBegin") { p.captureBegin() }?.let { return m.stop("capture: $it") }
         var said = false
+        var face: Boolean? = null
+        var faceSaidAt = 0L
         while (m.step() == Meet.Step.WINDOW || m.step() == Meet.Step.REVIEW) {
             val turn = call("captureTick", { lost(it); null }) { p.captureTick() } ?: return
             if (turn.templateReady && !said) {
                 said = true
                 m.note("state: a frame yielded a template; the queries can go.")
+            }
+            // the face, as state: said when it comes or goes, and every
+            // five seconds while it is absent (developer wording until the
+            // UX pass [author, 2026-10-24])
+            val now = System.currentTimeMillis()
+            if (face != turn.face || (!turn.face && now - faceSaidAt > 5_000L)) {
+                face = turn.face
+                faceSaidAt = now
+                m.note(if (turn.face) "state: a face is in frame." else "state: no face in frame; absent ${turn.awayMs / 1000u} s of the window so far.")
             }
             if (turn.done) {
                 m.note("state: the capture's window has elapsed, ${turn.frames} frame(s) kept.")

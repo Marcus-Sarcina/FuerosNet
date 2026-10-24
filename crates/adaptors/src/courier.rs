@@ -642,6 +642,16 @@ impl Courier {
                         }
                     }
                     Msg::Payload { to, bytes, device } => {
+                        // **the ceremony's own legs offer the direct path
+                        // too** [author, 2026-10-24]: a witness or a verifier
+                        // is a contact, and the first message to one that is
+                        // not yet reached directly carries this side's
+                        // candidates ahead of it, as a send from the
+                        // application does — otherwise every leg to a witness
+                        // stayed on the relay (run 1bd1c15-a5-1)
+                        if !me.direct.reachable().holds(&to) && !me.offered(&to) {
+                            me.offer(to).await;
+                        }
                         // a delivery short of complete leaves the message
                         // with the sender, and a relayed path carries it
                         // (design §14.1.1): direct where a path is held,
@@ -653,8 +663,17 @@ impl Courier {
                         }
                     }
                     // the client already said no direct path is held, so
-                    // the relayed path is the whole of what is left
+                    // the relayed path is the whole of what is left — for
+                    // this message. **The first to a contact not yet reached
+                    // directly carries this side's candidates ahead of it**
+                    // [author, 2026-10-24]: the kernel routes every leg as a
+                    // relay until a path is held, so this is where a
+                    // ceremony's legs to its witnesses earn one (run
+                    // 1bd1c15-a5-2: 219 relayed, not one offer)
                     Msg::Relay { to, bytes, device } => {
+                        if !me.offered(&to) {
+                            me.offer(to).await;
+                        }
                         if !me.relayed(to, &bytes, device).await {
                             out.refused.push(Msg::Relay { to, bytes, device });
                         }

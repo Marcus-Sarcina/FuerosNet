@@ -158,6 +158,17 @@ impl Instrument {
             // locator (`wire-format.md` §2.3): what the bench hands a phone
             // for the nominee it names, since a nominee is offered to the
             // counterparty's prune by locator and material alone cannot be
+            // a party held by material alone, for the direct path's gate
+            // (design §12.6.3): the bench's stand-in for the meeting a witness
+            // and its nominator would have had
+            ["contact", material] => {
+                let m = bytes(material)?;
+                let who = self
+                    .client
+                    .hold_contact(m)
+                    .map_err(|e| e.reason().to_string())?;
+                Ok(vec![format!("contact {}", hex(&who))])
+            }
             ["introduction"] => Ok(vec![format!(
                 "introduction {}",
                 hex(&self
@@ -800,6 +811,7 @@ pub const HELP: &str = "\
 help                      these lines
 me                        this participant's keyhash
 introduction              this participant's introduction: its material and signed locator
+contact <material>        hold a party as a contact by its key material
 attach <node> <addr>[,<addr>] [<party>...]
                           attach to a serving node, sweeping the parties named
 attached                  whether a session is held

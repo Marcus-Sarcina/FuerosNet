@@ -45,3 +45,28 @@ reasonable from a user standpoint will undoubtedly shift at that point."
   a window the author has already said will not be the one users feel, and
   would be redone; (c) leaves the releasable rule untested on hardware.
 - **Arose** 2026-10-24, during A6; **deferred** 2026-10-24.
+
+---
+
+## A party's refusal to open a direct path
+
+**Deferred** [author, 2026-10-24]: the direct path is between contacts — "a
+client may dial anyone for whom they hold a contact, the recipient will
+upgrade to a direct connection if they hold the sender as a contact modulo
+any blacklisting process we wish to implement in the future."
+
+- **What prompted it.** Moving the direct-path bound from the horizon to
+  contacts (design §12.6.3), after run `58a6883-a5-2` showed every witness
+  leg relayed through the node and cut off by its request allowance.
+- **The options.** (a) No refusal beyond the contact rule: a contact may
+  always open the path; (b) a per-party refusal the person sets — a
+  blacklist — read by the recipient's gate; (c) a refusal that also drops
+  the contact, so the party is no longer dialled either.
+- **What was done meanwhile.** The gate is the contact rule alone; the
+  design says a party may decline and that no mechanism yet specifies how
+  (§12.6.3, P17). The transport already honours a local refusal
+  (`adaptors/tests/direct.rs`, TRV-08), so (b) is a table and a screen, not
+  a protocol change.
+- **What changes if it goes the other way.** Nothing on the wire; the
+  recipient's gate reads one more table.
+- **Arose** 2026-10-24; **deferred** 2026-10-24.

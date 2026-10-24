@@ -383,6 +383,15 @@ start_witness() { # n
   fi
   W_INTRO[n]="$(grep -m1 '^introduction ' "$d/stdout.txt" | cut -d' ' -f2)"
   [ -n "${W_INTRO[n]}" ] || die "witness-$n gave an empty introduction"
+  # and the phones as its contacts: a nominee met its nominator, so each
+  # holds the other, and the direct path opens both ways (design §12.6.3);
+  # here the bench stands in for that meeting
+  for m in ${PHONE_MATERIALS[@]+"${PHONE_MATERIALS[@]}"}; do
+    echo "contact $m" >&"$fd"
+    if ! await_text "$d/stdout.txt" "^contact " 20 "${W_PID[n]}"; then
+      die "witness-$n did not hold a phone as a contact"
+    fi
+  done
 }
 start_witness 1
 start_witness 2

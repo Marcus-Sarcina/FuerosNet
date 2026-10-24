@@ -146,7 +146,11 @@ so install all of them or none.
    travels as an introduction** — its material and its signed locator,
    asked of the instrument after its attach [author, 2026-10-24] — because
    a nominee is offered to the counterparty's prune by locator and material
-   alone left the set empty (run `58a6883-a5-2`). Then the
+   alone left the set empty (run `58a6883-a5-2`). **A nominee held as a
+   contact is dialled directly** (design §12.6.3, the contact rule of
+   2026-10-24): on the bench the phones and the witnesses share a network,
+   so after the engagement crosses the relay the trace should read
+   `pay.route path=direct`, and the node carries none of it. Then the
    collector as its stream target (the app is stopped and started twice;
    the second start is the one that attaches), starts the logcat captures,
    writes `run.json`, and holds. The run is named

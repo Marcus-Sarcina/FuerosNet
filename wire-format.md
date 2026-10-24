@@ -4557,8 +4557,8 @@ this rule's other instance, on the other stream class.
 needs none: clients dial outward to their serving infra node at a static IP, and
 infra nodes dial each other directly.
 
-**Payload attempts a direct path inside the horizon**, which does require
-traversal. Infra nodes act as **STUN and TURN**, and ICE falls back to relaying
+**Payload attempts a direct path between contacts** (design §12.6.3), which
+does require traversal. Infra nodes act as **STUN and TURN**, and ICE falls back to relaying
 through the serving node when hole punching fails. Address- and port-dependent
 mapping can defeat it, and carrier-grade NAT and mobile networks raise the odds of
 meeting that, but **neither guarantees failure** (RFC 8445).
@@ -5186,9 +5186,9 @@ attacker must be *there*, and being there is the cost this network meters
 (design §1).
 
 **This property is load-bearing, not incidental.** It is why a ceremony can
-establish presence at all, and, since 2026-09-25, why a candidate handed over
-at one overrides the horizon gate that bounds dialling elsewhere (design
-§12.6.3). A rule that rested on these interfaces while they were remotely
+establish presence at all, and why a candidate handed over at one can be
+trusted to name the party in the room and nobody else (design §12.6.3). A rule
+that rested on these interfaces while they were remotely
 reachable would be a rule about nothing.
 
 **An implementation MUST NOT bridge one of these interfaces over a wide-area

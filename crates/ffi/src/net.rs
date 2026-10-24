@@ -572,15 +572,18 @@ impl Net {
             // **The direct path, on a socket of this client's own**
             // (design §14.1.1): candidates gathered there, the peer's
             // dialled from it, and what a peer opens toward it taken under
-            // the key it authenticates.  Gated to the horizon — the whole
-            // of the check, and nobody's choice [author, 2026-09-27] — and
-            // the relay is the answer where there is no path.
+            // the key it authenticates.  Gated to contacts — a client dials
+            // any party it holds a contact for and opens the path to one
+            // that holds it, each side's own decision and nobody's choice
+            // [author, 2026-10-24; the horizon bound of 2026-09-27 before
+            // it, which left every witness on the relay] — and the relay is
+            // the answer where there is no path.
             let inlet = Inlet::default();
             let gate: Gate = {
                 let h = handle_for_task.clone();
                 Arc::new(move |peer| {
                     let peer = *peer;
-                    h.with_blocking(move |c| c.horizon.distance(&peer).is_some())
+                    h.with_blocking(move |c| c.store.contacts.contains_key(&peer))
                 })
             };
             let direct = LightDirect::bind(

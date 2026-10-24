@@ -292,6 +292,7 @@ pub struct Hold {
     away_since: Option<u64>,
     away_total: u64,
     done: bool,
+    seen_now: bool,
 }
 
 /// What one turn of the hold came to.
@@ -351,6 +352,7 @@ impl Hold {
             away_since: None,
             away_total: 0,
             done: false,
+            seen_now: false,
         }
     }
 
@@ -358,6 +360,17 @@ impl Hold {
     /// yields a template before the window is out (design §7.1 item 6).
     pub fn frames(&self) -> &[Frame] {
         &self.frames
+    }
+
+    /// Whether the last tick's frame held a face.
+    pub fn seen_now(&self) -> bool {
+        self.seen_now
+    }
+
+    /// How long a face has been absent in all, in milliseconds, so far.
+    pub fn away_ms(&self, clock: &dyn Clock) -> u64 {
+        let now = clock.now_ms().saturating_sub(self.start);
+        self.away_total + self.away_since.map_or(0, |s| now.saturating_sub(s))
     }
 
     /// How long the hold has run, in milliseconds of the device's clock.
@@ -395,7 +408,20 @@ impl Hold {
             at_ms: now,
             bytes: strip(raw),
         };
-        match engine.sample(&frame) {
+        let sample = engine.sample(&frame);
+        // **every tick is said** [bench, 2026-10-24]: a window that sealed
+        // nothing could not say whether the camera gave frames, whether a
+        // face was in them, or when the first prompt fell
+        tracing::info!(
+            target: "cer",
+            at_ms = now,
+            prompted = prompt.is_some(),
+            bytes = frame.bytes.len(),
+            seen = sample.is_some(),
+            "cer.hold.tick"
+        );
+        self.seen_now = sample.is_some();
+        match sample {
             Some(seen) => {
                 if let Some(h) = &self.held {
                     // a different face while the one held was away is the

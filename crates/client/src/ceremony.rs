@@ -370,6 +370,10 @@ pub struct CaptureTurn {
     pub frames: u64,
     /// Whether a template is in hand, so the queries can go.
     pub template_ready: bool,
+    /// Whether this turn's frame held a face.
+    pub face: bool,
+    /// How long a face has been absent in all, in milliseconds.
+    pub away_ms: u64,
 }
 
 /// What the proposer shows every signer: the proposal, the disclosure set
@@ -1864,6 +1868,8 @@ impl Client {
         }
         let frames = hold.frames().len() as u64;
         let template_ready = a.template.is_some();
+        let face = hold.seen_now();
+        let away_ms = hold.away_ms(self.device.clock.as_ref());
         match turn {
             Tick::Lost(why) => {
                 tracing::info!(target: "cer", ?why, "cer.capture.lost");
@@ -1876,6 +1882,8 @@ impl Client {
                     next_ms: 0,
                     frames,
                     template_ready,
+                    face,
+                    away_ms,
                 })
             }
             Tick::Continue { next_ms } => Ok(CaptureTurn {
@@ -1883,6 +1891,8 @@ impl Client {
                 next_ms,
                 frames,
                 template_ready,
+                face,
+                away_ms,
             }),
         }
     }

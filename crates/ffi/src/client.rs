@@ -231,6 +231,10 @@ pub struct CaptureTurn {
     pub frames: u64,
     /// Whether a template is in hand, so the queries can go.
     pub template_ready: bool,
+    /// Whether this turn's frame held a face.
+    pub face: bool,
+    /// How long a face has been absent in all, in milliseconds.
+    pub away_ms: u64,
 }
 
 /// A verifier the client selected, and why it was eligible.
@@ -1939,6 +1943,8 @@ impl Participant {
                     next_ms: t.next_ms,
                     frames: t.frames,
                     template_ready: t.template_ready,
+                    face: t.face,
+                    away_ms: t.away_ms,
                 })
                 .map_err(|a| Refused::new(format!("{a:?}")))
         })
@@ -2084,6 +2090,25 @@ impl Participant {
                     theirs: theirs.iter().map(id_of).collect(),
                 }
             })
+        })
+    }
+
+    /// **Hold a party as a contact by its key material alone**: what a
+    /// shell does with a key handed over without a locator. Such a contact
+    /// cannot be dialled (there is no address to dial) but it is a party
+    /// this client chose, so a direct path the party offers is opened
+    /// (design §12.6.3). The bench uses it to stand in for the meeting a
+    /// witness and its nominator would have had.
+    pub fn hold_contact(&self, material: Vec<u8>) -> Result<Id, Refused> {
+        crate::diag::call("hold_contact", || {
+            let who = self.handle.with_blocking(move |c| {
+                let identity = rhtn_crypto::Identity::from_key_material(&material)
+                    .ok_or_else(|| Refused::new("not key material"))?;
+                c.contact(&identity, rhtn_client::contacts::How::Introduced, true);
+                Ok::<_, Refused>(identity.keyhash)
+            })?;
+            self.save()?;
+            Ok(id_of(&who))
         })
     }
 

@@ -4904,8 +4904,8 @@ cannot.** A verification query and its response are payload (§7.3,
 
 | Path | When | Who sees the flow |
 |---|---|---|
-| **Direct** | Peer is **inside the horizon** (§15.1), both online, traversal succeeds | Nobody. The peers exchange addresses during setup and connect |
-| **Relayed** | Peer is **outside the horizon**, *or* traversal fails — symmetric NAT, CGNAT, two mobile peers | Both serving infra nodes, as TURN relays carrying ciphertext |
+| **Direct** | Each side holds the other as a **contact** (`light-client-requirements.md` §4.2) — met, introduced, nominated or selected — both online, traversal succeeds | Nobody. The peers exchange addresses during setup and connect |
+| **Relayed** | Either side holds **no contact** for the other, *or* traversal fails — symmetric NAT, CGNAT, two mobile peers | Both serving infra nodes, as TURN relays carrying ciphertext |
 | **Queued** | Recipient offline | The recipient's serving node holds ciphertext until reconnect (§14.1.4) |
 
 **"Relays" in the table is about who sees the flow, not about whose cooperation a
@@ -4921,27 +4921,26 @@ distant node for which it holds a locator [author, 2026-10-05], and §12.6.1's
 resolution is how it finds one it cannot already place. Both nodes still see the
 flow, which is what the row says and the whole of what it says.
 
-**Direct connection is limited to the horizon**, because a direct path reveals
-each peer's IP to the other (P17). Three reasons this is the right boundary:
-
-- **The horizon already sees your structural position.** A locator discloses your
-  patron, depth and subtree to anyone you introduce yourself to (§12.1), and nodes
-  inside your horizon hold your topology regardless. IP is *incremental*
-  disclosure to that set and *novel* disclosure outside it.
-- **It is evaluable from state a node already holds.** "Is this peer in my h=2
-  topology store?" is the entire check.
-- **It should cover most traffic** (A2), so the bandwidth argument below survives.
-
-**But the horizon is a bounded set, not a trusted one.** At f = 10 and h = 2 it is
-221 nodes (§15.1), and it includes a user's nephews and their patron's siblings —
-people they may never have met. A patron already sees its subordinates'
-traffic metadata and gains nothing; a sibling or a patron's sibling would gain an IP
-they do not have today. **The rule bounds exposure rather than restricting
-it to chosen parties**, and the bound is the whole of the mitigation
-[author, 2026-09-27]: the direct path is preferred inside the horizon and the
-relay is the fallback, and neither is a user choice nor a warning the client
-raises — the trade is recorded where trades are (P17), not put to the person
-per connection.
+**Direct connection is between contacts** [author, 2026-10-24]. A client may
+dial any party it holds a contact for, and the party dialled opens the path
+where it holds the dialler as a contact — each side's own decision, read from
+its own table (`light-client-requirements.md` §4.2), with room for a party to
+decline that no mechanism yet specifies. The bound is the acquaintance set
+rather than the horizon: a direct path reveals each peer's IP (P17), and a
+contact is a party this client chose — met in person, taken by introduction,
+nominated as a witness or selected as a verifier — so the exposure is chosen
+rather than structural. Witnesses and verifiers are contacts by construction,
+so a ceremony's legs to them go direct wherever traversal allows and touch a
+serving node only as the lookup that found them (§12.6.1) and as the mailbox
+where they are away (§14.1.6); a serving node holds no policy over what flows
+to the clients it serves. The horizon was the earlier bound [author,
+2026-09-27]: it left every party met but not structurally adjacent on the
+relay, which put a serving node astride a ceremony's witness legs and their
+request allowance across its trace — the position §6.4 is written to deny it.
+**The path order stands**: the direct path where one is held, the relay as
+the fallback, and neither a user choice nor a warning the client raises — the
+trade is recorded where trades are (P17), not put to the person per
+connection.
 
 **Candidates may travel the ceremony's local interfaces** [author,
 2026-09-25]. The exchange above has a carriage this section did not name, and
@@ -4961,17 +4960,15 @@ permeability past the meeting itself, so an uncooperative patron loses its
 position astride the route as it has already lost its position astride the
 record.
 
-**A ceremony in person overrides the horizon gate** [author, 2026-09-25]. The
-gate above bounds who may be dialled because an IP is novel disclosure outside
-the horizon (P17); it is not novel to a party standing in front of you, and a
-horizon an eclipsing patron controls is the thing an exit most needs not to
-depend on. What licenses the override is what licenses the ceremony itself:
-the interfaces this travels on are **not intermediable by a wide-area
-network** (`wire-format.md` §14), so no remote party can put itself in the
-position the exchange assumes. A candidate that arrived any other way is gated
-as before. **The disclosure this makes is its own finding** (§19.4, P40): the
-exposure stops being bounded by the horizon and becomes chosen instead, which
-is a different shape of cost rather than none.
+**A ceremony in person needs no override** [author, 2026-10-24; the override
+of 2026-09-25 is subsumed]. The counterparty becomes a contact as its key is
+pinned at the optical exchange, so candidates handed over on the local
+interfaces open under the same rule as any other — and they still travel
+interfaces **not intermediable by a wide-area network** (`wire-format.md`
+§14), so no remote party can put itself in the position the exchange assumes.
+A candidate that arrived any other way opens only for a party held as a
+contact. **The disclosure this makes is its own finding** (§19.4, P40): an IP
+handed to a party met once, for as long as the address lasts.
 
 The relayed path is the federation shape (email, XMPP, Matrix). **In every case
 the hierarchy carries no payload**, which is what makes the f=10 cap affordable
@@ -5856,8 +5853,8 @@ Session establishment, attestation pulls, resolution and queue operations are al
 client-server at the edge and server-server in the core, and none needs hole
 punching.
 
-**Payload takes a direct path where it can** (§12.6.3), meaning *inside the
-horizon*, since a direct connection reveals each peer's IP (P17), and that does
+**Payload takes a direct path where it can** (§12.6.3), meaning *between
+contacts*, since a direct connection reveals each peer's IP (P17), and that does
 need traversal. **There is no way to avoid it**: an always-relay model would make
 traversal unnecessary at the cost of routing every payload byte through
 infrastructure, which §12.6.3 declines for both cost and privacy reasons.
@@ -6088,7 +6085,7 @@ oldest.** Two reasons, and the second is the decisive one.
 
 Dropping the oldest destroys a message the sender believes was accepted, which is an
 invisible failure; refusing the newest produces an error the sender receives and can
-act on — retry, direct path within horizon (§12.6.3), or tell the user. §1.1's whole
+act on — retry, the direct path to a contact (§12.6.3), or tell the user. §1.1's whole
 posture is converting invisible failures into visible ones.
 
 **And drop-oldest is an attack.** Anyone who can send to a queue could flush earlier
@@ -8048,7 +8045,7 @@ and a citation to a missing number resolves there.
 | P14 | **Chain back-pointers leak activity level to counterparties.** Signing over a predecessor hash reveals the subject's chain head, so a counterparty meeting the same person twice sees how far it advanced | Low | **Accepted, not open.** It discloses nothing past §8.1's selection threshold, which is `min(floor(n/2), 10, |candidates|)` where *n* is the subject's presence count and **the evaluator learns *n* from the subject by design**. Activity level is already an input every evaluator receives; a chain head is a coarser view of the same fact, given to a party who has met them |
 | **P15** | **Service catalog entries reveal what a node runs, to anyone in its horizon who asks.** Resource type, instance name and connection info are served on request (§11.5) | Medium | `discover_scope` filtering at the source limits the audience to those who could use the resource, which is a genuine mitigation. Residual: running a resource at all is visible to everyone in scope, and the *set* of resources a node runs is a fingerprint. Unassessed under §19.1 **Subsumes the former P8** (*topology deanonymisation by association*), withdrawn: identifying one member by real name yields their job, not a label for any of their subtrees — §3.1.1's membership plurality means a member belongs to several, and nothing in the protocol says which is a workplace rather than a bowling team. **What labels a subtree is its catalog**, which is this finding, and the catalog is answered on request within horizon, so a party holding topology from further away cannot obtain the labels at all. An attacker who holds both the topology and a real-name link within their horizon gets the disclosures membership carries (§1.2) |
 | P16 | **The resource owner accumulates signed reports about its own resources** (§11.6) | Low | Never broadcast, so no public accusation is created; that was deliberate (§6.2.2). Because the resource reports and the owner receives (§11.6), these are records of the owner's own operation rather than of who complained about whom. **The residual is what a report describes**, not who filed it |
-| **P17** | **A direct payload connection reveals each peer's IP address to the other** (§14.1.1) | Low–Medium | New with direct-first payload, and **bounded by limiting direct connection to the horizon** (§12.6.3), the set that already holds your locator and topology, so IP is incremental rather than novel there. Residual: the horizon is up to 221 nodes at f = 10 (§15.1) — the patron, the siblings, the grandpatron, the patron's siblings, the subordinates and their subordinates, and the nephews — many of whom a user may never have met, so exposure is *bounded* rather than *chosen*. Cousins are three edges out and are not in it. §7.6 establishes IP gives coarse location, so an in-horizon party gains an ongoing location signal. **The path order is fixed** [author, 2026-09-27]: direct inside the horizon, the relay as fallback, neither offered as a choice nor warned — the bound above is the mitigation, and this row is where the trade is recorded |
+| **P17** | **A direct payload connection reveals each peer's IP address to the other** (§14.1.1) | Low–Medium | New with direct-first payload, and **bounded to contacts** (§12.6.3) [author, 2026-10-24]: the parties this client met, took an introduction to, nominated or selected, so the exposure is *chosen* rather than structural — P40's shape, generalised. The horizon was the bound before [author, 2026-09-27]; it was a set of up to 221 nodes a user may never have met, and it left every acquaintance outside it on the relay. Residual: §7.6 establishes IP gives coarse location, so every contact gains an ongoing location signal for as long as the address lasts; a party's refusal to open is its own decision, and no blacklist is specified yet. **The path order is fixed** [author, 2026-09-27]: direct where a path is held, the relay as fallback, neither offered as a choice nor warned — the bound above is the mitigation, and this row is where the trade is recorded |
 | **P18** | **A verification query tells a prior counterparty that the subject is *right now* in a witnessed ceremony with someone** (§7.3) | Medium | Intrinsic to verification, and never analysed as a cost, the oracle protections address what a verifier *learns about the biometric*, not what they learn about the subject's current activity. Repeated queries reveal activity cadence. Bounded by the selector querying only a handful of the subject's counterparties per event — and, since 2026-09-01, by the subject's curation: nobody is queryable through a record the subject declines to bundle — and, since 2026-09-03, by the consent itself: the signed query names its one addressed verifier (`wire-format.md` §5.6), so the selector cannot re-present it to a wider circle |
 | **P19** | **Archive presentation hands a new patron an intelligible history of prior relationships** (§16.7) | High | The prefix is chosen by the user, but the chain forbids arbitrary omission, so the choice is coarse. Selective disclosure within records (§19.3) is now specified, and does not help here: what a prospective patron reads is counterparty identity, which no field-level measure withholds (§8.1.1). See also C4 in §19.8, which is worse |
 | **P20** | **Resource access logs, where an implementation creates them, bind network identity to application actions** (§11.7) | High for sensitive resources | Flagged as unfinished but never analysed. A resource already authenticates by network identity and topological scope, so a log connects *who* to *what they did, when, and under which organisational relationship* |
@@ -8071,7 +8068,7 @@ and a citation to a missing number resolves there.
 | **P37** | **A ceremony counterparty is handed a bundle of the subject's prior counterparties — who they have met, and where each can be reached — and credibility pushes that bundle wide** (§8.1.2, §19.2) | Medium | Selecting the other's verifiers needs a candidate set, and the subject supplies it as introductions (`wire-format.md` §2.3, §5.4): a party's key and the most recent locator held for them, nothing of the meeting — no record, no witnesses, no verifiers, no time. **The disclosure is elective, not compelled** — nobody walks another party's archive, but the incentive runs one way: a bundle holding nobody the selector recognises is worth nothing to them (§16.1), so being believed means showing counterparties in common. **Bounded by design to a handful** [author, 2026-10-11]: the bundle is meant to suffice at a few names, and what it leaves unmet is fished one candidate at a time, in turns, so a party is never asked for its history in the bundle and cannot have it drawn out in successive ones — it accepts the next proposal and stops. **Distinct from P19**, which is the *adoption* disclosure a prospective patron drives by fetching and walking; this one the subject hands over. **Distinct from P2/C2**, which price the verifier set carried *in the record* rather than the pool it was drawn from. **The floor is a real choice**, since what a ceremony gives its participants is a face they will know again (§7), which no bundle affects. Disclosing narrowly costs third-party weight and the counterparty's continuity assurance, not the relationship |
 | **P38** | **A filtered catalog query reveals what kind of service the asker seeks** (`wire-format.md` §6.4), to the answering node, whether or not any connection follows — P26's shape at the catalog: interest disclosed before contact | Low–Medium | **The reference client already blunts it** (`light-client-requirements.md` §8): sweep the horizon, cache, refresh on schedule — a browsing click is answered from cache, so no per-interaction query exists to observe. **Residual**: a targeted type-filtered query from any client remains a dated, authenticated statement of interest in a service class — clinical, employment, family, and repetition makes it a history |
 | **P39** | **A prekey fetch reveals how many devices a subject has** (`wire-format.md` §7.8): a reply carries one bundle per device, where it carried one | Low | **A consequence of a session being with a device** (§23.3, §14.2.4), stated rather than hidden. The audience is the horizon that could open a session with the subject at all, the count is held near three by construction (§23.3), and what it reveals is that a person has a phone and a desktop, which the resource types the desktop exists for reveal anyway. **Residual**: the count changes when a device is added or lost, and a party sweeping on schedule sees when |
-| **P40** | **Offering traversal candidates at a ceremony discloses an IP to the counterparty, and not within the horizon bound P17 rests on** (§12.6.3) | Low–Medium | New with the 2026-09-25 ruling that a ceremony in person overrides the gate. **The exposure is chosen rather than bounded**, which inverts P17: the counterparty is a party the user decided to meet and §14.1's interfaces put them in the room, but no horizon limits the set, and a first ceremony may be with somebody the user has no standing with at all. Residual: §7.6 makes an IP a coarse location signal, so a counterparty met once holds an ongoing one for as long as the address lasts and nothing obliges them to discard it. **The location it yields is not new** — the counterparty was in the room — so C1 is untouched and C24 records why; what the address can add is the carrier behind it. **The disclosure is the price of the exit right** §12.6.3 states — a route no patron carried is a route the counterparty knows — and it is refusable: the ceremony completes without candidates, and `light-client-requirements.md` §4 requires the client to offer it as the disclosure it is |
+| **P40** | **Offering traversal candidates at a ceremony discloses an IP to the counterparty** (§12.6.3) | Low–Medium | New with the 2026-09-25 ruling that a ceremony in person opened the direct path past the horizon; since 2026-10-24 the counterparty is a contact from the exchange on and the path opens under P17's own rule. **The exposure is chosen rather than bounded**: the counterparty is a party the user decided to meet and §14.1's interfaces put them in the room, and a first ceremony may be with somebody the user has no standing with at all. Residual: §7.6 makes an IP a coarse location signal, so a counterparty met once holds an ongoing one for as long as the address lasts and nothing obliges them to discard it. **The location it yields is not new** — the counterparty was in the room — so C1 is untouched and C24 records why; what the address can add is the carrier behind it. **The disclosure is the price of the exit right** §12.6.3 states — a route no patron carried is a route the counterparty knows — and it is refusable: the ceremony completes without candidates, and `light-client-requirements.md` §4 requires the client to offer it as the disclosure it is |
 
 ### 19.5 Queue policy had to settle more than size
 
@@ -8373,7 +8370,7 @@ A23 is superseded in place by A34.
 | # | Assumption | What rests on it | If false | Evidence that would settle it |
 |---|---|---|---|---|
 | **A1** | **Human time is the binding resource for a presence-proof attack** | The entire Sybil defence (§17.3). Ceremony duration is priced in minutes precisely to meter it | If attackers can hire humans at scale cheaply, presence proofs are far weaker than §17.3 claims and the three-legged defence becomes two-legged | A measured attack-cost model comparing human ceremony time with capital/automation scaling, including wages, concurrency, collusion, and ceremony throughput. |
-| **A2** | **Most traffic stays within the two-edge trust horizon** | The control/payload split (§12.6.3), f=10 affordability (§3.2), rarity of anchor lookups (§12.2), store-and-forward sufficiency (§14.1.4), **and now the direct payload path, which is horizon-limited (§12.6.3)** | Apex load, anchor load and push requirements change together, **and relay load becomes (out-of-horizon traffic) + (in-horizon traffic where traversal fails)**, so if this is wrong the infra economics of §16.6 collapse as well. The single most load-bearing behavioural claim in the document | Traffic telemetry or a representative workload model showing what fraction of payload/control activity falls inside a two-edge horizon. |
+| **A2** | **Most traffic stays within the two-edge trust horizon** | The control/payload split (§12.6.3), f=10 affordability (§3.2), rarity of anchor lookups (§12.2), store-and-forward sufficiency (§14.1.4). **The direct payload path no longer rests on it** [author, 2026-10-24]: it is bound to contacts, not the horizon (§12.6.3) | Apex load, anchor load and push requirements change together, **and relay load becomes (traffic between parties who are not each other's contacts) + (traffic between contacts where traversal fails)**, so if this is wrong the infra economics of §16.6 collapse as well. The single most load-bearing behavioural claim in the document | Traffic telemetry or a representative workload model showing what fraction of payload/control activity falls inside a two-edge horizon. |
 | **A3** | **Apex load scales with churn, not usage** | The f=10 cap surviving at scale (§3.2) | The fanout cap becomes a throughput ceiling and the social rationale collides with the plumbing again | A queueing/load model or simulation separating churn-driven control traffic from usage-driven traffic across the hierarchy. |
 | **A4** | **Evaluation demand is much smaller than total activity** | Pull-not-push attestation (§15), the biggest scaling decision here | Backbone traffic grows with population. Note this is now framed as an implementation constraint (§15), which is enforceable — unlike the others | Measurements or a workload model comparing evaluation/query demand with total network activity. |
 | **A5** | **Presence ceremonies are rare per user** | PQ signatures on presence records (§5), the ~35 KB budget, storage estimates | Record size becomes a real cost and the PQ exception needs revisiting | Field data or a credible usage model for ceremonies per user over time. |

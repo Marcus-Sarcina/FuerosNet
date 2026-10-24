@@ -336,10 +336,10 @@ async fn the_kernel_fails_over_to_the_named_sibling_and_starts_cold_from_the_lis
 }
 
 /// The direct path is joined behind the boundary (design §14.1.1,
-/// `light-client-requirements.md` §5): two clients of one node inside each
-/// other's horizon open it from their own sends and the node relays none
-/// of what follows; the person's override holds in both directions, and
-/// the catalog sweep rides the same session.
+/// `light-client-requirements.md` §5): two clients of one node that hold
+/// each other as contacts open it from their own sends and the node relays
+/// none of what follows; the person's override holds in both directions,
+/// and the catalog sweep rides the same session.
 // acceptance: DMN-13
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn the_kernel_joins_the_direct_path_honours_the_override_and_sweeps_the_catalog() {
@@ -447,6 +447,15 @@ async fn the_kernel_joins_the_direct_path_honours_the_override_and_sweeps_the_ca
         "each places the other in its horizon, from the acts bob is a party to"
     );
     assert!(!alice.direct_to(idv("carol")), "nothing offered yet");
+    // **and each holds the other as a contact**, which is what licenses the
+    // direct path (design §12.6.3, the contact rule of 2026-10-24): the
+    // horizon places them but no longer decides it
+    alice
+        .hold_contact(material("carol"))
+        .expect("alice holds carol");
+    carol
+        .hold_contact(material("alice"))
+        .expect("carol holds alice");
 
     // the first send offers candidates over the relay and the path opens
     // both ways; what follows goes around the node

@@ -8562,7 +8562,7 @@
     "id": "REP-11",
     "area": "replication-peering",
     "gap": "replication-peering",
-    "title": "Take the direct payload path inside the horizon",
+    "title": "Take the direct payload path between contacts",
     "milestone": 4,
     "kind": "positive",
     "spec": [
@@ -8572,14 +8572,14 @@
     "rule": [
       {
         "where": "design §12.6.3",
-        "text": "Direct | Peer is inside the horizon (§15.1), both online, traversal succeeds | Nobody. The peers exchange addresses during setup and connect"
+        "text": "Direct | Each side holds the other as a contact (`light-client-requirements.md` §4.2) — met, introduced, nominated or selected — both online, traversal succeeds | Nobody. The peers exchange addresses during setup and connect"
       },
       {
         "where": "design §12.6.3",
-        "text": "\"Is this peer in my h=2 topology store?\" is the entire check."
+        "text": "Direct connection is between contacts [author, 2026-10-24]. A client may\ndial any party it holds a contact for, and the party dialled opens the path\nwhere it holds the dialler as a contact"
       }
     ],
-    "given": "Light clients L1 and L2 are siblings (distance 1, inside each other's h=2 horizon), both online and attached, with a NAT traversal that succeeds; no user override is set.",
+    "given": "Light clients L1 and L2 hold each other as contacts, both online and attached, with a NAT traversal that succeeds; no user override is set.",
     "when": "L1 sends payload to L2.",
     "then": "L2 receives the payload directly from L1's address; neither serving node carries the payload bytes.",
     "oracle": "behaviour",
@@ -8589,7 +8589,7 @@
     "id": "REP-12",
     "area": "replication-peering",
     "gap": "replication-peering",
-    "title": "Relay, never connect directly, to a peer outside the horizon",
+    "title": "Relay, never connect directly, to a peer neither side holds as a contact",
     "milestone": 4,
     "kind": "negative",
     "spec": [
@@ -8599,14 +8599,14 @@
     "rule": [
       {
         "where": "design §12.6.3",
-        "text": "Direct connection is limited to the horizon, because a direct path reveals each peer's IP to the other (P17)."
+        "text": "Direct connection is between contacts [author, 2026-10-24]. A client may\ndial any party it holds a contact for, and the party dialled opens the path\nwhere it holds the dialler as a contact"
       },
       {
         "where": "design §12.6.3",
-        "text": "Relayed | Peer is outside the horizon, or traversal fails — symmetric NAT, CGNAT, two mobile peers | Both serving infra nodes, as TURN relays carrying ciphertext"
+        "text": "Relayed | Either side holds no contact for the other, or traversal fails — symmetric NAT, CGNAT, two mobile peers | Both serving infra nodes, as TURN relays carrying ciphertext"
       }
     ],
-    "given": "Light clients L1 (serving node S1) and L2 (serving node S2) sit in different subtrees, outside each other's h=2 horizon; both online; no user override.",
+    "given": "Light clients L1 (serving node S1) and L2 (serving node S2) sit in different subtrees and hold no contact for each other; both online; no user override.",
     "when": "L1 sends payload to L2.",
     "then": "The payload passes through S1 and S2 as ciphertext; L1 opens no connection to L2's address, and L2 learns no address for L1.",
     "oracle": "behaviour",
@@ -8616,7 +8616,7 @@
     "id": "REP-13",
     "area": "replication-peering",
     "gap": "replication-peering",
-    "title": "Do not count a peering edge toward the horizon for the direct path",
+    "title": "A peering edge makes no contact, and opens no direct path",
     "milestone": 4,
     "kind": "negative",
     "spec": [
@@ -8634,9 +8634,9 @@
         "text": "Peering edges do not count (§6.3): a peering edge is ungoverned and carries none of the subnet's authority, so it contributes flow without conferring scope."
       }
     ],
-    "given": "Users A and B, each running an instance, in different subtrees, have peered. Light client L attaches to A and light client M to B; without the peering edge they are outside each other's horizon; both online; no override.",
+    "given": "Users A and B, each running an instance, in different subtrees, have peered. Light client L attaches to A and light client M to B; they have never met and hold no contact for each other, and the peering edge is between the instances; both online; no override.",
     "when": "L sends payload to M.",
-    "then": "The payload is relayed through A and B; M is absent from L's h=2 topology store and no direct connection is attempted.",
+    "then": "The payload is relayed through A and B; M is no contact of L's, the peering edge makes it none, and no direct connection is attempted.",
     "oracle": "behaviour",
     "interpretation": null
   },
@@ -13434,7 +13434,7 @@
         "text": "Act as STUN and TURN for clients attempting direct payload paths"
       }
     ],
-    "given": "Leaf L attached to serving node S, behind an emulated NAT with endpoint-independent mapping, preparing a direct path to an in-horizon peer.",
+    "given": "Leaf L attached to serving node S, behind an emulated NAT with endpoint-independent mapping, preparing a direct path to a peer it holds as a contact.",
     "when": "L gathers candidates.",
     "then": "L sends a STUN Binding Request to S at the address it serves QUIC on, S answers with the source address it saw, and L's candidates carry its host address and the reflexive address the NAT mapped for that socket.",
     "oracle": "behaviour",
@@ -13461,7 +13461,7 @@
         "text": "ICE falls back to relaying through the serving node when hole punching fails"
       }
     ],
-    "given": "Leaves L1 and L2 inside each other's horizon, each behind an emulated NAT, having exchanged candidates through their serving nodes. The NATs' mapping and filtering behaviour is the harness's parameter.",
+    "given": "Leaves L1 and L2 holding each other as contacts, each behind an emulated NAT, having exchanged candidates through their serving nodes. The NATs' mapping and filtering behaviour is the harness's parameter.",
     "when": "L1 sends payload to L2, first with endpoint-independent NATs and then with address-and-port-dependent ones.",
     "then": "With endpoint-independent NATs a connection completes on a candidate pair and the payload crosses it with neither serving node carrying the bytes; with address-and-port-dependent NATs the checks fail within the bound and the same payload is delivered through L2's serving node.",
     "oracle": "behaviour",
@@ -13525,7 +13525,7 @@
     "id": "TRV-05",
     "area": "traversal",
     "gap": "traversal",
-    "title": "Gather no candidates and open no direct path for a peer outside the horizon",
+    "title": "Gather no candidates and open no direct path for a peer this client holds no contact for",
     "milestone": "after-5",
     "kind": "negative",
     "spec": [
@@ -13535,14 +13535,14 @@
     "rule": [
       {
         "where": "wire-format.md §9.2",
-        "text": "Payload attempts a direct path inside the horizon, which does require traversal."
+        "text": "Payload attempts a direct path between contacts (design §12.6.3), which\ndoes require traversal."
       },
       {
         "where": "design §12.6.3",
-        "text": "Direct connection is limited to the horizon"
+        "text": "Direct connection is between contacts"
       }
     ],
-    "given": "Leaf L1 with a peer L2 outside its horizon, both behind NATs the harness would let a direct path through.",
+    "given": "Leaf L1 with a peer L2 it holds no contact for, both behind NATs the harness would let a direct path through.",
     "when": "L1 sends L2 payload.",
     "then": "L1 sends no STUN request, exchanges no candidates and dials no address of L2's; the payload goes by the relay.",
     "oracle": "behaviour",
@@ -13598,14 +13598,14 @@
       },
       {
         "where": "wire-format.md §9.2",
-        "text": "Payload attempts a direct path inside the horizon, which does require traversal"
+        "text": "Payload attempts a direct path between contacts (design §12.6.3), which\ndoes require traversal"
       }
     ],
-    "given": "Two clients inside each other's horizon, each with a payload session to the other: light clients L1 and L2 beside their serving node on sockets of their own, and nodes N1 and N2 that are participants on the nodes' own sockets. A peer outside the horizon exists.",
-    "when": "L1 (and N1) offers the direct path to its peer from its own client, then sends application payload; then offers the peer outside the horizon.",
-    "then": "The candidates travel through the serving node as their own payload kind; the peer dials them and offers its own back; both clients' own interfaces report the peer reachable; the application payload crosses the connection with the serving node relaying nothing further; the offer outside the horizon gathers and sends nothing.",
+    "given": "Two clients holding each other as contacts, each with a payload session to the other: light clients L1 and L2 beside their serving node on sockets of their own, and nodes N1 and N2 that are participants on the nodes' own sockets. A peer held as no contact exists.",
+    "when": "L1 (and N1) offers the direct path to its peer from its own client, then sends application payload; then offers the peer it holds no contact for.",
+    "then": "The candidates travel through the serving node as their own payload kind; the peer dials them and offers its own back; both clients' own interfaces report the peer reachable; the application payload crosses the connection with the serving node relaying nothing further; the offer to the peer held as no contact gathers and sends nothing.",
     "oracle": "behaviour",
-    "interpretation": "The candidates travel as a payload kind of the reference's own (kind 3) on whatever path exists. A light client keeps no table, so whether the path may be direct is what the node beside it says of its horizon. Re-read 2026-09-22: design §14.1.1's priority order is RFC 8445's and binds this implementation; this entry holds the outcome, and TRV-11 holds the order."
+    "interpretation": "The candidates travel as a payload kind of the reference's own (kind 3) on whatever path exists. Whether the path may be direct is whether the client holds the peer as a contact, read from its own table (design §12.6.3) [author, 2026-10-24]. Re-read 2026-09-22: design §14.1.1's priority order is RFC 8445's and binds this implementation; this entry holds the outcome, and TRV-11 holds the order."
   },
   {
     "id": "TRV-08",
@@ -13655,7 +13655,7 @@
         "text": "a direct connection reveals each peer's IP (P17)"
       }
     ],
-    "given": "Two mutually pinned nodes with no topology relationship, so each lies outside the other's horizon, and the candidates of one supplied to the other by hand.",
+    "given": "Two mutually pinned nodes with no topology relationship and no contact held, so each side's local decision refuses the other, and the candidates of one supplied to the other by hand.",
     "when": "One is asked to gather for the other, then to open on those candidates, and then the other dials it directly.",
     "then": "Nothing is gathered, nothing is dialled, and the connection the peer opens is closed before anything on it is read. Neither node reports the other reachable.",
     "oracle": "behaviour",
@@ -13755,7 +13755,7 @@
     ],
     "given": "A client offering the ceremony's local interfaces, and a peer reachable only over the network.",
     "when": "Anything arrives claiming to have come from a local interface, or a caller asks for one of those interfaces to carry to a remote peer.",
-    "then": "The client refuses: nothing is treated as locally delivered that did not arrive on a local interface, and no local interface is carried remotely. The horizon override rests on this, so a candidate admitted this way is refused when the claim is false.",
+    "then": "The client refuses: nothing is treated as locally delivered that did not arrive on a local interface, and no local interface is carried remotely. The in-person candidate rests on this, so a candidate admitted this way is refused when the claim is false.",
     "oracle": "behaviour",
     "interpretation": "The property is unenforceable against a peer (design §1.1) and is stated as a commitment; the test binds this implementation's own paths, not another's."
   },

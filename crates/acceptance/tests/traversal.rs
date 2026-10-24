@@ -29,7 +29,7 @@ fn trv_12_candidates_offered_on_the_ceremony_s_local_inter() {
 ///
 /// Given: A client offering the ceremony's local interfaces, and a peer reachable only over the network.
 /// When: Anything arrives claiming to have come from a local interface, or a caller asks for one of those interfaces to carry to a remote peer.
-/// Then: The client refuses: nothing is treated as locally delivered that did not arrive on a local interface, and no local interface is carried remotely. The horizon override rests on this, so a candidate admitted this way is refused when the claim is false.
+/// Then: The client refuses: nothing is treated as locally delivered that did not arrive on a local interface, and no local interface is carried remotely. The in-person candidate rests on this, so a candidate admitted this way is refused when the claim is false.
 ///
 /// Interpretation: The property is unenforceable against a peer (design §1.1) and is stated as a commitment; the test binds this implementation's own paths, not another's.
 #[test]
