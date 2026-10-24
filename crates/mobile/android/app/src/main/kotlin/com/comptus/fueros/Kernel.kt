@@ -912,6 +912,20 @@ object Kernel {
 
     @Volatile private var lastTurnAt = 0L
 
+    @Volatile private var lastEntryAt = 0L
+
+    /** **That the loop is about to ask for an event**, on the clock. With
+     *  [turnHeartbeat] this brackets the one call in the loop that can
+     *  block: an entry with no heartbeat after it is a park in
+     *  `nextEvent`, and no entry at all is a loop that is not running. */
+    private fun turnEntry(turns: Long) {
+        if (!Diag.enabled()) return
+        val now = System.currentTimeMillis()
+        if (now - lastEntryAt < turnDiagMs) return
+        lastEntryAt = now
+        Diag.event("kernel.turn", "turns" to turns)
+    }
+
     /** [Meet.turnState] into the diagnostics, on change or on the clock;
      *  `meet=null` where there is no meeting, so that a turn always says
      *  something and silence can only mean the loop. */
@@ -1587,7 +1601,23 @@ object Kernel {
             } ?: return
             show(p, Status.Attached(node, a.primary))
         }
+        // **the loop's own first word.** Said once, before any turn, so
+        // that a run which never reaches the loop is distinguishable from
+        // one whose loop parks in its first call (2026-10-24).
+        Diag.event("kernel.loop", "state" to "entered")
+        var turns = 0L
         while (true) {
+            // **before the call that can park, not after.** The turn
+            // heartbeat sits past `nextEvent` and the event handling, so a
+            // loop parked in `nextEvent` emits nothing at all and says
+            // nothing about where it stopped — which is how A6's fifth and
+            // sixth attempts left the question open. `next_event` is
+            // wrapped in the diagnostics' plain call, which emits nothing,
+            // so this is the only line that can place it. On the clock
+            // rather than every turn: a 2 s poll would otherwise write
+            // thirty lines a minute for a loop doing nothing.
+            turnEntry(turns)
+            turns += 1
             val e = p.nextEvent(2000UL)
             // the kind of thing that arrived and who from, as eight hex
             // characters; a payload's bytes are counted, never shown
