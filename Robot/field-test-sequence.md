@@ -145,8 +145,10 @@ a path the suite holds, which is the right order for a bench.
    removed, having never once been filled in [author, 2026-10-23].
 2. **A2's nodeless adoption pass**, on phones that have met, as the row
    now says. Witnessless normal record carrying the adoption.
-3. **Heading F's arrival spread** (A5) — unaffected by the lift, listed
-   here only because it is the other run waiting on nobody.
+3. **Heading F's arrival spread** (A5) — **now behind the restructuring of
+   the post-optical regime** [author, 2026-10-24: "No sense testing a
+   process we'll immediately change"]. The commit recording that ruling
+   is the fallback point; A5 runs on the restructured machine.
 
 **What is not unblocked, and why.** A3's nodeless peering waits on the
 shell, not the gate — the Meet flow's `DONE` step needs a screen. A4 is

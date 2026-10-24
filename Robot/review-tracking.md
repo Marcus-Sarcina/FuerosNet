@@ -18984,6 +18984,27 @@ which depends on the current step machine.
 progress; this is the record of the ruling so it is not lost between
 sessions.
 
+**The three questions, answered** [author, 2026-10-24]:
+
+1. *Presence figures (design §7.5) — now or after A5?* **Deferred**: "there's
+   no sense trying to tune the presence thresholds until we move to the 4
+   minute timer, as what feels reasonable from a user standpoint will
+   undoubtedly shift at that point." Filed in `deferred-decisions.md`.
+2. *The tap inside the single state, or out of the regime?* Not yet a
+   ruling — a leaning, in his words: "I am thinking of just dropping
+   ranging entirely as the tap is very explicitly not what I ever wanted. I
+   wanted radio ranging at a few feet distance so it could run during the
+   face-each-other-and-wait. I am not sure what the tap is buying us."
+   **Asked back in the output** with what the design says the channel
+   buys and what dropping it removes, since it would supersede the
+   2026-10-21 ruling to leave the tap as-is and touches §7.6.3, the
+   record's channel field and three rows.
+3. *Restructure before or after heading F?* **Before**: "We can take a
+   pre-restructuring commit as a fallback point and then restructure. No
+   sense testing a process we'll immediately change." A5 moves behind the
+   restructuring; the fallback point is tagged on the commit that records
+   these rulings.
+
 **Two tooling nits from the confirmation run, owed and not blocking**:
 `nodeless.sh` says "holding" and then exits — there is nothing after the
 message that holds, so run from a shell it returns at once and leaves the
