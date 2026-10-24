@@ -29,16 +29,16 @@ reasonable from a user standpoint will undoubtedly shift at that point."
   user has to move from tap position to filming position inside those
   windows; the continuity check is off on the field-test build
   (`device.rs`, window 0 [author, 2026-10-18]) because the 90 % figure is
-  §7.5's ratio for four minutes and over ten seconds is a different rule.
+  design §7.5's ratio for four minutes and over ten seconds is a different rule.
   The author's reading: "a handful of spot checks over the course of
   minutes with a forgiving rule as to presence; just enough that it wasn't
   safe to do the initial exchange and walk away."
-- **The options.** (a) Restate §7.5's figures now, against the 30 s
+- **The options.** (a) Restate design §7.5's figures now, against the 30 s
   field-test window; (b) restate them once the witness window is the
   design's 240 s and the post-optical regime is one concurrent state, from
-  what runs on the bench then; (c) leave §7.5 as written and carry the
+  what runs on the bench then; (c) leave design §7.5 as written and carry the
   field-test relaxation as a build difference indefinitely.
-- **What was done meanwhile.** (b) in effect: §7.5 stands as written; the
+- **What was done meanwhile.** (b) in effect: design §7.5 stands as written; the
   field-test build keeps continuity off and the 30 s window; the regime
   restructuring proceeds first (the author's third ruling of the same day).
 - **What changes if it goes the other way.** (a) would tune thresholds to
