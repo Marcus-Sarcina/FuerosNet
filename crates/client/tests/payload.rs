@@ -1443,3 +1443,41 @@ fn a_message_sent_on_a_displaced_session_still_opens_after_the_holder_restarts()
         .expect("the displaced session came back with the restart");
     assert_eq!(describe(&got), "Application(high second)");
 }
+
+/// **A ceremony's legs do not outlive the ceremony** [bench, 2026-10-24]:
+/// what was queued for a peer with no session yet — a trace, a request —
+/// goes when the ceremony ends, and what the application queued stays.
+/// Two phones that met again a day later each flushed 207 trace events of
+/// an earlier exchange at the other on the first direct send after the
+/// record (run a5a2f39-a2-nodeless-2).
+#[test]
+fn legs_queued_for_an_unreached_peer_go_with_the_ceremony() {
+    use rhtn_client::payload::{KIND_APPLICATION, KIND_EXCHANGE_TRACE, KIND_WITNESS_REQUEST, wrap};
+    let mut s = common::harness::setup(&["alice", "bob", "w1"]);
+    s.client("alice")
+        .begin(Some(kh("bob")), vec![kh("w1")], true)
+        .expect("alice begins");
+    let device = [7u8; 32];
+    s.client("alice").payload.pending.insert(
+        (kh("w1"), device),
+        vec![
+            wrap(KIND_EXCHANGE_TRACE, b"shape"),
+            wrap(KIND_WITNESS_REQUEST, b"ask"),
+            wrap(KIND_APPLICATION, b"a word for later"),
+        ],
+    );
+    s.client("alice").abandon();
+    let left = s
+        .client("alice")
+        .payload
+        .pending
+        .get(&(kh("w1"), device))
+        .cloned()
+        .unwrap_or_default();
+    assert_eq!(
+        left.len(),
+        1,
+        "the legs went, the application's word stays: {left:?}"
+    );
+    assert_eq!(left[0], wrap(KIND_APPLICATION, b"a word for later"));
+}

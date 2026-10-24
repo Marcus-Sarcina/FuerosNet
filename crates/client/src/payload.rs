@@ -1395,3 +1395,27 @@ impl PayloadState {
         }
     }
 }
+
+impl PayloadState {
+    /// **A ceremony's legs do not outlive the ceremony** [bench, 2026-10-24].
+    /// A step to a party with no session yet is queued for the session that
+    /// opens later; a conversation leg (kinds 9 to 24) so queued for a
+    /// ceremony that has since ended is a message to nobody — and two
+    /// phones that met again a day later each flushed 207 trace events of
+    /// an earlier exchange at the other, which the other rightly refused as
+    /// a stranger's. Drops them; what was queued for the application and
+    /// the rest stays. How many went.
+    pub fn drop_legs(&mut self) -> usize {
+        let mut dropped = 0;
+        for waiting in self.pending.values_mut() {
+            let before = waiting.len();
+            waiting.retain(|plain| match unwrap(plain) {
+                Ok((kind, _)) => !(KIND_CONSENT_REQUEST..=KIND_WITNESS_STANDDOWN).contains(&kind),
+                Err(_) => true,
+            });
+            dropped += before - waiting.len();
+        }
+        self.pending.retain(|_, v| !v.is_empty());
+        dropped
+    }
+}

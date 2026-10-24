@@ -2773,6 +2773,16 @@ impl Client {
         );
         self.active = None;
         self.subject.responses.clear();
+        self.drop_legs();
+    }
+
+    /// The legs still queued for peers this ceremony never reached go with
+    /// it (see [`crate::payload::PayloadState::drop_legs`]).
+    fn drop_legs(&mut self) {
+        let dropped = self.payload.drop_legs();
+        if dropped > 0 {
+            tracing::info!(target: "cer", dropped, "cer.pending.dropped");
+        }
     }
 
     /// The record, finalized: appended to my archive and kept; as a
@@ -2831,6 +2841,9 @@ impl Client {
         // `store.own` keeps is the counterparty and the ceremony's id, the
         // capture key being derived from the identity root when wanted
         // (design §7.5.2.6)
+        if mine {
+            self.drop_legs();
+        }
         if let Some(mut a) = self.active.take_if(|_| mine) {
             let peer = a.peer()?;
             if let Some(sealed) = a.sealed.take() {

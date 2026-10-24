@@ -170,8 +170,10 @@ a path the suite holds, which is the right order for a bench.
    stale messages pended for the other from an earlier day — 207 trace
    events, which the receiver rightly discarded as a stranger's ("a trace
    for no engagement this client watches") — so a ceremony's legs pended
-   for a peer outlive the ceremony. A question for the author's next
-   session, with the obvious answer being that they should not.
+   for a peer outlived the ceremony. Fixed the same day: the legs (kinds 9
+   to 24) queued for an unreached peer go when the ceremony ends, by
+   abandon or by a finalize of one's own; what the application queued
+   stays.
 3. **Heading F's arrival spread** (A5) — **ready on the restructured
    machine** (2026-10-24): ranging is gone, the post-optical regime is one
    `WINDOW` step in which the capture's hold is turned tick by tick while
