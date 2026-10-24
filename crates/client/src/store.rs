@@ -497,7 +497,14 @@ impl ClientStore {
             st.unattached_late.insert(t, decode_keys(&v)?);
         }
         for (t, v) in m(5)? {
-            st.disclosures.insert(t, decode_disclosures(&v)?);
+            // a set this client cannot read is dropped and the record kept,
+            // as the directory form below has always done: the set is the
+            // holder's own convenience for presenting, never the record
+            // itself, and a shape from before the set changed (the seven
+            // slots of before 2026-10-24) must not keep the store shut
+            if let Some(d) = decode_disclosures(&v) {
+                st.disclosures.insert(t, d);
+            }
         }
         if f.len() >= 7 {
             // a seventh collection that held bare locators (2026-10-11,
