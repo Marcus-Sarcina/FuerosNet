@@ -1270,7 +1270,36 @@ object Kernel {
      * the step drivers, so a set that completed before its step was reached
      * is taken the moment it is.
      */
-    private fun drainBearer(p: Participant, m: Meet): Unit = synchronized(bearerLock) {
+    /**
+     * **Arrival drives the machine.** [drainBearerLocked] takes what
+     * landed; the poll that acts on it runs here, outside `bearerLock`,
+     * because A6 showed the alternative: MRK received the counterparty's
+     * responses — `phase 7, 32 bytes, duplicates 0, refused 0` — and its
+     * screen went on saying it was waiting for them, because the only
+     * poll was the turn loop's and the loop was not turning
+     * (2026-10-24). Setting a flag and waiting for a tick is one clock
+     * too many; what arrived is itself the reason to look.
+     *
+     * **Outside the lock on purpose**: a poll can propose, hand over or
+     * stop, each of which calls back into the kernel, and doing that
+     * under `bearerLock` would put the bearer's own thread behind the
+     * work it is trying to deliver. [Meet] guards its own state, so a
+     * poll from here and one from the loop cannot interleave inside it.
+     *
+     * **This routes around the loop rather than repairing it** [author,
+     * 2026-10-24, "A then B"]: the loop not turning is a separate defect
+     * and `kernel.loop`/`kernel.turn` are in to find it.
+     */
+    private fun drainBearer(p: Participant, m: Meet) {
+        drainBearerLocked(p, m)
+        if (carriedPending.getAndSet(false)) m.poll(courier(p))
+    }
+
+    /** Whether [drainBearerLocked] took a conversation carriage that the
+     *  flow has not yet been polled for. */
+    private val carriedPending = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    private fun drainBearerLocked(p: Participant, m: Meet): Unit = synchronized(bearerLock) {
         // SERIALIZED, because two threads reach here: the BLE inbound
         // callback when the counterparty's packets land, and the step
         // driver (runProximity/runCapture) right after it sends. received()
@@ -1385,6 +1414,9 @@ object Kernel {
                     // without this the flow never looks again
                     m.carried()
                     sendCarriages(p)
+                    // and the poll itself runs in [drainBearer], once this
+                    // lock is given up
+                    carriedPending.set(true)
                 }
             }
             else -> {}
