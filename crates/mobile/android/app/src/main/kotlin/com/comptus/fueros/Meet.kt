@@ -67,6 +67,10 @@ class Meet(
      *  The kernel runs no timer: when to propose is the proposer's own
      *  call (`crates/client/src/sequence.rs`), and this is it. */
     val patienceMs: Long = PATIENCE_MS,
+    /** How long [converse] waits between asking the kernel again for a
+     *  window it refused with `Waiting` — the counterparty's keep of this
+     *  side's witness set, still crossing the bearer. */
+    val openRetryMs: Long = OPEN_RETRY_MS,
 ) {
     companion object {
         /** One minute: long enough for a verifier two hops away to be
@@ -97,6 +101,20 @@ class Meet(
          * part held longer, not shorter (`OpticalExchange.WINDOW`).
          */
         const val TURN_MS = 100L
+
+        /**
+         * **How often [converse] asks again for a window the kernel
+         * refused with `Waiting`.** The thing it waits on is the
+         * counterparty's keep of this side's witness set, which crosses
+         * the bearer like any other leg: nodeless on the bench the witness
+         * sets took **29 seconds** to cross between two TCLs, landing long
+         * after the channels were done (A6, 2026-10-23). A second between
+         * asks covers that inside [PATIENCE_MS] at sixty asks, rather than
+         * the six hundred a [TURN_MS] cadence would make — and a client
+         * review has already found this shell asking the kernel 28 times
+         * in 3 s to be too much [2026-10-11].
+         */
+        const val OPEN_RETRY_MS = 1_000L
     }
     /** The adoption this meeting carries, as chosen at D1a. */
     val adopt: Adopt get() = kind.adopt
@@ -1064,11 +1082,34 @@ class Meet(
      */
     fun converse(c: Courier, nowMs: Long = System.currentTimeMillis()) {
         synchronized(lock) {
-            if (step != Step.VERIFIERS || opening) return
+            if (step != Step.VERIFIERS || opening || entered) return
             opening = true
         }
         if (!synchronized(lock) { windowOpen }) {
-            c.open()?.let { return stop("the conversation could not open: $it") }
+            // **`Waiting` is the kernel's "not yet", not a refusal.** What
+            // it waits on is the counterparty's keep of this side's witness
+            // set, and that crosses the bearer like any other leg — so it
+            // can land after the channels are done, which is where
+            // [openWindow] has stopped being called. This fallback used to
+            // end the meeting on the first `Waiting`, and a nodeless run
+            // between two TCLs died on exactly that: the sets took 29 s to
+            // cross and the keeps were given 48 ms (A6, 2026-10-23).
+            // Waited out here, on this thread — the keep arrives on the
+            // kernel's own — and bounded by the flow's patience, because a
+            // keep that never comes must not hold two people on a step
+            // either. Any other refusal still ends the meeting at once.
+            val deadline = nowMs + patienceMs
+            var why = c.open()
+            while (why != null && why.startsWith("Waiting(") &&
+                System.currentTimeMillis() < deadline
+            ) {
+                Thread.sleep(openRetryMs)
+                why = c.open()
+            }
+            if (why != null) {
+                synchronized(lock) { opening = false }
+                return stop("the conversation could not open: $why")
+            }
             synchronized(lock) { windowOpen = true }
         }
         note("the nominees are asked to witness; back-pointers sent.")

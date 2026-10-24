@@ -778,6 +778,69 @@ class MeetConversationTest {
      *  everything after it — the channels, the capture, the verification —
      *  happens inside it. Refused while the counterparty's prune has not
      *  answered, and asked again on the next turn. */
+    /**
+     * **A `Waiting` at the conversation's own open is not a failure
+     * either.** [Meet.openWindow] runs during the channels and retries it;
+     * [Meet.converse]'s fallback runs after them, and used to end the
+     * meeting on the first `Waiting` — which is how A6 died on
+     * 2026-10-23. Nodeless, the witness sets took 29 seconds to cross
+     * between two TCLs, so the keep was still in flight when the captures
+     * finished, and both phones stopped at the verifiers with
+     * `Waiting("the counterparty's keep of this side's witness set")`
+     * forty-eight milliseconds after sending their own keep.
+     */
+    @Test
+    fun a_waiting_at_the_conversations_own_open_is_retried_not_stopped_on() {
+        val m = Meet("aa", "carol", Meet.Kind(), openRetryMs = 1L).apply {
+            crossBootstrap(); accept(); intentSent(); intentReceived()
+            proximityDone(); captureDone()
+        }
+        assertEquals(Meet.Step.VERIFIERS, m.step())
+        assertFalse("the channels never opened it", m.windowOpen())
+        // the keep is still crossing the bearer for the first two asks,
+        // and lands on the third
+        val c = object : Meet.Courier {
+            var asks = 0
+            override fun engage(): String? = null
+            override fun trace(e: OpticalExchange.Event): String? = null
+            override fun open(): String? {
+                asks += 1
+                return if (asks < 3) {
+                    "Waiting(\"the counterparty's keep of this side's witness set\")"
+                } else {
+                    null
+                }
+            }
+            override fun queries(): String? = null
+            override fun gathered(): String? = null
+            override fun propose(): String? = null
+            override fun progress(): Meet.Progress? = null
+        }
+        m.converse(c)
+        assertNull("a wait is not a stop", m.stopReason())
+        assertTrue("the window opened once the keep landed", m.windowOpen())
+        assertEquals("asked until it was answered", 3, c.asks)
+    }
+
+    /** **A refusal that is not a `Waiting` still ends the meeting at
+     *  once**, and is not waited out: the patience is for a leg in flight,
+     *  not for a kernel that has said no. */
+    @Test
+    fun a_refusal_that_is_not_waiting_still_stops_the_conversation_at_once() {
+        val m = Meet("aa", "carol", Meet.Kind(), openRetryMs = 1L).apply {
+            crossBootstrap(); accept(); intentSent(); intentReceived()
+            proximityDone(); captureDone()
+        }
+        val c = FakeCourier()
+        c.openRefusal = "Refused(the request named a meeting this side never opened)"
+        m.converse(c)
+        assertTrue(
+            "it stops with the kernel's reason",
+            m.stopReason()?.contains("Refused") == true,
+        )
+        assertEquals("asked once, not waited out", 1, c.count("open"))
+    }
+
     @Test
     fun the_window_opens_with_the_request_and_is_retried_while_the_prune_answers() {
         val m = Meet("aa", "carol", Meet.Kind()).apply {
