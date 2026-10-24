@@ -18932,6 +18932,58 @@ it holds; and the guided-capture test's hard 15,000 ms ceiling now allows
 scheduling slack, having failed twice on load.
 
 
+## 2026-10-24 — the post-optical regime is one state, not a progression [author]
+
+A6 passed (`a6-witnessless-s21-4`) and the author's reading of the seven
+attempts is a design statement, recorded here in his words before
+anything is built from it:
+
+> I don't like how linear this all is. I was thinking of the whole
+> post-optical regime as a single state where the camera runs, captures
+> get taken at random intervals, and all the verification and (non-tap)
+> ranging take place concurrently while the witness' clocks run. Not a
+> strict progression and not a back-and-forth loop, but a "form" that
+> takes required elements opportunistically. There are of course
+> structured interactions within that, like exchanging and down-selecting
+> witnesses is a structured exchange, so is capturing and querying
+> verifiers. But the process as built is very strict and the total run
+> time will be longer than desired.
+>
+> The presence standards are way too strict if we need to specify a lag
+> time for users to switch from the tap position to the filming their
+> counterparty position. This was meant to be a handful of spot checks
+> over the course of minutes with a forgiving rule as to presence; just
+> enough that it wasn't safe to do the initial exchange and walk away.
+
+**What prompted it**: the capture window loses 1.6–3.7 s to the camera's
+first frame inside 15 s; the NFC latch is 4 s; the shell's `Step` machine
+runs OPTICAL → PROXIMITY → CAPTURE → VERIFIERS → REVIEW strictly, and a
+user has to move from tap position to filming position inside those
+windows. The whole ceremony is 5,462 bytes in 17 packets, so none of the
+run time is the link; it is the sequencing.
+
+**What it changes, as I read it** (to be confirmed, not assumed):
+- the shell's post-optical steps collapse into one concurrent state with
+  the camera held open for its duration — which also answers the
+  camera-left-streaming finding, since the camera is *meant* to run;
+- captures are spot checks at random intervals across minutes, not one
+  15 s window; the continuity rule (design §7.5, `device.rs`'s window)
+  becomes forgiving — enough to stop "exchange and walk away", no more;
+- verification queries, non-tap ranging and the witness clocks all run
+  inside that state concurrently; the structured sub-exchanges (witness
+  set/keep, capture + verifier query) keep their internal order.
+
+**Questions this raises for the author, asked in the output**: whether
+design §7.5's presence figures should be restated now or after A5 runs;
+whether the tap stays a sub-exchange inside the state (so a late tap
+still counts) or is dropped from the regime; and whether this
+restructuring comes before or after heading F's arrival-spread run,
+which depends on the current step machine.
+
+**Nothing restructured yet.** The run that confirms the loop is in
+progress; this is the record of the ruling so it is not lost between
+sessions.
+
 ## 2026-10-23 — the nodeless rows re-planned, and a form nobody fills
 
 **The lift, stated precisely.** It bought no new capability. A nodeless

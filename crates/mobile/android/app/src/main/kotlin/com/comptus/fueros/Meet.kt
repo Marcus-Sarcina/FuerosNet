@@ -1226,6 +1226,17 @@ class Meet(
             return stop("nothing has moved for ${STALE_MS / 1000} s; the other phone may have stopped")
         }
         if (step() != Step.VERIFIERS) return
+        // **said before any branch can return**, on both sides, once.
+        // This sat in the `when` at the end, after the proposer branch —
+        // which proposes and returns in the same poll that first sees the
+        // body proposable, so the statement was unreachable there, and a
+        // responder never had `noWitness` at all (A6, 2026-10-24).
+        // Developer wording until the UX pass [author, 2026-10-24]: the
+        // state, not a message.
+        if (p.noWitness) {
+            val fresh = synchronized(lock) { (!saidNoWitness).also { saidNoWitness = true; changed() } }
+            if (fresh) note("state: no witness attests this meeting — witnesses=0, formation=false; record field 4 absent, permanent.")
+        }
         if (p.proposed) {
             // the body is out, or has been shown and signed here
             moved(Step.VERIFIERS, Step.REVIEW)
@@ -1273,23 +1284,12 @@ class Meet(
             moved(Step.VERIFIERS, Step.REVIEW)
             return
         }
-        when {
-            p.noWitness -> {
-                // **a missing witness stops nothing** [author, 2026-10-19]:
-                // there is no floor (`wire-format.md` §3.2), and the
-                // record's absent witness field says what happened to
-                // every later reader — which is the one thing the person
-                // is told here, once, before they sign it.
-                val fresh = synchronized(lock) { (!saidNoWitness).also { saidNoWitness = true; changed() } }
-                if (fresh) note("no witness attests this meeting; the record will say so, permanently.")
-            }
-            // what it waits on is the kernel's word and the screen shows
-            // it; said once, not once per turn
-            p.waitingOn != null -> {
-                val on = p.waitingOn
-                val fresh = synchronized(lock) { (said != on).also { said = on } }
-                if (fresh) note("not yet proposed: waiting on $on.")
-            }
+        // what it waits on is the kernel's word and the screen shows
+        // it; said once, not once per turn
+        if (p.waitingOn != null) {
+            val on = p.waitingOn
+            val fresh = synchronized(lock) { (said != on).also { said = on } }
+            if (fresh) note("not yet proposed: waiting on $on.")
         }
     }
 

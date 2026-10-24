@@ -860,7 +860,14 @@ impl Client {
             // no floor [author, 2026-10-19]: a witnessless body proposes,
             // and `no_witness` is information for a screen, not a gate
             proposable: ready,
-            no_witness: ready && witnesses == 0 && !formation,
+            // **both sides, once the sets are settled** [author, 2026-10-24]:
+            // gated on `ready` this was true only for the initiator and only
+            // in the same breath as `proposable`, so the responder never saw
+            // it and the proposer proposed before a screen could say it —
+            // A6 reached a witnessless normal record with neither phone
+            // saying so. `opened` is after the keep, so the survivors are
+            // known; none outstanding and none attesting is the fact.
+            no_witness: c.opened && witnesses_outstanding == 0 && witnesses == 0 && !formation,
             waiting_on: waiting_on.map(str::to_string),
             queries_outstanding: a.issued.iter().filter(|q| !answered.contains(*q)).count(),
             witnesses_outstanding,
