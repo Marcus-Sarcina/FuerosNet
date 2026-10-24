@@ -399,6 +399,26 @@ fn the_counterparty_learned_after_begin_is_never_offered_as_a_witness() {
         s.client("alice").nominees_engaged().0 >= 1,
         "alice engaged somebody, and the only parties she has met include bob"
     );
+    // **a nominee the courier could not reach leaves the set** [bench,
+    // 2026-10-24]: the message built, so the kernel counted bob engaged,
+    // but with no node the carry was refused — the boundary reports that
+    // and the set closes without him; a later attempt that reaches him
+    // puts him back, since availability is what the crossing reports
+    let engaged = s.client("alice").nominees_engaged().0;
+    s.client("alice").engagement_unreached(&[b]);
+    assert_eq!(
+        s.client("alice").nominees_engaged().0,
+        engaged - 1,
+        "an unreached nominee is not engaged"
+    );
+    s.client("alice")
+        .converse_engage()
+        .expect("alice engages again");
+    assert_eq!(
+        s.client("alice").nominees_engaged().0,
+        engaged,
+        "reached this time"
+    );
     // the codes cross: the contribution carries the identity, and this is
     // where each side learns who it is meeting (`take_optical`)
     let oa = s

@@ -501,6 +501,32 @@ impl Client {
         Ok(out)
     }
 
+    /// **Nominees the engagement did not reach**, as the courier reports
+    /// them [bench, 2026-10-24]: a message built on a session held from an
+    /// earlier day is a nominee this kernel counted engaged, and a carry
+    /// the adaptors refused is one nobody reached — with no node the whole
+    /// set was offered, kept by the counterparty, and the request to it
+    /// ended the ceremony. Such a nominee was unavailable (design §7.1) and
+    /// leaves the set, while the set is still open; once it has crossed
+    /// nothing changes.
+    pub fn engagement_unreached(&mut self, who: &[Keyhash]) {
+        let Some(a) = self.active.as_mut() else {
+            return;
+        };
+        if a.set_sent || who.is_empty() {
+            return;
+        }
+        let before = a.engaged_to.len();
+        for k in who {
+            a.engaged_to.remove(k);
+        }
+        tracing::info!(
+            target: "cer",
+            unreached = before - a.engaged_to.len(),
+            "cer.witness.unreached"
+        );
+    }
+
     /// One event of the optical exchange's shape to this side's nominees
     /// (kind 21), as it happens and never batched: the arrival pace on the
     /// nominees' clocks is the evidence (design §7.1 items 3 and 9).  The
@@ -513,10 +539,14 @@ impl Client {
                 handle: a.handle,
                 event,
             };
-            (
-                a.my_nominees.iter().copied().collect::<Vec<_>>(),
-                Msg::Trace(t),
-            )
+            // to the nominees the engagement reached, once it was tried: a
+            // nominee it did not reach is sent nothing further
+            let to: Vec<Keyhash> = if a.engage_attempted {
+                a.engaged_to.iter().copied().collect()
+            } else {
+                a.my_nominees.iter().copied().collect()
+            };
+            (to, Msg::Trace(t))
         };
         let (out, _) = self.converse_to(&msg, &nominees);
         Ok(out)

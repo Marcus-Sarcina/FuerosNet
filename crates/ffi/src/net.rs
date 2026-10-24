@@ -899,6 +899,45 @@ impl Net {
         Ok(carried.answers)
     }
 
+    /// Carry, and say who was not reached: the recipients of what the
+    /// serving node refused, for the kernel to count as unavailable
+    /// (design §7.1, a witness that does not appear).  What no path carried
+    /// at all is still an error, as in [`Net::carry`].
+    pub(crate) fn carry_noting(
+        &self,
+        msgs: Vec<rhtn_client::ceremony::Msg>,
+    ) -> Result<Vec<Keyhash>, Refused> {
+        use rhtn_client::ceremony::Msg;
+        let courier = match self.courier() {
+            Ok(c) => c,
+            Err(_) if msgs.is_empty() => return Ok(Vec::new()),
+            Err(_) => {
+                return Err(Refused::new(format!(
+                    "no serving node is attached and {} message(s) need one",
+                    msgs.len()
+                )));
+            }
+        };
+        let carried = self.rt().block_on(async move { courier.carry(msgs).await });
+        if !carried.left.is_empty() {
+            return Err(Refused::new(format!(
+                "no path carried {} of the messages: unsent",
+                carried.left.len()
+            )));
+        }
+        let mut unreached: Vec<Keyhash> = carried
+            .refused
+            .iter()
+            .filter_map(|m| match m {
+                Msg::Payload { to, .. } | Msg::Relay { to, .. } => Some(*to),
+                _ => None,
+            })
+            .collect();
+        unreached.sort_unstable();
+        unreached.dedup();
+        Ok(unreached)
+    }
+
     pub(crate) fn carry(&self, msgs: Vec<rhtn_client::ceremony::Msg>) -> Result<(), Refused> {
         let courier = match self.courier() {
             Ok(c) => c,

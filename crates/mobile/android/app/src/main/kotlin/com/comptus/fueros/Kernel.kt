@@ -74,6 +74,8 @@ object Kernel {
     /** The conversation is entered once per meeting, as the window opens. */
     private val conversationStarted = java.util.concurrent.atomic.AtomicBoolean(false)
     private val sealLock = Any()
+    /** Whether this meeting has already said the trace could not go. */
+    private val traceRefusedSaid = java.util.concurrent.atomic.AtomicBoolean(false)
 
     /**
      * **The one thread the bearer's work runs on, and never a GATT
@@ -852,7 +854,11 @@ object Kernel {
             for (e in events) {
                 courier(p).trace(e)?.let { why ->
                     Diag.warn("optical.trace", "why" to why)
-                    m.note("a nominee could not be sent the exchange's shape.")
+                    // said once a meeting, not once an event: a nodeless run
+                    // said it 130 times (2026-10-24)
+                    if (traceRefusedSaid.compareAndSet(false, true)) {
+                        m.note("a nominee could not be sent the exchange's shape.")
+                    }
                     return@execute
                 }
             }
@@ -1558,6 +1564,7 @@ object Kernel {
         theirCaptureKey = null
         captureWindowDone.set(false)
         conversationStarted.set(false)
+        traceRefusedSaid.set(false)
     }
 
     /** The peer this device talks to — adopted at a meeting or named by the

@@ -841,7 +841,13 @@ impl Participant {
             .handle
             .with_blocking(step)
             .map_err(|a| Refused::new(format!("{a:?}")))?;
-        self.net.carry(msgs)?;
+        // **a leg a witness's node refused is a witness that will not
+        // appear, not a stopped ceremony** (design §7.1) [bench,
+        // 2026-10-24]: said, and the step stands
+        let unreached = self.net.carry_noting(msgs)?;
+        if !unreached.is_empty() {
+            tracing::warn!(target: "cer", unreached = unreached.len(), "cer.leg.refused");
+        }
         self.save()
     }
 }
@@ -2510,7 +2516,20 @@ impl Participant {
     /// counterparty has accepted anything.  A nominee that cannot be
     /// reached was unavailable and is dropped from the set.
     pub fn converse_engage(&self) -> Result<(), Refused> {
-        crate::diag::call("converse_engage", || self.converse(|c| c.converse_engage()))
+        crate::diag::call("converse_engage", || {
+            let msgs = self
+                .handle
+                .with_blocking(|c| c.converse_engage())
+                .map_err(|a| Refused::new(format!("{a:?}")))?;
+            // a nominee whose engagement the node refused was not reached,
+            // and leaves the set the counterparty will be offered
+            let unreached = self.net.carry_noting(msgs)?;
+            if !unreached.is_empty() {
+                self.handle
+                    .with_blocking(move |c| c.engagement_unreached(&unreached));
+            }
+            self.save()
+        })
     }
 
     /// One event of the optical exchange's shape to this side's nominees

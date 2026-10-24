@@ -144,7 +144,34 @@ a path the suite holds, which is the right order for a bench.
    35 checklists that used to be generated under `runs/` — a form since
    removed, having never once been filled in [author, 2026-10-23].
 2. **A2's nodeless adoption pass**, on phones that have met, as the row
-   now says. Witnessless normal record carrying the adoption.
+   now says. Witnessless normal record carrying the adoption. **First
+   attempt `a5a2f39-a2-nodeless-1` (2026-10-24), stopped at the window,
+   and it found two things**: the phone had no payload path at all without
+   an attach (fixed first: a detached client stands its own courier and
+   direct socket, and the two phones now hand candidates across the bearer
+   — both said "a direct path to … is open"); and a nominee the stale
+   provision still named was counted engaged though no node ever carried
+   the engagement, so the counterparty kept it and the request to it ended
+   the ceremony — fixed: a nominee whose engagement the adaptors refused
+   leaves the set while it is open, the trace goes to the reached alone,
+   and a refused witness leg is a witness that will not appear rather than
+   a stopped ceremony (design §7.1). **DONE, `a5a2f39-a2-nodeless-2`
+   (2026-10-24)**: no node anywhere, GXV patron, MRK adopted. The stale
+   nominee fell out at the engagement ("0 of 1 nominees are engaged; the
+   rest were not reachable"), `set_sent offered=0 unreachable=1`, the
+   candidates crossed behind the intent and both said "a direct path to …
+   is open", the record `bce08f8b` finalised as a witnessless normal record
+   (`witnesses=0 formation=false`, signers 2), and the adoption ran on the
+   direct path — MRK offered series 1 as an individual, GXV proposed, MRK's
+   kernel checked the body and signed it (`cer.adoption.signed`), both hold
+   `ce2f7ba8` — 208 of 221 payloads direct, the 13 relayed being the twelve
+   refused engagements and the one offer. **One thing found, not yet
+   fixed**: on the first direct send after the record each phone flushed
+   stale messages pended for the other from an earlier day — 207 trace
+   events, which the receiver rightly discarded as a stranger's ("a trace
+   for no engagement this client watches") — so a ceremony's legs pended
+   for a peer outlive the ceremony. A question for the author's next
+   session, with the obvious answer being that they should not.
 3. **Heading F's arrival spread** (A5) — **ready on the restructured
    machine** (2026-10-24): ranging is gone, the post-optical regime is one
    `WINDOW` step in which the capture's hold is turned tick by tick while
