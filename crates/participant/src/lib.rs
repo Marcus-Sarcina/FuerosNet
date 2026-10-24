@@ -154,6 +154,17 @@ impl Instrument {
         match f {
             ["help"] => Ok(HELP.lines().map(str::to_string).collect()),
             ["me"] => Ok(vec![format!("me {}", self.me())]),
+            // the introduction another party takes to hold this one by
+            // locator (`wire-format.md` §2.3): what the bench hands a phone
+            // for the nominee it names, since a nominee is offered to the
+            // counterparty's prune by locator and material alone cannot be
+            ["introduction"] => Ok(vec![format!(
+                "introduction {}",
+                hex(&self
+                    .client
+                    .own_introduction()
+                    .map_err(|e| e.reason().to_string())?)
+            )]),
 
             ["attached"] => Ok(vec![format!("attached {}", self.client.attached())]),
 
@@ -788,6 +799,7 @@ pub fn read_peers(path: &Path) -> Result<Vec<Vec<u8>>, String> {
 pub const HELP: &str = "\
 help                      these lines
 me                        this participant's keyhash
+introduction              this participant's introduction: its material and signed locator
 attach <node> <addr>[,<addr>] [<party>...]
                           attach to a serving node, sweeping the parties named
 attached                  whether a session is held

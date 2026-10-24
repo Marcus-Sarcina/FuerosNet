@@ -332,8 +332,13 @@ archive = "$RUN/daemon/archive"
 heartbeat = 30
 ingestion = "unverified-gossip"
 
+# the exchange's trace is one relayed request per event, never batched
+# (design §7.1 item 1): ~120 per nominee per exchange, which the earlier
+# 120/60 s cut off at the 118th and left the confirmation unsent (run
+# 58a6883-a5-2, 2026-10-24). A bench figure; what a node should admit is
+# the author's question
 [allowance]
-requests = 120
+requests = 600
 seconds = 60
 
 [log]
@@ -367,6 +372,17 @@ start_witness() { # n
     die "witness-$n did not answer its attach"
   fi
   say "witness-$n: $(grep -m1 -E '^(attached|error)' "$d/stdout.txt")"
+  # its introduction — material and signed locator — for the phone that
+  # nominates it: a nominee is offered to the counterparty's prune by
+  # locator (`network-design.md` §8.1.2), and material alone leaves the
+  # phone nothing to offer (run 58a6883-a5-2, 2026-10-24: offered=0)
+  echo "introduction" >&"$fd"
+  if ! await_text "$d/stdout.txt" "^introduction " 20 "${W_PID[n]}"; then
+    cat "$d/stderr.txt" >&2
+    die "witness-$n did not give its introduction"
+  fi
+  W_INTRO[n]="$(grep -m1 '^introduction ' "$d/stdout.txt" | cut -d' ' -f2)"
+  [ -n "${W_INTRO[n]}" ] || die "witness-$n gave an empty introduction"
 }
 start_witness 1
 start_witness 2
@@ -483,13 +499,14 @@ for s in ${DEVICES[@]+"${DEVICES[@]}"}; do
       # nominee is its own and the `nominated_by` split is balanced. Both
       # witnesses go into `known` either way: a nominee must be addressable
       # and its signature on the record verifiable
-      if [ $((i % 2)) -eq 0 ]; then nominee="$W_KEYHASH1"; nominee_name="witness-1"; else nominee="$W_KEYHASH2"; nominee_name="witness-2"; fi
-      python3 - "$DAEMON_MATERIAL" "$peer_material" "${PHONE_MATERIALS[i]}" "$DAEMON_KEYHASH" "$ADDR" "$peer_keyhash" "$peer_name" "$RETENTION" "$W_MATERIAL1" "$W_MATERIAL2" "$nominee" > "$RUN/phones/$s/provision.json" <<'PY'
+      if [ $((i % 2)) -eq 0 ]; then nominee="$W_KEYHASH1"; nominee_name="witness-1"; nominee_intro="${W_INTRO[1]}"; else nominee="$W_KEYHASH2"; nominee_name="witness-2"; nominee_intro="${W_INTRO[2]}"; fi
+      python3 - "$DAEMON_MATERIAL" "$peer_material" "${PHONE_MATERIALS[i]}" "$DAEMON_KEYHASH" "$ADDR" "$peer_keyhash" "$peer_name" "$RETENTION" "$W_MATERIAL1" "$W_MATERIAL2" "$nominee" "$nominee_intro" > "$RUN/phones/$s/provision.json" <<'PY'
 import json, sys
-node_m, peer_m, own_m, node, addr, peer, name, retention, w1, w2, nominee = sys.argv[1:12]
+node_m, peer_m, own_m, node, addr, peer, name, retention, w1, w2, nominee, nominee_intro = sys.argv[1:13]
 known = [node_m, peer_m, own_m] + [w for w in (w1, w2) if w != peer_m]
 blob = {"known": known, "node": node, "addr": addr,
-        "peer": peer, "peer_name": name, "nominees": [nominee]}
+        "peer": peer, "peer_name": name, "nominees": [nominee],
+        "introductions": [nominee_intro]}
 if retention:
     blob["retention_years"] = int(retention)
 print(json.dumps(blob, separators=(",", ":")))

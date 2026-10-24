@@ -108,6 +108,14 @@ fn an_instrument_reports_what_it_was_told_the_hardware_did_and_nothing_more() {
     assert_eq!(p.must("answer yes"), ["answer yes"]);
     assert_eq!(p.must("answer"), ["answer yes"]);
 
+    // its own introduction, one line of hex: what the bench hands a phone
+    // for the nominee it names (`wire-format.md` §2.3)
+    let intro = line(p.must("introduction"), "introduction ");
+    assert!(
+        intro.len() > 64 && intro.chars().all(|c| c.is_ascii_hexdigit()),
+        "{intro}"
+    );
+
     // and a command it does not know is refused rather than ignored
     assert!(p.tell("nonsense")[0].contains("is not a command"));
     assert!(p.tell("send zz 0 00")[0].contains("not hex"));

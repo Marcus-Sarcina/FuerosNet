@@ -218,6 +218,26 @@ fn a_contact_round_trips_through_the_store_and_a_bare_locator_is_not_one() {
     let _ = ids();
 }
 
+/// **A party's own introduction is what another takes to hold it by
+/// locator** (`wire-format.md` §2.3): the bench hands a phone its nominee
+/// this way, since a nominee is offered to the counterparty's prune by
+/// locator and material alone left the set empty (run 58a6883-a5-2,
+/// 2026-10-24).
+#[test]
+fn an_own_introduction_is_taken_by_another_and_held_with_its_locator() {
+    let mut s = setup(&["alice", "bob"]);
+    let intro = s.client("bob").own_introduction().expect("bob's own");
+    let a = s.client("alice");
+    assert_eq!(a.take_introduction(&intro).expect("bob arrives"), kh("bob"));
+    let c = a.store.contacts.get(&kh("bob")).expect("a contact for bob");
+    assert_eq!(c.how, How::Introduced);
+    assert!(c.locator.is_some(), "the locator came with the key");
+    assert!(
+        s.client("bob").take_introduction(&intro).is_err(),
+        "an introduction to oneself is refused"
+    );
+}
+
 /// **Taking an introduction is the one way a party arrives without a
 /// meeting** (`wire-format.md` §2.3; design §12.3 Case 0, where the
 /// locator travels with the key out of band and no lookup occurs). The

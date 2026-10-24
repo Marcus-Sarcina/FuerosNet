@@ -585,8 +585,12 @@ impl LiveNode {
             );
             Box::pin(async move {
                 // over the requester's allowance the stream fails, and nothing
-                // about the request is kept
+                // about the request is kept — but the refusal is said: a bench
+                // node cut a ceremony's trace off at its 118th event and the
+                // daemon's log held not one line about it (run 58a6883-a5-2,
+                // 2026-10-24)
                 if !lim.allow(&peer) {
+                    tracing::info!(target: "node", peer8 = %crate::diag::id8(&peer), "node.allowance");
                     return None;
                 }
                 match family {

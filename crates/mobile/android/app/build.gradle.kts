@@ -31,9 +31,11 @@ android {
 
     defaultConfig {
         applicationId = "com.comptus.fueros"
-        // The floor was set at 31 when UWB was one of the ceremony's channels;
-        // ranging is dropped [author, 2026-10-24] and the floor is kept as it
-        // was, with no new reason claimed for it.
+        // API 31 is where Bluetooth LE got its own permissions (BLUETOOTH_SCAN,
+        // CONNECT, ADVERTISE, with the neverForLocation flag): below it a BLE
+        // scan needs the location permission, which this app has no use for
+        // and would have to explain. The floor was first set here for UWB;
+        // ranging is gone [author, 2026-10-24] and the bearer keeps it.
         minSdk = 31
         targetSdk = 36
         versionCode = 1

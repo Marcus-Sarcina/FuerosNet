@@ -2087,6 +2087,17 @@ impl Participant {
         })
     }
 
+    /// **This client's own introduction** (`wire-format.md` §2.3): its key
+    /// material with its own signed locator, for another party to take with
+    /// [`Participant::take_introduction`] and hold it by.
+    pub fn own_introduction(&self) -> Result<Vec<u8>, Refused> {
+        crate::diag::call("own_introduction", || {
+            self.handle
+                .with_blocking(|c| c.own_introduction())
+                .map_err(|a| Refused::new(format!("{a:?}")))
+        })
+    }
+
     /// **Take an introduction** (`wire-format.md` §2.3): somebody's key
     /// material and a locator of theirs, scanned or pasted, which is the
     /// one way a person brings a party into this client without having

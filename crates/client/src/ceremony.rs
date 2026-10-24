@@ -1343,6 +1343,20 @@ impl Client {
         ))
     }
 
+    /// **This client's own introduction** (`wire-format.md` §2.3): its key
+    /// material and its own `SignedLocator`, as a party hands one on so
+    /// that a holder can address it and offer it by locator — which is how
+    /// a nominee travels to the counterparty's prune ([`Client::my_witness_set`]
+    /// in `sequence.rs`).
+    pub fn own_introduction(&self) -> Result<Vec<u8>, Abort> {
+        let me = self.signer()?;
+        let sl = rhtn_archive::locator::signed_locator(me, &self.acting_position());
+        Ok(rhtn_archive::locator::introduction(
+            &me.public.key_material(),
+            &sl,
+        ))
+    }
+
     /// Keep `sl` as the locator held for `who` where it is theirs and
     /// newer than what is held (`wire-format.md` §2.3): verified under the
     /// key already pinned for them, replaced by a greater counter in the

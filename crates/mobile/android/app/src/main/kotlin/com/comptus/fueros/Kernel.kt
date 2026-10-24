@@ -1584,6 +1584,21 @@ object Kernel {
         } ?: return
         participant = p
         show(p, Status.Detached)
+        // **a nominee arrives as an introduction** (`wire-format.md` §2.3):
+        // material and a signed locator, taken as a person would take one
+        // scanned, so the nominee can be offered to the counterparty's
+        // prune by locator. The bench names nominees this way because a
+        // phone at genesis has met nobody; material alone left the set
+        // empty (run 58a6883-a5-2, 2026-10-24)
+        provision?.optJSONArray("introductions")?.let { a ->
+            for (k in 0 until a.length()) {
+                val bytes = runCatching { unhex(a.getString(k)) }.getOrNull() ?: continue
+                call("takeIntroduction", { e -> front.note("· an introduction was refused: ${e.reason}") }) {
+                    val who = p.takeIntroduction(bytes)
+                    front.note("· introduced: ${hex(who).take(16)}…")
+                }
+            }
+        }
 
         val material = p.material().joinToString("") { "%02x".format(it) }
 
