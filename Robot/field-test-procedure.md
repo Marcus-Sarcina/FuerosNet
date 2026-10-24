@@ -210,6 +210,28 @@ so install all of them or none.
 A second run needs step 2 again (new node identity, new provision), and
 after a wipe `field-setup.sh` again, or step 1 by hand (new material).
 
+## Reading a stall or a leak
+
+The field-test build carries three instruments for a screen that freezes
+or a process that grows, all in the phone's stream (`phones/<serial>.jsonl`)
+[bench, 2026-10-24]:
+
+- **Every boundary call's duration** — `ffi.return` and `shell.return` carry
+  `took_ms`. A call made from the thread that draws is a stall of that
+  length: `opticalTrace` at a median of 100 ms and a maximum of 6.8 s, 210
+  times in one exchange, was the frozen preview of run `1bd1c15-direct-1`.
+  Read it as a table: method, count, median, maximum, over the step's window.
+- **The main thread's watchdog** — `shell.stall` (warn) when a tick posted to
+  the main looper has not run within a second, with the main thread's stack
+  at that moment, and `shell.stall state=over held_ms=N` when it does. A
+  stall with no `took_ms` beside it is one the boundary did not cause.
+- **The heap on the turn's clock** — `shell.memory` with `java_kb` and
+  `native_kb` beside every `kernel.turn`. A number that climbs across a run
+  and does not come down is a leak; `adb shell dumpsys meminfo
+  com.comptus.fueros` on the bench says the same from outside, and `adb
+  shell am dumpheap com.comptus.fueros /data/local/tmp/h.hprof` takes the
+  heap for Android Studio's profiler where a climb needs a culprit.
+
 ## Reading the arrival spread
 
 What PRD-17 is judged on is not on either phone's screen: it is whether the

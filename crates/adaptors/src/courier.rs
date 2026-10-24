@@ -642,16 +642,6 @@ impl Courier {
                         }
                     }
                     Msg::Payload { to, bytes, device } => {
-                        // **the ceremony's own legs offer the direct path
-                        // too** [author, 2026-10-24]: a witness or a verifier
-                        // is a contact, and the first message to one that is
-                        // not yet reached directly carries this side's
-                        // candidates ahead of it, as a send from the
-                        // application does — otherwise every leg to a witness
-                        // stayed on the relay (run 1bd1c15-a5-1)
-                        if !me.direct.reachable().holds(&to) && !me.offered(&to) {
-                            me.offer(to).await;
-                        }
                         // a delivery short of complete leaves the message
                         // with the sender, and a relayed path carries it
                         // (design §14.1.1): direct where a path is held,
@@ -660,6 +650,19 @@ impl Courier {
                             && !me.relayed(to, &bytes, device).await
                         {
                             out.refused.push(Msg::Payload { to, bytes, device });
+                        }
+                        // **the ceremony's own legs offer the direct path
+                        // too** [author, 2026-10-24]: a witness or a verifier
+                        // is a contact, and the first message to one not yet
+                        // reached directly is followed by this side's
+                        // candidates, as a send from the application is.
+                        // **After the message, never ahead of it**: the first
+                        // message on a fresh session is the one that opens it,
+                        // and candidates relayed as their own request raced
+                        // past it and met "no session with that peer" at the
+                        // witness (run 1bd1c15-direct-1)
+                        if !me.direct.reachable().holds(&to) && !me.offered(&to) {
+                            me.offer(to).await;
                         }
                     }
                     // the client already said no direct path is held, so
@@ -671,11 +674,12 @@ impl Courier {
                     // ceremony's legs to its witnesses earn one (run
                     // 1bd1c15-a5-2: 219 relayed, not one offer)
                     Msg::Relay { to, bytes, device } => {
-                        if !me.offered(&to) {
-                            me.offer(to).await;
-                        }
                         if !me.relayed(to, &bytes, device).await {
                             out.refused.push(Msg::Relay { to, bytes, device });
+                        }
+                        // the offer follows the message, as above
+                        if !me.offered(&to) {
+                            me.offer(to).await;
                         }
                     }
                     // **a resource is reached through its host** (§11.1):

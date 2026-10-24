@@ -841,14 +841,29 @@ object Kernel {
         if (events.isEmpty()) return
         val p = participant ?: return
         val m = meet ?: return
-        for (e in events) {
-            courier(p).trace(e)?.let { why ->
-                Diag.warn("optical.trace", "why" to why)
-                m.note("a nominee could not be sent the exchange's shape.")
-                return
+        // **off the thread that drives the exchange, always** [bench,
+        // 2026-10-24]: each event is a relayed request to the nominee's
+        // node, 100 ms at the median and up to seven seconds, and the
+        // exchange's screen called this 210 times from its own thread — the
+        // code stopped cycling and the preview froze for the duration (run
+        // 1bd1c15-direct-1). One thread, so the events keep their order,
+        // which is what the witness attests from
+        traceWork.execute {
+            for (e in events) {
+                courier(p).trace(e)?.let { why ->
+                    Diag.warn("optical.trace", "why" to why)
+                    m.note("a nominee could not be sent the exchange's shape.")
+                    return@execute
+                }
             }
         }
     }
+
+    /** The one thread the trace goes out on, in order (see [opticalTrace]). */
+    private val traceWork: java.util.concurrent.ExecutorService =
+        java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+            Thread(r, "fueros-trace").apply { isDaemon = true }
+        }
 
     fun takeOptical(bytes: ByteArray): String? {
         val p = participant ?: return "the kernel is not running"
@@ -923,6 +938,15 @@ object Kernel {
         if (now - lastEntryAt < turnDiagMs) return
         lastEntryAt = now
         Diag.event("kernel.turn", "turns" to turns)
+        // the heap beside it, on the same clock: a number that climbs across
+        // a run is a leak, and one that does not rules it out [bench,
+        // 2026-10-24]
+        val rt = Runtime.getRuntime()
+        Diag.event(
+            "shell.memory",
+            "java_kb" to (rt.totalMemory() - rt.freeMemory()) / 1024,
+            "native_kb" to android.os.Debug.getNativeHeapAllocatedSize() / 1024,
+        )
     }
 
     /** [Meet.turnState] into the diagnostics, on change or on the clock;
@@ -1529,6 +1553,8 @@ object Kernel {
             appContext = app
         }
         Thread({ bringUp(AndroidShell(app)) }, "fueros-kernel").start()
+        // the main thread's watchdog, in a build that has somewhere to say it
+        if (Diag.enabled()) Stall.start()
     }
 
     /**
