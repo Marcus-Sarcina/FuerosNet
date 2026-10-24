@@ -9,7 +9,7 @@
 //! that is what a generator can read whichever generator is chosen.
 
 use rhtn_archive::Keyhash;
-use rhtn_client::device::{ChannelKind, ChannelResult, Prompt};
+use rhtn_client::device::Prompt;
 use rhtn_client::notice::{Notice, Role};
 use rhtn_client::query::Verdict;
 
@@ -31,45 +31,6 @@ pub fn keyhash(id: &[u8]) -> Option<Keyhash> {
     id.try_into().ok()
 }
 
-/// A proximity channel, as the shell knows it (`light-client-requirements.md` §1.3).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
-pub enum Channel {
-    /// UWB secure ranging, the strongest channel considered (design §7.6.3).
-    Uwb,
-    /// An NFC tap.
-    Nfc,
-    /// The screen-to-camera pass, which the anchor exchange itself makes.
-    Optical,
-    /// A route-latency plausibility check, weak evidence.
-    Latency,
-}
-
-impl Channel {
-    /// The channel the client's own kind names.
-    pub fn of(k: ChannelKind) -> Channel {
-        match k {
-            ChannelKind::Uwb => Channel::Uwb,
-            ChannelKind::Nfc => Channel::Nfc,
-            ChannelKind::Optical => Channel::Optical,
-            ChannelKind::Latency => Channel::Latency,
-        }
-    }
-
-    /// The client's kind this channel names.
-    pub fn kind(self) -> ChannelKind {
-        match self {
-            Channel::Uwb => ChannelKind::Uwb,
-            Channel::Nfc => ChannelKind::Nfc,
-            Channel::Optical => ChannelKind::Optical,
-            Channel::Latency => ChannelKind::Latency,
-        }
-    }
-}
-
-/// What running a channel came to.  **A channel the hardware lacks is
-/// unavailable and never a failure**, and nothing is promoted: the
-/// distinction is the shell's to report and the client's to weigh
-/// (`light-client-requirements.md` §1.3).
 /// The payload session's construction, as the client states it to its own
 /// user (`light-client-requirements.md` §3). A value, not a sentence: the
 /// wording is each shell's, in its user's own language.
@@ -86,29 +47,6 @@ impl From<rhtn_client::ratchet::Construction> for Construction {
         match c {
             rhtn_client::ratchet::Construction::DoubleRatchet => Construction::DoubleRatchet,
             rhtn_client::ratchet::Construction::TripleRatchet => Construction::TripleRatchet,
-        }
-    }
-}
-
-/// What running one channel came to.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
-pub enum ChannelOutcome {
-    /// The channel ran and the parties were close enough.
-    Pass,
-    /// The channel ran and they were not.
-    Fail,
-    /// The hardware does not have it. **Not a failure**, and never promoted
-    /// to one.
-    Unavailable,
-}
-
-impl ChannelOutcome {
-    /// The client's own result this outcome names.
-    pub fn result(self) -> ChannelResult {
-        match self {
-            ChannelOutcome::Pass => ChannelResult::Pass,
-            ChannelOutcome::Fail => ChannelResult::Fail,
-            ChannelOutcome::Unavailable => ChannelResult::Unavailable,
         }
     }
 }

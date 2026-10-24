@@ -28,7 +28,6 @@ fn full_set() -> DisclosureSet {
         retention_value(2),
         integrity_value(false, 0),
         retention_value(2),
-        proximity_value(&[(1, 0, Some(4))], 1),
     ];
     disclosures(values, std::array::from_fn(|i| [i as u8 + 1; 16]))
 }
@@ -396,7 +395,7 @@ fn a_client_scans_what_it_imports_and_reports_what_it_dropped() {
 /// A client at a stated instant, for the scan's clock.
 fn fresh(name: &str, at_ms: u64) -> rhtn_client::ceremony::Client {
     let clock = std::rc::Rc::new(std::cell::Cell::new(at_ms));
-    let (device, _) = common::harness::device(vec![], clock, 7, 0);
+    let (device, _) = common::harness::device(clock, 7, 0);
     rhtn_client::ceremony::Client::new(id(name), ids(), Default::default(), device)
 }
 

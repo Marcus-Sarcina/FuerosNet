@@ -590,29 +590,4 @@ fn dec_37_the_openings_structures_hold_their_shapes() {
     };
     assert!(chk("WitnessStanddown", &sd_ok).is_ok());
     assert!(chk("WitnessStanddown", &sd_extra).is_err(), "a second key");
-    // an update is the ceremony-id and one channel map
-    let upd = |channel_key: u64| {
-        let mut o = Vec::new();
-        emit_map_head(&mut o, 2);
-        emit_uint(&mut o, 1);
-        b32(&mut o, 6);
-        emit_uint(&mut o, 2);
-        emit_map_head(&mut o, 2);
-        // the inner map sorted either way, so the unknown key is what fails
-        let (first, second) = if channel_key < 2 {
-            (channel_key, 2)
-        } else {
-            (2, channel_key)
-        };
-        emit_uint(&mut o, first);
-        emit_uint(&mut o, if first == channel_key { 2 } else { 0 });
-        emit_uint(&mut o, second);
-        emit_uint(&mut o, if second == channel_key { 2 } else { 0 });
-        o
-    };
-    assert!(chk("ProximityUpdate", &upd(1)).is_ok());
-    assert!(
-        chk("ProximityUpdate", &upd(9)).is_err(),
-        "an unknown channel key, refused unsigned as in a request"
-    );
 }

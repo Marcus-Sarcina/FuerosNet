@@ -14,17 +14,6 @@ use std::{rc::Rc, sync::Arc};
 struct Shell {
     store: std::sync::Mutex<std::collections::BTreeMap<String, Vec<u8>>>,
 }
-impl Proximity for Shell {
-    fn supported(&self) -> Vec<Channel> {
-        vec![]
-    }
-    fn run(&self, _: Channel, _: Vec<u8>) -> ChannelOutcome {
-        ChannelOutcome::Unavailable
-    }
-    fn resolution_m(&self, _: Channel) -> Option<u64> {
-        None
-    }
-}
 impl Camera for Shell {
     fn capture(&self, _: Ask) -> Vec<u8> {
         vec![7; 64]
@@ -84,7 +73,6 @@ impl Custody for Shell {
 fn client(name: &str) -> Client {
     let s = Arc::new(Shell::default());
     let p = Platform {
-        proximity: s.clone(),
         camera: s.clone(),
         clock: s.clone(),
         random: s.clone(),
@@ -177,7 +165,6 @@ async fn r08_failover_must_update_the_kernel_serving_identity() {
     let s = shell.clone();
     let p = tokio::task::spawn_blocking(move || {
         let platform = Arc::new(Platform {
-            proximity: s.clone(),
             camera: s.clone(),
             clock: s.clone(),
             random: s.clone(),
@@ -466,7 +453,7 @@ fn r06_a_valid_presented_presence_must_be_walkable_in_an_archive_reply() {
     let a = test_identity("alice");
     let b = test_identity("bob");
     let ids = vec![a.public.clone(), b.public.clone()];
-    let set = disclosures(std::array::from_fn(|_| vec![0]), [[4; 16]; 7]);
+    let set = disclosures(std::array::from_fn(|_| vec![0]), [[4; 16]; 6]);
     let ga = [rhtn_archive::genesis(&a.public.keyhash)];
     let gb = [rhtn_archive::genesis(&b.public.keyhash)];
     let env = envelope(
@@ -1024,7 +1011,6 @@ fn control_start_from_backup_restores_the_identity_and_writes_current_state() {
         .unwrap();
     let shell = Arc::new(Shell::default());
     let platform = Arc::new(Platform {
-        proximity: shell.clone(),
         camera: shell.clone(),
         clock: shell.clone(),
         random: shell.clone(),

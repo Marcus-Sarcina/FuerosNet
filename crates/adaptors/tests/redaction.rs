@@ -21,7 +21,6 @@
 mod common;
 
 use common::*;
-use rhtn_client::device::ChannelKind;
 use rhtn_client::diag::json::JsonLines;
 use rhtn_codec::cose::sha256;
 use std::collections::{BTreeMap, HashSet};
@@ -103,9 +102,9 @@ async fn no_secret_of_a_whole_ceremony_appears_in_any_event() {
     prior.meet("alice", "w2");
     let mut m = Meeting::open(
         vec![
-            Who::with("alice", &[ChannelKind::Nfc]),
-            Who::with("bob", &[ChannelKind::Nfc]),
-            Who::with("carol", &[ChannelKind::Nfc]),
+            Who::with("alice"),
+            Who::with("bob"),
+            Who::with("carol"),
             Who::watching("w1"),
             Who::watching("w2"),
             Who::watching("witness"),
@@ -210,8 +209,6 @@ async fn no_secret_of_a_whole_ceremony_appears_in_any_event() {
         "cer.begin",
         "cer.intent.received",
         "cer.id_fixed",
-        "cer.proximity",
-        "cer.proximity.done",
         "cer.capture",
         "cer.select",
         "cer.query.issued",

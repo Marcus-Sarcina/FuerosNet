@@ -8,7 +8,6 @@
 //! mismatch here means one of the two is wrong and neither gets to decide
 //! which.
 
-use rhtn_client::device::{ChannelKind, ChannelOutcome, ChannelResult};
 use rhtn_client::local::*;
 use serde_json::Value;
 
@@ -73,27 +72,6 @@ fn the_optical_objects_encode_to_the_canonical_bytes_and_read_back() {
     assert_eq!(read.encode(), fx);
     // the ceremony-id the other objects anchor to
     let cid = read.ceremony_id;
-
-    let fx = fixture("P-proximity-outcomes");
-    let read = ProximityOutcomes::decode(&fx).expect("decodes");
-    assert_eq!(read.ceremony_id, cid, "anchored to the same ceremony");
-    assert_eq!(
-        read.channels,
-        vec![
-            ChannelOutcome {
-                kind: ChannelKind::Nfc,
-                result: ChannelResult::Pass,
-                resolution_m: None,
-            },
-            ChannelOutcome {
-                kind: ChannelKind::Optical,
-                result: ChannelResult::Pass,
-                resolution_m: None,
-            },
-        ],
-        "the record's own channels: NFC pass then optical pass"
-    );
-    assert_eq!(read.encode(), fx);
 
     let fx = fixture("P-candidate-handover");
     let read = CandidateHandover::decode(&fx).expect("decodes");
@@ -227,8 +205,7 @@ fn an_object_the_schema_refuses_does_not_decode_here_either() {
     );
     // and the anchored kinds are not interchangeable, each checking against
     // its own rule
-    assert!(ProximityOutcomes::decode(&fixture("P-candidate-handover")).is_err());
-    assert!(CandidateHandover::decode(&fixture("P-proximity-outcomes")).is_err());
+    assert!(CandidateHandover::decode(&fixture("P-capture-key-handover")).is_err());
     assert!(BundleContinuation::decode(&fixture("P-intent-exchange")).is_err());
     // the responder's intent of the pair: the other flag, an empty bundle
     let r = IntentExchange::decode(&fixture("P-intent-exchange-responder")).expect("decodes");

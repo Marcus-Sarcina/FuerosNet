@@ -11,7 +11,6 @@ mod common;
 use common::harness::setup;
 use common::{id, ids, kh};
 use rhtn_client::ceremony::Adopting;
-use rhtn_client::device::ChannelKind;
 
 const PARTIES: [&str; 6] = ["alice", "bob", "carol", "w1", "w2", "w3"];
 
@@ -25,7 +24,7 @@ fn subnet_under(s: &mut common::harness::Setup, root: &str) -> rhtn_archive::Txi
 // acceptance: TOP-49
 #[test]
 fn a_client_self_anchors_until_it_is_adopted_and_a_newly_minted_root_can_adopt() {
-    let mut s = setup(&PARTIES, &[ChannelKind::Nfc]);
+    let mut s = setup(&PARTIES);
 
     // **nothing has been configured and no ceremony has been run.** A
     // client's position under its own key is the self-anchor: the empty
@@ -87,7 +86,7 @@ fn a_client_self_anchors_until_it_is_adopted_and_a_newly_minted_root_can_adopt()
 // acceptance: TOP-50
 #[test]
 fn a_client_adopted_into_two_trees_holds_a_position_in_each() {
-    let mut s = setup(&PARTIES, &[ChannelKind::Nfc]);
+    let mut s = setup(&PARTIES);
 
     // two roots, and bob adopted under both: `wire-format.md` §2.3 has one
     // series per patron relationship, so this is two lines and not a
@@ -178,7 +177,7 @@ fn a_client_adopted_into_two_trees_holds_a_position_in_each() {
 // acceptance: CER-40
 #[test]
 fn a_patron_issues_each_subordinate_its_own_index_and_stops_at_ten() {
-    let mut s = setup(&PARTIES, &[ChannelKind::Nfc]);
+    let mut s = setup(&PARTIES);
     let me = kh("alice");
 
     // **ten slots and no eleventh.** design §3.1 gives every node at most
@@ -220,7 +219,6 @@ fn an_eleventh_subordinate_has_no_slot_to_be_put_in() {
         common::ids(),
         Default::default(),
         common::harness::device(
-            vec![],
             std::rc::Rc::new(std::cell::Cell::new(1_790_000_000_000u64)),
             11,
             0,
@@ -284,7 +282,7 @@ fn a_client_leaves_a_patron_on_its_own_signature_and_holds_no_position_there_aft
     use rhtn_archive::tx::TYPE_DEPARTURE;
     use rhtn_client::ceremony::{Abort, Msg};
 
-    let mut s = setup(&PARTIES, &[ChannelKind::Nfc]);
+    let mut s = setup(&PARTIES);
     s.adopted("bob", "alice", "w1", 1);
     s.adopted("bob", "carol", "w1", 2);
     let alices = subnet_under(&mut s, "alice");
@@ -373,7 +371,7 @@ fn a_client_leaves_a_patron_on_its_own_signature_and_holds_no_position_there_aft
 /// with `nominees: 0` and the body waited on a witness never asked.
 #[test]
 fn a_client_that_is_handed_no_nominee_nominates_the_parties_it_has_met() {
-    let mut s = setup(&["alice", "bob", "carol"], &[ChannelKind::Nfc]);
+    let mut s = setup(&["alice", "bob", "carol"]);
     assert!(
         s.client("alice").met(None).is_empty(),
         "nobody met, nobody to nominate"
@@ -417,14 +415,14 @@ fn a_client_that_is_handed_no_nominee_nominates_the_parties_it_has_met() {
 /// did first]. Both restorers fold it.
 #[test]
 fn a_restarted_client_has_still_met_whom_it_met() {
-    let mut s = setup(&["alice", "bob"], &[ChannelKind::Nfc]);
+    let mut s = setup(&["alice", "bob"]);
     s.met("alice", "bob", "carol");
     assert_eq!(s.client("alice").met(None), vec![kh("bob")]);
     let blob = s.client("alice").durable();
     let clock = s.clock.clone();
 
     // from the durable document
-    let (dev, _h) = common::harness::device(vec![ChannelKind::Nfc], clock.clone(), 17, 0);
+    let (dev, _h) = common::harness::device(clock.clone(), 17, 0);
     let mut again = rhtn_client::ceremony::Client::new(id("alice"), ids(), Default::default(), dev);
     again.restore_durable(&blob).expect("opens whole");
     assert_eq!(again.met(None), vec![kh("bob")], "restored: still met bob");
@@ -434,7 +432,7 @@ fn a_restarted_client_has_still_met_whom_it_met() {
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     s.client("alice").save(&dir).expect("saved");
-    let (dev, _h) = common::harness::device(vec![ChannelKind::Nfc], clock, 18, 0);
+    let (dev, _h) = common::harness::device(clock, 18, 0);
     let at = rhtn_client::ceremony::Client::at(&dir, id("alice"), ids(), Default::default(), dev)
         .expect("opens from the directory");
     assert_eq!(at.met(None), vec![kh("bob")], "loaded: still met bob");
@@ -449,7 +447,7 @@ fn a_restarted_client_has_still_met_whom_it_met() {
 /// anchor records"].
 #[test]
 fn a_client_makes_a_card_of_its_own_once_it_knows_where_its_anchor_answers() {
-    let mut s = setup(&PARTIES, &[ChannelKind::Nfc]);
+    let mut s = setup(&PARTIES);
     let patron = kh("alice");
     s.adopted("bob", "alice", "w2", 1);
 
@@ -495,7 +493,7 @@ fn a_client_makes_a_card_of_its_own_once_it_knows_where_its_anchor_answers() {
 #[test]
 fn a_scope_brought_under_a_patron_dissolves_and_returns_on_departure() {
     use rhtn_client::ceremony::Abort;
-    let mut s = setup(&PARTIES, &[ChannelKind::Nfc]);
+    let mut s = setup(&PARTIES);
     // alice roots a scope: her first adoption, carol under her
     let scope = s.adopted("carol", "alice", "w1", 1);
     assert_eq!(s.client("alice").subnets(), vec![scope]);
@@ -576,7 +574,7 @@ fn a_scope_brought_under_a_patron_dissolves_and_returns_on_departure() {
 /// operator signs the record on the series of its position there.
 #[test]
 fn an_endpoint_record_is_signed_on_the_line_of_the_subnet_it_serves() {
-    let mut s = setup(&PARTIES, &[ChannelKind::Nfc]);
+    let mut s = setup(&PARTIES);
     s.adopted("bob", "alice", "w1", 4);
     s.adopted("bob", "carol", "w1", 9);
     let alices = subnet_under(&mut s, "alice");

@@ -14,10 +14,6 @@ ceremony exists; the application id `com.comptus.fueros` is provisional.
 
 **What this shell owes**, beyond rendering the client's states:
 
-- The proximity channels the device has, and no promotion of one that
-  failed (`light-client-requirements.md` §1.3). Android exposes UWB and
-  NFC to an application; a device lacking one reports it as unavailable
-  rather than absent from the list.
 - A guided camera capture whose frames cross the boundary as pixels, with
   whatever the platform's pipeline attached stripped at the boundary (§1.3).
 - The privacy choices §5 requires the user be able to make, and the
@@ -71,7 +67,7 @@ The shell's events are the rows of the plan's section 3.6: `shell.call` and
 `shell.return` around every kernel call in `Kernel.kt`, `shell.event` for
 what the event loop takes, `meet.step`, `meet.stop` and `meet.note`,
 `qr.shown` and `qr.read`, `camera`, `face.frames` and `face.timeout`, `ble`,
-`bearer.packets` and `bearer.refused`, `nfc`, `permission`, `storage`,
+`bearer.packets` and `bearer.refused`, `permission`, `storage`,
 `custody`, `crash`, and `report.*`. Identities are eight hex characters
 (`Diag.id8`), and free text that quotes a longer hex run is cut to eight
 (`Diag.scrub`); no frame, key, seed, capture or storage payload has a path

@@ -1,8 +1,7 @@
 //! The boundary the mobile shells bind to.
 //!
-//! The ceremony needs a camera, NFC and UWB
-//! (`light-client-requirements.md` §1.3), which exist on a phone and not in
-//! a Rust process, so the light client application is Kotlin and Swift over
+//! The ceremony needs a camera (`light-client-requirements.md` §1.3), which
+//! exists on a phone and not in a Rust process, so the light client application is Kotlin and Swift over
 //! this crate. Everything above the boundary is a platform shell;
 //! everything below it is the reference library.
 //!

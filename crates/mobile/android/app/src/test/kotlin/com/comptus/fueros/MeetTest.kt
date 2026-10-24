@@ -40,11 +40,9 @@ class MeetTest {
         m.crossBootstrap()
         assertEquals(Meet.Step.BRIEF, m.step())
         m.accept()
-        // optical, proximity, capture: the device faces away
+        // optical, capture: the device faces away
         assertEquals(Meet.Step.OPTICAL, m.step())
         m.intentSent(); m.intentReceived()
-        assertEquals(Meet.Step.PROXIMITY, m.step())
-        m.proximityDone()
         assertEquals(Meet.Step.CAPTURE, m.step())
         m.captureDone()
         // capture hands back to the user for verifier selection
@@ -67,7 +65,7 @@ class MeetTest {
         val m = meet()
         assertThrows(IllegalStateException::class.java) { m.finalized("tx") }
         m.crossBootstrap(); m.accept()
-        m.intentSent(); m.intentReceived(); m.proximityDone(); m.captureDone()
+        m.intentSent(); m.intentReceived(); m.captureDone()
         val c = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0, proposable = true))
         m.converse(c)
         assertEquals(Meet.Step.REVIEW, m.step())
@@ -103,7 +101,7 @@ class MeetTest {
 
     /** The flow, up to the point the verifier step is live. */
     private fun atVerifiers(): Meet = meet().apply {
-        crossBootstrap(); accept(); intentSent(); intentReceived(); proximityDone(); captureDone()
+        crossBootstrap(); accept(); intentSent(); intentReceived(); captureDone()
     }
 
     @Test
@@ -237,7 +235,7 @@ class MeetConversationTest {
 
     private fun atVerifiers(role: Meet.Role = Meet.Role.INITIATOR): Meet =
         Meet("aa", "carol", Meet.Kind(), role).apply {
-            crossBootstrap(); accept(); intentSent(); intentReceived(); proximityDone(); captureDone()
+            crossBootstrap(); accept(); intentSent(); intentReceived(); captureDone()
         }
 
     /** A meeting with its codes crossing, which is where the optical
@@ -345,7 +343,7 @@ class MeetConversationTest {
     @Test
     fun the_flow_is_due_on_an_arrival_or_the_patience_and_not_on_the_turn() {
         val m = Meet("aa", "carol", Meet.Kind(), Meet.Role.INITIATOR, patienceMs = 1_000).apply {
-            crossBootstrap(); accept(); intentSent(); intentReceived(); proximityDone(); captureDone()
+            crossBootstrap(); accept(); intentSent(); intentReceived(); captureDone()
         }
         m.selected(listOf(Meet.Chosen("v1", Meet.Basis.MET)))
         val c = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 1))
@@ -366,7 +364,7 @@ class MeetConversationTest {
 
         // a message of the conversation is an arrival too
         val n = Meet("bb", "carol", Meet.Kind(), Meet.Role.RESPONDER).apply {
-            crossBootstrap(); accept(); intentSent(); intentReceived(); proximityDone(); captureDone()
+            crossBootstrap(); accept(); intentSent(); intentReceived(); captureDone()
         }
         val c2 = FakeCourier(Meet.Progress(proposer = false, queriesOutstanding = 0, handed = true))
         n.converse(c2, nowMs = 20_000)
@@ -469,7 +467,7 @@ class MeetConversationTest {
         assertFalse(w["w2"]!!.mine)
         // the pre-sign warning reads the same facts: none of mine attest
         m.selected(listOf())
-        m.learned(channel = "UWB", familiar = true)
+        m.learned(familiar = true)
         val text = m.presign().joinToString(" ") { it.text }
         assertTrue(text.contains("one-sided"))
         assertTrue(text.contains("0 nominated by you"))
@@ -556,7 +554,7 @@ class MeetConversationTest {
         assertFalse(m.handOff(b))
     }
 
-    /** **Ranging and capture go stale too**: a step with nothing of its own
+    /** **The capture goes stale too**: a step with nothing of its own
      *  watching it is judged by how long it has been the step. */
     @Test
     fun a_step_held_past_the_stale_window_is_the_other_phone_gone() {
@@ -646,7 +644,7 @@ class MeetConversationTest {
     @Test
     fun the_patience_runs_out_and_the_initiator_proposes_with_queries_unanswered() {
         val m = Meet("aa", "carol", Meet.Kind(), Meet.Role.INITIATOR, patienceMs = 1_000).apply {
-            crossBootstrap(); accept(); intentSent(); intentReceived(); proximityDone(); captureDone()
+            crossBootstrap(); accept(); intentSent(); intentReceived(); captureDone()
         }
         m.selected(listOf(Meet.Chosen("v1", Meet.Basis.MET), Meet.Chosen("v2", Meet.Basis.MET)))
         val c = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 2, proposable = true))
@@ -750,13 +748,13 @@ class MeetConversationTest {
         m.intentReceived()
         assertEquals("theirs alone is not enough", Meet.Step.OPTICAL, m.step())
         m.intentSent()
-        assertEquals(Meet.Step.PROXIMITY, m.step())
+        assertEquals(Meet.Step.CAPTURE, m.step())
         // and the other order
         val n = Meet(kind = Meet.Kind()).apply { crossBootstrap(); accept() }
         n.intentSent()
         assertEquals(Meet.Step.OPTICAL, n.step())
         n.intentReceived()
-        assertEquals(Meet.Step.PROXIMITY, n.step())
+        assertEquals(Meet.Step.CAPTURE, n.step())
     }
 
     @Test
@@ -789,7 +787,7 @@ class MeetConversationTest {
     fun the_turn_state_says_where_the_flow_is_and_whether_a_poll_is_due() {
         val m = Meet("aa", "carol", Meet.Kind(), openRetryMs = 1L).apply {
             crossBootstrap(); accept(); intentSent(); intentReceived()
-            proximityDone(); captureDone()
+            captureDone()
         }
         val c = FakeCourier(
             Meet.Progress(
@@ -833,7 +831,7 @@ class MeetConversationTest {
     fun a_carriage_taken_from_the_bearer_makes_the_poll_due() {
         val m = Meet("aa", "carol", Meet.Kind(), openRetryMs = 1L).apply {
             crossBootstrap(); accept(); intentSent(); intentReceived()
-            proximityDone(); captureDone()
+            captureDone()
         }
         // A6's own state: the proposer, nothing outstanding because no
         // verifier was selected, waiting on the counterparty's responses
@@ -863,7 +861,7 @@ class MeetConversationTest {
     fun a_conversation_waiting_on_nothing_still_becomes_due_and_goes_stale() {
         val m = Meet("aa", "carol", Meet.Kind(), openRetryMs = 1L).apply {
             crossBootstrap(); accept(); intentSent(); intentReceived()
-            proximityDone(); captureDone()
+            captureDone()
         }
         // A6's own state: the proposer, nothing outstanding because no
         // verifier was selected, waiting on the counterparty's responses
@@ -904,7 +902,7 @@ class MeetConversationTest {
     fun a_waiting_at_the_conversations_own_open_is_retried_not_stopped_on() {
         val m = Meet("aa", "carol", Meet.Kind(), openRetryMs = 1L).apply {
             crossBootstrap(); accept(); intentSent(); intentReceived()
-            proximityDone(); captureDone()
+            captureDone()
         }
         assertEquals(Meet.Step.VERIFIERS, m.step())
         assertFalse("the channels never opened it", m.windowOpen())
@@ -940,7 +938,7 @@ class MeetConversationTest {
     fun a_refusal_that_is_not_waiting_still_stops_the_conversation_at_once() {
         val m = Meet("aa", "carol", Meet.Kind(), openRetryMs = 1L).apply {
             crossBootstrap(); accept(); intentSent(); intentReceived()
-            proximityDone(); captureDone()
+            captureDone()
         }
         val c = FakeCourier()
         c.openRefusal = "Refused(the request named a meeting this side never opened)"
@@ -957,7 +955,7 @@ class MeetConversationTest {
         val m = Meet("aa", "carol", Meet.Kind()).apply {
             crossBootstrap(); accept(); intentSent(); intentReceived()
         }
-        assertEquals("the channels are the window's", Meet.Step.PROXIMITY, m.step())
+        assertEquals("the capture is the window's", Meet.Step.CAPTURE, m.step())
         assertFalse(m.windowOpen())
         // the keep has not arrived: the kernel says so, nothing stops
         val waiting = FakeCourier()
@@ -973,7 +971,6 @@ class MeetConversationTest {
         assertEquals("the request goes once", 1, c.count("open"))
         assertEquals(1, m.log().count { it.contains("the window is open") })
         // and the queries follow inside it, without a second request
-        m.proximityDone()
         m.captureDone()
         c.progress = Meet.Progress(proposer = true, queriesOutstanding = 1)
         m.converse(c)
@@ -1324,7 +1321,7 @@ class MeetRowsTest {
     // ---- D6: UX-003 ---------------------------------------------------
 
     private fun atReview(m: Meet): Meet {
-        m.crossBootstrap(); m.accept(); m.intentSent(); m.intentReceived(); m.proximityDone(); m.captureDone()
+        m.crossBootstrap(); m.accept(); m.intentSent(); m.intentReceived(); m.captureDone()
         m.converse(FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0, proposable = true)))
         check(m.step() == Meet.Step.REVIEW)
         return m
@@ -1339,14 +1336,13 @@ class MeetRowsTest {
                 Meet.Chosen("c2", Meet.Basis.DISCRETIONARY, Meet.Verdict.UNAVAILABLE),
             ),
         )
-        m.learned(mine = 2, theirs = 0, channel = "NFC", familiar = false)
+        m.learned(mine = 2, theirs = 0, familiar = false)
         val w = m.presign()
         assertEquals(listOf("UX-003"), rows(w))
         val text = w.joinToString(" ") { it.text }
         assertTrue("missing familiar verifiers", text.contains("someone you have met"))
         assertTrue("unavailable evidence", text.contains("answered nothing"))
         assertTrue("witness imbalance", text.contains("one-sided"))
-        assertTrue("weak proximity", text.contains("not UWB"))
         // and NEVER as malformed: that is UX-003's whole point
         assertFalse(text.contains("malformed"))
         assertFalse(text.contains("invalid"))
@@ -1356,7 +1352,7 @@ class MeetRowsTest {
     fun a_sound_meeting_is_not_warned_about() {
         val m = atReview(meet())
         m.selected(listOf(Meet.Chosen("c1", Meet.Basis.MET, Meet.Verdict.MATCH)))
-        m.learned(mine = 2, theirs = 2, channel = "UWB", familiar = true)
+        m.learned(mine = 2, theirs = 2, familiar = true)
         assertTrue("nothing to flag", m.presign().isEmpty())
     }
 
@@ -1364,7 +1360,7 @@ class MeetRowsTest {
     fun no_witnesses_is_the_formation_case_and_said_so() {
         val m = atReview(meet())
         m.selected(listOf())
-        m.learned(mine = 0, theirs = 0, channel = "UWB", familiar = true)
+        m.learned(mine = 0, theirs = 0, familiar = true)
         val text = m.presign().joinToString(" ") { it.text }
         assertTrue(text.contains("formation record"))
         assertTrue("real, and visibly uncorroborated", text.contains("uncorroborated"))
@@ -1372,15 +1368,6 @@ class MeetRowsTest {
         assertTrue(text.contains("no prior\nrecords") || text.contains("no prior records"))
     }
 
-    @Test
-    fun no_channel_passing_is_named_without_calling_the_meeting_broken() {
-        val m = atReview(meet())
-        m.selected(listOf())
-        m.learned(mine = 1, theirs = 1, channel = null, familiar = true)
-        val text = m.presign().joinToString(" ") { it.text }
-        assertTrue(text.contains("No proximity channel passed"))
-        assertFalse(text.contains("malformed"))
-    }
 
     // ---- D7: PRD-05 ---------------------------------------------------
 

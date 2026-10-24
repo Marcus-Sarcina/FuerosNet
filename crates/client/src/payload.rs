@@ -611,9 +611,8 @@ pub const KIND_WITNESS_KEEP: u64 = 23;
 /// A `WitnessStanddown` (§7.10.2): a nominee that did not survive the
 /// prune.
 pub const KIND_WITNESS_STANDDOWN: u64 = 24;
-/// A `ProximityUpdate` (§7.10.2): one channel's outcome to the surviving
-/// witnesses, as it lands inside the window.
-pub const KIND_PROXIMITY_UPDATE: u64 = 25;
+// kind 25 (`ProximityUpdate`) was RETIRED 2026-10-24: ranging is not used
+// (design §7.6.3). The number is not reused and a decoder meeting it rejects.
 
 /// A plaintext with its kind in front.
 pub fn wrap(kind: u64, bytes: &[u8]) -> Vec<u8> {

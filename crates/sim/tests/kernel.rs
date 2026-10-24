@@ -20,17 +20,6 @@ struct Shell {
     store: Mutex<std::collections::BTreeMap<String, Vec<u8>>>,
 }
 
-impl Proximity for Shell {
-    fn supported(&self) -> Vec<Channel> {
-        vec![]
-    }
-    fn run(&self, _: Channel, _: Vec<u8>) -> ChannelOutcome {
-        ChannelOutcome::Unavailable
-    }
-    fn resolution_m(&self, _: Channel) -> Option<u64> {
-        None
-    }
-}
 impl Camera for Shell {
     fn capture(&self, _: Ask) -> Vec<u8> {
         vec![7; 64]
@@ -90,7 +79,6 @@ impl Custody for Shell {
 
 fn platform_of(s: Arc<Shell>) -> Arc<Platform> {
     Arc::new(Platform {
-        proximity: s.clone(),
         camera: s.clone(),
         clock: s.clone(),
         random: s.clone(),

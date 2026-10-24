@@ -11,7 +11,6 @@ use rhtn_archive::locator::{COUNTER_MAX, SignedLocator};
 use rhtn_archive::record::Record;
 
 use rhtn_client::ceremony::*;
-use rhtn_client::device::ChannelKind;
 use rhtn_client::query::{Basis, Response, Verdict, prior_key_of};
 use rhtn_client::rotation::Rotation;
 use rhtn_codec::cbor::*;
@@ -24,7 +23,7 @@ const PARTIES: [&str; 6] = ["alice", "alice2", "bob", "carol", "w1", "w2"];
 /// under w1.  Returns the harness, the txid, and the log index where the
 /// adoption's messages begin.
 fn recovered() -> (Setup, [u8; 32], usize) {
-    let mut s = setup(&PARTIES, &[ChannelKind::Nfc]);
+    let mut s = setup(&PARTIES);
     s.met("alice", "bob", "w2");
     s.met("alice", "carol", "w2");
     s.adopted("alice", "w1", "w2", 3);
@@ -168,7 +167,7 @@ fn a_recovery_response_is_signed_hybrid_by_the_verifier_and_its_consent_classica
 // acceptance: REC-04
 #[test]
 fn the_recovery_meeting_is_a_ceremony_in_which_the_verifier_is_its_own_querier() {
-    let mut s = setup(&PARTIES, &[ChannelKind::Nfc]);
+    let mut s = setup(&PARTIES);
     s.met("alice", "bob", "w2");
     let old_archive = s.client("alice").archive.clone();
     s.client("alice2").rotation = Some(Box::new(Rotation::begin(

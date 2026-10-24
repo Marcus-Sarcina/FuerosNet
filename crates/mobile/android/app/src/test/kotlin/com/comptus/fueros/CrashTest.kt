@@ -28,14 +28,14 @@ class CrashTest {
         var seen: Pair<Thread, Throwable>? = null
         val previous = Thread.UncaughtExceptionHandler { t, e -> seen = t to e }
         val handler = Crash.handler(previous)
-        val boom = IllegalStateException("cannot go OPTICAL -> PROXIMITY from BRIEF", RuntimeException("why"))
+        val boom = IllegalStateException("cannot go OPTICAL -> CAPTURE from BRIEF", RuntimeException("why"))
         handler.uncaughtException(Thread.currentThread(), boom)
         assertEquals(1, lines.size)
         val line = lines[0]
         assertTrue(line, line.contains("\"level\":\"warn\",\"layer\":\"shell\",\"event\":\"crash\""))
         assertTrue(line, line.contains("\"thread\":\"${Thread.currentThread().name}\""))
         assertTrue(line, line.contains("\"class\":\"java.lang.IllegalStateException\""))
-        assertTrue(line, line.contains("\"message\":\"cannot go OPTICAL -> PROXIMITY from BRIEF\""))
+        assertTrue(line, line.contains("\"message\":\"cannot go OPTICAL -> CAPTURE from BRIEF\""))
         assertTrue(line, line.contains("\"frames\":[\"com.comptus.fueros.CrashTest."))
         assertTrue(line, line.contains("\"cause\":\"java.lang.RuntimeException\""))
         assertEquals(1, flushed)

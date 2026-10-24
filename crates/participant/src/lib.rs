@@ -41,7 +41,6 @@ pub mod terminal;
 use rhtn_ffi::client::Participant;
 use rhtn_ffi::client::platform;
 use rhtn_ffi::net::Wake;
-use rhtn_ffi::types::{Channel, ChannelOutcome};
 use std::path::Path;
 use std::sync::Arc;
 use terminal::{Terminal, hex, unhex};
@@ -99,12 +98,11 @@ impl Instrument {
             known.extend(read_peers(p)?);
         }
         let shell = Arc::new(Terminal::default());
-        // the ninth object, diagnostics: the file `--log` named, in a
+        // the eighth object, diagnostics: the file `--log` named, in a
         // field-test build, and nothing otherwise
         // (Robot/field-test-diagnostics.md, section 4)
         let sink = diag::sink(log)?;
         let p = platform(
-            shell.clone(),
             shell.clone(),
             shell.clone(),
             shell.clone(),
@@ -263,36 +261,6 @@ impl Instrument {
                     .map_err(|_| format!("`{ms}` is not a count of milliseconds"))?,
             ),
 
-            ["channel"] => Ok(self
-                .shell
-                .declarations()
-                .iter()
-                .map(|(c, o, m)| {
-                    format!(
-                        "channel {} {}{}",
-                        channel_name(*c),
-                        outcome_name(*o),
-                        m.map_or(String::new(), |m| format!(" {m}"))
-                    )
-                })
-                .collect()),
-            ["channel", name, outcome, rest @ ..] => {
-                let c = channel_of(name)?;
-                let metres = match rest {
-                    [] => None,
-                    [m] => Some(
-                        m.parse::<u64>()
-                            .map_err(|_| format!("`{m}` is not a count of metres"))?,
-                    ),
-                    _ => return Err("channel <name> <pass|fail|unavailable> [<metres>]".into()),
-                };
-                match *outcome {
-                    "none" => self.shell.declare(c, None),
-                    _ => self.shell.declare(c, Some((outcome_of(outcome)?, metres))),
-                }
-                Ok(vec![format!("channel {name} {outcome}")])
-            }
-
             ["answer"] => Ok(vec![format!(
                 "answer {}",
                 if self.shell.answering() { "yes" } else { "no" }
@@ -375,27 +343,6 @@ impl Instrument {
                 })])
             }
 
-            ["proximity"] => {
-                let bytes = c.proximity_carriage().map_err(|e| e.reason().to_string())?;
-                Ok(vec![
-                    format!("channels {}", carry::pack_channels(&c.achieved())),
-                    format!("proximity {}", hex(&bytes)),
-                ])
-            }
-            ["achieved"] => Ok(vec![format!(
-                "channels {}",
-                carry::pack_channels(&c.achieved())
-            )]),
-            ["take-proximity", blob] => {
-                c.take_proximity(carry::blob(blob)?)
-                    .map_err(|e| e.reason().to_string())?;
-                Ok(vec!["proximity taken".into()])
-            }
-            ["take-channels", blob] => {
-                c.take_channels(carry::take_channels(blob)?)
-                    .map_err(|e| e.reason().to_string())?;
-                Ok(vec!["channels taken".into()])
-            }
             ["candidates", blob] => Ok(vec![format!(
                 "handover {}",
                 hex(&c
@@ -792,42 +739,6 @@ fn id(s: &str) -> Result<Vec<u8>, String> {
     Ok(b)
 }
 
-fn channel_of(s: &str) -> Result<Channel, String> {
-    match s {
-        "uwb" => Ok(Channel::Uwb),
-        "nfc" => Ok(Channel::Nfc),
-        "optical" => Ok(Channel::Optical),
-        "latency" => Ok(Channel::Latency),
-        _ => Err(format!("`{s}` is not uwb, nfc, optical or latency")),
-    }
-}
-
-fn channel_name(c: Channel) -> &'static str {
-    match c {
-        Channel::Uwb => "uwb",
-        Channel::Nfc => "nfc",
-        Channel::Optical => "optical",
-        Channel::Latency => "latency",
-    }
-}
-
-fn outcome_of(s: &str) -> Result<ChannelOutcome, String> {
-    match s {
-        "pass" => Ok(ChannelOutcome::Pass),
-        "fail" => Ok(ChannelOutcome::Fail),
-        "unavailable" => Ok(ChannelOutcome::Unavailable),
-        _ => Err(format!("`{s}` is not pass, fail or unavailable")),
-    }
-}
-
-fn outcome_name(o: ChannelOutcome) -> &'static str {
-    match o {
-        ChannelOutcome::Pass => "pass",
-        ChannelOutcome::Fail => "fail",
-        ChannelOutcome::Unavailable => "unavailable",
-    }
-}
-
 /// Read the seeds an identity is derived from.
 pub fn read_identity(path: &Path) -> Result<Vec<u8>, String> {
     let bytes = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
@@ -898,8 +809,6 @@ begin <party> [<nominee>,...] [initiator]
                           open a ceremony; prints the intent to carry
 intent <from> <intent>    take theirs; prints the ceremony id
 ceremony                  the ceremony id, once both intents have crossed
-proximity                 run the channels; prints what to carry
-take-channels <channels>  take what their hardware achieved
 capture-key               the key your captures will be sealed under
 capture <key>             capture them under the key they sent
 verifiers                 the verifiers selected, and the basis of each
@@ -939,8 +848,5 @@ adopt <anchor> <node> <presence> <series> <back>
 sign <body>               sign a body proposed or shown
 adoption-envelope <body> <signer>:<signature>,...
 take-adoption <envelope>  take it; it is also what says where you now sit
-channel                   what the hardware has been declared to do
-channel <name> <outcome> [<m>]
-                          declare it; `none` clears one back to unavailable
 answer [yes|no]           the standing answer to a question put to the person
 quit                      stop";

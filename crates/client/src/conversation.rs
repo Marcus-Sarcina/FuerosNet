@@ -18,8 +18,7 @@
 //! yet, which that side says.
 
 use crate::ceremony::WitnessRequest;
-use crate::device::ChannelOutcome;
-use crate::local::{bs, emit_channels, fixed32, read_channels};
+use crate::local::{bs, fixed32};
 use crate::record::{Disclosure, DisclosureSet, LABELS, Proposal, Refusal};
 use crate::{Keyhash, Txid};
 use rhtn_archive::tx::Witness;
@@ -87,11 +86,11 @@ impl FishingProposal {
 
 impl WitnessRequest {
     /// The map a nominee is sent (§7.10.2, kind 12): the ceremony-id, the
-    /// participants in body order, the claimed start, and the channels as
-    /// measured.
+    /// participants in body order, the claimed start and the engagement
+    /// handle it closes; field 4 is retired [author, 2026-10-24].
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
-        emit_map_head(&mut out, 5);
+        emit_map_head(&mut out, 4);
         emit_uint(&mut out, 1);
         emit_bstr(&mut out, &self.ceremony_id);
         emit_uint(&mut out, 2);
@@ -101,8 +100,6 @@ impl WitnessRequest {
         }
         emit_uint(&mut out, 3);
         emit_uint(&mut out, self.started_at);
-        emit_uint(&mut out, 4);
-        emit_channels(&mut out, &self.channels);
         emit_uint(&mut out, 5);
         emit_bstr(&mut out, &self.handle);
         out
@@ -122,7 +119,6 @@ impl WitnessRequest {
             ceremony_id: fixed32(b, map_get(m, 1).ok_or("ceremony-id")?)?,
             participants,
             started_at: map_get(m, 3).and_then(as_uint).ok_or("started_at")?,
-            channels: read_channels(map_get(m, 4).ok_or("channels")?)?,
             handle: fixed32(b, map_get(m, 5).ok_or("handle")?)?,
         })
     }
@@ -360,46 +356,6 @@ impl Standdown {
     }
 }
 
-/// One channel's outcome to the surviving witnesses, as it lands inside
-/// the window (§7.10.2, kind 25).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ProximityPing {
-    /// The ceremony it belongs to.
-    pub ceremony_id: [u8; 32],
-    /// The channel and its outcome as measured.
-    pub channel: ChannelOutcome,
-}
-
-impl ProximityPing {
-    /// The map a surviving witness is sent.
-    pub fn encode(&self) -> Vec<u8> {
-        let mut out = Vec::new();
-        emit_map_head(&mut out, 2);
-        emit_uint(&mut out, 1);
-        emit_bstr(&mut out, &self.ceremony_id);
-        emit_uint(&mut out, 2);
-        // one channel, the §4.5 map emit_channels writes per entry
-        let mut arr = Vec::new();
-        emit_channels(&mut arr, std::slice::from_ref(&self.channel));
-        out.extend_from_slice(&arr[1..]);
-        out
-    }
-
-    /// Read a `ProximityPing` from `b`.
-    pub fn decode(b: &[u8]) -> Result<Self, String> {
-        let it = checked(b, "ProximityUpdate")?;
-        let Item::Map(m) = &it else {
-            return Err("ProximityUpdate is not a map".into());
-        };
-        let ch = map_get(m, 2).ok_or("channel")?;
-        let one = read_channels(&Item::Array(vec![ch.clone()]))?;
-        Ok(ProximityPing {
-            ceremony_id: fixed32(b, map_get(m, 1).ok_or("ceremony-id")?)?,
-            channel: one.into_iter().next().ok_or("channel")?,
-        })
-    }
-}
-
 /// The nominee's answer (§7.10.2, kind 13): witnessing with the attestation
 /// bits it will set (Witness field 3, §3.2), or declining with nothing.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -573,7 +529,7 @@ impl ProposedBody {
         }
         let set: DisclosureSet = set
             .try_into()
-            .map_err(|_| String::from("exactly seven disclosures"))?;
+            .map_err(|_| String::from("exactly six disclosures"))?;
         Ok(ProposedBody {
             body,
             set: Some(set),

@@ -28,10 +28,10 @@
 
 use rhtn_ffi::client::Participant;
 use rhtn_ffi::device::{
-    Camera, Clock, Custody, Notices, Operator, Platform, Proximity, Random, Silent, Storage,
+    Camera, Clock, Custody, Notices, Operator, Platform, Random, Silent, Storage,
 };
 use rhtn_ffi::harness::{TestNode, test_identity};
-use rhtn_ffi::types::{Ask, Channel, ChannelOutcome, Told};
+use rhtn_ffi::types::{Ask, Told};
 use std::sync::{Arc, Mutex};
 
 struct Shell {
@@ -61,17 +61,6 @@ impl Storage for Shell {
     fn write(&self, name: String, bytes: Vec<u8>) -> bool {
         self.store.lock().unwrap().insert(name, bytes);
         true
-    }
-}
-impl Proximity for Shell {
-    fn supported(&self) -> Vec<Channel> {
-        vec![]
-    }
-    fn run(&self, _channel: Channel, _peer: Vec<u8>) -> ChannelOutcome {
-        ChannelOutcome::Unavailable
-    }
-    fn resolution_m(&self, _channel: Channel) -> Option<u64> {
-        None
     }
 }
 impl Camera for Shell {
@@ -216,7 +205,6 @@ fn main() {
         custody: Mutex::default(),
     });
     let platform = Arc::new(Platform {
-        proximity: s.clone(),
         camera: s.clone(),
         clock: s.clone(),
         random: s.clone(),

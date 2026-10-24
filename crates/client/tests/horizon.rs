@@ -627,7 +627,6 @@ fn a_client_weighs_trust_distance_from_its_own_copy_and_asks_nobody() {
         common::ids(),
         Default::default(),
         harness::device(
-            vec![],
             std::rc::Rc::new(std::cell::Cell::new(1_790_000_000_000u64)),
             7,
             0,
@@ -959,7 +958,6 @@ fn client_for(name: &str, h: Horizon) -> rhtn_client::ceremony::Client {
         common::ids(),
         Default::default(),
         harness::device(
-            vec![],
             std::rc::Rc::new(std::cell::Cell::new(1_790_000_000_000u64)),
             7,
             0,

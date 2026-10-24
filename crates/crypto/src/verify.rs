@@ -539,18 +539,17 @@ fn map_without_keys(raw: &[u8], keys: &[u64]) -> Option<Vec<u8>> {
     Some(cur)
 }
 
-const LABELS: [&str; 7] = [
+const LABELS: [&str; 6] = [
     "capture",
     "location",
     "p0.integrity",
     "p0.retention",
     "p1.integrity",
     "p1.retention",
-    "proximity",
 ];
 
 /// A partial presentation (§4.5.1): the embedded envelope verified wholesale,
-/// then the seven slots' digests recomputed over the exact received
+/// then the six slots' digests recomputed over the exact received
 /// encodings and checked against the body's committed root.
 ///
 /// **It fails the way its siblings fail.** A key the holder lacks reaches
@@ -572,7 +571,7 @@ pub fn presentation<L: Lookup + ?Sized>(ids: &L, pres: &[u8]) -> Result<(), Fail
     let Item::Array(slots) = &outer[1] else {
         return Err("slots not array".into());
     };
-    if slots.len() != 7 {
+    if slots.len() != 6 {
         return Err("slot count".into());
     }
     let slot_ranges = array_item_ranges(pres, ranges[1].start).ok_or("slots walk")?;

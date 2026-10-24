@@ -31,7 +31,6 @@ fn full_set() -> DisclosureSet {
         retention_value(2),
         integrity_value(false, 0),
         retention_value(2),
-        proximity_value(&[(2, 0, Some(1)), (3, 0, None), (4, 0, None)], 2),
     ];
     disclosures(values, std::array::from_fn(|i| [i as u8 + 1; 16]))
 }
@@ -78,7 +77,7 @@ fn a_presentation_withholds_every_field_by_default_and_the_digests_travel() {
     let mut w = world();
     let set = full_set();
     let rec = signed_record(&mut w, &set, vec![]);
-    // no instruction to reveal: seven digests, and the envelope verifies over them
+    // no instruction to reveal: six digests, and the envelope verifies over them
     let minimal = present(&rec.bytes, &set, &[]);
     let p = read_presentation(&ids(), &minimal).expect("well-formed");
     assert_eq!(p.record.txid, rec.txid);
@@ -90,18 +89,18 @@ fn a_presentation_withholds_every_field_by_default_and_the_digests_travel() {
     );
     assert_eq!(
         minimal.len(),
-        rec.bytes.len() + 1 + 1 + 7 * 34,
-        "envelope plus seven 32-byte digests and the array heads"
+        rec.bytes.len() + 1 + 1 + 6 * 34,
+        "envelope plus six 32-byte digests and the array heads"
     );
-    // revealing proximity: the disclosure travels, the rest stay digests
-    let some = present(&rec.bytes, &set, &["proximity"]);
+    // revealing one field: the disclosure travels, the rest stay digests
+    let some = present(&rec.bytes, &set, &["p1.retention"]);
     let p = read_presentation(&ids(), &some).expect("well-formed");
     assert_eq!(
         p.revealed.keys().copied().collect::<Vec<_>>(),
-        vec!["proximity"]
+        vec!["p1.retention"]
     );
-    assert_eq!(p.revealed["proximity"], set[6].value);
-    assert_eq!(p.withheld.len(), 6);
+    assert_eq!(p.revealed["p1.retention"], set[5].value);
+    assert_eq!(p.withheld.len(), 5);
     // a withheld digest altered: the root no longer recomputes
     let mut bad = minimal.clone();
     let n = bad.len();
@@ -113,29 +112,11 @@ fn a_presentation_withholds_every_field_by_default_and_the_digests_travel() {
     );
     // a disclosure revealed in another label's slot
     let mut swapped = set.clone();
-    swapped.swap(0, 6);
+    swapped.swap(0, 5);
     assert!(
         read_presentation(&ids(), &present(&rec.bytes, &swapped, &["capture"]))
             .unwrap_err()
             .contains("label")
-    );
-    // proximity revealed whose strongest is not the highest that passed
-    let mut lying = set.clone();
-    lying[6].value = proximity_value(&[(2, 0, Some(1)), (3, 0, None)], 3);
-    let mut lying_rec_set = set.clone();
-    lying_rec_set[6] = lying[6].clone();
-    let rec2 = signed_record(&mut w, &lying_rec_set, vec![]);
-    assert!(
-        read_presentation(
-            &ids(),
-            &present(&rec2.bytes, &lying_rec_set, &["proximity"])
-        )
-        .unwrap_err()
-        .contains("strongest")
-    );
-    assert!(
-        read_presentation(&ids(), &present(&rec2.bytes, &lying_rec_set, &[])).is_ok(),
-        "withheld, the rule is unverifiable, not violated"
     );
     // an envelope signed by keys the reader lacks
     let without: Vec<_> = ids()
@@ -511,28 +492,28 @@ fn a_presentation_a_decoder_must_refuse() {
     // §4.5.1.5 names five things a decoder must do, and this is the other
     // side of CER-18: each of them refusing something.
 
-    // (a) a slot count other than seven. A presentation is `[envelope,
+    // (a) a slot count other than six. A presentation is `[envelope,
     // slots]`, so the slots' array head sits one byte past the envelope
     // and the last slot here is a 32-byte digest.
     let head = 1 + rec.bytes.len();
-    assert_eq!(good[head], 0x87, "seven slots");
-    let mut six = good.clone();
-    six[head] = 0x86;
-    six.truncate(six.len() - 34);
+    assert_eq!(good[head], 0x86, "six slots");
+    let mut five = good.clone();
+    five[head] = 0x85;
+    five.truncate(five.len() - 34);
     assert!(
-        read_presentation(&ids(), &six)
+        read_presentation(&ids(), &five)
             .unwrap_err()
-            .contains("seven slots"),
-        "six slots"
+            .contains("six slots"),
+        "five slots"
     );
-    let mut eight = good.clone();
-    eight[head] = 0x88;
-    eight.extend_from_slice(&good[good.len() - 34..]);
+    let mut seven = good.clone();
+    seven[head] = 0x87;
+    seven.extend_from_slice(&good[good.len() - 34..]);
     assert!(
-        read_presentation(&ids(), &eight)
+        read_presentation(&ids(), &seven)
             .unwrap_err()
-            .contains("seven slots"),
-        "eight slots"
+            .contains("six slots"),
+        "seven slots"
     );
 
     // (b) a salt that is not exactly sixteen bytes
@@ -595,8 +576,8 @@ fn a_withheld_field_is_not_a_default_and_there_is_no_aggregate_verdict() {
     // reader gets the labels that were withheld and no value for them, so
     // there is nothing to mistake for one: `revealed` has no entry, and
     // asking for it answers nothing rather than answering zero.
-    let p =
-        read_presentation(&ids(), &present(&rec.bytes, &set, &["proximity"])).expect("well-formed");
+    let p = read_presentation(&ids(), &present(&rec.bytes, &set, &["p1.retention"]))
+        .expect("well-formed");
     assert_eq!(p.revealed.len(), 1, "one field revealed");
     assert_eq!(
         p.revealed.get("p0.retention"),
@@ -642,25 +623,6 @@ fn a_withheld_field_is_not_a_default_and_there_is_no_aggregate_verdict() {
 // and run the day the thing they wait for exists.  Milestone 14's shells
 // wait on the mobile framework decision, the binding generator decision,
 // and a toolchain this machine does not have.
-
-// acceptance: CER-37
-#[test]
-#[ignore = "deferred: needs a proximity radio; the reference platform reaches the latency rung only"]
-fn the_channel_recorded_is_the_strongest_the_hardware_actually_supports() {
-    // **On hardware, `supported()` is what the device has and `run()` is
-    // what happened in the room** (`light-client-requirements.md` §1.3),
-    // and the record must say the strongest that passed. The instrument
-    // reports what its operator declared, which is evidence about a
-    // scenario rather than about hardware, so this cannot be asserted here
-    // without asserting the declaration back.
-    //
-    // What this will do: drive a device whose UWB and NFC are real, run
-    // the ceremony with the counterparty in the room and then out of it,
-    // and assert that the record's `proximity` value names the rung that
-    // physically passed in each case — and that the second is weaker than
-    // the first without anything being promoted.
-    unimplemented!("a device with a proximity radio");
-}
 
 // acceptance: CER-38
 #[test]
@@ -1078,7 +1040,6 @@ fn a_revealed_integrity_value_is_held_to_its_evidence_width() {
             retention_value(2),
             integrity_value(false, 0),
             retention_value(2),
-            proximity_value(&[(2, 0, Some(1)), (3, 0, None)], 2),
         ];
         let set = disclosures(values, std::array::from_fn(|i| [i as u8 + 1; 16]));
         let rec = signed_record(&mut w, &set, vec![]);

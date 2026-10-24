@@ -45,8 +45,6 @@ pub const VERIFIER_RESPONSES_PER_RECORD: usize = 32;
 pub const ASSERTED_LOCATIONS_PER_RECORD: usize = 4;
 /// Corroborations per record (§1.3): one per witness.
 pub const CORROBORATIONS_PER_RECORD: usize = 16;
-/// Proximity channels per record (§1.3).
-pub const PROXIMITY_CHANNELS_PER_RECORD: usize = 8;
 /// Keyhashes in an explicit scope list (§1.3).
 pub const EXPLICIT_SCOPE_KEYHASHES: usize = 256;
 /// `NetworkPoint` entries per anchor entry or endpoint record (§1.3, §7.2,
@@ -89,8 +87,6 @@ pub const CANDIDATES_PER_EXCHANGE: usize = 8;
 pub const DELEGATIONS_PER_CREDENTIAL: usize = 45;
 /// The ceremony's conversation on the end-to-end channel (§7.10.2).  A
 /// `FishingProposal` is one `Introduction` (§5.1): one candidate per turn.
-/// `Channel` entries per `WitnessRequest`: the proximity-channel ceiling.
-pub const WITNESS_REQUEST_CHANNELS: usize = 8;
 /// `VerifierResponse` entries per `GatheredResponses`: the per-record bound.
 pub const GATHERED_RESPONSES: usize = 32;
 /// Nominees a participant engages, and `Introduction` entries per

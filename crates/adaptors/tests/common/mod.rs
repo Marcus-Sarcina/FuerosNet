@@ -308,22 +308,6 @@ impl Operator for Yes {
     }
 }
 
-/// Proximity hardware with a fixed set of channels, all of which pass.
-pub struct Passing(pub Vec<ChannelKind>);
-
-impl Proximity for Passing {
-    fn supported(&self) -> Vec<ChannelKind> {
-        self.0.clone()
-    }
-    fn run(&self, kind: ChannelKind, _: &Keyhash) -> ChannelOutcome {
-        ChannelOutcome {
-            kind,
-            result: ChannelResult::Pass,
-            resolution_m: None,
-        }
-    }
-}
-
 /// The wall clock a fixed offset away: a witness whose clock is far.
 pub struct SkewedClock(pub i64);
 
@@ -339,19 +323,17 @@ impl Clock for SkewedClock {
 /// A device with nothing to run a ceremony on, a wall clock, and the
 /// direct path the adaptors report.
 pub fn device(direct: Rc<dyn DirectPath>) -> Device {
-    device_with(direct, Vec::new(), 0)
+    device_with(direct, 0)
 }
 
-/// A device whose proximity hardware has `channels`, all passing, and
-/// whose clock is `skew_s` from the wall.
-pub fn device_with(direct: Rc<dyn DirectPath>, channels: Vec<ChannelKind>, skew_s: i64) -> Device {
+/// A device whose clock is `skew_s` from the wall.
+pub fn device_with(direct: Rc<dyn DirectPath>, skew_s: i64) -> Device {
     let clock: Rc<dyn Clock> = if skew_s == 0 {
         Rc::new(SystemClock)
     } else {
         Rc::new(SkewedClock(skew_s))
     };
     Device {
-        proximity: Rc::new(Passing(channels)),
         camera: Rc::new(Cam),
         clock,
         random: Rc::new(OsRandom),
@@ -365,16 +347,14 @@ pub fn device_with(direct: Rc<dyn DirectPath>, channels: Vec<ChannelKind>, skew_
 /// A client for `name` on a thread of its own, its route choice reading
 /// `reachable`.
 pub fn spawn_client(name: &'static str, cfg: Config, reachable: Reachable) -> Handle {
-    spawn_client_with(name, cfg, reachable, Vec::new(), 0)
+    spawn_client_with(name, cfg, reachable, 0)
 }
 
-/// The same, on a device with `channels` and a clock `skew_s` from the
-/// wall.
+/// The same, on a device with a clock `skew_s` from the wall.
 pub fn spawn_client_with(
     name: &'static str,
     cfg: Config,
     reachable: Reachable,
-    channels: Vec<ChannelKind>,
     skew_s: i64,
 ) -> Handle {
     Handle::spawn(move || {
@@ -382,7 +362,7 @@ pub fn spawn_client_with(
             id(name),
             ids(),
             cfg,
-            device_with(Rc::new(reachable), channels, skew_s),
+            device_with(Rc::new(reachable), skew_s),
         )
     })
     .expect("the client builds")
@@ -502,13 +482,8 @@ impl Kept {
 
 /// A device whose camera, person and notifier are `kept`, with
 /// `channels` passing and a clock `skew_s` from the wall.
-pub fn device_keeping(
-    direct: Rc<dyn DirectPath>,
-    channels: Vec<ChannelKind>,
-    skew_s: i64,
-    kept: Kept,
-) -> Device {
-    let mut d = device_with(direct, channels, skew_s);
+pub fn device_keeping(direct: Rc<dyn DirectPath>, skew_s: i64, kept: Kept) -> Device {
+    let mut d = device_with(direct, skew_s);
     d.camera = Rc::new(KeptCam(kept.cam.clone()));
     d.operator = Rc::new(KeptAsk(kept.person.clone()));
     d.notifier = Rc::new(KeptTell(kept.hook.clone()));
@@ -545,7 +520,6 @@ pub fn spawn_client_keeping(
     name: &'static str,
     cfg: Config,
     reachable: Reachable,
-    channels: Vec<ChannelKind>,
     skew_s: i64,
     kept: Kept,
 ) -> Handle {
@@ -554,7 +528,7 @@ pub fn spawn_client_keeping(
             id(name),
             ids(),
             cfg,
-            device_keeping(Rc::new(reachable), channels, skew_s, kept),
+            device_keeping(Rc::new(reachable), skew_s, kept),
         )
     })
     .expect("the client builds")
@@ -637,10 +611,9 @@ pub fn host(
     name: &'static str,
     serving: &Arc<dyn Serving>,
     inboxes: &Inboxes,
-    channels: Vec<ChannelKind>,
     skew_s: i64,
 ) -> Party {
-    host_with(name, serving, inboxes, channels, skew_s, ceremony_cfg())
+    host_with(name, serving, inboxes, skew_s, ceremony_cfg())
 }
 
 /// The same, with the client's own configuration.
@@ -648,13 +621,12 @@ pub fn host_with(
     name: &'static str,
     serving: &Arc<dyn Serving>,
     inboxes: &Inboxes,
-    channels: Vec<ChannelKind>,
     skew_s: i64,
     cfg: Config,
 ) -> Party {
     let reachable = Reachable::default();
     let kept = Kept::new();
-    let handle = spawn_client_keeping(name, cfg, reachable.clone(), channels, skew_s, kept.clone());
+    let handle = spawn_client_keeping(name, cfg, reachable.clone(), skew_s, kept.clone());
     let (courier, app) = Courier::new(
         handle.clone(),
         serving.clone(),
@@ -782,22 +754,21 @@ pub struct Meeting {
     before: std::collections::BTreeSet<Txid>,
 }
 
-/// One party to host: its name, the channels its hardware has, and how
-/// far its clock is from the wall.
-pub struct Who(pub &'static str, pub Vec<ChannelKind>, pub i64);
+/// One party to host: its name, and how far its clock is from the wall.
+pub struct Who(pub &'static str, pub i64);
 
 impl Who {
-    /// A party whose hardware has `channels` and whose clock is right.
-    pub fn with(name: &'static str, channels: &[ChannelKind]) -> Who {
-        Who(name, channels.to_vec(), 0)
+    /// A party whose clock is right.
+    pub fn with(name: &'static str) -> Who {
+        Who(name, 0)
     }
     /// A party with no proximity hardware and a clock `skew_s` out.
     pub fn skewed(name: &'static str, skew_s: i64) -> Who {
-        Who(name, Vec::new(), skew_s)
+        Who(name, skew_s)
     }
     /// A party with nothing to run a ceremony on: a witness or a verifier.
     pub fn watching(name: &'static str) -> Who {
-        Who(name, Vec::new(), 0)
+        Who(name, 0)
     }
 }
 
@@ -907,11 +878,8 @@ impl Meeting {
         let inboxes = Inboxes::default();
         let serving: Arc<dyn Serving> = LocalNode::new(live.clone(), inboxes.clone());
         let mut parties = BTreeMap::new();
-        for Who(name, channels, skew) in who {
-            parties.insert(
-                name,
-                host_with(name, &serving, &inboxes, channels, skew, cfg.clone()),
-            );
+        for Who(name, skew) in who {
+            parties.insert(name, host_with(name, &serving, &inboxes, skew, cfg.clone()));
         }
         let population: Vec<Keyhash> = parties.keys().map(|n| kh(n)).collect();
         for p in parties.values() {
@@ -1057,8 +1025,6 @@ impl Meeting {
         engage(self.party(b)).await?;
         self.party(a).with(move |c| c.take_intent(kb, &ib)).await?;
         self.party(b).with(move |c| c.take_intent(ka, &ia)).await?;
-        let ch = self.party(a).with(|c| c.proximity()).await?;
-        self.party(b).with(move |c| c.take_channels(&ch)).await?;
         let kca = self.party(a).with(|c| c.capture_key()).await?;
         let kcb = self.party(b).with(|c| c.capture_key()).await?;
         let (ra, rb) = tokio::join!(

@@ -5,13 +5,10 @@
 // facade's `harness` feature, which a shell never builds.
 import uniffi.rhtn_ffi.*
 
-class Shell : Proximity, Camera, Clock, Random, Operator, Notices, Storage, Custody, Diagnostics {
+class Shell : Camera, Clock, Random, Operator, Notices, Storage, Custody, Diagnostics {
     private val kept = HashMap<String, ByteArray>()
     private var custody: ByteArray? = null
     private val rng = java.security.SecureRandom()
-    override fun `supported`(): List<Channel> = listOf()
-    override fun `run`(`channel`: Channel, `peer`: ByteArray): ChannelOutcome = ChannelOutcome.UNAVAILABLE
-    override fun `resolutionM`(`channel`: Channel): ULong? = null
     override fun `capture`(`ask`: Ask): ByteArray = ByteArray(64) { 7 }
     override fun `probe`(): ByteArray = ByteArray(64) { 7 }
     override fun `nowMs`(): ULong = System.currentTimeMillis().toULong()
@@ -35,7 +32,7 @@ class Shell : Proximity, Camera, Clock, Random, Operator, Notices, Storage, Cust
 // (design §22.2) and this round trip wants the reference stand-in
 fun platformOf(): Platform {
     val s = Shell()
-    return Platform(s, s, s, s, s, s, s, s, s, byteArrayOf(), byteArrayOf(), 0u, 0u)
+    return Platform(s, s, s, s, s, s, s, s, byteArrayOf(), byteArrayOf(), 0u, 0u)
 }
 
 fun main() {

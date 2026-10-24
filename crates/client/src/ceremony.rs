@@ -6,7 +6,7 @@
 //! in-process [`Harness`] moves them and records every path they take.
 
 use crate::backup;
-use crate::device::{ChannelKind, ChannelOutcome, ChannelResult, Device, Held, hold_continuity};
+use crate::device::{Device, Held, hold_continuity};
 use crate::diag::id8;
 use crate::horizon::{Askable, Horizon, Reach, Upstream};
 use crate::keys::{capture_key, pre_commitment};
@@ -132,10 +132,6 @@ pub enum Abort {
     Unsealable,
     /// The counterparty's claimed start is far from this clock.
     ClockFar,
-    /// No proximity channel passed.
-    NoProximity,
-    /// The two devices disagree on what was achieved.
-    ChannelDisagreement,
     /// A bearer-carried message echoes a contribution this device did not
     /// read off the counterparty's screen (`wire-format.md` §14.3.1): the
     /// bearer disagrees with the screen, and the ceremony stops.
@@ -234,8 +230,6 @@ pub struct Restored {
 pub enum Msg {
     /// What each side commits to as the meeting opens.
     Intent(Intent),
-    /// What the distance channels measured.
-    Channels(Vec<ChannelOutcome>),
     /// The capture key, wiped wherever a copy is dropped.
     CaptureKey(Zeroizing<[u8; 32]>),
     /// A query for the subject to consent to.
@@ -284,7 +278,6 @@ pub enum Msg {
     Standdown([u8; 32]),
     /// One channel's outcome to the surviving witnesses, inside the
     /// window (kind 25).
-    ProximityPing(crate::conversation::ProximityPing),
     /// The recovering subject names the prior key whose history it claims.
     ClaimPrior(Keyhash),
     /// A recovery verifier's signed response, hybrid, to the subject.
@@ -460,10 +453,6 @@ pub struct WitnessRequest {
     pub participants: [Keyhash; 2],
     /// The claimed start, which a witness checks its own clock against.
     pub started_at: u64,
-    /// What the distance channels measured so far: the channels run inside
-    /// the window and later outcomes follow as updates (`wire-format.md`
-    /// §7.10.2) [author, 2026-10-19].
-    pub channels: Vec<ChannelOutcome>,
     /// The engagement handle this request closes (`wire-format.md`
     /// §7.10.2 field 5) [author, 2026-10-19]: minted by the nominating
     /// side at `begin`, one per ceremony attempt, so what the witness
@@ -539,8 +528,6 @@ pub(crate) struct Active {
     pub(crate) their_nominees: Vec<Keyhash>,
     their_bundle: Vec<Vec<u8>>,
     their_retention: u64,
-    channels: Vec<ChannelOutcome>,
-    strongest: Option<ChannelKind>,
     sealed: Option<SealedCapture>,
     /// The template of the counterparty, in memory for the queries and
     /// gone with the ceremony.
@@ -967,8 +954,6 @@ impl Client {
             their_nominees: vec![],
             their_bundle: vec![],
             their_retention: 0,
-            channels: vec![],
-            strongest: None,
             sealed: None,
             template: None,
             image_count: 0,
@@ -1561,39 +1546,6 @@ impl Client {
         Ok(taken)
     }
 
-    /// What the channels achieved, as the screen draws it: read from the
-    /// ceremony rather than measured again, so the carriage and the chips
-    /// cannot disagree (`light-client-requirements.md` §1.3).
-    pub fn achieved(&self) -> Vec<ChannelOutcome> {
-        self.active
-            .as_ref()
-            .map(|a| a.channels.clone())
-            .unwrap_or_default()
-    }
-
-    /// What the distance channels measured, anchored (§14.3.2).
-    pub fn proximity_carriage(&mut self) -> Result<Vec<u8>, Abort> {
-        let outcomes = self.proximity()?;
-        let cid = self.anchored_id()?;
-        self.seal(
-            &crate::local::ProximityOutcomes {
-                ceremony_id: cid,
-                channels: outcomes,
-            }
-            .encode(),
-        )
-    }
-
-    /// The counterparty's outcomes, anchored to this ceremony or refused.
-    /// What they measured is their claim, and this side weighs it (design
-    /// §1.3 item 4) — which is what [`Client::take_channels`] does.
-    pub fn take_proximity(&mut self, bytes: &[u8]) -> Result<(), Abort> {
-        let plain = self.open(bytes)?;
-        let read = crate::local::ProximityOutcomes::decode(&plain).map_err(Abort::Malformed)?;
-        self.anchored("proximity", read.ceremony_id)?;
-        self.take_channels(&read.channels)
-    }
-
     /// Candidates for the direct path, on the ceremony's own channels
     /// (§14.3.2, design §12.6.3): the bare array the payload path carries,
     /// with the anchor this carriage adds.
@@ -1789,76 +1741,6 @@ impl Client {
     /// The active ceremony's id, once both contributions have fixed it.
     pub fn ceremony_id(&self) -> Option<[u8; 32]> {
         self.active.as_ref().and_then(|a| a.ceremony_id)
-    }
-
-    /// Steps 3–4: run the proximity channels, strongest first, and keep
-    /// what was achieved.
-    pub fn proximity(&mut self) -> Result<Vec<ChannelOutcome>, Abort> {
-        let peer = self.active()?.peer()?;
-        let t0 = self.device.clock.now_ms();
-        let (outcomes, strongest) =
-            crate::device::run_channels(self.device.proximity.as_ref(), &peer);
-        let ms = self.device.clock.now_ms().saturating_sub(t0);
-        for o in &outcomes {
-            tracing::info!(
-                target: "cer",
-                channel = ?o.kind,
-                outcome = ?o.result,
-                resolution_m = o.resolution_m,
-                "cer.proximity"
-            );
-        }
-        tracing::info!(
-            target: "cer",
-            channels = outcomes.len(),
-            strongest = ?strongest,
-            ms,
-            "cer.proximity.done"
-        );
-        let a = self.active()?;
-        a.channels = outcomes.clone();
-        a.strongest = strongest;
-        if strongest.is_none() {
-            return Err(abort("proximity", Abort::NoProximity));
-        }
-        // **each outcome to the surviving witnesses as it lands** [author,
-        // 2026-10-19] (kind 25): inside the window, which the request
-        // opens.  A channel measured before it rides in the request's own
-        // field 4 — "the proximity channels as measured SO FAR", with
-        // later outcomes following as this kind (`wire-format.md`
-        // §7.10.2) — and the survivors are not known until the prune
-        let opened = self.active.as_ref().is_some_and(|a| a.conversation.opened);
-        if let (true, Ok(cid)) = (opened, self.anchored_id()) {
-            let (_, witnesses) = self.conversation_parties()?;
-            if !witnesses.is_empty() {
-                for channel in outcomes.clone() {
-                    self.converse_into_outbox(
-                        &Msg::ProximityPing(crate::conversation::ProximityPing {
-                            ceremony_id: cid,
-                            channel,
-                        }),
-                        &witnesses,
-                    );
-                }
-            }
-        }
-        Ok(outcomes)
-    }
-
-    /// The counterparty's view of the channels: this device ran the same
-    /// ones and must have seen the same strongest pass.
-    pub fn take_channels(&mut self, theirs: &[ChannelOutcome]) -> Result<(), Abort> {
-        let mine = self.proximity()?;
-        let strongest = |v: &[ChannelOutcome]| {
-            v.iter()
-                .find(|o| o.result == ChannelResult::Pass)
-                .map(|o| o.kind)
-        };
-        if strongest(&mine) != strongest(theirs) {
-            return Err(abort("take_channels", Abort::ChannelDisagreement));
-        }
-        self.active()?.channels = theirs.to_vec();
-        Ok(())
     }
 
     /// The key the counterparty seals its captures of me under (design
@@ -2291,14 +2173,12 @@ impl Client {
             ceremony_id: a.ceremony_id.ok_or(Abort::NoCeremonyId)?,
             participants: participants(self.keyhash(), a.peer()?),
             started_at: a.started_at,
-            channels: a.channels.clone(),
             handle: a.handle,
         };
         tracing::info!(
             target: "cer",
             ceremony = %id8(&req.ceremony_id),
             nominees = a.my_nominees.len(),
-            channels = req.channels.len(),
             "cer.witness.asked"
         );
         Ok(req)
@@ -2496,11 +2376,7 @@ impl Client {
             );
             return None;
         }
-        let latency = req
-            .channels
-            .iter()
-            .any(|c| c.kind == ChannelKind::Latency && c.result == ChannelResult::Pass);
-        let flags = 3 | if latency { 4 } else { 0 };
+        let flags = 3;
         let mut evicted = false;
         if self.witnessing.len() >= crate::sequence::PENDING_WITNESS_REQUESTS {
             let oldest = self
@@ -2551,7 +2427,7 @@ impl Client {
     ) -> Result<(Proposal, DisclosureSet), Abort> {
         let me = self.keyhash();
         let now = self.now_s();
-        let salts: [[u8; 16]; 7] = std::array::from_fn(|_| self.random::<16>());
+        let salts: [[u8; 16]; 6] = std::array::from_fn(|_| self.random::<16>());
         let (retention, their_retention) =
             (self.cfg.retention_years, self.active()?.their_retention);
         let mine_back = self.archive.next_back_pointers();
@@ -2562,11 +2438,6 @@ impl Client {
         } else {
             (their_retention, retention)
         };
-        let channels: Vec<(u64, u64, Option<u64>)> = a
-            .channels
-            .iter()
-            .map(|c| (c.kind.code(), c.result as u64, c.resolution_m))
-            .collect();
         let values = [
             record::capture_value(0, a.image_count, 0, 1),
             record::empty_location_value(),
@@ -2574,12 +2445,6 @@ impl Client {
             record::retention_value(r0),
             record::integrity_value(false, 0),
             record::retention_value(r1),
-            record::proximity_value(
-                &channels,
-                a.strongest
-                    .ok_or_else(|| abort("propose", Abort::NoProximity))?
-                    .code(),
-            ),
         ];
         let set = disclosures(values, salts);
         let mut responses = a.responses.clone();
@@ -4626,7 +4491,7 @@ impl Client {
         };
         let mut reply = self.archive.serve(&req);
         // a presence record arrives in the presented form (`wire-format.md`
-        // §7.9): the envelope and its seven slots, nothing revealed unless
+        // §7.9): the envelope and its six slots, nothing revealed unless
         // the holder chooses to, which is what this path is for.  One whose
         // disclosure set this holder does not have goes as the envelope,
         // there being nothing to present it with
@@ -5693,7 +5558,7 @@ impl Client {
             // in answer put in the outbox.  Kind 19 arranges an adoption
             // and has its own row above
             k @ payload::KIND_CONSENT_REQUEST..=payload::KIND_RECORD
-            | k @ payload::KIND_WITNESS_ENGAGEMENT..=payload::KIND_PROXIMITY_UPDATE => {
+            | k @ payload::KIND_WITNESS_ENGAGEMENT..=payload::KIND_WITNESS_STANDDOWN => {
                 Dispatched::Conversation(self.converse_in(from, k, &inner))
             }
             k => Dispatched::Application {
@@ -5790,7 +5655,6 @@ pub fn conversation_payload(msg: &Msg) -> Option<(u64, Vec<u8>)> {
             payload::KIND_WITNESS_STANDDOWN,
             Standdown { handle: *handle }.encode(),
         ),
-        Msg::ProximityPing(u) => (payload::KIND_PROXIMITY_UPDATE, u.encode()),
         _ => return None,
     })
 }
@@ -5864,9 +5728,6 @@ pub fn conversation_from(kind: u64, bytes: &[u8]) -> Result<Msg, Abort> {
         }
         payload::KIND_WITNESS_STANDDOWN => {
             Msg::Standdown(Standdown::decode(bytes).map_err(malformed)?.handle)
-        }
-        payload::KIND_PROXIMITY_UPDATE => {
-            Msg::ProximityPing(ProximityPing::decode(bytes).map_err(malformed)?)
         }
         _ => {
             return Err(malformed(format!(
@@ -5950,7 +5811,7 @@ impl Harness {
 
     /// **The local exchanges of one ceremony** (`wire-format.md` §14.3;
     /// design §7.1 steps 1 to 5): the two intents across the optical
-    /// channel, the proximity channels agreed, the capture keys crossed
+    /// channel, the capture keys crossed
     /// and each party capturing the other.
     ///
     /// **This is what a harness may drive** [author, 2026-10-14]: every
@@ -5979,14 +5840,7 @@ impl Harness {
         let m = self.send(b, a, Msg::Intent(ib));
         let Msg::Intent(i) = &m else { unreachable!() };
         self.client(&a).take_intent(b, i)?;
-        // 3–4. proximity
-        let ch = self.client(&a).proximity()?;
-        let m = self.send(a, b, Msg::Channels(ch));
-        let Msg::Channels(ch) = &m else {
-            unreachable!()
-        };
-        self.client(&b).take_channels(ch)?;
-        // 5. capture keys cross, then each captures the other
+        // 3. capture keys cross, then each captures the other
         let ka = self.client(&a).capture_key()?;
         let kb = self.client(&b).capture_key()?;
         self.send(a, b, Msg::CaptureKey(ka.clone()));
@@ -6063,12 +5917,6 @@ impl Harness {
         let m = self.send(verifier, subject, Msg::Intent(ib));
         let Msg::Intent(i) = &m else { unreachable!() };
         self.client(&subject).take_intent(verifier, i)?;
-        let ch = self.client(&subject).proximity()?;
-        let m = self.send(subject, verifier, Msg::Channels(ch));
-        let Msg::Channels(ch) = &m else {
-            unreachable!()
-        };
-        self.client(&verifier).take_channels(ch)?;
         let ks = self.client(&subject).capture_key()?;
         let kv = self.client(&verifier).capture_key()?;
         self.send(subject, verifier, Msg::CaptureKey(ks.clone()));

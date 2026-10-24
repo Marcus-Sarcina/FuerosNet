@@ -17,8 +17,7 @@
 //! lists, and `-` is an empty list. Nothing in it is binary — an
 //! instrument is read by a person as often as by a script.
 
-use rhtn_ffi::client::{Achieved, Engaging, Proposed, Revealed, WitnessAsk, Witnessing};
-use rhtn_ffi::types::{Channel, ChannelOutcome};
+use rhtn_ffi::client::{Engaging, Proposed, Revealed, WitnessAsk, Witnessing};
 
 use crate::terminal::{hex, unhex};
 
@@ -81,88 +80,15 @@ pub fn take_carriage(s: &str) -> Result<Vec<Vec<u8>>, String> {
     ids(s, "a carriage message")
 }
 
-// ----------------------------------------------------------- channels
-
-fn channel_name(c: Channel) -> &'static str {
-    match c {
-        Channel::Uwb => "uwb",
-        Channel::Nfc => "nfc",
-        Channel::Optical => "optical",
-        Channel::Latency => "latency",
-    }
-}
-
-fn channel_of(s: &str) -> Result<Channel, String> {
-    match s {
-        "uwb" => Ok(Channel::Uwb),
-        "nfc" => Ok(Channel::Nfc),
-        "optical" => Ok(Channel::Optical),
-        "latency" => Ok(Channel::Latency),
-        _ => Err(format!("`{s}` is not a channel")),
-    }
-}
-
-fn outcome_name(o: ChannelOutcome) -> &'static str {
-    match o {
-        ChannelOutcome::Pass => "pass",
-        ChannelOutcome::Fail => "fail",
-        ChannelOutcome::Unavailable => "unavailable",
-    }
-}
-
-fn outcome_of(s: &str) -> Result<ChannelOutcome, String> {
-    match s {
-        "pass" => Ok(ChannelOutcome::Pass),
-        "fail" => Ok(ChannelOutcome::Fail),
-        "unavailable" => Ok(ChannelOutcome::Unavailable),
-        _ => Err(format!("`{s}` is not an outcome")),
-    }
-}
-
-/// The channel outcomes as one line a terminal can carry.
-pub fn pack_channels(a: &[Achieved]) -> String {
-    list(
-        a.iter()
-            .map(|x| {
-                format!(
-                    "{}:{}:{}",
-                    channel_name(x.channel),
-                    outcome_name(x.outcome),
-                    x.resolution_m.map_or("-".into(), |m| m.to_string())
-                )
-            })
-            .collect(),
-    )
-}
-
-/// The outcomes back out of what [`pack_channels`] wrote.
-pub fn take_channels(s: &str) -> Result<Vec<Achieved>, String> {
-    unlist(s)
-        .iter()
-        .map(|one| {
-            let p: Vec<&str> = one.split(':').collect();
-            Ok(Achieved {
-                channel: channel_of(field(&p, 0, "a channel")?)?,
-                outcome: outcome_of(field(&p, 1, "a channel")?)?,
-                resolution_m: match field(&p, 2, "a channel")? {
-                    "-" => None,
-                    m => Some(num(m, "count of metres")?),
-                },
-            })
-        })
-        .collect()
-}
-
 // ------------------------------------------------------- witness ask
 
 /// A witness request as one line a terminal can carry.
 pub fn pack_ask(a: &WitnessAsk) -> String {
     format!(
-        "{}|{}|{}|{}|{}",
+        "{}|{}|{}|{}",
         hex(&a.ceremony),
         list(a.participants.iter().map(|p| hex(p)).collect()),
         a.started_at,
-        pack_channels(&a.channels),
         hex(&a.handle)
     )
 }
@@ -174,8 +100,7 @@ pub fn take_ask(s: &str) -> Result<WitnessAsk, String> {
         ceremony: bytes(field(&f, 0, "an ask")?, "a ceremony id")?,
         participants: ids(field(&f, 1, "an ask")?, "a participant")?,
         started_at: num(field(&f, 2, "an ask")?, "time")?,
-        channels: take_channels(field(&f, 3, "an ask")?)?,
-        handle: bytes(field(&f, 4, "an ask")?, "a handle")?,
+        handle: bytes(field(&f, 3, "an ask")?, "a handle")?,
     })
 }
 

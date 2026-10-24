@@ -16,7 +16,6 @@ mod common;
 use common::harness::*;
 use common::*;
 use rhtn_client::ceremony::*;
-use rhtn_client::device::*;
 
 const EVERYONE: [&str; 6] = ["alice", "bob", "carol", "w1", "w2", "w3"];
 
@@ -25,8 +24,8 @@ const EVERYONE: [&str; 6] = ["alice", "bob", "carol", "w1", "w2", "w3"];
 /// recognises bob among alice's two introduced parties, must seek one
 /// verifier and he is the one she can ask.  The log is left holding the
 /// last meeting only.
-fn three_meetings(channels: &[ChannelKind]) -> (Setup, [u8; 32], [u8; 32], [u8; 32]) {
-    let mut s = setup(&["alice", "bob", "carol", "c1", "w1", "w2", "w3"], channels);
+fn three_meetings() -> (Setup, [u8; 32], [u8; 32], [u8; 32]) {
+    let mut s = setup(&["alice", "bob", "carol", "c1", "w1", "w2", "w3"]);
     let cb = s.met("carol", "bob", "w1");
     // **in person**, so bob holds a capture of alice and she holds the
     // key to it: a verifier asked about a subject it has only a record of
@@ -55,7 +54,7 @@ fn three_meetings(channels: &[ChannelKind]) -> (Setup, [u8; 32], [u8; 32], [u8; 
 /// the bytes wait on it, as any first send does.
 #[test]
 fn a_query_and_a_grant_unanswered_at_half_the_patience_go_again_once() {
-    let (mut s, _, _, _) = three_meetings(&[ChannelKind::Nfc]);
+    let (mut s, _, _, _) = three_meetings();
     // alice and carol again, driven by hand as far as the queries and
     // no further, so that nothing answers them
     s.face_off("alice", "carol");
@@ -70,8 +69,6 @@ fn a_query_and_a_grant_unanswered_at_half_the_patience_go_again_once() {
         .unwrap();
     s.client("carol").take_intent(a, &ia).unwrap();
     s.client("alice").take_intent(c, &ic).unwrap();
-    let ch = s.client("alice").proximity().unwrap();
-    s.client("carol").take_channels(&ch).unwrap();
     let ka = s.client("alice").capture_key().unwrap();
     let kc = s.client("carol").capture_key().unwrap();
     s.client("carol").capture(ka).unwrap();
@@ -112,7 +109,7 @@ fn a_query_and_a_grant_unanswered_at_half_the_patience_go_again_once() {
 /// and not during one, whose intent has already stated it.
 #[test]
 fn the_declared_retention_is_the_persons_to_set_between_ceremonies() {
-    let mut s = setup(&["alice", "bob"], &[ChannelKind::Nfc]);
+    let mut s = setup(&["alice", "bob"]);
     let a = s.client("alice");
     assert_eq!(a.retention_years(), 2, "the default");
     assert_eq!(
@@ -142,7 +139,7 @@ fn the_declared_retention_is_the_persons_to_set_between_ceremonies() {
 // acceptance: CER-49
 #[test]
 fn strangers_pin_each_other_from_the_first_qr_and_the_first_code_fixes_the_counterparty() {
-    let mut s = setup(&EVERYONE, &[ChannelKind::Nfc]);
+    let mut s = setup(&EVERYONE);
     // neither holds the other: what each knows is itself and the witnesses
     s.client("alice").known.retain(|i| i.keyhash != kh("bob"));
     s.client("bob").known.retain(|i| i.keyhash != kh("alice"));
@@ -152,10 +149,6 @@ fn strangers_pin_each_other_from_the_first_qr_and_the_first_code_fixes_the_count
         .client("alice")
         .begin(None, vec![], true)
         .expect("alice begins");
-    assert_eq!(
-        s.client("alice").proximity().err(),
-        Some(Abort::NoCounterparty)
-    );
     let ib = s
         .client("bob")
         .begin(Some(kh("alice")), vec![], false)
@@ -219,7 +212,7 @@ fn a_witness_holds_a_bounded_number_of_pending_requests_and_the_oldest_goes_firs
     use rhtn_archive::tx::Witness;
     use rhtn_client::record::Proposal;
     use rhtn_client::sequence::PENDING_WITNESS_REQUESTS;
-    let mut s = setup(&EVERYONE, &[ChannelKind::Nfc]);
+    let mut s = setup(&EVERYONE);
     let now = s.clock.get() / 1000;
     let bound = PENDING_WITNESS_REQUESTS as u64;
     let w = s.client("w1");
@@ -231,7 +224,6 @@ fn a_witness_holds_a_bounded_number_of_pending_requests_and_the_oldest_goes_firs
         ceremony_id: [i as u8; 32],
         participants: participants(kh("alice"), kh("bob")),
         started_at: now - 100 + i,
-        channels: vec![],
         handle: [0xe0 | i as u8; 32],
     };
     // each request closes an engagement this witness watched [author,
@@ -282,7 +274,7 @@ fn a_witness_holds_a_bounded_number_of_pending_requests_and_the_oldest_goes_firs
 #[test]
 fn a_request_binds_to_the_engagement_watched_and_its_ceremony_id() {
     use rhtn_client::conversation::{Engagement, Trace, TraceEvent};
-    let mut s = setup(&EVERYONE, &[ChannelKind::Nfc]);
+    let mut s = setup(&EVERYONE);
     let now = s.clock.get() / 1000;
     let w = s.client("w1");
     let engagement = |h: u8| Engagement {
@@ -294,7 +286,6 @@ fn a_request_binds_to_the_engagement_watched_and_its_ceremony_id() {
         ceremony_id: [cid; 32],
         participants: participants(kh("alice"), kh("bob")),
         started_at: now,
-        channels: vec![],
         handle: [h; 32],
     };
     // a request whose engagement this client never watched binds nothing
@@ -350,7 +341,7 @@ fn a_request_binds_to_the_engagement_watched_and_its_ceremony_id() {
 /// witness, which is the whole role (`wire-format.md` §3.2).
 #[test]
 fn the_counterparty_learned_after_begin_is_never_offered_as_a_witness() {
-    let mut s = setup(&["alice", "bob", "w1"], &[ChannelKind::Nfc]);
+    let mut s = setup(&["alice", "bob", "w1"]);
     // they have met: each is the other's only met party besides the
     // witness of that meeting
     s.met("alice", "bob", "w1");
@@ -465,7 +456,7 @@ fn the_counterparty_learned_after_begin_is_never_offered_as_a_witness() {
 #[test]
 fn the_opening_reaches_a_nominee_before_acceptance_and_one_event_at_a_time() {
     use rhtn_client::conversation::{Trace, TraceEvent};
-    let mut s = setup(&EVERYONE, &[ChannelKind::Nfc]);
+    let mut s = setup(&EVERYONE);
     s.face_off("alice", "bob");
     let (a, b) = (kh("alice"), kh("bob"));
     let ib = s
@@ -554,7 +545,7 @@ fn a_witness_will_not_sign_before_its_window_has_passed() {
     use rhtn_archive::tx::Witness;
     use rhtn_client::conversation::Engagement;
     use rhtn_client::record::Proposal;
-    let mut s = setup(&EVERYONE, &[ChannelKind::Nfc]);
+    let mut s = setup(&EVERYONE);
     let window_s = 30;
     s.client("w1").cfg.witness_window_s = window_s;
     let now = s.clock.get() / 1000;
@@ -571,7 +562,6 @@ fn a_witness_will_not_sign_before_its_window_has_passed() {
         ceremony_id: [9; 32],
         participants: participants(kh("alice"), kh("bob")),
         started_at: now,
-        channels: vec![],
         handle: [9; 32],
     };
     assert_eq!(w.take_witness_request(&req), Some(3), "it agreed to attest");
@@ -620,7 +610,7 @@ fn a_witness_will_not_sign_before_its_window_has_passed() {
     );
     // a client whose window is zero does not wait at all, which is what
     // the in-process harness runs on
-    let mut t = setup(&EVERYONE, &[ChannelKind::Nfc]);
+    let mut t = setup(&EVERYONE);
     t.client("w1").cfg.witness_window_s = 0;
     let tnow = t.clock.get() / 1000;
     let e2 = Engagement {
@@ -633,7 +623,6 @@ fn a_witness_will_not_sign_before_its_window_has_passed() {
         ceremony_id: [8; 32],
         participants: participants(kh("alice"), kh("bob")),
         started_at: tnow,
-        channels: vec![],
         handle: [8; 32],
     };
     assert_eq!(t.client("w1").take_witness_request(&req2), Some(3));

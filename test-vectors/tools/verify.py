@@ -17,7 +17,7 @@ every claim it can reach:
     and never zero (wire s1.3, s3.5), over transactions.md and the corpus;
   - the ceremony's conversation (wire s7.10.1 kinds 9 to 18): the consent
     verifies over the query_id, the proposed body is the normal record's and
-    its seven slots recompute the root, the signing reply's two entries verify
+    its six slots recompute the root, the signing reply's two entries verify
     under the record's lowest-keyhash signer, the witness request and the
     gathered responses are the record's;
   - the capture-key handover: HKDF-SHA-256 from the stated seed recipe over
@@ -361,7 +361,7 @@ check(not verify_sig(BY[extr[0][1]], -8, extr[1], sig_sign1(extr[2], b'rhtn/1:en
 
 # ------------------------------------------------- selective disclosure (§4.5.1)
 LABELS = ['capture', 'location', 'p0.integrity', 'p0.retention',
-          'p1.integrity', 'p1.retention', 'proximity']
+          'p1.integrity', 'p1.retention']
 dtab = re.findall(r'\| `([a-z01.]+)` \| `([0-9a-f]{32})` \| `([0-9a-f]+)` \| `([0-9a-f]{64})` \|', tx)
 assert [r[0] for r in dtab] == LABELS, 'disclosure table labels'
 digests = {}
@@ -380,7 +380,7 @@ pres_ok = 0
 for m in re.finditer(r'\*\*(Fully revealed|Partial|Minimal)\*\*.*?```\n([0-9a-f\n]+?)```', tx, re.S):
     pr_obj = canonical(bytes.fromhex(m.group(2).replace('\n', '')))
     env, slots = pr_obj
-    assert len(slots) == 7
+    assert len(slots) == 6
     ds = []
     for i, slot in enumerate(slots):
         if isinstance(slot, str):          # withheld digest
@@ -831,7 +831,7 @@ check(canonical(bytes.fromhex(byid['P-vs-bundle-1']['hex']))[2][1]
       'bundle: entries 1 and 3 introduce one subject, counted once')
 check(_ix[5] is True and _ixr[5] is False,
       's14.3: the pair of intents disagree on who began, the initiator true and the responder false')
-for _fid in ('P-proximity-outcomes', 'P-candidate-handover'):
+for _fid in ('P-candidate-handover',):
     check(canonical(bytes.fromhex(byid[_fid]['hex']))[1] == _cid,
           f's14.3: {_fid} is anchored to the derived ceremony-id')
 _dc = canonical(bytes.fromhex(byid['P-device-credential']['hex']))
@@ -858,18 +858,6 @@ tr2 = byid['TR2']['expect']
 check(tr2['actions'] == ['never_process_as_early_data']
       and sorted(tr2.get('one_of', [])) == ['defer_until_handshake', 'reject'],
       'corpus: TR2 carries the reject-or-defer disjunction, not one branch')
-cr = canonical(bytes.fromhex(byid['P-channel-retry-presentation']['hex']))
-cr_env_o, cr_slots_o = cr
-cr_ds = []
-for i, slot in enumerate(cr_slots_o):
-    D_ = enc(slot)
-    cr_ds.append(H(b'\x00' + D_))
-check(H(b'\x01' + b''.join(cr_ds)).hex() == cr_env_o[3][8],
-      'channel-retry presentation recomputes its root')
-cr_prox = cr_slots_o[6][2]
-check([c[1] for c in cr_prox[1]] == [3, 3] and [c[2] for c in cr_prox[1]] == [1, 0]
-      and cr_prox[2] == 3,
-      'channel-retry: the repeated kind carries fail-then-pass and strongest is the retried channel')
 check(byid['N-wrong-signer-anchor'].get('precondition') == 'the named key is pinned',
       'corpus: the anchor wrong-signer expect carries its pinned-key precondition')
 b17 = canonical(bytes.fromhex(byid['B-witnesses-17']['hex']))
@@ -993,11 +981,11 @@ CONV = ['P-consent-reply', 'P-fishing-proposal', 'P-witness-request',
         'P-signing-reply-signed', 'P-signing-reply-refused',
         'P-witness-engagement', 'P-exchange-trace-shape',
         'P-exchange-trace-confirmed', 'P-witness-set', 'P-witness-keep',
-        'P-witness-standdown', 'P-proximity-update']
+        'P-witness-standdown']
 conv_blocks = [h.replace('\n', '') for h in e2e[2:]]
 check(len(conv_blocks) == 1 + len(CONV) and conv_blocks[1:] == [byid[f]['hex'] for f in CONV],
-      'conversation: the seventeen typed corpus entries are byte-identical to the messages.md '
-      'blocks, kinds 10 to 17 and the opening 20 to 25 in order after the kind-9 query')
+      'conversation: the sixteen typed corpus entries are byte-identical to the messages.md '
+      'blocks, kinds 10 to 17 and the opening 20 to 24 in order after the kind-9 query')
 check(conv_blocks[0] == enc(n_query).hex(),
       "conversation kind 9: the query sent for consent is the normal record's first worked query")
 npr_c = canonical(bytes.fromhex(byid['P-normal-record']['hex']))
@@ -1015,7 +1003,7 @@ check(verify_sig(subj, -8, bytes.fromhex(cr[1][3]),
 check(cr[1] == [r[7] for r in npr_c[3][5] if r[3] == cr[0]][0],
       "ConsentReply: the COSE_Sign1 is the one the record's matching VerifierResponse field 7 carries")
 # WitnessRequest: the record's ceremony, participants in body order, claimed
-# start, channels as measured
+# start
 wr = canonical(bytes.fromhex(byid['P-witness-request']['hex']))
 check(wr[1] == n_query[3],
       "WitnessRequest: the ceremony-id is the normal record's pre-commitment (query field 3)")
@@ -1034,7 +1022,7 @@ wkeep = canonical(bytes.fromhex(byid['P-witness-keep']['hex']))
 check(len(wset) == 2 and sorted(wkeep) == sorted([KH['c1'], KH['w1']])
       and all(i[2][1] in wkeep for i in wset),
       'opening: the kept keyhashes are c1 and w1, each the subject of a nominee of the set it answers')
-# ProposedBody: the body as signed, and all seven slots revealed
+# ProposedBody: the body as signed, and all six slots revealed
 pb = canonical(bytes.fromhex(byid['P-proposed-body']['hex']))
 pb_body = bytes.fromhex(pb[1])
 check(pb_body == npr_c_body, "ProposedBody: field 1 is P-normal-record's body byte-for-byte")
@@ -1044,12 +1032,9 @@ for i, slot in enumerate(pb[2]):
     pb_lab &= (isinstance(slot, list) and len(slot) == 3
                and len(bytes.fromhex(slot[0])) == 16 and slot[1] == ('tstr', LABELS[i]))
     pb_ds.append(H(b'\x00' + enc(slot)))
-check(len(pb[2]) == 7 and pb_lab and H(b'\x01' + b''.join(pb_ds)).hex() == pb_obj[8],
-      'ProposedBody: seven revealed Disclosure slots, labels in position, 16-byte salts, '
+check(len(pb[2]) == 6 and pb_lab and H(b'\x01' + b''.join(pb_ds)).hex() == pb_obj[8],
+      'ProposedBody: six revealed Disclosure slots, labels in position, 16-byte salts, '
       'and the root recomputes to body field 8 (s4.5.1)')
-prox_val = pb[2][LABELS.index('proximity')][2]
-check(wr[4] == prox_val[1] and 1 <= len(wr[4]) <= 8,
-      "WitnessRequest: the channels are the record's proximity channels, as the disclosure reveals them")
 # GatheredResponses: the record's responses, in the body's order
 gr = canonical(bytes.fromhex(byid['P-gathered-responses']['hex']))
 check(gr == npr_c[3][5] and len(gr) == 3,
@@ -1099,9 +1084,6 @@ check(wa_y == {1: True, 2: 7} and wa_n == {1: False},
 check(len(canonical(bytes.fromhex(byid['B-gathered-responses-32']['hex']))) == 32
       and len(canonical(bytes.fromhex(byid['N-gathered-responses-33']['hex']))) == 33,
       'GatheredResponses bound: 32 at the ceiling, 33 past it')
-check(len(canonical(bytes.fromhex(byid['B-witness-request-channels-8']['hex']))[4]) == 8
-      and len(canonical(bytes.fromhex(byid['B-witness-request-channels-9']['hex']))[4]) == 9,
-      'WitnessRequest channel bound: 8 at the ceiling, 9 past it')
 
 # ------------------------------- the capture-key handover (s14.3, design s7.5.2)
 # Recomputed from the stated recipe, never from the generator: the seed is

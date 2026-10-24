@@ -1,6 +1,6 @@
 //! The ceremony's opening over the bearer, between two live clients
 //! (`wire-format.md` §14.3): the optical exchange, then the intent, the
-//! proximity outcomes, the candidates and the capture keys, every one of
+//! candidates and the capture keys, every one of
 //! them as the bytes the shell carries and none of them as fields.
 
 mod common;
@@ -8,7 +8,6 @@ mod common;
 use common::harness::*;
 use common::*;
 use rhtn_client::ceremony::*;
-use rhtn_client::device::*;
 
 /// What a bearer is, for a test: a byte string handed from one device to
 /// the other. Nothing else is modelled, because nothing else is promised —
@@ -21,7 +20,7 @@ fn carry(bytes: &[u8]) -> Vec<u8> {
 // acceptance: CER-44
 #[test]
 fn the_opening_crosses_as_bytes_and_each_check_is_made_on_this_side() {
-    let mut s = setup(&["alice", "bob"], &[ChannelKind::Nfc]);
+    let mut s = setup(&["alice", "bob"]);
     s.face_off("alice", "bob");
     s.client("alice")
         .begin(Some(kh("bob")), vec![], true)
@@ -72,12 +71,6 @@ fn the_opening_crosses_as_bytes_and_each_check_is_made_on_this_side() {
         .take_intent_carriage(kh("alice"), &carried)
         .unwrap();
 
-    // the channels, anchored, and the counterparty weighs what they say
-    let pa = s.client("alice").proximity_carriage().unwrap();
-    let pb = s.client("bob").proximity_carriage().unwrap();
-    s.client("alice").take_proximity(&carry(&pb)).unwrap();
-    s.client("bob").take_proximity(&carry(&pa)).unwrap();
-
     // and the candidates: an address to dial, with the anchor the local
     // carriage adds and nothing else
     let bare = vec![0x81, 0x83, 0x00, 0x44, 10, 0, 0, 1, 0x19, 0x1f, 0x90];
@@ -121,7 +114,7 @@ fn the_opening_crosses_as_bytes_and_each_check_is_made_on_this_side() {
 // acceptance: CER-44
 #[test]
 fn a_bearer_that_disagrees_with_the_screen_stops_the_ceremony() {
-    let mut s = setup(&["alice", "bob", "carol"], &[ChannelKind::Nfc]);
+    let mut s = setup(&["alice", "bob", "carol"]);
     s.face_off("alice", "bob");
     s.client("alice")
         .begin(Some(kh("bob")), vec![], true)
@@ -191,30 +184,9 @@ fn a_bearer_that_disagrees_with_the_screen_stops_the_ceremony() {
     let cid_c = rhtn_client::local::TranscriptConfirm::decode(&tc)
         .unwrap()
         .ceremony_id;
-    let stray = rhtn_client::local::ProximityOutcomes {
-        ceremony_id: cid_c,
-        channels: vec![ChannelOutcome {
-            kind: ChannelKind::Nfc,
-            result: ChannelResult::Pass,
-            resolution_m: None,
-        }],
-    }
-    .encode();
     // **Two layers now, and the key is the first.**  Carol's own carriage
     // is sealed under carol's session key, so alice cannot open it: the
     // per-ceremony key separates the two before any anchor is compared.
-    assert!(matches!(
-        s.client("alice").take_proximity(&stray),
-        Err(Abort::Unsealable)
-    ));
-    // and the anchor check is still what catches a holder of alice's key
-    // re-anchoring another ceremony's message, which is the attack
-    // §14.3.1 concedes and the theory proves reachable
-    let resealed = s.client("alice").seal_as_co_present(&stray).unwrap();
-    assert!(matches!(
-        s.client("alice").take_proximity(&resealed),
-        Err(Abort::CeremonyIdMismatch)
-    ));
     let stray = rhtn_client::local::CandidateHandover {
         ceremony_id: cid_c,
         candidates: vec![0x81, 0x83, 0x00, 0x44, 10, 0, 0, 1, 0x19, 0x1f, 0x90],
@@ -224,6 +196,9 @@ fn a_bearer_that_disagrees_with_the_screen_stops_the_ceremony() {
         s.client("alice").take_candidate_carriage(&stray),
         Err(Abort::Unsealable)
     ));
+    // and the anchor check is still what catches a holder of alice's key
+    // re-anchoring another ceremony's message, which is the attack
+    // §14.3.1 concedes and the theory proves reachable
     let resealed = s.client("alice").seal_as_co_present(&stray).unwrap();
     assert!(matches!(
         s.client("alice").take_candidate_carriage(&resealed),
@@ -250,12 +225,12 @@ fn a_bearer_that_disagrees_with_the_screen_stops_the_ceremony() {
     // garbage never reaches the decoder, and garbage a key holder sealed
     // does
     assert!(matches!(
-        s.client("alice").take_proximity(&[0x00]),
+        s.client("alice").take_capture_key_carriage(&[0x00]),
         Err(Abort::Unsealable)
     ));
     let sealed_garbage = s.client("alice").seal_as_co_present(&[0x00]).unwrap();
     assert!(matches!(
-        s.client("alice").take_proximity(&sealed_garbage),
+        s.client("alice").take_capture_key_carriage(&sealed_garbage),
         Err(Abort::Malformed(_))
     ));
 }
@@ -267,7 +242,7 @@ fn a_bearer_that_disagrees_with_the_screen_stops_the_ceremony() {
 /// not there.
 #[test]
 fn an_anchor_asked_for_before_the_id_is_fixed_is_its_own_refusal() {
-    let mut s = setup(&["alice", "bob"], &[ChannelKind::Nfc]);
+    let mut s = setup(&["alice", "bob"]);
     assert!(matches!(
         s.client("alice").capture_key_carriage(),
         Err(Abort::NotActive)
@@ -324,7 +299,7 @@ fn an_anchor_asked_for_before_the_id_is_fixed_is_its_own_refusal() {
 /// unable to say a word to each other.
 #[test]
 fn a_handover_opens_an_end_to_end_channel_with_no_node_asked() {
-    let mut s = setup(&["alice", "bob"], &[ChannelKind::Nfc]);
+    let mut s = setup(&["alice", "bob"]);
     s.face_off("alice", "bob");
     s.client("alice")
         .begin(Some(kh("bob")), vec![], true)
@@ -392,7 +367,7 @@ fn a_handover_opens_an_end_to_end_channel_with_no_node_asked() {
 /// the material trustworthy and never the channel.
 #[test]
 fn a_handover_is_checked_against_this_ceremony_and_its_own_signature() {
-    let mut s = setup(&["alice", "bob", "carol"], &[ChannelKind::Nfc]);
+    let mut s = setup(&["alice", "bob", "carol"]);
     s.face_off("alice", "bob");
     s.client("alice")
         .begin(Some(kh("bob")), vec![], true)

@@ -105,7 +105,7 @@ object Bearer {
      * ```
      *
      * **A phase is one exchange of the ceremony's conversation** — the
-     * intent carriage, then the proximity outcomes, then the capture key —
+     * intent carriage, then the capture key —
      * and the phase bits are what keep a late packet of one from being
      * assembled into another. The phases' *meaning* is fixed by [Carriage],
      * not here: this file moves packets and reads nothing.

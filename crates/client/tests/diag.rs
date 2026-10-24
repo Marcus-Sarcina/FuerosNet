@@ -24,7 +24,6 @@ use common::harness::*;
 use common::*;
 use rhtn_archive::prekey::{PrekeyReply, PrekeyRequest};
 use rhtn_client::ceremony::{Client, Msg};
-use rhtn_client::device::ChannelKind;
 use rhtn_client::diag::json::JsonLines;
 use rhtn_client::keys::capture_key;
 use rhtn_client::payload::KIND_APPLICATION;
@@ -169,7 +168,7 @@ fn no_secret_of_a_whole_ceremony_appears_in_any_event_and_the_timeline_is_comple
     // two ceremonies, an adoption, a payload session, two recovery
     // meetings and the recovery adoption, all rendered
     let s = tracing::subscriber::with_default(subscriber, || {
-        let mut s = setup(&PARTIES, &[ChannelKind::Nfc]);
+        let mut s = setup(&PARTIES);
         s.met_in_person("alice", "bob", "w2");
         s.met_in_person("alice", "carol", "w2");
         s.adopted("alice", "w1", "w2", 3);
@@ -276,8 +275,6 @@ fn no_secret_of_a_whole_ceremony_appears_in_any_event_and_the_timeline_is_comple
             "cer.begin",
             "cer.intent.received",
             "cer.id_fixed",
-            "cer.proximity",
-            "cer.proximity.done",
             "cer.capture",
             "cer.finalize",
             "pay.session",

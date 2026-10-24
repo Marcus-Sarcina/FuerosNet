@@ -14,7 +14,6 @@ use common::harness::*;
 use common::*;
 use rhtn_archive::tx::{Adoption, Evidence, Locator, Seqno, adoption_body};
 use rhtn_client::ceremony::{Abort, Adopting};
-use rhtn_client::device::ChannelKind;
 
 const PARTIES: [&str; 5] = ["alice", "bob", "carol", "w1", "w2"];
 
@@ -68,7 +67,7 @@ fn refusal(e: Abort) -> String {
 // acceptance: CER-57
 #[test]
 fn the_body_the_patron_proposed_on_the_meeting_they_had_is_signed_and_taken() {
-    let mut s = setup(&PARTIES, &[ChannelKind::Nfc]);
+    let mut s = setup(&PARTIES);
     let t = s.adopted("bob", "alice", "w2", 1);
     // both hold it, and the subordinate knows where it now sits
     for n in ["bob", "alice"] {
@@ -96,7 +95,7 @@ fn the_body_the_patron_proposed_on_the_meeting_they_had_is_signed_and_taken() {
 // acceptance: CER-58
 #[test]
 fn a_body_adopting_another_party_is_not_this_clients_to_sign() {
-    let mut s = setup(&PARTIES, &[ChannelKind::Nfc]);
+    let mut s = setup(&PARTIES);
     let pop = s.met_in_person("bob", "alice", "w2");
     let where_alice = held_position(&mut s, "bob", "alice");
     // alice's body, adopting carol: bob is not its subject
@@ -125,7 +124,7 @@ fn a_body_adopting_another_party_is_not_this_clients_to_sign() {
 // acceptance: CER-58
 #[test]
 fn a_body_resting_on_a_meeting_with_somebody_else_is_refused() {
-    let mut s = setup(&PARTIES, &[ChannelKind::Nfc]);
+    let mut s = setup(&PARTIES);
     // bob met alice, and witnessed a meeting of alice and carol — so he
     // holds that record too, and it is not evidence of anything about
     // him. (A record he holds nothing of is refused one step earlier, for
@@ -158,7 +157,7 @@ fn a_body_resting_on_a_meeting_with_somebody_else_is_refused() {
 // acceptance: CER-60
 #[test]
 fn a_series_this_key_has_occupied_is_refused() {
-    let mut s = setup(&PARTIES, &[ChannelKind::Nfc]);
+    let mut s = setup(&PARTIES);
     s.adopted("bob", "alice", "w2", 1);
     // carol proposes the series bob already occupies under alice
     let pop = s.met_in_person("bob", "carol", "w2");
@@ -202,7 +201,7 @@ fn a_series_this_key_has_occupied_is_refused() {
 // acceptance: CER-59
 #[test]
 fn an_address_that_is_not_the_patrons_to_issue_is_refused() {
-    let mut s = setup(&PARTIES, &[ChannelKind::Nfc]);
+    let mut s = setup(&PARTIES);
     let pop = s.met_in_person("bob", "alice", "w2");
     let where_alice = held_position(&mut s, "bob", "alice");
     let now = s.clock.get() / 1000;
@@ -252,7 +251,7 @@ fn an_address_that_is_not_the_patrons_to_issue_is_refused() {
 // acceptance: CER-61
 #[test]
 fn back_pointers_that_are_not_this_archives_are_refused() {
-    let mut s = setup(&PARTIES, &[ChannelKind::Nfc]);
+    let mut s = setup(&PARTIES);
     let pop = s.met_in_person("bob", "alice", "w2");
     let where_alice = held_position(&mut s, "bob", "alice");
     let body = body_of(
@@ -280,7 +279,7 @@ fn back_pointers_that_are_not_this_archives_are_refused() {
 // acceptance: CER-61
 #[test]
 fn a_timestamp_this_clock_cannot_hold_is_refused() {
-    let mut s = setup(&PARTIES, &[ChannelKind::Nfc]);
+    let mut s = setup(&PARTIES);
     let pop = s.met_in_person("bob", "alice", "w2");
     let where_alice = held_position(&mut s, "bob", "alice");
     let at = |when| {
@@ -325,7 +324,7 @@ fn a_timestamp_this_clock_cannot_hold_is_refused() {
 // acceptance: CER-59
 #[test]
 fn a_patron_whose_own_position_is_not_held_is_refused() {
-    let mut s = setup(&PARTIES, &[ChannelKind::Nfc]);
+    let mut s = setup(&PARTIES);
     // a record of the meeting, and no intent: nothing says where alice
     // sits, so nothing says the address is hers to issue
     let pop = s.met("bob", "alice", "w2");
@@ -359,10 +358,7 @@ fn a_patron_whose_own_position_is_not_held_is_refused() {
 // acceptance: CER-62
 #[test]
 fn a_body_carrying_a_recovery_block_is_refused_on_this_path() {
-    let mut s = setup(
-        &["alice", "alice2", "bob", "carol", "w1", "w2"],
-        &[ChannelKind::Nfc],
-    );
+    let mut s = setup(&["alice", "alice2", "bob", "carol", "w1", "w2"]);
     s.met_in_person("alice", "bob", "w2");
     s.met_in_person("alice", "carol", "w2");
     s.adopted("alice", "w1", "w2", 3);

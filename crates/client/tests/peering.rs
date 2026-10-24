@@ -12,7 +12,6 @@ mod common;
 use common::harness::*;
 use common::*;
 use rhtn_client::ceremony::Abort;
-use rhtn_client::device::ChannelKind;
 
 const PARTIES: [&str; 4] = ["alice", "bob", "w1", "w2"];
 
@@ -44,7 +43,7 @@ fn refusal(e: Abort) -> String {
 // acceptance: REP-17
 #[test]
 fn two_parties_who_met_peer_by_locator_and_both_hold_the_record() {
-    let mut s = setup(&PARTIES, &[ChannelKind::Nfc]);
+    let mut s = setup(&PARTIES);
     // both are in a subnet, so both have a position to write down
     s.adopted("alice", "w1", "w2", 1);
     s.adopted("bob", "w1", "w2", 2);
@@ -104,7 +103,7 @@ fn two_parties_who_met_peer_by_locator_and_both_hold_the_record() {
 // acceptance: REP-17
 #[test]
 fn a_peering_rests_on_a_meeting_of_the_two_and_on_positions_each_holds() {
-    let mut s = setup(&PARTIES, &[ChannelKind::Nfc]);
+    let mut s = setup(&PARTIES);
     s.adopted("alice", "w1", "w2", 1);
     s.adopted("bob", "w1", "w2", 2);
     let theirs = s.client("bob").back_pointers();
@@ -155,7 +154,7 @@ fn a_peering_rests_on_a_meeting_of_the_two_and_on_positions_each_holds() {
 // acceptance: REP-17
 #[test]
 fn a_peering_body_is_refused_where_it_misstates_this_partys_own_side() {
-    let mut s = setup(&PARTIES, &[ChannelKind::Nfc]);
+    let mut s = setup(&PARTIES);
     s.adopted("alice", "w1", "w2", 1);
     s.adopted("bob", "w1", "w2", 2);
     let pop = s.met_in_person("alice", "bob", "w2");

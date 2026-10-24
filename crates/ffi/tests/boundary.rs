@@ -12,7 +12,6 @@ use std::sync::{Arc, Mutex};
 /// A shell's hardware: what it reports and what it was asked.
 #[derive(Default)]
 struct Shell {
-    has: Vec<Channel>,
     asked: Mutex<Vec<Ask>>,
     told: Mutex<Vec<Told>>,
     questions: Mutex<Vec<String>>,
@@ -60,24 +59,6 @@ impl Storage for Shell {
     fn write(&self, name: String, bytes: Vec<u8>) -> bool {
         self.store.lock().unwrap().insert(name, bytes);
         true
-    }
-}
-
-impl Proximity for Shell {
-    fn supported(&self) -> Vec<Channel> {
-        self.has.clone()
-    }
-    fn run(&self, channel: Channel, _peer: Vec<u8>) -> ChannelOutcome {
-        match channel {
-            Channel::Nfc => ChannelOutcome::Pass,
-            _ => ChannelOutcome::Fail,
-        }
-    }
-    fn resolution_m(&self, channel: Channel) -> Option<u64> {
-        match channel {
-            Channel::Uwb => Some(2),
-            _ => None,
-        }
     }
 }
 
@@ -139,7 +120,6 @@ impl Notices for Shell {
 
 fn platform_of(shell: Arc<Shell>) -> Arc<Platform> {
     Arc::new(Platform {
-        proximity: shell.clone(),
         camera: shell.clone(),
         clock: shell.clone(),
         random: shell.clone(),
@@ -179,7 +159,6 @@ fn id(name: &str) -> Vec<u8> {
 #[test]
 fn a_shell_drives_the_client_through_the_boundary_and_gets_values_back() {
     let shell = Arc::new(Shell {
-        has: vec![Channel::Nfc, Channel::Uwb],
         ..Default::default()
     });
     let known: Vec<Vec<u8>> = ["alice", "bob", "carol"]
@@ -207,8 +186,7 @@ fn a_shell_drives_the_client_through_the_boundary_and_gets_values_back() {
         "array head 1, version 1, the full KeyMaterial 2003, contribution 1+16"
     );
 
-    // the hardware is asked through the boundary, strongest first, and
-    // nothing is promoted: the channel that failed is reported failed
+    // a second participant through the same boundary
     let bob = Participant::start(
         seeds("bob"),
         ["alice", "bob", "carol"]
@@ -216,7 +194,6 @@ fn a_shell_drives_the_client_through_the_boundary_and_gets_values_back() {
             .map(|n| material(n))
             .collect(),
         platform_of(Arc::new(Shell {
-            has: vec![Channel::Nfc, Channel::Uwb],
             ..Default::default()
         })),
     )
@@ -246,20 +223,6 @@ fn a_shell_drives_the_client_through_the_boundary_and_gets_values_back() {
         0,
         "no continuations followed"
     );
-    p.proximity_carriage().expect("runs the channels");
-    let achieved = p.achieved();
-    assert_eq!(
-        achieved.iter().map(|a| a.channel).collect::<Vec<_>>(),
-        vec![Channel::Uwb, Channel::Nfc],
-        "strongest first"
-    );
-    assert_eq!(achieved[0].outcome, ChannelOutcome::Fail);
-    assert_eq!(
-        achieved[0].resolution_m,
-        Some(2),
-        "what the hardware measured"
-    );
-    assert_eq!(achieved[1].outcome, ChannelOutcome::Pass);
 
     // a refusal is a value carrying its reason, not a failure the shell
     // has to guess at
@@ -277,7 +240,6 @@ fn a_shell_drives_the_client_through_the_boundary_and_gets_values_back() {
 #[test]
 fn randomness_of_short_measure_is_refused_and_the_shell_is_told() {
     let shell = Arc::new(Shell {
-        has: vec![Channel::Nfc],
         short: true,
         // a kept storage key: the mint would otherwise draw from the same
         // short source and refuse first, which is not this test's target
@@ -407,7 +369,6 @@ async fn the_kernel_holds_the_session_and_no_wire_byte_crosses_outward() {
                     seeds("alice"),
                     known,
                     platform_of(Arc::new(Shell {
-                        has: vec![Channel::Nfc],
                         ..Default::default()
                     })),
                 )
@@ -642,7 +603,6 @@ async fn a_message_the_serving_node_refused_reaches_the_application_as_unsent() 
                     seeds("alice"),
                     known,
                     platform_of(Arc::new(Shell {
-                        has: vec![Channel::Nfc],
                         ..Default::default()
                     })),
                 )
@@ -713,7 +673,6 @@ async fn a_device_holding_no_seed_attaches_under_its_delegation_and_publishes_wh
         .collect();
     let shell = || {
         platform_of(Arc::new(Shell {
-            has: vec![Channel::Nfc],
             real_time: true,
             ..Default::default()
         }))

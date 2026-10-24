@@ -330,6 +330,6 @@ fn a_client_browses_its_serving_nodes_catalog_and_follows_the_continuation() {
 /// A client with nothing configured, for the paths that need one.
 fn fresh(name: &str) -> rhtn_client::ceremony::Client {
     let clock = std::rc::Rc::new(std::cell::Cell::new(1_790_000_000_000u64));
-    let (device, _) = common::harness::device(vec![], clock, 7, 0);
+    let (device, _) = common::harness::device(clock, 7, 0);
     rhtn_client::ceremony::Client::new(id(name), ids(), Default::default(), device)
 }

@@ -862,17 +862,6 @@ object Kernel {
             ?: return refused ?: "the transcript was refused"
         transcriptTaken = true
         m.note("the two meeting ids agree: ${hex(id).take(16)}…")
-        // D3 can now run: the tap carries this agreed ceremony-id,
-        // and the reader/card side follows the bootstrap's own
-        // asymmetry — the party that showed the bootstrap reads.
-        ProximityChannels.ceremony(id, m.role == Meet.Role.INITIATOR, true)
-        // **and the tap is armed from here, opportunistically** [author,
-        // 2026-10-19]: the two phones are facing each other for the
-        // optical exchange at this moment, so a tap now costs nobody
-        // anything, and whatever it catches is waiting when the ladder
-        // asks. Nothing waits on it — the channels run inside the window
-        // alongside the capture, never holding it
-        appContext?.let { ProximityChannels.arm(it) }
         // THE BEARER'S TURN. The optical step is what the integrity
         // rests on (§14.3.1); from here a radio carries the bulk,
         // and everything it carries is checked against what the
@@ -1094,10 +1083,8 @@ object Kernel {
         // the bearer's thread goes with the meeting; a send still in the
         // gate is not waited for, since the link it was for is closed
         work?.shutdownNow()
-        // the hardware goes back with the meeting: a camera held behind a
-        // dead ceremony and a channel bound to a stale id are both the kind
-        // of thing nobody consented to
-        ProximityChannels.ceremony(null, false, false)
+        // the camera goes back with the meeting: held behind a dead
+        // ceremony it is the kind of thing nobody consented to
         shell?.endCapture()
     }
 
@@ -1146,7 +1133,7 @@ object Kernel {
         // ONE inbound handler for the whole conversation. Each phase is
         // apart in the carriage (`Carriage.Phase`), so a packet arriving
         // is just dropped into its phase and the step waiting on that phase
-        // is attempted — a late proximity packet cannot complete the intent
+        // is attempted — a late capture-key packet cannot complete the intent
         // and a replayed intent packet cannot complete the capture.
         // **off the stack's thread, always** ([bearerWork]): everything
         // below this point can send, and a send blocks on an
@@ -1201,7 +1188,7 @@ object Kernel {
             }) { p.intentCarriage() } ?: return@Thread
             if (carriage?.send(mine, Carriage.Phase.INTENT) == true) {
                 m.note("intent sent: ${mine.size} message(s) over the radio.")
-                // proximity starts once theirs is in as well
+                // the capture starts once theirs is in as well
                 m.intentSent()
             } else {
                 m.stop("the radio would not take the intent; nothing crossed")
@@ -1302,7 +1289,7 @@ object Kernel {
     private fun drainBearerLocked(p: Participant, m: Meet): Unit = synchronized(bearerLock) {
         // SERIALIZED, because two threads reach here: the BLE inbound
         // callback when the counterparty's packets land, and the step
-        // driver (runProximity/runCapture) right after it sends. received()
+        // driver (runCapture) right after it sends. received()
         // is non-destructive, so without this both could read one completed
         // phase, both take it, and the second advance() would throw on a
         // callback thread (step has already moved). The lock makes the
@@ -1320,6 +1307,12 @@ object Kernel {
             }
             live.discard(Carriage.Phase.PREKEY)
         }
+        // **the window opens with the request, before the capture** (design
+        // §7.1): with the channels gone [author, 2026-10-24] this is the
+        // first step after the codes, so it is where the request goes.
+        // Refused with `Waiting` while the counterparty's prune has not
+        // answered, and asked again on the next turn of this drain
+        if (m.step() == Meet.Step.CAPTURE) m.openWindow(courier(p))
         when (m.step()) {
             Meet.Step.OPTICAL -> live.received(Carriage.Phase.INTENT)?.let { set ->
                 val to = counterparty() ?: return m.stop("the codes did not name who this is with")
@@ -1329,27 +1322,8 @@ object Kernel {
                 call("takeIntentCarriage", { e -> m.stop("the carried intent was refused: ${e.reason}") }) {
                     val taken = p.takeIntentCarriage(to, set)
                     m.note("their intent is in, with $taken continuation(s).")
-                    // proximity starts once ours has gone as well
+                    // the capture starts once ours has gone as well
                     m.intentReceived()
-                }
-            }
-            // **the window opens before the channels run** [author,
-            // 2026-10-19]: the request carries the ceremony-id and closes
-            // each engagement, and everything after it — the channels, the
-            // capture, the verification — happens inside it, each leg
-            // reaching the survivors as it is sent. Refused while the
-            // counterparty's prune has not answered, and asked again on
-            // the next turn of this drain
-            Meet.Step.PROXIMITY -> {
-                m.openWindow(courier(p))
-                live.received(Carriage.Phase.PROXIMITY)?.let { set ->
-                set.firstOrNull()?.let { bytes ->
-                    call("takeProximity", { e -> m.stop("the carried outcomes were refused: ${e.reason}") }) {
-                        p.takeProximity(bytes)
-                        m.note("their channel outcomes are in.")
-                        m.proximityDone()
-                    }
-                }
                 }
             }
             Meet.Step.CAPTURE -> live.received(Carriage.Phase.CAPTURE_KEY)?.let { set ->
@@ -1421,25 +1395,6 @@ object Kernel {
             }
             else -> {}
         }
-    }
-
-    /**
-     * D3: run the channel ladder, send this device's outcomes, and take the
-     * counterparty's. The outcomes cross as `ProximityOutcomes` (phase
-     * PROXIMITY); the kernel weighs what they measured (design §1.3 item 4).
-     */
-    fun runProximity(m: Meet) {
-        val p = participant ?: return
-        val radio = ble ?: return m.stop("no radio carries the channel outcomes")
-        if (!awaitLink(radio, m, "proximity")) return
-        val mine = call("proximityCarriage", { e -> m.stop("proximity: ${e.reason}"); null }) {
-            p.proximityCarriage()
-        } ?: return
-        if (carriage?.send(listOf(mine), Carriage.Phase.PROXIMITY) != true) {
-            return m.stop("the radio would not take the channel outcomes; nothing crossed")
-        }
-        m.note("channels run; the strongest that passed is recorded.")
-        drainBearer(p, m)
     }
 
     /**

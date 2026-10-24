@@ -3,21 +3,21 @@
 //! still owed for this area.  tests/rustfmt.toml keeps rustfmt off
 //! this directory: the titles are the catalogue's, not hand-laid code.
 
-/// Candidates offered on the ceremony's proximity channels open a direct path
+/// Candidates offered on the ceremony's local interfaces open a direct path
 ///
 /// Spec: design §12.6.3; light-client-requirements.md §4
 /// Milestone: after-5.  Kind: positive.  Oracle: behaviour.
 ///
-/// Rule (design §12.6.3): "two parties standing in front of each other hand candidates over on the channels the ceremony already uses"
+/// Rule (design §12.6.3): "two parties standing in front of each other hand candidates over on the local interfaces the ceremony already uses"
 /// Rule (light-client-requirements.md §4): "open nothing from candidates that did not come from the party they name"
 ///
-/// Given: A and B are at a ceremony, on a proximity channel, and neither has written to the other.
-/// When: Each offers its traversal candidates on that channel, and afterwards A sends payload to B.
+/// Given: A and B are at a ceremony, on a local interface, and neither has written to the other.
+/// When: Each offers its traversal candidates on that interface, and afterwards A sends payload to B.
 /// Then: A dials B on the candidates B handed over and the payload takes that path; neither serving node carried it. Candidates presented as another party's are not opened from.
 #[test]
 #[ignore = "acceptance TRV-12: owed at milestone after-5"]
-fn trv_12_candidates_offered_on_the_ceremony_s_proximity_c() {
-    todo!("TRV-12: Candidates offered on the ceremony's proximity channels open a direct path")
+fn trv_12_candidates_offered_on_the_ceremony_s_local_inter() {
+    todo!("TRV-12: Candidates offered on the ceremony's local interfaces open a direct path")
 }
 
 /// A local device-to-device interface is never bridged over a wide-area network
@@ -27,7 +27,7 @@ fn trv_12_candidates_offered_on_the_ceremony_s_proximity_c() {
 ///
 /// Rule (wire-format.md §14.1): "An implementation MUST NOT bridge one of these interfaces over a wide-area network"
 ///
-/// Given: A client offering the ceremony's proximity channels, and a peer reachable only over the network.
+/// Given: A client offering the ceremony's local interfaces, and a peer reachable only over the network.
 /// When: Anything arrives claiming to have come from a local interface, or a caller asks for one of those interfaces to carry to a remote peer.
 /// Then: The client refuses: nothing is treated as locally delivered that did not arrive on a local interface, and no local interface is carried remotely. The horizon override rests on this, so a candidate admitted this way is refused when the claim is false.
 ///

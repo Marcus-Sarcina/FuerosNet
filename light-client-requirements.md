@@ -170,9 +170,6 @@ shell exists.
 
 ### 1.3 Capture
 
-- **Obtain the strongest proximity channel the hardware supports**, and record
-  which was achieved. Never present a weaker channel as a stronger one (design
-  §7.6.3).
 - **Hold the counterparty present for the whole enforced duration, with the
   camera** [author, 2026-10-06]. The check that a face is in front of the lens
   rather than a blank wall is one the capture needs anyway (design §7.5); over
@@ -763,7 +760,7 @@ only party who can tell them is their own client.
   frame, a desktop under an identity you know being the ordinary case, and it
   is current state like the rest of the view, never a history of keys.
 
-- **Candidates may be offered and taken on the ceremony's proximity channels**
+- **Candidates may be offered and taken on the ceremony's local interfaces**
   [author, 2026-09-25], where the two parties are in front of each other
   (§1.3, design §12.6.3). A route obtained this way was carried by no patron,
   which is what it is for: it makes reaching a counterparty cost proximity
@@ -1142,7 +1139,7 @@ on the wire.
   application receives what was written and the party the material attributes
   it to.
 - **The hardware crosses inward** (design §14.1.0, §1.3 above): the camera, the
-  proximity radios, the clock, the random source and the person. The kernel
+  clock, the random source and the person. The kernel
   asks; the application answers; the application does not answer on the
   person's behalf. Consent, in particular, is what they said and never what the
   application assumed.

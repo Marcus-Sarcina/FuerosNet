@@ -32,9 +32,8 @@ class Carriage(private val radio: Bearer.Link?) {
      * bytes was.
      *
      * Every phase carries `wire-format.md` §14.3.2's encodings, opaque
-     * here: INTENT the intent and its continuations, PROXIMITY the
-     * `ProximityOutcomes`, CAPTURE_KEY the `CaptureKeyHandover` design
-     * §7.5.2.6 requires. Each is anchored to the ceremony-id and the
+     * here: INTENT the intent and its continuations, CAPTURE_KEY the
+     * `CaptureKeyHandover` design §7.5.2.6 requires. Each is anchored to the ceremony-id and the
      * kernel checks the anchor when it takes the bytes back; the phase
      * number is only this shell's framing, and keeps one phase's packets
      * out of another's assembly.
@@ -42,8 +41,10 @@ class Carriage(private val radio: Bearer.Link?) {
     object Phase {
         /** The intent exchange and any bundle continuations with it. */
         const val INTENT = 0
-        /** What the distance channels measured. */
-        const val PROXIMITY = 1
+        /** Retired [author, 2026-10-24]: carried the distance channels'
+         *  outcomes while there were any. The number is never reused. */
+        @Suppress("unused")
+        const val PROXIMITY_RETIRED = 1
         /** The capture key, one each way. */
         const val CAPTURE_KEY = 2
         /** The prekey handover (`wire-format.md` §14.3.4), one each way:

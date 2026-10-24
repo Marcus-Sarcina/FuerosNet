@@ -1,30 +1,26 @@
 //! The platform, where the platform is a terminal.
 //!
-//! `rhtn-ffi` takes seven objects from a shell (design §14.1.0's boundary as
-//! the author restated it): the proximity hardware, the camera, the clock,
-//! randomness, the person, the notifier and the storage.  A phone has all
-//! seven.  A terminal has three of them outright, one by asking, and the
-//! rest only because somebody says what they are.
+//! `rhtn-ffi` takes six objects from a shell (design §14.1.0's boundary as
+//! the author restated it): the camera, the clock, randomness, the person,
+//! the notifier and the storage.  A phone has all six.  A terminal has three
+//! of them outright, one by asking, and the rest only because somebody says
+//! what they are.
 //!
 //! **So this one is told rather than measured, and never pretends
-//! otherwise.** `light-client-requirements.md` §1.3 asks a client to
-//! obtain the strongest channel its hardware supports and *never present a
-//! weaker channel as a stronger one*; a machine with no ultra-wideband
-//! radio and no camera pointed at anybody supports nothing, so every
-//! channel here is unavailable until the instrument's operator declares
-//! what happened.  A declaration is what it is — evidence about a
-//! scenario, not about hardware — and that is the whole difference between
-//! an instrument and a client.
+//! otherwise.** A machine with no camera pointed at anybody captures
+//! nothing real, so what the camera here returns is declared rather than
+//! seen.  A declaration is what it is — evidence about a scenario, not about
+//! hardware — and that is the whole difference between an instrument and a
+//! client.
 
-use rhtn_ffi::device::{Camera, Clock, Notices, Operator, Proximity, Random, Storage};
-use rhtn_ffi::types::{Ask, Channel, ChannelOutcome, Told};
+use rhtn_ffi::device::{Camera, Clock, Notices, Operator, Random, Storage};
+use rhtn_ffi::types::{Ask, Told};
 use std::sync::Mutex;
 
 /// What the operator of the instrument has declared, and what the client
 /// has said back.
 #[derive(Default)]
 pub struct Terminal {
-    declared: Mutex<Vec<(Channel, ChannelOutcome, Option<u64>)>>,
     /// What is answered when the client asks the person a question.  A
     /// standing answer rather than a prompt, because standard input is the
     /// command channel: a question read from there would race the script
@@ -67,31 +63,6 @@ impl Storage for Terminal {
 }
 
 impl Terminal {
-    /// Declare what a channel did, which is what the client will be told
-    /// it did.  `None` clears the declaration back to unavailable.
-    pub fn declare(&self, channel: Channel, outcome: Option<(ChannelOutcome, Option<u64>)>) {
-        let mut d = self.declared.lock().unwrap();
-        d.retain(|(c, _, _)| *c != channel);
-        if let Some((o, m)) = outcome {
-            d.push((channel, o, m));
-        }
-    }
-
-    /// What has been declared, strongest first.
-    pub fn declarations(&self) -> Vec<(Channel, ChannelOutcome, Option<u64>)> {
-        let d = self.declared.lock().unwrap();
-        let order = [
-            Channel::Uwb,
-            Channel::Nfc,
-            Channel::Optical,
-            Channel::Latency,
-        ];
-        order
-            .iter()
-            .filter_map(|c| d.iter().find(|(k, _, _)| k == c).copied())
-            .collect()
-    }
-
     /// Set the standing answer to a question put to the person.
     pub fn answers(&self, yes: bool) {
         *self.answer.lock().unwrap() = yes;
@@ -109,28 +80,6 @@ impl Terminal {
 
     fn say(&self, line: String) {
         self.said.lock().unwrap().push(line);
-    }
-}
-
-impl Proximity for Terminal {
-    /// **A channel the hardware lacks is not listed**, and here the
-    /// hardware is whatever was declared.
-    fn supported(&self) -> Vec<Channel> {
-        self.declarations().into_iter().map(|(c, _, _)| c).collect()
-    }
-
-    fn run(&self, channel: Channel, _peer: Vec<u8>) -> ChannelOutcome {
-        self.declarations()
-            .iter()
-            .find(|(c, _, _)| *c == channel)
-            .map_or(ChannelOutcome::Unavailable, |(_, o, _)| *o)
-    }
-
-    fn resolution_m(&self, channel: Channel) -> Option<u64> {
-        self.declarations()
-            .iter()
-            .find(|(c, _, _)| *c == channel)
-            .and_then(|(_, _, m)| *m)
     }
 }
 

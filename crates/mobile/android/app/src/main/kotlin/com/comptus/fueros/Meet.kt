@@ -189,7 +189,6 @@ class Meet(
         /** The optical exchange, and the intents over the bearer. */
         OPTICAL,
         /** The distance channels. */
-        PROXIMITY,
         /** The guided captures. */
         CAPTURE,
         /** The verifier selection and the queries. */
@@ -478,7 +477,6 @@ class Meet(
     /** Facts the pre-sign warnings are drawn from, as the flow learns them. */
     private var witnessesMine = 0
     private var witnessesTheirs = 0
-    private var strongest: String? = null
     private var familiarOffered = false
     private val log = mutableListOf<String>()
     private var recordTxid: String? = null
@@ -919,19 +917,6 @@ class Meet(
                     "$witnessesTheirs by $counterpartyName. A reader can see the imbalance.",
             )
         }
-        if (strongest == null) {
-            out += Item(
-                "UX-003",
-                "No proximity channel passed. The meeting rests on what the two of " +
-                    "you saw on each other's screens and nothing else.",
-            )
-        } else if (strongest != "UWB") {
-            out += Item(
-                "UX-003",
-                "The strongest channel that passed was $strongest, not UWB. It is " +
-                    "the strongest this hardware has, and the record says which it was.",
-            )
-        }
         out
     }
 
@@ -939,13 +924,11 @@ class Meet(
     fun learned(
         mine: Int = witnessesMine,
         theirs: Int = witnessesTheirs,
-        channel: String? = strongest,
         familiar: Boolean = familiarOffered,
     ) {
         synchronized(lock) {
             witnessesMine = mine
             witnessesTheirs = theirs
-            strongest = channel
             familiarOffered = familiar
             changed()
         }
@@ -1000,10 +983,11 @@ class Meet(
     /**
      * **The optical step ends when both intents have crossed**: this
      * device's sent over the bearer, and the counterparty's received. On
-     * either alone the proximity ladder would start on one phone while the
-     * other was still sending, and the ladder holds the kernel's thread
-     * for its tap window, so the intent behind it went out half a minute
-     * late and the two tap windows never overlapped [2026-10-04]. A
+     * either alone the next step would start on one phone while the
+     * other was still sending (when that step was the tap's ladder it held
+     * the kernel's thread for its window, so the intent behind it went out
+     * half a minute late and the two windows never overlapped
+     * [2026-10-04]). A
      * mismatch of outcomes between two phones that tapped once is what the
      * kernel then refuses.
      */
@@ -1018,11 +1002,8 @@ class Meet(
             if (received) intentReceived = true
             intentSent && intentReceived
         }
-        if (both) moved(Step.OPTICAL, Step.PROXIMITY)
+        if (both) moved(Step.OPTICAL, Step.CAPTURE)
     }
-
-    /** The kernel finished the distance channels. */
-    fun proximityDone() = advance(Step.PROXIMITY, Step.CAPTURE, "kernel")
 
     /** Capture is the last hands-off step; the device comes back to the
      *  user for the verifier selection. */
@@ -1570,20 +1551,20 @@ class Meet(
         Diag.event("meet.step", "from" to from, "to" to to, "trigger" to trigger)
     }
 
-    /** When the step last changed: the clock the ranging and capture
-     *  steps are judged stale against. */
+    /** When the step last changed: the clock the capture step is judged
+     *  stale against. */
     private var steppedAtMs = System.currentTimeMillis()
 
     /**
      * **Whether a step with no clock of its own has stopped moving for
      * good.** The exchange has [opticalStale] and the conversation its
-     * progress; ranging and capture wait on the counterparty's carriage
+     * progress; the capture waits on the counterparty's carriage
      * with nothing watching — on the bench one phone's client died at
      * capture and the other waited at it for ever (2026-10-11). A step
      * held longer than [STALE_MS] is the other phone gone.
      */
     fun stepStale(nowMs: Long = System.currentTimeMillis()): Boolean = synchronized(lock) {
-        (step == Step.PROXIMITY || step == Step.CAPTURE) && nowMs - steppedAtMs > STALE_MS
+        step == Step.CAPTURE && nowMs - steppedAtMs > STALE_MS
     }
 
     /**

@@ -12,7 +12,7 @@
 
 use crate::device::Platform;
 use crate::net::{Attached, Event, Net, Status, Wake, pins_for};
-use crate::types::{Answer, Channel, ChannelOutcome, Id, Refused, id_of, keyhash};
+use crate::types::{Answer, Id, Refused, id_of, keyhash};
 use rhtn_adaptors::actor::Handle;
 use rhtn_archive::Keyhash;
 use rhtn_client::ceremony::Client;
@@ -219,17 +219,6 @@ pub struct Restored {
     pub discarded: u64,
 }
 
-/// What a proximity run achieved, as the shell is shown it.
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct Achieved {
-    /// Which channel ran.
-    pub channel: Channel,
-    /// How it went.
-    pub outcome: ChannelOutcome,
-    /// Metres, where the channel measured a distance.
-    pub resolution_m: Option<u64>,
-}
-
 /// A verifier the client selected, and why it was eligible.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Selected {
@@ -351,8 +340,6 @@ pub struct WitnessAsk {
     pub participants: Vec<Id>,
     /// When the meeting began, in milliseconds since the epoch.
     pub started_at: u64,
-    /// What the participants' proximity channels achieved.
-    pub channels: Vec<Achieved>,
     /// The engagement handle the request closes (`wire-format.md`
     /// §7.10.2 field 5).
     pub handle: Id,
@@ -636,15 +623,6 @@ impl WitnessAsk {
             ceremony: r.ceremony_id.to_vec(),
             participants: r.participants.iter().map(id_of).collect(),
             started_at: r.started_at,
-            channels: r
-                .channels
-                .iter()
-                .map(|c| Achieved {
-                    channel: Channel::of(c.kind),
-                    outcome: outcome_of(c.result),
-                    resolution_m: c.resolution_m,
-                })
-                .collect(),
             handle: r.handle.to_vec(),
         }
     }
@@ -664,7 +642,6 @@ impl WitnessAsk {
             ceremony_id: ceremony,
             participants,
             started_at: self.started_at,
-            channels: self.channels.iter().map(inward_channel).collect(),
             handle: self
                 .handle
                 .as_slice()
@@ -764,15 +741,7 @@ fn revealed_inward(set: &[Revealed]) -> Result<rhtn_client::record::DisclosureSe
         });
     }
     out.try_into()
-        .map_err(|_| Refused::new("a disclosure set is seven values"))
-}
-
-fn inward_channel(a: &Achieved) -> rhtn_client::device::ChannelOutcome {
-    rhtn_client::device::ChannelOutcome {
-        kind: a.channel.kind(),
-        result: a.outcome.result(),
-        resolution_m: a.resolution_m,
-    }
+        .map_err(|_| Refused::new("a disclosure set is six values"))
 }
 
 fn answered_of(a: &rhtn_client::verifier::Answer) -> Answered {
@@ -1444,30 +1413,7 @@ impl Participant {
         })
     }
 
-    /// Run every channel the hardware has, strongest first, and hand back
-    /// the anchored outcomes for the bearer (§14.3.2). Nothing is promoted
-    /// (`light-client-requirements.md` §1.3), and what to draw comes from
-    /// [`Participant::achieved`] rather than from running them again.
-    pub fn proximity_carriage(&self) -> Result<Vec<u8>, Refused> {
-        crate::diag::call("proximity_carriage", || {
-            self.handle
-                .with_blocking(|c| c.proximity_carriage())
-                .map_err(|a| Refused::new(format!("{a:?}")))
-        })
-    }
-
-    /// The counterparty's outcomes, anchored to this ceremony or refused.
-    /// What they measured is their claim and this side weighs it (design
-    /// §1.3 item 4).
-    pub fn take_proximity(&self, bytes: Vec<u8>) -> Result<(), Refused> {
-        crate::diag::call("take_proximity", || {
-            self.handle
-                .with_blocking(move |c| c.take_proximity(&bytes))
-                .map_err(|a| Refused::new(format!("{a:?}")))
-        })
-    }
-
-    /// Candidates for the direct path on the ceremony's channels
+    /// Candidates for the direct path on the ceremony's local interfaces
     /// (§14.3.2, design §12.6.3), anchored.
     pub fn candidate_carriage(&self, candidates: Vec<u8>) -> Result<Vec<u8>, Refused> {
         crate::diag::call("candidate_carriage", || {
@@ -1586,24 +1532,6 @@ impl Participant {
                 .map_err(|a| Refused::new(format!("{a:?}")))?;
             let _ = self.save();
             Ok(())
-        })
-    }
-
-    /// What the channels achieved, for the screen: read from the ceremony,
-    /// not measured again.
-    #[must_use]
-    pub fn achieved(&self) -> Vec<Achieved> {
-        crate::diag::call_plain("achieved", || {
-            self.handle.with_blocking(|c| {
-                c.achieved()
-                    .into_iter()
-                    .map(|o| Achieved {
-                        channel: Channel::of(o.kind),
-                        outcome: outcome_of(o.result),
-                        resolution_m: o.resolution_m,
-                    })
-                    .collect()
-            })
         })
     }
 
@@ -1952,22 +1880,6 @@ impl Participant {
         crate::diag::call_plain("ceremony", || {
             self.handle
                 .with_blocking(|c| c.ceremony_id().map(|i| i.to_vec()))
-        })
-    }
-
-    /// Take what the counterparty's hardware achieved.
-    ///
-    /// **Both sides weigh the same pair of lists**, which is why this
-    /// crosses rather than each side trusting its own: a channel one
-    /// device passed and the other did not is a disagreement the record
-    /// has to settle (`light-client-requirements.md` §1.3).
-    pub fn take_channels(&self, theirs: Vec<Achieved>) -> Result<(), Refused> {
-        crate::diag::call("take_channels", || {
-            let ch: Vec<_> = theirs.iter().map(inward_channel).collect();
-            self.handle.with_blocking(move |c| {
-                c.take_channels(&ch)
-                    .map_err(|a| Refused::new(format!("{a:?}")))
-            })
         })
     }
 
@@ -2930,14 +2842,6 @@ fn basis_of(b: u32) -> Result<rhtn_client::selection::SelectionBasis, Refused> {
     }
 }
 
-fn outcome_of(r: rhtn_client::device::ChannelResult) -> ChannelOutcome {
-    match r {
-        rhtn_client::device::ChannelResult::Pass => ChannelOutcome::Pass,
-        rhtn_client::device::ChannelResult::Fail => ChannelOutcome::Fail,
-        rhtn_client::device::ChannelResult::Unavailable => ChannelOutcome::Unavailable,
-    }
-}
-
 #[uniffi::export]
 impl Platform {
     /// The platform's nine objects, handed over once — the ninth,
@@ -2947,7 +2851,6 @@ impl Platform {
     #[uniffi::constructor]
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        proximity: Arc<dyn crate::device::Proximity>,
         camera: Arc<dyn crate::device::Camera>,
         clock: Arc<dyn crate::device::Clock>,
         random: Arc<dyn crate::device::Random>,
@@ -2962,7 +2865,6 @@ impl Platform {
         frame_height: u32,
     ) -> Platform {
         platform(
-            proximity,
             camera,
             clock,
             random,
@@ -2982,7 +2884,6 @@ impl Platform {
 /// So a shell need not hold `Arc` itself.
 #[allow(clippy::too_many_arguments)]
 pub fn platform(
-    proximity: Arc<dyn crate::device::Proximity>,
     camera: Arc<dyn crate::device::Camera>,
     clock: Arc<dyn crate::device::Clock>,
     random: Arc<dyn crate::device::Random>,
@@ -3018,7 +2919,6 @@ pub fn platform(
         }
     };
     Platform {
-        proximity,
         camera,
         clock,
         random,

@@ -99,31 +99,8 @@ fn two_participant_processes_exchange_payload_through_a_daemon() {
 // acceptance: PRT-02
 #[test]
 fn an_instrument_reports_what_it_was_told_the_hardware_did_and_nothing_more() {
-    let mut set = Participants::new(env!("CARGO_BIN_EXE_rhtnp"), "channels");
+    let mut set = Participants::new(env!("CARGO_BIN_EXE_rhtnp"), "nothing_more");
     let p = set.start("alice", &CAST);
-
-    // **nothing is supported until something says so.**  A machine with
-    // no radio and no camera pointed at anybody has no proximity channel,
-    // and `light-client-requirements.md` §1.3 forbids presenting a weaker
-    // one as a stronger one — so the instrument starts by claiming none.
-    assert!(
-        p.must("channel").is_empty(),
-        "an undeclared instrument claims no channel"
-    );
-
-    assert_eq!(p.must("channel latency pass 30"), ["channel latency pass"]);
-    assert_eq!(p.must("channel optical fail"), ["channel optical fail"]);
-    assert_eq!(
-        p.must("channel"),
-        ["channel optical fail", "channel latency pass 30"],
-        "strongest first, and neither promoted"
-    );
-    assert_eq!(p.must("channel optical none"), ["channel optical none"]);
-    assert_eq!(
-        p.must("channel"),
-        ["channel latency pass 30"],
-        "a cleared channel is unsupported again"
-    );
 
     // the person's standing answer is declining, because every question a
     // client puts is whether to release something
@@ -132,7 +109,6 @@ fn an_instrument_reports_what_it_was_told_the_hardware_did_and_nothing_more() {
     assert_eq!(p.must("answer"), ["answer yes"]);
 
     // and a command it does not know is refused rather than ignored
-    assert!(p.tell("channel sonar pass")[0].contains("not uwb, nfc, optical or latency"));
     assert!(p.tell("nonsense")[0].contains("is not a command"));
     assert!(p.tell("send zz 0 00")[0].contains("not hex"));
     assert!(p.tell("attach 00 1.2.3.4:1")[0].contains("and an identity is 32"));
@@ -299,9 +275,6 @@ fn ceremony(
     wb: &str,
 ) -> String {
     let (a, b) = (hex(&kh(one)), hex(&kh(two)));
-    for n in [one, two] {
-        set.get(n).must("channel latency pass 30");
-    }
     for n in cast {
         set.get(n).must("answer yes");
         // **the witness's window off for a process test** [author,
@@ -344,8 +317,6 @@ fn ceremony(
     let ib = line(set.get(two).must("intent"), "intent ");
     set.get(two).must(&format!("intent {a} {ia}"));
     set.get(one).must(&format!("intent {b} {ib}"));
-    let pa = line(set.get(one).must("proximity"), "proximity ");
-    set.get(two).must(&format!("take-proximity {pa}"));
     let ka = line(set.get(one).must("capture-key"), "capture-key ");
     let kb = line(set.get(two).must("capture-key"), "capture-key ");
     set.get(two).must(&format!("capture {ka}"));
@@ -574,9 +545,6 @@ fn a_verifier_in_a_third_process_answers_and_the_record_carries_it() {
     std::thread::sleep(std::time::Duration::from_secs(2));
 
     // alice meets carol; intent through capture are PRT-04's steps.
-    // carol's hardware, like everybody's, is what was declared: nothing,
-    // until here
-    set.get("carol").must("channel latency pass 30");
     let (a, b, c) = (hex(&kh("alice")), hex(&kh("bob")), hex(&kh("carol")));
     set.get("alice")
         .must(&format!("begin {c} {} initiator", hex(&kh("w1"))));
@@ -602,8 +570,6 @@ fn a_verifier_in_a_third_process_answers_and_the_record_carries_it() {
     let ic = line(set.get("carol").must("intent"), "intent ");
     set.get("carol").must(&format!("intent {a} {ia}"));
     set.get("alice").must(&format!("intent {c} {ic}"));
-    let pa = line(set.get("alice").must("proximity"), "proximity ");
-    set.get("carol").must(&format!("take-proximity {pa}"));
     let ka = line(set.get("alice").must("capture-key"), "capture-key ");
     let kc = line(set.get("carol").must("capture-key"), "capture-key ");
     set.get("carol").must(&format!("capture {ka}"));

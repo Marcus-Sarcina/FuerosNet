@@ -12,7 +12,7 @@ their purpose: **a disagreement between a vector and the specification is a
 finding against one of them**, and either answer is progress. Review rounds
 have produced specification fixes.
 
-**Pinned**: wire-format.md `e59f38e064a12e19f07cccefd7e2db9bdb425d0c58157f79afb664819adcecd8` · network-design.md `6a7c009e00519febcbd65a463512594bd06ac2a6a73a5ece4ca077fc1c1713dd`
+**Pinned**: wire-format.md `318dfcd2564bee7a146a0128a8bbea893b7bdd32edc9a8a1ed26e663cfdc74df` · network-design.md `0510c48a6e681d966a85e014444e27e3c518e8ceca89d262cd77ddd0c08325b1`
 
 **Scope**: wire-format/protocol **interoperability** vectors.
 `light-client-requirements.md` is pinned alongside the two protocol documents
@@ -180,7 +180,7 @@ loudly.
 | attach (noted trap) | infer degraded mode from having dialled a sibling | TR13 — the server's mode determination is authoritative |
 | presence #11 | field 5 required-with-empty-array; reject the absent spelling | P-fin-absent (valid absent) + N-responses-empty-array / T51 (the empty spelling rejects) |
 | presence (witness floor, retired 2026-10-19) | field 4 required on a normal record, or required-with-empty-array | P-normal-witnessless (valid absent) + N-witness-empty-array / T60 (the empty spelling rejects) |
-| presence #3 | one Proximity entry per channel kind | P-channel-retry / D19 — optical failed, retried, passed |
+| presence #3 (retired 2026-10-24) | one Proximity entry per channel kind | the `Proximity` disclosure no longer exists — ranging is dropped [author, 2026-10-24]; D19 is withdrawn with it |
 | presence phase 1 (first run) | reject counters that skip (`+1` contiguity) | D6 — `[5,42] → [5,100]` is a valid supersession |
 | general (frame decode) | closed deserializing enum over control-frame types | TR1 — unknown frames are skipped, the session survives |
 | general (enum posture) | reject open-registry values | D1 (disavowal band), D3 (location method), D4 (witness bits), greased capabilities |
@@ -255,7 +255,7 @@ negatives (T9–T12). Still open:
    bound in the declared scope with byte fixtures at the bound and past it —
    back-pointers, witnesses, path nibbles, unknown keys and values, audits,
    NetworkPoint lists and ports, prekey blobs, catalog total size, scope
-   lists, capabilities, siblings, channels, asserted locations,
+   lists, capabilities, siblings, asserted locations,
    corroborations, geohash lengths and case, archive bounds, the
    finalization gap at 86,400/86,401 — with the two over-identity-set counts
    and the two 100 KB frame bounds as unit recipes.

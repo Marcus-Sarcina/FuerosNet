@@ -1155,8 +1155,7 @@ impl Client {
             // hat: engaging this client for a meeting of its own.  The
             // opening's kinds route by the handle they carry, not by the
             // ceremony this side is in
-            m
-            @ (Msg::Engagement(_) | Msg::Trace(_) | Msg::Standdown(_) | Msg::ProximityPing(_)) => {
+            m @ (Msg::Engagement(_) | Msg::Trace(_) | Msg::Standdown(_)) => {
                 self.as_witness(from, kind, m)
             }
             _ => Conversed::Refused {
@@ -1341,19 +1340,6 @@ impl Client {
             .map(|(cid, _)| *cid)
     }
 
-    /// The ceremony a proximity update belongs to, where this client
-    /// witnesses it and `from` is one of its participants.
-    fn witnessing_for_update(
-        &self,
-        u: &crate::conversation::ProximityPing,
-        from: Keyhash,
-    ) -> Option<[u8; 32]> {
-        self.witnessing
-            .get(&u.ceremony_id)
-            .filter(|w| w.request.participants.contains(&from))
-            .map(|_| u.ceremony_id)
-    }
-
     /// Any pending ceremony `from` is a participant of.
     fn witnessing_with(&self, from: Keyhash) -> Option<[u8; 32]> {
         self.witnessing
@@ -1414,23 +1400,6 @@ impl Client {
                     _ => refused("a standdown for no engagement this client watches"),
                 }
             }
-            Msg::ProximityPing(u) => match self.witnessing_for_update(&u, from) {
-                Some(cid) => {
-                    // a channel's outcome, on this witness's clock, inside
-                    // the window: another arrival a run is read by
-                    tracing::info!(
-                        target: "cer",
-                        ceremony = %crate::diag::id8(&cid),
-                        from = %crate::diag::id8(&from),
-                        channel = ?u.channel.kind,
-                        outcome = ?u.channel.result,
-                        "cer.witness.channel"
-                    );
-                    self.observe(cid, from, kind);
-                    Conversed::Observed { kind }
-                }
-                None => refused("an update for no ceremony this client witnesses"),
-            },
             Msg::WitnessRequest(req) => {
                 if !req.participants.contains(&from) {
                     return refused("a request from no participant of the ceremony it names");

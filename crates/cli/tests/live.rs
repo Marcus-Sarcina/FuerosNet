@@ -85,7 +85,7 @@ fn two_phones_stream_at_once_and_one_reconnects_into_the_same_file() {
     until(|| count("disconnect") == 1, "B's disconnect");
     send(
         &mut a,
-        r#"{"ms":900,"level":"warn","layer":"cer","event":"cer.abort","abort":"NoProximity"}"#,
+        r#"{"ms":900,"level":"warn","layer":"cer","event":"cer.abort","abort":"Declined"}"#,
     );
     drop(a);
     until(|| count("disconnect") == 2, "A's disconnect");
@@ -303,15 +303,12 @@ fn watch_prints_a_step_event_the_moment_it_is_appended() {
     );
     writeln!(
         f,
-        r#"{{"ms":3000,"level":"warn","layer":"cer","event":"cer.abort","abort":"NoProximity"}}"#
+        r#"{{"ms":3000,"level":"warn","layer":"cer","event":"cer.abort","abort":"Declined"}}"#
     )
     .unwrap();
     f.flush().unwrap();
     until(
-        || {
-            String::from_utf8_lossy(&shared.lock().unwrap())
-                .contains("cer.abort  abort=NoProximity")
-        },
+        || String::from_utf8_lossy(&shared.lock().unwrap()).contains("cer.abort  abort=Declined"),
         "the abort is printed",
     );
     stop.store(true, Ordering::Relaxed);

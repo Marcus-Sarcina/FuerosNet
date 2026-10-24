@@ -17,9 +17,7 @@ mod common;
 use common::*;
 use rhtn_archive::Keyhash;
 use rhtn_archive::record::Record;
-use rhtn_client::device::ChannelKind;
 use rhtn_client::record::{LABELS, read_presentation};
-use rhtn_client::sequence::Conversed;
 use rhtn_client::store::open;
 use rhtn_codec::cbor::*;
 
@@ -30,99 +28,20 @@ fn root(name: &str) -> [u8; 32] {
     *rhtn_crypto::identity::testkit::test_identity(name).identity_root()
 }
 
-/// The proximity field of a record's disclosure set, as (kind, result).
-async fn proximity_of(m: &Meeting, who: &str, t: rhtn_archive::Txid) -> (Vec<(u64, u64)>, u64) {
-    let v = m
-        .party(who)
-        .with(move |c| c.store.disclosures[&t][6].value.clone())
-        .await;
-    let item = parse_all(&v).unwrap();
-    let Item::Map(map) = &item else {
-        panic!("proximity map")
-    };
-    let strongest = as_uint(map_get(map, 2).unwrap()).unwrap();
-    let Some(Item::Array(ch)) = map_get(map, 1) else {
-        panic!("channels")
-    };
-    let kinds = ch
-        .iter()
-        .map(|c| {
-            let Item::Map(cm) = c else { panic!() };
-            (
-                as_uint(map_get(cm, 1).unwrap()).unwrap(),
-                as_uint(map_get(cm, 2).unwrap()).unwrap(),
-            )
-        })
-        .collect();
-    (kinds, strongest)
-}
-
 /// Two parties at their genesis beside a node: their first meeting is the
 /// formation case, which needs no witness and no verifier, so the
 /// conversation is the two of them and the record is what it reaches.
-async fn pair(channels: &[ChannelKind]) -> Meeting {
+async fn pair() -> Meeting {
     Meeting::open(
         vec![
-            Who::with("alice", channels),
-            Who::with("bob", channels),
+            Who::with("alice"),
+            Who::with("bob"),
             Who::watching("witness"),
         ],
         "witness",
         Scene::new().table("witness", &["witness"]),
     )
     .await
-}
-
-// acceptance: CER-01
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn the_strongest_channel_the_hardware_has_is_what_the_record_says_was_achieved() {
-    let mut m = pair(&[ChannelKind::Nfc, ChannelKind::Optical, ChannelKind::Latency]).await;
-    let t = m.meet("alice", "bob", &[], &[]).await.expect("a record");
-    for n in ["alice", "bob"] {
-        assert_eq!(
-            m.party(n).with(|c| c.archive.len()).await,
-            1,
-            "{n} holds the record"
-        );
-    }
-    let (kinds, strongest) = proximity_of(&m, "alice", t).await;
-    assert_eq!(
-        strongest,
-        ChannelKind::Nfc.code(),
-        "NFC is the strongest achieved"
-    );
-    assert!(
-        kinds.iter().all(|(k, _)| *k != ChannelKind::Uwb.code()),
-        "no UWB entry"
-    );
-    assert_eq!(kinds, vec![(2, 0), (3, 0), (4, 0)]);
-    // both participants hold the same set, and the presentation reads
-    let mine = m
-        .party("alice")
-        .with(move |c| c.store.disclosures[&t].clone())
-        .await;
-    let theirs = m
-        .party("bob")
-        .with(move |c| c.store.disclosures[&t].clone())
-        .await;
-    assert_eq!(mine, theirs, "one set, held by both");
-    let env = m.record("alice", t).await;
-    let p = read_presentation(
-        &ids(),
-        &rhtn_client::record::present(&env, &mine, &["proximity"]),
-    )
-    .unwrap();
-    assert_eq!(p.revealed.len(), 1);
-}
-
-// acceptance: CER-02
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn a_weaker_channel_is_never_presented_as_a_stronger_one() {
-    let mut m = pair(&[ChannelKind::Optical]).await;
-    let t = m.meet("alice", "bob", &[], &[]).await.expect("a record");
-    let (kinds, strongest) = proximity_of(&m, "alice", t).await;
-    assert_eq!(strongest, ChannelKind::Optical.code());
-    assert_eq!(kinds, vec![(3, 0)], "optical and nothing ranked above it");
 }
 
 /// Two new joiners, nobody to nominate and nobody to ask: their first
@@ -136,7 +55,7 @@ async fn a_weaker_channel_is_never_presented_as_a_stronger_one() {
 // acceptance: CER-50
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn two_new_joiners_form_a_record_with_no_witness_and_only_once() {
-    let mut m = pair(&[ChannelKind::Nfc]).await;
+    let mut m = pair().await;
     let t = m
         .meet("alice", "bob", &[], &[])
         .await
@@ -181,7 +100,7 @@ async fn two_new_joiners_form_a_record_with_no_witness_and_only_once() {
 // acceptance: CER-06
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_client_holds_no_decryptable_likeness_and_no_sealing_key() {
-    let mut m = pair(&[ChannelKind::Nfc]).await;
+    let mut m = pair().await;
     let t = m.meet("alice", "bob", &[], &[]).await.expect("a record");
     let a_seed = m
         .party("alice")
@@ -240,7 +159,7 @@ async fn a_client_holds_no_decryptable_likeness_and_no_sealing_key() {
 // acceptance: CER-23
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn captured_frames_are_stripped_of_metadata_before_sealing() {
-    let mut m = pair(&[ChannelKind::Nfc]).await;
+    let mut m = pair().await;
     let t = m.meet("alice", "bob", &[], &[]).await.expect("a record");
     let seed = m
         .party("alice")
@@ -280,8 +199,8 @@ async fn captured_frames_are_stripped_of_metadata_before_sealing() {
 async fn either_party_may_begin_and_the_participants_sit_in_keyhash_order() {
     let mut m = Meeting::open(
         vec![
-            Who::with("alice", &[ChannelKind::Nfc]),
-            Who::with("bob", &[ChannelKind::Nfc]),
+            Who::with("alice"),
+            Who::with("bob"),
             Who::watching("w1"),
             Who::watching("witness"),
         ],
@@ -315,7 +234,7 @@ async fn either_party_may_begin_and_the_participants_sit_in_keyhash_order() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn the_records_disclosable_fields_are_all_present_and_withheld_by_default() {
-    let mut m = pair(&[ChannelKind::Nfc]).await;
+    let mut m = pair().await;
     let t = m.meet("alice", "bob", &[], &[]).await.expect("a record");
     let set = m
         .party("alice")
@@ -327,7 +246,7 @@ async fn the_records_disclosable_fields_are_all_present_and_withheld_by_default(
     );
     let env = m.record("alice", t).await;
     let p = read_presentation(&ids(), &rhtn_client::record::present(&env, &set, &[])).unwrap();
-    assert_eq!(p.withheld.len(), 7);
+    assert_eq!(p.withheld.len(), 6);
 }
 
 /// **Every nominee declining is not a refusal to meet**: two parties at
@@ -339,8 +258,8 @@ async fn the_records_disclosable_fields_are_all_present_and_withheld_by_default(
 async fn two_at_their_genesis_whose_every_nominee_declines_still_form_a_record() {
     let mut m = Meeting::open(
         vec![
-            Who::with("alice", &[ChannelKind::Nfc]),
-            Who::with("bob", &[ChannelKind::Nfc]),
+            Who::with("alice"),
+            Who::with("bob"),
             Who::skewed("w1", 3_600),
             Who::skewed("w2", -3_600),
             Who::watching("witness"),
@@ -393,8 +312,8 @@ async fn the_guided_capture_takes_three_to_five_frames_over_ten_to_fifteen_secon
  {
     let mut m = Meeting::open_with(
         vec![
-            Who::with("alice", &[ChannelKind::Nfc]),
-            Who::with("bob", &[ChannelKind::Nfc]),
+            Who::with("alice"),
+            Who::with("bob"),
             Who::watching("w1"),
             Who::watching("witness"),
         ],
@@ -500,9 +419,9 @@ async fn scene_with_a_verifier() -> (Meeting, rhtn_archive::Txid, rhtn_archive::
     prior.meet("alice", "w2");
     let mut m = Meeting::open(
         vec![
-            Who::with("alice", &[ChannelKind::Nfc]),
-            Who::with("bob", &[ChannelKind::Nfc]),
-            Who::with("carol", &[ChannelKind::Nfc]),
+            Who::with("alice"),
+            Who::with("bob"),
+            Who::with("carol"),
             Who::watching("w1"),
             Who::watching("w2"),
             Who::watching("witness"),
@@ -705,8 +624,8 @@ async fn what_the_record_will_contain_is_disclosed_at_capture_and_to_nobody_else
 async fn a_witness_far_from_the_claimed_start_declines_and_the_others_carry_the_record() {
     let mut m = Meeting::open(
         vec![
-            Who::with("alice", &[ChannelKind::Nfc]),
-            Who::with("bob", &[ChannelKind::Nfc]),
+            Who::with("alice"),
+            Who::with("bob"),
             Who::skewed("w1", 3_600),
             Who::watching("w2"),
             Who::watching("witness"),
@@ -752,8 +671,8 @@ async fn a_witness_far_from_the_claimed_start_declines_and_the_others_carry_the_
 async fn the_counterparty_prunes_to_three_and_the_dismissed_stands_down() {
     let mut m = Meeting::open(
         vec![
-            Who::with("alice", &[ChannelKind::Nfc]),
-            Who::with("bob", &[ChannelKind::Nfc]),
+            Who::with("alice"),
+            Who::with("bob"),
             Who::watching("w1"),
             Who::watching("w2"),
             Who::watching("w3"),
@@ -810,71 +729,5 @@ async fn the_counterparty_prunes_to_three_and_the_dismissed_stands_down() {
         m.party(gone).with(|c| c.archive.len()).await,
         0,
         "{gone} was dismissed and holds nothing"
-    );
-}
-
-/// **A channel's outcome lands inside the window and reaches the
-/// survivors** (design §7.1 item 5) [author, 2026-10-19].  Before the
-/// request opens the window nobody has survived the prune, and what was
-/// measured by then rides in the request's own field 4; after it, each
-/// outcome goes to the surviving witnesses of both sides as a kind-25
-/// update, on their clocks as it lands.
-// acceptance: CER-69
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn each_proximity_outcome_reaches_the_survivors_inside_the_window() {
-    let mut m = Meeting::open(
-        vec![
-            Who::with("alice", &[ChannelKind::Nfc]),
-            Who::with("bob", &[ChannelKind::Nfc]),
-            Who::watching("w1"),
-            Who::watching("witness"),
-        ],
-        "witness",
-        Scene::new().table("witness", &["witness"]),
-    )
-    .await;
-    m.exchanges("alice", "bob", &["w1"], &[])
-        .await
-        .expect("the local exchanges");
-    // the channels ran during the exchanges, before the window: w1 has
-    // watched the opening and holds no ceremony yet, so no update is owed
-    // and none is taken
-    fn updates(m: &mut Meeting) -> usize {
-        m.at("w1").drain();
-        m.party("w1")
-            .conversed()
-            .into_iter()
-            .filter(|(_, c)| matches!(c, Conversed::Observed { kind: 25 }))
-            .count()
-    }
-    assert_eq!(updates(&mut m), 0, "nothing before the window");
-    // the window opens with the request; from here a channel's outcome is
-    // the survivors' to hear
-    open_both(m.party("alice"), m.party("bob"))
-        .await
-        .expect("the window opens");
-    assert!(
-        m.party("w1")
-            .holds(30_000, |c| c.witnessing_count() > 0)
-            .await,
-        "w1 holds the ceremony the request named"
-    );
-    m.party("alice")
-        .step(|c| c.proximity().map(|_| Vec::new()))
-        .await
-        .expect("the channels run again inside the window");
-    // the courier is given its turns, and the update is the survivor's.
-    // **A generous bound, which costs nothing when the update is prompt**
-    // [author, 2026-10-22]: this read five seconds and was starved the
-    // first time the suite ran its binaries concurrently, which is a
-    // scheduling fact about the host and not an update that failed to go
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
-    while updates(&mut m) == 0 && std::time::Instant::now() < deadline {
-        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
-    }
-    assert!(
-        updates(&mut m) > 0,
-        "each outcome reaches the surviving witness as it lands: {:?}",
-        m.party("w1").conversed()
     );
 }

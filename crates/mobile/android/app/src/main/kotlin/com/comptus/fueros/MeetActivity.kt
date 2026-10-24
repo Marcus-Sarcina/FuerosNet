@@ -25,10 +25,11 @@ import android.widget.FrameLayout
  * a recreation mid-flow rejoins it.
  *
  * The flow, its front-loaded brief, its hands-off phase and its
- * review-before-sign gate are enforced by [Meet]. **D1 through D4 run on
- * the hardware**: the invitation and anchor codes on the rear and selfie
- * cameras, the intent over a Bluetooth LE bearer, the tap over NFC and the
- * guided capture on the selfie camera. **D5 through D7 run on the kernel's
+ * review-before-sign gate are enforced by [Meet]. **D1, D2 and D4 run on
+ * the hardware** (D3, the tap, is retired [author, 2026-10-24] and its
+ * number is not reused): the invitation and anchor codes on the rear and
+ * selfie cameras, the intent over a Bluetooth LE bearer and the guided
+ * capture on the selfie camera. **D5 through D7 run on the kernel's
  * courier**: the request to witness, the queries and their consent, the
  * gathered responses, the body and the record cross the end-to-end path
  * (`wire-format.md` §7.10.1), the kernel reviews and signs as the body
@@ -201,14 +202,11 @@ class MeetActivity : Activity() {
     override fun onStart() {
         super.onStart()
         Consent.host(this)
-        // the NFC reader side needs a foreground activity (D3); this is it
-        ProximityChannels.host(this)
         Kernel.meet()?.bind(sink) ?: redraw()
     }
 
     override fun onStop() {
         Consent.release(this)
-        ProximityChannels.release(this)
         Kernel.meet()?.unbind(sink)
         // **leaving before anything began is changing one's mind**: a
         // meeting still at the choice or the brief has nothing in the
@@ -251,9 +249,8 @@ class MeetActivity : Activity() {
             when (m.step()) {
                 Meet.Step.INTENT -> "Meet ${m.counterpartyName}"
                 Meet.Step.BRIEF -> "Before you begin"
-                Meet.Step.OPTICAL -> "Exchanging (1/3)"
-                Meet.Step.PROXIMITY -> "Ranging (2/3)"
-                Meet.Step.CAPTURE -> "Capturing (3/3)"
+                Meet.Step.OPTICAL -> "Exchanging (1/2)"
+                Meet.Step.CAPTURE -> "Capturing (2/2)"
                 Meet.Step.VERIFIERS -> "Verifiers"
                 Meet.Step.REVIEW -> "Review and sign"
                 Meet.Step.DONE -> "Done"
@@ -274,7 +271,6 @@ class MeetActivity : Activity() {
                 Meet.Step.INTENT -> intent(m)
                 Meet.Step.BRIEF -> brief(m)
                 Meet.Step.OPTICAL -> optical(m)
-                Meet.Step.PROXIMITY -> proximity(m)
                 Meet.Step.CAPTURE -> capture(m)
                 Meet.Step.VERIFIERS -> verifiers(m)
                 Meet.Step.REVIEW -> review(m)
@@ -283,8 +279,7 @@ class MeetActivity : Activity() {
             }
         }
         // **the switch to capture is cued**, once, as it happens: with the
-        // phones face to face for ranging, nobody is looking at either
-        // screen, and an NFC tap is the only step the system sounds for
+        // phones held up for the codes, nobody is looking at either screen
         // [author, 2026-10-11]
         if (m.step() == Meet.Step.CAPTURE && drawnStep != Meet.Step.CAPTURE) cueCapture()
         drawnStep = m.step()
@@ -292,7 +287,7 @@ class MeetActivity : Activity() {
     }
 
     /**
-     * A short buzz and a beep: ranging is over, the camera is next. Both
+     * A short buzz and a beep: the codes are read, the camera is next. Both
      * are best effort — a phone with no vibrator or a muted tone channel
      * still shows the step — and neither carries anything about the
      * ceremony beyond the fact that it moved.
@@ -717,7 +712,7 @@ class MeetActivity : Activity() {
 
         heading("What may be weak in this meeting")
         para("• Nominated witnesses: none, until your horizon can offer them. The record carries that it had none.")
-        para("• Verifiers and proximity are weighed, not required; a thin meeting is honest, not malformed.")
+        para("• Verifiers are weighed, not required; a thin meeting is honest, not malformed.")
         if (bluetooth.any { !held(it) }) {
             // the bearer that carries the intent is Bluetooth LE; without
             // the permissions the exchange stops at the radio, said here
@@ -835,23 +830,6 @@ class MeetActivity : Activity() {
             if (why != null) { m.stop(why); return }
         }
         redraw()
-    }
-
-    // ---- D3 proximity: the tap, and the optical pass D2 already made ---
-
-    /**
-     * The kernel runs the channel ladder (design §7.6.3) off the UI thread
-     * and the screen follows. **The phone still faces the counterparty**,
-     * so there is nothing to tap here: the NFC tap is two phones touching,
-     * and the optical channel already passed when the two screens agreed at
-     * D2. The strongest that passed is what the record carries.
-     */
-    private fun proximity(m: Meet) {
-        para("Ranging with ${m.counterpartyName}. Hold the phones together for the tap; the screen-to-screen check at the last step is itself the weakest channel, so this cannot come back with nothing.")
-        para("UWB is not among the channels this build can run, so the strongest here is a tap. The record carries the strongest that passed and no more — a weaker channel is never shown as a stronger one.")
-        once(m, "proximity") {
-            Kernel.runProximity(m)
-        }
     }
 
     // ---- D4 capture: the counterparty's face ---------------------------

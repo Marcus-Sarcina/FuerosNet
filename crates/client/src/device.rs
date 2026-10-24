@@ -1,9 +1,9 @@
 //! The device behind the client (`Robot/implementation-plan.md`: device I/O
-//! behind an interface): proximity channels, the camera, the clock, the
-//! random source, the person, and the biometric engine.  Each is a trait
+//! behind an interface): the camera, the clock, the random source, the
+//! person, and the biometric engine.  Each is a trait
 //! so the same client runs on a harness, and the decisions this module
-//! makes — which channel to report, how a capture is guided, what is
-//! stripped — are the client's, not the hardware's.
+//! makes — how a capture is guided, what is stripped — are the client's,
+//! not the hardware's.
 
 use crate::Keyhash;
 use crate::notice::Notifier;
@@ -13,102 +13,6 @@ use crate::verifier::{ByteEquality, Matcher};
 use rhtn_codec::cose::sha256;
 use std::collections::BTreeMap;
 use std::rc::Rc;
-
-/// A proximity channel, ranked strongest first (design §7.6.3): the code
-/// is `wire-format.md` §4.5's.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum ChannelKind {
-    /// Ultra-wideband ranging.
-    Uwb = 1,
-    /// A near-field tap.
-    Nfc = 2,
-    /// The optical exchange.
-    Optical = 3,
-    /// Round-trip latency, which is the weakest.
-    Latency = 4,
-}
-
-impl ChannelKind {
-    /// Strongest first.
-    pub const RANKED: [ChannelKind; 4] = [
-        ChannelKind::Uwb,
-        ChannelKind::Nfc,
-        ChannelKind::Optical,
-        ChannelKind::Latency,
-    ];
-
-    /// The code `wire-format.md` §4.5 gives this channel.
-    pub fn code(self) -> u64 {
-        self as u64
-    }
-
-    /// The channel `c` names, or nothing where it names none.
-    pub fn from_code(c: u64) -> Option<Self> {
-        Self::RANKED.into_iter().find(|k| k.code() == c)
-    }
-}
-
-/// What one channel came to (`wire-format.md` §4.5 `Channel` field 2).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ChannelResult {
-    /// The channel ran and passed.  What passing means is the channel's
-    /// own; no document defines it further, and `strongest` is the
-    /// highest-ranked channel with this result (`wire-format.md` §4.5).
-    Pass = 0,
-    /// It ran and did not pass.
-    Fail = 1,
-    /// It did not run.
-    Unavailable = 2,
-}
-
-/// One channel run: what it was, how it went, and the resolution it
-/// claims where it claims one.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ChannelOutcome {
-    /// Which channel ran.
-    pub kind: ChannelKind,
-    /// How it went.
-    pub result: ChannelResult,
-    /// The resolution it claims, where it claims one.
-    pub resolution_m: Option<u64>,
-}
-
-/// The proximity hardware: which channels it has, and running one with a
-/// counterparty's device.
-pub trait Proximity {
-    /// The channels this hardware has.
-    fn supported(&self) -> Vec<ChannelKind>;
-    /// Run `kind` against `peer` and say how it went.
-    fn run(&self, kind: ChannelKind, peer: &Keyhash) -> ChannelOutcome;
-}
-
-/// Run every channel the hardware supports, strongest first, and report
-/// what was achieved: the outcomes as observed, and the strongest that
-/// passed.  A channel the hardware lacks is not listed, and nothing is
-/// promoted (`light-client-requirements.md` §1.3).
-pub fn run_channels(
-    p: &dyn Proximity,
-    peer: &Keyhash,
-) -> (Vec<ChannelOutcome>, Option<ChannelKind>) {
-    let supported = p.supported();
-    let mut outcomes = Vec::new();
-    let mut strongest = None;
-    for kind in ChannelKind::RANKED {
-        if !supported.contains(&kind) {
-            continue;
-        }
-        let o = p.run(kind, peer);
-        assert_eq!(
-            o.kind, kind,
-            "the hardware reports the channel it was asked to run"
-        );
-        if o.result == ChannelResult::Pass && strongest.is_none() {
-            strongest = Some(kind);
-        }
-        outcomes.push(o);
-    }
-    (outcomes, strongest)
-}
 
 /// A prompt the guided capture gives the counterparty (design §7.5).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -525,8 +429,6 @@ impl DirectPath for NoDirectPath {
 
 /// Everything a client reaches the world through.
 pub struct Device {
-    /// The proximity hardware.
-    pub proximity: Rc<dyn Proximity>,
     /// The camera.
     pub camera: Rc<dyn Camera>,
     /// The clock.

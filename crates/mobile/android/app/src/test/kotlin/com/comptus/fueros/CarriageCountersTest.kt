@@ -39,8 +39,8 @@ class CarriageCountersTest {
         val wire = Wire(24)
         val out = Carriage(wire)
         val messages = listOf(ByteArray(50), ByteArray(21))
-        assertTrue(out.send(messages, Carriage.Phase.PROXIMITY))
-        val c = out.counters(Carriage.Phase.PROXIMITY)
+        assertTrue(out.send(messages, Carriage.Phase.CAPTURE_KEY))
+        val c = out.counters(Carriage.Phase.CAPTURE_KEY)
         // 20 bytes of slice per packet: 3 + 2 packets
         assertEquals(5, c.sent)
         assertEquals(71, c.sentBytes)
@@ -49,7 +49,7 @@ class CarriageCountersTest {
         val e = events("bearer.packets").single()
         assertTrue(
             e,
-            e.contains("\"dir\":\"sent\",\"phase\":1,\"messages\":2,\"packets\":5,\"bytes\":71,\"failed\":0,\"ok\":true"),
+            e.contains("\"dir\":\"sent\",\"phase\":2,\"messages\":2,\"packets\":5,\"bytes\":71,\"failed\":0,\"ok\":true"),
         )
     }
 

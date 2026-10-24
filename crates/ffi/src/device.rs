@@ -1,8 +1,7 @@
 //! The platform's hardware, passed inward.
 //!
 //! `rhtn-client` reaches the world through interfaces it declares: the
-//! proximity channels, the camera, the clock, randomness, the person and
-//! the notifier. On a phone each is the platform's, so each arrives across
+//! camera, the clock, randomness, the person and the notifier. On a phone each is the platform's, so each arrives across
 //! the boundary as an object the shell supplies.
 //!
 //! **The two sides hold their objects differently, and that is the work
@@ -15,27 +14,10 @@
 //! below it would be absent from every other client, so the adapters
 //! translate and never adjudicate.
 
-use crate::types::{Ask, Channel, ChannelOutcome, Told};
-use rhtn_archive::Keyhash;
+use crate::types::{Ask, Told};
 use rhtn_client::device as dev;
 use rhtn_client::notice::{Notice, Notifier};
 use std::sync::Arc;
-
-/// The proximity hardware a shell offers.
-///
-/// **A channel the hardware lacks is not listed**, and one that failed is
-/// reported as failed: nothing is promoted, and the strongest that passed
-/// is the client's to decide (`light-client-requirements.md` §1.3).
-#[uniffi::export(with_foreign)]
-pub trait Proximity: Send + Sync {
-    /// The channels this hardware has, in any order.
-    fn supported(&self) -> Vec<Channel>;
-    /// Run `channel` against `peer`, named by its keyhash, and say how it
-    /// went.
-    fn run(&self, channel: Channel, peer: Vec<u8>) -> ChannelOutcome;
-    /// Metres, where the channel measured one.
-    fn resolution_m(&self, channel: Channel) -> Option<u64>;
-}
 
 /// The camera, which returns the pixels of one frame.
 ///
@@ -151,8 +133,6 @@ impl Diagnostics for Silent {
 /// Everything a shell supplies, in one object it hands over once.
 #[derive(Clone, uniffi::Object)]
 pub struct Platform {
-    /// The proximity hardware.
-    pub proximity: Arc<dyn Proximity>,
     /// The camera.
     pub camera: Arc<dyn Camera>,
     /// The clock.
@@ -202,7 +182,6 @@ impl Platform {
             None => std::rc::Rc::new(dev::HashEngine::new(16)),
         };
         dev::Device {
-            proximity: std::rc::Rc::new(ProximityIn(self.proximity.clone())),
             camera: std::rc::Rc::new(CameraIn(self.camera.clone())),
             clock: std::rc::Rc::new(ClockIn(self.clock.clone())),
             random: std::rc::Rc::new(RandomIn(self.random.clone())),
@@ -225,36 +204,6 @@ impl Platform {
                 std::collections::BTreeSet::from([rhtn_engine::TEMPLATE_VERSION]);
         }
         cfg
-    }
-}
-
-struct ProximityIn(Arc<dyn Proximity>);
-
-impl dev::Proximity for ProximityIn {
-    fn supported(&self) -> Vec<dev::ChannelKind> {
-        self.0.supported().into_iter().map(|c| c.kind()).collect()
-    }
-
-    fn run(&self, kind: dev::ChannelKind, peer: &Keyhash) -> dev::ChannelOutcome {
-        let c = Channel::of(kind);
-        let started = std::time::Instant::now();
-        let result = self.0.run(c, peer.to_vec()).result();
-        // the channel asked for is the channel reported: a shell that
-        // answered about another would silently move what was measured
-        let out = dev::ChannelOutcome {
-            kind,
-            result,
-            resolution_m: self.0.resolution_m(c),
-        };
-        tracing::info!(
-            target: "platform",
-            channel = ?kind,
-            outcome = ?result,
-            resolution_m = out.resolution_m,
-            took_ms = started.elapsed().as_millis() as u64,
-            "platform.proximity"
-        );
-        out
     }
 }
 

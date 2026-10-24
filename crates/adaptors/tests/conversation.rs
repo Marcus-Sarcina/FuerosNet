@@ -16,7 +16,6 @@ use rhtn_archive::tx::Witness;
 use rhtn_archive::{Keyhash, Txid};
 use rhtn_client::ceremony::{Abort, Client, Dispatched, Msg, Proposed, conversation_payload};
 use rhtn_client::conversation::{BackPointers, proposal_from_body};
-use rhtn_client::device::ChannelKind;
 use rhtn_client::payload::KIND_BACK_POINTERS;
 use rhtn_client::query::{Response, Verdict};
 use rhtn_client::record::Refusal;
@@ -78,12 +77,11 @@ async fn the_conversation_runs_over_the_payload_path_to_a_record_every_signer_ho
     );
     let inboxes = Inboxes::default();
     let serving: Arc<dyn Serving> = LocalNode::new(node.clone(), inboxes.clone());
-    let optical = vec![ChannelKind::Optical];
-    let mut alice = host("alice", &serving, &inboxes, optical.clone(), 0);
-    let mut bob = host("bob", &serving, &inboxes, optical, 0);
-    let mut w1 = host("w1", &serving, &inboxes, vec![], 0);
-    let mut w2 = host("w2", &serving, &inboxes, vec![], 3600);
-    let carol = host("carol", &serving, &inboxes, vec![], 0);
+    let mut alice = host("alice", &serving, &inboxes, 0);
+    let mut bob = host("bob", &serving, &inboxes, 0);
+    let mut w1 = host("w1", &serving, &inboxes, 0);
+    let mut w2 = host("w2", &serving, &inboxes, 3600);
+    let carol = host("carol", &serving, &inboxes, 0);
     let population: Vec<Keyhash> = ["alice", "bob", "w1", "w2", "carol"]
         .iter()
         .map(|n| kh(n))
@@ -166,10 +164,6 @@ async fn the_conversation_runs_over_the_payload_path_to_a_record_every_signer_ho
         .await
         .expect("bob takes alice's intent");
     assert_eq!(cid, cid_b, "one ceremony");
-    let ch = alice.with(|c| c.proximity()).await.expect("channels");
-    bob.with(move |c| c.take_channels(&ch))
-        .await
-        .expect("bob agrees");
     let ka = alice.with(|c| c.capture_key()).await.expect("alice's key");
     let kb = bob.with(|c| c.capture_key()).await.expect("bob's key");
     let (ra, rb) = tokio::join!(
@@ -486,10 +480,9 @@ async fn a_signer_whose_root_check_fails_answers_and_the_proposer_records_it() {
     );
     let inboxes = Inboxes::default();
     let serving: Arc<dyn Serving> = LocalNode::new(node.clone(), inboxes.clone());
-    let optical = vec![ChannelKind::Optical];
-    let mut alice = host("alice", &serving, &inboxes, optical.clone(), 0);
-    let mut bob = host("bob", &serving, &inboxes, optical, 0);
-    let w1 = host("w1", &serving, &inboxes, vec![], 0);
+    let mut alice = host("alice", &serving, &inboxes, 0);
+    let mut bob = host("bob", &serving, &inboxes, 0);
+    let w1 = host("w1", &serving, &inboxes, 0);
     let population: Vec<Keyhash> = ["alice", "bob", "w1"].iter().map(|n| kh(n)).collect();
     for p in [&alice, &bob, &w1] {
         p.courier.attach(population.clone()).await;
@@ -523,10 +516,6 @@ async fn a_signer_whose_root_check_fails_answers_and_the_proposer_records_it() {
         .await
         .expect("bob takes alice's intent");
     assert_eq!(cid, cid_b, "one ceremony");
-    let ch = alice.with(|c| c.proximity()).await.expect("channels");
-    bob.with(move |c| c.take_channels(&ch))
-        .await
-        .expect("bob agrees");
     let ka = alice.with(|c| c.capture_key()).await.expect("alice's key");
     let kb = bob.with(|c| c.capture_key()).await.expect("bob's key");
     let (ra, rb) = tokio::join!(
@@ -682,9 +671,8 @@ async fn a_stopped_participant_does_not_witness_its_own_ceremony() {
     );
     let inboxes = Inboxes::default();
     let serving: Arc<dyn Serving> = LocalNode::new(node.clone(), inboxes.clone());
-    let optical = vec![ChannelKind::Optical];
-    let mut alice = host("alice", &serving, &inboxes, optical.clone(), 0);
-    let mut bob = host("bob", &serving, &inboxes, optical, 0);
+    let mut alice = host("alice", &serving, &inboxes, 0);
+    let mut bob = host("bob", &serving, &inboxes, 0);
     let population: Vec<Keyhash> = ["alice", "bob"].iter().map(|n| kh(n)).collect();
     for p in [&alice, &bob] {
         p.courier.attach(population.clone()).await;
@@ -709,10 +697,6 @@ async fn a_stopped_participant_does_not_witness_its_own_ceremony() {
     bob.with(move |c| c.take_intent(kh("alice"), &ia))
         .await
         .expect("bob takes alice's intent");
-    let ch = alice.with(|c| c.proximity()).await.expect("channels");
-    bob.with(move |c| c.take_channels(&ch))
-        .await
-        .expect("bob agrees");
     // bob stops; alice, not knowing, opens: her request to witness goes to
     // her counterparty as every message of the conversation does.  **No
     // bearer runs in this test**: it hands the carriage over itself, so
@@ -740,7 +724,7 @@ async fn a_stopped_participant_does_not_witness_its_own_ceremony() {
         );
         // and nothing distinguishes that from a device which never began:
         // the same refusal, carrying nothing about what was asked
-        let never = spawn_client_with("carol", ceremony_cfg(), Reachable::default(), vec![], 0);
+        let never = spawn_client_with("carol", ceremony_cfg(), Reachable::default(), 0);
         let b2 = bytes.clone();
         let r2 = never
             .with(move |c| c.take_conversation_carriage(&b2).map(|_| ()))
@@ -785,20 +769,8 @@ async fn a_stopped_participant_does_not_witness_its_own_ceremony() {
 #[tokio::test]
 async fn net_026_a_formation_ceremony_completes_with_no_node_reachable() {
     let (alice, bob) = (
-        spawn_client_with(
-            "alice",
-            ceremony_cfg(),
-            Reachable::default(),
-            vec![ChannelKind::Optical],
-            0,
-        ),
-        spawn_client_with(
-            "bob",
-            ceremony_cfg(),
-            Reachable::default(),
-            vec![ChannelKind::Optical],
-            0,
-        ),
+        spawn_client_with("alice", ceremony_cfg(), Reachable::default(), 0),
+        spawn_client_with("bob", ceremony_cfg(), Reachable::default(), 0),
     );
 
     // the local exchanges, as §14.3 has them, with no nominees
@@ -818,10 +790,6 @@ async fn net_026_a_formation_ceremony_completes_with_no_node_reachable() {
     bob.with(move |c| c.take_intent(kh("alice"), &ia))
         .await
         .expect("bob takes alice's intent");
-    let ch = alice.with(|c| c.proximity()).await.expect("channels");
-    bob.with(move |c| c.take_channels(&ch))
-        .await
-        .expect("bob agrees");
     let ka = alice.with(|c| c.capture_key()).await.expect("alice's key");
     let kb = bob.with(|c| c.capture_key()).await.expect("bob's key");
     let (ra, rb) = tokio::join!(
@@ -936,10 +904,9 @@ async fn a_witness_both_participants_nominated_signs_once() {
     );
     let inboxes = Inboxes::default();
     let serving: Arc<dyn Serving> = LocalNode::new(node.clone(), inboxes.clone());
-    let optical = vec![ChannelKind::Optical];
-    let alice = host("alice", &serving, &inboxes, optical.clone(), 0);
-    let bob = host("bob", &serving, &inboxes, optical, 0);
-    let w1 = host("w1", &serving, &inboxes, vec![], 0);
+    let alice = host("alice", &serving, &inboxes, 0);
+    let bob = host("bob", &serving, &inboxes, 0);
+    let w1 = host("w1", &serving, &inboxes, 0);
     let population: Vec<Keyhash> = ["alice", "bob", "w1"].iter().map(|n| kh(n)).collect();
     for p in [&alice, &bob, &w1] {
         p.courier.attach(population.clone()).await;
@@ -981,10 +948,6 @@ async fn a_witness_both_participants_nominated_signs_once() {
     bob.with(move |c| c.take_intent(kh("alice"), &ia))
         .await
         .expect("bob takes alice's intent");
-    let ch = alice.with(|c| c.proximity()).await.expect("channels");
-    bob.with(move |c| c.take_channels(&ch))
-        .await
-        .expect("bob agrees");
     let ka = alice.with(|c| c.capture_key()).await.expect("alice's key");
     let kb = bob.with(|c| c.capture_key()).await.expect("bob's key");
     let (ra, rb) = tokio::join!(

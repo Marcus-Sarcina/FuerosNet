@@ -710,15 +710,6 @@ payload, so apex load scales with churn and introductions, not with usage.
 distinct from §22's open questions about mechanisms that *are* specified.
 
 ### Explicitly deferred
-- **Ranging mode and receiver implementation in proximity evidence.** §7.6.3's
-  known UWB attacks turn on HRP-versus-alternative modes and specific receiver
-  designs, so carrying them would let policy weight a `pass` by how defeatable it
-  was. **Not carried in v1**: the fields would fingerprint hardware (P15's shape
-  one layer down), the values need a registry nobody can populate yet, and
-  `wire-format.md` §4.5.1's disclosures are not extension points — an ad-hoc addition is malformed.
-  Until then a UWB pass is weighted as the weakest deployed mode. Revisiting means
-  a `Channel` field with a mode registry, and deciding whether it joins the
-  proximity disclosure or stays body-visible.
 - **IPv6 endpoints, and prefix-based reputation with them.** v1 demands IPv4
   (§17.3): routable IPv4 is genuinely scarce and metered, which is the second leg
   of Sybil cost, and a 16-byte address in a `NetworkPoint` is malformed. IPv6
@@ -1450,20 +1441,8 @@ end node, starting from its own local records of people it has met.
    opens here**, with the witness request that carries the ceremony-id, and
    from this point the surviving witnesses receive every leg of the
    conversation as it is sent.
-5. **Proximity channels, run inside the window and never waited on** [author,
-   2026-10-19]: UWB secure ranging (802.15.4z) where available, an NFC tap
-   polled opportunistically for a few seconds alongside the rest rather than
-   holding the ceremony. UWB is the **strongest** channel but **not
-   categorically relay-resistant** — deployed 802.15.4z HRP implementations
-   have been defeated by physical-layer distance-reduction attacks (§7.6.3) —
-   and NFC provides physical-range friction and no distance-bounding
-   guarantee. Bluetooth RSSI is NOT usable: received signal strength is
-   attacker-controllable, since an amplifier raises it without changing
-   distance. Each outcome is streamed to the surviving witnesses as it lands,
-   so the channel evidence arrives on their clocks too; the channels remain
-   for the participants' own assurance and are not remotely verifiable.
-6. **Guided face capture**, locally on each device (§7.2, §7.5), run across
-   the window concurrently with the channels and the verification below. Each party
+5. **Guided face capture**, locally on each device (§7.2, §7.5), run across
+   the window concurrently with the verification below. Each party
    retains 3–5 images of the counterparty, taken **under randomised prompts
    spread through the capture, which runs for the ceremony's enforced duration**
    [author, 2026-10-06] — turn slightly, change expression, which supplies both
@@ -1478,7 +1457,7 @@ end node, starting from its own local records of people it has met.
    likeness of anyone but itself. Images stay on the device **for the declared
    retention period** (§7.5.1) and are then deleted; nothing biometric enters the
    record at any point.
-7. **Verifier queries**, run automatically by the client (§7.3), inside the
+6. **Verifier queries**, run automatically by the client (§7.3), inside the
    same window: selection starts when the bundle is handed over, the first
    query fires as soon as a captured frame yields a template, and responses
    land while the capture continues — each leg reaching the surviving
@@ -1501,14 +1480,14 @@ end node, starting from its own local records of people it has met.
    acquaintances where the bundles surface none, and filling the remainder at
    their own discretion — each response carrying the selector's claim of which
    it was.
-8. **Each party reviews the other's selection before signing.** Because A selects
+7. **Each party reviews the other's selection before signing.** Because A selects
    B's verifiers and B selects A's, a participant who signs without looking may be
    left holding a record whose responders they cannot stand behind. And cannot
    repair it, since the record is immutable. This is one of the ceremony's checks that
    protect a signer **against their counterparty** rather than against outsiders
    or against the pair colluding; `light-client-requirements.md` §1.4 counts
    them.
-9. Witnesses attest only to what they observed: that the protocol ran, both
+8. Witnesses attest only to what they observed: that the protocol ran, both
    parties were live and responsive, **and that the sequence arrived on the
    witness's own clock as a live run would deliver it** — the engagement, the
    optical trace at screen-and-camera pace, the channels, the queries and the
@@ -1528,7 +1507,7 @@ asking its operator about something the operator did not see.
 
 **Two carriages, by what has to be agreed in the room** [author, 2026-10-02].
 What the two devices must fix between themselves while facing each other — the
-optical anchor, the intent, the proximity outcomes, traversal candidates, the
+optical anchor, the intent, traversal candidates, the
 capture key and each other's prekey material — crosses the local interface
 between them (§14.1.0, `wire-format.md` §14).
 
@@ -2553,7 +2532,7 @@ existence.
 
 **And the transfer problem disappears.** The subject sends a **32-byte derived key**, not megabytes of expanded
 keystream. §7.5.2's earlier note about
-NFC and BLE throughput was chasing a problem that only existed because the
+radio throughput was chasing a problem that only existed because the
 mechanism was described in terms of the expanded stream rather than what generates
 it. **Any channel carries 32 bytes.**
 
@@ -2665,9 +2644,7 @@ three compounding reasons:
    no challenge window tighter than a network round trip is achievable. A
    confederate standing in front of the honest party scans the room, ships the
    result to the remote key holder, and the remote party signs it. Overlap
-   succeeds. Contrast UWB secure ranging, whose nanosecond budget is
-   cryptographically bound to the session key and which a relay's milliseconds
-   defeat. **Radio overlap provides no anti-relay property whatsoever.**
+   succeeds. **Radio overlap provides no anti-relay property whatsoever.**
 2. **No threat left in the middle.** Under bilateral collusion the parties can
    agree on anything anywhere. Under unilateral fraud the dishonest party is
    physically present by construction and therefore has legitimate access to the
@@ -2675,9 +2652,7 @@ three compounding reasons:
 3. **Narrow residual, unavailable where it matters.** The one case it uniquely
    catches is a naive remote relay, two parties on a video call, one pointing a
    phone at the other's feed to capture the codes, which the optical channel alone
-   does not catch. But UWB catches it, and NFC's physical-range
-   friction makes it awkward, so the value is additive only on devices lacking
-   both, and iOS blocks general
+   does not catch. The value would be that one case alone, and iOS blocks general
    *nearby*-BSSID enumeration for ordinary apps in its public APIs (an entitled
    app meeting further conditions — precise-location authorization among them —
    can read the **current** network's BSSID, which is not enough for this
@@ -2707,72 +2682,35 @@ location evidence a record needs is the evaluator's policy.
 a later evaluator knows whether a meeting was located to ten metres or four
 thousand kilometres.
 
-#### 7.6.3 Co-presence evidence, ranked
+#### 7.6.3 Co-presence evidence
 
-Strongest first:
-1. **UWB secure ranging (802.15.4z).** The **strongest of the channels considered
-   here** — §20.1 records that no comparison against every handset-available
-   channel was made — proximity
-   channel, and **not categorically relay-resistant**. Distance bounding at
-   nanosecond resolution cryptographically bound to the session key requires an
-   attacker to defeat the ranging protocol rather than relay a timing measurement bar
-   very substantially, since a relay's milliseconds exceed the time budget by
-   orders of magnitude. Decimetre-class accuracy where it works — *Ghost Peak* observed 10–20 cm normal error in the systems it tested, which is an implementation and environment result rather than a guarantee of the standard.
+**Ranging is not used** [author, 2026-10-24]. What this design takes as
+evidence that two people stood together is what the ceremony itself produces
+between the two devices: the **optical exchange**, screen to camera both ways,
+which binds each party's key material and contribution to a ceremony-id that
+both screens fix (§7.1); and the **guided capture**, which holds the
+counterparty in front of the camera for the window and keeps what it saw
+(§7.5). Both are short-range and line-of-sight, and both are relayable in
+principle — a confederate's screen shows whatever a remote client instructs,
+and a confederate's face is a face — so what they supply is *friction*: an
+attacker must put a person and a device in the room, for the whole window,
+under prompts chosen at random. No channel this design considered supplies
+more than friction. Distance-bounding radio was the candidate that might
+have, and deployed implementations have been defeated at the physical layer
+without the ranging key; a near-field tap supplies friction of the same kind
+as the screen and asks the two people to choreograph their hands for it.
+Neither earns a field in the record.
 
-   **But deployed implementations have been broken.** USENIX Security 2022
-   demonstrated practical over-the-air **distance-reduction attacks against
-   802.15.4z HRP UWB**, including Apple U1, NXP and Qorvo parts — 12 m spoofed as
-   0 m **without knowledge of the ranging key**, because the attack targets the
-   receiver's processing of the physical layer's scrambled timestamp sequence
-   rather than the cryptography that generates it. Resistance
-   depends on ranging mode, receiver design, and implementation, not on the
-   standard alone. Not universally available either.
-2. **NFC tap.** A few cm, widely deployed on modern handsets though not a
-   guaranteed platform capability, and close enough that the gesture is
-   deliberate even where contact is not required.
-   **NOT anti-relay.** Relay attacks against NFC are a well-documented class;
-   short physical range does not prevent a relay pair with a fast link. NFC
-   supplies *physical-range friction*, not a distance-bounding guarantee.
-3. **Optical channel.** Short-range and line-of-sight, but relayable: a
-   confederate's screen shows whatever a remote client instructs. A bound on the
-   screen-to-camera round trip would constrain only the latency a relay adds,
-   measured against a camera-and-display floor that is device-specific and
-   unknown to the party measuring, so it supplies friction of NFC's kind, not a
-   distance bound.
-4. **Route latency.** Continental resolution only; plausibility filter
-
-**Consequence: proximity evidence bounds an attacker's cost; it never establishes
-co-presence.** Any channel can be defeated by an adversary able to manipulate the
-physical layer it measures, and a channel's resistance is a property of its
-deployed implementation rather than of the standard it follows. The ranking above
-therefore orders cost imposed on an attacker, not guarantees — UWB sits at the top
-and has been defeated in deployed form.
-
-This is consistent with what §7 already says — proof of presence is **a cost, not
-an unforgeable primitive**, and bilateral collusion defeats it regardless. The
-correction moves UWB from "the one solid channel" to "the strongest of several
-imperfect ones", which changes the confidence a policy should place in a record,
-not the architecture.
-
-**Practical consequences:**
-- `Proximity` (§8.1) records which channel was achieved and **deliberately not the
-  ranging mode or receiver implementation** — deferred (§4). The consequence for
-  v1 evaluators: a UWB `pass` cannot be distinguished by mode, so policy must
-  weight it as the *weakest* mode in deployment (HRP), since the known attacks
-  turn on exactly that distinction.
-- No implementation should treat any single channel as proof that a counterparty's
-  key is physically present. Combining channels raises attacker cost; nothing here
-  makes it prohibitive.
-
-A reference client should obtain the strongest channel the hardware supports, and **record which
-channel it got**, since a policy evaluating the record later needs to know the
-strength of the proximity claim. None survives bilateral collusion, which is out
-of scope by §7.
+**Consequence: co-presence evidence bounds an attacker's cost; it never
+establishes co-presence.** This is consistent with what §7 already says —
+proof of presence is **a cost, not an unforgeable primitive**, and bilateral
+collusion defeats it regardless. Route latency (§7.6) is a plausibility
+filter at continental resolution and is no part of the evidence.
 
 **Self-reported serving cell ID** is available on Android through
 `TelephonyManager` under location permission, and **is not available on iOS** —
 CoreTelephony has never published a serving-cell identifier, and its carrier
-properties are deprecated and return static values on current releases. It is forgeable by construction. It belongs in the same category as client integrity (§7.8) —
+properties are deprecated and return static values on current releases. It is forgeable by construction. It belongs in the same category as client integrity:
 a trust-raising attribute weighted by attestation, never treated as a fact.
 
 **Witnesses notarise; they do not verify proximity.** Under the corrected
@@ -2817,13 +2755,13 @@ Repeated sampling helps less than it appears: minimum-of-many-samples is the
 standard constraint-based-geolocation technique for suppressing *queueing*
 jitter and does work for that. What it cannot remove is the **systematic
 radio-access floor**, which is the dominant term here and does not average out. Proximity
-comes from the optical and ranging channels (§7.1), never from latency.
+comes from the optical exchange and the capture (§7.1), never from latency.
 
 **Terminating vs relaying proxies.** A relay still traverses the attacker's true
 position and loses the tight upper bound, so it is detectable. A *terminating*
 proxy, a client genuinely running on a VPS in the claimed city — is
-indistinguishable at the network layer. That case is what the optical and
-ranging channels exist for.
+indistinguishable at the network layer. That case is what the optical
+exchange and the capture exist for.
 
 ### 7.7 Location field
 Coarse **geohash at precision 3–4**, not precise coordinates. Standard geohash
@@ -2837,7 +2775,7 @@ from a user's typical patterns, while removing venue-level identification.
 
 ### 7.8 Client integrity
 Every step depends on a sensor reporting honestly, and a modified client can
-fabricate the camera feed, the ranging result and the timing. Hardware
+fabricate the camera feed and the timing. Hardware
 attestation (Play Integrity, App Attest) would reintroduce the manufacturer as a
 global trusted party, the same tension as §23.2's autonomous-participation entry raises about attestation. Resolution: attested
 client integrity is **carried in the record and is not a requirement**, and
@@ -2898,15 +2836,6 @@ PresenceRecord {
     # retention and client_integrity are DISCLOSABLE (§8.1.1) and travel in the
     # disclosure set rather than the body. No locator: see below. Disclosure
     # consent is the per-query subject countersignature (§7.4.2)
-  }
-
-  # --- proximity evidence --- DISCLOSABLE
-  proximity {
-    channels[]      : { kind: enum{uwb, nfc, optical, latency},
-                        result: enum{pass, fail, unavailable},
-                        resolution_m: uint32,     # claimed strength
-                        binding: opaque }         # session-key binding, if any
-    strongest       : enum                        # highest-ranked channel passed
   }
 
   # --- capture evidence (NO biometric data) --- DISCLOSABLE
@@ -3029,8 +2958,8 @@ transaction.
 commits to the list; the envelope signature covers the body, so a recipient verifies a
 partial presentation against the same signature. Encoding: `wire-format.md` §4.5.1.
 
-**Disclosable — seven fields:** location evidence, per-participant retention,
-client integrity, capture parameters, and proximity channels. *`started_at` and
+**Disclosable — six fields:** location evidence, per-participant retention,
+client integrity, and capture parameters. *`started_at` and
 `subtype` are body fields rather than disclosable ones: the structural rules
 consume them, and withholding them would conceal nothing — `finalized_at` already shows the
 ceremony's day, and a formation record's
@@ -3046,7 +2975,7 @@ evaluate a presence record, and what each actually reads decides what may be wit
 | Verification by query (§7.3) | a fuzzed profile and a query id, **not the record**, which does not exist yet | no |
 | Verifier selection (§8.1.2) | the handed bundle — the selector's own act, replayed by nobody | no |
 | Response accounting (§8.1) | verifier responses | no |
-| Structural verification (`wire-format.md` §3) | the body: signatures, back-pointers, timestamps, subtype, participant distinctness — plus `proximity`'s strongest rule when revealed | no |
+| Structural verification (`wire-format.md` §3) | the body: signatures, back-pointers, timestamps, subtype, participant distinctness | no |
 | Adoption's proof-of-presence reference (§6.1.1) | that the record exists and names these two parties | no |
 | Archive presentation to a prospective patron (§16.7) | signatures, and counterparties the patron already knows (§10.1) | **benefits** |
 | Trust metric (§16.2) | graph edges — adoptions, and the acquaintance edges a presence record or peering establishes (§16.2.1). **That an edge exists, never the record's disclosable contents** | no |
@@ -5014,10 +4943,10 @@ relay is the fallback, and neither is a user choice nor a warning the client
 raises — the trade is recorded where trades are (P17), not put to the person
 per connection.
 
-**Candidates may travel the ceremony's proximity channels** [author,
+**Candidates may travel the ceremony's local interfaces** [author,
 2026-09-25]. The exchange above has a carriage this section did not name, and
 the relay is not the only one it can have: two parties standing in front of
-each other hand candidates over on the channels the ceremony already uses
+each other hand candidates over on the local interfaces the ceremony already uses
 (`light-client-requirements.md` §1.3), and leave with a route to each other
 that neither patron carried.
 
@@ -5619,10 +5548,10 @@ Generalises past bootstrap:
 | Young subnet | Available | None, no prior counterparties yet |
 | Mature | Available | Available |
 
-Same principle §8.1 applies to proximity evidence: **the record states what was
-available and at what strength**, rather than pretending to a uniform standard.
-A young subnet's records are legitimately weaker than a mature one's and should
-say so, rather than being padded or rejected.
+Same principle §8.1 applies to the witness evidence: **the record states what was
+available**, rather than pretending to a uniform standard. A young subnet's
+records are legitimately weaker than a mature one's and should say so, rather
+than being padded or rejected.
 
 ### 13.6 Key rotation is per-subnet
 
@@ -5900,8 +5829,8 @@ parser beside the first, which is the hazard `wire-format.md` §11.2 names for H
 different layer: two parsers that disagree about where a message ends are a
 gap an attacker chooses.
 
-**Device input travels inward across the same interface.** The camera and the
-proximity radios exist only in the platform layer (`light-client-requirements.md`
+**Device input travels inward across the same interface.** The camera exists
+only in the platform layer (`light-client-requirements.md`
 §1.3), so the kernel owns the network while the interface owns the hardware,
 and a capture is the kernel asking rather than taking. That inversion is the
 price of the arrangement and it is worth paying.
@@ -7379,7 +7308,7 @@ where the presenter has a choice to make. A prospective patron running §7.7's
 impossible-travel check needs the geohash series; a presenter withholding it is
 declining to offer that evidence rather than concealing a defect, and the withholding
 is visible either way. Everything else disclosable — retention, client integrity,
-capture parameters, proximity — has no consumer here.
+capture parameters — has no consumer here.
 
 **Presentation is a single head txid** (`wire-format.md` §4.1 field 7), from which
 the patron walks backward from it and fetches what it wants
@@ -8078,7 +8007,7 @@ the record to a recipient without the fields that recipient has no use for, and 
 recipient still verifies against the same signature.
 
 **What it covers:** location evidence, retention, client integrity, capture
-parameters, proximity channels. Nine of the eleven exchanges that
+parameters. Nine of the eleven exchanges that
 transmit or evaluate a record read none of them — ten, counting location
 alone (§8.1.1).
 
@@ -8400,7 +8329,6 @@ mistaken for established results.
 | 1 | Moving affiliations off commercial platforms "makes you a materially harder target" | The security argument for the design. Plausible, and no adversary-cost comparison establishes it |
 | 1 | Centralized platforms "capture margin in most cases by displacing more local and accountable intermediaries" | The freedom argument. An economic claim about mechanism, not merely outcome, and unsupported here |
 | 1.2.4 | Subnet membership is discoverable "roughly as a church or club is" — parity with physical-world discovery cost | The claim the affiliation limit now rests on. The deniability delta is argued and narrowed (spendable only by §1.2.2's third class); the discovery-cost parity has no comparative study behind it |
-| 7.6.3 | UWB is "the strongest available proximity channel" | The channel ranking (§7.6.3). Comparative claim with no comparison against the other handset-available channels under a stated attacker |
 | 7.6 | Carriers aggregate to a small number of regional gateways | SUPPORTING. Drives the "continental resolution" conclusion for latency; a documented deployment pattern rather than a universal property, and carrier topology varies and is not published |
 | 7.6 | Radio access latency runs 20–80 ms | SUPPORTING. Feeds the same conclusion; varies by generation, radio state, operator and load, and the term is ambiguous between one-way, RTT and access procedure. **Tie to a specific technology and measurement** |
 | `resource-requirements.md` §9 | A hostile installed extension is a larger attack surface than operator conduct | SUPPORTING. Comparative claim about two surfaces neither of which is measured |
@@ -8933,9 +8861,7 @@ rules that conflict only on malformed input.
 3. Anchor set gossip and the resolution sequence (§12.3).
 4. Sibling replication, then cross-tree peering.
 5. Reference flow-based trust metric + conformance test (§16.2, §16.4).
-6. Proof-of-presence ceremony and record (§7–7.3). Sequence the co-presence
-   channels by availability: optical first since it needs no special hardware,
-   then NFC, then UWB.
+6. Proof-of-presence ceremony and record (§7–7.3).
 7. Verification-by-query and the local face store (§7.2–7.3).
 8. Recovery adoption (§9), depends on 7, since the local photo archives are
    the recovery substrate.

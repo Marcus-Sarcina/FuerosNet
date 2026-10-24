@@ -15,7 +15,6 @@ use common::harness::setup;
 use common::kh;
 use rhtn_client::ceremony::{Msg, Proposed, conversation_from, conversation_payload};
 use rhtn_client::conversation::*;
-use rhtn_client::device::{ChannelKind, ChannelResult};
 use rhtn_client::payload::*;
 use rhtn_client::query::VerificationQuery;
 use rhtn_client::record::{LABELS, Refusal, disclosure_root};
@@ -50,17 +49,6 @@ fn the_conversation_objects_encode_to_the_canonical_bytes_and_read_back() {
     // the participants as the fixture lists them, alice then bob
     assert_eq!(read.participants[0], fx[40..72], "alice's keyhash");
     assert_eq!(read.participants[1], fx[74..106], "bob's keyhash");
-    assert_eq!(
-        read.channels
-            .iter()
-            .map(|c| (c.kind, c.result, c.resolution_m))
-            .collect::<Vec<_>>(),
-        vec![
-            (ChannelKind::Nfc, ChannelResult::Pass, None),
-            (ChannelKind::Optical, ChannelResult::Pass, None),
-        ],
-        "NFC and optical passing"
-    );
     assert_eq!(read.encode(), fx);
 
     let fx = fixture("P-witness-answer-witnessing");
@@ -106,7 +94,7 @@ fn the_conversation_objects_encode_to_the_canonical_bytes_and_read_back() {
     assert_eq!(
         set.iter().map(|d| d.label).collect::<Vec<_>>(),
         LABELS,
-        "seven slots in label order"
+        "six slots in label order"
     );
     let (proposal, back) = proposal_from_body(&read.body).expect("the body reads back");
     assert_eq!(
@@ -176,7 +164,7 @@ fn an_object_the_schema_refuses_does_not_decode_here_either() {
         "thirty-three responses"
     );
     assert!(
-        ProposedBody::decode(&fixture("N-proposed-body-six-slots")).is_err(),
+        ProposedBody::decode(&fixture("N-proposed-body-five-slots")).is_err(),
         "six slots"
     );
     assert!(
@@ -452,7 +440,7 @@ fn a_refusal_carries_its_particular_only_where_it_names_one() {
 /// the same question from the same state.
 #[test]
 fn progress_says_whether_a_proposal_would_produce_a_body() {
-    let mut s = setup(&["alice", "bob", "w1", "w2"], &[ChannelKind::Nfc]);
+    let mut s = setup(&["alice", "bob", "w1", "w2"]);
     // a prior meeting, so neither party is at genesis and a witness is
     // required: the witnessless shape is the formation case alone
     s.met("alice", "bob", "w1");

@@ -113,7 +113,6 @@ pub fn kind_name(kind: u64) -> &'static str {
         KIND_WITNESS_SET => "witness_set",
         KIND_WITNESS_KEEP => "witness_keep",
         KIND_WITNESS_STANDDOWN => "witness_standdown",
-        KIND_PROXIMITY_UPDATE => "proximity_update",
         _ => "unknown",
     }
 }
@@ -146,8 +145,6 @@ pub fn variant(a: &crate::ceremony::Abort) -> &'static str {
         NoCeremonyId => "NoCeremonyId",
         Unsealable => "Unsealable",
         ClockFar => "ClockFar",
-        NoProximity => "NoProximity",
-        ChannelDisagreement => "ChannelDisagreement",
         ContributionMismatch => "ContributionMismatch",
         CeremonyIdMismatch => "CeremonyIdMismatch",
         Malformed(_) => "Malformed",
@@ -232,7 +229,6 @@ pub fn msg(m: &crate::ceremony::Msg) -> &'static str {
     use crate::ceremony::Msg::*;
     match m {
         Intent(_) => "Intent",
-        Channels(_) => "Channels",
         CaptureKey(_) => "CaptureKey",
         ConsentRequest(_) => "ConsentRequest",
         Consent { .. } => "Consent",
@@ -252,7 +248,6 @@ pub fn msg(m: &crate::ceremony::Msg) -> &'static str {
         WitnessSet(_) => "WitnessSet",
         WitnessKeep(_) => "WitnessKeep",
         Standdown(_) => "Standdown",
-        ProximityPing(_) => "ProximityPing",
         ClaimPrior(_) => "ClaimPrior",
         RecoveryResponse(_) => "RecoveryResponse",
         RecoveryProposal { .. } => "RecoveryProposal",

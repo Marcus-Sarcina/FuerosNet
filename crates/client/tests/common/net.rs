@@ -14,7 +14,6 @@ use super::harness::*;
 use super::*;
 use rhtn_archive::prekey::*;
 use rhtn_client::ceremony::*;
-use rhtn_client::device::ChannelKind;
 use rhtn_client::payload::KIND_APPLICATION;
 use rhtn_node::prekeys::{PrekeyConfig, PrekeyService};
 use std::collections::{BTreeMap, VecDeque};
@@ -42,7 +41,7 @@ pub struct Net {
 pub const CLIENTS: [&str; 5] = ["alice", "bob", "carol", "w1", "w2"];
 
 pub fn net(nodes: &[&'static str], serving: &[(&'static str, &'static str)]) -> Net {
-    let s = setup(&CLIENTS, &[ChannelKind::Nfc]);
+    let s = setup(&CLIENTS);
     net_of(s, nodes, serving)
 }
 

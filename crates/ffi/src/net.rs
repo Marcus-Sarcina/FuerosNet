@@ -752,8 +752,8 @@ impl Net {
     ///
     /// [`Net::take_carriage`] was already written both ways and says so in
     /// its own comment, *"a carriage must not wait on one"*; this half was
-    /// not, so a nodeless pair crossed the optical channel, the proximity
-    /// and the capture and then stopped dead at the conversation with *no
+    /// not, so a nodeless pair crossed the optical channel and the capture
+    /// and then stopped dead at the conversation with *no
     /// serving node is attached* — 49 seconds in, with everything the
     /// record needed already in hand [measured, 2026-10-07].
     ///

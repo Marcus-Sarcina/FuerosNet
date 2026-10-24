@@ -7,15 +7,14 @@ mod common;
 use common::harness::*;
 use common::*;
 use rhtn_client::ceremony::*;
-use rhtn_client::device::ChannelKind;
 use rhtn_client::query::VerificationQuery;
 use rhtn_client::verifier::{GrantOutcome, QueryOutcome};
 use rhtn_transport::tls::Credential;
 
 fn desktop_of(name: &str, presented: [u8; 32]) -> Client {
-    let s = setup(&["alice", "bob"], &[ChannelKind::Nfc]);
+    let s = setup(&["alice", "bob"]);
     s.clock.set(1_790_000_000_000);
-    let (dev, _h) = common::harness::device(vec![ChannelKind::Nfc], s.clock.clone(), 77, 0);
+    let (dev, _h) = common::harness::device(s.clock.clone(), 77, 0);
     Client::delegated(id(name).public, presented, ids(), Config::default(), dev)
 }
 
@@ -61,9 +60,9 @@ fn a_device_holding_no_seed_refuses_what_the_identity_key_signs() {
 /// key, for one window; a run is contiguous.
 #[test]
 fn the_ceremony_device_delegates_to_a_transport_key_another_device_minted() {
-    let s = setup(&["alice", "bob"], &[ChannelKind::Nfc]);
+    let s = setup(&["alice", "bob"]);
     s.clock.set(1_790_000_000_000);
-    let (dev, _h) = common::harness::device(vec![ChannelKind::Nfc], s.clock.clone(), 77, 0);
+    let (dev, _h) = common::harness::device(s.clock.clone(), 77, 0);
     let phone = Client::new(id("bob"), ids(), Config::default(), dev);
     assert!(phone.holds_seed());
 
@@ -80,7 +79,7 @@ fn the_ceremony_device_delegates_to_a_transport_key_another_device_minted() {
     assert!(cred.current().is_some());
     // one by alice for the same key is not bob's to hold
     let alices = {
-        let (dev, _h) = common::harness::device(vec![ChannelKind::Nfc], s.clock.clone(), 78, 0);
+        let (dev, _h) = common::harness::device(s.clock.clone(), 78, 0);
         Client::new(id("alice"), ids(), Config::default(), dev)
             .delegate(&key, 1_790_000_000)
             .unwrap()

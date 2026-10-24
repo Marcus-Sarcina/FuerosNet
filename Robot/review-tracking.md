@@ -18984,6 +18984,21 @@ which depends on the current step machine.
 progress; this is the record of the ruling so it is not lost between
 sessions.
 
+**And then, the same day, the rulings that start the work** [author,
+2026-10-24: "Drop ranging entirely, keep the window at 30 s, go ahead"]:
+
+- **Ranging is dropped entirely** — the NFC tap and UWB both. This
+  supersedes "Leave the NFC tap as-is" [author, 2026-10-21]. What the
+  design keeps as co-presence evidence is the optical exchange and the
+  capture; route latency (§7.6) is a separate mechanism and is not
+  "ranging" — that reading is mine and is stated in the output for
+  correction. The sweep is by search: the documents first (the design
+  wins), then the catalogue and vectors, then the kernel and shell.
+- **The field-test window stays 30 s** for the first runs of the
+  restructured regime.
+- **Go ahead** with the post-optical regime as one concurrent state; A5
+  runs on it. Fallback point: tag `pre-regime` on `973b0e0`.
+
 **The three questions, answered** [author, 2026-10-24]:
 
 1. *Presence figures (design §7.5) — now or after A5?* **Deferred**: "there's

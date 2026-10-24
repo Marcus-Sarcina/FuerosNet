@@ -3,7 +3,7 @@
 **Draft. Spec-derived, unverified by an implementation.** See
 [README.md](README.md).
 
-**Pinned**: wire-format.md `e59f38e064a12e19f07cccefd7e2db9bdb425d0c58157f79afb664819adcecd8` · network-design.md `6a7c009e00519febcbd65a463512594bd06ac2a6a73a5ece4ca077fc1c1713dd`
+**Pinned**: wire-format.md `318dfcd2564bee7a146a0128a8bbea893b7bdd32edc9a8a1ed26e663cfdc74df` · network-design.md `0510c48a6e681d966a85e014444e27e3c518e8ceca89d262cd77ddd0c08325b1`
 
 ## The result model is structured, not a single status
 
@@ -129,7 +129,7 @@ works, not inputs.
 | R12 | A formation-subtype record carrying a witness array | Formation records omit fields 4 and 5 entirely (§3.2); their absence is half of what separates a bootstrap from an ordinary meeting |
 | R13 | A formation-subtype record carrying verifier responses | Same rule, field 5 |
 | R14 | ~~window-ordinal mismatch~~ | **Retired 2026-09-01** with body key 7 and deterministic selection; the id is not reused. *The note this row briefly carried — key 7 as a preserved unknown extension — was superseded 2026-09-02 by the tombstone ruling*: a decoder meeting a retired number REJECTS (§4.5, T50) |
-| R11 | A revealed `proximity` whose `strongest` lacks `result = pass`, or with a higher-ranked passing channel | **Revealed and violated → `structural = malformed`** — it is a structural rule like any other, and §3.2 now says so explicitly. Withheld → `checks[strongest] = unverifiable(withheld)`, never valid and never malformed. *An earlier revision of this row said the revealed case was a failed check rather than malformed — the sixth review caught the drift* |
+| R11 | *Withdrawn 2026-10-24.* The `proximity` disclosure and its `strongest` rule no longer exist: ranging is dropped [author, 2026-10-24]. The number is not reused | — |
 
 ### Transaction and record bindings (§4)
 
@@ -287,7 +287,7 @@ admits and another refuses propagates rather than stopping where it arrived:
 | D16 | A record whose witnesses all carry the same `nominated_by` | Wire-valid (§3.2 requires only that each names a participant); the nomination split is the reference client's warning, never a validity condition (`light-client-requirements.md` §1.0) |
 | D17 | The counter-jump pair read as state: `[5,42]` then `[5,100]` | `state_action = replace` — and the reverse order is `ignore_stale`, not an error: absence of prior state is acceptable and staleness is ordinary (§2.3) |
 | D18 | A bounded unknown extension whose value is a tagged item, float, or any other deterministic CBOR item outside the schemas' types | §1 [author, 2026-09-01]: **opaque encoded slices, preserved and never interpreted** — uninterpretable state kept for a reader that may understand it later. An implementation reconstructing extensions through a typed model drops what it cannot type, and fails here |
-| D19 | A `Proximity` disclosure carrying the same channel kind twice — failed, then retried and passing | §4.5 [2026-09-02]: a kind may repeat; a retried channel is two measurements, both evidence. A validator imposing one-entry-per-kind rejects a valid record (`P-channel-retry`) |
+| D19 | *Withdrawn 2026-10-24.* The `Proximity` disclosure no longer exists: ranging is dropped [author, 2026-10-24]. The number is not reused | — |
 | D21 | The recovery adoption (`transactions.md`), which carries **neither** field 8 nor field 9 | Its evidence is field 6 (design §6.1.1): a recovery's presence half is embedded, not referenced. A decoder demanding field 8 on every adoption rejects every recovery |
 | D22 | A `CurrencyAttestation` whose field 2 differs from field 1 (`P-currency-successor`) | §7.1 [author, 2026-09-18]: field 2 is what the issuer vouches is live, a rotation-or-fork signal, never a redirect; a decoder that required equality would remove fork detection from the currency path (CUR-20) |
 | D23 | A `CurrencyAttestation` signed under the issuer's identity with no field 8 (`records.md`) | §7.1: field 8 is present iff the signature is under a delegated key; an issuer holding its seed carries none |
@@ -331,5 +331,5 @@ an invalid neighbour), the `NetworkPoint` port at 65535/65536,
 u32/u64 edges, epoch saturation, ordinal transitions, **the presence
 finalization gap at 0 / 86,400 / 86,401 seconds (D10/D11/R3)**, and
 fixed-width keyhash fields at 31/32/33 bytes wherever one appears. Bounds of genuinely uncovered objects (prekey blobs, catalog
-sizes, capabilities, sibling lists, scope lists, corroborations, proximity
-channels, asserted locations, recovery responses) join when their objects do.
+sizes, capabilities, sibling lists, scope lists, corroborations, asserted
+locations, recovery responses) join when their objects do.

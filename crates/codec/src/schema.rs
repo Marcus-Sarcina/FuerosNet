@@ -738,7 +738,7 @@ pub fn check_type(b: &[u8], at: usize, t: T) -> Result<(), Error> {
         }
         ArchiveEntries => {
             // a map is an envelope and an array a presentation, an
-            // envelope beside seven disclosure slots (`wire-format.md` §7.9,
+            // envelope beside six disclosure slots (`wire-format.md` §7.9,
             // §4.5.1); the signatures are the verifier's business
             let entries = array_item_ranges(b, at).ok_or(Error("archive entries not array"))?;
             if entries.len() > ARCHIVE_SUBSET_REFS {
@@ -753,7 +753,7 @@ pub fn check_type(b: &[u8], at: usize, t: T) -> Result<(), Error> {
                     Item::Array(ref parts) => {
                         if parts.len() != 2
                             || !matches!(parts[0], Item::Map(_))
-                            || !matches!(&parts[1], Item::Array(s) if s.len() == 7)
+                            || !matches!(&parts[1], Item::Array(s) if s.len() == 6)
                         {
                             return Err(Error("presented record shape"));
                         }
@@ -1102,54 +1102,6 @@ fn record_extension_bounds(b: &[u8], kind: &str, item: &Item) -> Result<(), Erro
         "SignedLocator" => nested_extension_bounds(b, 0, 2, &|k| (1..=4).contains(&k)),
         _ => Ok(()),
     }
-}
-
-/// The §4.5 `Channel` maps, exactly as a record's proximity field and a
-/// `ProximityOutcomes` exchange (`wire-format.md` §14.3.2) both carry
-/// them.  Each channel's kind and outcome are closed enumerations, and
-/// §1.2 rejects an unknown value in a known enumerated field.
-///
-/// `signed` picks which of §1's two rules an unknown key falls under:
-/// inside a signed record it is an extension the holder preserves, and
-/// the caller bounds it; on an unsigned message it is refused.
-fn channels_ok(ch: &[Item], signed: bool) -> Result<(), Error> {
-    for c in ch {
-        let Item::Map(cm) = c else {
-            return Err(Error("channel not map"));
-        };
-        if !signed {
-            let known = cm
-                .iter()
-                .filter(|(k, _)| matches!(k, Item::Uint(1..=4)))
-                .count();
-            if known != cm.len() {
-                return Err(Error("unknown key on an unsigned message"));
-            }
-        }
-        match map_get(cm, 1).and_then(as_uint) {
-            Some(1..=4) => {}
-            _ => return Err(Error("channel kind out of range")),
-        }
-        match map_get(cm, 2).and_then(as_uint) {
-            Some(0..=2) => {}
-            _ => return Err(Error("channel outcome out of range")),
-        }
-        // field 3 is `? uint` with no presence condition (§4.5): whether a
-        // kind carries a claimed resolution is the client's claim and
-        // policy weighs it, but what is carried is a uint or the field is
-        // malformed -- it was the one `Channel` field nothing checked
-        // [2026-09-30]
-        match map_get(cm, 3) {
-            Some(Item::Uint(_)) | None => {}
-            _ => return Err(Error("channel resolution is a uint")),
-        }
-        match map_get(cm, 4) {
-            Some(Item::Bytes(r)) if !r.is_empty() && r.len() <= 128 => {}
-            None => {}
-            _ => return Err(Error("channel evidence out of range")),
-        }
-    }
-    Ok(())
 }
 
 /// A `Candidate` array (`wire-format.md` §14.3.2): one to eight, each
@@ -1529,26 +1481,6 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             }
             Ok(())
         }
-        "Proximity" => {
-            let Item::Map(m) = item else {
-                return Err(Error("not map"));
-            };
-            let Item::Array(ch) = map_get(m, 1).ok_or(Error("channels"))? else {
-                return Err(Error("channels not array"));
-            };
-            if ch.is_empty() || ch.len() > PROXIMITY_CHANNELS_PER_RECORD {
-                return Err(Error("channel count"));
-            }
-            // a record's channels are under its signature, so their unknown
-            // keys are kept and bounded like any signed map's (§1.3)
-            nested_extension_bounds(b, 0, 1, &|k| (1..=4).contains(&k))?;
-            channels_ok(ch, true)?;
-            match map_get(m, 2).and_then(as_uint) {
-                Some(1..=4) => {}
-                _ => return Err(Error("strongest channel out of range")),
-            }
-            Ok(())
-        }
         // ---- the local device-to-device interfaces (`wire-format.md` §14.3)
         "OpticalContribution" => {
             let Item::Array(a) = item else {
@@ -1658,28 +1590,6 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
         }
         "Introduction" => introduction_ok(b, 0),
         "AnchoredIntroduction" => anchored_introduction_ok(b, 0),
-        "ProximityOutcomes" => {
-            let Item::Array(a) = item else {
-                return Err(Error("not array"));
-            };
-            if a.len() != 3 {
-                return Err(Error("three fields"));
-            }
-            if as_uint(&a[0]) != Some(1) {
-                return Err(Error("version 1"));
-            }
-            match &a[1] {
-                Item::Bytes(r) if r.len() == 32 => {}
-                _ => return Err(Error("a ceremony-id is 32 bytes")),
-            }
-            let Item::Array(ch) = &a[2] else {
-                return Err(Error("channels not array"));
-            };
-            if ch.is_empty() || ch.len() > PROXIMITY_CHANNELS_PER_RECORD {
-                return Err(Error("one to eight channels"));
-            }
-            channels_ok(ch, false)
-        }
         "Candidates" => candidates_ok(item),
         "CandidateHandover" => {
             let Item::Array(a) = item else {
@@ -1917,25 +1827,15 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             }
             Ok(())
         }
-        "ProximityUpdate" => {
-            let Item::Map(m) = item else {
-                return Err(Error("not map"));
-            };
-            if m.len() != 2 {
-                return Err(Error("keys 1 and 2"));
-            }
-            if keyhash_at(b, m, 1).map(|k| k.len()) != Some(32) {
-                return Err(Error("a ceremony-id is 32 bytes"));
-            }
-            let ch = map_get(m, 2).ok_or(Error("the channel"))?;
-            channels_ok(std::slice::from_ref(ch), false)
-        }
         "WitnessRequest" => {
             let Item::Map(m) = item else {
                 return Err(Error("not map"));
             };
-            if m.len() != 5 || !(1..=5).all(|k| map_get(m, k).is_some()) {
-                return Err(Error("keys 1 to 5"));
+            // key 4 (the proximity channels measured so far) was RETIRED
+            // 2026-10-24: ranging is not used (`wire-format.md` §7.10.2);
+            // the number is not reused and a decoder meeting it rejects
+            if m.len() != 4 || ![1, 2, 3, 5].iter().all(|k| map_get(m, *k).is_some()) {
+                return Err(Error("keys 1, 2, 3 and 5"));
             }
             // the engagement handle this request closes [author, 2026-10-19]
             if keyhash_at(b, m, 5).map(|k| k.len()) != Some(32) {
@@ -1957,13 +1857,7 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
                 }
             }
             map_get(m, 3).and_then(as_uint).ok_or(Error("started_at"))?;
-            let Some(Item::Array(ch)) = map_get(m, 4) else {
-                return Err(Error("channels not array"));
-            };
-            if ch.len() > WITNESS_REQUEST_CHANNELS {
-                return Err(Error("channels over eight"));
-            }
-            channels_ok(ch, false)
+            Ok(())
         }
         "WitnessAnswer" => {
             let Item::Map(m) = item else {
@@ -2073,8 +1967,8 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
                 return Err(Error("disclosures not array"));
             };
             // every slot revealed, so a signer recomputes the root (§4.5.1)
-            if set.len() != 7 {
-                return Err(Error("exactly seven disclosures"));
+            if set.len() != 6 {
+                return Err(Error("exactly six disclosures"));
             }
             for d in set {
                 let Item::Array(f) = d else {
@@ -3054,7 +2948,7 @@ mod shapes {
         emit_uint(&mut o, 1);
         emit_bstr(&mut o, body);
         emit_uint(&mut o, 2);
-        emit_array_head(&mut o, 7);
+        emit_array_head(&mut o, 6);
         for label in [
             "capture",
             "location",
@@ -3062,7 +2956,6 @@ mod shapes {
             "p0.retention",
             "p1.integrity",
             "p1.retention",
-            "proximity",
         ] {
             emit_array_head(&mut o, 3);
             bstr(&mut o, 16, 4);
@@ -3138,71 +3031,6 @@ mod shapes {
         // the signature slot stays on the side the carriage puts it
         assert!(checked("DeviceIntroduction", &introduction(&bundle(true, None))).is_err());
         assert!(checked("DeviceCredential", &credential(&bundle(false, None))).is_err());
-    }
-
-    fn channel(unknown_key: bool) -> Vec<u8> {
-        let mut o = Vec::new();
-        emit_map_head(&mut o, if unknown_key { 3 } else { 2 });
-        emit_uint(&mut o, 1);
-        emit_uint(&mut o, 2);
-        emit_uint(&mut o, 2);
-        emit_uint(&mut o, 0);
-        if unknown_key {
-            emit_uint(&mut o, 9);
-            emit_uint(&mut o, 1);
-        }
-        o
-    }
-
-    fn outcomes(ch: &[u8]) -> Vec<u8> {
-        let mut o = Vec::new();
-        emit_array_head(&mut o, 3);
-        emit_uint(&mut o, 1);
-        bstr(&mut o, 32, 5);
-        emit_array_head(&mut o, 1);
-        o.extend_from_slice(ch);
-        o
-    }
-
-    fn witness_request(ch: &[u8]) -> Vec<u8> {
-        let mut o = Vec::new();
-        emit_map_head(&mut o, 5);
-        emit_uint(&mut o, 1);
-        bstr(&mut o, 32, 5);
-        emit_uint(&mut o, 2);
-        emit_array_head(&mut o, 2);
-        bstr(&mut o, 32, 6);
-        bstr(&mut o, 32, 7);
-        emit_uint(&mut o, 3);
-        emit_uint(&mut o, 1_700_000_000);
-        emit_uint(&mut o, 4);
-        emit_array_head(&mut o, 1);
-        o.extend_from_slice(ch);
-        emit_uint(&mut o, 5);
-        bstr(&mut o, 32, 8);
-        o
-    }
-
-    fn proximity(ch: &[u8]) -> Vec<u8> {
-        let mut o = Vec::new();
-        emit_map_head(&mut o, 2);
-        emit_uint(&mut o, 1);
-        emit_array_head(&mut o, 1);
-        o.extend_from_slice(ch);
-        emit_uint(&mut o, 2);
-        emit_uint(&mut o, 2);
-        o
-    }
-
-    #[test]
-    fn an_unknown_channel_key_is_refused_unsigned_and_kept_signed() {
-        assert!(checked("ProximityOutcomes", &outcomes(&channel(false))).is_ok());
-        assert!(checked("ProximityOutcomes", &outcomes(&channel(true))).is_err());
-        assert!(checked("WitnessRequest", &witness_request(&channel(false))).is_ok());
-        assert!(checked("WitnessRequest", &witness_request(&channel(true))).is_err());
-        // a record's proximity is under its signature: the key is kept
-        assert!(checked("Proximity", &proximity(&channel(false))).is_ok());
-        assert!(checked("Proximity", &proximity(&channel(true))).is_ok());
     }
 
     #[test]

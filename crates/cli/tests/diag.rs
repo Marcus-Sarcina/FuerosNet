@@ -84,7 +84,7 @@ fn two_files_merge_by_their_anchors_into_one_timeline() {
     let timeline = diag::render_timeline(&lines);
     assert!(timeline.starts_with("        +0  rhtnd"), "{timeline}");
     assert!(
-        timeline.contains("cer.abort  abort=NoProximity  step=capture"),
+        timeline.contains("cer.abort  abort=Declined  step=capture"),
         "{timeline}"
     );
 

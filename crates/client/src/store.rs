@@ -728,7 +728,7 @@ fn decode_keys(b: &[u8]) -> Option<Vec<Keyhash>> {
 fn encode_disclosures(d: &DisclosureSet) -> Vec<u8> {
     use rhtn_codec::encode::*;
     let mut out = Vec::new();
-    emit_array_head(&mut out, 7);
+    emit_array_head(&mut out, 6);
     for one in d {
         emit_array_head(&mut out, 2);
         emit_bstr(&mut out, &one.salt);
@@ -737,14 +737,14 @@ fn encode_disclosures(d: &DisclosureSet) -> Vec<u8> {
     out
 }
 
-/// **The labels are not written.** A disclosure set is the seven labels in
+/// **The labels are not written.** A disclosure set is the six labels in
 /// their fixed order (`wire-format.md` §4.5.1), so storing them would be
-/// storing the same seven strings against every record — and a file whose
+/// storing the same six strings against every record — and a file whose
 /// labels disagreed with the order would be a set this client cannot use
 /// anyway.
 fn decode_disclosures(b: &[u8]) -> Option<DisclosureSet> {
-    let a = array_of(b, 7)?;
-    let mut out: Vec<crate::record::Disclosure> = Vec::with_capacity(7);
+    let a = array_of(b, 6)?;
+    let mut out: Vec<crate::record::Disclosure> = Vec::with_capacity(6);
     for (i, item) in a.iter().enumerate() {
         let rhtn_codec::cbor::Item::Array(f) = item else {
             return None;

@@ -9,7 +9,6 @@ use common::{id, ids, kh};
 use rhtn_archive::locator::signed_locator;
 use rhtn_archive::tx::{Locator, Seqno};
 use rhtn_client::contacts::{Contact, How, prune, upstream_held};
-use rhtn_client::device::ChannelKind;
 use std::collections::BTreeMap;
 
 /// The subnet the fixtures' positions are in (`wire-format.md` §2.3 field 4).
@@ -18,7 +17,7 @@ const SUBNET: [u8; 32] = [0xdb; 32];
 // acceptance: TOP-040
 #[test]
 fn a_meeting_leaves_each_party_a_contact_of_the_other_with_a_locator() {
-    let mut s = setup(&["alice", "bob"], &[ChannelKind::Nfc]);
+    let mut s = setup(&["alice", "bob"]);
     // the local exchanges are what pin a counterparty and hold its
     // locator: the code read from its screen and the intent it sent. The
     // record of the meeting is evidence, and it is what says they met
@@ -60,7 +59,7 @@ fn a_meeting_leaves_each_party_a_contact_of_the_other_with_a_locator() {
 // acceptance: TOP-040
 #[test]
 fn an_introduced_stranger_is_a_contact_with_material_to_verify_by() {
-    let mut s = setup(&["alice", "bob", "carol", "w1"], &[ChannelKind::Nfc]);
+    let mut s = setup(&["alice", "bob", "carol", "w1"]);
     // alice and bob have met: the record of it is evidence, built as test
     // data rather than by running a second ceremony driver
     s.met("alice", "bob", "w1");
@@ -106,12 +105,12 @@ fn an_introduced_stranger_is_a_contact_with_material_to_verify_by() {
 // acceptance: TOP-040
 #[test]
 fn contacts_survive_a_restart_and_introductions_still_build() {
-    let mut s = setup(&["alice", "bob"], &[ChannelKind::Nfc]);
+    let mut s = setup(&["alice", "bob"]);
     s.met("alice", "bob", "w1");
     s.meet_locally("alice", "bob", &[], &[])
         .expect("alice and bob exchange");
     let blob = s.client("alice").durable();
-    let (dev, _h) = common::harness::device(vec![ChannelKind::Nfc], s.clock.clone(), 23, 0);
+    let (dev, _h) = common::harness::device(s.clock.clone(), 23, 0);
     // started knowing nobody, as a phone is
     let mut again =
         rhtn_client::ceremony::Client::new(id("alice"), vec![], Default::default(), dev);
@@ -226,7 +225,7 @@ fn a_contact_round_trips_through_the_store_and_a_bare_locator_is_not_one() {
 /// all, so a `People` screen had nothing to call [2026-10-13].
 #[test]
 fn an_introduction_taken_leaves_an_identity_a_contact_and_a_position() {
-    let mut s = setup(&["alice", "bob", "w1"], &[ChannelKind::Nfc]);
+    let mut s = setup(&["alice", "bob", "w1"]);
     // bob sits under w1, and says so
     let under = Locator {
         anchor: kh("w1"),
@@ -290,7 +289,7 @@ fn an_introduction_taken_leaves_an_identity_a_contact_and_a_position() {
 /// [2026-10-13].
 #[test]
 fn an_endpoint_record_gives_an_introduced_party_an_address_to_start_from() {
-    let mut s = setup(&["alice", "bob", "w1"], &[ChannelKind::Nfc]);
+    let mut s = setup(&["alice", "bob", "w1"]);
     let under = Locator {
         anchor: kh("w1"),
         path: vec![0x10],
@@ -379,7 +378,7 @@ fn an_endpoint_record_gives_an_introduced_party_an_address_to_start_from() {
 /// make its own.
 #[test]
 fn a_card_carries_an_introduction_and_the_records_of_its_anchor() {
-    let mut s = setup(&["alice", "bob", "w1"], &[ChannelKind::Nfc]);
+    let mut s = setup(&["alice", "bob", "w1"]);
     let point = {
         let mut p = Vec::new();
         rhtn_transport::session::NetworkPoint::new([127, 0, 0, 1], Some(5001)).encode(&mut p);
@@ -457,7 +456,7 @@ fn a_card_carries_an_introduction_and_the_records_of_its_anchor() {
 /// upstreams.
 #[test]
 fn a_hop_of_the_walk_is_filed_with_the_address_it_was_heard_at() {
-    let mut s = setup(&["alice", "bob", "w1"], &[ChannelKind::Nfc]);
+    let mut s = setup(&["alice", "bob", "w1"]);
     let point = |port: u64| {
         let mut p = Vec::new();
         rhtn_transport::session::NetworkPoint::new([127, 0, 0, 1], Some(port)).encode(&mut p);
@@ -547,7 +546,7 @@ fn a_hop_of_the_walk_is_filed_with_the_address_it_was_heard_at() {
 /// [author, 2026-10-14].
 #[test]
 fn a_record_that_arrives_leaves_every_signer_a_contact() {
-    let mut s = setup(&["alice", "bob", "witness"], &[ChannelKind::Nfc]);
+    let mut s = setup(&["alice", "bob", "witness"]);
     let t = s.met("alice", "bob", "witness");
     for (who, other) in [("alice", "bob"), ("bob", "alice")] {
         let c = s.client(who);

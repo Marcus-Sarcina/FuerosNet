@@ -18,23 +18,22 @@ use rhtn_codec::schema;
 use rhtn_crypto::verify::Lookup;
 use std::collections::{BTreeMap, BTreeSet};
 
-/// The seven disclosable labels, in ascending byte order
+/// The six disclosable labels, in ascending byte order
 /// (`wire-format.md` §4.5.1.1).
-pub const LABELS: [&str; 7] = [
+pub const LABELS: [&str; 6] = [
     "capture",
     "location",
     "p0.integrity",
     "p0.retention",
     "p1.integrity",
     "p1.retention",
-    "proximity",
 ];
 
 /// One disclosable field: its label, a fresh 16-byte salt, and the CBOR the
 /// field carries.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Disclosure {
-    /// Which of the seven this is.
+    /// Which of the six this is.
     pub label: &'static str,
     /// The salt it is hashed under, fresh per record.
     pub salt: [u8; 16],
@@ -62,10 +61,10 @@ impl Disclosure {
     }
 }
 
-/// The seven disclosures, one per label in label order.
-pub type DisclosureSet = [Disclosure; 7];
+/// The six disclosures, one per label in label order.
+pub type DisclosureSet = [Disclosure; 6];
 
-/// `SHA-256(0x01 || the seven digests in label order)`: body field 8.
+/// `SHA-256(0x01 || the six digests in label order)`: body field 8.
 pub fn disclosure_root(set: &DisclosureSet) -> [u8; 32] {
     let mut pre = vec![1u8];
     for d in set {
@@ -74,36 +73,13 @@ pub fn disclosure_root(set: &DisclosureSet) -> [u8; 32] {
     sha256(&pre)
 }
 
-/// A disclosure set over the seven values, salted fresh.
-pub fn disclosures(values: [Vec<u8>; 7], salts: [[u8; 16]; 7]) -> DisclosureSet {
+/// A disclosure set over the six values, salted fresh.
+pub fn disclosures(values: [Vec<u8>; 6], salts: [[u8; 16]; 6]) -> DisclosureSet {
     let mut it = values.into_iter().zip(salts).zip(LABELS);
     std::array::from_fn(|_| {
-        let ((value, salt), label) = it.next().expect("seven");
+        let ((value, salt), label) = it.next().expect("six");
         Disclosure { label, salt, value }
     })
-}
-
-/// A proximity value (`wire-format.md` §4.5): the channels tried, each
-/// (kind, result, resolution in metres), and the strongest that passed.
-pub fn proximity_value(channels: &[(u64, u64, Option<u64>)], strongest: u64) -> Vec<u8> {
-    let mut out = Vec::new();
-    emit_map_head(&mut out, 2);
-    emit_uint(&mut out, 1);
-    emit_array_head(&mut out, channels.len());
-    for (kind, result, resolution) in channels {
-        emit_map_head(&mut out, 2 + resolution.is_some() as usize);
-        emit_uint(&mut out, 1);
-        emit_uint(&mut out, *kind);
-        emit_uint(&mut out, 2);
-        emit_uint(&mut out, *result);
-        if let Some(r) = resolution {
-            emit_uint(&mut out, 3);
-            emit_uint(&mut out, *r);
-        }
-    }
-    emit_uint(&mut out, 2);
-    emit_uint(&mut out, strongest);
-    out
 }
 
 /// A capture value (`wire-format.md` §4.5): modality, image count, liveness
@@ -358,13 +334,13 @@ pub fn witness_check(started_at: u64, observed: u64, tolerance: u64) -> Result<(
 }
 
 /// A presentation (`wire-format.md` §4.5.1.3): the envelope and exactly
-/// seven slots in label order, each the disclosure revealed or its digest
+/// six slots in label order, each the disclosure revealed or its digest
 /// withheld.  Nothing is revealed unless named.
 pub fn present(envelope: &[u8], set: &DisclosureSet, reveal: &[&str]) -> Vec<u8> {
     let mut out = Vec::new();
     emit_array_head(&mut out, 2);
     out.extend_from_slice(envelope);
-    emit_array_head(&mut out, 7);
+    emit_array_head(&mut out, 6);
     for d in set {
         if reveal.contains(&d.label) {
             out.extend_from_slice(&d.encode());
@@ -453,8 +429,7 @@ fn is_uint(it: &Item) -> bool {
     matches!(it, Item::Uint(_))
 }
 
-/// The value schema for one label (`wire-format.md` §4.5.1.1's table), and
-/// the `strongest`-channel rule where `proximity` is revealed (§3.2).
+/// The value schema for one label (`wire-format.md` §4.5.1.1's table).
 fn check_value(label: &str, b: &[u8], item: &Item) -> Result<(), String> {
     match label {
         "capture" => {
@@ -471,33 +446,6 @@ fn check_value(label: &str, b: &[u8], item: &Item) -> Result<(), String> {
             Ok(())
         }
         "location" => schema::check_kind(b, "LocationEvidence", item).map_err(|e| e.0.to_string()),
-        "proximity" => {
-            schema::check_kind(b, "Proximity", item).map_err(|e| e.0.to_string())?;
-            let Item::Map(m) = item else { unreachable!() };
-            let strongest = map_get(m, 2).and_then(as_uint).ok_or("strongest")?;
-            let Some(Item::Array(ch)) = map_get(m, 1) else {
-                unreachable!()
-            };
-            let mut passed = Vec::new();
-            for c in ch {
-                let Item::Map(cm) = c else {
-                    return Err("channel not a map".into());
-                };
-                let kind = map_get(cm, 1).and_then(as_uint).ok_or("channel kind")?;
-                let result = map_get(cm, 2).and_then(as_uint).ok_or("channel result")?;
-                if !(1..=4).contains(&kind) || result > 2 {
-                    return Err("channel out of range".into());
-                }
-                if result == 0 {
-                    passed.push(kind);
-                }
-            }
-            // ranking is UWB 1 > NFC 2 > optical 3 > latency 4
-            if !passed.contains(&strongest) || passed.iter().any(|k| *k < strongest) {
-                return Err("strongest is not the highest-ranked channel that passed".into());
-            }
-            Ok(())
-        }
         "p0.retention" | "p1.retention" => {
             if is_uint(item) {
                 Ok(())
@@ -526,7 +474,7 @@ fn check_value(label: &str, b: &[u8], item: &Item) -> Result<(), String> {
 }
 
 /// Read a presentation: the envelope verified under the keys held, exactly
-/// seven slots, each withheld digest taken as given and each revealed
+/// six slots, each withheld digest taken as given and each revealed
 /// disclosure hashed after its salt, label position and value schema are
 /// checked, and the root recomputed against body field 8.  A mismatch is
 /// malformed.
@@ -540,8 +488,8 @@ pub fn read_presentation<L: Lookup + ?Sized>(ids: &L, bytes: &[u8]) -> Result<Pr
     let record = Record::parse(env)?;
     rhtn_crypto::verify::envelope(ids, env).map_err(|e| e.to_string())?;
     let slots = array_item_ranges(bytes, outer[1].start).ok_or("slots not an array")?;
-    if slots.len() != 7 {
-        return Err("exactly seven slots".into());
+    if slots.len() != 6 {
+        return Err("exactly six slots".into());
     }
     let mut pre = vec![1u8];
     let mut out = Presented {

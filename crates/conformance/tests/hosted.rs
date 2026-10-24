@@ -8,10 +8,6 @@ use std::{rc::Rc,sync::Arc,time::Duration};
 fn boxed_identity(name: &str)->Box<rhtn_crypto::SigningIdentity> { Box::new(test_identity(name)) }
 
 struct DeviceStub;
-impl Proximity for DeviceStub {
-    fn supported(&self)->Vec<ChannelKind> { vec![] }
-    fn run(&self,kind:ChannelKind,_:&Keyhash)->ChannelOutcome { ChannelOutcome{kind,result:ChannelResult::Unavailable,resolution_m:None} }
-}
 impl Camera for DeviceStub {
     fn capture(&self,_:Prompt)->RawFrame { RawFrame{pixels:vec![],metadata:Default::default()} }
 
@@ -53,7 +49,7 @@ async fn r10_wrong_requester_must_not_cancel_another_requesters_pending_query() 
         let ids=vec![subject.public.clone(),test_identity("bob").public,requester.clone(),stranger.clone()];
         let handle=Handle::spawn(move || {
             let mut cfg=Config::default();cfg.verifier.grant_buffer_ms=5000;
-            let device=Device{proximity:Rc::new(DeviceStub),camera:Rc::new(DeviceStub),clock:Rc::new(DeviceStub),random:Rc::new(DeviceStub),operator:Rc::new(DeviceStub),notifier:Rc::new(Silent),engine:Rc::new(HashEngine::new(16)),direct:Rc::new(Reachable::default())};
+            let device=Device{camera:Rc::new(DeviceStub),clock:Rc::new(DeviceStub),random:Rc::new(DeviceStub),operator:Rc::new(DeviceStub),notifier:Rc::new(Silent),engine:Rc::new(HashEngine::new(16)),direct:Rc::new(Reachable::default())};
             Client::new(test_identity("bob"),ids,cfg,device)
         }).unwrap();
         let (courier,_app)=Courier::new(handle.clone(),Arc::new(ServingStub),Arc::new(NoDirect(Reachable::default())));

@@ -209,14 +209,11 @@ malformed, not merely unusual.
 | Verifier responses per presence record | 32 — **two subjects × a per-subject threshold capped at 10**, with headroom. Sixteen does not fit: two well-connected participants require ten each |
 | Asserted locations per record | 4 |
 | Corroborations per record | 16 (one per witness) |
-| Proximity channels per record | 8 |
 | Explicit-scope keyhash list | 256 |
 | NetworkPoint entries per anchor entry or endpoint record (§7.2, §7.6) | 8 — this row is the anchor entry's and the endpoint record's alone; **peering carries exactly one `NetworkPoint` or `Locator` per endpoint** (§4.4) |
 | `Introduction` entries per `IntentExchange` or `BundleContinuation` (§14.3.2) | 256 — a bound on the carriage; the bundle itself has none (§5.4) |
-| `Channel` entries per `ProximityOutcomes` (§14.3.2) | 8 — the same ceiling as proximity channels per record, above |
 | `Candidate` entries per `CandidateHandover` or per payload-path candidate exchange (§14.3.2) | 8 |
 | `Introduction` entries per `FishingProposal` (§7.10.2) | 1 — one candidate per proposal, in turns (§5.1) |
-| `Channel` entries per `WitnessRequest` (§7.10.2) | 8 — the proximity-channel ceiling above |
 | `VerifierResponse` entries per `GatheredResponses` (§7.10.2) | 32 — the per-record bound above |
 | `COSE_Signature` entries per `SigningReply` (§7.10.2) | 2 — one logical signer (§3.5) |
 | Delegations per `DeviceCredential` (§14.3.3) | 45 — the run an instance is provisioned with, 90 days end to end (design §12.6.5) |
@@ -694,13 +691,6 @@ Rules a validator checks from the record alone. All were previously unstated.
   assembly closed, and **the verifier sample does not gate it**: an unanswered
   query simply yields no response (§5.5). Late responses arrive as
   `LateResponse` objects (§7.4) and never alter the original record's validity.
-- **`strongest` MUST appear among the channels with `result = pass`, and no
-  higher-ranked channel may appear with `pass`.** Ranking is UWB > NFC > optical >
-  latency (design §7.6.3). Without the second half the field is not
-  deterministic. *Proximity is disclosable (§4.5.1), so this is the one structural
-  rule checked only when its field is revealed — withheld, it reports
-  unverifiable, never valid and never malformed. **Revealed and violated, the
-  record is malformed**, like any structural failure.*
 - **A key may appear in at most one formation record: its first.** A formation record's key 0 list for each signer MUST be exactly
   **the genesis value, `[ SHA-256(signer keyhash) ]`** — the same encoding every
   first transaction carries (§3.1).
@@ -1543,10 +1533,10 @@ Field-for-field per design §8.1.
   ; [2026-09-02]: retired numbers are tombstones, not extension space, the
   ; same rule as §4's type 6 and Scope's tag 3. An unknown key is one the
   ; schema never assigned; a retired key is one it remembers
-  8: bstr .size 32     ; disclosure root (§4.5.1) — commits to the seven
-                       ;   disclosable fields (§4.5.1's label set): proximity,
-                       ;   capture, location, and each Participant's retention
-                       ;   and client integrity
+  8: bstr .size 32     ; disclosure root (§4.5.1) — commits to the six
+                       ;   disclosable fields (§4.5.1's label set): capture,
+                       ;   location, and each Participant's retention and
+                       ;   client integrity
 
   ; key 0 (chain back-pointers) is common to all bodies (see §3.1).
   ; NOTE: no patron signature appears in a presence record. Patrons do not
@@ -1564,24 +1554,6 @@ ClientIntegrity = { 1: bool, 2: uint, 3: ? bstr .size (1..1024) }
                      ; unattested client may still carry scheme evidence and an
                      ; attested one may omit it. Policy reads the combination
                      ; (design §7.8); a validator checks only the shapes
-
-Proximity = {
-  1: [ + Channel ],
-  2: uint              ; strongest channel that passed
-}
-Channel = {
-  1: uint,             ; 1 uwb, 2 nfc, 3 optical, 4 latency. A KIND MAY
-                       ;   REPEAT [2026-09-02]: a channel retried is two
-                       ;   measurements, both evidence — validators impose no
-                       ;   uniqueness rule here
-  2: uint,             ; 0 pass, 1 fail, 2 unavailable
-  3: ? uint,           ; claimed resolution, metres. Syntactically optional with
-                       ;   no presence condition: whether a kind carries one is
-                       ;   the client's claim, and policy weighs it
-  4: ? bstr .size (1..128)
-                       ; session-key binding, where the channel provides one.
-                       ;   Optionality is syntactic only, as field 3
-}
 
 Capture = {
   1: uint,             ; modality: 0 still, 1 stereo, 2 depth
@@ -1761,7 +1733,7 @@ participants' devices.
 
 **A holder can present a presence record without the fields a given recipient has no
 use for.** Scoped deliberately: this hides **location, retention, client
-integrity, capture parameters and proximity channels**, and hides **nothing else**.
+integrity and capture parameters**, and hides **nothing else**.
 See design §8.1.1 for what it does not reach and why. *`started_at` and `subtype`
 are body fields, not disclosable — the structural rules consume them, and
 withholding them concealed nothing the body does not already show (§4.5).*
@@ -1779,9 +1751,9 @@ root         = SHA-256( 0x01 || concatenation of all digests, ascending by label
 ```
 
 `root` is body field 8. **Labels are the field's path**, so a decoder knows what it
-is looking at without a table. **Exactly seven, in ascending byte order**:
+is looking at without a table. **Exactly six, in ascending byte order**:
 `capture`, `location`, `p0.integrity`, `p0.retention`, `p1.integrity`,
-`p1.retention`, `proximity`. A label outside this set is malformed. **`pN` is the
+`p1.retention`. A label outside this set is malformed. **`pN` is the
 participant at index N of field 3**, whose order is the proposer's and not
 keyhash order (§3.2), so
 both clients compute the root over one labelling without a table.
@@ -1790,7 +1762,6 @@ both clients compute the root over one labelling without a table.
 
 | Label | Value |
 |---|---|
-| `proximity` | the `Proximity` map (§4.5) |
 | `capture` | the `Capture` map (§4.5) |
 | `location` | the `LocationEvidence` map (§4.5) |
 | `pN.retention` | `uint` — years the capture is retained (design §7.5.1) |
@@ -1857,14 +1828,11 @@ record is still ~34 KB. This is a disclosure measure, not a bandwidth one.
 ##### 4.5.1.5 What a decoder MUST do
 
 - **Reject a record whose recomputed root does not equal body field 8.**
-- **Reject a slot count other than seven**, a revealed label differing from its
+- **Reject a slot count other than six**, a revealed label differing from its
   slot's position, and a label outside the set above.
 - **Reject a `Disclosure` whose salt is not exactly 16 bytes.**
 - **Reject a revealed value that does not match its label's schema** (the table
   above) — a disclosure is not an extension point.
-- **The `strongest`-channel rule (§3.2) is checked when `proximity` is revealed**,
-  and reported as unverifiable, not valid, not malformed — when it is withheld.
-  It is the one structural rule living in a disclosable field.
 - **Accept any subset of disclosures, including none.** A minimised record is
   well-formed; only a root mismatch is malformed.
 - **Never treat a withheld field as a default value.** Withheld is not zero, not
@@ -1895,7 +1863,7 @@ separately here.
 | Verification by query (§5.6, design §7.3) | **None.** A verifier receives a fuzzed profile and a query id, never the record |
 | Verifier selection (§5) | **None.** Selection is the selector's judgment over the handed bundle; nothing in the record replays it |
 | Response accounting (§5.5) | **None.** Counts and reads field 5 |
-| Structural verification (§3) | **None**, with one stated exception: the `strongest`-channel rule lives in `proximity` and is checked only when revealed. Everything else (signatures, back-pointers, timestamps, subtype rules, participant distinctness) reads the body |
+| Structural verification (§3) | **None.** |
 | Adoption's proof-of-presence reference (§4.1 field 8) | **None.** Confirms the record exists and names these two parties |
 | Archive fetch by a prospective patron (§7.9) | **Holder's choice.** The only exchange with a use for location |
 | Presence-based recovery (§4.1 `Recovery`) | **None.** Reads field 9 |
@@ -3651,7 +3619,7 @@ attribute it; here nothing is read before attribution.
 | 22 | `WitnessSet` (§7.10.2) | Participant to participant, on the local interface: the sender's nominees by locator, for the counterparty's prune (design §7.1 item 4) |
 | 23 | `WitnessKeep` (§7.10.2) | Participant to participant, on the local interface: which of the counterparty's nominees the sender keeps |
 | 24 | `WitnessStanddown` (§7.10.2) | A participant to a nominee of its own that did not survive the counterparty's prune |
-| 25 | `ProximityUpdate` (§7.10.2) | Each participant to the surviving witnesses of both sides, as a proximity channel's outcome lands inside the window (design §7.1 item 5) |
+| 25 | *retired 2026-10-24* — was `ProximityUpdate`; ranging is not used (design §7.6.3). The number is not reused and a decoder meeting it REJECTS | — |
 
 An unknown kind is application payload to a recipient that does not know it,
 and a kind whose body does not decode is dropped by the recipient that
@@ -3659,10 +3627,10 @@ opened it: the sender is attributed, and the message is not evidence.
 
 **Kinds 9 to 18 are the ceremony's conversation** [author, 2026-10-02]:
 everything the two participants and their witnesses say to one another after
-the local exchanges (§14.3). **Kinds 20 to 25 are its opening** [author,
-2026-10-19]: what a participant and its own nominees say to one another from
-the intent, and the one exchange the prune needs between the participants
-themselves — sent before the four-minute window opens, which is why they are
+the local exchanges (§14.3). **Kinds 20 to 24 are its opening** [author,
+2026-10-19; 25 retired 2026-10-24]: what a participant and its own nominees
+say to one another from the intent, and the one exchange the prune needs
+between the participants themselves — sent before the four-minute window opens, which is why they are
 their own kinds rather than early uses of the nine.
 
 **Kinds 15 to 19 also arrange a two-signature transaction after the record**
@@ -3700,9 +3668,7 @@ witness sees them — a witness learns of its survival from the request that
 follows, bound by field 5 to the engagement it was watching, and of its
 dismissal from the standdown; the ceremony-id reaches every nominee twice,
 once as the trace's closing event and again in the request, and the two MUST
-agree. Proximity updates (kind 25) go from each participant to the surviving
-witnesses of both sides as each outcome lands; the counterparty needs none,
-measuring its own (§14.3.2's `ProximityOutcomes`). **A participant takes
+agree. **A participant takes
 the conversation only from its counterparty and its ceremony's witnesses, and
 a witness only from the two participants the request named — and takes kinds
 20, 21 and 24 only from the party that engaged it**; from anyone
@@ -3799,24 +3765,14 @@ WitnessRequest = {
                        ;   closing event where one was sent
   2: [ 2 keyhash ],    ; the participants, in body field 3's order (§4.5)
   3: uint,             ; started_at, the claimed start (§4.5 field 1)
-  4: [ 0*8 Channel ],  ; the proximity channels as measured SO FAR (§4.5):
-                       ;   the channels run inside the window and are never
-                       ;   waited on (design §7.1 item 5), so later outcomes
-                       ;   follow as kind 25 while this carries what the
-                       ;   opening already measured
+                       ; key 4 (the proximity channels measured so far) was
+                       ;   RETIRED 2026-10-24: ranging is not used (design
+                       ;   §7.6.3). The number is not reused, and a decoder
+                       ;   meeting it REJECTS, as §4.5's key 7
   5: bstr .size 32     ; the engagement handle this request closes [author,
                        ;   2026-10-19]: the window opens with this request,
                        ;   and what the witness watched under the handle is
                        ;   what it may later sign
-}
-
-ProximityUpdate = {    ; kind 25: one channel's outcome, sent to the
-                       ;   surviving witnesses of both sides as it lands —
-                       ;   on their clocks, inside the window (design §7.1
-                       ;   item 5). The counterparty is not a recipient: it
-                       ;   measures its own (§14.3.2 `ProximityOutcomes`)
-  1: bstr .size 32,    ; the ceremony-id
-  2: Channel           ; §4.5: the channel and its outcome as measured
 }
 
 WitnessAnswer = {
@@ -5221,11 +5177,10 @@ encoding for every row (§14.3).
 
 **An interface in this class is not intermediable by a wide-area network**
 [author, 2026-09-25]. The two endpoints are in each other's physical
-presence, and the carriage — a radio with metres of range, a tap, a screen
-read by a camera — has no route through which a remote party can interpose
-itself. That is not a claim that the channels are unattackable: design
-§7.6.3 records that deployed UWB has been defeated by physical-layer
-distance reduction, and NFC offers friction rather than a distance bound.
+presence, and the carriage — a radio with metres of range, a screen read by
+a camera — has no route through which a remote party can interpose itself.
+That is not a claim that the channels are unattackable: design §7.6.3
+records that what they supply is friction, not a distance bound.
 **The claim is narrower and is what the rest of the protocol leans on**: an
 attacker must be *there*, and being there is the cost this network meters
 (design §1).
@@ -5260,7 +5215,6 @@ design already depends on.
 |---|---|---|---|
 | The ceremony's intent exchange — the contribution, the bundle of introductions, the sender's locator, the timing and who initiated; the nominees no longer ride it [author, 2026-10-19], each side's set crossing by locator at the prune (§7.10.1 kind 22) | Two participants' devices | design §7.1, §7.5.2, §8.1.2 | `IntentExchange` (§14.3.2), carried by the shell's chosen bearer (§14.3.1) and bound to the pre-commitment. The CBOR is specified; two vendors' clients compute the same pre-commitment, the ceremony-id (design §7.5.2.6), either way |
 | The optical transcript — each device's key material and contribution, then the derived ceremony-id, screen to camera | Two participants' devices | design §7.1 item 3, design §7.5.2, design §12.3 | `OpticalContribution` then `TranscriptConfirm` (§14.3.2): the key material is pinned at this first contact, the contribution is the key-exchange input, the ceremony-id is the transcript hash both display and check |
-| Proximity channel outcomes — the UWB, NFC or optical result and its ranking | Two participants' devices | §3.2, design §7.1 item 5 | `ProximityOutcomes` (§14.3.2): the §4.5 `Channel` maps as measured, anchored to the ceremony-id. The record's `strongest` (§3.2) is not carried — each device computes it from the outcomes, as each computes the ceremony-id |
 | Traversal candidates | Two participants' devices | design §12.6.3 [author, 2026-09-25] | `CandidateHandover` (§14.3.2), carrying the `Candidate` structure this document now defines; the same candidates travel the end-to-end payload path when a direct connection is set up remotely (design §12.6.3, §14.1.1) |
 | The capture-key handover — the key each participant derived for the captures the other holds of them, handed across at capture time | Two participants' devices | design §7.5.2, design §7.5.2.6 | `CaptureKeyHandover` (§14.3.2): the 32-byte key design §7.5.2.6 derives, anchored to the ceremony-id like the proximity outcomes and the candidates [author, 2026-10-02] |
 | A delegated device's payload material, and the ceremony device's signature over it | Two devices of one identity | design §23.3, §7.8 | `DeviceIntroduction` then `DeviceCredential` (§14.3.3): §7.8's bundle unsigned and then signed, beside §8.2's delegations |
@@ -5279,10 +5233,10 @@ now travel **by who the recipient is**, so a participant's leg to the
 co-present counterparty is a local carriage — the two rows above — while a
 witness's or a verifier's leg of the same kind travels the end-to-end
 payload path and is reached through that party's own locator and upstream
-node. The opening's kinds — 20 to 25 of §7.10.1 — split the same way [author,
+node. The opening's kinds — 20 to 24 of §7.10.1 — split the same way [author,
 2026-10-19]: the prune's two legs are between the participants and
 therefore local, while every leg to a nominee — the engagement, the trace,
-the standdown, the updates — is to a party who is somewhere else, and
+the standdown — is to a party who is somewhere else, and
 travels the payload path through that nominee's own node. The content did not change and neither did its encoding; what changed
 is which of the two interfaces each leg takes. **Every leg a witness hears
 still reaches it**, which is how a witness observes the sequence it attests
@@ -5303,10 +5257,9 @@ the room. A shell picks the best bearer it and its counterparty share, and
 the protocol does not name which, the way design §7.1 already leaves the
 carriage to *whatever means the two have*.
 
-**Bluetooth as a bearer is not Bluetooth as proximity evidence.** design
-§7.1 item 5 bars Bluetooth RSSI from the *distance* channel because signal
-strength is attacker-controllable (design §7.6.3). That bar is about evidence of
-nearness. A bearer moving data that is already bound to the optical anchor
+**Bluetooth as a bearer is not Bluetooth as proximity evidence.** Signal
+strength is attacker-controllable and is no evidence of nearness; the design
+uses no ranging at all (design §7.6.3). A bearer moving data that is already bound to the optical anchor
 needs no distance guarantee of its own: a *remote* man in the middle of the
 Bluetooth link is caught by the ceremony-id each party computed from
 contributions read off the other's actual screen — a co-present one is not,
@@ -5518,27 +5471,8 @@ only a party that read both screens can produce one that opens
 lemmas this rests on). The contributions were public when this check was
 written and are not now.
 
-**Two more exchanges ride the ceremony's interfaces, anchored the same way**
+**One more exchange rides the ceremony's interfaces, anchored the same way**
 [author, 2026-09-29]:
-
-```
-ProximityOutcomes = [          ; what the distance channels measured
-  uint,                        ; version, 1
-  bstr .size 32,               ; the ceremony-id (§14.3.1); the receiver
-                               ;   checks it equals its own, and stops where
-                               ;   it does not
-  [ 1*8 Channel ],             ; §4.5's Channel maps, exactly as a record
-                               ;   carries them: kind, result, claimed
-                               ;   resolution, session-key binding. Eight is
-                               ;   the record's own proximity ceiling (§1.3)
-]
-```
-
-The device that drove the channels reports what they measured, and the
-counterparty weighs it — the outcome is each device's claim, as everywhere
-(design §7.1 item 5). The record's `strongest` (§3.2) is no part of the
-exchange: each device computes it from the same outcomes, and a value both
-sides derive needs no carriage.
 
 ```
 Candidate = [                  ; one address for the direct path
@@ -5594,8 +5528,8 @@ candidate exchange** when a direct connection is set up remotely (design
 §12.6.3, §14.1.1): the session it rides in already authenticates the peer,
 so the anchor field is the local carriage's alone. Either way what is handed
 over is an address to dial, not evidence of anything — reachability is
-settled by the dial (RFC 8445's checks), and nearness by the proximity
-channels and nothing else.
+settled by the dial (RFC 8445's checks), and nearness by the optical
+exchange and the capture, nothing else.
 
 **A confidential bearer channel was not wanted, and that position is
 superseded** [author, 2026-09-29; superseded 2026-10-05]. It rested on the

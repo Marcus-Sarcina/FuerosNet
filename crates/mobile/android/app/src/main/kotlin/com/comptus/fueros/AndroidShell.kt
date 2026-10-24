@@ -11,8 +11,6 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 import uniffi.rhtn_ffi.Ask
-import uniffi.rhtn_ffi.Channel
-import uniffi.rhtn_ffi.ChannelOutcome
 import uniffi.rhtn_ffi.Camera
 import uniffi.rhtn_ffi.Clock
 import uniffi.rhtn_ffi.Custody
@@ -20,7 +18,6 @@ import uniffi.rhtn_ffi.Diagnostics
 import uniffi.rhtn_ffi.Notices
 import uniffi.rhtn_ffi.Operator
 import uniffi.rhtn_ffi.Platform
-import uniffi.rhtn_ffi.Proximity
 import uniffi.rhtn_ffi.Random
 import uniffi.rhtn_ffi.Storage
 import uniffi.rhtn_ffi.Told
@@ -29,14 +26,13 @@ import timber.log.Timber
 /**
  * The platform the kernel runs on, as this device provides it.
  *
- * Proximity, capture and the operator's question are the ceremony's, and
- * the ceremony is not in this slice: a channel is reported unavailable
- * rather than absent from the list, a capture yields no frame, and a
+ * Capture and the operator's question are the ceremony's, and the
+ * ceremony is not in this slice: a capture yields no frame, and a
  * question nobody was shown is answered no.  Storage is the application's
  * private files directory; the kernel's state file names contain no path.
  */
 class AndroidShell(private val context: Context) :
-    Proximity, Camera, Clock, Random, Operator, Notices, Storage, Custody, Diagnostics {
+    Camera, Clock, Random, Operator, Notices, Storage, Custody, Diagnostics {
 
     /** An asset's bytes, or none where the app ships without it. */
     fun asset(name: String): ByteArray =
@@ -50,17 +46,6 @@ class AndroidShell(private val context: Context) :
      *  meeting ends. Held here because the kernel calls [capture] on its
      *  own thread and this side owns the camera's lifecycle. */
     @Volatile private var face: FaceCamera? = null
-
-    // D3: the channels this shell can run (design §7.6.3). UWB is present
-    // on some hardware but this shell cannot drive 802.15.4z ranging, so it
-    // is NOT listed — the strongest recorded is the strongest attemptable,
-    // which is the rule's wording (`light-client-requirements.md` §1.3).
-    override fun supported(): List<Channel> = ProximityChannels.supported(context)
-
-    override fun run(channel: Channel, peer: ByteArray): ChannelOutcome =
-        ProximityChannels.run(context, channel)
-
-    override fun resolutionM(channel: Channel): ULong? = null
 
     // D4: one frame of the counterparty per prompt, on the selfie camera.
     // The camera opens on the first prompt of the sequence and the meeting
@@ -287,7 +272,7 @@ fun platformOf(shell: AndroidShell): Platform {
     val sface = shell.asset("sface.onnx")
     Diag.event("shell.engine", "yunet" to yunet.size, "sface" to sface.size)
     return Platform(
-        shell, shell, shell, shell, shell, shell, shell, shell, shell,
+        shell, shell, shell, shell, shell, shell, shell, shell,
         yunet, sface, FaceCamera.WIDTH.toUInt(), FaceCamera.HEIGHT.toUInt(),
     )
 }

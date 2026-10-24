@@ -3,11 +3,6 @@ use rhtn_ffi::{client::Participant,device::*,types::*};
 use rhtn_crypto::identity::testkit::test_identity;
 use std::sync::Arc;
 struct Shell;
-impl Proximity for Shell {
- fn supported(&self)->Vec<Channel> {vec![]}
- fn run(&self,_:Channel,_:Vec<u8>)->ChannelOutcome {ChannelOutcome::Unavailable}
- fn resolution_m(&self,_:Channel)->Option<u64> {None}
-}
 impl Camera for Shell {fn capture(&self,_:Ask)->Vec<u8>{vec![7;64]} fn probe(&self)->Vec<u8>{vec![7;64]}}
 impl Clock for Shell {fn now_ms(&self)->u64 {1_800_000_000_000} fn wait_ms(&self,_:u64){}}
 impl Random for Shell {fn fill(&self,n:u32)->Vec<u8>{vec![19;n as usize]}}
@@ -17,7 +12,7 @@ impl Storage for Shell {fn read(&self,_:String)->Option<Vec<u8>>{None} fn write(
 // 2026-09-27: the platform gained a custody object; unsealed by declaration
 // repairs compilation without touching what any test asserts
 impl Custody for Shell {fn key(&self)->Option<Vec<u8>>{None} fn keep(&self,_:Vec<u8>)->bool{false} fn unsealed(&self)->bool{true}}
-fn platform()->Arc<Platform> {let s=Arc::new(Shell);Arc::new(Platform {proximity:s.clone(),camera:s.clone(),clock:s.clone(),random:s.clone(),operator:s.clone(),notices:s.clone(),storage:s.clone(),custody:s,diagnostics:Arc::new(Silent),engine:None})}
+fn platform()->Arc<Platform> {let s=Arc::new(Shell);Arc::new(Platform {camera:s.clone(),clock:s.clone(),random:s.clone(),operator:s.clone(),notices:s.clone(),storage:s.clone(),custody:s,diagnostics:Arc::new(Silent),engine:None})}
 fn seeds(n:&str)->Vec<u8> {let mut b=rhtn_codec::cose::sha256(format!("rhtn-test-vectors:{n}:ed25519-seed").as_bytes()).to_vec();b.extend(rhtn_codec::cose::sha256(format!("rhtn-test-vectors:{n}:ml-dsa-65-seed").as_bytes()));b}
 
 #[tokio::test(flavor="multi_thread",worker_threads=4)]

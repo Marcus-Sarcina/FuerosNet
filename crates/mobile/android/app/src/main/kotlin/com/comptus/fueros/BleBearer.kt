@@ -37,13 +37,11 @@ import timber.log.Timber
  * property §14.1 names.
  *
  * **Bluetooth here is not Bluetooth as proximity evidence**, and §14.3.1
- * says so in as many words: design §1.3 bars RSSI from the *distance*
- * channel because signal strength is attacker-controllable, and that bar is
- * about evidence of nearness. Data already bound to the optical anchor
+ * says so in as many words: the design uses no ranging at all (§7.6.3), and
+ * signal strength is attacker-controllable besides. Data already bound to
+ * the optical anchor
  * needs no distance guarantee of its own. **Nothing in this file is ever
- * offered as a proximity channel**, and the `Proximity` implementation that
- * answers the kernel's channel question is elsewhere and says `Unavailable`
- * where there is no UWB or NFC.
+ * offered as evidence of nearness.**
  *
  * The shape: one device **advertises** a service with one write
  * characteristic and one notify characteristic; the other **scans** for it
@@ -51,7 +49,8 @@ import timber.log.Timber
  * meaning — the initiator of the ceremony is not necessarily the advertiser.
  *
  * **It has run on hardware, and a radio did bite.** Two radios carried
- * every carriage phase — intent, proximity, capture key — in each field
+ * every carriage phase — intent, capture key, and the proximity outcomes
+ * while there were any — in each field
  * ceremony from `bc08f98`. The bite was the one this header predicted:
  * concurrent writes returned status 201,
  * `ERROR_GATT_WRITE_REQUEST_BUSY`, which is a write that reports failure

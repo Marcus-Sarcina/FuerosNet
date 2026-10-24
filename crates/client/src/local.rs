@@ -16,7 +16,6 @@
 //! property, and it is physical.
 
 use crate::Keyhash;
-use crate::device::{ChannelKind, ChannelOutcome, ChannelResult};
 use aws_lc_rs::aead::{AES_256_GCM, Aad, LessSafeKey, Nonce, UnboundKey};
 use aws_lc_rs::rand::{SecureRandom, SystemRandom};
 use rhtn_codec::cbor::*;
@@ -223,85 +222,6 @@ impl BundleContinuation {
             entries: entries(b, 3)?,
         })
     }
-}
-
-/// What the distance channels measured (§14.3.2), anchored: the §4.5
-/// `Channel` maps exactly as a record carries them.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ProximityOutcomes {
-    /// The ceremony these measurements belong to.
-    pub ceremony_id: [u8; 32],
-    /// What each channel measured, as a record carries them.
-    pub channels: Vec<ChannelOutcome>,
-}
-
-impl ProximityOutcomes {
-    /// The bytes of this `ProximityOutcomes`, as §14.3.2 composes them.
-    pub fn encode(&self) -> Vec<u8> {
-        let mut out = Vec::new();
-        emit_array_head(&mut out, 3);
-        emit_uint(&mut out, 1);
-        emit_bstr(&mut out, &self.ceremony_id);
-        emit_channels(&mut out, &self.channels);
-        out
-    }
-
-    /// Read a `ProximityOutcomes` from `b`; an error naming what did not read.
-    pub fn decode(b: &[u8]) -> Result<Self, String> {
-        let it = checked(b, "ProximityOutcomes")?;
-        let a = fields(&it);
-        Ok(ProximityOutcomes {
-            ceremony_id: fixed32(b, &a[1])?,
-            channels: read_channels(&a[2])?,
-        })
-    }
-}
-
-/// The record's own `Channel` maps (§4.5) as an array: kind, result, and
-/// the claimed resolution only where the client claims one.  One emitter
-/// for every object that carries the channels as measured, here and on the
-/// conversation (§7.10.2), so the two cannot drift apart.
-pub(crate) fn emit_channels(out: &mut Vec<u8>, channels: &[ChannelOutcome]) {
-    emit_array_head(out, channels.len());
-    for c in channels {
-        let n = 2 + usize::from(c.resolution_m.is_some());
-        emit_map_head(out, n);
-        emit_uint(out, 1);
-        emit_uint(out, c.kind.code());
-        emit_uint(out, 2);
-        emit_uint(out, c.result as u64);
-        if let Some(m) = c.resolution_m {
-            emit_uint(out, 3);
-            emit_uint(out, m);
-        }
-    }
-}
-
-/// The channels back from their array.
-pub(crate) fn read_channels(it: &Item) -> Result<Vec<ChannelOutcome>, String> {
-    let Item::Array(cs) = it else {
-        return Err("channels not an array".into());
-    };
-    let mut channels = Vec::new();
-    for c in cs {
-        let Item::Map(m) = c else {
-            return Err("channel not a map".into());
-        };
-        channels.push(ChannelOutcome {
-            kind: map_get(m, 1)
-                .and_then(as_uint)
-                .and_then(ChannelKind::from_code)
-                .ok_or("channel kind")?,
-            result: match map_get(m, 2).and_then(as_uint) {
-                Some(0) => ChannelResult::Pass,
-                Some(1) => ChannelResult::Fail,
-                Some(2) => ChannelResult::Unavailable,
-                _ => return Err("channel result".into()),
-            },
-            resolution_m: map_get(m, 3).and_then(as_uint),
-        });
-    }
-    Ok(channels)
 }
 
 /// Candidates on the ceremony's channels (§14.3.2, design §12.6.3): the

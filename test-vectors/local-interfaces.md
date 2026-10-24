@@ -1,6 +1,6 @@
 # Local device-to-device interfaces (`wire-format.md` §14.3)
 
-Generated against `wire-format.md` `e59f38e064a12e19…`, `network-design.md` `6a7c009e00519feb…` and `light-client-requirements.md` `be2b9e7beae44a59…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `318dfcd2564bee7a…`, `network-design.md` `0510c48a6e681d96…` and `light-client-requirements.md` `9be60c155e23de3b…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Canonical. Spec-derived, reproduced by the independent harness.** The encodings
 of `wire-format.md` §14.3, as one coherent exchange: **alice initiates with
@@ -19,8 +19,7 @@ to open. **Interpretations
 taken**: the intent's bundle entry uses `wire-format.md` §7.9's *envelope*
 form (the presented form is equally legal; the envelope is the
 holder-withholds-nothing case); the intent's retention is the design's
-stated two-year default; the proximity outcomes are the channel maps the
-normal record's own `proximity` disclosure carries.
+stated two-year default.
 
 ## The optical exchange (§14.3.1–.2)
 
@@ -352,15 +351,6 @@ ac1d02ecaf3f521122edff0bfc1630e154723ec58b86cc07b1e6daaebd0b
 ```
 
 ## The anchored exchanges (§14.3.2)
-
-**ProximityOutcomes — the two channels the normal record's disclosure
-carries, NFC pass then optical pass, anchored to the ceremony-id**
-(47 bytes):
-
-```
-83015820cb8ea88ad0a089017394c291f918217c4dc8d754a4639eb024f23662
-e5ca2b1882a201020200a201030200
-```
 
 **Candidates, bare — the payload path's form: an IPv4 host candidate and an
 IPv6 server-reflexive one** (33 bytes):

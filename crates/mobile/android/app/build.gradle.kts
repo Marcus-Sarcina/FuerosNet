@@ -31,8 +31,9 @@ android {
 
     defaultConfig {
         applicationId = "com.comptus.fueros"
-        // UWB reached Android at API 31, and the ceremony's channels are
-        // the application's reason to exist (`mobile/android/README.md`).
+        // The floor was set at 31 when UWB was one of the ceremony's channels;
+        // ranging is dropped [author, 2026-10-24] and the floor is kept as it
+        // was, with no new reason claimed for it.
         minSdk = 31
         targetSdk = 36
         versionCode = 1

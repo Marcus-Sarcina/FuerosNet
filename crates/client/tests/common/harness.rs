@@ -14,25 +14,6 @@ use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 use std::rc::Rc;
 
-/// Proximity hardware with a fixed set of channels, all of which pass.
-pub struct Channels(pub Vec<ChannelKind>);
-impl Proximity for Channels {
-    fn supported(&self) -> Vec<ChannelKind> {
-        self.0.clone()
-    }
-    fn run(&self, kind: ChannelKind, _peer: &[u8; 32]) -> ChannelOutcome {
-        ChannelOutcome {
-            kind,
-            result: ChannelResult::Pass,
-            resolution_m: if kind == ChannelKind::Uwb {
-                Some(1)
-            } else {
-                None
-            },
-        }
-    }
-}
-
 /// A camera whose frames start with the face in front of it — whoever the
 /// harness put there — and carry the metadata a pipeline attaches:
 /// location, time, device.  It remembers every prompt it was given and
@@ -162,12 +143,7 @@ pub fn face(name: &str) -> Vec<u8> {
     format!("face:{name:<10}").into_bytes()
 }
 
-pub fn device(
-    channels: Vec<ChannelKind>,
-    clock: Rc<Cell<u64>>,
-    seed: u64,
-    skew_ms: i64,
-) -> (Device, Handles) {
+pub fn device(clock: Rc<Cell<u64>>, seed: u64, skew_ms: i64) -> (Device, Handles) {
     let cam = Rc::new(Cam {
         facing: RefCell::new(vec![]),
         clock: clock.clone(),
@@ -186,7 +162,6 @@ pub fn device(
     };
     let reach = Rc::new(Reach(Cell::new(true)));
     let d = Device {
-        proximity: Rc::new(Channels(channels)),
         camera: cam.clone(),
         clock: clk,
         random: Rc::new(Seeded(Cell::new(seed))),
@@ -217,15 +192,11 @@ pub struct Setup {
     pub world: crate::common::World,
 }
 
-pub fn setup(names: &[&'static str], channels: &[ChannelKind]) -> Setup {
-    setup_with(names, channels, &[])
+pub fn setup(names: &[&'static str]) -> Setup {
+    setup_with(names, &[])
 }
 
-pub fn setup_with(
-    names: &[&'static str],
-    channels: &[ChannelKind],
-    skews: &[(&str, i64)],
-) -> Setup {
+pub fn setup_with(names: &[&'static str], skews: &[(&str, i64)]) -> Setup {
     let clock = Rc::new(Cell::new(1_790_000_000_000u64));
     let mut h = Harness::default();
     let mut handles = BTreeMap::new();
@@ -235,12 +206,7 @@ pub fn setup_with(
             .find(|(s, _)| s == n)
             .map(|(_, k)| *k)
             .unwrap_or(0);
-        let (d, hd) = device(
-            channels.to_vec(),
-            clock.clone(),
-            0x9e37_79b9_7f4a_7c15 ^ (i as u64 + 1),
-            skew,
-        );
+        let (d, hd) = device(clock.clone(), 0x9e37_79b9_7f4a_7c15 ^ (i as u64 + 1), skew);
         h.add(Client::new(id(n), ids(), Config::default(), d));
         handles.insert(*n, hd);
     }

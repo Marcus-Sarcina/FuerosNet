@@ -680,7 +680,7 @@ participant = lambda i: e_map([(e_uint(1), e_bstr(i.keyhash))])
 
 # ---- Selective disclosure, §4.5.1: the REAL construction ----
 LABELS = ['capture', 'location', 'p0.integrity', 'p0.retention',
-          'p1.integrity', 'p1.retention', 'proximity']  # ascending byte order
+          'p1.integrity', 'p1.retention']  # ascending byte order
 
 def disclosure(salt, label, value_bytes):
     assert len(salt) == 16
@@ -708,8 +708,7 @@ def presented(envelope_bytes, slots, reveal):
 # The formation ceremony's disclosable values — schema-valid throughout:
 # capture {modality, count, liveness, version}; location with one asserted
 # geohash and no corroborations (no witnesses to corroborate); per-participant
-# retention (years) and integrity; proximity with optical+latency passing and
-# strongest = optical (3) — no higher-ranked channel present, satisfying §3.2.
+# retention (years) and integrity.
 form_values = {
     'capture':      e_map([(e_uint(1), e_uint(0)), (e_uint(2), e_uint(3)),
                            (e_uint(3), e_uint(0)), (e_uint(4), e_uint(1))]),
@@ -720,11 +719,6 @@ form_values = {
     'p0.retention': e_uint(2),
     'p1.integrity': e_map([(e_uint(1), b'\xf4'), (e_uint(2), e_uint(0))]),
     'p1.retention': e_uint(2),
-    'proximity':    e_map([(e_uint(1), e_arr([
-                            e_map([(e_uint(1), e_uint(3)), (e_uint(2), e_uint(0))]),
-                            e_map([(e_uint(1), e_uint(4)), (e_uint(2), e_uint(0)),
-                                   (e_uint(3), e_uint(50))])])),
-                           (e_uint(2), e_uint(3))]),
 }
 form_slots, form_root = disclosure_set('formation', form_values)
 # Field 3's order is DELIBERATELY the reverse of keyhash order, so that
@@ -744,7 +738,7 @@ formation_txid = H(formation_body)
 formation_env, formation_entries = envelope(1, 5, formation_body, [p_hi, p_lo])
 pres_full = presented(formation_env, form_slots, set(LABELS))
 pres_min = presented(formation_env, form_slots, set())
-pres_part = presented(formation_env, form_slots, {'proximity', 'p0.retention'})
+pres_part = presented(formation_env, form_slots, {'capture', 'p0.retention'})
 
 # --- Presence, formation subtype: ALICE AND BOB.  design §6.1.1 requires every
 # adoption to carry evidence, and §13.1 puts a ceremony before a formation
@@ -986,10 +980,6 @@ npr_values = {
     'p0.retention': e_uint(2),
     'p1.integrity': e_map([(e_uint(1), b'\xf4'), (e_uint(2), e_uint(0))]),
     'p1.retention': e_uint(3),
-    'proximity':    e_map([(e_uint(1), e_arr([
-                            e_map([(e_uint(1), e_uint(2)), (e_uint(2), e_uint(0))]),
-                            e_map([(e_uint(1), e_uint(3)), (e_uint(2), e_uint(0))])])),
-                           (e_uint(2), e_uint(2))]),
 }
 npr_slots, npr_root = disclosure_set('normal', npr_values)
 
@@ -1582,7 +1572,7 @@ three verify against the same body root under the same envelope signatures.
 {hexblock(pres_full)}
 ```
 
-**Partial** — `proximity` and `p0.retention` revealed, five withheld
+**Partial** — `capture` and `p0.retention` revealed, four withheld
 ({len(pres_part)} bytes):
 
 ```
@@ -2910,8 +2900,6 @@ _reply_pairs.extend([
 # one signer's envelope entries; the ceremony-id is that record's
 # pre-commitment, which VerificationQuery field 3 also carries.
 conv_parts = sorted([alice, bob], key=lambda i: i.keyhash, reverse=True)
-conv_channels = [e_map([(e_uint(1), e_uint(2)), (e_uint(2), e_uint(0))]),
-                 e_map([(e_uint(1), e_uint(3)), (e_uint(2), e_uint(0))])]
 consent_reply = e_arr([e_bstr(npr_q0), consent_over(npr_q0, alice)])
 # an Introduction (§2.3): a prior counterparty's key material with the most
 # recent SignedLocator the holder has for them. alice introduces c1, whose
@@ -2928,7 +2916,7 @@ intro_c1 = e_arr([e_uint(1), IDS['c1'].key_material, sl_c1])
 sl_bob = signed_locator_by(bob, locator(bob.keyhash, b'\x40', seqno(1, 0)))
 # one candidate per proposal, in turns (§5.1): the proposal is the introduction
 fishing_proposal = intro_c1
-# the opening's kinds (s7.10.1, 20-25) [author, 2026-10-19]: what a
+# the opening's kinds (s7.10.1, 20-24) [author, 2026-10-19]: what a
 # participant and its own nominees say to one another from the intent, and
 # the prune's two legs between the participants. One handle per nominating
 # side per ceremony attempt; the request's field 5 closes the loop.
@@ -2936,7 +2924,6 @@ conv_handle = H(b'rhtn-test-vectors:engagement-handle:alice')
 witness_request = e_map([(e_uint(1), e_bstr(npr_precommit)),
                          (e_uint(2), e_arr([e_bstr(i.keyhash) for i in conv_parts])),
                          (e_uint(3), e_uint(TS_C2)),
-                         (e_uint(4), e_arr(conv_channels)),
                          (e_uint(5), e_bstr(conv_handle))])
 witness_engagement = e_map([(e_uint(1), e_bstr(conv_handle)),
                             (e_uint(2), e_uint(TS_C2)),
@@ -2957,7 +2944,6 @@ intro_w1 = introduction(IDS['w1'], locator(bob.keyhash, b'\x30', seqno(1, 2)))
 witness_set = e_arr([intro_c1, intro_w1])
 witness_keep = e_arr([e_bstr(i) for i in sorted([IDS['c1'].keyhash, IDS['w1'].keyhash])])
 witness_standdown = e_map([(e_uint(1), e_bstr(conv_handle))])
-proximity_update = e_map([(e_uint(1), e_bstr(npr_precommit)), (e_uint(2), conv_channels[0])])
 witness_answer_yes = e_map([(e_uint(1), b'\xf5'), (e_uint(2), e_uint(7))])
 witness_answer_no = e_map([(e_uint(1), b'\xf4')])
 gathered_responses = e_arr(npr_responses)
@@ -3003,7 +2989,7 @@ _conv_pairs = [
     ('WitnessAnswer, kind 13 — declining; no bits', witness_answer_no, 13),
     ('GatheredResponses, kind 14 — the normal record\'s three responses in body order, for the proposer', gathered_responses, 14),
     ('BackPointers, kind 15 — alice\'s back-pointers for the normal record: the one head, her merge, that the body\'s key 0 names for her', back_pointers, 15),
-    ('ProposedBody, kind 16 — the normal record\'s body with its seven revealed disclosure slots', proposed_body, 16),
+    ('ProposedBody, kind 16 — the normal record\'s body with its six revealed disclosure slots', proposed_body, 16),
     ('SigningReply, kind 17 — the lowest-keyhash signer\'s two envelope entries over that body', signing_reply_signed, 17),
     ('SigningReply, kind 17 — a refusal: a witness attributed to this party that it did not nominate, with the witness keyhash', signing_reply_refused, 17),
     ('WitnessEngagement, kind 20 — the nomination itself, sent with the intent before the counterparty has accepted anything; the handle every message of the opening carries', witness_engagement, 20),
@@ -3012,7 +2998,6 @@ _conv_pairs = [
     ('WitnessSet, kind 22 — the sender\'s nominees by locator, between the participants on the local interface, for the counterparty\'s prune', witness_set, 22),
     ('WitnessKeep, kind 23 — of the counterparty\'s set, the ones the sender keeps: min(3, offered)', witness_keep, 23),
     ('WitnessStanddown, kind 24 — a nominee that did not survive the prune; its part ends here', witness_standdown, 24),
-    ('ProximityUpdate, kind 25 — one channel\'s outcome to the surviving witnesses of both sides, as it lands inside the window', proximity_update, 25),
 ]
 # kind 18 is the finalised Envelope, `P-normal-record` in records.md
 _ctrl_md, _req_md, _msg_md = [], [], []
@@ -3539,14 +3524,6 @@ for gh, exp in [('u4', REJ('LocationEvidence', 'schema', 'two geohash characters
     reg(f'B-geohash-{gh}', 'bytes', exp,
         e_map([(e_uint(1), e_arr([e_map([(e_uint(1), e_uint(0)), (e_uint(2), e_tstr(gh))])])),
                (e_uint(2), e_arr([]))]))
-def _prox(k):
-    return e_map([(e_uint(1), e_arr([e_map([(e_uint(1), e_uint(3)), (e_uint(2), e_uint(0))])] * 1
-                                    if k == 1 else
-                                    [e_map([(e_uint(1), e_uint(1 + (i % 4))), (e_uint(2), e_uint(0)),
-                                            (e_uint(3), e_uint(i + 1))]) for i in range(k)])),
-                  (e_uint(2), e_uint(3))])
-reg('B-channels-8', 'bytes', ACC('Proximity', 'eight channels, the ceiling'), _prox(8))
-reg('B-channels-9', 'bytes', REJ('Proximity', 'schema', 'nine channels exceed the ceiling'), _prox(9))
 def _loc_ev(nass, ncorr):
     return e_map([(e_uint(1), e_arr([e_map([(e_uint(1), e_uint(0)), (e_uint(2), e_tstr('u4p'))])
                                      for _ in range(nass)])),
@@ -3663,25 +3640,25 @@ reg('U-request-262145', 'unit',
 _np_slots = [npr_slots[lab] for lab in LABELS]
 def _pres(slots_arr):
     return e_arr([npr_env, e_arr(slots_arr)])
-full7 = [npr_slots[lab][0] for lab in LABELS]
-reg('N-disclosure-six-slots', 'bytes', REJ('presentation', 'schema', 'six slots — exactly seven always'),
-    _pres(full7[:6]))
-reg('N-disclosure-eight-slots', 'bytes', REJ('presentation', 'schema', 'eight slots — exactly seven always'),
-    _pres(full7 + [e_bstr(npr_slots['capture'][1])]))
+full6 = [npr_slots[lab][0] for lab in LABELS]
+reg('N-disclosure-five-slots', 'bytes', REJ('presentation', 'schema', 'five slots — exactly six always'),
+    _pres(full6[:5]))
+reg('N-disclosure-seven-slots', 'bytes', REJ('presentation', 'schema', 'seven slots — exactly six always'),
+    _pres(full6 + [e_bstr(npr_slots['capture'][1])]))
 reg('N-disclosure-label-mismatch', 'bytes', REJ('presentation', 'schema',
     "slot 0 carries the 'location' disclosure — a revealed label must match its slot position"),
-    _pres([npr_slots['location'][0]] + full7[1:]))
+    _pres([npr_slots['location'][0]] + full6[1:]))
 reg('N-disclosure-salt-15', 'bytes', REJ('presentation', 'schema', 'a 15-byte salt is malformed'),
-    _pres([e_arr([e_bstr(H(b's')[:15]), e_tstr('capture'), npr_values['capture']])] + full7[1:]))
+    _pres([e_arr([e_bstr(H(b's')[:15]), e_tstr('capture'), npr_values['capture']])] + full6[1:]))
 reg('N-disclosure-root-mismatch', 'bytes', REJ('presentation', 'semantic',
     'a flipped withheld digest — the recomputed root no longer equals body field 8'),
-    _pres([e_bstr(bytes([npr_slots['capture'][1][0] ^ 1]) + npr_slots['capture'][1][1:])] + full7[1:]))
+    _pres([e_bstr(bytes([npr_slots['capture'][1][0] ^ 1]) + npr_slots['capture'][1][1:])] + full6[1:]))
 reg('N-disclosure-value-mutated', 'bytes', REJ('presentation', 'semantic',
     'a revealed value mutated — its digest, and so the root, no longer match'),
     _pres([e_arr([e_bstr(H(f'rhtn-test-vectors:salt:normal:capture'.encode())[:16]),
                   e_tstr('capture'),
                   e_map([(e_uint(1), e_uint(1)), (e_uint(2), e_uint(4)),
-                         (e_uint(3), e_uint(0)), (e_uint(4), e_uint(2))])])] + full7[1:]))
+                         (e_uint(3), e_uint(0)), (e_uint(4), e_uint(2))])])] + full6[1:]))
 
 # ---- bar 13: optionals not otherwise exercised
 reg('P-archive-request-bounded', 'bytes', ACC('ArchiveRequest', 'frontier and stop-timestamp both present'),
@@ -3740,9 +3717,6 @@ reg('P-catalog-reply-truncated', 'bytes',
     e_map([(e_uint(1), e_bstr(NONCE(b'catalog'))),
            (e_uint(2), e_arr(_trunc_entries)),
            (e_uint(3), e_tstr('rhtn-wiki'))]))
-reg('P-channel-bound', 'bytes', ACC('Channel', 'claimed resolution and session-key binding both present'),
-    e_map([(e_uint(1), e_uint(1)), (e_uint(2), e_uint(0)), (e_uint(3), e_uint(1)),
-           (e_uint(4), e_bstr(H(b'rhtn-test-vectors:uwb-session-key')[:32]))]))
 reg('P-integrity-evidence', 'bytes', ACC('ClientIntegrity', 'evidence bstr present'),
     e_map([(e_uint(1), b'\xf5'), (e_uint(2), e_uint(2)), (e_uint(3), e_bstr(H(b'attest-quote')))]))
 
@@ -3768,31 +3742,6 @@ reg('N-witness-empty-array', 'bytes',
     REJ('body', 'schema', 'zero witnesses OMIT key 4 - the empty-array spelling is the second encoding of one logical record (s3.2, T60)'),
     nw_empty_body,
     note='Stress: an implementer reading field 4 as required-with-empty-array emits and accepts this; P-normal-witnessless is the one valid spelling, there being no witness floor (2026-10-19).')
-
-retry_values = dict(npr_values)
-retry_values['proximity'] = e_map([(e_uint(1), e_arr([
-    e_map([(e_uint(1), e_uint(3)), (e_uint(2), e_uint(1))]),   # optical, FAIL
-    e_map([(e_uint(1), e_uint(3)), (e_uint(2), e_uint(0))])])), # optical retried, PASS
-    (e_uint(2), e_uint(3))])
-cr_slots, cr_root = disclosure_set('channel-retry', retry_values)
-cr_signers = [n_hi, n_lo, IDS['w3']]
-cr_body = e_map([
-    (e_uint(0), backptrs(*[[genesis(x.keyhash)] for x in cr_signers])),
-    (e_uint(1), e_uint(TS_C2 + 4 * 86400)),
-    (e_uint(2), e_uint(TS_C2 + 4 * 86400 + 1800)),
-    (e_uint(3), e_arr([participant(n_hi), participant(n_lo)])),
-    (e_uint(4), e_arr([witness_entry(IDS['w3'], bob, 7)])),
-    (e_uint(6), e_uint(0)),
-    (e_uint(8), e_bstr(cr_root)),
-])
-cr_txid = H(cr_body)
-cr_env, _ = envelope(1, 5, cr_body, cr_signers)
-cr_pres = presented(cr_env, cr_slots, set(LABELS))
-reg('P-channel-retry', 'bytes', ACC('envelope', 'a repeated channel kind: optical failed, optical retried and passed (D19)'),
-    cr_env,
-    note='Stress: a validator imposing one-entry-per-kind rejects this valid record; a retried channel is two measurements (s4.5).')
-reg('P-channel-retry-presentation', 'bytes', ACC('presentation', 'fully revealed; the proximity strongest-rule passes over the retried channel'),
-    cr_pres)
 
 # ---- traces and contexts (structured, no bytes)
 TRACE_ONE_OF = {'TR2': ['defer_until_handshake', 'reject'],
@@ -3981,12 +3930,6 @@ intent_r = e_arr([e_uint(1), e_bstr(pc_b),
 # ceiling, §5.4, and the carriage has)
 cont_x = e_arr([e_uint(1), e_bstr(pc_demo), e_uint(1), e_arr([intro_c1])])
 
-# the outcomes that crossed are the channels the record's own proximity
-# disclosure carries, byte-for-byte (NFC pass, optical pass)
-prox_channels = [e_map([(e_uint(1), e_uint(2)), (e_uint(2), e_uint(0))]),
-                 e_map([(e_uint(1), e_uint(3)), (e_uint(2), e_uint(0))])]
-prox_x = e_arr([e_uint(1), e_bstr(pc_demo), e_arr(prox_channels)])
-
 def candidate(kind, ip, port):
     return e_arr([e_uint(kind), e_bstr(bytes(ip)), e_uint(port)])
 cand_host = candidate(0, [192, 0, 2, 7], 4443)                    # TEST-NET-1
@@ -4039,8 +3982,7 @@ to open. **Interpretations
 taken**: the intent's bundle entry uses `wire-format.md` §7.9's *envelope*
 form (the presented form is equally legal; the envelope is the
 holder-withholds-nothing case); the intent's retention is the design's
-stated two-year default; the proximity outcomes are the channel maps the
-normal record's own `proximity` disclosure carries.
+stated two-year default.
 
 ## The optical exchange (§14.3.1–.2)
 
@@ -4095,14 +4037,6 @@ introduction, anchored to the ceremony-id** ({len(cont_x)} bytes):
 ```
 
 ## The anchored exchanges (§14.3.2)
-
-**ProximityOutcomes — the two channels the normal record's disclosure
-carries, NFC pass then optical pass, anchored to the ceremony-id**
-({len(prox_x)} bytes):
-
-```
-{hexblock(prox_x)}
-```
 
 **Candidates, bare — the payload path's form: an IPv4 host candidate and an
 IPv6 server-reflexive one** ({len(cands_bare)} bytes):
@@ -4230,7 +4164,6 @@ for fid, by, kind, note in [
     ('P-intent-exchange', intent_x, 'IntentExchange', 'echoes the optical contribution; one introduction in the bundle; the sender\'s own signed locator last'),
     ('P-intent-exchange-responder', intent_r, 'IntentExchange', "the responder's: echoes bob's contribution, an empty bundle, initiator false; the flags of the pair differ"),
     ('P-bundle-continuation', cont_x, 'BundleContinuation', 'the bundle past its first carriage, anchored and numbered from one'),
-    ('P-proximity-outcomes', prox_x, 'ProximityOutcomes', "the record's own channels, anchored"),
     ('P-candidates-bare', cands_bare, 'Candidates', 'the payload path form; both address families'),
     ('P-candidate-handover', cand_handover, 'CandidateHandover', 'the same candidates, anchored'),
     ('P-capture-key-handover', ck_handover, 'CaptureKeyHandover', "alice's key for bob's captures of her, anchored"),
@@ -4298,7 +4231,7 @@ for fid, by, kind, note in [
     ('P-witness-answer-declining', witness_answer_no, 'WitnessAnswer', 'declining carries no bits'),
     ('P-gathered-responses', gathered_responses, 'GatheredResponses', "the normal record's three responses in body order"),
     ('P-back-pointers', back_pointers, 'BackPointers', "alice's one head for the normal record, the merge; what the body's key 0 names for her"),
-    ('P-proposed-body', proposed_body, 'ProposedBody', "the normal record's body and its seven revealed slots"),
+    ('P-proposed-body', proposed_body, 'ProposedBody', "the normal record's body and its six revealed slots"),
     ('P-proposed-adoption', proposed_adoption, 'ProposedBody', "an adoption body proposed over the same kind, with no disclosure set (s7.10.2)"),
     ('P-adoption-direction', adoption_direction, 'AdoptionDirection', "the recipient under the sender, in the subnet the patron adopts into"),
     ('P-adoption-direction-series', adoption_direction_series, 'AdoptionDirection', "the sender under the recipient, offering the series it can enter"),
@@ -4315,7 +4248,6 @@ for fid, by, kind, note in [
     ('P-witness-set', witness_set, 'WitnessSet', "two nominees by locator, for the counterparty's prune"),
     ('P-witness-keep', witness_keep, 'WitnessKeep', "both of the counterparty's two kept: min(3, offered)"),
     ('P-witness-standdown', witness_standdown, 'WitnessStanddown', 'a nominee dismissed at the prune'),
-    ('P-proximity-update', proximity_update, 'ProximityUpdate', "one channel's outcome inside the window, to the surviving witnesses"),
 ]:
     reg(fid, 'bytes', ACC(kind, note), by)
 # sorted ascending bytewise, as a list longer than one is (§3.1)
@@ -4328,26 +4260,11 @@ reg('N-back-pointers-empty', 'bytes',
 reg('N-witness-answer-bits-while-declining', 'bytes',
     REJ('WitnessAnswer', 'schema', 'the attestation bits are present only when witnessing'),
     e_map([(e_uint(1), b'\xf4'), (e_uint(2), e_uint(7))]))
-reg('B-witness-request-channels-8', 'bytes',
-    ACC('WitnessRequest', 'eight channels, the proximity-channel ceiling'),
-    e_map([(e_uint(1), e_bstr(npr_precommit)),
-           (e_uint(2), e_arr([e_bstr(i.keyhash) for i in conv_parts])),
-           (e_uint(3), e_uint(TS_C2)),
-           (e_uint(4), e_arr(conv_channels * 4)),
-           (e_uint(5), e_bstr(conv_handle))]))
-reg('B-witness-request-channels-9', 'bytes',
-    REJ('WitnessRequest', 'schema', 'nine channels exceed the ceiling of eight'),
-    e_map([(e_uint(1), e_bstr(npr_precommit)),
-           (e_uint(2), e_arr([e_bstr(i.keyhash) for i in conv_parts])),
-           (e_uint(3), e_uint(TS_C2)),
-           (e_uint(4), e_arr(conv_channels * 4 + conv_channels[:1])),
-           (e_uint(5), e_bstr(conv_handle))]))
 reg('N-witness-request-no-handle', 'bytes',
     REJ('WitnessRequest', 'schema', 'field 5 is required: the request closes an engagement (s7.10.2, T63, 2026-10-19)'),
     e_map([(e_uint(1), e_bstr(npr_precommit)),
            (e_uint(2), e_arr([e_bstr(i.keyhash) for i in conv_parts])),
-           (e_uint(3), e_uint(TS_C2)),
-           (e_uint(4), e_arr(conv_channels))]))
+           (e_uint(3), e_uint(TS_C2))]))
 reg('N-trace-confirmed-with-index', 'bytes',
     REJ('ExchangeTrace', 'schema', "the event's fields are its own: a confirmation carries the ceremony-id and no index (s7.10.2, T62)"),
     trace_confirmed_bad)
@@ -4366,9 +4283,9 @@ reg('B-gathered-responses-32', 'bytes',
 reg('N-gathered-responses-33', 'bytes',
     REJ('GatheredResponses', 'schema', 'thirty-three responses exceed the per-record bound of 32'),
     e_arr([npr_responses[0]] * 33))
-reg('N-proposed-body-six-slots', 'bytes',
-    REJ('ProposedBody', 'schema', 'exactly seven slots, every one revealed'),
-    e_map([(e_uint(1), e_bstr(npr_body)), (e_uint(2), e_arr(proposed_slots[:6]))]))
+reg('N-proposed-body-five-slots', 'bytes',
+    REJ('ProposedBody', 'schema', 'exactly six slots, every one revealed'),
+    e_map([(e_uint(1), e_bstr(npr_body)), (e_uint(2), e_arr(proposed_slots[:5]))]))
 reg('N-signing-reply-code-5', 'bytes',
     REJ('SigningReply', 'schema', 'refusal codes run 1 to 4'),
     e_map([(e_uint(2), e_uint(5))]))
@@ -4420,14 +4337,6 @@ reg('N-continuation-index-0', 'bytes',
 reg('N-continuation-empty', 'bytes',
     REJ('BundleContinuation', 'schema', 'a continuation carries at least one entry'),
     e_arr([e_uint(1), e_bstr(pc_demo), e_uint(1), e_arr([])]))
-reg('B-outcomes-channels-8', 'bytes', ACC('ProximityOutcomes', 'eight channels, the ceiling'),
-    e_arr([e_uint(1), e_bstr(pc_demo), e_arr(prox_channels * 4)]))
-reg('N-outcomes-channels-9', 'bytes',
-    REJ('ProximityOutcomes', 'schema', "nine channels exceed the record's own ceiling of eight"),
-    e_arr([e_uint(1), e_bstr(pc_demo), e_arr(prox_channels * 4 + prox_channels[:1])]))
-reg('N-outcomes-channels-empty', 'bytes',
-    REJ('ProximityOutcomes', 'schema', 'an outcome exchange carries at least one channel'),
-    e_arr([e_uint(1), e_bstr(pc_demo), e_arr([])]))
 reg('B-credential-delegations-45', 'bytes',
     ACC('DeviceCredential', 'forty-five delegations, the 90-day run, the ceiling'),
     e_arr([e_uint(1), e_arr([e_bstr(deleg_alice_desktop)] * 45), e_bstr(prekey_desktop)]))

@@ -10,7 +10,6 @@ use common::net::*;
 use common::*;
 use rhtn_archive::prekey::*;
 use rhtn_client::ceremony::*;
-use rhtn_client::device::ChannelKind;
 use rhtn_client::notice::Notice;
 use rhtn_client::payload::*;
 use rhtn_client::query::KeyGrant;
@@ -708,7 +707,7 @@ fn pay_20_a_bundle_per_device_a_session_with_each_and_a_ciphertext_to_each() {
     // bob's desktop, d2: its own material, its bundle signed by bob's
     // identity (on the phone) and published under its own device
     let d2 = [0x42u8; 32];
-    let (dev, _handles) = common::harness::device(vec![ChannelKind::Nfc], n.s.clock.clone(), 77, 0);
+    let (dev, _handles) = common::harness::device(n.s.clock.clone(), 77, 0);
     let mut desktop = Client::new(id("bob"), ids(), Config::default(), dev);
     desktop.as_device(d2);
     let pop = n.population();
@@ -864,7 +863,7 @@ fn a_device_holding_no_seed_publishes_what_the_ceremony_device_signed_and_receiv
     let d1 = *id("bob").public.ed.as_bytes();
     // the desktop presents a delegated transport key and holds no seed
     let d2 = [0x42u8; 32];
-    let (dev, _handles) = common::harness::device(vec![ChannelKind::Nfc], n.s.clock.clone(), 77, 0);
+    let (dev, _handles) = common::harness::device(n.s.clock.clone(), 77, 0);
     let mut desktop = Client::delegated(id("bob").public, d2, ids(), Config::default(), dev);
     assert!(!desktop.holds_seed());
     assert_eq!(desktop.keyhash(), kh("bob"));
@@ -1085,7 +1084,7 @@ fn a_client_restarts_from_its_own_storage_with_its_sessions_intact() {
 
     // alice's process ends: what it wrote is all that survives
     let blob = n.s.client("alice").durable();
-    let (dev, _handles) = common::harness::device(vec![ChannelKind::Nfc], n.s.clock.clone(), 91, 0);
+    let (dev, _handles) = common::harness::device(n.s.clock.clone(), 91, 0);
     let mut alice2 = Client::new(id("alice"), ids(), Config::default(), dev);
     let restored = alice2.restore_durable(&blob).expect("opens whole");
     assert_eq!(restored.sessions, 1, "the session with bob's one device");
@@ -1364,7 +1363,7 @@ fn a_sender_opens_a_fresh_session_past_a_peer_that_lost_its_half() {
     assert_eq!(n.collect("bob"), vec!["Application(first)".to_string()]);
 
     // bob's process ends before it wrote the session alice opened
-    let (dev, handles) = common::harness::device(vec![ChannelKind::Nfc], n.s.clock.clone(), 92, 0);
+    let (dev, handles) = common::harness::device(n.s.clock.clone(), 92, 0);
     handles.reach.0.set(false);
     let mut bob2 = Client::new(id("bob"), ids(), Config::default(), dev);
     let restored = bob2.restore_durable(&blob).expect("opens whole");
@@ -1435,7 +1434,7 @@ fn a_message_sent_on_a_displaced_session_still_opens_after_the_holder_restarts()
     assert_eq!(describe(&d), "Application(high first)");
     // low restarts between the two
     let blob = n.s.client(low).durable();
-    let (dev, _h) = common::harness::device(vec![ChannelKind::Nfc], n.s.clock.clone(), 77, 0);
+    let (dev, _h) = common::harness::device(n.s.clock.clone(), 77, 0);
     let mut again = Client::new(id(low), ids(), Config::default(), dev);
     again.restore_durable(&blob).expect("opens whole");
     let (from, h2) = n.queued(low);
