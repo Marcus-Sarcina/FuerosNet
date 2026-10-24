@@ -1067,6 +1067,20 @@ class Meet(
         return true
     }
 
+    /**
+     * **A carriage of the conversation was taken from the bearer.**
+     * Nodeless there are no kernel events for the conversation: its
+     * messages arrive as carriages and are ingested by the shell's own
+     * drain, so nothing else tells this flow that anything landed, and
+     * [pollDue] stayed false for ever. A6 reached the verifiers with the
+     * counterparty's responses *taken and held* and never proposed, on a
+     * conversation that was not stuck at all (2026-10-23).
+     */
+    fun carried() = synchronized(lock) {
+        arrived = true
+        changed()
+    }
+
     /** Whether the window is open: the request has gone, and the channels,
      *  the capture and the verification run inside it. */
     fun windowOpen(): Boolean = synchronized(lock) { windowOpen }
@@ -1561,6 +1575,16 @@ class Meet(
      */
     fun pollDue(nowMs: Long = System.currentTimeMillis()): Boolean = synchronized(lock) {
         if (!entered || (step != Step.VERIFIERS && step != Step.REVIEW)) return false
-        arrived || patienceLeftMs(nowMs) == 0L
+        // **the staleness guard has to be reachable with nothing arriving.**
+        // [poll] is what notices that nothing has moved for [STALE_MS] and
+        // ends the meeting, so gating every poll on an arrival or on a
+        // patience put the watchdog behind the very condition it exists to
+        // catch: with no verifier selected there are no queries, so
+        // `patienceLeftMs` is null, and this reduced to `arrived` alone.
+        // A6 sat on the Verifiers screen indefinitely rather than stopping
+        // after three minutes (2026-10-23).
+        val since = maxOf(lastProgressAt, queriesOutAt)
+        arrived || patienceLeftMs(nowMs) == 0L ||
+            (since != 0L && nowMs - since > STALE_MS)
     }
 }

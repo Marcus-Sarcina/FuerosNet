@@ -1340,7 +1340,14 @@ object Kernel {
                     }
                     live.discard(phase)
                 }
-                if (taken > 0) sendCarriages(p)
+                if (taken > 0) {
+                    // **what arrived has to wake the poll.** These are the
+                    // conversation's own messages and nodeless they come
+                    // only this way, with no kernel event behind them, so
+                    // without this the flow never looks again
+                    m.carried()
+                    sendCarriages(p)
+                }
             }
             else -> {}
         }

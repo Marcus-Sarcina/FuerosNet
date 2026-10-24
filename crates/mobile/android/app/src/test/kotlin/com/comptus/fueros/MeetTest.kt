@@ -779,6 +779,75 @@ class MeetConversationTest {
      *  happens inside it. Refused while the counterparty's prune has not
      *  answered, and asked again on the next turn. */
     /**
+     * **A carriage taken from the bearer wakes the poll.** Nodeless the
+     * conversation's messages arrive only that way, with no kernel event
+     * behind them, and `arrived` was set by [Meet.conversed] and
+     * [Meet.answered] alone — both event-driven. So A6 held the
+     * counterparty's responses, taken and saved, and never proposed: with
+     * no verifier selected there are no queries either, so the patience is
+     * null and [Meet.pollDue] reduced to `arrived` (2026-10-23).
+     */
+    @Test
+    fun a_carriage_taken_from_the_bearer_makes_the_poll_due() {
+        val m = Meet("aa", "carol", Meet.Kind(), openRetryMs = 1L).apply {
+            crossBootstrap(); accept(); intentSent(); intentReceived()
+            proximityDone(); captureDone()
+        }
+        // A6's own state: the proposer, nothing outstanding because no
+        // verifier was selected, waiting on the counterparty's responses
+        val c = FakeCourier(
+            Meet.Progress(
+                proposer = true,
+                queriesOutstanding = 0,
+                waitingOn = "the counterparty's responses",
+            ),
+        )
+        m.converse(c)
+        assertEquals(Meet.Step.VERIFIERS, m.step())
+        assertFalse("nothing outstanding, nothing arrived", m.pollDue())
+        m.carried()
+        assertTrue("a carriage is an arrival", m.pollDue())
+    }
+
+    /**
+     * **The staleness guard is reachable with nothing arriving at all.**
+     * It lives inside [Meet.poll], and [Meet.pollDue] used to gate every
+     * poll on an arrival or on a patience that is null when no query is
+     * outstanding — so the watchdog sat behind the condition it exists to
+     * catch, and the Verifiers screen hung instead of stopping after three
+     * minutes.
+     */
+    @Test
+    fun a_conversation_waiting_on_nothing_still_becomes_due_and_goes_stale() {
+        val m = Meet("aa", "carol", Meet.Kind(), openRetryMs = 1L).apply {
+            crossBootstrap(); accept(); intentSent(); intentReceived()
+            proximityDone(); captureDone()
+        }
+        // A6's own state: the proposer, nothing outstanding because no
+        // verifier was selected, waiting on the counterparty's responses
+        val c = FakeCourier(
+            Meet.Progress(
+                proposer = true,
+                queriesOutstanding = 0,
+                waitingOn = "the counterparty's responses",
+            ),
+        )
+        val t0 = 1_000_000L
+        m.converse(c, t0)
+        assertFalse("not due while it is young", m.pollDue(t0 + 1_000L))
+        assertTrue(
+            "due once nothing has moved for the stale window",
+            m.pollDue(t0 + Meet.STALE_MS + 1_000L),
+        )
+        // and the poll it is now due for is the one that ends the meeting
+        m.poll(c, t0 + Meet.STALE_MS + 1_000L)
+        assertTrue(
+            "it stops rather than holding two people on a step",
+            m.stopReason()?.contains("nothing has moved") == true,
+        )
+    }
+
+    /**
      * **A `Waiting` at the conversation's own open is not a failure
      * either.** [Meet.openWindow] runs during the channels and retries it;
      * [Meet.converse]'s fallback runs after them, and used to end the
