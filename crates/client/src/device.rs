@@ -255,8 +255,15 @@ pub enum Held {
     Lost(Lost),
 }
 
-/// **Hold the counterparty across the window, and retain the frames taken
-/// at the prompts** (design §7.5).
+/// **The hold, as a machine the caller turns** (design §7.5, §7.1 item 5):
+/// the capture runs for the ceremony's window *concurrently* with the
+/// verification, so it cannot be one call that holds the client's thread
+/// for the window.  [`Hold::begin`] plans the prompts, each [`Hold::tick`]
+/// takes one frame — prompted where a prompt falls now, a bare probe
+/// otherwise — and says when the next is due, and [`Hold::finish`] judges
+/// what the window saw.  [`hold_continuity`] is the same machine turned to
+/// completion against the device's clock, for a caller with nothing else
+/// to do meanwhile.
 ///
 /// One mechanism rather than two: the prompts fall at random through the
 /// window and the retained images are the ones taken at them, so the
@@ -269,39 +276,113 @@ pub enum Held {
 /// What is not retained does not survive: a probe's sample is compared and
 /// dropped, never stored, which is what keeps a compliant client holding
 /// no decryptable likeness it was not given a key for (§7.5.2).
-pub fn hold_continuity(
-    cam: &dyn Camera,
-    clock: &dyn Clock,
-    rng: &dyn Random,
-    engine: &dyn Engine,
+pub struct Hold {
+    at: Vec<u64>,
+    next: usize,
+    window: u64,
+    enforced: bool,
+    start: u64,
+    probe_ms: u64,
+    max_gap_ms: u64,
+    presence_pct: u64,
     version: u64,
-    p: &CaptureParams,
-    c: &Continuity,
-) -> Held {
-    let n = draw(rng, p.min_frames, p.max_frames);
-    // the window: the floor where one is set, and the capture's own span
-    // where it is not
-    let window = if c.duration_ms == 0 {
-        draw(rng, p.min_span_ms, p.max_span_ms)
-    } else {
-        c.duration_ms
-    };
-    // the prompts' instants, drawn through the window and taken in order
-    let mut at: Vec<u64> = (0..n).map(|_| draw(rng, 0, window)).collect();
-    at.sort_unstable();
-    // **nothing is abandoned where no window was set**: see
-    // [`Continuity::duration_ms`] for why a short window measures no ratio
-    let enforced = c.duration_ms != 0;
-    let start = clock.now_ms();
-    let (mut frames, mut prompts) = (Vec::new(), Vec::new());
-    let (mut held, mut next) = (None::<Vec<u8>>, 0usize);
-    let (mut away_since, mut away_total) = (None::<u64>, 0u64);
-    loop {
-        let now = clock.now_ms().saturating_sub(start);
+    frames: Vec<Frame>,
+    prompts: Vec<Prompt>,
+    held: Option<Vec<u8>>,
+    away_since: Option<u64>,
+    away_total: u64,
+    done: bool,
+}
+
+/// What one turn of the hold came to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Tick {
+    /// The window is still open.
+    Continue {
+        /// When the next frame is due, in milliseconds.
+        next_ms: u64,
+    },
+    /// The window has elapsed: [`Hold::finish`] is what remains.
+    Done,
+    /// Abandoned, and why.  **The meeting ends**: a party that could not
+    /// hold its counterparty has nothing to attest.
+    Lost(Lost),
+}
+
+impl Hold {
+    /// Plan the hold: the prompt count and their instants, drawn through
+    /// the window — the floor where one is set, `window_ms` where the
+    /// caller names the ceremony's own, and the capture's drawn span
+    /// otherwise.  Nothing is taken until the first [`Hold::tick`].
+    pub fn begin(
+        clock: &dyn Clock,
+        rng: &dyn Random,
+        version: u64,
+        p: &CaptureParams,
+        c: &Continuity,
+        window_ms: Option<u64>,
+    ) -> Hold {
+        let n = draw(rng, p.min_frames, p.max_frames);
+        let window = if c.duration_ms != 0 {
+            c.duration_ms
+        } else {
+            window_ms
+                .filter(|w| *w != 0)
+                .unwrap_or_else(|| draw(rng, p.min_span_ms, p.max_span_ms))
+        };
+        let mut at: Vec<u64> = (0..n).map(|_| draw(rng, 0, window)).collect();
+        at.sort_unstable();
+        Hold {
+            at,
+            next: 0,
+            window,
+            // **nothing is abandoned where no window was set**: see
+            // [`Continuity::duration_ms`] for why a short window measures
+            // no ratio
+            enforced: c.duration_ms != 0,
+            start: clock.now_ms(),
+            probe_ms: c.probe_ms,
+            max_gap_ms: c.max_gap_ms,
+            presence_pct: c.presence_pct,
+            version,
+            frames: Vec::new(),
+            prompts: Vec::new(),
+            held: None,
+            away_since: None,
+            away_total: 0,
+            done: false,
+        }
+    }
+
+    /// The frames retained so far, at the prompts that have fallen: what
+    /// yields a template before the window is out (design §7.1 item 6).
+    pub fn frames(&self) -> &[Frame] {
+        &self.frames
+    }
+
+    /// How long the hold has run, in milliseconds of the device's clock.
+    pub fn elapsed_ms(&self, clock: &dyn Clock) -> u64 {
+        clock.now_ms().saturating_sub(self.start)
+    }
+
+    /// One turn: a prompt where one falls now, a probe otherwise, judged
+    /// against the face being held.  After [`Tick::Done`] it is a no-op
+    /// answering `Done`.
+    pub fn tick(
+        &mut self,
+        cam: &dyn Camera,
+        clock: &dyn Clock,
+        rng: &dyn Random,
+        engine: &dyn Engine,
+    ) -> Tick {
+        if self.done {
+            return Tick::Done;
+        }
+        let now = clock.now_ms().saturating_sub(self.start);
         // a prompt falls here: show it, keep the frame, and let the frame
         // itself serve as this tick's probe
-        let prompt = (next < at.len() && now >= at[next]).then(|| {
-            next += 1;
+        let prompt = (self.next < self.at.len() && now >= self.at[self.next]).then(|| {
+            self.next += 1;
             Prompt::ALL[draw(rng, 0, Prompt::ALL.len() as u64 - 1) as usize]
         });
         // prompted where a prompt falls here, and a bare probe otherwise:
@@ -316,62 +397,99 @@ pub fn hold_continuity(
         };
         match engine.sample(&frame) {
             Some(seen) => {
-                if let Some(h) = &held {
+                if let Some(h) = &self.held {
                     // a different face while the one held was away is the
                     // substitution the loop exists to catch
-                    if enforced
-                        && away_since.is_some()
-                        && engine.matcher().compare(h, &engine.profile(&seen), version)
+                    if self.enforced
+                        && self.away_since.is_some()
+                        && engine
+                            .matcher()
+                            .compare(h, &engine.profile(&seen), self.version)
                             == crate::query::Verdict::NoMatch
                     {
-                        return Held::Lost(Lost::Another);
+                        self.done = true;
+                        return Tick::Lost(Lost::Another);
                     }
                 } else {
-                    held = Some(seen);
+                    self.held = Some(seen);
                 }
-                if let Some(since) = away_since.take() {
-                    away_total += now.saturating_sub(since);
+                if let Some(since) = self.away_since.take() {
+                    self.away_total += now.saturating_sub(since);
                 }
             }
             None => {
-                let since = *away_since.get_or_insert(now);
-                if enforced && now.saturating_sub(since) > c.max_gap_ms {
-                    return Held::Lost(Lost::Gap);
+                let since = *self.away_since.get_or_insert(now);
+                if self.enforced && now.saturating_sub(since) > self.max_gap_ms {
+                    self.done = true;
+                    return Tick::Lost(Lost::Gap);
                 }
             }
         }
         if let Some(prompt) = prompt {
-            prompts.push(prompt);
-            frames.push(frame);
+            self.prompts.push(prompt);
+            self.frames.push(frame);
         }
-        if now >= window {
-            break;
+        if now >= self.window {
+            self.done = true;
+            return Tick::Done;
         }
-        clock.wait_ms(c.probe_ms);
+        // on the probe's cadence: a prompt that falls between two probes is
+        // taken at the next, as the one-call form always took it
+        Tick::Continue {
+            next_ms: self.probe_ms,
+        }
     }
-    if let Some(since) = away_since {
-        away_total += window.saturating_sub(since);
+
+    /// Judge the window once it has elapsed: the gaps summed against the
+    /// share the window allows, and the frames kept at the prompts.
+    pub fn finish(mut self) -> Held {
+        if let Some(since) = self.away_since.take() {
+            self.away_total += self.window.saturating_sub(since);
+        }
+        if self.enforced && self.held.is_none() {
+            return Held::Lost(Lost::None_);
+        }
+        // the gaps, summed, against the share the window allows
+        let short = self.away_total * 100 > self.window * (100 - self.presence_pct.min(100));
+        if self.enforced && short {
+            return Held::Lost(Lost::Ratio);
+        }
+        // **off, and still said**: a run wants to know what the loop saw
+        // even where nothing turns on it, the check being the party's own
+        // (§7.5)
+        tracing::info!(
+            target: "cer",
+            enforced = self.enforced,
+            window_ms = self.window,
+            away_ms = self.away_total,
+            held = self.held.is_some(),
+            would_abandon = short,
+            "cer.continuity"
+        );
+        Held::Kept(self.frames, self.prompts)
     }
-    if enforced && held.is_none() {
-        return Held::Lost(Lost::None_);
+}
+
+/// **Hold the counterparty across the window, and retain the frames taken
+/// at the prompts** (design §7.5): the [`Hold`] turned to completion on
+/// this thread, waiting on the device's clock between turns.
+pub fn hold_continuity(
+    cam: &dyn Camera,
+    clock: &dyn Clock,
+    rng: &dyn Random,
+    engine: &dyn Engine,
+    version: u64,
+    p: &CaptureParams,
+    c: &Continuity,
+) -> Held {
+    let mut hold = Hold::begin(clock, rng, version, p, c, None);
+    loop {
+        match hold.tick(cam, clock, rng, engine) {
+            Tick::Done => return hold.finish(),
+            Tick::Lost(why) => return Held::Lost(why),
+            Tick::Continue { next_ms } => clock.wait_ms(next_ms),
+        }
     }
-    // the gaps, summed, against the share the window allows
-    let short = away_total * 100 > window * (100 - c.presence_pct.min(100));
-    if enforced && short {
-        return Held::Lost(Lost::Ratio);
-    }
-    // **off, and still said**: a run wants to know what the loop saw even
-    // where nothing turns on it, the check being the party's own (§7.5)
-    tracing::info!(
-        target: "cer",
-        enforced,
-        window_ms = window,
-        away_ms = away_total,
-        held = held.is_some(),
-        would_abandon = short,
-        "cer.continuity"
-    );
-    Held::Kept(frames, prompts)
 }
 
 fn draw(rng: &dyn Random, lo: u64, hi: u64) -> u64 {

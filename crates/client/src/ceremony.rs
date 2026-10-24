@@ -6,7 +6,7 @@
 //! in-process [`Harness`] moves them and records every path they take.
 
 use crate::backup;
-use crate::device::{Device, Held, hold_continuity};
+use crate::device::{Device, Held, Hold, Tick};
 use crate::diag::id8;
 use crate::horizon::{Askable, Horizon, Reach, Upstream};
 use crate::keys::{capture_key, pre_commitment};
@@ -359,6 +359,19 @@ pub enum Msg {
     Carriage(Vec<u8>),
 }
 
+/// One turn of the capture's hold, as [`Client::capture_tick`] reports it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CaptureTurn {
+    /// Whether the window has elapsed and the seal may be taken.
+    pub done: bool,
+    /// When the next turn is due, in milliseconds; zero once done.
+    pub next_ms: u64,
+    /// The frames retained so far.
+    pub frames: u64,
+    /// Whether a template is in hand, so the queries can go.
+    pub template_ready: bool,
+}
+
 /// What the proposer shows every signer: the proposal, the disclosure set
 /// its root commits to, and the back-pointers each signer supplied.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -529,6 +542,11 @@ pub(crate) struct Active {
     their_bundle: Vec<Vec<u8>>,
     their_retention: u64,
     sealed: Option<SealedCapture>,
+    /// The hold the capture runs as, from [`Client::capture_begin`] until
+    /// [`Client::capture_seal`] takes it (design §7.1 item 5).
+    hold: Option<Hold>,
+    /// Whether the hold's window has elapsed: what the seal waits on.
+    hold_done: bool,
     /// The template of the counterparty, in memory for the queries and
     /// gone with the ceremony.
     template: Option<Vec<u8>>,
@@ -955,6 +973,8 @@ impl Client {
             their_bundle: vec![],
             their_retention: 0,
             sealed: None,
+            hold: None,
+            hold_done: false,
             template: None,
             image_count: 0,
             issued: BTreeSet::new(),
@@ -1766,35 +1786,124 @@ impl Client {
     /// template, seal both under the key the counterparty supplied, and
     /// let that key go: it is wiped here, and this side holds no copy.
     pub fn capture(&mut self, their_key: Zeroizing<[u8; 32]>) -> Result<(), Abort> {
+        self.capture_begin()?;
+        loop {
+            let turn = self.capture_tick()?;
+            if turn.done {
+                break;
+            }
+            self.device.clock.wait_ms(turn.next_ms);
+        }
+        self.capture_seal(their_key)
+    }
+
+    /// **Begin the hold** (design §7.1 item 5): the capture runs for the
+    /// ceremony's window — `witness_window_s`, or the capture's own drawn
+    /// span where that is zero, the harness's idiom — concurrently with
+    /// everything else inside it, so it is a machine the shell turns with
+    /// [`Client::capture_tick`] rather than a call that holds this thread.
+    /// Begun once; a second call is a no-op.
+    pub fn capture_begin(&mut self) -> Result<(), Abort> {
+        let window_ms = self.cfg.witness_window_s * 1_000;
+        let a = self.active.as_mut().ok_or(Abort::NotActive)?;
+        a.peer()?;
+        a.ceremony_id.ok_or(Abort::NoCeremonyId)?;
+        if a.hold.is_some() {
+            return Ok(());
+        }
+        self.device.notifier.notify(Notice::RecordDisclosure {
+            role: Role::Participant,
+        });
+        a.hold = Some(Hold::begin(
+            self.device.clock.as_ref(),
+            self.device.random.as_ref(),
+            self.cfg.template_version,
+            &self.cfg.capture,
+            &self.cfg.continuity,
+            Some(window_ms),
+        ));
+        a.hold_done = false;
+        Ok(())
+    }
+
+    /// **One turn of the hold**: a prompt where one falls now, a probe
+    /// otherwise.  **The first retained frame yields the template** the
+    /// queries carry (design §7.1 item 6: "the first query fires as soon as
+    /// a captured frame yields a template"), so the verification starts
+    /// while the capture continues.  A lost hold ends the ceremony here,
+    /// as it did in the one-call form.
+    pub fn capture_tick(&mut self) -> Result<CaptureTurn, Abort> {
+        let template_len = self.cfg.seal.template_len;
+        let a = self.active.as_mut().ok_or(Abort::NotActive)?;
+        let hold = a.hold.as_mut().ok_or(Abort::NotActive)?;
+        let turn = hold.tick(
+            self.device.camera.as_ref(),
+            self.device.clock.as_ref(),
+            self.device.random.as_ref(),
+            self.device.engine.as_ref(),
+        );
+        if a.template.is_none() && !hold.frames().is_empty() {
+            let t = self.device.engine.template(hold.frames());
+            if t.len() == template_len {
+                a.template = Some(t);
+            }
+        }
+        let frames = hold.frames().len() as u64;
+        let template_ready = a.template.is_some();
+        match turn {
+            Tick::Lost(why) => {
+                tracing::info!(target: "cer", ?why, "cer.capture.lost");
+                Err(abort("capture", Abort::LostHold(why)))
+            }
+            Tick::Done => {
+                a.hold_done = true;
+                Ok(CaptureTurn {
+                    done: true,
+                    next_ms: 0,
+                    frames,
+                    template_ready,
+                })
+            }
+            Tick::Continue { next_ms } => Ok(CaptureTurn {
+                done: false,
+                next_ms,
+                frames,
+                template_ready,
+            }),
+        }
+    }
+
+    /// **Seal the capture under the counterparty's key** once the window
+    /// has elapsed (design §7.5.2.6): the frames retained at the prompts,
+    /// the template they yield, sealed and held for the record.  Refused
+    /// with `Waiting` while the hold is still running — the key may land
+    /// before the window is out, and the shell asks again when it is.
+    /// **The key is discarded once the capture is sealed.**
+    pub fn capture_seal(&mut self, their_key: Zeroizing<[u8; 32]>) -> Result<(), Abort> {
         let me = self.keyhash();
         let (peer, cid) = {
             let a = self.active()?;
             (a.peer()?, a.ceremony_id.ok_or(Abort::NoCeremonyId)?)
         };
-        self.device.notifier.notify(Notice::RecordDisclosure {
-            role: Role::Participant,
-        });
-        let t0 = self.device.clock.now_ms();
-        // **held across the window, not taken in a burst** (design §7.5):
-        // the prompts fall at random through it and the retained frames
-        // are the ones taken at them, while between prompts the loop
-        // satisfies this party that it met one person continuously
-        let frames = match hold_continuity(
-            self.device.camera.as_ref(),
-            self.device.clock.as_ref(),
-            self.device.random.as_ref(),
-            self.device.engine.as_ref(),
-            self.cfg.template_version,
-            &self.cfg.capture,
-            &self.cfg.continuity,
-        ) {
+        let (hold, done) = {
+            let a = self.active.as_mut().ok_or(Abort::NotActive)?;
+            if a.hold.is_none() {
+                return Err(Abort::NotActive);
+            }
+            if !a.hold_done {
+                return Err(Abort::Waiting("the capture's window"));
+            }
+            (a.hold.take().expect("checked"), a.hold_done)
+        };
+        debug_assert!(done);
+        let ms = hold.elapsed_ms(self.device.clock.as_ref());
+        let frames = match hold.finish() {
             Held::Kept(frames, _prompts) => frames,
             Held::Lost(why) => {
                 tracing::info!(target: "cer", ?why, "cer.capture.lost");
                 return Err(abort("capture", Abort::LostHold(why)));
             }
         };
-        let ms = self.device.clock.now_ms().saturating_sub(t0);
         let template = self.device.engine.template(&frames);
         // the count and the version, never a frame or the template
         tracing::info!(

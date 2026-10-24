@@ -113,7 +113,7 @@ class DiagTest {
         assertTrue(lines[2].contains("\"line\":\"their contribution is in: 01234567\""))
         assertTrue(lines[3].contains("\"trigger\":\"kernel\""))
         assertTrue(lines[4].contains("\"level\":\"warn\""))
-        assertTrue(lines[4].contains("\"from\":\"CAPTURE\",\"reason\":\"the carried intent was refused\""))
+        assertTrue(lines[4].contains("\"from\":\"WINDOW\",\"reason\":\"the carried intent was refused\""))
     }
 
     @Test

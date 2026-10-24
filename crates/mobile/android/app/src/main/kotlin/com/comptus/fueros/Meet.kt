@@ -12,8 +12,8 @@ package com.comptus.fueros
  *  - **Everything a person reads or decides is front-loaded.** The kind of
  *    transaction is chosen at [Step.INTENT] by the initiator; every warning
  *    and every disclosure choice at [Step.BRIEF]. Past the brief the device
- *    faces the counterparty and takes no input — [Step.OPTICAL] through
- *    [Step.CAPTURE] are **hands-off** — so nothing that needs the user may
+ *    faces the counterparty and takes no input — [Step.OPTICAL] and
+ *    [Step.WINDOW] are **hands-off** — so nothing that needs the user may
  *    live there.
  *  - **D1 is two halves and two cameras** [author, 2026-09-29]. A
  *    **bootstrap** QR carries only this device's identifier and the kind of
@@ -188,11 +188,10 @@ class Meet(
         BRIEF,
         /** The optical exchange, and the intents over the bearer. */
         OPTICAL,
-        /** The distance channels. */
-        /** The guided captures. */
-        CAPTURE,
-        /** The verifier selection and the queries. */
-        VERIFIERS,
+        /** **The window** (design §7.1 items 4–6): the capture, the verifier
+         *  selection and queries, and the conversation, concurrently, from
+         *  the request that opens it to the body that ends it. */
+        WINDOW,
         /** The proposed body, for every signer to review. */
         REVIEW,
         /** The record is finalised and held. */
@@ -622,7 +621,7 @@ class Meet(
      */
     fun goOn() {
         synchronized(lock) {
-            if (step != Step.VERIFIERS) return
+            if (step != Step.WINDOW) return
             goOn = true
             changed()
         }
@@ -1002,12 +1001,30 @@ class Meet(
             if (received) intentReceived = true
             intentSent && intentReceived
         }
-        if (both) moved(Step.OPTICAL, Step.CAPTURE)
+        if (both) moved(Step.OPTICAL, Step.WINDOW)
     }
 
-    /** Capture is the last hands-off step; the device comes back to the
-     *  user for the verifier selection. */
-    fun captureDone() = advance(Step.CAPTURE, Step.VERIFIERS, "kernel")
+    /**
+     * **The capture is sealed** [author, 2026-10-24]: the window has elapsed
+     * on this device's clock and the frames are sealed under the
+     * counterparty's key. Not a step — the capture ran inside the window
+     * alongside the verification (design §7.1 item 5) — but the fact the
+     * proposal and the handover wait on, since a party whose capture is
+     * not sealed has nothing to hold of the counterparty.
+     */
+    fun captureSealed() {
+        synchronized(lock) {
+            if (captureSealed) return
+            captureSealed = true
+            Diag.event("meet.capture", "sealed" to true)
+            changed()
+        }
+    }
+
+    /** Whether this device's capture is sealed. */
+    fun isCaptureSealed(): Boolean = synchronized(lock) { captureSealed }
+
+    private var captureSealed = false
 
     /**
      * **Open the four-minute window** (design §7.1 item 4) [author,
@@ -1017,8 +1034,8 @@ class Meet(
      * engagement each has been watching, and this signer's back-pointers
      * go with it.
      *
-     * **Everything after it runs inside the window** — the channels, the
-     * capture and the verification — so each leg reaches the survivors on
+     * **Everything after it runs inside the window** — the capture and the
+     * verification, concurrently — so each leg reaches the survivors on
      * their own clocks as it is sent, which is what a witness attests
      * from. Refused with the kernel's `Waiting` while the keep has not
      * arrived, and retried on the next turn; any other refusal ends the
@@ -1086,22 +1103,21 @@ class Meet(
         changed()
     }
 
-    /** Whether the window is open: the request has gone, and the channels,
-     *  the capture and the verification run inside it. */
+    /** Whether the window is open: the request has gone, and the capture
+     *  and the verification run inside it. */
     fun windowOpen(): Boolean = synchronized(lock) { windowOpen }
 
     /**
-     * **Put the queries, inside the window** (design §7.1 item 7), once,
-     * on entering [Step.VERIFIERS]. The window opened before the channels
-     * ([openWindow]); where a caller drove the flow without it — a test,
-     * or a path that never reached the channels — it is opened here, since
-     * there is no conversation without the request. A refusal stops the
+     * **Put the queries, inside the window** (design §7.1 item 6), once,
+     * as the window opens at [Step.WINDOW] ([openWindow]); where a caller
+     * drove the flow without it — a test — it is opened here, since there
+     * is no conversation without the request. A refusal stops the
      * meeting with the kernel's reason. Ends with one [poll], so a
      * conversation that has nothing to wait on moves at once.
      */
     fun converse(c: Courier, nowMs: Long = System.currentTimeMillis()) {
         synchronized(lock) {
-            if (step != Step.VERIFIERS || opening || entered) return
+            if (step != Step.WINDOW || opening || entered) return
             opening = true
         }
         if (!synchronized(lock) { windowOpen }) {
@@ -1164,7 +1180,7 @@ class Meet(
     /**
      * **Where the conversation stands, and the step it earns.** Called on
      * the kernel's event loop, every tick and after every message of the
-     * conversation, while the flow is at [Step.VERIFIERS] or [Step.REVIEW].
+     * conversation, while the flow is at [Step.WINDOW] or [Step.REVIEW].
      *
      * At the verifiers, once no query is outstanding, or once the person
      * said to go on or the patience ran out with some still out: the
@@ -1185,7 +1201,7 @@ class Meet(
      * `nowMs` from the queries going out or the last answer landing.
      */
     fun poll(c: Courier, nowMs: Long = System.currentTimeMillis()) {
-        val live = synchronized(lock) { entered && (step == Step.VERIFIERS || step == Step.REVIEW) }
+        val live = synchronized(lock) { entered && (step == Step.WINDOW || step == Step.REVIEW) }
         if (!live) return
         val p = c.progress() ?: return
         synchronized(lock) { arrived = false }
@@ -1206,7 +1222,7 @@ class Meet(
         if (stale) {
             return stop("nothing has moved for ${STALE_MS / 1000} s; the other phone may have stopped")
         }
-        if (step() != Step.VERIFIERS) return
+        if (step() != Step.WINDOW) return
         // **said before any branch can return**, on both sides, once.
         // This sat in the `when` at the end, after the proposer branch —
         // which proposes and returns in the same poll that first sees the
@@ -1220,7 +1236,15 @@ class Meet(
         }
         if (p.proposed) {
             // the body is out, or has been shown and signed here
-            moved(Step.VERIFIERS, Step.REVIEW)
+            moved(Step.WINDOW, Step.REVIEW)
+            return
+        }
+        // **nothing leaves this device for the record before its capture is
+        // sealed** [author, 2026-10-24]: the handover and the proposal both
+        // wait on the window elapsing here, said once
+        if (!synchronized(lock) { captureSealed }) {
+            val fresh = synchronized(lock) { (said != "the capture").also { said = "the capture" } }
+            if (fresh) note("not yet proposed: the capture's window is still open on this device.")
             return
         }
         if (p.queriesOutstanding > 0) {
@@ -1262,7 +1286,7 @@ class Meet(
                 return
             }
             note("the body is proposed and shown to every signer.")
-            moved(Step.VERIFIERS, Step.REVIEW)
+            moved(Step.WINDOW, Step.REVIEW)
             return
         }
         // what it waits on is the kernel's word and the screen shows
@@ -1303,7 +1327,7 @@ class Meet(
     fun finalized(txid: String) {
         synchronized(lock) {
             if (step == Step.DONE || step == Step.STOPPED) return
-            check(step == Step.VERIFIERS || step == Step.REVIEW) { "a record finalizes from the conversation, not $step" }
+            check(step == Step.WINDOW || step == Step.REVIEW) { "a record finalizes from the conversation, not $step" }
             recordTxid = txid
             stepped(step, Step.DONE, "kernel")
             changed()
@@ -1564,7 +1588,7 @@ class Meet(
      * held longer than [STALE_MS] is the other phone gone.
      */
     fun stepStale(nowMs: Long = System.currentTimeMillis()): Boolean = synchronized(lock) {
-        step == Step.CAPTURE && nowMs - steppedAtMs > STALE_MS
+        step == Step.WINDOW && !windowOpen && nowMs - steppedAtMs > STALE_MS
     }
 
     /**
@@ -1579,7 +1603,7 @@ class Meet(
      * arrived — that being the case it exists for.
      */
     fun pollDue(nowMs: Long = System.currentTimeMillis()): Boolean = synchronized(lock) {
-        if (!entered || (step != Step.VERIFIERS && step != Step.REVIEW)) return false
+        if (!entered || (step != Step.WINDOW && step != Step.REVIEW)) return false
         // **the staleness guard has to be reachable with nothing arriving.**
         // [poll] is what notices that nothing has moved for [STALE_MS] and
         // ends the meeting, so gating every poll on an arrival or on a

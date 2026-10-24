@@ -43,10 +43,10 @@ class MeetTest {
         // optical, capture: the device faces away
         assertEquals(Meet.Step.OPTICAL, m.step())
         m.intentSent(); m.intentReceived()
-        assertEquals(Meet.Step.CAPTURE, m.step())
-        m.captureDone()
-        // capture hands back to the user for verifier selection
-        assertEquals(Meet.Step.VERIFIERS, m.step())
+        assertEquals(Meet.Step.WINDOW, m.step())
+        m.captureSealed()
+        // the seal is a fact inside the window, not a step
+        assertEquals(Meet.Step.WINDOW, m.step())
     }
 
     @Test
@@ -65,7 +65,7 @@ class MeetTest {
         val m = meet()
         assertThrows(IllegalStateException::class.java) { m.finalized("tx") }
         m.crossBootstrap(); m.accept()
-        m.intentSent(); m.intentReceived(); m.captureDone()
+        m.intentSent(); m.intentReceived(); m.captureSealed()
         val c = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0, proposable = true))
         m.converse(c)
         assertEquals(Meet.Step.REVIEW, m.step())
@@ -101,13 +101,13 @@ class MeetTest {
 
     /** The flow, up to the point the verifier step is live. */
     private fun atVerifiers(): Meet = meet().apply {
-        crossBootstrap(); accept(); intentSent(); intentReceived(); captureDone()
+        crossBootstrap(); accept(); intentSent(); intentReceived(); captureSealed()
     }
 
     @Test
     fun the_verifier_step_distinguishes_none_required_from_not_yet_asked() {
         val m = atVerifiers()
-        assertEquals(Meet.Step.VERIFIERS, m.step())
+        assertEquals(Meet.Step.WINDOW, m.step())
         // before the selection runs, an empty list means nothing was asked
         assertFalse(m.selectionRun())
         assertTrue(m.chosen().isEmpty())
@@ -235,7 +235,7 @@ class MeetConversationTest {
 
     private fun atVerifiers(role: Meet.Role = Meet.Role.INITIATOR): Meet =
         Meet("aa", "carol", Meet.Kind(), role).apply {
-            crossBootstrap(); accept(); intentSent(); intentReceived(); captureDone()
+            crossBootstrap(); accept(); intentSent(); intentReceived(); captureSealed()
         }
 
     /** A meeting with its codes crossing, which is where the optical
@@ -256,7 +256,7 @@ class MeetConversationTest {
         // a recreated screen or a second tick does not open it again
         m.converse(c)
         assertEquals(listOf("open", "queries"), c.calls)
-        assertEquals(Meet.Step.VERIFIERS, m.step())
+        assertEquals(Meet.Step.WINDOW, m.step())
     }
 
     @Test
@@ -300,7 +300,7 @@ class MeetConversationTest {
         m.converse(c, t0)
         // polling with the same progress is not progress, however long
         m.poll(c, t0 + Meet.STALE_MS)
-        assertEquals("still inside the allowance", Meet.Step.VERIFIERS, m.step())
+        assertEquals("still inside the allowance", Meet.Step.WINDOW, m.step())
         m.poll(c, t0 + Meet.STALE_MS + 1)
         assertEquals(Meet.Step.STOPPED, m.step())
         assertTrue(
@@ -325,10 +325,10 @@ class MeetConversationTest {
             attesting = listOf("w1"),
         )
         m.poll(c, t0 + Meet.STALE_MS - 1)
-        assertEquals(Meet.Step.VERIFIERS, m.step())
+        assertEquals(Meet.Step.WINDOW, m.step())
         // the clock runs from there, not from the start
         m.poll(c, t0 + Meet.STALE_MS + 1)
-        assertEquals("the allowance began again", Meet.Step.VERIFIERS, m.step())
+        assertEquals("the allowance began again", Meet.Step.WINDOW, m.step())
         m.poll(c, t0 + 2 * Meet.STALE_MS)
         assertEquals(Meet.Step.STOPPED, m.step())
     }
@@ -343,7 +343,7 @@ class MeetConversationTest {
     @Test
     fun the_flow_is_due_on_an_arrival_or_the_patience_and_not_on_the_turn() {
         val m = Meet("aa", "carol", Meet.Kind(), Meet.Role.INITIATOR, patienceMs = 1_000).apply {
-            crossBootstrap(); accept(); intentSent(); intentReceived(); captureDone()
+            crossBootstrap(); accept(); intentSent(); intentReceived(); captureSealed()
         }
         m.selected(listOf(Meet.Chosen("v1", Meet.Basis.MET)))
         val c = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 1))
@@ -364,7 +364,7 @@ class MeetConversationTest {
 
         // a message of the conversation is an arrival too
         val n = Meet("bb", "carol", Meet.Kind(), Meet.Role.RESPONDER).apply {
-            crossBootstrap(); accept(); intentSent(); intentReceived(); captureDone()
+            crossBootstrap(); accept(); intentSent(); intentReceived(); captureSealed()
         }
         val c2 = FakeCourier(Meet.Progress(proposer = false, queriesOutstanding = 0, handed = true))
         n.converse(c2, nowMs = 20_000)
@@ -413,7 +413,7 @@ class MeetConversationTest {
         m.poll(c)
         assertEquals("gathered goes once, not per tick", 1, c.count("gathered"))
         assertEquals("the responder never proposes", 0, c.count("propose"))
-        assertEquals(Meet.Step.VERIFIERS, m.step())
+        assertEquals(Meet.Step.WINDOW, m.step())
         // the body arrives, is reviewed and signed in the kernel, and the
         // progress says so
         m.conversed("the body reviewed and signed", Meet.Turn.Other)
@@ -439,7 +439,7 @@ class MeetConversationTest {
             ),
         )
         m.converse(c)
-        assertEquals(Meet.Step.VERIFIERS, m.step())
+        assertEquals(Meet.Step.WINDOW, m.step())
         assertEquals("the counterparty's responses", m.waitingOn())
         m.poll(c)
         m.poll(c)
@@ -480,7 +480,7 @@ class MeetConversationTest {
         m.nominated(mine = listOf("w1"), theirs = listOf())
         val c = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0, noWitness = true))
         m.converse(c)
-        assertEquals(Meet.Step.VERIFIERS, m.step())
+        assertEquals(Meet.Step.WINDOW, m.step())
         assertTrue(m.noWitness())
         assertNull("not a stop: there is no witness floor", m.stopReason())
         m.poll(c)
@@ -514,7 +514,7 @@ class MeetConversationTest {
         val m = atVerifiers()
         val c = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0, noWitness = true))
         m.converse(c)
-        assertEquals("not a stop", Meet.Step.VERIFIERS, m.step())
+        assertEquals("not a stop", Meet.Step.WINDOW, m.step())
         c.progress = Meet.Progress(proposer = true, queriesOutstanding = 0, noWitness = true, proposable = true)
         m.poll(c)
         assertEquals(1, c.count("propose"))
@@ -554,11 +554,15 @@ class MeetConversationTest {
         assertFalse(m.handOff(b))
     }
 
-    /** **The capture goes stale too**: a step with nothing of its own
-     *  watching it is judged by how long it has been the step. */
+    /** **The window goes stale too, until it opens**: before the request
+     *  has gone nothing of its own watches the step, so it is judged by how
+     *  long it has been the step; once open, the conversation's progress
+     *  clock takes over ([Meet.poll]). */
     @Test
     fun a_step_held_past_the_stale_window_is_the_other_phone_gone() {
         val m = atVerifiers()
+        assertTrue("nothing opened the window", m.stepStale(System.currentTimeMillis() + Meet.STALE_MS * 2))
+        assertTrue(m.openWindow(FakeCourier()))
         assertFalse("the conversation has its own clock", m.stepStale(System.currentTimeMillis() + Meet.STALE_MS * 2))
         val c = Meet(kind = Meet.Kind())
         assertFalse(c.stepStale(System.currentTimeMillis() + Meet.STALE_MS * 2))
@@ -609,7 +613,7 @@ class MeetConversationTest {
         val m = atVerifiers(Meet.Role.RESPONDER)
         m.converse(FakeCourier(Meet.Progress(proposer = false, queriesOutstanding = 0)))
         m.conversed("kind 12 refused: from no party to a ceremony this client is in or witnesses", Meet.Turn.Other)
-        assertEquals("a stranger's message is not this meeting's failure", Meet.Step.VERIFIERS, m.step())
+        assertEquals("a stranger's message is not this meeting's failure", Meet.Step.WINDOW, m.step())
         assertTrue(m.log().any { it.contains("kind 12 refused") })
         m.conversed("the body refused: NotVerified", Meet.Turn.BodyRefused(4, "NotVerified"))
         assertEquals(Meet.Step.STOPPED, m.step())
@@ -644,7 +648,7 @@ class MeetConversationTest {
     @Test
     fun the_patience_runs_out_and_the_initiator_proposes_with_queries_unanswered() {
         val m = Meet("aa", "carol", Meet.Kind(), Meet.Role.INITIATOR, patienceMs = 1_000).apply {
-            crossBootstrap(); accept(); intentSent(); intentReceived(); captureDone()
+            crossBootstrap(); accept(); intentSent(); intentReceived(); captureSealed()
         }
         m.selected(listOf(Meet.Chosen("v1", Meet.Basis.MET), Meet.Chosen("v2", Meet.Basis.MET)))
         val c = FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 2, proposable = true))
@@ -748,13 +752,13 @@ class MeetConversationTest {
         m.intentReceived()
         assertEquals("theirs alone is not enough", Meet.Step.OPTICAL, m.step())
         m.intentSent()
-        assertEquals(Meet.Step.CAPTURE, m.step())
+        assertEquals(Meet.Step.WINDOW, m.step())
         // and the other order
         val n = Meet(kind = Meet.Kind()).apply { crossBootstrap(); accept() }
         n.intentSent()
         assertEquals(Meet.Step.OPTICAL, n.step())
         n.intentReceived()
-        assertEquals(Meet.Step.CAPTURE, n.step())
+        assertEquals(Meet.Step.WINDOW, n.step())
     }
 
     @Test
@@ -787,7 +791,7 @@ class MeetConversationTest {
     fun the_turn_state_says_where_the_flow_is_and_whether_a_poll_is_due() {
         val m = Meet("aa", "carol", Meet.Kind(), openRetryMs = 1L).apply {
             crossBootstrap(); accept(); intentSent(); intentReceived()
-            captureDone()
+            captureSealed()
         }
         val c = FakeCourier(
             Meet.Progress(
@@ -801,7 +805,7 @@ class MeetConversationTest {
 
         val idle = m.turnState(t0 + 1_000L)
         for (field in listOf(
-            "step=VERIFIERS", "entered=true", "arrived=false", "due=false",
+            "step=WINDOW", "entered=true", "arrived=false", "due=false",
             "outstanding=0", "proposer=true", "proposed=false",
             "waitingOn=the counterparty's responses",
         )) {
@@ -831,7 +835,7 @@ class MeetConversationTest {
     fun a_carriage_taken_from_the_bearer_makes_the_poll_due() {
         val m = Meet("aa", "carol", Meet.Kind(), openRetryMs = 1L).apply {
             crossBootstrap(); accept(); intentSent(); intentReceived()
-            captureDone()
+            captureSealed()
         }
         // A6's own state: the proposer, nothing outstanding because no
         // verifier was selected, waiting on the counterparty's responses
@@ -843,7 +847,7 @@ class MeetConversationTest {
             ),
         )
         m.converse(c)
-        assertEquals(Meet.Step.VERIFIERS, m.step())
+        assertEquals(Meet.Step.WINDOW, m.step())
         assertFalse("nothing outstanding, nothing arrived", m.pollDue())
         m.carried()
         assertTrue("a carriage is an arrival", m.pollDue())
@@ -861,7 +865,7 @@ class MeetConversationTest {
     fun a_conversation_waiting_on_nothing_still_becomes_due_and_goes_stale() {
         val m = Meet("aa", "carol", Meet.Kind(), openRetryMs = 1L).apply {
             crossBootstrap(); accept(); intentSent(); intentReceived()
-            captureDone()
+            captureSealed()
         }
         // A6's own state: the proposer, nothing outstanding because no
         // verifier was selected, waiting on the counterparty's responses
@@ -902,9 +906,9 @@ class MeetConversationTest {
     fun a_waiting_at_the_conversations_own_open_is_retried_not_stopped_on() {
         val m = Meet("aa", "carol", Meet.Kind(), openRetryMs = 1L).apply {
             crossBootstrap(); accept(); intentSent(); intentReceived()
-            captureDone()
+            captureSealed()
         }
-        assertEquals(Meet.Step.VERIFIERS, m.step())
+        assertEquals(Meet.Step.WINDOW, m.step())
         assertFalse("the channels never opened it", m.windowOpen())
         // the keep is still crossing the bearer for the first two asks,
         // and lands on the third
@@ -938,7 +942,7 @@ class MeetConversationTest {
     fun a_refusal_that_is_not_waiting_still_stops_the_conversation_at_once() {
         val m = Meet("aa", "carol", Meet.Kind(), openRetryMs = 1L).apply {
             crossBootstrap(); accept(); intentSent(); intentReceived()
-            captureDone()
+            captureSealed()
         }
         val c = FakeCourier()
         c.openRefusal = "Refused(the request named a meeting this side never opened)"
@@ -955,7 +959,7 @@ class MeetConversationTest {
         val m = Meet("aa", "carol", Meet.Kind()).apply {
             crossBootstrap(); accept(); intentSent(); intentReceived()
         }
-        assertEquals("the capture is the window's", Meet.Step.CAPTURE, m.step())
+        assertEquals("the capture is the window's", Meet.Step.WINDOW, m.step())
         assertFalse(m.windowOpen())
         // the keep has not arrived: the kernel says so, nothing stops
         val waiting = FakeCourier()
@@ -971,7 +975,7 @@ class MeetConversationTest {
         assertEquals("the request goes once", 1, c.count("open"))
         assertEquals(1, m.log().count { it.contains("the window is open") })
         // and the queries follow inside it, without a second request
-        m.captureDone()
+        m.captureSealed()
         c.progress = Meet.Progress(proposer = true, queriesOutstanding = 1)
         m.converse(c)
         assertEquals("no second request", 1, c.count("open"))
@@ -1321,7 +1325,7 @@ class MeetRowsTest {
     // ---- D6: UX-003 ---------------------------------------------------
 
     private fun atReview(m: Meet): Meet {
-        m.crossBootstrap(); m.accept(); m.intentSent(); m.intentReceived(); m.captureDone()
+        m.crossBootstrap(); m.accept(); m.intentSent(); m.intentReceived(); m.captureSealed()
         m.converse(FakeCourier(Meet.Progress(proposer = true, queriesOutstanding = 0, proposable = true)))
         check(m.step() == Meet.Step.REVIEW)
         return m

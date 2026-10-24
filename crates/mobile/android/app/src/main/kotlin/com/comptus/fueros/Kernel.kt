@@ -65,6 +65,15 @@ object Kernel {
     /** How many conversation carriages this side has sent over the bearer
      *  in this ceremony: what picks each one's phase ([Carriage.Phase.conversation]). */
     private val sentCarriages = java.util.concurrent.atomic.AtomicInteger(0)
+    /** The counterparty's capture key, from the bearer until the seal takes
+     *  it; wiped the moment it is used or the meeting ends. */
+    @Volatile private var theirCaptureKey: ByteArray? = null
+    /** Whether this device's hold has run its window: the seal waits on
+     *  this and on [theirCaptureKey], whichever lands last. */
+    private val captureWindowDone = java.util.concurrent.atomic.AtomicBoolean(false)
+    /** The conversation is entered once per meeting, as the window opens. */
+    private val conversationStarted = java.util.concurrent.atomic.AtomicBoolean(false)
+    private val sealLock = Any()
 
     /**
      * **The one thread the bearer's work runs on, and never a GATT
@@ -340,6 +349,7 @@ object Kernel {
             // nobody is named here: the codes say who is being met
             // (`wire-format.md` §14.3.1), the provision's peer being the
             // payload demo's and no part of a ceremony
+            resetWindow()
             meet = Meet(kind = kind, role = role, retentionYears = retention.toLong()).also { m ->
                 // the kernel's ceremony ends with the screen's: a Stop from
                 // any live step abandons it, so nothing of the conversation
@@ -977,7 +987,7 @@ object Kernel {
         call(method, { it.reason }) { body(); null }
 
     /**
-     * Enter the conversation as the captures seal: the nominees and the
+     * Enter the conversation as the window opens: the nominees and the
      * verifier rows for the screen first, then the kernel's open and its
      * queries, off the thread the bearer's packet arrived on, since each
      * sends over the network. The flow opens once; a second entry is its
@@ -1069,6 +1079,7 @@ object Kernel {
         meet?.stop(reason)
         val work = synchronized(lock) {
             meet = null
+            resetWindow()
             // **the adoption goes with the meeting it rested on**: a frame
             // of the next meeting's would otherwise reach the last one's,
             // which refuses it for coming from the wrong party
@@ -1289,7 +1300,7 @@ object Kernel {
     private fun drainBearerLocked(p: Participant, m: Meet): Unit = synchronized(bearerLock) {
         // SERIALIZED, because two threads reach here: the BLE inbound
         // callback when the counterparty's packets land, and the step
-        // driver (runCapture) right after it sends. received()
+        // driver (runWindow) right after it sends. received()
         // is non-destructive, so without this both could read one completed
         // phase, both take it, and the second advance() would throw on a
         // callback thread (step has already moved). The lock makes the
@@ -1307,12 +1318,41 @@ object Kernel {
             }
             live.discard(Carriage.Phase.PREKEY)
         }
-        // **the window opens with the request, before the capture** (design
-        // §7.1): with the channels gone [author, 2026-10-24] this is the
-        // first step after the codes, so it is where the request goes.
-        // Refused with `Waiting` while the counterparty's prune has not
-        // answered, and asked again on the next turn of this drain
-        if (m.step() == Meet.Step.CAPTURE) m.openWindow(courier(p))
+        // **the window opens with the request** (design §7.1 item 4), the
+        // first step after the codes, and **the conversation enters with
+        // it** [author, 2026-10-24]: the queries go the moment the window is
+        // open, while the capture runs beside them (items 5 and 6). Refused
+        // with `Waiting` while the counterparty's prune has not answered,
+        // and asked again on the next turn of this drain
+        if (m.step() == Meet.Step.WINDOW && m.openWindow(courier(p)) &&
+            conversationStarted.compareAndSet(false, true)
+        ) {
+            startConversation(p, m)
+        }
+        // the counterparty's capture key, whenever it lands inside the
+        // window: held for the seal, which waits on it and on the hold
+        if (m.step() == Meet.Step.WINDOW) {
+            live.received(Carriage.Phase.CAPTURE_KEY)?.let { set ->
+                set.firstOrNull()?.let { bytes ->
+                    // the carried `CaptureKeyHandover` is checked against
+                    // this ceremony's id in the kernel, and their key is
+                    // what comes back. It seals MY capture of them
+                    // (design §7.5.2.6)
+                    val k = call("takeCaptureKeyCarriage", { e -> m.stop("the capture could not be sealed: ${e.reason}"); null }) {
+                        p.takeCaptureKeyCarriage(bytes)
+                    }
+                    if (k != null) {
+                        theirCaptureKey = k
+                        m.note("their capture key is in.")
+                    }
+                    // the bearer's assembly is zeroed: a key opens a
+                    // likeness of a person (design §7.5.2)
+                    set.forEach { it.fill(0) }
+                    live.discard(Carriage.Phase.CAPTURE_KEY)
+                    trySeal(p, m)
+                }
+            }
+        }
         when (m.step()) {
             Meet.Step.OPTICAL -> live.received(Carriage.Phase.INTENT)?.let { set ->
                 val to = counterparty() ?: return m.stop("the codes did not name who this is with")
@@ -1326,50 +1366,11 @@ object Kernel {
                     m.intentReceived()
                 }
             }
-            Meet.Step.CAPTURE -> live.received(Carriage.Phase.CAPTURE_KEY)?.let { set ->
-                set.firstOrNull()?.let { bytes ->
-                    var theirKey: ByteArray? = null
-                    try {
-                        // the carried `CaptureKeyHandover` is checked
-                        // against this ceremony's id in the kernel, and
-                        // their key is what comes back. It seals MY
-                        // capture of them: the capture ran on this
-                        // device's camera at D4 and is sealed beneath,
-                        // silently (design §7.5.2.6)
-                        val sealed = { e: Refused.Reason ->
-                            m.stop("the capture could not be sealed: ${e.reason}")
-                        }
-                        val k = call("takeCaptureKeyCarriage", { sealed(it); null }) {
-                            p.takeCaptureKeyCarriage(bytes)
-                        }
-                        if (k != null) {
-                            theirKey = k
-                            call("capture", sealed) {
-                                p.capture(k)
-                                m.note("captures sealed; the conversation opens.")
-                                m.captureDone()
-                                // from here the courier carries the
-                                // ceremony, and the kernel's loop drives
-                                startConversation(p, m)
-                            }
-                        }
-                    } finally {
-                        // THE KEY IS LET GO HERE, sealed or not: it opens
-                        // a likeness of a person, and the kernel wiped its
-                        // own copies as the calls returned (design §7.5.2).
-                        // Every byte of it this shell holds is zeroed, the
-                        // bearer's assembly included
-                        theirKey?.fill(0)
-                        set.forEach { it.fill(0) }
-                        live.discard(Carriage.Phase.CAPTURE_KEY)
-                    }
-                }
-            }
             // the conversation: every phase from CONVERSATION up that has
             // arrived whole is one message of the counterparty's, taken
             // and its phase discarded so the sender's count can wrap.
             // What a taken step owes the counterparty goes straight back
-            Meet.Step.VERIFIERS, Meet.Step.REVIEW -> {
+            Meet.Step.WINDOW, Meet.Step.REVIEW -> {
                 var taken = 0
                 for (phase in Carriage.Phase.CONVERSATION until Bearer.PHASES) {
                     val set = live.received(phase) ?: continue
@@ -1398,15 +1399,18 @@ object Kernel {
     }
 
     /**
-     * D4: hand the counterparty the key that seals its captures of me, and
-     * take theirs. The keys cross as `CaptureKeyHandover` (`wire-format.md`
-     * §14.3.2), one each way as the one message of the CAPTURE_KEY phase,
-     * anchored to the ceremony-id like the outcomes and checked against it
-     * in the kernel when taken. The capture itself ran on this device's
-     * camera as the kernel drove [AndroidShell.capture]; this is only the
-     * keys crossing.
+     * **D4 inside the window**: hand the counterparty the key that seals
+     * its captures of me, then turn this device's hold for the window
+     * (design §7.1 item 5; `Participant.captureBegin`/`captureTick`), one
+     * frame a turn on the selfie camera, while the drain opens the window
+     * and runs the conversation beside it. The keys cross as
+     * `CaptureKeyHandover` (`wire-format.md` §14.3.2), one each way as the
+     * one message of the CAPTURE_KEY phase, anchored to the ceremony-id and
+     * checked against it in the kernel when taken. The seal is taken by
+     * [trySeal] once both the hold is done and their key is in, whichever
+     * lands last.
      */
-    fun runCapture(m: Meet) {
+    fun runWindow(m: Meet) {
         val p = participant ?: return
         // the handover carries my key in clear: once the bearer has
         // had it, this shell keeps no copy, the packets it was cut
@@ -1422,14 +1426,12 @@ object Kernel {
             mine.fill(0)
         }
         if (!sent) return m.stop("the radio would not take the capture key; nothing crossed")
-        m.note("my capture key is sent; capturing the counterparty.")
+        m.note("my capture key is sent; capturing the counterparty across the window.")
         // **and the prekeys behind it** (`wire-format.md` §14.3.4): this
         // device's signed bundle and one one-time key, so the two can open
-        // a channel afterwards with no node to ask. The kernel has built
-        // and taken this since 2026-10-06 and nothing in the shell carried
-        // it, so two strangers who had met held a record and could not say
-        // a word to each other. Not the record's concern: a handover that
-        // will not cross is noted, and the meeting goes on
+        // a channel afterwards with no node to ask. Not the record's
+        // concern: a handover that will not cross is noted, and the meeting
+        // goes on
         val prekeys = call("prekeyCarriage", { e -> m.note("no prekey handover: ${e.reason}"); null }) {
             p.prekeyCarriage()
         }
@@ -1437,6 +1439,64 @@ object Kernel {
             m.note("the radio would not take the prekey handover; a later message will need a node.")
         }
         drainBearer(p, m)
+        // THE HOLD, turned from here for the window: each tick is one short
+        // call into the kernel — a frame and the detector — so the
+        // conversation's own calls interleave with it rather than waiting
+        // behind one call that held the kernel's thread for the window
+        val lost = { e: Refused.Reason -> m.stop("the capture was lost: ${e.reason}") }
+        refusal("captureBegin") { p.captureBegin() }?.let { return m.stop("capture: $it") }
+        var said = false
+        while (m.step() == Meet.Step.WINDOW || m.step() == Meet.Step.REVIEW) {
+            val turn = call("captureTick", { lost(it); null }) { p.captureTick() } ?: return
+            if (turn.templateReady && !said) {
+                said = true
+                m.note("state: a frame yielded a template; the queries can go.")
+            }
+            if (turn.done) {
+                m.note("state: the capture's window has elapsed, ${turn.frames} frame(s) kept.")
+                captureWindowDone.set(true)
+                trySeal(p, m)
+                return
+            }
+            Thread.sleep(turn.nextMs.toLong().coerceIn(50L, 2_000L))
+        }
+    }
+
+    /**
+     * Seal this device's capture under the counterparty's key, once both
+     * are in: the hold's window elapsed ([captureWindowDone]) and the key
+     * landed ([theirCaptureKey]). Called from whichever arrives second, and
+     * a no-op otherwise. THE KEY IS LET GO HERE, sealed or not: it opens a
+     * likeness of a person, and the kernel wipes its own copies as the call
+     * returns (design §7.5.2).
+     */
+    private fun trySeal(p: Participant, m: Meet) {
+        val sealed = synchronized(sealLock) {
+            if (!captureWindowDone.get()) return
+            val k = theirCaptureKey ?: return
+            theirCaptureKey = null
+            try {
+                call("captureSeal", { e -> m.stop("the capture could not be sealed: ${e.reason}"); false }) {
+                    p.captureSeal(k)
+                    m.note("captures sealed under their key.")
+                    m.captureSealed()
+                    true
+                }
+            } finally {
+                k.fill(0)
+            }
+        }
+        // the seal is what the proposal and the handover were waiting on;
+        // outside the lock, since a poll calls back into the kernel
+        if (sealed) m.poll(courier(p))
+    }
+
+    /** The window's per-meeting state, cleared as a meeting starts or ends. */
+    private fun resetWindow() {
+        theirCaptureKey?.fill(0)
+        theirCaptureKey = null
+        captureWindowDone.set(false)
+        conversationStarted.set(false)
     }
 
     /** The peer this device talks to — adopted at a meeting or named by the
@@ -1722,7 +1782,7 @@ object Kernel {
                 // the conversation is taken on the tick, as is one whose
                 // packet arrived while the step driver held the lock
                 val t = m.step()
-                if (t == Meet.Step.VERIFIERS || t == Meet.Step.REVIEW) {
+                if (t == Meet.Step.WINDOW || t == Meet.Step.REVIEW) {
                     drainBearer(p, m)
                 }
                 // **only where it has something to do**: an arrival since

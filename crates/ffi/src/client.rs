@@ -219,6 +219,20 @@ pub struct Restored {
     pub discarded: u64,
 }
 
+/// One turn of the capture's hold, as [`Participant::capture_tick`] reports
+/// it.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct CaptureTurn {
+    /// Whether the window has elapsed and the seal may be taken.
+    pub done: bool,
+    /// When the next turn is due, in milliseconds; zero once done.
+    pub next_ms: u64,
+    /// The frames retained so far.
+    pub frames: u64,
+    /// Whether a template is in hand, so the queries can go.
+    pub template_ready: bool,
+}
+
 /// A verifier the client selected, and why it was eligible.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Selected {
@@ -1892,6 +1906,59 @@ impl Participant {
             self.handle.with_blocking(|c| {
                 c.capture_key()
                     .map(|k| k.to_vec())
+                    .map_err(|a| Refused::new(format!("{a:?}")))
+            })
+        })
+    }
+
+    /// **Begin the capture's hold** (design §7.1 item 5): planned now,
+    /// turned by [`Participant::capture_tick`] from a thread of the shell's
+    /// for the ceremony's window, and sealed by [`Participant::capture_seal`]
+    /// when the window is out.  The three together are what
+    /// [`Participant::capture`] does in one call for a shell with nothing
+    /// else to do meanwhile; a phone has the verification to run.
+    pub fn capture_begin(&self) -> Result<(), Refused> {
+        crate::diag::call("capture_begin", || {
+            self.handle
+                .with_blocking(|c| c.capture_begin())
+                .map_err(|a| Refused::new(format!("{a:?}")))
+        })
+    }
+
+    /// One turn of the hold: a frame taken on the camera, prompted where a
+    /// prompt falls now.  Says when the next is due, how many frames are
+    /// kept, whether a template is in hand for the queries, and whether the
+    /// window has elapsed.  A lost hold is refused with its reason, and the
+    /// ceremony is over.
+    pub fn capture_tick(&self) -> Result<CaptureTurn, Refused> {
+        crate::diag::call_plain("capture_tick", || {
+            self.handle
+                .with_blocking(|c| c.capture_tick())
+                .map(|t| CaptureTurn {
+                    done: t.done,
+                    next_ms: t.next_ms,
+                    frames: t.frames,
+                    template_ready: t.template_ready,
+                })
+                .map_err(|a| Refused::new(format!("{a:?}")))
+        })
+    }
+
+    /// Seal the capture under the counterparty's key once the window has
+    /// elapsed; refused with `Waiting` while it has not.  **The key is
+    /// discarded once the capture is sealed**, every copy the kernel made
+    /// of it zeroed by the time this returns; the bytes the shell handed in
+    /// are the shell's to wipe.
+    pub fn capture_seal(&self, their_key: Vec<u8>) -> Result<(), Refused> {
+        crate::diag::call("capture_seal", || {
+            let their_key = zeroize::Zeroizing::new(their_key);
+            let k = their_key
+                .as_slice()
+                .try_into()
+                .map(zeroize::Zeroizing::<[u8; 32]>::new)
+                .map_err(|_| Refused::new("a capture key is 32 bytes"))?;
+            self.handle.with_blocking(move |c| {
+                c.capture_seal(k)
                     .map_err(|a| Refused::new(format!("{a:?}")))
             })
         })

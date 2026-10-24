@@ -250,8 +250,7 @@ class MeetActivity : Activity() {
                 Meet.Step.INTENT -> "Meet ${m.counterpartyName}"
                 Meet.Step.BRIEF -> "Before you begin"
                 Meet.Step.OPTICAL -> "Exchanging (1/2)"
-                Meet.Step.CAPTURE -> "Capturing (2/2)"
-                Meet.Step.VERIFIERS -> "Verifiers"
+                Meet.Step.WINDOW -> "In the window (2/2)"
                 Meet.Step.REVIEW -> "Review and sign"
                 Meet.Step.DONE -> "Done"
                 Meet.Step.STOPPED -> "Stopped"
@@ -271,8 +270,7 @@ class MeetActivity : Activity() {
                 Meet.Step.INTENT -> intent(m)
                 Meet.Step.BRIEF -> brief(m)
                 Meet.Step.OPTICAL -> optical(m)
-                Meet.Step.CAPTURE -> capture(m)
-                Meet.Step.VERIFIERS -> verifiers(m)
+                Meet.Step.WINDOW -> window(m)
                 Meet.Step.REVIEW -> review(m)
                 Meet.Step.DONE -> done(m)
                 Meet.Step.STOPPED -> stopped(m)
@@ -281,7 +279,7 @@ class MeetActivity : Activity() {
         // **the switch to capture is cued**, once, as it happens: with the
         // phones held up for the codes, nobody is looking at either screen
         // [author, 2026-10-11]
-        if (m.step() == Meet.Step.CAPTURE && drawnStep != Meet.Step.CAPTURE) cueCapture()
+        if (m.step() == Meet.Step.WINDOW && drawnStep != Meet.Step.WINDOW) cueCapture()
         drawnStep = m.step()
         atTop()
     }
@@ -835,23 +833,29 @@ class MeetActivity : Activity() {
     // ---- D4 capture: the counterparty's face ---------------------------
 
     /**
-     * The guided capture runs on the kernel's thread, one frame per prompt,
+     * **The window** (design §7.1 items 4–6), one screen: the capture runs
      * on the selfie camera the phone is already pointing at the
-     * counterparty. The disclosures were read at D1.5 and the device faces
-     * away, so this shows a progress line and takes nothing.
+     * counterparty, turned by the kernel's hold from a thread of this
+     * shell's, while the verifier selection, the queries and the
+     * conversation run beside it. The disclosures were read at D1.5 and the
+     * device faces away, so this shows state and takes nothing but a stop.
+     * Developer wording until the UX pass [author, 2026-10-24].
      */
-    private fun capture(m: Meet) {
+    private fun window(m: Meet) {
         para("Capturing ${m.counterpartyName}: a few frames over a few seconds, with spoken or toned prompts for them. Nothing is shown to you and nothing is asked — you read what this holds and who may see it before the phone turned around.")
         if (!held(Manifest.permission.CAMERA)) {
             para("The capture needs the camera, which is not yet allowed.")
             button("Allow the camera") { ask(2, Manifest.permission.CAMERA) }
             return
         }
-        once(m, "capture") {
-            // the conversation on the courier opens from the kernel as
-            // the captures seal; nothing here starts it
-            Kernel.runCapture(m)
+        once(m, "window") {
+            // the capture key crosses and the hold is turned here; the
+            // window itself opens from the kernel's drain as the keep lands,
+            // and the conversation with it
+            Kernel.runWindow(m)
         }
+        para("state: capture ${if (m.isCaptureSealed()) "sealed" else "running"}; window ${if (m.windowOpen()) "open" else "not yet open"}")
+        verification(m)
     }
 
     /**
@@ -868,7 +872,7 @@ class MeetActivity : Activity() {
 
     // ---- D5 verifiers --------------------------------------------------
 
-    private fun verifiers(m: Meet) {
+    private fun verification(m: Meet) {
         para("Your device picks ${m.counterpartyName}'s verifiers from the records they handed over, preferring people you have met. The choice is computed, not offered: there is nothing here to pick.")
         if (!m.selectionRun()) {
             // the selection is the kernel's, asked for once as the flow
@@ -916,7 +920,7 @@ class MeetActivity : Activity() {
             p.proposer -> para("Proposing the body to every signer.")
             else -> para("Your gathered responses are with ${m.counterpartyName}, whose device proposes the body. It is shown here when it arrives, reviewed and signed by this device as it does.")
         }
-        button("Stop") { m.stop("you stopped at the verifiers") }
+        button("Stop") { m.stop("you stopped inside the window") }
     }
 
     /** Every nominee, whose it was and what it answered: a witness that
