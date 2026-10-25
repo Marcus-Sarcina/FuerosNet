@@ -61,8 +61,44 @@ pub const REGISTRY_DEFAULT: &str = "ggcr.io/mzuech/fuerosnet";
 pub const IMAGE: &str = "rhtnd";
 /// The tag pulled unless another is named.
 pub const TAG_DEFAULT: &str = "latest";
-/// The provider's machine image: Debian 12, which carries podman.
-pub const MACHINE_IMAGE_DEFAULT: &str = "debian-12-x64";
+/// The distribution a machine is launched from unless the plan names an
+/// image: Debian, which carries podman.  Which release is the
+/// provider's to say, asked at launch ([`Provider::machine_images`],
+/// [`newest_debian`]) rather than named here, since a slug named here
+/// outlives the provider's offer of it (DigitalOcean refused
+/// `debian-12-x64` as "an invalid image" on 2026-10-25).
+pub const MACHINE_DISTRIBUTION: &str = "Debian";
+
+/// A machine image the provider offers.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MachineImage {
+    /// Its slug, as a plan names it.
+    pub slug: String,
+    /// The distribution, as the provider names it.
+    pub distribution: String,
+    /// Its name, for a person.
+    pub name: String,
+}
+
+/// The newest 64-bit Debian among `images`, by the release number in its
+/// slug (`debian-13-x64` over `debian-12-x64`); none where there is no
+/// Debian.
+pub fn newest_debian(images: &[MachineImage]) -> Option<String> {
+    images
+        .iter()
+        .filter(|i| i.distribution.eq_ignore_ascii_case(MACHINE_DISTRIBUTION))
+        .filter(|i| i.slug.starts_with("debian-") && i.slug.ends_with("-x64"))
+        .filter_map(|i| {
+            i.slug
+                .trim_start_matches("debian-")
+                .trim_end_matches("-x64")
+                .parse::<u32>()
+                .ok()
+                .map(|v| (v, i.slug.clone()))
+        })
+        .max()
+        .map(|(_, slug)| slug)
+}
 
 /// A fresh enrolment token as 64 hex digits, from `random`: written into
 /// the instance's configuration and never sent (`rhtn_crypto::enrolment`).
@@ -190,8 +226,9 @@ pub struct Plan {
     pub region: String,
     /// The provider's size slug.
     pub size: String,
-    /// The provider's machine image.
-    pub machine_image: String,
+    /// The provider's machine image, or none for the newest Debian the
+    /// provider offers, found at launch.
+    pub machine_image: Option<String>,
     /// The node image to run.
     pub image: Image,
 }
@@ -202,7 +239,7 @@ impl Plan {
         Plan {
             region: region.into(),
             size: size.into(),
-            machine_image: MACHINE_IMAGE_DEFAULT.into(),
+            machine_image: None,
             image: Image::default(),
         }
     }
@@ -266,6 +303,13 @@ pub trait Provider {
     /// The steps on that page, for a client to show beside it: what to
     /// choose so the token can do what the launch needs and no more.
     fn token_walkthrough(&self) -> &'static [&'static str];
+    /// The machine images offered: the distributions, not an operator's
+    /// own.
+    fn machine_images(
+        &self,
+        t: &dyn Transport,
+        credential: &str,
+    ) -> Result<Vec<MachineImage>, String>;
     /// The regions offered.
     fn regions(&self, t: &dyn Transport, credential: &str) -> Result<Vec<Region>, String>;
     /// The sizes offered.
@@ -308,7 +352,7 @@ const DIGITALOCEAN_TOKEN_STEPS: &[&str] = &[
     "Sign in, or sign up; DigitalOcean asks for a payment method before it makes a machine.",
     "Under API, Tokens, choose Generate New Token.",
     "Name the token for this client and give it an expiry: the client holds it until then, and you make another the same way afterwards.",
-    "Under Scopes choose Custom Scopes and tick, under droplet: create, read and delete; under regions: read; under sizes: read. Full Access also works and gives the token more than the launch needs.",
+    "Under Scopes choose Custom Scopes and tick, under droplet: create, read and delete; under image: read; under regions: read; under sizes: read. Full Access also works and gives the token more than the launch needs.",
     "Generate it, copy the token shown (it is shown once), and paste it here.",
 ];
 
@@ -380,6 +424,34 @@ impl Provider for DigitalOcean {
         DIGITALOCEAN_TOKEN_STEPS
     }
 
+    fn machine_images(
+        &self,
+        t: &dyn Transport,
+        credential: &str,
+    ) -> Result<Vec<MachineImage>, String> {
+        let v = self.ask(
+            t,
+            credential,
+            "GET",
+            "/v2/images?type=distribution&per_page=200",
+            None,
+        )?;
+        Ok(v["images"]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .filter_map(|i| {
+                        Some(MachineImage {
+                            slug: i["slug"].as_str()?.to_string(),
+                            distribution: i["distribution"].as_str().unwrap_or("").to_string(),
+                            name: i["name"].as_str().unwrap_or("").to_string(),
+                        })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default())
+    }
+
     fn regions(&self, t: &dyn Transport, credential: &str) -> Result<Vec<Region>, String> {
         let v = self.ask(t, credential, "GET", "/v2/regions?per_page=200", None)?;
         Ok(v["regions"]
@@ -434,11 +506,18 @@ impl Provider for DigitalOcean {
         name: &str,
         user_data: &str,
     ) -> Result<Launched, String> {
+        let image = match &plan.machine_image {
+            Some(i) => i.clone(),
+            None => newest_debian(&self.machine_images(t, credential)?).ok_or_else(|| {
+                "DigitalOcean lists no Debian image to this token; a token with custom scopes needs image: read"
+                    .to_string()
+            })?,
+        };
         let body = json!({
             "name": name,
             "region": plan.region,
             "size": plan.size,
-            "image": plan.machine_image,
+            "image": image,
             "ipv6": false,
             "monitoring": false,
             "tags": ["rhtn"],
@@ -557,6 +636,10 @@ mod tests {
     fn a_launch_posts_the_plan_and_reads_the_id_and_the_address_once_active() {
         let t = Scripted::new(vec![
             (
+                200,
+                r#"{"images":[{"slug":"ubuntu-24-04-x64","distribution":"Ubuntu","name":"24.04 LTS x64"},{"slug":"debian-12-x64","distribution":"Debian","name":"12 x64"},{"slug":"debian-13-x64","distribution":"Debian","name":"13 x64"},{"slug":"debian-13-arm64","distribution":"Debian","name":"13 arm64"}]}"#,
+            ),
+            (
                 202,
                 r#"{"droplet":{"id":123456,"name":"rhtn-1","status":"new"}}"#,
             ),
@@ -582,14 +665,57 @@ mod tests {
         assert!(s.active);
         assert_eq!(s.ipv4.as_deref(), Some("203.0.113.9"));
         let asked = t.asked.borrow();
-        assert_eq!(asked[0].0, "POST http://api.test/v2/droplets");
-        assert_eq!(asked[0].1, "Bearer tok");
-        let sent: Value = serde_json::from_str(&asked[0].2).unwrap();
+        // the machine image is the provider's newest Debian, asked for
+        // rather than named
+        assert_eq!(
+            asked[0].0,
+            "GET http://api.test/v2/images?type=distribution&per_page=200"
+        );
+        assert_eq!(asked[1].0, "POST http://api.test/v2/droplets");
+        assert_eq!(asked[1].1, "Bearer tok");
+        let sent: Value = serde_json::from_str(&asked[1].2).unwrap();
         assert_eq!(sent["region"], "nyc3");
         assert_eq!(sent["size"], "s-1vcpu-1gb");
-        assert_eq!(sent["image"], "debian-12-x64");
+        assert_eq!(sent["image"], "debian-13-x64");
         assert_eq!(sent["user_data"], "#cloud-config\n");
-        assert_eq!(asked[1].0, "GET http://api.test/v2/droplets/123456");
+        assert_eq!(asked[2].0, "GET http://api.test/v2/droplets/123456");
+    }
+
+    #[test]
+    fn a_named_machine_image_is_sent_as_named_and_no_debian_is_a_refusal_with_the_scope_said() {
+        let t = Scripted::new(vec![(
+            202,
+            r#"{"droplet":{"id":7,"name":"rhtn-1","status":"new"}}"#,
+        )]);
+        let d = DigitalOcean {
+            base: "http://api.test".into(),
+        };
+        let mut plan = Plan::new("nyc3", "s-1vcpu-1gb");
+        plan.machine_image = Some("debian-12-x64".into());
+        d.launch(&t, "tok", &plan, "rhtn-1", "#cloud-config\n")
+            .unwrap();
+        {
+            let asked = t.asked.borrow();
+            assert_eq!(asked[0].0, "POST http://api.test/v2/droplets");
+            let sent: Value = serde_json::from_str(&asked[0].2).unwrap();
+            assert_eq!(sent["image"], "debian-12-x64");
+        }
+
+        let t = Scripted::new(vec![(
+            200,
+            r#"{"images":[{"slug":"ubuntu-24-04-x64","distribution":"Ubuntu","name":"24.04"}]}"#,
+        )]);
+        let e = d
+            .launch(
+                &t,
+                "tok",
+                &Plan::new("nyc3", "s-1vcpu-1gb"),
+                "rhtn-1",
+                "#cloud-config\n",
+            )
+            .unwrap_err();
+        assert!(e.contains("image: read"), "{e}");
+        assert_eq!(newest_debian(&[]), None);
     }
 
     // acceptance: PRT-08
@@ -603,6 +729,7 @@ mod tests {
         let steps = p.token_walkthrough().join(" ");
         for scope in [
             "droplet: create, read and delete",
+            "image: read",
             "regions: read",
             "sizes: read",
         ] {

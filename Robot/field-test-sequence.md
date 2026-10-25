@@ -115,7 +115,7 @@ With A having met B earlier, B meets C and A is selected:
 **C1 Launch a node.** The proven half: phone-to-container enrolment
 (hardware, 2026-10-10). The **build** half: H1 — creating the instance from
 the client; on the bench, the client launching a container on this machine
-(`local.sh` is the stand-in); the cloud flow later and larger. ~~Also owed: renewal~~ — **built 2026-10-16**: the instance
+(`local.sh` is the stand-in); ~~the cloud flow later and larger~~ — **the cloud flow ran live, 2026-10-25, as a user would**: on GXV, from the Operator screen, the author made a DigitalOcean token through the walkthrough the screen opens, pasted it, fetched regions and sizes, and launched; droplet 612585146 in nyc1 (`s-1vcpu-512mb-10gb`), address 159.65.234.124, the surface open within a minute of the address, the proof checked and the endpoint record and delegation signed at 19:17:37, node keyhash 1e33a62f…; the image pulled anonymously from `ggcr.io/mzuech/fuerosnet/rhtnd:latest` once the project was made public. Two refusals on the way, both fixed the same hour: DigitalOcean no longer offers `debian-12-x64`, so the adapter now asks for the newest Debian; and an OAuth flow was built and withdrawn (nothing registered to the author ships). The droplet is the author's to destroy from the instance's row. ~~Also owed: renewal~~ — **built 2026-10-16**: the instance
 reports `run-ends`, the next run opens exactly there, and the CLI, the
 kernel and the Operator screen each do it (`light-client-requirements.md`
 §10).

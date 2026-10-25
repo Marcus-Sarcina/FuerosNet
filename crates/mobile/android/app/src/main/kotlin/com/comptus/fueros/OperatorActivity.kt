@@ -194,13 +194,17 @@ class OperatorActivity : Activity() {
         }
     }
 
-    private fun field(hint: String, value: String = "", numeric: Boolean = false): EditText =
+    private fun field(hint: String, value: String = "", numeric: Boolean = false, secret: Boolean = false): EditText =
         EditText(this).apply {
             this.hint = hint
             setText(value)
             textSize = 15f
             if (numeric) {
                 inputType = InputType.TYPE_CLASS_NUMBER
+            } else if (secret) {
+                // a provider's token is a key: not shown, not suggested,
+                // not read off the screen by a dump
+                inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
             } else {
                 inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
                 typeface = Typeface.MONOSPACE
@@ -401,7 +405,7 @@ class OperatorActivity : Activity() {
     ): LinearLayout {
         val provider = Launch.providers().first()
         val held = Kernel.providerCredentials()[provider.name.lowercase()] ?: ""
-        val credential = field("${provider.name} API token", held)
+        val credential = field("${provider.name} API token", held, secret = true)
         // the token is the operator's own, made at the provider's page:
         // open it, and say the steps there
         val getToken = Button(this).apply {
