@@ -88,8 +88,19 @@ screen faults are fixed from the record's own body. **A second match the same ev
 signers)**: 4VC selected ZU8 for GXV as met, ZU8's grant was buffered
 ahead of the query again and it answered Match from the capture it
 sealed of GXV in `1d78338e`; GXV required none for 4VC, which
-introduced one party. The first verdict from a TCL as verifier. **Owed**:
-the rows below, one at a time, on the pairs that now share a party.
+introduced one party. The first verdict from a TCL as verifier. **The unavailable
+case, `32d7c33b` (GXV–ZU8, three signers, two responses)**, the same
+evening, by the tethered capture wipe (`forget_captures`, procedure):
+4VC's sealed captures of ZU8 dropped over adb, then both sides selected
+4VC — `n 3, pool 2, required 1`, 4VC the lower keyhash of two met — and
+4VC answered **Match** about GXV from the capture it held and
+**Unavailable with no basis** about ZU8, holding nothing
+(`ver.query.answered verdict=Unavailable`); both responses are in the
+body. VER-011 in both orders on the same record: ZU8's grant reached 4VC
+before its query and was buffered, GXV's query reached 4VC before the
+grant and waited for it (`ver.query.awaiting_grant`, 36 s). **Owed**: the
+rows below, one at a time, on the pairs that now share a party — the
+no-match and inconclusive answers, the refused query, the late reply.
 
 With A having met B earlier, B meets C and A is selected:
 
