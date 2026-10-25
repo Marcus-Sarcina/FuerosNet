@@ -1928,8 +1928,23 @@ async fn answer_request(
     device: [u8; 32],
     handler: Option<RequestHandler>,
 ) {
-    let FrameRead::Payload(p) = read_frame(&mut recv, bounds::REQUEST_FRAME_BYTES).await else {
-        return;
+    let p = match read_frame(&mut recv, bounds::REQUEST_FRAME_BYTES).await {
+        FrameRead::Payload(p) => p,
+        // a frame over the bound is dropped unread and unanswered
+        // (`wire-format.md` §9.2), and the drop is said: a client whose
+        // request met silence here had nothing to read but the silence
+        // (run 0c8c8f8-a3-node-1, 2026-10-24)
+        FrameRead::OverBound(n) => {
+            tracing::info!(
+                target: "transport",
+                peer = %peer[..4].iter().map(|b| format!("{b:02x}")).collect::<String>(),
+                declared = n,
+                bound = bounds::REQUEST_FRAME_BYTES,
+                "transport.request.over_bound"
+            );
+            return;
+        }
+        FrameRead::Closed(_) => return,
     };
     answer_payload(send, p, peer, device, handler).await
 }

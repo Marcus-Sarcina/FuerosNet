@@ -590,6 +590,25 @@ impl Courier {
     /// no longer the *first* answer, and so no longer a party whose
     /// cooperation a sender needs.
     async fn relayed(&self, to: Keyhash, bytes: &[u8], device: [u8; 32]) -> bool {
+        // **a relay submission is one request frame**, and a frame is
+        // bounded at 256 KiB (`wire-format.md` §9.2): a body past it would
+        // be dropped by the node unread, with no reply — which is how a
+        // 426 KiB backup blob went nowhere on the bench with nothing to
+        // say why (run 0c8c8f8-a3-node-1, 2026-10-24).  Said here instead,
+        // and not attempted.  The frame's own head and the submission's
+        // fields around the ciphertext are allowed for generously
+        if bytes.len() + 256 > rhtn_codec::bounds::REQUEST_FRAME_BYTES {
+            tracing::info!(
+                target: "pay",
+                to = %hex4(&to),
+                bytes = bytes.len(),
+                bound = rhtn_codec::bounds::REQUEST_FRAME_BYTES,
+                via = "nowhere",
+                reason = "over the request frame bound: the relay cannot carry it",
+                "pay.relay"
+            );
+            return false;
+        }
         let theirs = self.to_their_node(to, bytes, device).await;
         let mine = !theirs
             && self
