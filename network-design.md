@@ -1243,9 +1243,22 @@ consequence of subnet plurality, not a gap in this mechanism.
   last offered, hands its own current address back over the path that
   opens, and on every contact exchanges what `wire-format.md` §7.10.3
   states: its locator, a request for what the peer holds of it, and a
-  fresh deposit where its dataset has moved. The interval is the client's
-  own (§21.1.1's freely-tunable class); the reference client takes
-  fifteen minutes.
+  fresh deposit where its dataset has moved. **The deposit and its return
+  travel on the direct path only** [author, 2026-10-25]: a blob is larger
+  than a relay's request frame (`wire-format.md` §9.2), the serving node's
+  mailbox is for mail (§14.1.6), and a peer that cannot be reached
+  directly is no use as one; where no path is held the deposit waits for
+  the next contact that holds one, and the relay never carries it. **The
+  interval is the client's own** (§21.1.1's freely-tunable class), and it
+  is to be set low [author, 2026-10-25]: peering is not a bandwidth-
+  intensive feature, recovery of contacts is not time-sensitive, and a
+  dataset that dribbles back from one's peers over a day after a device
+  loses its storage is recovered well enough. A user with several peers
+  costs the network several rounds and recovers several times as fast.
+  The reference client's figure is a placeholder to be de-rated before
+  release; the field-test build runs a minute, for the reason the
+  witness window runs thirty seconds (§7.1): a test cycle at production
+  values would be prohibitively slow.
 - **It requires a proof of presence between the two peers** [author,
   2026-09-05], named in the record as an adoption names one (§6.1.1,
   `wire-format.md` §4.4). **No alternative applies**: §6.1.1's former-patron

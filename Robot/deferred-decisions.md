@@ -70,3 +70,34 @@ any blacklisting process we wish to implement in the future."
 - **What changes if it goes the other way.** Nothing on the wire; the
   recipient's gate reads one more table.
 - **Arose** 2026-10-24; **deferred** 2026-10-24.
+
+## The production value of the peer contact interval
+
+**Deferred** [author, 2026-10-25]: "It is my intention to de-rate the
+peer recovery timing when we approach release. Peering should not be a
+bandwidth intensive feature and recovery of contacts is not very time
+sensitive. I am leaving the contact interval at 1 minute for now for the
+same reason the witness window is at 30 seconds; individual test cycles
+would be prohibitively slow if these parameters were at their production
+values. Likewise, it is fine if contact recovery from peers dribbles in
+over the course of a day or so after loss of on-device storage."
+
+- **What prompted it.** The peer backup exchange (design §6.3,
+  `wire-format.md` §7.10.3) landed 2026-10-24 with
+  `PEER_CONTACT_EVERY` at a minute in the field-test flavour and fifteen
+  minutes shipping, the shipping figure chosen by the assistant as a
+  placeholder.
+- **The options.** A figure in hours, with the reconnect trigger kept
+  (the network coming back still contacts at once); a figure that scales
+  with the number of peers held, so a user with many peers costs the
+  network no more than one with few; or a randomised interval around a
+  figure, so a population's rounds do not align.
+- **What was done meanwhile.** Fifteen minutes stands in the shipping
+  constant and is marked a placeholder in the code and in design §6.3; the
+  field-test build keeps a minute.
+- **What changes if it goes the other way.** Nothing structural: the
+  constant and one sentence of design §6.3. The author's expectation to carry
+  into the choice: active users will hold several peers, which multiplies
+  the rounds and multiplies the recovery rate alike.
+- **When it arose.** 2026-10-24 (the build); deferred 2026-10-25.
+

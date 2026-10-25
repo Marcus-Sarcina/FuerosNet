@@ -346,9 +346,13 @@ const DIRECT_PORT: u16 = 7432;
 /// use as one).  Each round dials every peer no path is held to at the
 /// candidates it last offered, and offers this side's own back, so the two
 /// hold each other's present address.  A chosen value, freely tunable
-/// (design §21.1.1): fifteen minutes shipping, where a round is a dial
-/// and nothing unless a peer moved; one minute on the bench, so a run
-/// shows it.
+/// (design §21.1.1).  **Fifteen minutes is a placeholder to be de-rated
+/// before release** [author, 2026-10-25]: peering is not a bandwidth-
+/// intensive feature, recovery of contacts is not time-sensitive, and a
+/// dataset that dribbles back from one's peers over a day is recovered
+/// well enough.  One minute on the bench, for the reason the witness
+/// window runs thirty seconds: a test cycle at production values would
+/// be prohibitively slow.
 pub(crate) const PEER_CONTACT_EVERY: Duration =
     Duration::from_secs(if cfg!(feature = "fieldtest") { 60 } else { 900 });
 

@@ -3881,6 +3881,13 @@ and the view kept beside them, never a sealed capture of somebody else and
 never the identity. A holder that is asked for a blob it does not hold
 answers nothing, and a requester hearing nothing knows only that.
 
+**Kinds 27 and 29 travel on the direct path only** [author, 2026-10-25]. A
+blob is ordinarily larger than one request frame (§9.2's 256 KiB), a relay
+submission is one request frame, and a serving node's mailbox holds mail
+(design §14.1.6); so a deposit or a return for a peer no direct path is
+held to **waits** for the next contact that holds one, and is never put to
+a relay. Kinds 26 and 28 are small and go either way.
+
 ### 7.11 Profile
 
 **A display name and an image, per position, signed by the one it is about,
