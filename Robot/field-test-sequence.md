@@ -217,9 +217,10 @@ with-node by construction, since a nominee has to be reachable and a
 party met nodeless has no route. All of C needs the node. The lift moves
 nothing in C or D.
 
-**What the author still owns here.** Whether the nodeless adoption pass
-should *also* be run at genesis, to prove the adoption under a formation
-shape as well as under a witnessless normal one. The met-phones pass is
-planned above because it is cheaper and keeps B's state; the genesis pass
-proves a different record shape and costs two identities. Nobody has
-asked for it, and this plan does not assume it.
+**Decided** [author, 2026-10-24]: **the nodeless adoption pass also runs
+at genesis, the next time the live sequence is worked through**, to prove
+the adoption under a formation shape as well as under the witnessless
+normal one the met-phones pass proved. It costs two identities, so it is
+scheduled for the pass that wipes anyway (`field-setup.sh --conf` on a
+file naming the two) and not before. Nothing else in this plan is open
+with the author.
