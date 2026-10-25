@@ -171,7 +171,16 @@ const HEADS: [&str; 12] = [
 ];
 const STRIDES: [usize; 3] = [8, 16, 32];
 /// YuNet's score floor and the overlap at which two boxes are one.
-const SCORE_FLOOR: f32 = 0.9;
+///
+/// **0.8, measured on the 320 canvas** [bench, 2026-10-25]: at 0.9 — the
+/// OpenCV demo's figure, which this engine ran at on the 640 canvas — the
+/// small canvas kept a face 60 frame-pixels across (0.90) and lost one of
+/// 40 (0.83–0.87) that the large canvas had kept at 0.92; at 0.8 it keeps
+/// both, and nine frames of circuit boards yield no face at either canvas
+/// down to a floor of 0.5.  A face at arm's length is 150 pixels across
+/// on these cameras, so the floor is slack for the case the capture is
+/// for and tight against a wall.
+const SCORE_FLOOR: f32 = 0.8;
 const NMS_IOU: f32 = 0.3;
 
 impl SFace {
