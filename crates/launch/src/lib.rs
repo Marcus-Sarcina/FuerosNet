@@ -32,6 +32,8 @@
 
 #![warn(missing_docs)]
 
+pub mod oauth;
+
 use serde_json::{Value, json};
 
 /// The port the node serves on: `wire-format.md` §4.4's default, so an

@@ -14,9 +14,10 @@
 
 use crate::enrol;
 use rhtn_crypto::SigningIdentity;
+use rhtn_launch::oauth::{self, App, Credential, Pkce};
 use rhtn_launch::{Image, Plan, Provider, Standing, Transport};
 use std::io::{Read, Write};
-use std::net::TcpStream;
+use std::net::{TcpListener, TcpStream};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -341,14 +342,129 @@ pub fn plan(region: &str, size: &str, registry: Option<&str>, tag: Option<&str>)
     p
 }
 
-/// The credential from a file, its surrounding whitespace dropped.
+/// **The credential from a file**: a pasted token, or the document
+/// `node authorise` wrote; one that is about to expire is renewed with
+/// its refresh token first and the file rewritten, so what is handed on
+/// is a token that works.
 pub fn credential_from(path: &str) -> Result<String, String> {
     let s = std::fs::read_to_string(path).map_err(|e| format!("read {path}: {e}"))?;
-    let c = s.trim().to_string();
-    if c.is_empty() {
+    if s.trim().is_empty() {
         return Err(format!("{path} is empty"));
     }
-    Ok(c)
+    let mut c = Credential::from_json(&s);
+    if c.stale_at(now_s()) {
+        let (Some(refresh), Some(client_id)) = (c.refresh_token.clone(), c.client_id.clone())
+        else {
+            return Err(format!(
+                "the token in {path} has expired and carries nothing to renew it with; authorise again"
+            ));
+        };
+        // the provider is the one the document was written for; DigitalOcean
+        // is the one flow this build offers
+        let e = oauth::digitalocean();
+        let app = App {
+            client_id,
+            client_secret: None,
+            redirect_uri: String::new(),
+        };
+        let t = TlsTransport::new()?;
+        c = oauth::refresh(&t, &e, &app, &refresh, now_s())?;
+        std::fs::write(path, c.to_json()).map_err(|e| format!("write {path}: {e}"))?;
+    }
+    Ok(c.access_token)
+}
+
+fn now_s() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// **`node authorise`: the provider's own page, then the token at a local
+/// callback** (`light-client-requirements.md` §10).  The page is opened
+/// in the person's browser and printed as well; the listener on `port`
+/// waits as long as it takes — through a signup, a payment method, a
+/// second factor, a confirmation mail — and takes the first callback
+/// carrying this request's state.  The code is exchanged with the PKCE
+/// verifier kept here, and the credential document is written to `out`.
+pub fn authorise(
+    provider: &str,
+    client_id: &str,
+    client_secret: Option<&str>,
+    port: u16,
+    out: &str,
+) -> Result<String, String> {
+    let e = oauth::endpoints(provider).ok_or_else(|| {
+        format!("{provider} offers no authorisation flow; paste its token into {out} instead")
+    })?;
+    let listener = TcpListener::bind(("127.0.0.1", port))
+        .map_err(|e| format!("listen on 127.0.0.1:{port}: {e}"))?;
+    let mut random = [0u8; 32];
+    let rng = rustls::crypto::aws_lc_rs::default_provider().secure_random;
+    rng.fill(&mut random)
+        .map_err(|e| format!("no randomness: {e:?}"))?;
+    let pkce = Pkce::from_random(&random);
+    rng.fill(&mut random)
+        .map_err(|e| format!("no randomness: {e:?}"))?;
+    let state = oauth::base64url(&random[..16]);
+    let app = App {
+        client_id: client_id.to_string(),
+        client_secret: client_secret.map(String::from),
+        redirect_uri: format!("http://127.0.0.1:{port}/callback"),
+    };
+    let url = oauth::authorize_url(&e, &app, &state, &pkce);
+    eprintln!(
+        "open this page, sign in or sign up there, and approve:
+  {url}"
+    );
+    // the person's browser, where one answers; the URL above is the
+    // fallback and the record either way
+    let _ = std::process::Command::new("xdg-open")
+        .arg(&url)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn();
+    eprintln!(
+        "waiting at {} — take your time; this keeps listening",
+        app.redirect_uri
+    );
+    let code = loop {
+        let (mut s, _) = listener.accept().map_err(|e| format!("accept: {e}"))?;
+        let mut buf = [0u8; 4096];
+        let n = s.read(&mut buf).unwrap_or(0);
+        let line = String::from_utf8_lossy(&buf[..n])
+            .lines()
+            .next()
+            .unwrap_or("")
+            .to_string();
+        match oauth::callback_params(&line) {
+            Some((code, got)) if got == state => {
+                let _ = s.write_all(oauth::callback_page(true).as_bytes());
+                break code;
+            }
+            Some(_) => {
+                let _ = s.write_all(oauth::callback_page(false).as_bytes());
+                eprintln!("a callback arrived with another request's state; still waiting");
+            }
+            None => {
+                let _ = s.write_all(oauth::callback_page(false).as_bytes());
+            }
+        }
+    };
+    let t = TlsTransport::new()?;
+    let c = oauth::exchange(&t, &e, &app, &code, &pkce, now_s())?;
+    std::fs::write(out, c.to_json()).map_err(|e| format!("write {out}: {e}"))?;
+    Ok(format!(
+        "authorised{}; the credential is in {out}{}",
+        c.account
+            .as_deref()
+            .map(|a| format!(" as {a}"))
+            .unwrap_or_default(),
+        c.expires_at
+            .map(|_| ", renewed from its refresh token as needed")
+            .unwrap_or_default()
+    ))
 }
 
 fn hex(b: &[u8]) -> String {

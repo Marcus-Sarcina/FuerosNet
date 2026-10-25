@@ -53,6 +53,7 @@ rhtn-archive = { path = "../archive" }
 # the flavour is chosen here, by this crate's features, and never by the
 # client's own default
 rhtn-engine = { path = "../engine" }
+rhtn-launch = { path = "../launch" }
 rhtn-client = { path = "../client", default-features = false }
 rhtn-crypto = { path = "../crypto" }
 rhtn-transport = { path = "../transport" }

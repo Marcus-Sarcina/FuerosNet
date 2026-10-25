@@ -44,6 +44,9 @@ pub(crate) mod diag;
 /// A node and identities in one process, for a shell's own tests.
 #[cfg(feature = "harness")]
 pub mod harness;
+/// The launch across the boundary: the crate's composition and adapters
+/// over the shell's HTTP (`light-client-requirements.md` §10).
+pub mod launch;
 /// The session and the payload path behind the boundary, and the events
 /// a shell reads from them.
 pub mod net;

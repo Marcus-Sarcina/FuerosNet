@@ -28,6 +28,14 @@ usage: rhtn <command> [...]
         file holds, wait for its address and its surface, then enrol it
         with a token minted here (L §10, OPS-020). The provider is one of:
         digitalocean.
+  node authorise --provider <name> --client-id <id> --credential-file <out>
+        [--client-secret <secret>] [--port <n>]
+        Open the provider's own page for signing up or in and approving,
+        wait at a local callback for as long as that takes, and write
+        the token it hands back to <out>, with what renews it. The
+        callback is http://127.0.0.1:<port>/callback, port 7450 unless
+        given; register it with the provider. Providers offering the
+        flow: digitalocean.
   node offers --provider <name> --credential-file <file>
         List the provider's regions and sizes.
   node destroy --provider <name> --credential-file <file> --id <machine id>
@@ -183,6 +191,7 @@ fn do_node(rest: &[&str]) -> Result<String, String> {
     match rest.first().copied() {
         Some("launch") => return do_launch(&rest[1..]),
         Some("offers") => return do_offers(&rest[1..]),
+        Some("authorise") | Some("authorize") => return do_authorise(&rest[1..]),
         Some("destroy") => return do_destroy(&rest[1..]),
         _ => {}
     }
@@ -321,6 +330,36 @@ fn do_launch(rest: &[&str]) -> Result<String, String> {
         subtree,
     };
     launch::launch(&me, &ask)
+}
+
+fn do_authorise(opts: &[&str]) -> Result<String, String> {
+    let o = options(
+        opts,
+        &[
+            "provider",
+            "client-id",
+            "client-secret",
+            "credential-file",
+            "port",
+        ],
+    )?;
+    let need = |k: &str| {
+        o.get(k)
+            .cloned()
+            .ok_or_else(|| format!("--{k} is required"))
+    };
+    let port: u16 = o
+        .get("port")
+        .map(|p| p.parse().map_err(|_| "--port takes a number".to_string()))
+        .transpose()?
+        .unwrap_or(7450);
+    launch::authorise(
+        &need("provider")?,
+        &need("client-id")?,
+        o.get("client-secret").map(String::as_str),
+        port,
+        &need("credential-file")?,
+    )
 }
 
 fn do_offers(opts: &[&str]) -> Result<String, String> {

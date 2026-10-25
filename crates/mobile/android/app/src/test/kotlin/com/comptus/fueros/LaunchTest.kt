@@ -5,15 +5,17 @@ import kotlin.concurrent.thread
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import uniffi.rhtn_ffi.Header
 
 /**
- * **The launch flow's half that is this shell's** ([Launch]): the token,
- * the configuration and the script it composes, and the DigitalOcean
- * exchange against an ordinary socket standing in for the provider.
+ * **The launch flow's half that is this shell's** ([Launch]): the token it
+ * mints, and the HTTPS exchange it makes for the kernel's adapters, against
+ * an ordinary socket standing in for a provider. The composition and the
+ * adapters are the kernel's and are tested there (`rhtn-launch`).
  */
 class LaunchTest {
 
-    /** A provider that answers one request and says what it was asked. */
+    /** A server that answers one request and says what it was asked. */
     private class Api(val answer: String, val status: String = "200 OK") {
         val socket = ServerSocket(0)
         var asked = ""
@@ -72,66 +74,32 @@ class LaunchTest {
     }
 
     @Test
-    fun the_configuration_and_the_script_carry_what_the_instance_needs_and_no_seed() {
-        val token = "ab".repeat(32)
-        val conf = Launch.nodeConfig(token)
-        assertTrue(conf.contains("token = \"$token\""))
-        assertTrue(conf.contains("listen = \"0.0.0.0:7431\""))
-        assertTrue(conf.contains("listen = \"0.0.0.0:7449\""))
-        assertTrue(conf.contains("operator = \"/var/lib/rhtn/operator.material\""))
-        val script = Launch.userData("82a301", token, registry = "reg.example/x", tag = "abc123")
-        assertTrue(script.startsWith("#cloud-config\n"))
-        assertTrue(script.contains("  - podman\n"))
-        assertTrue(script.contains("      token = \"$token\""))
-        assertTrue(script.contains("      82a301\n"))
-        assertTrue(script.contains("chown -R 10001:10001 /var/lib/rhtn"))
-        assertTrue(script.contains("--network=host -v /var/lib/rhtn:/var/lib/rhtn reg.example/x/rhtnd:abc123"))
-        // what a seed would look like is nowhere in it: only the public material
-        assertTrue(!script.contains("seed"))
-    }
-
-    @Test
-    fun a_launch_posts_the_droplet_and_reads_its_id() {
-        val api = Api("""{"droplet":{"id":123456,"name":"rhtn-1","status":"new"}}""", "202 Accepted")
+    fun the_transport_carries_the_request_and_answers_with_status_and_body() {
+        val api = Api("""{"droplet":{"id":1}}""", "202 Accepted")
         api.serve()
-        val got = Launch.DigitalOcean(api.base).launch("tok", Launch.Plan("nyc3", "s-1vcpu-1gb"), "rhtn-1", "#cloud-config\n")
-        assertEquals("123456", got.getOrThrow().id)
+        val t = Launch.HttpTransport(api.base)
+        val e = t.exchange(
+            "POST",
+            "https://api.digitalocean.com/v2/droplets",
+            listOf(Header("Authorization", "Bearer tok"), Header("Content-Type", "application/json")),
+            """{"name":"x"}""",
+        )
+        assertEquals(202.toUShort(), e.status)
+        assertEquals("""{"droplet":{"id":1}}""", e.body)
         assertTrue(api.asked.startsWith("POST /v2/droplets "))
         assertEquals("Bearer tok", api.auth)
-        val sent = Json.obj(Json.parse(api.body))
-        assertEquals("nyc3", Json.string(sent["region"]))
-        assertEquals("s-1vcpu-1gb", Json.string(sent["size"]))
-        assertEquals("debian-12-x64", Json.string(sent["image"]))
-        assertEquals("#cloud-config\n", Json.string(sent["user_data"]))
+        assertEquals("""{"name":"x"}""", api.body)
     }
 
     @Test
-    fun the_standing_reads_the_public_address_once_active() {
-        val api = Api(
-            """{"droplet":{"id":1,"status":"active","networks":{"v4":[
-            {"ip_address":"10.0.0.2","type":"private"},{"ip_address":"203.0.113.9","type":"public"}],"v6":[]}}}""",
-        )
+    fun a_refusal_keeps_the_providers_body_and_a_dead_host_answers_zero() {
+        val api = Api("""{"id":"unauthorized","message":"Unable to authenticate you"}""", "401 Unauthorized")
         api.serve()
-        val s = Launch.DigitalOcean(api.base).standing("tok", "1").getOrThrow()
-        assertEquals("active", s.status)
-        assertEquals("203.0.113.9", s.ipv4)
-        assertTrue(api.asked.startsWith("GET /v2/droplets/1 "))
-    }
-
-    @Test
-    fun regions_and_sizes_parse_and_a_refusal_carries_the_providers_words() {
-        val r = Api("""{"regions":[{"slug":"nyc3","name":"New York 3","available":true},{"slug":"x","name":"gone","available":false}]}""")
-        r.serve()
-        val regions = Launch.DigitalOcean(r.base).regions("tok").getOrThrow()
-        assertEquals(listOf("nyc3", "x"), regions.map { it.slug })
-        val s = Api("""{"sizes":[{"slug":"s-1vcpu-1gb","memory":1024,"vcpus":1,"price_monthly":6.0,"regions":["nyc3"],"available":true}]}""")
-        s.serve()
-        val sizes = Launch.DigitalOcean(s.base).sizes("tok").getOrThrow()
-        assertEquals(1, sizes.size)
-        assertEquals(1024, sizes[0].memoryMb)
-        val no = Api("""{"id":"unauthorized","message":"Unable to authenticate you"}""", "401 Unauthorized")
-        no.serve()
-        val e = Launch.DigitalOcean(no.base).regions("bad").exceptionOrNull()
-        assertTrue(e != null && e.message!!.contains("401") && e.message!!.contains("Unable to authenticate you"))
+        val e = Launch.HttpTransport(api.base).exchange("GET", "https://api.digitalocean.com/v2/regions", listOf(), null)
+        assertEquals(401.toUShort(), e.status)
+        assertTrue(e.body.contains("Unable to authenticate you"))
+        val dead = Launch.HttpTransport("http://127.0.0.1:1").exchange("GET", "https://api.digitalocean.com/v2/regions", listOf(), null)
+        assertEquals(0.toUShort(), dead.status)
+        assertTrue(dead.body.isNotEmpty())
     }
 }

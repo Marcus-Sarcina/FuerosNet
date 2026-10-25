@@ -1205,7 +1205,14 @@ on the wire.
   and never in the archive (§2) — so a replacement device launches as the
   same operator. The operator's recourse for a credential that leaked is
   the provider's own console, where it is cancelled; this client offers no
-  other. **The image is pulled from the reference registry unless the
+  other. **Where the provider offers an authorisation flow, the client opens
+  the provider's own page and takes the token back at a local callback**
+  [author, 2026-10-25], proving itself with a code verifier rather than a
+  shipped secret; the person signs up or in and approves at whatever pace
+  — a payment method, a second factor, a confirmation mail between — and
+  the callback waits as long as that takes and can be asked for again. A
+  provider offering no such flow hands its token over its console, and the
+  person pastes it. A token that expires is held with what renews it. **The image is pulled from the reference registry unless the
   operator names another**, which is how a custom or third-party node is
   launched by the same pages. Order the providers and zones offered as §6
   says, by concentration inside this operator's own horizon.
