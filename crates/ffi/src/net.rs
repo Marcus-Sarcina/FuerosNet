@@ -300,12 +300,50 @@ struct Live {
 struct Detached {
     courier: Arc<Courier>,
     task: tokio::task::JoinHandle<()>,
+    /// The socket itself, to close when the device moves.
+    direct: LightDirect,
+    /// The interface it was bound on: what [`Net::refresh_detached`]
+    /// compares against the one the device routes out of now.
+    local: std::net::IpAddr,
 }
 
 impl Drop for Detached {
     fn drop(&mut self) {
         self.task.abort();
+        self.direct.close();
     }
+}
+
+/// **The port a detached client's direct socket takes where it is free**,
+/// the next ephemeral one otherwise.  A client's own number
+/// (`light-client-requirements.md` §4), no part of the wire: a candidate a
+/// contact kept (`ClientStore::direct_hints`) names an address *and a
+/// port*, and a port that changed at every restart would make every kept
+/// candidate stale the moment this device came back.  One above a node's
+/// default (`wire-format.md` §4.4), so a node and a client on one host do
+/// not contend.
+const DIRECT_PORT: u16 = 7432;
+
+/// **How often a client reaches for its peers** (design §6.3: peers keep
+/// each other's current endpoint, and a peer must be reachable to be of
+/// use as one).  Each round dials every peer no path is held to at the
+/// candidates it last offered, and offers this side's own back, so the two
+/// hold each other's present address.  A chosen value, freely tunable
+/// (design §21.1.1): fifteen minutes shipping, where a round is a dial
+/// and nothing unless a peer moved; one minute on the bench, so a run
+/// shows it.
+pub(crate) const PEER_CONTACT_EVERY: Duration =
+    Duration::from_secs(if cfg!(feature = "fieldtest") { 60 } else { 900 });
+
+/// How one peer stood at the end of a contact round.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Contacted {
+    pub peer: Keyhash,
+    /// Whether a direct path is held now.
+    pub held: bool,
+    /// What happened: `held` already, `dialled` now, `no hint` to dial
+    /// at, `unreached` at the hint held.
+    pub how: &'static str,
 }
 
 /// The session in force, read by the attached node's requests and swapped
@@ -357,7 +395,7 @@ pub(crate) struct Net {
     /// (design §6.4, §12.6.3).  Built once the client's thread exists and
     /// kept for the life of the process; an attach's courier takes
     /// precedence while one is live.
-    detached: Mutex<Option<Detached>>,
+    detached: Arc<Mutex<Option<Detached>>>,
     /// Nonces for what this client hands its node: the platform's random
     /// source, which is the only one this workspace has.
     nonce: Arc<dyn Fn() -> [u8; 16] + Send + Sync>,
@@ -420,7 +458,7 @@ impl Net {
         let beyond = Beyond::new(beyonder.clone(), nonce.clone());
         Ok(Net {
             reachable: Reachable::default(),
-            detached: Mutex::new(None),
+            detached: Arc::new(Mutex::new(None)),
             rt: Some(rt),
             endpoint,
             me,
@@ -579,34 +617,125 @@ impl Net {
             // the interface the default route leaves by: a host candidate a
             // peer on the same network can dial, with no node to ask
             let local = interface_toward("1.1.1.1:443".parse().unwrap());
-            let direct = LightDirect::bind(
-                cfg.me.clone(),
-                cfg.pins.clone(),
-                cfg.bind
-                    .clone()
-                    .with_held(Arc::new(handle_for_task.clone())),
-                reachable,
-                SocketAddr::new(local, 0),
-                None,
-                None,
-                gate,
-                inlet.inbound(),
-            )
-            .map_err(|e| Refused::new(format!("no direct socket: {e}")))?;
+            // the stable port first, whatever is free otherwise
+            let mut bound = None;
+            for port in [DIRECT_PORT, 0] {
+                match LightDirect::bind(
+                    cfg.me.clone(),
+                    cfg.pins.clone(),
+                    cfg.bind
+                        .clone()
+                        .with_held(Arc::new(handle_for_task.clone())),
+                    reachable.clone(),
+                    SocketAddr::new(local, port),
+                    None,
+                    None,
+                    gate.clone(),
+                    inlet.inbound(),
+                ) {
+                    Ok(d) => {
+                        bound = Some(d);
+                        break;
+                    }
+                    Err(e) if port != 0 => {
+                        tracing::info!(target: "pay", port, error = %e, "pay.direct.port_taken");
+                    }
+                    Err(e) => return Err(Refused::new(format!("no direct socket: {e}"))),
+                }
+            }
+            let direct = bound.expect("bound, or returned");
+            tracing::info!(
+                target: "pay",
+                addr = %direct.addr().map(|a| a.to_string()).unwrap_or_default(),
+                "pay.direct.bound"
+            );
             let (courier, events) = Courier::new(
                 handle_for_task.clone(),
                 Arc::new(rhtn_adaptors::serving::Nobody),
-                Arc::new(direct),
+                Arc::new(direct.clone()),
             );
             inlet.bind(courier.inbound());
             if let Some(p) = persist {
                 courier.write_after_arrivals(p);
             }
             let task = tokio::spawn(forward(events, events_tx));
-            Ok::<_, Refused>(Detached { courier, task })
+            Ok::<_, Refused>(Detached { courier, task, direct, local })
         })?;
         *self.detached.lock().unwrap() = Some(built);
         Ok(())
+    }
+
+    /// **The device's network changed** (`light-client-requirements.md`
+    /// §9: the hardware crosses inward).  Where the interface the device
+    /// routes out of is no longer the one the direct socket was bound on,
+    /// that socket reaches nothing and nothing reaches it: it is closed,
+    /// every path it held forgotten, and a new one stood.  Whether a new
+    /// socket was stood.
+    pub(crate) fn refresh_detached(&self, handle: &Handle) -> Result<bool, Refused> {
+        let now = interface_toward("1.1.1.1:443".parse().unwrap());
+        let stale = {
+            let d = self.detached.lock().unwrap();
+            d.as_ref().map(|d| d.local != now)
+        };
+        match stale {
+            Some(false) => Ok(false),
+            Some(true) => {
+                tracing::info!(target: "pay", from = %self.detached.lock().unwrap().as_ref().map(|d| d.local.to_string()).unwrap_or_default(), to = %now, "pay.direct.moved");
+                // dropped outside the lock: the drop closes a socket
+                let old = self.detached.lock().unwrap().take();
+                drop(old);
+                self.reachable.clear();
+                self.stand_detached(handle)?;
+                Ok(true)
+            }
+            None => {
+                self.stand_detached(handle)?;
+                Ok(true)
+            }
+        }
+    }
+
+    /// **Reach for every peer** (design §6.3): a path already held is left
+    /// alone; a peer with no path is dialled at the candidates it last
+    /// offered, and where that opens, this side's own candidates go back
+    /// over it, so the peer's kept address for this device is the current
+    /// one.  Refused where this client has no courier at all.
+    pub(crate) fn contact_peers(&self, handle: &Handle) -> Result<Vec<Contacted>, Refused> {
+        let courier = self.courier()?;
+        let (peers, hints) = handle.with_blocking(|c| (c.peers(), c.store.direct_hints.clone()));
+        Ok(self
+            .rt()
+            .block_on(contact_round(courier, peers, hints)))
+    }
+
+    /// The contact round on its own clock ([`PEER_CONTACT_EVERY`]), for
+    /// as long as the process runs; the first round one interval in, the
+    /// start having already dialled what it could.
+    pub(crate) fn schedule_contact(&self, handle: Handle, every: Duration) {
+        let live = self.live.clone();
+        let detached = self.detached.clone();
+        self.rt().spawn(async move {
+            let mut tick = tokio::time::interval(every);
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+            tick.tick().await;
+            loop {
+                tick.tick().await;
+                let courier = live
+                    .lock()
+                    .unwrap()
+                    .as_ref()
+                    .map(|l| l.courier.clone())
+                    .or_else(|| detached.lock().unwrap().as_ref().map(|d| d.courier.clone()));
+                let Some(courier) = courier else {
+                    continue;
+                };
+                let (peers, hints) = handle.with(|c| (c.peers(), c.store.direct_hints.clone())).await;
+                if peers.is_empty() {
+                    continue;
+                }
+                contact_round(courier, peers, hints).await;
+            }
+        });
     }
 
     /// This side's candidates for `peer`, for a carriage the shell owns
@@ -1123,6 +1252,36 @@ type Readers = (
 /// connected there and asked what it was bound on, which is how a client
 /// learns its own address without enumerating interfaces.  The
 /// unspecified address where the probe fails.
+/// One round of [`Net::contact_peers`], as a task or a call runs it.
+async fn contact_round(
+    courier: Arc<Courier>,
+    peers: Vec<Keyhash>,
+    hints: BTreeMap<Keyhash, Vec<u8>>,
+) -> Vec<Contacted> {
+    let mut out = Vec::with_capacity(peers.len());
+    for peer in peers {
+        let how = if courier.direct.reachable().holds(&peer) {
+            "held"
+        } else if let Some(h) = hints.get(&peer) {
+            if courier.open_offered(peer, h).await {
+                // where this side answers now, back over the path just
+                // opened: the peer's kept candidates for this device are
+                // then the current ones
+                courier.offer(peer).await;
+                "dialled"
+            } else {
+                "unreached"
+            }
+        } else {
+            "no hint"
+        };
+        let held = courier.direct.reachable().holds(&peer);
+        tracing::info!(target: "peer", peer = %hex4(&peer), how, held, "peer.contact");
+        out.push(Contacted { peer, held, how });
+    }
+    out
+}
+
 fn interface_toward(remote: SocketAddr) -> std::net::IpAddr {
     let any: SocketAddr = if remote.is_ipv4() {
         "0.0.0.0:0".parse().unwrap()

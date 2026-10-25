@@ -1605,6 +1605,12 @@ impl Client {
         let plain = self.open(bytes)?;
         let read = crate::local::CandidateHandover::decode(&plain).map_err(Abort::Malformed)?;
         self.anchored("candidates", read.ceremony_id)?;
+        // kept as a payload-path offer is (`ClientStore::direct_hints`):
+        // the counterparty is a contact from here on, and this is where
+        // it answers
+        if let Some(them) = self.counterparty() {
+            self.store.direct_hints.insert(them, read.candidates.clone());
+        }
         Ok(read.candidates)
     }
 
@@ -2248,6 +2254,12 @@ impl Client {
             .as_ref()
             .map(|a| a.responses.clone())
             .unwrap_or_default()
+    }
+
+    /// The parties this client is peered with (design §6.3), from the
+    /// peering records it holds.
+    pub fn peers(&self) -> Vec<Keyhash> {
+        self.store.peers(&self.public.keyhash)
     }
 
     /// Who is in front of this device in the active ceremony, where one is
@@ -5695,7 +5707,12 @@ impl Client {
                     &consented,
                 ))
             }
-            payload::KIND_CANDIDATES => Dispatched::Candidates(inner),
+            payload::KIND_CANDIDATES => {
+                // the last address this party offered, kept for a dial with
+                // no node to ask (`ClientStore::direct_hints`)
+                self.store.direct_hints.insert(from, inner.clone());
+                Dispatched::Candidates(inner)
+            }
             payload::KIND_RESPONSE_COPY => {
                 Dispatched::ResponseCopy(self.take_response_copy(&inner))
             }

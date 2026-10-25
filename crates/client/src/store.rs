@@ -315,6 +315,15 @@ pub struct ClientStore {
     /// The subnets' own profiles held, by subnet: this client's where it
     /// is the root that set one, and otherwise the latest fetched.
     pub subnet_profiles: BTreeMap<Txid, Vec<u8>>,
+    /// **The last candidates each contact offered for the direct path**
+    /// (`wire-format.md` §7.10.1 kind 3, §14.3.2), as the bytes they came
+    /// in, so that a client with no node can dial them again [author,
+    /// 2026-10-24: contacts upgrade to a direct connection, the
+    /// infrastructure's part being to look a present address up].  Where
+    /// no node can be asked, what was last offered is the only address
+    /// there is; it goes stale when the peer moves, and a fresh offer
+    /// replaces it.  An address and a port, nothing secret.
+    pub direct_hints: BTreeMap<Keyhash, Vec<u8>>,
 }
 
 impl ClientStore {
@@ -327,6 +336,36 @@ impl ClientStore {
             .any(|s| s.slots.iter().any(|slot| find(slot)))
             || self.records.values().any(|r| find(r))
             || self.late.values().flatten().any(|l| find(l))
+    }
+
+    /// **The parties `me` is peered with** (design §6.3): the other party
+    /// of every peering record held that names `me`.  Derived from the
+    /// records and kept nowhere else, as every other view of the archive
+    /// is.
+    pub fn peers(&self, me: &Keyhash) -> Vec<Keyhash> {
+        let mut out: Vec<Keyhash> = Vec::new();
+        for bytes in self.records.values() {
+            let Ok(rec) = rhtn_archive::record::Record::parse(bytes) else {
+                continue;
+            };
+            if rec.tx_type != rhtn_archive::tx::TYPE_PEERING {
+                continue;
+            }
+            let (Some(a), Some(b)) = (rec.field_hash(1), rec.field_hash(2)) else {
+                continue;
+            };
+            let other = if a == *me {
+                b
+            } else if b == *me {
+                a
+            } else {
+                continue;
+            };
+            if !out.contains(&other) {
+                out.push(other);
+            }
+        }
+        out
     }
 
     /// Whether this client's own presence records name `k` as a
@@ -421,6 +460,10 @@ impl ClientStore {
             &dir.join("subnet-profiles"),
             self.subnet_profiles.iter().map(|(k, b)| (*k, b.clone())),
         )?;
+        rewrite(
+            &dir.join("direct-hints"),
+            self.direct_hints.iter().map(|(k, b)| (*k, b.clone())),
+        )?;
         Ok(())
     }
 
@@ -430,7 +473,7 @@ impl ClientStore {
     pub fn encode(&self) -> Vec<u8> {
         use rhtn_codec::encode::*;
         let mut out = Vec::new();
-        emit_array_head(&mut out, 9);
+        emit_array_head(&mut out, 10);
         keyed(&mut out, self.records.iter().map(|(t, b)| (*t, b.clone())));
         keyed(
             &mut out,
@@ -462,6 +505,10 @@ impl ClientStore {
             &mut out,
             self.subnet_profiles.iter().map(|(k, b)| (*k, b.clone())),
         );
+        keyed(
+            &mut out,
+            self.direct_hints.iter().map(|(k, b)| (*k, b.clone())),
+        );
         out
     }
 
@@ -474,9 +521,10 @@ impl ClientStore {
             return None;
         };
         // six collections before locators were kept (2026-10-11), seven
-        // since, nine with profiles (2026-10-15): a store written by an
-        // earlier shape opens with none of what it did not hold
-        if !matches!(f.len(), 6 | 7 | 9) {
+        // since, nine with profiles (2026-10-15), ten with the direct
+        // hints (2026-10-24): a store written
+        // by an earlier shape opens with none of what it did not hold
+        if !matches!(f.len(), 6 | 7 | 9 | 10) {
             return None;
         }
         let m = |i: usize| unkeyed(b, &f[i]);
@@ -515,12 +563,17 @@ impl ClientStore {
                 }
             }
         }
-        if f.len() == 9 {
+        if f.len() >= 9 {
             for (k, v) in m(7)? {
                 st.profiles.insert(k, v);
             }
             for (k, v) in m(8)? {
                 st.subnet_profiles.insert(k, v);
+            }
+        }
+        if f.len() == 10 {
+            for (k, v) in m(9)? {
+                st.direct_hints.insert(k, v);
             }
         }
         Some(st)
@@ -570,6 +623,9 @@ impl ClientStore {
         }
         for (k, b) in read_dir_of(&dir.join("subnet-profiles"))? {
             st.subnet_profiles.insert(k, b);
+        }
+        for (k, b) in read_dir_of(&dir.join("direct-hints"))? {
+            st.direct_hints.insert(k, b);
         }
         Ok(st)
     }

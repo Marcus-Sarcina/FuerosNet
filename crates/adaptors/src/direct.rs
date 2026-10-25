@@ -34,6 +34,11 @@ impl Reachable {
         }
     }
 
+    /// Forget every path: what a socket that is gone held.
+    pub fn clear(&self) {
+        self.0.lock().unwrap().clear();
+    }
+
     /// Whether a direct path to `peer` is held.
     pub fn holds(&self, peer: &Keyhash) -> bool {
         self.0.lock().unwrap().contains(peer)
@@ -171,6 +176,14 @@ impl LightDirect {
     /// The address this socket is bound to.
     pub fn addr(&self) -> io::Result<SocketAddr> {
         self.0.socket.addr()
+    }
+
+    /// Close the socket: every connection it holds ends and the accept
+    /// task behind it returns.  For a device that moved to another
+    /// interface, whose socket is bound where nothing reaches any more.
+    pub fn close(&self) {
+        self.0.conns.lock().unwrap().clear();
+        self.0.endpoint.close(quinn::VarInt::from_u32(0), b"moved");
     }
 
     /// Hold `conn` under the peer it authenticates and read what it

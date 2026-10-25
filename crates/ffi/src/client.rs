@@ -440,6 +440,18 @@ pub struct Intake {
     pub who: Id,
 }
 
+/// How one peer stood after a contact round ([`Participant::contact_peers`]).
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct PeerContact {
+    /// The peer.
+    pub who: Id,
+    /// Whether a direct path is held now.
+    pub held: bool,
+    /// What happened, in the kernel's words: `held`, `dialled`, `no hint`
+    /// or `unreached`.
+    pub how: String,
+}
+
 /// One contact as the shell lists it (`light-client-requirements.md` §4.3).
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct ContactRow {
@@ -875,6 +887,9 @@ impl Participant {
         self.net.persist_with(after.clone());
         self.net
             .schedule_maintenance(self.handle.clone(), MAINTAIN_EVERY, after);
+        // and the peers, on their own clock (design §6.3)
+        self.net
+            .schedule_contact(self.handle.clone(), crate::net::PEER_CONTACT_EVERY);
     }
 }
 
@@ -982,6 +997,48 @@ impl Participant {
     #[must_use]
     pub fn status(&self) -> Status {
         crate::diag::call_plain("status", || self.net.status())
+    }
+
+    /// The parties this client is peered with (design §6.3), from the
+    /// peering records it holds.
+    pub fn peers(&self) -> Vec<Id> {
+        crate::diag::call_plain("peers", || {
+            self.handle
+                .with_blocking(|c| c.peers().iter().map(id_of).collect())
+        })
+    }
+
+    /// **Reach for every peer now** (design §6.3): each peer no direct
+    /// path is held to is dialled at the candidates it last offered, and
+    /// this side's own go back where that opens.  The kernel does this on
+    /// its own clock besides; a shell calls it when the platform says the
+    /// network came back, or a person asks.  How each peer stood.
+    pub fn contact_peers(&self) -> Result<Vec<PeerContact>, Refused> {
+        crate::diag::call("contact_peers", || {
+            Ok(self
+                .net
+                .contact_peers(&self.handle)?
+                .into_iter()
+                .map(|c| PeerContact {
+                    who: id_of(&c.peer),
+                    held: c.held,
+                    how: c.how.to_string(),
+                })
+                .collect())
+        })
+    }
+
+    /// **The device's network changed** (`light-client-requirements.md`
+    /// §9: the hardware crosses inward, and connectivity is the
+    /// platform's to know).  The direct socket is stood again where the
+    /// device now routes out of another interface, and every peer is
+    /// reached for, as [`Participant::contact_peers`] does.
+    pub fn network_changed(&self) -> Result<Vec<PeerContact>, Refused> {
+        crate::diag::call("network_changed", || {
+            let restood = self.net.refresh_detached(&self.handle)?;
+            tracing::info!(target: "pay", restood, "pay.network_changed");
+            self.contact_peers()
+        })
     }
 
     /// Whether a direct path to `peer` is held now: status a screen may

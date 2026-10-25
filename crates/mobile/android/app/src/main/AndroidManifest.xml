@@ -4,6 +4,10 @@
     <!-- The kernel dials the serving node itself; nothing else here talks
          to the network. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- The default network coming back is handed to the kernel, which
+         reaches for its peers (design §6.3); the shell reads the state and
+         never the traffic. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- The optical channel's two QRs (`wire-format.md` §14.3.1): the
          bootstrap one read rear-camera, the anchor exchange selfie-camera. -->
     <uses-permission android:name="android.permission.CAMERA" />

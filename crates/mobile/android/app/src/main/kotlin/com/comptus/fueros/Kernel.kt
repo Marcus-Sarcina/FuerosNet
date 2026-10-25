@@ -1643,6 +1643,48 @@ object Kernel {
         }.start()
     }
 
+    /**
+     * **The network is the platform's to know** (`light-client-requirements.md`
+     * §9: the hardware crosses inward). The default network coming up —
+     * at start, and again after it was lost — is handed to the kernel,
+     * which stands its direct socket again where the device now routes
+     * out of another interface and reaches for every peer (design §6.3).
+     * The kernel reaches for them on its own clock besides; this is the
+     * reconnect case, which a clock alone would meet late. Off the
+     * callback's thread: a round dials, and a dial waits.
+     */
+    private fun watchNetwork(p: Participant) {
+        val cm = appContext?.getSystemService(android.net.ConnectivityManager::class.java) ?: return
+        try {
+            cm.registerDefaultNetworkCallback(object : android.net.ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: android.net.Network) {
+                    Diag.event("shell.network", "state" to "available")
+                    Thread({
+                        call("network_changed", { _ -> }) {
+                            val round = p.networkChanged()
+                            Diag.event(
+                                "peer.round",
+                                "peers" to round.size,
+                                "held" to round.count { it.held },
+                                "how" to round.joinToString(",") { it.how },
+                            )
+                            round.forEach { c ->
+                                val who = hex(c.who).take(8)
+                                if (c.how == "dialled") front.note("· peer $who… reached directly")
+                            }
+                        }
+                    }, "fueros-network").start()
+                }
+
+                override fun onLost(network: android.net.Network) {
+                    Diag.event("shell.network", "state" to "lost")
+                }
+            })
+        } catch (e: Exception) {
+            Diag.warn("shell.network", "state" to "unwatched", "error" to (e.message ?: e.javaClass.simpleName))
+        }
+    }
+
     /** Start the participant, attach where provisioned, and pump its events. */
     @Volatile private var shell: AndroidShell? = null
 
@@ -1666,6 +1708,7 @@ object Kernel {
         } ?: return
         participant = p
         show(p, Status.Detached)
+        watchNetwork(p)
         // **a nominee arrives as an introduction** (`wire-format.md` §2.3):
         // material and a signed locator, taken as a person would take one
         // scanned, so the nominee can be offered to the counterparty's

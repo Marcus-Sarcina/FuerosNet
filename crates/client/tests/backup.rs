@@ -498,15 +498,25 @@ fn a_store_written_before_locators_were_kept_still_opens() {
             7,
         ),
     );
+    st.direct_hints.insert([3u8; 32], vec![0x81, 0x83, 0x00, 0x44, 10, 0, 0, 7, 0x19, 0x1d, 0x08]);
     let seven = st.encode();
     let back = ClientStore::decode(&seven).expect("the current shape opens");
-    assert_eq!(back, st, "and round-trips, contacts included");
+    assert_eq!(back, st, "and round-trips, contacts and direct hints included");
 
     // the same store as the earlier shapes wrote it: the first six
-    // collections, no seventh; and the first seven, before profiles
-    // were kept (2026-10-15)
+    // collections, no seventh; the first seven, before profiles were
+    // kept (2026-10-15); the first nine, before the direct hints
+    // (2026-10-24)
     let items = rhtn_codec::cbor::array_item_ranges(&seven, 0).unwrap();
-    assert_eq!(items.len(), 9);
+    assert_eq!(items.len(), 10);
+    let mut nine_shape = Vec::new();
+    rhtn_codec::encode::emit_array_head(&mut nine_shape, 9);
+    for r in &items[..9] {
+        nine_shape.extend_from_slice(&seven[r.clone()]);
+    }
+    let opened = ClientStore::decode(&nine_shape).expect("the nine-shape opens");
+    assert_eq!(opened.contacts, st.contacts, "with its contacts");
+    assert!(opened.direct_hints.is_empty(), "and no hints, as that client kept none");
     let mut seven_shape = Vec::new();
     rhtn_codec::encode::emit_array_head(&mut seven_shape, 7);
     for r in &items[..7] {

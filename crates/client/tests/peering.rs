@@ -92,6 +92,11 @@ fn two_parties_who_met_peer_by_locator_and_both_hold_the_record() {
     for n in ["alice", "bob"] {
         assert!(s.client(n).store.records.contains_key(&t), "{n} holds it");
     }
+    // and each now counts the other among its peers, read from the record
+    // and kept nowhere else (design §6.3)
+    assert_eq!(s.client("alice").peers(), vec![kh("bob")]);
+    assert_eq!(s.client("bob").peers(), vec![kh("alice")]);
+    assert!(s.client("w1").peers().is_empty(), "a witness is nobody's peer");
     // and a peering is no part of a position: both still sit where they sat
     let subnet = s.client("w1").subnets()[0];
     assert_eq!(
