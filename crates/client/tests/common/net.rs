@@ -90,6 +90,7 @@ pub fn describe(d: &Dispatched) -> String {
         Dispatched::Query { query, outcome } => format!("Query({query:?}, {outcome:?})"),
         Dispatched::Response(r) => format!("Response({r:?})"),
         Dispatched::Conversation(c) => format!("Conversation({c})"),
+        Dispatched::Peer(what) => format!("Peer({what})"),
     }
 }
 

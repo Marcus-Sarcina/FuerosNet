@@ -611,6 +611,16 @@ pub const KIND_WITNESS_KEEP: u64 = 23;
 /// A `WitnessStanddown` (§7.10.2): a nominee that did not survive the
 /// prune.
 pub const KIND_WITNESS_STANDDOWN: u64 = 24;
+/// The sender's current locator, a peer's to hold (`wire-format.md` §4.4:
+/// a peering's snapshot of an address is kept current by the peers
+/// themselves; §7.10.1 kind 26).
+pub const KIND_PEER_LOCATOR: u64 = 26;
+/// The sender's backup blob, for a peer to hold (design §6.3; kind 27).
+pub const KIND_BACKUP_DEPOSIT: u64 = 27;
+/// Asks a peer for the blob it holds of the sender (kind 28).
+pub const KIND_BACKUP_REQUEST: u64 = 28;
+/// A peer's answer: the recipient's own blob, as held (kind 29).
+pub const KIND_BACKUP_RETURN: u64 = 29;
 // kind 25 (`ProximityUpdate`) was RETIRED 2026-10-24: ranging is not used
 // (design §7.6.3). The number is not reused and a decoder meeting it rejects.
 

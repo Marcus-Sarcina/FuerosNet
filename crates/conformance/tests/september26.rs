@@ -656,36 +656,31 @@ fn r07_client_archive_fetch_must_keep_every_valid_merge_branch() {
 }
 
 #[test]
-fn r02_backup_install_must_not_accept_another_identitys_seeds() {
-    use rhtn_client::backup::{self, Contents, Cost, Wrap};
+fn r02_backup_install_must_not_accept_another_identitys_blob() {
+    use rhtn_client::backup::{self, Contents, Wrap};
     let mut b = client("bob");
-    // spelled out: `Contents` wipes its seeds on drop, and a type that
-    // drops cannot be built by struct update from a default
+    // a blob that opens under bob's key and names another identity: opening
+    // establishes which key the reader holds, not which identity wrote it
+    let donor = rhtn_crypto::SigningIdentity::from_seeds(&[71; 32], &[72; 32]);
+    assert_ne!(b.keyhash(), donor.public.keyhash);
     let contents = Contents {
-        owner: None,
-        seeds: Some([[71; 32], [72; 32]]),
+        owner: Some(donor.public.keyhash),
         records: Vec::new(),
         store: Default::default(),
         provider: Some(b"foreign-provider-secret".to_vec()),
     };
-    let donor = rhtn_crypto::SigningIdentity::from_seeds(&[71; 32], &[72; 32]);
-    assert_ne!(b.keyhash(), donor.public.keyhash);
     let blob = backup::export(
         &contents,
-        &Wrap::passphrase(Cost {
-            m_kib: 32,
-            passes: 1,
-            lanes: 1,
-        }),
-        b"password",
+        &Wrap::identity(),
+        test_identity("bob").identity_root(),
     )
     .unwrap();
-    let (opened, _) = b.import(&blob, b"password").unwrap();
-    assert_eq!(opened.seeds, contents.seeds);
+    let (opened, _) = b.import(&blob).unwrap();
+    assert_eq!(opened.owner, contents.owner);
     let result = b.install(opened);
     assert!(
         result.is_err(),
-        "OPS-004: backup seeds discarded and foreign provider/store installed under Bob: {result:?}"
+        "OPS-004: another identity's provider/store installed under Bob: {result:?}"
     );
 }
 
@@ -775,35 +770,29 @@ fn r09_topology_persistence_must_not_keep_foreign_transaction_history() {
 }
 
 #[test]
-fn r02_seedless_backup_must_still_be_bound_to_its_identity() {
-    use rhtn_client::backup::{self, Contents, Cost, Wrap};
+fn r02_ownerless_backup_must_still_be_bound_to_an_identity() {
+    use rhtn_client::backup::{self, Contents, Wrap};
     let mut bob = client("bob");
-    // A backup made on a delegated device has no identity seeds.  Its
-    // provider credential and evidence store are still identity state, so
-    // omitting the seeds cannot make the envelope transferable to any empty
-    // client that knows its passphrase.
+    // A blob that names no owner (the shape before the owner was carried)
+    // installs nowhere: a provider credential and an evidence store are
+    // identity state, and opening under a key is not a name.
     let foreign = Contents {
         owner: None,
-        seeds: None,
         records: Vec::new(),
         store: Default::default(),
         provider: Some(b"alice-provider-secret".to_vec()),
     };
     let blob = backup::export(
         &foreign,
-        &Wrap::passphrase(Cost {
-            m_kib: 32,
-            passes: 1,
-            lanes: 1,
-        }),
-        b"password",
+        &Wrap::identity(),
+        test_identity("bob").identity_root(),
     )
     .unwrap();
-    let (opened, _) = bob.import(&blob, b"password").unwrap();
+    let (opened, _) = bob.import(&blob).unwrap();
     let result = bob.install(opened);
     assert!(
         result.is_err(),
-        "OPS-004: a seedless backup names no owner and installed foreign provider state into Bob: {result:?}"
+        "OPS-004: an ownerless backup installed foreign provider state into Bob: {result:?}"
     );
     assert!(bob.provider_credential.is_none());
 }
@@ -992,23 +981,14 @@ fn n04_upgrade_must_not_delete_a_legacy_own_act_while_migrating_the_store() {
 }
 
 #[test]
-fn control_start_from_backup_restores_the_identity_and_writes_current_state() {
-    use rhtn_client::backup::Cost;
+fn control_restore_on_a_device_given_the_identity_writes_current_state() {
     use rhtn_ffi::client::{Participant, STATE};
     let source = client("alice");
+    // the identity comes to the new device by its holder's hand
+    // (light-client §2), never out of the blob: the blob opens under it
     let ed = rhtn_codec::cose::sha256(b"rhtn-test-vectors:alice:ed25519-seed");
     let pq = rhtn_codec::cose::sha256(b"rhtn-test-vectors:alice:ml-dsa-65-seed");
-    let blob = source
-        .export(
-            Some([ed, pq]),
-            Cost {
-                m_kib: 32,
-                passes: 1,
-                lanes: 1,
-            },
-            b"password",
-        )
-        .unwrap();
+    let blob = source.export().unwrap();
     let shell = Arc::new(Shell::default());
     let platform = Arc::new(Platform {
         camera: shell.clone(),
@@ -1021,9 +1001,10 @@ fn control_start_from_backup_restores_the_identity_and_writes_current_state() {
         diagnostics: Arc::new(rhtn_ffi::device::Silent),
         engine: None,
     });
-    let restored = Participant::start_from_backup(
-        blob,
-        b"password".to_vec(),
+    let mut seeds = ed.to_vec();
+    seeds.extend_from_slice(&pq);
+    let restored = Participant::start(
+        seeds,
         vec![
             test_identity("alice").public.key_material(),
             test_identity("bob").public.key_material(),
@@ -1031,6 +1012,7 @@ fn control_start_from_backup_restores_the_identity_and_writes_current_state() {
         platform,
     )
     .unwrap();
+    restored.restore_backup(blob).unwrap();
     assert_eq!(
         restored.me(),
         test_identity("alice").public.keyhash.to_vec()
@@ -1294,21 +1276,10 @@ fn control_fact_only_client_state_restores_its_current_topology_without_foreign_
 }
 
 #[test]
-fn control_seedless_client_export_names_its_owner_and_roundtrips_only_there() {
-    use rhtn_client::backup::Cost;
+fn control_client_export_names_its_owner_and_roundtrips_only_there() {
     let alice = client("alice");
-    let bytes = alice
-        .export(
-            None,
-            Cost {
-                m_kib: 32,
-                passes: 1,
-                lanes: 1,
-            },
-            b"password",
-        )
-        .unwrap();
-    let (contents, _) = alice.import(&bytes, b"password").unwrap();
+    let bytes = alice.export().unwrap();
+    let (contents, _) = alice.import(&bytes).unwrap();
     assert_eq!(contents.owner, Some(alice.keyhash()));
     assert!(client("alice").install(contents.clone()).is_ok());
     assert!(client("bob").install(contents).is_err());

@@ -1685,6 +1685,35 @@ object Kernel {
         }
     }
 
+    /**
+     * **The bench's two levers on the peer exchange** (fieldtest flavour,
+     * by intent extra): forget one contact, so that a peer's copy can be
+     * watched bringing it back; and reach for the peers now rather than
+     * at the clock's next tick. Each runs off the caller's thread and says
+     * what it did on the home screen's notes.
+     */
+    fun forgetContact(hexKey: String) {
+        val p = participant ?: run { front.note("· no kernel yet"); return }
+        val who = runCatching { unhex(hexKey) }.getOrNull() ?: run { front.note("· not a key: $hexKey"); return }
+        Thread({
+            call("forget_contact", { e -> front.note("· forget refused: ${e.reason}") }) {
+                val had = p.forgetContact(who)
+                front.note(if (had) "· forgot contact ${hexKey.take(8)}…" else "· no such contact ${hexKey.take(8)}…")
+            }
+        }, "fueros-forget").start()
+    }
+
+    fun contactPeersNow() {
+        val p = participant ?: run { front.note("· no kernel yet"); return }
+        Thread({
+            call("contact_peers", { e -> front.note("· contact refused: ${e.reason}") }) {
+                val round = p.contactPeers()
+                Diag.event("peer.round", "peers" to round.size, "held" to round.count { it.held }, "how" to round.joinToString(",") { it.how })
+                front.note("· peers: " + round.joinToString("; ") { "${hex(it.who).take(8)}… ${it.how}" }.ifEmpty { "none" })
+            }
+        }, "fueros-contact").start()
+    }
+
     /** Start the participant, attach where provisioned, and pump its events. */
     @Volatile private var shell: AndroidShell? = null
 
@@ -1838,6 +1867,7 @@ object Kernel {
                         is Event.ResponseCopy -> Diag.id8(e.from)
                         is Event.Late -> Diag.id8(e.from)
                         is Event.Conversed -> Diag.id8(e.from)
+                        is Event.Peer -> Diag.id8(e.from)
                         else -> null
                     },
                     "bytes" to (e as? Event.Payload)?.bytes?.size,
@@ -1886,6 +1916,12 @@ object Kernel {
                 // a verifier answered on the end-to-end path: the kernel
                 // took it against the query it issued, and the screen
                 // shows the verdict against the verifier it names
+                // between peers (design §6.3): what a locator, a deposit, a
+                // request or a return came to, in the kernel's words
+                is Event.Peer -> {
+                    Diag.event("peer.event", "from" to Diag.id8(e.from), "what" to e.what)
+                    front.note("· peer: ${e.what}")
+                }
                 is Event.Answered -> {
                     val v = e.answer
                     if (v != null) {

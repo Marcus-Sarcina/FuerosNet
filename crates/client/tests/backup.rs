@@ -5,19 +5,14 @@ mod common;
 
 use common::*;
 use rhtn_archive::tx::{TYPE_PRESENCE, Witness};
-use rhtn_client::backup::{self, Contents, Cost, Failure, Wrap};
+use rhtn_client::backup::{self, Contents, Failure, Wrap};
 use rhtn_client::record::*;
 use rhtn_client::store::{Capture, ClientStore, Frame, OwnCapture, SealParams, seal};
 
-/// Cheap enough to run in a test and still Argon2id: the cost is the
-/// operator's number, and a test asserting a shape has no business
-/// spending 64 MiB on it.
-fn cheap() -> Cost {
-    Cost {
-        m_kib: 64,
-        passes: 1,
-        lanes: 1,
-    }
+/// The identity root a backup is keyed under (design §13.7.1 as restated
+/// 2026-10-24): the one thing the blob must not contain.
+fn root(name: &str) -> [u8; 32] {
+    *id(name).identity_root()
 }
 
 fn full_set() -> DisclosureSet {
@@ -32,8 +27,8 @@ fn full_set() -> DisclosureSet {
     disclosures(values, std::array::from_fn(|i| [i as u8 + 1; 16]))
 }
 
-/// Everything a device loss takes away: the identity, the archive, and the
-/// store beside it.
+/// Everything a device loss takes away: the archive and the store beside
+/// it — never the identity, which is what opens the blob.
 fn contents(w: &mut World) -> (Contents, [u8; 32]) {
     let set = full_set();
     let t = w.tick();
@@ -87,7 +82,6 @@ fn contents(w: &mut World) -> (Contents, [u8; 32]) {
     (
         Contents {
             owner: Some(kh("alice")),
-            seeds: Some([[1; 32], [2; 32]]),
             records: vec![rec.bytes.clone()],
             store,
             provider: None,
@@ -101,36 +95,30 @@ fn contents(w: &mut World) -> (Contents, [u8; 32]) {
 fn a_backup_is_enveloped_under_a_key_kept_apart_and_comes_back_whole() {
     let mut w = World::new();
     let (before, _) = contents(&mut w);
-    let wrap = Wrap::passphrase(cheap());
-    let blob = backup::export(&before, &wrap, b"a passphrase").expect("exports");
+    let wrap = Wrap::identity();
+    let blob = backup::export(&before, &wrap, &root("alice")).expect("exports");
 
     // **the KEK is never stored with the ciphertext** (design §13.7.1):
-    // neither the passphrase nor anything derived from it is in the blob,
-    // and neither is the plaintext it protects
+    // neither the identity root nor anything derived from it is in the
+    // blob, and neither is the plaintext it protects
     assert!(
-        !find(&blob, b"a passphrase"),
-        "the passphrase is not in the backup"
-    );
-    let kek_probe = before.seeds.unwrap()[0];
-    assert!(
-        !find(&blob, &kek_probe),
-        "nor is the identity seed in the clear"
+        !find(&blob, &root("alice")),
+        "the identity root is not in the backup"
     );
     assert!(!find(&blob, b"a frame"), "nor a captured frame");
 
-    let after = backup::import(&blob, b"a passphrase").expect("imports");
+    let after = backup::import(&blob, &root("alice")).expect("imports");
     assert_eq!(
         after, before,
         "everything a device loss takes away comes back"
     );
 
     // the salt is fresh per backup, so two exports of the same contents
-    // under the same passphrase are different bytes
-    let again =
-        backup::export(&before, &Wrap::passphrase(cheap()), b"a passphrase").expect("exports");
+    // under the same identity are different bytes
+    let again = backup::export(&before, &Wrap::identity(), &root("alice")).expect("exports");
     assert_ne!(again, blob, "a fresh salt and fresh nonces each time");
     assert_eq!(
-        backup::import(&again, b"a passphrase").expect("imports"),
+        backup::import(&again, &root("alice")).expect("imports"),
         before
     );
 }
@@ -140,29 +128,24 @@ fn a_backup_is_enveloped_under_a_key_kept_apart_and_comes_back_whole() {
 fn a_backup_refuses_a_wrong_secret_a_tampered_blob_and_a_truncated_one_by_name() {
     let mut w = World::new();
     let (before, _) = contents(&mut w);
-    let blob =
-        backup::export(&before, &Wrap::passphrase(cheap()), b"a passphrase").expect("exports");
+    let blob = backup::export(&before, &Wrap::identity(), &root("alice")).expect("exports");
 
-    // **the secret is wrong, which is a different thing to tell a person
-    // than a tampered payload**, and both are authentication failures
-    assert_eq!(
-        backup::import(&blob, b"the wrong one"),
-        Err(Failure::Secret)
-    );
+    // **another identity's key is the wrong key, which is a different
+    // thing to tell a person than a tampered payload**, and both are
+    // authentication failures
+    assert_eq!(backup::import(&blob, &root("bob")), Err(Failure::Secret));
     assert_eq!(backup::import(&blob, b""), Err(Failure::Secret));
 
     // altering the header makes the data key refuse to unwrap: the header
-    // is the wrap's aad, so a changed cost or salt is not a different
-    // derivation but a failure
+    // is the wrap's aad, so a changed salt is not a different derivation
+    // but a failure.  The salt's first byte sits at offset 7: the outer
+    // array head, the header's two-byte bstr head, then the header's own
+    // head, version, method and the salt's head
     let mut headered = blob.clone();
-    let at = headered
-        .iter()
-        .position(|b| *b == 64)
-        .expect("the memory cost is in there");
-    headered[at] = 65;
+    headered[7] ^= 1;
     assert!(
         matches!(
-            backup::import(&headered, b"a passphrase"),
+            backup::import(&headered, &root("alice")),
             Err(Failure::Secret) | Err(Failure::Malformed(_))
         ),
         "an altered header does not open"
@@ -175,7 +158,7 @@ fn a_backup_refuses_a_wrong_secret_a_tampered_blob_and_a_truncated_one_by_name()
     let n = tampered.len();
     tampered[n - 20] ^= 1;
     assert_eq!(
-        backup::import(&tampered, b"a passphrase"),
+        backup::import(&tampered, &root("alice")),
         Err(Failure::Payload)
     );
 
@@ -184,7 +167,7 @@ fn a_backup_refuses_a_wrong_secret_a_tampered_blob_and_a_truncated_one_by_name()
     for cut in [blob.len() - 1, blob.len() / 2, 8, 0] {
         let short = &blob[..cut];
         assert!(
-            backup::import(short, b"a passphrase").is_err(),
+            backup::import(short, &root("alice")).is_err(),
             "a backup cut at {cut} opens nothing"
         );
     }
@@ -196,41 +179,28 @@ fn the_wrapping_is_replaceable_without_touching_what_it_wraps() {
     let mut w = World::new();
     let (before, _) = contents(&mut w);
 
-    // **the cost is the operator's and travels in the header**, so a
-    // reader uses what the writer used rather than what it would have
-    // chosen: two backups at different costs both open
-    for cost in [
-        cheap(),
-        Cost {
-            m_kib: 128,
-            passes: 2,
-            lanes: 1,
-        },
-    ] {
-        let blob =
-            backup::export(&before, &Wrap::passphrase(cost), b"a passphrase").expect("exports");
-        assert_eq!(
-            backup::import(&blob, b"a passphrase").expect("imports"),
-            before,
-            "at {cost:?}"
-        );
-    }
-
     // **a wrap method this reader does not implement is named, not
-    // guessed** (design §13.7.1: passphrase in v1, hardware token later,
-    // split shares later still — none of which changes the format)
-    let blob =
-        backup::export(&before, &Wrap::passphrase(cheap()), b"a passphrase").expect("exports");
+    // guessed** (design §13.7.1: a hardware token later, split shares
+    // later still — none of which changes the format)
+    let blob = backup::export(&before, &Wrap::identity(), &root("alice")).expect("exports");
     let future = with_wrap_method(&blob, 7);
     assert_eq!(
-        backup::import(&future, b"a passphrase"),
+        backup::import(&future, &root("alice")),
         Err(Failure::UnsupportedWrap(7))
+    );
+    // method 0 was a passphrase run through Argon2id, retired the day the
+    // identity became the key (2026-10-24): the number is not reused, and
+    // a reader meeting it says so
+    let retired = with_wrap_method(&blob, 0);
+    assert_eq!(
+        backup::import(&retired, &root("alice")),
+        Err(Failure::UnsupportedWrap(0))
     );
 
     // and a later format version likewise
     let later = with_version(&blob, 2);
     assert_eq!(
-        backup::import(&later, b"a passphrase"),
+        backup::import(&later, &root("alice")),
         Err(Failure::Version(2))
     );
 }
@@ -336,10 +306,6 @@ fn a_scan_on_import_discards_what_is_past_its_window_and_keeps_the_history() {
         "and what they committed to"
     );
     assert_eq!(aged.records, before.records, "and the archive");
-    assert_eq!(
-        aged.seeds, before.seeds,
-        "and the identity, which is not a retention question"
-    );
 }
 
 /// The scan runs through the client, on its own clock and its own window,
@@ -350,19 +316,18 @@ fn a_client_scans_what_it_imports_and_reports_what_it_dropped() {
     let mut w = World::new();
     let (before, txid) = contents(&mut w);
     let finalized = before.store.own[&txid].finalized_at;
-    let blob =
-        backup::export(&before, &Wrap::passphrase(cheap()), b"a passphrase").expect("exports");
+    let blob = backup::export(&before, &Wrap::identity(), &root("alice")).expect("exports");
 
     // a client whose clock is inside the window imports the lot
     let mut c = fresh("alice", (finalized + 60) * 1000);
-    let (kept, dropped) = c.import(&blob, b"a passphrase").expect("imports");
+    let (kept, dropped) = c.import(&blob).expect("imports");
     assert_eq!(dropped, backup::Discarded::default());
     assert_eq!(kept.store.sealed.len(), 1);
 
     // one whose clock is past it gets the history and not the likeness,
     // and is told so
     c = fresh("alice", (finalized + 2 * 365 * 86_400 + 1) * 1000);
-    let (kept, dropped) = c.import(&blob, b"a passphrase").expect("imports");
+    let (kept, dropped) = c.import(&blob).expect("imports");
     assert_eq!(
         dropped,
         backup::Discarded {
@@ -375,21 +340,18 @@ fn a_client_scans_what_it_imports_and_reports_what_it_dropped() {
     assert_eq!(kept.store.records, before.store.records);
 
     // and a backup that does not open discards nothing, because nothing
-    // was opened
-    assert!(c.import(&blob, b"the wrong one").is_err());
+    // was opened: another identity's client holds another key
+    assert!(fresh("bob", (finalized + 60) * 1000).import(&blob).is_err());
 
     // the round trip through the client's own export
     let mut source = fresh("alice", (finalized + 60) * 1000);
     source.store = before.store.clone();
-    let own = source
-        .export(before.seeds, cheap(), b"another passphrase")
-        .expect("exports");
-    let (back, _) = source.import(&own, b"another passphrase").expect("imports");
+    let own = source.export().expect("exports");
+    let (back, _) = source.import(&own).expect("imports");
     assert_eq!(
         back.store, before.store,
         "what this client wrote, this client reads"
     );
-    assert_eq!(back.seeds, before.seeds);
 }
 
 /// A client at a stated instant, for the scan's clock.
@@ -406,18 +368,18 @@ fn an_operators_provider_credential_rides_in_the_envelope_and_never_in_the_archi
     let (mut c, _t) = contents(&mut w);
     let credential = b"provider-account:token-7f3a9c:region-eu".to_vec();
     c.provider = Some(credential.clone());
-    let wrap = Wrap::passphrase(cheap());
-    let blob = rhtn_client::backup::export(&c, &wrap, b"correct horse").unwrap();
+    let wrap = Wrap::identity();
+    let blob = rhtn_client::backup::export(&c, &wrap, &root("alice")).unwrap();
 
-    // under the passphrase it comes back whole; under another it does not
+    // under the identity it comes back whole; under another it does not
     // come back at all
-    let back = rhtn_client::backup::import(&blob, b"correct horse").unwrap();
+    let back = rhtn_client::backup::import(&blob, &root("alice")).unwrap();
     assert_eq!(back.provider.as_deref(), Some(credential.as_slice()));
     assert_eq!(back, c);
     assert_eq!(
-        rhtn_client::backup::import(&blob, b"wrong").unwrap_err(),
+        rhtn_client::backup::import(&blob, &root("bob")).unwrap_err(),
         Failure::Secret,
-        "the credential opens only under the passphrase"
+        "the credential opens only under the identity"
     );
     assert!(
         !find(&blob, &credential),
@@ -440,12 +402,12 @@ fn an_operators_provider_credential_rides_in_the_envelope_and_never_in_the_archi
     // slot empty rather than absent
     let mut client = fresh("alice", 1_790_000_000_000);
     client.provider_credential = Some(credential.clone());
-    let blob = client.export(None, cheap(), b"pw").unwrap();
-    let (got, _) = client.import(&blob, b"pw").unwrap();
+    let blob = client.export().unwrap();
+    let (got, _) = client.import(&blob).unwrap();
     assert_eq!(got.provider, Some(credential));
     client.provider_credential = None;
-    let blob = client.export(None, cheap(), b"pw").unwrap();
-    assert_eq!(client.import(&blob, b"pw").unwrap().0.provider, None);
+    let blob = client.export().unwrap();
+    assert_eq!(client.import(&blob).unwrap().0.provider, None);
 }
 
 /// A backup is installed into a client that holds nothing: the records
@@ -456,14 +418,13 @@ fn a_backup_installs_into_an_empty_client_and_is_refused_into_one_with_an_archiv
     let mut w = World::new();
     let (mut c, t) = contents(&mut w);
     c.provider = Some(b"provider".to_vec());
-    // as a backup made on a device holding no seed is: no seeds, and the
-    // owner named in its own right
-    c.seeds = None;
+    // the owner is named in its own right: opening the blob says which key
+    // the reader holds, not which identity wrote it
     c.owner = Some(kh("alice"));
-    let blob = rhtn_client::backup::export(&c, &Wrap::passphrase(cheap()), b"pw").unwrap();
+    let blob = rhtn_client::backup::export(&c, &Wrap::identity(), &root("alice")).unwrap();
 
     let mut fresh_alice = fresh("alice", 1_790_000_000_000);
-    let (got, discarded) = fresh_alice.import(&blob, b"pw").unwrap();
+    let (got, discarded) = fresh_alice.import(&blob).unwrap();
     assert_eq!(discarded, backup::Discarded::default());
     assert_eq!(fresh_alice.install(got).unwrap(), 1);
     assert!(fresh_alice.archive.records().any(|r| r.txid == t));
@@ -474,7 +435,7 @@ fn a_backup_installs_into_an_empty_client_and_is_refused_into_one_with_an_archiv
     );
 
     // a second install would replace an intact identity: refused
-    let (got, _) = fresh_alice.import(&blob, b"pw").unwrap();
+    let (got, _) = fresh_alice.import(&blob).unwrap();
     assert!(fresh_alice.install(got).is_err());
     assert_eq!(fresh_alice.archive.len(), 1, "and nothing changed");
 }
@@ -498,17 +459,24 @@ fn a_store_written_before_locators_were_kept_still_opens() {
             7,
         ),
     );
-    st.direct_hints.insert([3u8; 32], vec![0x81, 0x83, 0x00, 0x44, 10, 0, 0, 7, 0x19, 0x1d, 0x08]);
+    st.direct_hints.insert(
+        [3u8; 32],
+        vec![0x81, 0x83, 0x00, 0x44, 10, 0, 0, 7, 0x19, 0x1d, 0x08],
+    );
+    st.held_for.insert([4u8; 32], vec![0x83, 0x40, 0x40, 0x40]);
     let seven = st.encode();
     let back = ClientStore::decode(&seven).expect("the current shape opens");
-    assert_eq!(back, st, "and round-trips, contacts and direct hints included");
+    assert_eq!(
+        back, st,
+        "and round-trips, contacts, direct hints and held blobs included"
+    );
 
     // the same store as the earlier shapes wrote it: the first six
     // collections, no seventh; the first seven, before profiles were
-    // kept (2026-10-15); the first nine, before the direct hints
-    // (2026-10-24)
+    // kept (2026-10-15); the first nine, before the direct hints and the
+    // blobs held for peers (2026-10-24)
     let items = rhtn_codec::cbor::array_item_ranges(&seven, 0).unwrap();
-    assert_eq!(items.len(), 10);
+    assert_eq!(items.len(), 11);
     let mut nine_shape = Vec::new();
     rhtn_codec::encode::emit_array_head(&mut nine_shape, 9);
     for r in &items[..9] {
@@ -516,7 +484,21 @@ fn a_store_written_before_locators_were_kept_still_opens() {
     }
     let opened = ClientStore::decode(&nine_shape).expect("the nine-shape opens");
     assert_eq!(opened.contacts, st.contacts, "with its contacts");
-    assert!(opened.direct_hints.is_empty(), "and no hints, as that client kept none");
+    assert!(
+        opened.direct_hints.is_empty(),
+        "and no hints, as that client kept none"
+    );
+    assert!(opened.held_for.is_empty());
+    // and the ten-shape, which ran on the bench for an afternoon: the hints
+    // and no held blobs
+    let mut ten_shape = Vec::new();
+    rhtn_codec::encode::emit_array_head(&mut ten_shape, 10);
+    for r in &items[..10] {
+        ten_shape.extend_from_slice(&seven[r.clone()]);
+    }
+    let opened = ClientStore::decode(&ten_shape).expect("the ten-shape opens");
+    assert_eq!(opened.direct_hints, st.direct_hints, "with its hints");
+    assert!(opened.held_for.is_empty());
     let mut seven_shape = Vec::new();
     rhtn_codec::encode::emit_array_head(&mut seven_shape, 7);
     for r in &items[..7] {

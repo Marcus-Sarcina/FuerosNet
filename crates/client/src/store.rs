@@ -324,6 +324,12 @@ pub struct ClientStore {
     /// there is; it goes stale when the peer moves, and a fresh offer
     /// replaces it.  An address and a port, nothing secret.
     pub direct_hints: BTreeMap<Keyhash, Vec<u8>>,
+    /// **The backup blobs this client holds for its peers**, by peer
+    /// (design §6.3: what a peer gets that an acquaintance does not is
+    /// durability).  Ciphertext under the peer's own identity, which this
+    /// client does not hold; the newest deposit replaces the one before,
+    /// and the blob goes back to its owner on request and nowhere else.
+    pub held_for: BTreeMap<Keyhash, Vec<u8>>,
 }
 
 impl ClientStore {
@@ -464,6 +470,10 @@ impl ClientStore {
             &dir.join("direct-hints"),
             self.direct_hints.iter().map(|(k, b)| (*k, b.clone())),
         )?;
+        rewrite(
+            &dir.join("held-for"),
+            self.held_for.iter().map(|(k, b)| (*k, b.clone())),
+        )?;
         Ok(())
     }
 
@@ -473,7 +483,7 @@ impl ClientStore {
     pub fn encode(&self) -> Vec<u8> {
         use rhtn_codec::encode::*;
         let mut out = Vec::new();
-        emit_array_head(&mut out, 10);
+        emit_array_head(&mut out, 11);
         keyed(&mut out, self.records.iter().map(|(t, b)| (*t, b.clone())));
         keyed(
             &mut out,
@@ -509,6 +519,7 @@ impl ClientStore {
             &mut out,
             self.direct_hints.iter().map(|(k, b)| (*k, b.clone())),
         );
+        keyed(&mut out, self.held_for.iter().map(|(k, b)| (*k, b.clone())));
         out
     }
 
@@ -521,10 +532,12 @@ impl ClientStore {
             return None;
         };
         // six collections before locators were kept (2026-10-11), seven
-        // since, nine with profiles (2026-10-15), ten with the direct
-        // hints (2026-10-24): a store written
-        // by an earlier shape opens with none of what it did not hold
-        if !matches!(f.len(), 6 | 7 | 9 | 10) {
+        // since, nine with profiles (2026-10-15), ten with the direct hints
+        // and eleven with the blobs held for peers (both 2026-10-24; the
+        // ten-shape ran on the bench for an afternoon and opens): a store
+        // written by an earlier shape opens with none of what it did not
+        // hold
+        if !matches!(f.len(), 6 | 7 | 9 | 10 | 11) {
             return None;
         }
         let m = |i: usize| unkeyed(b, &f[i]);
@@ -571,9 +584,14 @@ impl ClientStore {
                 st.subnet_profiles.insert(k, v);
             }
         }
-        if f.len() == 10 {
+        if f.len() >= 10 {
             for (k, v) in m(9)? {
                 st.direct_hints.insert(k, v);
+            }
+        }
+        if f.len() == 11 {
+            for (k, v) in m(10)? {
+                st.held_for.insert(k, v);
             }
         }
         Some(st)
@@ -626,6 +644,9 @@ impl ClientStore {
         }
         for (k, b) in read_dir_of(&dir.join("direct-hints"))? {
             st.direct_hints.insert(k, b);
+        }
+        for (k, b) in read_dir_of(&dir.join("held-for"))? {
+            st.held_for.insert(k, b);
         }
         Ok(st)
     }

@@ -475,8 +475,8 @@ job.
 - **An operator's backup carries their provider credential too.** It belongs in
   design §13.7.1's envelope with everything else and **not in the archive**,
   which siblings replicate (design §3.4) and which is the wrong place for
-  something nobody else has any business holding. Encrypted under a passphrase
-  the user holds, on a device they control, it is as protected as the subnet keys
+  something nobody else has any business holding. Encrypted under the
+  identity's own key (design §13.7.1), it is as protected as the records
   beside it, and it makes a restore a whole one: a replacement device recovers
   the ability to administer, not only to participate. It is also the piece whose
   loss is recoverable outside this network, a provider having its own account
@@ -1159,7 +1159,7 @@ on the wire.
   whole obligation — a platform key store wrapping it on a phone,
   hardware-backed where the device has one, so the wrapping key never enters
   the process; a key derived from a passphrase where a person is present at
-  start (design §13.7.1's envelope); the operating environment's own
+  start; the operating environment's own
   convention where the platform declares itself unsealed. **Unsealed is a
   declared configuration, never a fallback**: a source that cannot keep the
   key refuses the start rather than quietly writing plain. The storage key

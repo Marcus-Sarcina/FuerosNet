@@ -128,6 +128,14 @@ pub enum Event {
         /// Why it was refused, where it was.
         refused: Option<String>,
     },
+    /// A message between peers came to something (design §6.3): a locator
+    /// held, a backup held or returned, a reconcile, a refusal.
+    Peer {
+        /// The peer.
+        from: Id,
+        /// What it came to, in the kernel's words.
+        what: String,
+    },
     /// A verifier answered a query this device put to it: the query and
     /// the verdict, or why the response was refused.
     Answered {
@@ -659,7 +667,12 @@ impl Net {
                 courier.write_after_arrivals(p);
             }
             let task = tokio::spawn(forward(events, events_tx));
-            Ok::<_, Refused>(Detached { courier, task, direct, local })
+            Ok::<_, Refused>(Detached {
+                courier,
+                task,
+                direct,
+                local,
+            })
         })?;
         *self.detached.lock().unwrap() = Some(built);
         Ok(())
@@ -703,15 +716,19 @@ impl Net {
     pub(crate) fn contact_peers(&self, handle: &Handle) -> Result<Vec<Contacted>, Refused> {
         let courier = self.courier()?;
         let (peers, hints) = handle.with_blocking(|c| (c.peers(), c.store.direct_hints.clone()));
-        Ok(self
-            .rt()
-            .block_on(contact_round(courier, peers, hints)))
+        let h = handle.clone();
+        Ok(self.rt().block_on(contact_round(courier, h, peers, hints)))
     }
 
     /// The contact round on its own clock ([`PEER_CONTACT_EVERY`]), for
     /// as long as the process runs; the first round one interval in, the
     /// start having already dialled what it could.
-    pub(crate) fn schedule_contact(&self, handle: Handle, every: Duration) {
+    pub(crate) fn schedule_contact(
+        &self,
+        handle: Handle,
+        every: Duration,
+        after: Arc<dyn Fn() + Send + Sync>,
+    ) {
         let live = self.live.clone();
         let detached = self.detached.clone();
         self.rt().spawn(async move {
@@ -729,11 +746,15 @@ impl Net {
                 let Some(courier) = courier else {
                     continue;
                 };
-                let (peers, hints) = handle.with(|c| (c.peers(), c.store.direct_hints.clone())).await;
+                let (peers, hints) = handle
+                    .with(|c| (c.peers(), c.store.direct_hints.clone()))
+                    .await;
                 if peers.is_empty() {
                     continue;
                 }
-                contact_round(courier, peers, hints).await;
+                contact_round(courier, handle.clone(), peers, hints).await;
+                // a round may have taken a deposit or reconciled: written
+                after();
             }
         });
     }
@@ -1255,6 +1276,7 @@ type Readers = (
 /// One round of [`Net::contact_peers`], as a task or a call runs it.
 async fn contact_round(
     courier: Arc<Courier>,
+    handle: Handle,
     peers: Vec<Keyhash>,
     hints: BTreeMap<Keyhash, Vec<u8>>,
 ) -> Vec<Contacted> {
@@ -1277,6 +1299,20 @@ async fn contact_round(
         };
         let held = courier.direct.reachable().holds(&peer);
         tracing::info!(target: "peer", peer = %hex4(&peer), how, held, "peer.contact");
+        // **what peers exchange on contact** (design §6.3): the locator,
+        // the request for what the peer holds, the deposit where the
+        // dataset moved — each over the path just confirmed
+        if held {
+            let owed = handle
+                .with(move |c| {
+                    c.greet_peer(peer);
+                    c.outbox()
+                })
+                .await;
+            if !owed.is_empty() {
+                courier.carry(owed).await;
+            }
+        }
         out.push(Contacted { peer, held, how });
     }
     out
@@ -1397,6 +1433,7 @@ fn event_of(from: Keyhash, d: Dispatched) -> Option<Event> {
     let from = id_of(&from);
     match d {
         Dispatched::Application { kind, bytes } => Some(Event::Payload { from, kind, bytes }),
+        Dispatched::Peer(what) => Some(Event::Peer { from, what }),
         Dispatched::ResponseCopy(Ok(q)) => Some(Event::ResponseCopy {
             from,
             query: Some(q.to_vec()),

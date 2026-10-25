@@ -662,14 +662,14 @@
       },
       {
         "where": "design §13.7.1",
-        "text": "A random data key encrypts the blob, and a key-encryption key (KEK) derived from\n  a passphrase encrypts the data key."
+        "text": "A random data key encrypts the blob, and a key-encryption key (KEK) encrypts the data key"
       }
     ],
-    "given": "A participant's identity seeds, archive records and store.",
-    "when": "They are exported under a passphrase and imported back.",
-    "then": "Neither the passphrase, nor an identity seed, nor a captured frame appears in the blob. Everything a device loss takes away comes back identical. A second export of the same contents under the same passphrase is different bytes, because the salt and the nonces are fresh each time.",
+    "given": "A participant's archive records and store.",
+    "when": "They are exported under the identity's key and imported back.",
+    "then": "Neither the identity root nor a captured frame appears in the blob. Everything a device loss takes away comes back identical. A second export of the same contents under the same identity is different bytes, because the salt is fresh per envelope.",
     "oracle": "behaviour",
-    "interpretation": "The KEK is derived and never written; what the blob carries is the wrapped data key and the header needed to derive the KEK again, which is the standard envelope construction §13.7.1 names."
+    "interpretation": "The KEK is derived from the identity root and never written; what the blob carries is the wrapped data key and the header needed to derive the KEK again, which is the standard envelope construction §13.7.1 names. The identity itself is not in the blob: it is what opens it."
   },
   {
     "id": "ARC-24",
@@ -689,10 +689,10 @@
       }
     ],
     "given": "A well-formed backup.",
-    "when": "It is opened with the wrong secret, with an empty secret, with an altered header, with an altered payload, and truncated at four lengths.",
-    "then": "A wrong secret and an altered header fail at the unwrap; an altered payload authenticates the key and fails the body, so the two steps are distinguishable and a person can be told which went wrong. Every truncation opens nothing. Nothing is returned from a backup that did not authenticate whole.",
+    "when": "It is opened under another identity's key, with an empty key, with an altered header, with an altered payload, and truncated at four lengths.",
+    "then": "Another identity's key and an altered header fail at the unwrap; an altered payload authenticates the key and fails the body, so the two steps are distinguishable and a person can be told which went wrong. Every truncation opens nothing. Nothing is returned from a backup that did not authenticate whole.",
     "oracle": "behaviour",
-    "interpretation": "The header is the wrap's external_aad, so altering a cost or a salt is an authentication failure rather than a different derivation; a partial import is how a restore replaces an intact identity with half of an old one."
+    "interpretation": "The header is the wrap's external_aad, so altering a salt is an authentication failure rather than a different derivation; a partial import is how a restore replaces an intact identity with half of an old one."
   },
   {
     "id": "ARC-25",
@@ -708,14 +708,14 @@
     "rule": [
       {
         "where": "design §13.7.1",
-        "text": "**The format leaves a seam.** How the KEK is protected is a pluggable layer\n  above the backup format"
+        "text": "**The format leaves a seam.** How the KEK is derived is a pluggable layer above the backup format"
       }
     ],
-    "given": "A participant's contents and more than one cost setting.",
-    "when": "Backups are written at each cost, and readers meet a wrap method and a format version they do not implement.",
-    "then": "Each cost opens, because the cost travels in the header and a reader uses what the writer used rather than what it would have chosen. An unimplemented wrap method and a later format version are each named rather than guessed at.",
+    "given": "A participant's contents.",
+    "when": "Readers meet a wrap method they do not implement, the retired passphrase method, and a format version they do not know.",
+    "then": "An unimplemented wrap method, the retired method 0 and a later format version are each named rather than guessed at.",
     "oracle": "behaviour",
-    "interpretation": "§13.7.1 has passphrase in v1, hardware token later and split shares later still, none of which changes the format; the cost is an operator's number like every other §21.1 leaves unset."
+    "interpretation": "§13.7.1 has the identity now, a hardware token later and split shares later still, none of which changes the format; method 0 was the passphrase and its number is not reused."
   },
   {
     "id": "ARC-26",

@@ -276,8 +276,6 @@ pub enum Msg {
     WitnessKeep(Vec<Keyhash>),
     /// A nominee of this side's that did not survive the prune (kind 24).
     Standdown([u8; 32]),
-    /// One channel's outcome to the surviving witnesses, inside the
-    /// window (kind 25).
     /// The recovering subject names the prior key whose history it claims.
     ClaimPrior(Keyhash),
     /// A recovery verifier's signed response, hybrid, to the subject.
@@ -616,6 +614,10 @@ pub struct Client {
     /// Its persisted state: sealed captures, own-capture rows, records,
     /// disclosures.
     pub store: ClientStore,
+    /// A digest of the last backup each peer was handed, so a round that
+    /// changed nothing deposits nothing.  This process's memory alone: a
+    /// restart deposits once more, which is the cheaper error.
+    deposited: BTreeMap<Keyhash, [u8; 32]>,
     /// Its state as a subject.
     pub subject: SubjectState,
     /// Its state as a verifier.
@@ -752,6 +754,36 @@ pub enum Dispatched {
     /// kinds 9 to 18): what it came to, as a participant or a witness.
     /// What the step owes in answer is in the outbox.
     Conversation(crate::sequence::Conversed),
+    /// A message between peers (design §6.3; kinds 26 to 29): what it
+    /// came to, in words a screen can show.  What it owes in answer is in
+    /// the outbox.
+    Peer(String),
+}
+
+/// What [`Client::reconcile_from_peer`] took.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Reconciled {
+    /// Records appended to the archive.
+    pub records: usize,
+    /// Contacts inserted.
+    pub contacts: usize,
+    /// Everything else inserted: own-capture rows, late responses,
+    /// disclosure sets, profiles, direct hints.
+    pub other: usize,
+    /// Records that did not verify or did not chain.
+    pub refused: usize,
+}
+
+/// Insert what `theirs` has and `mine` lacks; how many.
+fn insert_absent<K: Ord, V>(mine: &mut BTreeMap<K, V>, theirs: BTreeMap<K, V>) -> usize {
+    let mut n = 0;
+    for (k, v) in theirs {
+        if let std::collections::btree_map::Entry::Vacant(e) = mine.entry(k) {
+            e.insert(v);
+            n += 1;
+        }
+    }
+    n
 }
 
 /// The refusal a device holding no seed gives to an act of the identity
@@ -840,6 +872,7 @@ impl Client {
             subject: SubjectState::new(cfg.subject.clone()),
             verifier: VerifierState::new(cfg.verifier.clone()),
             acquaintance: Acquaintance::default(),
+            deposited: BTreeMap::new(),
             horizon: Horizon::new(kh),
             cfg,
             device,
@@ -1609,7 +1642,9 @@ impl Client {
         // the counterparty is a contact from here on, and this is where
         // it answers
         if let Some(them) = self.counterparty() {
-            self.store.direct_hints.insert(them, read.candidates.clone());
+            self.store
+                .direct_hints
+                .insert(them, read.candidates.clone());
         }
         Ok(read.candidates)
     }
@@ -3836,20 +3871,11 @@ impl Client {
         if !self.archive.is_empty() {
             return Err("this client already holds an archive".into());
         }
-        // **decryption establishes that the passphrase opened it, not that
-        // this identity owns it.**  Every backup names its subject, and a
-        // device holding no seed makes one too: a provider credential and
-        // an evidence store are identity state whether or not the seeds
-        // travel with them, so the owner is carried in its own right and
-        // not inferred from what happens to be present.
-        let named = contents.owner.or_else(|| {
-            contents.seeds.map(|[ed, pq]| {
-                rhtn_crypto::SigningIdentity::from_seeds(&ed, &pq)
-                    .public
-                    .keyhash
-            })
-        });
-        match named {
+        // **decryption establishes which key this reader holds, not which
+        // identity wrote the blob.**  Every backup names its subject in its
+        // own right, and one that names another is refused however it
+        // opened.
+        match contents.owner {
             Some(owner) if owner == self.public.keyhash => {}
             Some(_) => return Err("this backup belongs to another identity".into()),
             None => return Err("this backup names no owner".into()),
@@ -3879,27 +3905,172 @@ impl Client {
         Ok(n)
     }
 
-    /// Everything a device loss would take away, enveloped under a key
-    /// derived from `secret` (design §13.7.1).
+    /// Everything a device loss would take away, enveloped under the key
+    /// the identity derives (design §13.7.1).
     ///
-    /// **The identity goes in.** The store writes no key; a backup is
-    /// where the archive and the key are deliberately together, which is
-    /// the aggregation §13.7.1 names and exactly why the blob is
-    /// encrypted. Seeds absent where this client cannot supply them.
-    pub fn export(
-        &self,
-        seeds: Option<[[u8; 32]; 2]>,
-        cost: backup::Cost,
-        secret: &[u8],
-    ) -> Result<Vec<u8>, backup::Failure> {
+    /// **The identity stays out.** The store writes no key and neither
+    /// does this: what opens the blob is what a holder puts on a device by
+    /// hand (`light-client-requirements.md` §2), and a device holding no
+    /// seed can write no backup — [`backup::Failure::NoKey`].
+    pub fn export(&self) -> Result<Vec<u8>, backup::Failure> {
+        let root = self
+            .signer()
+            .map_err(|_| backup::Failure::NoKey)?
+            .identity_root();
         let contents = backup::Contents {
             owner: Some(self.public.keyhash),
-            seeds,
             records: self.archive.records().map(|r| r.bytes.clone()).collect(),
             store: self.store.clone(),
             provider: self.provider_credential.clone(),
         };
-        backup::export(&contents, &backup::Wrap::passphrase(cost), secret)
+        backup::export(&contents, &backup::Wrap::identity(), root)
+    }
+
+    /// **What a peer holds for this client** (design §6.3): the records
+    /// and the view kept beside them — contacts, held locators, profiles,
+    /// the own-capture rows — and **not the sealed captures of others, not
+    /// the provider credential, never the identity**.  Under the same key
+    /// as [`Client::export`], so a peer holds ciphertext it cannot read.
+    pub fn export_for_peer(&self) -> Result<Vec<u8>, backup::Failure> {
+        let root = self
+            .signer()
+            .map_err(|_| backup::Failure::NoKey)?
+            .identity_root();
+        let contents = backup::Contents {
+            owner: Some(self.public.keyhash),
+            records: self.archive.records().map(|r| r.bytes.clone()).collect(),
+            store: self.store_for_peer(),
+            provider: None,
+        };
+        backup::export(&contents, &backup::Wrap::identity(), root)
+    }
+
+    /// The store as a peer blob carries it: without the sealed captures
+    /// of others and without what this client holds for its own peers.
+    fn store_for_peer(&self) -> ClientStore {
+        let mut store = self.store.clone();
+        store.sealed.clear();
+        store.held_for.clear();
+        store
+    }
+
+    /// The plaintext a peer blob would carry now, digested: what decides
+    /// whether a round has anything new to deposit.
+    fn peer_blob_digest(&self) -> [u8; 32] {
+        let mut pre = Vec::new();
+        for r in self.archive.records() {
+            pre.extend_from_slice(&r.txid);
+        }
+        pre.extend_from_slice(&self.store_for_peer().encode());
+        rhtn_codec::cose::sha256(&pre)
+    }
+
+    /// **Bring this client up to what a peer holds for it** (design §6.3,
+    /// and §23.3's rule for a device that is behind): the blob opens under
+    /// this identity or it is nothing; it names this identity or it is
+    /// refused; then what it holds and this client does not is taken —
+    /// records appended where they verify, contacts and the rest of the
+    /// view inserted where absent.  **Nothing held here is replaced**: a
+    /// peer's copy is older than the device that made it, and what is
+    /// here is what this device knows now.  How much was taken.
+    pub fn reconcile_from_peer(&mut self, blob: &[u8]) -> Result<Reconciled, String> {
+        let root = self
+            .signer()
+            .map_err(|_| backup::Failure::NoKey.to_string())?
+            .identity_root();
+        let mut contents = backup::import(blob, root).map_err(|e| e.to_string())?;
+        match contents.owner {
+            Some(owner) if owner == self.public.keyhash => {}
+            Some(_) => return Err("the blob a peer returned belongs to another identity".into()),
+            None => return Err("the blob a peer returned names no owner".into()),
+        }
+        contents.scan(self.now_s(), self.cfg.subject.retention_seconds);
+        let mut out = Reconciled::default();
+        // records: the ones not held, oldest first, each verified under the
+        // keys this client knows before it is appended
+        let mut parsed: Vec<Record> = contents
+            .records
+            .iter()
+            .filter_map(|r| Record::parse(r).ok())
+            .filter(|r| self.archive.get(&r.txid).is_none())
+            .collect();
+        parsed.sort_by_key(|r| (r.effective, r.txid));
+        for rec in parsed {
+            if verify::envelope(&self.known, &rec.bytes).is_err() {
+                out.refused += 1;
+                continue;
+            }
+            let (t, bytes) = (rec.txid, rec.bytes.clone());
+            if self.archive.append(rec).is_ok() {
+                self.store.records.entry(t).or_insert(bytes);
+                out.records += 1;
+            } else {
+                out.refused += 1;
+            }
+        }
+        let theirs = std::mem::take(&mut contents.store);
+        out.contacts += insert_absent(&mut self.store.contacts, theirs.contacts);
+        out.other += insert_absent(&mut self.store.records, theirs.records);
+        out.other += insert_absent(&mut self.store.own, theirs.own);
+        out.other += insert_absent(&mut self.store.late, theirs.late);
+        out.other += insert_absent(&mut self.store.disclosures, theirs.disclosures);
+        out.other += insert_absent(&mut self.store.profiles, theirs.profiles);
+        out.other += insert_absent(&mut self.store.subnet_profiles, theirs.subnet_profiles);
+        out.other += insert_absent(&mut self.store.direct_hints, theirs.direct_hints);
+        if out.records > 0 {
+            self.positions.clear();
+            self.root_subnet = None;
+            self.scopes.clear();
+            self.root_carried = false;
+            self.adopt_own_positions();
+        }
+        tracing::info!(
+            target: "peer",
+            records = out.records,
+            contacts = out.contacts,
+            other = out.other,
+            refused = out.refused,
+            "peer.reconciled"
+        );
+        Ok(out)
+    }
+
+    /// **What goes to a peer on contact** (design §6.3): this client's
+    /// current locator, so the peer's copy of where it stands is the
+    /// present one; a request for the blob the peer holds of it; and a
+    /// fresh deposit where the dataset changed since the last.  Queued in
+    /// the outbox; `None` where `peer` is not one.
+    pub fn greet_peer(&mut self, peer: Keyhash) -> Option<()> {
+        if !self.peers().contains(&peer) {
+            return None;
+        }
+        if let Ok(sl) = self.own_locator() {
+            self.queue_to_peer(peer, payload::KIND_PEER_LOCATOR, &sl);
+        }
+        self.queue_to_peer(peer, payload::KIND_BACKUP_REQUEST, &[]);
+        let digest = self.peer_blob_digest();
+        if self.deposited.get(&peer) != Some(&digest) {
+            match self.export_for_peer() {
+                Ok(blob) => {
+                    tracing::info!(target: "peer", peer = %id8(&peer), bytes = blob.len(), "peer.deposit");
+                    self.queue_to_peer(peer, payload::KIND_BACKUP_DEPOSIT, &blob);
+                    self.deposited.insert(peer, digest);
+                }
+                Err(e) => {
+                    tracing::info!(target: "peer", peer = %id8(&peer), why = %e, "peer.deposit.none");
+                }
+            }
+        }
+        Some(())
+    }
+
+    fn queue_to_peer(&mut self, peer: Keyhash, kind: u64, bytes: &[u8]) {
+        match self.send_payload(peer, kind, bytes) {
+            Ok(msgs) => self.outbox.extend(msgs),
+            Err(e) => {
+                tracing::info!(target: "peer", peer = %id8(&peer), kind = crate::diag::kind_name(kind), why = ?e, "peer.send.refused");
+            }
+        }
     }
 
     /// Open a backup and **scan it before any of it lands**
@@ -3914,9 +4085,12 @@ impl Client {
     pub fn import(
         &self,
         blob: &[u8],
-        secret: &[u8],
     ) -> Result<(backup::Contents, backup::Discarded), backup::Failure> {
-        let mut contents = backup::import(blob, secret)?;
+        let root = self
+            .signer()
+            .map_err(|_| backup::Failure::NoKey)?
+            .identity_root();
+        let mut contents = backup::import(blob, root)?;
         let discarded = contents.scan(self.now_s(), self.cfg.subject.retention_seconds);
         Ok((contents, discarded))
     }
@@ -5713,6 +5887,63 @@ impl Client {
                 self.store.direct_hints.insert(from, inner.clone());
                 Dispatched::Candidates(inner)
             }
+            // **between peers** (design §6.3): each is taken from a peer
+            // and from nobody else, since what a peer holds is the one
+            // thing an acquaintance does not get
+            payload::KIND_PEER_LOCATOR
+            | payload::KIND_BACKUP_DEPOSIT
+            | payload::KIND_BACKUP_REQUEST
+            | payload::KIND_BACKUP_RETURN
+                if !self.peers().contains(&from) =>
+            {
+                tracing::info!(target: "peer", from = %id8(&from), kind = crate::diag::kind_name(kind), "peer.refused.not_a_peer");
+                Dispatched::Peer(format!(
+                    "{} sent a peer's message and is not a peer",
+                    hex8(&from)
+                ))
+            }
+            payload::KIND_PEER_LOCATOR => match self.hold_locator(&from, &inner, false) {
+                Ok(()) => Dispatched::Peer(format!("{}'s current locator is held", hex8(&from))),
+                Err(e) => Dispatched::Peer(format!("{}'s locator was refused: {e:?}", hex8(&from))),
+            },
+            payload::KIND_BACKUP_DEPOSIT => {
+                let bytes = inner.len();
+                self.store.held_for.insert(from, inner);
+                tracing::info!(target: "peer", from = %id8(&from), bytes, "peer.held");
+                Dispatched::Peer(format!(
+                    "holding {bytes} bytes of backup for {}",
+                    hex8(&from)
+                ))
+            }
+            payload::KIND_BACKUP_REQUEST => match self.store.held_for.get(&from).cloned() {
+                Some(blob) => {
+                    let bytes = blob.len();
+                    self.queue_to_peer(from, payload::KIND_BACKUP_RETURN, &blob);
+                    tracing::info!(target: "peer", from = %id8(&from), bytes, "peer.returned");
+                    Dispatched::Peer(format!(
+                        "returned {bytes} bytes of backup to {}",
+                        hex8(&from)
+                    ))
+                }
+                None => Dispatched::Peer(format!(
+                    "{} asked for a backup and none is held",
+                    hex8(&from)
+                )),
+            },
+            payload::KIND_BACKUP_RETURN => match self.reconcile_from_peer(&inner) {
+                Ok(r) => Dispatched::Peer(format!(
+                    "reconciled with {}: {} record(s), {} contact(s), {} other item(s) taken, {} refused",
+                    hex8(&from),
+                    r.records,
+                    r.contacts,
+                    r.other,
+                    r.refused
+                )),
+                Err(e) => Dispatched::Peer(format!(
+                    "the backup {} returned was not taken: {e}",
+                    hex8(&from)
+                )),
+            },
             payload::KIND_RESPONSE_COPY => {
                 Dispatched::ResponseCopy(self.take_response_copy(&inner))
             }

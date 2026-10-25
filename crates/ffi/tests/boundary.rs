@@ -1020,7 +1020,7 @@ async fn a_kernel_restarts_from_the_storage_seam_with_its_session_and_its_queue_
     // the client's own tests show
     let blob = {
         let q = alice.clone();
-        tokio::task::spawn_blocking(move || q.export_backup(b"pw".to_vec()))
+        tokio::task::spawn_blocking(move || q.export_backup())
             .await
             .unwrap()
             .expect("exports")
@@ -1029,7 +1029,7 @@ async fn a_kernel_restarts_from_the_storage_seam_with_its_session_and_its_queue_
     let alice2 = Arc::new(start("alice", empty_shell.clone()).await.unwrap());
     let r = {
         let (q, blob) = (alice2.clone(), blob.clone());
-        tokio::task::spawn_blocking(move || q.restore_backup(blob, b"pw".to_vec()))
+        tokio::task::spawn_blocking(move || q.restore_backup(blob))
             .await
             .unwrap()
             .expect("restores")
@@ -1042,14 +1042,18 @@ async fn a_kernel_restarts_from_the_storage_seam_with_its_session_and_its_queue_
         }
     );
     assert!(empty_shell.read("client".into()).is_some());
+    // and another identity's kernel holds another key, so the blob does
+    // not open there: the identity is the key (design §13.7.1)
+    let bob_shell = Arc::new(Shell::default());
+    let bob2 = Arc::new(start("bob", bob_shell).await.unwrap());
     let e = {
-        let q = alice2.clone();
-        tokio::task::spawn_blocking(move || q.restore_backup(blob, b"wrong".to_vec()))
+        let q = bob2.clone();
+        tokio::task::spawn_blocking(move || q.restore_backup(blob))
             .await
             .unwrap()
-            .expect_err("a wrong passphrase opens nothing")
+            .expect_err("another identity's key opens nothing")
     };
-    assert!(e.reason().contains("Secret"), "{e}");
+    assert!(e.reason().contains("did not unwrap"), "{e}");
 }
 
 // functional APP-011

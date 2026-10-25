@@ -113,6 +113,10 @@ pub fn kind_name(kind: u64) -> &'static str {
         KIND_WITNESS_SET => "witness_set",
         KIND_WITNESS_KEEP => "witness_keep",
         KIND_WITNESS_STANDDOWN => "witness_standdown",
+        KIND_PEER_LOCATOR => "peer_locator",
+        KIND_BACKUP_DEPOSIT => "backup_deposit",
+        KIND_BACKUP_REQUEST => "backup_request",
+        KIND_BACKUP_RETURN => "backup_return",
         _ => "unknown",
     }
 }
@@ -219,6 +223,7 @@ pub fn dispatched(d: &crate::ceremony::Dispatched) -> String {
         Fetched(Ok(n)) => format!("Fetched({n} records)"),
         Fetched(Err(why)) => format!("Fetched(refused: {why})"),
         Conversation(c) => format!("Conversation({c})"),
+        Peer(what) => format!("Peer({what})"),
     }
 }
 

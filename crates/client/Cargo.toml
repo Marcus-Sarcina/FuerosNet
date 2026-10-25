@@ -42,7 +42,6 @@ aws-lc-rs = "1.18"
 # extended nonce is what lets the nonce be drawn at random per sealing;
 # aws-lc-rs offers the IETF 12-byte ChaCha20-Poly1305 and not this one
 chacha20poly1305 = { version = "0.11", features = ["zeroize"] }
-argon2 = "0.6.0"
 # MIT; already in the graph through quinn.  No `attributes`, no `log`.
 tracing = { version = "0.1", default-features = false, features = ["std"] }
 # MIT OR Apache-2.0; already in the graph through tracing.  Named here only

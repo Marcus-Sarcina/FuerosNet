@@ -2,17 +2,28 @@
 //! the device (design §13.7.1).
 //!
 //! **The blob is the aggregation the design avoids everywhere else** —
-//! every subnet key plus photographs of everyone the user has met, in one
-//! file — so it is encrypted under a key not stored alongside it. The
-//! construction is the standard one §13.7.1 names and nothing invented: a
-//! random data key encrypts the payload, a key-encryption key derived from
-//! a passphrase encrypts the data key, and the KEK is never written.
+//! every record and every contact a user has, in one file — so it is
+//! encrypted under a key not stored alongside it. The construction is the
+//! standard one §13.7.1 names and nothing invented: a random data key
+//! encrypts the payload, a key-encryption key encrypts the data key, and
+//! the KEK is never written.
 //!
-//! **How the KEK is protected is a seam, deliberately.** §13.7.1:
-//! *"passphrase in v1, hardware token later, split shares later still —
-//! none of which changes the format"*. So [`Wrap`] names the method and
-//! the header carries it, and a reader that meets a method it does not
-//! implement says so rather than guessing.
+//! **The KEK is derived from the identity** [author, 2026-10-24]: HKDF
+//! over the identity root, the same root a capture key derives from
+//! (design §7.5.2.6). The identity never crosses a wire, so a blob under
+//! it is unreadable wherever it is held — on a desktop, with a peer
+//! (design §6.3) — until the identity's key material is put on that device
+//! by its holder (`light-client-requirements.md` §2), and a passphrase,
+//! where a client offers one, is how a person carries that material and
+//! not a second secret. **No backup carries the identity**, for the same
+//! reason: what opens it is the one thing it must not contain.
+//!
+//! **How the KEK is derived is a seam, deliberately.** §13.7.1: *"a
+//! hardware token later, split shares later still — none of which changes
+//! the format"*. So [`Wrap`] names the method and the header carries it,
+//! and a reader that meets a method it does not implement says so rather
+//! than guessing. Method 0 was a passphrase run through Argon2id, retired
+//! the day the identity became the key; the number is not reused.
 //!
 //! **What this is not.** Nothing here splits the KEK among counterparties.
 //! §13.7.1 costs that honestly — plain Shamir is not verifiable, social
@@ -22,6 +33,7 @@
 
 use crate::store::ClientStore;
 use aws_lc_rs::aead::{AES_256_GCM, Aad, LessSafeKey, Nonce, UnboundKey};
+use aws_lc_rs::hkdf;
 use aws_lc_rs::rand::{SecureRandom, SystemRandom};
 use rhtn_codec::cbor::{Item, parse_all};
 use rhtn_codec::encode::*;
@@ -35,93 +47,65 @@ pub const VERSION: u64 = 1;
 const AAD_WRAP: &[u8] = b"rhtn/1:backup-wrap";
 const AAD_BODY: &[u8] = b"rhtn/1:backup-body";
 
-/// Argon2id's cost, which nobody has stated.
-///
-/// **The operator's numbers** (design §21.1's posture for every such
-/// value), carried in the header because a reader must use what the writer
-/// used. The defaults are the RFC 9106 second recommendation — 64 MiB,
-/// three passes — chosen as a value a phone can afford and recorded as
-/// chosen rather than derived.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Cost {
-    /// Memory, in kibibytes.
-    pub m_kib: u32,
-    /// How many passes over it.
-    pub passes: u32,
-    /// How many lanes.
-    pub lanes: u32,
-}
+/// The info the KEK's derivation is labelled with: distinct from every
+/// other derivation over the identity root (`keys::CAPTURE_TAG`), so a
+/// backup key is a distinguisher for nothing else.
+pub const KEK_TAG: &[u8] = b"rhtn/1:backup-kek";
 
-impl Default for Cost {
-    fn default() -> Self {
-        Cost {
-            m_kib: 65_536,
-            passes: 3,
-            lanes: 1,
-        }
-    }
-}
-
-/// How the key-encryption key is derived from what the user supplies.
+/// How the key-encryption key is derived.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Wrap {
-    /// Argon2id over a passphrase (design §13.7.1's named KDF: memory-hard,
-    /// which raises the cost of GPU and specialised-hardware attack in
-    /// proportion to the parameters chosen rather than preventing it).
-    Passphrase {
-        /// The salt, fresh per envelope.
+    /// HKDF-SHA-256 over the identity root (design §13.7.1 as the author
+    /// restated it, 2026-10-24): the salt as HKDF's salt, the root as the
+    /// keying material, [`KEK_TAG`] as the info, 32 bytes out.
+    Identity {
+        /// The salt, fresh per envelope, so two blobs of one identity are
+        /// under two keys.
         salt: [u8; 16],
-        /// The cost the writer used, which a reader must use too.
-        cost: Cost,
     },
 }
 
 impl Wrap {
-    /// A fresh passphrase wrap at the given cost.
-    pub fn passphrase(cost: Cost) -> Wrap {
+    /// A fresh identity wrap.
+    pub fn identity() -> Wrap {
         let mut salt = [0u8; 16];
         SystemRandom::new()
             .fill(&mut salt)
             .expect("the system's random source");
-        Wrap::Passphrase { salt, cost }
+        Wrap::Identity { salt }
     }
 
-    /// The key-encryption key this wrap derives from `secret`.
-    fn kek(&self, secret: &[u8]) -> Result<[u8; 32], Failure> {
+    /// The key-encryption key this wrap derives from `root`, the identity
+    /// root ([`rhtn_crypto::SigningIdentity::identity_root`]).
+    fn kek(&self, root: &[u8]) -> Result<[u8; 32], Failure> {
         match self {
-            Wrap::Passphrase { salt, cost } => {
-                let params = argon2::Params::new(cost.m_kib, cost.passes, cost.lanes, Some(32))
-                    .map_err(|_| Failure::Cost)?;
-                let a = argon2::Argon2::new(
-                    argon2::Algorithm::Argon2id,
-                    argon2::Version::V0x13,
-                    params,
-                );
+            Wrap::Identity { salt } => {
+                if root.len() != 32 {
+                    return Err(Failure::Secret);
+                }
+                let prk = hkdf::Salt::new(hkdf::HKDF_SHA256, salt).extract(root);
                 let mut out = [0u8; 32];
-                a.hash_password_into(secret, salt, &mut out)
-                    .map_err(|_| Failure::Cost)?;
+                prk.expand(&[KEK_TAG], hkdf::HKDF_SHA256)
+                    .map_err(|_| Failure::Secret)?
+                    .fill(&mut out)
+                    .map_err(|_| Failure::Secret)?;
                 Ok(out)
             }
         }
     }
 }
 
-/// What a backup holds: everything a device loss takes away.
-///
-/// **The identity is in here and not in the store** (`ClientStore` writes
-/// no key): a backup is where the two are deliberately together, which is
-/// exactly why it is enveloped.
+/// What a backup holds: everything a device loss takes away, **the
+/// identity excepted** — it is what opens the blob, and a holder puts it
+/// on a device by hand (`light-client-requirements.md` §2).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Contents {
-    /// **Whose backup this is.**  Carried in its own right, because a
-    /// device holding no seed still makes one and its provider credential
-    /// and evidence store are as much identity state as the seeds would
-    /// have been.  Absent only in an envelope written before this field
-    /// existed.
+    /// **Whose backup this is.**  Carried in its own right: the blob
+    /// opens under the identity's key, but opening it establishes which
+    /// key the *reader* holds and not which identity *wrote* it, and a
+    /// reader must refuse to install another's.  Absent only in an
+    /// envelope written before this field existed.
     pub owner: Option<crate::Keyhash>,
-    /// The two seeds an identity is derived from, classical then
-    /// post-quantum, as `rhtn keys` writes them.
-    pub seeds: Option<[[u8; 32]; 2]>,
     /// The archive's records, as bytes.
     pub records: Vec<Vec<u8>>,
     /// The client's own persisted state.
@@ -152,8 +136,9 @@ pub enum Failure {
     Payload,
     /// The payload opened and is not a backup's contents.
     Contents,
-    /// The cost parameters are ones this reader cannot run.
-    Cost,
+    /// This device holds no identity root, so it can neither write a
+    /// backup nor open one.
+    NoKey,
 }
 
 impl std::fmt::Display for Failure {
@@ -170,17 +155,18 @@ impl std::fmt::Display for Failure {
             ),
             Failure::Payload => write!(f, "the payload did not authenticate: altered ciphertext"),
             Failure::Contents => write!(f, "the payload opened and is not a backup's contents"),
-            Failure::Cost => write!(f, "the cost parameters are ones this reader cannot run"),
+            Failure::NoKey => write!(f, "this device holds no seed, and a backup is keyed by it"),
         }
     }
 }
 
-const WRAP_PASSPHRASE: u64 = 0;
+/// Method 0 was Argon2id over a passphrase; retired, never reused.
+const WRAP_IDENTITY: u64 = 1;
 
 /// Write a backup: a random data key over the payload, the data key
-/// wrapped under the KEK `wrap` derives from `secret`, and the KEK kept
+/// wrapped under the KEK `wrap` derives from `root`, and the KEK kept
 /// nowhere.
-pub fn export(contents: &Contents, wrap: &Wrap, secret: &[u8]) -> Result<Vec<u8>, Failure> {
+pub fn export(contents: &Contents, wrap: &Wrap, root: &[u8]) -> Result<Vec<u8>, Failure> {
     let rng = SystemRandom::new();
     let mut data_key = [0u8; 32];
     let (mut wrap_nonce, mut body_nonce) = ([0u8; 12], [0u8; 12]);
@@ -193,7 +179,7 @@ pub fn export(contents: &Contents, wrap: &Wrap, secret: &[u8]) -> Result<Vec<u8>
     // the fact makes the data key refuse to unwrap rather than silently
     // deriving a different one
     let mut wrapped = data_key.to_vec();
-    key(&wrap.kek(secret)?)
+    key(&wrap.kek(root)?)
         .seal_in_place_append_tag(
             Nonce::assume_unique_for_key(wrap_nonce),
             Aad::from(aad(AAD_WRAP, &header)),
@@ -221,7 +207,7 @@ pub fn export(contents: &Contents, wrap: &Wrap, secret: &[u8]) -> Result<Vec<u8>
 /// Read one back.  **Nothing is returned from a backup that did not
 /// authenticate whole**: a partial import is how a restore replaces an
 /// intact identity with half of an old one.
-pub fn import(blob: &[u8], secret: &[u8]) -> Result<Contents, Failure> {
+pub fn import(blob: &[u8], root: &[u8]) -> Result<Contents, Failure> {
     let item = parse_all(blob).map_err(|_| Failure::Malformed("does not parse"))?;
     let Item::Array(parts) = &item else {
         return Err(Failure::Malformed("not an array"));
@@ -233,7 +219,7 @@ pub fn import(blob: &[u8], secret: &[u8]) -> Result<Contents, Failure> {
     let (wrap, wrap_nonce, body_nonce) = decode_header(&header)?;
 
     let mut key_buf = wrapped.clone();
-    let opened = key(&wrap.kek(secret)?)
+    let opened = key(&wrap.kek(root)?)
         .open_in_place(
             Nonce::assume_unique_for_key(wrap_nonce),
             Aad::from(aad(AAD_WRAP, &header)),
@@ -257,14 +243,11 @@ pub fn import(blob: &[u8], secret: &[u8]) -> Result<Contents, Failure> {
 fn encode_header(wrap: &Wrap, wrap_nonce: &[u8; 12], body_nonce: &[u8; 12]) -> Vec<u8> {
     let mut out = Vec::new();
     match wrap {
-        Wrap::Passphrase { salt, cost } => {
-            emit_array_head(&mut out, 7);
+        Wrap::Identity { salt } => {
+            emit_array_head(&mut out, 4);
             emit_uint(&mut out, VERSION);
-            emit_uint(&mut out, WRAP_PASSPHRASE);
+            emit_uint(&mut out, WRAP_IDENTITY);
             emit_bstr(&mut out, salt);
-            emit_uint(&mut out, cost.m_kib as u64);
-            emit_uint(&mut out, cost.passes as u64);
-            emit_uint(&mut out, cost.lanes as u64);
             let mut nonces = Vec::new();
             nonces.extend_from_slice(wrap_nonce);
             nonces.extend_from_slice(body_nonce);
@@ -290,33 +273,22 @@ fn decode_header(b: &[u8]) -> Result<(Wrap, [u8; 12], [u8; 12]), Failure> {
         .get(1)
         .and_then(uint)
         .ok_or(Failure::Malformed("no wrap method"))?;
-    if method != WRAP_PASSPHRASE {
+    if method != WRAP_IDENTITY {
         return Err(Failure::UnsupportedWrap(method));
     }
-    if f.len() != 7 {
-        return Err(Failure::Malformed("passphrase header is seven fields"));
+    if f.len() != 4 {
+        return Err(Failure::Malformed("identity header is four fields"));
     }
     let salt: [u8; 16] = raw(b, &f[2])?
         .try_into()
         .map_err(|_| Failure::Malformed("salt is not 16 bytes"))?;
-    let cost = Cost {
-        m_kib: uint(&f[3])
-            .and_then(|v| u32::try_from(v).ok())
-            .ok_or(Failure::Malformed("memory cost"))?,
-        passes: uint(&f[4])
-            .and_then(|v| u32::try_from(v).ok())
-            .ok_or(Failure::Malformed("passes"))?,
-        lanes: uint(&f[5])
-            .and_then(|v| u32::try_from(v).ok())
-            .ok_or(Failure::Malformed("lanes"))?,
-    };
-    let nonces = raw(b, &f[6])?;
+    let nonces = raw(b, &f[3])?;
     if nonces.len() != 24 {
         return Err(Failure::Malformed("nonces are two of twelve bytes"));
     }
     let (w, y) = nonces.split_at(12);
     Ok((
-        Wrap::Passphrase { salt, cost },
+        Wrap::Identity { salt },
         w.try_into().unwrap(),
         y.try_into().unwrap(),
     ))
@@ -325,14 +297,9 @@ fn decode_header(b: &[u8]) -> Result<(Wrap, [u8; 12], [u8; 12]), Failure> {
 fn encode_contents(c: &Contents) -> Vec<u8> {
     let mut out = Vec::new();
     emit_array_head(&mut out, 5);
-    match &c.seeds {
-        Some([a, b]) => {
-            emit_array_head(&mut out, 2);
-            emit_bstr(&mut out, a);
-            emit_bstr(&mut out, b);
-        }
-        None => emit_array_head(&mut out, 0),
-    }
+    // the first slot held the seeds until 2026-10-24; it is written empty,
+    // so the layout a reader of either day expects is the one it meets
+    emit_array_head(&mut out, 0);
     emit_array_head(&mut out, c.records.len());
     for r in &c.records {
         emit_bstr(&mut out, r);
@@ -353,8 +320,8 @@ fn decode_contents(b: &[u8]) -> Option<Contents> {
     let item = parse_all(b).ok()?;
     let Item::Array(f) = &item else { return None };
     // four fields is the shape written before the owner was named; it is
-    // read rather than refused, and what it installs is bound by the seeds
-    // it carries
+    // read rather than refused, and installs nowhere, an owner being
+    // required there
     let (s, r, st, p, o) = match f.as_slice() {
         [s, r, st, p] => (s, r, st, p, None),
         [s, r, st, p, o] => (s, r, st, p, Some(o)),
@@ -366,15 +333,13 @@ fn decode_contents(b: &[u8]) -> Option<Contents> {
         Some(it @ Item::Bytes(_)) => Some(raw(b, it).ok()?.try_into().ok()?),
         Some(_) => return None,
     };
+    // a blob that carries seeds is from before the identity became the
+    // key, and what it carries is refused with it: the identity enters a
+    // device by its holder's hand and never out of a backup
     let Item::Array(sa) = s else { return None };
-    let seeds = match sa.as_slice() {
-        [] => None,
-        [a, b2] => Some([
-            raw(b, a).ok()?.try_into().ok()?,
-            raw(b, b2).ok()?.try_into().ok()?,
-        ]),
-        _ => return None,
-    };
+    if !sa.is_empty() {
+        return None;
+    }
     let Item::Array(ra) = r else { return None };
     let records: Vec<Vec<u8>> = ra.iter().map(|x| raw(b, x).ok()).collect::<Option<_>>()?;
     let provider = match p {
@@ -384,7 +349,6 @@ fn decode_contents(b: &[u8]) -> Option<Contents> {
     };
     Some(Contents {
         owner,
-        seeds,
         records,
         store: ClientStore::decode(&raw(b, st).ok()?)?,
         provider,
@@ -425,15 +389,6 @@ pub struct Discarded {
     pub captures: usize,
     /// Rows for the subject's own captures that the reader would not take.
     pub own: usize,
-}
-
-/// The seeds go with the contents: a backup assembled and then dropped,
-/// on either side of the envelope, leaves no copy of them behind.
-impl Drop for Contents {
-    fn drop(&mut self) {
-        use zeroize::Zeroize;
-        self.seeds.zeroize();
-    }
 }
 
 impl Contents {

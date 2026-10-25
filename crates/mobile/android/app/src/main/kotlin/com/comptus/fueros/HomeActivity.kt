@@ -88,6 +88,13 @@ class HomeActivity : Activity() {
             }
         }
         Kernel.start(this)
+        // the bench's levers on the peer exchange (design §6.3), fieldtest
+        // alone: `--es forget_contact <keyhash>` takes one contact out of
+        // the dataset, `--ez contact_peers true` reaches for the peers now
+        if (BuildConfig.FIELD_TEST) {
+            intent.getStringExtra("forget_contact")?.let { Kernel.forgetContact(it) }
+            if (intent.getBooleanExtra("contact_peers", false)) Kernel.contactPeersNow()
+        }
     }
 
     override fun onStart() {

@@ -1237,6 +1237,15 @@ consequence of subnet plurality, not a gap in this mechanism.
   several at once (§3.1.1) — and no peering transaction is reissued for it.
   **When a user adds an instance, its endpoint goes to their peers**, and
   once both peers run instances they route to each other directly.
+- **Peers reach for each other on a clock and when the network comes
+  back** [author, 2026-10-24]. A peer that cannot be reached is no use as
+  one, so a client dials each peer it holds no path to at the address it
+  last offered, hands its own current address back over the path that
+  opens, and on every contact exchanges what `wire-format.md` §7.10.3
+  states: its locator, a request for what the peer holds of it, and a
+  fresh deposit where its dataset has moved. The interval is the client's
+  own (§21.1.1's freely-tunable class); the reference client takes
+  fifteen minutes.
 - **It requires a proof of presence between the two peers** [author,
   2026-09-05], named in the record as an adoption names one (§6.1.1,
   `wire-format.md` §4.4). **No alternative applies**: §6.1.1's former-patron
@@ -1276,7 +1285,16 @@ consequence of subnet plurality, not a gap in this mechanism.
   and never a secret** [author, 2026-09-29]: the sealed captures go to a
   desktop or third-party backup with the archive (§23.3), and the seeds go
   nowhere — they sit on the device that performs ceremonies and nowhere
-  else (§23.3).
+  else (§23.3). **The blob is §13.7.1's envelope under the owner's own
+  identity** [author, 2026-10-24], the same blob a desktop would hold, so
+  a peer holds what it cannot open and the owner opens it wherever the
+  identity is. **And it is a mirror the owner reconciles with on every
+  contact**: the peer returns the blob it holds on request, and the owner
+  takes from it whatever it holds and the owner no longer does — a record
+  that verifies, a contact — replacing nothing it already has. A device
+  that lost something between two contacts has it back at the next, and
+  a device that lost everything has its history back once its identity is
+  put on it (§23.3; `wire-format.md` §7.10.3).
 - **It confers no scope, and does not extend the horizon.** A peering edge is
   **ungoverned**: permissionless, outside the tree, requiring nobody's authority and
   therefore carrying none of the subnet's. A peer is not in your trust horizon by virtue
@@ -3793,7 +3811,13 @@ an attacker who completes the same recovery the same history — the archive bei
 the second factor this section exists to describe. So the archive is restored
 from the user's own backup or not at all, and a client says plainly that
 recovery restores **standing, not history**
-(`light-client-requirements.md` §6, PRD-09).
+(`light-client-requirements.md` §6, PRD-09). **The backup opens under the
+identity's own key** (§13.7.1) [author, 2026-10-24], which is consistent
+with this: recovery mints a new key and never returns the old seed, so the
+blob a peer or a desktop holds stays shut to whoever recovered, and open to
+the holder who carried the seed to a new device. The factor the archive adds
+is against a key *rotated* without the seed, not against a seed stolen —
+§12.4's device-theft case, which this section already concedes.
 
 ### 10.3 Merges. The archive is a DAG, not a chain
 
@@ -5648,18 +5672,24 @@ reaches the cryptosystem or the wire.
   §7.2 worked to prevent. **Encrypt under a key not stored alongside it.**
 
   Standard construction, no invention required: **envelope encryption.** A
-  random data key encrypts the blob, and a key-encryption key (KEK) derived from
-  a passphrase encrypts the data key. Argon2id for the KDF (memory-hard; **raises the cost
-  of** GPU and specialised-hardware attack rather than preventing it, and only in
-  proportion to the memory and time parameters chosen), XChaCha20-Poly1305 or AES-256-GCM for the payload, KEK never
-  stored with the ciphertext. Broadly the shape password managers and encrypted
-  backups use, though 1Password, Bitwarden, KeePass and Signal each derive their
-  keys differently.
+  random data key encrypts the blob, and a key-encryption key (KEK) encrypts
+  the data key; AES-256-GCM for the payload, KEK never stored with the
+  ciphertext. **The KEK is derived from the identity** [author, 2026-10-24]:
+  HKDF over the identity root under a label of its own, as a capture key is
+  (§7.5.2.6). The identity never crosses a wire, so a blob under it is
+  unreadable wherever it is held — a desktop, a peer (§6.3) — until the
+  identity's key material is put on that device by its holder
+  (`light-client-requirements.md` §2); **a passphrase, where a client offers
+  one, is how a person carries that material and not a second secret**. And
+  no backup carries the identity, for the same reason: what opens it is the
+  one thing it must not contain. *(A passphrase-derived KEK under Argon2id
+  was the construction until that day; it is retired, and the method number
+  it held is not reused.)*
 
-  **The format leaves a seam.** How the KEK is protected is a pluggable layer
-  above the backup format: passphrase in v1, hardware token later, split shares
-  later still — none of which changes the format. So the harder options need not
-  be decided now.
+  **The format leaves a seam.** How the KEK is derived is a pluggable layer
+  above the backup format: the identity now, a hardware token later, split
+  shares later still — none of which changes the format. So the harder
+  options need not be decided now.
 
   **On splitting the KEK among trusted counterparties** (the §9.1 principle
   applied to backup): attractive, but cost it honestly. The "don't roll your own
@@ -8804,7 +8834,8 @@ far as the deletion did. **Archives, sealed
 captures and caches go where the storage is**, §13.7.1's envelope being what makes
 anywhere safe to put them, and a personal computer is the obvious place: a phone
 is lost, broken and stolen, and neither the transaction record nor the captures
-should go with it. Such a device holds ciphertext under a passphrase rather than a
+should go with it. Such a device holds ciphertext under the identity's own key,
+which it does not hold, rather than a
 seal under a platform's key storage — **a cold store for the archive and the
 captures rather than a live client for them**,
 which is why it needs no enclave to be safe (P33).

@@ -886,10 +886,10 @@ impl Participant {
         });
         self.net.persist_with(after.clone());
         self.net
-            .schedule_maintenance(self.handle.clone(), MAINTAIN_EVERY, after);
+            .schedule_maintenance(self.handle.clone(), MAINTAIN_EVERY, after.clone());
         // and the peers, on their own clock (design §6.3)
         self.net
-            .schedule_contact(self.handle.clone(), crate::net::PEER_CONTACT_EVERY);
+            .schedule_contact(self.handle.clone(), crate::net::PEER_CONTACT_EVERY, after);
     }
 }
 
@@ -1015,9 +1015,10 @@ impl Participant {
     /// network came back, or a person asks.  How each peer stood.
     pub fn contact_peers(&self) -> Result<Vec<PeerContact>, Refused> {
         crate::diag::call("contact_peers", || {
-            Ok(self
-                .net
-                .contact_peers(&self.handle)?
+            let round = self.net.contact_peers(&self.handle)?;
+            // a round may have taken a deposit or reconciled: written
+            self.save()?;
+            Ok(round
                 .into_iter()
                 .map(|c| PeerContact {
                     who: id_of(&c.peer),
@@ -1115,35 +1116,29 @@ impl Participant {
         })
     }
 
-    /// Everything a device loss would take away, enveloped under a key
-    /// derived from `secret` (design §13.7.1): the seeds where this device
-    /// holds them, the records, the capture store and the provider
-    /// credential.  The payload material and the sessions are this
-    /// device's own and do not travel.
-    pub fn export_backup(&self, secret: Vec<u8>) -> Result<Vec<u8>, Refused> {
+    /// Everything a device loss would take away, enveloped under the key
+    /// the identity derives (design §13.7.1): the records, the store and
+    /// the provider credential.  **Never the identity**, which is what
+    /// opens it; a device holding no seed makes none.  The payload
+    /// material and the sessions are this device's own and do not travel.
+    pub fn export_backup(&self) -> Result<Vec<u8>, Refused> {
         crate::diag::call("export_backup", || {
-            // the copy that crosses into the closure is wiped with it; the one
-            // the backup assembles is wiped when its contents drop
-            let seeds = zeroize::Zeroizing::new(self.seeds);
             self.handle
-                .with_blocking(move |c| {
-                    c.export(*seeds, rhtn_client::backup::Cost::default(), &secret)
-                })
-                .map_err(|e| Refused::new(format!("{e:?}")))
+                .with_blocking(|c| c.export())
+                .map_err(|e| Refused::new(e.to_string()))
         })
     }
 
-    /// Open a backup, scan it, and install it into a client that holds
-    /// nothing yet; then write the result to storage.  Refused where this
-    /// client already has an archive, or where the backup does not
-    /// authenticate whole.
-    pub fn restore_backup(&self, blob: Vec<u8>, secret: Vec<u8>) -> Result<Restored, Refused> {
+    /// Open a backup under this identity, scan it, and install it into a
+    /// client that holds nothing yet; then write the result to storage.
+    /// Refused where this client already has an archive, where the backup
+    /// does not open under this identity, or where it names another.
+    pub fn restore_backup(&self, blob: Vec<u8>) -> Result<Restored, Refused> {
         crate::diag::call("restore_backup", || {
             let r = self
                 .handle
                 .with_blocking(move |c| {
-                    let (contents, discarded) =
-                        c.import(&blob, &secret).map_err(|e| format!("{e:?}"))?;
+                    let (contents, discarded) = c.import(&blob).map_err(|e| e.to_string())?;
                     let records = c.install(contents)?;
                     Ok::<_, String>(Restored {
                         records: records as u64,
@@ -1237,41 +1232,6 @@ impl Participant {
             };
             p.open()?;
             p.schedule();
-            Ok(p)
-        })
-    }
-
-    /// Start from a backup and its passphrase alone, on a replacement
-    /// device (`light-client-requirements.md` §2: a restore is a whole
-    /// one).  The identity is the envelope's seeds; the records, the
-    /// capture store and the provider credential are installed; the
-    /// result is written to the platform's storage.  Refused where the
-    /// envelope does not open, carries no seeds, or where the storage
-    /// already holds a state.
-    #[uniffi::constructor]
-    pub fn start_from_backup(
-        blob: Vec<u8>,
-        secret: Vec<u8>,
-        known: Vec<Vec<u8>>,
-        platform: Arc<Platform>,
-    ) -> Result<Participant, Refused> {
-        crate::diag::call("start_from_backup", || {
-            if platform.storage.read(STATE.into()).is_some() {
-                return Err(Refused::new(
-                    "this device already holds a state; a restore replaces nothing",
-                ));
-            }
-            let contents = rhtn_client::backup::import(&blob, &secret)
-                .map_err(|e| Refused::new(format!("the backup does not open: {e:?}")))?;
-            let Some([ed, pq]) = contents.seeds else {
-                return Err(Refused::new(
-                    "the backup carries no seeds: it was made on a device holding none",
-                ));
-            };
-            let mut seeds = ed.to_vec();
-            seeds.extend_from_slice(&pq);
-            let p = Participant::start(seeds, known, platform)?;
-            p.restore_backup(blob, secret)?;
             Ok(p)
         })
     }
@@ -2210,6 +2170,21 @@ impl Participant {
             })?;
             self.save()?;
             Ok(id_of(&who))
+        })
+    }
+
+    /// **Forget a contact** (`light-client-requirements.md` §4.3: the
+    /// contacts are this client's own, bounded and pruned by it).  Whether
+    /// one was held.  The bench's way of taking something out of the
+    /// dataset to watch a peer's copy bring it back (design §6.3).
+    pub fn forget_contact(&self, who: Id) -> Result<bool, Refused> {
+        crate::diag::call("forget_contact", || {
+            let k = keyhash(&who).ok_or_else(|| Refused::new("a contact is 32 bytes"))?;
+            let had = self
+                .handle
+                .with_blocking(move |c| c.store.contacts.remove(&k).is_some());
+            self.save()?;
+            Ok(had)
         })
     }
 

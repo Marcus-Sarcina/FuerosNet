@@ -3620,6 +3620,10 @@ attribute it; here nothing is read before attribution.
 | 23 | `WitnessKeep` (§7.10.2) | Participant to participant, on the local interface: which of the counterparty's nominees the sender keeps |
 | 24 | `WitnessStanddown` (§7.10.2) | A participant to a nominee of its own that did not survive the counterparty's prune |
 | 25 | *retired 2026-10-24* — was `ProximityUpdate`; ranging is not used (design §7.6.3). The number is not reused and a decoder meeting it REJECTS | — |
+| 26 | The sender's current `SignedLocator` (§2), bare, or its `EndpointRecord` (§7.6) where it runs an instance | Peer to peer, on contact (§4.4: the peering's snapshot of an address is kept current by the peers themselves) |
+| 27 | `BackupDeposit` (§7.10.3) | Peer to peer: the sender's blob, for the recipient to hold (design §6.3) |
+| 28 | `BackupRequest` (§7.10.3) | Peer to peer: asks for the blob the recipient holds of the sender |
+| 29 | `BackupReturn` (§7.10.3) | Peer to peer: the recipient's own blob, as the sender holds it |
 
 An unknown kind is application payload to a recipient that does not know it,
 and a kind whose body does not decode is dropped by the recipient that
@@ -3843,6 +3847,39 @@ which has not yet seen the by-products of the steps it was sent, sends no
 §1.2) [author, 2026-10-08]: its answer to the request acknowledged the
 ceremony, its signature is its readiness, and the proposer's wait on an
 unanswered signer (§7.10.1) covers the interval.
+
+#### 7.10.3 What peers exchange on contact
+
+**Between peers and nobody else** [author, 2026-10-24]. Kinds 26 to 29 are
+taken from a party the recipient holds a peering record with (§4.4) and
+dropped from anybody else: what a peer holds for a peer is the one thing an
+acquaintance does not get (design §6.3). A client reaches for its peers on a
+clock of its own and when its network comes back, and on each contact sends
+its current locator (kind 26), asks for what the peer holds of it (kind 28)
+and deposits a fresh blob where its dataset moved (kind 27); the peer answers
+the request with the blob it holds (kind 29).
+
+```
+BackupDeposit = bstr   ; kind 27: the sender's backup, design §13.7.1's
+                       ;   envelope under the sender's own identity. The
+                       ;   recipient holds the newest and reads none of it;
+                       ;   a deposit replaces the one before
+
+BackupRequest = {}     ; kind 28: nothing to say but who is asking, which
+                       ;   the session says
+
+BackupReturn = bstr    ; kind 29: the recipient's own blob, exactly as the
+                       ;   sender holds it. The recipient opens it under its
+                       ;   identity, refuses one that names another, and
+                       ;   takes what it holds and the recipient does not —
+                       ;   records that verify, contacts and the view beside
+                       ;   them — replacing nothing it already has
+```
+
+**What a blob carries is the owner's business** (design §6.3): the records
+and the view kept beside them, never a sealed capture of somebody else and
+never the identity. A holder that is asked for a blob it does not hold
+answers nothing, and a requester hearing nothing knows only that.
 
 ### 7.11 Profile
 

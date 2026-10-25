@@ -687,6 +687,9 @@ impl Instrument {
                         record.map_or("-".into(), |r| hex(&r))
                     )
                 }
+                rhtn_ffi::net::Event::Peer { from, what } => {
+                    format!("peer from={} what={what}", hex(&from))
+                }
                 rhtn_ffi::net::Event::Answered {
                     from,
                     query,

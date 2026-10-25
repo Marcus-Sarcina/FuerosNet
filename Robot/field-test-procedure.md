@@ -232,6 +232,23 @@ diagnostics file by hand when the run is over —
     adb -s <serial> shell run-as com.comptus.fueros ls -t files/diag | head -1
     adb -s <serial> exec-out run-as com.comptus.fueros cat files/diag/<file> > runs/<name>/phones/<serial>.jsonl
 
+**The peer exchange, nodeless** (2026-10-24). Two phones that hold a
+peering record reach for each other on the kernel's clock — once a minute
+in this flavour — and at once when the default network comes back; each
+dials the other at the candidates it last offered (kept since this build,
+so the first run after it needs one more meeting to seed them), and on
+each contact sends its locator, asks for the blob the other holds of it,
+and deposits a fresh blob where its dataset moved. Read `peer.contact`
+(`how=dialled` or `held`), `peer.deposit` and `peer.held`, then
+`peer.returned` and `peer.reconciled` on the side that lost something. The
+two levers, by intent extra, fieldtest alone:
+
+    adb -s <serial> shell am start -n com.comptus.fueros/.HomeActivity --es forget_contact <keyhash-hex>
+    adb -s <serial> shell am start -n com.comptus.fueros/.HomeActivity --ez contact_peers true
+
+Forget a contact *other than the peer* — the peer is what the direct path
+is gated on. The home screen's notes say what each did.
+
 ## Reading a stall or a leak
 
 The field-test build carries three instruments for a screen that freezes
