@@ -229,6 +229,15 @@ class BleBearer(private val context: Context) {
     private var advertiser: AdvertiseCallback? = null
     private var scanner: ScanCallback? = null
     private val subscription = Subscription()
+    /** How many times the client side has dialled the peer it found. */
+    private val dials = java.util.concurrent.atomic.AtomicInteger(0)
+    /** How many dials a found peer gets before the link's own timeout is
+     *  left to say so: Android's GATT reports a failed connection as status
+     *  133 and nothing more, and the first dial after a scan fails that way
+     *  often enough that one attempt is not a test of the radio (bench,
+     *  2026-10-25: a TCL found the S21 at -59 dBm, dialled once, got 133 in
+     *  1.4 s, and waited out the remaining 28 s). */
+    private val dialsAllowed = 4
 
     private fun manager(): BluetoothManager? =
         context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
@@ -458,8 +467,8 @@ class BleBearer(private val context: Context) {
                     Diag.event("ble", "op" to "scan", "state" to "found", "rssi" to result.rssi)
                     stopScan(adapter)
                     peer = d
-                    Diag.event("ble", "op" to "connect", "state" to "dialling")
-                    gatt = d.connectGatt(context, false, clientCallback)
+                    dials.set(0)
+                    dial(d)
                 }
 
                 override fun onScanFailed(error: Int) {
@@ -658,6 +667,21 @@ class BleBearer(private val context: Context) {
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
             connection("client", status, newState)
             if (newState != BluetoothProfile.STATE_CONNECTED) subscription.reset()
+            // **a connection that failed before the link was up is dialled
+            // again**, off this binder thread and after a moment for the
+            // stack to let the failed one go; the link's timeout still
+            // bounds the whole
+            if (newState == BluetoothProfile.STATE_DISCONNECTED && !subscription.active) {
+                val d = peer
+                runCatching { g.close() }
+                if (d != null && gatt === g) {
+                    gatt = null
+                    Thread({
+                        Thread.sleep(600)
+                        if (peer === d && gatt == null) dial(d)
+                    }, "fueros-ble-redial").start()
+                }
+            }
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 try {
                     // ask for the largest MTU the stack will give: every
@@ -727,6 +751,22 @@ class BleBearer(private val context: Context) {
 
         private fun changed(c: BluetoothGattCharacteristic, value: ByteArray) {
             if (c.uuid == OUTBOUND) inbound?.packet(value)
+        }
+    }
+
+    /** Dial the peer the scan found, counting the attempt; nothing past
+     *  [dialsAllowed], where the link's timeout says what happened. */
+    private fun dial(d: BluetoothDevice) {
+        val n = dials.incrementAndGet()
+        if (n > dialsAllowed) {
+            Diag.warn("ble", "op" to "connect", "state" to "given up", "dials" to n - 1)
+            return
+        }
+        Diag.event("ble", "op" to "connect", "state" to "dialling", "attempt" to n)
+        try {
+            gatt = d.connectGatt(context, false, clientCallback)
+        } catch (e: SecurityException) {
+            refused("connect")
         }
     }
 
