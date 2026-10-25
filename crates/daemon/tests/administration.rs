@@ -627,6 +627,57 @@ fn enrolled_with(
     (l, d, at)
 }
 
+/// **An operator who claims no subtree writes no anchor entry, and the
+/// node comes up without one** [2026-10-25]. The first instance launched
+/// from a phone enrolled with the subtree left blank, took its run, and
+/// then refused every start with "anchor.entry: No such file or directory"
+/// until the read was changed: the path the configuration names says where
+/// an entry will go once the operator signs one, not that one is there.
+#[test]
+fn a_node_enrolled_with_no_subtree_claimed_serves_and_serves_again_after_a_restart() {
+    let l = layout("no-anchor", &TOKEN, 37452);
+    let mut d = spawn(&l);
+    let at = d.surface_at();
+    let got = ask(
+        at,
+        &format!("GET /node?nonce={} HTTP/1.1", hex(&[2u8; 16])),
+        b"",
+    );
+    let key: [u8; 32] = unhex(&field(&got, "transport").expect("a key"))
+        .try_into()
+        .expect("32 bytes");
+    let bob = test_identity("bob");
+    let point = NetworkPoint::new([127, 0, 0, 1], Some(37452));
+    let record = endpoint_record(&bob, std::slice::from_ref(&point), seqno(1));
+    assert_eq!(
+        200,
+        status(&ask(at, "PUT /node/endpoint-record HTTP/1.1", &record))
+    );
+    // no anchor entry: nothing claimed
+    for c in issue_run(&bob, &key, now(), 1) {
+        assert_eq!(200, status(&ask(at, "PUT /node/run HTTP/1.1", &c)));
+    }
+    assert!(
+        d.serving().is_some(),
+        "it serves with no anchor entry written; the daemon said {:?}",
+        d.lines()
+    );
+    assert!(
+        !l.dir.join("anchor.entry").exists(),
+        "the test wrote no entry, so the daemon must not have needed one"
+    );
+    d.stop();
+
+    // the restart a container's policy makes, on the same state
+    let mut again = spawn(&l);
+    assert!(
+        again.serving().is_some(),
+        "it serves again on the same state; the daemon said {:?}",
+        again.lines()
+    );
+    again.stop();
+}
+
 /// **The management acts** (OPS-012, and §8.1 as it actually reads): a
 /// standing policy changed from the page, and a stop that takes the path a
 /// signal takes. Neither composes a frame, replays traffic, makes a

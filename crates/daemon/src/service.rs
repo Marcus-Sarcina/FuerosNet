@@ -302,6 +302,19 @@ fn credentials_remaining(cred: &rhtn_transport::tls::Credential, now: u64) -> us
     cred.issued().iter().filter(|i| i.not_after > now).count()
 }
 
+/// **A record's path the configuration names, where the file is not there
+/// yet, is no record rather than a refusal** [2026-10-25].  The operator's
+/// client writes the endpoint record and the anchor entry through the
+/// surface once it has signed them, and an operator who claims no subtree
+/// never writes an entry at all; the path says where one will go.  The
+/// first instance launched from a phone enrolled with no subtree claimed,
+/// took its run, and then refused every start with "anchor.entry: No such
+/// file or directory" until this read.  A file that is there and does not
+/// read is still a refusal.
+fn not_yet_written(p: &std::path::Path) -> Option<&std::path::Path> {
+    p.exists().then_some(p)
+}
+
 impl Service {
     /// Start a node from `cfg`.
     ///
@@ -579,7 +592,7 @@ impl Service {
         // it would mint (`infra-client-requirements.md` §4.4): each must
         // verify under the operator's identity, and neither ever under the
         // delegated key
-        let given_record = match &cfg.endpoint_record {
+        let given_record = match cfg.endpoint_record.as_deref().and_then(not_yet_written) {
             None => None,
             Some(p) => {
                 let bytes = std::fs::read(p)
@@ -603,7 +616,7 @@ impl Service {
                 Some((bytes, named))
             }
         };
-        if let Some(p) = &cfg.anchor_entry {
+        if let Some(p) = cfg.anchor_entry.as_deref().and_then(not_yet_written) {
             let bytes =
                 std::fs::read(p).map_err(|e| Startup::State(format!("{}: {e}", p.display())))?;
             let entry = rhtn_node::resolution::AnchorEntry::parse(&bytes)
