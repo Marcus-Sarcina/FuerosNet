@@ -74,6 +74,9 @@ object Kernel {
     /** The conversation is entered once per meeting, as the window opens. */
     private val conversationStarted = java.util.concurrent.atomic.AtomicBoolean(false)
     private val sealLock = Any()
+    /** Frames of an adoption or a peering that arrived before this side began its own (see the loop). */
+    private val earlyAdoption = mutableListOf<Pair<String, ByteArray>>()
+    private val earlyPeering = mutableListOf<Pair<String, ByteArray>>()
     /** Whether this meeting has already said the trace could not go. */
     private val traceRefusedSaid = java.util.concurrent.atomic.AtomicBoolean(false)
 
@@ -516,6 +519,9 @@ object Kernel {
         a.onChanged = { m.rendered() }
         adoption = a
         m.rendered()
+        // what arrived before this side began goes in now, in order
+        val early = synchronized(lock) { earlyAdoption.filter { it.first == them }.also { earlyAdoption.clear() } }
+        early.forEach { (_, bytes) -> a.frame(bytes) }
         // off the caller's thread: every leg of this sends
         // the responder states the direction and which subnet, in words,
         // in the other side's frame: "a new subnet under <me>", not "under
@@ -615,6 +621,8 @@ object Kernel {
         pr.onChanged = { m.rendered() }
         peering = pr
         m.rendered()
+        val early = synchronized(lock) { earlyPeering.filter { it.first == them }.also { earlyPeering.clear() } }
+        early.forEach { (_, bytes) -> pr.frame(bytes) }
         // off the caller's thread: the first leg sends
         Thread { pr.begin() }.start()
     }
@@ -1565,6 +1573,10 @@ object Kernel {
         captureWindowDone.set(false)
         conversationStarted.set(false)
         traceRefusedSaid.set(false)
+        synchronized(lock) {
+            earlyAdoption.clear()
+            earlyPeering.clear()
+        }
     }
 
     /** The peer this device talks to — adopted at a meeting or named by the
@@ -1806,15 +1818,21 @@ object Kernel {
                     if (e.kind == Adoption.KIND) {
                         val a = adoption
                         when {
-                            a == null -> front.note("· a message of an adoption arrived with no meeting to put it in")
-                            from != a.counterparty -> front.note("· a message of an adoption arrived from somebody who is not party to it")
+                            // **a frame that arrives before this side has begun
+                            // its own is held, not dropped** [bench,
+                            // 2026-10-24]: the other phone reached Done a
+                            // second earlier and sent its first leg, and this
+                            // side's object did not exist yet (run
+                            // 5f415ee-a3-peering-1, the peering's back-pointers)
+                            a == null -> synchronized(lock) { earlyAdoption += from to e.bytes }
+                            from != a.counterparty -> front.note("· a message of an adoption arrived from somebody who is not party to this one")
                             else -> a.frame(e.bytes)
                         }
                     } else if (e.kind == Peering.KIND) {
                         val pr = peering
                         when {
-                            pr == null -> front.note("· a message of a peering arrived with no meeting to put it in")
-                            from != pr.counterparty -> front.note("· a message of a peering arrived from somebody who is not party to it")
+                            pr == null -> synchronized(lock) { earlyPeering += from to e.bytes }
+                            from != pr.counterparty -> front.note("· a message of a peering arrived from somebody who is not party to this one")
                             else -> pr.frame(e.bytes)
                         }
                     } else {
