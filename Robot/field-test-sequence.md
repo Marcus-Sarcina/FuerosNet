@@ -84,8 +84,12 @@ template and the kernel called that *NotActive*; the sign screen named
 no verifier though the body carried the answer, the Done screen said
 nobody witnessed though a witness signed, and the *no witness* line
 latched from a snapshot seven milliseconds before one attested. The
-screen faults are fixed from the record's own body. **Owed**: the rows
-below, one at a time, on the pairs that now share a party.
+screen faults are fixed from the record's own body. **A second match the same evening, `a6bae1fe` (GXV–4VC, four
+signers)**: 4VC selected ZU8 for GXV as met, ZU8's grant was buffered
+ahead of the query again and it answered Match from the capture it
+sealed of GXV in `1d78338e`; GXV required none for 4VC, which
+introduced one party. The first verdict from a TCL as verifier. **Owed**:
+the rows below, one at a time, on the pairs that now share a party.
 
 With A having met B earlier, B meets C and A is selected:
 

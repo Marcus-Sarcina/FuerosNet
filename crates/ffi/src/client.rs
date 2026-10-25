@@ -2216,6 +2216,25 @@ impl Participant {
         })
     }
 
+    /// **Forget every sealed capture held of `subject`**: how many went.
+    /// The bench's act, over adb, for the verifier that is asked about a
+    /// party it holds nothing on (VER-008's unavailable answer, its own
+    /// held evidence refuting the basis claimed for it), which no meeting
+    /// produces by itself since a subject introduces only parties it has
+    /// met [author, 2026-10-25: a tethered wipe, never a screen control].
+    pub fn forget_captures(&self, subject: Id) -> Result<u64, Refused> {
+        crate::diag::call("forget_captures", || {
+            let k = keyhash(&subject).ok_or_else(|| Refused::new("a subject is 32 bytes"))?;
+            let n = self.handle.with_blocking(move |c| {
+                let before = c.store.sealed.len();
+                c.store.sealed.retain(|_, s| s.subject != k);
+                (before - c.store.sealed.len()) as u64
+            });
+            self.save()?;
+            Ok(n)
+        })
+    }
+
     /// **This client's own introduction** (`wire-format.md` §2.3): its key
     /// material with its own signed locator, for another party to take with
     /// [`Participant::take_introduction`] and hold it by.

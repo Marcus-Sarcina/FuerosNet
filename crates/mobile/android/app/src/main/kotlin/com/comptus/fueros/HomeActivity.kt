@@ -107,11 +107,14 @@ class HomeActivity : Activity() {
     /**
      * The bench's levers on the peer exchange (design §6.3), fieldtest
      * alone: `--es forget_contact <keyhash>` takes one contact out of the
-     * dataset, `--ez contact_peers true` reaches for the peers now.
+     * dataset, `--es forget_captures <keyhash>` drops every sealed capture
+     * held of that party, `--ez contact_peers true` reaches for the peers
+     * now.
      */
     private fun benchLevers(intent: android.content.Intent) {
         if (!BuildConfig.FIELD_TEST) return
         intent.getStringExtra("forget_contact")?.let { Kernel.forgetContact(it) }
+        intent.getStringExtra("forget_captures")?.let { Kernel.forgetCaptures(it) }
         if (intent.getBooleanExtra("contact_peers", false)) Kernel.contactPeersNow()
     }
 

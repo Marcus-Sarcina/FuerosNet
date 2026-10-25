@@ -1708,6 +1708,17 @@ object Kernel {
         }, "fueros-forget").start()
     }
 
+    fun forgetCaptures(hexKey: String) {
+        val p = participant ?: run { front.note("· no kernel yet"); return }
+        val who = runCatching { unhex(hexKey) }.getOrNull() ?: run { front.note("· not a key: $hexKey"); return }
+        Thread({
+            call("forget_captures", { e -> front.note("· forget refused: ${e.reason}") }) {
+                val n = p.forgetCaptures(who)
+                front.note("· forgot $n sealed capture(s) of ${hexKey.take(8)}…")
+            }
+        }, "fueros-forget").start()
+    }
+
     fun contactPeersNow() {
         val p = participant ?: run { front.note("· no kernel yet"); return }
         Thread({
