@@ -15,6 +15,8 @@ import uniffi.rhtn_ffi.launchRegions
 import uniffi.rhtn_ffi.launchRegistryDefault
 import uniffi.rhtn_ffi.launchSizes
 import uniffi.rhtn_ffi.launchStanding
+import uniffi.rhtn_ffi.launchTokenPage
+import uniffi.rhtn_ffi.launchTokenWalkthrough
 import uniffi.rhtn_ffi.launchUserData
 
 /**
@@ -28,7 +30,9 @@ import uniffi.rhtn_ffi.launchUserData
  * phone: the HTTPS exchange, over the system's trust roots, through the
  * platform's own connection class ([HttpTransport]). This object holds no
  * key: the provider credential is the kernel's to keep (`Kernel.
- * providerCredentials`), carried in the backup under the identity.
+ * providerCredentials`), carried in the backup under the identity. The
+ * credential is a token the operator makes at the provider's own page
+ * and pastes; the page and the steps there are the kernel's too.
  */
 object Launch {
     /** The port the node serves on: `wire-format.md` §4.4's default. */
@@ -77,6 +81,12 @@ object Launch {
         /** The provider's autonomous system, for PRD-11's ordering. */
         val asn: Long
 
+        /** The provider's own page where the operator makes a token. */
+        val tokenPage: String
+
+        /** The steps on that page, shown beside it. */
+        val tokenWalkthrough: List<String>
+
         fun regions(credential: String): Result<List<Region>>
 
         fun sizes(credential: String): Result<List<Size>>
@@ -97,6 +107,8 @@ object Launch {
     class Bound(private val key: String, private val transport: ProviderTransport) : Provider {
         override val name: String = key.replaceFirstChar { it.uppercase() }.let { if (it == "Digitalocean") "DigitalOcean" else it }
         override val asn: Long = launchProviderAsn(key)?.toLong() ?: 0L
+        override val tokenPage: String = launchTokenPage(key) ?: ""
+        override val tokenWalkthrough: List<String> = launchTokenWalkthrough(key)
 
         override fun regions(credential: String): Result<List<Region>> = runCatching {
             launchRegions(key, transport, credential).map { Region(it.slug, it.name, it.available) }

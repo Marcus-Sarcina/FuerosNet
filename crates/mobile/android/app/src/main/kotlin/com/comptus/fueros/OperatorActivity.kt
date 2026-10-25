@@ -402,6 +402,17 @@ class OperatorActivity : Activity() {
         val provider = Launch.providers().first()
         val held = Kernel.providerCredentials()[provider.name.lowercase()] ?: ""
         val credential = field("${provider.name} API token", held)
+        // the token is the operator's own, made at the provider's page:
+        // open it, and say the steps there
+        val getToken = Button(this).apply {
+            text = "Get a token at ${provider.name}"
+            setOnClickListener {
+                narration.text = provider.tokenWalkthrough.withIndex()
+                    .joinToString("\n") { (n, step) -> "${n + 1}. $step" }
+                runCatching { startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(provider.tokenPage))) }
+                    .onFailure { narration.text = "no browser opened; the page is ${provider.tokenPage}\n\n${narration.text}" }
+            }
+        }
         val registry = field("registry to pull the node image from", Launch.REGISTRY_DEFAULT)
         val tag = field("image tag", Launch.TAG_DEFAULT)
         val regions = android.widget.Spinner(this)
@@ -532,6 +543,7 @@ class OperatorActivity : Activity() {
         return LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             addView(about)
+            addView(getToken)
             addView(credential)
             addView(fetch)
             addView(TextView(this@OperatorActivity).apply { textSize = 12f; setTextColor(Color.GRAY); text = "Region" })

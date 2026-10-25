@@ -28,15 +28,12 @@ usage: rhtn <command> [...]
         file holds, wait for its address and its surface, then enrol it
         with a token minted here (L §10, OPS-020). The provider is one of:
         digitalocean.
-  node authorise --provider <name> --credential-file <out>
-        [--client-id <id>] [--client-secret-file <file>] [--port <n>]
-        Open the provider's own page for signing up or in and approving,
-        wait at a local callback for as long as that takes, and write
-        the token it hands back to <out>, with what renews it. The
-        callback is http://127.0.0.1:<port>/callback, port 7450 unless
-        given. The client id this build carries for the provider is used
-        unless one is given; a confidential client's secret is read from
-        a file and never kept. Providers offering the flow: digitalocean.
+  node credential --provider <name> --credential-file <out>
+        Open the provider's own token page, print the steps there, read
+        the token pasted on standard input, try it at the provider, and
+        write it to <out>, readable by its owner alone. No application is
+        registered with any provider: the token is the operator's own,
+        scoped and expiring as they chose. Providers: digitalocean.
   node offers --provider <name> --credential-file <file>
         List the provider's regions and sizes.
   node destroy --provider <name> --credential-file <file> --id <machine id>
@@ -192,7 +189,7 @@ fn do_node(rest: &[&str]) -> Result<String, String> {
     match rest.first().copied() {
         Some("launch") => return do_launch(&rest[1..]),
         Some("offers") => return do_offers(&rest[1..]),
-        Some("authorise") | Some("authorize") => return do_authorise(&rest[1..]),
+        Some("credential") => return do_credential(&rest[1..]),
         Some("destroy") => return do_destroy(&rest[1..]),
         _ => {}
     }
@@ -201,7 +198,7 @@ fn do_node(rest: &[&str]) -> Result<String, String> {
     };
     if *sub != "enrol" && *sub != "renew" {
         return Err(format!(
-            "`node {sub}` is not a command; there are `node launch`, `node offers`, `node destroy`, `node enrol` and `node renew`"
+            "`node {sub}` is not a command; there are `node launch`, `node offers`, `node credential`, `node destroy`, `node enrol` and `node renew`"
         ));
     }
     let (mut token, mut credentials, mut endpoint, mut subtree) = (None, 7usize, None, None);
@@ -333,38 +330,17 @@ fn do_launch(rest: &[&str]) -> Result<String, String> {
     launch::launch(&me, &ask)
 }
 
-fn do_authorise(opts: &[&str]) -> Result<String, String> {
-    let o = options(
-        opts,
-        &[
-            "provider",
-            "client-id",
-            "client-secret-file",
-            "credential-file",
-            "port",
-        ],
-    )?;
+/// `node credential --provider --credential-file`.
+fn do_credential(opts: &[&str]) -> Result<String, String> {
+    let o = options(opts, &["provider", "credential-file"])?;
     let need = |k: &str| {
         o.get(k)
             .cloned()
             .ok_or_else(|| format!("--{k} is required"))
     };
-    let port: u16 = o
-        .get("port")
-        .map(|p| p.parse().map_err(|_| "--port takes a number".to_string()))
-        .transpose()?
-        .unwrap_or(7450);
-    let secret = o
-        .get("client-secret-file")
-        .map(|f| launch::credential_from(f))
-        .transpose()?;
-    launch::authorise(
-        &need("provider")?,
-        o.get("client-id").map(String::as_str),
-        secret.as_deref(),
-        port,
-        &need("credential-file")?,
-    )
+    let stdin = std::io::stdin();
+    let mut input = stdin.lock();
+    launch::credential(&need("provider")?, &need("credential-file")?, &mut input)
 }
 
 fn do_offers(opts: &[&str]) -> Result<String, String> {

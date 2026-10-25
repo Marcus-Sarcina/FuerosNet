@@ -14,10 +14,9 @@
 
 use crate::enrol;
 use rhtn_crypto::SigningIdentity;
-use rhtn_launch::oauth::{self, App, Credential, Pkce};
 use rhtn_launch::{Image, Plan, Provider, Standing, Transport};
 use std::io::{Read, Write};
-use std::net::{TcpListener, TcpStream};
+use std::net::TcpStream;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -342,137 +341,61 @@ pub fn plan(region: &str, size: &str, registry: Option<&str>, tag: Option<&str>)
     p
 }
 
-/// **The credential from a file**: a pasted token, or the document
-/// `node authorise` wrote; one that is about to expire is renewed with
-/// its refresh token first and the file rewritten, so what is handed on
-/// is a token that works.
+/// The token a credential file holds: the operator's own, pasted at
+/// `node credential` or written there by hand.
 pub fn credential_from(path: &str) -> Result<String, String> {
     let s = std::fs::read_to_string(path).map_err(|e| format!("read {path}: {e}"))?;
-    if s.trim().is_empty() {
+    let t = s.trim();
+    if t.is_empty() {
         return Err(format!("{path} is empty"));
     }
-    let mut c = Credential::from_json(&s);
-    if c.stale_at(now_s()) {
-        let (Some(refresh), Some(client_id)) = (c.refresh_token.clone(), c.client_id.clone())
-        else {
-            return Err(format!(
-                "the token in {path} has expired and carries nothing to renew it with; authorise again"
-            ));
-        };
-        // the provider is the one the document was written for; DigitalOcean
-        // is the one flow this build offers
-        let e = oauth::digitalocean();
-        let app = App {
-            client_id,
-            // a confidential client's secret, where the operator carries
-            // one, comes from the environment and is never written
-            client_secret: std::env::var("RHTN_CLIENT_SECRET")
-                .ok()
-                .filter(|s| !s.is_empty()),
-            redirect_uri: String::new(),
-        };
-        let t = TlsTransport::new()?;
-        c = oauth::refresh(&t, &e, &app, &refresh, now_s())?;
-        write_private(path, &c.to_json())?;
-    }
-    Ok(c.access_token)
+    Ok(t.to_string())
 }
 
-fn now_s() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
-}
-
-/// **`node authorise`: the provider's own page, then the token at a local
-/// callback** (`light-client-requirements.md` §10).  The page is opened
-/// in the person's browser and printed as well; the listener on `port`
-/// waits as long as it takes — through a signup, a payment method, a
-/// second factor, a confirmation mail — and takes the first callback
-/// carrying this request's state.  The code is exchanged with the PKCE
-/// verifier kept here, and the credential document is written to `out`.
-pub fn authorise(
+/// **`node credential`: the provider's token page, the steps there, and
+/// the token pasted** (`light-client-requirements.md` §10).  No
+/// application is registered with any provider and nothing of the
+/// project's stands between the operator and the provider: the operator
+/// makes a token of their own at the provider's console, scoped and
+/// expiring as they choose, and pastes it.  The page is opened in the
+/// person's browser and printed as well, the steps are printed beside it,
+/// the token is read from `input`, tried at the provider, and written to
+/// `out` readable by its owner alone.
+pub fn credential(
     provider: &str,
-    client_id: Option<&str>,
-    client_secret: Option<&str>,
-    port: u16,
     out: &str,
+    input: &mut dyn std::io::BufRead,
 ) -> Result<String, String> {
-    let e = oauth::endpoints(provider).ok_or_else(|| {
-        format!("{provider} offers no authorisation flow; paste its token into {out} instead")
-    })?;
-    let client_id = client_id
-        .or_else(|| oauth::client_id(provider))
-        .ok_or_else(|| {
-            format!("this build carries no client id for {provider}; give one with --client-id")
-        })?;
-    let listener = TcpListener::bind(("127.0.0.1", port))
-        .map_err(|e| format!("listen on 127.0.0.1:{port}: {e}"))?;
-    let mut random = [0u8; 32];
-    let rng = rustls::crypto::aws_lc_rs::default_provider().secure_random;
-    rng.fill(&mut random)
-        .map_err(|e| format!("no randomness: {e:?}"))?;
-    let pkce = Pkce::from_random(&random);
-    rng.fill(&mut random)
-        .map_err(|e| format!("no randomness: {e:?}"))?;
-    let state = oauth::base64url(&random[..16]);
-    let app = App {
-        client_id: client_id.to_string(),
-        client_secret: client_secret.map(String::from),
-        redirect_uri: format!("http://127.0.0.1:{port}/callback"),
-    };
-    let url = oauth::authorize_url(&e, &app, &state, &pkce);
-    eprintln!(
-        "open this page, sign in or sign up there, and approve:
-  {url}"
-    );
+    let p = rhtn_launch::provider(provider)
+        .ok_or_else(|| format!("{provider} is not a provider this build drives"))?;
+    let page = p.token_page();
+    eprintln!("make a token at {}'s own page:\n  {page}", p.name());
+    for (n, step) in p.token_walkthrough().iter().enumerate() {
+        eprintln!("  {}. {step}", n + 1);
+    }
     // the person's browser, where one answers; the URL above is the
     // fallback and the record either way
     let _ = std::process::Command::new("xdg-open")
-        .arg(&url)
+        .arg(page)
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .spawn();
-    eprintln!(
-        "waiting at {} — take your time; this keeps listening",
-        app.redirect_uri
-    );
-    let code = loop {
-        let (mut s, _) = listener.accept().map_err(|e| format!("accept: {e}"))?;
-        let mut buf = [0u8; 4096];
-        let n = s.read(&mut buf).unwrap_or(0);
-        let line = String::from_utf8_lossy(&buf[..n])
-            .lines()
-            .next()
-            .unwrap_or("")
-            .to_string();
-        match oauth::callback_params(&line) {
-            Some((code, got)) if got == state => {
-                let _ = s.write_all(oauth::callback_page(true).as_bytes());
-                break code;
-            }
-            Some(_) => {
-                let _ = s.write_all(oauth::callback_page(false).as_bytes());
-                eprintln!("a callback arrived with another request's state; still waiting");
-            }
-            None => {
-                let _ = s.write_all(oauth::callback_page(false).as_bytes());
-            }
-        }
-    };
+    eprint!("paste the token here: ");
+    let mut line = String::new();
+    input
+        .read_line(&mut line)
+        .map_err(|e| format!("read the token: {e}"))?;
+    let token = line.trim();
+    if token.is_empty() {
+        return Err("no token was pasted".into());
+    }
     let t = TlsTransport::new()?;
-    let c = oauth::exchange(&t, &e, &app, &code, &pkce, now_s())?;
-    write_private(out, &c.to_json())?;
+    let regions = p.regions(&t, token)?;
+    write_private(out, token)?;
     Ok(format!(
-        "authorised{}; the credential is in {out}{}",
-        c.account
-            .as_deref()
-            .map(|a| format!(" as {a}"))
-            .unwrap_or_default(),
-        c.expires_at
-            .map(|_| ", renewed from its refresh token as needed")
-            .unwrap_or_default()
+        "the token answers at {}: {} regions offered; kept in {out}",
+        p.name(),
+        regions.len()
     ))
 }
 

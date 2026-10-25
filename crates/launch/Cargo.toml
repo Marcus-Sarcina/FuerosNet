@@ -6,7 +6,6 @@ license = "Apache-2.0"
 description = "Launching an instance at a hosting provider (light-client §10, infra-client §8.3): the token, the configuration, the once-run script, and the provider adapters over an injected HTTP transport"
 
 [dependencies]
-rhtn-codec = { path = "../codec" }
 serde_json = { workspace = true }
 
 [dev-dependencies]

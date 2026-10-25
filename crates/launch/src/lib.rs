@@ -29,10 +29,20 @@
 //! the operator's recourse for a leaked one is the provider's console
 //! [author, 2026-10-25].  No broker stands between the client and the
 //! provider.
+//!
+//! **The credential is a token the operator makes at the provider's own
+//! console and pastes** [author, 2026-10-25]: no application is
+//! registered with any provider on the project's behalf, so the client
+//! ships nothing that names the project to a provider and nothing of the
+//! project's stands between the operator and the provider.  An
+//! authorisation flow was tried and withdrawn the same day: DigitalOcean
+//! refuses the exchange without the application's secret, and a secret
+//! in a shipped client is public.  What the adapter supplies instead is
+//! where the token is made and the steps there
+//! ([`Provider::token_page`], [`Provider::token_walkthrough`]), so a
+//! client can open the page and show the steps beside it.
 
 #![warn(missing_docs)]
-
-pub mod oauth;
 
 use serde_json::{Value, json};
 
@@ -250,6 +260,12 @@ pub trait Provider {
     fn name(&self) -> &'static str;
     /// The provider's autonomous system, for PRD-11's ordering.
     fn asn(&self) -> u64;
+    /// Where an operator makes the token this adapter is spoken to with:
+    /// the provider's own page, for a client to open.
+    fn token_page(&self) -> &'static str;
+    /// The steps on that page, for a client to show beside it: what to
+    /// choose so the token can do what the launch needs and no more.
+    fn token_walkthrough(&self) -> &'static [&'static str];
     /// The regions offered.
     fn regions(&self, t: &dyn Transport, credential: &str) -> Result<Vec<Region>, String>;
     /// The sizes offered.
@@ -283,6 +299,18 @@ pub fn provider(name: &str) -> Option<Box<dyn Provider>> {
 pub fn provider_names() -> Vec<&'static str> {
     vec!["digitalocean"]
 }
+
+/// The steps on DigitalOcean's token page, as a client shows them.  The
+/// scopes are the launch's needs and nothing beyond: a droplet made, read
+/// while it boots and destroyed when the operator says; the regions and
+/// sizes read to choose from.
+const DIGITALOCEAN_TOKEN_STEPS: &[&str] = &[
+    "Sign in, or sign up; DigitalOcean asks for a payment method before it makes a machine.",
+    "Under API, Tokens, choose Generate New Token.",
+    "Name the token for this client and give it an expiry: the client holds it until then, and you make another the same way afterwards.",
+    "Under Scopes choose Custom Scopes and tick, under droplet: create, read and delete; under regions: read; under sizes: read. Full Access also works and gives the token more than the launch needs.",
+    "Generate it, copy the token shown (it is shown once), and paste it here.",
+];
 
 /// **DigitalOcean**, API v2: a bearer token, JSON in and out, a droplet
 /// from an image, a region and a size with `user_data`, and its public
@@ -342,6 +370,14 @@ impl Provider for DigitalOcean {
 
     fn asn(&self) -> u64 {
         14061
+    }
+
+    fn token_page(&self) -> &'static str {
+        "https://cloud.digitalocean.com/account/api/tokens/new"
+    }
+
+    fn token_walkthrough(&self) -> &'static [&'static str] {
+        DIGITALOCEAN_TOKEN_STEPS
     }
 
     fn regions(&self, t: &dyn Transport, credential: &str) -> Result<Vec<Region>, String> {
@@ -557,6 +593,24 @@ mod tests {
     }
 
     // acceptance: PRT-08
+    #[test]
+    fn the_token_page_is_the_providers_own_and_the_steps_name_the_scopes_the_launch_needs() {
+        let p = provider("digitalocean").unwrap();
+        assert!(
+            p.token_page()
+                .starts_with("https://cloud.digitalocean.com/")
+        );
+        let steps = p.token_walkthrough().join(" ");
+        for scope in [
+            "droplet: create, read and delete",
+            "regions: read",
+            "sizes: read",
+        ] {
+            assert!(steps.contains(scope), "{scope}");
+        }
+        assert!(steps.contains("paste"));
+    }
+
     #[test]
     fn regions_and_sizes_parse_and_a_refusal_carries_the_providers_words() {
         let t = Scripted::new(vec![

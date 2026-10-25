@@ -126,6 +126,26 @@ pub fn launch_provider_asn(provider: String) -> Option<u64> {
     rhtn_launch::provider(&provider).map(|p| p.asn())
 }
 
+/// Where an operator makes a provider's token: its own page, for the
+/// shell to open; none for a name this build does not drive.
+#[uniffi::export]
+pub fn launch_token_page(provider: String) -> Option<String> {
+    rhtn_launch::provider(&provider).map(|p| p.token_page().to_string())
+}
+
+/// The steps on that page, for the shell to show beside it.
+#[uniffi::export]
+pub fn launch_token_walkthrough(provider: String) -> Vec<String> {
+    rhtn_launch::provider(&provider)
+        .map(|p| {
+            p.token_walkthrough()
+                .iter()
+                .map(|s| (*s).to_string())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// The registry pulled from unless the operator names another.
 #[uniffi::export]
 pub fn launch_registry_default() -> String {
