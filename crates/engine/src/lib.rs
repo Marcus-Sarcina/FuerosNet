@@ -61,10 +61,20 @@ pub const PROFILE_LEN: usize = 128;
 pub const DIM: usize = 128;
 /// SFace's input side.
 pub const SIDE: usize = 112;
-/// YuNet's input side: the graph declares its shapes at 640×640, so a
-/// frame is placed top-left on a black canvas of that size and the
-/// coordinates read back are the frame's own.
-const CANVAS: usize = 640;
+/// The largest frame a camera may hand over, on a side.
+const FRAME_SIDE: usize = 640;
+/// YuNet's input side here: 320.  The graph was exported declaring
+/// 640×640, and its convolutions take any size `tract` is told; a frame is
+/// shrunk two-to-one where it needs to be, placed top-left on a black
+/// canvas of this size, and the coordinates read back are scaled to the
+/// frame's own.  **A quarter of the work of the 640 canvas the engine ran
+/// at until 2026-10-25**, when the bench's low-end phones took four to
+/// eight seconds a detection and sampled a 30 s window five times; a face
+/// held at arm's length is a hundred pixels across at this size, far
+/// above what the detector needs.
+const CANVAS: usize = 320;
+/// The orientation no face has been found at yet (see [`SFace::find`]).
+const TURNS_UNKNOWN: u8 = u8::MAX;
 /// The noise added to a profile, per unit-vector component (provisional).
 pub const FUZZ_SIGMA: f32 = 0.03;
 
@@ -130,6 +140,16 @@ pub struct SFace {
     sface: Runnable,
     width: usize,
     height: usize,
+    /// The detector's canvas on a side.
+    canvas: usize,
+    /// How many frame pixels one canvas pixel stands for: 2 where the
+    /// frame is larger than the canvas on either side, 1 otherwise.
+    scale: usize,
+    /// The quarter turns a face was last found at ([`TURNS_UNKNOWN`]
+    /// before any): tried first, since a camera does not turn between
+    /// frames and three more detections of an empty frame are the cost of
+    /// not remembering.
+    turns: std::sync::atomic::AtomicU8,
     thresholds: Thresholds,
     matcher: Cosine,
 }
@@ -156,7 +176,8 @@ const NMS_IOU: f32 = 0.3;
 
 impl SFace {
     /// Load both models for frames of `width` × `height` luminance bytes,
-    /// which must fit YuNet's 640×640 canvas.
+    /// which must fit a 640×640 frame; larger than the detector's canvas
+    /// on a side, they are shrunk two-to-one for detection.
     pub fn from_onnx(
         yunet: &[u8],
         sface: &[u8],
@@ -164,15 +185,35 @@ impl SFace {
         height: usize,
         thresholds: Thresholds,
     ) -> Result<SFace, String> {
-        if width == 0 || height == 0 || width > CANVAS || height > CANVAS {
+        Self::from_onnx_at(yunet, sface, width, height, thresholds, CANVAS)
+    }
+
+    /// [`SFace::from_onnx`] at a stated detector canvas: what a bench
+    /// measurement compares sizes with.  The reference client uses
+    /// [`SFace::from_onnx`].
+    #[doc(hidden)]
+    pub fn from_onnx_at(
+        yunet: &[u8],
+        sface: &[u8],
+        width: usize,
+        height: usize,
+        thresholds: Thresholds,
+        canvas: usize,
+    ) -> Result<SFace, String> {
+        if width == 0 || height == 0 || width > FRAME_SIDE || height > FRAME_SIDE {
             return Err(format!(
-                "a frame must fit YuNet's {CANVAS}x{CANVAS} canvas, not {width}x{height}"
+                "a frame must fit {FRAME_SIDE}x{FRAME_SIDE}, not {width}x{height}"
             ));
         }
+        let scale = if width.max(height) > canvas { 2 } else { 1 };
+        // the export declares every intermediate tensor's shape at the
+        // 640 canvas; those are discarded so the graph is inferred at this
+        // one, the convolutions taking any size they are given
         let mut y = tract_onnx::onnx()
+            .with_ignore_value_info(true)
             .model_for_read(&mut Cursor::new(yunet))
             .map_err(|e| format!("YuNet: {e}"))?;
-        y.set_input_fact(0, f32::fact([1, 3, CANVAS, CANVAS]).into())
+        y.set_input_fact(0, f32::fact([1, 3, canvas, canvas]).into())
             .map_err(|e| format!("YuNet input: {e}"))?;
         // the heads by the names the graph declares its outputs under
         // (the tensor labels, not node names); a graph declaring them in
@@ -209,6 +250,9 @@ impl SFace {
             sface,
             width,
             height,
+            canvas,
+            scale,
+            turns: std::sync::atomic::AtomicU8::new(TURNS_UNKNOWN),
             thresholds,
             matcher: Cosine(thresholds),
         })
@@ -218,6 +262,12 @@ impl SFace {
     /// geometry, if any.
     pub fn detect(&self, gray: &[u8]) -> Option<Face> {
         self.detect_in(gray, self.width, self.height)
+    }
+
+    /// [`SFace::find`]'s result for a measurement: the face and the turns.
+    #[doc(hidden)]
+    pub fn find_scored(&self, gray: &[u8]) -> Option<(Face, u8)> {
+        self.find(gray).map(|(_, _, _, f, t)| (f, t))
     }
 
     /// **A face in the frame, whichever way up the camera delivered it.**
@@ -234,9 +284,18 @@ impl SFace {
         if gray.len() < self.width * self.height {
             return None;
         }
-        for turns in [0u8, 3, 1, 2] {
+        // the orientation a face was last found at first, then the rest
+        let last = self.turns.load(std::sync::atomic::Ordering::Relaxed);
+        let mut order: Vec<u8> = Vec::with_capacity(4);
+        if last != TURNS_UNKNOWN {
+            order.push(last);
+        }
+        order.extend([0u8, 3, 1, 2].iter().filter(|t| **t != last));
+        for turns in order {
             let (g, w, h) = rotate(gray, self.width, self.height, turns);
             if let Some(face) = self.detect_in(&g, w, h) {
+                self.turns
+                    .store(turns, std::sync::atomic::Ordering::Relaxed);
                 return Some((g, w, h, face, turns));
             }
         }
@@ -244,17 +303,27 @@ impl SFace {
     }
 
     fn detect_in(&self, gray: &[u8], fw: usize, fh: usize) -> Option<Face> {
-        if gray.len() < fw * fh || fw > CANVAS || fh > CANVAS {
+        let s = self.scale;
+        if gray.len() < fw * fh || fw > self.canvas * s || fh > self.canvas * s {
             return None;
         }
-        let (w, h) = (CANVAS, CANVAS);
+        let (w, h) = (self.canvas, self.canvas);
+        // the frame shrunk `s` to one by block mean, placed top-left
+        let (sw, sh) = (fw / s, fh / s);
         let input = tract_ndarray::Array4::<f32>::from_shape_fn((1, 3, h, w), |(_, _, y, x)| {
-            if x < fw && y < fh {
-                f32::from(gray[y * fw + x])
+            if x < sw && y < sh {
+                let mut sum = 0u32;
+                for dy in 0..s {
+                    for dx in 0..s {
+                        sum += u32::from(gray[(y * s + dy) * fw + x * s + dx]);
+                    }
+                }
+                sum as f32 / (s * s) as f32
             } else {
                 0.0
             }
         });
+        let st_scale = s as f32;
         let outputs = self.yunet.run(tvec!(Tensor::from(input).into())).ok()?;
         let view = |i: usize| outputs[i].to_plain_array_view::<f32>().ok();
         let mut faces: Vec<Face> = Vec::new();
@@ -273,7 +342,8 @@ impl SFace {
                     continue;
                 }
                 let (r, c) = ((i / cols) as f32, (i % cols) as f32);
-                let st = stride as f32;
+                // canvas pixels back to frame pixels
+                let st = stride as f32 * st_scale;
                 let cx = (c + bbox[(i, 0)]) * st;
                 let cy = (r + bbox[(i, 1)]) * st;
                 let bw = bbox[(i, 2)].exp() * st;
