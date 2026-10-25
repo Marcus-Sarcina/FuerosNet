@@ -28,14 +28,15 @@ usage: rhtn <command> [...]
         file holds, wait for its address and its surface, then enrol it
         with a token minted here (L §10, OPS-020). The provider is one of:
         digitalocean.
-  node authorise --provider <name> --client-id <id> --credential-file <out>
-        [--client-secret <secret>] [--port <n>]
+  node authorise --provider <name> --credential-file <out>
+        [--client-id <id>] [--client-secret-file <file>] [--port <n>]
         Open the provider's own page for signing up or in and approving,
         wait at a local callback for as long as that takes, and write
         the token it hands back to <out>, with what renews it. The
         callback is http://127.0.0.1:<port>/callback, port 7450 unless
-        given; register it with the provider. Providers offering the
-        flow: digitalocean.
+        given. The client id this build carries for the provider is used
+        unless one is given; a confidential client's secret is read from
+        a file and never kept. Providers offering the flow: digitalocean.
   node offers --provider <name> --credential-file <file>
         List the provider's regions and sizes.
   node destroy --provider <name> --credential-file <file> --id <machine id>
@@ -338,7 +339,7 @@ fn do_authorise(opts: &[&str]) -> Result<String, String> {
         &[
             "provider",
             "client-id",
-            "client-secret",
+            "client-secret-file",
             "credential-file",
             "port",
         ],
@@ -353,10 +354,14 @@ fn do_authorise(opts: &[&str]) -> Result<String, String> {
         .map(|p| p.parse().map_err(|_| "--port takes a number".to_string()))
         .transpose()?
         .unwrap_or(7450);
+    let secret = o
+        .get("client-secret-file")
+        .map(|f| launch::credential_from(f))
+        .transpose()?;
     launch::authorise(
         &need("provider")?,
-        &need("client-id")?,
-        o.get("client-secret").map(String::as_str),
+        o.get("client-id").map(String::as_str),
+        secret.as_deref(),
         port,
         &need("credential-file")?,
     )

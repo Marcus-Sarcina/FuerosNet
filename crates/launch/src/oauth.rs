@@ -44,6 +44,24 @@ pub fn digitalocean() -> Endpoints {
     }
 }
 
+/// **The application this client is, at DigitalOcean**: registered once by
+/// the project under its own account (the registration is the project's,
+/// not an operator's), and public — the id identifies the software and is
+/// no secret, the proof at exchange is the PKCE verifier.  A confidential
+/// client's secret, where an operator chooses to carry one, is given at
+/// the command line and never kept here [author, 2026-10-25].
+pub const DIGITALOCEAN_CLIENT_ID: &str =
+    "c0dfa21d7030deb7857f1d931088c1a066e2e6af9cf5a1c8844c72c4ac40a979";
+
+/// The client id this build carries for a provider, where the project
+/// registered one.
+pub fn client_id(provider: &str) -> Option<&'static str> {
+    match provider.to_ascii_lowercase().as_str() {
+        "digitalocean" => Some(DIGITALOCEAN_CLIENT_ID),
+        _ => None,
+    }
+}
+
 /// The endpoints of a provider that offers the flow, by name.
 pub fn endpoints(provider: &str) -> Option<Endpoints> {
     match provider.to_ascii_lowercase().as_str() {

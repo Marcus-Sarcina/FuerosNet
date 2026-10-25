@@ -364,12 +364,16 @@ pub fn credential_from(path: &str) -> Result<String, String> {
         let e = oauth::digitalocean();
         let app = App {
             client_id,
-            client_secret: None,
+            // a confidential client's secret, where the operator carries
+            // one, comes from the environment and is never written
+            client_secret: std::env::var("RHTN_CLIENT_SECRET")
+                .ok()
+                .filter(|s| !s.is_empty()),
             redirect_uri: String::new(),
         };
         let t = TlsTransport::new()?;
         c = oauth::refresh(&t, &e, &app, &refresh, now_s())?;
-        std::fs::write(path, c.to_json()).map_err(|e| format!("write {path}: {e}"))?;
+        write_private(path, &c.to_json())?;
     }
     Ok(c.access_token)
 }
@@ -390,7 +394,7 @@ fn now_s() -> u64 {
 /// verifier kept here, and the credential document is written to `out`.
 pub fn authorise(
     provider: &str,
-    client_id: &str,
+    client_id: Option<&str>,
     client_secret: Option<&str>,
     port: u16,
     out: &str,
@@ -398,6 +402,11 @@ pub fn authorise(
     let e = oauth::endpoints(provider).ok_or_else(|| {
         format!("{provider} offers no authorisation flow; paste its token into {out} instead")
     })?;
+    let client_id = client_id
+        .or_else(|| oauth::client_id(provider))
+        .ok_or_else(|| {
+            format!("this build carries no client id for {provider}; give one with --client-id")
+        })?;
     let listener = TcpListener::bind(("127.0.0.1", port))
         .map_err(|e| format!("listen on 127.0.0.1:{port}: {e}"))?;
     let mut random = [0u8; 32];
@@ -454,7 +463,7 @@ pub fn authorise(
     };
     let t = TlsTransport::new()?;
     let c = oauth::exchange(&t, &e, &app, &code, &pkce, now_s())?;
-    std::fs::write(out, c.to_json()).map_err(|e| format!("write {out}: {e}"))?;
+    write_private(out, &c.to_json())?;
     Ok(format!(
         "authorised{}; the credential is in {out}{}",
         c.account
@@ -469,6 +478,31 @@ pub fn authorise(
 
 fn hex(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
+}
+
+/// Write a credential document readable by its owner alone, as `keys mint`
+/// writes an identity: a bearer token is a key.
+fn write_private(path: &str, text: &str) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+        let mut f = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(path)
+            .map_err(|e| format!("write {path}: {e}"))?;
+        f.write_all(text.as_bytes())
+            .map_err(|e| format!("write {path}: {e}"))?;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))
+            .map_err(|e| format!("write {path}: {e}"))?;
+        Ok(())
+    }
+    #[cfg(not(unix))]
+    {
+        std::fs::write(path, text).map_err(|e| format!("write {path}: {e}"))
+    }
 }
 
 #[cfg(test)]
