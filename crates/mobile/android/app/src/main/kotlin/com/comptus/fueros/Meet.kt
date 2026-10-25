@@ -1528,6 +1528,10 @@ class Meet(
         synchronized(lock) {
             check(opposedAdoptions()) { "there is no opposition to resolve" }
             direction = d
+            // the opposition and its answer, as the diagnostics see them: the
+            // run that first produced it left only a 22 s gap to read it by
+            // (cb53936-a2-opposed-1, 2026-10-24)
+            Diag.event("meet.direction", "mine" to kind.adopt, "theirs" to theirAdopt, "chosen" to d)
             changed()
         }
     }

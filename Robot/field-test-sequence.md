@@ -185,7 +185,17 @@ a path the suite holds, which is the right order for a bench.
    A patron placed in somebody else's subnet may adopt under its own key
    (`wire-format.md` §2.1, design §13.8), and the adopted now accepts that
    form: one hop below the patron's own key, the subnet the patron's to
-   name. Still to run from the row: the simultaneous-opposite case.
+   name. **The simultaneous-opposite case — DONE, `cb53936-a2-opposed-1`
+   (2026-10-24, nodeless)**: GXV chose *I will be the Patron* and MRK, with
+   the responder's own D1a the shell gained for this run (until then only
+   the inviter could choose, so the case could not arise on the bench),
+   chose *Scan — I will be the Patron*. Record `6d227d08`, witnessless, two
+   signers; at Done MRK was asked to choose between the two intentions and
+   chose GXV as patron, GXV having waited 22 s for that word; GXV proposed
+   into a new subnet under its own key, MRK's kernel checked and signed
+   (series 3), both hold `e21137ee`, the legs direct, nothing stale. **A2's
+   list is complete**: both directions with a node, both nodeless, and the
+   opposed case.
 3. **Heading F's arrival spread** (A5) — **ready on the restructured
    machine** (2026-10-24): ranging is gone, the post-optical regime is one
    `WINDOW` step in which the capture's hold is turned tick by tick while
