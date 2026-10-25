@@ -590,11 +590,22 @@ impl Courier {
     /// no longer the *first* answer, and so no longer a party whose
     /// cooperation a sender needs.
     async fn relayed(&self, to: Keyhash, bytes: &[u8], device: [u8; 32]) -> bool {
-        self.to_their_node(to, bytes, device).await
-            || self
+        let theirs = self.to_their_node(to, bytes, device).await;
+        let mine = !theirs
+            && self
                 .serving
                 .relay(self.me(), to, bytes.to_vec(), device)
-                .await
+                .await;
+        // said either way: a relay that silently went nowhere left a
+        // 424 KiB backup blob unaccounted for on the bench (2026-10-24)
+        tracing::info!(
+            target: "pay",
+            to = %hex4(&to),
+            bytes = bytes.len(),
+            via = if theirs { "their node" } else if mine { "serving node" } else { "nowhere" },
+            "pay.relay"
+        );
+        theirs || mine
     }
 
     /// Carry the client's messages where the seams go: prekey traffic to
@@ -768,6 +779,11 @@ impl Courier {
 /// Eight hex characters of an identifier, for a diagnostic line.
 fn hex8(b: &[u8]) -> String {
     b.iter().take(4).map(|x| format!("{x:02x}")).collect()
+}
+
+/// Four bytes of a keyhash, for an event.
+fn hex4(k: &Keyhash) -> String {
+    k[..4].iter().map(|b| format!("{b:02x}")).collect()
 }
 
 #[cfg(test)]

@@ -308,8 +308,17 @@ struct Live {
 struct Detached {
     courier: Arc<Courier>,
     task: tokio::task::JoinHandle<()>,
-    /// The socket itself, to close when the device moves.
+    /// The socket itself, to close when the device moves.  **The one
+    /// direct socket this client has**: an attach's courier carries over
+    /// it too, rather than binding a second whose connection table would
+    /// be empty while the shared reachable set said *held* (run
+    /// 0c8c8f8-a3-node-1, 2026-10-24: every payload after the attach took
+    /// the relay, and a 426 KiB blob the relay would not take went
+    /// nowhere).
     direct: LightDirect,
+    /// Where the socket delivers: the attach's courier while one is live,
+    /// this one otherwise.
+    inlet: Inlet,
     /// The interface it was bound on: what [`Net::refresh_detached`]
     /// compares against the one the device routes out of now.
     local: std::net::IpAddr,
@@ -557,6 +566,12 @@ impl Net {
         }
         *self.live.lock().unwrap() = None;
         *self.status.lock().unwrap() = Status::Detached;
+        // the direct socket delivers to the detached courier again, and
+        // asks nobody for a reflexive candidate
+        if let Some(d) = self.detached.lock().unwrap().as_ref() {
+            d.inlet.bind(d.courier.inbound());
+            d.direct.set_stun(None);
+        }
     }
 
     pub(crate) fn session(&self) -> Option<Arc<Session>> {
@@ -671,6 +686,7 @@ impl Net {
                 courier,
                 task,
                 direct,
+                inlet,
                 local,
             })
         })?;
@@ -795,8 +811,14 @@ impl Net {
             (handle.clone(), self.endpoint.clone(), self.nonce.clone());
         let current = self.current.clone();
         let addrs = addrs.to_vec();
-        let reachable = self.reachable.clone();
         let beyond = self.beyond.clone();
+        // the one direct socket, stood if it is not yet
+        self.stand_detached(handle)?;
+        let (direct, inlet) = {
+            let d = self.detached.lock().unwrap();
+            let d = d.as_ref().expect("stood a line above");
+            (d.direct.clone(), d.inlet.clone())
+        };
         let built = self.rt().block_on(async move {
             // the serving node first, and the cached siblings where it is
             // unreachable at attach time: the cold-start fallback
@@ -824,12 +846,9 @@ impl Net {
             let (deliveries, frames) = take_readers(&mut session);
             // the serving node answers STUN on the socket it serves on
             // (design §14.1.1): where this side's reflexive candidate comes
-            // from
+            // from, asked of the one direct socket from here on
             let stun = session.conn.remote_address();
-            // the direct socket sits on the interface the session uses, so
-            // the host candidate it gathers is an address a peer can dial;
-            // the unspecified address would name nothing
-            let local = interface_toward(stun);
+            direct.set_stun(Some(stun));
             let (mode, queued) = (session.ack.mode, session.ack.queued);
             let session = Arc::new(session);
             *current.lock().unwrap() = Some(session.clone());
@@ -839,35 +858,10 @@ impl Net {
                 Arc::new(move || reads.lock().unwrap().clone()),
                 nonce,
             );
-            // **The direct path, on a socket of this client's own**
-            // (design §14.1.1): candidates gathered there, the peer's
-            // dialled from it, and what a peer opens toward it taken under
-            // the key it authenticates.  Gated to contacts — a client dials
-            // any party it holds a contact for and opens the path to one
-            // that holds it, each side's own decision and nobody's choice
-            // [author, 2026-10-24; the horizon bound of 2026-09-27 before
-            // it, which left every witness on the relay] — and the relay is
-            // the answer where there is no path.
-            let inlet = Inlet::default();
-            let gate: Gate = {
-                let h = handle_for_task.clone();
-                Arc::new(move |peer| {
-                    let peer = *peer;
-                    h.with_blocking(move |c| c.store.contacts.contains_key(&peer))
-                })
-            };
-            let direct = LightDirect::bind(
-                cfg.me.clone(),
-                cfg.pins.clone(),
-                cfg.bind.clone().with_held(Arc::new(handle_for_task.clone())),
-                reachable.clone(),
-                SocketAddr::new(local, 0),
-                None,
-                Some(stun),
-                gate,
-                inlet.inbound(),
-            )
-            .map_err(|e| Refused::new(format!("no direct socket: {e}")))?;
+            // **The direct path is the one socket this client stood at
+            // start** (design §14.1.1), gated to contacts there [author,
+            // 2026-10-24]; this courier carries over it and the relay is
+            // the answer where there is no path
             let (courier, events) = Courier::new(
                 handle_for_task.clone(),
                 serving.clone(),
@@ -878,6 +872,7 @@ impl Net {
             // node, dialled from here, and to the node serving this client
             // only where that fails
             courier.reach_beyond(beyond);
+            // the socket delivers to this courier while it is live
             inlet.bind(courier.inbound());
             let tasks = vec![
                 attached::follow(handle_for_task.clone(), frames),
@@ -1310,7 +1305,18 @@ async fn contact_round(
                 })
                 .await;
             if !owed.is_empty() {
-                courier.carry(owed).await;
+                let n = owed.len();
+                let carried = courier.carry(owed).await;
+                // what did not go is said, not swallowed: the deposit is
+                // the one message here that can be too large for a path
+                tracing::info!(
+                    target: "peer",
+                    peer = %hex4(&peer),
+                    sent = n - carried.refused.len() - carried.left.len(),
+                    refused = carried.refused.len(),
+                    left = carried.left.len(),
+                    "peer.carry"
+                );
             }
         }
         out.push(Contacted { peer, held, how });

@@ -101,7 +101,10 @@ struct Light {
     bind: Binding,
     socket: Arc<TraversalSocket>,
     endpoint: quinn::Endpoint,
-    stun: Option<SocketAddr>,
+    /// Where a reflexive candidate is asked for: the serving node's
+    /// socket once one is attached, nothing before.  Set late, because the
+    /// socket outlives any one attach.
+    stun: Mutex<Option<SocketAddr>>,
     gate: Gate,
     inbound: Inbound,
     conns: Mutex<HashMap<Keyhash, quinn::Connection>>,
@@ -150,7 +153,7 @@ impl LightDirect {
             bind,
             socket,
             endpoint: endpoint.clone(),
-            stun,
+            stun: Mutex::new(stun),
             gate,
             inbound,
             conns: Mutex::new(HashMap::new()),
@@ -176,6 +179,12 @@ impl LightDirect {
     /// The address this socket is bound to.
     pub fn addr(&self) -> io::Result<SocketAddr> {
         self.0.socket.addr()
+    }
+
+    /// Where to ask for a reflexive candidate from now on: the serving
+    /// node's socket on attach (design §14.1.1), nothing on detach.
+    pub fn set_stun(&self, stun: Option<SocketAddr>) {
+        *self.0.stun.lock().unwrap() = stun;
     }
 
     /// Close the socket: every connection it holds ends and the accept
@@ -247,11 +256,8 @@ impl Direct for LightDirect {
             if !(self.0.gate)(&peer) {
                 return None;
             }
-            let cands = self
-                .0
-                .socket
-                .gather(self.0.stun, Duration::from_secs(2))
-                .await;
+            let stun = *self.0.stun.lock().unwrap();
+            let cands = self.0.socket.gather(stun, Duration::from_secs(2)).await;
             // a candidate exchange carries one to eight candidates
             // (`wire-format.md` §14.3.2): an empty gather is no offer,
             // not an offer of nothing
@@ -294,15 +300,34 @@ impl Direct for LightDirect {
             let Some(c) = conn else {
                 return false;
             };
-            // **a delivery is bounded by the dial's own timeout.** The
-            // direct path has no heartbeat: a peer that went away leaves a
-            // connection nothing closes until QUIC's idle timer, and a
-            // stream it will never acknowledge.  A delivery that does not
-            // complete in the time a dial gets is a path no longer held,
-            // and the message goes to the relay (design §14.1.1)
-            let ok = tokio::time::timeout(self.0.dial_timeout, deliver(&c, bytes))
+            // **a delivery is bounded by the dial's own timeout, plus a
+            // second for every 32 KiB.** The direct path has no heartbeat:
+            // a peer that went away leaves a connection nothing closes
+            // until QUIC's idle timer, and a stream it will never
+            // acknowledge.  A delivery that does not complete in that time
+            // is a path no longer held, and the message goes to the relay
+            // (design §14.1.1).  The size term is the bench's lesson [run
+            // 0c8c8f8-a3-node-1, 2026-10-24]: a 424 KiB backup blob met
+            // packet loss in its first hundred milliseconds, QUIC's
+            // recovery ran past the dial's three seconds, and the path was
+            // judged lost with the blob a third of the way across — while
+            // every message under a kilobyte went through.  A client's own
+            // number, no part of the wire
+            let n = bytes.len();
+            let bound = self.0.dial_timeout + Duration::from_secs((n / (32 * 1024)) as u64);
+            let started = std::time::Instant::now();
+            let ok = tokio::time::timeout(bound, deliver(&c, bytes))
                 .await
                 .unwrap_or(false);
+            tracing::info!(
+                target: "pay",
+                peer = %hex4(&peer),
+                bytes = n,
+                ok,
+                took_ms = started.elapsed().as_millis() as u64,
+                bound_ms = bound.as_millis() as u64,
+                "pay.direct.deliver"
+            );
             if !ok {
                 self.0.conns.lock().unwrap().remove(&peer);
                 self.0.reachable.set(peer, false);
@@ -367,4 +392,8 @@ impl Direct for NodeDirect {
             }
         })
     }
+}
+
+fn hex4(k: &Keyhash) -> String {
+    k[..4].iter().map(|b| format!("{b:02x}")).collect()
 }

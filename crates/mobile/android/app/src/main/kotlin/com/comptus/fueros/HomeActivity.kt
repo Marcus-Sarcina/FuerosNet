@@ -88,13 +88,31 @@ class HomeActivity : Activity() {
             }
         }
         Kernel.start(this)
-        // the bench's levers on the peer exchange (design §6.3), fieldtest
-        // alone: `--es forget_contact <keyhash>` takes one contact out of
-        // the dataset, `--ez contact_peers true` reaches for the peers now
-        if (BuildConfig.FIELD_TEST) {
-            intent.getStringExtra("forget_contact")?.let { Kernel.forgetContact(it) }
-            if (intent.getBooleanExtra("contact_peers", false)) Kernel.contactPeersNow()
-        }
+        benchLevers(intent)
+    }
+
+    /**
+     * **A second start lands here, not in [onCreate]**: `am start` on a
+     * task whose root this activity already is delivers the intent to the
+     * running instance (`singleTop`), which is how the bench reached a
+     * phone sitting on its Done screen and nothing happened (run
+     * `0c8c8f8-a3-node-1`, 2026-10-24).
+     */
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        benchLevers(intent)
+    }
+
+    /**
+     * The bench's levers on the peer exchange (design §6.3), fieldtest
+     * alone: `--es forget_contact <keyhash>` takes one contact out of the
+     * dataset, `--ez contact_peers true` reaches for the peers now.
+     */
+    private fun benchLevers(intent: android.content.Intent) {
+        if (!BuildConfig.FIELD_TEST) return
+        intent.getStringExtra("forget_contact")?.let { Kernel.forgetContact(it) }
+        if (intent.getBooleanExtra("contact_peers", false)) Kernel.contactPeersNow()
     }
 
     override fun onStart() {

@@ -43,6 +43,7 @@
              up and takes a provision extra. The rest are destinations. -->
         <activity
             android:name=".HomeActivity"
+            android:launchMode="singleTop"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
