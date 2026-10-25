@@ -1,3 +1,7 @@
+stages:
+  - test
+  - deploy
+
 # The gate, as GitLab runs it.  Lives under crates/ because the repository's
 # root holds the design documents alone; the project's CI/CD setting "CI/CD
 # configuration file" must point at `crates/.gitlab-ci.yml`.
@@ -7,6 +11,7 @@
 # needs a JDK and the Kotlin compiler; both are installed below, so the gate
 # runs its round trip here rather than skipping it.
 gate:
+  stage: test
   image: rust:1-bookworm
   variables:
     CARGO_HOME: $CI_PROJECT_DIR/.cargo
@@ -37,3 +42,37 @@ gate:
     - export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 RHTN_JNA_JAR="$HOME/opt/downloads/jna-$JNA_VERSION.jar"
     - export PATH="$HOME/opt/kotlinc/bin:$PATH"
     - cd crates && ./check.sh
+
+# **The node image, built and pushed on every commit to master that passed
+# the gate** (`infra-client-requirements.md` §9: a node is distributed as a
+# container image; `light-client-requirements.md` §10: the launch pulls it
+# from the reference registry).  Kaniko builds the Containerfile without a
+# docker daemon or privileges, which is what lets this run under the same
+# runner as the gate.  Tagged with the commit, so an image on a rented host
+# traces back to the tree that made it, and `latest` beside it.
+#
+# What this needs on the GitLab side, both the author's: the project's
+# container registry enabled (it is), and the image pullable without
+# credentials — which is the project's visibility, since the registry's
+# follows it.  `$CI_REGISTRY_IMAGE` is the registry host and project path
+# GitLab supplies; the default the client pulls from (`Launch.REGISTRY_DEFAULT`)
+# must name the same host and path.
+image-publish:
+  stage: deploy
+  needs: [gate]
+  rules:
+    - if: $CI_COMMIT_BRANCH == "master"
+  image:
+    name: gcr.io/kaniko-project/executor:v1.23.2-debug
+    entrypoint: [""]
+  variables:
+    GIT_CLEAN_FLAGS: -ffdx
+  script:
+    - mkdir -p /kaniko/.docker
+    - printf '{"auths":{"%s":{"auth":"%s"}}}' "$CI_REGISTRY" "$(printf '%s:%s' "$CI_REGISTRY_USER" "$CI_REGISTRY_PASSWORD" | base64 | tr -d '\n')" > /kaniko/.docker/config.json
+    - /kaniko/executor
+        --context "$CI_PROJECT_DIR/crates"
+        --dockerfile "$CI_PROJECT_DIR/crates/packaging/Containerfile"
+        --build-arg FLAVOUR=releasable
+        --destination "$CI_REGISTRY_IMAGE/rhtnd:$CI_COMMIT_SHORT_SHA"
+        --destination "$CI_REGISTRY_IMAGE/rhtnd:latest"
