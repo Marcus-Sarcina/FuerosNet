@@ -402,3 +402,44 @@ fn a_body_carrying_a_recovery_block_is_refused_on_this_path() {
     );
     assert!(why.contains("recovery adoption"), "{why}");
 }
+
+/// **A patron placed in somebody else's subnet may still adopt under its
+/// own key** (`wire-format.md` §2.1, design §13.8), and the party it
+/// adopts accepts the address: the locator that party holds for the patron
+/// is the patron's position elsewhere, which says nothing against a root
+/// of the patron's own. On the bench MRK, adopted under GXV an hour before,
+/// chose a new subnet under its own key and GXV refused the body against
+/// MRK's position in GXV's subnet (run 9613069-a2-nodeless-reverse-1,
+/// 2026-10-24).
+#[test]
+fn a_patron_placed_elsewhere_adopts_under_its_own_key_and_the_adopted_accepts() {
+    let mut s = setup(&PARTIES);
+    // bob sits under w1; what alice holds for bob is that position
+    s.adopted("bob", "w1", "w2", 1);
+    let pop = s.met_in_person("alice", "bob", "w2");
+    let held = held_position(&mut s, "alice", "bob");
+    assert_eq!(held.anchor, kh("w1"), "alice holds bob's position under w1");
+    // bob adopts alice under its own key: a new subnet, named by nothing yet
+    let back = s.client("alice").back_pointers();
+    let body = s
+        .client("bob")
+        .propose_adoption_in(
+            None,
+            kh("alice"),
+            &back,
+            Adopting {
+                evidence: Evidence::Presence(pop),
+                series: 1,
+                presented_head: None,
+                key_material: None,
+                carrying: None,
+            },
+        )
+        .expect("bob proposes under its own key");
+    let r = rhtn_codec::cbor::value_slice(&body, 3).expect("a locator");
+    let loc = Locator::decode(&body[r]).expect("a locator");
+    assert_eq!((loc.anchor, loc.nibbles, loc.subnet), (kh("bob"), 1, None));
+    s.client("alice")
+        .review_and_sign_adoption(&body)
+        .expect("the address is the patron's to issue, under its own key");
+}

@@ -173,7 +173,19 @@ a path the suite holds, which is the right order for a bench.
    for a peer outlived the ceremony. Fixed the same day: the legs (kinds 9
    to 24) queued for an unreached peer go when the ceremony ends, by
    abandon or by a finalize of one's own; what the application queued
-   stays.
+   stays. **The reverse direction nodeless — DONE, `9613069-a2-nodeless-reverse-2`
+   (2026-10-24)**: GXV asked to be adopted, MRK chose a new subnet under
+   its own key, record `9cc48b95` witnessless with two signers, the adoption
+   `b2279f0e` proposed by MRK, checked and signed by GXV's kernel (series
+   2), held by both, the legs direct, and no stale queue flushed this time.
+   **Its first attempt (`…-reverse-1`) found a third thing, fixed the same
+   day**: the adopted side checked the body's address against the position
+   it held for the patron — MRK's place in GXV's own subnet from the pass
+   before — and refused a root under MRK's own key as not one hop below it.
+   A patron placed in somebody else's subnet may adopt under its own key
+   (`wire-format.md` §2.1, design §13.8), and the adopted now accepts that
+   form: one hop below the patron's own key, the subnet the patron's to
+   name. Still to run from the row: the simultaneous-opposite case.
 3. **Heading F's arrival spread** (A5) — **ready on the restructured
    machine** (2026-10-24): ranging is gone, the post-optical regime is one
    `WINDOW` step in which the capture's hold is turned tick by tick while

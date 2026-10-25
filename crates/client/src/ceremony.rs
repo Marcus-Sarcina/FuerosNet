@@ -3209,7 +3209,19 @@ impl Client {
         let theirs = rhtn_archive::locator::SignedLocator::parse(theirs)
             .map_err(Abort::Malformed)?
             .locator;
-        if loc.anchor != theirs.anchor || loc.nibbles != theirs.nibbles + 1 {
+        // **or one hop below the patron's own key** (`wire-format.md` §2.1,
+        // design §13.8): a patron that holds a position in somebody else's
+        // subnet may still root one under its own key — "which tree is the
+        // patron's to say" — and the locator this side holds for it is its
+        // position elsewhere, which says nothing against that. The subnet
+        // such an address names is the patron's own, which nobody but the
+        // patron can vouch for (design §1.1). On the bench the patron MRK,
+        // adopted under GXV an hour before, chose a new subnet under its own
+        // key and GXV refused the body against the position it held for MRK
+        // in GXV's own subnet (run 9613069-a2-nodeless-reverse-1,
+        // 2026-10-24).
+        let under_own_key = loc.anchor == patron && loc.nibbles == 1 && loc.path.len() == 1;
+        if !under_own_key && (loc.anchor != theirs.anchor || loc.nibbles != theirs.nibbles + 1) {
             return Err(refused(format!(
                 "the address is not one hop below the patron's own position in {}",
                 hex8(&theirs.anchor)
@@ -3219,7 +3231,7 @@ impl Client {
         // none where the patron is a lone root adopting for the first
         // time, this record's own txid being the id (`wire-format.md`
         // §2.3, §4.1; design §13.8)
-        if loc.subnet != theirs.subnet {
+        if !under_own_key && loc.subnet != theirs.subnet {
             return Err(refused(match theirs.subnet {
                 Some(s) => format!(
                     "the address is in a subnet other than the patron's, {}",
@@ -3238,7 +3250,7 @@ impl Client {
                 byte & 0x0f
             })
         };
-        for i in 0..theirs.nibbles {
+        for i in 0..(if under_own_key { 0 } else { theirs.nibbles }) {
             if nibble(&loc.path, i) != nibble(&theirs.path, i) {
                 return Err(refused(
                     "the address does not extend the patron's own path".into(),
