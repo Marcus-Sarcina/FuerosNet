@@ -1708,6 +1708,46 @@ object Kernel {
         }, "fueros-forget").start()
     }
 
+    /**
+     * **The provider credentials, kept by the kernel** (`light-client-
+     * requirements.md` §10): one JSON document, providers by name, which
+     * the backup carries under the identity. Read and written whole; the
+     * kernel keeps the bytes and reads none of them.
+     */
+    fun providerCredentials(): Map<String, String> {
+        val p = participant ?: return emptyMap()
+        val bytes = call("provider_credentials", { null }) { p.providerCredentials() } ?: return emptyMap()
+        return runCatching {
+            Json.obj(Json.parse(String(bytes))).mapNotNull { (k, v) -> Json.string(v)?.let { k to it } }.toMap()
+        }.getOrDefault(emptyMap())
+    }
+
+    fun holdProviderCredential(provider: String, credential: String): String? {
+        val p = participant ?: return "the kernel is not running"
+        val all = providerCredentials().toMutableMap()
+        if (credential.isBlank()) all.remove(provider) else all[provider] = credential
+        val doc = "{" + all.entries.joinToString(",") { (k, v) -> "${Json.quote(k)}:${Json.quote(v)}" } + "}"
+        return call("hold_provider_credentials", { e -> e.reason }) {
+            p.holdProviderCredentials(if (all.isEmpty()) ByteArray(0) else doc.toByteArray())
+            null
+        }
+    }
+
+    /** How crowded a provider already is inside this operator's own
+     *  horizon (PRD-11): the count, and whether it is marked. */
+    fun crowded(asn: Long): Pair<Int, Boolean> {
+        val p = participant ?: return 0 to false
+        val rows = call("providers_by_concentration", { emptyList() }) {
+            p.providersByConcentration(listOf(asn.toULong()))
+        }
+        val row = rows.firstOrNull() ?: return 0 to false
+        return row.nodes.toInt() to row.crowded
+    }
+
+    /** This device's public key material, hex: what an instance is told
+     *  to speak as. */
+    fun materialHex(): String? = participant?.material()?.joinToString("") { "%02x".format(it) }
+
     fun forgetCaptures(hexKey: String) {
         val p = participant ?: run { front.note("· no kernel yet"); return }
         val who = runCatching { unhex(hexKey) }.getOrNull() ?: run { front.note("· not a key: $hexKey"); return }

@@ -2216,6 +2216,30 @@ impl Participant {
         })
     }
 
+    /// **The provider credentials this operator holds**, opaque to the
+    /// kernel (`light-client-requirements.md` §2, §10): what a launch flow
+    /// speaks to a hosting provider with, carried in the backup under the
+    /// identity (design §13.7.1, ARC-28) and never in the archive.  The
+    /// shell decides the bytes' shape; the kernel keeps and carries them.
+    #[must_use]
+    pub fn provider_credentials(&self) -> Option<Vec<u8>> {
+        crate::diag::call_plain("provider_credentials", || {
+            self.handle.with_blocking(|c| c.provider_credential.clone())
+        })
+    }
+
+    /// Hold `bytes` as the provider credentials from now on, or none where
+    /// empty; written at once, since what a device loss would take away
+    /// is exactly this.
+    pub fn hold_provider_credentials(&self, bytes: Vec<u8>) -> Result<(), Refused> {
+        crate::diag::call("hold_provider_credentials", || {
+            self.handle.with_blocking(move |c| {
+                c.provider_credential = if bytes.is_empty() { None } else { Some(bytes) };
+            });
+            self.save()
+        })
+    }
+
     /// **Forget every sealed capture held of `subject`**: how many went.
     /// The bench's act, over adb, for the verifier that is asked about a
     /// party it holds nothing on (VER-008's unavailable answer, its own

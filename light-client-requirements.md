@@ -1191,6 +1191,24 @@ on the wire.
 - **Show each instance under the subnet's label** (§4.4, §7), since an
   operator with two instances needs to know which is which by something other
   than an address.
+- **Launch an instance from this client, at a provider the operator
+  chose, with a credential the operator holds** [author, 2026-10-25].
+  The provisioning pages (`infra-client-requirements.md` §8.3) are where
+  an instance comes from as well as where it is enrolled: the client mints
+  the enrolment token, composes the configuration the instance cannot
+  supply for itself, hands both to a fresh machine at the provider as the
+  script it runs once, and enrols it at the address that comes back. **No
+  broker stands between the client and the provider**: the client speaks
+  to the provider's own interface with a credential the operator obtained
+  there, and that credential is identity state — carried in design
+  §13.7.1's envelope under the identity, beside the archive it protects,
+  and never in the archive (§2) — so a replacement device launches as the
+  same operator. The operator's recourse for a credential that leaked is
+  the provider's own console, where it is cancelled; this client offers no
+  other. **The image is pulled from the reference registry unless the
+  operator names another**, which is how a custom or third-party node is
+  launched by the same pages. Order the providers and zones offered as §6
+  says, by concentration inside this operator's own horizon.
 - **Renew a run before it lapses, from where it ends** [author,
   2026-10-16]. An instance holds 45 credentials of 48 hours and signs none
   of them: it tells its operator before the last one

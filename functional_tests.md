@@ -726,6 +726,7 @@ The Cargo workspace has **16 crates**. Components below follow responsibilities 
 | OPS-017 | P | Run both repair paths W §10.1.3 names: the replay on a new adjacency, and the periodic replay to siblings and the patron. The interval is an operator parameter with a stated default and bound, and a setting that turns it off is a policy choice rather than a refusal. Neither path is a mechanism beyond propagation: the same frames, suppressed as duplicates where already held. | W §§10.1.2–10.1.3; D §21.1 |
 | OPS-018 | C | The retention scan runs on import and not over live data, covering device migration and manual copies as well as restore. A capture expires on its subject's declared window rather than its holder's; records, disclosure sets, the archive and the identity survive it. What was discarded is reported rather than swallowed. | D §§13.7.1, 7.5.1; L §2 |
 | OPS-019 | C | **Identity key material enters as bytes, and a seed phrase is a severable feature above the kernel** [author, 2026-10-17]. A new identity is made as it always was; a second signing device holds it because its holder put the material there, never because a device sent it (D §23.3). Nothing below the application knows how a person kept it: the material is handed in at start or read from a file, and **a seed phrase, where one is offered, only encodes those same bytes as words and reads them back** — no kernel surface, no protocol surface, no change to the cryptosystem, and a client offering none is conforming. Test: a client starts from material supplied as a file and reproduces every key of the identity, the hybrid pair's both halves among them, and the capture keys it derives (D §7.5.2.6, §5.1); **with the phrase feature removed the client still starts and still signs**, which is what makes it a feature rather than part of the identity; a fresh device given the material holds no archive, which is D §10.2's key-only position — standing in the subnets that key is current in, nothing portable to a new one, and the archive from the user's own backup or not at all; where a phrase is offered it is shown when the identity is made and a screen asking for it again refuses. | D §§23.3, 10.2, 5.1, 7.5.2.6; L §§2, 6, 9 |
+| OPS-020 | C | **An instance is launched from the client at a provider the operator chose, with the operator's own provider credential and no broker** [author, 2026-10-25]. The client mints the enrolment token, composes the instance's configuration and the once-run script that installs the engine, pulls the image from the reference registry or the one the operator named, and starts the node; it waits for the machine's public IPv4 and then enrols at it with the proof checked as for any instance. The provider credential is kept by the kernel as identity state and carried in the backup envelope under the identity, never in the archive; the seed is in none of what the provider receives. Test: the composed script carries the token and the operator's public material and no seed; a launch posts the plan and reads the machine's id; the public address is read once the machine is active; a provider's refusal arrives with its own words. | L §§2, 6, 10; I §§8.2, 8.3; D §§13.7.1, 23.3 |
 
 ### CLI, participant instrument and test-support integration
 
@@ -1006,7 +1007,7 @@ Open local parameters are not all specification defects: cache TTLs, queue cap, 
 
 ## 10. Document baseline and coverage totals
 
-This specification contains **532 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
+This specification contains **533 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
 
 | Prefix | Families |
 |---|---:|
@@ -1031,7 +1032,7 @@ This specification contains **532 numbered requirement/test families** across **
 | PKG | 14 |
 | APP | 14 |
 | UX | 19 |
-| OPS | 19 |
+| OPS | 20 |
 | TOOL | 7 |
 | SCH | 27 |
 | INT | 24 |

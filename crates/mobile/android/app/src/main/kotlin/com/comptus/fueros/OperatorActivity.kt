@@ -50,7 +50,15 @@ class OperatorActivity : Activity() {
      * instance in each, and nothing here infers an instance from a
      * position.
      */
-    data class Instance(val at: String, val subnet: String?, val label: String)
+    data class Instance(
+        val at: String,
+        val subnet: String?,
+        val label: String,
+        /** The provider it was launched at and its id there, where this
+         *  client launched it (H1); blank where it was enrolled by hand. */
+        val provider: String = "",
+        val remoteId: String = "",
+    )
 
     /**
      * **The token this screen was given for an instance**, kept so a
@@ -74,20 +82,28 @@ class OperatorActivity : Activity() {
             .filter { it.isNotBlank() }
             .map { line ->
                 val parts = line.split('\t')
-                Instance(parts[0], parts.getOrNull(1)?.ifEmpty { null }, parts.getOrElse(2) { parts[0] })
+                Instance(
+                    parts[0],
+                    parts.getOrNull(1)?.ifEmpty { null },
+                    parts.getOrElse(2) { parts[0] },
+                    parts.getOrElse(3) { "" },
+                    parts.getOrElse(4) { "" },
+                )
             }
+
+    private fun line(it: Instance) = "${it.at}\t${it.subnet ?: ""}\t${it.label}\t${it.provider}\t${it.remoteId}"
 
     private fun remember(i: Instance) {
         val kept = instances().filter { it.at != i.at } + i
         getSharedPreferences("operator", MODE_PRIVATE).edit()
-            .putString("instances", kept.joinToString("\n") { "${it.at}\t${it.subnet ?: ""}\t${it.label}" })
+            .putString("instances", kept.joinToString("\n") { line(it) })
             .apply()
     }
 
     private fun forget(at: String) {
         val kept = instances().filter { it.at != at }
         getSharedPreferences("operator", MODE_PRIVATE).edit()
-            .putString("instances", kept.joinToString("\n") { "${it.at}\t${it.subnet ?: ""}\t${it.label}" })
+            .putString("instances", kept.joinToString("\n") { line(it) })
             .apply()
     }
 
@@ -166,6 +182,15 @@ class OperatorActivity : Activity() {
                     }
                 },
             )
+            // the machine itself, where this client launched it (H1)
+            if (i.remoteId.isNotEmpty()) {
+                roll.addView(
+                    Button(this).apply {
+                        text = "Destroy the machine at ${i.provider}"
+                        setOnClickListener { destroy(i) }
+                    },
+                )
+            }
         }
     }
 
@@ -327,7 +352,17 @@ class OperatorActivity : Activity() {
                     textSize = 12f
                     typeface = Typeface.DEFAULT_BOLD
                     setTextColor(Color.GRAY)
-                    text = "Enrol another"
+                    text = "Launch one at a provider"
+                },
+            )
+            addView(launchSection(credentials, subtree, at, token, endpoint))
+            addView(
+                TextView(this@OperatorActivity).apply {
+                    setPadding(0, 32, 0, 8)
+                    textSize = 12f
+                    typeface = Typeface.DEFAULT_BOLD
+                    setTextColor(Color.GRAY)
+                    text = "Enrol one by hand"
                 },
             )
             listOf(at, token, credentials, endpoint, subtree).forEach { addView(it) }
@@ -346,6 +381,188 @@ class OperatorActivity : Activity() {
             addView(narration)
         }
         setContentView(ScrollView(this).apply { addView(body) })
+    }
+
+    /**
+     * **H1, the launch** (`Launch`; `light-client-requirements.md` §10): a
+     * provider and the credential the operator holds there, a region and a
+     * size, then one button that launches the machine, waits for its
+     * address and its surface, and runs the enrolment above with the
+     * token this client minted. Each step is narrated as the enrolment's
+     * are, and a step that fails stops the rest — a machine left running
+     * with no run signed is said so, with its id, so it can be destroyed.
+     */
+    private fun launchSection(
+        credentials: EditText,
+        subtree: EditText,
+        atField: EditText,
+        tokenField: EditText,
+        endpointField: EditText,
+    ): LinearLayout {
+        val provider = Launch.providers().first()
+        val held = Kernel.providerCredentials()[provider.name.lowercase()] ?: ""
+        val credential = field("${provider.name} API token", held)
+        val registry = field("registry to pull the node image from", Launch.REGISTRY_DEFAULT)
+        val tag = field("image tag", Launch.TAG_DEFAULT)
+        val regions = android.widget.Spinner(this)
+        val sizes = android.widget.Spinner(this)
+        var regionRows: List<Launch.Region> = listOf()
+        var sizeRows: List<Launch.Size> = listOf()
+        val (crowdedCount, crowded) = Kernel.crowded(provider.asn)
+        val about = TextView(this).apply {
+            textSize = 13f
+            setTextColor(Color.GRAY)
+            text = "${provider.name} (AS${provider.asn}): " +
+                (if (crowded) "$crowdedCount of the parties in your horizon already run there — crowded, and still yours to choose. " else "nobody in your horizon runs there. ") +
+                "That speaks to your own redundancy, not the network's."
+        }
+        val fetch = Button(this).apply {
+            text = "Fetch regions and sizes"
+            setOnClickListener {
+                val cred = credential.text.toString().trim()
+                if (cred.isEmpty()) { narration.text = "paste the ${provider.name} API token first"; return@setOnClickListener }
+                isEnabled = false
+                narration.text = "asking ${provider.name}…"
+                Thread {
+                    val r = provider.regions(cred)
+                    val s = provider.sizes(cred)
+                    runOnUiThread {
+                        isEnabled = true
+                        if (r.isFailure || s.isFailure) {
+                            narration.text = (r.exceptionOrNull() ?: s.exceptionOrNull())?.message ?: "refused"
+                            return@runOnUiThread
+                        }
+                        regionRows = r.getOrThrow().filter { it.available }
+                        sizeRows = s.getOrThrow().sortedBy { it.monthly }
+                        regions.adapter = android.widget.ArrayAdapter(
+                            this@OperatorActivity,
+                            android.R.layout.simple_spinner_dropdown_item,
+                            regionRows.map { "${it.slug}  ${it.name}" },
+                        )
+                        sizes.adapter = android.widget.ArrayAdapter(
+                            this@OperatorActivity,
+                            android.R.layout.simple_spinner_dropdown_item,
+                            sizeRows.map { "${it.slug}  ${it.memoryMb} MB, ${it.vcpus} vcpu, \$${it.monthly}/month" },
+                        )
+                        // the credential is kept once it has worked, and
+                        // travels in the backup from here
+                        Kernel.holdProviderCredential(provider.name.lowercase(), cred)?.let { narration.text = it }
+                            ?: run { narration.text = "${regionRows.size} regions, ${sizeRows.size} sizes" }
+                    }
+                }.start()
+            }
+        }
+        val go = Button(this).apply {
+            text = "Launch, wait for it, then enrol"
+            setOnClickListener {
+                val cred = credential.text.toString().trim()
+                val region = regionRows.getOrNull(regions.selectedItemPosition)
+                val size = sizeRows.getOrNull(sizes.selectedItemPosition)
+                if (cred.isEmpty() || region == null || size == null) {
+                    narration.text = "fetch the regions and sizes first, and pick one of each"
+                    return@setOnClickListener
+                }
+                val scopes = Kernel.scopes()
+                if (scopes.size > 1 && chosen == null) {
+                    narration.text = "choose which subnet the instance serves first"
+                    return@setOnClickListener
+                }
+                val material = Kernel.materialHex() ?: run { narration.text = "the kernel is not running"; return@setOnClickListener }
+                isEnabled = false
+                val plan = Launch.Plan(region.slug, size.slug, registry = registry.text.toString().trim(), tag = tag.text.toString().trim())
+                val minted = Launch.token()
+                val creds = credentials.text.toString().trim().toIntOrNull() ?: 7
+                val tree = subtree.text.toString().trim().toLongOrNull()
+                val subnet = chosen?.id?.takeIf { it.length == 64 }
+                val label = chosen?.label() ?: "an instance (subnet not named)"
+                Thread {
+                    val said = mutableListOf<String>()
+                    fun show() = runOnUiThread { narration.text = said.joinToString("\n") }
+                    val launched = provider.launch(cred, plan, "rhtn-${minted.take(8)}", Launch.userData(material, minted, plan.registry, plan.tag))
+                    val id = launched.getOrElse {
+                        said += "launch refused: ${it.message}"; show(); runOnUiThread { isEnabled = true }; return@Thread
+                    }.id
+                    said += "${provider.name} created machine $id in ${region.slug}; waiting for its address"; show()
+                    var ip: String? = null
+                    val deadline = System.currentTimeMillis() + 5 * 60_000
+                    while (ip == null && System.currentTimeMillis() < deadline) {
+                        Thread.sleep(5_000)
+                        val st = provider.standing(cred, id).getOrNull() ?: continue
+                        if (st.status == "active" && st.ipv4 != null) ip = st.ipv4
+                    }
+                    if (ip == null) {
+                        said += "no address within five minutes; the machine $id is running at ${provider.name} and can be destroyed from the list"
+                        remember(Instance("", subnet, "$label — launching, no address", provider.name.lowercase(), id))
+                        show(); runOnUiThread { isEnabled = true; drawInstances() }; return@Thread
+                    }
+                    val surface = "$ip:${Launch.ADMIN_PORT}"
+                    said += "address $ip; waiting for the instance to install, pull the image and open its surface"; show()
+                    val up = System.currentTimeMillis() + 8 * 60_000
+                    var answered = false
+                    while (!answered && System.currentTimeMillis() < up) {
+                        Thread.sleep(10_000)
+                        answered = Provision.fetch(surface).isSuccess
+                    }
+                    if (!answered) {
+                        said += "the surface at $surface did not answer within eight minutes; the machine is running and can be enrolled by hand or destroyed"
+                        remember(Instance(surface, subnet, "$label — launched, not enrolled", provider.name.lowercase(), id))
+                        rememberToken(surface, minted)
+                        show(); runOnUiThread { isEnabled = true; drawInstances() }; return@Thread
+                    }
+                    said += "its surface answers; enrolling"; show()
+                    said += Kernel.enrol(surface, minted, creds, "$ip:${Launch.QUIC_PORT}", tree, subnet)
+                    val took = said.any { it.startsWith("credential") }
+                    runOnUiThread {
+                        narration.text = said.joinToString("\n")
+                        isEnabled = true
+                        if (took) {
+                            remember(Instance(surface, subnet, label, provider.name.lowercase(), id))
+                            rememberToken(surface, minted)
+                            atField.setText(surface)
+                            tokenField.setText(minted)
+                            endpointField.setText("$ip:${Launch.QUIC_PORT}")
+                            pageAt = surface
+                            open.isEnabled = true
+                            drawInstances()
+                        }
+                    }
+                }.start()
+            }
+        }
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(about)
+            addView(credential)
+            addView(fetch)
+            addView(TextView(this@OperatorActivity).apply { textSize = 12f; setTextColor(Color.GRAY); text = "Region" })
+            addView(regions)
+            addView(TextView(this@OperatorActivity).apply { textSize = 12f; setTextColor(Color.GRAY); text = "Size" })
+            addView(sizes)
+            addView(registry)
+            addView(tag)
+            addView(go)
+        }
+    }
+
+    /**
+     * **Destroy a machine this client launched**, at the provider, with
+     * the credential held there: the one lifecycle act beyond enrol and
+     * renew that H1 gives an operator, and only for what H1 launched.
+     */
+    private fun destroy(i: Instance) {
+        val provider = Launch.providers().firstOrNull { it.name.lowercase() == i.provider } ?: return
+        val cred = Kernel.providerCredentials()[i.provider] ?: run {
+            narration.text = "no ${provider.name} credential is held; paste it above first"
+            return
+        }
+        narration.text = "destroying machine ${i.remoteId} at ${provider.name}…"
+        Thread {
+            val r = provider.destroy(cred, i.remoteId)
+            runOnUiThread {
+                narration.text = r.fold({ "destroyed machine ${i.remoteId}" }, { "destroy refused: ${it.message}" })
+                if (r.isSuccess) { forget(i.at); drawInstances() }
+            }
+        }.start()
     }
 
     /** What the screen was asked to do, so the thread carries no views. */
