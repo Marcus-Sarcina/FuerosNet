@@ -55,8 +55,8 @@ gate:
 # container registry enabled (it is), and the image pullable without
 # credentials — which is the project's visibility, since the registry's
 # follows it.  `$CI_REGISTRY_IMAGE` is the registry host and project path
-# GitLab supplies; the default the client pulls from (`Launch.REGISTRY_DEFAULT`)
-# must name the same host and path.
+# GitLab supplies — ggcr.io/mzuech/fuerosnet on this host (2026-10-25) — and
+# the default the client pulls from (`Launch.REGISTRY_DEFAULT`) names the same.
 image-publish:
   stage: deploy
   needs: [gate]

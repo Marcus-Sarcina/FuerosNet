@@ -24,5 +24,6 @@ pub mod diag;
 pub mod enrol;
 pub mod inspect;
 pub mod keys;
+pub mod launch;
 pub mod live;
 pub mod probe;

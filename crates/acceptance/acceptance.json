@@ -7255,6 +7255,34 @@
     "interpretation": "The reference engine compares byte-equal hashes and recognises nobody (design §22.2 leaves the engine open), so the match observed attests the grant's key release and the carried legs, not recognition. Carriage between processes is the instrument's, as PRT-04 reads it."
   },
   {
+    "id": "PRT-08",
+    "area": "participant",
+    "gap": "participant",
+    "title": "Launch an instance at a provider from the client, and enrol it with a token minted there",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "light-client-requirements.md §10",
+      "infra-client-requirements.md §8.3",
+      "design §13.7.1"
+    ],
+    "rule": [
+      {
+        "where": "light-client-requirements.md §10",
+        "text": "composes the configuration the instance cannot"
+      },
+      {
+        "where": "infra-client-requirements.md §8.3",
+        "text": "**A client ships the provisioning pages and no others.**"
+      }
+    ],
+    "given": "An operator's identity, a provider credential, and a plan naming a region, a size and the node image.",
+    "when": "The client mints the enrolment token, composes the instance's configuration and the once-run script, launches the machine, reads its public address once it is active, and the provider refuses a credential it does not know.",
+    "then": "The configuration carries the token and listens on the node's and the surface's ports; the script installs the engine, writes the configuration and the operator's public material, hands the state directory to the image's uid and runs the image from the registry named, and carries no seed. The launch posts the region, the size, the machine image and the script under the credential, reads the machine's id back, and the standing reads the public IPv4 once the status is active. A refusal arrives with the provider's status and its own words.",
+    "oracle": "behaviour",
+    "interpretation": "What local.sh does on one machine, done at a provider over a transport the platform supplies; the enrolment that follows is the one PRT-04's by-hand path already exercises, the token and the address having come from here rather than been typed."
+  },
+  {
     "id": "QUE-01",
     "area": "queue",
     "gap": "queue",

@@ -46,7 +46,7 @@ object Launch {
     /** **Where the image is pulled from by default**, and the advanced
      *  option is to name another for a custom or third-party node
      *  [author, 2026-10-25]. */
-    const val REGISTRY_DEFAULT = "registry.gitgud.io/mzuech/fuerosnet"
+    const val REGISTRY_DEFAULT = "ggcr.io/mzuech/fuerosnet"
     const val IMAGE = "rhtnd"
     const val TAG_DEFAULT = "latest"
 

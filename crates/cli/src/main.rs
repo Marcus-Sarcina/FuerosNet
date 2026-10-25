@@ -1,6 +1,6 @@
 //! The command line's entry point.
 
-use rhtn_cli::{diag, enrol, inspect, keys, live, probe};
+use rhtn_cli::{diag, enrol, inspect, keys, launch, live, probe};
 use rhtn_codec::frame::Stream;
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -21,6 +21,17 @@ usage: rhtn <command> [...]
         Print the test identity test-vectors/keys.md derives for <name>.
         These are not secret.
 
+  node launch <identity> --provider <name> --credential-file <file>
+        --region <slug> --size <slug> [--registry <host/path>] [--tag <tag>]
+        [--credentials <n>] [--anchor <size>] [--name <machine name>]
+        Launch an instance at a hosting provider with the credential the
+        file holds, wait for its address and its surface, then enrol it
+        with a token minted here (L §10, OPS-020). The provider is one of:
+        digitalocean.
+  node offers --provider <name> --credential-file <file>
+        List the provider's regions and sizes.
+  node destroy --provider <name> --credential-file <file> --id <machine id>
+        Destroy a machine launched this way, at the provider.
   node enrol <identity> <host:port> --token <64 hex> [...]
   node renew <identity> <host:port> --token <64 hex> [--credentials <n>]
         Sign the next run for an instance already enrolled, opening where
@@ -169,12 +180,18 @@ fn do_keys(rest: &[&str]) -> Result<String, String> {
 /// `node enrol`: the operator's side of an instance's administration
 /// surface ([`enrol`]).
 fn do_node(rest: &[&str]) -> Result<String, String> {
+    match rest.first().copied() {
+        Some("launch") => return do_launch(&rest[1..]),
+        Some("offers") => return do_offers(&rest[1..]),
+        Some("destroy") => return do_destroy(&rest[1..]),
+        _ => {}
+    }
     let [sub, identity, at, opts @ ..] = rest else {
         return Err("node enrol|renew <identity> <host:port> --token <64 hex> [...]".into());
     };
     if *sub != "enrol" && *sub != "renew" {
         return Err(format!(
-            "`node {sub}` is not a command; there are `node enrol` and `node renew`"
+            "`node {sub}` is not a command; there are `node launch`, `node offers`, `node destroy`, `node enrol` and `node renew`"
         ));
     }
     let (mut token, mut credentials, mut endpoint, mut subtree) = (None, 7usize, None, None);
@@ -225,6 +242,112 @@ fn do_node(rest: &[&str]) -> Result<String, String> {
         return enrol::renew(&me, &ask);
     }
     enrol::enrol(&me, &ask)
+}
+
+/// The `--name value` options of the launch commands, as a map.
+fn options(
+    opts: &[&str],
+    allowed: &[&str],
+) -> Result<std::collections::BTreeMap<String, String>, String> {
+    let mut out = std::collections::BTreeMap::new();
+    let mut i = 0;
+    while i < opts.len() {
+        let key = opts[i]
+            .strip_prefix("--")
+            .ok_or_else(|| format!("{} is not an option", opts[i]))?;
+        if !allowed.contains(&key) {
+            return Err(format!("--{key} is not an option here"));
+        }
+        let value = opts
+            .get(i + 1)
+            .ok_or_else(|| format!("--{key} takes a value"))?;
+        out.insert(key.to_string(), value.to_string());
+        i += 2;
+    }
+    Ok(out)
+}
+
+/// `node launch <identity> --provider --credential-file --region --size [...]`.
+fn do_launch(rest: &[&str]) -> Result<String, String> {
+    let [identity, opts @ ..] = rest else {
+        return Err("node launch <identity> --provider <name> --credential-file <file> --region <slug> --size <slug> [...]".into());
+    };
+    let o = options(
+        opts,
+        &[
+            "provider",
+            "credential-file",
+            "region",
+            "size",
+            "registry",
+            "tag",
+            "credentials",
+            "anchor",
+            "name",
+        ],
+    )?;
+    let need = |k: &str| {
+        o.get(k)
+            .cloned()
+            .ok_or_else(|| format!("--{k} is required"))
+    };
+    let me = read_identity(identity)?;
+    let credentials: usize = o
+        .get("credentials")
+        .map(|c| {
+            c.parse()
+                .map_err(|_| "--credentials takes a count".to_string())
+        })
+        .transpose()?
+        .unwrap_or(7);
+    let subtree = o
+        .get("anchor")
+        .map(|a| {
+            a.parse::<u64>()
+                .map_err(|_| "--anchor takes a subtree size".to_string())
+        })
+        .transpose()?;
+    let ask = launch::Ask {
+        provider: need("provider")?,
+        credential: launch::credential_from(&need("credential-file")?)?,
+        plan: launch::plan(
+            &need("region")?,
+            &need("size")?,
+            o.get("registry").map(String::as_str),
+            o.get("tag").map(String::as_str),
+        ),
+        name: o.get("name").cloned(),
+        credentials,
+        subtree,
+    };
+    launch::launch(&me, &ask)
+}
+
+fn do_offers(opts: &[&str]) -> Result<String, String> {
+    let o = options(opts, &["provider", "credential-file"])?;
+    let need = |k: &str| {
+        o.get(k)
+            .cloned()
+            .ok_or_else(|| format!("--{k} is required"))
+    };
+    launch::offers(
+        &need("provider")?,
+        &launch::credential_from(&need("credential-file")?)?,
+    )
+}
+
+fn do_destroy(opts: &[&str]) -> Result<String, String> {
+    let o = options(opts, &["provider", "credential-file", "id"])?;
+    let need = |k: &str| {
+        o.get(k)
+            .cloned()
+            .ok_or_else(|| format!("--{k} is required"))
+    };
+    launch::destroy(
+        &need("provider")?,
+        &launch::credential_from(&need("credential-file")?)?,
+        &need("id")?,
+    )
 }
 
 fn do_probe(rest: &[&str]) -> Result<String, String> {
