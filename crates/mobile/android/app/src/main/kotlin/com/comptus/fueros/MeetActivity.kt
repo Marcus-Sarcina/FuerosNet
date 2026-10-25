@@ -991,6 +991,26 @@ class MeetActivity : Activity() {
         m.witnesses().filter { it.answer == Meet.Answer.ATTESTS }.forEach { n ->
             para("• ${n.key.take(16)}…  witness, nominated by ${if (n.mine) "you" else m.counterpartyName}")
         }
+        // **the verifiers' answers are in the body too** (`wire-format.md`
+        // §4.5 field 5), and a person signing it is owed sight of them; the
+        // first verified record on the bench was signed from a screen that
+        // named none (run 8bc1291-b1-node-1, 2026-10-25)
+        val chosen = m.chosen()
+        val mine = m.queriesAboutMe()
+        if (chosen.isNotEmpty() || mine.isNotEmpty()) {
+            heading("Verifiers")
+            chosen.forEach { c ->
+                val answer = when (c.verdict) {
+                    null -> "no answer; absent from the record"
+                    Meet.Verdict.MATCH -> "answered: a match"
+                    Meet.Verdict.NO_MATCH -> "answered: no match"
+                    Meet.Verdict.INCONCLUSIVE -> "answered: inconclusive"
+                    Meet.Verdict.UNAVAILABLE -> "unavailable; silence counts for nothing either way"
+                }
+                para("• ${c.key.take(16)}…  asked about ${m.counterpartyName}, ${basisWords(c.basis)}; $answer")
+            }
+            mine.forEach { para("• $it…  asked about you by ${m.counterpartyName}; its answer is ${m.counterpartyName}'s to see") }
+        }
         heading("Signatures")
         if (proposer && p != null) {
             para("${p.signed.size} of the signers have signed so far, this device among them. The record is finalized here when every one has, and goes to each of them.")

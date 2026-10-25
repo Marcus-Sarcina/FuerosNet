@@ -2042,7 +2042,17 @@ impl Client {
             (
                 a.peer()?,
                 a.ceremony_id.ok_or(Abort::NoCeremonyId)?,
-                a.template.clone().ok_or(Abort::NotActive)?,
+                // **the capture has not yielded a template yet**: the
+                // queries carry the counterparty's fuzzed profile, which
+                // comes from this side's frames of them, and the hold runs
+                // beside the conversation on its own clock. Said as a wait,
+                // not as no ceremony: a caller that put the queries the
+                // moment the keep arrived met NotActive and abandoned a live
+                // ceremony with a verifier selected (run 8bc1291-b1-node-1,
+                // GXV, 2026-10-25)
+                a.template.clone().ok_or(Abort::Waiting(
+                    "a template of the counterparty from the capture",
+                ))?,
             )
         };
         let profile = self.device.engine.profile(&template);

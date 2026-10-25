@@ -1067,7 +1067,12 @@ object Kernel {
             // nothing more is met over this bearer: stop offering, so a
             // later scanner in the room does not find this phone first
             ble?.quiet()
-            Meet.Turn.Finalized(hex(c.txid))
+            // who the record says witnessed it, from the signed body
+            val named: List<List<ByteArray>> = participant?.recordWitnesses(c.txid) ?: listOf()
+            val witnesses: List<String> = named.mapNotNull { pair: List<ByteArray> ->
+                pair.firstOrNull()?.let { key: ByteArray -> hex(key) }
+            }
+            Meet.Turn.Finalized(hex(c.txid), witnesses)
         }
         is Conversation.Reviewed ->
             c.refused?.let { Meet.Turn.BodyRefused(it.code.toInt(), it.why) } ?: Meet.Turn.Other

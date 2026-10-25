@@ -61,6 +61,32 @@ out of what those identities accumulate — and it has dissolved rather
 than been resolved. All four phones keep their state indefinitely, and the
 nodeless rows can be interleaved with B instead of competing with it.
 
+**B1 with a node, first verified record — done 2026-10-25, run
+`8bc1291-b1-node-1`, record `1d78338e` (GXV–ZU8, three signers).** The
+pairing that produced it: ZU8 had met MRK and 4VC that day (the TCLs'
+stores held no records from before — 48 KB of state against 20 MB on
+the S21s — so each earlier meeting had to be remade), and GXV had met
+MRK. GXV's selection: `n 2, pool 2, required 1, selected 1, basis met`
+— MRK for ZU8. The query waited seven seconds on the capture's template
+(the fix below), went to ZU8 for consent over the relay, ZU8 consented,
+its grant reached MRK **before** the query and was buffered (VER-011,
+`ver.grant outcome=buffered`), the query followed and MRK answered
+**Match** from the capture it had sealed of ZU8 four hours earlier
+(`ver.query.answered verdict=Match`); GXV took the response
+(`cer.response verdict=Match`) and proposed a body with one witness and
+one response. ZU8 required none (`n 1`). **What the run found on the
+way**, each fixed and committed the same day: the Bluetooth client gave
+up after one failed dial (status 133); the detector took four to eight
+seconds a frame on the TCLs (canvas 640 for every frame, four rotations
+for an empty one) and then, at 320, lost marginal faces at the 0.9
+floor (0.8 now, measured); the queries were put before the hold had a
+template and the kernel called that *NotActive*; the sign screen named
+no verifier though the body carried the answer, the Done screen said
+nobody witnessed though a witness signed, and the *no witness* line
+latched from a snapshot seven milliseconds before one attested. The
+screen faults are fixed from the record's own body. **Owed**: the rows
+below, one at a time, on the pairs that now share a party.
+
 With A having met B earlier, B meets C and A is selected:
 
 - the same-face test the author ruled on 2026-10-06: A asked about B → **match**; A asked about a party it never met → **unavailable**, its own held evidence refuting the basis (VER-008)

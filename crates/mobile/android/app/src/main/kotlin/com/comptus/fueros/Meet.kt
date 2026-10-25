@@ -453,8 +453,8 @@ class Meet(
         /** A signer refused the body this device proposed. */
         data class SignerRefused(val signer: String, val code: Int, val why: String) : Turn()
 
-        /** The record is finalized and held. */
-        data class Finalized(val txid: String) : Turn()
+        /** The record is finalized and held, naming these witnesses. */
+        data class Finalized(val txid: String, val witnesses: List<String> = listOf()) : Turn()
 
         /** Everything else: consent, witness answers, back-pointers, a
          *  stranger's message refused. */
@@ -479,6 +479,10 @@ class Meet(
     private var familiarOffered = false
     private val log = mutableListOf<String>()
     private var recordTxid: String? = null
+    /** The witnesses the finalized record names, from its signed body:
+     *  what the Done screen reads, since the conversation's last progress
+     *  snapshot can predate the witness's signature (bench, 2026-10-25). */
+    private var recordWitnesses: List<String>? = null
     private var stopReason: String? = null
     private var chosen: List<Chosen> = listOf()
     private var selectionRun = false
@@ -641,6 +645,10 @@ class Meet(
      * is a valid record saying so permanently (there is no floor).
      */
     fun attested(): List<Nominee> = synchronized(lock) {
+        // the record's own word once it is held; the snapshot before
+        recordWitnesses?.let { named ->
+            return@synchronized named.map { k -> Nominee(k, k in nomineesMine, Answer.ATTESTS) }
+        }
         val signed = progress?.signed.orEmpty().toSet()
         witnessesLocked().filter { it.answer == Answer.ATTESTS && it.key in signed }
     }
@@ -1148,7 +1156,21 @@ class Meet(
             synchronized(lock) { windowOpen = true }
         }
         note("the nominees are asked to witness; back-pointers sent.")
-        c.queries()?.let { return stop("the queries could not be put: $it") }
+        // **the queries wait on the capture's template** the same way the
+        // open waits on the keep: the hold yields it on its own clock, and
+        // a keep that arrived first put the queries before the template
+        // was there — refused as NotActive then, and the meeting ended with
+        // a verifier selected (run 8bc1291-b1-node-1, GXV, 2026-10-25).
+        // Bounded by the flow's patience, as the open is
+        val queriesDeadline = nowMs + patienceMs
+        var put = c.queries()
+        while (put != null && put.startsWith("Waiting(") &&
+            System.currentTimeMillis() < queriesDeadline
+        ) {
+            Thread.sleep(openRetryMs)
+            put = c.queries()
+        }
+        put?.let { return stop("the queries could not be put: $it") }
         note("the queries are with $counterpartyName for consent.")
         synchronized(lock) {
             entered = true
@@ -1230,10 +1252,6 @@ class Meet(
         // responder never had `noWitness` at all (A6, 2026-10-24).
         // Developer wording until the UX pass [author, 2026-10-24]: the
         // state, not a message.
-        if (p.noWitness) {
-            val fresh = synchronized(lock) { (!saidNoWitness).also { saidNoWitness = true; changed() } }
-            if (fresh) note("state: no witness attests this meeting — witnesses=0, formation=false; record field 4 absent, permanent.")
-        }
         if (p.proposed) {
             // the body is out, or has been shown and signed here
             moved(Step.WINDOW, Step.REVIEW)
@@ -1246,6 +1264,14 @@ class Meet(
             val fresh = synchronized(lock) { (said != "the capture").also { said = "the capture" } }
             if (fresh) note("not yet proposed: the capture's window is still open on this device.")
             return
+        }
+        // **said once the window has closed, not before**: a witness's
+        // answer can land during the window, and this line said *none*
+        // seven milliseconds before one attested, then stood for the rest
+        // of a meeting a witness signed (run 8bc1291-b1-node-1, 2026-10-25)
+        if (p.noWitness) {
+            val fresh = synchronized(lock) { (!saidNoWitness).also { saidNoWitness = true; changed() } }
+            if (fresh) note("state: no witness attests this meeting — witnesses=0, formation=false; record field 4 absent, permanent.")
         }
         if (p.queriesOutstanding > 0) {
             val why = synchronized(lock) {
@@ -1310,7 +1336,7 @@ class Meet(
     fun conversed(what: String, turn: Turn) {
         synchronized(lock) { arrived = true }
         when (turn) {
-            is Turn.Finalized -> finalized(turn.txid)
+            is Turn.Finalized -> finalized(turn.txid, turn.witnesses)
             is Turn.BodyRefused ->
                 stop("this device refused the body: ${turn.why} (refusal ${turn.code})")
             is Turn.SignerRefused ->
@@ -1324,11 +1350,12 @@ class Meet(
      * verifiers or the review, since the body and the record can land in
      * one tick; ignored once stopped, which is terminal.
      */
-    fun finalized(txid: String) {
+    fun finalized(txid: String, witnesses: List<String> = listOf()) {
         synchronized(lock) {
             if (step == Step.DONE || step == Step.STOPPED) return
             check(step == Step.WINDOW || step == Step.REVIEW) { "a record finalizes from the conversation, not $step" }
             recordTxid = txid
+            recordWitnesses = witnesses
             stepped(step, Step.DONE, "kernel")
             changed()
         }

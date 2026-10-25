@@ -258,6 +258,26 @@ impl Record {
         out
     }
 
+    /// The witnesses of a presence record (field 4), each with who
+    /// nominated it: empty where the record names none, which the signed
+    /// body says permanently (`wire-format.md` §4.5).
+    pub fn witnesses(&self) -> Vec<(Keyhash, Keyhash)> {
+        let m = self.body_map();
+        let body = &self.bytes[self.body.clone()];
+        let mut out = Vec::new();
+        if let Some(Item::Array(ws)) = map_get(&m, 4) {
+            for w in ws {
+                if let Item::Map(wm) = w
+                    && let Some(k) = map_get(wm, 1).and_then(|it| kh(body, it))
+                    && let Some(by) = map_get(wm, 2).and_then(|it| kh(body, it))
+                {
+                    out.push((k, by));
+                }
+            }
+        }
+        out
+    }
+
     /// The prior key a recovery adoption claims (field 6.1).
     pub fn prior_key(&self) -> Option<Keyhash> {
         if self.tx_type != TYPE_ADOPTION {

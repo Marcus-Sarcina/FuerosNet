@@ -1873,6 +1873,34 @@ impl Participant {
         })
     }
 
+    /// **The witnesses a held presence record names**, each as the pair
+    /// (witness, nominated by), read from the signed body: what a screen
+    /// says about who attested comes from the record and not from the
+    /// conversation's last snapshot, which on the bench was taken before
+    /// the witness signed and said nobody had (run 8bc1291-b1-node-1,
+    /// 2026-10-25).  Empty where the record is not held or names none.
+    #[must_use]
+    pub fn record_witnesses(&self, txid: Id) -> Vec<Vec<Id>> {
+        crate::diag::call_plain("record_witnesses", || {
+            let Some(t) = keyhash(&txid) else {
+                return Vec::new();
+            };
+            self.handle.with_blocking(move |c| {
+                c.store
+                    .records
+                    .get(&t)
+                    .and_then(|b| rhtn_archive::record::Record::parse(b).ok())
+                    .map(|r| {
+                        r.witnesses()
+                            .into_iter()
+                            .map(|(w, by)| vec![id_of(&w), id_of(&by)])
+                            .collect()
+                    })
+                    .unwrap_or_default()
+            })
+        })
+    }
+
     /// How many records the copy is a fold over.
     #[must_use]
     pub fn records(&self) -> u64 {
