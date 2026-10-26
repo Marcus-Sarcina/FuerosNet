@@ -359,7 +359,7 @@ class OperatorActivity : Activity() {
                     text = "Launch one at a provider"
                 },
             )
-            addView(launchSection(credentials, subtree, at, token, endpoint))
+            addView(launchSection(credentials, at, token, endpoint))
             addView(
                 TextView(this@OperatorActivity).apply {
                     setPadding(0, 32, 0, 8)
@@ -398,7 +398,6 @@ class OperatorActivity : Activity() {
      */
     private fun launchSection(
         credentials: EditText,
-        subtree: EditText,
         atField: EditText,
         tokenField: EditText,
         endpointField: EditText,
@@ -419,6 +418,12 @@ class OperatorActivity : Activity() {
         }
         val registry = field("registry to pull the node image from", Launch.REGISTRY_DEFAULT)
         val tag = field("image tag", Launch.TAG_DEFAULT)
+        // **the anchor claim is this section's own field** [2026-10-25]:
+        // the first live launch read the by-hand section's field, further
+        // down the screen, which the operator never saw as part of the
+        // launch — and the radio buttons above it choose the subnet the
+        // instance serves, which is a different thing from a subtree claimed
+        val subtree = field("subtree size to claim as an anchor, or blank to claim none", numeric = true)
         val regions = android.widget.Spinner(this)
         val sizes = android.widget.Spinner(this)
         var regionRows: List<Launch.Region> = listOf()
@@ -554,6 +559,7 @@ class OperatorActivity : Activity() {
             addView(regions)
             addView(TextView(this@OperatorActivity).apply { textSize = 12f; setTextColor(Color.GRAY); text = "Size" })
             addView(sizes)
+            addView(subtree)
             addView(registry)
             addView(tag)
             addView(go)
