@@ -534,6 +534,13 @@ impl Gateway {
             Ok(p) => p,
             Err(_) => return ResourceResponse::code(STATUS_MALFORMED),
         };
+        // **a path under `/.rhtn/` is the node's own**
+        // ([`crate::federation`]): a member's request naming one is
+        // refused here, so a resource that sees such a path is seeing its
+        // host and nothing else
+        if parsed.target.starts_with(crate::federation::PATH_PREFIX) {
+            return ResourceResponse::code(STATUS_REFUSED);
+        }
         let Some(backend) = binding.backend.clone() else {
             return ResourceResponse::code(STATUS_UNAVAILABLE);
         };
@@ -584,6 +591,22 @@ impl Gateway {
                     .map(|h| (h.bytes.clone(), r.roles.iter().cloned().collect()))
             })
             .collect()
+    }
+}
+
+impl crate::federation::Carrier for Gateway {
+    fn hand(&self, resource: &Keyhash, message: &[u8]) -> Option<Result<Vec<u8>, String>> {
+        let backend = self.bindings.get(resource)?.backend.clone()?;
+        if !backend.running() {
+            return Some(Err("the package is not running".into()));
+        }
+        Some(backend.handle(message))
+    }
+
+    fn authority(&self, resource: &Keyhash) -> Option<String> {
+        let b = self.bindings.get(resource)?;
+        b.backend.as_ref()?;
+        Some(b.authority.clone())
     }
 }
 

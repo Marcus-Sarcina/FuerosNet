@@ -23,6 +23,25 @@
 //! roles  = ["connect", "reader", "writer"]
 //! ```
 //!
+//! **An instance's federation relationships are configured here too**
+//! (`rhtn_node::federation`; `resource-design/federation-model.md` §6:
+//! "topology follows patronage"), beside the resource they belong to:
+//!
+//! ```toml
+//! [[host]]
+//! resource     = "<keyhash>"
+//! patron       = "<the patron's instance, a resource keyhash>"
+//! subordinates = ["<a subordinate's instance>", "..."]
+//! [host.kin]
+//! guild = ["<a kin instance>", "..."]
+//! ```
+//!
+//! Each names another *instance* by its resource keyhash, never a
+//! person or a node. Nothing here is checked against the topology: the
+//! relationship is the operator's statement of whom their instance
+//! federates with, and the node carries envelopes within it and no
+//! further ([`relationships`]).
+//!
 //! **A grant sits inside the package it grants on**, which is what the
 //! nesting buys: a grant naming a resource nothing hosts was an error the
 //! line format could express and this one cannot.
@@ -54,6 +73,7 @@
 //! thing an operator may want to write down.
 
 use rhtn_archive::Keyhash;
+use rhtn_node::federation::Relationships;
 use rhtn_node::grant::{Clause, Grant, Template};
 use rhtn_node::relay::Relay;
 use rhtn_node::resources::{Binding, Gateway, Kind, Manifest, Operation, Parameter, instantiate};
@@ -139,6 +159,15 @@ struct HostEntry {
     /// does rewrite ([`crate::grants`]).
     #[serde(default)]
     grant: Vec<GrantEntry>,
+    /// The patron's instance this resource federates with
+    /// ([`rhtn_node::federation::Relationships`]).
+    patron: Option<String>,
+    /// The subordinates' instances.
+    #[serde(default)]
+    subordinates: Vec<String>,
+    /// Named kin groups.
+    #[serde(default)]
+    kin: std::collections::BTreeMap<String, Vec<String>>,
 }
 
 #[derive(serde::Deserialize)]
@@ -246,6 +275,63 @@ pub(crate) fn grant_of(g: &GrantEntry) -> Result<Grant, String> {
         clauses.push(clause_of(c)?);
     }
     Ok(Grant { roles, clauses })
+}
+
+/// **The federation relationships the hosting file configures**, per
+/// resource ([`rhtn_node::federation::Relationships`]): read from the
+/// same file as [`apply`], after it, so the planes follow the bindings.
+/// Every resource the file hosts gets relationships, empty where it
+/// names none, so a plane exists for each and an operator's surface can
+/// deliver to it.
+pub fn relationships(path: &Path) -> Result<Vec<(Keyhash, Relationships)>, Refused> {
+    let text =
+        std::fs::read_to_string(path).map_err(|e| at(0, format!("{}: {e}", path.display())))?;
+    let file: File = toml::from_str(&text).map_err(|e| at(0, e.to_string()))?;
+    let mut out = Vec::new();
+    for h in &file.host {
+        let res = keyhash(&h.resource).ok_or_else(|| {
+            at(
+                0,
+                format!("`{}` is not 64 lower-case hex digits", h.resource),
+            )
+        })?;
+        let one = |s: &String| {
+            keyhash(s).ok_or_else(|| {
+                at(
+                    0,
+                    format!(
+                        "`{}`: `{s}` is not an instance (64 lower-case hex digits)",
+                        h.resource
+                    ),
+                )
+            })
+        };
+        let mut r = Relationships {
+            patron: h.patron.as_ref().map(one).transpose()?,
+            ..Default::default()
+        };
+        for s in &h.subordinates {
+            r.subordinates.insert(one(s)?);
+        }
+        for (name, members) in &h.kin {
+            let mut set = std::collections::BTreeSet::new();
+            for s in members {
+                set.insert(one(s)?);
+            }
+            r.kin.insert(name.clone(), set);
+        }
+        if r.all().contains(&res) {
+            return Err(at(
+                0,
+                format!("`{}` names itself as a relationship", h.resource),
+            ));
+        }
+        if let Some(why) = r.refused() {
+            return Err(at(0, format!("`{}`: {why}", h.resource)));
+        }
+        out.push((res, r));
+    }
+    Ok(out)
 }
 
 /// Read `path` and bind what it names into `gateway`.

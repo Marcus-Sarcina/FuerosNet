@@ -772,3 +772,215 @@ fn every_clause_survives_being_written_and_read_back() {
         .expect("named by its resource");
     assert!(text.contains("Written by the node"), "{text}");
 }
+
+/// **The directive plane across two instances one node hosts**
+/// (`rhtn_node::federation`; `resource-design/directive-surface.md`): the
+/// hosting file names the relationships, each instance is an ordinary
+/// HTTP origin on a port of its own, and one pass carries the patron's
+/// directive into the subordinate's inbox and the subordinate's receipt
+/// back. A member's request naming a node path never reaches either.
+#[test]
+fn a_directive_crosses_between_two_hosted_instances_and_a_member_cannot_speak_on_the_nodes_paths() {
+    use rhtn_archive::topology::Table;
+    use rhtn_node::federation::{Carrier, Envelope, SCHEMA_DIRECTIVE, SCHEMA_RECEIPT};
+    use rhtn_node::grant::Standing;
+    use std::io::{Read, Write};
+    use std::sync::{Arc, Mutex};
+
+    const PATRON: &str = "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a";
+    const SUB: &str = "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b";
+    let patron_k: [u8; 32] = [0x0a; 32];
+    let sub_k: [u8; 32] = [0x0b; 32];
+
+    /// An origin server that answers every request from a script and
+    /// keeps what it was handed.
+    fn origin(
+        answers: Vec<(&'static str, String)>,
+    ) -> (
+        std::net::SocketAddr,
+        Arc<Mutex<Vec<String>>>,
+        std::thread::JoinHandle<()>,
+    ) {
+        let l = std::net::TcpListener::bind("127.0.0.1:0").expect("a port");
+        let addr = l.local_addr().unwrap();
+        let got = Arc::new(Mutex::new(Vec::new()));
+        let keep = got.clone();
+        let h = std::thread::spawn(move || {
+            for _ in 0..answers.len() {
+                let (mut c, _) = l.accept().expect("the node connects");
+                let mut buf = vec![0u8; 65536];
+                let n = c.read(&mut buf).expect("a request");
+                let text = String::from_utf8_lossy(&buf[..n]).to_string();
+                let line = text.lines().next().unwrap_or("").to_string();
+                keep.lock().unwrap().push(text);
+                let body = answers
+                    .iter()
+                    .find(|(starts, _)| line.starts_with(starts))
+                    .map(|(_, b)| b.clone())
+                    .unwrap_or_default();
+                let _ = c.write_all(
+                    format!(
+                        "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\r\n{body}",
+                        body.len()
+                    )
+                    .as_bytes(),
+                );
+            }
+        });
+        (addr, got, h)
+    }
+
+    let directive = Envelope::live(
+        patron_k,
+        "policy-1",
+        SCHEMA_DIRECTIVE,
+        1,
+        b"{\"retention_floor_days\":90}",
+    );
+    let receipt = Envelope::live(
+        sub_k,
+        "receipt-policy-1",
+        SCHEMA_RECEIPT,
+        1,
+        b"{\"applied\":true}",
+    );
+    // the patron: told its relationships, then asked for its outbox
+    let (pa, pgot, pj) = origin(vec![
+        ("PUT /.rhtn/relationships", String::new()),
+        (
+            "GET /.rhtn/outbox",
+            serde_json::json!({"emit": [{"to": "subordinates", "envelope": directive.to_json()}]})
+                .to_string(),
+        ),
+    ]);
+    // the subordinate: told its relationships, polled, handed the
+    // directive (and answers with the receipt), polled again
+    let (sa, sgot, sj) = origin(vec![
+        ("PUT /.rhtn/relationships", String::new()),
+        ("GET /.rhtn/outbox", "{\"emit\":[]}".into()),
+        (
+            "PUT /.rhtn/envelope",
+            serde_json::json!({"emit": [{"to": "patron", "envelope": receipt.to_json()}]})
+                .to_string(),
+        ),
+        ("GET /.rhtn/outbox", "{\"emit\":[]}".into()),
+    ]);
+
+    let d = Dir::new("federation");
+    let m = d.put("front.manifest", "roles = [\"reader\"]\n");
+    let f = d.put(
+        "hosting",
+        format!(
+            "[[host]]\nresource = \"{PATRON}\"\nowner = \"{WHO}\"\nauthority = \"hall.internal\"\n\
+             manifest = \"{m}\"\naddress = \"{pa}\"\nsubordinates = [\"{SUB}\"]\n\n\
+             [[host]]\nresource = \"{SUB}\"\nowner = \"{WHO}\"\nauthority = \"club.internal\"\n\
+             manifest = \"{m}\"\naddress = \"{sa}\"\npatron = \"{PATRON}\"\n[host.kin]\nguild = [\"{PATRON}\"]\n",
+            m = m.display()
+        ),
+    );
+    grants_for(&d, SUB, "[[grant]]\nroles = [\"reader\"]\n");
+    let mut g = Gateway::default();
+    apply(
+        &mut g,
+        Path::new(&f),
+        Limits::default(),
+        Some(&d.0.join("grants")),
+    )
+    .expect("binds");
+    let rs = rhtn_daemon::hosting::relationships(Path::new(&f)).expect("relationships read");
+    assert_eq!(rs.len(), 2);
+    let mut fed = rhtn_node::federation::Federation::default();
+    for (res, r) in rs {
+        fed.configure(res, r).expect("configured");
+    }
+    assert_eq!(
+        fed.plane(&sub_k)
+            .unwrap()
+            .relationships
+            .relation_of(&patron_k),
+        Some(rhtn_node::federation::Relation::Patron),
+        "a patron is answered before the kin group that also names it"
+    );
+
+    // pass one: relationships told, the patron's outbox emits, the
+    // directive crosses into the subordinate's plane
+    let one = fed.pass(&g);
+    assert_eq!((one.emitted, one.carried), (1, 1), "{one:?}");
+    assert!(one.refused.is_empty(), "{one:?}");
+    // pass two: the subordinate is handed the directive and answers with
+    // the receipt, which crosses to the patron
+    let two = fed.pass(&g);
+    assert_eq!(
+        (two.delivered, two.emitted, two.carried),
+        (1, 1, 1),
+        "{two:?}"
+    );
+    assert_eq!(
+        fed.plane(&patron_k).unwrap().waiting(),
+        1,
+        "the receipt waits for the patron"
+    );
+
+    // the gateway is what carried: the authority and the backend are its
+    assert_eq!(g.authority(&sub_k).as_deref(), Some("club.internal"));
+    sj.join().unwrap();
+    let handed = sgot.lock().unwrap().clone();
+    let delivery = handed
+        .iter()
+        .find(|t| t.starts_with("PUT /.rhtn/envelope"))
+        .expect("the subordinate was handed the directive");
+    assert!(delivery.contains("host: club.internal"), "{delivery}");
+    assert!(delivery.contains("rhtn-relation: patron"), "{delivery}");
+    assert!(
+        delivery.contains(&format!("rhtn-origin: {PATRON}")),
+        "{delivery}"
+    );
+    assert!(delivery.contains("rhtn-audience:"), "{delivery}");
+    let body = delivery.split("\r\n\r\n").nth(1).unwrap();
+    let got = Envelope::from_json(&serde_json::from_str(body).unwrap()).unwrap();
+    assert_eq!(got.record, "policy-1");
+    assert_eq!(
+        got.path,
+        vec![patron_k],
+        "the path names the instance it crossed from"
+    );
+    let told = handed
+        .iter()
+        .find(|t| t.starts_with("PUT /.rhtn/relationships"))
+        .unwrap();
+    assert!(
+        told.contains(PATRON) && told.contains("\"guild\""),
+        "{told}"
+    );
+
+    // a member of the subordinate's owner asking the node's own path is
+    // refused before anything is connected: the server has had its four
+    // exchanges and is gone, and a fifth connect would fail loudly, so
+    // the refusal here is the gateway's own
+    let owner = [1u8; 32];
+    let table = Table::with_me(owner);
+    g.refresh(&table, &Standing::unknown());
+    let request = rhtn_archive::catalog::ResourceRequest {
+        resource: sub_k,
+        message: b"GET /.rhtn/outbox HTTP/1.1\r\nhost: x\r\n\r\n".to_vec(),
+    }
+    .encode();
+    let reply = g.serve(&owner, &table, &owner, &request);
+    assert_eq!(
+        reply.status,
+        rhtn_archive::catalog::STATUS_REFUSED,
+        "a member's request on a node path is refused"
+    );
+    let plain = rhtn_archive::catalog::ResourceRequest {
+        resource: sub_k,
+        message: b"GET /.rhtnot HTTP/1.1\r\nhost: x\r\n\r\n".to_vec(),
+    }
+    .encode();
+    // the prefix is `/.rhtn/`, so a path that merely begins with the
+    // letters is an ordinary one — this one reaches a server that is gone,
+    // which is the unavailable code, not the refusal
+    let reply = g.serve(&owner, &table, &owner, &plain);
+    assert_ne!(reply.status, rhtn_archive::catalog::STATUS_REFUSED);
+    pj.join().unwrap();
+    let _ = pgot;
+}

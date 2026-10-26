@@ -27,6 +27,10 @@ pub mod currency;
 /// The node's diagnostic events, compiled out of a releasable build.
 pub mod diag;
 
+/// The directive plane between the instances this node hosts
+/// (`resource-design/federation-model.md` §2, §5, §6), stubbed at the
+/// node: envelopes, their semantics, and the reserved paths they cross.
+pub mod federation;
 /// The predicate language an operator's grants are written in.
 pub mod grant;
 /// The hosted-session surface a resource is reached through

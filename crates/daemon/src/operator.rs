@@ -858,6 +858,101 @@ pub struct ResourceView {
     /// What its package declared it can be asked to do
     /// (`rhtn_node::resources::Operation`).
     pub admin: Vec<rhtn_node::resources::Operation>,
+    /// Its side of the directive plane, where the node has one for it
+    /// ([`FederationView`]).
+    pub federation: Option<FederationView>,
+}
+
+/// **An instance's federation, as the operator's page shows it**
+/// (`rhtn_node::federation`; `resource-design/federation-model.md`): the
+/// relationships the operator configured, every record the instance has
+/// been handed and whether it stands, and the counts that say whether
+/// the plane is moving — waiting for the resource, pending for an
+/// instance elsewhere, in conflict, dropped. The legibility floor's
+/// operator half: what was pushed here and from whom is on the page;
+/// what the members see of it is the application's to show.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FederationView {
+    /// The patron's instance.
+    pub patron: Option<Keyhash>,
+    /// The subordinates' instances.
+    pub subordinates: Vec<Keyhash>,
+    /// Named kin groups.
+    pub kin: Vec<(String, Vec<Keyhash>)>,
+    /// Each record held: origin, record id, revision, and whether live.
+    pub held: Vec<(Keyhash, String, u64, bool)>,
+    /// Envelopes waiting for the resource to take them.
+    pub waiting: usize,
+    /// Envelopes emitted for an instance this node does not host.
+    pub pending: usize,
+    /// Conflicts seen.
+    pub conflicts: usize,
+    /// Deliveries dropped after being declined repeatedly.
+    pub dropped: usize,
+}
+
+impl FederationView {
+    fn render_html(&self, resource: &Keyhash) -> String {
+        let mut out = String::from("<h2>Federation</h2>\n<pre>");
+        let _ = writeln!(
+            out,
+            "patron        {}",
+            self.patron
+                .map_or("none configured".to_string(), |k| hex(&k))
+        );
+        let _ = writeln!(
+            out,
+            "subordinates  {}",
+            if self.subordinates.is_empty() {
+                "none configured".to_string()
+            } else {
+                self.subordinates
+                    .iter()
+                    .map(hex)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            }
+        );
+        for (name, members) in &self.kin {
+            let _ = writeln!(
+                out,
+                "kin {:<9} {}",
+                escape(name),
+                members.iter().map(hex).collect::<Vec<_>>().join(", ")
+            );
+        }
+        let _ = writeln!(
+            out,
+            "waiting {}  pending elsewhere {}  conflicts {}  dropped {}",
+            self.waiting, self.pending, self.conflicts, self.dropped
+        );
+        out.push_str("</pre>\n");
+        if self.held.is_empty() {
+            out.push_str("<pre>nothing has been handed to this instance</pre>\n");
+        } else {
+            out.push_str("<pre>");
+            for (o, r, rev, live) in &self.held {
+                let _ = writeln!(
+                    out,
+                    "{} {:<40} rev {:<6} {}",
+                    &hex(o)[..16],
+                    escape(r),
+                    rev,
+                    if *live { "live" } else { "withdrawn" }
+                );
+            }
+            out.push_str("</pre>\n");
+        }
+        let _ = writeln!(
+            out,
+            "<p class=\"sub\">The plane as JSON, pending envelopes included: \
+             <code>GET /node/resource/{0}/federation</code>. Deliver an envelope from a related \
+             instance: <code>PUT /node/resource/{0}/envelope</code>. Run a pass now: \
+             <code>POST /node/resource/{0}/federate</code>.</p>",
+            hex(resource)
+        );
+        out
+    }
 }
 
 impl ResourceView {
@@ -934,6 +1029,9 @@ impl ResourceView {
             let _ = writeln!(out, "<pre>{}</pre>", escape(&body));
         }
         out.push_str(&self.render_templates());
+        if let Some(f) = &self.federation {
+            out.push_str(&f.render_html(&self.resource));
+        }
         out.push_str(&self.render_admin());
         out.push_str(
             "<p class=\"sub\">A grant takes effect when it is made, and is written to the \

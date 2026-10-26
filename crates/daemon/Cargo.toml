@@ -27,7 +27,7 @@ releasable = [
 # The field-test flavour: the hooks stay in, and the `[log]` table installs
 # `diag::JsonLines` on a file.  Built with `--no-default-features --features
 # fieldtest`; the two together are a compile error (`lib.rs`).
-fieldtest = ["dep:tracing-subscriber", "dep:serde_json"]
+fieldtest = ["dep:tracing-subscriber"]
 
 [dependencies]
 rhtn-archive = { path = "../archive" }
@@ -49,7 +49,9 @@ tracing = { version = "0.1", default-features = false, features = ["std"] }
 log = { version = "0.4", default-features = false }
 # MIT; the registry the field-test renderer is installed on
 tracing-subscriber = { version = "0.3", default-features = false, features = ["std", "registry"], optional = true }
-serde_json = { workspace = true, optional = true }
+# MIT/Apache-2.0; the directive plane's envelopes on the operator's surface
+# and the field-test log
+serde_json = { workspace = true }
 
 [dev-dependencies]
 rhtn-sim = { path = "../sim" }

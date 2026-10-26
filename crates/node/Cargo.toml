@@ -13,6 +13,8 @@ rhtn-archive = { path = "../archive" }
 rhtn-transport = { path = "../transport" }
 rhtn-policy = { path = "../policy" }
 sha2 = { workspace = true }
+# MIT/Apache-2.0; the form an envelope crosses HTTP in (`federation`)
+serde_json = { workspace = true }
 quinn = { version = "0.11", default-features = false, features = ["runtime-tokio", "rustls-aws-lc-rs", "log"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "sync", "io-util"] }
 # MIT; one diagnostic event at the held-list eviction, the rest of the
@@ -22,6 +24,5 @@ tracing = { version = "0.1", default-features = false, features = ["std"] }
 [dev-dependencies]
 ed25519-dalek = { workspace = true }
 hex = { workspace = true }
-serde_json = { workspace = true }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "sync", "io-util"] }
 quinn = { version = "0.11", default-features = false, features = ["runtime-tokio", "rustls-aws-lc-rs", "log"] }

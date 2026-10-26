@@ -81,6 +81,10 @@ pub struct NodeView {
     /// The resources this node hosts or brokers, their role tables and
     /// hosted sessions (`wire-format.md` §11).
     pub resources: crate::resources::Gateway,
+    /// The directive plane of the resources this node hosts: their
+    /// relationships, what each has been handed and what each emitted
+    /// ([`crate::federation`]).
+    pub federation: crate::federation::Federation,
     /// This node's own archive, which its disavowals advance.
     pub archive: Archive,
     /// `slot -> occupant`, this node's own subordinate slots.
@@ -163,6 +167,7 @@ impl NodeView {
             wake: crate::wake::WakeRegister::new(),
             catalog: crate::catalog::CatalogService::default(),
             resources: crate::resources::Gateway::default(),
+            federation: crate::federation::Federation::default(),
             archive: Archive::new(me),
             slots: BTreeMap::new(),
             memo_table: BTreeMap::new(),

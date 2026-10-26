@@ -968,3 +968,108 @@ async fn dmn_28_a_renewal_opens_where_the_run_ends_and_an_overlap_is_refused() {
     assert_eq!(400, status(&put), "an overlapping credential: {put}");
     assert!(body(&put).contains("not taken into the run"), "{put}");
 }
+
+/// **The directive plane from the operator's surface**
+/// (`rhtn_node::federation`; `resource-design/directive-surface.md`): a
+/// hosted instance with a configured patron takes an envelope from that
+/// patron at `PUT /node/resource/<hex>/envelope`, refuses one from a
+/// stranger, and shows what it holds at `GET …/federation`. The resource
+/// here is brokered, so nothing is delivered onward: the plane's bookkeeping
+/// is what this test reads.
+#[test]
+fn an_envelope_is_delivered_from_the_surface_and_the_plane_is_readable() {
+    use rhtn_node::federation::Envelope;
+    const RES: &str = "0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c";
+    const PATRON: &str = "0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d0d";
+    let (l, mut d, at) = enrolled_with("federation", 37453, |l| {
+        let m = l.dir.join("front.manifest");
+        std::fs::write(&m, "roles = [\"reader\"]\n").unwrap();
+        std::fs::write(
+            l.dir.join("hosting"),
+            format!(
+                "[[host]]\nresource = \"{RES}\"\nowner = \"{}\"\nauthority = \"club.internal\"\n\
+                 manifest = \"{}\"\npatron = \"{PATRON}\"\n",
+                hex(&test_identity("bob").public.keyhash),
+                m.display()
+            ),
+        )
+        .unwrap();
+    });
+    assert!(d.serving().is_some(), "{:?}", d.lines());
+
+    let before = ask(
+        at,
+        &format!("GET /node/resource/{RES}/federation HTTP/1.1"),
+        b"",
+    );
+    assert_eq!(200, status(&before), "{before}");
+    assert!(
+        before.contains(&format!("\"patron\":\"{PATRON}\"")),
+        "{before}"
+    );
+    assert!(before.contains("\"held\":[]"), "{before}");
+
+    let from_patron = Envelope::live([0x0d; 32], "policy-1", "rhtn/directive@1", 1, b"{\"x\":1}");
+    let body = from_patron.to_json().to_string();
+    let r = ask(
+        at,
+        &format!("PUT /node/resource/{RES}/envelope HTTP/1.1"),
+        body.as_bytes(),
+    );
+    assert_eq!(200, status(&r), "{r}");
+    assert!(r.contains("New"), "{r}");
+    let again = ask(
+        at,
+        &format!("PUT /node/resource/{RES}/envelope HTTP/1.1"),
+        body.as_bytes(),
+    );
+    assert!(again.contains("Duplicate"), "{again}");
+
+    let stranger = Envelope::live([0x0e; 32], "policy-1", "rhtn/directive@1", 1, b"{\"x\":1}");
+    let r = ask(
+        at,
+        &format!("PUT /node/resource/{RES}/envelope HTTP/1.1"),
+        stranger.to_json().to_string().as_bytes(),
+    );
+    assert_eq!(
+        409,
+        status(&r),
+        "a stranger is not a configured relationship: {r}"
+    );
+
+    let r = ask(
+        at,
+        &format!("PUT /node/resource/{RES}/envelope HTTP/1.1"),
+        b"not json",
+    );
+    assert_eq!(400, status(&r), "{r}");
+
+    let after = ask(
+        at,
+        &format!("GET /node/resource/{RES}/federation HTTP/1.1"),
+        b"",
+    );
+    assert!(after.contains("\"record\":\"policy-1\""), "{after}");
+    assert!(
+        after.contains("\"waiting\":1"),
+        "brokered, so it waits: {after}"
+    );
+
+    let r = ask(
+        at,
+        &format!("POST /node/resource/{RES}/federate HTTP/1.1"),
+        b"",
+    );
+    assert_eq!(200, status(&r), "{r}");
+
+    // the page carries the same, for the operator reading rather than
+    // scripting
+    let page = ask(at, &format!("GET /?resource={RES} HTTP/1.1"), b"");
+    assert!(page.contains("<h2>Federation</h2>"), "{page}");
+    assert!(page.contains("policy-1"), "{page}");
+
+    let r = ask(at, "GET /node/resource/zz/federation HTTP/1.1", b"");
+    assert_eq!(400, status(&r), "{r}");
+    d.stop();
+    let _ = std::fs::remove_dir_all(&l.dir);
+}

@@ -567,6 +567,15 @@ impl Service {
                 // the grants this file wrote are expanded now rather than
                 // waiting for the topology to move under them
                 view.expand_grants();
+                // the instances' federation relationships, from the same
+                // file, so each hosted resource has its plane
+                for (res, r) in crate::hosting::relationships(path)
+                    .map_err(|e| Startup::Hosting(format!("{}: {e}", path.display())))?
+                {
+                    view.federation
+                        .configure(res, r)
+                        .map_err(|e| Startup::Hosting(format!("{}: {e}", path.display())))?;
+                }
                 tracing::info!(target: "daemon", step = "hosting", bound, "daemon.lifecycle");
                 bound > 0
             }
@@ -824,6 +833,30 @@ impl Service {
         view.prekeys.take_exhausted()
     }
 
+    /// **One pass of the directive plane** (`rhtn_node::federation`):
+    /// each hosted instance told its relationships where it has not been,
+    /// handed what waits for it, asked for what it emits, and what it
+    /// emits carried to the instances this node hosts. Run on the tick
+    /// and after an act on the surface delivers an envelope.
+    pub fn federate(&self) -> rhtn_node::federation::Passed {
+        let mut view = self.node.view.lock().unwrap();
+        let v = &mut *view;
+        let passed = v.federation.pass(&v.resources);
+        if passed.delivered + passed.emitted + passed.carried > 0 || !passed.refused.is_empty() {
+            tracing::info!(
+                target: "daemon",
+                step = "federate",
+                delivered = passed.delivered,
+                declined = passed.declined,
+                emitted = passed.emitted,
+                carried = passed.carried,
+                refused = passed.refused.len(),
+                "daemon.lifecycle"
+            );
+        }
+        passed
+    }
+
     /// Write back what a restart must find.  Called on the way out, and
     /// safe to call more than once.
     pub fn persist(&self) -> Result<(), std::io::Error> {
@@ -881,6 +914,9 @@ impl Service {
                     self.mind_the_run();
                     for dry in self.maintain() {
                         crate::say!("rhtnd: one-time pool exhausted for {}", hex8(&dry));
+                    }
+                    for why in self.federate().refused {
+                        crate::say!("rhtnd: federation: {why}");
                     }
                     // the store is written on the tick as well as on the
                     // way out, so a kill that never reaches the handler

@@ -321,6 +321,7 @@ impl Surface {
             ("PUT", "/node/endpoint-record") | ("POST", "/node/endpoint-record") => {
                 self.take_signed(Signed::Endpoint, &req.body)
             }
+            (m, p) if p.starts_with("/node/resource/") => self.resource_act(m, p, &req.body),
             ("PUT", "/node/anchor-entry") | ("POST", "/node/anchor-entry") => {
                 self.take_signed(Signed::Anchor, &req.body)
             }
@@ -328,8 +329,10 @@ impl Surface {
                 404,
                 "this surface answers GET /, GET /node, \
                  PUT /node/{run,endpoint-record,anchor-entry}, \
-                 POST /node/{acknowledge,reload,stop} and \
-                 POST /node/grant[/narrow|/drop|/template]\n"
+                 POST /node/{acknowledge,reload,stop}, \
+                 POST /node/grant[/narrow|/drop|/template], and for a hosted instance \
+                 GET /node/resource/<hex>/federation, PUT /node/resource/<hex>/envelope \
+                 and POST /node/resource/<hex>/federate\n"
                     .into(),
             ),
             _ => (405, "this surface answers GET and PUT\n".into()),
@@ -599,6 +602,17 @@ impl Surface {
             Ok(n) => {
                 // §10.2: the operator has just configured roles
                 view.expand_grants();
+                // and the instances' relationships, from the same file
+                match crate::hosting::relationships(&path) {
+                    Ok(rs) => {
+                        for (res, r) in rs {
+                            if let Err(e) = view.federation.configure(res, r) {
+                                return (400, format!("{}: {e}\n", path.display()));
+                            }
+                        }
+                    }
+                    Err(e) => return (400, format!("{}: {e}\n", path.display())),
+                }
                 tracing::info!(
                     target: "daemon",
                     step = "surface_act",
@@ -612,6 +626,117 @@ impl Surface {
                 ))
             }
             Err(e) => (400, format!("{}: {e}\n", path.display())),
+        }
+    }
+
+    /// **The directive plane, from the operator's surface**
+    /// (`rhtn_node::federation`): `PUT …/envelope` offers an envelope to
+    /// a hosted instance as if from the related instance that signed it,
+    /// standing in for the transport between nodes that does not exist
+    /// yet; `GET …/federation` reads the plane — relationships, what is
+    /// held, what waits, what is pending for an instance elsewhere, and
+    /// any conflict — which is also how an operator carries a pending
+    /// envelope to the other node by hand; `POST …/federate` runs one
+    /// pass now rather than at the next tick.
+    fn resource_act(&self, method: &str, path: &str, body: &[u8]) -> (u16, String) {
+        use rhtn_node::federation::{Envelope, Outcome};
+        let rest = path.trim_start_matches("/node/resource/");
+        let Some((res_hex, act)) = rest.split_once('/') else {
+            return (
+                404,
+                "GET /node/resource/<hex>/federation, PUT …/envelope, POST …/federate\n".into(),
+            );
+        };
+        let Some(resource) = unhex(res_hex).and_then(|b| <[u8; 32]>::try_from(b.as_slice()).ok())
+        else {
+            return (400, format!("`{res_hex}` is not 64 hex digits\n"));
+        };
+        let Ok(node) = self.acting() else {
+            return (409, "this node is not serving yet\n".into());
+        };
+        match (method, act) {
+            ("GET", "federation") => {
+                let view = node.view.lock().unwrap();
+                let Some(plane) = view.federation.plane(&resource) else {
+                    return (404, "this node hosts no such instance\n".into());
+                };
+                let hex32 = |k: &[u8]| hex(k);
+                let held: Vec<serde_json::Value> = plane
+                    .held()
+                    .iter()
+                    .map(|(o, r, h)| {
+                        serde_json::json!({
+                            "origin": hex32(o), "record": r, "revision": h.revision,
+                            "digest": hex32(&h.digest),
+                            "state": if h.state == rhtn_node::federation::State::Live { "live" } else { "withdrawn" },
+                        })
+                    })
+                    .collect();
+                let body = serde_json::json!({
+                    "resource": hex32(&resource),
+                    "relationships": plane.relationships.to_json(),
+                    "relationships_told": plane.relationships_told,
+                    "held": held,
+                    "waiting": plane.waiting(),
+                    "pending": plane.pending.iter().map(|p| serde_json::json!({
+                        "to": hex32(&p.to), "envelope": p.envelope.to_json()
+                    })).collect::<Vec<_>>(),
+                    "conflicts": plane.conflicts.iter().map(|(e, h)| serde_json::json!({
+                        "offered": e.to_json(), "held_revision": h.revision, "held_digest": hex32(&h.digest)
+                    })).collect::<Vec<_>>(),
+                    "dropped": plane.dropped.iter().map(Envelope::to_json).collect::<Vec<_>>(),
+                });
+                (200, format!("{body}\n"))
+            }
+            ("PUT", "envelope") | ("POST", "envelope") => {
+                let v: serde_json::Value = match serde_json::from_slice(body) {
+                    Ok(v) => v,
+                    Err(e) => return (400, format!("the body is not JSON: {e}\n")),
+                };
+                let e = match Envelope::from_json(&v) {
+                    Ok(e) => e,
+                    Err(why) => return (400, format!("not an envelope: {why}\n")),
+                };
+                let outcome = {
+                    let mut view = node.view.lock().unwrap();
+                    match view.federation.deliver(&resource, e) {
+                        Ok(o) => o,
+                        Err(why) => return (409, format!("{why}\n")),
+                    }
+                };
+                tracing::info!(
+                    target: "daemon",
+                    step = "surface_act",
+                    act = "envelope",
+                    outcome = ?outcome,
+                    "daemon.lifecycle"
+                );
+                // taken: handed on now rather than at the next tick
+                if matches!(outcome, Outcome::New | Outcome::Superseded) {
+                    let mut view = node.view.lock().unwrap();
+                    let v = &mut *view;
+                    v.federation.pass(&v.resources);
+                }
+                let status = match &outcome {
+                    Outcome::New | Outcome::Superseded | Outcome::Duplicate => 200,
+                    Outcome::Older | Outcome::Tombstoned => 200,
+                    Outcome::Conflict => 409,
+                    Outcome::Refused(_) => 400,
+                };
+                (status, format!("{outcome:?}\n"))
+            }
+            ("POST", "federate") => {
+                let passed = {
+                    let mut view = node.view.lock().unwrap();
+                    let v = &mut *view;
+                    v.federation.pass(&v.resources)
+                };
+                (200, format!("{passed:?}\n"))
+            }
+            _ => (
+                404,
+                "GET /node/resource/<hex>/federation, PUT …/envelope, POST …/federate\n".into(),
+            ),
         }
     }
 
@@ -963,6 +1088,34 @@ fn resource_views(node: &LiveNode) -> Vec<crate::operator::ResourceView> {
                 rows,
                 sessions: g.hosted_sessions(),
                 admin: b.declared.admin.clone(),
+                federation: view.federation.plane(&resource).map(|p| {
+                    crate::operator::FederationView {
+                        patron: p.relationships.patron,
+                        subordinates: p.relationships.subordinates.iter().copied().collect(),
+                        kin: p
+                            .relationships
+                            .kin
+                            .iter()
+                            .map(|(n, m)| (n.clone(), m.iter().copied().collect()))
+                            .collect(),
+                        held: p
+                            .held()
+                            .into_iter()
+                            .map(|(o, r, h)| {
+                                (
+                                    o,
+                                    r,
+                                    h.revision,
+                                    h.state == rhtn_node::federation::State::Live,
+                                )
+                            })
+                            .collect(),
+                        waiting: p.waiting(),
+                        pending: p.pending.len(),
+                        conflicts: p.conflicts.len(),
+                        dropped: p.dropped.len(),
+                    }
+                }),
             })
         })
         .collect()
