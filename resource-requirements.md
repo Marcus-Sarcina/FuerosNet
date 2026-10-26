@@ -194,6 +194,55 @@ gateway-inserted headers are distinguishable from client-supplied ones.
   signing, canonical encoding or domain separation. A purpose-built framing would
   buy properties this path does not require.
 
+### 3.3 What arrives from your host, on paths that are its own
+
+**Paths under `/.rhtn/` are the node's** [author, 2026-10-26]. The node refuses a
+member's request naming one before it reaches you, and a member's `rhtn-*` headers
+are already gone (§3.1), so **a request you receive on such a path came from your
+host and from nothing else**. It is the one door you already have — the same
+authenticated hop, the same parser's output — carrying what your host has to tell
+you rather than what a member asked. No host binding is added for it (§9,
+`infra-client-requirements.md` §9.2): a package that runs on a port of its own and
+one that runs in the sandbox receive it alike.
+
+**Three exchanges travel there today**, the hosting side of the application
+federation your package may take part in. Each carries `host` as the authority the
+operator bound and `rhtn-audience` naming you.
+
+| Request | Carries | Your answer |
+|---|---|---|
+| `PUT /.rhtn/relationships` | the instances your operator configured yours to federate with: a patron's instance, subordinates' instances, named kin, each a resource keyhash | 2xx once taken; it is repeated until then, and again whenever they change |
+| `PUT /.rhtn/envelope` | one **envelope** from a related instance, with `rhtn-origin` (that instance, hex) and `rhtn-relation` (`patron`, `subordinate` or `kin:<name>`, the node's reading of your operator's configuration) | 2xx to take it, which the node remembers; the body may carry envelopes to send (below) |
+| `GET /.rhtn/outbox` | nothing | 2xx with `{"emit": [{"to": …, "envelope": …}, …]}`, empty where you have nothing to send; `to` is `patron`, `subordinates`, `kin:<name>` or one related instance in hex |
+
+**An envelope is one instance's signed claim about one record**: `origin` (the
+instance, a resource keyhash), `record` (its local identifier), `schema`,
+`revision` (strictly ordered per record), `digest` (SHA-256 of the body), `state`
+(`live` or `withdrawn`), `path` (the instances it crossed, transport metadata outside
+the signature), `signature`, and the body where live. The origin signs the six
+immutable fields and never the route: a CBOR array `[origin, record, schema,
+revision, digest, state]` with `state` 0 for live and 1 for withdrawn. **The
+signature authenticates the instance's claim, not any person's**: authorship within
+the instance is your application data, attributed by the pairwise principal's local
+label, never a network identity.
+
+**What the node has already decided before an envelope reaches you**, per
+(`origin`, `record`), so that you see each revision once and never a stale copy of
+what you hold: a different digest at a revision already held is a *conflict*, kept
+for the operator and delivered to nobody; the same revision again is a duplicate
+and a no-op; a newer revision supersedes and is delivered; an older one is
+discarded; and a withdrawal is a tombstone that no replayed older live copy undoes.
+What you keep of a record is yours, in your own store; the node keeps identities,
+revisions and digests, bounded.
+
+**Who may hand you an envelope is your operator's configuration and nothing
+wider.** An envelope from an instance that is not a configured relationship is
+refused at the node, and one you emit to an instance that is not one is held and
+never forced through. A directive binds only within its own relationship; what a
+directive means, what to apply, what to report and what your members are shown of
+it — including who set a policy — is your application's to decide and to make
+legible.
+
 ---
 
 ## 4. What a resource is

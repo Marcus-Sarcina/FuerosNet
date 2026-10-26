@@ -554,6 +554,30 @@ capability-based, so a module reaches only what it is handed. Its effectiveness
 against a hostile module is for that literature to establish, and an implementer
 should treat it as an open engineering question rather than a settled one.
 
+**What you hand a package besides its callers' traffic goes through the same door,
+on paths that are yours** [author, 2026-10-26]. `resource-requirements.md` §3.3
+reserves `/.rhtn/` for the node: refuse a member's request naming such a path
+before it reaches any backend, so that a resource seeing one is seeing you. On
+those paths you carry the hosting side of application federation for the instances
+you host, and nothing of the network with it: tell each instance the relationships
+its operator configured for it (a patron's instance, subordinates' instances, named
+kin, each a resource keyhash, written in your hosting configuration beside the
+resource); hand it each envelope a related instance sent, marked with the origin and
+the relation; ask it for what it emits; and carry what it emits to the related
+instances you host yourself. **Carry within the configured relationships and no
+further**: an envelope whose origin is not a relationship of the receiving instance
+is refused, and one addressed to an instance that is not a relationship of the
+sender is held, visible, and not forced through. **Keep the record bookkeeping
+§3.3 states before anything is delivered** — conflict before duplicate, newer
+supersedes, older discarded, a tombstone that replay does not undo — and keep a
+conflict for the operator rather than resolving it. **Show the plane on your
+administration surface** (§8.3), per instance: the relationships, what is held and
+whether it stands, what waits, what is pending for an instance elsewhere, and any
+conflict, so that what was pushed to an instance and from whom is legible to its
+operator. An envelope for a related instance another node hosts is pending until a
+transport carries it; until one does, the operator's surface offers it to be read
+and to be delivered at the other node's surface by hand.
+
 ---
 
 ## 10. Role assignment and hosted-session lifecycle
