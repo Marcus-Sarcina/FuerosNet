@@ -221,7 +221,12 @@ the same (`wire-format.md` §7.2), so a change of address is something an
 operator's client signs. Both are rare by construction, an endpoint record being re-signed
 when the address set changes and an anchor entry when the subtree size does. The
 consequence to plan for is that an instance whose address moves while its
-operator is unreachable publishes nothing until they are.
+operator is unreachable publishes nothing until they are. **Both are signed at
+enrolment** [author, 2026-10-25]: the endpoint record naming the address the
+instance serves on, and the anchor entry stating the subtree beneath it, which
+at enrolment is nothing. The size is a fact about the node, not a choice its
+operator is asked to make, so the client states it and re-signs the entry as
+the subtree grows.
 
 **You accept it on the same terms as an anchor entry.** The signature is verifiable
 only once you hold the node's key material, so it gives attribution after contact

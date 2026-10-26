@@ -2907,6 +2907,19 @@ impl Participant {
         })
     }
 
+    /// **The anchor entry enrolment always signs** [author, 2026-10-25]:
+    /// for the same instance, on the same line, with the subtree a fresh
+    /// instance has beneath it (`rhtn_client::FRESH_SUBTREE`).
+    /// The size is the kernel's to state, not the operator's to type.
+    pub fn anchor_entry_fresh(
+        &self,
+        subnet: Option<Id>,
+        points: Vec<Vec<u8>>,
+        counter: u32,
+    ) -> Result<Vec<u8>, Refused> {
+        self.anchor_entry(subnet, points, rhtn_client::FRESH_SUBTREE, counter)
+    }
+
     /// **An anchor entry for the same instance**, claiming a subtree of
     /// `subtree_size`, signed by the same operator for the same reason,
     /// on the same line (`wire-format.md` §7.6).

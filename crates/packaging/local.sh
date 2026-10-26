@@ -132,7 +132,7 @@ fi
 
 say "enrolling it: fetch the key, check the proof, sign the run and the records"
 "$TARGET" node enrol "$OPERATOR" "127.0.0.1:$ADMIN" \
-  --token "$TOKEN" --endpoint "127.0.0.1:$QUIC" --anchor 1
+  --token "$TOKEN" --endpoint "127.0.0.1:$QUIC"
 
 for _ in $(seq 1 60); do
   "$ENGINE" logs "$NAME" 2>&1 | grep -q "serving on" && break

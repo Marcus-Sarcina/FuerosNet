@@ -135,14 +135,12 @@ object Kernel {
      * @param tokenHex the enrolment token its configuration carries
      * @param credentials how many 48-hour delegations the run carries
      * @param endpoint the address to name in an endpoint record, or null
-     * @param subtree the subtree size to claim in an anchor entry, or null
      */
     fun enrol(
         at: String,
         tokenHex: String,
         credentials: Int,
         endpoint: String?,
-        subtree: Long?,
         /** The subnet the instance serves, hex, or null for the one under
          *  this device's own key: the records are signed on that line's
          *  series (`wire-format.md` §7.6). */
@@ -182,13 +180,16 @@ object Kernel {
             said += "endpoint record naming $endpoint: " +
                 Provision.put(at, "/node/endpoint-record", record).fold({ it }, { "${it.message}" })
         }
-        if (subtree != null) {
+        // **the anchor entry is always signed at enrolment** [author,
+        // 2026-10-25]: its size is the kernel's to state (nothing beneath a
+        // fresh instance), not the operator's to type
+        run {
             val point = point(endpoint ?: at) ?: return said + "`$at` is not host:port"
             val line2 = subnet?.takeIf { it.length == 64 }?.let { unhex(it) }
-            val entry = call("anchorEntry", { null }) {
-                p.anchorEntry(line2, listOf(point), subtree.toULong(), 1u)
+            val entry = call("anchorEntryFresh", { null }) {
+                p.anchorEntryFresh(line2, listOf(point), 1u)
             } ?: return said + "the anchor entry was not signed"
-            said += "anchor entry claiming a subtree of $subtree: " +
+            said += "anchor entry, nothing beneath it yet: " +
                 Provision.put(at, "/node/anchor-entry", entry).fold({ it }, { "${it.message}" })
         }
 

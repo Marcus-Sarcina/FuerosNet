@@ -627,12 +627,14 @@ fn enrolled_with(
     (l, d, at)
 }
 
-/// **An operator who claims no subtree writes no anchor entry, and the
-/// node comes up without one** [2026-10-25]. The first instance launched
-/// from a phone enrolled with the subtree left blank, took its run, and
-/// then refused every start with "anchor.entry: No such file or directory"
-/// until the read was changed: the path the configuration names says where
-/// an entry will go once the operator signs one, not that one is there.
+/// **A node comes up with no anchor entry written** [2026-10-25]. The
+/// first instance launched from a phone was enrolled with none, took its
+/// run, and then refused every start with "anchor.entry: No such file or
+/// directory" until the read was changed: the path the configuration names
+/// says where an entry will go once the operator signs one, not that one is
+/// there. Enrolment has signed the entry unconditionally since the same day
+/// (§4.4), so this is now the case of a restart before the entry arrived,
+/// and of an instance enrolled before the rule.
 #[test]
 fn a_node_enrolled_with_no_subtree_claimed_serves_and_serves_again_after_a_restart() {
     let l = layout("no-anchor", &TOKEN, 37452);

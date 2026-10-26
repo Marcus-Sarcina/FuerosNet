@@ -11,6 +11,16 @@
 //! Where §1.3 gives a reason for a number, it is repeated below.  Where it
 //! gives none, there is none to give: the row is a chosen ceiling.
 
+/// **The subtree beneath an instance at enrolment: nothing** [author,
+/// 2026-10-25].  An anchor entry is always signed at enrolment, beside the
+/// endpoint record, and its size is a fact about the node rather than a
+/// choice its operator makes: design §12.2 defines anchors by subtree
+/// size, and `infra-client-requirements.md` §4.4 has the entry re-signed
+/// when that size changes.  A fresh instance has no subordinate, so this
+/// is what it claims, and a table admitting subtrees of any size
+/// (`rhtn_node::resolution::AnchorTable::new(0, ..)`) takes it.
+pub const FRESH_SUBTREE: u64 = 0;
+
 /// Archive subset references (§1.3).
 pub const ARCHIVE_SUBSET_REFS: usize = 256;
 /// Bundles per `PrekeyReply`, one per device (`wire-format.md` §7.8): a chosen

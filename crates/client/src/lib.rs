@@ -86,3 +86,6 @@ pub mod trust;
 pub mod verifier;
 
 pub use rhtn_archive::{Keyhash, Txid};
+/// The subtree a fresh instance has beneath it, which is what enrolment's
+/// anchor entry states (`rhtn_codec::bounds::FRESH_SUBTREE`).
+pub use rhtn_codec::bounds::FRESH_SUBTREE;

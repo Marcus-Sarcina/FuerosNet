@@ -180,8 +180,6 @@ pub struct Ask {
     pub name: Option<String>,
     /// How many 48-hour credentials the run carries.
     pub credentials: usize,
-    /// The subtree size to claim in an anchor entry, where one is wanted.
-    pub subtree: Option<u64>,
 }
 
 /// **Launch, wait, enrol**: the machine created with the composed script,
@@ -241,7 +239,6 @@ pub fn launch(me: &SigningIdentity, ask: &Ask) -> Result<String, String> {
                 .parse()
                 .map_err(|_| "the address did not parse")?,
         ),
-        subtree: ask.subtree,
     };
     let started = Instant::now();
     let mut last = String::new();

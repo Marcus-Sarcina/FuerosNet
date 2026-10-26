@@ -218,7 +218,6 @@ class OperatorActivity : Activity() {
         val token = field("its enrolment token — 64 hex digits")
         val credentials = field("credentials, 48 hours each", "7", numeric = true)
         val endpoint = field("the address to publish — host:port, or blank")
-        val subtree = field("subtree to claim, or blank", numeric = true)
 
         narration = TextView(this).apply {
             textSize = 13f
@@ -244,12 +243,27 @@ class OperatorActivity : Activity() {
         chosen = scopes.singleOrNull()
         val choice = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
+            // **one chooser for both ways of enrolling** [author, 2026-10-25]:
+            // the launch below needs this choice too, and when it sat in the
+            // by-hand section it looked like the by-hand section's alone
+            if (scopes.size <= 1) {
+                addView(
+                    TextView(this@OperatorActivity).apply {
+                        textSize = 13f
+                        setTextColor(Color.GRAY)
+                        text = when (val s = scopes.singleOrNull()) {
+                            null -> "you hold a position in no subnet yet; an instance enrolled now serves none"
+                            else -> "your one subnet, ${s.label()}: an instance enrolled here serves it"
+                        }
+                    },
+                )
+            }
             if (scopes.size > 1) {
                 addView(
                     TextView(this@OperatorActivity).apply {
                         textSize = 13f
                         setTextColor(Color.GRAY)
-                        text = "It serves:"
+                        text = "You hold positions in several; choose which one this instance serves:"
                     },
                 )
                 val group = android.widget.RadioGroup(this@OperatorActivity)
@@ -281,7 +295,6 @@ class OperatorActivity : Activity() {
                     token = token.text.toString().trim(),
                     credentials = credentials.text.toString().trim().toIntOrNull() ?: 7,
                     endpoint = endpoint.text.toString().trim().ifEmpty { null },
-                    subtree = subtree.text.toString().trim().toLongOrNull(),
                     // the line the records are signed on (§7.6)
                     subnet = chosen?.id?.takeIf { it.length == 64 },
                 )
@@ -294,7 +307,6 @@ class OperatorActivity : Activity() {
                         ask.token,
                         ask.credentials,
                         ask.endpoint,
-                        ask.subtree,
                         ask.subnet,
                     )
                     runOnUiThread {
@@ -356,6 +368,16 @@ class OperatorActivity : Activity() {
                     textSize = 12f
                     typeface = Typeface.DEFAULT_BOLD
                     setTextColor(Color.GRAY)
+                    text = "Which of your subnets the instance serves"
+                },
+            )
+            addView(choice)
+            addView(
+                TextView(this@OperatorActivity).apply {
+                    setPadding(0, 32, 0, 8)
+                    textSize = 12f
+                    typeface = Typeface.DEFAULT_BOLD
+                    setTextColor(Color.GRAY)
                     text = "Launch one at a provider"
                 },
             )
@@ -369,8 +391,7 @@ class OperatorActivity : Activity() {
                     text = "Enrol one by hand"
                 },
             )
-            listOf(at, token, credentials, endpoint, subtree).forEach { addView(it) }
-            addView(choice)
+            listOf(at, token, credentials, endpoint).forEach { addView(it) }
             addView(go)
             addView(open)
             addView(
@@ -418,12 +439,6 @@ class OperatorActivity : Activity() {
         }
         val registry = field("registry to pull the node image from", Launch.REGISTRY_DEFAULT)
         val tag = field("image tag", Launch.TAG_DEFAULT)
-        // **the anchor claim is this section's own field** [2026-10-25]:
-        // the first live launch read the by-hand section's field, further
-        // down the screen, which the operator never saw as part of the
-        // launch — and the radio buttons above it choose the subnet the
-        // instance serves, which is a different thing from a subtree claimed
-        val subtree = field("subtree size to claim as an anchor, or blank to claim none", numeric = true)
         val regions = android.widget.Spinner(this)
         val sizes = android.widget.Spinner(this)
         var regionRows: List<Launch.Region> = listOf()
@@ -492,7 +507,6 @@ class OperatorActivity : Activity() {
                 val plan = Launch.Plan(region.slug, size.slug, registry = registry.text.toString().trim(), tag = tag.text.toString().trim())
                 val minted = Launch.token()
                 val creds = credentials.text.toString().trim().toIntOrNull() ?: 7
-                val tree = subtree.text.toString().trim().toLongOrNull()
                 val subnet = chosen?.id?.takeIf { it.length == 64 }
                 val label = chosen?.label() ?: "an instance (subnet not named)"
                 Thread {
@@ -530,7 +544,7 @@ class OperatorActivity : Activity() {
                         show(); runOnUiThread { isEnabled = true; drawInstances() }; return@Thread
                     }
                     said += "its surface answers; enrolling"; show()
-                    said += Kernel.enrol(surface, minted, creds, "$ip:${Launch.QUIC_PORT}", tree, subnet)
+                    said += Kernel.enrol(surface, minted, creds, "$ip:${Launch.QUIC_PORT}", subnet)
                     val took = said.any { it.startsWith("credential") }
                     runOnUiThread {
                         narration.text = said.joinToString("\n")
@@ -559,7 +573,6 @@ class OperatorActivity : Activity() {
             addView(regions)
             addView(TextView(this@OperatorActivity).apply { textSize = 12f; setTextColor(Color.GRAY); text = "Size" })
             addView(sizes)
-            addView(subtree)
             addView(registry)
             addView(tag)
             addView(go)
@@ -593,7 +606,6 @@ class OperatorActivity : Activity() {
         val token: String,
         val credentials: Int,
         val endpoint: String?,
-        val subtree: Long?,
         val subnet: String?,
     )
 }

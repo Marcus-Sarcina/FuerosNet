@@ -23,7 +23,7 @@ usage: rhtn <command> [...]
 
   node launch <identity> --provider <name> --credential-file <file>
         --region <slug> --size <slug> [--registry <host/path>] [--tag <tag>]
-        [--credentials <n>] [--anchor <size>] [--name <machine name>]
+        [--credentials <n>] [--name <machine name>]
         Launch an instance at a hosting provider with the credential the
         file holds, wait for its address and its surface, then enrol it
         with a token minted here (L §10, OPS-020). The provider is one of:
@@ -49,7 +49,6 @@ usage: rhtn <command> [...]
         key. Options:
           --credentials <n>   how many 48-hour credentials; default 7
           --endpoint <addr>   also sign an endpoint record naming <addr>
-          --anchor <size>     also sign an anchor entry claiming <size>
         This is the provisioning page's work as an instrument: in a product
         the client does it (L §8.3). It crosses no protocol request.
 
@@ -201,7 +200,7 @@ fn do_node(rest: &[&str]) -> Result<String, String> {
             "`node {sub}` is not a command; there are `node launch`, `node offers`, `node credential`, `node destroy`, `node enrol` and `node renew`"
         ));
     }
-    let (mut token, mut credentials, mut endpoint, mut subtree) = (None, 7usize, None, None);
+    let (mut token, mut credentials, mut endpoint) = (None, 7usize, None);
     let mut i = 0;
     while i < opts.len() {
         let value = opts.get(i + 1).copied();
@@ -222,13 +221,6 @@ fn do_node(rest: &[&str]) -> Result<String, String> {
                         .map_err(|_| "--endpoint takes an address and port".to_string())?,
                 )
             }
-            "--anchor" => {
-                subtree = Some(
-                    need("anchor")?
-                        .parse()
-                        .map_err(|_| "--anchor takes a subtree size".to_string())?,
-                )
-            }
             other => return Err(format!("{other} is not an option of `node {sub}`")),
         }
         i += 2;
@@ -243,7 +235,6 @@ fn do_node(rest: &[&str]) -> Result<String, String> {
         token,
         credentials,
         endpoint,
-        subtree,
     };
     if *sub == "renew" {
         return enrol::renew(&me, &ask);
@@ -289,7 +280,6 @@ fn do_launch(rest: &[&str]) -> Result<String, String> {
             "registry",
             "tag",
             "credentials",
-            "anchor",
             "name",
         ],
     )?;
@@ -307,13 +297,6 @@ fn do_launch(rest: &[&str]) -> Result<String, String> {
         })
         .transpose()?
         .unwrap_or(7);
-    let subtree = o
-        .get("anchor")
-        .map(|a| {
-            a.parse::<u64>()
-                .map_err(|_| "--anchor takes a subtree size".to_string())
-        })
-        .transpose()?;
     let ask = launch::Ask {
         provider: need("provider")?,
         credential: launch::credential_from(&need("credential-file")?)?,
@@ -325,7 +308,6 @@ fn do_launch(rest: &[&str]) -> Result<String, String> {
         ),
         name: o.get("name").cloned(),
         credentials,
-        subtree,
     };
     launch::launch(&me, &ask)
 }

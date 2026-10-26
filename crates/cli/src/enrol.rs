@@ -37,8 +37,6 @@ pub struct Ask {
     pub credentials: usize,
     /// The address to name in an endpoint record, where one is wanted.
     pub endpoint: Option<SocketAddr>,
-    /// The subtree size to claim in an anchor entry, where one is wanted.
-    pub subtree: Option<u64>,
 }
 
 /// **Renew a run before it lapses** (`infra-client-requirements.md` §7):
@@ -123,12 +121,15 @@ pub fn enrol(me: &SigningIdentity, ask: &Ask) -> Result<String, String> {
         let said = push(addr, "/node/endpoint-record", &record)?;
         out.push_str(&format!("endpoint record naming {ep}: {said}\n"));
     }
-    if let Some(size) = ask.subtree {
+    // **the anchor entry is always signed at enrolment** [author,
+    // 2026-10-25], with the subtree a fresh instance has beneath it
+    {
+        let size = rhtn_node::resolution::FRESH_SUBTREE;
         let point = point_of(ask.endpoint.unwrap_or(addr));
         let entry = anchor_entry(me, std::slice::from_ref(&point), size, seqno(1));
         let said = push(addr, "/node/anchor-entry", &entry)?;
         out.push_str(&format!(
-            "anchor entry claiming a subtree of {size}: {said}\n"
+            "anchor entry, a subtree of {size} beneath it: {said}\n"
         ));
     }
     let run = issue_run(me, &key, now(), ask.credentials);

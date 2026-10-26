@@ -410,6 +410,8 @@ impl ResolveReply {
     }
 }
 
+pub use rhtn_codec::bounds::FRESH_SUBTREE;
+
 /// An `AnchorEntry` (`wire-format.md` §7.2) as the table holds it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AnchorEntry {
