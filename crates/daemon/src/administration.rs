@@ -613,6 +613,17 @@ impl Surface {
                     }
                     Err(e) => return (400, format!("{}: {e}\n", path.display())),
                 }
+                match crate::hosting::locations(&path) {
+                    Ok(ls) => {
+                        view.federation.unlocate_all();
+                        for (instance, at) in ls {
+                            if let Err(e) = view.federation.locate(instance, at) {
+                                return (400, format!("{}: {e}\n", path.display()));
+                            }
+                        }
+                    }
+                    Err(e) => return (400, format!("{}: {e}\n", path.display())),
+                }
                 tracing::info!(
                     target: "daemon",
                     step = "surface_act",

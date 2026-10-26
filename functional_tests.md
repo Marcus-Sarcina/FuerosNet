@@ -730,6 +730,7 @@ The Cargo workspace has **16 crates**. Components below follow responsibilities 
 | OPS-019 | C | **Identity key material enters as bytes, and a seed phrase is a severable feature above the kernel** [author, 2026-10-17]. A new identity is made as it always was; a second signing device holds it because its holder put the material there, never because a device sent it (D §23.3). Nothing below the application knows how a person kept it: the material is handed in at start or read from a file, and **a seed phrase, where one is offered, only encodes those same bytes as words and reads them back** — no kernel surface, no protocol surface, no change to the cryptosystem, and a client offering none is conforming. Test: a client starts from material supplied as a file and reproduces every key of the identity, the hybrid pair's both halves among them, and the capture keys it derives (D §7.5.2.6, §5.1); **with the phrase feature removed the client still starts and still signs**, which is what makes it a feature rather than part of the identity; a fresh device given the material holds no archive, which is D §10.2's key-only position — standing in the subnets that key is current in, nothing portable to a new one, and the archive from the user's own backup or not at all; where a phrase is offered it is shown when the identity is made and a screen asking for it again refuses. | D §§23.3, 10.2, 5.1, 7.5.2.6; L §§2, 6, 9 |
 | OPS-020 | C | **An instance is launched from the client at a provider the operator chose, with the operator's own provider credential and no broker** [author, 2026-10-25]. The client mints the enrolment token, composes the instance's configuration and the once-run script that installs the engine, pulls the image from the reference registry or the one the operator named, and starts the node; it waits for the machine's public IPv4 and then enrols at it with the proof checked as for any instance. The provider credential is kept by the kernel as identity state and carried in the backup envelope under the identity, never in the archive; the seed is in none of what the provider receives. Test: the composed script carries the token and the operator's public material and no seed; a launch posts the plan and reads the machine's id; the public address is read once the machine is active; a provider's refusal arrives with its own words. | L §§2, 6, 10; I §§8.2, 8.3; D §§13.7.1, 23.3 |
 | OPS-021 | C | **An instance's federation relationships are the operator's configuration, and its plane is on the operator's surface** [author, 2026-10-26]. A patron's instance, subordinates' instances and named kin groups are written in the hosting configuration beside the resource, each a resource keyhash, re-read on reload; the surface shows per instance the relationships, what is held and whether it stands, what waits, what is pending for an instance elsewhere and any conflict, offers an envelope from a related instance for delivery by hand, and runs a pass on demand. Test: a hosting entry naming itself or a malformed instance is refused; a reload re-reads the relationships; the surface takes an envelope from the configured patron, refuses a stranger's, and reads back what is held. | I §§8.3, 9.2; R §3.3 |
+| OPS-022 | C | **Envelopes for instances other nodes host are carried node to node over TLS with raw public keys pinned by the operator** [author, 2026-10-26]. A node that opened a federation listener presents the key its transport presents and takes `PUT /federation/envelope` for an instance it hosts, applying the relationship check and the record rules as its own surface would; a node whose operator wrote a far node's listener and key beside a related instance delivers pending envelopes there each tick, presenting its own key, and refuses a listener presenting any other key. Test: two nodes, each hosting one of a related pair, the receipt one instance emits carried to the other node and held there; a wrong key written for the far node leaves the envelope pending with the refusal said; a far node that is down leaves it pending and a later tick carries it. | I §9.2; R §3.3 |
 
 ### CLI, participant instrument and test-support integration
 
@@ -1010,7 +1011,7 @@ Open local parameters are not all specification defects: cache TTLs, queue cap, 
 
 ## 10. Document baseline and coverage totals
 
-This specification contains **536 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
+This specification contains **537 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
 
 | Prefix | Families |
 |---|---:|
@@ -1035,7 +1036,7 @@ This specification contains **536 numbered requirement/test families** across **
 | PKG | 16 |
 | APP | 14 |
 | UX | 19 |
-| OPS | 21 |
+| OPS | 22 |
 | TOOL | 7 |
 | SCH | 27 |
 | INT | 24 |

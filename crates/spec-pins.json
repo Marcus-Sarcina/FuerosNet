@@ -3,10 +3,10 @@
   "network-design.md": "29fb9efc51b31c12c403df3659fd68f88e1f8bd572e478188fd87458597e8142",
   "wire-format.md": "ae882d8a30158163773bb47e546982526e06b88aa285cbb9fe7937f4fa5ded05",
   "light-client-requirements.md": "e7279f4632d8bb2f43c6a0908d52298eb3c0bc1daeadb36d8fde3106b5983770",
-  "infra-client-requirements.md": "ea923f8a47761c32e44a06391a7b89771bf786f702ccb3cf2eca4834fd484990",
+  "infra-client-requirements.md": "325272a6f1ee03f5ab2e57d41ff0575dcd052448d2d291dbb85befad5db2e769",
   "resource-requirements.md": "30e0042579c71b2148d9c31dd0df3c20ae63a9db68bfae01fe91a04136750944",
-  "functional_tests.md": "5431e99bf9a4bc0afdd145530c157fd3eb66fac9a457da845271df8b6fe4a542"
+  "functional_tests.md": "6665dd22a5f2b3ff6f221bf8e8b9610229d9a2a1f8bb5d71aae9f05affcca504"
  },
- "accepted": "2026-10-25",
+ "accepted": "2026-10-26",
  "note": "the documents crates/check.sh last passed against; rewritten only by tools/pincheck.py --accept"
 }

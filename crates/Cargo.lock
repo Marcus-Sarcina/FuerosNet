@@ -2034,6 +2034,8 @@ dependencies = [
  "rhtn-resources",
  "rhtn-sim",
  "rhtn-transport",
+ "rustls",
+ "rustls-pki-types",
  "serde",
  "serde_json",
  "tokio",

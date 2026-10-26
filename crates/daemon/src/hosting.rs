@@ -42,6 +42,16 @@
 //! federates with, and the node carries envelopes within it and no
 //! further ([`relationships`]).
 //!
+//! **Where a related instance another node hosts is reached** is written
+//! beside it too ([`locations`]; `rhtn_node::federation::Location`): that
+//! node's federation listener and the raw public key it presents, as its
+//! operator gave them:
+//!
+//! ```toml
+//! [host.at]
+//! "<a related instance>" = { address = "203.0.113.9:7452", key = "<64 hex>" }
+//! ```
+//!
 //! **A grant sits inside the package it grants on**, which is what the
 //! nesting buys: a grant naming a resource nothing hosts was an error the
 //! line format could express and this one cannot.
@@ -73,7 +83,7 @@
 //! thing an operator may want to write down.
 
 use rhtn_archive::Keyhash;
-use rhtn_node::federation::Relationships;
+use rhtn_node::federation::{Location, Relationships};
 use rhtn_node::grant::{Clause, Grant, Template};
 use rhtn_node::relay::Relay;
 use rhtn_node::resources::{Binding, Gateway, Kind, Manifest, Operation, Parameter, instantiate};
@@ -168,6 +178,19 @@ struct HostEntry {
     /// Named kin groups.
     #[serde(default)]
     kin: std::collections::BTreeMap<String, Vec<String>>,
+    /// Where related instances other nodes host are reached
+    /// ([`locations`]).
+    #[serde(default)]
+    at: std::collections::BTreeMap<String, AtEntry>,
+}
+
+/// One related instance's node: its federation listener and the key it
+/// presents.
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AtEntry {
+    address: String,
+    key: String,
 }
 
 #[derive(serde::Deserialize)]
@@ -275,6 +298,61 @@ pub(crate) fn grant_of(g: &GrantEntry) -> Result<Grant, String> {
         clauses.push(clause_of(c)?);
     }
     Ok(Grant { roles, clauses })
+}
+
+/// **Where related instances other nodes host are reached**, from the
+/// `[host.at]` tables of the hosting file ([`rhtn_node::federation::Location`]):
+/// each names an instance, the federation listener of the node hosting
+/// it, and the raw public key that node presents, which the far operator
+/// gave. One instance is at one node: the same instance located twice
+/// with different particulars is refused.
+pub fn locations(path: &Path) -> Result<Vec<(Keyhash, Location)>, Refused> {
+    let text =
+        std::fs::read_to_string(path).map_err(|e| at(0, format!("{}: {e}", path.display())))?;
+    let file: File = toml::from_str(&text).map_err(|e| at(0, e.to_string()))?;
+    let mut out: Vec<(Keyhash, Location)> = Vec::new();
+    for h in &file.host {
+        for (instance, where_) in &h.at {
+            let k = keyhash(instance).ok_or_else(|| {
+                at(
+                    0,
+                    format!(
+                        "`{}`: `{instance}` is not an instance (64 lower-case hex digits)",
+                        h.resource
+                    ),
+                )
+            })?;
+            let address: std::net::SocketAddr = where_.address.parse().map_err(|_| {
+                at(
+                    0,
+                    format!(
+                        "`{instance}`: `{}` is not an address and port",
+                        where_.address
+                    ),
+                )
+            })?;
+            let key = keyhash(&where_.key).ok_or_else(|| {
+                at(
+                    0,
+                    format!("`{instance}`: `key` is 64 lower-case hex digits"),
+                )
+            })?;
+            let loc = Location { address, key };
+            if let Some((_, other)) = out.iter().find(|(i, _)| *i == k)
+                && *other != loc
+            {
+                return Err(at(
+                    0,
+                    format!(
+                        "`{instance}` is located twice, differently: one instance is at one node"
+                    ),
+                ));
+            }
+            out.push((k, loc));
+        }
+    }
+    out.dedup();
+    Ok(out)
 }
 
 /// **The federation relationships the hosting file configures**, per

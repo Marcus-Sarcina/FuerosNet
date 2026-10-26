@@ -82,6 +82,11 @@ pub struct Config {
     /// whatever means they reach the host with, which
     /// `infra-client-requirements.md` §8.2 leaves to them.
     pub administration: Option<Administration>,
+    /// Where this node takes envelopes for the instances it hosts from
+    /// other nodes ([`crate::federation`]), where the operator opened
+    /// one; absent, envelopes for instances here arrive by hand at the
+    /// administration surface and envelopes for instances elsewhere wait.
+    pub federation: Option<Federation>,
     /// Where the queue's directory store lives, so what was accepted
     /// survives a restart (`infra-client-requirements.md` §2).
     pub queue: PathBuf,
@@ -167,6 +172,16 @@ pub struct Administration {
     pub listen: SocketAddr,
     /// The one-time token, 32 bytes.
     pub token: [u8; 32],
+}
+
+/// The `[federation]` table: where this node listens for envelopes from
+/// other nodes, TLS over TCP, presenting the same raw public key the
+/// protocol's transport presents ([`crate::federation`]). Public, unlike
+/// the administration surface: another operator's node reaches it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Federation {
+    /// Where the listener binds.
+    pub listen: SocketAddr,
 }
 
 /// The `[log]` table: a file of JSON lines, one event each, and the least
@@ -313,7 +328,14 @@ struct File {
     #[serde(rename = "resource-limits")]
     resource_limits: Option<Spanned<Limits>>,
     administration: Option<Spanned<AdministrationTable>>,
+    federation: Option<Spanned<FederationTable>>,
     log: Option<Spanned<LogTable>>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FederationTable {
+    listen: String,
 }
 
 #[derive(serde::Deserialize)]
@@ -497,6 +519,18 @@ impl Config {
                 Some(Administration { listen, token })
             }
         };
+        let federation = match &f.federation {
+            None => None,
+            Some(e) => {
+                let n = line_at(text, e);
+                let listen: SocketAddr = e
+                    .get_ref()
+                    .listen
+                    .parse()
+                    .map_err(|_| at(n, "`federation.listen` is not an address and port"))?;
+                Some(Federation { listen })
+            }
+        };
 
         // the seed, or the whole of what an instance runs on instead
         match (&f.identity, &f.operator, &f.transport_key, &f.delegations) {
@@ -525,6 +559,7 @@ impl Config {
             anchor_entry: f.anchor_entry,
             acknowledge: f.acknowledge.unwrap_or(false),
             administration,
+            federation,
             listen,
             upstream,
             queue: f.queue,

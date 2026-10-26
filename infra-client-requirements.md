@@ -568,15 +568,24 @@ instances you host yourself. **Carry within the configured relationships and no
 further**: an envelope whose origin is not a relationship of the receiving instance
 is refused, and one addressed to an instance that is not a relationship of the
 sender is held, visible, and not forced through. **Keep the record bookkeeping
-§3.3 states before anything is delivered** — conflict before duplicate, newer
+`resource-requirements.md` §3.3 states before anything is delivered** — conflict before duplicate, newer
 supersedes, older discarded, a tombstone that replay does not undo — and keep a
 conflict for the operator rather than resolving it. **Show the plane on your
 administration surface** (§8.3), per instance: the relationships, what is held and
 whether it stands, what waits, what is pending for an instance elsewhere, and any
 conflict, so that what was pushed to an instance and from whom is legible to its
-operator. An envelope for a related instance another node hosts is pending until a
-transport carries it; until one does, the operator's surface offers it to be read
-and to be delivered at the other node's surface by hand.
+operator. **An envelope for a related instance another node hosts is carried to
+that node over TLS, node to node** [author, 2026-10-26]: where you opened a
+federation listener it presents the raw public key your transport presents, and
+where your operator wrote the far node's listener and key beside a related
+instance you deliver there, presenting your own key and refusing a listener that
+presents any key but the one written. The applications see nothing of the carriage
+— instance to instance in meaning, node to node on the wire — so the bookkeeping
+and the relationship check above are applied once, at the receiving node, whatever
+carried the envelope. What this gives up is delivery to a node that is down: a
+pending envelope is retried each tick until the far node takes it, and where no
+location is written for an instance it stays pending, readable from the surface
+and deliverable at the other node's surface by hand.
 
 ---
 

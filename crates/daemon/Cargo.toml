@@ -42,6 +42,10 @@ serde = { version = "1", features = ["derive"] }
 # names it), and named here for the enrolment proof's HMAC
 aws-lc-rs = "1.18"
 toml = "1"
+# the federation listener and sender: TLS over TCP between nodes, raw
+# public keys as the transport already presents them (`federation`)
+rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs", "std", "tls12"] }
+rustls-pki-types = "1"
 # MIT; the lifecycle events, and the cap the `releasable` feature sets
 tracing = { version = "0.1", default-features = false, features = ["std"] }
 # MIT OR Apache-2.0; already in the graph through tracing, named so

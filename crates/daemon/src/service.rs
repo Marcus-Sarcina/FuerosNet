@@ -167,6 +167,10 @@ pub struct Service {
     /// The credential an instance runs under, and where its run is read
     /// from; none for a node holding its seed.
     credential: Option<(Arc<rhtn_transport::tls::Credential>, std::path::PathBuf)>,
+    /// What this node presents in a handshake, for the federation carrier
+    /// ([`crate::federation`]): the same key the protocol's transport
+    /// presents.
+    presenter: rhtn_transport::tls::Presenter,
     /// The count last noticed to the operator, so a notice is raised once
     /// per count.
     noticed: std::sync::Mutex<Option<usize>>,
@@ -576,6 +580,13 @@ impl Service {
                         .configure(res, r)
                         .map_err(|e| Startup::Hosting(format!("{}: {e}", path.display())))?;
                 }
+                for (instance, at) in crate::hosting::locations(path)
+                    .map_err(|e| Startup::Hosting(format!("{}: {e}", path.display())))?
+                {
+                    view.federation
+                        .locate(instance, at)
+                        .map_err(|e| Startup::Hosting(format!("{}: {e}", path.display())))?;
+                }
                 tracing::info!(target: "daemon", step = "hosting", bound, "daemon.lifecycle");
                 bound > 0
             }
@@ -732,8 +743,37 @@ impl Service {
                 }
             }
         };
+        let presenter = match &credential {
+            Some((c, _)) => rhtn_transport::tls::Presenter::Delegated(c.clone()),
+            None => rhtn_transport::tls::Presenter::from(
+                signer.clone().expect("a seed or a credential"),
+            ),
+        };
+        // the federation listener, where the operator opened one: public,
+        // presenting the transport key, taking envelopes for the
+        // instances hosted here from other nodes
+        if let Some(f) = &cfg.federation {
+            match crate::federation::listen(f.listen, &presenter, node.clone()) {
+                Ok(bound) => {
+                    tracing::info!(target: "daemon", step = "federation", addr = %bound, "daemon.lifecycle");
+                    let key: String = presenter
+                        .presented_key()
+                        .iter()
+                        .map(|b| format!("{b:02x}"))
+                        .collect();
+                    crate::tell!("rhtnd: federation on {bound}, key {key}");
+                }
+                Err(e) => {
+                    return Err(Startup::State(format!(
+                        "federation.listen {}: {e}",
+                        f.listen
+                    )));
+                }
+            }
+        }
         let service = Service {
             node,
+            presenter,
             prekeys: cfg.prekeys.clone(),
             topology: cfg.topology.clone(),
             archive: cfg.archive.clone(),
@@ -839,9 +879,16 @@ impl Service {
     /// emits carried to the instances this node hosts. Run on the tick
     /// and after an act on the surface delivers an envelope.
     pub fn federate(&self) -> rhtn_node::federation::Passed {
-        let mut view = self.node.view.lock().unwrap();
-        let v = &mut *view;
-        let passed = v.federation.pass(&v.resources);
+        let mut passed = {
+            let mut view = self.node.view.lock().unwrap();
+            let v = &mut *view;
+            v.federation.pass(&v.resources)
+        };
+        // then across to other nodes, outside the lock: the far end may
+        // be slow or absent, and a request here must not wait on it
+        let (taken, failed) = crate::federation::carry(&self.node, &self.presenter);
+        passed.carried += taken;
+        passed.refused.extend(failed);
         if passed.delivered + passed.emitted + passed.carried > 0 || !passed.refused.is_empty() {
             tracing::info!(
                 target: "daemon",

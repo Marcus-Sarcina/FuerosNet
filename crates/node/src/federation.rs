@@ -49,15 +49,23 @@
 //! thing, but **this stub does not verify it**: instance keys are the
 //! applications' and no key material for them is held here yet.
 //!
-//! **What is stubbed.** Delivery between two instances *this node hosts*
-//! is real. Delivery to an instance on another node is not: an envelope
-//! for a related instance this node does not host waits in the outbox,
-//! readable from the operator's surface (`GET /node/resource/<hex>/
-//! federation`) and deliverable by hand at the other node's surface
-//! (`PUT /node/resource/<hex>/envelope`). The transport that replaces
-//! the hand is §6's open choice. Relationships are configured in the
-//! hosting file; the "established by directive" path is not built. No
-//! body is pulled on acceptance: an envelope carries its body, bounded.
+//! **Between nodes: HTTPS, node to node, raw public keys pinned by the
+//! operator** [author, 2026-10-26]. An envelope for a related instance
+//! another node hosts is *pending* until the daemon carries it to that
+//! node's federation listener over TLS, each side presenting its own
+//! transport key and the sender checking the key the operator configured
+//! for the far instance's node ([`Location`]); the far node offers it into
+//! the instance's plane exactly as its own surface does. The applications
+//! see nothing of this: instance to instance in meaning, node to node on
+//! the wire, so §5's bookkeeping and the relationship check stay the
+//! node's. What is given up is offline delivery — HTTPS reaches a node
+//! that is up, and a pending envelope is retried each tick until one is.
+//! Where no location is configured for the far instance the envelope
+//! stays pending, readable from the operator's surface and deliverable by
+//! hand at the other node's. Relationships are configured in the hosting
+//! file; the "established by directive" path is not built. No body is
+//! pulled on acceptance: an envelope carries its body, bounded. The
+//! signature is carried, canonical bytes fixed, and not yet verified.
 
 use crate::Keyhash;
 use crate::http::base64url;
@@ -518,9 +526,24 @@ pub struct Delivery {
     pub attempts: u32,
 }
 
+/// **Where an instance another node hosts is reached**: that node's
+/// federation listener, and the transport key it presents, which the
+/// operator was given by the far operator and wrote beside the
+/// relationship. The sender pins it, so a listener presenting another key
+/// is not delivered to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Location {
+    /// The far node's federation listener.
+    pub address: std::net::SocketAddr,
+    /// The raw public key that node presents: its transport key, as its
+    /// own page and startup line print it.
+    pub key: [u8; 32],
+}
+
 /// An envelope a hosted resource emitted, waiting for a carrier to the
-/// instance it names: this node where it hosts that instance, nothing
-/// yet where it does not.
+/// instance it names: this node where it hosts that instance, the
+/// daemon's transport where a [`Location`] is configured for it, nothing
+/// yet where neither.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Pending {
     /// Where it is to go.
@@ -724,6 +747,23 @@ impl Plane {
 #[derive(Debug, Default)]
 pub struct Federation {
     planes: BTreeMap<Keyhash, Plane>,
+    /// Where instances other nodes host are reached, by instance.
+    locations: BTreeMap<Keyhash, Location>,
+}
+
+/// One envelope to carry to another node: which of this node's instances
+/// emitted it, which instance it is for, where that instance's node is,
+/// and the envelope itself.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Abroad {
+    /// The emitting instance this node hosts.
+    pub from: Keyhash,
+    /// The instance it is for.
+    pub to: Keyhash,
+    /// Where to carry it.
+    pub at: Location,
+    /// The envelope.
+    pub envelope: Envelope,
 }
 
 /// What one pass did, for a log line and a test.
@@ -766,6 +806,63 @@ impl Federation {
     /// Forget a resource that is no longer hosted.
     pub fn forget(&mut self, resource: &Keyhash) {
         self.planes.remove(resource);
+    }
+
+    /// Set where an instance another node hosts is reached, replacing
+    /// what was known. An instance this node hosts needs no location and
+    /// is refused one, since a carrier would then send to itself.
+    pub fn locate(&mut self, instance: Keyhash, at: Location) -> Result<(), String> {
+        if self.planes.contains_key(&instance) {
+            return Err(format!(
+                "{} is hosted here and needs no location",
+                hex(&instance)
+            ));
+        }
+        self.locations.insert(instance, at);
+        Ok(())
+    }
+
+    /// Forget every location, before a reload writes them again.
+    pub fn unlocate_all(&mut self) {
+        self.locations.clear();
+    }
+
+    /// Where `instance` is reached, where the operator said.
+    pub fn location_of(&self, instance: &Keyhash) -> Option<Location> {
+        self.locations.get(instance).copied()
+    }
+
+    /// **What waits to be carried to another node**: every pending
+    /// envelope whose instance has a location. The daemon carries each
+    /// and calls [`Federation::carried`] for those the far node took;
+    /// the rest stay pending for the next tick.
+    pub fn abroad(&self) -> Vec<Abroad> {
+        let mut out = Vec::new();
+        for (from, plane) in &self.planes {
+            for p in &plane.pending {
+                if let Some(at) = self.locations.get(&p.to) {
+                    out.push(Abroad {
+                        from: *from,
+                        to: p.to,
+                        at: *at,
+                        envelope: p.envelope.clone(),
+                    });
+                }
+            }
+        }
+        out
+    }
+
+    /// A pending envelope the far node took: no longer pending.
+    pub fn carried(&mut self, from: &Keyhash, to: &Keyhash, envelope: &Envelope) {
+        if let Some(plane) = self.planes.get_mut(from)
+            && let Some(i) = plane
+                .pending
+                .iter()
+                .position(|p| p.to == *to && p.envelope == *envelope)
+        {
+            plane.pending.remove(i);
+        }
     }
 
     /// The plane of a resource, where one is configured.
@@ -1317,6 +1414,59 @@ mod tests {
             )],
         );
         assert!(refused[0].contains("origin"), "{refused:?}");
+    }
+
+    #[test]
+    fn a_pending_envelope_for_a_located_instance_is_abroad_until_carried() {
+        let mut f = Federation::default();
+        f.configure(
+            k(5),
+            Relationships {
+                patron: Some(k(9)),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let at = Location {
+            address: "203.0.113.9:7452".parse().unwrap(),
+            key: [7; 32],
+        };
+        assert!(
+            f.locate(k(5), at).is_err(),
+            "a hosted instance has no location"
+        );
+        f.locate(k(9), at).unwrap();
+        struct Quiet;
+        impl Carrier for Quiet {
+            fn authority(&self, _: &Keyhash) -> Option<String> {
+                Some("x.internal".into())
+            }
+            fn hand(&self, _: &Keyhash, message: &[u8]) -> Option<Result<Vec<u8>, String>> {
+                let text = String::from_utf8_lossy(message);
+                let body = if text.starts_with("GET /.rhtn/outbox") {
+                    json!({"emit": [{"to": "patron", "envelope": Envelope::live(k(5), "up", "s@1", 1, b"y").to_json()}]}).to_string()
+                } else {
+                    String::new()
+                };
+                Some(Ok(format!(
+                    "HTTP/1.1 200 OK\r\ncontent-length: {}\r\n\r\n{body}",
+                    body.len()
+                )
+                .into_bytes()))
+            }
+        }
+        f.pass(&Quiet);
+        let abroad = f.abroad();
+        assert_eq!(abroad.len(), 1);
+        assert_eq!(
+            (abroad[0].from, abroad[0].to, abroad[0].at),
+            (k(5), k(9), at)
+        );
+        f.carried(&k(5), &k(9), &abroad[0].envelope);
+        assert!(f.abroad().is_empty());
+        assert!(f.plane(&k(5)).unwrap().pending.is_empty());
+        f.unlocate_all();
+        assert_eq!(f.location_of(&k(9)), None);
     }
 
     #[test]
