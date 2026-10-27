@@ -45,13 +45,30 @@ template. That fixes the navigation, and the sections below become screens
 
 **Home view** is the landing state on loading and on returning by the alias
 bar: a reverse-chronological scroll of high-priority notices from every
-joined subnet.
+joined subnet and every resource in them. **Each says where it is from, in
+full** [author, 2026-10-27]:
+
+> *[patron alias]*'s *[subnet alias]* *[resource name]*: *[notice type]*
+
+**That form is the point rather than decoration.** With the core
+applications distributed, many subnets will carry resources of
+substantially similar name and description, so the person has to know which
+context they are seeing one in; the subnet's icon beside the row is the
+glance, and the line is the whole of it. A notice with nothing behind it in
+a resource — a witness request, an adoption offer — drops that one segment.
 
 **Subnet view** is what a subnet's icon opens: content from that subnet
 alone, the content area split between navigation buttons to that subnet's
 resources and a scrolling view of its chat — **a BBS-style single board**,
 one board per subnet, with message propagation along subnet-hierarchical
 scope.
+
+**Navigating into a subnet is the only way to its resources** [author,
+2026-10-27], for the reason the notice line carries its context: a resource
+named out of its subnet is a name that several subnets will share. So the
+catalog is not a place a person goes. The sweep that fills it is still the
+client's (F), and what it returns is sorted into the subnet each entry
+belongs to.
 
 **Direct view** is what the direct-messages icon opens: a reverse
 chronological list of recent chat activity. **It is also the contacts
@@ -77,8 +94,8 @@ with a back control in the title header returning to the view it came from.
 **What this leaves to settle**, drawn as placeholders and owed: the scope
 vocabulary a board post carries, which is the application tier's and not
 this document's; the palette, the template implying a dark one; and a home
-for the catalog browsed across subnets, for settings, and for backup and
-recovery.
+for settings and for backup and recovery, the second of which is the one
+worth placing early — losing the phone loses the identity on it.
 
 ---
 
@@ -223,6 +240,13 @@ a reason and a way back (UX-013 validates these by walking them).
 | E4 Recovery | Owed whole (five client functions, no export); the identity-fork warning of A1 applies here | Owed | REC-*, UX-008 |
 
 ## F. Catalog and resources
+
+**This is no longer a destination** [author, 2026-10-27]. Under the shell
+above, a resource is reached by navigating into the subnet it belongs to
+and nowhere else, so what this section describes is where the sweep's
+results are *shown* — the resource strip at the top of a subnet view — and
+no longer a screen of its own. F1 to F3 below describe the browse as it was
+built; F4 and F5 are still owed and still have no kernel call behind them.
 
 **Built, 2026-10-16** (`CatalogActivity`, `Catalog`): the sweep
 (`Client::browse`), what it holds with each entry's type, instance, owner
