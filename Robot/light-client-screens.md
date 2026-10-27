@@ -54,18 +54,31 @@ one board per subnet, with message propagation along subnet-hierarchical
 scope.
 
 **Direct view** is what the direct-messages icon opens: a reverse
-chronological list of recent chat activity, and a way to open a new thread
-with anyone in this person's contacts.
+chronological list of recent chat activity. **It is also the contacts
+list** [author, 2026-10-27], with a search bar at its top that finds a
+contact by alias or by hash — so everyone this device holds is reachable
+from here whether or not anything has been said, and opening one is how a
+thread starts. No separate roll and no separate compose control.
+
+**One scanner, and what the code was decides** [author, 2026-10-27].
+*Scan* is the first option on the meeting screen, and it reads whatever is
+put in front of it: **a locator is kept** and the screen says *[alias]
+saved to contacts*; **an invitation goes on into the meeting flow**. The
+kernel already parses which it is rather than being told (`take_intake`,
+E1), so neither the person nor the screen has to know in advance. The name
+in that confirmation is the keyhash until the party publishes one, by
+`light-client-requirements.md` §4.3's rule that no name is shown before it
+is received.
 
 **A thread takes the whole screen.** Selecting a direct thread or a board
 discussion hides the rail and the foot, so the screen is the conversation,
 with a back control in the title header returning to the view it came from.
 
-**What this leaves to settle**, drawn as placeholders and owed:
-the scope vocabulary a board post carries, which is the application tier's
-and not this document's; where taking somebody's code lives now that People
-is not a destination (E1); and the palette, the template implying a dark
-one.
+**What this leaves to settle**, drawn as placeholders and owed: the scope
+vocabulary a board post carries, which is the application tier's and not
+this document's; the palette, the template implying a dark one; and a home
+for the catalog browsed across subnets, for settings, and for backup and
+recovery.
 
 ---
 
