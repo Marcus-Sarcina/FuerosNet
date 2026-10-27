@@ -163,7 +163,7 @@ class OperatorActivity : Activity() {
                             isEnabled = true
                         } else {
                             Thread {
-                                val said = Kernel.renew(i.at, token, 45)
+                                val said = Kernel.renew(i.at, token, 45, i.subnet)
                                 runOnUiThread {
                                     narration.text = said.joinToString("\n")
                                     isEnabled = true
@@ -423,9 +423,14 @@ class OperatorActivity : Activity() {
         tokenField: EditText,
         endpointField: EditText,
     ): LinearLayout {
-        val provider = Launch.providers().first()
-        val held = Kernel.providerCredentials()[provider.name.lowercase()] ?: ""
-        val credential = field("${provider.name} API token", held, secret = true)
+        // **every provider this build drives, least crowded first**
+        // (PRD-11; `light-client-requirements.md` §6): the ordering speaks
+        // to this operator's own redundancy rather than the network's, it
+        // hides none and it scores none
+        val all = Launch.providers().sortedBy { Kernel.crowded(it.asn).first }
+        var provider = all.first()
+        val heldFor = { p: Launch.Provider -> Kernel.providerCredentials()[p.name.lowercase()] ?: "" }
+        val credential = field("${provider.name} API token", heldFor(provider), secret = true)
         // the token is the operator's own, made at the provider's page:
         // open it, and say the steps there
         val getToken = Button(this).apply {
@@ -443,13 +448,55 @@ class OperatorActivity : Activity() {
         val sizes = android.widget.Spinner(this)
         var regionRows: List<Launch.Region> = listOf()
         var sizeRows: List<Launch.Size> = listOf()
-        val (crowdedCount, crowded) = Kernel.crowded(provider.asn)
         val about = TextView(this).apply {
             textSize = 13f
             setTextColor(Color.GRAY)
-            text = "${provider.name} (AS${provider.asn}): " +
-                (if (crowded) "$crowdedCount of the parties in your horizon already run there — crowded, and still yours to choose. " else "nobody in your horizon runs there. ") +
+        }
+        fun describe() {
+            val (count, crowded) = Kernel.crowded(provider.asn)
+            about.text = "${provider.name} (AS${provider.asn}): " +
+                (if (crowded) "$count of the parties in your horizon already run there — crowded, and still yours to choose. " else "nobody in your horizon runs there. ") +
                 "That speaks to your own redundancy, not the network's."
+        }
+        describe()
+        // **which one of them**, chosen here: a build driving two
+        // providers and offering one would be choosing for the operator
+        val chooser = android.widget.Spinner(this).apply {
+            adapter = android.widget.ArrayAdapter(
+                this@OperatorActivity,
+                android.R.layout.simple_spinner_dropdown_item,
+                all.map { p ->
+                    val (count, crowded) = Kernel.crowded(p.asn)
+                    "${p.name} (AS${p.asn})" + if (crowded) "  — $count in your horizon" else ""
+                },
+            )
+            onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+                override fun onItemSelected(
+                    parent: android.widget.AdapterView<*>?,
+                    view: android.view.View?,
+                    position: Int,
+                    id: Long,
+                ) {
+                    provider = all[position]
+                    describe()
+                    getToken.text = "Get a token at ${provider.name}"
+                    credential.hint = "${provider.name} API token"
+                    credential.setText(heldFor(provider))
+                    // what was fetched was the provider chosen then: a
+                    // region of one provider is not a region of another
+                    regionRows = listOf()
+                    sizeRows = listOf()
+                    val empty = android.widget.ArrayAdapter(
+                        this@OperatorActivity,
+                        android.R.layout.simple_spinner_dropdown_item,
+                        listOf<String>(),
+                    )
+                    regions.adapter = empty
+                    sizes.adapter = empty
+                }
+
+                override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
+            }
         }
         val fetch = Button(this).apply {
             text = "Fetch regions and sizes"
@@ -565,6 +612,8 @@ class OperatorActivity : Activity() {
         }
         return LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
+            addView(TextView(this@OperatorActivity).apply { textSize = 12f; setTextColor(Color.GRAY); text = "Provider" })
+            addView(chooser)
             addView(about)
             addView(getToken)
             addView(credential)

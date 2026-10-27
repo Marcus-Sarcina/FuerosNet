@@ -1073,3 +1073,59 @@ fn an_envelope_is_delivered_from_the_surface_and_the_plane_is_readable() {
     d.stop();
     let _ = std::fs::remove_dir_all(&l.dir);
 }
+
+/// **The fetch states the subtree this instance counts, and the page says
+/// a re-signed entry is owed where its entry claims another number**
+/// (`infra-client-requirements.md` §4.4; [author, 2026-10-26]). The size
+/// is the instance's own fact, so the instance states it and the client
+/// signs it; here the entry delivered at enrolment claims a subtree of 3
+/// while nothing is beneath this node, which is the same comparison a
+/// grown subtree makes from the other side.
+#[test]
+fn the_fetch_says_the_subtree_it_counts_and_the_page_owes_a_re_signed_entry() {
+    let (l, mut d, at) = enrolled_with("subtree", 37454, |_| {});
+    assert!(d.serving().is_some(), "{:?}", d.lines());
+
+    // the entry `enrolled_with` delivered claims 3 (its fixture's size)
+    let got = ask(
+        at,
+        &format!("GET /node?nonce={} HTTP/1.1", hex(&[5u8; 16])),
+        b"",
+    );
+    assert_eq!(
+        "0",
+        field(&got, "subtree").expect("the count is stated"),
+        "nothing is beneath this node: {got}"
+    );
+    assert_eq!("3", field(&got, "anchor-claims").expect("what it claims"));
+    assert_eq!("1", field(&got, "anchor-seqno").expect("at which counter"));
+    let points = field(&got, "anchor-points").expect("the points it names");
+    assert!(!points.is_empty(), "so a re-signing moves the size alone");
+
+    let page = ask(at, "GET / HTTP/1.1", b"");
+    assert!(
+        page.contains("re-signed anchor entry"),
+        "the page owes one: {page}"
+    );
+    assert!(
+        page.contains("claiming a subtree of 3") && page.contains("0 beneath this node now"),
+        "and says both numbers: {page}"
+    );
+
+    // re-signed at the next counter over the same points, and the page
+    // stops asking
+    let bob = test_identity("bob");
+    let point = NetworkPoint::new([127, 0, 0, 1], Some(37454));
+    let entry = anchor_entry(&bob, std::slice::from_ref(&point), 0, seqno(2));
+    assert_eq!(
+        200,
+        status(&ask(at, "PUT /node/anchor-entry HTTP/1.1", &entry))
+    );
+    let page = ask(at, "GET / HTTP/1.1", b"");
+    assert!(
+        !page.contains("re-signed anchor entry"),
+        "nothing is owed once it claims what the node counts: {page}"
+    );
+    d.stop();
+    let _ = std::fs::remove_dir_all(&l.dir);
+}

@@ -798,23 +798,49 @@ impl Surface {
         // says where that is.
         let issued = self.credential.issued();
         let ends = issued.iter().map(|i| i.not_after).max().unwrap_or(0);
-        (
-            200,
-            format!(
-                "transport {}\nproof {}\nphase {}\ncredentials {}\nrun-ends {}\nendpoint-record {}\nanchor-entry {}\n",
-                hex(&key),
-                hex(&proof(&self.token, &nonce, &key)),
-                if self.running().is_some() {
-                    "serving"
-                } else {
-                    "enrolling"
-                },
-                issued.len(),
-                ends,
-                held(&self.endpoint_record),
-                held(&self.anchor_entry),
-            ),
-        )
+        // **the subtree this instance counts, and what its entry claims**
+        // (`infra-client-requirements.md` §4.4): the size is a fact about
+        // the node, so the node states it and the client re-signs where
+        // the two differ. The points come back too, so a re-signing names
+        // the same addresses without the client having to remember them.
+        let running = self.running();
+        let subtree = running
+            .as_ref()
+            .map(|(node, _)| node.view.lock().unwrap().subtree_seen())
+            .unwrap_or(0);
+        let entry = self
+            .anchor_entry
+            .as_deref()
+            .and_then(|p| std::fs::read(p).ok())
+            .and_then(|b| rhtn_node::resolution::AnchorEntry::parse(&b).ok());
+        let mut said = format!(
+            "transport {}\nproof {}\nphase {}\ncredentials {}\nrun-ends {}\nendpoint-record {}\nanchor-entry {}\nsubtree {subtree}\n",
+            hex(&key),
+            hex(&proof(&self.token, &nonce, &key)),
+            if running.is_some() {
+                "serving"
+            } else {
+                "enrolling"
+            },
+            issued.len(),
+            ends,
+            held(&self.endpoint_record),
+            held(&self.anchor_entry),
+        );
+        if let Some(e) = &entry {
+            said.push_str(&format!(
+                "anchor-claims {}\nanchor-seqno {}\nanchor-series {}\nanchor-points {}\n",
+                e.subtree_size,
+                e.seqno.counter,
+                e.seqno.series,
+                e.endpoints
+                    .iter()
+                    .map(|p| hex(&p.encode_bytes()))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            ));
+        }
+        (200, said)
     }
 
     /// One of the two records only this instance's operator can sign:

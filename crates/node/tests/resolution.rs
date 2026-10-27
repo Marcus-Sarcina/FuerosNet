@@ -1185,3 +1185,59 @@ fn a_thiefs_seal_freezes_a_chainless_holders_entry_and_nothing_moves_it_afterwar
     assert_eq!(store.offer(&thief, &ids()), LocatorOutcome::Replay);
     assert_eq!(store.in_series(&kh("alice"), 5).unwrap().bytes, thief);
 }
+
+/// **What a node counts beneath itself, which is what its anchor entry
+/// claims** (`NodeView::subtree_seen`; design §12.2's subtree size;
+/// `infra-client-requirements.md` §4.4): the downline over open bindings,
+/// the light clients attached, and the memo table's occupants, each once
+/// and never the node itself.
+///
+/// It is a floor by construction — a node stores its two-edge ball
+/// (design §15.1) and §15.2.1's table is optional — so what this asserts
+/// is that everything the node *does* hold is counted, not that the count
+/// is the true subtree.
+#[test]
+fn a_node_counts_what_it_holds_of_its_own_subtree_once_each_and_not_itself() {
+    use rhtn_node::view::Slot;
+    let t = tree();
+
+    // alice holds both adoptions: bob below her, carol below bob
+    assert_eq!(
+        t.a.subtree_seen(),
+        2,
+        "the downline over open bindings, walked to its depth"
+    );
+    // bob holds the same bindings and has carol attached as a client: one
+    // party, counted once whichever way it is held
+    assert_eq!(t.c.subtree_seen(), 1);
+
+    // a party only the memo table knows of is counted too: §15.2.1's
+    // table is how a node comes to see past its own ball
+    let mut a = t.a;
+    a.memo_table.insert(
+        (kh("bob"), 5),
+        Slot {
+            occupant: Some(kh("dave")),
+            timestamp: 0,
+        },
+    );
+    assert_eq!(a.subtree_seen(), 3);
+    // an empty slot adds nobody, and the node itself is never its own
+    // subordinate however it appears
+    a.memo_table.insert(
+        (kh("bob"), 6),
+        Slot {
+            occupant: None,
+            timestamp: 0,
+        },
+    );
+    a.memo_table.insert(
+        (kh("bob"), 7),
+        Slot {
+            occupant: Some(kh("alice")),
+            timestamp: 0,
+        },
+    );
+    a.attached.insert(kh("alice"));
+    assert_eq!(a.subtree_seen(), 3);
+}

@@ -27,13 +27,13 @@ usage: rhtn <command> [...]
         Launch an instance at a hosting provider with the credential the
         file holds, wait for its address and its surface, then enrol it
         with a token minted here (L §10, OPS-020). The provider is one of:
-        digitalocean.
+        digitalocean, hetzner.
   node credential --provider <name> --credential-file <out>
         Open the provider's own token page, print the steps there, read
         the token pasted on standard input, try it at the provider, and
         write it to <out>, readable by its owner alone. No application is
         registered with any provider: the token is the operator's own,
-        scoped and expiring as they chose. Providers: digitalocean.
+        scoped and expiring as they chose. Providers: digitalocean, hetzner.
   node offers --provider <name> --credential-file <file>
         List the provider's regions and sizes.
   node destroy --provider <name> --credential-file <file> --id <machine id>

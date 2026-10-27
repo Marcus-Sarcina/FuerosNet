@@ -228,6 +228,25 @@ at enrolment is nothing. The size is a fact about the node, not a choice its
 operator is asked to make, so the client states it and re-signs the entry as
 the subtree grows.
 
+**So the instance states the count and its client signs it** [author,
+2026-10-26]. **Count what you hold of your own subtree** — the nodes at or below
+you over open bindings, the clients attached to you, and the occupants your memo
+table has accumulated (design §15.2.1), each once and not yourself — **and state it on
+the fetch your operator's client already makes**, beside what your standing
+entry claims, the sequence number it carries and the addresses it names. **It is
+a floor and should be read as one**: you store topology for your two-edge ball
+and the memo table is optional, so the number is at most your subtree and never
+more, which understates your reach rather than overstating it — and design §12.2
+wants it for an estimate with hysteresis either side. A client finding the count
+and the claim different signs a new entry over the same addresses at the next
+counter **in the same series**, since a sequence number orders two entries only
+within one (`wire-format.md` §2.3). **Say on your administration surface (§8.3)
+that one is owed**, with both numbers, as you say the records are owed at
+enrolment. The renewal of §7 is where a client does this, being the visit its
+operator already makes; an instance whose subtree moves between renewals carries
+a stale claim until the next one, which costs an estimate's accuracy and nothing
+else.
+
 **You accept it on the same terms as an anchor entry.** The signature is verifiable
 only once you hold the node's key material, so it gives attribution after contact
 rather than authentication before it. Treat the record as unverified gossip until you

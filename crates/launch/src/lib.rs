@@ -14,9 +14,12 @@
 //! **One shape for every provider that fits**: a machine from an image, a
 //! region and a size, given a script, giving back a public IPv4 (design
 //! §17.3 demands one).  DigitalOcean's API is the shape the budget
-//! providers copy, so it is the first [`Provider`] and the pattern for
-//! Hetzner, Vultr and BitLaunch; Njalla speaks it in another dialect; AWS
-//! and GCP speak the same primitive under heavier signing.
+//! providers copy, so it was the first [`Provider`]; [`Hetzner`] is the
+//! second and the proof that the shape travels — four of its differences
+//! are named in its own documentation, each a place where believing the
+//! first provider would have been wrong.  Vultr and BitLaunch copy the
+//! same shape; Njalla speaks it in another dialect; AWS and GCP speak the
+//! same primitive under heavier signing.
 //!
 //! **No network of its own.**  Every provider speaks HTTPS, and where a
 //! trust root comes from is the platform's: the kernel ships none by
@@ -78,23 +81,31 @@ pub struct MachineImage {
     pub distribution: String,
     /// Its name, for a person.
     pub name: String,
+    /// **Whether it runs on the 64-bit x86 machines this launch asks
+    /// for.**  Each provider says so in its own way — a suffix on the
+    /// slug at DigitalOcean, a field at Hetzner — and the adapter reads
+    /// its own; what this flow needs is one answer, because an image of
+    /// the wrong architecture is accepted at the plan and refused at the
+    /// machine.
+    pub amd64: bool,
 }
 
-/// The newest 64-bit Debian among `images`, by the release number in its
-/// slug (`debian-13-x64` over `debian-12-x64`); none where there is no
-/// Debian.
+/// The newest Debian among `images` that runs on this flow's machines, by
+/// the release number its slug carries after `debian-`; none where there
+/// is no such Debian.
+///
+/// **The slug's spelling is the provider's**, which is why the release is
+/// read off the front rather than matched whole: DigitalOcean writes
+/// `debian-13-x64` and Hetzner writes `debian-13`, and a pattern fitted
+/// to one of them silently finds nothing at the other.
 pub fn newest_debian(images: &[MachineImage]) -> Option<String> {
     images
         .iter()
-        .filter(|i| i.distribution.eq_ignore_ascii_case(MACHINE_DISTRIBUTION))
-        .filter(|i| i.slug.starts_with("debian-") && i.slug.ends_with("-x64"))
+        .filter(|i| i.amd64 && i.distribution.eq_ignore_ascii_case(MACHINE_DISTRIBUTION))
         .filter_map(|i| {
-            i.slug
-                .trim_start_matches("debian-")
-                .trim_end_matches("-x64")
-                .parse::<u32>()
-                .ok()
-                .map(|v| (v, i.slug.clone()))
+            let rest = i.slug.strip_prefix("debian-")?;
+            let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+            digits.parse::<u32>().ok().map(|v| (v, i.slug.clone()))
         })
         .max()
         .map(|(_, slug)| slug)
@@ -334,6 +345,7 @@ pub trait Provider {
 pub fn provider(name: &str) -> Option<Box<dyn Provider>> {
     match name.to_ascii_lowercase().as_str() {
         "digitalocean" => Some(Box::new(DigitalOcean::default())),
+        "hetzner" => Some(Box::new(Hetzner::default())),
         _ => None,
     }
 }
@@ -341,7 +353,7 @@ pub fn provider(name: &str) -> Option<Box<dyn Provider>> {
 /// Every provider's name, in the order a chooser lists them before
 /// PRD-11's ordering is applied.
 pub fn provider_names() -> Vec<&'static str> {
-    vec!["digitalocean"]
+    vec!["digitalocean", "hetzner"]
 }
 
 /// The steps on DigitalOcean's token page, as a client shows them.  The
@@ -442,6 +454,7 @@ impl Provider for DigitalOcean {
                 a.iter()
                     .filter_map(|i| {
                         Some(MachineImage {
+                            amd64: i["slug"].as_str()?.ends_with("-x64"),
                             slug: i["slug"].as_str()?.to_string(),
                             distribution: i["distribution"].as_str().unwrap_or("").to_string(),
                             name: i["name"].as_str().unwrap_or("").to_string(),
@@ -556,6 +569,286 @@ impl Provider for DigitalOcean {
         self.ask(t, credential, "DELETE", &format!("/v2/droplets/{id}"), None)
             .map(|_| ())
     }
+}
+
+/// The steps on Hetzner's token page, as a client shows them.  A token
+/// is a project's and carries one of two permissions, so the walkthrough
+/// names the project and the read-and-write choice rather than scopes
+/// Hetzner does not offer.
+const HETZNER_TOKEN_STEPS: &[&str] = &[
+    "Sign in, or sign up; Hetzner asks for a payment method, and a first-time account can take a while to be cleared for use.",
+    "Make a project, or open the one this node belongs in: a token belongs to one project and reaches nothing outside it, which is the narrowest a Hetzner token gets.",
+    "In that project open Security, then API tokens, and choose Generate API token.",
+    "Name the token for this client and give it Read & Write: the launch creates a machine, reads it while it boots and destroys it when you say, and Read alone cannot.",
+    "Generate it, copy the token shown (it is shown once), and paste it here.",
+];
+
+/// **Hetzner Cloud**, API v1: a bearer token, JSON in and out, a server
+/// from a system image, a location and a server type with `user_data`,
+/// and its public IPv4 in `public_net.ipv4.ip` once `status` is
+/// `running`.
+///
+/// **The same shape as DigitalOcean's, in another dialect** — which is
+/// what the [`Provider`] trait is for. Four differences are the adapter's
+/// to absorb, each a place where believing the first provider would have
+/// been wrong: a token is a *project's* rather than an account's; memory
+/// is stated in gigabytes and a price in a string of euros, per location;
+/// an image's architecture is a field rather than a suffix on its name;
+/// and a server type is offered per location, with the ones it has been
+/// withdrawn from still listed.
+#[derive(Debug, Clone)]
+pub struct Hetzner {
+    /// The API's base URL; a test's server stands in.
+    pub base: String,
+}
+
+impl Default for Hetzner {
+    fn default() -> Self {
+        Hetzner {
+            base: "https://api.hetzner.cloud".into(),
+        }
+    }
+}
+
+impl Hetzner {
+    /// One request, the provider's own `error.message` surfaced where it
+    /// refused.
+    fn ask(
+        &self,
+        t: &dyn Transport,
+        credential: &str,
+        method: &str,
+        path: &str,
+        body: Option<&str>,
+    ) -> Result<Value, String> {
+        let auth = format!("Bearer {credential}");
+        let mut headers: Vec<(&str, &str)> =
+            vec![("Authorization", &auth), ("Accept", "application/json")];
+        if body.is_some() {
+            headers.push(("Content-Type", "application/json"));
+        }
+        let (status, text) = t.exchange(method, &format!("{}{path}", self.base), &headers, body)?;
+        if !(200..300).contains(&status) {
+            let why = serde_json::from_str::<Value>(&text).ok().and_then(|v| {
+                v["error"]["message"]
+                    .as_str()
+                    .map(String::from)
+                    .or_else(|| v["error"]["code"].as_str().map(String::from))
+            });
+            return Err(match why {
+                Some(w) => format!("Hetzner answered {status}: {w}"),
+                None => format!("Hetzner answered {status}"),
+            });
+        }
+        if text.trim().is_empty() {
+            return Ok(Value::Null);
+        }
+        serde_json::from_str(&text).map_err(|e| format!("Hetzner's answer did not read: {e}"))
+    }
+}
+
+impl Provider for Hetzner {
+    fn name(&self) -> &'static str {
+        "Hetzner"
+    }
+
+    fn asn(&self) -> u64 {
+        // HETZNER-AS, Hetzner Online GmbH (RIPE, read 2026-10-26)
+        24940
+    }
+
+    fn token_page(&self) -> &'static str {
+        // a token belongs to a project, and the project is chosen on the
+        // way: the console's own front door is where the steps start
+        "https://console.hetzner.cloud/projects"
+    }
+
+    fn token_walkthrough(&self) -> &'static [&'static str] {
+        HETZNER_TOKEN_STEPS
+    }
+
+    fn machine_images(
+        &self,
+        t: &dyn Transport,
+        credential: &str,
+    ) -> Result<Vec<MachineImage>, String> {
+        // the distributions, for this flow's architecture, and the page
+        // Hetzner's largest: `per_page` tops out at 50 and the system
+        // images are a short list
+        let v = self.ask(
+            t,
+            credential,
+            "GET",
+            "/v1/images?type=system&architecture=x86&status=available&per_page=50",
+            None,
+        )?;
+        Ok(v["images"]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .filter_map(|i| {
+                        Some(MachineImage {
+                            slug: i["name"].as_str()?.to_string(),
+                            distribution: i["os_flavor"].as_str().unwrap_or("").to_string(),
+                            name: i["description"].as_str().unwrap_or("").to_string(),
+                            amd64: i["architecture"].as_str() == Some("x86"),
+                        })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default())
+    }
+
+    fn regions(&self, t: &dyn Transport, credential: &str) -> Result<Vec<Region>, String> {
+        let v = self.ask(t, credential, "GET", "/v1/locations", None)?;
+        Ok(v["locations"]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .filter_map(|l| {
+                        let city = l["city"].as_str().unwrap_or("");
+                        let country = l["country"].as_str().unwrap_or("");
+                        Some(Region {
+                            slug: l["name"].as_str()?.to_string(),
+                            name: match l["description"].as_str() {
+                                Some(d) if !d.is_empty() => format!("{d} ({country})"),
+                                _ => format!("{city} ({country})"),
+                            },
+                            // **Hetzner states availability per server
+                            // type, not per location** (each type lists
+                            // the locations it is offered in), so a
+                            // location is offered and the size listing is
+                            // where a choice narrows
+                            available: true,
+                        })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default())
+    }
+
+    fn sizes(&self, t: &dyn Transport, credential: &str) -> Result<Vec<Size>, String> {
+        let v = self.ask(t, credential, "GET", "/v1/server_types?per_page=50", None)?;
+        Ok(v["server_types"]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    // an architecture this flow's image does not run on,
+                    // and a type being withdrawn, are both listed: a
+                    // chooser offering either offers a launch that fails
+                    .filter(|s| s["architecture"].as_str() == Some("x86"))
+                    .filter(|s| {
+                        s["deprecated"].as_bool() != Some(true) && !s["deprecation"].is_object()
+                    })
+                    .filter_map(|s| {
+                        // where it is offered now, from the type's own
+                        // list; the prices' locations where it carries
+                        // none
+                        let regions: Vec<String> = s["locations"]
+                            .as_array()
+                            .map(|ls| {
+                                ls.iter()
+                                    .filter(|l| l["available"].as_bool() != Some(false))
+                                    .filter_map(|l| l["name"].as_str().map(String::from))
+                                    .collect()
+                            })
+                            .filter(|r: &Vec<String>| !r.is_empty())
+                            .or_else(|| {
+                                s["prices"]
+                                    .as_array()
+                                    .map(|ps| ps.iter().filter_map(l_name).collect())
+                            })
+                            .unwrap_or_default();
+                        // the net monthly price, as a string of euros, at
+                        // the cheapest location it is offered in
+                        let monthly = s["prices"]
+                            .as_array()
+                            .map(|ps| {
+                                ps.iter()
+                                    .filter_map(|p| p["price_monthly"]["net"].as_str())
+                                    .filter_map(|n| n.parse::<f64>().ok())
+                                    .fold(f64::INFINITY, f64::min)
+                            })
+                            .filter(|m| m.is_finite())
+                            .unwrap_or(0.0);
+                        Some(Size {
+                            slug: s["name"].as_str()?.to_string(),
+                            // gigabytes, and a float: 0.5 is a size
+                            // Hetzner has sold
+                            memory_mb: (s["memory"].as_f64().unwrap_or(0.0) * 1024.0).round()
+                                as u64,
+                            vcpus: s["cores"].as_f64().unwrap_or(0.0).round() as u64,
+                            monthly,
+                            regions,
+                        })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default())
+    }
+
+    fn launch(
+        &self,
+        t: &dyn Transport,
+        credential: &str,
+        plan: &Plan,
+        name: &str,
+        user_data: &str,
+    ) -> Result<Launched, String> {
+        let image = match &plan.machine_image {
+            Some(i) => i.clone(),
+            None => newest_debian(&self.machine_images(t, credential)?).ok_or_else(|| {
+                "Hetzner lists no Debian image to this token: a token with Read alone cannot read \
+                 them"
+                    .to_string()
+            })?,
+        };
+        let body = json!({
+            "name": name,
+            "location": plan.region,
+            "server_type": plan.size,
+            "image": image,
+            "start_after_create": true,
+            "user_data": user_data,
+            "public_net": { "enable_ipv4": true, "enable_ipv6": false },
+            "labels": { "rhtn": "" },
+        });
+        let v = self.ask(
+            t,
+            credential,
+            "POST",
+            "/v1/servers",
+            Some(&body.to_string()),
+        )?;
+        let id = v["server"]["id"]
+            .as_u64()
+            .ok_or("the answer named no server id")?;
+        Ok(Launched { id: id.to_string() })
+    }
+
+    fn standing(&self, t: &dyn Transport, credential: &str, id: &str) -> Result<Standing, String> {
+        let v = self.ask(t, credential, "GET", &format!("/v1/servers/{id}"), None)?;
+        let s = &v["server"];
+        let status = s["status"].as_str().unwrap_or("unknown").to_string();
+        Ok(Standing {
+            active: status == "running",
+            ipv4: s["public_net"]["ipv4"]["ip"]
+                .as_str()
+                .filter(|ip| !ip.is_empty())
+                .map(String::from),
+            status,
+        })
+    }
+
+    fn destroy(&self, t: &dyn Transport, credential: &str, id: &str) -> Result<(), String> {
+        self.ask(t, credential, "DELETE", &format!("/v1/servers/{id}"), None)?;
+        Ok(())
+    }
+}
+
+/// A price row's location, where it names one.
+fn l_name(p: &Value) -> Option<String> {
+    p["location"].as_str().map(String::from)
 }
 
 #[cfg(test)]
@@ -716,6 +1009,189 @@ mod tests {
             .unwrap_err();
         assert!(e.contains("image: read"), "{e}");
         assert_eq!(newest_debian(&[]), None);
+    }
+
+    // acceptance: PRT-08
+    /// **Hetzner, in its own dialect** (`Hetzner`): gigabytes of memory,
+    /// a price as a string of euros per location, an architecture as a
+    /// field, and a server type listed where it is no longer offered.
+    #[test]
+    fn hetzners_regions_and_sizes_parse_out_of_its_own_spellings() {
+        let t = Scripted::new(vec![
+            (
+                200,
+                r#"{"locations":[{"id":1,"name":"fsn1","description":"Falkenstein DC Park 1","country":"DE","city":"Falkenstein","network_zone":"eu-central"},{"id":4,"name":"ash","description":"","country":"US","city":"Ashburn, VA","network_zone":"us-east"}]}"#,
+            ),
+            (
+                200,
+                r#"{"server_types":[
+                    {"name":"cx22","cores":2,"memory":4.0,"architecture":"x86","deprecated":false,
+                     "prices":[{"location":"fsn1","price_monthly":{"net":"4.5900000000","gross":"5.46"}},
+                               {"location":"ash","price_monthly":{"net":"5.9900000000","gross":"5.99"}}],
+                     "locations":[{"name":"fsn1","available":true},{"name":"ash","available":false}]},
+                    {"name":"cax11","cores":2,"memory":4.0,"architecture":"arm","deprecated":false,
+                     "prices":[{"location":"fsn1","price_monthly":{"net":"3.7900000000"}}],
+                     "locations":[{"name":"fsn1","available":true}]},
+                    {"name":"cx11","cores":1,"memory":2.0,"architecture":"x86","deprecated":false,
+                     "deprecation":{"unavailable_after":"2026-01-01T00:00:00+00:00","announced":"2025-07-01T00:00:00+00:00"},
+                     "prices":[{"location":"fsn1","price_monthly":{"net":"2.8900000000"}}],
+                     "locations":[{"name":"fsn1","available":true}]},
+                    {"name":"cpx11","cores":2,"memory":0.5,"architecture":"x86",
+                     "prices":[{"location":"fsn1","price_monthly":{"net":"3.4900000000"}}]}
+                ]}"#,
+            ),
+        ]);
+        let h = Hetzner {
+            base: "http://api.test".into(),
+        };
+        let regions = h.regions(&t, "tok").unwrap();
+        assert_eq!(regions.len(), 2);
+        assert_eq!(regions[0].slug, "fsn1");
+        assert_eq!(regions[0].name, "Falkenstein DC Park 1 (DE)");
+        assert_eq!(
+            regions[1].name, "Ashburn, VA (US)",
+            "a location with no description is named by its city"
+        );
+        assert!(
+            regions.iter().all(|r| r.available),
+            "availability is a server type's, per location"
+        );
+
+        let sizes = h.sizes(&t, "tok").unwrap();
+        let slugs: Vec<&str> = sizes.iter().map(|s| s.slug.as_str()).collect();
+        assert_eq!(
+            slugs,
+            vec!["cx22", "cpx11"],
+            "the arm type and the one being withdrawn are not offered"
+        );
+        assert_eq!(sizes[0].memory_mb, 4096, "gigabytes, stated as such");
+        assert_eq!(sizes[0].vcpus, 2);
+        assert_eq!(
+            sizes[0].monthly, 4.59,
+            "the cheapest location's net price, read from its string"
+        );
+        assert_eq!(
+            sizes[0].regions,
+            vec!["fsn1".to_string()],
+            "where it is offered now, not where it is priced"
+        );
+        assert_eq!(sizes[1].memory_mb, 512, "half a gigabyte is a size");
+        assert_eq!(
+            sizes[1].regions,
+            vec!["fsn1".to_string()],
+            "a type carrying no locations falls back to its prices'"
+        );
+        let asked = t.asked.borrow();
+        assert_eq!(asked[0].1, "Bearer tok");
+        assert!(asked[1].0.contains("/v1/server_types"), "{:?}", asked[1].0);
+    }
+
+    // acceptance: PRT-08
+    #[test]
+    fn a_hetzner_launch_posts_its_own_spelling_and_reads_the_address_once_running() {
+        let t = Scripted::new(vec![
+            (
+                200,
+                r#"{"images":[{"name":"debian-12","description":"Debian 12","os_flavor":"debian","os_version":"12","architecture":"x86","status":"available"},{"name":"debian-13","description":"Debian 13","os_flavor":"debian","os_version":"13","architecture":"x86","status":"available"},{"name":"ubuntu-24.04","description":"Ubuntu 24.04","os_flavor":"ubuntu","architecture":"x86","status":"available"}]}"#,
+            ),
+            (
+                201,
+                r#"{"server":{"id":987654,"status":"initializing","public_net":{"ipv4":null}},"action":{"id":1,"status":"running"}}"#,
+            ),
+            (
+                200,
+                r#"{"server":{"id":987654,"status":"running","public_net":{"ipv4":{"id":2,"ip":"203.0.113.40","blocked":false}}}}"#,
+            ),
+            (
+                200,
+                r#"{"action":{"id":3,"command":"delete_server","status":"running"}}"#,
+            ),
+        ]);
+        let h = Hetzner {
+            base: "http://api.test".into(),
+        };
+        let got = h
+            .launch(
+                &t,
+                "tok",
+                &Plan::new("fsn1", "cx22"),
+                "rhtn-1",
+                "#cloud-config\n",
+            )
+            .unwrap();
+        assert_eq!(got.id, "987654");
+        let s = h.standing(&t, "tok", "987654").unwrap();
+        assert!(s.active, "`running` is what this flow waits for");
+        assert_eq!(s.ipv4.as_deref(), Some("203.0.113.40"));
+        h.destroy(&t, "tok", "987654").unwrap();
+
+        let asked = t.asked.borrow();
+        assert!(
+            asked[0]
+                .0
+                .contains("/v1/images?type=system&architecture=x86"),
+            "the images are asked for this flow's architecture: {:?}",
+            asked[0].0
+        );
+        assert_eq!(asked[1].0, "POST http://api.test/v1/servers");
+        let sent: Value = serde_json::from_str(&asked[1].2).unwrap();
+        assert_eq!(sent["location"], "fsn1", "a location, not a region");
+        assert_eq!(sent["server_type"], "cx22", "a server type, not a size");
+        assert_eq!(
+            sent["image"], "debian-13",
+            "the newest Debian the provider offers, in the provider's own spelling"
+        );
+        assert_eq!(sent["start_after_create"], true);
+        assert_eq!(sent["public_net"]["enable_ipv4"], true);
+        assert_eq!(sent["public_net"]["enable_ipv6"], false);
+        assert_eq!(sent["user_data"], "#cloud-config\n");
+        assert_eq!(asked[2].0, "GET http://api.test/v1/servers/987654");
+        assert_eq!(asked[3].0, "DELETE http://api.test/v1/servers/987654");
+    }
+
+    #[test]
+    fn a_hetzner_refusal_carries_its_own_words() {
+        let t = Scripted::new(vec![(
+            401,
+            r#"{"error":{"code":"unauthorized","message":"unable to authenticate"}}"#,
+        )]);
+        let h = Hetzner {
+            base: "http://api.test".into(),
+        };
+        let e = h.regions(&t, "nope").unwrap_err();
+        assert_eq!(e, "Hetzner answered 401: unable to authenticate");
+    }
+
+    #[test]
+    fn the_newest_debian_is_found_in_either_providers_spelling_and_never_for_another_machine() {
+        let image = |slug: &str, dist: &str, amd64: bool| MachineImage {
+            slug: slug.into(),
+            distribution: dist.into(),
+            name: slug.into(),
+            amd64,
+        };
+        // DigitalOcean's spelling, with an arm image beside it
+        let d = vec![
+            image("debian-12-x64", "Debian", true),
+            image("debian-13-x64", "Debian", true),
+            image("debian-14-arm64", "Debian", false),
+            image("ubuntu-24-04-x64", "Ubuntu", true),
+        ];
+        assert_eq!(newest_debian(&d).as_deref(), Some("debian-13-x64"));
+        // Hetzner's
+        let h = vec![
+            image("debian-12", "debian", true),
+            image("debian-13", "debian", true),
+            image("debian-13", "debian", false),
+            image("ubuntu-24.04", "ubuntu", true),
+        ];
+        assert_eq!(newest_debian(&h).as_deref(), Some("debian-13"));
+        assert_eq!(newest_debian(&[]), None);
+        assert_eq!(
+            newest_debian(&[image("debian-13", "debian", false)]),
+            None,
+            "an image this flow's machines cannot run is not a candidate"
+        );
     }
 
     // acceptance: PRT-08

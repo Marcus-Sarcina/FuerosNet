@@ -51,6 +51,17 @@ object Provision {
         /** `held`, `wanted` or `unconfigured`, for each of §4.4's records. */
         val endpointRecord: String,
         val anchorEntry: String,
+        /** The subtree it counts beneath itself now (`§4.4`): what its
+         *  anchor entry should claim, and the instance's fact to state
+         *  rather than its operator's to know. */
+        val subtree: Long,
+        /** What its signed entry claims and at which counter, where one is
+         *  signed: a claim that is not [subtree] owes a re-signing. */
+        val anchorClaims: Long?,
+        val anchorSeqno: Int?,
+        /** The points that entry names, each as hex, so a re-signing moves
+         *  the size and not the addresses. */
+        val anchorPoints: List<String>,
     )
 
     /** Sixteen bytes of this device's own choosing, per fetch. */
@@ -74,6 +85,12 @@ object Provision {
             runEnds = field(said, "run-ends")?.toLongOrNull() ?: 0,
             endpointRecord = field(said, "endpoint-record") ?: "unconfigured",
             anchorEntry = field(said, "anchor-entry") ?: "unconfigured",
+            subtree = field(said, "subtree")?.toLongOrNull() ?: 0,
+            anchorClaims = field(said, "anchor-claims")?.toLongOrNull(),
+            anchorSeqno = field(said, "anchor-seqno")?.toIntOrNull(),
+            anchorPoints = (field(said, "anchor-points") ?: "")
+                .split(',')
+                .filter { it.isNotEmpty() },
         )
     }
 

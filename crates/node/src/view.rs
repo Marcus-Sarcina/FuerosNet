@@ -211,6 +211,44 @@ impl NodeView {
         self.public.keyhash
     }
 
+    /// **The subtree beneath this node, as far as this node can see it**
+    /// [author, 2026-10-26]: the nodes at or below it over open bindings,
+    /// the light clients attached to it, and every occupant the memo
+    /// table has accumulated, counted once each and without this node
+    /// itself.  It is what an anchor entry claims, and what a changed
+    /// count obliges the operator's client to re-sign
+    /// (`infra-client-requirements.md` §4.4).
+    ///
+    /// **It is a floor rather than a census, and deliberately.** A node
+    /// stores topology for its two-edge ball (design §15.1), and the
+    /// memo table that would cover the whole subtree is optional —
+    /// §15.2.1: "the table is optional and detection degrades
+    /// gracefully" — so what this counts is what passed through or was
+    /// stored, which is at most the subtree and never more.  Design
+    /// §12.2 wants the number for anchor status, where S "estimates
+    /// which ancestors are likely to be *widely cached*" and hysteresis
+    /// absorbs the error, so an entry carrying a floor understates a
+    /// node's reach rather than overstating it.
+    pub fn subtree_seen(&self) -> u64 {
+        let me = self.me();
+        let mut below: BTreeSet<Keyhash> = BTreeSet::new();
+        let mut walked: BTreeSet<Keyhash> = BTreeSet::new();
+        let mut stack = vec![me];
+        while let Some(n) = stack.pop() {
+            if !walked.insert(n) {
+                continue;
+            }
+            for s in self.table.subordinates(&n) {
+                below.insert(s);
+                stack.push(s);
+            }
+        }
+        below.extend(self.attached.iter().copied());
+        below.extend(self.memo_table.values().filter_map(|s| s.occupant));
+        below.remove(&me);
+        below.len() as u64
+    }
+
     /// The subnet this node sits in: its own locator's anchor.
     pub fn anchor(&self) -> Keyhash {
         self.position.anchor

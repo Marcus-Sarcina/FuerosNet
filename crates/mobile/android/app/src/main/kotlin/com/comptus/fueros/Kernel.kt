@@ -216,7 +216,16 @@ object Kernel {
      * are what §4.4 asks of an operator once, and a renewal is about the
      * credential alone.
      */
-    fun renew(at: String, tokenHex: String, credentials: Int): List<String> {
+    fun renew(
+        at: String,
+        tokenHex: String,
+        credentials: Int,
+        /** The subnet this instance's records were signed on, hex, or null
+         *  for the line under this device's own key: a re-signed anchor
+         *  entry must carry the same series as the standing one or it
+         *  supersedes nothing (`wire-format.md` §2.3). */
+        subnet: String? = null,
+    ): List<String> {
         val p = participant ?: return listOf("the kernel is not running")
         val token = runCatching { Provision.unhex(tokenHex.trim()) }.getOrElse {
             return listOf("the token is 64 lower-case hex digits")
@@ -247,6 +256,31 @@ object Kernel {
         run.forEachIndexed { i, credential ->
             said += "credential ${i + 1} of ${run.size}: " +
                 Provision.put(at, "/node/run", credential).fold({ it }, { "${it.message}" })
+        }
+        // **the anchor entry, re-signed where the subtree moved under it**
+        // (`infra-client-requirements.md` §4.4; [author, 2026-10-26]): the
+        // size is the instance's own count, so the renewal — the visit an
+        // operator already makes — compares it against what the entry
+        // claims and re-signs at the next counter over the same points
+        val claims = got.anchorClaims
+        val seqno = got.anchorSeqno
+        if (claims == null || seqno == null) {
+            said += "no anchor entry is signed there: enrolling signs the first"
+        } else if (claims == got.subtree) {
+            said += "anchor entry: it claims a subtree of $claims and counts ${got.subtree}, so it stands"
+        } else {
+            val points = got.anchorPoints.map { Provision.unhex(it) }
+                .ifEmpty { listOfNotNull(point(at)) }
+            val line = subnet?.takeIf { it.length == 64 }?.let { unhex(it) }
+            val entry = call("anchorEntry", { null }) {
+                p.anchorEntry(line, points, got.subtree.toULong(), (seqno + 1).toUInt())
+            }
+            said += if (entry == null) {
+                "the re-signed anchor entry was not signed"
+            } else {
+                "anchor entry re-signed at seqno ${seqno + 1}, a subtree of ${got.subtree} where it claimed $claims: " +
+                    Provision.put(at, "/node/anchor-entry", entry).fold({ it }, { "${it.message}" })
+            }
         }
         return said
     }

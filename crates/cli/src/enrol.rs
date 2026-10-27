@@ -43,35 +43,101 @@ pub struct Ask {
 /// the instance says where its run ends, and the next run opens exactly
 /// there, contiguous as §8.2 requires. The proof is checked again first —
 /// a key that is not this instance's gets no signature of this operator's,
-/// renewal or not — and nothing else is re-signed: the two records of §4.4
-/// are an enrolment's business and a renewal is about the credential.
+/// renewal or not.
+///
+/// **And the anchor entry is re-signed where the subtree has moved under
+/// it** [author, 2026-10-26]. §4.4 has the entry re-signed "when the
+/// subtree size does [change]", and the size is the instance's own count
+/// rather than a number its operator could know ([`Seen::subtree`]): so
+/// the renewal, which is the visit an operator already makes, compares
+/// the count against what the entry claims and signs a new one at the
+/// next counter over the addresses the old one named. The endpoint record
+/// is not touched — an address change is the operator's to state, and
+/// nothing here knows one happened.
 pub fn renew(me: &SigningIdentity, ask: &Ask) -> Result<String, String> {
     let addr = resolve(&ask.at)?;
     let mut out = String::new();
-    let (key, key_hex, ends) = checked(addr, &ask.token, &mut out)?;
-    if ends == 0 {
+    let seen = checked(addr, &ask.token, &mut out)?;
+    if seen.ends == 0 {
         return Err(format!(
             "the instance at {} holds no run to renew: `node enrol` signs its first",
             ask.at
         ));
     }
-    out.push_str(&format!("the run ends at {ends}; the next opens there\n"));
-    let _ = key_hex;
-    let run = issue_run(me, &key, ends, ask.credentials);
+    out.push_str(&format!(
+        "the run ends at {}; the next opens there\n",
+        seen.ends
+    ));
+    let run = issue_run(me, &seen.key, seen.ends, ask.credentials);
     for (i, d) in run.iter().enumerate() {
         let said = push(addr, "/node/run", d)?;
         out.push_str(&format!("credential {} of {}: {said}\n", i + 1, run.len()));
     }
+    out.push_str(&reanchored(me, addr, ask, &seen)?);
     Ok(out)
 }
 
-/// The fetch and its proof, which both commands do first: the transport
-/// key this instance minted, as hex too, and when its run ends.
-fn checked(
+/// The anchor entry, re-signed where the instance's count differs from
+/// what its entry claims; a line saying so either way.
+fn reanchored(
+    me: &SigningIdentity,
     addr: SocketAddr,
-    token: &[u8; 32],
-    out: &mut String,
-) -> Result<([u8; 32], String, u64), String> {
+    ask: &Ask,
+    seen: &Seen,
+) -> Result<String, String> {
+    let Some((claims, seqno, points)) = &seen.anchor else {
+        return Ok("no anchor entry is signed here: `node enrol` signs the first\n".into());
+    };
+    if *claims == seen.subtree {
+        return Ok(format!(
+            "anchor entry: it claims a subtree of {claims} and counts {}, so it stands\n",
+            seen.subtree
+        ));
+    }
+    // the addresses the standing entry names, so a re-signing moves the
+    // size and nothing else; where it named none, the one in hand
+    let points: Vec<NetworkPoint> = if points.is_empty() {
+        vec![point_of(ask.endpoint.unwrap_or(addr))]
+    } else {
+        points.clone()
+    };
+    // **the same series, or it supersedes nothing**: a sequence number
+    // orders two entries only within one series (`wire-format.md` §2.3)
+    let next = seqno
+        .counter
+        .checked_add(1)
+        .ok_or("the entry's counter is at its last")?;
+    let entry = anchor_entry(
+        me,
+        &points,
+        seen.subtree,
+        rhtn_archive::tx::Seqno {
+            series: seqno.series,
+            counter: next,
+        },
+    );
+    let said = push(addr, "/node/anchor-entry", &entry)?;
+    Ok(format!(
+        "anchor entry re-signed at seqno {next}: a subtree of {} where it claimed {claims}: \
+         {said}\n",
+        seen.subtree
+    ))
+}
+
+/// What the fetch said, once its proof has checked.
+struct Seen {
+    key: [u8; 32],
+    /// When the run it holds ends, or 0 where it holds none.
+    ends: u64,
+    /// The subtree this instance counts beneath itself now (§4.4).
+    subtree: u64,
+    /// What its anchor entry claims, the sequence number it carries and
+    /// the points it names, where one is signed.
+    anchor: Option<(u64, rhtn_archive::tx::Seqno, Vec<NetworkPoint>)>,
+}
+
+/// The fetch and its proof, which both commands do first.
+fn checked(addr: SocketAddr, token: &[u8; 32], out: &mut String) -> Result<Seen, String> {
     let nonce: [u8; 16] = rhtn_transport::tls::random_bytes::<16>();
     let got = ask_surface(
         addr,
@@ -98,7 +164,38 @@ fn checked(
     let ends = field(&got, "run-ends")
         .and_then(|s| s.parse::<u64>().ok())
         .unwrap_or(0);
-    Ok((key, key_hex, ends))
+    let subtree = field(&got, "subtree")
+        .and_then(|s| s.parse::<u64>().ok())
+        .unwrap_or(0);
+    let anchor = match (
+        field(&got, "anchor-claims").and_then(|s| s.parse::<u64>().ok()),
+        field(&got, "anchor-seqno").and_then(|s| s.parse::<u32>().ok()),
+    ) {
+        (Some(claims), Some(counter)) => {
+            let points: Vec<NetworkPoint> = field(&got, "anchor-points")
+                .unwrap_or_default()
+                .split(',')
+                .filter(|p| !p.is_empty())
+                .filter_map(unhex)
+                .filter_map(|b| NetworkPoint::decode_bytes(&b).ok())
+                .collect();
+            // **the same series, or it supersedes nothing**: a sequence
+            // number orders two entries only within one series
+            // (`wire-format.md` §2.3), so a re-signing stays in the one
+            // the standing entry carries
+            let series = field(&got, "anchor-series")
+                .and_then(|s| s.parse::<u32>().ok())
+                .unwrap_or(0);
+            Some((claims, rhtn_archive::tx::Seqno { series, counter }, points))
+        }
+        _ => None,
+    };
+    Ok(Seen {
+        key,
+        ends,
+        subtree,
+        anchor,
+    })
 }
 
 /// Run the exchange, and say what happened at each step.
@@ -110,7 +207,7 @@ pub fn enrol(me: &SigningIdentity, ask: &Ask) -> Result<String, String> {
     // choosing is what makes the answer unreplayable, and the token it is
     // checked under is what makes the key this instance's rather than
     // whatever answered (`rhtn_daemon::administration`).
-    let (key, _key_hex, _ends) = checked(addr, &ask.token, &mut out)?;
+    let seen = checked(addr, &ask.token, &mut out)?;
 
     // **the records first and the run last**: taking the run is what ends
     // the instance's wait, and the node then reads the two records from the
@@ -132,7 +229,7 @@ pub fn enrol(me: &SigningIdentity, ask: &Ask) -> Result<String, String> {
             "anchor entry, a subtree of {size} beneath it: {said}\n"
         ));
     }
-    let run = issue_run(me, &key, now(), ask.credentials);
+    let run = issue_run(me, &seen.key, now(), ask.credentials);
     for (i, d) in run.iter().enumerate() {
         let said = push(addr, "/node/run", d)?;
         out.push_str(&format!("credential {} of {}: {said}\n", i + 1, run.len()));

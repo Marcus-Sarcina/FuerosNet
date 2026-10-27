@@ -564,6 +564,12 @@ pub struct StatusView {
     pub endpoint_seqno: Option<u32>,
     /// The same for its anchor entry.
     pub anchor_seqno: Option<u32>,
+    /// The subtree size that entry claims, where one is signed.
+    pub anchor_claims: Option<u64>,
+    /// The subtree this node counts beneath itself now
+    /// (`rhtn_node::view::NodeView::subtree_seen`): where it differs from
+    /// what the entry claims, a re-signed entry is owed (§4.4).
+    pub subtree: u64,
     /// Where it serves.
     pub listen: String,
     /// Its own clock, so an operator can see a skew for themselves.
@@ -625,6 +631,13 @@ impl StatusView {
                     .ok()
                     .map(|e| e.seqno.counter)
             }),
+            anchor_claims: anchor_entry.and_then(|p| {
+                let b = std::fs::read(p).ok()?;
+                rhtn_node::resolution::AnchorEntry::parse(&b)
+                    .ok()
+                    .map(|e| e.subtree_size)
+            }),
+            subtree: view.subtree_seen(),
             listen: node.addr.to_string(),
             now: view.now(),
             acknowledging: view.ack_policy.is_some(),
@@ -693,9 +706,13 @@ impl StatusView {
         let _ = writeln!(
             out,
             "anchor entry {}",
-            match self.anchor_seqno {
-                Some(s) => format!("operator-signed at seqno {s}"),
-                None => "none signed".into(),
+            match (self.anchor_seqno, self.anchor_claims) {
+                (Some(s), Some(c)) => format!(
+                    "operator-signed at seqno {s}, claiming a subtree of {c}; {} beneath this node now",
+                    self.subtree
+                ),
+                (Some(s), None) => format!("operator-signed at seqno {s}"),
+                _ => format!("none signed; {} beneath this node now", self.subtree),
             }
         );
         out
@@ -1181,6 +1198,20 @@ fn owed(status: &StatusView) -> String {
     }
     if status.anchor_seqno.is_none() {
         want.push("an <strong>anchor entry</strong>");
+    }
+    // **the entry is re-signed when the size changes** (§4.4), and the
+    // size is this node's own count: the page is where the operator sees
+    // that their client owes one
+    let restate = match status.anchor_claims {
+        Some(c) if c != status.subtree => Some(format!(
+            "a <strong>re-signed anchor entry</strong>, since it claims a subtree of {c} and \
+             {} are beneath this node now",
+            status.subtree
+        )),
+        _ => None,
+    };
+    if let Some(r) = &restate {
+        want.push(r);
     }
     if want.is_empty() {
         return String::new();
