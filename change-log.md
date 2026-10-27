@@ -15623,3 +15623,49 @@ indistinguishable from the operator's administrative one. The page says so
 where the invocation will go.
 
 Daemon tests 32; the workspace clean.
+
+### 2026-10-27 (the directive plane's first review, ingested)
+
+**Ten counterexamples, all of which reproduced**, and six of the nine findings
+were defects in what had just been built. What changed, in the order it matters:
+
+**A claimed origin is now an authenticated sender.** The federation listener read
+the caller's key after it had already offered the envelope, and nothing bound the
+envelope's self-declared origin to the authenticated caller — so a stranger with
+a valid key could claim a configured peer as origin at the largest revision there
+is, and every legitimate revision after it was classified as older and never
+delivered. The key is now established before anything is acted on, and must be
+the one the operator configured for the node hosting the claimed origin.
+
+**A path has one reading or it is refused.** `PUT /%2erhtn/envelope` passed a
+guard on `/.rhtn/` and reached a backend that decoded it back. The strict parser
+now refuses a percent-escape of an unreserved character or a path separator, and
+a dot segment, so what is forwarded cannot be read two ways.
+
+**Delivery is at least once, in order, and says so.** The claim that a resource
+saw each revision once and never a stale copy was false under retry: a declined
+revision 1 arrived after revision 2 had been applied. A queued older snapshot is
+now superseded, one in flight is discarded, an emission refused for capacity is
+kept rather than dropped, and a record stopped after its attempts can be requeued
+by offering the identical envelope. `resource-requirements.md` §3.3 states the
+guarantee that is kept instead of the one that was not.
+
+**A relationship removed revokes the work it authorised**, ingress and egress,
+visibly; the relation is read when an envelope is handed over rather than when it
+arrived; a reload forgets a resource no longer hosted and re-announces to a
+rebound backend; and each plane carries an epoch so an answer composed under an
+older configuration is not committed to a newer one.
+
+**No resource is called while the node's own state is locked.** A pass that
+called backends under `node.view` stopped the node's protocol and administration
+work for as long as a slow package took to answer. Planning, performing and
+committing are now three steps, with bounded rounds, a cap on exchanges in
+flight, a deadline on a whole exchange and checked arithmetic on a caller's
+length.
+
+**And what is not fixed is now stated rather than implied**: the planes are in
+memory, a restart loses what was not delivered, and application idempotence makes
+a redelivery harmless without being able to recreate a message nobody knows to
+resend. The durable inbox and outbox are owed, with the instance-signature
+question and the acceptance entries; every one of the nine findings carries its
+disposition in the review tracker, as R01 to R09.

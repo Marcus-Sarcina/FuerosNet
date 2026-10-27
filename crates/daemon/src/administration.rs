@@ -624,6 +624,10 @@ impl Surface {
                     }
                     Err(e) => return (400, format!("{}: {e}\n", path.display())),
                 }
+                // a resource that is no longer hosted has no plane, and a
+                // backend that has just been bound has been told nothing
+                let bound = view.resources.bound();
+                view.federation.hosted_now(&bound);
                 tracing::info!(
                     target: "daemon",
                     step = "surface_act",
@@ -680,6 +684,11 @@ impl Surface {
                             "origin": hex32(o), "record": r, "revision": h.revision,
                             "digest": hex32(&h.digest),
                             "state": if h.state == rhtn_node::federation::State::Live { "live" } else { "withdrawn" },
+                            "stage": match h.stage {
+                                rhtn_node::federation::Stage::Waiting => "waiting",
+                                rhtn_node::federation::Stage::Applied => "applied",
+                                rhtn_node::federation::Stage::Stopped => "stopped",
+                            },
                         })
                     })
                     .collect();
@@ -695,7 +704,10 @@ impl Surface {
                     "conflicts": plane.conflicts.iter().map(|(e, h)| serde_json::json!({
                         "offered": e.to_json(), "held_revision": h.revision, "held_digest": hex32(&h.digest)
                     })).collect::<Vec<_>>(),
-                    "dropped": plane.dropped.iter().map(Envelope::to_json).collect::<Vec<_>>(),
+                    "stopped": plane.stopped.iter().map(|(e, why)| serde_json::json!({
+                        "envelope": e.to_json(), "why": why
+                    })).collect::<Vec<_>>(),
+                    "epoch": plane.epoch,
                 });
                 (200, format!("{body}\n"))
             }
@@ -722,28 +734,30 @@ impl Surface {
                     outcome = ?outcome,
                     "daemon.lifecycle"
                 );
-                // taken: handed on now rather than at the next tick
-                if matches!(outcome, Outcome::New | Outcome::Superseded) {
-                    let mut view = node.view.lock().unwrap();
-                    let v = &mut *view;
-                    v.federation.pass(&v.resources);
+                // **taken: handed on now rather than at the next tick**,
+                // and by the service's own rounds, which call no backend
+                // under the node's lock ([`crate::service::Service::federate`])
+                if matches!(
+                    outcome,
+                    Outcome::New | Outcome::Superseded | Outcome::Requeued
+                ) {
+                    crate::federation::rounds(&node);
                 }
                 let status = match &outcome {
-                    Outcome::New | Outcome::Superseded | Outcome::Duplicate => 200,
-                    Outcome::Older | Outcome::Tombstoned => 200,
+                    Outcome::New
+                    | Outcome::Superseded
+                    | Outcome::Requeued
+                    | Outcome::Duplicate
+                    | Outcome::Older
+                    | Outcome::Tombstoned => 200,
                     Outcome::Conflict => 409,
                     Outcome::Refused(_) => 400,
                 };
                 (status, format!("{outcome:?}\n"))
             }
-            ("POST", "federate") => {
-                let passed = {
-                    let mut view = node.view.lock().unwrap();
-                    let v = &mut *view;
-                    v.federation.pass(&v.resources)
-                };
-                (200, format!("{passed:?}\n"))
-            }
+            // the local rounds; what is pending for another node goes on
+            // the tick, which is where the transport lives
+            ("POST", "federate") => (200, format!("{:?}\n", crate::federation::rounds(&node))),
             _ => (
                 404,
                 "GET /node/resource/<hex>/federation, PUT …/envelope, POST …/federate\n".into(),
@@ -1150,7 +1164,7 @@ fn resource_views(node: &LiveNode) -> Vec<crate::operator::ResourceView> {
                         waiting: p.waiting(),
                         pending: p.pending.len(),
                         conflicts: p.conflicts.len(),
-                        dropped: p.dropped.len(),
+                        stopped: p.stopped.len(),
                     }
                 }),
             })

@@ -782,7 +782,7 @@ fn every_clause_survives_being_written_and_read_back() {
 #[test]
 fn a_directive_crosses_between_two_hosted_instances_and_a_member_cannot_speak_on_the_nodes_paths() {
     use rhtn_archive::topology::Table;
-    use rhtn_node::federation::{Carrier, Envelope, SCHEMA_DIRECTIVE, SCHEMA_RECEIPT};
+    use rhtn_node::federation::{Addresses, Envelope, SCHEMA_DIRECTIVE, SCHEMA_RECEIPT};
     use rhtn_node::grant::Standing;
     use std::io::{Read, Write};
     use std::sync::{Arc, Mutex};
@@ -902,18 +902,43 @@ fn a_directive_crosses_between_two_hosted_instances_and_a_member_cannot_speak_on
         "a patron is answered before the kin group that also names it"
     );
 
-    // pass one: relationships told, the patron's outbox emits, the
-    // directive crosses into the subordinate's plane
-    let one = fed.pass(&g);
-    assert_eq!((one.emitted, one.carried), (1, 1), "{one:?}");
-    assert!(one.refused.is_empty(), "{one:?}");
-    // pass two: the subordinate is handed the directive and answers with
-    // the receipt, which crosses to the patron
-    let two = fed.pass(&g);
+    // **the rounds, as the daemon runs them**
+    // (`rhtn_daemon::federation::rounds`): plan against the gateway,
+    // perform the exchanges, commit. They come back to be performed
+    // because nothing may be handed to a backend while the node's own
+    // state is locked.
+    let round = |fed: &mut rhtn_node::federation::Federation| {
+        let answers: Vec<rhtn_node::federation::Answer> = fed
+            .work(&g)
+            .into_iter()
+            .map(|e| {
+                let answer = e
+                    .backend
+                    .handle(&e.message)
+                    .map(|bytes| rhtn_node::federation::response_of(&bytes));
+                rhtn_node::federation::Answer {
+                    exchange: e,
+                    answer,
+                }
+            })
+            .collect();
+        fed.done(answers)
+    };
+    // the first round tells each instance its relationships, which it
+    // takes before anything else reaches it
+    let one = round(&mut fed);
+    assert_eq!((one.delivered, one.carried), (0, 0), "{one:?}");
+    // then the patron's outbox emits the directive, which crosses into
+    // the subordinate's plane
+    let two = round(&mut fed);
+    assert_eq!((two.emitted, two.carried), (1, 1), "{two:?}");
+    assert!(two.refused.is_empty(), "{two:?}");
+    // and the subordinate is handed it, answering with its receipt
+    let three = round(&mut fed);
     assert_eq!(
-        (two.delivered, two.emitted, two.carried),
+        (three.delivered, three.emitted, three.carried),
         (1, 1, 1),
-        "{two:?}"
+        "{three:?}"
     );
     assert_eq!(
         fed.plane(&patron_k).unwrap().waiting(),
@@ -921,8 +946,11 @@ fn a_directive_crosses_between_two_hosted_instances_and_a_member_cannot_speak_on
         "the receipt waits for the patron"
     );
 
-    // the gateway is what carried: the authority and the backend are its
-    assert_eq!(g.authority(&sub_k).as_deref(), Some("club.internal"));
+    // the gateway is what said where to reach it
+    assert_eq!(
+        g.reachable(&sub_k).map(|(a, _)| a).as_deref(),
+        Some("club.internal")
+    );
     sj.join().unwrap();
     let handed = sgot.lock().unwrap().clone();
     let delivery = handed

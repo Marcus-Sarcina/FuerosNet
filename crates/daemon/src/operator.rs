@@ -904,8 +904,9 @@ pub struct FederationView {
     pub pending: usize,
     /// Conflicts seen.
     pub conflicts: usize,
-    /// Deliveries dropped after being declined repeatedly.
-    pub dropped: usize,
+    /// Work this plane stopped carrying: declined to exhaustion, or
+    /// revoked because the relationship it travelled under is gone.
+    pub stopped: usize,
 }
 
 impl FederationView {
@@ -940,8 +941,8 @@ impl FederationView {
         }
         let _ = writeln!(
             out,
-            "waiting {}  pending elsewhere {}  conflicts {}  dropped {}",
-            self.waiting, self.pending, self.conflicts, self.dropped
+            "waiting {}  pending elsewhere {}  conflicts {}  stopped {}",
+            self.waiting, self.pending, self.conflicts, self.stopped
         );
         out.push_str("</pre>\n");
         if self.held.is_empty() {

@@ -587,6 +587,8 @@ impl Service {
                         .locate(instance, at)
                         .map_err(|e| Startup::Hosting(format!("{}: {e}", path.display())))?;
                 }
+                let hosted = view.resources.bound();
+                view.federation.hosted_now(&hosted);
                 tracing::info!(target: "daemon", step = "hosting", bound, "daemon.lifecycle");
                 bound > 0
             }
@@ -878,14 +880,21 @@ impl Service {
     /// handed what waits for it, asked for what it emits, and what it
     /// emits carried to the instances this node hosts. Run on the tick
     /// and after an act on the surface delivers an envelope.
+    ///
+    /// **A resource is never called while the node's own state is
+    /// locked** [2026-10-27]. A pass used to make the backend calls
+    /// itself, under `node.view`, so a slow socket service or an
+    /// expensive confined package stopped every other thing the node was
+    /// doing for as long as it took to answer — and an incoming delivery
+    /// could trigger a pass over every hosted instance at once. So each
+    /// round plans under the lock, performs the exchanges holding
+    /// nothing, and commits under it again; the rounds are bounded, and
+    /// one delivery an instance a round keeps a slow instance to its own
+    /// round rather than to everyone's.
     pub fn federate(&self) -> rhtn_node::federation::Passed {
-        let mut passed = {
-            let mut view = self.node.view.lock().unwrap();
-            let v = &mut *view;
-            v.federation.pass(&v.resources)
-        };
-        // then across to other nodes, outside the lock: the far end may
-        // be slow or absent, and a request here must not wait on it
+        let mut passed = crate::federation::rounds(&self.node);
+        // then across to other nodes, outside the lock as well: the far
+        // end may be slow or absent, and nothing here waits on it
         let (taken, failed) = crate::federation::carry(&self.node, &self.presenter);
         passed.carried += taken;
         passed.refused.extend(failed);

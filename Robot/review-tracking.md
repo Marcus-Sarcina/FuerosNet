@@ -19294,3 +19294,155 @@ edit), each costing a full cycle. Fixed habits: targeted
 `-p crate --test file` while iterating; fmt + gen_stubs + pincheck + the
 document checkers (12 s) before invoking the gate; one gate per pass; and
 nothing heavy running beside it, since it is niced to 19.
+
+---
+
+## Directive surface and federation implementation, 2026-10-26 (R01–R09)
+
+**Reviewed against `8852d5d`** and filed with ten executable counterexample
+probes. **All ten reproduced against the real library before any fix**, which
+is how each finding here was verified rather than argued; the review's own
+instruction was that a fix should make the counterexample's assertion fail and
+the intended invariant become an ordinary regression test, and that is what
+happened to each of them. The review file and its probes are deleted [author,
+2026-10-27]; they are in `e34bcbb` if ever wanted, and what they established is
+below and in the tests named.
+
+**R01 — a configured origin is a claim, not an authenticated sender. P1.
+FIXED.** The listener read the caller's key *after* `answer()` had already
+offered the envelope, and nothing bound the envelope's self-declared origin to
+the authenticated caller. Verified: an unsigned envelope claiming a configured
+peer as origin at revision `u64::MAX` was accepted as new, after which the
+legitimate revision 1 was classified as older and never delivered — a record
+suppressed for good by a stranger, which no later application-side signature
+check could undo. Now the key is established before anything is acted on and
+must be the key the operator configured for the node hosting the claimed origin
+(`Location`); an origin with no node configured is refused, with the operator's
+own surface remaining the way to hand an envelope over by hand (§8.2). Stated in
+infra §9.2 and tested by
+`a_node_that_does_not_host_the_origin_cannot_speak_for_it`, which uses a valid
+but unrelated key exactly as the review asked. **Still owed, and the author's
+call: which guarantee the product wants** — node-key authentication at ingress
+(built) or instance signatures verified before authoritative suppression, which
+is the only thing that protects against a *dishonest hosting node*. The review's
+staging-queue option was not built; the documents now claim the narrower
+guarantee rather than the wider one.
+
+**R02 — a reserved URL is not proof that a request is a host control message.
+P1. FIXED, in both halves.** The gateway tested the raw target, and the parser
+kept percent-escapes as written: `PUT /%2erhtn/envelope` passed the guard and
+reached a backend that decoded it back. Rather than normalise and hope the
+router agrees, the strict parser now refuses a path with more than one reading —
+a percent-escape of an unreserved character or of a path separator, or a dot
+segment — so what is forwarded has one reading and the guard is sound
+(`an_ambiguous_target_is_refused_and_the_reserved_path_cannot_be_spelled_around`).
+Every control exchange also carries `rhtn-control: node`, which a member cannot
+forge through the gateway since member `rhtn-*` headers are stripped. The second
+qualification is adopted rather than engineered away: §3.3 no longer says a
+reserved path means the request came from the host and nothing else, and now
+sends a socket-reachable resource to §3.1's direct-access rule, which already
+had the answer.
+
+**R03 — the acknowledgement chain can lose a directive across a restart. P1.
+ACCEPTED, NOT FIXED — and the documents no longer claim otherwise.** The
+analysis is correct and the plan's claim was wrong: application idempotence
+makes a redelivery harmless and cannot recreate a message no surviving component
+knows to resend. Nothing durable was built. What changed is the honesty of the
+record: §3.3 and infra §9.2 now state that the planes are in memory, that a
+restart loses what was not delivered, that a sender can lose what was not
+acknowledged, and that idempotence is not a remedy for loss. **Owed, and the
+largest piece of work the review names**: a durable application outbox with
+stable item identifiers, a durable receiver inbox, an acknowledgement that means
+*accepted into custody* as against *applied*, atomic record-plus-outbox commit,
+and the crash matrix to prove it. The review's framing — local durable
+messaging, not distributed consensus — is adopted as the shape.
+
+**R04 — retries and backpressure violated the stated guarantees. P1. FIXED, and
+the guarantee restated.** All three cases reproduced. (1) A declined revision 1
+was delivered after revision 2 had been applied: a queued older snapshot is now
+superseded when a newer is taken, and one in flight when a newer is taken is
+discarded rather than requeued behind it. (2) An emission the receiver refused
+for capacity was dropped from the sender's pending list: a refusal is transient
+and the work is kept. (3) A delivery stopped after its attempts could not be
+requeued, the identical envelope being classified as a duplicate: a record now
+carries a stage — waiting, applied, stopped — and offering the identical
+envelope to a stopped record queues it afresh, so neither side invents a
+revision to retry one. The claim "each revision once, never a stale copy" is
+withdrawn from §3.3 and replaced by what is kept: **at least once, in revision
+order, idempotence required of the application**. PKG-016 amended with each
+case.
+
+**R05 — configuration changes did not revoke queued authority. P1. FIXED.**
+Three probes reproduced it. The relation is now read when an envelope is handed
+over rather than when it arrived; removing a relationship stops queued ingress
+and pending egress, each recorded with its reason in `Plane::stopped` and shown
+on the surface and the page; `abroad()` re-checks the relationship, so a
+destination removed is not carried on a retained location; nothing is delivered
+to an instance that has not taken its current relationships; a reload forgets the
+plane of a resource no longer hosted and re-announces to a rebound backend; and
+each plane carries an epoch, so an answer composed under a configuration that has
+since changed is not committed to the new one. **Partly owed**: the review's
+"atomically install one validated snapshot" is approximated rather than
+implemented — the reload still applies hosting, relationships and locations in
+sequence, and a failure midway leaves the earlier steps applied. The epoch check
+limits the damage to work in flight rather than preventing a half-applied
+configuration.
+
+**R06 — package processing could block the core node; listener admission was
+unbounded. P1. FIXED for the lock and the bounds; the scheduling owed.** A pass
+called resource backends synchronously under `node.view`, so a slow socket
+service or an expensive package stopped the node's protocol and administration
+work for as long as it took — multiplied across every hosted instance when an
+arriving envelope triggered a pass. The pass is now in two halves: `work()`
+plans under the lock, the caller performs the exchanges holding nothing, `done()`
+commits under it again with the epoch checked. One delivery an instance a round,
+rounds bounded at 32, so a slow instance costs its own round. The listener caps
+exchanges in flight at 32, puts a 30-second deadline on a whole exchange rather
+than on each read of it, uses checked arithmetic on the caller's content length
+and bounds what the carrier reads back. **Owed**: fair scheduling with per-peer
+admission quotas and an aggregate resource-plane budget, and the test the review
+describes — one package stalled while another package, ordinary node traffic and
+an administrative cancellation all continue.
+
+**R07 — the interface needs an explicit v1 scope and several contract
+decisions. P2. PART FIXED, the rest owed and some of it the author's.** Fixed:
+the inline-body requirement, since offers-then-pull is deferred — a live
+envelope without a body is refused rather than taking the revision and
+suppressing the complete copy (reproduced, now tested). Owed and recorded:
+onward forwarding (A → B → C cannot preserve A's signed envelope under the
+present rules, so v1 is one hop and should say so, or immediate-sender and
+origin must become separate fields); a path-membership loop check rather than a
+length cap, and the remote carrier appending to the path as local delivery does;
+capacity retirement for the 4,096 held identities, which cannot simply forget
+tombstones without weakening replay protection; the key contract — introduction,
+proof of possession, algorithm, rotation, restoration, and a signature bound
+that follows the scheme rather than choosing it; versioning the host exchanges
+with unknown-field behaviour and independent canonical-byte vectors; and whether
+a schema change at one revision is a conflict, which the present duplicate test
+does not compare. The smaller inconsistencies the review lists are in
+`directive-surface.md`, which now lives in `../FuerosNet-applications`, and are
+noted there rather than fixed here.
+
+**R08 — the new functional requirements exceeded the demonstrated coverage. P2.
+PART FIXED.** The four rows are amended to state what is now kept and tested,
+including the at-least-once guarantee and the in-memory limitation, and the
+coverage added this pass is the inverted counterexamples: ordering under retry,
+requeue after exhaustion, capacity refusal, bodyless live record, encoded path
+aliases, relationship revocation, relationships not yet taken, and a forged
+origin from an unrelated key. **Owed**: the acceptance-catalogue entries the
+review found missing — no entry matched the reserved paths, the federation
+route, the origin and relation headers or the configured-relationship
+vocabulary, and the new tests carry no acceptance markers; all three control
+exchanges through a real Wasmtime guest; a lost-acknowledgement case, which
+waits on R03; and independently fixed signature vectors, which wait on R07's key
+contract.
+
+**R09 — the plan needs stronger first milestones and less simultaneous scope.
+P2. NOT THIS REPOSITORY'S.** The implementation plan is in
+`../FuerosNet-applications`; the seven revisions and the proposed milestone
+sequence are for that thread, and its plan already records the nine findings as
+adopted. What this repository owes from it is the third item — authentication
+and durable delivery in the foundation rather than after field deployment —
+which is R01 and R03 above. The one point worth carrying into this repository's
+own vocabulary: *received*, *accepted*, *applied* and *compliant* are four
+different facts, and the node is entitled to speak for the first two only.

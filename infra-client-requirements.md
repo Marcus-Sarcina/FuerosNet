@@ -586,14 +586,62 @@ the relation; ask it for what it emits; and carry what it emits to the related
 instances you host yourself. **Carry within the configured relationships and no
 further**: an envelope whose origin is not a relationship of the receiving instance
 is refused, and one addressed to an instance that is not a relationship of the
-sender is held, visible, and not forced through. **Keep the record bookkeeping
+sender is held, visible, and not forced through.
+
+**Authenticate the sender before you touch the record state** [2026-10-27]. An
+envelope says which instance it comes from; a handshake establishes which *node* is
+speaking, and the two are different claims. Bind them: **the key the caller
+presented must be the key your operator configured for the node hosting the origin
+it claims**, and where no node is configured for that instance, refuse — nothing
+authenticates the claim, and your operator's own surface is where such an envelope
+is handed over by hand (§8.2). **Refuse before the plane is touched, not after**,
+because taking a record moves its revision watermark: an envelope accepted on a
+caller's word alone can claim the largest revision there is and leave every
+legitimate revision after it classified as older and never delivered, which a
+signature the application would have rejected does not undo. **Authenticating the
+node is not authenticating the instance**, and this is the narrower of the two
+guarantees: state which one you offer rather than describing the first as the
+second.
+
+**Keep the record bookkeeping
 `resource-requirements.md` §3.3 states before anything is delivered** — conflict before duplicate, newer
 supersedes, older discarded, a tombstone that replay does not undo — and keep a
 conflict for the operator rather than resolving it. **Show the plane on your
 administration surface** (§8.3), per instance: the relationships, what is held and
 whether it stands, what waits, what is pending for an instance elsewhere, and any
-conflict, so that what was pushed to an instance and from whom is legible to its
-operator. **An envelope for a related instance another node hosts is carried to
+conflict, and the work you stopped carrying with the reason — so that what was
+pushed to an instance and from whom is legible to its operator, and so is what was
+cancelled.
+
+**Deliver at least once, in order, and say so** [2026-10-27]. Retry what an
+instance did not take; **supersede a queued older snapshot** rather than delivering
+it after the newer one that replaced it, and discard one in flight when a newer is
+taken; stop a delivery retried to exhaustion, visibly, and queue it afresh if the
+identical envelope is offered again, so neither side has to invent a revision to
+retry one. **A relationship removed revokes the work it authorised**, ingress and
+egress alike, and the relation an envelope arrives under is read when it is handed
+over rather than when it arrived. **Re-announce the relationships when a backend is
+rebound**, a new backend having been told nothing, and **forget the plane of a
+resource you no longer host**.
+
+**Never call a resource while your own state is locked** [2026-10-27]. A hosted
+package or a socket service may take as long as it likes to answer, and a pass that
+called them under the lock guarding your topology, your queue and your
+administration surface stopped all of it for that long — for every hosted instance
+at once, where an arriving envelope triggered a pass. Decide what to ask under the
+lock, ask holding nothing, commit under it again, and check on commit that the
+configuration has not moved under the answer. Bound what you accept while you are
+there: one delivery an instance a round, so a slow instance costs its own round
+rather than everyone's; a cap on the exchanges in flight; a deadline on the whole
+of an exchange rather than on each read of it; a bound on a body before it is
+allocated; and checked arithmetic on any length a caller sent you.
+
+**What is not durable, said plainly.** The planes are in memory: a restart loses
+what has not been delivered, and a sender can lose what it has not had
+acknowledged. A 2xx from an instance means that instance took responsibility, and
+nothing weaker should be read as custody — in particular, application idempotence
+is not a remedy for loss. It makes a redelivery harmless; it cannot recreate a
+message that no surviving component knows to resend. **An envelope for a related instance another node hosts is carried to
 that node over TLS, node to node** [author, 2026-10-26]: where you opened a
 federation listener it presents the raw public key your transport presents, and
 where your operator wrote the far node's listener and key beside a related

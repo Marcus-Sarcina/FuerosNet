@@ -20,8 +20,13 @@ the input, never the record of what was done about it.
 
 | Filed | What it reviewed | Where its findings stand |
 |---|---|---|
-| `directive-and-implementation-review-2026-10-26.md` | The directive surface and its implementation, as built on 2026-10-26 (the node's federation module, the three reserved exchanges, the envelope's record rules, the node-to-node carriage) | **Nine findings, not yet ingested here.** They were adopted into the application thread's `implementation-plan.md` on the same date; what any of them asks of this repository has not been verified or applied |
-| `directive-review-probes-2026-10-26.rs`, `run-directive-review-probes.py` | The probes written for that review, which exercise the surface directly | Beside the review they belong to |
+| ~~`directive-and-implementation-review-2026-10-26.md`~~ and its probes | The directive surface and its implementation as built on 2026-10-26 | **Ingested and deleted** [author, 2026-10-27]: all nine dispositions are in [`../review-tracking.md`](../review-tracking.md) under R01–R09, and the ten counterexample probes — every one of which reproduced before the fixes — became ordinary regression tests. The files are in `e34bcbb` if they are ever wanted |
+
+**A review is deleted once its findings are recorded**, which is what this
+directory is for: a received artefact is an input, and the record of what was
+done about one is `../review-tracking.md`. Keeping the input afterwards would
+keep two accounts of one pass, and the account with the dispositions is the one
+that stays true.
 
 The older review artefacts in this workspace predate this directory and
 stayed where they are: `client-review-2026-10-11.md` at the top level, and

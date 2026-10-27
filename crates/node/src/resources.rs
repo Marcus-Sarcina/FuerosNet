@@ -594,19 +594,10 @@ impl Gateway {
     }
 }
 
-impl crate::federation::Carrier for Gateway {
-    fn hand(&self, resource: &Keyhash, message: &[u8]) -> Option<Result<Vec<u8>, String>> {
-        let backend = self.bindings.get(resource)?.backend.clone()?;
-        if !backend.running() {
-            return Some(Err("the package is not running".into()));
-        }
-        Some(backend.handle(message))
-    }
-
-    fn authority(&self, resource: &Keyhash) -> Option<String> {
+impl crate::federation::Addresses for Gateway {
+    fn reachable(&self, resource: &Keyhash) -> Option<(String, Arc<dyn Backend>)> {
         let b = self.bindings.get(resource)?;
-        b.backend.as_ref()?;
-        Some(b.authority.clone())
+        Some((b.authority.clone(), b.backend.clone()?))
     }
 }
 

@@ -2127,3 +2127,53 @@ fn a_grant_the_node_cannot_hold_is_refused_when_it_is_written() {
         "a refused grant leaves no trace"
     );
 }
+
+/// **A path with more than one reading is refused** (`rhtn_node::http`;
+/// `resource-requirements.md` §3.3, PKG-015) [2026-10-27].
+///
+/// The gateway refuses a member's request under `/.rhtn/`, which is the
+/// node's own. A guard on the raw target was not enough: the parser kept
+/// percent-escapes as written, so `PUT /%2erhtn/envelope` passed the
+/// guard and reached a backend that decoded it back to the reserved path.
+/// Rather than normalise and hope the far end agrees, an ambiguous
+/// spelling is refused, and the normal form is the only one that travels.
+#[test]
+fn an_ambiguous_target_is_refused_and_the_reserved_path_cannot_be_spelled_around() {
+    let request = |target: &str| format!("PUT {target} HTTP/1.1\r\nhost: x\r\n\r\n").into_bytes();
+    for target in [
+        "/%2erhtn/envelope",
+        "/.%72htn/envelope",
+        "/%2E%72htn/outbox",
+        "/x/..%2f.rhtn/envelope",
+        "/x/../.rhtn/envelope",
+        "/./.rhtn/relationships",
+        "/.rhtn%2fenvelope",
+    ] {
+        let out = http::parse(&request(target));
+        assert!(
+            out.is_err(),
+            "{target} has more than one reading and must be refused, not forwarded"
+        );
+    }
+    // the normal form of the reserved path parses, and is refused by the
+    // gateway rather than by the parser
+    let parsed = http::parse(&request("/.rhtn/envelope")).expect("a well-formed request");
+    assert_eq!(parsed.target, "/.rhtn/envelope");
+    assert!(
+        parsed
+            .target
+            .starts_with(rhtn_node::federation::PATH_PREFIX),
+        "which is what the gateway tests"
+    );
+    // and an ordinary path that merely begins with the same letters is
+    // neither ambiguous nor reserved
+    let ordinary = http::parse(&request("/.rhtnot")).expect("a well-formed request");
+    assert!(
+        !ordinary
+            .target
+            .starts_with(rhtn_node::federation::PATH_PREFIX)
+    );
+    // a percent-escape of a reserved character is legitimate and travels
+    let kept = http::parse(&request("/a%3Ab?q=%2F")).expect("a well-formed request");
+    assert_eq!(kept.target, "/a%3Ab?q=%2F", "the query is untouched");
+}

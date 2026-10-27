@@ -44,7 +44,18 @@ struct Node {
     hosting: PathBuf,
 }
 
-fn node(tag: &str, who: &str, hosting: &str) -> Node {
+/// **The key a node presents**, which a test can know in advance: a node
+/// holding its own seed presents that identity's classical member, so
+/// both sides of a two-node test can be configured for each other before
+/// either starts ([`rhtn_transport::tls::Presenter`]).
+fn presents(who: &str) -> String {
+    hex(&test_identity(who)
+        .ed_signing_key()
+        .verifying_key()
+        .to_bytes())
+}
+
+fn node(tag: &str, who: &str, port: u16, hosting: &str) -> Node {
     let dir = std::env::temp_dir().join(format!("rhtnd-fed-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
@@ -60,7 +71,7 @@ fn node(tag: &str, who: &str, hosting: &str) -> Node {
             "identity = \"{}\"\nlisten = \"127.0.0.1:0\"\nqueue = \"{}\"\nprekeys = \"{}\"\n\
              topology = \"{}\"\narchive = \"{}\"\nresources = \"{}\"\ngrants = \"{}\"\n\
              heartbeat = 30\ningestion = \"unverified-gossip\"\n\n[allowance]\nrequests = 120\n\
-             seconds = 60\n\n[federation]\nlisten = \"127.0.0.1:0\"\n",
+             seconds = 60\n\n[federation]\nlisten = \"127.0.0.1:{port}\"\n",
             dir.join("identity.key").display(),
             dir.join("queue").display(),
             dir.join("prekeys").display(),
@@ -191,33 +202,45 @@ fn origin() -> (SocketAddr, Arc<Mutex<Vec<String>>>) {
     (addr, got)
 }
 
+/// Ports fixed, so each node can be configured for the other before
+/// either of them starts.
+const A_PORT: u16 = 37461;
+const B_PORT: u16 = 37462;
+
 #[test]
 fn a_receipt_crosses_from_the_subordinates_node_to_the_patrons_over_tls_with_the_key_pinned() {
     let bob = hex(&test_identity("bob").public.keyhash);
     let alice = hex(&test_identity("alice").public.keyhash);
     let manifest_text = "roles = [\"reader\"]\n";
+    let (a_key, b_key) = (presents("bob"), presents("alice"));
 
-    // node A: the patron's instance, brokered, with the subordinate named
-    let a = node("a", "bob", "");
+    // **node A: the patron's instance**, brokered, with the subordinate
+    // named *and located* — an envelope arriving for an instance whose
+    // origin has no node configured is refused, because nothing
+    // authenticates the claim
+    let a = node("a", "bob", A_PORT, "");
     let ma = a.dir.join("front.manifest");
     std::fs::write(&ma, manifest_text).unwrap();
     std::fs::write(
         &a.hosting,
         format!(
             "[[host]]\nresource = \"{PA}\"\nowner = \"{bob}\"\nauthority = \"hall.internal\"\n\
-             manifest = \"{}\"\nsubordinates = [\"{SB}\"]\n",
+             manifest = \"{}\"\nsubordinates = [\"{SB}\"]\n\
+             [host.at]\n\"{SB}\" = {{ address = \"127.0.0.1:{B_PORT}\", key = \"{b_key}\" }}\n",
             ma.display()
         ),
     )
     .unwrap();
     let ra = Running::start(&a);
-    let (a_addr, a_key) = ra.federation();
-    assert_eq!(a_key.len(), 64, "{a_key}");
+    let (a_addr, said_key) = ra.federation();
+    assert_eq!(a_addr.port(), A_PORT);
+    assert_eq!(said_key, a_key, "a node presents its identity's own key");
 
-    // node B: the subordinate's instance on a socket of its own, its
-    // patron located at node A — first with the wrong key
+    // **node B: the subordinate's instance** on a socket of its own, its
+    // patron located at node A — first with the wrong key, which the
+    // sender refuses to deliver to
     let (origin_addr, _handed) = origin();
-    let b = node("b", "alice", "");
+    let b = node("b", "alice", B_PORT, "");
     let mb = b.dir.join("front.manifest");
     std::fs::write(&mb, manifest_text).unwrap();
     let hosting_b = |key: &str, origin_addr: SocketAddr| {
@@ -288,4 +311,114 @@ fn a_receipt_crosses_from_the_subordinates_node_to_the_patrons_over_tls_with_the
     ra.stop();
     let _ = std::fs::remove_dir_all(&a.dir);
     let _ = std::fs::remove_dir_all(&b.dir);
+}
+
+/// **A caller with a key of its own cannot speak for an instance it does
+/// not host** [2026-10-27]: the listener binds the key the handshake
+/// established to the node configured for the claimed origin *before* the
+/// plane is touched, so a forged origin changes no record's revision.
+///
+/// This is the shape of the defect it closes: an envelope claiming the
+/// patron as origin, at revision `u64::MAX`, from a caller holding a
+/// perfectly valid but unrelated key. Taken, it would have set the
+/// record's watermark to the largest revision there is, and every
+/// legitimate revision after it would have been classified as older and
+/// never delivered — a record suppressed for good by a stranger, which no
+/// application-side signature check could have undone.
+#[test]
+fn a_node_that_does_not_host_the_origin_cannot_speak_for_it() {
+    use rhtn_node::federation::Envelope;
+    const PORT: u16 = 37463;
+    let bob = hex(&test_identity("bob").public.keyhash);
+    let a = node("forged", "bob", PORT, "");
+    let m = a.dir.join("front.manifest");
+    std::fs::write(&m, "roles = [\"reader\"]\n").unwrap();
+    // the patron's instance is hosted here and has a subordinate
+    // configured, located at a node that presents alice's key
+    std::fs::write(
+        &a.hosting,
+        format!(
+            "[[host]]\nresource = \"{PA}\"\nowner = \"{bob}\"\nauthority = \"hall.internal\"\n\
+             manifest = \"{}\"\nsubordinates = [\"{SB}\"]\n\
+             [host.at]\n\"{SB}\" = {{ address = \"127.0.0.1:1\", key = \"{}\" }}\n",
+            m.display(),
+            presents("alice")
+        ),
+    )
+    .unwrap();
+    let r = Running::start(&a);
+    let (at, _) = r.federation();
+
+    // a caller with its own valid key — carol's, which is nobody's node
+    // here — claiming the configured subordinate as origin
+    let forged = Envelope::live(
+        [0x0b; 32],
+        "policy-1",
+        rhtn_node::federation::SCHEMA_DIRECTIVE,
+        u64::MAX,
+        b"{\"mine\":true}",
+    );
+    let (status, said) = put_envelope(at, "carol", PA, &forged);
+    assert_eq!(status, 403, "{said}");
+    assert!(
+        said.contains("presented key") || said.contains("no node is configured"),
+        "it says which claim it could not authenticate: {said}"
+    );
+
+    // nothing was held, so the legitimate revision that follows is new
+    let legitimate = Envelope::live(
+        [0x0b; 32],
+        "policy-1",
+        rhtn_node::federation::SCHEMA_DIRECTIVE,
+        1,
+        b"{\"retention_floor_days\":90}",
+    );
+    let (status, said) = put_envelope(at, "alice", PA, &legitimate);
+    assert_eq!(status, 200, "{said}");
+    assert!(said.contains("New"), "the record was not poisoned: {said}");
+    r.stop();
+    let _ = std::fs::remove_dir_all(&a.dir);
+}
+
+/// Put one envelope to a node's federation listener, presenting the key
+/// of the named test identity: the sender's half of the exchange, written
+/// out here so a test can be the stranger.
+fn put_envelope(
+    at: SocketAddr,
+    as_who: &str,
+    to: &str,
+    e: &rhtn_node::federation::Envelope,
+) -> (u16, String) {
+    use rhtn_transport::tls::{Presenter, client_config_with};
+    use std::sync::Arc;
+    let me = Presenter::own(&test_identity(as_who));
+    let mut cfg = client_config_with(
+        &me,
+        vec![rustls::crypto::aws_lc_rs::kx_group::X25519MLKEM768],
+    );
+    cfg.alpn_protocols = vec![b"http/1.1".to_vec()];
+    cfg.enable_early_data = false;
+    let tcp = std::net::TcpStream::connect(at).expect("the listener accepts");
+    tcp.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+    let name = rustls_pki_types::ServerName::IpAddress(at.ip().into());
+    let conn = rustls::ClientConnection::new(Arc::new(cfg), name).expect("a client");
+    let mut tls = rustls::StreamOwned::new(conn, tcp);
+    let body = serde_json::json!({"to": to, "envelope": e.to_json()}).to_string();
+    let request = format!(
+        "PUT /federation/envelope HTTP/1.1\r\nhost: {at}\r\ncontent-type: application/json\r\n\
+         content-length: {}\r\nconnection: close\r\n\r\n{body}",
+        body.len()
+    );
+    tls.write_all(request.as_bytes()).expect("written");
+    tls.flush().ok();
+    let mut answer = Vec::new();
+    let _ = tls.read_to_end(&mut answer);
+    let text = String::from_utf8_lossy(&answer).to_string();
+    let status = text
+        .lines()
+        .next()
+        .and_then(|l| l.split(' ').nth(1))
+        .and_then(|c| c.parse().ok())
+        .unwrap_or(0);
+    (status, text)
 }

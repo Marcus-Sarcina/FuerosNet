@@ -197,13 +197,27 @@ gateway-inserted headers are distinguishable from client-supplied ones.
 ### 3.3 What arrives from your host, on paths that are its own
 
 **Paths under `/.rhtn/` are the node's** [author, 2026-10-26]. The node refuses a
-member's request naming one before it reaches you, and a member's `rhtn-*` headers
-are already gone (§3.1), so **a request you receive on such a path came from your
-host and from nothing else**. It is the one door you already have — the same
-authenticated hop, the same parser's output — carrying what your host has to tell
-you rather than what a member asked. No host binding is added for it (§9,
-`infra-client-requirements.md` §9.2): a package that runs on a port of its own and
-one that runs in the sandbox receive it alike.
+member's request naming one before it reaches you; **a target with more than one
+reading is refused outright** [2026-10-27] — a percent-escape of an unreserved
+character or of a path separator, or a dot segment — because a path the node and
+your router read differently is a path neither of them decides, and
+`PUT /%2erhtn/envelope` was such a path. Every control request also carries
+`rhtn-control: node`, and a member's `rhtn-*` headers are stripped before the node
+inserts its own (§3.1), so **a member cannot forge one through the gateway**. It is
+the one door you already have — the same authenticated hop, the same parser's
+output — carrying what your host has to tell you rather than what a member asked.
+No host binding is added for it (§9, `infra-client-requirements.md` §9.2): a
+package that runs on a port of its own and one that runs in the sandbox receive it
+alike.
+
+**What that does and does not settle.** For a package in the sandbox it is
+conclusive: nothing but the node can call you. **A resource holding its own port
+is reachable by any local process that can open it**, and for you §3.1's rule
+stands unchanged — being behind a gateway is a deployment fact, not a property you
+can verify from a request. Bind where only the node reaches you, or require the
+secret §3.1 describes. Neither the path nor the header is a secret, and reading
+either as proof of origin on a port anyone can open would be the header-spoofing
+hazard §3.1 exists to name.
 
 **Three exchanges travel there today**, the hosting side of the application
 federation your package may take part in. Each carries `host` as the authority the
@@ -211,7 +225,7 @@ operator bound and `rhtn-audience` naming you.
 
 | Request | Carries | Your answer |
 |---|---|---|
-| `PUT /.rhtn/relationships` | the instances your operator configured yours to federate with: a patron's instance, subordinates' instances, named kin, each a resource keyhash | 2xx once taken; it is repeated until then, and again whenever they change |
+| `PUT /.rhtn/relationships` | the instances your operator configured yours to federate with: a patron's instance, subordinates' instances, named kin, each a resource keyhash | 2xx once taken; it is repeated until then, and again whenever they change. **Nothing else is delivered to you until you take it** [2026-10-27]: a directive is acted on under a snapshot of who may send you one, and until you answer you have accepted no snapshot |
 | `PUT /.rhtn/envelope` | one **envelope** from a related instance, with `rhtn-origin` (that instance, hex) and `rhtn-relation` (`patron`, `subordinate` or `kin:<name>`, the node's reading of your operator's configuration) | 2xx to take it, which the node remembers; the body may carry envelopes to send (below) |
 | `GET /.rhtn/outbox` | nothing | 2xx with `{"emit": [{"to": …, "envelope": …}, …]}`, empty where you have nothing to send; `to` is `patron`, `subordinates`, `kin:<name>` or one related instance in hex |
 
@@ -224,24 +238,47 @@ immutable fields and never the route: a CBOR array `[origin, record, schema,
 revision, digest, state]` with `state` 0 for live and 1 for withdrawn. **The
 signature authenticates the instance's claim, not any person's**: authorship within
 the instance is your application data, attributed by the pairwise principal's local
-label, never a network identity.
+label, never a network identity. **A live envelope carries its body**
+[2026-10-27]: nothing offers a record and lets you fetch it afterwards, so a live
+envelope without one is refused rather than taking the record's revision and
+suppressing the complete copy behind it.
 
 **What the node has already decided before an envelope reaches you**, per
-(`origin`, `record`), so that you see each revision once and never a stale copy of
-what you hold: a different digest at a revision already held is a *conflict*, kept
-for the operator and delivered to nobody; the same revision again is a duplicate
-and a no-op; a newer revision supersedes and is delivered; an older one is
-discarded; and a withdrawal is a tombstone that no replayed older live copy undoes.
-What you keep of a record is yours, in your own store; the node keeps identities,
-revisions and digests, bounded.
+(`origin`, `record`): a different digest at a revision already held is a
+*conflict*, kept for the operator and delivered to nobody; the same revision again
+is a duplicate and a no-op; a newer revision supersedes and is delivered; an older
+one is discarded; and a withdrawal is a tombstone that no replayed older live copy
+undoes. What you keep of a record is yours, in your own store; the node keeps
+identities, revisions and digests, bounded.
+
+**What that is worth, stated as what it is** [2026-10-27]. **Delivery is at least
+once, in revision order, and you must be idempotent.** The node retries an envelope
+you did not take, and an acknowledgement can be lost on the way back, so **the same
+revision can arrive twice** and applying it twice must cost nothing. What the node
+does promise is the ordering: **an older revision is never delivered after a newer
+one you have taken** — a queued older snapshot is superseded, and one in flight
+when a newer is taken is discarded rather than retried behind it — so a stale live
+copy cannot follow the withdrawal that replaced it. **A record the node gave up
+on** after retrying is stopped and shown to your operator with the reason; offering
+the identical envelope again queues it afresh, so neither of you has to invent a
+revision to retry one. **None of this is durable yet**: the node's queues are in
+memory, a restart loses what it had not delivered, and the sending side can lose
+what it had not had acknowledged. Until that is closed, do not treat the carrier as
+custody — keep what you have applied in your own store, which is the thing that
+makes a redelivery harmless.
 
 **Who may hand you an envelope is your operator's configuration and nothing
 wider.** An envelope from an instance that is not a configured relationship is
 refused at the node, and one you emit to an instance that is not one is held and
-never forced through. A directive binds only within its own relationship; what a
-directive means, what to apply, what to report and what your members are shown of
-it — including who set a policy — is your application's to decide and to make
-legible.
+never forced through. **A relationship removed revokes the work it authorised**
+[2026-10-27]: an envelope waiting to reach you from an origin that is no longer a
+relationship is stopped, as is an emission addressed to one, and both are shown to
+your operator with the reason. **The relation you are told is read when the
+envelope is handed to you**, not when it arrived, so it is never a relation your
+operator has since withdrawn. A directive binds only within its own relationship;
+what a directive means, what to apply, what to report and what your members are
+shown of it — including who set a policy — is your application's to decide and to
+make legible.
 
 ---
 

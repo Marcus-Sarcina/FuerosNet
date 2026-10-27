@@ -63,6 +63,53 @@ fn find(hay: &[u8], needle: &[u8], from: usize) -> Option<usize> {
         .map(|p| p + from)
 }
 
+/// The path of an origin-form target, without its query: what is routed
+/// on, and the only part whose spelling this parser constrains.
+fn path_of(target: &str) -> &str {
+    target.split('?').next().unwrap_or(target)
+}
+
+/// Why this path has more than one reading, where it has.
+///
+/// Three spellings are refused, each of which another parser may read
+/// differently from this one: a percent-escape of an unreserved character
+/// (RFC 3986 §2.3, which §6.2.2.2 says decodes to itself), a
+/// percent-escape of a path separator, and a dot segment.
+fn ambiguous(path: &str) -> Option<&'static str> {
+    let b = path.as_bytes();
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'%' {
+            if i + 2 >= b.len() {
+                return Some("target percent-escape");
+            }
+            let hex = |c: u8| match c {
+                b'0'..=b'9' => Some(c - b'0'),
+                b'a'..=b'f' => Some(c - b'a' + 10),
+                b'A'..=b'F' => Some(c - b'A' + 10),
+                _ => None,
+            };
+            let (Some(h), Some(l)) = (hex(b[i + 1]), hex(b[i + 2])) else {
+                return Some("target percent-escape");
+            };
+            let c = h * 16 + l;
+            if c.is_ascii_alphanumeric() || matches!(c, b'-' | b'.' | b'_' | b'~') {
+                return Some("target escapes an unreserved character");
+            }
+            if matches!(c, b'/' | b'\\') {
+                return Some("target escapes a path separator");
+            }
+            i += 3;
+            continue;
+        }
+        i += 1;
+    }
+    if path.split('/').any(|seg| seg == "." || seg == "..") {
+        return Some("target carries a dot segment");
+    }
+    None
+}
+
 /// Parse one HTTP/1.1 request, strictly (RFC 9112 with every tolerance
 /// removed).
 pub fn parse(bytes: &[u8]) -> Result<Request, Reject> {
@@ -105,6 +152,21 @@ pub fn parse(bytes: &[u8]) -> Result<Request, Reject> {
     };
     if target.bytes().any(|c| c <= b' ' || c == 0x7f) {
         return Err(Reject::Malformed("target characters"));
+    }
+    // **the path has one reading, or it is refused** [2026-10-27].
+    //
+    // A target is forwarded as the caller wrote it, and the thing at the
+    // far end routes on it: a node that forwards two spellings of one
+    // path has handed the routing decision to whichever of the two
+    // parsers reads it. `PUT /%2erhtn/envelope` passed a guard on
+    // `/.rhtn/` and reached a backend that decoded it back, which is how
+    // a member reached a path reserved for the node
+    // ([`crate::federation`]). RFC 3986 §6.2.2.2 calls the decoding a
+    // normalisation; rather than normalise and hope the far end agrees,
+    // the ambiguous spelling is refused and the normal form is the only
+    // one that travels.
+    if let Some(why) = ambiguous(path_of(&target)) {
+        return Err(Reject::Malformed(why));
     }
     let mut headers: Vec<(String, String)> = Vec::new();
     let (mut content_length, mut chunked, mut host_seen) = (None::<usize>, false, false);
