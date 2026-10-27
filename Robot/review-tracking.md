@@ -19471,18 +19471,28 @@ does not compare. The smaller inconsistencies the review lists are in
 noted there rather than fixed here.
 
 **R08 — the new functional requirements exceeded the demonstrated coverage. P2.
-PART FIXED.** The four rows are amended to state what is now kept and tested,
+PART FIXED; the catalogue debt closed 2026-10-27.** The four rows are amended to state what is now kept and tested,
 including the at-least-once guarantee and the in-memory limitation, and the
 coverage added this pass is the inverted counterexamples: ordering under retry,
 requeue after exhaustion, capacity refusal, bodyless live record, encoded path
 aliases, relationship revocation, relationships not yet taken, and a forged
-origin from an unrelated key. **Owed**: the acceptance-catalogue entries the
-review found missing — no entry matched the reserved paths, the federation
-route, the origin and relation headers or the configured-relationship
-vocabulary, and the new tests carry no acceptance markers; all three control
-exchanges through a real Wasmtime guest; a lost-acknowledgement case, which
-waits on R03; and independently fixed signature vectors, which wait on R07's key
-contract.
+origin from an unrelated key.
+
+**The catalogue entries are in** [2026-10-27]: `RSC-43` to `RSC-52` for the
+package's side of the reserved paths, `DMN-29` to `DMN-34` for the node's,
+sixteen rows each quoting its rule verbatim from §3.3 or §9.2 and each marked on
+the test that holds it. Three rows had nothing asserting them and were written
+rather than claimed: the gateway's own refusal of a reserved path (as against the
+parser's refusal of an ambiguous spelling), the outbox poll's `?taken=` naming,
+and an emission addressed to an instance whose own operator never configured the
+sender. A fourth test was written for the lock discipline, and found that a
+delivery stopped by anything but exhausted retries left its record *waiting* with
+nothing queued, so the identical envelope offered again was suppressed as a
+duplicate and nobody could retry it.
+
+**Still owed on this finding**: all three control exchanges through a real
+Wasmtime guest; a lost-acknowledgement case, which waits on R03; and
+independently fixed signature vectors, which wait on R07's key contract.
 
 **R09 — the plan needs stronger first milestones and less simultaneous scope.
 P2. NOT THIS REPOSITORY'S.** The implementation plan is in

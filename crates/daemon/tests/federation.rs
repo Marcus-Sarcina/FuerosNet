@@ -209,6 +209,7 @@ fn origin() -> (SocketAddr, Arc<Mutex<Vec<String>>>) {
 const A_PORT: u16 = 37461;
 const B_PORT: u16 = 37462;
 
+// acceptance: DMN-30
 #[test]
 fn a_receipt_crosses_from_the_subordinates_node_to_the_patrons_over_tls_with_the_key_pinned() {
     let bob = hex(&test_identity("bob").public.keyhash);
@@ -327,6 +328,7 @@ fn a_receipt_crosses_from_the_subordinates_node_to_the_patrons_over_tls_with_the
 /// legitimate revision after it would have been classified as older and
 /// never delivered — a record suppressed for good by a stranger, which no
 /// application-side signature check could have undone.
+// acceptance: DMN-29
 #[test]
 fn a_node_that_does_not_host_the_origin_cannot_speak_for_it() {
     use rhtn_node::federation::Envelope;
@@ -473,6 +475,7 @@ fn put_envelope(
 /// again — which application idempotence cannot fix, since it makes a
 /// redelivery harmless and cannot recreate a message nobody knows to
 /// resend.
+// acceptance: DMN-31
 #[test]
 fn an_envelope_admitted_and_not_applied_survives_a_restart() {
     use rhtn_node::federation::Envelope;

@@ -976,6 +976,7 @@ async fn dmn_28_a_renewal_opens_where_the_run_ends_and_an_overlap_is_refused() {
 /// stranger, and shows what it holds at `GET …/federation`. The resource
 /// here is brokered, so nothing is delivered onward: the plane's bookkeeping
 /// is what this test reads.
+// acceptance: DMN-32
 #[test]
 fn an_envelope_is_delivered_from_the_surface_and_the_plane_is_readable() {
     use rhtn_node::federation::Envelope;
@@ -1067,6 +1068,23 @@ fn an_envelope_is_delivered_from_the_surface_and_the_plane_is_readable() {
     let page = ask(at, &format!("GET /?resource={RES} HTTP/1.1"), b"");
     assert!(page.contains("<h2>Federation</h2>"), "{page}");
     assert!(page.contains("policy-1"), "{page}");
+
+    // **and it says whether custody is kept at all**: this node has no
+    // `[federation] store`, so every answer it gives a sending node is a
+    // promise it cannot keep across a restart, and it says so in all
+    // three places an operator looks
+    assert!(
+        after.contains("\"custody\":\"in memory\""),
+        "the fetch says what it is keeping: {after}"
+    );
+    assert!(page.contains("IN MEMORY"), "and so does the page: {page}");
+    assert!(
+        d.lines()
+            .iter()
+            .any(|l| l.contains("no `[federation] store` is configured")),
+        "and so did the start: {:?}",
+        d.lines()
+    );
 
     let r = ask(at, "GET /node/resource/zz/federation HTTP/1.1", b"");
     assert_eq!(400, status(&r), "{r}");

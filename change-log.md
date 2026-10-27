@@ -15729,3 +15729,37 @@ signature, so multi-hop moves behind the key contract with the rest. The
 staging-queue alternative is declined rather than deferred: it would trade the
 ordering settled a day earlier for a provenance story obtainable more cheaply once
 the keys are specified.
+
+### 2026-10-27 (the plane's rows in the acceptance catalogue, and a record that could not be retried)
+
+**Sixteen acceptance entries for the directive plane**, which the review's eighth
+finding said were missing: `RSC-43` to `RSC-52` for what a package is owed on the
+paths reserved for its host, `DMN-29` to `DMN-34` for what the node owes around it.
+Each carries its rule quoted verbatim from `resource-requirements.md` §3.3 or
+`infra-client-requirements.md` §9.2 and an `acceptance:` marker on the test that
+holds it, so the catalogue counts them implemented rather than owed. The finding's
+instruction was not to count a green gate as coverage, and three of the rows had
+nothing asserting them: the gateway's own refusal of a reserved path, the outbox
+poll's `?taken=` naming, and an emission the receiver's operator never configured.
+Those tests were written.
+
+**And one of them found a record nobody could retry.** A delivery stopped by
+anything other than exhausted retries left its watermark saying *waiting* with
+nothing queued: the next offer of the identical envelope was taken for a duplicate
+of something still owed and suppressed, so the record never arrived and neither
+side could do anything about it. Giving up a delivery now marks the record stopped
+whatever stopped it, which is what makes the re-offer a retry; both root documents
+say so, where each already said it for the retry case alone.
+
+**A second, smaller one in the same place**: a delivery whose relationship was
+withdrawn while it was out was stopped twice, once by the configuration and once by
+the epoch check, so an operator read two reasons for one envelope.
+
+**The adversarial test is the one worth keeping.** A hosted instance reaches back
+into the node from inside the call it is answering and reconfigures its own plane:
+it finds the node's state free, which is what "never call a resource while your own
+state is locked" means operationally, and its answer is then stopped rather than
+credited to a configuration nobody accepted. The first assertion is `try_lock`
+rather than `lock`, because a hanging test says less than a failing one.
+
+Catalogue 539 entries, 508 implemented; node federation tests 16, daemon 35.

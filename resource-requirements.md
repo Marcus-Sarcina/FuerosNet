@@ -280,7 +280,11 @@ when a newer is taken is discarded rather than retried behind it — so a stale 
 copy cannot follow the withdrawal that replaced it. **A record the node gave up
 on** after retrying is stopped and shown to your operator with the reason; offering
 the identical envelope again queues it afresh, so neither of you has to invent a
-revision to retry one. **A 2xx of yours is where custody ends** [2026-10-27]: until you answer one, the
+revision to retry one. **This holds whatever stopped it** [2026-10-27]: a
+relationship withdrawn and a configuration that moved while a directive was being
+handed to you stop work the same way, and what the node remembers of such a record
+says *stopped* rather than *waiting* — so the identical envelope offered next is
+not mistaken for a duplicate of something still owed to you. **A 2xx of yours is where custody ends** [2026-10-27]: until you answer one, the
 node holds the envelope where a restart finds it, and after you answer it is yours
 and the node forgets it. A node that keeps no such store says so on its operator's
 page, and `infra-client-requirements.md` §9.2 tells it not to federate that way. **What the node remembers of a

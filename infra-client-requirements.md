@@ -638,7 +638,10 @@ instance did not take; **supersede a queued older snapshot** rather than deliver
 it after the newer one that replaced it, and discard one in flight when a newer is
 taken; stop a delivery retried to exhaustion, visibly, and queue it afresh if the
 identical envelope is offered again, so neither side has to invent a revision to
-retry one. **A relationship removed revokes the work it authorised**, ingress and
+retry one. **Mark the record stopped whatever stopped it** — exhaustion, a
+relationship withdrawn, a configuration that moved under the answer — because a
+record left waiting with nothing queued takes the next offer of it for a duplicate
+and suppresses it, and nobody is then able to retry. **A relationship removed revokes the work it authorised**, ingress and
 egress alike, and the relation an envelope arrives under is read when it is handed
 over rather than when it arrived. **Re-announce the relationships when a backend is
 rebound**, a new backend having been told nothing, and **forget the plane of a

@@ -990,8 +990,23 @@ impl Plane {
 
     /// Record work this plane carries no further, with the reason, and
     /// give up custody of it.
+    ///
+    /// **A delivery stopped leaves its record stopped**, whatever stopped
+    /// it [2026-10-27]: exhaustion, a configuration that moved under the
+    /// answer, a relationship withdrawn. The watermark says so because
+    /// that is what lets the origin offer the identical envelope again
+    /// and have it queued afresh (`resource-requirements.md` §3.3) — a
+    /// record left *waiting* with nothing queued takes the next offer of
+    /// it for a duplicate and suppresses it, so neither side could retry
+    /// without inventing a revision.
     fn stop(&mut self, which: &str, id: u64, e: Envelope, why: &str) {
         self.give_up(which, id);
+        if which == "in"
+            && let Some(h) = self.held.get_mut(&(e.origin, e.record.clone()))
+        {
+            h.stage = Stage::Stopped;
+            self.keep_held();
+        }
         if self.stopped.len() >= MAX_CONFLICTS {
             self.stopped.remove(0);
         }
@@ -1264,10 +1279,6 @@ impl Plane {
         }
         d.attempts += 1;
         if d.attempts >= MAX_ATTEMPTS {
-            if let Some(h) = self.held.get_mut(&key) {
-                h.stage = Stage::Stopped;
-            }
-            self.keep_held();
             let why = format!("the resource declined it {MAX_ATTEMPTS} times");
             self.stop("in", d.id, d.envelope, &why);
         } else {
@@ -1739,8 +1750,14 @@ impl Federation {
                 continue;
             };
             if plane.epoch != a.exchange.epoch {
-                if let About::Envelope(d) = a.exchange.about {
-                    plane.take(d.id);
+                // **stopped once, with one reason**: the change that
+                // moved the epoch may have stopped this delivery itself
+                // (its origin is no longer a relationship), and an
+                // operator reading two reasons for one envelope would be
+                // reading about two things
+                if let About::Envelope(d) = a.exchange.about
+                    && plane.take(d.id).is_some()
+                {
                     plane.stop(
                         "in",
                         d.id,
@@ -2129,6 +2146,7 @@ mod tests {
         }
     }
 
+    // acceptance: RSC-44
     #[test]
     fn the_envelope_crosses_json_whole_and_signs_the_six_immutable_fields_only() {
         let mut e = Envelope::live(k(1), "notice-7", SCHEMA_DIRECTIVE, 3, b"{\"retain\":90}");
@@ -2147,8 +2165,18 @@ mod tests {
         let mut other = e.clone();
         other.revision = 4;
         assert_ne!(other.signed_bytes(), e.signed_bytes());
+        // the array is the six fields in order, and the state is the
+        // integer §3.3 fixes: 0 live, 1 withdrawn, and nothing else moves
+        let live = Envelope::live(k(1), "r", "s@1", 1, b"x");
+        let gone = Envelope::withdrawn(k(1), "r", "s@1", 1, live.digest);
+        let (lb, gb) = (live.signed_bytes(), gone.signed_bytes());
+        assert_eq!(lb[0], 0x86, "a definite array of six");
+        assert_eq!(*lb.last().unwrap(), 0, "live is 0");
+        assert_eq!(*gb.last().unwrap(), 1, "withdrawn is 1");
+        assert_eq!(lb[..lb.len() - 1], gb[..gb.len() - 1]);
     }
 
+    // acceptance: RSC-45
     #[test]
     fn a_body_that_is_not_its_digest_a_tombstone_with_one_and_a_live_one_without_are_refused() {
         let mut e = Envelope::live(k(1), "r", "s@1", 1, b"x");
@@ -2178,6 +2206,7 @@ mod tests {
         );
     }
 
+    // acceptance: RSC-46
     #[test]
     fn section_five_semantics_in_order() {
         let mut p = Plane::default();
@@ -2208,6 +2237,7 @@ mod tests {
         assert_eq!(p.waiting(), 1);
     }
 
+    // acceptance: RSC-51
     #[test]
     fn relationships_decide_who_may_deliver_and_where_an_emission_goes() {
         let r = Relationships {
@@ -2243,6 +2273,63 @@ mod tests {
         let mut bad_kin = Relationships::default();
         bad_kin.kin.insert("Not A Name".into(), BTreeSet::new());
         assert!(f.configure(k(6), bad_kin).is_err());
+
+        // an emission naming an instance that is no relationship of the
+        // sender is refused with its reason, and nothing is queued
+        let stranger = hex(&k(4));
+        let refused = f.plane_mut(&k(5)).expect("a plane").emit(
+            &k(5),
+            &[(
+                "to-nobody".to_string(),
+                Destination::parse(&stranger).unwrap(),
+                Envelope::live(k(5), "up", "s@1", 1, b"y"),
+            )],
+        );
+        assert_eq!(refused.len(), 1, "{refused:?}");
+        assert!(f.plane(&k(5)).expect("a plane").pending.is_empty());
+
+        // **and one the receiver's own operator has not configured is
+        // held, not forced through**: the sender's relationships say it
+        // may go, the receiver's say nobody may send it, and the
+        // receiver's is the one that decides what reaches the receiver
+        let (from, to) = (k(7), k(8));
+        let i = Instance::new();
+        let at = Backends(BTreeMap::from([(from, i.clone()), (to, Instance::new())]));
+        let mut g = Federation::default();
+        g.configure(
+            from,
+            Relationships {
+                subordinates: BTreeSet::from([to]),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        g.configure(to, Relationships::default()).unwrap();
+        round(&mut g, &at);
+        g.plane_mut(&from).expect("a plane").emit(
+            &from,
+            &[(
+                "down-1".to_string(),
+                Destination::Subordinates,
+                Envelope::live(from, "r", "s@1", 1, b"x"),
+            )],
+        );
+        settle(&mut g, &at);
+        let held = &g.plane(&from).expect("a plane").pending;
+        assert_eq!(held.len(), 1, "held");
+        assert_eq!(held[0].to, to, "and readable as pending for that instance");
+        assert_eq!(
+            g.plane(&to).expect("a plane").waiting(),
+            0,
+            "not forced through"
+        );
+        assert!(
+            !i.saw()
+                .iter()
+                .any(|m| m.starts_with(&format!("PUT {PATH_ENVELOPE}"))),
+            "and nothing was handed to anyone on its behalf: {:?}",
+            i.saw()
+        );
     }
 
     /// Two instances on one node: the patron's outbox emits a directive
@@ -2316,6 +2403,7 @@ mod tests {
     /// relationships.** An application acting on a directive acts under a
     /// snapshot of who may send it one; until it answers, it has accepted
     /// no snapshot.
+    // acceptance: RSC-47
     #[test]
     fn an_instance_that_refuses_its_relationships_is_handed_nothing_else() {
         let res = k(5);
@@ -2345,6 +2433,7 @@ mod tests {
     /// declines revision 1, takes revision 2, and never sees 1 again: the
     /// queued older snapshot is superseded, and one still out when a
     /// newer is taken is not requeued behind it.
+    // acceptance: RSC-48
     #[test]
     fn a_declined_revision_is_not_delivered_after_a_newer_one_was_taken() {
         let res = k(5);
@@ -2371,6 +2460,7 @@ mod tests {
     /// **A delivery that failed for good can be asked for again** without
     /// its origin inventing a revision it does not have: offering the
     /// identical envelope requeues it.
+    // acceptance: RSC-49
     #[test]
     fn a_record_carried_no_further_is_requeued_by_offering_it_again() {
         let res = k(5);
@@ -2404,6 +2494,7 @@ mod tests {
 
     /// **Removing a relationship revokes the work it authorised**, on
     /// both sides, and says so where an operator can see it.
+    // acceptance: RSC-52
     #[test]
     fn removing_a_relationship_revokes_queued_and_pending_work() {
         let res = k(5);
@@ -2449,6 +2540,37 @@ mod tests {
                 .all(|m| !m.starts_with("PUT /.rhtn/envelope")),
             "nothing was handed over under the old relationship: {:?}",
             i.saw()
+        );
+
+        // **the relation is read when the envelope is handed over**, not
+        // when it arrived: an instance is never told a relation its
+        // operator has since changed
+        let other = k(9);
+        let j = Instance::new();
+        let at = Backends(BTreeMap::from([(other, j.clone())]));
+        let mut g = Federation::default();
+        g.configure(other, patron_of(k(1))).unwrap();
+        g.deliver(&other, Envelope::live(k(1), "r", "s@1", 1, b"x"))
+            .unwrap();
+        g.configure(
+            other,
+            Relationships {
+                kin: BTreeMap::from([("audit".to_string(), BTreeSet::from([k(1)]))]),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        settle(&mut g, &at);
+        let handed: Vec<String> = j
+            .saw()
+            .into_iter()
+            .filter(|m| m.starts_with(&format!("PUT {PATH_ENVELOPE}")))
+            .collect();
+        assert_eq!(handed.len(), 1, "{handed:?}");
+        assert!(
+            handed[0].contains("rhtn-relation: kin:audit"),
+            "the relation it arrived under is gone: {}",
+            handed[0].lines().next().unwrap_or_default()
         );
     }
 
@@ -2497,6 +2619,7 @@ mod tests {
         assert_eq!((still[0].to, &still[0].envelope), (to, &over));
     }
 
+    // acceptance: DMN-30
     #[test]
     fn a_pending_envelope_for_a_located_instance_is_abroad_until_carried() {
         let mut f = Federation::default();
@@ -2538,6 +2661,23 @@ mod tests {
         );
         f.unlocate_all();
         assert_eq!(f.location_of(&k(9)), None);
+
+        // **and where no location is written it stays pending**, not
+        // carried and not lost: readable from the surface, and
+        // deliverable at the other node's surface by hand
+        f.configure(k(5), patron_of(k(9))).unwrap();
+        f.plane_mut(&k(5)).expect("a plane").emit(
+            &k(5),
+            &[(
+                "up-4".to_string(),
+                Destination::Patron,
+                Envelope::live(k(5), "up", "s@1", 2, b"z"),
+            )],
+        );
+        assert!(f.abroad().is_empty(), "nowhere to carry it to");
+        let pending = &f.plane(&k(5)).expect("a plane").pending;
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].to, k(9), "and it says which instance owes it");
     }
 
     /// **What a restart finds** (`Custody`): the envelopes it had taken
@@ -2550,6 +2690,7 @@ mod tests {
     /// unfixed: a 2xx said *I have it* when nothing had it, and
     /// application idempotence cannot recreate a message no surviving
     /// component knows to resend.
+    // acceptance: DMN-31
     #[test]
     fn a_restart_finds_what_was_admitted_and_what_it_already_knew() {
         let dir = std::env::temp_dir().join(format!("rhtn-custody-{}", std::process::id()));
@@ -2651,6 +2792,7 @@ mod tests {
     /// An item's name is the application's, and is held to a shape a
     /// request can carry: the node puts it in the query of the poll it
     /// composes.
+    // acceptance: RSC-50
     #[test]
     fn an_items_name_is_bounded_and_a_re_offer_is_the_same_item() {
         let mut p = Plane::default();
@@ -2672,6 +2814,261 @@ mod tests {
         let again = p.emit(&k(5), &[("up-1".to_string(), Destination::Patron, e)]);
         assert!(again.is_empty());
         assert_eq!(p.pending.len(), 1, "not a second emission");
+
+        // **the poll is where the application hears it**: the item the
+        // node holds is named in `?taken=`, and a carried one is named
+        // once more in case the answer that said so first went missing.
+        // Serving a poll is not itself an acknowledgement of anything.
+        let (res, patron) = (k(5), k(1));
+        let (mine, theirs) = (Instance::new(), Instance::new());
+        let at = Backends(BTreeMap::from([
+            (res, mine.clone()),
+            (patron, theirs.clone()),
+        ]));
+        let mut f = Federation::default();
+        f.configure(res, patron_of(patron)).unwrap();
+        f.configure(
+            patron,
+            Relationships {
+                subordinates: BTreeSet::from([res]),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        round(&mut f, &at); // relationships, both of them
+        f.plane_mut(&res).expect("a plane").emit(
+            &res,
+            &[(
+                "up-7".to_string(),
+                Destination::Patron,
+                Envelope::live(res, "up", SCHEMA_RECEIPT, 1, b"y"),
+            )],
+        );
+        let polls = || -> Vec<String> {
+            mine.saw()
+                .into_iter()
+                .filter(|m| m.starts_with(&format!("GET {PATH_OUTBOX}")))
+                .collect()
+        };
+        let before = polls().len();
+        round(&mut f, &at);
+        assert!(
+            polls()[before..].iter().any(|m| m.contains("taken=up-7")),
+            "the item the node holds is named: {:?}",
+            polls()
+        );
+        assert!(
+            f.plane(&res).expect("a plane").pending.is_empty(),
+            "and it was carried"
+        );
+        let after = polls().len();
+        round(&mut f, &at);
+        assert!(
+            polls()[after..].iter().any(|m| m.contains("taken=up-7")),
+            "named once more, the first answer having been able to go missing: {:?}",
+            polls()
+        );
+        let heard = polls().len();
+        round(&mut f, &at);
+        assert!(
+            polls()[heard..].iter().all(|m| !m.contains("up-7")),
+            "and not again once the application has heard it: {:?}",
+            polls()
+        );
+    }
+
+    /// **The instance is called holding nothing, and an answer the
+    /// configuration moved under is not applied**
+    /// (`infra-client-requirements.md` §9.2).
+    ///
+    /// The adversarial shape: the instance, *while the node is calling
+    /// it*, reaches back into the node and reconfigures its own plane. A
+    /// pass that called a resource under the lock guarding this node's
+    /// state would hold that lock for as long as the resource took, so
+    /// the re-entry is the test — the plan is data, the call is the
+    /// caller's, and here the caller is holding the lock the instance
+    /// takes. Its answer then concerns a configuration nobody accepted,
+    /// so it is stopped where an operator sees it rather than credited;
+    /// offering the identical envelope again queues it afresh.
+    // acceptance: DMN-33
+    #[test]
+    fn an_instance_called_mid_round_can_reconfigure_its_plane_and_its_answer_is_not_applied() {
+        use std::sync::OnceLock;
+
+        /// An instance that reconfigures its own node from inside its
+        /// answer, and says whether it was able to.
+        struct Reenters {
+            node: OnceLock<Arc<Mutex<Federation>>>,
+            res: Keyhash,
+            /// What it was asked, in order.
+            saw: Mutex<Vec<String>>,
+            /// Whether the lock was free while it was answering.
+            free: Mutex<Option<bool>>,
+        }
+
+        impl Backend for Reenters {
+            fn handle(&self, message: &[u8]) -> Result<Vec<u8>, String> {
+                let text = String::from_utf8_lossy(message).to_string();
+                let path = text.split(' ').nth(1).unwrap_or_default().to_string();
+                self.saw.lock().unwrap().push(path.clone());
+                if path == PATH_ENVELOPE && self.free.lock().unwrap().is_none() {
+                    // `try_lock` rather than `lock`: a pass holding it
+                    // would deadlock here, and a hanging test says less
+                    // than a failing one
+                    let node = self.node.get().expect("the node");
+                    let free = match node.try_lock() {
+                        Ok(mut f) => {
+                            // the patron stays a relationship, so what is
+                            // queued is not revoked: the epoch alone moves
+                            f.configure(
+                                self.res,
+                                Relationships {
+                                    patron: Some(k(1)),
+                                    kin: BTreeMap::from([(
+                                        "audit".to_string(),
+                                        BTreeSet::from([k(3)]),
+                                    )]),
+                                    ..Default::default()
+                                },
+                            )
+                            .unwrap();
+                            true
+                        }
+                        Err(_) => false,
+                    };
+                    *self.free.lock().unwrap() = Some(free);
+                }
+                Ok(b"HTTP/1.1 200 X\r\ncontent-length: 0\r\n\r\n".to_vec())
+            }
+            fn running(&self) -> bool {
+                true
+            }
+        }
+
+        /// One instance, reachable.
+        struct One(Keyhash, Arc<dyn Backend>);
+        impl Addresses for One {
+            fn reachable(&self, resource: &Keyhash) -> Option<(String, Arc<dyn Backend>)> {
+                (*resource == self.0).then(|| ("one.internal".to_string(), self.1.clone()))
+            }
+        }
+
+        /// The daemon's own round, with the node's state behind the lock
+        /// it really is behind: plan under it, call holding nothing,
+        /// commit under it again.
+        fn round_locked(f: &Arc<Mutex<Federation>>, at: &dyn Addresses) -> Passed {
+            let work = f.lock().unwrap().work(at);
+            let answers: Vec<Answer> = work
+                .into_iter()
+                .map(|e| {
+                    let answer = e.backend.handle(&e.message).map(|b| response_of(&b));
+                    Answer {
+                        exchange: e,
+                        answer,
+                    }
+                })
+                .collect();
+            f.lock().unwrap().done(answers)
+        }
+
+        let res = k(5);
+        let it = Arc::new(Reenters {
+            node: OnceLock::new(),
+            res,
+            saw: Mutex::new(Vec::new()),
+            free: Mutex::new(None),
+        });
+        let node = Arc::new(Mutex::new(Federation::default()));
+        it.node.set(node.clone()).ok();
+        let at = One(res, it.clone());
+        let envelope = Envelope::live(k(1), "r", SCHEMA_DIRECTIVE, 1, b"x");
+        {
+            let mut f = node.lock().unwrap();
+            f.configure(res, patron_of(k(1))).unwrap();
+            f.deliver(&res, envelope.clone()).unwrap();
+        }
+        round_locked(&node, &at); // the relationships, taken
+        round_locked(&node, &at); // the envelope, delivered mid-reconfiguration
+
+        assert_eq!(
+            *it.free.lock().unwrap(),
+            Some(true),
+            "the node called the instance while holding its own lock"
+        );
+        let f = node.lock().unwrap();
+        let plane = f.plane(&res).expect("a plane");
+        assert_eq!(plane.held().len(), 1, "the record's watermark is its own");
+        assert_eq!(
+            plane.held()[0].2.stage,
+            Stage::Stopped,
+            "stopped, not applied, and stopped is what lets it be offered again"
+        );
+        assert_eq!(
+            plane.stopped.len(),
+            1,
+            "stopped visibly: {:?}",
+            plane.stopped
+        );
+        assert!(
+            plane.stopped[0]
+                .1
+                .contains("changed while it was being delivered")
+        );
+        drop(f);
+
+        // the identical envelope, offered again, queues afresh and this
+        // time is applied: nothing was lost by the refusal
+        node.lock().unwrap().deliver(&res, envelope).unwrap();
+        round_locked(&node, &at); // the relationships again, after the change
+        round_locked(&node, &at);
+        let f = node.lock().unwrap();
+        let plane = f.plane(&res).expect("a plane");
+        assert_eq!(plane.held()[0].2.stage, Stage::Applied);
+        assert_eq!(
+            it.saw
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|p| *p == PATH_ENVELOPE)
+                .count(),
+            2,
+            "the second offer was delivered, not deduplicated"
+        );
+    }
+
+    /// **A rebound backend is told its relationships again, and the plane
+    /// of a resource this node no longer hosts is forgotten**
+    /// (`infra-client-requirements.md` §9.2). Configuring the planes alone
+    /// missed both: a new backend has been told nothing while the plane
+    /// thought it had told the instance, and a plane nobody hosts is
+    /// nobody's.
+    // acceptance: DMN-34
+    #[test]
+    fn a_rebound_backend_is_told_again_and_an_unhosted_plane_is_forgotten() {
+        let (a, b) = (k(5), k(6));
+        let (ia, ib) = (Instance::new(), Instance::new());
+        let at = Backends(BTreeMap::from([(a, ia.clone()), (b, ib.clone())]));
+        let mut f = Federation::default();
+        f.configure(a, patron_of(k(1))).unwrap();
+        f.configure(b, patron_of(k(1))).unwrap();
+        settle(&mut f, &at);
+        let told = |i: &Arc<Instance>| {
+            i.saw()
+                .iter()
+                .filter(|m| m.starts_with(&format!("PUT {PATH_RELATIONSHIPS}")))
+                .count()
+        };
+        assert_eq!((told(&ia), told(&ib)), (1, 1), "each told once");
+
+        // a reload: `a` is rebound to another backend under relationships
+        // that did not change, and `b` is no longer hosted here
+        f.hosted_now(&[a]);
+        assert!(f.plane(&b).is_none(), "its plane is nobody's");
+        f.configure(a, patron_of(k(1))).unwrap();
+        settle(&mut f, &at);
+        assert_eq!(told(&ia), 2, "the new backend had been told nothing");
+        assert_eq!(told(&ib), 1, "and nothing is pushed to what is not hosted");
+        assert_eq!(f.resources(), vec![a]);
     }
 
     #[test]

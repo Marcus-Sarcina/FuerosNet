@@ -14421,5 +14421,411 @@
     "then": "The first states how many attested and how the nominated_by split fell; the second says so and that this side's own nominees are absent from it; the third says nobody witnessed it and that the record says so permanently. None of the three is presented as a fault.",
     "oracle": "behaviour",
     "interpretation": ""
+  },
+  {
+    "id": "RSC-43",
+    "area": "resources",
+    "gap": "resources",
+    "title": "The node's own paths are the node's: a member reaches none of them, and no target with two readings travels",
+    "milestone": "after-5",
+    "kind": "negative",
+    "spec": [
+      "resource-requirements.md §3.3",
+      "infra-client-requirements.md §9.2"
+    ],
+    "rule": [
+      {
+        "where": "resource-requirements.md §3.3",
+        "text": "a target with more than one reading is refused outright"
+      },
+      {
+        "where": "infra-client-requirements.md §9.2",
+        "text": "refuse a member's request naming such a path before it reaches any backend, so that a resource seeing one is seeing you"
+      }
+    ],
+    "given": "A node hosting a package, and a member who holds connect on it.",
+    "when": "The member names each reserved path in turn, and then spellings that decode to one: a percent-escape of an unreserved character, an escaped separator, and a dot segment. The control header and the origin and relation marks are also written by the member on an ordinary path.",
+    "then": "Every reserved target is refused and no backend is called; every ambiguous spelling is refused by the parser rather than normalised and forwarded; the normal form of an unreserved path that merely begins with the same letters is carried; a percent-escape of a reserved character is left as written; and none of the member's rhtn- headers reaches the package.",
+    "oracle": "behaviour",
+    "interpretation": null
+  },
+  {
+    "id": "RSC-44",
+    "area": "resources",
+    "gap": "resources",
+    "title": "The envelope crosses whole, and the origin signs the six immutable fields and never the route",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "resource-requirements.md §3.3"
+    ],
+    "rule": [
+      {
+        "where": "resource-requirements.md §3.3",
+        "text": "The origin signs the six immutable fields and never the route: a CBOR array [origin, record, schema, revision, digest, state] with state 0 for live and 1 for withdrawn."
+      }
+    ],
+    "given": "An envelope whose path records the instances it crossed.",
+    "when": "It is serialised, read back, and the bytes its origin signs are composed before and after the path changes.",
+    "then": "Every field survives the round trip; the signed bytes are the CBOR array of the six immutable fields with the state encoded as 0 or 1; and the bytes do not move when the path does, so transport metadata is outside the signature.",
+    "oracle": "fixture",
+    "interpretation": null
+  },
+  {
+    "id": "RSC-45",
+    "area": "resources",
+    "gap": "resources",
+    "title": "A live envelope without its body, a body that is not its digest, and a tombstone carrying one are refused",
+    "milestone": "after-5",
+    "kind": "negative",
+    "spec": [
+      "resource-requirements.md §3.3"
+    ],
+    "rule": [
+      {
+        "where": "resource-requirements.md §3.3",
+        "text": "a live envelope without one is refused rather than taking the record's revision and suppressing the complete copy behind it"
+      }
+    ],
+    "given": "A plane configured for an origin that may deliver.",
+    "when": "Three envelopes are offered: a live one with no body, a live one whose body is not the digest it claims, and a withdrawal that carries a body.",
+    "then": "Each is refused with its own reason, nothing is queued for the instance, and no watermark moves — so none of them has taken the record's revision and left a complete copy unable to follow it.",
+    "oracle": "behaviour",
+    "interpretation": null
+  },
+  {
+    "id": "RSC-46",
+    "area": "resources",
+    "gap": "resources",
+    "title": "Conflict, duplicate, supersession, discard and tombstone, decided in that order before anything is delivered",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "resource-requirements.md §3.3",
+      "infra-client-requirements.md §9.2"
+    ],
+    "rule": [
+      {
+        "where": "resource-requirements.md §3.3",
+        "text": "the same revision again is a duplicate and a no-op; a newer revision supersedes and is delivered; an older one is discarded; and a withdrawal is a tombstone that no replayed older live copy undoes"
+      },
+      {
+        "where": "infra-client-requirements.md §9.2",
+        "text": "conflict before duplicate, newer supersedes, older discarded, a tombstone that replay does not undo"
+      }
+    ],
+    "given": "A plane holding revision 2 of one record from one origin.",
+    "when": "The same revision arrives with a different digest, then the same revision again unchanged, then revision 3, then revision 1, then a withdrawal, and then the older live copy once more.",
+    "then": "The differing digest is a conflict, kept for the operator and delivered to nobody; the repeat is a no-op; revision 3 is delivered; revision 1 is discarded; the withdrawal is delivered and stands; and the replayed live copy is refused against the tombstone. The node keeps identities, revisions and digests, and the conflict is not resolved for the operator.",
+    "oracle": "behaviour",
+    "interpretation": null
+  },
+  {
+    "id": "RSC-47",
+    "area": "resources",
+    "gap": "resources",
+    "title": "Until an instance takes its relationships, nothing else is delivered to it",
+    "milestone": "after-5",
+    "kind": "negative",
+    "spec": [
+      "resource-requirements.md §3.3"
+    ],
+    "rule": [
+      {
+        "where": "resource-requirements.md §3.3",
+        "text": "a directive is acted on under a snapshot of who may send you one, and until you answer you have accepted no snapshot"
+      }
+    ],
+    "given": "An instance with one envelope waiting and one relationship configured.",
+    "when": "The instance refuses the relationships exchange on every attempt, and then takes it.",
+    "then": "While it refuses, the relationships are repeated and no envelope and no outbox poll reach it; the envelope waits where it was admitted; once it takes them the waiting envelope is delivered.",
+    "oracle": "behaviour",
+    "interpretation": null
+  },
+  {
+    "id": "RSC-48",
+    "area": "resources",
+    "gap": "resources",
+    "title": "An older revision is never delivered after a newer one has been taken",
+    "milestone": "after-5",
+    "kind": "negative",
+    "spec": [
+      "resource-requirements.md §3.3",
+      "infra-client-requirements.md §9.2"
+    ],
+    "rule": [
+      {
+        "where": "resource-requirements.md §3.3",
+        "text": "an older revision is never delivered after a newer one you have taken — a queued older snapshot is superseded, and one in flight when a newer is taken is discarded rather than retried behind it"
+      },
+      {
+        "where": "infra-client-requirements.md §9.2",
+        "text": "supersede a queued older snapshot"
+      }
+    ],
+    "given": "An instance that declines revision 2 of a record, leaving it queued for another attempt.",
+    "when": "Revision 3 of the same record arrives and is taken, and the rounds then run to quiet.",
+    "then": "Revision 2 is never handed over again, the record is applied at revision 3, and the instance's own log of what it was handed shows no revision after a higher one, with nothing left waiting.",
+    "oracle": "behaviour",
+    "interpretation": null
+  },
+  {
+    "id": "RSC-49",
+    "area": "resources",
+    "gap": "resources",
+    "title": "A record the node gave up on is stopped with its reason, and the identical envelope offered again queues afresh",
+    "milestone": "after-5",
+    "kind": "robustness",
+    "spec": [
+      "resource-requirements.md §3.3"
+    ],
+    "rule": [
+      {
+        "where": "resource-requirements.md §3.3",
+        "text": "A record the node gave up on after retrying is stopped and shown to your operator with the reason; offering the identical envelope again queues it afresh"
+      },
+      {
+        "where": "resource-requirements.md §3.3",
+        "text": "what the node remembers of such a record says *stopped* rather than *waiting* — so the identical envelope offered next is not mistaken for a duplicate of something still owed to you"
+      }
+    ],
+    "given": "An instance that declines one envelope on every attempt.",
+    "when": "The rounds run until the node gives up, the identical envelope is then offered again, and the instance takes it.",
+    "then": "The record is stopped with the reason where the operator reads it, its watermark says stopped, and nothing is retried on its own afterwards; the identical envelope is queued afresh rather than suppressed as a duplicate, and is applied. Neither side has had to invent a revision to retry one. The same holds whatever stopped it, a relationship withdrawn or a configuration that moved under the answer, because the watermark says stopped in each case.",
+    "oracle": "behaviour",
+    "interpretation": null
+  },
+  {
+    "id": "RSC-50",
+    "area": "resources",
+    "gap": "resources",
+    "title": "The outbox names what the node holds, and an item offered again while it holds one is the same item",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "resource-requirements.md §3.3",
+      "infra-client-requirements.md §9.2"
+    ],
+    "rule": [
+      {
+        "where": "resource-requirements.md §3.3",
+        "text": "the next outbox poll names, in `?taken=`, every item the node has custody of or has already carried"
+      },
+      {
+        "where": "infra-client-requirements.md §9.2",
+        "text": "treat an item it offers again while you hold it as the same item"
+      }
+    ],
+    "given": "An instance emitting one item named by itself, and a node that has taken it.",
+    "when": "The outbox is polled again; the same item is offered a second time; an item named outside the vocabulary or longer than the bound is offered; and an item is carried and then polled for.",
+    "then": "The poll names the item the node holds, and names a carried one once more so a lost answer costs nothing; the second offer of a held item is not a second emission; the malformed name is refused with its reason; and serving a poll is not by itself an acknowledgement of anything.",
+    "oracle": "behaviour",
+    "interpretation": null
+  },
+  {
+    "id": "RSC-51",
+    "area": "resources",
+    "gap": "resources",
+    "title": "Who may hand an instance an envelope is its operator's configuration and nothing wider",
+    "milestone": "after-5",
+    "kind": "negative",
+    "spec": [
+      "resource-requirements.md §3.3",
+      "infra-client-requirements.md §9.2"
+    ],
+    "rule": [
+      {
+        "where": "resource-requirements.md §3.3",
+        "text": "An envelope from an instance that is not a configured relationship is refused at the node, and one you emit to an instance that is not one is held and never forced through."
+      },
+      {
+        "where": "infra-client-requirements.md §9.2",
+        "text": "Carry within the configured relationships and no further"
+      }
+    ],
+    "given": "An instance configured with a patron, two subordinates and one named kin.",
+    "when": "An envelope arrives from an instance that is no relationship of it, and the instance emits to each configured destination and to one that is not.",
+    "then": "The envelope from the stranger is refused at the node and never offered; each configured destination is resolved and queued, and the relation it is marked with is the node's reading of the operator's configuration; an emission naming an instance that is no relationship of the sender is refused with its reason and queues nothing; and one addressed to an instance whose own operator has not configured the sender is held, readable as pending for that instance, and never forced through.",
+    "oracle": "behaviour",
+    "interpretation": null
+  },
+  {
+    "id": "RSC-52",
+    "area": "resources",
+    "gap": "resources",
+    "title": "A relationship removed revokes the work it authorised, ingress and egress alike",
+    "milestone": "after-5",
+    "kind": "negative",
+    "spec": [
+      "resource-requirements.md §3.3",
+      "infra-client-requirements.md §9.2"
+    ],
+    "rule": [
+      {
+        "where": "resource-requirements.md §3.3",
+        "text": "an envelope waiting to reach you from an origin that is no longer a relationship is stopped, as is an emission addressed to one, and both are shown to your operator with the reason"
+      },
+      {
+        "where": "infra-client-requirements.md §9.2",
+        "text": "the relation an envelope arrives under is read when it is handed over rather than when it arrived"
+      }
+    ],
+    "given": "An instance with one envelope queued from its patron and one emission addressed to it.",
+    "when": "The patron is removed from the configuration, and the rounds then run.",
+    "then": "Both are stopped and both are shown to the operator with the reason; nothing is handed over under the withdrawn relationship afterwards; the instance is told its relationships again before anything else reaches it; and an exchange already composed under the old configuration is not committed against the new one.",
+    "oracle": "behaviour",
+    "interpretation": null
+  },
+  {
+    "id": "DMN-29",
+    "area": "daemon",
+    "gap": "daemon",
+    "title": "Bind the key that called to the node configured for the origin claimed, and refuse before the plane is touched",
+    "milestone": "after-5",
+    "kind": "negative",
+    "spec": [
+      "infra-client-requirements.md §9.2"
+    ],
+    "rule": [
+      {
+        "where": "infra-client-requirements.md §9.2",
+        "text": "the key the caller presented must be the key your operator configured for the node hosting the origin it claims, and where no node is configured for that instance, refuse"
+      },
+      {
+        "where": "infra-client-requirements.md §9.2",
+        "text": "Refuse before the plane is touched, not after"
+      }
+    ],
+    "given": "Two nodes, each configured with the other's listener and key, one hosting the patron's instance.",
+    "when": "An envelope is delivered claiming an origin whose node is not the caller, claiming an origin no node is configured for, and claiming the largest revision there is.",
+    "then": "Each is refused on the handshake's key rather than on the envelope's word, and the plane is untouched: no watermark moves, so the legitimate revisions that follow are still delivered rather than classified as older. A node configured for one instance cannot speak for another, and the path the envelope carries changes none of this.",
+    "oracle": "behaviour",
+    "interpretation": "The node's own transport key is the identity's classical member, which is what lets a test configure both nodes before either starts."
+  },
+  {
+    "id": "DMN-30",
+    "area": "daemon",
+    "gap": "daemon",
+    "title": "An envelope for an instance another node hosts is carried node to node, with the far key pinned",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "infra-client-requirements.md §9.2"
+    ],
+    "rule": [
+      {
+        "where": "infra-client-requirements.md §9.2",
+        "text": "where your operator wrote the far node's listener and key beside a related instance you deliver there, presenting your own key and refusing a listener that presents any key but the one written"
+      }
+    ],
+    "given": "Node A hosting the patron's instance behind a federation listener, node B hosting the subordinate's as an origin of its own, each configured with the other's address and key.",
+    "when": "B's instance emits a receipt addressed to its patron, and the same is tried again with the wrong key written for A.",
+    "then": "The receipt crosses to A over TLS, is admitted there and is held for the patron, the bookkeeping and the relationship check being applied once at the receiving node; with the wrong key written it stays pending with the refusal said, and where no location is written it stays pending and readable from the surface. The instances see nothing of the carriage.",
+    "oracle": "behaviour",
+    "interpretation": null
+  },
+  {
+    "id": "DMN-31",
+    "area": "daemon",
+    "gap": "daemon",
+    "title": "What was admitted and not applied is written before the answer, and a restart finds it with every record's watermark",
+    "milestone": "after-5",
+    "kind": "robustness",
+    "spec": [
+      "infra-client-requirements.md §9.2"
+    ],
+    "rule": [
+      {
+        "where": "infra-client-requirements.md §9.2",
+        "text": "write it down and flush it before you answer, not on a later tick"
+      },
+      {
+        "where": "infra-client-requirements.md §9.2",
+        "text": "the watermark of every record — revision, digest and state — which is the replay protection and without which a restart reads a withdrawn record's older live copy as new"
+      }
+    ],
+    "given": "A node keeping custody under a store its operator named, holding one admitted envelope its instance has not taken and one record already withdrawn.",
+    "when": "The node is stopped without warning and started again, and the withdrawn record's older live copy is then offered.",
+    "then": "The admitted envelope is offered again in the order it was admitted, with its attempts; the watermarks come back, so the older live copy is refused across the restart as within a run; custody of an envelope ends when the instance answers 2xx and of an emission when the far side has it, and not before.",
+    "oracle": "behaviour",
+    "interpretation": null
+  },
+  {
+    "id": "DMN-32",
+    "area": "daemon",
+    "gap": "daemon",
+    "title": "Show each instance's plane on the operator's surface, and say there whether custody is kept at all",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "infra-client-requirements.md §9.2"
+    ],
+    "rule": [
+      {
+        "where": "infra-client-requirements.md §9.2",
+        "text": "Say on your operator's page whether you are keeping custody at all, and do not federate without it"
+      },
+      {
+        "where": "infra-client-requirements.md §9.2",
+        "text": "the relationships, what is held and whether it stands, what waits, what is pending for an instance elsewhere, and any conflict, and the work you stopped carrying with the reason"
+      }
+    ],
+    "given": "A node hosting one instance, with a relationship configured and an envelope delivered by hand from the operator's own surface.",
+    "when": "The surface is read, and read again on a node configured to federate with no store for what it takes.",
+    "then": "The plane is legible per instance: the relationships, what is held and whether it stands, what waits, what is pending elsewhere, any conflict, and what was stopped with its reason. A node keeping no custody says so in the fetch, on the page, and at startup.",
+    "oracle": "behaviour",
+    "interpretation": null
+  },
+  {
+    "id": "DMN-33",
+    "area": "daemon",
+    "gap": "daemon",
+    "title": "Decide under the lock, call the instance holding nothing, and refuse an answer the configuration moved under",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "infra-client-requirements.md §9.2"
+    ],
+    "rule": [
+      {
+        "where": "infra-client-requirements.md §9.2",
+        "text": "Never call a resource while your own state is locked"
+      },
+      {
+        "where": "infra-client-requirements.md §9.2",
+        "text": "Decide what to ask under the lock, ask holding nothing, commit under it again, and check on commit that the configuration has not moved under the answer."
+      },
+      {
+        "where": "infra-client-requirements.md §9.2",
+        "text": "Mark the record stopped whatever stopped it — exhaustion, a relationship withdrawn, a configuration that moved under the answer"
+      }
+    ],
+    "given": "A node whose hosted instance reaches back into the node from inside its own answer.",
+    "when": "An envelope is delivered to it, and while the call is outstanding it reconfigures its own plane; the identical envelope is then offered again.",
+    "then": "The instance finds the node's state free while it is being called, so nothing was held for as long as it took; its answer concerns a configuration nobody accepted and is stopped where the operator sees it rather than credited; and the identical envelope offered afterwards is queued afresh and applied.",
+    "oracle": "behaviour",
+    "interpretation": "What the lock guards is the reference implementation's arrangement; the obligation is that a resource is not called while it is held."
+  },
+  {
+    "id": "DMN-34",
+    "area": "daemon",
+    "gap": "daemon",
+    "title": "Tell a rebound backend its relationships again, and forget the plane of a resource you no longer host",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "infra-client-requirements.md §9.2"
+    ],
+    "rule": [
+      {
+        "where": "infra-client-requirements.md §9.2",
+        "text": "Re-announce the relationships when a backend is rebound, a new backend having been told nothing, and forget the plane of a resource you no longer host."
+      }
+    ],
+    "given": "A node hosting two instances, each told its relationships once.",
+    "when": "The configuration is reloaded: one instance is rebound to another backend under relationships that did not change, and the other is no longer hosted here.",
+    "then": "The rebound instance is told its relationships again before anything else reaches it; the plane of the one no longer hosted is gone and nothing is pushed to it; and what the node reports it hosts is what its configuration now names.",
+    "oracle": "behaviour",
+    "interpretation": null
   }
 ]

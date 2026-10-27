@@ -2137,6 +2137,7 @@ fn a_grant_the_node_cannot_hold_is_refused_when_it_is_written() {
 /// guard and reached a backend that decoded it back to the reserved path.
 /// Rather than normalise and hope the far end agrees, an ambiguous
 /// spelling is refused, and the normal form is the only one that travels.
+// acceptance: RSC-43
 #[test]
 fn an_ambiguous_target_is_refused_and_the_reserved_path_cannot_be_spelled_around() {
     let request = |target: &str| format!("PUT {target} HTTP/1.1\r\nhost: x\r\n\r\n").into_bytes();
@@ -2176,4 +2177,81 @@ fn an_ambiguous_target_is_refused_and_the_reserved_path_cannot_be_spelled_around
     // a percent-escape of a reserved character is legitimate and travels
     let kept = http::parse(&request("/a%3Ab?q=%2F")).expect("a well-formed request");
     assert_eq!(kept.target, "/a%3Ab?q=%2F", "the query is untouched");
+}
+
+/// **A member reaches none of the node's own paths, and forges none of
+/// the marks the node puts on its own requests**
+/// (`resource-requirements.md` §3.3). Neither the reserved prefix nor the
+/// control header is a secret, so what a package in the sandbox may rely
+/// on is this: the path is refused before any backend is called, and
+/// every `rhtn-*` header a member wrote is gone before the node writes
+/// its own (§3.1). Written against the gateway rather than the parser,
+/// because the parser's refusal of an ambiguous spelling and the
+/// gateway's refusal of the normal one are two different guards and the
+/// second was asserted nowhere.
+// acceptance: RSC-43
+#[test]
+fn a_member_reaches_no_reserved_path_and_forges_no_control_header() {
+    let sc = scene();
+    let backend = Arc::new(Fake::new());
+    let mut g = gateway_with(&sc, backend.clone());
+    g.set_row(
+        R1,
+        kh("carol"),
+        Row {
+            roles: BTreeSet::new(),
+            connect: true,
+        },
+    )
+    .unwrap();
+    for target in [
+        rhtn_node::federation::PATH_ENVELOPE,
+        rhtn_node::federation::PATH_RELATIONSHIPS,
+        rhtn_node::federation::PATH_OUTBOX,
+        "/.rhtn/whatever-comes-later",
+    ] {
+        let message =
+            format!("PUT {target} HTTP/1.1\r\nhost: x\r\ncontent-length: 0\r\n\r\n").into_bytes();
+        assert_eq!(
+            g.serve(
+                &kh("alice"),
+                &sc.table,
+                &kh("carol"),
+                &request(R1, &message)
+            ),
+            ResourceResponse::code(STATUS_REFUSED),
+            "{target} is the node's own"
+        );
+    }
+    assert_eq!(
+        backend.calls.load(Ordering::SeqCst),
+        0,
+        "refused before it reaches any backend"
+    );
+    // and the mark the node puts on a control exchange does not survive
+    // the gateway when a member is the one who wrote it
+    let forged = format!(
+        "GET /threads/42 HTTP/1.1\r\nhost: x\r\n{}: {}\r\nrhtn-origin: {}\r\nrhtn-relation: patron\r\n\r\n",
+        rhtn_node::federation::CONTROL_HEADER,
+        rhtn_node::federation::CONTROL_VALUE,
+        "aa".repeat(32),
+    )
+    .into_bytes();
+    assert_eq!(
+        g.serve(&kh("alice"), &sc.table, &kh("carol"), &request(R1, &forged))
+            .status,
+        STATUS_DELIVERED
+    );
+    let seen = backend.seen.lock().unwrap();
+    let h = http::headers_of(&seen[0]);
+    for name in [
+        rhtn_node::federation::CONTROL_HEADER,
+        "rhtn-origin",
+        "rhtn-relation",
+    ] {
+        assert!(
+            !h.iter().any(|(n, _)| n == name),
+            "{name} was the member's and must not reach the package: {h:?}"
+        );
+    }
 }
