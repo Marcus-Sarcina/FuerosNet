@@ -1,0 +1,36 @@
+[package]
+name = "rhtn-desktop"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+authors.workspace = true
+description = "The operator's desktop: the provider's own console in a window beside the steps, the token pasted back, and the launch driven from there (light-client-requirements.md §10)"
+
+[features]
+default = []
+# **The window and its web view are the system's** (`main.rs`), which on
+# this platform means WebKitGTK and GTK 3 with their development files
+# present.  Off by default so that the gate, and a continuous-integration
+# container with no desktop libraries at all, build and test everything
+# below the window: `cargo build -p rhtn-desktop --features gui` is the
+# build that opens one.
+gui = ["dep:wry", "dep:tao"]
+
+[dependencies]
+rhtn-launch = { path = "../launch" }
+# **the transport is the command line's** (`rhtn_cli::launch::TlsTransport`):
+# one TLS client over the system's roots, already written and already
+# exercised against two providers, and a second copy of it here would be a
+# second place for it to drift
+rhtn-cli = { path = "../cli" }
+serde_json = { workspace = true }
+
+# Apache-2.0 OR MIT, both; the web view and the window, each the system's
+# own rather than a browser shipped with this binary
+wry = { version = "0.57", optional = true }
+tao = { version = "0.37", optional = true }
+
+[[bin]]
+name = "rhtn-desktop"
+path = "src/main.rs"
+required-features = ["gui"]
