@@ -32,8 +32,8 @@ class ConversationActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // the peer named by the row that opened this, or the sole peer this
-        // device is provisioned to
+        // the peer named by the row that opened this, or the one party this
+        // device has met or been provisioned to, where a row did not name one
         peerKey = intent.getStringExtra("peer") ?: Kernel.peerKey()
 
         messages = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -49,8 +49,16 @@ class ConversationActivity : Activity() {
         send.setOnClickListener {
             val text = box.text.toString()
             if (text.isEmpty()) return@setOnClickListener
+            // **the party this thread is with, and nobody else**: the
+            // kernel used to send to whoever was met last, whichever
+            // thread was on screen
+            val to = peerKey
+            if (to == null) {
+                box.setText("")
+                return@setOnClickListener
+            }
             box.setText("")
-            Kernel.send(text)
+            Kernel.send(to, text)
         }
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -90,7 +98,21 @@ class ConversationActivity : Activity() {
 
     private fun redraw() {
         messages.removeAllViews()
-        val t = peerKey?.let { Kernel.front.thread(it) } ?: return
+        val t = peerKey?.let { Kernel.front.thread(it) }
+        if (t == null) {
+            // **a screen with nobody behind it says so**: this opens from
+            // the thread list, and a thread exists for every party met,
+            // so the empty case is a device that has met nobody
+            messages.addView(
+                TextView(this).apply {
+                    text = "Nobody to talk to yet. Meet someone first, " +
+                        "and the conversation opens here."
+                    textSize = 16f
+                    setPadding(0, 24, 0, 0)
+                },
+            )
+            return
+        }
         t.messages.forEach { m -> messages.addView(bubble(m)) }
         scroll.post { scroll.fullScroll(ScrollView.FOCUS_DOWN) }
     }

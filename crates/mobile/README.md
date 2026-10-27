@@ -14,8 +14,14 @@ their own toolchains, on their own runners.
 nine manual product entries in the acceptance catalogue are this
 application's obligations, and an entry is marked implemented by a marker
 in a file the catalogue's walk reaches. A shell in another repository could
-never close one. The walk is extended to `.kt` and `.swift` when the first
-marker is written; until then these directories hold no code.
+never close one. **The walk reaches `.kt` and `.swift` already**
+(`crates/acceptance/tools/catalogue.py`), so a marker written here counts
+the day it is written.
+
+**`android/` holds the shell; `ios/` holds a README.** The Android one is
+the participant's application as it stands — the ceremony end to end, the
+conversations, the contacts, the catalog and the operator's screens — and
+the Swift one is not started. Two directories, one of them a plan.
 
 **Licensing: Apache-2.0 per artifact, AGPL per build that carries
 libsignal** [author, 2026-09-26]. Every file written here is Apache-2.0, as

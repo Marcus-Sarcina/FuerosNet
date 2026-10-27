@@ -19503,3 +19503,59 @@ and durable delivery in the foundation rather than after field deployment —
 which is R01 and R03 above. The one point worth carrying into this repository's
 own vocabulary: *received*, *accepted*, *applied* and *compliant* are four
 different facts, and the node is entitled to speak for the first two only.
+
+## 2026-10-27 — the client's four repairs, and what the first one says about this suite
+
+Asked for after a survey of where the plan stands: the remaining catalogue
+debt is thirteen PRD rows, which are the client's screens, and three
+surfaces recorded as built did not work in the installed app.
+
+**1. The Catalog screen threw where it was opened.** `HomeActivity` names
+`CatalogActivity`; no manifest declared it. Built 2026-10-16, recorded as
+built here and in `light-client-screens.md` §F, and unopenable in both
+flavours until today. `field-test-sequence.md`'s C row waits on that screen,
+so the run would have failed at the tap.
+
+**What it says about the suite, which is the part worth keeping**: 216
+passing tests and not one of them touches an Activity. The screen's pure
+half (`Catalog`) was tested throughout and passed, and the split that makes
+those helpers testable — `People`, `Catalog`, `Front`, `Meet` — is exactly
+what put the untestable half out of reach. `ManifestTest` reads the sources
+and manifests as text, which is the one thing about an Activity a JVM test
+can say, and it caught the defect when the declaration was taken back out
+to check. **It also passed, first time, on a stale result**: the manifests
+were not an input of the test task, so a manifest-only edit left the task up
+to date. Declared now. A test that reads files outside its declared inputs
+is a test that can report yesterday's answer.
+
+**2. A message went to whoever was met last.** `Kernel.send` took no
+recipient and used the one `peer` slot every meeting overwrote, while
+`ConversationActivity` drew the thread it was opened on. So a bubble typed
+in an older thread appeared in the newest and went to that party — a
+violation of UX-012, which is about attribution. The recipient is the
+screen's now. The direct-path chip had the same shape and is each thread's.
+
+**3. A serving node could not be reached from the installed app.** The only
+attach was `bringUp`'s, from the bench's provision blob at a cold start.
+This is the second half of the 2026-10-11 review's item 2.1: the loop now
+runs without a provision, so a phone can meet — and it still could not
+attach, so it could reach no verifier, mailbox or catalog. `AttachActivity`
+behind Home's connection line, with `Attach` as the pure half; the nodes
+`reachable` reports, or a key and an address typed.
+
+**4. Documentation that described a different application.** The Android
+README called the shell a skeleton with one screen and listed a built
+capture as owed; `AndroidShell`'s own comment said capture and the
+operator's question did not exist; `crates/mobile/README.md` said both shell
+directories held no code; the capability matrix called resource access owed,
+built 2026-10-16. Corrected, and the Android README now carries what is
+built screen by screen beside what is owed.
+
+**Still owed, and all of it at the boundary**: recovery, departure, standing
+and evaluation, resource registration, the role view, the mode query, and
+the verifier and seal settings. Each is library code with tests behind it
+and no export, and each blocks a screen the sheet already specifies.
+
+**And the question that is the author's**, asked in the output: how a manual
+PRD row is recorded now that the tester's form is gone [2026-10-23]. Six of
+the thirteen owed rows describe screens that exist.

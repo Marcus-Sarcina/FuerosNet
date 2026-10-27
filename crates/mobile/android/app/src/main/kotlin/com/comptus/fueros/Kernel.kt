@@ -1659,28 +1659,39 @@ object Kernel {
     }
 
     /**
-     * Send application bytes to the provisioned peer.
+     * Send application bytes **to the party whose thread this is**, named
+     * by its keyhash in hex [2026-10-27].
      *
      * The bubble goes up at once as *sending*; the kernel's own send blocks
      * on the network, so it runs off the caller's thread and settles the
      * bubble to *sent* — accepted for carriage, never *delivered* — or to
      * *unsent* with the refusal's reason.
+     *
+     * **The recipient was this kernel's one `peer` slot until now**, which
+     * every meeting overwrote: a conversation screen drew the thread it was
+     * opened on and then sent to whoever had been met last, putting the
+     * bubble in that other thread as it went. A screen showing one party
+     * and sending to another is a misdelivery, not a missing feature, so
+     * the recipient is the screen's own and this kernel keeps no current
+     * one. Who may be sent to is every party [adopt] has pinned, which is
+     * every meeting this device has reached the optical step of.
      */
-    fun send(text: String) {
+    fun send(to: String, text: String) {
         val p = participant
-        val to = counterparty()
-        val key = peerKey
-        if (p == null || to == null || key == null) {
-            front.note("· unprovisioned: nobody to send to")
+        val who = runCatching { unhex(to) }.getOrNull()
+        if (p == null || who == null || who.size != 32) {
+            front.note(
+                if (p == null) "· no kernel yet" else "· not a party to send to: ${to.take(8)}…",
+            )
             return
         }
-        val id = front.outgoing(key, text)
-        Thread {
-            call("send", { e -> front.settle(key, id, Front.Delivery.UNSENT, e.reason) }) {
-                p.send(to, kindApplication(), text.toByteArray())
-                front.settle(key, id, Front.Delivery.SENT, null)
+        val id = front.outgoing(to, text)
+        Thread({
+            call("send", { e -> front.settle(to, id, Front.Delivery.UNSENT, e.reason) }) {
+                p.send(who, kindApplication(), text.toByteArray())
+                front.settle(to, id, Front.Delivery.SENT, null)
             }
-        }.start()
+        }, "fueros-send").start()
     }
 
     /**
@@ -1782,6 +1793,86 @@ object Kernel {
     /** This device's public key material, hex: what an instance is told
      *  to speak as. */
     fun materialHex(): String? = participant?.material()?.joinToString("") { "%02x".format(it) }
+
+    // ---- the device's own attach ---------------------------------------
+
+    /** One serving node this device knows how to reach, as the attach
+     *  screen draws it. */
+    data class Node(val node: String, val addresses: List<String>)
+
+    /**
+     * **The nodes whose endpoint records this device holds**, from the
+     * horizon: a node whose code was taken on the People screen is here
+     * without this device ever having attached to one.
+     */
+    fun nodesKnown(): List<Node> {
+        val p = participant ?: return emptyList()
+        return call("reachable", { emptyList() }) {
+            p.reachable().map { Node(hex(it.node), it.addresses) }
+        }
+    }
+
+    /**
+     * **Attach to a serving node the person named** [2026-10-27].
+     *
+     * Until this, the only attach was the one `bringUp` performs from the
+     * bench's provision blob, read once at a cold start — so an installed
+     * app had no way to reach a node at all, and every run that needed one
+     * was a run a script had set up. A second attach replaces the first,
+     * which is what returning to a patron after a spell on a sibling is.
+     *
+     * **The population swept is the parties this device holds**, not the
+     * nodes: a sweep stocks payload material for people, and a node is
+     * where they are reached rather than somebody to reach.
+     *
+     * Off the caller's thread: an attach dials, publishes and sweeps.
+     */
+    fun attachTo(nodeHex: String, address: String) {
+        val p = participant ?: run { front.note("· no kernel yet"); return }
+        val node = Attach.node(nodeHex)?.let { runCatching { unhex(it) }.getOrNull() }
+        val at = Attach.address(address)
+        if (node == null || at == null) {
+            front.note("· not a node and an address: ${nodeHex.take(8)}… at $address")
+            return
+        }
+        Thread({
+            val population = call("contacts", { emptyList() }) {
+                // the people, not the infrastructure: `how` 4 is a node
+                p.contacts().filter { it.how.toInt() != 4 }.map { it.who }
+            }
+            val a = call("attach", { e -> front.note("· attach refused: ${e.reason}"); null }) {
+                p.attach(node, listOf(at), population)
+            }
+            if (a == null) {
+                // **a node that did not answer is the detached case**, as
+                // it is on the provision's path: the loop goes on running
+                front.note("· $at did not answer: this device stays detached.")
+                show(p, Status.Detached)
+            } else {
+                // **not the provision's flag**: that one says a blob was
+                // read, and this attach is the person's own
+                front.note("· attached to ${hex(node).take(8)}… at $at; ${a.queued} queued there.")
+                show(p, Status.Attached(node, a.primary))
+            }
+        }, "fueros-attach").start()
+    }
+
+    /**
+     * **Detach, which the person may do and the screen offers**: the
+     * session closes cleanly so the serving node queues for this device
+     * from now rather than after three missed intervals. Everything else
+     * is kept.
+     */
+    fun detachNow() {
+        val p = participant ?: run { front.note("· no kernel yet"); return }
+        Thread({
+            call("detach", { e -> front.note("· detach refused: ${e.reason}") }) {
+                p.detach()
+                front.note("· detached. Nothing is queued for this device from here.")
+                show(p, Status.Detached)
+            }
+        }, "fueros-detach").start()
+    }
 
     fun forgetCaptures(hexKey: String) {
         val p = participant ?: run { front.note("· no kernel yet"); return }
@@ -2104,10 +2195,14 @@ object Kernel {
             Construction.TRIPLE_RATCHET -> "the Triple Ratchet"
         }
         front.setStatus("$line · presents $key…\npayload: $construction")
-        val to = peer
-        val k = peerKey
-        if (to != null && k != null) {
-            front.directPath(k, p.directTo(to))
+        // **every thread's chip, not the latest party's** [2026-10-27]:
+        // the chip is per peer on the thread list (C1), and reading it off
+        // one slot left every other thread's showing whatever it showed
+        // when that party was the current one
+        for (t in front.threads()) {
+            runCatching { unhex(t.peerKey) }.getOrNull()?.let { who ->
+                if (who.size == 32) front.directPath(t.peerKey, p.directTo(who))
+            }
         }
     }
 

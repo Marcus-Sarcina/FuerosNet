@@ -1,27 +1,44 @@
 # Android shell
 
-Kotlin over `rhtn-ffi`. What is here is the skeleton: a Gradle project
-whose one screen starts the kernel over the binding and shows what it
-presents. `tools/build-native.sh` cross-compiles `librhtn_ffi.so` for
-`arm64-v8a` and `x86_64` and generates the Kotlin binding from a host
-build of the same crate, both into directories the tree does not carry;
-`./gradlew assembleReleasableDebug` then builds the APK (the two flavours
-are below). The binding is generated
-without the `harness` feature, which is never in a shell's build, so the
-load-time checksum probe wants exactly the symbols the packaged library
-has. The seeds the skeleton mints on first launch stand in until the
-ceremony exists; the application id `com.comptus.fueros` is provisional.
+Kotlin over `rhtn-ffi`. `tools/build-native.sh` cross-compiles
+`librhtn_ffi.so` for `arm64-v8a` and `x86_64` and generates the Kotlin
+binding from a host build of the same crate, both into directories the tree
+does not carry; `./gradlew assembleReleasableDebug` then builds the APK (the
+two flavours are below). The binding is generated without the `harness`
+feature, which is never in a shell's build, so the load-time checksum probe
+wants exactly the symbols the packaged library has. The application id
+`com.comptus.fueros` is provisional.
 
-**What this shell owes**, beyond rendering the client's states:
+**What is built**, screen by screen, against
+`Robot/light-client-screens.md`:
 
-- A guided camera capture whose frames cross the boundary as pixels, with
-  whatever the platform's pipeline attached stripped at the boundary (§1.3).
-- The privacy choices §5 requires the user be able to make, and the
-  warnings §6 requires before anything irreversible.
+| Screen | What it does |
+|---|---|
+| Home | Brings the kernel up, shows what this device presents and whether it is attached; the connection line opens the attach screen |
+| Attach | This device's own attach to a serving node: the nodes whose records it holds, or a key and an address typed, and a detach |
+| Meet | The ceremony end to end: the invitation, both briefs, the optical exchange, the window, the guided capture, verifiers and witnesses, the review, the record, and the peering and adoption that follow |
+| Conversations | A thread per party met, each sending to its own party, with an honest *sending* / *sent* / *unsent* and no *delivered* |
+| People | Contacts: a code scanned or pasted, this device's own card, the roll |
+| Catalog | The sweep, what it holds with truncation and staleness said, and one request to a resource through the node that served its entry |
+| Operator | An instance enrolled by hand or launched at a provider, its run renewed, its pages framed, the machine destroyed |
+
+**What this shell still owes**, beyond rendering the client's states:
+
+- The identity fork at first run: a new identity is minted and kept under
+  this shell's own custody, and **restore and recover are not built** — the
+  kernel exports neither recovery nor departure yet.
+- Settings, which is a placeholder: the wake endpoint, the verifier limits
+  and the seal cost.
 - Encrypted backup under a key kept apart from the backup, and a plain
   statement of what losing the device costs (design §13.7.1).
+- The privacy choices §5 requires the user be able to make, and those of
+  §6's warnings that are not already in the ceremony's brief.
+- The role view and registering a resource, neither of which the kernel
+  exports.
 
-The catalogue carries these as PRD-01 to PRD-05 and PRD-07 to PRD-09.
+The catalogue carries the obligations as PRD-02 to PRD-14, PRD-17 and
+PRD-19, and marks none of them: a manual row closes on an observation, and
+how one is recorded is open since the tester's form was removed.
 
 ## The two flavours
 
@@ -31,7 +48,7 @@ features of `rhtn-ffi` are (`Robot/field-test-diagnostics.md`, section 4;
 
 | Flavour | Native library | What it adds |
 |---|---|---|
-| `releasable` | `tools/build-native.sh` into `app/src/releasable/jniLibs` | nothing: no log tree, no event file, no Report action, no crash handler |
+| `releasable` | `tools/build-native.sh` into `app/src/releasable/jniLibs` | nothing: no log tree, no event file, no live stream, no crash handler |
 | `fieldtest` | `tools/build-native.sh --fieldtest` into `app/src/fieldtest/jniLibs` | the diagnostics below |
 
 Build and install:
@@ -68,7 +85,7 @@ The shell's events are the rows of the plan's section 3.6: `shell.call` and
 what the event loop takes, `meet.step`, `meet.stop` and `meet.note`,
 `qr.shown` and `qr.read`, `camera`, `face.frames` and `face.timeout`, `ble`,
 `bearer.packets` and `bearer.refused`, `permission`, `storage`,
-`custody`, `crash`, and `report.*`. Identities are eight hex characters
+`custody` and `crash`. Identities are eight hex characters
 (`Diag.id8`), and free text that quotes a longer hex run is cut to eight
 (`Diag.scrub`); no frame, key, seed, capture or storage payload has a path
 into an event.
@@ -79,13 +96,14 @@ the handler that was there. The Rust side's panic hook in
 `crates/ffi/src/diag.rs` writes a panic's message and location through the
 same layer before the default hook runs.
 
-The Report action, on the home screen and every Meet screen in this flavour
-alone, zips the run's event files with a `header.json` (run id, commit,
-spec pins, device, Android version, the radios present, flavour, app
-version, the wall-clock anchor) under `filesDir/diag/report/` and offers
-it with `ACTION_SEND` through `ReportProvider`, a one-directory read-only
-content provider declared in the fieldtest manifest. The run naming is
-M4's.
+**The run's header** (`Report.kt`): run id, commit, spec pins, device,
+Android version, the radios present, flavour, app version and the
+wall-clock anchor the `ms` fields count from. Every live stream opens with
+it. **The bundle and its share sheet are gone** [author, 2026-10-07]: they
+zipped the event files for `ACTION_SEND`, which on a phone with nothing
+that accepts a zip is a save dialogue with nowhere to send it, and
+`crates/tools/field-run.sh` already streams every event live and pulls
+every file at stop. The run naming is M4's.
 
 **The live stream** (`DiagStream.kt`, fieldtest only). Beside the file,
 the same lines go to the bench over one plaintext TCP connection on the

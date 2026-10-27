@@ -15763,3 +15763,51 @@ credited to a configuration nobody accepted. The first assertion is `try_lock`
 rather than `lock`, because a hanging test says less than a failing one.
 
 Catalogue 539 entries, 508 implemented; node federation tests 16, daemon 35.
+
+### 2026-10-27 (the client's four repairs: a screen nobody could open, a message that went to the wrong person, a node nobody could reach)
+
+**The Catalog screen threw where it was opened.** Built on 2026-10-16,
+recorded as built, named by Home's own navigation, and declared in no
+manifest — so tapping *Catalog* raised `ActivityNotFoundException` in both
+flavours for eleven days, and the bench row that waits on it could never
+have run. One line. Nothing caught it because every test in that shell is a
+JVM unit test and none of them touches an Activity, while the screen's pure
+half was tested and passing throughout. `ManifestTest` now reads the sources
+and the manifests as text and holds that every Activity a source can open is
+one the system knows about; the manifests are declared an input of the test
+task, because the first check of that test passed on a stale result after a
+manifest-only edit.
+
+**A message went to whoever was met last.** The conversation screen drew the
+thread it was opened on and then called a kernel whose recipient was its one
+`peer` slot, which every meeting overwrote: a bubble typed in an older
+thread appeared in the newest one and went to that party. That is a
+misdelivery and a misattribution, which is UX-012's own subject, so the
+recipient is now the screen's and the kernel keeps no current party. The
+direct-path chip was read off the same slot and is now each thread's own.
+
+**And a serving node could not be reached at all from the installed app.**
+The only attach was the one the kernel performs at a cold start from the
+bench's provision blob, so a phone nobody had scripted could meet whoever
+was in front of it and never reach a node — no verifier past the two
+present, no mailbox, no catalog, no sweep. Every run that needed one was a
+run a script had set up. The connection line on Home now opens an attach
+screen: the nodes whose endpoint records this device already holds, or a
+node's key and the address it answers at, and a detach. Not a seventh
+navigation row, the six being the author's; the status this screen changes
+is where changing it belongs. A node is a key *and* an address, which the
+screen says, because that is what makes a wrong address a failed attach
+rather than an attach to somebody else.
+
+**The fourth repair was the documentation that described a different
+application.** The Android shell's own README called itself a skeleton
+whose one screen starts the kernel, listed a guided camera capture as owed,
+and described a Report action removed on 2026-10-07; the platform object
+said capture and the operator's question did not exist; the mobile README
+said both directories held no code. Each now says what is there, screen by
+screen, and what is still owed: the identity fork's restore and recover,
+settings, backup, the role view and registering a resource — the five that
+wait on exports the boundary does not carry.
+
+Android unit tests 227, 0 failed, from 216; the APK assembles and declares
+every screen. Not installed on the bench: a run is holding.

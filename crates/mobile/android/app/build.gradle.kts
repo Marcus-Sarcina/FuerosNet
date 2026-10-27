@@ -79,6 +79,18 @@ android {
     }
 }
 
+// **The manifests are an input of the unit tests** [2026-10-27], because
+// `ManifestTest` reads them as text: it holds that every Activity a source
+// names is declared, and the one defect it is written for is a manifest
+// that stopped naming one. Without this the task is up to date after a
+// manifest-only edit and the stale result reads as a pass -- which it did,
+// the first time this was checked by taking a declaration back out.
+tasks.withType<Test>().configureEach {
+    inputs.files(fileTree("src") { include("**/AndroidManifest.xml") })
+        .withPropertyName("androidManifests")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+}
+
 dependencies {
     // The generated binding speaks JNA and nothing else; the @aar carries
     // libjnidispatch.so for each ABI.

@@ -151,6 +151,49 @@ class FrontTest {
         assertFalse(front.thread("aa")!!.direct)
     }
 
+    /**
+     * **A message belongs to the thread it was sent on**, which is what a
+     * screen showing one party and a kernel sending to another broke: the
+     * recipient was the kernel's one current peer, so a bubble typed in an
+     * older thread appeared in the newest one and went to that party. The
+     * front was always able to say this; nothing had asked it to.
+     */
+    @Test
+    fun a_message_sits_in_the_thread_it_was_sent_on_and_in_no_other() {
+        val front = Front()
+        front.peerKnown("aa", "alice")
+        front.peerKnown("bb", "bob")
+        val toAlice = front.outgoing("aa", "for alice")
+        val toBob = front.outgoing("bb", "for bob")
+        assertEquals(listOf("for alice"), front.thread("aa")!!.messages.map { it.text })
+        assertEquals(listOf("for bob"), front.thread("bb")!!.messages.map { it.text })
+        // and each settles in its own thread, by its own id
+        front.settle("aa", toAlice, Front.Delivery.SENT, null)
+        front.settle("bb", toBob, Front.Delivery.UNSENT, "nobody carried it")
+        assertEquals(Front.Delivery.SENT, front.thread("aa")!!.messages[0].delivery)
+        assertEquals(Front.Delivery.UNSENT, front.thread("bb")!!.messages[0].delivery)
+        assertEquals("nobody carried it", front.thread("bb")!!.messages[0].reason)
+        // a settle naming the wrong thread moves nothing
+        front.settle("aa", toBob, Front.Delivery.UNSENT, "wrong thread")
+        assertEquals(Front.Delivery.SENT, front.thread("aa")!!.messages[0].delivery)
+    }
+
+    /** Every thread's chip is its own: read off one peer, the rest showed
+     *  whatever they showed when that party was the current one. */
+    @Test
+    fun each_threads_direct_chip_is_its_own() {
+        val front = Front()
+        front.peerKnown("aa", "alice")
+        front.peerKnown("bb", "bob")
+        front.directPath("aa", true)
+        assertTrue(front.thread("aa")!!.direct)
+        assertFalse("bob's thread says nothing about alice's path", front.thread("bb")!!.direct)
+        front.directPath("bb", true)
+        front.directPath("aa", false)
+        assertFalse(front.thread("aa")!!.direct)
+        assertTrue(front.thread("bb")!!.direct)
+    }
+
     @Test
     fun threads_keep_the_order_their_peers_were_first_known() {
         val front = Front()

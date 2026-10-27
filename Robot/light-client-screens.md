@@ -38,6 +38,7 @@ Two rules govern every screen before any is drawn:
 | **Second adoption nudge** (state-keyed): while subnet plurality is absent and the user can still reach one freely; explains eclipse, never a wire requirement | `places`/`anchors` | PRD-04, UX-005; `light-client-requirements.md` §6 |
 | **Operator frame** (state-keyed): appears iff an instance is attached (Owed: the mode query — *does this identity run an instance*) | Owed | `infra-client-requirements.md` §8.3 |
 | Navigation: Conversations · Meet · People · Catalog · Settings · Operator (conditional) | | |
+| **The status line is the way to the connection** [2026-10-27]: tapping it opens the attach screen — the nodes whose endpoint records this device holds, or a node's key and the address it answers at, and a detach. Built because there was no other way in: the only attach was the one the kernel performs at a cold start from the bench's provision blob, so an installed app could meet whoever was in front of it and could never reach a node, a verifier beyond the people present, a mailbox or a catalog. Not a seventh navigation row, the six above being the author's | `reachable`, `attach`, `detach` | `light-client-requirements.md` §4 |
 
 ## C. Conversations
 

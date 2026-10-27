@@ -24,12 +24,17 @@ import uniffi.rhtn_ffi.Told
 import timber.log.Timber
 
 /**
- * The platform the kernel runs on, as this device provides it.
+ * The platform the kernel runs on, as this device provides it: the two
+ * cameras, the clock, the randomness, the person, the notices, the storage
+ * and this device's own custody of its seeds.
  *
- * Capture and the operator's question are the ceremony's, and the
- * ceremony is not in this slice: a capture yields no frame, and a
- * question nobody was shown is answered no.  Storage is the application's
- * private files directory; the kernel's state file names contain no path.
+ * **Capture and the operator's question are real here** — the selfie
+ * camera opens on the first prompt and on every continuity probe, and a
+ * question reaches the person through [Consent] unless the brief they
+ * accepted already answers it. The comment that stood here said neither
+ * existed, from the slice before the ceremony was built. Storage is the
+ * application's private files directory; the kernel's state file names
+ * contain no path.
  */
 class AndroidShell(private val context: Context) :
     Camera, Clock, Random, Operator, Notices, Storage, Custody, Diagnostics {

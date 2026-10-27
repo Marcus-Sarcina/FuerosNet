@@ -28,7 +28,7 @@ class HomeActivity : Activity() {
     private val sink = object : Front.Ui {
         override fun render() {
             val line = Kernel.front.status()
-            runOnUiThread { statusBar.text = line.substringBefore('\n') }
+            runOnUiThread { statusBar.text = Home.statusBar(line) }
         }
     }
 
@@ -54,12 +54,19 @@ class HomeActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // **the connection line is the way to the connection** [2026-10-27]:
+        // attaching to a serving node had no screen at all, and the
+        // navigation below is the six destinations the screens sheet fixes,
+        // so the status this screen already shows is where changing it
+        // belongs rather than a seventh row
         statusBar = TextView(this).apply {
             textSize = 12f
             typeface = Typeface.MONOSPACE
             setTextColor(Color.GRAY)
             setPadding(0, 0, 0, 24)
-            text = "starting the kernel…"
+            text = Home.statusBar("starting the kernel…")
+            isClickable = true
+            setOnClickListener { open(AttachActivity::class.java) }
         }
         val title = TextView(this).apply {
             textSize = 28f

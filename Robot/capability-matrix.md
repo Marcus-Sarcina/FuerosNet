@@ -35,6 +35,7 @@ shell through the platform's `Notices` object as `Told`; events through
 | Screen or action | Kernel operation | Beneath it | Comes back | Entry |
 |---|---|---|---|---|
 | Attach to the serving node | `attach(serving, addresses, population)` | serving node first, cached siblings where it is dark; bundle published, pool stocked, population swept | `Attached { serving, primary, queued }` | DMN-13, SES-07 (kernel test) |
+| **The screen for it** [2026-10-27] | the same call, from `AttachActivity` behind Home's connection line | the nodes whose endpoint records the horizon holds (`reachable`), or a key and an address typed; the people held are the population swept | the status line, and the refusal's words | |
 | Connection status | `status`; `Event::Connection` | the watcher fails over after three missed intervals | `Status` | SES-08 (kernel test) |
 | Degraded banner | `Attached.primary == false`, `Status::Attached { primary: false }` | the sibling's ack mode | | `light-client-requirements.md` §4 |
 | Maintenance | kernel's own clock every `MAINTAIN_EVERY`; `maintain` when granted background time | prekey rotation, pool refill, wanted bindings | ok, or why not | PAY-11 |
@@ -56,7 +57,8 @@ shell through the platform's `Notices` object as `Told`; events through
 | Browse | `browse` then `catalog` | `Serving::catalog`, request type 5, each reply taken until done or truncated | `CatalogItem` with node, truncated, stale | CAT-* (client-level) |
 | Refresh and staleness | `browse` again; `CatalogItem.stale`, `truncated` | | | |
 | **Register a resource** | **Owed.** `CatalogService::register` exists on the node; no kernel call | | | |
-| **Access a resource, roles** | **Owed.** `ResourceRequest` and the role view exist on the node; no kernel call, no adaptor branch | | | RSC-* |
+| Access a resource | `request_resource`, built 2026-10-16; `CatalogActivity` asks one through the node that served its entry | request type 6 on the serving node's stream | `ResourceAnswer` with `wire-format.md` §11.1's six statuses | RSC-* |
+| **Roles** | **Owed.** The role view exists on the node; no kernel call | | | |
 | Unrecognised declaration | `Told::UnrecognisedDeclaration` | `surface_declaration` | | |
 
 ## 5. Ceremony
