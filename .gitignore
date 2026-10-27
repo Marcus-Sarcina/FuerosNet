@@ -11,19 +11,28 @@ models/results/*.spthy
 AGENTS.md
 
 # Conformance and acceptance run output, gigabytes of it, kept beside the
-# repository and never part of it
-conformance-review/
+# repository and never part of it — **and now actually beside it**
+# [2026-10-27]: `conformance-review` and `runs` are symlinks into
+# `../FuerosNet-output/`, so the comment above is true of where the bytes
+# are and not only of where git looks. The patterns carry no trailing
+# slash because a symlink is not a directory to git.
+conformance-review
 
 # Build marker written by the crate sweep
 crates/sweep.timestamp
 
 # Field-test runs: every run directory the bench script writes
-# (crates/tools/field-run.sh), bundles from the phones included
-runs/
+# (crates/tools/field-run.sh), bundles from the phones included; a symlink
+# into `../FuerosNet-output/runs`, so a `git clean -fdx` takes the link
+# and leaves 3.7 GB of runs where they are
+runs
 
-# The speculative resource-design thread: surfacing requirements for the
-# layers beneath it, and authoritative for nothing [author, 2026-10-10].
-resource-design/
+# The resource-design thread has left this tree [author, 2026-10-27]: the
+# application-layer documents are a repository of their own
+# (`../FuerosNet-applications`, which `CLAUDE.md` points at), the reviews
+# of this implementation are in `Robot/reviews/`, and the experiment data
+# is beside the repository with the other output. Nothing of it is ignored
+# here any more, because nothing of it is here.
 
 # Anonymising sidenet research: contextual work outside the core FN project
 /anonymizing-sidenet/

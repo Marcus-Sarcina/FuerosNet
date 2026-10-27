@@ -33,6 +33,18 @@ Everything process-facing lives in `Robot/`. A document in the root may cite ano
 root document; **no root document may cite anything in `Robot/`** — the design must
 not depend on a working file for its own integrity.
 
+**What is beside this repository rather than in it** [author, 2026-10-27]:
+
+| Sibling | What it holds |
+|---|---|
+| `../FuerosNet-applications` | A repository of its own: the application layer above the protocol — the five packages and the component library, the federation model, the implementation plan, the client utilities, the external services, the directive surface as an application developer reads it, and the version-control prototype. **A consumer of this design, authoritative for nothing in it**, separated for its own licence posture and cadence; the seam is the interface published here in `resource-requirements.md` §3.3 and `infra-client-requirements.md` §9.2. **No root document may cite it**, for the reason no root document may cite `Robot/` |
+| `../FuerosNet-output/` | Output, gigabytes of it, reproducible and never in a repository: `runs/` and `conformance-review/` are symlinked back in so the scripts keep working, and `vc-experiments/` holds the upstream checkouts an experiment rebuilt |
+
+`Robot/reviews/` holds external review passes as they arrived, unedited.
+`refcheck.py` reads the top level of `Robot/` and not below it, so a
+received artefact is neither re-cited nor exempted; what was done about
+one goes in `Robot/review-tracking.md`.
+
 **`Robot/` is the assistant's workspace** [author, 2026-10-02]: not a trusted
 history, pruned when a file stops being operational, kept or updated according
 to the assistant's own tracking and planning needs, and not worth tokens spent
