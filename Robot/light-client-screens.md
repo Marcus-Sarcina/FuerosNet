@@ -30,6 +30,45 @@ Two rules govern every screen before any is drawn:
   in the application, because `MeetActivity` is the one place that adds the
   insets to its padding instead of letting them replace it.
 
+## The shell: a rail, a foot, and one content area [author, 2026-10-27]
+
+**The core graphical design is a derivative of common chat applications,
+especially Discord and Slack**, with Discord's landing page as the
+template. That fixes the navigation, and the sections below become screens
+*within* it rather than destinations of their own.
+
+| Part | What it holds |
+|---|---|
+| **The rail**, down the left | Direct messages and the proof-of-presence interface, pinned at the top; below them a scrolling selection of the subnets this person has joined |
+| **The foot**, across the bottom | This person's icon beside a horizontal bar carrying their alias. The icon goes to their own options, the node operator's interfaces among them. **Unlike Discord, the bar goes home** |
+| **The content**, everything else | One of the three views below, or a thread |
+
+**Home view** is the landing state on loading and on returning by the alias
+bar: a reverse-chronological scroll of high-priority notices from every
+joined subnet.
+
+**Subnet view** is what a subnet's icon opens: content from that subnet
+alone, the content area split between navigation buttons to that subnet's
+resources and a scrolling view of its chat — **a BBS-style single board**,
+one board per subnet, with message propagation along subnet-hierarchical
+scope.
+
+**Direct view** is what the direct-messages icon opens: a reverse
+chronological list of recent chat activity, and a way to open a new thread
+with anyone in this person's contacts.
+
+**A thread takes the whole screen.** Selecting a direct thread or a board
+discussion hides the rail and the foot, so the screen is the conversation,
+with a back control in the title header returning to the view it came from.
+
+**What this leaves to settle**, drawn as placeholders and owed:
+the scope vocabulary a board post carries, which is the application tier's
+and not this document's; where taking somebody's code lives now that People
+is not a destination (E1); and the palette, the template implying a dark
+one.
+
+---
+
 ## A. First run and identity
 
 | Step | Elements | Beneath | Owes |
