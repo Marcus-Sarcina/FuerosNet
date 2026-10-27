@@ -15669,3 +15669,63 @@ a redelivery harmless without being able to recreate a message nobody knows to
 resend. The durable inbox and outbox are owed, with the instance-signature
 question and the acceptance entries; every one of the nine findings carries its
 disposition in the review tracker, as R01 to R09.
+### 2026-10-27 (custody, so that an answer means what it says)
+
+**R03's durable inbox and outbox** [author]. The planes were in memory, so a
+`2xx` to a sending node said *I have it* when nothing had it: the sender dropped
+its copy on that answer, a restart lost what had not reached the application, and
+no surviving component knew the message had to be sent again.
+
+**What is kept, per hosted instance**: the envelopes admitted and not yet applied,
+the emissions admitted and not yet carried, and the watermark of every record.
+**The write happens where custody changes hands, not on a tick** — the rest of a
+node's state accepts losing an interval and this cannot — and an envelope is
+written and flushed before the answer that admits it, with a store that could not
+take it answering as a refusal rather than noting it in a log. Custody ends when
+the resource answers 2xx, or when the far side has an emission, and not before.
+
+**The watermark is as necessary as the queues.** It is the replay protection: an
+in-memory plane read a withdrawn record's older live copy as new on the other side
+of a restart, and now refuses it.
+
+**The application's outbox is answered.** Serving a poll was being mistaken for an
+acknowledgement, with nothing to tell an application when an item had stopped
+being its responsibility. Each emitted item now carries a name of the
+application's, each outbox poll names in `?taken=` what the node holds or has
+carried, and an item offered again while the node holds it is the same item.
+
+A launched instance gets a store in the configuration the client composes; a node
+federating without one says so at startup and on its operator's page, and
+`infra-client-requirements.md` §9.2 tells it not to. What is still owed is the
+atomicity an application needs where its record change, its deduplication and its
+outbox entry share one store — which is the application's side, and belongs with
+the storage contract rather than here.
+### 2026-10-27 (the guarantee, ruled)
+
+**Node-key authentication at ingress is this version's guarantee** [author]:
+*keep the built guarantee as v1*. The envelope's signature is carried and not
+verified by the node, and both root documents now say that in those words rather
+than wording the wider claim loosely.
+
+**Why it is not a concession.** A hosting node already speaks for the instances it
+hosts in every other respect — it runs their code and holds their store — so for a
+single hop between two nodes, "this node is the one hosting that instance" and
+"that instance wrote this" are nearly the same fact.
+
+**What it gives up, which is everything that outlives the connection**: a record
+verifiable at a node it did not come from, a receipt an operator can hold up
+afterwards, an envelope recovered from a backup, and a provenance that survives a
+transport key being rolled. Each wants the instance's own signature checked before
+the record state moves, and all of them wait on the key contract — introduction,
+proof of possession, algorithm, rotation, restoration, and a signature bound that
+follows the scheme rather than choosing it. Custody is the seam where that check
+would go: verify, admit, acknowledge.
+
+**And one hop follows, by construction rather than by a rule written for it.**
+Ingress requires the caller to be the origin's *own* node, so no third party can
+deliver on another instance's behalf and an envelope cannot arrive forwarded; an
+instance may emit only what it originated. Carrying a record further wants the
+signature, so multi-hop moves behind the key contract with the rest. The
+staging-queue alternative is declined rather than deferred: it would trade the
+ordering settled a day earlier for a provenance story obtainable more cheaply once
+the keys are specified.

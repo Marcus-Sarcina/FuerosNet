@@ -708,6 +708,7 @@ impl Surface {
                         "envelope": e.to_json(), "why": why
                     })).collect::<Vec<_>>(),
                     "epoch": plane.epoch,
+                    "custody": if view.federation.keeping() { "kept" } else { "in memory" },
                 });
                 (200, format!("{body}\n"))
             }
@@ -1165,6 +1166,7 @@ fn resource_views(node: &LiveNode) -> Vec<crate::operator::ResourceView> {
                         pending: p.pending.len(),
                         conflicts: p.conflicts.len(),
                         stopped: p.stopped.len(),
+                        custody: view.federation.keeping(),
                     }
                 }),
             })

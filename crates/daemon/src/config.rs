@@ -180,8 +180,14 @@ pub struct Administration {
 /// the administration surface: another operator's node reaches it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Federation {
-    /// Where the listener binds.
-    pub listen: SocketAddr,
+    /// Where the listener binds, where the operator opened one.
+    pub listen: Option<SocketAddr>,
+    /// **Where custody is kept** (`rhtn_node::federation::Custody`):
+    /// what the node has taken and not yet handed on, written where a
+    /// restart finds it. Absent, the planes are in memory and a `2xx`
+    /// promises nothing across a restart, which §9.2 tells a node that
+    /// federates not to do.
+    pub store: Option<PathBuf>,
 }
 
 /// The `[log]` table: a file of JSON lines, one event each, and the least
@@ -335,7 +341,8 @@ struct File {
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 struct FederationTable {
-    listen: String,
+    listen: Option<String>,
+    store: Option<PathBuf>,
 }
 
 #[derive(serde::Deserialize)]
@@ -523,12 +530,24 @@ impl Config {
             None => None,
             Some(e) => {
                 let n = line_at(text, e);
-                let listen: SocketAddr = e
-                    .get_ref()
-                    .listen
-                    .parse()
-                    .map_err(|_| at(n, "`federation.listen` is not an address and port"))?;
-                Some(Federation { listen })
+                let listen = match &e.get_ref().listen {
+                    None => None,
+                    Some(l) => Some(
+                        l.parse::<SocketAddr>()
+                            .map_err(|_| at(n, "`federation.listen` is not an address and port"))?,
+                    ),
+                };
+                if listen.is_none() && e.get_ref().store.is_none() {
+                    return Err(at(
+                        n,
+                        "`[federation]` names neither `listen` nor `store`: a table that asks for \
+                         nothing is a table to leave out",
+                    ));
+                }
+                Some(Federation {
+                    listen,
+                    store: e.get_ref().store.clone(),
+                })
             }
         };
 

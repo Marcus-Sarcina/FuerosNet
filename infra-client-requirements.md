@@ -600,8 +600,28 @@ caller's word alone can claim the largest revision there is and leave every
 legitimate revision after it classified as older and never delivered, which a
 signature the application would have rejected does not undo. **Authenticating the
 node is not authenticating the instance**, and this is the narrower of the two
-guarantees: state which one you offer rather than describing the first as the
-second.
+guarantees.
+
+**It is also the guarantee this version offers** [author, 2026-10-27]. A node
+speaks for the instances it hosts, which is no concession: it runs their code and
+holds their store, so a dishonest one could make its own instance say anything
+whatever a signature said. **So the envelope's signature is carried and not
+verified here**, and the narrower claim is the one to make — not the wider one
+worded loosely. What the narrower claim does not cover is anything that outlives
+the connection carrying it: a record verifiable at a node it did not come from, a
+receipt an operator can hold up afterwards, an envelope recovered from a backup,
+and a provenance that survives a transport key being rolled. Each of those wants
+the instance's own signature checked before the record state moves, and that waits
+on a key contract — introduction, proof of possession, algorithm, rotation,
+restoration, and a signature bound that follows the scheme rather than choosing
+it. Custody is where it would go: verify, admit, acknowledge.
+
+**And so this version carries one hop, by construction rather than by rule.**
+Ingress requires the caller to be the origin's *own* node, so no third party can
+deliver on another instance's behalf; an envelope therefore cannot arrive
+forwarded, and an instance may only emit envelopes it originated. Carrying a
+record further than one hop needs the signature above, because a receiver two hops
+out is otherwise trusting the forwarder's word about who wrote it.
 
 **Keep the record bookkeeping
 `resource-requirements.md` §3.3 states before anything is delivered** — conflict before duplicate, newer
@@ -636,12 +656,30 @@ rather than everyone's; a cap on the exchanges in flight; a deadline on the whol
 of an exchange rather than on each read of it; a bound on a body before it is
 allocated; and checked arithmetic on any length a caller sent you.
 
-**What is not durable, said plainly.** The planes are in memory: a restart loses
-what has not been delivered, and a sender can lose what it has not had
-acknowledged. A 2xx from an instance means that instance took responsibility, and
-nothing weaker should be read as custody — in particular, application idempotence
-is not a remedy for loss. It makes a redelivery harmless; it cannot recreate a
-message that no surviving component knows to resend. **An envelope for a related instance another node hosts is carried to
+**Keep what you have taken where a restart finds it** [2026-10-27]. An answer
+that admits an envelope tells the sender it may forget its copy, so **write it
+down and flush it before you answer**, not on a later tick: the rest of your state
+can accept losing an interval, and this cannot. Keep, per hosted instance, the
+envelopes you have admitted and not yet had applied, the emissions you have
+admitted and not yet carried, and **the watermark of every record** — revision,
+digest and state — which is the replay protection and without which a restart
+reads a withdrawn record's older live copy as new. Give custody up when the
+resource answers 2xx, and not before; give it up for an emission when the far side
+has it, and not before. **Tell the application which of its items you hold**, on
+the one exchange that can carry it, so that it knows when an item has stopped
+being its responsibility; treat an item it offers again while you hold it as the
+same item. **Say on your operator's page whether you are keeping custody at all**,
+and do not federate without it: every answer such a node gives is a promise it
+cannot keep across a restart.
+
+**What that does and does not buy, said plainly.** A 2xx from an instance means
+that instance took responsibility, and nothing weaker should be read as custody. A
+redelivery is ordinary — an acknowledgement can be lost on either hop — so
+**application idempotence is required and is not a remedy for loss**: it makes a
+redelivery harmless and cannot recreate a message that no surviving component
+knows to resend. What is still owed is the atomicity the application needs where
+it shares a store: its own record change, its deduplication and its outbox entry
+committed together. **An envelope for a related instance another node hosts is carried to
 that node over TLS, node to node** [author, 2026-10-26]: where you opened a
 federation listener it presents the raw public key your transport presents, and
 where your operator wrote the far node's listener and key beside a related

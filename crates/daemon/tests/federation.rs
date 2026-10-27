@@ -71,7 +71,8 @@ fn node(tag: &str, who: &str, port: u16, hosting: &str) -> Node {
             "identity = \"{}\"\nlisten = \"127.0.0.1:0\"\nqueue = \"{}\"\nprekeys = \"{}\"\n\
              topology = \"{}\"\narchive = \"{}\"\nresources = \"{}\"\ngrants = \"{}\"\n\
              heartbeat = 30\ningestion = \"unverified-gossip\"\n\n[allowance]\nrequests = 120\n\
-             seconds = 60\n\n[federation]\nlisten = \"127.0.0.1:{port}\"\n",
+             seconds = 60\n\n[federation]\nlisten = \"127.0.0.1:{port}\"\n\
+             store = \"{}\"\n",
             dir.join("identity.key").display(),
             dir.join("queue").display(),
             dir.join("prekeys").display(),
@@ -79,6 +80,7 @@ fn node(tag: &str, who: &str, port: u16, hosting: &str) -> Node {
             dir.join("archive").display(),
             hosting_path.display(),
             dir.join("grants").display(),
+            dir.join("federation").display(),
         ),
     )
     .unwrap();
@@ -333,16 +335,21 @@ fn a_node_that_does_not_host_the_origin_cannot_speak_for_it() {
     let a = node("forged", "bob", PORT, "");
     let m = a.dir.join("front.manifest");
     std::fs::write(&m, "roles = [\"reader\"]\n").unwrap();
-    // the patron's instance is hosted here and has a subordinate
-    // configured, located at a node that presents alice's key
+    // the patron's instance is hosted here with two relationships: a
+    // subordinate at a node presenting alice's key, and kin at one
+    // presenting carol's
+    const KIN: &str = "0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e0e";
     std::fs::write(
         &a.hosting,
         format!(
             "[[host]]\nresource = \"{PA}\"\nowner = \"{bob}\"\nauthority = \"hall.internal\"\n\
              manifest = \"{}\"\nsubordinates = [\"{SB}\"]\n\
-             [host.at]\n\"{SB}\" = {{ address = \"127.0.0.1:1\", key = \"{}\" }}\n",
+             [host.kin]\nguild = [\"{KIN}\"]\n\
+             [host.at]\n\"{SB}\" = {{ address = \"127.0.0.1:1\", key = \"{}\" }}\n\
+             \"{KIN}\" = {{ address = \"127.0.0.1:2\", key = \"{}\" }}\n",
             m.display(),
-            presents("alice")
+            presents("alice"),
+            presents("carol")
         ),
     )
     .unwrap();
@@ -365,6 +372,19 @@ fn a_node_that_does_not_host_the_origin_cannot_speak_for_it() {
         "it says which claim it could not authenticate: {said}"
     );
 
+    // **a node configured for one instance cannot speak for another**:
+    // alice's key is the subordinate's node, not the kin instance's
+    let as_kin = Envelope::live(
+        [0x0e; 32],
+        "policy-1",
+        rhtn_node::federation::SCHEMA_DIRECTIVE,
+        1,
+        b"{\"theirs\":true}",
+    );
+    let (status, said) = put_envelope(at, "alice", PA, &as_kin);
+    assert_eq!(status, 403, "{said}");
+    assert!(said.contains("presented key"), "{said}");
+
     // nothing was held, so the legitimate revision that follows is new
     let legitimate = Envelope::live(
         [0x0b; 32],
@@ -376,6 +396,25 @@ fn a_node_that_does_not_host_the_origin_cannot_speak_for_it() {
     let (status, said) = put_envelope(at, "alice", PA, &legitimate);
     assert_eq!(status, 200, "{said}");
     assert!(said.contains("New"), "the record was not poisoned: {said}");
+
+    // **a path already on an envelope is metadata, not authority**: it
+    // changes nothing about who may deliver, and the origin's own node
+    // still may
+    let mut travelled = Envelope::live(
+        [0x0b; 32],
+        "policy-2",
+        rhtn_node::federation::SCHEMA_DIRECTIVE,
+        1,
+        b"{\"second\":true}",
+    );
+    travelled.path = vec![[0x0e; 32]];
+    let (status, said) = put_envelope(at, "alice", PA, &travelled);
+    assert_eq!(status, 200, "{said}");
+    assert!(said.contains("New"), "{said}");
+    // and carol, who is somebody's node but not this origin's, still
+    // cannot deliver it
+    let (status, said) = put_envelope(at, "carol", PA, &travelled);
+    assert_eq!(status, 403, "{said}");
     r.stop();
     let _ = std::fs::remove_dir_all(&a.dir);
 }
@@ -421,4 +460,90 @@ fn put_envelope(
         .and_then(|c| c.parse().ok())
         .unwrap_or(0);
     (status, text)
+}
+
+/// **A restart finds what the node had taken** (`Custody`;
+/// `infra-client-requirements.md` §9.2, OPS-022): an envelope admitted
+/// and not yet applied is still the node's to deliver on the other side
+/// of a stop, and the watermark that refuses a replay is still there.
+///
+/// The defect this closes: the planes were in memory, so a `2xx` said *I
+/// have it* when nothing had it. The sender dropped its copy on that
+/// answer and no surviving component knew the message had to be sent
+/// again — which application idempotence cannot fix, since it makes a
+/// redelivery harmless and cannot recreate a message nobody knows to
+/// resend.
+#[test]
+fn an_envelope_admitted_and_not_applied_survives_a_restart() {
+    use rhtn_node::federation::Envelope;
+    const PORT: u16 = 37464;
+    let bob = hex(&test_identity("bob").public.keyhash);
+    let a = node("custody", "bob", PORT, "");
+    let m = a.dir.join("front.manifest");
+    std::fs::write(&m, "roles = [\"reader\"]\n").unwrap();
+    // brokered, so nothing takes the envelope off the node's hands: it
+    // stays admitted, which is the state a restart has to find. Its
+    // patron is located at a node presenting alice's key, which is what
+    // the sender below holds.
+    std::fs::write(
+        &a.hosting,
+        format!(
+            "[[host]]\nresource = \"{PA}\"\nowner = \"{bob}\"\nauthority = \"hall.internal\"\n\
+             manifest = \"{}\"\npatron = \"{SB}\"\n\
+             [host.at]\n\"{SB}\" = {{ address = \"127.0.0.1:1\", key = \"{}\" }}\n",
+            m.display(),
+            presents("alice")
+        ),
+    )
+    .unwrap();
+
+    let r = Running::start(&a);
+    let (at, _) = r.federation();
+    let e = Envelope::live(
+        [0x0b; 32],
+        "policy-1",
+        rhtn_node::federation::SCHEMA_DIRECTIVE,
+        7,
+        b"{\"retention_floor_days\":90}",
+    );
+    let (status, said) = put_envelope(at, "alice", PA, &e);
+    assert_eq!(status, 200, "{said}");
+    assert!(said.contains("New"), "{said}");
+    r.stop();
+
+    // and again, on the same files
+    let again = Running::start(&a);
+    let (at, _) = again.federation();
+    let picked = again
+        .line(Duration::from_secs(20), |l| {
+            l.starts_with("rhtnd: federation: 1 envelope(s) to deliver")
+        })
+        .unwrap_or_else(|| {
+            panic!(
+                "it did not pick up what it was holding; it said {:?}",
+                again.lines.lock().unwrap()
+            )
+        });
+    assert!(picked.contains("out of custody"), "{picked}");
+
+    // **the watermark survived too**, so the same revision is a
+    // duplicate and an older one is older — not, as an in-memory plane
+    // would have had it, both of them new
+    let (status, said) = put_envelope(at, "alice", PA, &e);
+    assert_eq!(status, 200, "{said}");
+    assert!(said.contains("Duplicate"), "{said}");
+    let older = Envelope::live(
+        [0x0b; 32],
+        "policy-1",
+        rhtn_node::federation::SCHEMA_DIRECTIVE,
+        6,
+        b"{\"retention_floor_days\":30}",
+    );
+    let (_, said) = put_envelope(at, "alice", PA, &older);
+    assert!(
+        said.contains("Older"),
+        "the replay protection is durable: {said}"
+    );
+    again.stop();
+    let _ = std::fs::remove_dir_all(&a.dir);
 }

@@ -74,6 +74,7 @@ use rhtn_codec::cose::sha256;
 use rhtn_codec::encode::{emit_array_head, emit_bstr, emit_tstr, emit_uint};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 /// Every path under this prefix is the node's own: the gateway refuses
@@ -132,6 +133,233 @@ pub const MAX_CONFLICTS: usize = 64;
 pub const MAX_ATTEMPTS: u32 = 32;
 /// The longest a kin group's name may be.
 pub const MAX_KIN_NAME: usize = 32;
+/// **The longest an emitted item's own name may be**, and the shape it
+/// takes: `[A-Za-z0-9._-]`. The node puts these in the query of the
+/// outbox poll it composes, so a name with a space or a newline in it
+/// would be a name that breaks the request carrying it.
+pub const MAX_ITEM: usize = 64;
+/// The most items one outbox poll names as taken.
+pub const ITEMS_REPORTED: usize = 64;
+
+/// **Where a plane's custody is kept, and why it is written when it is**
+/// [2026-10-27].
+///
+/// The planes were in memory, which meant a `2xx` to a sending node said
+/// *I have it* when nothing had it: a restart lost what had not reached
+/// the application, the sender had already dropped its copy on that
+/// answer, and no surviving component knew the message had to be sent
+/// again. Application idempotence cannot close that — it makes a
+/// redelivery harmless and cannot recreate a message nobody knows to
+/// resend.
+///
+/// **So the write happens where custody changes hands, not on a tick.**
+/// The rest of this node's state is written back periodically and accepts
+/// losing at most an interval (`crate::store::TopologyStore`); custody
+/// cannot, because the whole worth of the answer is that the sender may
+/// now forget. An envelope is on disk and flushed before the node says it
+/// has it, and is removed once the resource has taken it.
+///
+/// **What is kept, per hosted instance:**
+///
+/// | File | Holds | Removed when |
+/// |---|---|---|
+/// | `held` | every record's watermark: revision, digest, state, stage | the record is retired, which nothing does yet |
+/// | `in/<seq>` | an envelope admitted and not yet applied | the resource answers 2xx |
+/// | `out/<seq>` | an emission admitted and not yet carried | the far side has it |
+///
+/// `held` is the replay protection, so it is as necessary as the queues:
+/// without it a restart would read a tombstoned record's older live copy
+/// as new. It is rewritten whole and renamed into place, a few hundred
+/// kilobytes at the bound and the simplest thing that cannot tear.
+///
+/// **Where verification would go.** Admission is the one place where
+/// durability and provenance both belong: check, admit, acknowledge.
+/// Should instance signatures come to be verified before authoritative
+/// state moves, this is the seam — nothing here is written or
+/// acknowledged before [`Plane::offer`] has decided.
+#[derive(Debug, Clone)]
+pub struct Custody {
+    dir: PathBuf,
+}
+
+/// What one plane's files said, read back at startup.
+#[derive(Debug, Default)]
+pub struct Kept {
+    /// The watermark of each record.
+    pub held: Vec<(Keyhash, String, Held)>,
+    /// Envelopes admitted and not yet applied, with their attempts.
+    pub inbox: Vec<(u64, Envelope, u32)>,
+    /// Emissions admitted and not yet carried: the sequence, where it is
+    /// addressed, the item the application named it by, and the envelope.
+    pub outbox: Vec<(u64, Keyhash, String, Envelope)>,
+}
+
+impl Custody {
+    /// Custody kept under `dir`, one directory per hosted instance.
+    pub fn at(dir: impl Into<PathBuf>) -> Custody {
+        Custody { dir: dir.into() }
+    }
+
+    /// Where this instance's own files are.
+    fn plane(&self, resource: &Keyhash) -> PathBuf {
+        self.dir.join(hex(resource))
+    }
+
+    /// Write and flush one file, then flush the directory that names it:
+    /// a name that is not yet durable names nothing.
+    fn put(at: &Path, bytes: &[u8]) -> std::io::Result<()> {
+        use std::io::Write as _;
+        if let Some(d) = at.parent() {
+            std::fs::create_dir_all(d)?;
+        }
+        let tmp = at.with_extension("writing");
+        {
+            let mut f = std::fs::File::create(&tmp)?;
+            f.write_all(bytes)?;
+            f.sync_all()?;
+        }
+        std::fs::rename(&tmp, at)?;
+        if let Some(d) = at.parent()
+            && let Ok(dir) = std::fs::File::open(d)
+        {
+            let _ = dir.sync_all();
+        }
+        Ok(())
+    }
+
+    /// The watermark table, rewritten whole.
+    fn write_held(
+        &self,
+        resource: &Keyhash,
+        held: &BTreeMap<(Keyhash, String), Held>,
+    ) -> std::io::Result<()> {
+        let lines: Vec<String> = held
+            .iter()
+            .map(|((o, r), h)| {
+                json!({
+                    "origin": hex(o),
+                    "record": r,
+                    "revision": h.revision,
+                    "digest": hex(&h.digest),
+                    "state": h.state.word(),
+                    "stage": h.stage.word(),
+                })
+                .to_string()
+            })
+            .collect();
+        Custody::put(
+            &self.plane(resource).join("held"),
+            lines.join("\n").as_bytes(),
+        )
+    }
+
+    /// An envelope taken into custody for a hosted instance.
+    fn write_in(&self, resource: &Keyhash, d: &Delivery) -> std::io::Result<()> {
+        let body = json!({"attempts": d.attempts, "envelope": d.envelope.to_json()}).to_string();
+        Custody::put(
+            &self.plane(resource).join("in").join(d.id.to_string()),
+            body.as_bytes(),
+        )
+    }
+
+    /// An emission taken into custody from a hosted instance.
+    fn write_out(&self, resource: &Keyhash, p: &Pending) -> std::io::Result<()> {
+        let body = json!({
+            "to": hex(&p.to),
+            "item": p.item,
+            "envelope": p.envelope.to_json(),
+        })
+        .to_string();
+        Custody::put(
+            &self.plane(resource).join("out").join(p.id.to_string()),
+            body.as_bytes(),
+        )
+    }
+
+    /// Custody given up: the resource has it, or the far side has it.
+    fn forget(&self, resource: &Keyhash, which: &str, id: u64) -> std::io::Result<()> {
+        let at = self.plane(resource).join(which).join(id.to_string());
+        match std::fs::remove_file(&at) {
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            other => other,
+        }
+    }
+
+    /// **What this instance was holding**, read back at startup.
+    pub fn read(&self, resource: &Keyhash) -> Kept {
+        let dir = self.plane(resource);
+        let mut kept = Kept::default();
+        if let Ok(text) = std::fs::read_to_string(dir.join("held")) {
+            for line in text.lines().filter(|l| !l.trim().is_empty()) {
+                let Ok(v) = serde_json::from_str::<Value>(line) else {
+                    continue;
+                };
+                let (Some(o), Some(r), Some(rev), Some(d)) = (
+                    v["origin"].as_str().and_then(unhex32),
+                    v["record"].as_str(),
+                    v["revision"].as_u64(),
+                    v["digest"].as_str().and_then(unhex32),
+                ) else {
+                    continue;
+                };
+                kept.held.push((
+                    o,
+                    r.to_string(),
+                    Held {
+                        revision: rev,
+                        digest: d,
+                        state: State::of(v["state"].as_str().unwrap_or("live")),
+                        stage: Stage::of(v["stage"].as_str().unwrap_or("waiting")),
+                    },
+                ));
+            }
+        }
+        for which in ["in", "out"] {
+            let Ok(rd) = std::fs::read_dir(dir.join(which)) else {
+                continue;
+            };
+            let mut found: Vec<(u64, Value)> = rd
+                .flatten()
+                .filter_map(|e| {
+                    let id = e.file_name().to_string_lossy().parse::<u64>().ok()?;
+                    let text = std::fs::read_to_string(e.path()).ok()?;
+                    Some((id, serde_json::from_str(&text).ok()?))
+                })
+                .collect();
+            // the sequence is the order they were admitted in, which is
+            // the order they are offered again
+            found.sort_by_key(|(id, _)| *id);
+            for (id, v) in found {
+                let Ok(e) = Envelope::from_json(&v["envelope"]) else {
+                    continue;
+                };
+                if which == "in" {
+                    kept.inbox
+                        .push((id, e, v["attempts"].as_u64().unwrap_or(0) as u32));
+                } else if let Some(to) = v["to"].as_str().and_then(unhex32) {
+                    kept.outbox.push((
+                        id,
+                        to,
+                        v["item"].as_str().unwrap_or_default().to_string(),
+                        e,
+                    ));
+                }
+            }
+        }
+        kept
+    }
+
+    /// Every instance with files here, so a restart can tell a plane it
+    /// still hosts from one it does not.
+    pub fn instances(&self) -> Vec<Keyhash> {
+        let Ok(rd) = std::fs::read_dir(&self.dir) else {
+            return Vec::new();
+        };
+        rd.flatten()
+            .filter_map(|e| unhex32(&e.file_name().to_string_lossy()))
+            .collect()
+    }
+}
 
 /// Whether a record is live or withdrawn (§5: a tombstone keeps digest
 /// and revision and drops the body).
@@ -144,10 +372,20 @@ pub enum State {
 }
 
 impl State {
-    fn word(self) -> &'static str {
+    /// The word it is written as, on the wire and in custody.
+    pub fn word(self) -> &'static str {
         match self {
             State::Live => "live",
             State::Withdrawn => "withdrawn",
+        }
+    }
+
+    /// Read back from that word; anything else reads as live, which is
+    /// the state a record is in before it is withdrawn.
+    pub fn of(word: &str) -> State {
+        match word {
+            "withdrawn" => State::Withdrawn,
+            _ => State::Live,
         }
     }
     fn code(self) -> u64 {
@@ -379,6 +617,27 @@ pub enum Stage {
     Stopped,
 }
 
+impl Stage {
+    /// The word it is written as in custody.
+    pub fn word(self) -> &'static str {
+        match self {
+            Stage::Waiting => "waiting",
+            Stage::Applied => "applied",
+            Stage::Stopped => "stopped",
+        }
+    }
+
+    /// Read back from that word; anything else reads as waiting, which
+    /// costs a redelivery and never a loss.
+    pub fn of(word: &str) -> Stage {
+        match word {
+            "applied" => Stage::Applied,
+            "stopped" => Stage::Stopped,
+            _ => Stage::Waiting,
+        }
+    }
+}
+
 /// What one resource's plane remembers of a record it has been handed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Held {
@@ -602,6 +861,14 @@ pub struct Pending {
     pub to: Keyhash,
     /// The envelope.
     pub envelope: Envelope,
+    /// **What the application calls this item**, which is how it learns
+    /// the node has custody of it: the next outbox poll names every item
+    /// the node holds or has carried, and the application stops offering
+    /// those (`resource-requirements.md` §3.3). An item re-offered while
+    /// the node still holds it is the same item, not a second one.
+    pub item: String,
+    /// Which admission this is, so custody can be given up by name.
+    id: u64,
 }
 
 /// **One hosted resource's side of the plane**: what it has been handed,
@@ -629,8 +896,16 @@ pub struct Plane {
     /// whenever the relationships change, so a result composed under an
     /// older one is not applied to a newer one.
     pub epoch: u64,
-    /// The next queued delivery's identifier.
+    /// The next admission's identifier, for a queued delivery or a
+    /// pending emission alike.
     next_id: u64,
+    /// Where this plane's custody is kept, and which instance it is:
+    /// `None` keeps it in memory, which promises nothing across a
+    /// restart and which the node says plainly.
+    keeping: Option<(Custody, Keyhash)>,
+    /// The items carried since the last outbox poll, so the application
+    /// hears about them once more even if a poll's answer was lost.
+    carried_items: VecDeque<String>,
     /// The queued deliveries an exchange has been composed for and not
     /// yet committed.
     out: BTreeSet<u64>,
@@ -663,6 +938,8 @@ impl Plane {
             } else {
                 self.out.remove(&d.id);
                 self.stop(
+                    "in",
+                    d.id,
                     d.envelope,
                     "its origin is no longer a configured relationship",
                 );
@@ -674,6 +951,8 @@ impl Plane {
                 self.pending.push(p);
             } else {
                 self.stop(
+                    "out",
+                    p.id,
                     p.envelope,
                     "the instance it was addressed to is no longer a configured relationship",
                 );
@@ -681,12 +960,88 @@ impl Plane {
         }
     }
 
-    /// Record work this plane carries no further, with the reason.
-    fn stop(&mut self, e: Envelope, why: &str) {
+    /// **Read back what this plane was holding** across a restart: the
+    /// watermarks, the envelopes not yet applied, the emissions not yet
+    /// carried. Nothing is written here — this is what the files already
+    /// say — and the sequence resumes above the highest it finds, so a
+    /// new admission cannot be given a name that is still in use.
+    fn restore(&mut self, kept: Kept) {
+        for (origin, record, held) in kept.held {
+            self.held.insert((origin, record), held);
+        }
+        for (id, envelope, attempts) in kept.inbox {
+            self.next_id = self.next_id.max(id);
+            self.inbox.push_back(Delivery {
+                envelope,
+                attempts,
+                id,
+            });
+        }
+        for (id, to, item, envelope) in kept.outbox {
+            self.next_id = self.next_id.max(id);
+            self.pending.push(Pending {
+                to,
+                envelope,
+                item,
+                id,
+            });
+        }
+    }
+
+    /// Record work this plane carries no further, with the reason, and
+    /// give up custody of it.
+    fn stop(&mut self, which: &str, id: u64, e: Envelope, why: &str) {
+        self.give_up(which, id);
         if self.stopped.len() >= MAX_CONFLICTS {
             self.stopped.remove(0);
         }
         self.stopped.push((e, why.to_string()));
+    }
+
+    /// **Carried, so custody ends here** — and the item is remembered,
+    /// so the next outbox poll tells the application once more that the
+    /// node has it even if the poll that said so first was lost.
+    fn gave(&mut self, p: &Pending) {
+        self.give_up("out", p.id);
+        if !p.item.is_empty() {
+            if self.carried_items.len() >= MAX_OUTBOX {
+                self.carried_items.pop_front();
+            }
+            self.carried_items.push_back(p.item.clone());
+        }
+    }
+
+    /// Hold an admitted envelope, and the watermark it moved, where a
+    /// restart will find them. The error is the caller's to answer with:
+    /// a sender told *I have it* by a node that has not written it down
+    /// is a sender that may forget it for nothing.
+    fn keep_in(&self, d: &Delivery) -> std::io::Result<()> {
+        if let Some((c, res)) = &self.keeping {
+            c.write_in(res, d)?;
+            c.write_held(res, &self.held)?;
+        }
+        Ok(())
+    }
+
+    /// The watermarks alone, which move without an envelope arriving: a
+    /// stage reached, a record stopped.
+    fn keep_held(&self) {
+        if let Some((c, res)) = &self.keeping
+            && let Err(e) = c.write_held(res, &self.held)
+        {
+            tracing::warn!(target: "node", why = %e, "node.federation.custody");
+        }
+    }
+
+    /// Custody given up, which is never a reason to stop: the worst a
+    /// failed removal costs is a redelivery, and an application is
+    /// required to be idempotent for exactly that reason.
+    fn give_up(&self, which: &str, id: u64) {
+        if let Some((c, res)) = &self.keeping
+            && let Err(e) = c.forget(res, which, id)
+        {
+            tracing::warn!(target: "node", why = %e, "node.federation.custody");
+        }
     }
 
     /// **Offer an envelope to this plane** (§5). Taken envelopes join the
@@ -769,21 +1124,37 @@ impl Plane {
                 }
                 self.inbox
                     .retain(|q| q.envelope.origin != e.origin || q.envelope.record != e.record);
-                self.held.insert(
-                    key,
-                    Held {
-                        revision: e.revision,
-                        digest: e.digest,
-                        state: e.state,
-                        stage: Stage::Waiting,
-                    },
-                );
                 self.next_id += 1;
-                self.inbox.push_back(Delivery {
+                let d = Delivery {
                     envelope: e,
                     attempts: 0,
                     id: self.next_id,
-                });
+                };
+                let was = self.held.insert(
+                    key.clone(),
+                    Held {
+                        revision: d.envelope.revision,
+                        digest: d.envelope.digest,
+                        state: d.envelope.state,
+                        stage: Stage::Waiting,
+                    },
+                );
+                // **written down before it is admitted** [2026-10-27]:
+                // the answer that follows tells a sender it may forget
+                // its copy, so a store that could not take it is a
+                // refusal and not a note in a log
+                if let Err(why) = self.keep_in(&d) {
+                    match was {
+                        Some(h) => {
+                            self.held.insert(key, h);
+                        }
+                        None => {
+                            self.held.remove(&key);
+                        }
+                    }
+                    return Outcome::Refused(format!("it could not be taken into custody: {why}"));
+                }
+                self.inbox.push_back(d);
             }
             Outcome::Conflict => {
                 let h = self.held.get(&key).cloned().expect("held");
@@ -842,6 +1213,8 @@ impl Plane {
                 None => {
                     let d = self.take(id).expect("the delivery just found");
                     self.stop(
+                        "in",
+                        d.id,
                         d.envelope,
                         "its origin is no longer a configured relationship",
                     );
@@ -867,6 +1240,10 @@ impl Plane {
         {
             h.stage = Stage::Applied;
         }
+        // **the resource has it, so the node need not**: the watermark
+        // stays, which is the replay protection, and the envelope goes
+        self.keep_held();
+        self.give_up("in", d.id);
     }
 
     /// The resource did not take it. Queue it again at the back, so one
@@ -882,6 +1259,7 @@ impl Plane {
         if let Some(h) = self.held.get(&key)
             && h.revision > d.envelope.revision
         {
+            self.give_up("in", d.id);
             return;
         }
         d.attempts += 1;
@@ -889,9 +1267,13 @@ impl Plane {
             if let Some(h) = self.held.get_mut(&key) {
                 h.stage = Stage::Stopped;
             }
+            self.keep_held();
             let why = format!("the resource declined it {MAX_ATTEMPTS} times");
-            self.stop(d.envelope, &why);
+            self.stop("in", d.id, d.envelope, &why);
         } else {
+            // the attempt count is custody's too, or a record that fails
+            // for ever would start again at nought after every restart
+            let _ = self.keep_in(&d);
             self.inbox.push_back(d);
         }
     }
@@ -901,9 +1283,22 @@ impl Plane {
     /// each (instance, envelope) queued as pending. Items naming nothing
     /// configured, or an origin other than this instance, are refused
     /// with their reasons.
-    pub fn emit(&mut self, me: &Keyhash, items: &[(Destination, Envelope)]) -> Vec<String> {
+    pub fn emit(&mut self, me: &Keyhash, items: &[(String, Destination, Envelope)]) -> Vec<String> {
         let mut refused = Vec::new();
-        for (to, e) in items {
+        for (item, to, e) in items {
+            // **an item the node already holds is the same item**
+            // [2026-10-27]: an application that offered one and did not
+            // hear that it was taken offers it again, and that is the
+            // protocol working rather than a second emission
+            if !item.is_empty() && self.pending.iter().any(|p| p.item == *item) {
+                continue;
+            }
+            if !item.is_empty() && !itemlike(item) {
+                refused.push(format!(
+                    "`{item}` is not an item's name: [A-Za-z0-9._-], 1 to {MAX_ITEM} bytes"
+                ));
+                continue;
+            }
             if e.origin != *me {
                 refused.push(format!(
                     "`{}` rev {}: the origin is not this instance",
@@ -933,10 +1328,26 @@ impl Plane {
                     ));
                     break;
                 }
-                self.pending.push(Pending {
+                self.next_id += 1;
+                let p = Pending {
                     to: t,
                     envelope: e.clone(),
-                });
+                    item: item.clone(),
+                    id: self.next_id,
+                };
+                // **into custody before it is the node's to carry**: an
+                // emission the node reported as taken and then lost on a
+                // restart is the loss this store exists to close
+                if let Some((c, res)) = &self.keeping
+                    && let Err(why) = c.write_out(res, &p)
+                {
+                    refused.push(format!(
+                        "`{}` rev {}: it could not be taken into custody: {why}",
+                        e.record, e.revision
+                    ));
+                    continue;
+                }
+                self.pending.push(p);
             }
         }
         refused
@@ -950,6 +1361,8 @@ pub struct Federation {
     planes: BTreeMap<Keyhash, Plane>,
     /// Where instances other nodes host are reached, by instance.
     locations: BTreeMap<Keyhash, Location>,
+    /// Where custody is kept, where it is kept at all.
+    custody: Option<Custody>,
 }
 
 /// One envelope to carry to another node: which of this node's instances
@@ -1030,8 +1443,14 @@ pub enum About {
     Relationships,
     /// One envelope, which the resource takes or declines.
     Envelope(Box<Delivery>),
-    /// A poll for what it has to send.
-    Outbox,
+    /// A poll for what it has to send, carrying the items the node has
+    /// taken custody of since the last one so the application can stop
+    /// offering them.
+    Outbox {
+        /// The items named, cleared from the plane once the application
+        /// has heard them.
+        reported: Vec<String>,
+    },
 }
 
 /// An [`Exchange`] and what came back: the status and body, or the words
@@ -1045,13 +1464,39 @@ pub struct Answer {
 }
 
 impl Federation {
+    /// **Where custody is kept**, installed before any plane is
+    /// configured: a plane created afterwards keeps what it is handed,
+    /// and one created before this was called does not.
+    pub fn keep_in(&mut self, custody: Custody) {
+        self.custody = Some(custody);
+    }
+
+    /// Whether this node is keeping custody at all. A node federating
+    /// without it promises nothing across a restart, which its page says
+    /// and `infra-client-requirements.md` §9.2 tells it not to do.
+    pub fn keeping(&self) -> bool {
+        self.custody.is_some()
+    }
+
     /// Configure (or reconfigure) a resource's relationships, creating
     /// its plane.
+    ///
+    /// **A plane created here reads back what it was holding**: the
+    /// watermark of every record, the envelopes admitted and not yet
+    /// applied, and the emissions admitted and not yet carried. Order is
+    /// the order they were admitted in, which is the order they are
+    /// offered again.
     pub fn configure(&mut self, resource: Keyhash, r: Relationships) -> Result<(), String> {
         if let Some(why) = r.refused() {
             return Err(why);
         }
-        self.planes.entry(resource).or_default().configure(r);
+        let fresh = !self.planes.contains_key(&resource);
+        let plane = self.planes.entry(resource).or_default();
+        if fresh && let Some(c) = &self.custody {
+            plane.keeping = Some((c.clone(), resource));
+            plane.restore(c.read(&resource));
+        }
+        plane.configure(r);
         Ok(())
     }
 
@@ -1151,6 +1596,16 @@ impl Federation {
         self.planes.keys().copied().collect()
     }
 
+    /// **What the planes are holding**: envelopes admitted and not yet
+    /// delivered, and emissions admitted and not yet carried. Said at
+    /// startup, because an operator restarting a node wants to know what
+    /// it picked up where it left off.
+    pub fn holding(&self) -> (usize, usize) {
+        self.planes.values().fold((0, 0), |(w, p), plane| {
+            (w + plane.waiting(), p + plane.pending.len())
+        })
+    }
+
     /// **Offer an envelope to a hosted resource from outside this node**:
     /// the operator's surface, standing in for the transport that does
     /// not exist yet. The origin must be a configured relationship of the
@@ -1239,11 +1694,31 @@ impl Federation {
                     epoch,
                 });
             }
+            // **what the node has taken, said on the way to asking for
+            // more** [2026-10-27]: an application holding its own
+            // durable outbox needs to know when an item has stopped
+            // being its responsibility, and this is the only exchange
+            // that can tell it. Named once more if it was named before
+            // and the answer went missing; an item re-offered while the
+            // node still holds it is the same item.
+            let reported: Vec<String> = plane
+                .pending
+                .iter()
+                .map(|p| p.item.clone())
+                .chain(plane.carried_items.iter().cloned())
+                .filter(|i| !i.is_empty())
+                .take(ITEMS_REPORTED)
+                .collect();
+            let path = if reported.is_empty() {
+                PATH_OUTBOX.to_string()
+            } else {
+                format!("{PATH_OUTBOX}?taken={}", reported.join(","))
+            };
             out.push(Exchange {
                 resource: res,
                 backend,
-                message: message("GET", PATH_OUTBOX, &authority, &res, &[], b""),
-                about: About::Outbox,
+                message: message("GET", &path, &authority, &res, &[], b""),
+                about: About::Outbox { reported },
                 epoch,
             });
         }
@@ -1267,6 +1742,8 @@ impl Federation {
                 if let About::Envelope(d) = a.exchange.about {
                     plane.take(d.id);
                     plane.stop(
+                        "in",
+                        d.id,
                         d.envelope,
                         "the relationships changed while it was being delivered",
                     );
@@ -1293,7 +1770,13 @@ impl Federation {
                         plane.declined(&d);
                     }
                 }
-                About::Outbox => {}
+                About::Outbox { reported } => {
+                    // the application has heard which items the node
+                    // holds, so they need not be named again
+                    if answered.is_some() {
+                        plane.carried_items.retain(|i| !reported.contains(i));
+                    }
+                }
             }
             // an answer to a delivery or a poll alike may carry what the
             // instance has to send
@@ -1345,7 +1828,14 @@ impl Federation {
                         refused.push(format!("`{}`: {why}", p.envelope.record));
                         keep.push(p);
                     }
-                    _ => carried += 1,
+                    // **the receiver's custody begins before the
+                    // sender's ends**: the target wrote it down inside
+                    // `offer`, so giving it up here cannot lose it
+                    _ => {
+                        carried += 1;
+                        let sender = self.planes.get_mut(&res).expect("a plane");
+                        sender.gave(&p);
+                    }
                 }
             }
             self.planes.get_mut(&res).expect("a plane").pending = keep;
@@ -1371,8 +1861,16 @@ fn emitted(plane: &mut Plane, me: &Keyhash, answer: &[u8]) -> (usize, Vec<String
             .and_then(Value::as_str)
             .and_then(Destination::parse);
         let env = item.get("envelope").map(Envelope::from_json);
+        // **the item's own name, where it gave one**: what the node
+        // reports back as taken, and what tells a re-offer from a second
+        // emission. An application that names none gets neither.
+        let id = item
+            .get("item")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string();
         match (to, env) {
-            (Some(to), Some(Ok(e))) => parsed.push((to, e)),
+            (Some(to), Some(Ok(e))) => parsed.push((id, to, e)),
             (None, _) => refused.push("an emitted item names no destination".into()),
             (_, Some(Err(why))) => refused.push(why),
             (_, None) => refused.push("an emitted item has no envelope".into()),
@@ -1381,6 +1879,14 @@ fn emitted(plane: &mut Plane, me: &Keyhash, answer: &[u8]) -> (usize, Vec<String
     let n = parsed.len();
     refused.extend(plane.emit(me, &parsed));
     (n, refused)
+}
+
+/// Whether `s` is the shape an emitted item's own name takes.
+pub fn itemlike(s: &str) -> bool {
+    !s.is_empty()
+        && s.len() <= MAX_ITEM
+        && s.bytes()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'_' | b'-'))
 }
 
 /// One HTTP/1.1 request the node composes for a resource on a reserved
@@ -1913,6 +2419,7 @@ mod tests {
         plane.emit(
             &res,
             &[(
+                "up-1".to_string(),
                 Destination::Patron,
                 Envelope::live(res, "up", "s@1", 1, b"y"),
             )],
@@ -1970,9 +2477,14 @@ mod tests {
             assert_eq!(f.deliver(&to, e).unwrap(), Outcome::New);
         }
         let over = Envelope::live(from, "over", "s@1", 1, b"x");
-        f.plane_mut(&from)
-            .expect("a plane")
-            .emit(&from, &[(Destination::Subordinates, over.clone())]);
+        f.plane_mut(&from).expect("a plane").emit(
+            &from,
+            &[(
+                "over-1".to_string(),
+                Destination::Subordinates,
+                over.clone(),
+            )],
+        );
         let p = f.done(Vec::new());
         assert_eq!(p.carried, 0);
         assert!(
@@ -1980,11 +2492,9 @@ mod tests {
             "the refusal is said: {:?}",
             p.refused
         );
-        assert_eq!(
-            f.plane(&from).unwrap().pending,
-            vec![Pending { to, envelope: over }],
-            "and the work is still the sender's to carry"
-        );
+        let still = &f.plane(&from).unwrap().pending;
+        assert_eq!(still.len(), 1, "the work is still the sender's to carry");
+        assert_eq!((still[0].to, &still[0].envelope), (to, &over));
     }
 
     #[test]
@@ -2001,9 +2511,10 @@ mod tests {
         );
         f.locate(k(9), at).unwrap();
         let e = Envelope::live(k(5), "up", "s@1", 1, b"y");
-        f.plane_mut(&k(5))
-            .expect("a plane")
-            .emit(&k(5), &[(Destination::Patron, e.clone())]);
+        f.plane_mut(&k(5)).expect("a plane").emit(
+            &k(5),
+            &[("up-1".to_string(), Destination::Patron, e.clone())],
+        );
         let abroad = f.abroad();
         assert_eq!(abroad.len(), 1);
         assert_eq!(
@@ -2018,7 +2529,7 @@ mod tests {
         // anywhere**, location or not
         f.plane_mut(&k(5))
             .expect("a plane")
-            .emit(&k(5), &[(Destination::Patron, e)]);
+            .emit(&k(5), &[("up-2".to_string(), Destination::Patron, e)]);
         assert_eq!(f.abroad().len(), 1);
         f.configure(k(5), Relationships::default()).unwrap();
         assert!(
@@ -2027,6 +2538,140 @@ mod tests {
         );
         f.unlocate_all();
         assert_eq!(f.location_of(&k(9)), None);
+    }
+
+    /// **What a restart finds** (`Custody`): the envelopes it had taken
+    /// and not delivered, the emissions it had taken and not carried, and
+    /// the watermark of every record — which is the replay protection, so
+    /// a tombstoned record's older live copy is still refused on the
+    /// other side of a restart.
+    ///
+    /// This is the finding the review put first among the ones it called
+    /// unfixed: a 2xx said *I have it* when nothing had it, and
+    /// application idempotence cannot recreate a message no surviving
+    /// component knows to resend.
+    #[test]
+    fn a_restart_finds_what_was_admitted_and_what_it_already_knew() {
+        let dir = std::env::temp_dir().join(format!("rhtn-custody-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let (res, patron) = (k(5), k(1));
+
+        // one envelope admitted, one emission admitted, one record
+        // withdrawn and its tombstone applied
+        {
+            let mut f = Federation::default();
+            f.keep_in(Custody::at(&dir));
+            f.configure(res, patron_of(patron)).unwrap();
+            assert!(f.keeping());
+            let live = Envelope::live(patron, "policy-1", SCHEMA_DIRECTIVE, 1, b"{\"a\":1}");
+            assert_eq!(f.deliver(&res, live.clone()).unwrap(), Outcome::New);
+            let gone = Envelope::withdrawn(patron, "policy-0", SCHEMA_DIRECTIVE, 9, [3; 32]);
+            assert_eq!(f.deliver(&res, gone).unwrap(), Outcome::New);
+            f.plane_mut(&res).expect("a plane").emit(
+                &res,
+                &[(
+                    "receipt-1".to_string(),
+                    Destination::Patron,
+                    Envelope::live(res, "receipt-1", SCHEMA_RECEIPT, 1, b"{\"ok\":true}"),
+                )],
+            );
+            assert_eq!(f.plane(&res).unwrap().waiting(), 2);
+            assert_eq!(f.plane(&res).unwrap().pending.len(), 1);
+        }
+
+        // the node stops. Nothing was applied and nothing was carried,
+        // so everything is still the node's to deliver
+        {
+            let mut f = Federation::default();
+            f.keep_in(Custody::at(&dir));
+            f.configure(res, patron_of(patron)).unwrap();
+            let plane = f.plane(&res).expect("a plane");
+            assert_eq!(plane.waiting(), 2, "both envelopes are still to deliver");
+            assert_eq!(plane.pending.len(), 1, "and the emission is still to carry");
+            assert_eq!(plane.pending[0].item, "receipt-1");
+            assert_eq!(plane.held().len(), 2, "and it knows what it holds");
+
+            // **the watermark is the replay protection**: the withdrawn
+            // record's older live copy is still refused, which an
+            // in-memory plane would have taken as new
+            let replayed = Envelope::live(patron, "policy-0", SCHEMA_DIRECTIVE, 8, b"{\"old\":1}");
+            assert_eq!(f.deliver(&res, replayed).unwrap(), Outcome::Tombstoned);
+            // and the duplicate of what is waiting is still a duplicate
+            let again = Envelope::live(patron, "policy-1", SCHEMA_DIRECTIVE, 1, b"{\"a\":1}");
+            assert_eq!(f.deliver(&res, again).unwrap(), Outcome::Duplicate);
+        }
+
+        // what is applied and what is carried are given up, and a
+        // restart after that finds neither
+        {
+            let i = Instance::new();
+            let at = Backends(BTreeMap::from([(res, i.clone())]));
+            let mut f = Federation::default();
+            f.keep_in(Custody::at(&dir));
+            f.configure(res, patron_of(patron)).unwrap();
+            settle(&mut f, &at);
+            assert_eq!(f.plane(&res).unwrap().waiting(), 0, "both were taken");
+            // the poll said which item the node holds
+            let polls: Vec<String> = i
+                .saw()
+                .into_iter()
+                .filter(|m| m.starts_with("GET /.rhtn/outbox"))
+                .collect();
+            assert!(
+                polls.iter().any(|m| m.contains("taken=receipt-1")),
+                "the application is told what the node has: {polls:?}"
+            );
+        }
+        {
+            let mut f = Federation::default();
+            f.keep_in(Custody::at(&dir));
+            f.configure(res, patron_of(patron)).unwrap();
+            let plane = f.plane(&res).expect("a plane");
+            assert_eq!(plane.waiting(), 0, "nothing is owed to the resource");
+            assert_eq!(
+                plane.held().len(),
+                2,
+                "and the watermarks stay, being the replay protection"
+            );
+            assert!(
+                plane
+                    .held()
+                    .iter()
+                    .all(|(_, _, h)| h.stage == Stage::Applied),
+                "each one applied: {:?}",
+                plane.held()
+            );
+            // the emission is still pending: nothing carried it, the
+            // patron being at no node this test configured
+            assert_eq!(plane.pending.len(), 1);
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// An item's name is the application's, and is held to a shape a
+    /// request can carry: the node puts it in the query of the poll it
+    /// composes.
+    #[test]
+    fn an_items_name_is_bounded_and_a_re_offer_is_the_same_item() {
+        let mut p = Plane::default();
+        p.configure(patron_of(k(1)));
+        let e = Envelope::live(k(5), "up", "s@1", 1, b"y");
+        let refused = p.emit(
+            &k(5),
+            &[("a b".to_string(), Destination::Patron, e.clone())],
+        );
+        assert!(refused[0].contains("is not an item's name"), "{refused:?}");
+        assert!(p.pending.is_empty());
+        let good = p.emit(
+            &k(5),
+            &[("up-1".to_string(), Destination::Patron, e.clone())],
+        );
+        assert!(good.is_empty());
+        assert_eq!(p.pending.len(), 1);
+        // offered again while the node still holds it: the same item
+        let again = p.emit(&k(5), &[("up-1".to_string(), Destination::Patron, e)]);
+        assert!(again.is_empty());
+        assert_eq!(p.pending.len(), 1, "not a second emission");
     }
 
     #[test]

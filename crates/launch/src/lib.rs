@@ -142,7 +142,9 @@ pub fn node_config(token_hex: &str, quic: u16, admin: u16) -> String {
          seconds = 60\n\
          [administration]\n\
          listen = \"0.0.0.0:{admin}\"\n\
-         token = \"{token_hex}\"\n"
+         token = \"{token_hex}\"\n\
+         [federation]\n\
+         store = \"/var/lib/rhtn/federation\"\n"
     )
 }
 

@@ -571,6 +571,15 @@ impl Service {
                 // the grants this file wrote are expanded now rather than
                 // waiting for the topology to move under them
                 view.expand_grants();
+                // **custody first, then the planes** (`Custody`): a
+                // plane keeps what it is handed when it is created, and
+                // one created before this would keep nothing
+                if let Some(dir) = cfg.federation.as_ref().and_then(|f| f.store.as_ref()) {
+                    std::fs::create_dir_all(dir)
+                        .map_err(|e| Startup::State(format!("{}: {e}", dir.display())))?;
+                    view.federation
+                        .keep_in(rhtn_node::federation::Custody::at(dir));
+                }
                 // the instances' federation relationships, from the same
                 // file, so each hosted resource has its plane
                 for (res, r) in crate::hosting::relationships(path)
@@ -589,6 +598,24 @@ impl Service {
                 }
                 let hosted = view.resources.bound();
                 view.federation.hosted_now(&hosted);
+                // **a node that federates and keeps no custody says so**:
+                // every answer it gives a sending node would be a promise
+                // it cannot keep across a restart
+                if !view.federation.resources().is_empty() && !view.federation.keeping() {
+                    crate::say!(
+                        "rhtnd: federation: no `[federation] store` is configured, so what this \
+                         node takes is held in memory and a restart loses it"
+                    );
+                }
+                // **what it picked up where it left off**: the one line
+                // an operator restarting a node wants about the plane
+                let (waiting, pending) = view.federation.holding();
+                if waiting + pending > 0 {
+                    crate::tell!(
+                        "rhtnd: federation: {waiting} envelope(s) to deliver and {pending} to \
+                         carry, out of custody"
+                    );
+                }
                 tracing::info!(target: "daemon", step = "hosting", bound, "daemon.lifecycle");
                 bound > 0
             }
@@ -754,8 +781,10 @@ impl Service {
         // the federation listener, where the operator opened one: public,
         // presenting the transport key, taking envelopes for the
         // instances hosted here from other nodes
-        if let Some(f) = &cfg.federation {
-            match crate::federation::listen(f.listen, &presenter, node.clone()) {
+        if let Some(f) = &cfg.federation
+            && let Some(listen) = f.listen
+        {
+            match crate::federation::listen(listen, &presenter, node.clone()) {
                 Ok(bound) => {
                     tracing::info!(target: "daemon", step = "federation", addr = %bound, "daemon.lifecycle");
                     let key: String = presenter
@@ -766,10 +795,7 @@ impl Service {
                     crate::tell!("rhtnd: federation on {bound}, key {key}");
                 }
                 Err(e) => {
-                    return Err(Startup::State(format!(
-                        "federation.listen {}: {e}",
-                        f.listen
-                    )));
+                    return Err(Startup::State(format!("federation.listen {listen}: {e}")));
                 }
             }
         }

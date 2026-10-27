@@ -227,7 +227,7 @@ operator bound and `rhtn-audience` naming you.
 |---|---|---|
 | `PUT /.rhtn/relationships` | the instances your operator configured yours to federate with: a patron's instance, subordinates' instances, named kin, each a resource keyhash | 2xx once taken; it is repeated until then, and again whenever they change. **Nothing else is delivered to you until you take it** [2026-10-27]: a directive is acted on under a snapshot of who may send you one, and until you answer you have accepted no snapshot |
 | `PUT /.rhtn/envelope` | one **envelope** from a related instance, with `rhtn-origin` (that instance, hex) and `rhtn-relation` (`patron`, `subordinate` or `kin:<name>`, the node's reading of your operator's configuration) | 2xx to take it, which the node remembers; the body may carry envelopes to send (below) |
-| `GET /.rhtn/outbox` | nothing | 2xx with `{"emit": [{"to": …, "envelope": …}, …]}`, empty where you have nothing to send; `to` is `patron`, `subordinates`, `kin:<name>` or one related instance in hex |
+| `GET /.rhtn/outbox` | **the items the node has taken**, as `?taken=a,b` [2026-10-27] | 2xx with `{"emit": [{"item": …, "to": …, "envelope": …}, …]}`, empty where you have nothing to send; `to` is `patron`, `subordinates`, `kin:<name>` or one related instance in hex |
 
 **An envelope is one instance's signed claim about one record**: `origin` (the
 instance, a resource keyhash), `record` (its local identifier), `schema`,
@@ -238,7 +238,16 @@ immutable fields and never the route: a CBOR array `[origin, record, schema,
 revision, digest, state]` with `state` 0 for live and 1 for withdrawn. **The
 signature authenticates the instance's claim, not any person's**: authorship within
 the instance is your application data, attributed by the pairwise principal's local
-label, never a network identity. **A live envelope carries its body**
+label, never a network identity. **The node carries that signature and does not
+check it** [author, 2026-10-27]: what it checks is that the node delivering an
+envelope is the node hosting the instance the envelope claims — which is the
+guarantee this version offers, a hosting node speaking for its own instances in
+any case. The field travels so that you may check it yourself where it matters to
+you, and so that its shape does not change when the node comes to check it. **One
+consequence to design around: this version carries one hop.** An envelope cannot
+reach you forwarded, because the node delivering it must be the origin's own, and
+you may emit only envelopes your instance originated. A record that must travel
+further is a record whose signature has to be verified, which is not yet built. **A live envelope carries its body**
 [2026-10-27]: nothing offers a record and lets you fetch it afterwards, so a live
 envelope without one is refused rather than taking the record's revision and
 suppressing the complete copy behind it.
@@ -251,6 +260,16 @@ one is discarded; and a withdrawal is a tombstone that no replayed older live co
 undoes. What you keep of a record is yours, in your own store; the node keeps
 identities, revisions and digests, bounded.
 
+**Name what you emit, and keep it until the node says it has it**
+[2026-10-27]. Each emitted item carries an `item` of your own — `[A-Za-z0-9._-]`,
+at most 64 bytes — and **the next outbox poll names, in `?taken=`, every item the
+node has custody of or has already carried**. Until you see yours there it is
+still yours: keep it in your own store and offer it again, and **an item re-offered
+while the node holds it is the same item**, not a second emission. This is the only
+exchange that can tell you, which is why it carries it: serving a poll is not an
+acknowledgement, and an item dropped when the poll was served would be an item lost
+before anyone had taken it.
+
 **What that is worth, stated as what it is** [2026-10-27]. **Delivery is at least
 once, in revision order, and you must be idempotent.** The node retries an envelope
 you did not take, and an acknowledgement can be lost on the way back, so **the same
@@ -261,11 +280,15 @@ when a newer is taken is discarded rather than retried behind it — so a stale 
 copy cannot follow the withdrawal that replaced it. **A record the node gave up
 on** after retrying is stopped and shown to your operator with the reason; offering
 the identical envelope again queues it afresh, so neither of you has to invent a
-revision to retry one. **None of this is durable yet**: the node's queues are in
-memory, a restart loses what it had not delivered, and the sending side can lose
-what it had not had acknowledged. Until that is closed, do not treat the carrier as
-custody — keep what you have applied in your own store, which is the thing that
-makes a redelivery harmless.
+revision to retry one. **A 2xx of yours is where custody ends** [2026-10-27]: until you answer one, the
+node holds the envelope where a restart finds it, and after you answer it is yours
+and the node forgets it. A node that keeps no such store says so on its operator's
+page, and `infra-client-requirements.md` §9.2 tells it not to federate that way. **What the node remembers of a
+record after you have taken it is the watermark** — revision, digest, state —
+which is the replay protection, so a withdrawn record's older live copy is refused
+across a restart as well as within a run. **Keep what you have applied in your own
+store**: that is what makes a redelivery harmless, and a redelivery is what you get
+when an acknowledgement is lost.
 
 **Who may hand you an envelope is your operator's configuration and nothing
 wider.** An envelope from an instance that is not a configured relationship is

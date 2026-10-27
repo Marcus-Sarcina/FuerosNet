@@ -19321,12 +19321,29 @@ must be the key the operator configured for the node hosting the claimed origin
 own surface remaining the way to hand an envelope over by hand (§8.2). Stated in
 infra §9.2 and tested by
 `a_node_that_does_not_host_the_origin_cannot_speak_for_it`, which uses a valid
-but unrelated key exactly as the review asked. **Still owed, and the author's
-call: which guarantee the product wants** — node-key authentication at ingress
-(built) or instance signatures verified before authoritative suppression, which
-is the only thing that protects against a *dishonest hosting node*. The review's
-staging-queue option was not built; the documents now claim the narrower
-guarantee rather than the wider one.
+but unrelated key exactly as the review asked. **The question the review put to the author is answered**
+[author, 2026-10-27]: **keep the built guarantee as v1.** Node-key authentication
+at ingress is what this version offers, the envelope's signature is carried and
+not verified, and both root documents say so in those words rather than wording
+the wider claim loosely. The reasoning that made it an easy call: a hosting node
+already speaks for the instances it hosts in every other respect, running their
+code and holding their store, so for a single hop the two claims are nearly the
+same fact. What the narrow claim gives up is everything that outlives the
+connection — a record verifiable at a node it did not come from, a receipt an
+operator can hold up later, an envelope out of a backup, a provenance that
+survives a rolled transport key — each of which wants the instance's signature
+checked before the record state moves, and all of which wait on R07's key
+contract. Custody is now the seam where that check would go: verify, admit,
+acknowledge. **The staging-queue option is declined** rather than deferred: it
+would trade the settled ordering of R04 for a provenance story obtainable more
+cheaply once the keys are specified.
+
+**And the forwarding half of R07 is answered with it**: this version carries one
+hop, by construction rather than by a rule added for it. Ingress requires the
+caller to be the origin's *own* node, so no third party can deliver on another
+instance's behalf and an envelope cannot arrive forwarded; an instance may emit
+only what it originated. Multi-hop needs the signature, so it moves behind the key
+contract with the rest.
 
 **R02 — a reserved URL is not proof that a request is a host control message.
 P1. FIXED, in both halves.** The gateway tested the raw target, and the parser
@@ -19344,7 +19361,10 @@ sends a socket-reachable resource to §3.1's direct-access rule, which already
 had the answer.
 
 **R03 — the acknowledgement chain can lose a directive across a restart. P1.
-ACCEPTED, NOT FIXED — and the documents no longer claim otherwise.** The
+FIXED [2026-10-27], the day after it was accepted.** What follows was the
+disposition when it was only accepted; the fix is at the end of this entry.
+
+**ACCEPTED, NOT FIXED — and the documents no longer claim otherwise.** The
 analysis is correct and the plan's claim was wrong: application idempotence
 makes a redelivery harmless and cannot recreate a message no surviving component
 knows to resend. Nothing durable was built. What changed is the honesty of the
@@ -19356,6 +19376,33 @@ stable item identifiers, a durable receiver inbox, an acknowledgement that means
 *accepted into custody* as against *applied*, atomic record-plus-outbox commit,
 and the crash matrix to prove it. The review's framing — local durable
 messaging, not distributed consensus — is adopted as the shape.
+
+**And then built** [author, 2026-10-27, "Build the durable inbox and outbox"].
+`rhtn_node::federation::Custody`: one directory per hosted instance holding the
+envelopes admitted and not yet applied, the emissions admitted and not yet
+carried, and the watermark of every record. **The write happens where custody
+changes hands, not on a tick** — the rest of the node's state accepts losing an
+interval and this cannot, because the whole worth of the answer is that the sender
+may now forget — and an envelope is written and flushed, with its directory
+flushed after it, before the answer that admits it. A store that cannot take one is
+a refusal, not a log line, so the sender keeps its copy. Custody is given up when
+the resource answers 2xx and when the far side has an emission, and never before.
+**The watermark is kept as long as the record is**, being the replay protection: an
+in-memory plane read a withdrawn record's older live copy as new after a restart,
+and now refuses it. **The application's own outbox is answered**: each emitted item
+carries a name of the application's, the outbox poll names in `?taken=` what the
+node holds or has carried, and an item re-offered while the node holds it is the
+same item — so serving a poll is no longer mistaken for an acknowledgement, which
+was the custody gap the review named in the outbox direction. A launched instance
+gets a store in its configuration; a node federating without one says so at
+startup and on its operator's page, and §9.2 tells it not to. Tested at both
+levels: the plane across a simulated restart, and a live daemon stopped and started
+on the same files, which says what it picked up out of custody and still refuses
+the replay. **Still owed from this finding**: the atomicity the *application* needs
+where its record change, its deduplication and its outbox entry share one store,
+which is the application's side and belongs with the storage contract; and the
+crash matrix beyond a clean stop — a kill between the write and the answer is safe
+by construction, but nothing yet tests it under a real signal.
 
 **R04 — retries and backpressure violated the stated guarantees. P1. FIXED, and
 the guarantee restated.** All three cases reproduced. (1) A declined revision 1

@@ -907,6 +907,11 @@ pub struct FederationView {
     /// Work this plane stopped carrying: declined to exhaustion, or
     /// revoked because the relationship it travelled under is gone.
     pub stopped: usize,
+    /// **Whether what this node takes is written where a restart finds
+    /// it** (`rhtn_node::federation::Custody`): without it a `2xx` to a
+    /// sending node promises nothing across a restart, and an operator
+    /// reading this page is the one who can fix that.
+    pub custody: bool,
 }
 
 impl FederationView {
@@ -943,6 +948,15 @@ impl FederationView {
             out,
             "waiting {}  pending elsewhere {}  conflicts {}  stopped {}",
             self.waiting, self.pending, self.conflicts, self.stopped
+        );
+        let _ = writeln!(
+            out,
+            "custody       {}",
+            if self.custody {
+                "kept where a restart finds it"
+            } else {
+                "IN MEMORY: a restart loses what has not been handed on. Configure `[federation] store`"
+            }
         );
         out.push_str("</pre>\n");
         if self.held.is_empty() {
