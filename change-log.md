@@ -15811,3 +15811,40 @@ wait on exports the boundary does not carry.
 
 Android unit tests 227, 0 failed, from 216; the APK assembles and declares
 every screen. Not installed on the bench: a run is holding.
+
+### 2026-10-27 (the system bars, added rather than substituted, on every screen)
+
+**The foot of every scrolling screen sat under the navigation bar.** A screen
+that set its padding and `fitsSystemWindows` on the same view had that padding
+*replaced* by the window insets rather than added to, so its own margins went;
+and what bottom inset there was landed inside the `ScrollView`, where it
+scrolls away. The thread's send box sat behind the gesture pill.
+
+**`MeetActivity` had already met this and solved it**, with the reason beside
+it: *Android 15 draws edge to edge and does not honour `fitsSystemWindows` on
+a plain layout*. So the mechanism was never in doubt; it was written once and
+the other seven screens were left on the attribute. `Screen.insetting` is that
+mechanism, shared, and Meet now calls it rather than keeping its own copy. The
+insets are added to what a view already carries, and they are added to the
+frame rather than to the scrolling content, so nothing is drawn under a bar in
+the first place.
+
+**The side gutter is held at zero deliberately**, which is where the framework
+had left it by accident, so that fixing the bars changed nothing anyone could
+see except the foot of the screen. `Screen.GUTTER` is the one number, and the
+ruling it is owed — *none on the optical exchange, very narrow everywhere
+else* — moves every screen from that line when the number comes.
+
+**Checked rather than asserted.** An emulator, since the bench is holding: the
+last row of the operator's screen now clears the navigation bar, where a
+photograph of a phone taken an hour earlier shows it drawn behind the icons.
+Three tests hold the shape of it: the arithmetic, that no screen sets the
+attribute again, and that the listener is written in one place.
+
+**And the tree's native library was stale against its binding**, which is not
+this change and was in the way of seeing it: an APK built from this working
+tree died at launch on `uniffi_rhtn_ffi_fn_clone_providertransport`, a symbol
+the packaged library did not export. Rebuilt. Nothing in git changed, both
+being generated, but anyone building to install would have hit it.
+
+Android unit tests 236, 0 failed, from 227.

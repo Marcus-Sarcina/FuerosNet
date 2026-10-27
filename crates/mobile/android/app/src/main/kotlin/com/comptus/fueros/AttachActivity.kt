@@ -84,7 +84,7 @@ class AttachActivity : Activity() {
 
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(48, 32, 48, 48)
+            setPadding(Screen.GUTTER, 32, Screen.GUTTER, 48)
             addView(title("Serving node"))
             addView(statusLine)
             addView(note(WHY))
@@ -96,7 +96,9 @@ class AttachActivity : Activity() {
             addView(buttons)
             addView(said)
         }
-        setContentView(ScrollView(this).apply { addView(body); fitsSystemWindows = true })
+        val frame = ScrollView(this).apply { addView(body) }
+        Screen.insetting(frame)
+        setContentView(frame)
     }
 
     override fun onStart() {

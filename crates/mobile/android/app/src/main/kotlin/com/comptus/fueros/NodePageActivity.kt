@@ -69,14 +69,15 @@ class NodePageActivity : Activity() {
             setPadding(24, 24, 24, 8)
             text = "$at — the node's own page, in a frame with no reach into this device"
         }
-        setContentView(
-            LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                fitsSystemWindows = true
-                addView(bar)
-                addView(frame(origin))
-            },
-        )
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(bar)
+            addView(frame(origin))
+        }
+        // the page the node serves scrolls inside the web view, and the
+        // bars are this frame's to keep clear of ([`Screen`])
+        Screen.insetting(root)
+        setContentView(root)
     }
 
     @SuppressLint("SetJavaScriptEnabled")

@@ -76,12 +76,12 @@ class HomeActivity : Activity() {
         }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            fitsSystemWindows = true
-            setPadding(48, 48, 48, 48)
+            setPadding(Screen.GUTTER, 48, Screen.GUTTER, 48)
             addView(statusBar)
             addView(title)
             destinations.forEach { (label, go) -> addView(navRow(label, go)) }
         }
+        Screen.insetting(root)
         setContentView(root)
 
         // where a provision arrives, and where the kernel is brought up:

@@ -29,14 +29,13 @@ class PlaceholderActivity : Activity() {
             textSize = 16f
             setTextColor(Color.GRAY)
         }
-        setContentView(
-            LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                fitsSystemWindows = true
-                setPadding(48, 48, 48, 48)
-                addView(title)
-                addView(body)
-            },
-        )
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(Screen.GUTTER, 48, Screen.GUTTER, 48)
+            addView(title)
+            addView(body)
+        }
+        Screen.insetting(root)
+        setContentView(root)
     }
 }

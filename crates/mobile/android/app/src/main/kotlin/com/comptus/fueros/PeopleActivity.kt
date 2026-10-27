@@ -103,8 +103,7 @@ class PeopleActivity : Activity() {
 
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            fitsSystemWindows = true
-            setPadding(32, 48, 32, 48)
+            setPadding(Screen.GUTTER, 48, Screen.GUTTER, 48)
             addView(narration)
             addView(scan)
             addView(preview)
@@ -121,7 +120,13 @@ class PeopleActivity : Activity() {
             )
             addView(roll)
         }
-        setContentView(ScrollView(this).apply { addView(body) })
+        // **the bars are the frame's, not the scrolling content's**
+        // ([`Screen`]): an inset applied inside a `ScrollView`
+        // scrolls away, which is how the foot of this screen came to
+        // sit under the navigation bar
+        val frame = ScrollView(this).apply { addView(body) }
+        Screen.insetting(frame)
+        setContentView(frame)
         draw()
     }
 

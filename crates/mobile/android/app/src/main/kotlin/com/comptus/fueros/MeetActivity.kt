@@ -188,14 +188,16 @@ class MeetActivity : Activity() {
             addView(previewHost)
             addView(scroll)
         }
-        // the system bars' insets, applied by hand: Android 15 draws edge
-        // to edge and does not honour fitsSystemWindows on a plain layout,
-        // which put the first code under the status bar
-        root.setOnApplyWindowInsetsListener { v, insets ->
-            val bars = insets.getInsets(android.view.WindowInsets.Type.systemBars())
-            v.setPadding(48 + bars.left, 48 + bars.top, 48 + bars.right, 48 + bars.bottom)
-            insets
-        }
+        // the system bars' insets, added to this screen's own padding:
+        // Android 15 draws edge to edge and does not honour
+        // fitsSystemWindows on a plain layout, which put the first code
+        // under the status bar. This was the only screen that met it and
+        // the only one that handled it; [`Screen`] is that handling,
+        // shared with the seven that did not [2026-10-27]. The padding
+        // stays this screen's own 48 rather than `Screen.GUTTER` until
+        // the optical step is restructured to take the full width, which
+        // the gutter ruling asks for and this does not do.
+        Screen.insetting(root)
         setContentView(root)
     }
 

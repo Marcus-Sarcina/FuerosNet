@@ -68,12 +68,12 @@ class ConversationActivity : Activity() {
         }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            fitsSystemWindows = true
-            setPadding(32, 24, 32, 16)
+            setPadding(Screen.GUTTER, 24, Screen.GUTTER, 16)
             addView(header())
             addView(scroll)
             addView(row)
         }
+        Screen.insetting(root)
         setContentView(root)
     }
 
