@@ -93,9 +93,25 @@ forms:
 | *and above* | Here and up the line of patronage |
 | *+3/-5* | A count each way: three levels up and five levels down |
 
-A new thread picks its scope where it is written; **a reply inherits the
-thread's**, so the thread screen states the scope rather than offering it.
-**What a new thread's scope defaults to is owed.**
+**The default is `+2/-2`** [author, 2026-10-27], and the selector adds or
+removes a level on either side. **The thread then carries the original
+post's scope through every reply**, so a reply screen states the scope
+rather than offering it.
+
+**And the count is read from wherever the reader stands** [author,
+2026-10-27]. A post written `+3/-3` is `+2/-4` to the writer's patron and
+`+4/-2` to their subordinates: a step up takes one off the top and adds one
+to the bottom, a step down does the reverse. **The band of subnets it
+reaches never moves; only the coordinates do**, which is why two people
+quoting one thread read different numbers and are both right. The named
+forms are the ones with no number to move: *this subnet* is `+0/-0` and
+stays it, and *and below* reaches a whole subtree from wherever it is read.
+
+**This arithmetic is the board application's, not this client's.** What the
+client owes is to render a scope in the reader's own coordinates, to offer
+the selector on a new thread, and to state the inherited one on a reply.
+Where the rule itself is specified belongs with the board, in the
+applications thread.
 
 **Navigating into a subnet is the only way to its resources** [author,
 2026-10-27], for the reason the notice line carries its context: a resource
@@ -179,7 +195,8 @@ that the light one is theirs to choose, not the platform's to impose.
 
 **What this leaves to settle**, drawn and owed: which of a person's
 per-subnet aliases the foot's bar carries, there being one name per subnet
-and one bar; and what scope a new thread starts at.
+and one bar; and whether a post that reached this board from another subnet
+says where it started, its count alone being unable to tell anybody.
 
 ---
 
