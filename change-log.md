@@ -16300,3 +16300,38 @@ operating on bytes already bounded needs none.
 
 RSC-62, and the relay's own chunked test now reads the re-framing out of
 the gateway's serialiser instead of the relay's. Workspace tests 885.
+
+### 2026-10-28 (the board is the shell's, and what that rules out)
+
+**Asked while costing the mockups**: is the board a resource, a protocol
+feature, or the shell's own? The word appears in none of the seven
+documents, and the applications thread has thread/message as a record of
+a hosted package — so the drawing was ahead of the design and the answer
+decided a third of what implementing it would take.
+
+**It is the shell's own** [author, 2026-10-28], over payload messaging,
+with distant nodes relaying so that one post fans out without a bound
+inside one subnet. **And it cannot live in the protocol**, for the reason
+that settles where it can: a board persists data that is not transaction
+records, and the protocol's persistence is archives of those. A message
+type may be added for it; the board itself cannot be.
+
+**Which reverses what the screens sheet said** while the question was
+open — that the scope arithmetic was the board application's and belonged
+with the applications thread. It is this client's, with the nodes that
+relay, and the sheet is corrected.
+
+**And it makes the scope increment load-bearing rather than cosmetic.**
+The rule of 2026-10-27 — a `+3/-3` post read as `+2/-4` by the writer's
+patron and `+4/-2` by their subordinates — is a hop count in two
+directions. So a post stops where its numbers run out, which is what
+bounds a flood that is otherwise unbounded in recipients. The scope words
+were a label on a drawing; they are now the mechanism.
+
+**Three things it leaves open**, asked in the same output and recorded on
+the sheet: what protects a post, since payload today is a per-device
+ratchet sealed pairwise and a poster cannot hold a session with every
+member of a subnet it cannot enumerate; where the scrollback lives and
+how a client that was away gets what it missed; and how long a node keeps
+a board. The first is the one the mechanism hangs on — a node that holds
+a board holds content, where payload leaves it holding ciphertext.

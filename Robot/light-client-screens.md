@@ -154,11 +154,39 @@ quoting one thread read different numbers and are both right. The named
 forms are the ones with no number to move: *this subnet* is `+0/-0` and
 stays it, and *and below* reaches a whole subtree from wherever it is read.
 
-**This arithmetic is the board application's, not this client's.** What the
-client owes is to render a scope in the reader's own coordinates, to offer
-the selector on a new thread, and to state the inherited one on a reply.
-Where the rule itself is specified belongs with the board, in the
-applications thread.
+**The board is this shell's own, not an application** [author,
+2026-10-28], which reverses what this sheet said while the question was
+open. It is built over payload messaging, **with distant nodes relaying so
+that one post fans out without a bound inside one subnet**. And it is not
+in the protocol, for a reason that decides where it can live: a board
+persists data that is not transaction records, and the protocol's
+persistence is archives of those. **A message type may be added to the
+protocol for it**; the board itself cannot be.
+
+**So the scope arithmetic is this client's after all**, with the nodes
+that relay: the client renders a scope in the reader's own coordinates,
+offers the selector on a new thread, states the inherited one on a reply,
+**and the increment is what bounds the flood** — a step up taking one off
+the top is a hop count in two directions, so a post stops where its
+numbers run out rather than by anyone deciding to stop forwarding it.
+
+**Three things the ruling leaves open**, each the author's and asked in
+the output of 2026-10-28:
+
+1. **What protects a post.** Payload today is a per-device ratchet sealed
+   pairwise (design §12.6.5, §23.3), and a poster cannot hold a session
+   with every member of a subnet — it does not know the membership, the
+   horizon being two edges of it. So a relayed post cannot be that
+   object. Signed and readable within the subnet is the shape a BBS
+   implies, and it makes a node a holder of content where payload makes
+   it a carrier of ciphertext: design §18.1's seized node would hold the
+   board.
+2. **Where the scrollback lives**, and how a client that was away gets
+   what it missed. A node-held log per subnet, fetched as a mailbox is,
+   is the reading that makes a board a board rather than a chat nobody
+   can scroll.
+3. **How long a node keeps one**, and whether a reader's own copy outlives
+   the node's.
 
 **Navigating into a subnet is the only way to its resources** [author,
 2026-10-27], for the reason the notice line carries its context: a resource
