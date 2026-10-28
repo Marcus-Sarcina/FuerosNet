@@ -83,6 +83,20 @@ resources and a scrolling view of its chat — **a BBS-style single board**,
 one board per subnet, with message propagation along subnet-hierarchical
 scope.
 
+**Every post says how far it travels** [author, 2026-10-27], in one of four
+forms:
+
+| Scope | Where it goes |
+|---|---|
+| *this subnet* | Here and nowhere else |
+| *and below* | Here and every subnet beneath this one |
+| *and above* | Here and up the line of patronage |
+| *+3/-5* | A count each way: three levels up and five levels down |
+
+A new thread picks its scope where it is written; **a reply inherits the
+thread's**, so the thread screen states the scope rather than offering it.
+**What a new thread's scope defaults to is owed.**
+
 **Navigating into a subnet is the only way to its resources** [author,
 2026-10-27], for the reason the notice line carries its context: a resource
 named out of its subnet is a name that several subnets will share. So the
@@ -163,11 +177,9 @@ Appearance in Options. The colour scheme and the type may both be revisited
 later; what is fixed is that the dark one is what a person meets first and
 that the light one is theirs to choose, not the platform's to impose.
 
-**What this leaves to settle**, drawn as placeholders and owed: **the words
-a board post carries for how far it travels** — the chip on the post
-itself, drawn as *this subnet*, *and below* and *up the line*, which is the
-application tier's vocabulary and not this document's; and which of a
-person's per-subnet aliases the foot's bar carries.
+**What this leaves to settle**, drawn and owed: which of a person's
+per-subnet aliases the foot's bar carries, there being one name per subnet
+and one bar; and what scope a new thread starts at.
 
 ---
 
