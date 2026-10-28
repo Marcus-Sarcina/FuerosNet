@@ -39,7 +39,7 @@ template. That fixes the navigation, and the sections below become screens
 
 | Part | What it holds |
 |---|---|
-| **The rail**, down the left | Direct messages and the proof-of-presence interface, pinned at the top; below them a scrolling selection of the subnets this person has joined |
+| **The rail**, down the left | Direct messages and the proof-of-presence interface, pinned at the top; below them a scrolling selection of the subnets this person has joined. **Each icon carries its unseen count** as a superscript, direct messages included [author, 2026-10-27] |
 | **The foot**, across the bottom | This person's icon beside a horizontal bar carrying their alias. The icon goes to **Options** (below), the bar **goes home**, which is where this departs from Discord |
 | **The content**, everything else | One of the three views below, or a thread |
 
@@ -85,6 +85,25 @@ record, its id is its root's scope id (design §13.8), and its alias and
 logo are signed by the root (design §12.8). **So nothing on a board ever
 comes from another subnet**: a post from four tiers up is the same subnet
 seen from further away, which is what the scope count re-expresses.
+
+**What this person is in a subnet is drawn around its icon** [author,
+2026-10-27], in the network's own crown — hierarchic trees branching from
+their apexes, which is what the mark is made of:
+
+| Around the icon | What it says |
+|---|---|
+| A thin **silver circlet** | At least one subordinate here |
+| A **golden circlet** | An instance of this person's runs here |
+| A **full pointed crown** | This person is the subnet's root |
+
+**The crown is worn, not stamped**: its downward sweep crosses in front of
+the icon's lower third and the rest of it sits behind, so the icon is
+nestled in it. **The three overlap** — a root usually has subordinates —
+and the drawing shows the highest that applies, root before operator
+before subordinates, **which is an assumption and not a ruling**.
+
+**Resources carry their own unseen counts** in the subnet view, one per
+block, as the rail's icons do.
 
 **Subnet view** is what a subnet's icon opens: content from that subnet
 alone, the content area split between navigation buttons to that subnet's
@@ -203,8 +222,10 @@ Appearance in Options. The colour scheme and the type may both be revisited
 later; what is fixed is that the dark one is what a person meets first and
 that the light one is theirs to choose, not the platform's to impose.
 
-**Nothing in the shell is open.** Every question this sheet raised against
-it has been ruled; what remains unbuilt is unbuilt, not undecided.
+**Nothing in the shell is open** but two small things the drawing settled
+on its own: which standing wins where the crowns overlap, and where the
+**russet field** the crown is normally presented on belongs — the rail and
+the launcher icon are the candidates, and it appears nowhere yet.
 
 ---
 
