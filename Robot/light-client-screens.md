@@ -77,6 +77,15 @@ an **in-horizon transfer**, not a meeting. E2 below already rules that one
 arrives as a notification with accept and deny [author, 2026-09-27]. Every
 adoption that is a meeting happens at the meeting and raises nothing here.
 
+**A subnet is the whole hierarchy descending from one root**, with its own
+name and its own id, and **the trust horizon is the local part of one**
+[author, 2026-10-27] — the thing loosely called *the local subnet* in
+conversation. The design already says exactly this: a subnet is named by a
+record, its id is its root's scope id (design §13.8), and its alias and
+logo are signed by the root (design §12.8). **So nothing on a board ever
+comes from another subnet**: a post from four tiers up is the same subnet
+seen from further away, which is what the scope count re-expresses.
+
 **Subnet view** is what a subnet's icon opens: content from that subnet
 alone, the content area split between navigation buttons to that subnet's
 resources and a scrolling view of its chat — **a BBS-style single board**,
@@ -148,12 +157,13 @@ does, the foot being what it would otherwise sit on top of.
 [author, 2026-10-27]. Anything about one subnet belongs to that subnet's
 own options, below.
 
-**The alias is not one name**, which this section has to carry rather than
-flatten: a client publishes an alias and an image **per subnet it holds a
-position in** (`light-client-requirements.md` §4.4, UX-015), so this is a
-list with a row per subnet and not a single field — and a subnet nothing
-has been published into shows the keyhash to everybody in it. **Which
-alias the foot's bar shows is owed.**
+**A default name, made at creation, with a per-subnet override where one is
+wanted** [author, 2026-10-27]. The wire is unchanged — a client publishes
+an alias and an image **per subnet it holds a position in**
+(`light-client-requirements.md` §4.4, UX-015) — and the default is what
+goes to each of them unless that subnet has an override. So Options carries
+one name and picture at the top, the list of overrides beneath it, and
+**the bar along the foot carries the default**.
 
 **Subnet options** are reached by **selecting the subnet's name at the top
 of its own view** [author, 2026-10-27], and hold what is true of that
@@ -165,7 +175,7 @@ subnet alone:
 | Everybody | **The patronage upline from here**, scrollable: this person, their patron, and so on to the root |
 | A patron here | What is open to a patron, their own subordinates among it |
 | An operator here | A way to their instance's administration pages, which the operator's own section reaches too |
-| **The root** | **The subnet's name becomes editable**, its logo with it — `light-client-requirements.md` §4.4 makes that the root's by convention while nothing enforces it, so the screen says so rather than presenting it as a rule |
+| **The root** | **The subnet's name becomes editable**, its logo with it — the root of the hierarchy the subnet *is*, which `light-client-requirements.md` §4.4 makes the root's by convention while nothing enforces it, so the screen says so rather than presenting it as a rule |
 
 **A resource takes the screen** [author, 2026-10-27], entered from its
 subnet's view or from a notice. The rail and the foot drop away as they do
@@ -193,10 +203,8 @@ Appearance in Options. The colour scheme and the type may both be revisited
 later; what is fixed is that the dark one is what a person meets first and
 that the light one is theirs to choose, not the platform's to impose.
 
-**What this leaves to settle**, drawn and owed: which of a person's
-per-subnet aliases the foot's bar carries, there being one name per subnet
-and one bar; and whether a post that reached this board from another subnet
-says where it started, its count alone being unable to tell anybody.
+**Nothing in the shell is open.** Every question this sheet raised against
+it has been ruled; what remains unbuilt is unbuilt, not undecided.
 
 ---
 
