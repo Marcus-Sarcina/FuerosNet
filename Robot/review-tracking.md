@@ -19633,9 +19633,22 @@ encoding on that path. The second is a no-op on a canonical message, so
 nothing is wrong, but it is one framer more than §11.2's one parser
 wants.
 
-**One question left for the author**, asked in the output: whether a
-package's response may carry `rhtn-*` headers. The node strips them from
-a member's *request* (`resource-requirements.md` §3.1), and the mirror
-rule on the response is not written anywhere. Nothing reads one from a
-response today, so nothing is exposed; it is left alone rather than
-invented.
+**And the question is settled** [author, 2026-10-28, having no opinion and
+asking whether there was a reason not to]: the node strips `rhtn-*` from
+a response on the member path, as §3.1 strips a caller's from a request.
+The objection that looked real — that a package does speak to its host in
+that namespace, through §3.3's control exchanges — does not apply: a
+request under `/.rhtn/` never reaches the gateway's parse, and the host's
+own exchanges are read by `federation::response_of`. It closes no live
+hole, nothing reading one off a response today; it makes *an `rhtn-*`
+header on the member path was written by the node* true in both
+directions rather than true in one and undefined in the other, which is
+cheapest to settle while no package in the world relies on one. Stripped
+rather than refused, matching the way in, with the operator told in the
+diagnostics. RSC-61, GAT-040.
+
+**Three readers of a response, of which one decides anything**, noticed
+while establishing the above and worth folding together with the relay
+duplication above: `federation::response_of` takes a status and a body
+off the host path, `relay::reframed` writes a length on the own-port
+path, and `http::parse_response` is the policy on the member path.

@@ -5155,6 +5155,17 @@ other as a fresh request — with the node's authenticated headers attached to i
   protocol [2026-09-02]. Field 1 already named the resource; letting a header re-aim the request
   is how a proxy is turned into someone else's client.
 - **Insert your headers after stripping, into the re-serialised message.**
+- **Strip the resource's `rhtn-*` headers from its response, as you strip the
+  caller's from the request.** The namespace is yours in both directions, and that
+  is what makes *an `rhtn-*` header on this path was written by the node* a
+  statement rather than an assumption a later reader has to check. Nothing in this
+  version reads one off a response, which is why it costs a package nothing to
+  settle now: a reader added later should not have to ask who could have written
+  one. **Strip rather than reject** — the stray header is a defect in the package
+  and your operator is the one who can act on it, where refusing the answer takes
+  the resource down over a header nobody reads. Your own control exchanges with a
+  resource (`resource-requirements.md` §3.3) are not on this path and are not
+  affected.
 
 **"Canonically" means *from your parse, deterministically*, not identically to
 another node.** Nothing signs these bytes and no second implementation compares

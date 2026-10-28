@@ -15078,5 +15078,32 @@
     "then": "All three framings become one canonical message whose length is declared exactly once and agrees with its own content, and parsing that output again yields the same response. Every byte of the body survives, including bytes that read as a second message, since the declared length now settles the extent. Repeatable headers stay repeated and a declared type or content-encoding is untouched: the node settles framing and never semantics.",
     "oracle": "behaviour",
     "interpretation": "Being tolerant of a bare newline or a chunked body is safe precisely because the node re-serialises: its own output is the canonical form, so the tolerance leaves no second reading downstream. Refusing those would restrict what a package may be written in, and settle nothing a rewrite does not already settle."
+  },
+  {
+    "id": "RSC-61",
+    "area": "resources",
+    "gap": "resources",
+    "title": "The host's header namespace is the host's in both directions",
+    "milestone": "after-5",
+    "kind": "negative",
+    "spec": [
+      "wire-format.md §11.2",
+      "resource-requirements.md §3.1"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §11.2",
+        "text": "Strip the resource's `rhtn-*` headers from its response, as you strip the\ncaller's from the request."
+      },
+      {
+        "where": "wire-format.md §11.2",
+        "text": "The namespace is yours in both directions"
+      }
+    ],
+    "given": "A hosted package answering a member's request, and a member able to connect.",
+    "when": "The package answers with the four credential headers and a control header of its own in the reserved namespace, beside a header of its own.",
+    "then": "The answer is delivered and not one header of the namespace travels; the package's own headers and its whole body are untouched. It is stripped rather than refused, matching the rule on the way in: the stray header is a defect in the package, named to the operator in the node's own diagnostics, where refusing the answer would take the resource down over a header nobody reads. The node's control exchanges with a resource are not on this path and keep theirs.",
+    "oracle": "behaviour",
+    "interpretation": "Nothing in this version reads an `rhtn-*` header off a response, so this closes no live hole; it buys a property. `resource-requirements.md` §3.1 makes *an `rhtn-*` header was written by the node* true on the way in, and the same rule on the way out makes it true rather than undefined — so a reader added later need not ask who could have written one, and no package exists yet for the rule to break."
   }
 ]

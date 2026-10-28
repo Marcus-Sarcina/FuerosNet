@@ -16218,3 +16218,44 @@ that path is next touched.
 
 Two catalogue entries (RSC-59, RSC-60) and two functional-test rows
 (GAT-038, GAT-039). Workspace tests 882.
+
+### 2026-10-28 (the namespace is the host's in both directions)
+
+**Asked and answered the same day**: may a package's response carry
+`rhtn-*` headers? `resource-requirements.md` §3.1 strips a caller's on
+the way in, so that a resource seeing one is seeing its host; the mirror
+rule was written nowhere, and the author had no opinion and asked whether
+there was a reason not to.
+
+**There is not, and the one that looked real does not exist.** A package
+does speak to its host in that namespace — the control exchanges of §3.3
+— so stripping it everywhere would forbid something the design wants.
+But a request under `/.rhtn/` never reaches the gateway's parse, the
+gateway refusing a member's request naming one before any backend sees
+it, and the host's own exchanges are read by `federation::response_of`
+instead. So the member path and the host path are already separate
+code, and a rule on the one leaves the other untouched.
+
+**What it buys is a sentence rather than a fix.** Nothing in this version
+reads an `rhtn-*` header off a response, so no hole closes. What changes
+is that *an `rhtn-*` header on the member path was written by the node*
+becomes true in both directions rather than true in one and undefined in
+the other — so a reader added later need not work out who could have
+written one. That is cheapest now, with no packages in the world to break
+and no reader to migrate; it is a breaking change the first time a
+package relies on one.
+
+**Stripped rather than refused**, matching the way in. A stray header is
+a defect in the package: the operator is the one who can act on it and is
+told in the node's diagnostics, where refusing the answer would take the
+resource down over a header nobody reads.
+
+**And a third reader of a response noticed while establishing this.**
+`federation::response_of` splits a head to take a status and a body,
+`relay::reframed` writes a length and strips an encoding, and the
+gateway's `parse_response` is the policy. Three sites, of which one
+decides anything — more than §11.2's one parser wants, and written down
+beside the relay duplication rather than refactored under a different
+task.
+
+RSC-61 and GAT-040. Workspace tests 883.

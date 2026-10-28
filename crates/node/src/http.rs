@@ -418,6 +418,10 @@ pub struct Response {
 /// **No declared type, encoding or body content is refused.** A body is
 /// bytes under a length to this parser; what a package may answer with is
 /// untouched by it.
+///
+/// **One header family is dropped**: `rhtn-*`, so that the namespace
+/// means the same thing in both directions as `resource-requirements.md`
+/// §3.1 makes it mean on the way in.
 pub fn parse_response(bytes: &[u8]) -> Result<Response, Reject> {
     // the head ends at a blank line, whichever way the package ends its
     // lines: a package is not required to agree with this parser about
@@ -509,7 +513,36 @@ pub fn parse_response(bytes: &[u8]) -> Result<Response, Reject> {
             "content-type" if headers.iter().any(|(n, _)| n == "content-type") => {
                 return Err(Reject::Ambiguous("duplicate content-type"));
             }
-            _ => headers.push((lname, value.to_string())),
+            _ => {
+                // **the namespace is the node's in both directions**
+                // [2026-10-28]. `resource-requirements.md` §3.1 has a
+                // member's `rhtn-*` headers stripped on the way in, so
+                // that a resource seeing one is seeing its host; the same
+                // rule on the way out is what makes *an `rhtn-*` header
+                // on this path was written by the node* a sentence that
+                // is true rather than undefined. Nothing reads one off a
+                // response today, which is the reason to settle it now:
+                // a reader added later should not have to ask who could
+                // have written it, and no package exists yet to break.
+                //
+                // **Stripped rather than refused**, as the member's are:
+                // a stray header is a defect in the package and the
+                // operator is told, where refusing the whole answer
+                // would take the resource down over a header nobody
+                // reads. The host path is untouched — a request under
+                // `/.rhtn/` never reaches this parse
+                // ([`crate::federation`]), and its answers are read by
+                // `federation::response_of`.
+                if lname.starts_with("rhtn-") {
+                    tracing::warn!(
+                        target: "node",
+                        header = %lname,
+                        "node.resource.response.rhtn_stripped"
+                    );
+                    continue;
+                }
+                headers.push((lname, value.to_string()))
+            }
         }
     }
     if content_length.is_some() && chunked {

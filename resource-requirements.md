@@ -219,6 +219,12 @@ secret §3.1 describes. Neither the path nor the header is a secret, and reading
 either as proof of origin on a port anyone can open would be the header-spoofing
 hazard §3.1 exists to name.
 
+**Your response's `rhtn-*` headers are dropped on the member path** [2026-10-28].
+The node strips the namespace on the way out as it strips a caller's on the way in
+(§3.1, `wire-format.md` §11.2), so do not answer a member in it and do not expect
+one to arrive: it is reserved for what a host says, in both directions. Your
+answers on the control paths above are a different exchange and keep theirs.
+
 **Three exchanges travel there today**, the hosting side of the application
 federation your package may take part in. Each carries `host` as the authority the
 operator bound and `rhtn-audience` naming you.

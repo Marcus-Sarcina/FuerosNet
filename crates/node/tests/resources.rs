@@ -2464,3 +2464,40 @@ fn the_canonical_form_is_a_fixed_point_and_declares_its_extent_once() {
         "the extent is declared exactly once",
     );
 }
+
+// acceptance: RSC-61
+#[test]
+fn a_package_cannot_speak_in_its_hosts_namespace_on_the_way_out_either() {
+    let sc = scene();
+    let me = kh("alice");
+    // a package answering as though it were the node: the four credential
+    // headers it was handed, aimed back at whoever reads a response
+    let said = b"HTTP/1.1 200 OK\r\ncontent-type: text/plain\r\n\
+                 rhtn-principal: AAAA\r\nrhtn-roles: admin\r\nrhtn-audience: BBBB\r\n\
+                 rhtn-session: CCCC\r\nrhtn-control: node\r\nx-app: kept\r\n\
+                 content-length: 2\r\n\r\nok";
+    let (mut g, _b) = answering(&sc, said);
+    let r = g.serve(&me, &sc.table, &kh("carol"), &request(R1, OK_GET));
+    assert_eq!(
+        r.status, STATUS_DELIVERED,
+        "a stray header is a defect in the package, not a reason to take the resource down"
+    );
+    let out = r.body.expect("a body");
+    let parsed = http::parse_response(&out).expect("reads");
+    assert!(
+        parsed.headers.iter().all(|(n, _)| !n.starts_with("rhtn-")),
+        "none of the namespace survives: {:?}",
+        parsed.headers,
+    );
+    assert!(
+        parsed.headers.contains(&("x-app".into(), "kept".into())),
+        "and the package's own headers are untouched: {:?}",
+        parsed.headers,
+    );
+    assert_eq!(parsed.body, b"ok", "as is everything it answered with");
+    // **so the sentence holds in both directions**: an `rhtn-*` header on
+    // this path was written by the node. `resource-requirements.md` §3.1
+    // makes it true on the way in; this makes it true on the way out.
+    let seen = String::from_utf8_lossy(&out).to_ascii_lowercase();
+    assert!(!seen.contains("rhtn-"), "not one of them travels: {seen}");
+}
