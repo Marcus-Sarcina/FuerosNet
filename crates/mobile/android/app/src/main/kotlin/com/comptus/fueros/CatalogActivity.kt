@@ -78,12 +78,31 @@ class CatalogActivity : Activity() {
                 }.start()
             }
         }
+        // **the resource's own page** [2026-10-28], which is where asking
+        // one leads now: the diagnostic read of a status and a first line
+        // stays beside it, because a status is what a person debugging a
+        // node wants and a page is what everybody else does
+        val open = Button(this).apply {
+            text = "Open that resource"
+            setOnClickListener {
+                val entry = chosen(which)
+                if (entry == null) {
+                    answer.text = "no entry held names that resource; sweep, or paste one from the list"
+                    return@setOnClickListener
+                }
+                startActivity(
+                    android.content.Intent(this@CatalogActivity, ResourceActivity::class.java)
+                        .putExtra("node", entry.node)
+                        .putExtra("resource", entry.resource)
+                        .putExtra("name", entry.instance)
+                        .putExtra("path", path.text.toString().trim().ifBlank { "/" }),
+                )
+            }
+        }
         val ask = Button(this).apply {
             text = "Ask that resource"
             setOnClickListener {
-                val entries = Kernel.catalog()
-                val want = which.text.toString().trim().lowercase()
-                val entry = entries.firstOrNull { it.resource == want }
+                val entry = chosen(which)
                 if (entry == null) {
                     answer.text = "no entry held names that resource; sweep, or paste one from the list"
                     return@setOnClickListener
@@ -136,6 +155,7 @@ class CatalogActivity : Activity() {
             )
             addView(which)
             addView(path)
+            addView(open)
             addView(ask)
             addView(answer)
         }
@@ -151,6 +171,12 @@ class CatalogActivity : Activity() {
     override fun onResume() {
         super.onResume()
         draw()
+    }
+
+    /** The catalog entry the pasted keyhash names, or null. */
+    private fun chosen(which: EditText): Kernel.Offered? {
+        val want = which.text.toString().trim().lowercase()
+        return Kernel.catalog().firstOrNull { it.resource == want }
     }
 
     private fun draw() {

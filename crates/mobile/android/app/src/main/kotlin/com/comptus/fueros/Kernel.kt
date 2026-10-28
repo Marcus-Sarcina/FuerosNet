@@ -751,9 +751,37 @@ object Kernel {
         val stale: Boolean,
     )
 
-    /** What a resource answered: §11.1's status, and the body where one
-     *  was delivered. */
-    data class Answered(val status: ULong, val body: ByteArray?)
+    /**
+     * **What a client may show of a resource's answer**
+     * (`light-client-requirements.md` §8): the kernel's reading of the
+     * declared type, never this shell's guess at the body.
+     */
+    enum class Shape { PAGE, TEXT, OTHER }
+
+    /** A resource's answer, as the kernel read the one HTTP message. */
+    data class Page(
+        val httpStatus: Int,
+        /** The declared media type, or null where none was declared. */
+        val media: String?,
+        val charset: String?,
+        val shape: Shape,
+        val body: ByteArray,
+    )
+
+    /**
+     * What a resource answered: §11.1's status, the page where one was
+     * delivered **and could be read**, and why not where it could not.
+     *
+     * **This shell never sees the HTTP message.** `wire-format.md` §11.2
+     * names what a second parser costs on the node's side of this
+     * exchange, and the same hazard sits on this side: the kernel reads
+     * it once and hands up what it found.
+     */
+    data class Answered(
+        val status: ULong,
+        val page: Page?,
+        val unreadable: String?,
+    )
 
     /** Sweep the serving node's catalog (`wire-format.md` §6.4). */
     fun browse(): String? {
@@ -792,7 +820,23 @@ object Kernel {
         val request = ("GET $path HTTP/1.1\r\nhost: resource\r\n\r\n").toByteArray()
         return call("requestResource", { null }) {
             val a = p.requestResource(unhex(node), unhex(resource), request)
-            Answered(a.status, a.body)
+            Answered(
+                status = a.status,
+                page = a.page?.let { q ->
+                    Page(
+                        httpStatus = q.httpStatus.toInt(),
+                        media = q.media,
+                        charset = q.charset,
+                        shape = when (q.shape) {
+                            uniffi.rhtn_ffi.PageShape.PAGE -> Shape.PAGE
+                            uniffi.rhtn_ffi.PageShape.TEXT -> Shape.TEXT
+                            uniffi.rhtn_ffi.PageShape.OTHER -> Shape.OTHER
+                        },
+                        body = q.body,
+                    )
+                },
+                unreadable = a.unreadable,
+            )
         }
     }
 

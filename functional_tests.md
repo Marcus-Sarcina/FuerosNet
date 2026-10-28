@@ -575,6 +575,9 @@ The Cargo workspace has **16 crates**. Components below follow responsibilities 
 | CAT-020 | C | Show only the accessing user's assigned roles/available services, not other principals' role rows or hidden eligibility predicates. Keep operator configuration and user catalog presentation as different interfaces. | R §7.4; I §10.7; L §8 |
 | CAT-021 | C | Service unavailability does not silently transfer ownership or broaden discovery. Retain appropriate stale information for explanation while a host is down and re-resolve/requery according to policy. | D §11.5.1; L §8 |
 | CAT-022 | S | Every reply echoes the nonce of the request that drew it, and an asker refuses one that does not without reading anything out of it. Cover registration, catalog, prekey, currency, archive and submission replies alike; a refused reply leaves its query outstanding. | W §§6.2, 6.4, 7.1, 7.8–7.10 |
+| CAT-023 | C | **Read a delivered resource response once, below any interface boundary, and reject rather than normalise what is ambiguous**: a line not terminated by CRLF, a folded header, a duplicated content-length, a content-length beside a transfer-encoding, an encoding other than chunked, a malformed or extended chunk, a trailer section, bytes after the declared body. A second parser above the boundary is W §11.2's hazard on the client's side of the same exchange. Test each refusal by name, and that nothing of a refused message is shown. | W §§11, 11.2; L §8 |
+| CAT-024 | C | **The declared media type decides what is rendered and nothing else does**: render the types the client has decided to render, name every other one to the user with its declared type and size, treat an absent declaration as declaring nothing, and never inspect a body to determine its type. Test that identical markup is framed when declared text/html and named when undeclared. | L §8; R §3 |
+| CAT-025 | C | **Frame a resource's page so it reaches nothing of the user's**: no script, no bridge into the client, no file or content access, no storage surviving the screen, no network fetch, no navigation, and an opaque origin — the response arrives through the kernel and has no origin to be same-origin with. Apply the client's own styling beneath the page's, overridable by it, and never rewrite the resource's markup. Test that a page cannot reach client state and that a navigation is refused. | L §8; D §§11.2, 18.1, 23.3; R §9 |
 
 ### Membership gates, subtree acknowledgements and role tables
 
@@ -1012,7 +1015,7 @@ Open local parameters are not all specification defects: cache TTLs, queue cap, 
 
 ## 10. Document baseline and coverage totals
 
-This specification contains **538 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
+This specification contains **541 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
 
 | Prefix | Families |
 |---|---:|
@@ -1032,7 +1035,7 @@ This specification contains **538 numbered requirement/test families** across **
 | REC | 12 |
 | PAY | 16 |
 | POL | 22 |
-| CAT | 22 |
+| CAT | 25 |
 | GAT | 37 |
 | PKG | 16 |
 | APP | 14 |

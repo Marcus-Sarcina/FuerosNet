@@ -402,8 +402,12 @@ and serving node, **a truncated or stale portion said rather than
 smoothed over** (`wire-format.md` §6.4), and one request to a resource
 through the node that served its entry (`wire-format.md` §11.1) with the six statuses in
 words. The request is the simplest HTTP/1.1 there is; an application's own
-screen is the resource's business. Owed: the grant-side cases (a sub
-reaching one under a grant), which need a hosted package on the bench.
+screen is the resource's business. **And since 2026-10-28 a resource's
+answer is read rather than quoted**: the kernel parses the one HTTP
+message, the frame policy of F6 below decides what may be shown of it,
+and the catalog's own line is the diagnostic beside that. Owed: the
+grant-side cases (a sub reaching one under a grant), which need a hosted
+package on the bench.
 
 | Step | Elements | Beneath | Owes |
 |---|---|---|---|
@@ -411,6 +415,7 @@ reaching one under a grant), which need a hosted package on the bench.
 | F2 Entry | Owner, the signed-service binding, hosting/proxy model, endpoint kind (E1's rule) | `CatalogItem` | UX-010, UX-014 |
 | F3 First brokered use | The one **persisted-flag** interstitial: the vendor's session can outlive membership; owner-signed metadata proves neither no-logging nor trustworthy conduct | shell flag | PRD-08, UX-010 |
 | F4 Roles | Names as the primary view; a quantile shown with its named population and moving cutoff; absolute top-k where that is the intent; unusable services filtered, not exposed | Owed (role view has no kernel call) | UX-009 |
+| **F6 A resource's page** | **Built, 2026-10-28** (`ResourcePage` holds the policy, `ResourceActivity` the frame). The declared type decides: `text/html` is framed, `text/plain` is drawn as text and takes no frame, everything else and everything undeclared is named with its size and not rendered — **nothing is sniffed**. The frame reaches nothing: no script, no bridge, no file or content access, no storage past the screen, no fetch, no navigation, and a null base so the document is same-origin with nothing. The app's sheet goes beneath the page's own and the markup is never rewritten | `request_resource` [2026-10-16], whose answer the kernel now reads: the HTTP message is parsed in `rhtn-client`'s `resource`, so no shell is the second parser `wire-format.md` §11.2 forbids on the node's side | CAT-023..025, RSC-56..58; `light-client-requirements.md` §8 |
 | F5 Register a resource | Owed (node has `CatalogService::register`; no kernel call) | Owed | `light-client-requirements.md` §8 |
 
 ## G. Settings

@@ -478,8 +478,44 @@ pub struct ResourceAnswer {
     /// 0 delivered, 1 refused, 2 unavailable, 3 malformed, 4 no subtree
     /// acknowledgement, 5 no matching role.
     pub status: u64,
-    /// The application's answer, where one was delivered.
-    pub body: Option<Vec<u8>>,
+    /// The application's answer, **read here and not above the
+    /// boundary**, where one was delivered and could be read.
+    pub page: Option<ResourcePage>,
+    /// Why the delivered message could not be read, where it could not.
+    /// A shell shows this and renders nothing.
+    pub unreadable: Option<String>,
+}
+
+/// **What a client may show of a resource's answer**
+/// (`light-client-requirements.md` §8).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum PageShape {
+    /// `text/html`: a page, for the frame.
+    Page,
+    /// `text/plain`: text, which is not a page and takes no frame.
+    Text,
+    /// Anything else, and anything undeclared: named to the person
+    /// rather than rendered. **Nothing is sniffed** — a body inspected to
+    /// find out what it is arrives as something nobody agreed to see.
+    Other,
+}
+
+/// A resource's answer, parsed out of the one HTTP/1.1 message §11
+/// carries.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ResourcePage {
+    /// The application's own HTTP status — **not** `ResourceAnswer`'s,
+    /// which says whether anything was delivered at all.
+    pub http_status: u32,
+    /// The declared media type, lower-cased and without parameters, or
+    /// none where the resource declared none.
+    pub media: Option<String>,
+    /// The declared charset, lower-cased, where there was one.
+    pub charset: Option<String>,
+    /// What may be shown of it.
+    pub shape: PageShape,
+    /// The body as it arrived.
+    pub body: Vec<u8>,
 }
 
 /// One candidate provider, as a provisioning screen orders them
@@ -2577,7 +2613,36 @@ impl Participant {
                 .handle
                 .with_blocking(move |c| c.take_resource_response(&reply))
                 .map_err(Refused::new)?;
-            Ok(ResourceAnswer { status, body })
+            // **the HTTP message is read here.** `wire-format.md` §11.2
+            // names the hazard a second parser creates on the node's side
+            // of this exchange — two parties disagreeing where one
+            // message ends — and a shell parsing what the kernel handed
+            // it raw would be that second parser on this side.
+            let (page, unreadable) = match body {
+                None => (None, None),
+                Some(bytes) => match rhtn_client::resource::answer(&bytes) {
+                    Ok(a) => (
+                        Some(ResourcePage {
+                            http_status: a.http_status as u32,
+                            media: a.media,
+                            charset: a.charset,
+                            shape: match a.shape {
+                                rhtn_client::resource::Shape::Page => PageShape::Page,
+                                rhtn_client::resource::Shape::Text => PageShape::Text,
+                                rhtn_client::resource::Shape::Other => PageShape::Other,
+                            },
+                            body: a.body,
+                        }),
+                        None,
+                    ),
+                    Err(e) => (None, Some(e.say())),
+                },
+            };
+            Ok(ResourceAnswer {
+                status,
+                page,
+                unreadable,
+            })
         })
     }
 

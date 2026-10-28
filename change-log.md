@@ -16060,3 +16060,81 @@ subordinate's line is a disavowal, and only a node holding its own seed
 can mint one, so it was never this screen's to offer.
 
 Android tests 252, workspace 869.
+
+### 2026-10-28 (the resource page's frame policy, and the one parser behind it)
+
+**What a resource's page may do was written down as owed**, and it turned
+out to have a prerequisite nobody had built: `wire-format.md` §11 delivers
+the application's reply as *one HTTP/1.1 message*, and nothing anywhere
+read one. The shell showed the first line of the raw bytes, which is
+`HTTP/1.1 200 OK`.
+
+**So the parse came first, and it is in the kernel.** §11.2 names the
+hazard the node's own parse exists to close — two parties disagreeing
+about where one message ends and the next begins, so that content one
+treats as a body the other treats as a fresh message — and **that hazard
+is about a boundary, not a direction**. A shell parsing what the kernel
+handed it raw would be exactly the second parser §11.2 forbids on the
+node's side of the same exchange. The boundary's own rule says it from
+the other end: nothing above it parses a wire byte. So
+`rhtn-client`'s `resource` reads it once and hands up what it found.
+
+**And it refuses rather than normalises**, by §11.2's own list read from
+this end: a line not terminated by CRLF, a folded header, a duplicated
+length, a length beside a transfer-encoding, an encoding other than
+chunked, a chunk size with an extension on it, a trailer section, bytes
+after the declared body. §11 has the node parse and re-serialise the
+response too, on the same reasoning, so **a node that sends one of those
+did not do its half** — which makes the refusal worth naming rather than
+smoothing over, and means nothing of a refused message is shown rather
+than some of it.
+
+**Nothing is sniffed.** The declared media type decides: `text/html` is a
+page, `text/plain` is text and takes no frame at all, and every other
+type and every absent declaration is named to the person with its size.
+Identical markup is a page when declared one and is not when declared
+nothing, which is the test that says this is a policy rather than a
+guess: a body inspected to find out what it is arrives as something
+nobody agreed to look at.
+
+**The frame is `infra-client-requirements.md` §8.3's argument one step
+further.** The node's own pages are framed because a seized node serving
+a hostile page must reach nothing on the device that still holds the seed,
+and the node cannot assert that isolation, being the party it is against.
+A resource is an application its owner packaged, hosted by a node that
+owner chose: **the party whose isolation it is cannot be the party
+asserting it.** So no script, no bridge, no file or content access, no
+storage past the screen, no fetch, no navigation — and no origin, the
+reply having arrived through the kernel rather than from a server, which
+makes the document same-origin with nothing, not even itself.
+
+**What that costs an application is nil**, which is the part worth
+stating: every exchange a resource has with a client goes through the
+kernel in any case, so a form is carried by the shell whether or not the
+page could run code. Script would buy local interactivity in return for
+the largest attack surface a page has.
+
+**The author's styling ruling of 2026-10-27 is implemented beneath rather
+than over**: the app's sheet is bare element selectors with no
+`!important`, so anything the resource styles for itself wins on
+specificity, and the markup is never rewritten. A client editing somebody
+else's document to make it safe would be asserting that it understood the
+document; the frame's refusals do not depend on understanding it at all.
+
+**And writing the client's half found that the node has not done its
+own.** §11 field 2's *same reasoning as the request* means the node parses
+and re-serialises the response too — the request's note being that opaque
+*means the node does not interpret the application semantics, not that it
+forwards unexamined input*. `rhtn-node`'s `resources::evaluate` parses the
+request and hands the backend's response bytes straight to
+`ResourceResponse`; `http.rs` has no response parser at all; and the
+sandbox bounds a package's answer by size alone. So a package emitting two
+HTTP messages reaches a client with both, and **the only thing refusing it
+today is this client's parser** — which is the wrong place for the only
+check, since §11.2's argument is about the party in the middle and a
+second client gets nothing from ours. Left open rather than fixed here:
+it is the node's gateway path with its own tests, and the task in hand was
+the client's.
+
+Three functional-test rows (CAT-023..025) and three catalogue entries
+(RSC-56..58). Android tests 263, workspace tests 876.

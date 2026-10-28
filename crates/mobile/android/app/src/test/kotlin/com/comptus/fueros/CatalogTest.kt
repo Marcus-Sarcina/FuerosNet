@@ -39,21 +39,48 @@ class CatalogTest {
         assertEquals("nothing held yet", Catalog.roll(emptyList()))
     }
 
+    private fun said(status: ULong, page: Kernel.Page? = null, unreadable: String? = null) =
+        Catalog.answer(Kernel.Answered(status, page, unreadable))
+
+    /**
+     * **The diagnostic line, which is not the page** [2026-10-28]. It
+     * used to quote the first line of the raw HTTP message, which was
+     * this shell reading one; the kernel reads it now, so what is
+     * quoted here is what the kernel found.
+     */
     @Test
-    fun each_of_the_six_statuses_is_said_in_words_and_a_body_is_quoted_once() {
-        assertEquals("delivered", Catalog.answer(Kernel.Answered(0UL, null)))
+    fun each_of_the_six_statuses_is_said_in_words_and_what_was_read_is_quoted() {
+        assertEquals("delivered", said(0UL))
         assertEquals(
-            "delivered — HTTP/1.1 200 OK",
-            Catalog.answer(Kernel.Answered(0UL, "HTTP/1.1 200 OK\r\n\r\nbody".toByteArray())),
+            "delivered — HTTP 200, text/html, 4 bytes",
+            said(
+                0UL,
+                Kernel.Page(200, "text/html", "utf-8", Kernel.Shape.PAGE, "body".toByteArray()),
+            ),
         )
-        assertEquals("refused", Catalog.answer(Kernel.Answered(1UL, null)))
-        assertEquals("the resource is unavailable", Catalog.answer(Kernel.Answered(2UL, null)))
-        assertEquals("the request was malformed", Catalog.answer(Kernel.Answered(3UL, null)))
         assertEquals(
-            "no subtree acknowledgement covers you",
-            Catalog.answer(Kernel.Answered(4UL, null)),
+            "a type nobody declared is said to be nothing, never guessed at",
+            "delivered — HTTP 200, nothing declared, 0 bytes",
+            said(0UL, Kernel.Page(200, null, null, Kernel.Shape.OTHER, ByteArray(0))),
         )
-        assertEquals("no role of yours matches", Catalog.answer(Kernel.Answered(5UL, null)))
-        assertEquals("status 9", Catalog.answer(Kernel.Answered(9UL, null)))
+        assertEquals(
+            "delivered, and unreadable: content-length twice",
+            said(0UL, unreadable = "content-length twice"),
+        )
+        assertEquals("refused", said(1UL))
+        assertEquals("the resource is unavailable", said(2UL))
+        assertEquals("the request was malformed", said(3UL))
+        assertEquals("no subtree acknowledgement covers you", said(4UL))
+        assertEquals("no role of yours matches", said(5UL))
+        assertEquals("status 9", said(9UL))
+    }
+
+    /** And it says the same words about a status as the screen does, so
+     *  the two never disagree about one. */
+    @Test
+    fun the_status_words_come_from_one_place() {
+        for (s in 0..6) {
+            assertEquals(ResourcePage.delivery(s.toULong()), said(s.toULong()))
+        }
     }
 }

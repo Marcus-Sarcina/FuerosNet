@@ -14948,5 +14948,86 @@
     "then": "It is refused by the same name the departure itself is refused by, rather than answered with a cost of nothing. A figure shown for a change that would not happen is worse than no figure: the person reads it as the price of an act they cannot perform.",
     "oracle": "behaviour",
     "interpretation": null
+  },
+  {
+    "id": "RSC-56",
+    "area": "resources",
+    "gap": "resources",
+    "title": "The declared type decides what may be shown, and no body is inspected to find out",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "light-client-requirements.md §8",
+      "wire-format.md §11"
+    ],
+    "rule": [
+      {
+        "where": "light-client-requirements.md §8",
+        "text": "The declared media type decides what is rendered, and nothing else does."
+      },
+      {
+        "where": "light-client-requirements.md §8",
+        "text": "Never inspect a body to find out what it is."
+      }
+    ],
+    "given": "One HTTP/1.1 response message as `wire-format.md` §11's field 2 carries it.",
+    "when": "A client reads it to decide what to show.",
+    "then": "The application's own status, the declared media type lower-cased without its parameters, and the charset are taken from the message; `text/html` is a page and `text/plain` is not; every other declared type and every absent declaration is named rather than rendered, so the same markup is a page when declared one and is not when declared nothing. A chunked body is joined and a body with neither length nor encoding is what remains.",
+    "oracle": "behaviour",
+    "interpretation": null
+  },
+  {
+    "id": "RSC-57",
+    "area": "resources",
+    "gap": "resources",
+    "title": "A resource's answer is read once, and every ambiguity in it is refused",
+    "milestone": "after-5",
+    "kind": "negative",
+    "spec": [
+      "light-client-requirements.md §8",
+      "wire-format.md §11.2"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §11.2",
+        "text": "two parties disagreeing about where one message ends and the next begins"
+      },
+      {
+        "where": "light-client-requirements.md §8",
+        "text": "Read it once, below whatever boundary your interface layer talks across, and\nreject rather than normalise anything ambiguous."
+      }
+    ],
+    "given": "A delivered response message carrying one of the ambiguities `wire-format.md` §11.2 names, read on the client's side of the same exchange.",
+    "when": "The client parses it.",
+    "then": "It is refused by name rather than normalised: a line not terminated by CRLF, a folded header, a duplicated content-length, a content-length beside a transfer-encoding, an encoding other than chunked, a chunk size carrying an extension, a trailer section, bytes after the declared body, fewer bytes than declared. Nothing of a refused message is shown, and the reason is given to the person rather than a guess at the content.",
+    "oracle": "behaviour",
+    "interpretation": "§11.2's requirements are written for the node, in the request direction. The hazard they close is a property of a boundary rather than of a direction, and §11 has the node parse and re-serialise the response on the same reasoning — so the client's half of the rule is to refuse what reaches it ambiguous, which also reports a node that did not do its own half."
+  },
+  {
+    "id": "RSC-58",
+    "area": "resources",
+    "gap": "resources",
+    "title": "A resource's page is framed so that it reaches nothing of the user's",
+    "milestone": "manual",
+    "kind": "manual",
+    "spec": [
+      "light-client-requirements.md §8",
+      "infra-client-requirements.md §8.3"
+    ],
+    "rule": [
+      {
+        "where": "light-client-requirements.md §8",
+        "text": "Frame a resource's page so that it reaches nothing of the user's"
+      },
+      {
+        "where": "light-client-requirements.md §8",
+        "text": "the party whose isolation it is cannot\nbe the party asserting it"
+      }
+    ],
+    "given": "A release build showing a page a resource served, with the client's own state on the device.",
+    "when": "A reviewer serves a page that attempts script, a fetch, storage, a file URL and a navigation away.",
+    "then": "None of them takes effect: the document has no origin to share, nothing is published into it, no fetch is served, nothing it stored outlives the screen, and the navigation is refused with the person told the frame did not go. The client's own styling applies where the page sets none and loses where it sets any, and the page's markup is unaltered.",
+    "oracle": "behaviour",
+    "interpretation": null
   }
 ]

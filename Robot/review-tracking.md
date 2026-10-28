@@ -19559,3 +19559,47 @@ and no export, and each blocks a screen the sheet already specifies.
 **And the question that is the author's**, asked in the output: how a manual
 PRD row is recorded now that the tester's form is gone [2026-10-23]. Six of
 the thirteen owed rows describe screens that exist.
+
+## The node does not parse the resource's response [found 2026-10-28]
+
+**Found while writing the client's half of it**, so it is a finding of my
+own rather than a reviewer's, and it is open.
+
+`wire-format.md` §11's `ResourceResponse` field 2 is *the application
+response as an HTTP/1.1 message* and carries **same reasoning as the
+request**. The request's own note in the CDDL is that a node *parses and
+re-serialises it (§11.2) — it does not relay the bytes. Opaque means the
+node does not interpret the application semantics, not that it forwards
+unexamined input.* So the response is specified to be parsed and
+re-serialised too.
+
+**It is not.** `rhtn-node`'s `resources::evaluate` parses the request with
+`http::parse`, serialises the credentialed message with `http::serialise`,
+and then does this with what comes back:
+
+```
+match backend.handle(&message) {
+    Ok(resp) => ResourceResponse { status: STATUS_DELIVERED, body: Some(resp) },
+```
+
+`crates/node/src/http.rs` has `parse` and `serialise` for a `Request` and
+nothing for a response. The sandbox bounds a package's response **by size
+only** (`rhtn-resources`' `Sandbox::serve`), so a hosted package writes
+its response bytes freely. A package emitting two HTTP messages, or one
+with a length beside a transfer-encoding, reaches the asking client with
+both or with the ambiguity intact.
+
+**What catches it today is the client**: `rhtn-client`'s `resource::answer`
+(2026-10-28) refuses each of those by name, which is why nothing is
+currently exploitable through this shell. **That is the wrong place for
+the only check.** §11.2's whole argument is that the party in the middle
+must not forward what its parser did not examine, and a second client
+implementation gets no protection from ours.
+
+**Not done here** because it is the node's gateway path with its own
+tests, and the task in hand was the client's frame policy. The scope when
+it is taken: a response parser beside `http::parse`, the six §11 statuses
+unchanged, `STATUS_UNAVAILABLE` for a backend whose answer cannot be
+re-serialised (a defect in the package, which is what that status already
+means for a trap), and a `GAT` row in `functional_tests.md` to match
+CAT-023 on the client's side.

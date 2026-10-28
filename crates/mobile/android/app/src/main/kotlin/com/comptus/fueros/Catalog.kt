@@ -23,19 +23,21 @@ object Catalog {
     fun roll(held: List<Kernel.Offered>): String =
         if (held.isEmpty()) "nothing held yet" else held.joinToString("\n") { line(it) }
 
-    /** What a resource's answer comes to, in words (§11.1's six statuses). */
+    /**
+     * **What a resource's answer comes to, for somebody debugging a
+     * node**: §11.1's delivery status and, where one was delivered, the
+     * application's own status and what it declared.
+     *
+     * **The page itself is not here.** [ResourcePage] decides what may be
+     * shown of a body and [ResourceActivity] shows it; this line is the
+     * diagnostic beside that, and it says the same words about a status
+     * so the two never disagree about one.
+     */
     fun answer(a: Kernel.Answered): String {
-        val what = when (a.status.toInt()) {
-            0 -> "delivered"
-            1 -> "refused"
-            2 -> "the resource is unavailable"
-            3 -> "the request was malformed"
-            4 -> "no subtree acknowledgement covers you"
-            5 -> "no role of yours matches"
-            else -> "status ${a.status}"
-        }
-        val body = a.body?.let { String(it) } ?: ""
-        val first = body.lineSequence().firstOrNull()?.trim().orEmpty()
-        return if (first.isEmpty()) what else "$what — $first"
+        val what = ResourcePage.delivery(a.status)
+        a.unreadable?.let { return "$what, and unreadable: $it" }
+        val p = a.page ?: return what
+        val declared = p.media ?: "nothing declared"
+        return "$what — HTTP ${p.httpStatus}, $declared, ${p.body.size} bytes"
     }
 }

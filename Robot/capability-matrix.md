@@ -57,7 +57,8 @@ shell through the platform's `Notices` object as `Told`; events through
 | Browse | `browse` then `catalog` | `Serving::catalog`, request type 5, each reply taken until done or truncated | `CatalogItem` with node, truncated, stale | CAT-* (client-level) |
 | Refresh and staleness | `browse` again; `CatalogItem.stale`, `truncated` | | | |
 | **Register a resource** | **Owed.** `CatalogService::register` exists on the node; no kernel call | | | |
-| Access a resource | `request_resource`, built 2026-10-16; `CatalogActivity` asks one through the node that served its entry | request type 6 on the serving node's stream | `ResourceAnswer` with `wire-format.md` §11.1's six statuses | RSC-* |
+| Access a resource | `request_resource`, built 2026-10-16; `CatalogActivity` asks one through the node that served its entry | request type 6 on the serving node's stream | `ResourceAnswer` with `wire-format.md` §11.1's six statuses, and since 2026-10-28 the delivered HTTP message **read in the kernel**: `ResourcePage` with the application's status, the declared type and charset, and what may be shown of it — or why it could not be read | RSC-56..58, CAT-023..025 |
+| **A resource's page** [2026-10-28] | the same call, from `ResourceActivity` behind the catalog; `ResourcePage` holds the policy | the declared type decides and nothing is sniffed; the frame has no script, no bridge, no file or content access, no storage past the screen, no fetch, no navigation and a null base | the page framed, text drawn plainly, anything else named with its size | `light-client-requirements.md` §8 |
 | **Roles** | **Owed.** The role view exists on the node; no kernel call | | | |
 | Unrecognised declaration | `Told::UnrecognisedDeclaration` | `surface_declaration` | | |
 

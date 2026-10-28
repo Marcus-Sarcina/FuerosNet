@@ -1113,6 +1113,45 @@ anchor up in, and it is what you hand onward in a bundle (§1.1,
   the case worth warning about, since the user is acting deliberately and the
   consequence is elsewhere.
 
+**What a resource answered, and what may be shown of it.** `wire-format.md` §11
+delivers the application's reply as one HTTP/1.1 message, so a client that means
+to show a resource's page has to read one.
+
+- **Read it once, below whatever boundary your interface layer talks across, and
+  reject rather than normalise anything ambiguous.** `wire-format.md` §11.2 names the hazard the
+  node's own parse exists to close — two parties disagreeing about where one
+  message ends and the next begins — and that hazard is about a boundary, not a
+  direction: an interface layer parsing what the kernel handed it raw is the
+  second parser it forbids on the node's side of the same exchange. That
+  list reads the same from this end: a line not terminated by CRLF, a folded
+  header, a duplicated length, a length beside a transfer-encoding, an encoding
+  other than chunked, bytes after the declared body. **A node that sent you one
+  of those did not do its half** — `wire-format.md` §11 has it parse and
+  re-serialise the response
+  too — so name the refusal rather than guess, and show none of the message
+  rather than some of it.
+- **The declared media type decides what is rendered, and nothing else does.**
+  Render the types you have decided to render; name every other one to the user
+  with its declared type and its size; treat an absent declaration as declaring
+  nothing. **Never inspect a body to find out what it is.** Sniffing delivers a
+  page as something the user did not agree to look at, and *could not display*
+  tells them nothing where *this is a PDF of 40 kB* tells them what happened.
+- **Frame a resource's page so that it reaches nothing of the user's**: no
+  script, no bridge into the client, no file or content access, no storage
+  outliving the screen, no fetch, no navigation, and no origin — the reply came
+  through the kernel and has none, so the page is same-origin with nothing. This
+  is `infra-client-requirements.md` §8.3's argument for framing a node's own
+  pages, one step further: a resource is an application its owner packaged,
+  hosted by a node that owner chose, and **the party whose isolation it is cannot
+  be the party asserting it**. The cost to an application is nil — its every
+  exchange goes through the kernel in any case, so a form is carried by the
+  client whether or not a page could run code.
+- **Style beneath the page rather than over it, and do not rewrite its markup.**
+  What the resource has not styled for itself the client may style to match its
+  own surface, with rules the page's own override. Editing somebody else's
+  document to make it safe would assert that the client understood the document;
+  the frame's refusals do not depend on understanding it at all.
+
 ---
 
 ## 9. The interface between the kernel and the application
