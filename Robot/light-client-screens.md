@@ -50,13 +50,18 @@ full** [author, 2026-10-27]:
 
 > *[patron alias]*'s *[subnet alias]* *[resource name]*: *[notice type]*
 
+**A board thread is the same line with the thread in place of the
+resource** [author, 2026-10-27]:
+
+> *[patron alias]*'s *[subnet alias]*: *[thread title]*
+> *[most recent poster's alias]*: *[the start of their message]*…
+
 **That form is the point rather than decoration.** With the core
 applications distributed, many subnets will carry resources of
 substantially similar name and description, so the person has to know which
 context they are seeing one in; the subnet's icon beside the row is the
 glance, and the line is the whole of it. A notice with nothing behind it in
-a resource — a reply on the board, an adoption offer — drops that one
-segment.
+a resource or a thread — an adoption offer — drops that one segment.
 
 **And what is never a notice** [author, 2026-10-27], because the client
 does it without asking anybody:
@@ -153,10 +158,16 @@ than per application.
 discussion hides the rail and the foot, so the screen is the conversation,
 with a back control in the title header returning to the view it came from.
 
-**What this leaves to settle**, drawn as placeholders and owed: the scope
-vocabulary a board post carries, which is the application tier's and not
-this document's; the palette, the template implying a dark one; and which
-of a person's per-subnet aliases the foot's bar carries.
+**Dark by default, light an option** [author, 2026-10-27], under
+Appearance in Options. The colour scheme and the type may both be revisited
+later; what is fixed is that the dark one is what a person meets first and
+that the light one is theirs to choose, not the platform's to impose.
+
+**What this leaves to settle**, drawn as placeholders and owed: **the words
+a board post carries for how far it travels** — the chip on the post
+itself, drawn as *this subnet*, *and below* and *up the line*, which is the
+application tier's vocabulary and not this document's; and which of a
+person's per-subnet aliases the foot's bar carries.
 
 ---
 
@@ -334,6 +345,7 @@ and what each owes are unchanged.
 
 | Element | Beneath | Owes |
 |---|---|---|
+| **Appearance: dark or light** [author, 2026-10-27], dark being what a person meets first | **Owed**: the shell's own, no kernel call | |
 | Retention: the years this device declares at its intent, stated in the brief | `retention_years`, `set_retention_years` (refused during a ceremony); the field-test build takes it from the provision | design §7.5.1 |
 | Verifier limits, seal cost | **Owed**: `Config::default()` fixed at start | `capability-matrix.md` §1 |
 | Wake endpoint: the user's chosen service, handed in as URL and key, withdrawable | `wake(Some(..))`, `wake(None)` | `light-client-requirements.md` §4.1 |
