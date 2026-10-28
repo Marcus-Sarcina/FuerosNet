@@ -3029,6 +3029,291 @@ impl Participant {
             Ok(t)
         })
     }
+
+    // ---- ending an authority (E3) --------------------------------------
+
+    /// **Every patron relationship this key holds**, one per patron it was
+    /// adopted under, with the series its line is currently on.
+    ///
+    /// What a screen needs before [`Participant::depart`]: a person is not
+    /// shown *leave* against a keyhash they cannot place, and the series
+    /// is what tells one line from another where a patron appears twice
+    /// over a key's life.
+    #[must_use]
+    pub fn relationships(&self) -> Vec<Relationship> {
+        crate::diag::call_plain("relationships", || {
+            self.handle.with_blocking(|c| {
+                rhtn_client::rotation::relationships(&c.archive)
+                    .iter()
+                    .map(|r| Relationship {
+                        patron: id_of(&r.patron),
+                        series: r.series(),
+                        anchor: id_of(&r.position.anchor),
+                        nibbles: r.position.nibbles,
+                    })
+                    .collect()
+            })
+        })
+    }
+
+    /// **Leave a patron** (`light-client-requirements.md` §4.2): minted,
+    /// signed, appended and posted in one act, because there is nothing to
+    /// propose and nobody to ask.
+    ///
+    /// **Exit is a right rather than a request** (design §6.2): the old
+    /// patron does not sign, and no refusal can come back from them. What
+    /// can come back is this client's own: no such relationship, or one
+    /// already left, which a second departure must not advance a counter
+    /// over.
+    ///
+    /// `reason` is the subject's own code where they give one, carried in
+    /// the record and interpreted by nobody here.
+    ///
+    /// **What this does not do is tell the person what it costs them.**
+    /// §6 wants the resources an ending revokes listed before it happens,
+    /// and that computation does not exist on either side of this
+    /// boundary yet.
+    pub fn depart(&self, patron: Id, reason: Option<u64>) -> Result<Id, Refused> {
+        crate::diag::call("depart", || {
+            let p = keyhash(&patron).ok_or_else(|| Refused::new("a patron is 32 bytes"))?;
+            let t = self.handle.with_blocking(move |c| {
+                c.depart(p, reason)
+                    .map(|t| t.to_vec())
+                    .map_err(|a| Refused::new(rhtn_client::diag::abort(&a)))
+            })?;
+            // the departure is this key's own act and is already in the
+            // outbox; a restart between signing and flooding must not lose
+            // the counter it advanced
+            self.net.carry_outbox(&self.handle)?;
+            self.save()?;
+            Ok(t)
+        })
+    }
+
+    // ---- standing, computed here and kept nowhere (E2) -----------------
+
+    /// **What this client's own policy makes of `subject`, now**
+    /// (design §16.2, `light-client-requirements.md` §4.2).
+    ///
+    /// **Computed on demand and retained nowhere**, from this client's own
+    /// copy of its horizon: the adoptions it holds, the meetings it was
+    /// present at, and the determinations its patrons made. Nothing it
+    /// sends depends on the answer (design §16.4), and no two clients owe
+    /// each other the same one.
+    #[must_use]
+    pub fn standing(&self, subject: Id) -> f64 {
+        crate::diag::call_plain("standing", || match keyhash(&subject) {
+            None => 0.0,
+            Some(k) => self.handle.with_blocking(move |c| c.standing(&k)),
+        })
+    }
+
+    /// **One computation over a set** (design §16.2): each candidate's own
+    /// standing, which of them the policy admits together, and what the
+    /// admitted set can carry at once.
+    ///
+    /// A set is not the sum of its members — a conserving policy bounds
+    /// what they can use jointly — so this is the call a screen makes when
+    /// it is about to show several, and `standing` the one for a single
+    /// party.
+    #[must_use]
+    pub fn evaluate(&self, candidates: Vec<Id>) -> Evaluation {
+        crate::diag::call_plain("evaluate", || {
+            let ks: Vec<Keyhash> = candidates.iter().filter_map(|c| keyhash(c)).collect();
+            self.handle.with_blocking(move |c| {
+                let e = c.evaluate(&ks);
+                Evaluation {
+                    individual: e
+                        .individual
+                        .iter()
+                        .map(|(k, v)| Standing {
+                            who: id_of(k),
+                            score: *v,
+                        })
+                        .collect(),
+                    admitted: e.admitted.iter().map(id_of).collect(),
+                    joint: e.joint,
+                }
+            })
+        })
+    }
+
+    // ---- recovery (A1's third door, E4) --------------------------------
+
+    /// **The prior key this device is recovering from**, where it is one.
+    ///
+    /// Nothing else here answers until this does: every call below is
+    /// about a key that is being succeeded, and a device holding no prior
+    /// key is an ordinary device.
+    #[must_use]
+    pub fn prior_key(&self) -> Option<Id> {
+        crate::diag::call_plain("prior_key", || {
+            self.handle
+                .with_blocking(|c| c.prior_key().map(|k| id_of(&k)))
+        })
+    }
+
+    /// **As a recovery verifier, the query about the person in front of
+    /// me** (design §9.1), under this meeting's pre-commitment and
+    /// addressed to myself.
+    ///
+    /// **Only where my own records show I met the prior key claimed.** A
+    /// verifier who never met them has nothing to recognise and is
+    /// refused here rather than asked a question they cannot answer.
+    pub fn recovery_query(&self, prior: Id) -> Result<Vec<u8>, Refused> {
+        crate::diag::call("recovery_query", || {
+            let k = keyhash(&prior).ok_or_else(|| Refused::new("a prior key is 32 bytes"))?;
+            self.handle.with_blocking(move |c| {
+                c.recovery_query(k)
+                    .map(|q| q.encode())
+                    .map_err(|a| Refused::new(rhtn_client::diag::abort(&a)))
+            })
+        })
+    }
+
+    /// **As a recovery verifier: the one question of the meeting**
+    /// (design §9.1), and on yes the hybrid response naming the prior key.
+    ///
+    /// **The recognition is the person's**, not the device's: this asks
+    /// through the platform's own operator and refuses on anything but
+    /// yes. The response says *personal knowledge* and *met*, which is
+    /// what a recovery verifier has and all they have.
+    pub fn recognise(
+        &self,
+        query: Vec<u8>,
+        consent: Vec<u8>,
+        prior: Id,
+    ) -> Result<Vec<u8>, Refused> {
+        crate::diag::call("recognise", || {
+            let k = keyhash(&prior).ok_or_else(|| Refused::new("a prior key is 32 bytes"))?;
+            self.handle.with_blocking(move |c| {
+                let q =
+                    rhtn_client::query::VerificationQuery::decode(&query).map_err(Refused::new)?;
+                c.recognise(&q, &consent, k)
+                    .map_err(|a| Refused::new(rhtn_client::diag::abort(&a)))
+            })
+        })
+    }
+
+    /// **As the recovering subject: take a verifier's answer**, verified
+    /// hybrid under that verifier and held.
+    ///
+    /// Refused where it is not about me, where it answers a query I did
+    /// not consent to, or where it names another prior key: a recovery
+    /// gathers recognitions of *one* predecessor, and a response about
+    /// another is not evidence of this one.
+    pub fn take_recovery_response(&self, bytes: Vec<u8>) -> Result<(), Refused> {
+        crate::diag::call("take_recovery_response", || {
+            self.handle
+                .with_blocking(move |c| c.take_recovery_response(&bytes).map_err(Refused::new))
+        })
+    }
+
+    /// **As the recovering subject: the block the adoption carries**
+    /// (design §9.1) — the old key's successor statement over prior, new
+    /// and patron, with the recognitions gathered — and the old archive's
+    /// head where there is one.
+    ///
+    /// **Refused until somebody has recognised them.** A recovery with no
+    /// match in it is a claim about a person that nobody made.
+    pub fn recovery_block(&self, patron: Id) -> Result<RecoveryBlock, Refused> {
+        crate::diag::call("recovery_block", || {
+            let p = keyhash(&patron).ok_or_else(|| Refused::new("a patron is 32 bytes"))?;
+            self.handle.with_blocking(move |c| {
+                c.recovery_block(&p)
+                    .map(|(block, head)| RecoveryBlock {
+                        block,
+                        old_head: head.map(|t| t.to_vec()),
+                    })
+                    .map_err(|a| Refused::new(rhtn_client::diag::abort(&a)))
+            })
+        })
+    }
+
+    /// **Seal every old line as the old key's last act** (design §9.0):
+    /// one self-signed locator per relationship, at the counter the series
+    /// reached.
+    ///
+    /// **After this the old key is gone from this client**, which is why
+    /// it is the last thing it does. Empty where there is no prior key to
+    /// seal with.
+    #[must_use]
+    pub fn seal_old_lines(&self) -> Vec<SealedLine> {
+        crate::diag::call_plain("seal_old_lines", || {
+            self.handle.with_blocking(|c| {
+                c.seal_old_lines()
+                    .into_iter()
+                    .map(|(patron, seal)| SealedLine {
+                        patron: id_of(&patron),
+                        seal,
+                    })
+                    .collect()
+            })
+        })
+    }
+
+    /// **The chain proving my series under `patron`** (`wire-format.md`
+    /// §4.6.1), presented when it is asked for and propagated to nobody.
+    #[must_use]
+    pub fn present_chain(&self, patron: Id) -> Vec<Vec<u8>> {
+        crate::diag::call_plain("present_chain", || match keyhash(&patron) {
+            None => Vec::new(),
+            Some(p) => self.handle.with_blocking(move |c| c.present_chain(&p)),
+        })
+    }
+}
+
+/// One patron relationship, as a shell is shown it.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct Relationship {
+    /// The patron this line is under.
+    pub patron: Id,
+    /// The series the line is currently on (`wire-format.md` §4.6).
+    pub series: u32,
+    /// The anchor the position the adoption gave is relative to.
+    pub anchor: Id,
+    /// How deep under that anchor the position sits.
+    pub nibbles: u64,
+}
+
+/// One candidate's standing under this client's own policy.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct Standing {
+    /// Who it is about.
+    pub who: Id,
+    /// What the policy makes of them, on its own scale.
+    pub score: f64,
+}
+
+/// What one computation over a set came to (design §16.2).
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct Evaluation {
+    /// Each candidate's own standing, in the order considered.
+    pub individual: Vec<Standing>,
+    /// The candidates the policy admits together, in its own order.
+    pub admitted: Vec<Id>,
+    /// What the admitted set can carry at once, which a conserving policy
+    /// bounds below the sum of its members.
+    pub joint: f64,
+}
+
+/// The block a recovery adoption carries, and the head of the archive the
+/// prior key left behind.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct RecoveryBlock {
+    /// The successor statement and the recognitions gathered.
+    pub block: Vec<u8>,
+    /// The old archive's head, where the prior key had one.
+    pub old_head: Option<Id>,
+}
+
+/// One line sealed as the old key's last act.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SealedLine {
+    /// The patron whose line this seals.
+    pub patron: Id,
+    /// The self-signed locator that closes it.
+    pub seal: Vec<u8>,
 }
 
 /// Where a party sits, as a shell is shown it: one of these per subnet

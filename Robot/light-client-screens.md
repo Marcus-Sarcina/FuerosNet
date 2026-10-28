@@ -383,9 +383,9 @@ a reason and a way back (UX-013 validates these by walking them).
 | Step | Elements | Beneath | Owes |
 |---|---|---|---|
 | E1 The horizon | **Users, never devices** [author, 2026-09-27]: every endpoint of a person sits behind one displayed representation, and the infra/non-infra distinction is an icon state on the person — read from current topology, never a stored species (promotion changes it). Positions, distance, reachability; the operator-itself versus person-behind distinction stays (the `.0` presentation), rendered on the person | `places`, `distance`, `reachable`, `resolvable` | UX-014 |
-| E2 Accept a patron | An in-horizon adoption offer — a non-PoP transfer — **arrives as a notification with accept/deny** [author, 2026-09-27]; the acceptance shows the upward-reaching policy list with **expanded names and counts** — a count alone is insufficient — framed as a reminder, the policy being the user's own | Owed in part (standing/trust export) | PRD-02, UX-007; `light-client-requirements.md` §6 |
-| E3 End or alter authority | The computed warning: which currently used resources this revokes — transfers and disavowals included, not departure alone; a stale permission list **identified as stale**, never silently used | Owed (`depart` has no export; the access computation) | PRD-02, UX-006; `light-client-requirements.md` §6 |
-| E4 Recovery | Owed whole (five client functions, no export); the identity-fork warning of A1 applies here | Owed | REC-*, UX-008 |
+| E2 Accept a patron | An in-horizon adoption offer — a non-PoP transfer — **arrives as a notification with accept/deny** [author, 2026-09-27]; the acceptance shows the upward-reaching policy list with **expanded names and counts** — a count alone is insufficient — framed as a reminder, the policy being the user's own | `standing`, `evaluate` [2026-10-27] | PRD-02, UX-007; `light-client-requirements.md` §6 |
+| E3 End or alter authority | The computed warning: which currently used resources this revokes — transfers and disavowals included, not departure alone; a stale permission list **identified as stale**, never silently used | `relationships`, `depart` [2026-10-27]; **the access computation is still owed**, so the warning has nothing to compute from | PRD-02, UX-006; `light-client-requirements.md` §6 |
+| E4 Recovery | The verifier's side and the subject's side both cross now [2026-10-27]; the identity-fork warning of A1 applies here | `recovery_query`, `recognise`, `prior_key`, `take_recovery_response`, `recovery_block`, `seal_old_lines`, `present_chain`. **Owed: entering one** — every call answers only where a prior key is held, and nothing crosses that puts one there | REC-*, UX-008 |
 
 ## F. Catalog and resources
 
@@ -447,12 +447,14 @@ and what each owes are unchanged.
 
 ## What this flow exposes as owed at the kernel
 
-From the capability matrix, confirmed by this pass: settings/config other
-than the retention, which is settable since 2026-10-03; biometric matcher;
-recovery; departure; standing and evaluation; resource registration and
-access; the mode query (*does this identity run an instance*); and the mode
-query alone now that the path ruling landed. The administration channel is
-the author's open decision.
+From the capability matrix, confirmed by this pass: settings and config
+other than the retention, which is settable since 2026-10-03; the biometric
+matcher; resource registration and the role view; and the mode query
+(*does this identity run an instance*). **Recovery, departure, standing and
+evaluation crossed on 2026-10-27**, leaving two things that are not
+exports: **entering a recovery**, which wants a prior key the boundary has
+no way to supply, and **what leaving costs**, which wants an access
+computation that exists on neither side.
 
 ## The rulings (all four questions, author, 2026-09-27)
 

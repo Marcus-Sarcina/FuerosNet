@@ -74,9 +74,12 @@ shell through the platform's `Notices` object as `Told`; events through
 | Sign and finish | `back_pointers`, `propose`, `body`, `review_and_sign`, `sign_body`, `finalize` | the record carried up at once | txid | REC-*, DMN-10 |
 | Adoption | `propose_adoption`, `take_adoption`, `position_in`, `anchors` | | | TOP-* |
 | Neighbourhood | `places`, `reachable`, `resolvable`, `distance`, `holds`, `records`, `prune` | the horizon this client keeps | | TOP-43, HOR-* |
-| **Recovery** | **Owed.** Five client functions, no export | | | REC-* |
-| **Departure** | **Owed.** `Client::depart`, no export | | | |
-| **Standing and evaluation** | **Owed.** The client's pair in `trust.rs`, no export, no driver | | | |
+| Recovery, the verifier's side | `recovery_query(prior)`, `recognise(query, consent, prior)` [2026-10-27] | refused where this device's own records do not show it met the prior key | the query, and the hybrid response naming the prior key | REC-* |
+| Recovery, the subject's side | `prior_key`, `take_recovery_response`, `recovery_block(patron)`, `seal_old_lines`, `present_chain(patron)` [2026-10-27] | | the block the adoption carries, the old head, the seals | REC-* |
+| **Entering a recovery** | **Owed.** Every call above answers only where a prior key is held, and nothing across the boundary can put one there: `Rotation::begin` takes the old signing identity and its archive, and where a device gets those is A1's fork | | | |
+| Departure | `relationships()` for what could be left; `depart(patron, reason)` [2026-10-27] | minted, signed, appended and posted in one act: no countersignature, no refusal from the patron | the departure's txid, or why not | |
+| **What leaving costs** | **Owed.** `light-client-requirements.md` §6 wants the resources an ending revokes listed first, and that computation exists on neither side | | | PRD-02, UX-006 |
+| Standing and evaluation | `standing(subject)`, `evaluate(candidates)` [2026-10-27] | the client's own horizon: its adoptions, the meetings it was present at, its patrons' determinations | a score, or one computation over a set with its joint figure | |
 
 ## 6. The two client modes
 

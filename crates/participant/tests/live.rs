@@ -271,6 +271,131 @@ fn a_newly_minted_root_adopts_on_the_record_it_just_made() {
     assert!(set.get("bob").must(&format!("where {t_a}"))[0].starts_with("position "));
 }
 
+/// **Leaving is the subordinate's own act** (`light-client-requirements.md`
+/// §4.2, design §6.2): bob is adopted under alice and then departs, with
+/// nothing proposed to alice and no refusal she can give. Afterwards bob
+/// holds no position in the subnet it left, and a second departure is
+/// refused rather than advancing a counter over a binding that closed.
+///
+/// Driven over the boundary from four processes, which is the whole point
+/// of it being here: the calls are a shell's, not a test reaching into a
+/// client.
+#[test]
+fn a_subordinate_departs_its_patron_and_cannot_depart_twice() {
+    let cast = ["alice", "bob", "carol", "w1"];
+    let mut set = Participants::new(env!("CARGO_BIN_EXE_rhtnp"), "departure");
+    for n in cast {
+        set.start(n, &cast);
+    }
+    let (a, b) = (hex(&kh("alice")), hex(&kh("bob")));
+
+    assert_eq!(
+        set.get("bob").must("relationships"),
+        Vec::<String>::new(),
+        "adopted by nobody, so no line to leave"
+    );
+    assert!(
+        set.get("bob")
+            .tell(&format!("depart {a}"))
+            .iter()
+            .any(|l| l.contains("NoRelationship")),
+        "and leaving one it never had is refused by name"
+    );
+
+    let pop = ceremony(&mut set, &cast, "alice", "bob", "carol", "w1");
+    let back = line(set.get("bob").must("back-pointers"), "back-pointers ");
+    let body = line(
+        set.get("alice")
+            .must(&format!("adopt - {b} {pop} 1 {back}")),
+        "adoption ",
+    );
+    let sig_b = line(set.get("bob").must(&format!("sign {body}")), "signed ");
+    let sig_a = line(set.get("alice").must(&format!("sign {body}")), "signed ");
+    let envelope = line(
+        set.get("alice")
+            .must(&format!("adoption-envelope {body} {b}:{sig_b},{a}:{sig_a}")),
+        "envelope ",
+    );
+    let t = line(
+        set.get("alice").must(&format!("take-adoption {envelope}")),
+        "adopted ",
+    );
+    set.get("bob").must(&format!("take-adoption {envelope}"));
+
+    // the line exists now, and says which series it is on
+    let held = set.get("bob").must("relationships");
+    assert!(
+        held.len() == 1 && held[0].starts_with(&format!("relationship {a} series ")),
+        "one line, under alice: {held:?}"
+    );
+    assert!(
+        set.get("bob")
+            .must("where")
+            .contains(&format!("subnet {t}")),
+        "and bob sits in alice's subnet"
+    );
+
+    // **leaving needs nobody**: no body proposed, no signature asked for
+    let left = line(set.get("bob").must(&format!("depart {a}")), "departed ");
+    assert_eq!(left.len(), 64, "a txid of its own: {left}");
+
+    assert_eq!(
+        set.get("bob").must(&format!("where {t}")),
+        ["position none"],
+        "bob holds no position in the subnet it left"
+    );
+
+    // **and not twice.** A second departure would advance the counter over
+    // a binding that is already closed, so the position it needs is gone
+    // and the refusal says which relationship it could not find.
+    assert!(
+        set.get("bob")
+            .tell(&format!("depart {a}"))
+            .iter()
+            .any(|l| l.contains("NoRelationship")),
+        "a line already left cannot be left again"
+    );
+}
+
+/// **What this client's own policy makes of a party** (design §16.2),
+/// computed from its own horizon and kept nowhere.
+///
+/// Two parties it has met and one it has not, over the boundary: the
+/// evaluation answers for the set in one computation, scores each
+/// candidate it was given, and admits from among them.
+#[test]
+fn standing_is_computed_from_this_clients_own_horizon() {
+    let cast = ["alice", "bob", "carol", "w1"];
+    let mut set = Participants::new(env!("CARGO_BIN_EXE_rhtnp"), "standing");
+    for n in cast {
+        set.start(n, &cast);
+    }
+    let (b, c) = (hex(&kh("bob")), hex(&kh("carol")));
+
+    let before = line(set.get("alice").must(&format!("standing {b}")), "standing ");
+    ceremony(&mut set, &cast, "alice", "bob", "carol", "w1");
+    let after = line(set.get("alice").must(&format!("standing {b}")), "standing ");
+    assert_ne!(
+        before, after,
+        "meeting bob is evidence alice did not have before: {before} then {after}"
+    );
+
+    // one computation over the set, which is not the sum of its members
+    let out = set.get("alice").must(&format!("evaluate {b},{c}"));
+    assert!(out.iter().any(|l| l.starts_with("joint ")), "{out:?}");
+    assert_eq!(
+        out.iter().filter(|l| l.starts_with("individual ")).count(),
+        2,
+        "one score per candidate given: {out:?}"
+    );
+    assert!(
+        out.iter()
+            .filter(|l| l.starts_with("individual "))
+            .all(|l| l.contains(&b) || l.contains(&c)),
+        "and about the two it was asked about: {out:?}"
+    );
+}
+
 /// One ceremony between alice and bob, witnessed by carol and w1, to the
 /// record both hold.  The steps are PRT-04's; what this returns is what an
 /// adoption is evidence of.

@@ -551,6 +551,34 @@ impl Instrument {
                 .map_err(|e| e.reason().to_string())?)
             )]),
 
+            // ending an authority, and what this client's policy makes
+            // of a party: `light-client-requirements.md` §§4.2, 6
+            ["relationships"] => Ok(c
+                .relationships()
+                .iter()
+                .map(|r| format!("relationship {} series {}", hex(&r.patron), r.series))
+                .collect()),
+            ["depart", patron] => Ok(vec![format!(
+                "departed {}",
+                hex(&c
+                    .depart(id(patron)?, None)
+                    .map_err(|e| e.reason().to_string())?)
+            )]),
+            ["standing", subject] => Ok(vec![format!("standing {:.6}", c.standing(id(subject)?))]),
+            ["evaluate", candidates] => {
+                let who: Result<Vec<Vec<u8>>, String> =
+                    carry_list(candidates).iter().map(|x| id(x)).collect();
+                let e = c.evaluate(who?);
+                Ok(std::iter::once(format!("joint {:.6}", e.joint))
+                    .chain(
+                        e.individual
+                            .iter()
+                            .map(|i| format!("individual {} {:.6}", hex(&i.who), i.score)),
+                    )
+                    .chain(e.admitted.iter().map(|a| format!("admitted {}", hex(a))))
+                    .collect())
+            }
+
             // the adoption, on the record the ceremony produced
             ["where"] => Ok(c
                 .subnets()

@@ -15848,3 +15848,44 @@ the packaged library did not export. Rebuilt. Nothing in git changed, both
 being generated, but anyone building to install would have hit it.
 
 Android unit tests 236, 0 failed, from 227.
+
+### 2026-10-27 (recovery, departure and standing cross the boundary)
+
+**Three rows of the capability matrix that said *Owed, no export*.** The
+library had carried all of it for weeks and no shell could reach any of it:
+a person could not leave a patron, could not be recognised by somebody who
+knew them, and could not be told what their own client made of anybody.
+Eleven calls now cross, and no library code changed to make them.
+
+**Departure is one act and no conversation** (`light-client-requirements.md`
+§4.2, design §6.2): minted, signed, appended and posted, with no
+countersignature to wait for and no refusal the patron can give. What the
+boundary adds is the list of lines there are to leave, since a person is
+not shown *leave* against a keyhash they cannot place, and the series
+beside each, which is what tells one line from another where a patron
+appears twice over a key's life.
+
+**Standing is computed and kept nowhere** (design §16.2). Both halves
+cross: one party's score, and the single computation over a set that a
+conserving policy bounds below the sum of its members.
+
+**Recovery crosses in both directions.** The verifier's side asks its one
+question and answers only where its own records show it met the key
+claimed; the subject's side takes the recognitions, builds the block the
+adoption carries, seals the old lines as the old key's last act, and
+presents its chain when asked.
+
+**Two things are still owed, and neither is an export.** *Entering* a
+recovery wants a prior signing identity and its archive, and nothing that
+crosses can put one there — where a device gets those is A1's fork, which
+is the author's. And the warning §6 wants before an authority ends, naming
+the resources it revokes, has no computation behind it on either side.
+
+**Tested where the evidence can exist.** A real departure runs across four
+`rhtnp` processes: adopted, the line listed, left, the position gone, and a
+second departure refused rather than advancing a counter over a binding
+that closed. Standing is measured before and after a meeting on the same
+harness. The eleven are asked of a fresh client at the boundary, where
+every one of them answers with a value or refuses by name.
+
+Workspace tests 860, Android 236, the Kotlin binding regenerated.

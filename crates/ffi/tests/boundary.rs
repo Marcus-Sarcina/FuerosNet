@@ -1139,3 +1139,91 @@ fn anothers_key_does_not_open_the_state_and_the_start_is_refused() {
         "sealed state that does not open refuses the start rather than beginning fresh over it"
     );
 }
+
+/// **The authority calls a shell needs, over the boundary**: what this key
+/// holds, what ending one does, what its own policy makes of a party, and
+/// the recovery surface before there is anything to recover.
+///
+/// The positive departure and the positive standing are proved where the
+/// evidence can exist, across four `rhtnp` processes (`rhtn-participant`'s
+/// live tests). What is here is the half a device can be in without a
+/// ceremony behind it, and every answer of it is a value rather than a
+/// panic: a fresh client is asked all eleven and refuses by name.
+#[test]
+fn authority_recovery_and_standing_answer_before_there_is_anything_to_answer_about() {
+    let shell = Arc::new(Shell::default());
+    let known: Vec<Vec<u8>> = ["alice", "bob"].iter().map(|n| material(n)).collect();
+    let p = Participant::start(seeds("alice"), known, platform_of(shell.clone())).expect("starts");
+
+    // ADOPTED BY NOBODY, so there is no line and nothing to leave.
+    assert!(p.relationships().is_empty(), "no patron, no relationship");
+    let no_line = p.depart(id("bob"), None).expect_err("nothing to leave");
+    assert!(
+        no_line.reason().contains("NoRelationship"),
+        "the refusal names what it could not find: {}",
+        no_line.reason()
+    );
+
+    // **STANDING IS COMPUTED, NEVER STORED** (design §16.2): a party this
+    // client has no evidence about still gets an answer, and the answer is
+    // a number rather than an absence.
+    let s = p.standing(id("bob"));
+    assert!(s.is_finite(), "a score, not a refusal: {s}");
+    assert_eq!(
+        p.standing(vec![1, 2, 3]),
+        0.0,
+        "and a thing that is not a keyhash is nobody"
+    );
+
+    // one computation over a set, which answers for what it was given
+    let e = p.evaluate(vec![id("bob"), id("alice")]);
+    assert_eq!(e.individual.len(), 2, "one score per candidate");
+    assert!(e.joint.is_finite(), "and a joint figure for the set");
+    assert!(
+        e.individual
+            .iter()
+            .all(|i| i.who == id("bob") || i.who == id("alice")),
+        "about the two it was asked about and nobody else"
+    );
+    assert!(
+        p.evaluate(vec![vec![9, 9]]).individual.is_empty(),
+        "a candidate that is not a keyhash is not scored"
+    );
+
+    // **THE RECOVERY SURFACE, WITH NO PRIOR KEY.** A device that is not
+    // recovering is an ordinary device, and says so on every call rather
+    // than half-answering.
+    assert_eq!(p.prior_key(), None, "nothing is being succeeded");
+    assert!(p.seal_old_lines().is_empty(), "no old key, no last act");
+    assert!(p.present_chain(id("bob")).is_empty(), "no line, no chain");
+    let no_prior = p.recovery_block(id("bob")).expect_err("nothing to recover");
+    assert!(
+        no_prior.reason().contains("NoPriorKey"),
+        "and it says which: {}",
+        no_prior.reason()
+    );
+
+    // a verifier who never met the key claimed has nothing to recognise
+    let unmet = p.recovery_query(id("bob")).expect_err("never met them");
+    assert!(
+        unmet.reason().contains("NotRecognised"),
+        "refused for the reason it is refused: {}",
+        unmet.reason()
+    );
+
+    // and the two that take bytes refuse what is not theirs
+    assert!(p.recognise(vec![0, 1, 2], vec![], id("bob")).is_err());
+    assert!(p.take_recovery_response(vec![0, 1, 2]).is_err());
+
+    // every call that takes a keyhash says so when it is handed something
+    // else, rather than treating the first 32 bytes of whatever arrived
+    for r in [
+        p.depart(vec![7], None).err(),
+        p.recovery_query(vec![7]).err(),
+        p.recovery_block(vec![7]).err(),
+        p.recognise(vec![0], vec![], vec![7]).err(),
+    ] {
+        let r = r.expect("a short id is refused");
+        assert!(r.reason().contains("32 bytes"), "{}", r.reason());
+    }
+}
