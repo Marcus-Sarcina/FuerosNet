@@ -18,26 +18,33 @@ import org.junit.Test
  */
 class LeavingTest {
 
-    private val patron = "a3f21c0812345678abcdef0011223344556677889900aabbccddeeff00112233"
+    private val patronKey = "a3f21c0812345678abcdef0011223344556677889900aabbccddeeff00112233"
     private val node = "5046da3700000000000000000000000000000000000000000000000000000000"
     private val owner = "9b2c7e4100000000000000000000000000000000000000000000000000000000"
+
+    private val patron = Kernel.Named(patronKey, "Rosa")
+    private val nameless = Kernel.Named(patronKey, null)
 
     private fun cost(
         losing: List<Kernel.Lost> = emptyList(),
         keeping: Int = 0,
-        leaving: List<String> = emptyList(),
+        leaving: List<Kernel.Named> = emptyList(),
         limits: List<Kernel.Limit> = listOf(Kernel.Limit.PredicateNotHeld),
     ) = Kernel.Cost(losing, keeping, leaving, limits)
 
-    private fun lost(hostLeaves: Boolean = true, instance: String = "Standpipe rota") =
-        Kernel.Lost(
-            resource = "0101010101010101010101010101010101010101010101010101010101010101",
-            node = node,
-            owner = owner,
-            serviceType = "rhtn-forum",
-            instance = instance,
-            hostLeaves = hostLeaves,
-        )
+    private fun lost(
+        hostLeaves: Boolean = true,
+        instance: String = "Standpipe rota",
+        nodeAlias: String? = "Hallkeeper",
+        ownerAlias: String? = "Rosa",
+    ) = Kernel.Lost(
+        resource = "0101010101010101010101010101010101010101010101010101010101010101",
+        node = Kernel.Named(node, nodeAlias),
+        owner = Kernel.Named(owner, ownerAlias),
+        serviceType = "rhtn-forum",
+        instance = instance,
+        hostLeaves = hostLeaves,
+    )
 
     // ---- the empty list, which is two different answers ----------------
 
@@ -114,7 +121,7 @@ class LeavingTest {
             limits = listOf(
                 Kernel.Limit.Unswept(node),
                 Kernel.Limit.Unswept(owner),
-                Kernel.Limit.Unswept(patron),
+                Kernel.Limit.Unswept(patronKey),
                 Kernel.Limit.PredicateNotHeld,
             ),
         )
@@ -149,13 +156,13 @@ class LeavingTest {
             Leaving.headline(
                 cost(
                     losing = listOf(lost(), lost(instance = "Minutes")),
-                    leaving = listOf(patron, node, owner),
+                    leaving = listOf(patron, Kernel.Named(node, "Hallkeeper"), nameless),
                 ),
             ),
         )
         assertEquals(
             "No resource this device knows of goes, but 2 people leave your horizon.",
-            Leaving.headline(cost(leaving = listOf(patron, node))),
+            Leaving.headline(cost(leaving = listOf(patron, nameless))),
         )
     }
 
@@ -163,13 +170,41 @@ class LeavingTest {
     fun a_host_that_goes_and_an_owner_that_goes_are_told_apart() {
         val host = Leaving.lost(lost(hostLeaves = true))
         val own = Leaving.lost(lost(hostLeaves = false))
-        assertTrue(host, host.contains("the node serving it leaves your horizon"))
-        assertTrue(own, own.contains("its owner leaves your horizon"))
+        assertTrue(host, host.contains("the node serving it leaves your horizon: Hallkeeper, 5046da370000…"))
+        assertTrue(own, own.contains("its owner leaves your horizon: Rosa, 9b2c7e410000…"))
         assertTrue(
             "an owner gone with the host still there is a door that will not open: $own",
             own.contains("the node stays"),
         )
         assertTrue(host, host.startsWith("Standpipe rota   rhtn-forum"))
+    }
+
+    // ---- the name, and the keyhash under it ----------------------------
+
+    /** The author's ruling of 2026-10-28: show the alias here. Both,
+     *  though — an alias is what somebody signed about themselves, and
+     *  the act is not undoable. */
+    @Test
+    fun a_party_is_named_by_the_alias_and_the_keyhash_together() {
+        assertEquals("Rosa, a3f21c081234…", Leaving.party(patron))
+        assertEquals(
+            "a published alias that arrived blank is no name at all",
+            "a3f21c081234…",
+            Leaving.party(Kernel.Named(patronKey, "  ")),
+        )
+    }
+
+    @Test
+    fun a_party_who_published_no_name_is_shown_by_the_keyhash_alone() {
+        assertEquals("a3f21c081234…", Leaving.party(nameless))
+        assertEquals("a3f21c081234…   series 3", Leaving.line(Kernel.Line(nameless, 3U)))
+        assertEquals("Leave a3f21c081234…", Leaving.button(nameless, armed = false))
+    }
+
+    @Test
+    fun a_resource_whose_host_published_no_name_still_says_which_node() {
+        val said = Leaving.lost(lost(nodeAlias = null))
+        assertTrue(said, said.contains("leaves your horizon: 5046da370000…"))
     }
 
     @Test
@@ -196,7 +231,7 @@ class LeavingTest {
     fun no_patron_says_there_is_nothing_to_leave_and_where_one_comes_from() {
         assertTrue(Leaving.NONE, Leaving.NONE.contains("under no patron"))
         assertTrue(Leaving.NONE, Leaving.NONE.contains("Meet screen"))
-        assertEquals("a3f21c081234…   series 3", Leaving.line(Kernel.Line(patron, 3U)))
+        assertEquals("Rosa, a3f21c081234…   series 3", Leaving.line(Kernel.Line(patron, 3U)))
     }
 
     /** The same slip as *1 person leave your horizon*, twice more: a
@@ -221,7 +256,7 @@ class LeavingTest {
 
     @Test
     fun the_button_asks_twice_and_says_so_the_second_time() {
-        assertEquals("Leave a3f21c081234…", Leaving.button(patron, armed = false))
-        assertEquals("Tap again to leave a3f21c081234…", Leaving.button(patron, armed = true))
+        assertEquals("Leave Rosa", Leaving.button(patron, armed = false))
+        assertEquals("Tap again to leave Rosa", Leaving.button(patron, armed = true))
     }
 }

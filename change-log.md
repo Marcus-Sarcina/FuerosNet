@@ -16037,4 +16037,19 @@ binding from Kotlin, where a cost asked for a line that does not exist is
 refused by name. The populated cost is proved in Rust and not yet on a
 phone, an adoption needing two devices.
 
-Android tests 249, workspace 869.
+**The alias came in on the author's ruling the same day**: a patron was
+named by a twelve-character keyhash prefix and nothing else, which is no
+way to recognise somebody before an act that cannot be undone. It is the
+published alias **and** the keyhash now, in that order — both, because an
+alias is what a party signed about themselves, nothing stops two of them
+signing the same, and what this device holds is its received copy rather
+than a fact. The keyhash alone where no alias has reached it, which is
+the rule `People` already keeps. The button carries the name alone, a
+button being read at a glance and a hash prefix not being read at all.
+
+**And the screen is on the canvas** (`NewLeave`), reached by tapping your
+patron in the subnet's own upline, with the three answers — a cost,
+nothing goes, cannot be worked out — on a tweak, since the point of the
+design is that the last two look alike and are not.
+
+Android tests 252, workspace 869.

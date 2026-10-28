@@ -1876,14 +1876,25 @@ object Kernel {
 
     // ---- authority: the lines this key holds, and what ending one costs
 
+    /**
+     * **A party as a screen names them**: the alias they published to
+     * this device where one has reached it, and the keyhash always.
+     *
+     * **Never a name that has not been received** — the rule `People`
+     * already keeps — and never the alias alone either, on a screen
+     * about an act that cannot be undone: an alias is what somebody
+     * signed about themselves, and two parties may sign the same one.
+     */
+    data class Named(val who: String, val alias: String?)
+
     /** One patron line this key holds (`wire-format.md` §4.6). */
-    data class Line(val patron: String, val series: UInt)
+    data class Line(val patron: Named, val series: UInt)
 
     /** One resource an ending takes away. */
     data class Lost(
         val resource: String,
-        val node: String,
-        val owner: String,
+        val node: Named,
+        val owner: Named,
         val serviceType: String,
         val instance: String,
         /** True where the node serving it goes; false where the owner does. */
@@ -1920,15 +1931,30 @@ object Kernel {
     data class Cost(
         val losing: List<Lost>,
         val keeping: Int,
-        val leaving: List<String>,
+        val leaving: List<Named>,
         val limits: List<Limit>,
     )
+
+    /**
+     * **The aliases this device has been told**, by keyhash: what the
+     * contacts list holds, which is where a published profile lands.
+     * Absent for a party that has published none to this device, and
+     * that absence is shown as the keyhash rather than filled in.
+     */
+    private fun aliases(p: Participant): Map<String, String> =
+        call("contacts", { emptyMap() }) {
+            p.contacts().mapNotNull { c -> c.alias?.let { a -> hex(c.who) to a } }.toMap()
+        }
 
     /** The patron lines this key holds, newest series and all. */
     fun lines(): List<Line> {
         val p = participant ?: return emptyList()
+        val names = aliases(p)
         return call("relationships", { emptyList() }) {
-            p.relationships().map { Line(hex(it.patron), it.series) }
+            p.relationships().map {
+                val k = hex(it.patron)
+                Line(Named(k, names[k]), it.series)
+            }
         }
     }
 
@@ -1949,21 +1975,26 @@ object Kernel {
         val p = participant ?: return null to "the kernel is not up yet"
         val who = runCatching { unhex(patronHex) }.getOrNull()
             ?: return null to "not a key: ${patronHex.take(16)}…"
+        val names = aliases(p)
+        fun named(b: ByteArray): Named {
+            val k = hex(b)
+            return Named(k, names[k])
+        }
         return call("cost_of_leaving", { e -> front.note("· cost refused: ${e.reason}"); null to e.reason }) {
             val k = p.costOfLeaving(who)
             Cost(
                 losing = k.losing.map {
                     Lost(
                         resource = hex(it.resource),
-                        node = hex(it.node),
-                        owner = hex(it.owner),
+                        node = named(it.node),
+                        owner = named(it.owner),
                         serviceType = it.serviceType,
                         instance = it.instance,
                         hostLeaves = it.reason == uniffi.rhtn_ffi.LossReason.HOST_LEAVES,
                     )
                 },
                 keeping = k.keeping.toInt(),
-                leaving = k.leaving.map { w -> hex(w) },
+                leaving = k.leaving.map { w -> named(w) },
                 limits = k.limits.map { l ->
                     when (l) {
                         is uniffi.rhtn_ffi.CostLimit.PredicateNotHeld -> Limit.PredicateNotHeld

@@ -44,7 +44,7 @@ class LeavingActivity : Activity() {
     private lateinit var leave: Button
 
     /** The patron whose cost is on screen, and whether the button is armed. */
-    private var chosen: String? = null
+    private var chosen: Kernel.Named? = null
     private var armed = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -105,20 +105,20 @@ class LeavingActivity : Activity() {
     }
 
     /** One line, tappable: tapping it asks what leaving it would cost. */
-    private fun row(l: Kernel.Line): TextView = mono(Leaving.line(l)).apply {
+    private fun row(l: Kernel.Line): TextView = body(Leaving.line(l)).apply {
         setPadding(0, 20, 0, 20)
         isClickable = true
         setOnClickListener { cost(l.patron) }
     }
 
-    private fun cost(patron: String) {
+    private fun cost(patron: Kernel.Named) {
         chosen = patron
         armed = false
         warning.text = "working it out…"
         leave.visibility = android.view.View.GONE
         said.text = ""
         Thread({
-            val (c, why) = Kernel.costOfLeaving(patron)
+            val (c, why) = Kernel.costOfLeaving(patron.who)
             runOnUiThread {
                 if (isFinishing || chosen != patron) return@runOnUiThread
                 if (c == null) {
@@ -127,7 +127,7 @@ class LeavingActivity : Activity() {
                     // with reads differently from a kernel that has not
                     // come up, and the screen is not the place to decide
                     // which happened
-                    warning.text = "No cost for ${patron.take(Leaving.SHORT)}…: $why"
+                    warning.text = "No cost for ${Leaving.party(patron)}: $why"
                     leave.visibility = android.view.View.GONE
                     return@runOnUiThread
                 }
@@ -155,7 +155,7 @@ class LeavingActivity : Activity() {
         leave.visibility = android.view.View.GONE
         said.text = "leaving…"
         Thread({
-            val out = Kernel.departFrom(patron)
+            val out = Kernel.departFrom(patron.who)
             runOnUiThread {
                 if (isFinishing) return@runOnUiThread
                 said.text = out

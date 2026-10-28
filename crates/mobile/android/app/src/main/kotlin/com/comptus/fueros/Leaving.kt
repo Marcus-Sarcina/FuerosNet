@@ -40,9 +40,27 @@ object Leaving {
      */
     const val SHORT = 12
 
+    /**
+     * **A party, named**: the alias this device was told, and the keyhash
+     * with it [author, 2026-10-28].
+     *
+     * **Both, never one.** The keyhash alone is no way to recognise
+     * somebody before an act that cannot be undone, which is what this
+     * screen showed until the author ruled otherwise. The alias alone is
+     * no way either: it is what a party signed about themselves, nothing
+     * stops two of them signing the same, and it is this device's
+     * received copy rather than a fact. So the name leads and the
+     * keyhash settles it.
+     */
+    fun party(n: Kernel.Named): String =
+        if (n.alias.isNullOrBlank()) {
+            "${n.who.take(SHORT)}…"
+        } else {
+            "${n.alias}, ${n.who.take(SHORT)}…"
+        }
+
     /** One line this key holds, as the roll draws it. */
-    fun line(l: Kernel.Line): String =
-        "${l.patron.take(SHORT)}…   series ${l.series}"
+    fun line(l: Kernel.Line): String = "${party(l.patron)}   series ${l.series}"
 
     /**
      * What to say where this key is under no patron at all.
@@ -104,10 +122,10 @@ object Leaving {
      */
     fun lost(r: Kernel.Lost): String {
         val why = if (r.hostLeaves) {
-            "the node serving it leaves your horizon: ${r.node.take(SHORT)}…"
+            "the node serving it leaves your horizon: ${party(r.node)}"
         } else {
-            "its owner leaves your horizon: ${r.owner.take(SHORT)}… — " +
-                "the node stays, and admission is the owner's to gate"
+            "its owner leaves your horizon: ${party(r.owner)} — " +
+                "the node stays, and admission is theirs to gate"
         }
         val named = r.instance.ifBlank { r.resource.take(SHORT) + "…" }
         return "$named   ${r.serviceType}\n    $why"
@@ -174,7 +192,7 @@ object Leaving {
             parts.add("")
             parts.add(
                 "Out of your horizon: " +
-                    c.leaving.joinToString(", ") { "${it.take(SHORT)}…" },
+                    c.leaving.joinToString(", ") { it.alias ?: "${it.who.take(SHORT)}…" },
             )
         }
         val why = limits(c)
@@ -192,12 +210,13 @@ object Leaving {
      * having been read. It is two taps because it is not undoable, not
      * because anybody must approve.
      */
-    fun button(patron: String, armed: Boolean): String =
-        if (armed) {
-            "Tap again to leave ${patron.take(SHORT)}…"
-        } else {
-            "Leave ${patron.take(SHORT)}…"
-        }
+    fun button(patron: Kernel.Named, armed: Boolean): String {
+        // **the name alone on the button**, the keyhash being on the row
+        // above and in the warning: a button is read at a glance and a
+        // prefix of a hash is not read at all
+        val who = patron.alias ?: "${patron.who.take(SHORT)}…"
+        return if (armed) "Tap again to leave $who" else "Leave $who"
+    }
 
     /** Said every time, because it is true every time. */
     const val LIMIT_PREDICATE =
