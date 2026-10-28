@@ -124,6 +124,23 @@ the orb's upper right rather than overlapping its edge.
 **Resources carry their own unseen counts** in the subnet view, one per
 block, as the rail's icons do.
 
+**The container is built, 2026-10-28** (`ShellActivity`, with [`Chrome`]
+deciding and [`Palette`] colouring): one screen, the russet rail down the
+left and the bar along the foot, the content between them changing, and
+the places that take the whole screen hiding both. **It is reached from
+Home while it is partial** rather than being the launcher, since making
+it the way in before it can draw the content views would take screens
+away; one line moves it when they land. **The platform's chrome is
+gone** with it — no title bar saying *Fueros* above the design, and the
+system bars in the shell's own colours rather than a light grey bar under
+a dark foot.
+
+**What the rail cannot draw yet**, each named on the screen rather than
+faked: the unseen counts, nothing tracking read state anywhere; the
+crowns, the kernel exporting no per-subnet standing; and the content
+itself, which is the next piece. The orbs, the foot and the chrome rule
+are real.
+
 **Subnet view** is what a subnet's icon opens: content from that subnet
 alone, the content area split between navigation buttons to that subnet's
 resources and a scrolling view of its chat — **a BBS-style single board**,
@@ -469,7 +486,7 @@ and what each owes are unchanged.
 
 | Element | Beneath | Owes |
 |---|---|---|
-| **Appearance: dark or light** [author, 2026-10-27], dark being what a person meets first | **Owed**: the shell's own, no kernel call | |
+| **Appearance: dark or light** [author, 2026-10-27], dark being what a person meets first | **Built, 2026-10-28** (`Palette`): both sets, dark in force, one assignment restyling the shell. The dark set is sampled from the artboards; **the light set is derived rather than drawn** and wants redrawing. **Owed**: the switch itself, which is an Options row | |
 | Retention: the years this device declares at its intent, stated in the brief | `retention_years`, `set_retention_years` (refused during a ceremony); the field-test build takes it from the provision | design §7.5.1 |
 | Verifier limits, seal cost | **Owed**: `Config::default()` fixed at start | `capability-matrix.md` §1 |
 | Wake endpoint: the user's chosen service, handed in as URL and key, withdrawable | `wake(Some(..))`, `wake(None)` | `light-client-requirements.md` §4.1 |

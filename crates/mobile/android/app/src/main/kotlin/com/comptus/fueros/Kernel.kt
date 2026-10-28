@@ -849,6 +849,26 @@ object Kernel {
     }
 
     /** The subnets this device holds a position in, labelled. */
+    /**
+     * **This person's own name for the foot, and their keyhash.**
+     *
+     * **There is no default alias at the network level** [found
+     * 2026-10-28]: `wire-format.md` §7.11 profiles are published *per
+     * subnet* — field 2 is the subnet and kind 0 is the subject's own
+     * profile there — so a name that holds everywhere is a shell notion
+     * and not an object. The author's ruling of 2026-10-27 is one
+     * default made at creation with a per-subnet override; until the
+     * shell holds that default, this answers with the first per-subnet
+     * name this key has published and the keyhash where it has published
+     * none.
+     */
+    fun ownAlias(): Pair<String?, String> {
+        val p = participant ?: return null to ""
+        val me = call("me", { "" }) { hex(p.me()) }
+        val named = scopes().firstNotNullOfOrNull { it.ownAlias?.takeIf { a -> a.isNotBlank() } }
+        return named to me
+    }
+
     fun scopes(): List<Meet.Scope> {
         val p = participant ?: return emptyList()
         return call("subnetRows", { emptyList() }) {

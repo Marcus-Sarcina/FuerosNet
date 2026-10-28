@@ -16345,3 +16345,54 @@ member of a subnet it cannot enumerate; where the scrollback lives and
 how a client that was away gets what it missed; and how long a node keeps
 a board. The first is the one the mechanism hangs on — a node that holds
 a board holds content, where payload leaves it holding ciphertext.
+
+### 2026-10-28 (the shell gets a container and a palette of its own)
+
+**The drawn design is a different shape from the app**, not more screens
+for it: thirteen Activities with one screen each and no chrome of their
+own, against one screen with a rail and a foot that persist and content
+that changes between them. So `ShellActivity` is built beside the old
+app rather than over it, reached from a row on Home — making it the
+launcher before it can draw the content views would take screens away,
+and one line moves it when they land.
+
+**`Chrome` decides and the Activity draws.** Which places keep the rail
+and the foot, what the rail holds and in what order, which crown an orb
+wears, what an orb's mark is when no picture has arrived, and what the
+foot says are all in a file that touches no view and has a test. The
+author's rulings are what it holds: a thread hides the side and bottom
+navigation; only the highest of three standings is drawn, root before
+node before subordinates; and a name that has not been received is never
+shown, the keyhash standing in.
+
+**The palette is the first colour this app has chosen.** It has been
+drawing in the platform's defaults — a light ground it never picked, a
+`TextView`'s own ink at 4.0:1 and `Color.GRAY` at 3.1:1, both under the
+floor, measured once by sampling a photograph of a running phone. The
+dark set is sampled from the artboards; the light set is derived from
+the same hues and wants redrawing, existing because the ruling says the
+option must.
+
+**Two findings came out of testing the contrast rather than asserting
+it.** The artboards' third grey `#6E757E` is 3.55:1 on the dark ground
+and **every value between it and `sub` is also under the floor** — so
+there is no third grey for text, only two, and it is kept for rules and
+for marks that say nothing. And `sub` is the dimmest text the floor
+allows *on the ground*: any surface raised above the ground is already
+too close to it, and the value that would fix `sub` on a control is
+darker than the ground itself. So the palette declares **which ink goes
+on which surface** rather than offering a free cross-product, and a pair
+a screen wants but the list does not name is a pair nothing checked.
+
+**And the platform's chrome went with it**: no title bar saying *Fueros*
+above the design, and the system bars in the shell's own colours, where
+the first thing the drawn rail met was a light grey navigation bar under
+its dark foot.
+
+**A crash the screenshot caught and no unit test could**: the system
+bars' appearance was set before `setContentView`, and
+`window.insetsController` is null until the decor view exists. Driven on
+an emulator, which is how this kind of work has to be checked.
+
+Android tests 277, three gaps named on the screen rather than faked: the
+unseen counts, the crowns' standing, and the content views.

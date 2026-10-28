@@ -73,6 +73,11 @@
         <!-- F: a resource's own page, in the frame `ResourcePage` sets out.
              Reached from the catalog. -->
         <activity android:name=".ResourceActivity" android:exported="false" />
+        <!-- The shell of the drawn design: one screen, a rail and a foot
+             that persist, the content between them changing. Reached from
+             Home while it is partial; it becomes the launcher when it
+             carries more than Home does. -->
+        <activity android:name=".ShellActivity" android:exported="false" />
         <!-- H3's provisioning pages, and the frame the node's own pages are
              presented in (PRD-12, PRD-13; §8.3). The frame is a separate
              Activity so that what it holds is a WebView and nothing else. -->

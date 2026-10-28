@@ -41,6 +41,11 @@ class HomeActivity : Activity() {
      *  to have an instance at all. Gating the only way in on already being
      *  in would leave no way in. */
     private val destinations = listOfNotNull(
+        // **the drawn design, while it is partial** [2026-10-28]: it is
+        // a row here rather than the launcher because making it the way
+        // in now would take away screens it cannot yet draw. One line
+        // moves it when the content views have landed.
+        "The shell (in progress)" to { open(ShellActivity::class.java) },
         "Conversations" to { open(ConversationsActivity::class.java) },
         "Meet" to { open(MeetActivity::class.java) },
         "People" to { open(PeopleActivity::class.java) },

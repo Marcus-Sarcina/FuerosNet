@@ -19662,3 +19662,17 @@ so had `response_of` kept its own lenient split, a chunked answer on the
 host path would have reached a caller with its chunk sizes in the body.
 The two changes had to land together, which is the argument for one
 parser stated as a fact rather than a principle.
+
+
+## A port collision in the daemon tests [observed 2026-10-28]
+
+`a_node_enrolled_with_no_subtree_claimed_serves_and_serves_again_after_a_restart`
+failed one gate run with `traversal socket: Address already in use`
+(`node/src/runtime.rs`), and passed alone immediately after. Another test
+in the same parallel run had the port.
+
+**Not investigated**, the task in hand being the shell's container; it
+joins `dec_02_seeded_mutations` as a known load-dependent failure. The
+shape of a fix is the usual one — bind port 0 and read back what the
+kernel gave — but which tests choose ports and whether any of them must
+know the number in advance is what would have to be read first.
