@@ -39,7 +39,7 @@ template. That fixes the navigation, and the sections below become screens
 
 | Part | What it holds |
 |---|---|
-| **The rail**, down the left | Direct messages and the proof-of-presence interface, pinned at the top; below them a scrolling selection of the subnets this person has joined. **Each icon carries its unseen count** as a superscript, direct messages included [author, 2026-10-27] |
+| **The rail**, down the left | Direct messages and the proof-of-presence interface, pinned at the top; below them a scrolling selection of the subnets this person has joined. **Each carries its unseen count** at its upper right, direct messages included [author, 2026-10-27] |
 | **The foot**, across the bottom | This person's icon beside a horizontal bar carrying their alias. The icon goes to **Options** (below), the bar **goes home**, which is where this departs from Discord |
 | **The content**, everything else | One of the three views below, or a thread |
 
@@ -96,18 +96,30 @@ their apexes, which is what the mark is made of:
 | A **golden circlet** | An instance of this person's runs here |
 | A **full pointed crown** | This person is the subnet's root |
 
-**The orb sits in its crown as in a stand** [author, 2026-10-27]: the
-subnet's mark is a circle, and the crown is small and low beneath it, its
-back passing behind the orb's foot and its front sweep crossing just over
-it. **The circlets are plain bands**, nothing on them; only the full crown
-carries points, which branch as the mark's own trees do. **The three
-standings overlap** — a root usually has subordinates — and the drawing
-shows the highest that applies, root before operator before subordinates,
-**which is an assumption and not a ruling**.
+**The orb flowers out of its crown** [author, 2026-10-27], which is the
+whole of how the two are proportioned. The subnet's mark is a **circle
+filling the rail**, a point clear of each edge; **the crown is far smaller**
+and sits on the orb's lower face, its band about three fifths of the orb's
+width. So the orb is not encircled: the crown is a cup at its foot.
+
+**The circlets are plain bands**, silver or gold, nothing on them. **Only
+the full crown carries points**, and they are **plain triangles** as the
+mark's own are, leaning with the ellipse they stand on. **Of its eight,
+only the three at the front are visible**; the rest, and the back of the
+band, are behind the orb's body and never drawn to the screen.
+
+**The three standings overlap** — a root usually has subordinates — and the
+drawing shows the highest that applies, root before operator before
+subordinates, **which is an assumption and not a ruling**.
 
 **The rail is a russet field** [author, 2026-10-27], the ground the mark is
 presented on, so the crowns read as gold and silver on their own colour
 rather than on a neutral dark.
+
+**Two things the orb's size settles by itself**, there being no gap left
+either side of it: the subnet in view is marked by a ring drawn inside its
+own edge rather than by a pip beside it, and an unseen count sits inside
+the orb's upper right rather than overlapping its edge.
 
 **Resources carry their own unseen counts** in the subnet view, one per
 block, as the rail's icons do.
