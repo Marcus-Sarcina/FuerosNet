@@ -1254,3 +1254,107 @@ fn what_is_held_for_a_prerequisite_is_bounded_and_the_reconstructible_goes_first
 fn what_is_held_for_a_prerequisite_is_bounded_at_the_production_ceiling() {
     held_is_bounded_and_the_reconstructible_goes_first(Table::new);
 }
+
+/// Bob under alice, beside sibling w1, over its own subordinate w2 — with
+/// the adoption's txid kept, which is what names the binding to leave.
+fn one_patron_one_sibling_one_subordinate() -> (World, Table, Txid) {
+    let mut w = World::new(&["alice", "bob", "w1", "w2"]);
+    let f = w.meet("alice", "bob");
+    let a1 = w.adopt("bob", "alice", f.txid, 1);
+    let fw = w.meet("alice", "w1");
+    let aw = w.adopt("w1", "alice", fw.txid, 3);
+    let fm = w.meet("bob", "w2");
+    let am = w.adopt("w2", "bob", fm.txid, 9);
+    let mut t = Table::new();
+    for r in [&f, &a1, &fw, &aw, &fm, &am] {
+        apply(&mut t, &w, r);
+    }
+    let adoption = a1.txid;
+    (w, t, adoption)
+}
+
+// acceptance: TOP-52
+#[test]
+fn the_horizon_without_a_binding_is_the_horizon_after_actually_leaving_it() {
+    let (mut w, mut t, adoption) = one_patron_one_sibling_one_subordinate();
+    let (n, p, sib, sub) = (w.kh("bob"), w.kh("alice"), w.kh("w1"), w.kh("w2"));
+
+    let now = t.horizon(&n, 2);
+    let hypothetical = t.horizon_without(&n, 2, &[adoption]);
+
+    // the question is worth asking: the two differ
+    assert!(now.contains(&p) && now.contains(&sib));
+    assert!(
+        !hypothetical.contains(&p),
+        "the patron is what leaving loses"
+    );
+    assert!(
+        !hypothetical.contains(&sib),
+        "and the sibling reached only through it"
+    );
+    assert!(
+        hypothetical.contains(&sub),
+        "what it reaches downward is its own, and stays"
+    );
+
+    // **and the answer is the truth.** The warning is only worth
+    // printing if the hypothetical matches what the departure actually
+    // does — so the test departs and compares, rather than asserting a
+    // set somebody wrote down beside the one the walk produces.
+    let dep = w.depart(
+        "bob",
+        "alice",
+        Seqno {
+            series: 1,
+            counter: 1,
+        },
+    );
+    assert_eq!(apply(&mut t, &w, &dep).applied, Applied::Ended);
+    assert_eq!(
+        t.horizon(&n, 2),
+        hypothetical,
+        "what was predicted is what happened"
+    );
+}
+
+// acceptance: TOP-53
+#[test]
+fn leaving_a_binding_keeps_whatever_another_binding_still_reaches() {
+    let mut w = World::new(&["alice", "bob", "carol", "w1", "w2"]);
+    let f = w.meet("alice", "bob");
+    let a1 = w.adopt("bob", "alice", f.txid, 1);
+    let fw = w.meet("alice", "w1");
+    let aw = w.adopt("w1", "alice", fw.txid, 3);
+    let fc = w.meet("carol", "bob");
+    let a2 = w.adopt("bob", "carol", fc.txid, 2);
+    let fx = w.meet("carol", "w2");
+    let ax = w.adopt("w2", "carol", fx.txid, 4);
+    let mut t = Table::new();
+    for r in [&f, &a1, &fw, &aw, &fc, &a2, &fx, &ax] {
+        apply(&mut t, &w, r);
+    }
+    let (n, p1, p2, w1, w2) = (
+        w.kh("bob"),
+        w.kh("alice"),
+        w.kh("carol"),
+        w.kh("w1"),
+        w.kh("w2"),
+    );
+
+    let without = t.horizon_without(&n, 2, &[a1.txid]);
+    assert!(!without.contains(&p1), "the patron left is gone");
+    assert!(!without.contains(&w1), "with the siblings under it");
+    assert!(
+        without.contains(&p2) && without.contains(&w2),
+        "the other patron and its subtree are untouched: an ending is one edge"
+    );
+
+    // **an edge nobody holds costs nothing.** A txid that names no
+    // binding of this node leaves the horizon exactly as it was, so a
+    // stale identifier cannot silently shrink the warning.
+    assert_eq!(
+        t.horizon_without(&n, 2, &[fx.txid]),
+        t.horizon(&n, 2),
+        "a txid that is not an adoption of this node changes nothing"
+    );
+}

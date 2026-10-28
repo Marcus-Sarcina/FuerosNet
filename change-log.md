@@ -15927,3 +15927,57 @@ met nobody having nothing in its archive to back up; that path is
 `install`'s and is tested where it lives.
 
 Workspace tests 861, Android 236, the Kotlin binding regenerated.
+
+### 2026-10-28 (what leaving costs, computed from one walk and quoted as a floor)
+
+**The warning `light-client-requirements.md` §6 wants before an authority
+relationship ends** — *warn if the resulting topology change will revoke
+access to resources the user currently uses* — now has a computation
+behind it, which it did not on either side.
+
+**It is a difference between two horizons, and both come out of one
+walk.** The topology table's relations — patrons, subordinates, siblings,
+and the horizon over them — were generalised over an optional set of
+adoptions to leave out, and the existing four delegate to that with an
+empty set. The point of doing it this way rather than writing a second
+walk beside the first is that the hypothetical cannot disagree with the
+real thing: a region computed one way and a what-if computed another
+would be free to differ, and nothing would reveal which was wrong until
+somebody acted on the answer. The archive test departs for real and
+asserts the prediction equals what happened.
+
+**What a client can honestly say is a lower bound**, and it says so. The
+resources it can name are the ones its catalog view holds, and the reason
+they go is topological: the node an entry was served by leaves the
+horizon, or the entry's owner does. **Access itself is the resource's own
+predicate**, evaluated by its host against the asker's reach — no client
+holds one, so a host still in view may refuse once the line is gone.
+That limit is returned beside the list rather than left to be inferred,
+along with the stale portion, the truncated one, and the node in the
+horizon whose catalog was never swept. §6's own words are why: *access
+follows the org chart, which is correct and will surprise people*.
+
+**A degenerate case worth the name it was given.** A client's own binding
+reaches its propagated copy only by propagation — the serving node floods
+the adoption and the client folds it back — so a client that has not
+received its own adoption has no edge to subtract. That answer is
+`NotInTable` rather than a cost of zero, because a warning that cannot be
+computed has to look different from one that came to nothing. It is what
+the four bare `rhtnp` processes produce, and the live test asserts it.
+
+**Refused where the departure would be refused**, by the same name: a
+figure shown for a change that cannot happen is read as the price of an
+act the person cannot perform. A transfer is the same call named on the
+former patron, the adoption that carries the transfer ending that line; a
+disavowal is minted only by a node holding its own seed, so it is the
+operator's surface and not this one.
+
+**And counted by resource rather than by entry**, which the first cut got
+wrong: the same resource can be served by two nodes, and one of them
+leaving is the loss of one way to it rather than of the resource. A list
+that counted entries would tell somebody they were about to lose
+something they would still have — the one error a warning cannot afford,
+since it is read as a reason not to act.
+
+Five catalogue entries (TOP-52, TOP-53, RSC-53..55), workspace tests 869,
+Android 236, the Kotlin binding regenerated.

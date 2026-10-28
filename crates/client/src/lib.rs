@@ -70,6 +70,7 @@ pub mod diag;
 pub mod durable;
 pub mod horizon;
 pub mod keys;
+pub mod leaving;
 pub mod local;
 pub mod notice;
 pub mod payload;

@@ -301,6 +301,13 @@ fn a_subordinate_departs_its_patron_and_cannot_depart_twice() {
             .any(|l| l.contains("NoRelationship")),
         "and leaving one it never had is refused by name"
     );
+    assert!(
+        set.get("bob")
+            .tell(&format!("cost-of-leaving {a}"))
+            .iter()
+            .any(|l| l.contains("NoRelationship")),
+        "and so is asking what leaving it would cost"
+    );
 
     let pop = ceremony(&mut set, &cast, "alice", "bob", "carol", "w1");
     let back = line(set.get("bob").must("back-pointers"), "back-pointers ");
@@ -333,6 +340,26 @@ fn a_subordinate_departs_its_patron_and_cannot_depart_twice() {
             .must("where")
             .contains(&format!("subnet {t}")),
         "and bob sits in alice's subnet"
+    );
+
+    // **WHAT IT COSTS, ASKED BEFORE LEAVING** (§6). These are four bare
+    // processes with no serving node between them, so nothing
+    // propagated bob's own adoption back to him: his copy of the
+    // topology holds no edge to subtract, and the answer says so rather
+    // than reporting a cost of nothing. A warning that cannot be
+    // computed has to look different from one that came to zero.
+    let cost = set.get("bob").must(&format!("cost-of-leaving {a}"));
+    assert!(
+        cost.iter().any(|l| l.contains("NotInTable")),
+        "the limit names why there is no figure: {cost:?}"
+    );
+    assert!(
+        cost.iter().any(|l| l.contains("PredicateNotHeld")),
+        "and the one that is always true is always there: {cost:?}"
+    );
+    assert!(
+        !cost.iter().any(|l| l.starts_with("losing")),
+        "nothing is claimed lost on a copy that cannot say: {cost:?}"
     );
 
     // **leaving needs nobody**: no body proposed, no signature asked for

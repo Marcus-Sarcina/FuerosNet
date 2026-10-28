@@ -14827,5 +14827,126 @@
     "then": "The rebound instance is told its relationships again before anything else reaches it; the plane of the one no longer hosted is gone and nothing is pushed to it; and what the node reports it hosts is what its configuration now names.",
     "oracle": "behaviour",
     "interpretation": null
+  },
+  {
+    "id": "TOP-52",
+    "area": "topology",
+    "gap": "topology",
+    "title": "The horizon without a binding is the horizon after leaving it",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "light-client-requirements.md §6"
+    ],
+    "rule": [
+      {
+        "where": "light-client-requirements.md §6",
+        "text": "warn if the resulting topology change will revoke access to resources the user\ncurrently uses"
+      }
+    ],
+    "given": "A table holding a node under one patron, beside a sibling under the same patron, over a subordinate of its own.",
+    "when": "The horizon is asked what it would be without the adoption that bound the node to its patron, and the node then departs that patron for real.",
+    "then": "The hypothetical drops the patron and the sibling reached only through it, keeps the subordinate, and equals the horizon the departure actually produces. Both answers come out of one walk: a region computed one way and a hypothetical computed another could disagree, and nothing would reveal which was wrong until somebody acted on it.",
+    "oracle": "behaviour",
+    "interpretation": "§6 states the warning and not how it is computed. The requirement is unmeetable unless a client can ask what a topology change would do before making it, so the hypothetical is the rule's own precondition, and its fidelity to the real change is what makes the warning true rather than merely present."
+  },
+  {
+    "id": "TOP-53",
+    "area": "topology",
+    "gap": "topology",
+    "title": "Ending one binding leaves whatever another binding still reaches",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "light-client-requirements.md §6",
+      "wire-format.md §4.2"
+    ],
+    "rule": [
+      {
+        "where": "light-client-requirements.md §6",
+        "text": "Departure is the common case, not the only one."
+      }
+    ],
+    "given": "A node under two patrons, each patron with another subordinate of its own.",
+    "when": "The horizon is asked what it would be without the adoption under the first patron.",
+    "then": "The first patron and the siblings under it are gone; the second patron and its subtree are untouched, because an ending is one edge. A transaction identifier naming no binding of this node changes nothing, so a stale identifier cannot silently shrink what the warning says is at stake.",
+    "oracle": "behaviour",
+    "interpretation": null
+  },
+  {
+    "id": "RSC-53",
+    "area": "resources",
+    "gap": "resources",
+    "title": "What leaving costs is the resources reachable now and not after",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "light-client-requirements.md §6",
+      "light-client-requirements.md §8"
+    ],
+    "rule": [
+      {
+        "where": "light-client-requirements.md §6",
+        "text": "Before any user-initiated change that ends or alters an authority relationship,\nwarn if the resulting topology change will revoke access to resources the user\ncurrently uses."
+      },
+      {
+        "where": "light-client-requirements.md §8",
+        "text": "Access is gated by current membership in the resource owner's trust horizon"
+      }
+    ],
+    "given": "A client adopted under a patron, holding its own adoption in its propagated copy, with catalog entries served and owned in each combination of itself and that patron.",
+    "when": "The cost of leaving the patron is asked for.",
+    "then": "The patron's resource is named as lost, with the node it was reached through and the reason that node leaves the horizon; a resource whose host stays in view and whose owner goes is lost for that reason instead, which is a different thing to be told. Both counts are by resource and not by entry: a resource another node in view still serves is kept, and goes only when the last way to it closes. The answer is computed on demand from the copy the client already holds and retained nowhere.",
+    "oracle": "behaviour",
+    "interpretation": "§6 names the resources an ending revokes, and a resource is revoked when no way to it survives. Counting entries would report the loss of one of several hosts as the loss of the resource, which is the one error a warning cannot afford: it is read as a reason not to act."
+  },
+  {
+    "id": "RSC-54",
+    "area": "resources",
+    "gap": "resources",
+    "title": "A cost carries its own limits rather than reading as the whole answer",
+    "milestone": "after-5",
+    "kind": "robustness",
+    "spec": [
+      "light-client-requirements.md §6",
+      "light-client-requirements.md §8"
+    ],
+    "rule": [
+      {
+        "where": "light-client-requirements.md §6",
+        "text": "Access follows the org chart, which is correct and will surprise\npeople"
+      },
+      {
+        "where": "light-client-requirements.md §8",
+        "text": "Do not present resources the user cannot use."
+      }
+    ],
+    "given": "A client whose catalog portion for a node is marked stale and truncated, and infrastructure in its horizon whose catalog has never been swept.",
+    "when": "The cost of leaving is asked for.",
+    "then": "The list is still given, and every reason it is a floor is given with it: the stale portion, the truncated one, the unswept node, and that access is a resource's own predicate which this client holds none of. A host still in view may refuse once the line is gone, so a list without that limit beside it would read as the whole cost.",
+    "oracle": "behaviour",
+    "interpretation": "§6 requires the warning, not a claim of completeness. A client holds no predicate and cannot evaluate one, so the honest answer is a lower bound stated as a lower bound; a stale portion shown as stale is the same obligation read from the other side, and is why a partial answer is still worth giving."
+  },
+  {
+    "id": "RSC-55",
+    "area": "resources",
+    "gap": "resources",
+    "title": "No cost is quoted for a departure that would be refused",
+    "milestone": "after-5",
+    "kind": "negative",
+    "spec": [
+      "light-client-requirements.md §6"
+    ],
+    "rule": [
+      {
+        "where": "light-client-requirements.md §6",
+        "text": "Before any user-initiated change that ends or alters an authority relationship"
+      }
+    ],
+    "given": "A client holding one relationship, and a party it holds none with.",
+    "when": "The cost of leaving that other party is asked for.",
+    "then": "It is refused by the same name the departure itself is refused by, rather than answered with a cost of nothing. A figure shown for a change that would not happen is worse than no figure: the person reads it as the price of an act they cannot perform.",
+    "oracle": "behaviour",
+    "interpretation": null
   }
 ]

@@ -558,6 +558,25 @@ impl Instrument {
                 .iter()
                 .map(|r| format!("relationship {} series {}", hex(&r.patron), r.series))
                 .collect()),
+            // what leaving costs, before leaving: §6's warning, in the
+            // lines a test can read
+            ["cost-of-leaving", patron] => {
+                let k = c
+                    .cost_of_leaving(id(patron)?)
+                    .map_err(|e| e.reason().to_string())?;
+                Ok(std::iter::once(format!("keeping {}", k.keeping))
+                    .chain(k.leaving.iter().map(|w| format!("leaving {}", hex(w))))
+                    .chain(k.losing.iter().map(|l| {
+                        format!(
+                            "losing {} through {} because {:?}",
+                            hex(&l.resource),
+                            hex(&l.node),
+                            l.reason
+                        )
+                    }))
+                    .chain(k.limits.iter().map(|v| format!("limit {v:?}")))
+                    .collect())
+            }
             ["depart", patron] => Ok(vec![format!(
                 "departed {}",
                 hex(&c

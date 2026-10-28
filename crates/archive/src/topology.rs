@@ -401,13 +401,26 @@ impl Table {
         &self.bindings
     }
 
-    fn open_bindings(&self) -> impl Iterator<Item = &Binding> {
-        self.bindings.iter().filter(|b| b.open())
+    /// The open bindings, less the ones `skip` names.
+    ///
+    /// **One iterator behind every relation**, so that asking what the
+    /// topology would be without a binding and asking what it is now are
+    /// the same question with one argument different. A second walk
+    /// written beside this one would be free to disagree with it, and the
+    /// disagreement would be invisible until somebody left a patron.
+    fn open_except<'a>(&'a self, skip: &'a [Txid]) -> impl Iterator<Item = &'a Binding> {
+        self.bindings
+            .iter()
+            .filter(move |b| b.open() && !skip.contains(&b.adoption))
     }
 
     /// The patrons of `node` across its open bindings.
     pub fn patrons(&self, node: &Keyhash) -> BTreeSet<Keyhash> {
-        self.open_bindings()
+        self.patrons_except(node, &[])
+    }
+
+    fn patrons_except(&self, node: &Keyhash, skip: &[Txid]) -> BTreeSet<Keyhash> {
+        self.open_except(skip)
             .filter(|b| b.node == *node)
             .map(|b| b.patron)
             .collect()
@@ -415,7 +428,11 @@ impl Table {
 
     /// The subordinates of `patron` across its open bindings.
     pub fn subordinates(&self, patron: &Keyhash) -> BTreeSet<Keyhash> {
-        self.open_bindings()
+        self.subordinates_except(patron, &[])
+    }
+
+    fn subordinates_except(&self, patron: &Keyhash, skip: &[Txid]) -> BTreeSet<Keyhash> {
+        self.open_except(skip)
             .filter(|b| b.patron == *patron)
             .map(|b| b.node)
             .collect()
@@ -423,9 +440,13 @@ impl Table {
 
     /// Siblings share a patron (design §3.4).
     pub fn siblings(&self, node: &Keyhash) -> BTreeSet<Keyhash> {
+        self.siblings_except(node, &[])
+    }
+
+    fn siblings_except(&self, node: &Keyhash, skip: &[Txid]) -> BTreeSet<Keyhash> {
         let mut out = BTreeSet::new();
-        for p in self.patrons(node) {
-            out.extend(self.subordinates(&p));
+        for p in self.patrons_except(node, skip) {
+            out.extend(self.subordinates_except(&p, skip));
         }
         out.remove(node);
         out
@@ -439,14 +460,32 @@ impl Table {
     /// Every node within an `h`-edge walk of `me` over adoption and sibling
     /// edges, `me` included (design §15.1).  Peering edges do not count.
     pub fn horizon(&self, me: &Keyhash, h: usize) -> BTreeSet<Keyhash> {
+        self.horizon_except(me, h, &[])
+    }
+
+    /// **The horizon as it would be with bindings ended**: what a
+    /// departure, a transfer or a disavowal of the relationships the
+    /// adoptions in `ending` opened would leave behind
+    /// (`light-client-requirements.md` §6).
+    ///
+    /// The walk is the same walk, which is the point: a region computed
+    /// one way and a hypothetical computed another could differ, and the
+    /// person reading the warning would have no way to tell which was
+    /// wrong. What ends is the named edges alone — the parties they
+    /// reached are gone only where nothing else reaches them.
+    pub fn horizon_without(&self, me: &Keyhash, h: usize, ending: &[Txid]) -> BTreeSet<Keyhash> {
+        self.horizon_except(me, h, ending)
+    }
+
+    fn horizon_except(&self, me: &Keyhash, h: usize, skip: &[Txid]) -> BTreeSet<Keyhash> {
         let mut seen: BTreeSet<Keyhash> = BTreeSet::from([*me]);
         let mut frontier: BTreeSet<Keyhash> = seen.clone();
         for _ in 0..h {
             let mut next = BTreeSet::new();
             for x in &frontier {
-                next.extend(self.patrons(x));
-                next.extend(self.subordinates(x));
-                next.extend(self.siblings(x));
+                next.extend(self.patrons_except(x, skip));
+                next.extend(self.subordinates_except(x, skip));
+                next.extend(self.siblings_except(x, skip));
             }
             frontier = next.difference(&seen).copied().collect();
             seen.extend(frontier.iter().copied());

@@ -3162,6 +3162,38 @@ impl Participant {
         })
     }
 
+    /// **What leaving `patron` would cost** (`light-client-requirements.md`
+    /// §6): the resources this client can reach now and could not after,
+    /// the parties that leave its horizon with the line, and the limits
+    /// of the answer.
+    ///
+    /// **Shown before `depart`, and the shell is expected to show it.**
+    /// §6 wants the person warned before a change that revokes access to
+    /// what they use, and this is the computation that warning is made
+    /// of: the difference between the horizon this client has and the one
+    /// it would have, over the catalog entries it holds.
+    ///
+    /// **A floor, which is why `limits` is not optional.** Access is a
+    /// resource's own predicate, evaluated by its host against the
+    /// asker's reach, and no predicate is held here: a host still in view
+    /// may refuse once the line is gone. `limits` also carries the
+    /// portions that are stale or were truncated, so a partial list is
+    /// shown as partial rather than read as the whole cost.
+    ///
+    /// Refused where this key holds no relationship with `patron` —
+    /// the same refusal `depart` gives, so a cost is never quoted for a
+    /// departure that would not happen.
+    pub fn cost_of_leaving(&self, patron: Id) -> Result<LeavingCost, Refused> {
+        crate::diag::call("cost_of_leaving", || {
+            let p = keyhash(&patron).ok_or_else(|| Refused::new("a patron is 32 bytes"))?;
+            self.handle.with_blocking(move |c| {
+                c.cost_of_leaving(&p)
+                    .map(cost_outward)
+                    .map_err(|a| Refused::new(rhtn_client::diag::abort(&a)))
+            })
+        })
+    }
+
     /// **Leave a patron** (`light-client-requirements.md` §4.2): minted,
     /// signed, appended and posted in one act, because there is nothing to
     /// propose and nobody to ask.
@@ -3175,10 +3207,10 @@ impl Participant {
     /// `reason` is the subject's own code where they give one, carried in
     /// the record and interpreted by nobody here.
     ///
-    /// **What this does not do is tell the person what it costs them.**
-    /// §6 wants the resources an ending revokes listed before it happens,
-    /// and that computation does not exist on either side of this
-    /// boundary yet.
+    /// **What it costs is computed separately and before**:
+    /// [`Participant::cost_of_leaving`] is §6's warning, and this call
+    /// does not repeat it. Nothing here refuses a departure whose cost
+    /// was never asked for — the person is being told, not gated.
     pub fn depart(&self, patron: Id, reason: Option<u64>) -> Result<Id, Refused> {
         crate::diag::call("depart", || {
             let p = keyhash(&patron).ok_or_else(|| Refused::new("a patron is 32 bytes"))?;
@@ -3380,6 +3412,122 @@ pub struct Relationship {
     pub anchor: Id,
     /// How deep under that anchor the position sits.
     pub nibbles: u64,
+}
+
+/// Why one resource goes when a relationship ends.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum LossReason {
+    /// The node that serves it leaves this client's horizon, so there is
+    /// nothing left to ask.
+    HostLeaves,
+    /// The host stays in view and the resource's owner does not.
+    OwnerLeaves,
+}
+
+/// One resource an ending takes away.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct LostResource {
+    /// The resource.
+    pub resource: Id,
+    /// The node its entry came from, which is the node it is reached
+    /// through.
+    pub node: Id,
+    /// Its owner.
+    pub owner: Id,
+    /// Its declared type.
+    pub service_type: String,
+    /// Its instance name.
+    pub instance: String,
+    /// Which of the two reasons applies.
+    pub reason: LossReason,
+}
+
+/// Why the list of what leaving costs is a floor and not the whole
+/// answer.  **Never empty**: the first is always there.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum CostLimit {
+    /// Access is a resource's own predicate and this client holds none
+    /// of them, so a host that stays in view may still refuse.
+    PredicateNotHeld,
+    /// This node's portion of the catalog could not be refreshed on the
+    /// last sweep: what it lists is what it listed then.
+    Stale {
+        /// The node.
+        node: Id,
+    },
+    /// This node held more than one reply's bound, so it serves
+    /// resources this client has never seen.
+    Truncated {
+        /// The node.
+        node: Id,
+    },
+    /// This node is infrastructure in the horizon whose catalog has
+    /// never been swept: what it serves is not in the list at all.
+    Unswept {
+        /// The node.
+        node: Id,
+    },
+    /// The relationship runs on more than one open line in the
+    /// propagated copy and one departure ends one of them: the cost
+    /// shown is of ending them all.
+    SeveralLines {
+        /// How many lines there are.
+        lines: u32,
+    },
+    /// The propagated copy holds no open binding to the patron although
+    /// this key's own archive holds the relationship, so the cost cannot
+    /// be read off the topology.  What the horizon has not been told
+    /// about, it cannot subtract.
+    NotInTable,
+}
+
+/// What ending an authority relationship would cost.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct LeavingCost {
+    /// The resources reachable now and not after, each with its reason.
+    pub losing: Vec<LostResource>,
+    /// How many reachable resources the ending does not touch.
+    pub keeping: u32,
+    /// The parties that leave this client's horizon with the line.
+    pub leaving: Vec<Id>,
+    /// Why this is a floor: see [`CostLimit`].
+    pub limits: Vec<CostLimit>,
+}
+
+/// A cost as the shell is shown it.
+fn cost_outward(c: rhtn_client::leaving::Cost) -> LeavingCost {
+    use rhtn_client::leaving::{Caveat, Why};
+    LeavingCost {
+        losing: c
+            .losing
+            .into_iter()
+            .map(|l| LostResource {
+                resource: id_of(&l.resource),
+                node: id_of(&l.node),
+                owner: id_of(&l.owner),
+                service_type: l.service_type,
+                instance: l.instance,
+                reason: match l.why {
+                    Why::HostLeaves => LossReason::HostLeaves,
+                    Why::OwnerLeaves => LossReason::OwnerLeaves,
+                },
+            })
+            .collect(),
+        keeping: c.keeping as u32,
+        leaving: c.leaving.iter().map(id_of).collect(),
+        limits: c
+            .caveats
+            .into_iter()
+            .map(|v| match v {
+                Caveat::PredicateNotHeld => CostLimit::PredicateNotHeld,
+                Caveat::Stale(n) => CostLimit::Stale { node: id_of(&n) },
+                Caveat::Truncated(n) => CostLimit::Truncated { node: id_of(&n) },
+                Caveat::Unswept(n) => CostLimit::Unswept { node: id_of(&n) },
+                Caveat::SeveralLines(n) => CostLimit::SeveralLines { lines: n as u32 },
+                Caveat::NotInTable => CostLimit::NotInTable,
+            })
+            .collect(),
+    }
 }
 
 /// One candidate's standing under this client's own policy.

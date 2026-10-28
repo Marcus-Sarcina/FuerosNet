@@ -1148,7 +1148,7 @@ fn anothers_key_does_not_open_the_state_and_the_start_is_refused() {
 /// evidence can exist, across four `rhtnp` processes (`rhtn-participant`'s
 /// live tests). What is here is the half a device can be in without a
 /// ceremony behind it, and every answer of it is a value rather than a
-/// panic: a fresh client is asked all eleven and refuses by name.
+/// panic: a fresh client is asked all twelve and refuses by name.
 #[test]
 fn authority_recovery_and_standing_answer_before_there_is_anything_to_answer_about() {
     let shell = Arc::new(Shell::default());
@@ -1215,10 +1215,23 @@ fn authority_recovery_and_standing_answer_before_there_is_anything_to_answer_abo
     assert!(p.recognise(vec![0, 1, 2], vec![], id("bob")).is_err());
     assert!(p.take_recovery_response(vec![0, 1, 2]).is_err());
 
+    // **WHAT LEAVING COSTS, ASKED BEFORE LEAVING.** The same refusal the
+    // departure gives, because a cost quoted for a departure that would
+    // not happen is worse than no cost at all.
+    let no_cost = p
+        .cost_of_leaving(id("bob"))
+        .expect_err("nothing to leave, nothing to cost");
+    assert!(
+        no_cost.reason().contains("NoRelationship"),
+        "refused by the same name: {}",
+        no_cost.reason()
+    );
+
     // every call that takes a keyhash says so when it is handed something
     // else, rather than treating the first 32 bytes of whatever arrived
     for r in [
         p.depart(vec![7], None).err(),
+        p.cost_of_leaving(vec![7]).err(),
         p.recovery_query(vec![7]).err(),
         p.recovery_block(vec![7]).err(),
         p.recognise(vec![0], vec![], vec![7]).err(),
