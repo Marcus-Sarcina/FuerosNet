@@ -991,6 +991,112 @@ impl Participant {
         })
     }
 
+    /// **Start as a key succeeding another one** (design §9.0, §9.1):
+    /// the third door of the first run, where the other two are
+    /// [`Participant::start`] and a start followed by
+    /// [`Participant::restore_backup`].
+    ///
+    /// **The prior key is required and is not optional**, because
+    /// `wire-format.md` §4.1 admits no variant of the `Recovery` block:
+    /// every claim of a predecessor's history carries **both** halves, the
+    /// old key's own signature and a prior counterparty's recognition. A
+    /// device holding no prior seed cannot make one, and what it can do
+    /// instead is start afresh — which is the unlinked path, and abandons
+    /// the standing rather than giving up the unlinkability.
+    ///
+    /// **The archive is optional, and its absence is ordinary**
+    /// (`light-client-requirements.md` §6): *recovery restores standing
+    /// and not history*. Where the person kept their own backup it is
+    /// opened here under the prior identity and the old lines come back
+    /// with it; where they did not, the recovery still carries their
+    /// standing and the history is simply gone. **Neither is presented as
+    /// the other**: what came back is `old_lines`, and a screen that found
+    /// none says so.
+    ///
+    /// `seeds` is the new identity, minted on this device. `prior_seeds`
+    /// is the one being succeeded, which the person kept apart from the
+    /// backup as §2 has them do — the blob opens under it, and a backup
+    /// naming another identity is refused however it opened.
+    ///
+    /// Both copies of a seed are wiped on this side as soon as they are
+    /// read, as [`Participant::start`] wipes its own.
+    #[uniffi::constructor]
+    pub fn recovering(
+        seeds: Vec<u8>,
+        prior_seeds: Vec<u8>,
+        backup: Option<Vec<u8>>,
+        known: Vec<Vec<u8>>,
+        platform: Arc<Platform>,
+    ) -> Result<Participant, Refused> {
+        if prior_seeds.len() != 64 {
+            return Err(Refused::new(format!(
+                "a prior identity is 64 bytes of seed, not {}",
+                prior_seeds.len()
+            )));
+        }
+        let (ed, pq): ([u8; 32], [u8; 32]) = (
+            prior_seeds[..32].try_into().unwrap(),
+            prior_seeds[32..].try_into().unwrap(),
+        );
+        {
+            use zeroize::Zeroize;
+            let mut prior_seeds = prior_seeds;
+            prior_seeds.zeroize();
+        }
+        let prior = Box::new(rhtn_crypto::SigningIdentity::from_seeds(&ed, &pq));
+        let prior_public = prior.public.clone();
+
+        // the old archive, where the person brought one: opened under the
+        // key that wrote it, which is the key being succeeded
+        let mut archive = rhtn_archive::chain::Archive::new(prior_public.keyhash);
+        if let Some(blob) = backup {
+            let contents = rhtn_client::backup::import(&blob, prior.identity_root())
+                .map_err(|e| Refused::new(e.to_string()))?;
+            match contents.owner {
+                Some(o) if o == prior_public.keyhash => {}
+                Some(_) => {
+                    return Err(Refused::new(
+                        "that backup belongs to another identity than the key being succeeded",
+                    ));
+                }
+                None => return Err(Refused::new("that backup names no owner")),
+            }
+            let mut parsed: Vec<rhtn_archive::record::Record> = contents
+                .records
+                .iter()
+                .map(|r| rhtn_archive::record::Record::parse(r))
+                .collect::<Result<_, _>>()
+                .map_err(|e| Refused::new(format!("record: {e}")))?;
+            parsed.sort_by_key(|r| (r.effective, r.txid));
+            for rec in parsed {
+                archive
+                    .append(rec)
+                    .map_err(|e| Refused::new(format!("record: {e}")))?;
+            }
+        }
+
+        // **the succeeded key is one this client knows**, so that what it
+        // signed verifies here: the successor statement is checked by
+        // everyone it reaches, and a client unable to check its own is of
+        // no use to the person holding it
+        let mut known = known;
+        if !known.iter().any(|k| {
+            rhtn_crypto::Identity::from_key_material(k)
+                .is_some_and(|i| i.keyhash == prior_public.keyhash)
+        }) {
+            known.push(prior_public.key_material().to_vec());
+        }
+
+        let p = Participant::start(seeds, known, platform)?;
+        p.handle.with_blocking(move |c| {
+            c.rotation = Some(Box::new(rhtn_client::rotation::Rotation::begin(
+                prior, archive,
+            )));
+        });
+        p.save()?;
+        Ok(p)
+    }
+
     /// The connection as a screen shows it: detached, attached to the
     /// serving node or degraded on a sibling, reconnecting, or lost.
     /// Changes also arrive as [`Event::Connection`].

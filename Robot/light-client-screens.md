@@ -251,7 +251,7 @@ still the platform's default and is the other place the mark belongs.
 
 | Step | Elements | Beneath | Owes |
 |---|---|---|---|
-| A1 The fork | Three doors: **New identity**, **Restore a backup**, **Recover** (Owed: recovery has no kernel export). Copy at the fork, not after it: an unlinked path abandons prior standing; a linked recovery gives up unlinkability — one choice seen from opposite sides | `start` / `restore_backup` / Owed | PRD-03, UX-008; `light-client-requirements.md` §6 |
+| A1 The fork | Three doors: **New identity**, **Restore a backup**, **Recover**. Copy at the fork, not after it: an unlinked path abandons prior standing; a linked recovery gives up unlinkability — one choice seen from opposite sides. **The third door asks for the prior seed and, optionally, the backup** [2026-10-27]: the seed because `wire-format.md` §4.1 admits no variant of the `Recovery` block, the backup because `light-client-requirements.md` §6 has recovery restore standing and not history, so a person who kept neither is at the first door rather than the third | `start` / `restore_backup` / `recovering` | PRD-03, UX-008; `light-client-requirements.md` §6 |
 | A2 New identity | No screen. Seeds minted silently, kept under the shell's own custody, never crossing the storage seam | `start(seeds, …)`; `seal("seeds")` | APP-011 |
 | A3 Restore | Envelope picker; passphrase field (the key kept apart from the device); import scan report naming anything past its retention; result framed **"recovered on trust"**, never *verified-complete* | `restore_backup(blob, secret)` | PRD-07, PRD-09; ARC-24 |
 
@@ -385,7 +385,7 @@ a reason and a way back (UX-013 validates these by walking them).
 | E1 The horizon | **Users, never devices** [author, 2026-09-27]: every endpoint of a person sits behind one displayed representation, and the infra/non-infra distinction is an icon state on the person — read from current topology, never a stored species (promotion changes it). Positions, distance, reachability; the operator-itself versus person-behind distinction stays (the `.0` presentation), rendered on the person | `places`, `distance`, `reachable`, `resolvable` | UX-014 |
 | E2 Accept a patron | An in-horizon adoption offer — a non-PoP transfer — **arrives as a notification with accept/deny** [author, 2026-09-27]; the acceptance shows the upward-reaching policy list with **expanded names and counts** — a count alone is insufficient — framed as a reminder, the policy being the user's own | `standing`, `evaluate` [2026-10-27] | PRD-02, UX-007; `light-client-requirements.md` §6 |
 | E3 End or alter authority | The computed warning: which currently used resources this revokes — transfers and disavowals included, not departure alone; a stale permission list **identified as stale**, never silently used | `relationships`, `depart` [2026-10-27]; **the access computation is still owed**, so the warning has nothing to compute from | PRD-02, UX-006; `light-client-requirements.md` §6 |
-| E4 Recovery | The verifier's side and the subject's side both cross now [2026-10-27]; the identity-fork warning of A1 applies here | `recovery_query`, `recognise`, `prior_key`, `take_recovery_response`, `recovery_block`, `seal_old_lines`, `present_chain`. **Owed: entering one** — every call answers only where a prior key is held, and nothing crosses that puts one there | REC-*, UX-008 |
+| E4 Recovery | Whole across the boundary [2026-10-27]: entered at A1's third door, driven from either side; the identity-fork warning of A1 applies here | `recovering`, `recovery_query`, `recognise`, `prior_key`, `take_recovery_response`, `recovery_block`, `seal_old_lines`, `present_chain` | REC-*, UX-008 |
 
 ## F. Catalog and resources
 
@@ -451,10 +451,9 @@ From the capability matrix, confirmed by this pass: settings and config
 other than the retention, which is settable since 2026-10-03; the biometric
 matcher; resource registration and the role view; and the mode query
 (*does this identity run an instance*). **Recovery, departure, standing and
-evaluation crossed on 2026-10-27**, leaving two things that are not
-exports: **entering a recovery**, which wants a prior key the boundary has
-no way to supply, and **what leaving costs**, which wants an access
-computation that exists on neither side.
+evaluation crossed on 2026-10-27**, entering a recovery with them, leaving
+one thing that is not an export: **what leaving costs**, which wants an
+access computation that exists on neither side.
 
 ## The rulings (all four questions, author, 2026-09-27)
 

@@ -15889,3 +15889,41 @@ harness. The eleven are asked of a fresh client at the boundary, where
 every one of them answers with a value or refuses by name.
 
 Workspace tests 860, Android 236, the Kotlin binding regenerated.
+
+### 2026-10-28 (the third door: a key that succeeds another one)
+
+**The documents already settled what a recovery needs**, and reading them
+was most of the work. `wire-format.md` §4.1: *there are no variants of the
+block itself — every claim of predecessor history carries both halves, the
+old key's signature and a prior counterparty's match*. So **the prior seed
+is required**, and a device that holds none is at the first door rather
+than the third: it starts afresh, which abandons the standing rather than
+giving up the unlinkability.
+
+**And the archive is not required**, which the same reading settles from
+the other side: *recovery restores standing and not history*
+(`light-client-requirements.md` §6), the archive coming from the person's
+own backup or not at all. So the backup is an optional argument and its
+absence is an ordinary recovery rather than a failed one.
+
+**What looked like a tension was not one.** §9.1 reads as though recovery
+is for a key that is gone, and §9.0 says the old key is in hand wherever
+the rotation carries its inheritance. The wire format decides between
+them: the old key signs, so a key that is truly gone has no recovery to
+make. What comes back under the new key is the standing, which is what
+*presence-based recovery returns the key* means.
+
+**So the entry point is one constructor**: the new identity, the prior
+one, the backup where there is one, and the known set the prior key is
+added to so that what it signed verifies here. It opens the backup under
+the key being succeeded and refuses one that names another, however it
+opened — the same rule `install` keeps against this client's own key,
+applied against the predecessor's.
+
+Tested at the boundary both ways: with the person's backup and without,
+with a backup belonging to somebody else, and with a prior seed of the
+wrong measure. What is not tested there is records loading, a key that has
+met nobody having nothing in its archive to back up; that path is
+`install`'s and is tested where it lives.
+
+Workspace tests 861, Android 236, the Kotlin binding regenerated.

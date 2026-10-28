@@ -1227,3 +1227,126 @@ fn authority_recovery_and_standing_answer_before_there_is_anything_to_answer_abo
         assert!(r.reason().contains("32 bytes"), "{}", r.reason());
     }
 }
+
+/// **The third door of the first run** (A1): a key succeeding another one.
+///
+/// The prior key is required, because `wire-format.md` §4.1 admits no
+/// variant of the `Recovery` block — both halves or nothing — and the
+/// archive is not, because `light-client-requirements.md` §6 has recovery
+/// restoring standing and not history. So this proves the two cases apart:
+/// a succession opens with the person's own backup and equally without
+/// one, and a backup that is not the succeeded key's is refused however it
+/// opened.
+///
+/// **What it does not prove is that records load**, because a key that has
+/// met nobody backs up an archive with nothing in it, and a ceremony is
+/// not reachable from here. That path is `install`'s own, tested where it
+/// lives (ARC-24); what is new here and is tested is the owner check
+/// against the *prior* key rather than against this client's own.
+#[test]
+fn a_key_succeeds_another_with_its_backup_and_without_one() {
+    let known: Vec<Vec<u8>> = ["alice", "bob"].iter().map(|n| material(n)).collect();
+
+    // ALICE, BEFORE ANY OF THIS, writes her own backup
+    let first = Arc::new(Shell::default());
+    let alice =
+        Participant::start(seeds("alice"), known.clone(), platform_of(first)).expect("starts");
+    let blob = alice.export_backup().expect("a backup of her own");
+    drop(alice);
+
+    // A NEW KEY SUCCEEDS HERS, with that backup in hand
+    let shell = Arc::new(Shell::default());
+    let heir = Participant::recovering(
+        seeds("bob"),
+        seeds("alice"),
+        Some(blob.clone()),
+        known.clone(),
+        platform_of(shell),
+    )
+    .expect("succeeds alice");
+    assert_eq!(
+        heir.prior_key(),
+        Some(id("alice")),
+        "the key being succeeded, which the Recovery block names"
+    );
+    assert_eq!(
+        heir.me(),
+        id("bob"),
+        "and this device's own key is the new one"
+    );
+    // nothing has recognised her yet, so there is no block to carry
+    let no_match = match heir.recovery_block(id("bob")) {
+        Err(e) => e,
+        Ok(_) => panic!("a recovery with no recognition in it must not build"),
+    };
+    assert!(
+        no_match.reason().contains("NotRecognised"),
+        "a recovery with no match in it is a claim nobody made"
+    );
+
+    // AND WITHOUT A BACKUP the succession still stands: standing is what
+    // comes back, history is what does not
+    let bare = Participant::recovering(
+        seeds("bob"),
+        seeds("alice"),
+        None,
+        known.clone(),
+        platform_of(Arc::new(Shell::default())),
+    )
+    .expect("succeeds her with nothing of hers");
+    assert_eq!(
+        bare.prior_key(),
+        Some(id("alice")),
+        "the same key succeeded"
+    );
+    assert!(
+        bare.seal_old_lines().is_empty(),
+        "and no line to seal, there being no archive to find one in"
+    );
+    assert!(
+        heir.seal_old_lines().is_empty(),
+        "nor in hers, she having been adopted by nobody before she backed up"
+    );
+
+    // A BACKUP THAT IS NOT THE SUCCEEDED KEY'S is refused however it
+    // opened: opening says which key the reader holds, not which wrote it
+    let other = Participant::start(
+        seeds("bob"),
+        known.clone(),
+        platform_of(Arc::new(Shell::default())),
+    )
+    .expect("starts");
+    let bobs = other.export_backup().expect("bob's own");
+    drop(other);
+    let wrong = Participant::recovering(
+        seeds("carol"),
+        seeds("alice"),
+        Some(bobs),
+        known.clone(),
+        platform_of(Arc::new(Shell::default())),
+    );
+    let wrong = match wrong {
+        Err(e) => e,
+        Ok(_) => panic!("a backup that is not the succeeded key's must not install"),
+    };
+    assert!(
+        !wrong.reason().is_empty(),
+        "and the refusal says something: {}",
+        wrong.reason()
+    );
+
+    // a prior seed of the wrong measure is refused by name, as the new
+    // identity's own is at `start`
+    let short = Participant::recovering(
+        seeds("bob"),
+        vec![1, 2, 3],
+        None,
+        known,
+        platform_of(Arc::new(Shell::default())),
+    );
+    let short = match short {
+        Err(e) => e,
+        Ok(_) => panic!("a prior seed of the wrong measure must be refused"),
+    };
+    assert!(short.reason().contains("64 bytes"), "{}", short.reason());
+}
