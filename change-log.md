@@ -16052,4 +16052,11 @@ patron in the subnet's own upline, with the three answers — a cost,
 nothing goes, cannot be worked out — on a tweak, since the point of the
 design is that the last two look alike and are not.
 
+**The patron's own side carries no cost** [author, 2026-10-28], asked
+about a row drawn earlier that offered *what ending one would revoke*
+beside the count of the downline: the count belongs there and the rest
+does not. Which also closes it on the protocol's own terms — ending a
+subordinate's line is a disavowal, and only a node holding its own seed
+can mint one, so it was never this screen's to offer.
+
 Android tests 252, workspace 869.
