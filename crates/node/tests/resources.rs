@@ -2255,3 +2255,212 @@ fn a_member_reaches_no_reserved_path_and_forges_no_control_header() {
         );
     }
 }
+
+// ---- the response leg, which had no parser until 2026-10-28 ----------
+
+/// A backend whose answer the test writes, so the response leg can be
+/// driven the way `Fake` drives the request leg.
+struct Says {
+    said: Mutex<Vec<u8>>,
+}
+
+impl Backend for Says {
+    fn handle(&self, _message: &[u8]) -> Result<Vec<u8>, String> {
+        Ok(self.said.lock().unwrap().clone())
+    }
+    fn running(&self) -> bool {
+        true
+    }
+}
+
+/// A gateway hosting R1 for alice with `Says` behind it, and carol able
+/// to connect: the shortest path to the response leg.
+fn answering(sc: &Scene, said: &[u8]) -> (Gateway, Arc<Says>) {
+    let backend = Arc::new(Says {
+        said: Mutex::new(said.to_vec()),
+    });
+    let mut g = Gateway::default();
+    g.bind(
+        R1,
+        Binding {
+            owner: kh("alice"),
+            authority: "r1.internal".into(),
+            backend: Some(backend.clone()),
+            declared: Manifest {
+                roles: BTreeSet::from(["reader".to_string()]),
+                ..Default::default()
+            },
+        },
+    );
+    g.set_row(
+        R1,
+        kh("carol"),
+        Row {
+            roles: BTreeSet::from(["reader".to_string()]),
+            connect: true,
+        },
+    )
+    .unwrap();
+    let _ = &sc.table;
+    (g, backend)
+}
+
+// acceptance: RSC-59
+#[test]
+fn a_package_that_answers_with_two_messages_reaches_nobody() {
+    let sc = scene();
+    let me = kh("alice");
+    // **§11.2's own *that is the attack*, on the leg that had no parser.**
+    // Until 2026-10-28 these bytes went to the asking client entire.
+    let two = b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\n\r\nokHTTP/1.1 200 OK\r\n\
+                content-length: 11\r\n\r\nnot yours\r\n";
+    let (mut g, _b) = answering(&sc, two);
+    let r = g.serve(&me, &sc.table, &kh("carol"), &request(R1, OK_GET));
+    assert_eq!(
+        r.status, STATUS_UNAVAILABLE,
+        "a package whose answer carries a second message is a defect, not an answer"
+    );
+    assert!(r.body.is_none(), "and nothing of it travels");
+}
+
+// acceptance: RSC-59
+#[test]
+fn every_ambiguity_no_rewriting_could_settle_is_refused_on_the_response_leg() {
+    let sc = scene();
+    let me = kh("alice");
+    for said in [
+        // two lengths
+        &b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\ncontent-length: 3\r\n\r\nok"[..],
+        // a length beside an encoding
+        &b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\ntransfer-encoding: chunked\r\n\r\nok"[..],
+        // an encoding this node does not decode
+        &b"HTTP/1.1 200 OK\r\ntransfer-encoding: gzip\r\n\r\nok"[..],
+        // a folded header
+        &b"HTTP/1.1 200 OK\r\ncontent-type: text/html\r\n ;charset=utf-8\r\n\r\n"[..],
+        // two content-types, so what may be shown is undecided
+        &b"HTTP/1.1 200 OK\r\ncontent-type: text/html\r\ncontent-type: text/plain\r\n\r\n"[..],
+        // an interim response, which is not the one answer
+        &b"HTTP/1.1 100 Continue\r\n\r\n"[..],
+        // a protocol switch
+        &b"HTTP/1.1 200 OK\r\nupgrade: h2c\r\nconnection: upgrade\r\n\r\n"[..],
+        // a chunk size with an extension, and a trailer section
+        &b"HTTP/1.1 200 OK\r\ntransfer-encoding: chunked\r\n\r\n3;x=1\r\nabc\r\n0\r\n\r\n"[..],
+        &b"HTTP/1.1 200 OK\r\ntransfer-encoding: chunked\r\n\r\n3\r\nabc\r\n0\r\nx: 1\r\n\r\n"[..],
+        // a version this node was not given rules for
+        &b"HTTP/1.0 200 OK\r\ncontent-length: 0\r\n\r\n"[..],
+        // a control character in a value, which would forge a header line
+        &b"HTTP/1.1 200 OK\r\nx-note: a\x01b\r\ncontent-length: 0\r\n\r\n"[..],
+    ] {
+        let (mut g, _b) = answering(&sc, said);
+        let r = g.serve(&me, &sc.table, &kh("carol"), &request(R1, OK_GET));
+        assert_eq!(
+            r.status,
+            STATUS_UNAVAILABLE,
+            "not refused: {}",
+            String::from_utf8_lossy(said),
+        );
+    }
+}
+
+// acceptance: RSC-60
+#[test]
+fn what_rewriting_can_settle_is_taken_and_written_back_canonically() {
+    let sc = scene();
+    let me = kh("alice");
+    // a package ending its lines with a bare LF, and one answering
+    // chunked: both read, both written back as one length and CRLFs
+    for said in [
+        &b"HTTP/1.1 200 OK\ncontent-type: text/html\n\n<p>hi</p>"[..],
+        &b"HTTP/1.1 200 OK\r\ncontent-type: text/html\r\ntransfer-encoding: chunked\r\n\r\n\
+           3\r\n<p>\r\n6\r\nhi</p>\r\n0\r\n\r\n"[..],
+        // and neither header at all: the backend's own buffer ends it
+        &b"HTTP/1.1 200 OK\r\ncontent-type: text/html\r\n\r\n<p>hi</p>"[..],
+    ] {
+        let (mut g, _b) = answering(&sc, said);
+        let r = g.serve(&me, &sc.table, &kh("carol"), &request(R1, OK_GET));
+        assert_eq!(
+            r.status,
+            STATUS_DELIVERED,
+            "{}",
+            String::from_utf8_lossy(said)
+        );
+        let out = r.body.expect("a body");
+        assert_eq!(
+            String::from_utf8_lossy(&out),
+            "HTTP/1.1 200 OK\r\ncontent-type: text/html\r\ncontent-length: 9\r\n\r\n<p>hi</p>",
+            "one canonical form out of three inputs",
+        );
+    }
+}
+
+// acceptance: RSC-60
+#[test]
+fn nothing_about_what_a_package_may_answer_with_is_narrowed() {
+    let sc = scene();
+    let me = kh("alice");
+    // **a body is bytes under a length to this parser.** Arbitrary binary
+    // under any declared type passes through unaltered, which is the
+    // whole of what "the status blocks no data" means.
+    let mut body: Vec<u8> = (0u8..=255).collect();
+    body.extend_from_slice(b"\r\nHTTP/1.1 200 OK\r\n\r\n");
+    let mut said = format!(
+        "HTTP/1.1 201 Created\r\ncontent-type: application/octet-stream\r\n\
+         content-encoding: gzip\r\nset-cookie: a=1\r\nset-cookie: b=2\r\n\
+         link: </x>; rel=next\r\ncontent-length: {}\r\n\r\n",
+        body.len()
+    )
+    .into_bytes();
+    said.extend_from_slice(&body);
+
+    let (mut g, _b) = answering(&sc, &said);
+    let r = g.serve(&me, &sc.table, &kh("carol"), &request(R1, OK_GET));
+    assert_eq!(r.status, STATUS_DELIVERED);
+    let out = r.body.expect("a body");
+    let parsed = http::parse_response(&out).expect("its own output reads");
+    assert_eq!(parsed.status, 201);
+    assert_eq!(parsed.reason, "Created");
+    assert_eq!(
+        parsed.body, body,
+        "every byte of it, including the ones that look like a message"
+    );
+    // **repeatable headers are repeated, not collapsed**: a node that
+    // merged set-cookie would be deciding the application's semantics
+    assert_eq!(
+        parsed
+            .headers
+            .iter()
+            .filter(|(n, _)| n == "set-cookie")
+            .count(),
+        2,
+    );
+    assert!(
+        parsed
+            .headers
+            .contains(&("content-encoding".into(), "gzip".into()))
+    );
+    assert!(
+        parsed
+            .headers
+            .contains(&("link".into(), "</x>; rel=next".into()))
+    );
+}
+
+// acceptance: RSC-60
+#[test]
+fn the_canonical_form_is_a_fixed_point_and_declares_its_extent_once() {
+    // what this node writes, this node reads back unchanged: the property
+    // §11.2 asks for in the words *what you emit is what you parsed*
+    let said = b"HTTP/1.1 404 Not Found\r\ncontent-type: text/plain\r\n\r\nno";
+    let once = http::parse_response(said).expect("reads");
+    let out = http::serialise_response(&once);
+    let twice = http::parse_response(&out).expect("its own output reads");
+    assert_eq!(once, twice);
+    assert_eq!(out, http::serialise_response(&twice), "and is stable");
+    assert_eq!(
+        String::from_utf8_lossy(&out)
+            .matches("content-length")
+            .count(),
+        1,
+        "the extent is declared exactly once",
+    );
+}

@@ -405,7 +405,12 @@ async fn a_daemon_hosts_the_package_its_configuration_names_and_serves_a_request
 
     let mut set = Daemons::new(env!("CARGO_BIN_EXE_rhtnd"), "hosting");
     let package = set.dir("alice").join("echo.wasm");
-    std::fs::write(&package, rhtn_sim::packages::echo()).expect("a package on disk");
+    // **a package that answers with a response**, not `echo`, which hands
+    // the request straight back: since 2026-10-28 the gateway reads what
+    // a package answered with (`wire-format.md` §11 field 2), and a
+    // request is not a response. `replies` puts the request in the body,
+    // so what crossed the boundary is still readable below.
+    std::fs::write(&package, rhtn_sim::packages::replies()).expect("a package on disk");
     let manifest = set.dir("alice").join("echo.manifest");
     std::fs::write(
         &manifest,

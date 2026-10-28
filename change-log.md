@@ -16132,9 +16132,89 @@ sandbox bounds a package's answer by size alone. So a package emitting two
 HTTP messages reaches a client with both, and **the only thing refusing it
 today is this client's parser** — which is the wrong place for the only
 check, since §11.2's argument is about the party in the middle and a
-second client gets nothing from ours. Left open rather than fixed here:
-it is the node's gateway path with its own tests, and the task in hand was
-the client's.
+second client gets nothing from ours. **Closed the same day**, the entry
+below.
 
 Three functional-test rows (CAT-023..025) and three catalogue entries
 (RSC-56..58). Android tests 263, workspace tests 876.
+
+### 2026-10-28 (the leg of the exchange that had no parser)
+
+**The node forwarded the resource's answer unexamined**, found while
+writing the client's half of reading one and closed on the author's
+condition: *as long as this status does not block data which the parser
+cannot handle*.
+
+**It does not, and three facts settle that rather than an argument.** A
+body is bytes under a length to this parser, so no declared type, no
+content-encoding and no payload is touched by it. `Backend::handle`
+already returns one buffered `Vec<u8>`, so parsing adds no buffering that
+was not already there. And `STATUS_DELIVERED` is constructed in exactly
+one place, so §11's multi-frame sequence — the case for a resource
+streaming an answer whose length it does not know — is unimplemented on
+this leg, and there is no streaming for a parse to break. What a parse
+refuses is HTTP *framing* that is ambiguous or that declares more than one
+message: a package's framing defect, never its data.
+
+**So the response parser is deliberately less strict than the request
+parser**, which is the part worth having written down. The request
+parser's strictness protects a backend the node cannot control, so an
+ambiguity there has to be refused. On the response the node is the party
+that writes the canonical form, so it can be tolerant wherever its own
+output removes the ambiguity: a package ending its lines with a bare
+newline is read and written back with CRLF, and a chunked body is joined
+and written back under one length. Three framings in, one canonical
+message out, its extent declared exactly once and agreeing with its own
+content — and parsing that output again gives back the same response,
+which is §11.2's *what you emit is what you parsed* as a property a test
+can state.
+
+**What is refused is what no rewriting could settle**: two lengths, a
+length beside an encoding, an encoding this node does not decode, a
+folded header, two content-types, an interim 1xx, a protocol switch, an
+extended chunk size, a trailer section, a version other than HTTP/1.1, a
+control character in a header value, and bytes after the body — §11.2's
+own *that is the attack*. Each answers `resource unavailable`, which is
+the status this node already gives for a trapped or oversized reply: a
+defect in the package rather than a refusal of the asker, and the
+operator is who can act on it.
+
+**And it settles framing without settling semantics.** Repeated headers
+stay repeated — a node collapsing `set-cookie` would be deciding the
+application's business — and every body byte survives, including bytes
+that read as a second message, because the declared length now decides
+the extent rather than the content.
+
+**The client's own parser stays.** §11.2's argument is about a party in
+the middle, and a client that trusted every node to have done its half
+would be trusting the one party the isolation is against. What changes is
+what a refusal there means: a conforming node's output is canonical now,
+so a client refusing one has found a node that is not conforming.
+
+**And it found a fixture that was never a response.** The daemon's
+hosting scenario hosted `echo`, which hands back exactly the message it
+was given — right for the sandbox's own ABI test, which asserts a package
+sees the node's message and nothing else, and not a response at all. Two
+tests broke, both of them hosting that fixture behind a gateway, and
+**that is the whole of it across the workspace** — counted on a run with
+no fail-fast, after a first count over three crates said one and was
+wrong. The relay path needed nothing: its own re-framing already produced
+a conforming response, so the gateway's parse agrees with it and the
+chunked re-framing test passes untouched. `echo`
+stays as it is and is now the fixture for a package whose answer cannot
+be read; `replies` wraps the request in a response of its own, so a test
+can still read what crossed the boundary. **A real sandboxed package
+answering with a non-response is refused end to end**, and the same
+package wrapped in a response is delivered — the pair saying it is the
+answer being read rather than the package being turned away.
+
+**One duplication noticed and left alone**: `relay`'s `reframed` writes a
+length and strips the encoding for a resource holding its own port, which
+the gateway's serialiser now does again. The second pass is a no-op on a
+canonical message — the fixed-point test says so, and the relay's own
+test passes — so nothing is wrong today. It is one framer more than
+§11.2's *one parser* wants, and worth folding into the gateway's when
+that path is next touched.
+
+Two catalogue entries (RSC-59, RSC-60) and two functional-test rows
+(GAT-038, GAT-039). Workspace tests 882.

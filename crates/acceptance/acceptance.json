@@ -15029,5 +15029,54 @@
     "then": "None of them takes effect: the document has no origin to share, nothing is published into it, no fetch is served, nothing it stored outlives the screen, and the navigation is refused with the person told the frame did not go. The client's own styling applies where the page sets none and loses where it sets any, and the page's markup is unaltered.",
     "oracle": "behaviour",
     "interpretation": null
+  },
+  {
+    "id": "RSC-59",
+    "area": "resources",
+    "gap": "resources",
+    "title": "A package whose answer cannot be read unambiguously is unavailable, and nothing of it travels",
+    "milestone": "after-5",
+    "kind": "negative",
+    "spec": [
+      "wire-format.md §11.2",
+      "wire-format.md §11"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §11.2",
+        "text": "Emit exactly one message per `ResourceRequest`. If the parse yields more than\none, that is the attack; reject."
+      },
+      {
+        "where": "wire-format.md §11.2",
+        "text": "Forward what your parser produced, never the bytes you received."
+      }
+    ],
+    "given": "A hosting node with a package bound and an asker who holds connect on it.",
+    "when": "The package answers with two HTTP messages, or with an ambiguity no rewriting could settle: two lengths, a length beside an encoding, an encoding the node does not decode, a folded header, two content-types, an interim status, a protocol switch, an extended chunk size, a trailer section, a version other than HTTP/1.1, or a control character in a header value.",
+    "then": "The asker is told the resource is unavailable and no body travels. The status is the one the node already gives for a trapped or oversized answer, because each is a defect in the package rather than a refusal of the asker, and the operator is who can act on it.",
+    "oracle": "behaviour",
+    "interpretation": "§11.2's requirements are written in the request direction, and §11 field 2 extends them to the response by *same reasoning as the request* — whose own note is that opaque means the node does not interpret the application's semantics, not that it forwards unexamined input. The hazard is a property of the party in the middle, so the leg without a parser was the gap."
+  },
+  {
+    "id": "RSC-60",
+    "area": "resources",
+    "gap": "resources",
+    "title": "The response the node writes declares its extent once, and narrows nothing a package may answer with",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "wire-format.md §11.2"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §11.2",
+        "text": "what you emit is what you parsed, entirely, and that the same input\ntwice gives the same output"
+      }
+    ],
+    "given": "A package answering with bare newlines, or chunked, or with neither a length nor an encoding; and a package answering with arbitrary bytes under its own declared type, repeated headers and a content-encoding.",
+    "when": "The node parses the answer and writes it back.",
+    "then": "All three framings become one canonical message whose length is declared exactly once and agrees with its own content, and parsing that output again yields the same response. Every byte of the body survives, including bytes that read as a second message, since the declared length now settles the extent. Repeatable headers stay repeated and a declared type or content-encoding is untouched: the node settles framing and never semantics.",
+    "oracle": "behaviour",
+    "interpretation": "Being tolerant of a bare newline or a chunked body is safe precisely because the node re-serialises: its own output is the canonical form, so the tolerance leaves no second reading downstream. Refusing those would restrict what a package may be written in, and settle nothing a rewrite does not already settle."
   }
 ]

@@ -378,3 +378,187 @@ pub fn headers_of(message: &[u8]) -> Vec<(String, String)> {
         })
         .collect()
 }
+
+// ---- the response, parsed and re-serialised the same way -------------
+
+/// A response as the parser produced it: what the asking client will see,
+/// once this node has written it out canonically.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Response {
+    /// The application's status code.
+    pub status: u16,
+    /// The reason phrase, kept where the package gave a readable one.
+    pub reason: String,
+    /// Header names lowercased, in the order received, the framing
+    /// headers removed — they are rewritten from the body's own length.
+    /// **Repeats are kept**: `set-cookie` and `link` are repeatable, and
+    /// a node that collapsed them would be deciding the application's
+    /// semantics rather than its framing.
+    pub headers: Vec<(String, String)>,
+    /// The body, de-chunked where it arrived chunked.
+    pub body: Vec<u8>,
+}
+
+/// **Parse one HTTP/1.1 response from a backend** (`wire-format.md` §11
+/// field 2, *same reasoning as the request*; §11.2).
+///
+/// **Less strict than [`parse`], deliberately.** The request parser's
+/// strictness protects a backend this node cannot control, so an
+/// ambiguity has to be refused rather than guessed at. Here this node is
+/// the party that writes the canonical form, so it can be tolerant
+/// wherever its own output removes the ambiguity: a package ending its
+/// lines with a bare LF is read and written back with CRLF, and a chunked
+/// body is joined and written back under a length. **What is refused is
+/// what no re-serialisation can make unambiguous**: two lengths, a length
+/// beside an encoding, an encoding this node does not decode, a folded
+/// header, a control character in a value, malformed chunking, and bytes
+/// after the body — which is §11.2's *more than one message, and that is
+/// the attack*.
+///
+/// **No declared type, encoding or body content is refused.** A body is
+/// bytes under a length to this parser; what a package may answer with is
+/// untouched by it.
+pub fn parse_response(bytes: &[u8]) -> Result<Response, Reject> {
+    // the head ends at a blank line, whichever way the package ends its
+    // lines: a package is not required to agree with this parser about
+    // that, because this parser is what decides what travels
+    let (head_end, sep) = match (find(bytes, b"\r\n\r\n", 0), find(bytes, b"\n\n", 0)) {
+        (Some(a), Some(b)) if a <= b => (a, 4),
+        (Some(a), None) => (a, 4),
+        (None, Some(b)) => (b, 2),
+        (Some(_), Some(b)) => (b, 2),
+        (None, None) => return Err(Reject::Malformed("no end of headers")),
+    };
+    let head = std::str::from_utf8(&bytes[..head_end])
+        .map_err(|_| Reject::Malformed("response head not ascii"))?;
+    if !head.is_ascii() {
+        return Err(Reject::Malformed("response head not ascii"));
+    }
+    let mut lines = head.split('\n').map(|l| l.strip_suffix('\r').unwrap_or(l));
+    let status_line = lines.next().ok_or(Reject::Malformed("no status line"))?;
+    let rest_of_line = status_line
+        .strip_prefix("HTTP/1.1 ")
+        .ok_or(Reject::Malformed("response version"))?;
+    let (code, reason) = match rest_of_line.split_once(' ') {
+        Some((c, r)) => (c, r),
+        None => (rest_of_line, ""),
+    };
+    if code.len() != 3 || !code.bytes().all(|c| c.is_ascii_digit()) {
+        return Err(Reject::Malformed("response status code"));
+    }
+    let status: u16 = code
+        .parse()
+        .map_err(|_| Reject::Malformed("response status code"))?;
+    // **an interim response is not the one answer** (`wire-format.md`
+    // §11.2's *reject anything asking for an exchange other than one
+    // request and one response*): a 1xx precedes the real one, and
+    // `ResourceResponse` carries one
+    if (100..200).contains(&status) {
+        return Err(Reject::NotOneExchange("an interim 1xx response"));
+    }
+    if !reason.is_empty() && !is_field_value(reason) {
+        return Err(Reject::Malformed("response reason phrase"));
+    }
+
+    let mut headers: Vec<(String, String)> = Vec::new();
+    let (mut content_length, mut chunked) = (None::<usize>, false);
+    for line in lines {
+        if line.starts_with(' ') || line.starts_with('\t') {
+            return Err(Reject::Ambiguous("obsolete line folding"));
+        }
+        let colon = line
+            .find(':')
+            .ok_or(Reject::Malformed("response header line"))?;
+        let (name, value) = (&line[..colon], line[colon + 1..].trim_matches([' ', '\t']));
+        if !is_token(name) {
+            return Err(Reject::Malformed("response header name"));
+        }
+        if !is_field_value(value) {
+            return Err(Reject::Ambiguous("control character in a header value"));
+        }
+        let lname = name.to_ascii_lowercase();
+        match lname.as_str() {
+            "content-length" => {
+                if content_length.is_some() || value.contains(',') {
+                    return Err(Reject::Ambiguous("duplicate content-length"));
+                }
+                content_length = Some(
+                    value
+                        .parse()
+                        .map_err(|_| Reject::Malformed("response content-length"))?,
+                );
+            }
+            "transfer-encoding" => {
+                if chunked || !value.eq_ignore_ascii_case("chunked") {
+                    return Err(Reject::Ambiguous("transfer-encoding"));
+                }
+                chunked = true;
+            }
+            "upgrade" => return Err(Reject::NotOneExchange("Upgrade")),
+            "connection"
+                if value
+                    .to_ascii_lowercase()
+                    .split(',')
+                    .any(|v| v.trim() == "upgrade") =>
+            {
+                return Err(Reject::NotOneExchange("Upgrade"));
+            }
+            // **two content-types leave undecided what may be shown**, and
+            // a client is told the declared type decides
+            // (`light-client-requirements.md` §8)
+            "content-type" if headers.iter().any(|(n, _)| n == "content-type") => {
+                return Err(Reject::Ambiguous("duplicate content-type"));
+            }
+            _ => headers.push((lname, value.to_string())),
+        }
+    }
+    if content_length.is_some() && chunked {
+        return Err(Reject::Ambiguous("content-length and transfer-encoding"));
+    }
+    let rest = &bytes[head_end + sep..];
+    let (body, consumed) = if chunked {
+        decode_chunked(rest)?
+    } else if let Some(n) = content_length {
+        if rest.len() < n {
+            return Err(Reject::Malformed("response body short"));
+        }
+        (rest[..n].to_vec(), n)
+    } else {
+        // **neither header, so the backend's own answer delimits it.**
+        // `Backend::handle` returns one buffer, and that buffer's end is
+        // the message's end — which is why this is not the ambiguity the
+        // same case is on a connection. Written back under a length, so
+        // nothing downstream has to decide it either.
+        (rest.to_vec(), rest.len())
+    };
+    if consumed != rest.len() {
+        return Err(Reject::MoreThanOne);
+    }
+    Ok(Response {
+        status,
+        reason: reason.to_string(),
+        headers,
+        body,
+    })
+}
+
+/// Re-serialise a response from the parse: the status line, the headers as
+/// parsed, one length taken from the body itself, and the body.
+///
+/// **This is what makes the tolerances above safe.** Whatever the package
+/// wrote, what leaves here is one message whose extent is declared
+/// exactly once and agrees with its own content, so no party downstream
+/// has a second reading available to it.
+pub fn serialise_response(r: &Response) -> Vec<u8> {
+    let mut out = if r.reason.is_empty() {
+        format!("HTTP/1.1 {}\r\n", r.status).into_bytes()
+    } else {
+        format!("HTTP/1.1 {} {}\r\n", r.status, r.reason).into_bytes()
+    };
+    for (n, v) in &r.headers {
+        out.extend_from_slice(format!("{n}: {v}\r\n").as_bytes());
+    }
+    out.extend_from_slice(format!("content-length: {}\r\n\r\n", r.body.len()).as_bytes());
+    out.extend_from_slice(&r.body);
+    out
+}

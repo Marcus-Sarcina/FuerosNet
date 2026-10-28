@@ -558,9 +558,35 @@ impl Gateway {
         let message = http::serialise(&parsed, &authority, &cred);
         *self.attempts.entry(req.resource).or_insert(0) += 1;
         match backend.handle(&message) {
-            Ok(resp) => ResourceResponse {
-                status: STATUS_DELIVERED,
-                body: Some(resp),
+            // **the answer is parsed and written back, not relayed**
+            // [2026-10-28]. `wire-format.md` §11 field 2 carries *same
+            // reasoning as the request*, and the request's own reasoning
+            // is that opaque means this node does not interpret the
+            // application's semantics — *not that it forwards unexamined
+            // input*. Until this, it forwarded the backend's bytes, so a
+            // package emitting two HTTP messages reached the asking
+            // client with both: §11.2's own *that is the attack*, on the
+            // one leg of the exchange that had no parser.
+            //
+            // **A package whose answer cannot be read is unavailable**,
+            // which is what that status already means here for a trap or
+            // an oversized reply: a defect in the package rather than a
+            // refusal of the asker, and the operator is the one who can
+            // act on it.
+            Ok(resp) => match crate::http::parse_response(&resp) {
+                Ok(parsed) => ResourceResponse {
+                    status: STATUS_DELIVERED,
+                    body: Some(crate::http::serialise_response(&parsed)),
+                },
+                Err(why) => {
+                    tracing::warn!(
+                        target: "node",
+                        resource8 = %crate::diag::id8(&req.resource),
+                        why = ?why,
+                        "node.resource.unreadable"
+                    );
+                    ResourceResponse::code(STATUS_UNAVAILABLE)
+                }
             },
             // one attempt, never a retry: the requester decides.  The
             // sandbox's refusal (exhausted, trapped, oversized) is known

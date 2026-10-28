@@ -99,6 +99,22 @@ fn a_package_is_handed_its_request_and_gives_back_its_answer() {
         "the package sees the message the node built and nothing else"
     );
 
+    // **and a package that answers with a response of its own**
+    // [2026-10-28]: `echo` is the ABI's fixture, handing back exactly the
+    // bytes it was given, which is not a response and is refused at the
+    // gateway. `replies` is the one a hosting test uses.
+    let r = Sandbox::admit(&rhtn_sim::packages::replies(), Limits::default()).expect("admitted");
+    let answered = r.serve(message).expect("served");
+    assert!(
+        answered.starts_with(b"HTTP/1.1 200 OK\r\n"),
+        "it answers with a status line: {:?}",
+        String::from_utf8_lossy(&answered[..answered.len().min(40)]),
+    );
+    assert!(
+        answered.ends_with(message),
+        "and the request it was handed is the body, so a test can still read it",
+    );
+
     // nothing carries between requests: each one gets its own store, and
     // the bindings offer no other door
     let second = s.serve(b"GET / HTTP/1.1\r\n\r\n").expect("served");
@@ -218,8 +234,12 @@ fn what_reaches_a_package_through_the_gateway_is_the_credential_and_the_request(
     table.mark_infra(me);
 
     let mut g = Gateway::default();
+    // **`replies`, not `echo`** [2026-10-28]: the gateway reads what a
+    // package answered with (`wire-format.md` §11 field 2), and `echo`
+    // hands the request straight back, which is not a response. The
+    // request is still the body, which is what this test reads.
     let hosted = Arc::new(Hosted::new(
-        Sandbox::admit(&echo(), Limits::default()).expect("admitted"),
+        Sandbox::admit(&rhtn_sim::packages::replies(), Limits::default()).expect("admitted"),
     ));
     g.bind(
         resource,
@@ -251,8 +271,8 @@ fn what_reaches_a_package_through_the_gateway_is_the_credential_and_the_request(
     let answer = g.serve(&me, &table, &me, &req.encode());
     let body = String::from_utf8(answer.body.expect("the package answered")).expect("text");
 
-    // the package echoes what it was handed, so this is the whole of what
-    // crossed: the four credential headers `resource-requirements.md` §3
+    // the package answers with what it was handed, so this is the whole of
+    // what crossed: the four credential headers `resource-requirements.md` §3
     // lists, the authority the node addressed it by, and the request
     for header in [
         "rhtn-principal:",
@@ -267,8 +287,12 @@ fn what_reaches_a_package_through_the_gateway_is_the_credential_and_the_request(
         );
     }
     assert!(
-        body.starts_with("GET /orders HTTP/1.1"),
-        "with its own request underneath"
+        body.starts_with("HTTP/1.1 200 OK\r\n"),
+        "the package's own answer, which the node read and wrote back: {body:?}"
+    );
+    assert!(
+        body.contains("\r\n\r\nGET /orders HTTP/1.1"),
+        "with its own request as the body underneath"
     );
     for absent in [
         "rhtn-topology",

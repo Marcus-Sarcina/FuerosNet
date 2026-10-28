@@ -20,17 +20,19 @@
 //! header, a duplicated length, a length beside a transfer-encoding,
 //! bytes after the body.
 //!
-//! **And this is not belt and braces today** [found 2026-10-28]. §11 has
-//! the node parse and re-serialise the response as well as the request —
-//! field 2's *same reasoning as the request*, where the request's own
-//! note is that opaque *means the node does not interpret the application
-//! semantics, not that it forwards unexamined input*. This workspace's
-//! node does not: `rhtn-node`'s `resources::evaluate` parses the request
-//! with `http::parse` and hands the backend's response bytes straight to
-//! `ResourceResponse`, and the sandbox bounds a package's response only
-//! by size. So a package that emits two HTTP messages reaches a client
-//! with both, and **what refuses it is this parser**. The node's own half
-//! is owed; until it lands, a refusal here is the only one.
+//! **Why a client checks at all, given the node does** [found and closed
+//! 2026-10-28]. §11 has the node parse and re-serialise the response as
+//! well as the request — field 2's *same reasoning as the request*, where
+//! the request's own note is that opaque *means the node does not
+//! interpret the application semantics, not that it forwards unexamined
+//! input*. Writing this parser found that this workspace's node did not:
+//! it handed the backend's bytes straight to `ResourceResponse`, so a
+//! package emitting two HTTP messages reached a client with both. That is
+//! closed (`rhtn-node`'s `http::parse_response`), and this stays: §11.2's
+//! argument is about a party in the middle, and a client that trusted
+//! every node to have done its half would be trusting the one party the
+//! isolation is against. **What arrives from a conforming node is already
+//! canonical**, so every refusal here now means a node that is not one.
 //!
 //! **Nothing is sniffed.** The declared media type decides what may be
 //! shown, an absent one decides nothing, and a body is never inspected to

@@ -630,6 +630,8 @@ The Cargo workspace has **16 crates**. Components below follow responsibilities 
 | GAT-035 | O | Standard OIDC/SAML/IdP adapters are planned integration paths, not permission to invent claims or bypass the gateway. Each selected adapter must document audience, role mapping, session lifetime and external-consumer limitations before its conformance tests are executable. | R §§5, 10–13 |
 | GAT-036 | C | An ending removes rows and sessions for the departed party and for everything that reached the owner's horizon only through it, on every bound resource including those carrying no standing grant. Membership is the outer gate whoever wrote the row; do not enumerate a subtree to find them. | I §10.2; D §11.4 |
 | GAT-037 | C | Distinguish a row a standing grant produced from one an operator set for a named member. Replacing the grant rewrites what it wrote and retires those sessions; the operator's own row is untouched and other resources are undisturbed. Re-applying an unchanged grant disturbs nothing. | I §§10.2, 10.5 |
+| GAT-038 | C | **Parse the backend's response and forward what the parser produced, never the bytes received**, which W §11 field 2 extends to the response by *same reasoning as the request*. Answer `resource unavailable` — the status already used for a trapped or oversized reply, a defect in the package rather than a refusal of the asker — and send no body, where the response carries two messages or an ambiguity no rewriting settles: duplicated or conflicting content-length, a length beside a transfer-encoding, an encoding other than chunked, obsolete folding, two content-types, an interim 1xx, a protocol switch, an extended chunk size, a trailer section, a version other than HTTP/1.1, a control character in a header value. Test each by name. | W §§11, 11.2; R §3 |
+| GAT-039 | C | **The response written out declares its extent exactly once and narrows nothing the package may answer with.** Bare-newline, chunked and unframed answers all become one canonical message whose length agrees with its content, and re-parsing that output yields the same response. Every body byte survives, including bytes that read as a second message; repeated headers stay repeated and the declared type and content-encoding are untouched. Test that framing is settled and semantics are not. | W §11.2 |
 
 ### Package admission, isolation, federation and abuse reporting
 
@@ -1015,7 +1017,7 @@ Open local parameters are not all specification defects: cache TTLs, queue cap, 
 
 ## 10. Document baseline and coverage totals
 
-This specification contains **541 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
+This specification contains **543 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
 
 | Prefix | Families |
 |---|---:|
@@ -1036,7 +1038,7 @@ This specification contains **541 numbered requirement/test families** across **
 | PAY | 16 |
 | POL | 22 |
 | CAT | 25 |
-| GAT | 37 |
+| GAT | 39 |
 | PKG | 16 |
 | APP | 14 |
 | UX | 20 |

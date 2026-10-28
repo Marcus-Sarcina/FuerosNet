@@ -1012,3 +1012,85 @@ fn a_directive_crosses_between_two_hosted_instances_and_a_member_cannot_speak_on
     pj.join().unwrap();
     let _ = pgot;
 }
+
+// acceptance: RSC-59
+/// **A real package whose answer is not a response reaches nobody**
+/// [found 2026-10-28].
+///
+/// This is the case that found the gap: `echo` hands back exactly the
+/// message it was given, a conforming fixture for the sandbox's own ABI
+/// test and not a response at all — and until the gateway read what a
+/// package answered with, those bytes went to the asking client entire.
+/// A request arriving where a response belongs is the mildest version of
+/// `wire-format.md` §11.2's *more than one message*; the point is that
+/// the node now looks.
+#[test]
+fn a_package_answering_with_something_that_is_not_a_response_is_unavailable() {
+    use rhtn_archive::topology::Table;
+    use rhtn_node::grant::Standing;
+
+    let d = Dir::new("notaresponse");
+    d.put("echo.wasm", rhtn_sim::packages::echo());
+    let m = d.put(
+        "echo.manifest",
+        "roles = [\"reader\"]\nimports = [\"rhtn/1:request\", \"rhtn/1:response\"]\ncomponent = \"echo.wasm\"\n",
+    );
+    let f = d.put("hosting", host(&m));
+    grants_for(&d, RES, "[[grant]]\nroles = [\"reader\"]\n");
+    let mut g = Gateway::default();
+    apply(
+        &mut g,
+        Path::new(&f),
+        Limits::default(),
+        Some(&d.0.join("grants")),
+    )
+    .expect("the package binds");
+    let resource = g.bound()[0];
+    let owner = [1u8; 32];
+    let table = Table::with_me(owner);
+    g.refresh(&table, &Standing::unknown());
+    let request = rhtn_archive::catalog::ResourceRequest {
+        resource,
+        message: b"GET /things HTTP/1.1\r\nhost: anything\r\n\r\n".to_vec(),
+    }
+    .encode();
+
+    let reply = g.serve(&owner, &table, &owner, &request);
+    assert_eq!(
+        reply.status, 2,
+        "the package ran and answered; what it answered with is not a response, \
+         so the asker is told the resource is unavailable"
+    );
+    assert!(reply.body.is_none(), "and none of it travels");
+
+    // the same package wrapped in a response is delivered, so this is the
+    // answer being read and not the package being rejected
+    let d2 = Dir::new("isaresponse");
+    d2.put("echo.wasm", rhtn_sim::packages::replies());
+    let m2 = d2.put(
+        "echo.manifest",
+        "roles = [\"reader\"]\nimports = [\"rhtn/1:request\", \"rhtn/1:response\"]\ncomponent = \"echo.wasm\"\n",
+    );
+    let f2 = d2.put("hosting", host(&m2));
+    grants_for(&d2, RES, "[[grant]]\nroles = [\"reader\"]\n");
+    let mut g2 = Gateway::default();
+    apply(
+        &mut g2,
+        Path::new(&f2),
+        Limits::default(),
+        Some(&d2.0.join("grants")),
+    )
+    .expect("the package binds");
+    g2.refresh(&table, &Standing::unknown());
+    let ok = g2.serve(&owner, &table, &owner, &request);
+    assert_eq!(
+        ok.status, 0,
+        "a package that answers with a response is delivered"
+    );
+    let body = ok.body.expect("a body");
+    assert!(String::from_utf8_lossy(&body).starts_with("HTTP/1.1 200 OK\r\n"));
+    assert!(
+        String::from_utf8_lossy(&body).contains("rhtn-principal:"),
+        "and the credentialed request it was handed is still readable in the body",
+    );
+}

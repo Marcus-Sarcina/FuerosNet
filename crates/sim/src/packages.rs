@@ -71,6 +71,35 @@ pub fn echo() -> Vec<u8> {
     )
 }
 
+/// **Answers with a response of its own**, whose body is the request it
+/// was handed.
+///
+/// [`echo`] hands the request straight back, which is what the sandbox's
+/// own test wants — it is asserting that a package sees exactly the
+/// message the node built. But a request is not a response, and since
+/// 2026-10-28 the gateway reads what a package answers with
+/// (`wire-format.md` §11 field 2): `echo` is now the fixture for *a
+/// package whose answer cannot be read*, and this is the one for a
+/// package that answers. The request is still in the body, so a test can
+/// still read what crossed the boundary.
+///
+/// Neither a length nor an encoding is declared: the host hands the whole
+/// answer over as one buffer, so its end is the message's end, and the
+/// node writes the length on the way out.
+pub fn replies() -> Vec<u8> {
+    // the prefix at a high address: the arena bump-allocates upward from
+    // 1024, so a test-sized request never reaches it
+    bound(
+        r#"
+    (data (i32.const 40000) "HTTP/1.1 200 OK\r\ncontent-type: text/plain\r\n\r\n")
+    (func (export "handle")
+      (call $request (i32.const 0))
+      (memory.copy (i32.const 40045) (i32.load (i32.const 0)) (i32.load (i32.const 4)))
+      (call $response (i32.const 40000) (i32.add (i32.const 45) (i32.load (i32.const 4)))))
+"#,
+    )
+}
+
 /// Grows until the host stops it, then reports how many pages it reached.
 pub fn greedy() -> Vec<u8> {
     bound(

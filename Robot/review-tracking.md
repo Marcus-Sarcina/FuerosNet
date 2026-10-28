@@ -19560,7 +19560,7 @@ and no export, and each blocks a screen the sheet already specifies.
 PRD row is recorded now that the tester's form is gone [2026-10-23]. Six of
 the thirteen owed rows describe screens that exist.
 
-## The node does not parse the resource's response [found 2026-10-28]
+## The node did not parse the resource's response [found and closed 2026-10-28]
 
 **Found while writing the client's half of it**, so it is a finding of my
 own rather than a reviewer's, and it is open.
@@ -19596,10 +19596,46 @@ the only check.** §11.2's whole argument is that the party in the middle
 must not forward what its parser did not examine, and a second client
 implementation gets no protection from ours.
 
-**Not done here** because it is the node's gateway path with its own
-tests, and the task in hand was the client's frame policy. The scope when
-it is taken: a response parser beside `http::parse`, the six §11 statuses
-unchanged, `STATUS_UNAVAILABLE` for a backend whose answer cannot be
-re-serialised (a defect in the package, which is what that status already
-means for a trap), and a `GAT` row in `functional_tests.md` to match
-CAT-023 on the client's side.
+**Closed the same day** [author, 2026-10-28], on one condition: that the
+status blocks no data the parser cannot handle. It does not, and three
+things establish that rather than argue it — a body is bytes under a
+length to the parser, so no declared type, encoding or content is
+touched; `Backend::handle` already returns one buffered `Vec<u8>`, so a
+parse adds no buffering that was not there; and `STATUS_DELIVERED` is
+constructed in exactly one place, so §11's multi-frame sequence is
+unimplemented on this leg and there is no streaming for a parse to break.
+
+`http::parse_response` and `http::serialise_response`, with
+`resources::evaluate` answering `STATUS_UNAVAILABLE` where the answer
+cannot be read. **Less strict than the request parser, deliberately**: the
+request's strictness protects a backend the node cannot control, while
+here the node writes the canonical form, so it is tolerant wherever its
+own output removes the ambiguity — a bare newline is read and written
+back as CRLF, a chunked body is joined and written back under a length —
+and refuses only what no rewriting could settle. Repeatable headers stay
+repeated, since collapsing `set-cookie` would be settling semantics
+rather than framing. RSC-59, RSC-60, GAT-038, GAT-039.
+
+**What it cost elsewhere: two tests, counted properly.** A first count
+over three crates found one and was reported as the blast radius; the
+workspace with no fail-fast found two, both hosting `rhtn-sim`'s `echo`
+behind a gateway. The daemon's hosting scenario and the sandbox's
+through-the-gateway test. `echo` hands back the message it was given — correct for the sandbox ABI test that asserts a package sees the
+node's message and nothing else, and not a response. `echo` keeps that
+role and is now also the fixture for an unreadable answer; `replies`
+answers with a response whose body is the request. The relay path needed
+nothing: its own `reframed` already produced a conforming response, so
+the gateway's parse agrees with it.
+
+**A duplication to fold in later**: `relay::reframed` and
+`http::serialise_response` now both write the length and strip the
+encoding on that path. The second is a no-op on a canonical message, so
+nothing is wrong, but it is one framer more than §11.2's one parser
+wants.
+
+**One question left for the author**, asked in the output: whether a
+package's response may carry `rhtn-*` headers. The node strips them from
+a member's *request* (`resource-requirements.md` §3.1), and the mirror
+rule on the response is not written anywhere. Nothing reads one from a
+response today, so nothing is exposed; it is left alone rather than
+invented.
