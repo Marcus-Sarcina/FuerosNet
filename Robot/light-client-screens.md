@@ -211,7 +211,7 @@ subnet alone:
 |---|---|
 | Everybody | Notices from this subnet, activated or suppressed |
 | Everybody | **The patronage upline from here**, scrollable: this person, their patron, and so on to the root |
-| A patron here | What is open to a patron, their own subordinates among it |
+| A patron here | What is open to a patron, among it **the count of their downline: the direct lines they have issued here and no deeper figure** [author, 2026-10-28] — a patron signed every adoption it issued, so that count is exact, where a subtree count would be only as far as the propagated copy reaches and would read low for anyone with depth below them. **No cost of ending one is shown**, that act being a disavowal and mintable only by a node holding its own seed |
 | An operator here | A way to their instance's administration pages, which the operator's own section reaches too |
 | **The root** | **The subnet's name becomes editable**, its logo with it — the root of the hierarchy the subnet *is*, which `light-client-requirements.md` §4.4 makes the root's by convention while nothing enforces it, so the screen says so rather than presenting it as a rule |
 
