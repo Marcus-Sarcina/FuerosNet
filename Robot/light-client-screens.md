@@ -40,7 +40,7 @@ template. That fixes the navigation, and the sections below become screens
 | Part | What it holds |
 |---|---|
 | **The rail**, down the left | Direct messages and the proof-of-presence interface, pinned at the top; below them a scrolling selection of the subnets this person has joined |
-| **The foot**, across the bottom | This person's icon beside a horizontal bar carrying their alias. The icon goes to their own options, the node operator's interfaces among them. **Unlike Discord, the bar goes home** |
+| **The foot**, across the bottom | This person's icon beside a horizontal bar carrying their alias. The icon goes to **Options** (below), the bar **goes home**, which is where this departs from Discord |
 | **The content**, everything else | One of the three views below, or a thread |
 
 **Home view** is the landing state on loading and on returning by the alias
@@ -102,15 +102,31 @@ in that confirmation is the keyhash until the party publishes one, by
 `light-client-requirements.md` §4.3's rule that no name is shown before it
 is received.
 
+**Options** is what the icon in the foot opens, and it is the home of
+everything that is about this person or this device rather than about a
+subnet [author, 2026-10-27]: **the alias and the profile image**, **the
+client's settings**, **backup and recovery**, and **the instances this
+operator runs**. It takes the whole screen with a back control, as a thread
+does, the foot being what it would otherwise sit on top of.
+
+**The alias is not one name**, which this section has to carry rather than
+flatten: a client publishes an alias and an image **per subnet it holds a
+position in** (`light-client-requirements.md` §4.4, UX-015), so this is a
+list with a row per subnet and not a single field — and a subnet nothing
+has been published into shows the keyhash to everybody in it. **Where this
+person roots a subnet they set that subnet's own name and logo too**, which
+the same section makes the root's by convention and nothing enforces, so
+the screen says that rather than presenting it as a rule. **Which alias the
+foot's bar shows is owed.**
+
 **A thread takes the whole screen.** Selecting a direct thread or a board
 discussion hides the rail and the foot, so the screen is the conversation,
 with a back control in the title header returning to the view it came from.
 
 **What this leaves to settle**, drawn as placeholders and owed: the scope
 vocabulary a board post carries, which is the application tier's and not
-this document's; the palette, the template implying a dark one; and a home
-for settings and for backup and recovery, the second of which is the one
-worth placing early — losing the phone loses the identity on it.
+this document's; the palette, the template implying a dark one; and which
+of a person's per-subnet aliases the foot's bar carries.
 
 ---
 
@@ -281,6 +297,10 @@ reaching one under a grant), which need a hosted package on the bench.
 | F5 Register a resource | Owed (node has `CatalogService::register`; no kernel call) | Owed | `light-client-requirements.md` §8 |
 
 ## G. Settings
+
+**These are Options' second group** [author, 2026-10-27], reached by the
+icon in the foot rather than by a destination of their own. The elements
+and what each owes are unchanged.
 
 | Element | Beneath | Owes |
 |---|---|---|
