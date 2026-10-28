@@ -96,11 +96,18 @@ their apexes, which is what the mark is made of:
 | A **golden circlet** | An instance of this person's runs here |
 | A **full pointed crown** | This person is the subnet's root |
 
-**The crown is worn, not stamped**: its downward sweep crosses in front of
-the icon's lower third and the rest of it sits behind, so the icon is
-nestled in it. **The three overlap** — a root usually has subordinates —
-and the drawing shows the highest that applies, root before operator
-before subordinates, **which is an assumption and not a ruling**.
+**The orb sits in its crown as in a stand** [author, 2026-10-27]: the
+subnet's mark is a circle, and the crown is small and low beneath it, its
+back passing behind the orb's foot and its front sweep crossing just over
+it. **The circlets are plain bands**, nothing on them; only the full crown
+carries points, which branch as the mark's own trees do. **The three
+standings overlap** — a root usually has subordinates — and the drawing
+shows the highest that applies, root before operator before subordinates,
+**which is an assumption and not a ruling**.
+
+**The rail is a russet field** [author, 2026-10-27], the ground the mark is
+presented on, so the crowns read as gold and silver on their own colour
+rather than on a neutral dark.
 
 **Resources carry their own unseen counts** in the subnet view, one per
 block, as the rail's icons do.
@@ -222,10 +229,9 @@ Appearance in Options. The colour scheme and the type may both be revisited
 later; what is fixed is that the dark one is what a person meets first and
 that the light one is theirs to choose, not the platform's to impose.
 
-**Nothing in the shell is open** but two small things the drawing settled
-on its own: which standing wins where the crowns overlap, and where the
-**russet field** the crown is normally presented on belongs — the rail and
-the launcher icon are the candidates, and it appears nowhere yet.
+**Nothing in the shell is open** but one thing the drawing settled on its
+own: which standing wins where the crowns overlap. The launcher icon is
+still the platform's default and is the other place the mark belongs.
 
 ---
 
