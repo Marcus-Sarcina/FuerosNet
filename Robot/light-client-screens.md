@@ -109,15 +109,45 @@ client's settings**, **backup and recovery**, and **the instances this
 operator runs**. It takes the whole screen with a back control, as a thread
 does, the foot being what it would otherwise sit on top of.
 
+**Options holds only what pertains to every context this person exists in**
+[author, 2026-10-27]. Anything about one subnet belongs to that subnet's
+own options, below.
+
 **The alias is not one name**, which this section has to carry rather than
 flatten: a client publishes an alias and an image **per subnet it holds a
 position in** (`light-client-requirements.md` §4.4, UX-015), so this is a
 list with a row per subnet and not a single field — and a subnet nothing
-has been published into shows the keyhash to everybody in it. **Where this
-person roots a subnet they set that subnet's own name and logo too**, which
-the same section makes the root's by convention and nothing enforces, so
-the screen says that rather than presenting it as a rule. **Which alias the
-foot's bar shows is owed.**
+has been published into shows the keyhash to everybody in it. **Which
+alias the foot's bar shows is owed.**
+
+**Subnet options** are reached by **selecting the subnet's name at the top
+of its own view** [author, 2026-10-27], and hold what is true of that
+subnet alone:
+
+| Who sees it | What is there |
+|---|---|
+| Everybody | Notices from this subnet, activated or suppressed |
+| Everybody | **The patronage upline from here**, scrollable: this person, their patron, and so on to the root |
+| A patron here | What is open to a patron, their own subordinates among it |
+| An operator here | A way to their instance's administration pages, which the operator's own section reaches too |
+| **The root** | **The subnet's name becomes editable**, its logo with it — `light-client-requirements.md` §4.4 makes that the root's by convention while nothing enforces it, so the screen says so rather than presenting it as a rule |
+
+**A resource takes the screen** [author, 2026-10-27], entered from its
+subnet's view or from a notice. The rail and the foot drop away as they do
+for a thread, leaving the system's own navigation, a title bar with a back
+control, and **the rest for the resource to fill**. The title bar carries
+the context the notice line carries, since two subnets will hold resources
+of the same name. **What the resource has not styled for itself, the
+application styles to match**: background, type and colour as everywhere
+else, so an untagged page does not arrive looking like a different
+application.
+
+**What a resource's page may do is owed, and is not a styling question.**
+The node's own administration pages are already framed with no script, no
+bridge, no file or content access, no storage, and navigation confined to
+that one origin (H3a, PRD-12). A resource is somebody else's code by the
+same argument, and a frame for it wants the same list settled once rather
+than per application.
 
 **A thread takes the whole screen.** Selecting a direct thread or a board
 discussion hides the rail and the foot, so the screen is the conversation,
