@@ -15105,5 +15105,31 @@
     "then": "The answer is delivered and not one header of the namespace travels; the package's own headers and its whole body are untouched. It is stripped rather than refused, matching the rule on the way in: the stray header is a defect in the package, named to the operator in the node's own diagnostics, where refusing the answer would take the resource down over a header nobody reads. The node's control exchanges with a resource are not on this path and keep theirs.",
     "oracle": "behaviour",
     "interpretation": "Nothing in this version reads an `rhtn-*` header off a response, so this closes no live hole; it buys a property. `resource-requirements.md` §3.1 makes *an `rhtn-*` header was written by the node* true on the way in, and the same rule on the way out makes it true rather than undefined — so a reader added later need not ask who could have written one, and no package exists yet for the rule to break."
+  },
+  {
+    "id": "RSC-62",
+    "area": "resources",
+    "gap": "resources",
+    "title": "One reader decides where a response ends, for the socket and the parser alike",
+    "milestone": "after-5",
+    "kind": "robustness",
+    "spec": [
+      "wire-format.md §11.2"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §11.2",
+        "text": "two parties disagreeing about where one message ends and the next begins"
+      },
+      {
+        "where": "wire-format.md §11.2",
+        "text": "A byte a resource sees that your parser did not examine is a byte outside your security model."
+      }
+    ],
+    "given": "A node reaching a resource over a socket, a node running one in its sandbox, and a node asking one of its own control paths — three places that must know where a response ends.",
+    "when": "Each reads an answer, in each of the three framings RFC 9112 allows and in each of the ambiguities no rewriting could settle.",
+    "then": "One reader answers how the body is delimited, and the socket reads that much while the parser reads what arrived to the same decision; a counted, a chunked and an unframed answer each come to the same canonical message. The reader refuses a duplicated or comma-listed length, a length beside an encoding and an encoding the node does not decode, so the refusal happens once rather than differently in each place. The socket hands up what it read without re-framing it, and the host path joins a chunked answer with the same parser rather than handing a caller its chunk sizes.",
+    "oracle": "behaviour",
+    "interpretation": "§11.2's hazard is two parties disagreeing about a message boundary. A socket must parse enough to know when to stop reading and cannot defer that, so the division is between reading — which stays where the bytes arrive, with the bound an unauthenticated far end can make the node spend — and deciding, which belongs to one reader. Three implementations of the second is the hazard inside one node."
   }
 ]

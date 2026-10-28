@@ -1929,22 +1929,30 @@ pub fn message(
     out
 }
 
-/// The status and body of a resource's HTTP answer, read leniently: a
-/// backend's framing is the relay's or the sandbox's to have checked.
+/// The status and body of a resource's HTTP answer, **read by the one
+/// parser** ([`crate::http::parse_response`]).
+///
+/// It used to read the head itself and leniently, on the reasoning that
+/// *a backend's framing is the relay's or the sandbox's to have checked*.
+/// Neither did: the sandbox bounds a package's answer by size alone, and
+/// the relay now hands up what it read without re-framing it — so a
+/// chunked answer on this path would have reached a caller here with its
+/// chunk sizes still in the body. One parser, so the three places that
+/// read a response cannot disagree about where it ends
+/// (`wire-format.md` §11.2).
+///
+/// **Status 0 for an answer that does not read**, as before for bytes
+/// that were not a response at all: nothing on this path treats 0 as
+/// taken, so an unreadable answer is one the node has not had — which is
+/// the state it was already in before the package replied.
 pub fn response_of(bytes: &[u8]) -> (u16, Vec<u8>) {
-    let head_end = bytes
-        .windows(4)
-        .position(|w| w == b"\r\n\r\n")
-        .map(|p| p + 4)
-        .unwrap_or(bytes.len());
-    let head = String::from_utf8_lossy(&bytes[..head_end]);
-    let status = head
-        .lines()
-        .next()
-        .and_then(|l| l.split(' ').nth(1))
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(0);
-    (status, bytes[head_end..].to_vec())
+    match crate::http::parse_response(bytes) {
+        Ok(r) => (r.status, r.body),
+        Err(why) => {
+            tracing::debug!(target: "node", why = ?why, "node.federation.unreadable");
+            (0, Vec::new())
+        }
+    }
 }
 
 fn hex(b: &[u8]) -> String {

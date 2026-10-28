@@ -18,10 +18,20 @@
 //!
 //! **What the node does not do is interpret the answer** (§3:
 //! "responses are ordinary HTTP. The node relays them; it does not
-//! interpret them"). It must still know where one ends, so the framing is
-//! read and, where a chunked body's framing would otherwise reach the
-//! caller as a lie, rewritten — the same discipline §3.1 states for the
-//! request, where the node "parses the HTTP message and re-serialises it".
+//! interpret them"). It must still know where one ends, because it is
+//! reading from a socket — so it asks [`crate::http::extent`] how the
+//! head says the body is delimited, reads that much, and hands up what
+//! it read.
+//!
+//! **It does not re-frame, and that is a change of 2026-10-28.** It used
+//! to scan the head itself, decode a chunked body and write the head out
+//! again with a count — which was the gateway's parse done a second
+//! time, in a second place, from a second reading of the same headers.
+//! `wire-format.md` §11.2 is about exactly that: two parties must not
+//! disagree about where a message ends. So the framing decision is
+//! [`crate::http::extent`]'s, the normalising is
+//! [`crate::http::serialise_response`]'s, and what is left here is
+//! reading bytes off a wire and bounding them.
 
 use crate::resources::Backend;
 use std::io::{Read, Write};
@@ -110,71 +120,76 @@ impl Backend for Relay {
             return Err(format!("{}: not an HTTP/1 response", self.addr));
         }
 
-        // **one of three framings, and the response says which**
-        // (RFC 9112 §6): a chunked body, a counted one, or one the far end
-        // ends by closing.
-        if let Some(te) = header(&head, b"transfer-encoding") {
-            if !te.eq_ignore_ascii_case("chunked") {
-                return Err(format!("{}: `transfer-encoding: {te}`", self.addr));
+        // **one of three framings, and one reader of which**
+        // ([`crate::http::extent`], RFC 9112 §6): a chunked body, a
+        // counted one, or one the far end ends by closing.
+        match crate::http::extent(&head).map_err(|e| format!("{}: {e:?}", self.addr))? {
+            crate::http::Extent::Chunked => {
+                // **read to the end of the chunking, and hand the
+                // chunking up**: decoding it here and rewriting the head
+                // was this file deciding the framing a second time
+                let read = self.to_last_chunk(&mut s, rest)?;
+                let mut out = head;
+                out.extend_from_slice(&read);
+                Ok(out)
             }
-            let body = self.dechunk(&mut s, rest)?;
-            return Ok(reframed(&head, &body));
-        }
-        if let Some(len) = header(&head, b"content-length") {
-            let want: usize = len
-                .trim()
-                .parse()
-                .map_err(|_| format!("{}: `content-length: {len}`", self.addr))?;
-            if want > self.cap {
-                return Err(format!(
-                    "{}: {want} bytes is over the node's {}",
-                    self.addr, self.cap
-                ));
-            }
-            while rest.len() < want {
-                match s.read(&mut chunk) {
-                    Ok(0) => {
-                        return Err(format!(
-                            "{}: closed {} bytes short",
-                            self.addr,
-                            want - rest.len()
-                        ));
-                    }
-                    Ok(n) => rest.extend_from_slice(&chunk[..n]),
-                    Err(e) => return Err(format!("{}: {e}", self.addr)),
+            crate::http::Extent::Length(want) => {
+                if want > self.cap {
+                    return Err(format!(
+                        "{}: {want} bytes is over the node's {}",
+                        self.addr, self.cap
+                    ));
                 }
+                while rest.len() < want {
+                    match s.read(&mut chunk) {
+                        Ok(0) => {
+                            return Err(format!(
+                                "{}: closed {} bytes short",
+                                self.addr,
+                                want - rest.len()
+                            ));
+                        }
+                        Ok(n) => rest.extend_from_slice(&chunk[..n]),
+                        Err(e) => return Err(format!("{}: {e}", self.addr)),
+                    }
+                }
+                rest.truncate(want);
+                let mut out = head;
+                out.extend_from_slice(&rest);
+                Ok(out)
             }
-            rest.truncate(want);
-            let mut out = head;
-            out.extend_from_slice(&rest);
-            return Ok(out);
+            crate::http::Extent::ToClose => {
+                loop {
+                    if rest.len() > self.cap {
+                        return Err(format!("{}: over the node's {} bytes", self.addr, self.cap));
+                    }
+                    match s.read(&mut chunk) {
+                        Ok(0) => break,
+                        Ok(n) => rest.extend_from_slice(&chunk[..n]),
+                        Err(e) => return Err(format!("{}: {e}", self.addr)),
+                    }
+                }
+                let mut out = head;
+                out.extend_from_slice(&rest);
+                Ok(out)
+            }
         }
-        // nothing framed it, so the close does
-        loop {
-            if rest.len() > self.cap {
-                return Err(format!("{}: over the node's {} bytes", self.addr, self.cap));
-            }
-            match s.read(&mut chunk) {
-                Ok(0) => break,
-                Ok(n) => rest.extend_from_slice(&chunk[..n]),
-                Err(e) => return Err(format!("{}: {e}", self.addr)),
-            }
-        }
-        let mut out = head;
-        out.extend_from_slice(&rest);
-        Ok(out)
     }
 }
 
 impl Relay {
-    /// Read a chunked body into its bytes.
+    /// **Read until the chunking ends, and keep every byte of it.**
     ///
-    /// **It is decoded rather than passed on** because the node answers on
-    /// a transport that carries one message and no trailer: a caller
-    /// handed `transfer-encoding: chunked` over that wire would be handed
-    /// a framing that does not describe what arrived.
-    fn dechunk(&self, s: &mut TcpStream, mut rest: Vec<u8>) -> Result<Vec<u8>, String> {
-        let mut body = Vec::new();
+    /// A socket gives no end of its own, so the chunk sizes are walked to
+    /// find one — that is reading, and it is why this cannot be left to
+    /// the parser. **What it does not do is decode**: the chunking is
+    /// handed up as it arrived and
+    /// [`crate::http::parse_response`] joins it, so the body's extent is
+    /// decided in one place rather than agreed in two.
+    ///
+    /// The cap is counted against the bytes actually read, which is what
+    /// an unauthenticated far end can make this node spend.
+    fn to_last_chunk(&self, s: &mut TcpStream, mut rest: Vec<u8>) -> Result<Vec<u8>, String> {
         let mut chunk = [0u8; 8192];
         let mut at = 0usize;
         loop {
@@ -183,6 +198,9 @@ impl Relay {
                 if let Some(i) = find(&rest[at..], b"\r\n") {
                     break String::from_utf8_lossy(&rest[at..at + i]).to_string();
                 }
+                if rest.len() > self.cap {
+                    return Err(format!("{}: over the node's {} bytes", self.addr, self.cap));
+                }
                 match s.read(&mut chunk) {
                     Ok(0) => return Err(format!("{}: closed inside a chunked body", self.addr)),
                     Ok(n) => rest.extend_from_slice(&chunk[..n]),
@@ -190,12 +208,25 @@ impl Relay {
                 }
             };
             at += line.len() + 2;
+            // the size is read to walk the body, not to judge it: an
+            // extension or a trailer is the parser's to refuse, and
+            // refusing it here would be a second opinion
             let size = usize::from_str_radix(line.split(';').next().unwrap_or("").trim(), 16)
                 .map_err(|_| format!("{}: `{line}` is not a chunk size", self.addr))?;
             if size == 0 {
-                return Ok(body);
+                // the terminal chunk's own CRLF, so the message is whole
+                // when the parser sees it
+                while rest.len() < at + 2 {
+                    match s.read(&mut chunk) {
+                        Ok(0) => break,
+                        Ok(n) => rest.extend_from_slice(&chunk[..n]),
+                        Err(e) => return Err(format!("{}: {e}", self.addr)),
+                    }
+                }
+                rest.truncate((at + 2).min(rest.len()));
+                return Ok(rest);
             }
-            if body.len() + size > self.cap {
+            if at + size + 2 > self.cap {
                 return Err(format!("{}: over the node's {} bytes", self.addr, self.cap));
             }
             while rest.len() < at + size + 2 {
@@ -205,46 +236,9 @@ impl Relay {
                     Err(e) => return Err(format!("{}: {e}", self.addr)),
                 }
             }
-            body.extend_from_slice(&rest[at..at + size]);
             at += size + 2;
         }
     }
-}
-
-/// The head again, with the framing it now has: the chunked header goes,
-/// a count takes its place, and nothing else of the far end's answer is
-/// touched.
-fn reframed(head: &[u8], body: &[u8]) -> Vec<u8> {
-    let mut out = Vec::new();
-    for line in head.split(|b| *b == b'\n') {
-        let l = line.strip_suffix(b"\r").unwrap_or(line);
-        if l.is_empty() {
-            continue;
-        }
-        let lower = l.to_ascii_lowercase();
-        if lower.starts_with(b"transfer-encoding:") || lower.starts_with(b"content-length:") {
-            continue;
-        }
-        out.extend_from_slice(l);
-        out.extend_from_slice(b"\r\n");
-    }
-    out.extend_from_slice(format!("content-length: {}\r\n\r\n", body.len()).as_bytes());
-    out.extend_from_slice(body);
-    out
-}
-
-/// One header's value from a response head, case-insensitively, or nothing.
-fn header(head: &[u8], name: &[u8]) -> Option<String> {
-    for line in head.split(|b| *b == b'\n') {
-        let l = line.strip_suffix(b"\r").unwrap_or(line);
-        let Some(i) = l.iter().position(|b| *b == b':') else {
-            continue;
-        };
-        if l[..i].to_ascii_lowercase() == name {
-            return Some(String::from_utf8_lossy(&l[i + 1..]).trim().to_string());
-        }
-    }
-    None
 }
 
 fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {

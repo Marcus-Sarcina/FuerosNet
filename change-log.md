@@ -16259,3 +16259,44 @@ beside the relay duplication rather than refactored under a different
 task.
 
 RSC-61 and GAT-040. Workspace tests 883.
+
+### 2026-10-28 (three readers of a response become one)
+
+**`wire-format.md` §11.2's hazard is two parties disagreeing about where
+a message ends, and there were three of them inside one node**: the host
+path's `federation::response_of` splitting a head for a status and a
+body, the own-port path's `relay::reframed` writing a length and
+stripping an encoding, and the member path's `http::parse_response`
+deciding the policy. Only the last decided anything, and the other two
+were each reading the same headers to their own conclusions.
+
+**The division that survives is reading from deciding.** A socket must
+parse enough to know when to stop reading, and cannot defer that to
+anyone — so `relay` keeps its reader, along with the cap, which is what
+bounds the work an unauthenticated far end can ask this node to do. What
+it no longer does is conclude: `http::extent` answers how a response is
+delimited, the socket reads that much, and `parse_response` asks the
+same function what arrived rather than reading those headers a second
+time. So the two cannot disagree by construction rather than by
+agreement.
+
+**`reframed` and the relay's own header scanner are gone**, and
+`dechunk` became `to_last_chunk`: it walks the chunk sizes to find the
+end and hands the chunking up as it arrived, where it used to decode and
+rewrite the head. A chunk extension or a trailer is no longer refused
+there either — that is the parser's to refuse, and refusing it in two
+places is two opinions.
+
+**The consolidation caught a regression on its way in**, which is the
+argument for one parser as a fact rather than a principle. With the relay
+no longer re-framing, `response_of`'s own lenient split would have handed
+a caller on the host path a chunked answer with its chunk sizes still in
+the body. The two changes had to land together; either alone would have
+been wrong.
+
+**What did not move**: the caps, which belong where the bytes arrive —
+the relay's against a socket, the sandbox's against a package. A parser
+operating on bytes already bounded needs none.
+
+RSC-62, and the relay's own chunked test now reads the re-framing out of
+the gateway's serialiser instead of the relay's. Workspace tests 885.

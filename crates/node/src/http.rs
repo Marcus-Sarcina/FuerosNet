@@ -399,6 +399,71 @@ pub struct Response {
     pub body: Vec<u8>,
 }
 
+/// **How a response head says where its body ends** (RFC 9112 §6).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Extent {
+    /// A counted body.
+    Length(usize),
+    /// Chunked framing.
+    Chunked,
+    /// Neither header: the far end ends it by closing, or — for a backend
+    /// that hands over one buffer — the buffer's own end does.
+    ToClose,
+}
+
+/// **The one reader of a response's framing headers** [2026-10-28].
+///
+/// A socket deciding how many bytes to read and a parser deciding what
+/// arrived are the two parties `wire-format.md` §11.2 says must not
+/// disagree about where a message ends — and they had separate readers.
+/// The relay scanned the head itself and rewrote the framing it found,
+/// the gateway's parse scanned it again, and the host path's reader
+/// scanned a third time for a status. This is that decision, once, for
+/// all three.
+///
+/// Refuses what no rewriting could settle: a duplicated or comma-listed
+/// length, a length beside an encoding, an encoding this node does not
+/// decode.
+pub fn extent(head: &[u8]) -> Result<Extent, Reject> {
+    let (mut length, mut chunked) = (None::<usize>, false);
+    for line in head.split(|b| *b == b'\n') {
+        let l = line.strip_suffix(b"\r").unwrap_or(line);
+        if l.is_empty() {
+            continue;
+        }
+        let Some(i) = l.iter().position(|b| *b == b':') else {
+            continue;
+        };
+        let name = l[..i].to_ascii_lowercase();
+        let value = String::from_utf8_lossy(&l[i + 1..]).trim().to_string();
+        match name.as_slice() {
+            b"content-length" => {
+                if length.is_some() || value.contains(',') {
+                    return Err(Reject::Ambiguous("duplicate content-length"));
+                }
+                length = Some(
+                    value
+                        .parse()
+                        .map_err(|_| Reject::Malformed("response content-length"))?,
+                );
+            }
+            b"transfer-encoding" => {
+                if chunked || !value.eq_ignore_ascii_case("chunked") {
+                    return Err(Reject::Ambiguous("transfer-encoding"));
+                }
+                chunked = true;
+            }
+            _ => {}
+        }
+    }
+    match (length, chunked) {
+        (Some(_), true) => Err(Reject::Ambiguous("content-length and transfer-encoding")),
+        (Some(n), false) => Ok(Extent::Length(n)),
+        (None, true) => Ok(Extent::Chunked),
+        (None, false) => Ok(Extent::ToClose),
+    }
+}
+
 /// **Parse one HTTP/1.1 response from a backend** (`wire-format.md` §11
 /// field 2, *same reasoning as the request*; §11.2).
 ///
@@ -464,8 +529,11 @@ pub fn parse_response(bytes: &[u8]) -> Result<Response, Reject> {
         return Err(Reject::Malformed("response reason phrase"));
     }
 
+    // **the framing is read once, by [`extent`]**, and the loop below
+    // reads everything else: the two had separate readers, which is the
+    // disagreement §11.2 is about
+    let how = extent(&bytes[..head_end])?;
     let mut headers: Vec<(String, String)> = Vec::new();
-    let (mut content_length, mut chunked) = (None::<usize>, false);
     for line in lines {
         if line.starts_with(' ') || line.starts_with('\t') {
             return Err(Reject::Ambiguous("obsolete line folding"));
@@ -482,22 +550,9 @@ pub fn parse_response(bytes: &[u8]) -> Result<Response, Reject> {
         }
         let lname = name.to_ascii_lowercase();
         match lname.as_str() {
-            "content-length" => {
-                if content_length.is_some() || value.contains(',') {
-                    return Err(Reject::Ambiguous("duplicate content-length"));
-                }
-                content_length = Some(
-                    value
-                        .parse()
-                        .map_err(|_| Reject::Malformed("response content-length"))?,
-                );
-            }
-            "transfer-encoding" => {
-                if chunked || !value.eq_ignore_ascii_case("chunked") {
-                    return Err(Reject::Ambiguous("transfer-encoding"));
-                }
-                chunked = true;
-            }
+            // the framing headers are [`extent`]'s, and are written back
+            // from the body's own length on the way out
+            "content-length" | "transfer-encoding" => {}
             "upgrade" => return Err(Reject::NotOneExchange("Upgrade")),
             "connection"
                 if value
@@ -545,24 +600,21 @@ pub fn parse_response(bytes: &[u8]) -> Result<Response, Reject> {
             }
         }
     }
-    if content_length.is_some() && chunked {
-        return Err(Reject::Ambiguous("content-length and transfer-encoding"));
-    }
     let rest = &bytes[head_end + sep..];
-    let (body, consumed) = if chunked {
-        decode_chunked(rest)?
-    } else if let Some(n) = content_length {
-        if rest.len() < n {
-            return Err(Reject::Malformed("response body short"));
+    let (body, consumed) = match how {
+        Extent::Chunked => decode_chunked(rest)?,
+        Extent::Length(n) => {
+            if rest.len() < n {
+                return Err(Reject::Malformed("response body short"));
+            }
+            (rest[..n].to_vec(), n)
         }
-        (rest[..n].to_vec(), n)
-    } else {
         // **neither header, so the backend's own answer delimits it.**
         // `Backend::handle` returns one buffer, and that buffer's end is
         // the message's end — which is why this is not the ambiguity the
         // same case is on a connection. Written back under a length, so
         // nothing downstream has to decide it either.
-        (rest.to_vec(), rest.len())
+        Extent::ToClose => (rest.to_vec(), rest.len()),
     };
     if consumed != rest.len() {
         return Err(Reject::MoreThanOne);

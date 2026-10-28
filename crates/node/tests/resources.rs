@@ -2501,3 +2501,86 @@ fn a_package_cannot_speak_in_its_hosts_namespace_on_the_way_out_either() {
     let seen = String::from_utf8_lossy(&out).to_ascii_lowercase();
     assert!(!seen.contains("rhtn-"), "not one of them travels: {seen}");
 }
+
+// acceptance: RSC-62
+#[test]
+fn one_reader_decides_how_a_response_is_delimited() {
+    use rhtn_node::http::Extent;
+
+    // the three framings RFC 9112 §6 allows, read once for everybody:
+    // the socket that must know how much to read and the parser that
+    // must know what arrived
+    assert_eq!(
+        http::extent(b"HTTP/1.1 200 OK\r\ncontent-length: 7\r\n\r\n").expect("counted"),
+        Extent::Length(7),
+    );
+    assert_eq!(
+        http::extent(b"HTTP/1.1 200 OK\r\ntransfer-encoding: CHUNKED\r\n\r\n").expect("chunked"),
+        Extent::Chunked,
+        "case is not what decides it",
+    );
+    assert_eq!(
+        http::extent(b"HTTP/1.1 200 OK\r\ncontent-type: text/plain\r\n\r\n").expect("neither"),
+        Extent::ToClose,
+    );
+    // and a head whose lines end the other way, since the node is what
+    // writes the canonical form
+    assert_eq!(
+        http::extent(b"HTTP/1.1 200 OK\ncontent-length: 2\n\n").expect("bare newlines"),
+        Extent::Length(2),
+    );
+
+    // what no rewriting could settle is refused here, once
+    for head in [
+        &b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\ncontent-length: 3\r\n\r\n"[..],
+        &b"HTTP/1.1 200 OK\r\ncontent-length: 2, 3\r\n\r\n"[..],
+        &b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\ntransfer-encoding: chunked\r\n\r\n"[..],
+        &b"HTTP/1.1 200 OK\r\ntransfer-encoding: gzip\r\n\r\n"[..],
+        &b"HTTP/1.1 200 OK\r\ntransfer-encoding: chunked\r\ntransfer-encoding: chunked\r\n\r\n"[..],
+    ] {
+        assert!(
+            http::extent(head).is_err(),
+            "not refused: {}",
+            String::from_utf8_lossy(head),
+        );
+    }
+
+    // **and the parser agrees with it by construction**, asking rather
+    // than reading those headers a second time: a response the one says
+    // is counted is one the other reads to that count
+    let m = b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\n\r\nok";
+    assert_eq!(http::extent(m).expect("counted"), Extent::Length(2));
+    assert_eq!(http::parse_response(m).expect("reads").body, b"ok");
+}
+
+// acceptance: RSC-62
+#[test]
+fn the_host_path_reads_a_response_with_the_same_parser() {
+    use rhtn_node::federation::response_of;
+
+    // **the regression this would have been.** The relay hands up the
+    // chunking it read rather than decoding it, so a host-path reader of
+    // its own would have handed a caller the chunk sizes as the body.
+    let chunked = b"HTTP/1.1 200 OK\r\ncontent-type: application/json\r\n\
+                    transfer-encoding: chunked\r\n\r\n2\r\n{}\r\n0\r\n\r\n";
+    let (status, body) = response_of(chunked);
+    assert_eq!(status, 200);
+    assert_eq!(body, b"{}", "joined, not handed over with its sizes in it");
+
+    // the statuses this path turns on, unchanged
+    assert_eq!(
+        response_of(b"HTTP/1.1 204 No Content\r\n\r\n"),
+        (204, vec![])
+    );
+    assert_eq!(
+        response_of(b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\n\r\n{}"),
+        (200, b"{}".to_vec()),
+    );
+    // and an answer that does not read is one the node has not had
+    assert_eq!(response_of(b"junk").0, 0);
+    assert_eq!(
+        response_of(b"HTTP/1.1 200 OK\r\ncontent-length: 1\r\ncontent-length: 2\r\n\r\nx").0,
+        0,
+        "an ambiguous answer is not taken, so the node asks again",
+    );
+}

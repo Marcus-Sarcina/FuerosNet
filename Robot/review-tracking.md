@@ -19627,11 +19627,13 @@ answers with a response whose body is the request. The relay path needed
 nothing: its own `reframed` already produced a conforming response, so
 the gateway's parse agrees with it.
 
-**A duplication to fold in later**: `relay::reframed` and
-`http::serialise_response` now both write the length and strip the
-encoding on that path. The second is a no-op on a canonical message, so
-nothing is wrong, but it is one framer more than §11.2's one parser
-wants.
+**That duplication is folded in** [author, 2026-10-28]: `relay::reframed`
+and `relay::header` are gone, `relay::dechunk` is now `to_last_chunk` —
+it walks the sizes to find the end, because a socket gives none, and
+hands the chunking up unaltered. `federation::response_of` is a wrapper
+over `http::parse_response` rather than its own lenient head split. One
+reader of the framing headers, `http::extent`, which the socket asks how
+much to read and the parser asks what arrived. RSC-62.
 
 **And the question is settled** [author, 2026-10-28, having no opinion and
 asking whether there was a reason not to]: the node strips `rhtn-*` from
@@ -19647,8 +19649,16 @@ cheapest to settle while no package in the world relies on one. Stripped
 rather than refused, matching the way in, with the operator told in the
 diagnostics. RSC-61, GAT-040.
 
-**Three readers of a response, of which one decides anything**, noticed
-while establishing the above and worth folding together with the relay
-duplication above: `federation::response_of` takes a status and a body
-off the host path, `relay::reframed` writes a length on the own-port
-path, and `http::parse_response` is the policy on the member path.
+**And the three readers are one** [author, 2026-10-28]. They were:
+`federation::response_of` taking a status and a body off the host path,
+`relay::reframed` writing a length on the own-port path, and
+`http::parse_response` on the member path. Now `http::extent` decides how
+a response is delimited and the other two ask it; reading bytes off a
+wire stays with the socket, where the bound an unauthenticated far end
+can make this node spend also lives.
+
+**It caught a regression on the way in**: the relay no longer re-frames,
+so had `response_of` kept its own lenient split, a chunked answer on the
+host path would have reached a caller with its chunk sizes in the body.
+The two changes had to land together, which is the argument for one
+parser stated as a fact rather than a principle.
