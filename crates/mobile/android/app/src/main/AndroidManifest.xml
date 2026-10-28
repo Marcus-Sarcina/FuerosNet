@@ -67,6 +67,9 @@
              2026-10-16 until 2026-10-27, no test having touched an Activity.
              `ManifestTest` now holds every one a source names. -->
         <activity android:name=".AttachActivity" android:exported="false" />
+        <!-- E3: the lines this key holds, what leaving one costs, and the
+             departure behind it.  Reached from People. -->
+        <activity android:name=".LeavingActivity" android:exported="false" />
         <!-- H3's provisioning pages, and the frame the node's own pages are
              presented in (PRD-12, PRD-13; §8.3). The frame is a separate
              Activity so that what it holds is a WebView and nothing else. -->

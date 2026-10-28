@@ -55,6 +55,15 @@ fun main() {
     var refused = false
     try { a.send(ByteArray(3), kindApplication(), ByteArray(1)) } catch (e: Refused.Reason) { refused = e.reason.contains("32 bytes") }
     check(refused) { "a bad recipient is refused with its reason" }
+    // the authority calls, from Kotlin: alice is attached to bob and under
+    // nobody, so there is no line to leave and no cost to quote for one.
+    // What this proves is that the call and its refusal cross the binding
+    // in a shell's own language (`light-client-requirements.md` §6).
+    check(a.relationships().isEmpty()) { "attached is not adopted: no line" }
+    var noCost = ""
+    try { a.costOfLeaving(bob.id) } catch (e: Refused.Reason) { noCost = e.reason }
+    check(noCost.contains("NoRelationship")) { "the cost is refused by name, got '$noCost'" }
+    check(a.standing(bob.id).isFinite()) { "and standing answers with a number" }
     a.detach(); c.detach()
     println("KOTLIN ROUND TRIP OK")
 }

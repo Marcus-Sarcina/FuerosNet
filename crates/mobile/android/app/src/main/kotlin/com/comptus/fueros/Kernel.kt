@@ -1874,6 +1874,128 @@ object Kernel {
         }, "fueros-detach").start()
     }
 
+    // ---- authority: the lines this key holds, and what ending one costs
+
+    /** One patron line this key holds (`wire-format.md` §4.6). */
+    data class Line(val patron: String, val series: UInt)
+
+    /** One resource an ending takes away. */
+    data class Lost(
+        val resource: String,
+        val node: String,
+        val owner: String,
+        val serviceType: String,
+        val instance: String,
+        /** True where the node serving it goes; false where the owner does. */
+        val hostLeaves: Boolean,
+    )
+
+    /**
+     * **Why a cost is a floor and not the whole answer.** The kernel's own
+     * variants, carried up as they are: the screen says each in its own
+     * words, and a variant it did not expect would be a variant it could
+     * not have worded.
+     */
+    sealed class Limit {
+        /** Access is the resource's own rule, held nowhere here. */
+        object PredicateNotHeld : Limit()
+
+        /** This node's list could not be refreshed on the last sweep. */
+        data class Stale(val node: String) : Limit()
+
+        /** This node holds more than it will list at once. */
+        data class Truncated(val node: String) : Limit()
+
+        /** This node within reach has never been asked what it serves. */
+        data class Unswept(val node: String) : Limit()
+
+        /** The relationship runs on more than one open line. */
+        data class SeveralLines(val lines: Int) : Limit()
+
+        /** This device's copy of the topology holds no edge to subtract. */
+        object NotInTable : Limit()
+    }
+
+    /** What ending one line would cost (`light-client-requirements.md` §6). */
+    data class Cost(
+        val losing: List<Lost>,
+        val keeping: Int,
+        val leaving: List<String>,
+        val limits: List<Limit>,
+    )
+
+    /** The patron lines this key holds, newest series and all. */
+    fun lines(): List<Line> {
+        val p = participant ?: return emptyList()
+        return call("relationships", { emptyList() }) {
+            p.relationships().map { Line(hex(it.patron), it.series) }
+        }
+    }
+
+    /**
+     * **What leaving `patronHex` would cost**, computed on demand and kept
+     * nowhere — or null **and the reason why**, which the screen says
+     * rather than guessing at.
+     *
+     * The kernel refuses this for a patron this key holds no relationship
+     * with, the same refusal the departure gives, so no price is ever
+     * quoted for an act that would not happen. **A null that carried no
+     * reason** would have had the screen report that refusal for a kernel
+     * that had simply not come up yet.
+     *
+     * Blocking: the caller runs it off the drawing thread.
+     */
+    fun costOfLeaving(patronHex: String): Pair<Cost?, String> {
+        val p = participant ?: return null to "the kernel is not up yet"
+        val who = runCatching { unhex(patronHex) }.getOrNull()
+            ?: return null to "not a key: ${patronHex.take(16)}…"
+        return call("cost_of_leaving", { e -> front.note("· cost refused: ${e.reason}"); null to e.reason }) {
+            val k = p.costOfLeaving(who)
+            Cost(
+                losing = k.losing.map {
+                    Lost(
+                        resource = hex(it.resource),
+                        node = hex(it.node),
+                        owner = hex(it.owner),
+                        serviceType = it.serviceType,
+                        instance = it.instance,
+                        hostLeaves = it.reason == uniffi.rhtn_ffi.LossReason.HOST_LEAVES,
+                    )
+                },
+                keeping = k.keeping.toInt(),
+                leaving = k.leaving.map { w -> hex(w) },
+                limits = k.limits.map { l ->
+                    when (l) {
+                        is uniffi.rhtn_ffi.CostLimit.PredicateNotHeld -> Limit.PredicateNotHeld
+                        is uniffi.rhtn_ffi.CostLimit.Stale -> Limit.Stale(hex(l.node))
+                        is uniffi.rhtn_ffi.CostLimit.Truncated -> Limit.Truncated(hex(l.node))
+                        is uniffi.rhtn_ffi.CostLimit.Unswept -> Limit.Unswept(hex(l.node))
+                        is uniffi.rhtn_ffi.CostLimit.SeveralLines -> Limit.SeveralLines(l.lines.toInt())
+                        is uniffi.rhtn_ffi.CostLimit.NotInTable -> Limit.NotInTable
+                    }
+                },
+            ) to ""
+        }
+    }
+
+    /**
+     * **Leave a patron**: minted, signed, appended and posted in one act.
+     * The old patron does not sign and no refusal can come back from them
+     * (design §6.2); what can come back is this client's own, and that is
+     * what the returned line says.
+     *
+     * Blocking, and the caller runs it off the drawing thread.
+     */
+    fun departFrom(patronHex: String): String {
+        val p = participant ?: return "no kernel yet"
+        val who = runCatching { unhex(patronHex) }.getOrNull() ?: return "not a key: $patronHex"
+        return call("depart", { e -> "refused: ${e.reason}" }) {
+            val t = p.depart(who, null)
+            front.note("· left ${patronHex.take(8)}…; the departure is ${hex(t).take(8)}…")
+            "left ${patronHex.take(8)}… — the departure is ${hex(t).take(8)}…"
+        }
+    }
+
     fun forgetCaptures(hexKey: String) {
         val p = participant ?: run { front.note("· no kernel yet"); return }
         val who = runCatching { unhex(hexKey) }.getOrNull() ?: run { front.note("· not a key: $hexKey"); return }

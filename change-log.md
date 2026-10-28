@@ -15981,3 +15981,60 @@ since it is read as a reason not to act.
 
 Five catalogue entries (TOP-52, TOP-53, RSC-53..55), workspace tests 869,
 Android 236, the Kotlin binding regenerated.
+
+### 2026-10-28 (the screen for what leaving costs, where an empty list means two things)
+
+**The computation of the morning had no screen**, and `depart` was
+reachable from nothing at all — so §6's warning was moot in both
+directions: nothing showed it, and nothing it warned about could be done.
+`LeavingActivity` is E3, behind a row on People: the lines this key holds,
+the cost of ending one on tapping it, the departure behind a second tap.
+
+**The hard case is the empty list, not the long one.** A cost that came to
+nothing and a cost that could not be worked out both arrive as no losses,
+and they mean opposite things. So the screen leads with *nothing this
+device can see goes with it* for the first and *what leaving costs cannot
+be worked out on this device* for the second, and prints the limits
+whether or not anything is lost. The screens sheet's *a stale permission
+list identified as stale, never silently used* is that requirement from
+the other side, and it is what the tests are mostly about.
+
+**The limits are said in the screen's own words rather than enumerated**:
+what cannot be computed first, then what is known to be missing — a
+node's list that could not be refreshed, a node that holds more than it
+will list, nodes never asked at all, collapsed to a count — and last the
+condition that always holds, that admission is the resource's own rule and
+something still in reach may refuse. Last because it reads there as a
+standing condition rather than as news.
+
+**It informs and does not guard.** Leaving is a right rather than a
+request (design §6.2): the old patron does not sign and cannot refuse, so
+nothing gates the departure on the cost having been read. It asks twice
+because a departure cannot be taken back. Nothing is re-read between the
+two taps either — re-computing under somebody's thumb would show them one
+figure and act on another.
+
+**Four defects, three of them in the wording and all the same shape.**
+*1 person leave your horizon*: the verb agreed with the count in one
+clause and was hardcoded in the other. Then *1 node holds more than they
+will list* and *1 node has never been asked what they serve*, found by
+reading the sentences back after the first was fixed — a singular count
+with a plural pronoun after it, twice more. And a party was named at
+twelve hex characters in the row and eight on the button, which would
+have had somebody comparing a prefix against a shorter prefix of itself
+before an act that cannot be undone; one width now, used everywhere.
+
+**The fourth was a null that carried no reason.** The kernel returned
+nothing both for a patron this key holds no relationship with and for a
+kernel that had not come up, so the screen reported the first for the
+second. It returns the reason beside the absence now, and the screen says
+what it was told rather than deciding which happened.
+
+Driven on an emulator as far as a fresh key goes — the roll says there is
+no patron and where one comes from, and the kernel's `relationships` call
+shows in the log — and the authority calls proved across the generated
+binding from Kotlin, where a cost asked for a line that does not exist is
+refused by name. The populated cost is proved in Rust and not yet on a
+phone, an adoption needing two devices.
+
+Android tests 249, workspace 869.

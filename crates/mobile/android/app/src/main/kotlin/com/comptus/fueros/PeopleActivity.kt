@@ -101,9 +101,27 @@ class PeopleActivity : Activity() {
             )
         }
 
+        // **the way to E3** [2026-10-28]: a patron is somebody in the
+        // horizon this screen shows, and ending that relationship is the
+        // one act about a person that changes what this device can reach.
+        // It is a row here rather than a seventh destination on Home,
+        // which is what the connection line did for the attach screen.
+        val authority = TextView(this).apply {
+            text = "Authority — who you are under, and what leaving costs"
+            textSize = 15f
+            setPadding(0, 20, 0, 24)
+            isClickable = true
+            setOnClickListener {
+                startActivity(
+                    android.content.Intent(this@PeopleActivity, LeavingActivity::class.java),
+                )
+            }
+        }
+
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(Screen.GUTTER, 48, Screen.GUTTER, 48)
+            addView(authority)
             addView(narration)
             addView(scan)
             addView(preview)
