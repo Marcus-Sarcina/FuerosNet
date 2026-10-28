@@ -163,15 +163,30 @@ persists data that is not transaction records, and the protocol's
 persistence is archives of those. **A message type may be added to the
 protocol for it**; the board itself cannot be.
 
-**So the scope arithmetic is this client's after all**, with the nodes
-that relay: the client renders a scope in the reader's own coordinates,
-offers the selector on a new thread, states the inherited one on a reply,
-**and the increment is what bounds the flood** — a step up taking one off
-the top is a hop count in two directions, so a post stops where its
-numbers run out rather than by anyone deciding to stop forwarding it.
+**The arithmetic is two separate jobs, and conflating them was wrong**
+[author, 2026-10-28]:
 
-**Three things the ruling leaves open**, each the author's and asked in
-the output of 2026-10-28:
+- **The scope as displayed is the board application's**, and it is
+  per reader rather than per post, **because one node may serve users at
+  several layers of the hierarchy** — so the same post needs a different
+  tag for each of them and no single stamp at the node could be right for
+  all. The client renders the scope in the reader's own coordinates,
+  offers the selector on a new thread, and states the inherited one on a
+  reply.
+- **Whether to forward is a separate decision**, and it belongs to
+  **either the board application or the node kernel** [open, the
+  author's]. It is not a hop count run down blindly: the test is whether
+  **further nodes are needed to reach recipients in range of that
+  message**. A node serving readers at three layers may satisfy a post
+  from its own users and forward nothing, where the same post at a node
+  serving one layer has to go on.
+
+**Four things the ruling leaves open**, each the author's — the first
+named by him, the rest asked in the output of 2026-10-28:
+
+0. **Where the forwarding decision sits**, between the board application
+   and the node kernel. What it has to answer either way is whether any
+   recipient in range is beyond the nodes already reached.
 
 1. **What protects a post.** Payload today is a per-device ratchet sealed
    pairwise (design §12.6.5, §23.3), and a poster cannot hold a session

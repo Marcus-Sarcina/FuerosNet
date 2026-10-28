@@ -16316,20 +16316,30 @@ that settles where it can: a board persists data that is not transaction
 records, and the protocol's persistence is archives of those. A message
 type may be added for it; the board itself cannot be.
 
-**Which reverses what the screens sheet said** while the question was
-open — that the scope arithmetic was the board application's and belonged
-with the applications thread. It is this client's, with the nodes that
-relay, and the sheet is corrected.
+**Which reverses half of what the screens sheet said** while the question
+was open — that the scope arithmetic belonged with the applications
+thread, a hosted package being where it would have lived.
 
-**And it makes the scope increment load-bearing rather than cosmetic.**
-The rule of 2026-10-27 — a `+3/-3` post read as `+2/-4` by the writer's
-patron and `+4/-2` by their subordinates — is a hop count in two
-directions. So a post stops where its numbers run out, which is what
-bounds a flood that is otherwise unbounded in recipients. The scope words
-were a label on a drawing; they are now the mechanism.
+**And the other half was two jobs read as one**, corrected the same day
+[author, 2026-10-28]. *Displaying* a scope stays the board
+application's, and it is per reader rather than per post, **because one
+node may serve users at several layers of the hierarchy**: the same post
+wants a different tag for each, so no single stamp at the node could be
+right for all of them. *Forwarding* is the other job, and where it sits
+— the board application or the node kernel — is open. What it has to
+answer either way is not a hop count run down blindly but **whether
+further nodes are needed to reach recipients in range of that message**:
+a node serving readers at three layers may satisfy a post out of its own
+users and forward nothing, where the same post at a node serving one
+layer has to go on.
 
-**Three things it leaves open**, asked in the same output and recorded on
-the sheet: what protects a post, since payload today is a per-device
+So the scope words were a label on a drawing and are now the mechanism —
+but the mechanism is a reachability question asked per node, not a
+countdown.
+
+**Four things it leaves open**, recorded on the sheet: where the
+forwarding decision sits, which the author named; and asked in the same
+output, what protects a post, since payload today is a per-device
 ratchet sealed pairwise and a poster cannot hold a session with every
 member of a subnet it cannot enumerate; where the scrollback lives and
 how a client that was away gets what it missed; and how long a node keeps
