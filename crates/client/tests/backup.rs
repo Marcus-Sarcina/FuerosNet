@@ -464,11 +464,12 @@ fn a_store_written_before_locators_were_kept_still_opens() {
         vec![0x81, 0x83, 0x00, 0x44, 10, 0, 0, 7, 0x19, 0x1d, 0x08],
     );
     st.held_for.insert([4u8; 32], vec![0x83, 0x40, 0x40, 0x40]);
+    st.default_alias = Some("Dana".into());
     let seven = st.encode();
     let back = ClientStore::decode(&seven).expect("the current shape opens");
     assert_eq!(
         back, st,
-        "and round-trips, contacts, direct hints and held blobs included"
+        "and round-trips, contacts, direct hints, held blobs and the default alias included"
     );
 
     // the same store as the earlier shapes wrote it: the first six
@@ -476,7 +477,24 @@ fn a_store_written_before_locators_were_kept_still_opens() {
     // kept (2026-10-15); the first nine, before the direct hints and the
     // blobs held for peers (2026-10-24)
     let items = rhtn_codec::cbor::array_item_ranges(&seven, 0).unwrap();
-    assert_eq!(items.len(), 11);
+    assert_eq!(items.len(), 12);
+    // the eleven-shape, before the default alias (2026-10-29): opens with
+    // no name
+    let mut eleven_shape = Vec::new();
+    rhtn_codec::encode::emit_array_head(&mut eleven_shape, 11);
+    for r in &items[..11] {
+        eleven_shape.extend_from_slice(&seven[r.clone()]);
+    }
+    let opened = ClientStore::decode(&eleven_shape).expect("the eleven-shape opens");
+    assert_eq!(opened.held_for, st.held_for, "with its held blobs");
+    assert!(
+        opened.default_alias.is_none(),
+        "and no name, as that client kept none"
+    );
+    // and a store with no name encodes null there and round-trips
+    let mut unnamed = st.clone();
+    unnamed.default_alias = None;
+    assert_eq!(ClientStore::decode(&unnamed.encode()), Some(unnamed));
     let mut nine_shape = Vec::new();
     rhtn_codec::encode::emit_array_head(&mut nine_shape, 9);
     for r in &items[..9] {

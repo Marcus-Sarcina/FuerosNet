@@ -8,6 +8,7 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
 import android.widget.Button
+import android.widget.EditText
 import android.widget.CheckBox
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -1151,11 +1152,57 @@ class MeetActivity : Activity() {
                     para("The adoption is recorded: $t")
                     para("Where you sit now: ${a.position()}")
                     para("Your device will hand the record to its node when it has one. Until then it is held here, which is where it is evidence.")
+                    if (a.patron && m.scope() == Meet.Scope.OWN) nameSubnet(t)
                 }
             }
             Adoption.Step.REFUSED ->
                 para("The adoption did not happen: ${a.reason()}. The meeting itself is untouched — the record above stands, and the two of you can try the adoption again from either side.")
             else -> para("Waiting on ${m.counterpartyName}'s device.")
+        }
+    }
+
+    /** The field and its outcome outlive a redraw of the Done screen. */
+    private var subnetName: EditText? = null
+    private var subnetNamed: String? = null
+    private var subnetSaid: String? = null
+
+    /**
+     * **A new subnet is named by its root at the moment it is formed**
+     * [author, 2026-10-29]: an adoption under this key's own, with no
+     * subnet chosen, is the anchoring record of a subnet whose id is this
+     * txid (design §13.8), and the patron is its root, whose name for it
+     * goes out as the subnet's profile (`wire-format.md` §7.11 kind 1;
+     * `light-client-requirements.md` §4.4). Asked here rather than left
+     * to Options so a subnet is not shown to its first member as eight
+     * hex characters.
+     */
+    private fun nameSubnet(txid: String) {
+        heading("A new subnet under your key")
+        subnetNamed?.let {
+            para("Named $it. Its profile is published to your node, and the name is yours to change in the subnet's options.")
+            return
+        }
+        para("Name it: what everybody who joins under you will see it as.")
+        subnetSaid?.let { para(it) }
+        val field = subnetName ?: EditText(this).apply {
+            hint = "the subnet's name"
+            textSize = 18f
+            setSingleLine()
+        }.also { subnetName = it }
+        (field.parent as? android.view.ViewGroup)?.removeView(field)
+        body.addView(field)
+        button("Name the subnet") {
+            val typed = field.text.toString().trim()
+            Identity.aliasRefusal(typed)?.let { subnetSaid = it; redraw(); return@button }
+            Thread({
+                val why = Kernel.publishSubnetAlias(txid, typed)
+                runOnUiThread {
+                    if (isFinishing) return@runOnUiThread
+                    if (why == null) subnetNamed = typed
+                    subnetSaid = why?.let { "the name could not be published: $it" }
+                    redraw()
+                }
+            }, "fueros-subnet-name").start()
         }
     }
 

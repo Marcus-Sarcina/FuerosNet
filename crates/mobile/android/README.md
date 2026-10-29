@@ -14,6 +14,7 @@ wants exactly the symbols the packaged library has. The application id
 
 | Screen | What it does |
 |---|---|
+| First run | A device with no identity lands here: **Start a new identity** mints one, shows its public key material and its 24-word phrase once, and asks for a default name; **Restore from a seed phrase** reads the words back, each completed from the standard list, into the same identity. The phrase is BIP-39's shape over a 32-byte master, the kernel's two seeds derived from it in the shell (`Identity`) |
 | The shell | The launcher since 2026-10-29: the rail of orbs down the left (direct messages, the meeting, each joined subnet in its crown), the foot with this person's name, and the content between them. Brings the kernel up and takes the bench's provision. Each place carries the rows that reach the screens below and names what it does not hold yet |
 | Attach | This device's own attach to a serving node, from Options: the nodes whose records it holds, or a key and an address typed, and a detach |
 | Meet | The ceremony end to end: the invitation, both briefs, the optical exchange, the window, the guided capture, verifiers and witnesses, the review, the record, and the peering and adoption that follow |
@@ -26,9 +27,10 @@ wants exactly the symbols the packaged library has. The application id
 
 **What this shell still owes**, beyond rendering the client's states:
 
-- The identity fork at first run: a new identity is minted and kept under
-  this shell's own custody, and **restore and recover are not built** — the
-  kernel exports neither recovery nor departure yet.
+- The identity fork's third door: **restore from a backup envelope and
+  recover are not built** — the first run offers a new identity and a
+  restore from the phrase (2026-10-29), and the kernel exports neither
+  recovery nor departure yet.
 - Settings, which is a placeholder: the wake endpoint, the verifier limits
   and the seal cost.
 - Encrypted backup under a key kept apart from the backup, and a plain

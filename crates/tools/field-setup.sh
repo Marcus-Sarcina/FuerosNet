@@ -13,10 +13,12 @@
 #    2. uninstalls the app from each phone, which wipes its data with it
 #       (the kernel's seeds, records and sealed captures, the provision,
 #       the event files), so each phone starts with a new identity;
-#    3. installs the fresh APK and launches it, which mints the identity;
-#    4. asks the tester to open Conversations, where an unprovisioned
-#       device shows its public key material, then reads that material
-#       through uiautomator every 5 s until it is there;
+#    3. installs the fresh APK and launches it, which lands on the first
+#       run's choice;
+#    4. asks the tester to tap "Start a new identity", which mints one and
+#       shows its public key material once, then reads that material
+#       through uiautomator every 5 s until it is there; the tester goes
+#       on to name the phone while the script moves to the next;
 #    5. reads the phone's Wi-Fi address and switches its adb to TCP as well
 #       as USB (`adb tcpip 5555`; a reboot undoes it), so a run can reach
 #       the phone with the cable off;
@@ -203,13 +205,14 @@ for s in "${SERIALS[@]}"; do
   "$ADB" -s "${ADB_ID[$s]}" uninstall "$APP" > /dev/null 2>&1 || true
   say "$s: installing $(basename "$APK")"
   "$ADB" -s "${ADB_ID[$s]}" install -r "$APK" > /dev/null || die "$s: the install failed"
-  # the first start mints the identity; the material shows in Conversations
+  # the first start lands on the first-run choice; "Start a new identity"
+  # mints one and shows the material
   "$ADB" -s "${ADB_ID[$s]}" shell am start -W -n "$APP/.ShellActivity" > /dev/null 2>&1 || die "$s: the app did not start"
 done
 
 # ------------------------------------------------------- the material -----
 read_material() {
-  # the Conversations screen prints the material as one line of hex;
+  # the first-run screen prints the material as one line of hex, once;
   # uiautomator's dump of the screen is the way to read it without a
   # typo. Nothing shorter than 400 hex characters is it.
   "$ADB" -s "${ADB_ID[$1]}" exec-out uiautomator dump /dev/tty 2> /dev/null \
@@ -219,8 +222,9 @@ declare -A MATERIAL=()
 for s in "${SERIALS[@]}"; do
   model="$("$ADB" -s "${ADB_ID[$s]}" shell getprop ro.product.model 2> /dev/null | tr -d '\r')"
   echo
-  echo "  On $s ($model): unlock the phone and tap Conversations."
+  echo "  On $s ($model): unlock the phone and tap 'Start a new identity'."
   echo "  The screen shows this device's public key material; this script reads it."
+  echo "  Then tap through and give the phone a name; the script has what it needs."
   echo
   n=0
   while :; do

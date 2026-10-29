@@ -315,6 +315,14 @@ pub struct ClientStore {
     /// The subnets' own profiles held, by subnet: this client's where it
     /// is the root that set one, and otherwise the latest fetched.
     pub subnet_profiles: BTreeMap<Txid, Vec<u8>>,
+    /// **The name this client publishes to every subnet it has not named
+    /// itself differently in** [author, 2026-10-27: a default name, made at
+    /// creation, with a per-subnet override where one is wanted].  The
+    /// wire is unchanged — a profile is published per subnet (`wire-format.md`
+    /// §7.11) — and this is what goes into one where the person set nothing
+    /// for that subnet.  Required at creation since 2026-10-29 [author],
+    /// which the client that creates enforces; the kernel holds it.
+    pub default_alias: Option<String>,
     /// **The last candidates each contact offered for the direct path**
     /// (`wire-format.md` §7.10.1 kind 3, §14.3.2), as the bytes they came
     /// in, so that a client with no node can dial them again [author,
@@ -466,6 +474,16 @@ impl ClientStore {
             &dir.join("subnet-profiles"),
             self.subnet_profiles.iter().map(|(k, b)| (*k, b.clone())),
         )?;
+        // one value, not a collection: the file is the name, and no file
+        // is no name
+        match &self.default_alias {
+            Some(a) => std::fs::write(dir.join("default-alias"), a.as_bytes())?,
+            None => match std::fs::remove_file(dir.join("default-alias")) {
+                Ok(()) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => return Err(e),
+            },
+        }
         rewrite(
             &dir.join("direct-hints"),
             self.direct_hints.iter().map(|(k, b)| (*k, b.clone())),
@@ -483,7 +501,7 @@ impl ClientStore {
     pub fn encode(&self) -> Vec<u8> {
         use rhtn_codec::encode::*;
         let mut out = Vec::new();
-        emit_array_head(&mut out, 11);
+        emit_array_head(&mut out, 12);
         keyed(&mut out, self.records.iter().map(|(t, b)| (*t, b.clone())));
         keyed(
             &mut out,
@@ -520,6 +538,11 @@ impl ClientStore {
             self.direct_hints.iter().map(|(k, b)| (*k, b.clone())),
         );
         keyed(&mut out, self.held_for.iter().map(|(k, b)| (*k, b.clone())));
+        // twelfth: the default alias as text, or null for none
+        match &self.default_alias {
+            Some(a) => emit_tstr(&mut out, a),
+            None => emit_null(&mut out),
+        }
         out
     }
 
@@ -534,10 +557,10 @@ impl ClientStore {
         // six collections before locators were kept (2026-10-11), seven
         // since, nine with profiles (2026-10-15), ten with the direct hints
         // and eleven with the blobs held for peers (both 2026-10-24; the
-        // ten-shape ran on the bench for an afternoon and opens): a store
-        // written by an earlier shape opens with none of what it did not
-        // hold
-        if !matches!(f.len(), 6 | 7 | 9 | 10 | 11) {
+        // ten-shape ran on the bench for an afternoon and opens), twelve
+        // with the default alias (2026-10-29): a store written by an
+        // earlier shape opens with none of what it did not hold
+        if !matches!(f.len(), 6 | 7 | 9 | 10 | 11 | 12) {
             return None;
         }
         let m = |i: usize| unkeyed(b, &f[i]);
@@ -589,10 +612,19 @@ impl ClientStore {
                 st.direct_hints.insert(k, v);
             }
         }
-        if f.len() == 11 {
+        if f.len() >= 11 {
             for (k, v) in m(10)? {
                 st.held_for.insert(k, v);
             }
+        }
+        if f.len() == 12 {
+            st.default_alias = match &f[11] {
+                rhtn_codec::cbor::Item::Text(r) => {
+                    Some(std::str::from_utf8(&b[r.clone()]).ok()?.to_string())
+                }
+                rhtn_codec::cbor::Item::Null => None,
+                _ => return None,
+            };
         }
         Some(st)
     }
@@ -641,6 +673,11 @@ impl ClientStore {
         }
         for (k, b) in read_dir_of(&dir.join("subnet-profiles"))? {
             st.subnet_profiles.insert(k, b);
+        }
+        match std::fs::read(dir.join("default-alias")) {
+            Ok(b) => st.default_alias = String::from_utf8(b).ok().filter(|a| !a.is_empty()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e),
         }
         for (k, b) in read_dir_of(&dir.join("direct-hints"))? {
             st.direct_hints.insert(k, b);

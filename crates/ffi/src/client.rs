@@ -2543,6 +2543,26 @@ impl Participant {
         })
     }
 
+    /// The name this client publishes to every subnet it has not named
+    /// itself differently in, or none.
+    #[must_use]
+    pub fn default_alias(&self) -> Option<String> {
+        crate::diag::call_plain("default_alias", || {
+            self.handle
+                .with_blocking(|c| c.default_alias().map(str::to_string))
+        })
+    }
+
+    /// Set that name [author, 2026-10-27], 1 to 64 bytes; it is published
+    /// at once to the subnet this client acts in where it holds no name of
+    /// its own there, and to each later one at attach.
+    pub fn set_default_alias(&self, alias: String) -> Result<(), Refused> {
+        crate::diag::call("set_default_alias", || {
+            self.converse(move |c| c.set_default_alias(&alias))?;
+            self.save()
+        })
+    }
+
     /// Fetch every contact's profile for the subnet its locator names,
     /// from where that locator leads (`wire-format.md` §7.11).  What comes
     /// back is kept beside the contact and shows in `contacts`.

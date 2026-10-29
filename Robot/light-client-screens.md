@@ -278,7 +278,16 @@ does, the foot being what it would otherwise sit on top of.
 own options, below.
 
 **A default name, made at creation, with a per-subnet override where one is
-wanted** [author, 2026-10-27]. The wire is unchanged — a client publishes
+wanted** [author, 2026-10-27]. **Required at creation since 2026-10-29**
+[author]: the first run does not end without one, and **the kernel holds
+it** (`ClientStore::default_alias`, `set_default_alias`), publishing it to
+the subnet this client acts in at attach wherever no name of its own is
+held there — so the light client, the desktop and the node read one model
+for it, as the author's model-layer ruling asks. **And a subnet is named
+by its root at the moment it is formed** [author, 2026-10-29]: an adoption
+under this key's own, with no subnet chosen, ends with the patron asked
+for the subnet's name on the Done screen, published as the subnet's own
+profile (kind 1). The wire is unchanged — a client publishes
 an alias and an image **per subnet it holds a position in**
 (`light-client-requirements.md` §4.4, UX-015) — and the default is what
 goes to each of them unless that subnet has an override. So Options carries
@@ -333,8 +342,8 @@ still the platform's default and is the other place the mark belongs.
 
 | Step | Elements | Beneath | Owes |
 |---|---|---|---|
-| A1 The fork | Three doors: **New identity**, **Restore a backup**, **Recover**. Copy at the fork, not after it: an unlinked path abandons prior standing; a linked recovery gives up unlinkability — one choice seen from opposite sides. **The third door asks for the prior seed and, optionally, the backup** [2026-10-27]: the seed because `wire-format.md` §4.1 admits no variant of the `Recovery` block, the backup because `light-client-requirements.md` §6 has recovery restore standing and not history, so a person who kept neither is at the first door rather than the third | `start` / `restore_backup` / `recovering` | PRD-03, UX-008; `light-client-requirements.md` §6 |
-| A2 New identity | No screen. Seeds minted silently, kept under the shell's own custody, never crossing the storage seam | `start(seeds, …)`; `seal("seeds")` | APP-011 |
+| A1 The fork | **Built in part, 2026-10-29** (`FirstRunActivity`, `Identity`) [author]: the first run offers **Start a new identity** and **Restore from a seed phrase**; a new identity shows its public key material and its 24 words **once** and then requires a default name, a restored one reads the words back with each completed from the standard list and requires the name too. The phrase is BIP-39's shape over a 32-byte master, the kernel's two seeds derived from it in the shell by HKDF under a fixed label — above the kernel, as `light-client-requirements.md` §9 asks, the kernel still taking 64 bytes. **The bench reads a fresh phone's material from this screen** now that the harness's Conversations screen no longer shows it. Still owed: the backup envelope's door and recovery. Three doors: **New identity**, **Restore a backup**, **Recover**. Copy at the fork, not after it: an unlinked path abandons prior standing; a linked recovery gives up unlinkability — one choice seen from opposite sides. **The third door asks for the prior seed and, optionally, the backup** [2026-10-27]: the seed because `wire-format.md` §4.1 admits no variant of the `Recovery` block, the backup because `light-client-requirements.md` §6 has recovery restore standing and not history, so a person who kept neither is at the first door rather than the third | `start` / `restore_backup` / `recovering` | PRD-03, UX-008; `light-client-requirements.md` §6 |
+| A2 New identity | **A screen since 2026-10-29** [author]: the material and the phrase shown once, then the name. The seeds are still kept under the shell's own custody and never cross the storage seam; what changed is that nothing is minted silently, and a kernel started with none says so | `start(seeds, …)`; `seal("seeds")` | APP-011 |
 | A3 Restore | Envelope picker; passphrase field (the key kept apart from the device); import scan report naming anything past its retention; result framed **"recovered on trust"**, never *verified-complete* | `restore_backup(blob, secret)` | PRD-07, PRD-09; ARC-24 |
 
 ## B. Home — navigation first, status peripheral [author, 2026-09-27]

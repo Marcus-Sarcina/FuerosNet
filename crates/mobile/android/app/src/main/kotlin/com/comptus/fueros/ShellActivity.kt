@@ -126,6 +126,15 @@ class ShellActivity : Activity() {
         // where a provision arrives, and where the kernel is brought up:
         // both are the launcher's, once
         intent.getStringExtra("provision")?.let { Kernel.provision(this, it) }
+        // **no identity yet is the first run's screen** [author,
+        // 2026-10-29], not a kernel minting one silently: the person
+        // chooses new or restored, sees the material and the phrase, and
+        // names themselves; this screen is what they land on after
+        if (!Kernel.hasIdentity(this)) {
+            startActivity(Intent(this, FirstRunActivity::class.java))
+            finish()
+            return
+        }
         // the bench's live stream target, taken in the fieldtest flavour
         // alone (`FuerosApp.streamTo`); the releasable never reads it
         if (BuildConfig.FIELD_TEST) {

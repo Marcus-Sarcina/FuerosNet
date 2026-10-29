@@ -16453,6 +16453,40 @@ rather than applying it. The test floods both, as a serving node does.
 TOP-54 and TOP-55. Workspace tests 888, Android 277, the binding
 regenerated.
 
+### 2026-10-29 (the first run: new or restored, the phrase once, then a name)
+
+**The author's two changes before the wipe.** First: a first-run screen
+offering a new identity or one restored from a seed phrase; a new identity
+shows its key material — where the bench now reads a fresh phone's
+material, the harness's Conversations screen having gone with the old Home
+— and its phrase, then requires a default name; a restore takes the
+phrase with the autocompletion every wallet has. Second: an adoption that
+forms a new subnet ends with the patron asked to name it.
+
+**The phrase is BIP-39's shape and lives above the kernel.** 24 words
+from a 32-byte master; the kernel takes 64 bytes, so the two seeds are
+derived from the master in the shell by HKDF-SHA256 under a fixed label
+(`Identity`), and the kernel is handed 64 bytes as it always was —
+`light-client-requirements.md` §9's test, that deleting the feature leaves
+the client working, holds. Shown once, never on demand, as §9 requires.
+The wordlist is the standard's file, not code, and is read from the
+asset. **Nothing is minted silently any more**: a kernel started with no
+seeds says so rather than making some.
+
+**The default alias is the kernel's.** `ClientStore::default_alias`, a
+twelfth collection in the backup blob and one file in the directory form,
+`set_default_alias` publishing it at once to the subnet acted in where no
+name of its own is held and `attach` doing the same for each later one —
+one model across the three clients, per the ruling of 2026-10-29. The
+foot carries it where no subnet has named this person.
+
+**The subnet's name at its formation.** The patron of an adoption under
+their own key with no subnet chosen is the root of a subnet whose id is
+that txid (design §13.8); the Done screen asks for its name there and
+publishes it as the subnet's profile, kind 1. Asked at the moment rather
+than left to Options so a subnet is not first seen as eight hex
+characters.
+
 ### 2026-10-29 (the shell is the launcher, and the old Home goes)
 
 **The provisioned phones still opened on the old Home** [author]: a list

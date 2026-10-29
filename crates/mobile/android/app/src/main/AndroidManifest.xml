@@ -55,6 +55,9 @@
             </intent-filter>
         </activity>
 
+        <!-- The first run: a new identity or one restored from its phrase,
+             then the name. The shell sends a device with no identity here. -->
+        <activity android:name=".FirstRunActivity" android:exported="false" />
         <!-- Direct messages, opened from the rail until the Direct view is
              built in the shell. -->
         <activity android:name=".ConversationsActivity" android:exported="false" />

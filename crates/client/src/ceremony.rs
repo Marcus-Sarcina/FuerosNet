@@ -4596,7 +4596,11 @@ impl Client {
         out.push(Msg::StockOneTime(keys));
         // the profiles this client holds for the subnet it acts in, as
         // its bundle is: at attach and whenever they change
-        // (`light-client-requirements.md` §4.4)
+        // (`light-client-requirements.md` §4.4) — and where it holds none
+        // for that subnet, the default name becomes one now
+        if let Err(e) = self.default_profile_if_absent() {
+            tracing::warn!(target: "cer", ?e, "the default alias could not be published");
+        }
         out.extend(self.profiles_to_publish());
         out.extend(self.sweep(population));
         out
@@ -4617,6 +4621,37 @@ impl Client {
             }))
             .map(|b| Msg::PublishProfile(b.clone()))
             .collect()
+    }
+
+    /// The name this client publishes wherever it set none for the subnet
+    /// itself (`ClientStore::default_alias`).
+    pub fn default_alias(&self) -> Option<&str> {
+        self.store.default_alias.as_deref()
+    }
+
+    /// Set the default name [author, 2026-10-27], bounded as any alias is,
+    /// and publish it at once to the subnet this client acts in where no
+    /// name of its own is held there.  **An override stays an override**:
+    /// a subnet the person named differently is not renamed by this.
+    pub fn set_default_alias(&mut self, alias: &str) -> Result<Vec<Msg>, Abort> {
+        if alias.is_empty() || alias.len() > rhtn_codec::bounds::PROFILE_ALIAS_BYTES {
+            return Err(Abort::Malformed("an alias is 1 to 64 bytes".into()));
+        }
+        self.store.default_alias = Some(alias.to_string());
+        self.default_profile_if_absent()
+    }
+
+    /// Where this client acts in a subnet and holds no profile of its own
+    /// there, the default name is made one.  Nothing where there is no
+    /// subnet, no default, or a name already held.
+    fn default_profile_if_absent(&mut self) -> Result<Vec<Msg>, Abort> {
+        let (Some(subnet), Some(alias)) = (self.subnet(), self.store.default_alias.clone()) else {
+            return Ok(Vec::new());
+        };
+        if self.store.profiles.contains_key(&subnet) {
+            return Ok(Vec::new());
+        }
+        self.publish_profile(subnet, 0, &alias, None)
     }
 
     /// Publish an alias and, if the person chooses, an image, for

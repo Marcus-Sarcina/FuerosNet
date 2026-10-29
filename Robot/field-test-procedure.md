@@ -78,9 +78,12 @@ The phones, once per commit or per wipe, from the repository root:
 builds everything field-test (the laptop's binaries, the native library and
 binding, the fieldtest debug APK), uninstalls the app from each phone named
 in `crates/tools/phones.conf`, which wipes its data, installs the fresh APK
-and launches it, asks the tester to open Conversations on each phone, reads
-the public key material off that screen through uiautomator every 5 s until
-it is there, and writes `<serial>=<material>` back into `phones.conf`.
+and launches it, asks the tester to tap **Start a new identity** on each
+phone's first-run screen, reads the public key material off that screen
+through uiautomator every 5 s until it is there, and writes
+`<serial>=<material>` back into `phones.conf`. The tester then writes the
+phrase down (or not, on a bench phone), taps through, and types the phone's
+default name; the material is already read by then.
 `field-run.sh` reads that file when given no `--phone`, so step 1 and the
 `--phone` arguments of step 2 below are done. `--no-build` installs what is
 already built; serials on the command line override the file. The two
@@ -102,7 +105,8 @@ data is what B is made of: the adoptions, the met pairs and the sealed
 captures a verifier needs from an earlier meeting. `install -r` replaces
 the code and keeps all of it, and the identity survives with it — so the
 material already in `phones.conf` stays valid and there is nothing to
-re-read off the Conversations screen. Use `field-setup.sh` when a run
+re-read: the material shows once, on the first run, and never again on
+demand (`light-client-requirements.md` §9). Use `field-setup.sh` when a run
 genuinely wants phones at genesis, and `--address-only` when all that
 changed is an address after a reboot.
 
@@ -117,10 +121,10 @@ so install all of them or none.
 
 ## One run
 
-1. On each phone, launch the app and open Conversations. While the device is
-   unprovisioned that screen shows its public key material, about 4,000 hex
-   characters. `field-setup.sh` has read it already; by hand, read it over
-   adb rather than by eye:
+1. On each phone, the first run shows the device's public key material
+   once, about 4,000 hex characters, after **Start a new identity**.
+   `field-setup.sh` has read it already; by hand, read it over adb rather
+   than by eye while that screen is up:
 
         adb -s <serial> exec-out uiautomator dump /dev/tty | grep -oE '[0-9a-f]{400,}' | head -1
 

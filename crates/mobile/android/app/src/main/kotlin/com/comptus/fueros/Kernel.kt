@@ -1,7 +1,6 @@
 package com.comptus.fueros
 
 import android.content.Context
-import java.security.SecureRandom
 import org.json.JSONObject
 import uniffi.rhtn_ffi.Answer
 import uniffi.rhtn_ffi.Construction
@@ -865,7 +864,10 @@ object Kernel {
     fun ownAlias(): Pair<String?, String> {
         val p = participant ?: return null to ""
         val me = call("me", { "" }) { hex(p.me()) }
+        // a subnet's own name for this person first, then the default the
+        // foot carries [author, 2026-10-27]
         val named = scopes().firstNotNullOfOrNull { it.ownAlias?.takeIf { a -> a.isNotBlank() } }
+            ?: call("defaultAlias", { null }) { p.defaultAlias() }
         return named to me
     }
 
@@ -2157,7 +2159,7 @@ object Kernel {
             ?.let { a -> (0 until a.length()).map { unhex(a.getString(it)) } }
             ?: listOf()
         val p = call("Participant.start", { e -> front.setStatus("kernel refused: ${e.reason}"); null }) {
-            Participant.start(mintedSeeds(shell), known, platformOf(shell))
+            Participant.start(heldSeeds(shell), known, platformOf(shell))
         } ?: return
         participant = p
         show(p, Status.Detached)
@@ -2454,18 +2456,75 @@ object Kernel {
     private fun hex(b: ByteArray): String = b.joinToString("") { "%02x".format(it) }
 
     /**
-     * The device's own seeds, minted once.
+     * The device's own seeds, as the first run sealed them.
      *
      * **Under the shell's own custody and never around it**: these are the
      * whole of the identity, and they never cross the kernel's storage
      * seam, so the kernel's sealing does not reach them — they are
      * Keystore-wrapped here, exactly as the storage key itself is
      * (`light-client-requirements.md` §9).
+     *
+     * **Nothing is minted here since 2026-10-29** [author]: the first run
+     * is a choice between a new identity and one restored from its
+     * phrase, and [createIdentity] is where the seeds arrive. A kernel
+     * started with none is a shell that skipped that screen, which is a
+     * fault to say rather than paper over.
      */
-    private fun mintedSeeds(shell: AndroidShell): ByteArray {
-        shell.unseal("seeds")?.let { if (it.size == 64) return it }
-        val s = ByteArray(64).also { SecureRandom().nextBytes(it) }
-        check(shell.seal("seeds", s)) { "the device's own storage refused the seeds" }
+    private fun heldSeeds(shell: AndroidShell): ByteArray {
+        val s = shell.unseal("seeds")
+        check(s != null && s.size == 64) { "no identity on this device: the first run was not completed" }
         return s
+    }
+
+    /** Whether the first run has been completed on this device. */
+    fun hasIdentity(context: Context): Boolean =
+        AndroidShell(context.applicationContext).unseal("seeds")?.size == 64
+
+    /**
+     * **The first run hands the seeds over and the kernel starts on them**
+     * ([FirstRunActivity]): sealed under the shell's custody first, so a
+     * process that dies between the two finds them at its next start.
+     * False where the storage refused them, and nothing started.
+     */
+    fun createIdentity(context: Context, seeds: ByteArray): Boolean {
+        require(seeds.size == 64) { "the kernel's seeds are 64 bytes" }
+        if (!AndroidShell(context.applicationContext).seal("seeds", seeds)) return false
+        start(context)
+        return true
+    }
+
+    /** The default name the kernel holds, or null. */
+    fun defaultAlias(): String? {
+        val p = participant ?: return null
+        return call("defaultAlias", { null }) { p.defaultAlias() }
+    }
+
+    /**
+     * Set the default name [author, 2026-10-27]: the kernel keeps it and
+     * publishes it to each subnet the person has not named themselves
+     * differently in. The refusal's words, or null where it was kept.
+     * **Waits for the kernel**: the first run sets this moments after
+     * starting it.
+     */
+    fun setDefaultAlias(name: String): String? {
+        val until = System.currentTimeMillis() + 30_000
+        var p = participant
+        while (p == null && System.currentTimeMillis() < until) {
+            Thread.sleep(200)
+            p = participant
+        }
+        if (p == null) return "the kernel did not come up"
+        return call("setDefaultAlias", { it.reason }) { p.setDefaultAlias(name); null }
+    }
+
+    /**
+     * **Name a subnet this key is the root of** (`wire-format.md` §7.11
+     * kind 1; `light-client-requirements.md` §4.4): the root's by
+     * convention, which nothing enforces. Asked for where an adoption
+     * forms one [author, 2026-10-29]. The refusal's words, or null.
+     */
+    fun publishSubnetAlias(subnetHex: String, alias: String): String? {
+        val p = participant ?: return "the kernel is not up"
+        return call("publishProfile", { it.reason }) { p.publishProfile(unhex(subnetHex), 1u, alias, null, null); null }
     }
 }
