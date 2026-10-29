@@ -62,7 +62,16 @@ class FirstRunActivity : Activity() {
         words = runCatching {
             assets.open("bip39/english.txt").bufferedReader().useLines { Identity.wordlist(it) }
         }.getOrDefault(emptyList())
-        choice()
+        // **an identity with no name yet lands on the name step** [2026-10-29]:
+        // the seeds are sealed before the material is shown, so a process
+        // killed between that screen and the name — the bench's restart
+        // does exactly this — has an identity and owes the name still
+        if (intent.getBooleanExtra(NAME_ONLY, false)) name() else choice()
+    }
+
+    companion object {
+        /** The extra that opens this screen at the name step alone. */
+        const val NAME_ONLY = "name_only"
     }
 
     // ---- the choice ----------------------------------------------------
@@ -125,21 +134,24 @@ class FirstRunActivity : Activity() {
     private fun shown(material: String?, phrase: List<String>?) {
         body.removeAllViews()
         title(if (phrase == null) "Your identity, restored" else "Your identity")
+        // **the phrase above the material**: the phrase is what the
+        // person must act on and the material is three screens of hex
+        // the bench reads; put first, both begin on the first screen,
+        // which is also what a screen reader of the bench's kind sees
+        if (phrase != null) {
+            heading("Your seed phrase")
+            para(
+                "Write these 24 words down, in order, and keep them apart from this " +
+                    "device. They are the whole of your identity: anyone holding them is " +
+                    "you, and nothing can show them again.",
+            )
+            mono(Identity.laidOut(phrase))
+            button("I have written them down") { name() }
+        }
         heading("Public key material")
         para("What a node is told about you. The bench reads it from here.")
         mono(material ?: "the kernel did not come up in time; the material will show on a later start")
-        if (phrase == null) {
-            button("Continue") { name() }
-            return
-        }
-        heading("Your seed phrase")
-        para(
-            "Write these 24 words down, in order, and keep them apart from this " +
-                "device. They are the whole of your identity: anyone holding them is " +
-                "you, and nothing can show them again.",
-        )
-        mono(Identity.laidOut(phrase))
-        button("I have written them down") { name() }
+        if (phrase == null) button("Continue") { name() }
     }
 
     // ---- restore -------------------------------------------------------

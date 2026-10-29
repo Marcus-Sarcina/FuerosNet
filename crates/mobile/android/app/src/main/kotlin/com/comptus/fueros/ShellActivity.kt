@@ -193,16 +193,28 @@ class ShellActivity : Activity() {
             val rows = Kernel.scopes()
             val held = Kernel.standings().associateBy { it.subnet }
             val mine = Kernel.ownAlias()
+            // **a kernel up with no default name is a first run that was
+            // cut short**: the name is required [author, 2026-10-29], and
+            // the seeds are sealed before it is asked, so the name step
+            // is where this device goes
+            val unnamed = mine.second.isNotEmpty() && Kernel.defaultAlias() == null
             runOnUiThread {
                 reading.set(false)
-                if (!isFinishing) {
-                    // a keyhash is what a kernel that is up answers with
-                    if (mine.second.isNotEmpty()) drawnFromKernel = true
-                    scopes = rows
-                    standing = held
-                    drawRail(rows, held)
-                    drawFoot(mine)
+                if (isFinishing) return@runOnUiThread
+                if (unnamed) {
+                    startActivity(
+                        Intent(this, FirstRunActivity::class.java)
+                            .putExtra(FirstRunActivity.NAME_ONLY, true),
+                    )
+                    finish()
+                    return@runOnUiThread
                 }
+                // a keyhash is what a kernel that is up answers with
+                if (mine.second.isNotEmpty()) drawnFromKernel = true
+                scopes = rows
+                standing = held
+                drawRail(rows, held)
+                drawFoot(mine)
             }
         }, "fueros-rail").start()
     }

@@ -218,6 +218,25 @@ read_material() {
   "$ADB" -s "${ADB_ID[$1]}" exec-out uiautomator dump /dev/tty 2> /dev/null \
     | grep -oE '[0-9a-f]{400,}' | head -1
 }
+# the same screen prints the 24-word phrase above the material, numbered
+# three to a line; the words alone, in order, or nothing where the screen
+# has moved on
+read_phrase() {
+  "$ADB" -s "${ADB_ID[$1]}" exec-out uiautomator dump /dev/tty 2> /dev/null \
+    | grep -oE 'text=" ?1 [a-z]+ +2 [a-z]+[^"]*' | head -1 \
+    | sed 's/^text="//' | grep -oE '[a-z]+' | tr '\n' ' ' | sed 's/ $//'
+}
+# **the phrases are kept beside the materials** [author, 2026-10-29: test
+# identities only, so persisting them is no vulnerability], one line per
+# serial, in a file git ignores
+RECOVERY="$(dirname "$CONF")/phones-recovery.conf"
+keep_phrase() {
+  local s="$1" w="$2" tmp
+  [ -n "$w" ] || return 0
+  tmp="$(mktemp)"
+  { [ -f "$RECOVERY" ] && grep -v "^$s=" "$RECOVERY"; echo "$s=$w"; } > "$tmp" 2> /dev/null || true
+  mv "$tmp" "$RECOVERY"
+}
 declare -A MATERIAL=()
 for s in "${SERIALS[@]}"; do
   model="$("$ADB" -s "${ADB_ID[$s]}" shell getprop ro.product.model 2> /dev/null | tr -d '\r')"
@@ -234,6 +253,13 @@ for s in "${SERIALS[@]}"; do
     if [ -n "$m" ]; then
       MATERIAL["$s"]="$m"
       say "$s: material read on attempt $n (${#m} hex characters)"
+      w="$(read_phrase "$s" || true)"
+      if [ "$(echo "$w" | wc -w)" -eq 24 ]; then
+        keep_phrase "$s" "$w"
+        say "$s: phrase kept in $(basename "$RECOVERY")"
+      else
+        say "$s: the phrase was not on screen to read; keep it by hand"
+      fi
       break
     fi
     say "$s: not on screen yet (attempt $n); trying again in ${INTERVAL}s"
