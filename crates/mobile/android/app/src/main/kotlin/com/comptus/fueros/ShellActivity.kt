@@ -262,9 +262,9 @@ class ShellActivity : Activity() {
                     alias = it.alias,
                     unseen = 0,
                     crown = Chrome.crown(
-                        root = it.standing.root,
-                        operator = it.standing.operator,
-                        hasSubordinate = it.standing.subordinates > 0u,
+                        root = it.rank.root,
+                        operator = it.rank.operator,
+                        hasSubordinate = it.rank.subordinates > 0u,
                     ),
                 )
             },
@@ -502,7 +502,7 @@ class ShellActivity : Activity() {
             }
             is Chrome.Place.SubnetOptions -> {
                 val scope = scopes.firstOrNull { it.id.hex() == where.id }
-                val s = scope?.standing
+                val s = scope?.rank
                 column.addView(
                     bar(scope?.alias ?: "subnet ${where.id.take(8)}…", back = Chrome.Place.Subnet(where.id)),
                 )

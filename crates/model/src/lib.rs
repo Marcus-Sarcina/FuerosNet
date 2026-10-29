@@ -96,12 +96,15 @@ pub struct Contact {
     pub last_at: u64,
 }
 
-/// **What this key is in a subnet**, each off a record it holds
-/// [author, 2026-10-28]: the patron of the anchoring record, an endpoint
-/// record on its line there, an adoption it granted there.
+/// **What this key is in a subnet** — its rank there, in the order the
+/// crowns are drawn: root above operator above patron — each off a record
+/// it holds [author, 2026-10-28]: the patron of the anchoring record, an
+/// endpoint record on its line there, an adoption it granted there. *Rank*
+/// and not *standing*, which the design uses for a party's score under a
+/// policy [2026-10-29].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "ffi", derive(uniffi::Record))]
-pub struct Standing {
+pub struct Rank {
     pub root: bool,
     pub operator: bool,
     /// The direct lines this key issued here and no deeper figure
@@ -130,7 +133,7 @@ pub struct Subnet {
     pub alias: Option<String>,
     /// This client's own alias there, where it published one.
     pub own_alias: Option<String>,
-    pub standing: Standing,
+    pub rank: Rank,
     /// None for the root of a subnet whose own position is the self-anchor.
     pub position: Option<Position>,
 }

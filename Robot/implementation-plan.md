@@ -885,11 +885,12 @@ ceremony*). **The sentences were left as written** [assumed, 2026-10-29,
 the author not having said otherwise]: each existing phrase maps to one
 row and nothing is contradicted; the alternative, *patron relationship*
 → *line* in some 120 places across four documents, is the author's call.
-**Open with the author**: the model's `Standing` (root, operator, patron
-of so many lines — the crowns) collides with the design's *standing*, a
-party's score under a policy, which the FFI also exports as `Standing`;
-one of them wants another name before a vocabulary row is written for
-it.
+**The collision, resolved on an assumption** [2026-10-29]: the model's
+`Standing` (root, operator, patron of so many lines — the crowns) collided
+with the design's *standing*, a party's score under a policy, which the
+FFI also exports as `Standing`; the crowns are `Rank` now — root above
+operator above patron is an order, and that is how they are drawn — and
+design §2 says so. The author's to overturn.
 
 **Stage three was the documents**:
 the schema into `light-client-requirements.md` §9 as a table, the

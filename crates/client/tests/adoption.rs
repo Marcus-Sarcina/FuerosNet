@@ -455,7 +455,7 @@ fn a_key_knows_whether_it_roots_a_subnet_and_how_many_sit_under_it_there() {
     let first = s.adopted("bob", "alice", "w2", 1);
     s.adopted("carol", "alice", "w2", 2);
 
-    let standing = s.client("alice").subnet_standing();
+    let standing = s.client("alice").subnet_rank();
     let here = standing
         .iter()
         .find(|x| x.subnet == first)
@@ -466,7 +466,7 @@ fn a_key_knows_whether_it_roots_a_subnet_and_how_many_sit_under_it_there() {
 
     // **and the subordinate's own view is the other one**: bob is in the
     // same subnet, roots nothing, and holds nobody under him
-    let his = s.client("bob").subnet_standing();
+    let his = s.client("bob").subnet_rank();
     let mine = his
         .iter()
         .find(|x| x.subnet == first)
@@ -488,7 +488,7 @@ fn a_line_that_ended_stops_being_counted_and_an_untold_one_still_counts() {
     // wear no crown at all — the wrong way round for a mark on a screen.
     assert_eq!(
         s.client("alice")
-            .subnet_standing()
+            .subnet_rank()
             .iter()
             .find(|x| x.subnet == first)
             .expect("her subnet")
@@ -522,7 +522,7 @@ fn a_line_that_ended_stops_being_counted_and_an_untold_one_still_counts() {
         }
     }
 
-    let after = s.client("alice").subnet_standing();
+    let after = s.client("alice").subnet_rank();
     let here = after
         .iter()
         .find(|x| x.subnet == first)
@@ -547,7 +547,7 @@ fn an_endpoint_record_on_a_subnets_own_line_is_what_makes_a_node_here() {
     // bob sits in it and runs nothing
     assert!(
         !s.client("bob")
-            .subnet_standing()
+            .subnet_rank()
             .iter()
             .find(|x| x.subnet == subnet)
             .expect("his subnet")
@@ -573,7 +573,7 @@ fn an_endpoint_record_on_a_subnets_own_line_is_what_makes_a_node_here() {
         );
     }
 
-    let his = s.client("bob").subnet_standing();
+    let his = s.client("bob").subnet_rank();
     let here = his.iter().find(|x| x.subnet == subnet).expect("his subnet");
     assert!(here.operator, "so he runs a node in this subnet: {his:?}");
     assert!(!here.root, "which is not the same as rooting it");

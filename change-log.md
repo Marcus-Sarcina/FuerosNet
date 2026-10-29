@@ -16468,9 +16468,12 @@ relationship*, *infra node*, *presence ceremony* — so the documents'
 sentences stand as written; whether to sweep *patron relationship* to
 *line* across four documents is the author's.
 
-**One collision found by writing the rows**: *standing* already means a
-party's score under a policy in the design and in the FFI, and the
-model uses it for what a key is in a subnet. Left to the author.
+**One collision found by writing the rows, resolved on an assumption**:
+*standing* already means a party's score under a policy in the design
+and in the FFI, and the model used it for what a key is in a subnet.
+The crowns are *Rank* now — root above operator above patron is an
+order, and that is how they are drawn — with a vocabulary row; the
+author's to overturn.
 
 ### 2026-10-29 (one model, stage two: the kernel says what changed)
 

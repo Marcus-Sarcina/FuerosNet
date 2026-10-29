@@ -478,6 +478,7 @@ latency for a stranger's key**, not bandwidth.
 | **Line** | A patron relationship as the subordinate holds it: the patron, the series it runs on, and where it puts the subordinate. The subordinate's word for what the patron holds as an adoption it granted |
 | **Instance** | An infra node as a client holds it: its keyhash and the addresses it answers at. *The instances you run* (`light-client-requirements.md` §10) are the ones this operator enrolled |
 | **Meeting** | A presence ceremony (§7.1) as a client names it to the person standing in it; the same event, the client's word |
+| **Rank** | What a key is in one subnet, read off the records it holds: the subnet's root, an operator in it, a patron in it and of how many direct lines, or none of these — in that order, which is how a client draws it. Not *standing*, which is a party's score under a policy (§16) |
 
 ---
 

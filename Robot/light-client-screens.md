@@ -111,7 +111,7 @@ mark's own are, leaning with the ellipse they stand on. **Of its eight,
 only the three at the front are visible**; the rest, and the back of the
 band, are behind the orb's body and never drawn to the screen.
 
-**The three standings overlap** — a root usually has subordinates — and the
+**The three ranks overlap** — a root usually has subordinates — and the
 drawing shows the highest that applies, root before operator before
 subordinates, **which is an assumption and not a ruling**.
 
@@ -142,7 +142,7 @@ options. Each place carries those rows and names what it does not hold.
 system bars in the shell's own colours rather than a light grey bar under
 a dark foot.
 
-**All three crowns are real since 2026-10-28** (`subnet_standing`), and
+**All three crowns are real since 2026-10-28** (`subnet_rank`; the model's `Rank`, *standing* being the design's word for a score [2026-10-29]), and
 **all three come off records this key already holds** [author,
 2026-10-28], each off the one that settles it:
 
@@ -346,7 +346,7 @@ later; what is fixed is that the dark one is what a person meets first and
 that the light one is theirs to choose, not the platform's to impose.
 
 **Nothing in the shell is open** but one thing the drawing settled on its
-own: which standing wins where the crowns overlap. The launcher icon is
+own: which rank wins where the crowns overlap. The launcher icon is
 still the platform's default and is the other place the mark belongs.
 
 ---

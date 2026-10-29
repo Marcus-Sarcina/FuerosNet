@@ -597,7 +597,7 @@ impl Active {
 /// of them a crown shows is the shell's precedence, not this type's:
 /// they overlap, and only the highest is drawn.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct SubnetStanding {
+pub struct SubnetRank {
     /// The subnet (design §13.8).
     pub subnet: Txid,
     /// Whether this key is the patron in the subnet's anchoring record,
@@ -4345,7 +4345,7 @@ impl Client {
     /// The three overlap and only the highest is drawn; **that
     /// precedence is the shell's**, in one place, rather than decided
     /// again here.
-    pub fn subnet_standing(&self) -> Vec<SubnetStanding> {
+    pub fn subnet_rank(&self) -> Vec<SubnetRank> {
         let me = self.keyhash();
         // the adoptions this key granted, by the subnet each placed
         // somebody in.  **This key's own archive**, because an adoption
@@ -4379,7 +4379,7 @@ impl Client {
             .collect();
         self.subnets()
             .into_iter()
-            .map(|subnet| SubnetStanding {
+            .map(|subnet| SubnetRank {
                 subnet,
                 // the anchoring record itself, rather than the position
                 // this key derived from it: one record, one reading

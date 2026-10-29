@@ -38,13 +38,13 @@ impl Client {
     /// it, and where it sits.
     #[must_use]
     pub fn subnets_held(&self) -> Vec<Subnet> {
-        let standing: std::collections::BTreeMap<_, _> = self
-            .subnet_standing()
+        let rank: std::collections::BTreeMap<_, _> = self
+            .subnet_rank()
             .into_iter()
             .map(|s| {
                 (
                     s.subnet,
-                    rhtn_model::Standing {
+                    rhtn_model::Rank {
                         root: s.root,
                         operator: s.operator,
                         subordinates: s.subordinates as u32,
@@ -58,7 +58,7 @@ impl Client {
                 id,
                 alias: self.subnet_alias(&id),
                 own_alias: self.own_alias(&id),
-                standing: standing.get(&id).copied().unwrap_or_default(),
+                rank: rank.get(&id).copied().unwrap_or_default(),
                 position: self.position_in(&id).map(|l| rhtn_model::Position {
                     anchor: l.anchor,
                     path: l.path.clone(),

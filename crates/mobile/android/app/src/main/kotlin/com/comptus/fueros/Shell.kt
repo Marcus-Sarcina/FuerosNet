@@ -1,6 +1,6 @@
 package com.comptus.fueros
 
-import uniffi.rhtn_model.Standing
+import uniffi.rhtn_model.Rank
 
 /**
  * **What the shell's content says where it says a number** — the pure
@@ -16,7 +16,7 @@ object Shell {
      * count would be only as far as the propagated copy reaches. Null is a
      * standing not read yet, which is said rather than shown as none.
      */
-    fun downline(s: Standing?): String = when {
+    fun downline(s: Rank?): String = when {
         s == null -> "Your standing here has not been read yet."
         s.subordinates == 0u -> "No line of yours is issued here."
         s.subordinates == 1u -> "Your downline here: 1 direct line."
