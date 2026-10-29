@@ -408,6 +408,11 @@ class Adoption(
         private const val REFUSED: Byte = 4
         private const val RECORD: Byte = 5
 
+        /** **Not an adoption frame**: a name, self-declared, on the same
+         *  number, so a counterparty is named before any profile exists
+         *  [author, 2026-10-29]. Outside [mine]'s range on purpose. */
+        private const val HELLO: Byte = 6
+
         sealed class Read
         data class Direction(val who: Int, val label: String?) : Read()
         data class Offer(val series: Int, val back: List<ByteArray>, val carrying: String?) : Read()
@@ -443,6 +448,16 @@ class Adoption(
         fun refused(why: String): ByteArray = byteArrayOf(VERSION, REFUSED) + why.toByteArray()
 
         fun record(envelope: ByteArray): ByteArray = byteArrayOf(VERSION, RECORD) + envelope
+
+        /** This device's name, at most 64 bytes of it. */
+        fun hello(alias: String): ByteArray =
+            byteArrayOf(VERSION, HELLO) + alias.toByteArray().take(64).toByteArray()
+
+        /** The name a hello carries, or null where these bytes are not one. */
+        fun heard(bytes: ByteArray): String? {
+            if (bytes.size < 3 || bytes[0] != VERSION || bytes[1] != HELLO) return null
+            return String(bytes.copyOfRange(2, bytes.size)).takeIf { it.isNotBlank() }
+        }
 
         /** Whether these bytes are one of this shell's adoption frames. */
         fun mine(bytes: ByteArray): Boolean =

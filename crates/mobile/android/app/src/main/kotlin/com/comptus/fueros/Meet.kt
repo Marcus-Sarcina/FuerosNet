@@ -121,14 +121,34 @@ class Meet(
 
     private var knownKey: String? = counterpartyKey
     private val givenName: String? = counterpartyName
+    private var heardName: String? = null
+    private var helloSent = false
 
     /** The counterparty's keyhash as hex, once a code has named them. */
     val counterpartyKey: String? get() = synchronized(lock) { knownKey }
 
-    /** How the screens name the counterparty: a given name, the key's
-     *  first eight characters once known, or *the other person*. */
+    /** How the screens name the counterparty: a given name, **what they
+     *  call themselves** where that has crossed — on the invitation for
+     *  the party that scanned it, on the channel for the other [author,
+     *  2026-10-29] — the key's first eight characters once known, or
+     *  *the other person*. */
     val counterpartyName: String
-        get() = givenName ?: synchronized(lock) { knownKey?.take(8) } ?: "the other person"
+        get() = givenName
+            ?: synchronized(lock) { heardName ?: knownKey?.take(8) }
+            ?: "the other person"
+
+    /** The counterparty said what they call themselves. Blank is nothing. */
+    fun heard(alias: String?) {
+        val a = alias?.trim()?.takeIf { it.isNotEmpty() } ?: return
+        synchronized(lock) { heardName = a }
+        changed()
+    }
+
+    /** Say this device's name once the channel is there, once. */
+    private fun sayHello(c: Courier) {
+        if (synchronized(lock) { helloSent.also { helloSent = true } }) return
+        c.hello()?.let { note("the name could not be sent: $it") }
+    }
 
     /**
      * **A code named the counterparty.** The first one fixes them; a later
@@ -377,6 +397,10 @@ class Meet(
         /** Open the window with the request, its field 5 closing each
          *  engagement, and hand over the back-pointers. */
         fun open(): String?
+
+        /** This device's own name to the counterparty, on the channel
+         *  the handover left, once the window is open. */
+        fun hello(): String?
 
         /** Select the verifiers and put each query to the subject. */
         fun queries(): String?
@@ -1069,6 +1093,9 @@ class Meet(
             opening = false
             changed()
         }
+        sayHello(c)
+        synchronized(lock) {
+        }
         note("the window is open: the witnesses that survived the prune are asked, back-pointers sent.")
         return true
     }
@@ -1154,6 +1181,7 @@ class Meet(
                 return stop("the conversation could not open: $why")
             }
             synchronized(lock) { windowOpen = true }
+            sayHello(c)
         }
         note("the nominees are asked to witness; back-pointers sent.")
         // **the queries wait on the capture's template** the same way the

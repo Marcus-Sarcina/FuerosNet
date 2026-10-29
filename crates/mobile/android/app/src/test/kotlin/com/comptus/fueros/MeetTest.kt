@@ -100,6 +100,25 @@ class MeetTest {
     // ---- the verifier step -------------------------------------------
 
     /** The flow, up to the point the verifier step is live. */
+    /** The counterparty is named by what they said they are called, once
+     *  that has crossed — from the scan or on the channel — and by the
+     *  key's first characters until then [author, 2026-10-29]. */
+    @Test
+    fun the_counterparty_is_named_by_what_they_call_themselves_once_heard() {
+        val m = Meet(null, null, Meet.Kind(), Meet.Role.RESPONDER)
+        assertEquals("the other person", m.counterpartyName)
+        m.counterparty("cd".repeat(32))
+        assertEquals("cdcdcdcd", m.counterpartyName)
+        m.heard("  ")
+        assertEquals("blank is nothing", "cdcdcdcd", m.counterpartyName)
+        m.heard("Dana")
+        assertEquals("Dana", m.counterpartyName)
+        // a name given at construction — the bench's — is not displaced
+        val given = Meet("aa", "carol", Meet.Kind(), Meet.Role.INITIATOR)
+        given.heard("Dana")
+        assertEquals("carol", given.counterpartyName)
+    }
+
     private fun atVerifiers(): Meet = meet().apply {
         crossBootstrap(); accept(); intentSent(); intentReceived(); captureSealed()
     }
@@ -212,6 +231,10 @@ class FakeCourier(var progress: Meet.Progress? = null) : Meet.Courier {
         if (openRefusal == null) opened = true
         return openRefusal
     }
+    /** How often this device said its name; apart from `calls`, which
+     *  the sequence tests read. */
+    var hellos = 0
+    override fun hello(): String? { hellos += 1; return null }
     override fun queries(): String? { calls += "queries"; return queriesRefusal }
     override fun gathered(): String? {
         calls += "gathered"
@@ -562,7 +585,11 @@ class MeetConversationTest {
     fun a_step_held_past_the_stale_window_is_the_other_phone_gone() {
         val m = atVerifiers()
         assertTrue("nothing opened the window", m.stepStale(System.currentTimeMillis() + Meet.STALE_MS * 2))
-        assertTrue(m.openWindow(FakeCourier()))
+        val hc = FakeCourier()
+        assertTrue(m.openWindow(hc))
+        assertEquals("the name is said once the window is open", 1, hc.hellos)
+        m.openWindow(hc)
+        assertEquals("and once only", 1, hc.hellos)
         assertFalse("the conversation has its own clock", m.stepStale(System.currentTimeMillis() + Meet.STALE_MS * 2))
         val c = Meet(kind = Meet.Kind())
         assertFalse(c.stepStale(System.currentTimeMillis() + Meet.STALE_MS * 2))
@@ -597,6 +624,8 @@ class MeetConversationTest {
             val calls = mutableListOf<String>()
             override fun engage(): String? = null
             override fun trace(e: OpticalExchange.Event): String? = null
+            override fun hello(): String? { hellos += 1; return null }
+            var hellos = 0
             override fun open(): String? { calls += "open"; m.poll(this); return null }
             override fun queries(): String? { calls += "queries"; return null }
             override fun gathered(): String? { calls += "gathered"; return null }
@@ -916,6 +945,8 @@ class MeetConversationTest {
             var asks = 0
             override fun engage(): String? = null
             override fun trace(e: OpticalExchange.Event): String? = null
+            override fun hello(): String? { hellos += 1; return null }
+            var hellos = 0
             override fun open(): String? {
                 asks += 1
                 return if (asks < 3) {

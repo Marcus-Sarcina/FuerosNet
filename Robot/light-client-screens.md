@@ -256,6 +256,19 @@ contact by alias or by hash — so everyone this device holds is reachable
 from here whether or not anything has been said, and opening one is how a
 thread starts. No separate roll and no separate compose control.
 
+**The counterparty's name inside the ceremony is carried in the shell's
+own frames** [author, 2026-10-29: *it makes the name visible from the scan
+and is the least overhead solution*]. A name reaches another device only
+as a profile, and a profile is published per subnet (`wire-format.md`
+§7.11), so two strangers have nothing to fetch; the invitation code
+carries what the inviter calls itself — the name published for the subnet
+named, else the default — and the party that scanned it is named back on
+the channel the prekey handover leaves, once the window opens. Self-
+declared, display only, and displaced by a published profile when one
+arrives; a name given by the bench stands over both. The alternatives
+declined: keyhashes until a profile is held (names from the second meeting
+on), and a subnet-less profile (a protocol change).
+
 **One scanner, and what the code was decides** [author, 2026-10-27].
 *Scan* is the first option on the meeting screen, and it reads whatever is
 put in front of it: **a locator is kept** and the screen says *[alias]
@@ -302,7 +315,7 @@ subnet alone:
 |---|---|
 | Everybody | Notices from this subnet, activated or suppressed |
 | Everybody | **The patronage upline from here**, scrollable: this person, their patron, and so on to the root |
-| A patron here | What is open to a patron, among it **the count of their downline: the direct lines they have issued here and no deeper figure** [author, 2026-10-28] — a patron signed every adoption it issued, so that count is exact, where a subtree count would be only as far as the propagated copy reaches and would read low for anyone with depth below them. **No cost of ending one is shown**, that act being a disavowal and mintable only by a node holding its own seed |
+| A patron here | What is open to a patron, among it **the count of their downline: the direct lines they have issued here and no deeper figure** [author, 2026-10-28] — **drawn, 2026-10-29**, with **the authority row** to E3 and, for the root, **the subnet's name to set or change** (the Done screen's prompt again, for a subnet formed before it or renamed) — a patron signed every adoption it issued, so that count is exact, where a subtree count would be only as far as the propagated copy reaches and would read low for anyone with depth below them. **No cost of ending one is shown**, that act being a disavowal and mintable only by a node holding its own seed |
 | An operator here | A way to their instance's administration pages, which the operator's own section reaches too |
 | **The root** | **The subnet's name becomes editable**, its logo with it — the root of the hierarchy the subnet *is*, which `light-client-requirements.md` §4.4 makes the root's by convention while nothing enforces it, so the screen says so rather than presenting it as a rule |
 

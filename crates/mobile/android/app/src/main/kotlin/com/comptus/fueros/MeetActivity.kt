@@ -1178,6 +1178,7 @@ class MeetActivity : Activity() {
      */
     private fun nameSubnet(txid: String) {
         heading("A new subnet under your key")
+        Diag.event("meet.subnet_name", "state" to (subnetNamed?.let { "named" } ?: "asked"), "txid" to txid.take(8))
         subnetNamed?.let {
             para("Named $it. Its profile is published to your node, and the name is yours to change in the subnet's options.")
             return
@@ -1193,7 +1194,13 @@ class MeetActivity : Activity() {
         body.addView(field)
         button("Name the subnet") {
             val typed = field.text.toString().trim()
-            Identity.aliasRefusal(typed)?.let { subnetSaid = it; redraw(); return@button }
+            Identity.aliasRefusal(typed)?.let {
+                Diag.warn("meet.subnet_name", "state" to "refused", "why" to it)
+                subnetSaid = it
+                redraw()
+                return@button
+            }
+            Diag.event("meet.subnet_name", "state" to "publishing", "bytes" to typed.toByteArray().size)
             Thread({
                 val why = Kernel.publishSubnetAlias(txid, typed)
                 runOnUiThread {

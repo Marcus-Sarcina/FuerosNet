@@ -89,7 +89,7 @@ class ConversationActivity : Activity() {
     private fun header(): TextView =
         TextView(this).apply {
             val t = peerKey?.let { Kernel.front.thread(it) }
-            text = t?.peerName ?: "conversation"
+            text = t?.let { Kernel.aliasOf(it.peerKey) ?: it.peerName } ?: "conversation"
             textSize = 22f
             typeface = Typeface.DEFAULT_BOLD
             setPadding(0, 0, 0, 16)

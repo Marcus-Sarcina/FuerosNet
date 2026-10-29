@@ -14423,6 +14423,33 @@
     "interpretation": ""
   },
   {
+    "id": "PRD-20",
+    "area": "product",
+    "gap": "product",
+    "title": "Re-sign a held profile at each attach, at a higher counter than the last",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "light-client-requirements.md §4.4",
+      "infra-client-requirements.md §6.2"
+    ],
+    "rule": [
+      {
+        "where": "light-client-requirements.md §4.4",
+        "text": "at attach and whenever\n  it changes, each one at a higher counter than the last"
+      },
+      {
+        "where": "infra-client-requirements.md §6.2",
+        "text": "replace the one you hold only by one\n  published later"
+      }
+    ],
+    "given": "A client holding a position in a subnet and a default alias, so a profile of its own is held for that subnet.",
+    "when": "It attaches, and attaches again.",
+    "then": "Each attach carries its profile for that subnet signed at a counter above the one it carried before, so a node holding the earlier one replaces it rather than refusing it.",
+    "oracle": "behaviour",
+    "interpretation": "Resending the held bytes unchanged satisfies \"at attach\" and not \"at a higher counter\"; the node's rule makes the second reading the only one that attaches twice."
+  },
+  {
     "id": "RSC-43",
     "area": "resources",
     "gap": "resources",

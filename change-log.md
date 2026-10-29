@@ -16453,6 +16453,57 @@ rather than applying it. The test floods both, as a serving node does.
 TOP-54 and TOP-55. Workspace tests 888, Android 277, the binding
 regenerated.
 
+### 2026-10-29 (names: on the invitation, on the channel, re-signed at attach)
+
+**T1 on fresh phones found three things about names, one of them a
+regression that detached two phones.**
+
+**The attach refused its own profile.** `light-client-requirements.md`
+§4.4 has a profile republished *at attach and whenever it changes, each
+one at a higher counter than the last*; `infra-client-requirements.md`
+§6.2 has the node replace only by one published later. The client resent
+the held bytes unchanged, the node refused them as not later, and the FFI
+treats a refused publication as a failed attach and detaches — so the
+first phone to hold a profile (which the default alias made every phone)
+attached once and never again. Held profiles are re-signed at each attach
+now; PRD-20 holds it, with a test that three attaches carry three rising
+counters.
+
+**Nobody was asking for profiles, and nobody knew where to ask.** The
+People screen's `onResume` was the only fetch and went with the screen;
+the shell asks each time it comes to front, and the attach asks too.
+And a contact's subnet was known only from its locator, which crosses by
+introduction or over a peering — a party met and adopted with no peering
+would never have been asked about in the one subnet both now stand in.
+The adoption records this client holds place its contacts, as node or
+patron, and those subnets are asked as well; each held subnet's own
+profile is asked of its root. The default name goes out the moment a
+position is gained, not at the next attach. Seen on glass: `cer.profile`
+taken on both phones, the conversations list naming the other by alias.
+
+**And the name inside the ceremony** [author, 2026-10-29: carry the
+default alias in the shell's own frames]. The invitation already carried
+the inviter's per-subnet alias as a claim; it carries the default where
+there is none, so the party scanning is named from the scan. The other
+direction is a hello on the adoption's own number — outside the adoption
+frames' range, so neither reads the other — sent once when the window
+opens; the meeting names the counterparty by it until a profile displaces
+it. Declined: keyhashes until a profile is held, and a subnet-less
+profile.
+
+**A subordinate asks its root by the anchor of its own position.** The
+subnet's profile was asked of the patron in the anchoring record, which
+only the root holds; ZU8, adopted into a subnet its root had just named,
+showed the hash until it was asked of the anchor its position names
+(`wire-format.md` §2.1). And the rail now follows the connection: the
+attach is what fetches, and a rail drawn once at start kept the hash
+until the next one.
+
+**The root names its subnet from the subnet's options** too: the Done
+screen's prompt at T1 published nothing — whether it was shown is not in
+the stream, and is now — so the row is where a subnet formed before the
+prompt, or renamed, gets its name.
+
 ### 2026-10-29 (the first run: new or restored, the phrase once, then a name)
 
 **The author's two changes before the wipe.** First: a first-run screen

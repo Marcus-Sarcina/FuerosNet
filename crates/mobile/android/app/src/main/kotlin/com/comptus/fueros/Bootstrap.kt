@@ -14,6 +14,13 @@ package com.comptus.fueros
  *
  * Version 2: `2, kind, backup, me(32), subnet(32, zeros where none),
  * aliasLen, alias, subnetAliasLen, subnetAlias`.
+ *
+ * **The alias is what the inviter calls itself, and it crosses here so
+ * the name is visible from the scan** [author, 2026-10-29]: the name it
+ * published for the subnet named, else its default name. A profile
+ * reaches another device only per subnet, so two strangers have nothing
+ * to fetch, and this is the least that carries it: self-declared, and
+ * the screens say so where it matters.
  */
 object Bootstrap {
     const val V1: Byte = 1
@@ -37,9 +44,17 @@ object Bootstrap {
 
     private val ZERO = "0".repeat(64)
 
-    fun encode(me: ByteArray, kind: Int, peering: Boolean, scope: Meet.Scope?): ByteArray {
+    fun encode(
+        me: ByteArray,
+        kind: Int,
+        peering: Boolean,
+        scope: Meet.Scope?,
+        /** What this device calls itself: the subnet's own name for it
+         *  where one is published, else the default. */
+        ownAlias: String? = scope?.ownAlias,
+    ): ByteArray {
         val subnet = scope?.id?.takeIf { it.length == 64 }?.let { Provision.unhex(it) } ?: ByteArray(32)
-        val alias = (scope?.ownAlias ?: "").toByteArray().take(64).toByteArray()
+        val alias = (ownAlias ?: "").toByteArray().take(64).toByteArray()
         val subnetAlias = (scope?.alias ?: "").toByteArray().take(64).toByteArray()
         return byteArrayOf(V2, kind.toByte(), (if (peering) 1 else 0).toByte()) +
             me + subnet +

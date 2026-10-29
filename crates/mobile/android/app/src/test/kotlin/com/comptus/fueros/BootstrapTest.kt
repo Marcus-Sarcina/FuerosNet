@@ -12,6 +12,19 @@ class BootstrapTest {
     private val me = ByteArray(32) { 0xab.toByte() }
     private val subnet = "cd".repeat(32)
 
+    /** The name crosses on the invitation whether or not a subnet is
+     *  named [author, 2026-10-29]: the default where the scope carries
+     *  none, so the party scanning sees it before anything else. */
+    @Test
+    fun the_default_name_rides_a_code_that_names_no_subnet() {
+        val read = Bootstrap.decode(Bootstrap.encode(me, 0, false, null, "Dana"))!!
+        assertNull(read.subnet)
+        assertEquals("Dana", read.alias)
+        // and the scope's own name wins where the scope has one
+        val own = Bootstrap.decode(Bootstrap.encode(me, 1, false, Meet.Scope(subnet, "League", "Alice")))!!
+        assertEquals("Alice", own.alias)
+    }
+
     // acceptance: PRD-15
     @Test
     fun a_version_two_code_carries_the_subnet_and_both_aliases_as_claims() {

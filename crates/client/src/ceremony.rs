@@ -3430,6 +3430,13 @@ impl Client {
         self.store.records.insert(t, envelope.to_vec());
         self.adopt_own_positions();
         self.outbox.push(Msg::Record(envelope.to_vec()));
+        // **a position just gained is a subnet the default name goes to
+        // now**, not at the next attach: the counterparty of this very
+        // adoption is the first to ask what this key is called there
+        match self.default_profile_if_absent() {
+            Ok(msgs) => self.outbox.extend(msgs),
+            Err(e) => tracing::warn!(target: "cer", ?e, "the default alias could not be published"),
+        }
         Ok(t)
     }
 
@@ -4601,26 +4608,55 @@ impl Client {
         if let Err(e) = self.default_profile_if_absent() {
             tracing::warn!(target: "cer", ?e, "the default alias could not be published");
         }
-        out.extend(self.profiles_to_publish());
+        out.extend(self.refreshed_profiles());
+        // and ask after everybody's, the session being the first chance
+        out.extend(self.profile_requests());
         out.extend(self.sweep(population));
         out
     }
 
     /// This client's own profile for the subnet it acts in, and the
-    /// subnet's where it set one, as publications.
-    fn profiles_to_publish(&self) -> Vec<Msg> {
+    /// subnet's where it set one, **re-signed at a higher counter** for
+    /// this attach (`light-client-requirements.md` §4.4: *at attach and
+    /// whenever it changes, each one at a higher counter than the last*).
+    /// The stored bytes resent unchanged were refused by the node as not
+    /// later than what it held (`infra-client-requirements.md` §6.2), and
+    /// a refusal fails the attach — found on the bench 2026-10-29, two
+    /// phones detached by their own names.
+    fn refreshed_profiles(&mut self) -> Vec<Msg> {
         let Some(subnet) = self.subnet() else {
             return Vec::new();
         };
-        self.store
+        let me = self.keyhash();
+        let held: Vec<(u64, rhtn_archive::profile::Profile)> = self
+            .store
             .profiles
             .get(&subnet)
+            .map(|b| (rhtn_archive::profile::KIND_OWN, b))
             .into_iter()
-            .chain(self.store.subnet_profiles.get(&subnet).filter(|b| {
-                rhtn_archive::profile::Profile::parse(b).is_ok_and(|p| p.subject == self.keyhash())
-            }))
-            .map(|b| Msg::PublishProfile(b.clone()))
-            .collect()
+            .chain(
+                self.store
+                    .subnet_profiles
+                    .get(&subnet)
+                    .map(|b| (rhtn_archive::profile::KIND_SUBNET, b)),
+            )
+            .filter_map(|(kind, b)| {
+                rhtn_archive::profile::Profile::parse(b)
+                    .ok()
+                    .map(|p| (kind, p))
+            })
+            .filter(|(_, p)| p.subject == me)
+            .collect();
+        let mut out = Vec::new();
+        for (kind, p) in held {
+            match self.publish_profile(subnet, kind, &p.alias, p.image.clone()) {
+                Ok(msgs) => out.extend(msgs),
+                Err(e) => {
+                    tracing::warn!(target: "cer", ?e, kind, "a held profile could not be re-signed")
+                }
+            }
+        }
+        out
     }
 
     /// The name this client publishes wherever it set none for the subnet
@@ -4651,6 +4687,7 @@ impl Client {
         if self.store.profiles.contains_key(&subnet) {
             return Ok(Vec::new());
         }
+        tracing::info!(target: "cer", subnet = %hex8(&subnet), "cer.profile.default");
         self.publish_profile(subnet, 0, &alias, None)
     }
 
@@ -4728,15 +4765,70 @@ impl Client {
     /// locator names: what a client asks after it takes a locator
     /// (`light-client-requirements.md` §4.3).
     pub fn profile_requests(&self) -> Vec<Msg> {
-        self.store
-            .contacts
-            .iter()
-            .filter_map(|(k, c)| {
-                let l = rhtn_archive::locator::SignedLocator::parse(c.locator.as_deref()?).ok()?;
-                let subnet = l.locator.subnet?;
-                Some(self.request_profile(*k, subnet, rhtn_archive::profile::KIND_OWN))
-            })
-            .collect()
+        // **where each contact is asked about: the subnet its locator
+        // names, and every subnet an adoption record this client holds
+        // places it in**, as node or as patron.  A locator reaches this
+        // client only by introduction or over a peering, so a party met
+        // and adopted here, with no peering, would otherwise never be
+        // asked about in the one subnet both of them now stand in
+        // [found on the bench, 2026-10-29: two names typed at creation
+        // and neither ever fetched]
+        let mut asked: std::collections::BTreeSet<(Keyhash, Txid)> =
+            std::collections::BTreeSet::new();
+        for (k, c) in &self.store.contacts {
+            if let Some(subnet) = c
+                .locator
+                .as_deref()
+                .and_then(|b| rhtn_archive::locator::SignedLocator::parse(b).ok())
+                .and_then(|l| l.locator.subnet)
+            {
+                asked.insert((*k, subnet));
+            }
+        }
+        for rec in self.archive.records() {
+            if rec.tx_type != TYPE_ADOPTION {
+                continue;
+            }
+            let Some(l) = rec.locator() else { continue };
+            // a root's first adoption names no subnet and is the subnet
+            // (design §13.8)
+            let subnet = l.subnet.unwrap_or(rec.txid);
+            for party in [rec.field_hash(1), rec.field_hash(2)].into_iter().flatten() {
+                if self.store.contacts.contains_key(&party) {
+                    asked.insert((party, subnet));
+                }
+            }
+        }
+        let contacts = asked
+            .into_iter()
+            .map(|(k, subnet)| self.request_profile(k, subnet, rhtn_archive::profile::KIND_OWN));
+        // **and each held subnet's own profile** (kind 1), asked of its
+        // root — the patron named in the anchoring record this client
+        // holds (design §13.8) — so a subnet is shown by the name its
+        // root gave it rather than by eight hex characters
+        // **the root is the anchor of this client's own position there**
+        // (`wire-format.md` §2.1): a subordinate holds its own adoption
+        // and not the subnet's anchoring record, so the record's patron
+        // is only the root's own way of knowing [found on the bench
+        // 2026-10-29: a subnet named by its root, its newest member still
+        // showing the hash]
+        let subnets = self.subnets().into_iter().filter_map(|s| {
+            let root = self
+                .position_in(&s)
+                .map(|p| p.anchor)
+                .or_else(|| self.archive.get(&s)?.field_hash(2))?;
+            Some(self.request_profile(root, s, rhtn_archive::profile::KIND_SUBNET))
+        });
+        let out: Vec<Msg> = contacts.chain(subnets).collect();
+        // how many were asked, and of how many contacts: a contact whose
+        // locator names no subnet is one nothing can be asked about
+        tracing::info!(
+            target: "cer",
+            requests = out.len(),
+            contacts = self.store.contacts.len(),
+            "cer.profile.requests"
+        );
+        out
     }
 
     /// Take a `ProfileReply`: a profile is verified under the subject it

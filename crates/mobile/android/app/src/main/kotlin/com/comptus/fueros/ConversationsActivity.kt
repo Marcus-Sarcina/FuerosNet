@@ -92,7 +92,9 @@ class ConversationsActivity : Activity() {
 
     private fun row(t: Front.Thread): View {
         val name = TextView(this).apply {
-            text = t.peerName
+            // the alias they published where one has reached this device,
+            // else what the thread was opened as
+            text = Kernel.aliasOf(t.peerKey) ?: t.peerName
             textSize = 20f
         }
         val chip = TextView(this).apply {

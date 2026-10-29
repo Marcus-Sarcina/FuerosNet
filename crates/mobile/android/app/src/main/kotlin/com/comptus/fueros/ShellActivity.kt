@@ -73,11 +73,19 @@ class ShellActivity : Activity() {
     private var drawnFromKernel = false
     private val reading = java.util.concurrent.atomic.AtomicBoolean(false)
 
+    /** The status the rail was last read at: a change is an attach, a
+     *  detach or a failover, each of which can bring names with it. */
+    @Volatile private var readAt: String? = null
+
     private val sink = object : Front.Ui {
         override fun render() {
             val line = Kernel.front.status()
             runOnUiThread { connection?.text = Attach.statusLine(line) }
-            if (!drawnFromKernel) readRail()
+            // **the rail follows the connection**: the attach fetches
+            // profiles, and a subnet named by its root arrived after the
+            // rail was drawn and stayed eight hex characters until the
+            // next start [bench, 2026-10-29]
+            if (!drawnFromKernel || line != readAt) readRail()
         }
     }
 
@@ -189,7 +197,13 @@ class ShellActivity : Activity() {
      */
     private fun readRail() {
         if (!reading.compareAndSet(false, true)) return
+        readAt = Kernel.front.status()
         Thread({
+            // **ask for what each contact and each subnet published**
+            // (`light-client-requirements.md` §4.3): this is the screen
+            // that shows names, so it is where the asking belongs — it was
+            // the People screen's until that went [2026-10-29]
+            Kernel.requestProfiles()
             val rows = Kernel.scopes()
             val held = Kernel.standings().associateBy { it.subnet }
             val mine = Kernel.ownAlias()
@@ -520,6 +534,7 @@ class ShellActivity : Activity() {
                     ) { startActivity(Intent(this, LeavingActivity::class.java)) },
                 )
                 column.addView(owed(Shell.downline(s)))
+                if (s?.root == true) column.addView(nameSubnet(where.id, scope?.alias))
                 if (s?.operator == true) {
                     column.addView(
                         row("Your instance here", "its administration pages, through the operator's own section") {
@@ -606,6 +621,53 @@ class ShellActivity : Activity() {
             }
             under?.let { addView(it.apply { setPadding(0, dp(3), 0, 0) }) }
         }
+    }
+
+    /**
+     * **The root names the subnet** (`Robot/light-client-screens.md`,
+     * subnet options: *the subnet's name becomes editable* for the root)
+     * — by convention, which `light-client-requirements.md` §4.4 makes
+     * the root's while nothing enforces it, so the row says so. The same
+     * publication the Done screen asks for at formation; here for a
+     * subnet formed before that prompt existed, or renamed.
+     */
+    private fun nameSubnet(id: String, current: String?): View {
+        val c = Palette.now
+        val column = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(10), dp(16), dp(10))
+        }
+        val field = android.widget.EditText(this).apply {
+            hint = current ?: "the subnet's name"
+            textSize = 16f
+            setSingleLine()
+        }
+        val said = TextView(this).apply {
+            textSize = 12f
+            setTextColor(c.sub)
+            text = "You are its root, so its name is yours to set — by convention; nothing enforces it."
+        }
+        column.addView(said)
+        column.addView(field)
+        column.addView(
+            android.widget.Button(this).apply {
+                text = if (current == null) "Name the subnet" else "Rename the subnet"
+                setOnClickListener {
+                    val typed = field.text.toString().trim()
+                    Identity.aliasRefusal(typed)?.let { said.text = it; return@setOnClickListener }
+                    said.text = "publishing…"
+                    Thread({
+                        val why = Kernel.publishSubnetAlias(id, typed)
+                        runOnUiThread {
+                            if (isFinishing) return@runOnUiThread
+                            said.text = why?.let { "not published: $it" } ?: "Named $typed; published to your node."
+                            if (why == null) readRail()
+                        }
+                    }, "fueros-subnet-name").start()
+                }
+            },
+        )
+        return column
     }
 
     /** What a place does not hold yet, said in the muted ink. */

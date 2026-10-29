@@ -252,6 +252,14 @@ class AdoptionTest {
         )
         // a truncated offer, and a version this build does not know
         assertNull(Adoption.Frame.read(byteArrayOf(1, 1, 0, 0, 0, 5)))
+        // a hello is on the same number and is not an adoption frame
+        val hello = Adoption.Frame.hello("Dana")
+        assertEquals("Dana", Adoption.Frame.heard(hello))
+        assertNull(Adoption.Frame.read(hello))
+        assertTrue(!Adoption.Frame.mine(hello))
+        assertNull(Adoption.Frame.heard(Adoption.Frame.refused("x")))
+        assertNull("blank says nothing", Adoption.Frame.heard(Adoption.Frame.hello("  ")))
+        assertEquals("bounded at 64 bytes", 64, Adoption.Frame.heard(Adoption.Frame.hello("é".repeat(40)))!!.toByteArray().size)
         assertNull(Adoption.Frame.read(byteArrayOf(2, 1, 0, 0, 0, 5, 0)))
         assertNull(Adoption.Frame.read(ByteArray(0)))
     }

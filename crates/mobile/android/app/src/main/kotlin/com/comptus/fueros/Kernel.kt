@@ -723,7 +723,16 @@ object Kernel {
         // this device acts in otherwise, so a regular meeting carries a
         // name too (`light-client-requirements.md` §7)
         val scope = m.scope() ?: scopes().firstOrNull { it.id == subnet() }
-        return Bootstrap.encode(me, kind, m.kind.peering, scope)
+        // **and the name, so it is visible from the scan** [author,
+        // 2026-10-29]: the one published there, else the default
+        val alias = scope?.ownAlias?.takeIf { it.isNotBlank() } ?: defaultAlias()
+        return Bootstrap.encode(me, kind, m.kind.peering, scope, alias)
+    }
+
+    /** The alias a contact published, where one has reached this device. */
+    fun aliasOf(keyHex: String): String? {
+        val p = participant ?: return null
+        return aliases(p)[keyHex]
     }
 
     /**
@@ -936,6 +945,8 @@ object Kernel {
         // and what it claimed about where it leads, which the brief states
         // as a claim (`light-client-requirements.md` §7)
         m.invitedBy(Meet.Claim(read.subnet, read.alias, read.subnetAlias))
+        // and what they call themselves, from the scan [author, 2026-10-29]
+        m.heard(read.alias)
         return null
     }
 
@@ -1120,6 +1131,17 @@ object Kernel {
                 )
             }
         override fun open(): String? = refusal("converseOpen") { p.converseOpen() }.also { sendCarriages(p) }
+        /** This device's name to the counterparty, on the channel the
+         *  handover left [author, 2026-10-29]: the responder's only way
+         *  to be named before a profile exists, and the inviter's again. */
+        override fun hello(): String? {
+            val them = meet?.counterpartyKey ?: return "no counterparty yet"
+            val name = defaultAlias() ?: return null
+            return call("send", { it.reason }) {
+                p.send(unhex(them), Adoption.KIND, Adoption.Frame.hello(name))
+                null
+            }
+        }
         override fun queries(): String? = refusal("converseQueries") { p.converseQueries() }.also { sendCarriages(p) }
         override fun gathered(): String? = refusal("converseGathered") { p.converseGathered() }.also { sendCarriages(p) }
         override fun propose(): String? = refusal("conversePropose") { p.conversePropose() }.also { sendCarriages(p) }
@@ -2314,7 +2336,14 @@ object Kernel {
                     // §7.10.1): the adoption's legs are this shell's own
                     // frames on their own number, and everything else is
                     // what a person sent a person
-                    if (e.kind == Adoption.KIND) {
+                    val said = if (e.kind == Adoption.KIND) Adoption.Frame.heard(e.bytes) else null
+                    if (said != null) {
+                        // **a name, self-declared, from the party in front
+                        // of you** [author, 2026-10-29]: the meeting's to
+                        // show, and nobody else's to take
+                        val m = meet
+                        if (m != null && m.counterpartyKey == from) m.heard(said)
+                    } else if (e.kind == Adoption.KIND) {
                         val a = adoption
                         when {
                             // **a frame that arrives before this side has begun
