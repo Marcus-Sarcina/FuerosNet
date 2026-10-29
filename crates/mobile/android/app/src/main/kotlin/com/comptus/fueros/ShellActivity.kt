@@ -38,10 +38,11 @@ import android.widget.TextView
  * **What it does not do yet**, each one named rather than faked: the
  * content region holds a placeholder per place, because the content
  * views are the next piece; the unseen counts are zero everywhere,
- * nothing in the kernel or this shell tracking read state; and the
- * crowns are drawn from a standing the kernel does not yet export, so
- * every orb is bare. The three are the gaps the costing of 2026-10-28
- * listed, and the rail is their shape rather than their content.
+ * nothing in the kernel or this shell tracking read state; and **the
+ * gold circlet never shows**, which subnet an instance serves being the
+ * operator's own record and this shell not yet reading its own list.
+ * The silver and the full crown are real, out of `subnet_standing`
+ * [2026-10-28].
  */
 class ShellActivity : Activity() {
 
@@ -113,10 +114,11 @@ class ShellActivity : Activity() {
         // client that may be parked in `nextEvent`
         Thread({
             val rows = Kernel.scopes()
+            val standing = Kernel.standings().associateBy { it.subnet }
             val mine = Kernel.ownAlias()
             runOnUiThread {
                 if (!isFinishing) {
-                    drawRail(rows)
+                    drawRail(rows, standing)
                     drawFoot(mine)
                 }
             }
@@ -150,19 +152,26 @@ class ShellActivity : Activity() {
 
     // ---- the rail ------------------------------------------------------
 
-    private fun drawRail(subnets: List<Meet.Scope>) {
+    private fun drawRail(subnets: List<Meet.Scope>, standing: Map<String, Kernel.Standing>) {
         railColumn.removeAllViews()
         val rungs = Chrome.rail(
             // **zero, and not a guess**: nothing tracks read state yet
             unseenDirect = 0,
             subnets = subnets.map {
+                val s = standing[it.id]
                 Chrome.Rung.Subnet(
                     id = it.id,
                     alias = it.alias,
                     unseen = 0,
-                    // bare until the kernel can say what this person is
-                    // in a subnet
-                    crown = Chrome.Crown.NONE,
+                    crown = Chrome.crown(
+                        root = s?.root == true,
+                        // **still the shell's to know, and it does not
+                        // yet**: which subnet an instance serves is the
+                        // operator's own record, an endpoint record
+                        // naming none
+                        operator = false,
+                        hasSubordinate = (s?.subordinates ?: 0) > 0,
+                    ),
                 )
             },
         )

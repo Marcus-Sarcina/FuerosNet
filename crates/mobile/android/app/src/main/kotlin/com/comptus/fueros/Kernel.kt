@@ -869,6 +869,26 @@ object Kernel {
         return named to me
     }
 
+    /**
+     * **What this key is in each subnet**, for the crown an orb sits in
+     * (`Robot/light-client-screens.md`, the crowns).
+     *
+     * **Two of the three.** Whether this person runs a node in a subnet
+     * is not the kernel's to say — an endpoint record names no subnet
+     * and an instance is a key of its own — so it comes from the
+     * operator's own list of instances, which is this shell's state.
+     */
+    data class Standing(val subnet: String, val root: Boolean, val subordinates: Int)
+
+    fun standings(): List<Standing> {
+        val p = participant ?: return emptyList()
+        return call("subnet_standing", { emptyList() }) {
+            p.subnetStanding().map {
+                Standing(hex(it.subnet), it.root, it.subordinates.toInt())
+            }
+        }
+    }
+
     fun scopes(): List<Meet.Scope> {
         val p = participant ?: return emptyList()
         return call("subnetRows", { emptyList() }) {

@@ -135,11 +135,19 @@ gone** with it — no title bar saying *Fueros* above the design, and the
 system bars in the shell's own colours rather than a light grey bar under
 a dark foot.
 
-**What the rail cannot draw yet**, each named on the screen rather than
-faked: the unseen counts, nothing tracking read state anywhere; the
-crowns, the kernel exporting no per-subnet standing; and the content
-itself, which is the next piece. The orbs, the foot and the chrome rule
-are real.
+**The silver and the full crown are real since 2026-10-28**
+(`subnet_standing`): whether this key roots a subnet, and how many
+subordinates it still holds there. **The gold is not, and cannot be from
+the kernel**: `wire-format.md` §7.6's endpoint record names a node and
+its addresses and no subnet, and an instance is a key of its own — so
+which subnet an instance serves is the operator's own record of what
+they administer, and the shell that holds that list is what supplies it.
+It is therefore an Options-side question rather than a kernel gap.
+
+**What the rail still cannot draw**, each named on the screen rather
+than faked: the unseen counts, nothing tracking read state anywhere; the
+gold circlet, above; and the content itself, which is the next piece.
+The orbs, the foot and the chrome rule are real.
 
 **Subnet view** is what a subnet's icon opens: content from that subnet
 alone, the content area split between navigation buttons to that subnet's

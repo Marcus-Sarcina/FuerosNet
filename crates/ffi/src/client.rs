@@ -2916,6 +2916,37 @@ impl Participant {
         })
     }
 
+    /// **What this key is in each subnet it holds a position in**
+    /// (`Robot/light-client-screens.md`, the crowns): the root of it, and
+    /// how many subordinates it still holds there.
+    ///
+    /// **A line this key granted counts until something says it ended**,
+    /// which is the safe way round for a mark on a screen: the adoptions
+    /// are read from this key's own archive, where they are whether or
+    /// not anything propagated them back, and only a binding the
+    /// propagated copy shows ended is taken off. The other way round
+    /// would blank a patron's crown for want of news about their own
+    /// adoptions.
+    ///
+    /// **The third standing is the shell's.** Whether this person
+    /// operates a node in a subnet cannot be answered here — see
+    /// [`SubnetStanding`].
+    #[must_use]
+    pub fn subnet_standing(&self) -> Vec<SubnetStanding> {
+        crate::diag::call_plain("subnet_standing", || {
+            self.handle.with_blocking(|c| {
+                c.subnet_standing()
+                    .into_iter()
+                    .map(|s| SubnetStanding {
+                        subnet: s.subnet.to_vec(),
+                        root: s.root,
+                        subordinates: s.subordinates as u32,
+                    })
+                    .collect()
+            })
+        })
+    }
+
     /// The same, each with the aliases a chooser labels it by: the
     /// subnet's own and this client's there, where either is held.
     #[must_use]
@@ -3593,6 +3624,25 @@ fn cost_outward(c: rhtn_client::leaving::Cost) -> LeavingCost {
             })
             .collect(),
     }
+}
+
+/// **What this key is in one subnet**, which is what a crown is drawn
+/// from (`Robot/light-client-screens.md`, the crowns).
+///
+/// **Two facts and not three.** Whether this person operates a node in
+/// the subnet is not here: an `EndpointRecord` (`wire-format.md` §7.6)
+/// names a node and its addresses and **no subnet**, and an instance is
+/// a key of its own rather than this one — so which subnet an instance
+/// serves is the operator's own record of what they administer, and the
+/// shell holding that list supplies it.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct SubnetStanding {
+    /// The subnet (design §13.8).
+    pub subnet: Id,
+    /// Whether this key is the root the subnet descends from.
+    pub root: bool,
+    /// How many subordinates it still holds there.
+    pub subordinates: u32,
 }
 
 /// One candidate's standing under this client's own policy.

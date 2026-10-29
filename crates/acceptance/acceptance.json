@@ -15131,5 +15131,28 @@
     "then": "One reader answers how the body is delimited, and the socket reads that much while the parser reads what arrived to the same decision; a counted, a chunked and an unframed answer each come to the same canonical message. The reader refuses a duplicated or comma-listed length, a length beside an encoding and an encoding the node does not decode, so the refusal happens once rather than differently in each place. The socket hands up what it read without re-framing it, and the host path joins a chunked answer with the same parser rather than handing a caller its chunk sizes.",
     "oracle": "behaviour",
     "interpretation": "§11.2's hazard is two parties disagreeing about a message boundary. A socket must parse enough to know when to stop reading and cannot defer that, so the division is between reading — which stays where the bytes arrive, with the bound an unauthenticated far end can make the node spend — and deciding, which belongs to one reader. Three implementations of the second is the hazard inside one node."
+  },
+  {
+    "id": "TOP-54",
+    "area": "topology",
+    "gap": "topology",
+    "title": "A key knows what it is in each subnet it holds a position in",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "light-client-requirements.md §4.2",
+      "design §13.8"
+    ],
+    "rule": [
+      {
+        "where": "design §13.8",
+        "text": "A subnet's id\nis its root's scope id."
+      }
+    ],
+    "given": "A key that adopted two parties into a subnet it roots, and one of those parties.",
+    "when": "Each asks what it is in that subnet.",
+    "then": "The root is told it roots it and holds two subordinates there; the subordinate is told it roots nothing and holds none. A line ended by a departure the propagated copy has taken stops being counted, and a line the propagated copy has not been told of at all still counts — the adoptions being read from the granting key's own archive and only an ended binding taken off, so that a patron is not left standing for nothing for want of news about adoptions it signed itself.",
+    "oracle": "behaviour",
+    "interpretation": "Two of the three standings a client can draw. Whether a person operates a node in a subnet is not among them: wire-format.md §7.6's endpoint record names a node and its addresses and no subnet, and an instance is a key of its own, so which subnet one serves is the operator's own record rather than anything this key holds."
   }
 ]

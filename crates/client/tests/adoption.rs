@@ -443,3 +443,89 @@ fn a_patron_placed_elsewhere_adopts_under_its_own_key_and_the_adopted_accepts() 
         .review_and_sign_adoption(&body)
         .expect("the address is the patron's to issue, under its own key");
 }
+
+// acceptance: TOP-54
+/// **What a crown is drawn from** (`Robot/light-client-screens.md`): what
+/// this key is in each subnet it holds a position in.
+#[test]
+fn a_key_knows_whether_it_roots_a_subnet_and_how_many_sit_under_it_there() {
+    let mut s = setup(&PARTIES);
+    // alice adopts bob, which names alice's subnet by that adoption's own
+    // txid (design §13.8), and then carol into the same one
+    let first = s.adopted("bob", "alice", "w2", 1);
+    s.adopted("carol", "alice", "w2", 2);
+
+    let standing = s.client("alice").subnet_standing();
+    let here = standing
+        .iter()
+        .find(|x| x.subnet == first)
+        .unwrap_or_else(|| panic!("alice's own subnet is among {standing:?}"));
+    assert!(here.root, "alice is the root this subnet descends from");
+    assert_eq!(here.subordinates, 2, "both the lines she granted");
+
+    // **and the subordinate's own view is the other one**: bob is in the
+    // same subnet, roots nothing, and holds nobody under him
+    let his = s.client("bob").subnet_standing();
+    let mine = his
+        .iter()
+        .find(|x| x.subnet == first)
+        .unwrap_or_else(|| panic!("bob sits in it too: {his:?}"));
+    assert!(!mine.root, "bob did not root it");
+    assert_eq!(mine.subordinates, 0, "and nobody sits under him");
+}
+
+// acceptance: TOP-54
+#[test]
+fn a_line_that_ended_stops_being_counted_and_an_untold_one_still_counts() {
+    let mut s = setup(&PARTIES);
+    let first = s.adopted("bob", "alice", "w2", 1);
+    let second = s.adopted("carol", "alice", "w2", 2);
+
+    // **what alice granted counts before anything propagates back.** Her
+    // own archive holds the adoptions she signed, and a patron whose
+    // copy of the topology has not been told about them would otherwise
+    // wear no crown at all — the wrong way round for a mark on a screen.
+    assert_eq!(
+        s.client("alice")
+            .subnet_standing()
+            .iter()
+            .find(|x| x.subnet == first)
+            .expect("her subnet")
+            .subordinates,
+        2,
+    );
+
+    // bob leaves, and the serving node floods both the adoptions and the
+    // departure back to her — **both, because a departure settles against
+    // the binding it ends**, and a copy never told of the adoption holds
+    // the departure pending instead of applying it
+    let left = s
+        .client("bob")
+        .depart(kh("alice"), None)
+        .expect("he may leave");
+    let flooded: Vec<Vec<u8>> = {
+        let c = s.client("bob");
+        vec![c.store.records[&left].clone()]
+    };
+    let adoptions: Vec<Vec<u8>> = {
+        let c = s.client("alice");
+        vec![
+            c.store.records[&first].clone(),
+            c.store.records[&second].clone(),
+        ]
+    };
+    {
+        let c = s.client("alice");
+        for bytes in adoptions.iter().chain(flooded.iter()) {
+            c.horizon.ingest(bytes, &c.known);
+        }
+    }
+
+    let after = s.client("alice").subnet_standing();
+    let here = after
+        .iter()
+        .find(|x| x.subnet == first)
+        .expect("her subnet");
+    assert!(here.root, "she is still its root");
+    assert_eq!(here.subordinates, 1, "carol alone now: {after:?}");
+}

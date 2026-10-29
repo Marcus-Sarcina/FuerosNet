@@ -16396,3 +16396,41 @@ an emulator, which is how this kind of work has to be checked.
 
 Android tests 277, three gaps named on the screen rather than faked: the
 unseen counts, the crowns' standing, and the content views.
+
+### 2026-10-28 (what a key is in each subnet, which is two of a crown's three)
+
+**The crowns wanted a standing the kernel did not export.** A subnet's
+orb is to sit in a thin silver circlet where this person has a
+subordinate there, a golden one where they run a node, and a full crown
+where they are its root [author, 2026-10-27] — and nothing could say
+which.
+
+**Two of the three are the kernel's and are built** (`subnet_standing`):
+whether this key roots a subnet, from the position whose anchor is
+itself at no depth, and how many subordinates it still holds there.
+
+**The third is not, and the reason is worth keeping.** Whether somebody
+operates a node in a subnet cannot be answered from this key at all:
+`wire-format.md` §7.6's endpoint record names a node and its addresses
+and **no subnet**, and an instance is a key of its own rather than the
+person's. So which subnet an instance serves is the operator's own
+record of what they administer — the list the operator screen already
+keeps as its own state. It is an Options-side question rather than a
+kernel gap, and the crown function takes it as a separate argument
+because of that.
+
+**A line counts until something says it ended**, which is the safe way
+round for a mark on a screen. The adoptions are read from the granting
+key's own archive, where they are whether or not anything propagated
+them back, and only a binding the propagated copy shows *ended* is taken
+off. Asking for open bindings instead would blank a patron's crown for
+want of news about adoptions they signed themselves — the same
+propagation asymmetry that made `cost_of_leaving` answer `NotInTable`,
+met from the other side and resolved the other way, because a warning
+must not overstate and a mark must not understate.
+
+**Which the test had to be taught too**: a departure settles against the
+binding it ends, so a copy never told of the adoption holds it pending
+rather than applying it. The test floods both, as a serving node does.
+
+TOP-54. Workspace tests 887, Android 277, the binding regenerated.

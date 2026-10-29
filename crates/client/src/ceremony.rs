@@ -590,6 +590,23 @@ impl Active {
     }
 }
 
+/// **What this key is in one subnet**, as a crown is drawn from
+/// (`Robot/light-client-screens.md`, the crowns).
+///
+/// **Two facts and not three**: whether this person operates a node in
+/// the subnet is the operator's own record of their instances, an
+/// endpoint record naming no subnet and an instance being a key of its
+/// own.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SubnetStanding {
+    /// The subnet (design §13.8).
+    pub subnet: Txid,
+    /// Whether this key is the root the subnet descends from.
+    pub root: bool,
+    /// How many subordinates it still holds there.
+    pub subordinates: usize,
+}
+
 /// A participant client: its identity, archive and store, its two query
 /// roles, whom it recognises, and the device it runs on.
 pub struct Client {
@@ -4282,6 +4299,63 @@ impl Client {
             .collect();
         out.extend(self.positions.keys().copied());
         out
+    }
+
+    /// **What this key is in one subnet** (`Robot/light-client-screens.md`,
+    /// the crowns): whether it is the root there, and how many
+    /// subordinates it still holds there.
+    ///
+    /// **Two of the three standings a crown draws.** The third — whether
+    /// this person operates a node in that subnet — is not a question
+    /// this client can answer: an `EndpointRecord` (`wire-format.md`
+    /// §7.6) names a node and its addresses and **no subnet**, and an
+    /// instance is a key of its own rather than this one, so holding one
+    /// is the operator's own record of what they administer. A shell
+    /// that knows its instances supplies that and this supplies the rest.
+    pub fn subnet_standing(&self) -> Vec<SubnetStanding> {
+        let me = self.keyhash();
+        // the adoptions this key granted, by the subnet each placed
+        // somebody in.  **This key's own archive**, because an adoption
+        // it signed is one it holds whether or not anything propagated
+        // it back; the table below says which of them have since ended.
+        let mut granted: BTreeMap<Txid, Vec<Txid>> = BTreeMap::new();
+        for rec in self.archive.records() {
+            if rec.tx_type == TYPE_ADOPTION
+                && rec.field_hash(2) == Some(me)
+                && rec.field_hash(1) != Some(me)
+                && let Some(l) = rec.locator()
+            {
+                // a root's first adoption names no subnet and is the
+                // subnet (design §13.8)
+                let subnet = l.subnet.unwrap_or(rec.txid);
+                granted.entry(subnet).or_default().push(rec.txid);
+            }
+        }
+        // **ended rather than open**, which is the safe way round for a
+        // mark on a screen: a binding the propagated copy has not been
+        // told about is one this key granted and nothing has ended, so
+        // it still counts. Asking for `open` instead would blank the
+        // crown of a patron whose own adoptions have not come back.
+        let ended: std::collections::BTreeSet<Txid> = self
+            .horizon
+            .table
+            .bindings()
+            .iter()
+            .filter(|b| !b.open())
+            .map(|b| b.adoption)
+            .collect();
+        let rooted = self.scopes_rooted();
+        self.subnets()
+            .into_iter()
+            .map(|subnet| SubnetStanding {
+                subnet,
+                root: rooted.contains(&subnet),
+                subordinates: granted
+                    .get(&subnet)
+                    .map(|v| v.iter().filter(|t| !ended.contains(*t)).count())
+                    .unwrap_or(0),
+            })
+            .collect()
     }
 
     /// The scopes this client roots and could bring under a patron
