@@ -96,3 +96,42 @@ fn a_held_profile_is_re_signed_at_a_higher_counter_at_each_attach() {
         "an override stays an override"
     );
 }
+
+/// **The kernel says which nouns changed, and says each once**: a reader
+/// keeping a copy refreshes those and no others, and a second ask with
+/// nothing between finds nothing.
+#[test]
+fn the_kernel_marks_the_nouns_it_changes_and_drains_them_once() {
+    use rhtn_model::Noun;
+    let mut s = setup(&PARTIES);
+    // a fresh client has marked nothing a reader could miss
+    let first = s.client("alice").take_changed();
+    assert!(
+        first.is_empty() || first.contains(&Noun::Contacts),
+        "nothing surprising: {first:?}"
+    );
+    s.client("alice").set_default_alias("Alice").expect("kept");
+    let marked = s.client("alice").take_changed();
+    assert!(
+        marked.contains(&Noun::Profiles),
+        "a name is a profile: {marked:?}"
+    );
+    assert!(s.client("alice").take_changed().is_empty(), "drained");
+
+    // an adoption places both parties: subnets and lines on each side
+    s.adopted("bob", "alice", "w1", 1);
+    let alice = s.client("alice").take_changed();
+    assert!(
+        alice.contains(&Noun::Subnets) && alice.contains(&Noun::Lines),
+        "the patron: {alice:?}"
+    );
+    let bob = s.client("bob").take_changed();
+    assert!(
+        bob.contains(&Noun::Subnets) && bob.contains(&Noun::Lines),
+        "the adopted: {bob:?}"
+    );
+    assert!(
+        s.client("bob").take_changed().is_empty(),
+        "and nothing twice"
+    );
+}

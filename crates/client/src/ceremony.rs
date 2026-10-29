@@ -701,6 +701,10 @@ pub struct Client {
     /// ceremony's and the carrying is the adaptors', and the two happen on
     /// different sides of the boundary.
     pub(crate) outbox: Vec<Msg>,
+    /// **Which nouns changed since a reader last asked** (`rhtn_model::Noun`;
+    /// the sync of `Robot/implementation-plan.md` section 8): marked at the
+    /// choke points below, drained by whoever keeps a copy in step.
+    pub(crate) changed: std::collections::BTreeSet<rhtn_model::Noun>,
     /// As a recovering subject: the responses gathered at recovery
     /// meetings, verified, awaiting the block.
     pub recovery_responses: Vec<Vec<u8>>,
@@ -901,6 +905,7 @@ impl Client {
             scopes: BTreeMap::new(),
             root_carried: false,
             outbox: Vec::new(),
+            changed: std::collections::BTreeSet::new(),
             catalog: crate::catalog::View::default(),
             browsing: None,
             fetching: BTreeMap::new(),
@@ -1241,6 +1246,7 @@ impl Client {
     /// it. Nothing here was reachable from the client until now: the
     /// horizon could ingest one and no call did [2026-10-13].
     pub fn take_endpoint(&mut self, bytes: &[u8]) -> Result<Keyhash, String> {
+        self.changed.insert(rhtn_model::Noun::Instances);
         let er = rhtn_archive::endpoint::EndpointRecord::parse(bytes)?;
         let node = er.node;
         // **signed by the node it names, or it is nothing**: the material
@@ -1324,6 +1330,7 @@ impl Client {
     /// its identity added to what this client verifies by, and the store
     /// pruned toward what still resolves where it has grown past its bound.
     pub fn contact(&mut self, identity: &Identity, how: crate::contacts::How, touch: bool) {
+        self.changed.insert(rhtn_model::Noun::Contacts);
         let now = self.now_s();
         let who = identity.keyhash;
         if !self.known.iter().any(|k| k.keyhash == who) {
@@ -4146,6 +4153,8 @@ impl Client {
     /// Afterwards this client holds no position in the subnet it left, and
     /// the envelope is in the outbox for its serving node to flood.
     pub fn depart(&mut self, patron: Keyhash, reason: Option<u64>) -> Result<Txid, Abort> {
+        self.changed.insert(rhtn_model::Noun::Lines);
+        self.changed.insert(rhtn_model::Noun::Subnets);
         let me = self.keyhash();
         let rel = crate::rotation::relationships(&self.archive)
             .into_iter()
@@ -4432,6 +4441,8 @@ impl Client {
     /// one back. Filtering rather than replaying would make the two
     /// cancel in whichever order they were written.
     fn adopt_own_positions(&mut self) {
+        self.changed.insert(rhtn_model::Noun::Subnets);
+        self.changed.insert(rhtn_model::Noun::Lines);
         let me = self.keyhash();
         // **the relationship's own order decides, not the archive's**
         // [found 2026-10-14]: this folded `records()`, which is by txid —
@@ -4659,6 +4670,12 @@ impl Client {
         out
     }
 
+    /// **What changed since the last call**, and nothing after it: a reader
+    /// keeping a copy of the nouns refreshes these and no others.
+    pub fn take_changed(&mut self) -> Vec<rhtn_model::Noun> {
+        std::mem::take(&mut self.changed).into_iter().collect()
+    }
+
     /// The name this client publishes wherever it set none for the subnet
     /// itself (`ClientStore::default_alias`).
     pub fn default_alias(&self) -> Option<&str> {
@@ -4670,6 +4687,7 @@ impl Client {
     /// name of its own is held there.  **An override stays an override**:
     /// a subnet the person named differently is not renamed by this.
     pub fn set_default_alias(&mut self, alias: &str) -> Result<Vec<Msg>, Abort> {
+        self.changed.insert(rhtn_model::Noun::Profiles);
         if alias.is_empty() || alias.len() > rhtn_codec::bounds::PROFILE_ALIAS_BYTES {
             return Err(Abort::Malformed("an alias is 1 to 64 bytes".into()));
         }
@@ -4704,6 +4722,8 @@ impl Client {
         alias: &str,
         image: Option<(u64, Vec<u8>)>,
     ) -> Result<Vec<Msg>, Abort> {
+        self.changed.insert(rhtn_model::Noun::Profiles);
+        self.changed.insert(rhtn_model::Noun::Subnets);
         if alias.is_empty() || alias.len() > rhtn_codec::bounds::PROFILE_ALIAS_BYTES {
             return Err(Abort::Malformed("an alias is 1 to 64 bytes".into()));
         }
@@ -4837,6 +4857,10 @@ impl Client {
     /// than what is held.  **Never shown unverified**, and the keyhash
     /// stands in where nothing came (`light-client-requirements.md` §4.3).
     pub fn take_profile_reply(&mut self, bytes: &[u8]) -> Result<bool, String> {
+        // a profile taken names a contact or a subnet: both readers redraw
+        self.changed.insert(rhtn_model::Noun::Profiles);
+        self.changed.insert(rhtn_model::Noun::Contacts);
+        self.changed.insert(rhtn_model::Noun::Subnets);
         let reply = rhtn_archive::profile::ProfileReply::decode(bytes)?;
         let Some(p) = reply.profile else {
             return Ok(false);
@@ -4990,6 +5014,7 @@ impl Client {
         &mut self,
         bytes: &[u8],
     ) -> Result<(crate::catalog::Step, Vec<Msg>), String> {
+        self.changed.insert(rhtn_model::Noun::Resources);
         let reply = rhtn_archive::catalog::CatalogReply::decode(bytes)?;
         let Some((node, mut sweep)) = self.browsing.take() else {
             return Err("no sweep is under way".into());

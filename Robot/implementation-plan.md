@@ -855,9 +855,26 @@ author approved them** [author, 2026-10-29: *these names are fine*]:
 to move; the catalog's resource answer (`ResourceAnswer`, `ResourcePage`)
 and the launch records, which stayed FFI records for now.
 
-**Stage two is the sync**: the kernel says *changed(noun)* whenever its
-store changes one, the shell keeps one snapshot per noun and refreshes
-on it, and screens read the snapshot. **Stage three is the documents**:
+**Built, stage two, 2026-10-29** — the sync. The kernel marks a noun at
+each place its store changes one (`Client::changed`: a contact held, an
+endpoint taken, positions adopted, a departure, a profile set, published
+or taken, a catalog reply) and `take_changed` drains the marks once. The
+FFI drains them at every `next_event`: after an arrival they wait, so
+the arrival is handed up first; at a quiet turn they go up as one
+`Event::Changed { nouns }`, each noun once. The shell's `Model` holds
+one snapshot per noun — contacts (and the alias map), subnets, lines,
+instances, resources, the connection — refreshed off the drawing thread
+for exactly the nouns named and telling its watchers which; the rail
+and the foot draw from it and redraw when subnets, profiles or the
+connection change, rather than at every `onStart` and on every status
+line. The desktop reads synchronously and needs none. Tests on both
+sides: the kernel marks and drains once across a name and an adoption;
+the snapshot tells its watchers the nouns and nothing on an empty set.
+**Owed**: the other screens still read the kernel's ports directly on
+opening (leaving, catalog, attach), which is correct and one-shot; the
+`Meeting` noun is still the ceremony screen's own state.
+
+**Stage three is the documents**:
 the schema into `light-client-requirements.md` §9 as a table, the
 vocabulary rows into design §2, and the terminology pass.
 

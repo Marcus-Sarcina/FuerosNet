@@ -16453,6 +16453,27 @@ rather than applying it. The test floods both, as a serving node does.
 TOP-54 and TOP-55. Workspace tests 888, Android 277, the binding
 regenerated.
 
+### 2026-10-29 (one model, stage two: the kernel says what changed)
+
+**The sync** [author, 2026-10-29: update logic that keeps them in sync].
+The kernel marks a noun at each place its store changes one — a contact
+held, an endpoint record taken, positions adopted, a departure, a
+profile set, published or taken, a catalog reply — and drains the marks
+once when asked. The FFI asks at every `next_event`: after an arrival
+the marks wait so the arrival goes up first; at a quiet turn they go up
+as one `Changed` event naming each noun once. The shell keeps one
+snapshot per noun, refreshed off the drawing thread for exactly the
+nouns named and telling its watchers which, and the rail and the foot
+draw from it — redrawn when the subnets, the profiles or the connection
+change, not at every `onStart` and on every status line, which is what
+the rail did until today and what left a subnet's new name eight hex
+characters until the next start.
+
+**What is not a noun of its own here**: the alias map is the contacts'
+snapshot read another way, and the connection is the kernel's own event
+relayed. The leaving, catalog and attach screens still read the kernel
+on opening, which for a one-shot screen is right.
+
 ### 2026-10-29 (one model: the nouns in a crate of their own)
 
 **The author's refactor, stage one.** The subnet was a type declared in

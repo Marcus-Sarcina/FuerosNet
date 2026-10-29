@@ -68,6 +68,13 @@ pub enum Event {
     /// The connection changed: a failover began, landed on a sibling, or
     /// found none.
     Connection(Status),
+    /// **Nouns of the model that changed** since the last event
+    /// (`rhtn_model::Noun`): a shell keeping a copy refreshes these. Raised
+    /// by the kernel's own choke points, drained at each `next_event`.
+    Changed {
+        /// Which, each once, in the model's order.
+        nouns: Vec<rhtn_model::Noun>,
+    },
     /// Application payload from `from`, with the kind it came under.
     ///
     /// **The kind is the application's to read** (`wire-format.md`

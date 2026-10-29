@@ -274,7 +274,7 @@ pub enum Connection {
 
 /// **Which noun changed**, for a client keeping a copy in step with the
 /// kernel [author, 2026-10-29: update logic that keeps them in sync].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "ffi", derive(uniffi::Enum))]
 pub enum Noun {
     Contacts,

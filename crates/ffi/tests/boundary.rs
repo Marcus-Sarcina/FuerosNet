@@ -590,13 +590,25 @@ async fn the_kernel_holds_the_session_and_no_wire_byte_crosses_outward() {
     assert!(e.reason().contains("at least one address"), "{e}");
 
     // nothing arrived for this client, and asking says so rather than
-    // blocking forever
+    // blocking forever. **The kernel's own notice of what changed is not
+    // an arrival**: the attach marked the nouns it touched, and that
+    // comes up the same stream once, as the model's names and no byte of
+    // the wire
+    let q = p.clone();
+    let quiet = tokio::task::spawn_blocking(move || q.next_event(200))
+        .await
+        .unwrap();
+    assert!(
+        matches!(quiet, None | Some(rhtn_ffi::net::Event::Changed { .. })),
+        "nothing but the kernel's own notice: {quiet:?}"
+    );
     let q = p.clone();
     assert!(
         tokio::task::spawn_blocking(move || q.next_event(200))
             .await
             .unwrap()
-            .is_none()
+            .is_none(),
+        "and then nothing at all"
     );
 }
 

@@ -58,6 +58,9 @@ pub struct Participant {
     /// [2026-10-06]. The lock also orders the states, so what lands last
     /// is what was taken last.
     saving: Arc<std::sync::Mutex<()>>,
+    /// Nouns the kernel marked changed while an arrival was being handed
+    /// up; raised as one `Event::Changed` at the next quiet call.
+    pending_changed: std::sync::Mutex<Vec<Vec<rhtn_model::Noun>>>,
     /// The seeds this device holds, for the backup: on the ceremony
     /// device alone.
     seeds: Option<[[u8; 32]; 2]>,
@@ -954,6 +957,7 @@ impl Participant {
                 net,
                 storage,
                 saving: Arc::new(std::sync::Mutex::new(())),
+                pending_changed: std::sync::Mutex::new(Vec::new()),
                 seeds: Some([ed, pq]),
             };
             p.open()?;
@@ -1293,6 +1297,7 @@ impl Participant {
                 net,
                 storage,
                 saving: Arc::new(std::sync::Mutex::new(())),
+                pending_changed: std::sync::Mutex::new(Vec::new()),
                 seeds: None,
             };
             p.open()?;
@@ -1833,12 +1838,37 @@ impl Participant {
     /// decrypted here and the ciphertext never leaves.
     pub fn next_event(&self, timeout_ms: u64) -> Option<Event> {
         crate::diag::call_plain("next_event", || {
-            let e = self.net.next_event(timeout_ms)?;
-            // what arrived advanced a ratchet; the event is the shell's either
-            // way, and a storage that did not take the state is reported at
-            // the next call that can carry a refusal
-            let _ = self.save();
-            Some(e)
+            let e = self.net.next_event(timeout_ms);
+            if e.is_some() {
+                // what arrived advanced a ratchet; the event is the shell's
+                // either way, and a storage that did not take the state is
+                // reported at the next call that can carry a refusal
+                let _ = self.save();
+            }
+            // **and what changed, after whatever arrived**: the nouns the
+            // kernel marked since the last call, as one event, so a shell
+            // keeping a copy refreshes exactly those. Arrivals first, since
+            // an arrival is usually what changed them.
+            match e {
+                Some(e) => {
+                    let nouns = self.handle.with_blocking(|c| c.take_changed());
+                    if !nouns.is_empty() {
+                        self.pending_changed.lock().unwrap().push(nouns);
+                    }
+                    Some(e)
+                }
+                None => {
+                    let mut pending = std::mem::take(&mut *self.pending_changed.lock().unwrap());
+                    let fresh = self.handle.with_blocking(|c| c.take_changed());
+                    if !fresh.is_empty() {
+                        pending.push(fresh);
+                    }
+                    let mut nouns: Vec<rhtn_model::Noun> = pending.into_iter().flatten().collect();
+                    nouns.sort();
+                    nouns.dedup();
+                    (!nouns.is_empty()).then_some(Event::Changed { nouns })
+                }
+            }
         })
     }
 

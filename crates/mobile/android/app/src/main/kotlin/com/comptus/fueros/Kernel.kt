@@ -2020,6 +2020,8 @@ object Kernel {
         } ?: return
         participant = p
         show(p, Connection.Detached)
+        // the shell's copy of the nouns, from a kernel that is up now
+        Model.refreshAll()
         watchNetwork(p)
         // **a nominee arrives as an introduction** (`wire-format.md` §2.3):
         // material and a signed locator, taken as a person would take one
@@ -2202,7 +2204,14 @@ object Kernel {
                         front.incoming(from, who, String(e.bytes))
                     }
                 }
-                is Event.Connection -> show(p, e.v1)
+                is Event.Connection -> {
+                    show(p, e.v1)
+                    Model.connection(e.v1)
+                }
+                // **the nouns the kernel changed**: the shell's copy is
+                // refreshed for exactly those, and the screens watching
+                // them redraw
+                is Event.Changed -> Model.refresh(e.nouns.toSet())
                 // a verifier answered on the end-to-end path: the kernel
                 // took it against the query it issued, and the screen
                 // shows the verdict against the verifier it names

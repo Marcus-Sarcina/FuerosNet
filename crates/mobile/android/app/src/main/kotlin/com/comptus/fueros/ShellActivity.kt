@@ -63,28 +63,24 @@ class ShellActivity : Activity() {
     private var connection: TextView? = null
 
     /**
-     * Whether the rail and the foot have been drawn from a kernel that was
-     * up. **The launcher starts the kernel and draws before it has come
-     * up** — a foot read then is a blank mark and an ellipsis for a name,
-     * which is what the first launch on glass showed [2026-10-29] — so
-     * the first status the kernel reports redraws them.
+     * **The rail and the foot follow the model's copy of the nouns**
+     * ([Model]): redrawn when the subnets, the profiles or the connection
+     * change, which the kernel says and the model relays — not on every
+     * status line, and not by this screen asking the kernel at each
+     * `onStart`. The one thing still asked for here is the profiles
+     * themselves (`light-client-requirements.md` §4.3), this being the
+     * screen that shows names.
      */
-    private var drawnFromKernel = false
-    private val reading = java.util.concurrent.atomic.AtomicBoolean(false)
-
-    /** The status the rail was last read at: a change is an attach, a
-     *  detach or a failover, each of which can bring names with it. */
-    @Volatile private var readAt: String? = null
+    private val watcher = Model.Watcher { nouns ->
+        if (nouns.any { it == uniffi.rhtn_model.Noun.SUBNETS || it == uniffi.rhtn_model.Noun.PROFILES || it == uniffi.rhtn_model.Noun.CONNECTION }) {
+            runOnUiThread { if (!isFinishing) drawFromModel() }
+        }
+    }
 
     private val sink = object : Front.Ui {
         override fun render() {
             val line = Kernel.front.status()
             runOnUiThread { connection?.text = Attach.statusLine(line) }
-            // **the rail follows the connection**: the attach fetches
-            // profiles, and a subnet named by its root arrived after the
-            // rail was drawn and stayed eight hex characters until the
-            // next start [bench, 2026-10-29]
-            if (!drawnFromKernel || line != readAt) readRail()
         }
     }
 
@@ -185,33 +181,30 @@ class ShellActivity : Activity() {
         super.onStart()
         Consent.host(this)
         Kernel.bind(sink)
-        readRail()
+        Model.watch(watcher)
+        drawFromModel()
+        // **ask for what each contact and each subnet published**
+        // (`light-client-requirements.md` §4.3): this is the screen that
+        // shows names, so it is where the asking belongs; what comes back
+        // reaches the rail through the model
+        Thread({ Kernel.requestProfiles() }, "fueros-profiles").start()
     }
 
     /**
-     * **Off the drawing thread**: the rail is built from the subnets the
-     * kernel holds, and reading them is a blocking call into a client
-     * that may be parked in `nextEvent`. One read at a time; a render
-     * that arrives while one is out is not a second one.
+     * **Draw the rail and the foot from the snapshot.** The foot's name is
+     * composed by the kernel (a subnet's own name for this person, else
+     * the default) and read off the drawing thread; a kernel up with no
+     * default name is a first run cut short, and the name step is where
+     * this device goes [author, 2026-10-29].
      */
-    private fun readRail() {
-        if (!reading.compareAndSet(false, true)) return
-        readAt = Kernel.front.status()
+    private fun drawFromModel() {
+        val rows = Model.subnets
+        scopes = rows
+        drawRail(rows)
         Thread({
-            // **ask for what each contact and each subnet published**
-            // (`light-client-requirements.md` §4.3): this is the screen
-            // that shows names, so it is where the asking belongs — it was
-            // the People screen's until that went [2026-10-29]
-            Kernel.requestProfiles()
-            val rows = Kernel.subnets()
             val mine = Kernel.ownAlias()
-            // **a kernel up with no default name is a first run that was
-            // cut short**: the name is required [author, 2026-10-29], and
-            // the seeds are sealed before it is asked, so the name step
-            // is where this device goes
             val unnamed = mine.second.isNotEmpty() && Kernel.defaultAlias() == null
             runOnUiThread {
-                reading.set(false)
                 if (isFinishing) return@runOnUiThread
                 if (unnamed) {
                     startActivity(
@@ -221,19 +214,9 @@ class ShellActivity : Activity() {
                     finish()
                     return@runOnUiThread
                 }
-                // a keyhash is what a kernel that is up answers with
-                if (mine.second.isNotEmpty()) drawnFromKernel = true
-                scopes = rows
-                drawRail(rows)
                 drawFoot(mine)
             }
-        }, "fueros-rail").start()
-    }
-
-    override fun onStop() {
-        Kernel.unbind(sink)
-        Consent.release(this)
-        super.onStop()
+        }, "fueros-foot").start()
     }
 
     /** Go to `where`, and show or hide the chrome as [Chrome] says. */
@@ -657,7 +640,7 @@ class ShellActivity : Activity() {
                         runOnUiThread {
                             if (isFinishing) return@runOnUiThread
                             said.text = why?.let { "not published: $it" } ?: "Named $typed; published to your node."
-                            if (why == null) readRail()
+                            if (why == null) Model.refresh(setOf(uniffi.rhtn_model.Noun.SUBNETS))
                         }
                     }, "fueros-subnet-name").start()
                 }

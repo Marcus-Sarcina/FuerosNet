@@ -691,6 +691,15 @@ impl Instrument {
                         }
                     }
                 }
+                // which nouns of the model changed, in the model's order
+                rhtn_ffi::net::Event::Changed { nouns } => format!(
+                    "changed {}",
+                    nouns
+                        .iter()
+                        .map(|n| format!("{n:?}").to_lowercase())
+                        .collect::<Vec<_>>()
+                        .join(",")
+                ),
                 rhtn_ffi::net::Event::Payload { from, kind, bytes } => {
                     format!(
                         "payload from={} kind={kind} bytes={}",
