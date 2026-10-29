@@ -138,6 +138,39 @@ core; the `sim` crate already runs several daemons.
 Recovery, rotation and departure on hardware — all with in-process tests,
 none run on phones. The iOS client, which has no position until it exists.
 
+## E. The shell's validation run, four fresh identities, 2026-10-29
+
+**Run `708a330-ui-validation-1`**, all four phones wiped and made new
+through the first-run screen (`field-setup.sh`), named at creation,
+pairs GXV–MRK and ZU8–4VC for provisioning. What it was for: the restyled
+shell as the launcher, the meeting from the rail's orb, and the names.
+Four ceremonies, each read back from the streams:
+
+| # | Who | What | Record | Adoption / peering | Signers |
+|---|---|---|---|---|---|
+| T1 | GXV ← MRK | formation under GXV's own key | `e4affe41` | `abb05435`, which is the subnet's id (design §13.8); named Garden Club by its root from the subnet's options | 4 |
+| T2 | GXV ← ZU8 | adoption into Garden Club | `6594d74b` | `cdc95fa8` | 3 (one witness, both nominating witness-1) |
+| T3 | 4VC → ZU8 | client-initiated adoption into Garden Club | `16e7f769` | `5514fc6f` | 4 |
+| T4 | MRK ↔ 4VC | regular meeting with the peering | `ba03f4c4` | peering `39009a9d`; backups 93,732 and 93,573 bytes, direct, each held by the other | 3 |
+
+**What it found, all fixed on the run and in `ce0fa62`**: the attach
+refused its own re-sent profile and the FFI detached on it (§4.4's
+*higher counter* rule, PRD-20); nothing fetched profiles after the People
+screen went, and a contact's subnet was known only from a locator; a
+subordinate asked the subnet's name of a record it does not hold; the
+rail drew once at start. And the author's ruling that the name crosses
+in the shell's own frames: on the invitation for the scanner, on the
+channel for the inviter — seen on every ceremony after T1 (*4VC asks to
+be adopted here, into ZU8's Garden Club*).
+
+**Not exercised**: the Done screen's subnet-naming prompt (T1's published
+nothing and the stream could not say whether it was shown; it is
+instrumented now and the root named the subnet from the subnet's options
+instead); submitting with a scope carried; verification queries, every
+pool being unrecognised on fresh phones. **Known and left**: the
+post-finalise `optical_trace` refusals noted on the Done screen, and
+MRK's nine `sendmsg` I/O warnings at start (`Robot/review-tracking.md`).
+
 ## Order
 
 A1 is done; a second plain pair was met deliberately (`82ffd1b-a2-adoption-1`, mislabelled) for series B. B1 nodeless hung at witness selection and showed that nothing met nodeless is reachable afterwards and no cross-pair verifier can qualify — so **B and A4 are with-node**, and the node bench (C1's proven half plus `field-run.sh`) is now the gate for nearly everything left. **[ruled, author, 2026-10-10]** witnesses are required where available and a witnessless meeting is not genesis-only; proceeding witnessless past genesis needs design §13.2 / `wire-format.md` §3.2 amended, which gates any nodeless meeting between non-genesis phones. **That amendment was made** [author, 2026-10-19] — no witness floor, design §13.2 reasoning from the same case the ruling was about — so the condition is met and the gate is lifted, and the rows above are re-planned against it below. **The node bench is up (2026-10-11, `82ffd1b-a4-node-1`), all four phones re-provisioned at genesis on it; the two met pairs are to be re-met there for B.** A4, B's with-node
