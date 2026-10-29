@@ -1,7 +1,6 @@
 package com.comptus.fueros
 
 import android.app.Activity
-import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
 import android.widget.Button
@@ -62,7 +61,7 @@ class LeavingActivity : Activity() {
 
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(Screen.GUTTER, 32, Screen.GUTTER, 48)
+            setPadding(Screen.gutter(context), 32, Screen.gutter(context), 48)
             addView(title("Authority"))
             addView(note(WHY))
             addView(heading("Who you are under"))
@@ -181,7 +180,7 @@ class LeavingActivity : Activity() {
     private fun note(t: String) = TextView(this).apply {
         text = t
         textSize = 14f
-        setTextColor(Color.GRAY)
+        setTextColor(Palette.now.sub)
         setPadding(0, 8, 0, 8)
     }
 

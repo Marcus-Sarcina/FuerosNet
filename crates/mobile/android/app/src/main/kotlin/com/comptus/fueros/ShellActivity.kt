@@ -53,14 +53,11 @@ class ShellActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val c = Palette.now
-        // **the platform's chrome is what this replaces** [2026-10-28]:
-        // the title bar said *Fueros* above every screen and the system
-        // bars kept their own colours, so the first thing the drawn
-        // design met was a light grey bar under its dark foot. The title
-        // goes, and the bars take the shell's own.
-        requestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
-        window.statusBarColor = c.chrome
-        window.navigationBarColor = c.sunken
+        // **the chrome is the theme's now** [2026-10-29]. This screen set
+        // its own title flag and bar colours while it was the only one
+        // drawn to the design; every screen is, so `@style/Fueros` does
+        // it once for all of them and a fourteenth cannot be written in
+        // the platform's defaults by forgetting to.
 
         railColumn = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -97,10 +94,6 @@ class ShellActivity : Activity() {
         }
         Screen.insetting(root)
         setContentView(root)
-        // **after the content, not before**: the decor view does not
-        // exist until then, and `window.insetsController` is null until
-        // it does — which is a crash rather than a no-op
-        bars(light = Palette.mode == Palette.Mode.LIGHT)
         go(Chrome.Place.Home)
     }
 
@@ -356,17 +349,6 @@ class ShellActivity : Activity() {
                 },
             )
         }
-    }
-
-    /**
-     * Whether the system bars draw their icons dark, which they must
-     * where the bar behind them is light. **Asked of the mode rather
-     * than of the colour**, so one switch moves both.
-     */
-    private fun bars(light: Boolean) {
-        val mask = android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or
-            android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
-        window.insetsController?.setSystemBarsAppearance(if (light) mask else 0, mask)
     }
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()

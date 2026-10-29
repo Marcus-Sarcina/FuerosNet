@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  **The shell's own chrome, for every screen at once.**
+
+  Until this the app wore the platform's: a light ground it never chose,
+  a title bar reading *Fueros* above each screen, a `TextView`'s own ink
+  at 4.0:1 and the system bars in their own colours. One theme is what
+  restyles thirteen Activities without editing thirteen Activities, and
+  what keeps a fourteenth from being written in the platform's defaults
+  by accident.
+
+  Dark is what a person meets first [author, 2026-10-27]; the light set
+  `Palette` also holds wants a second theme and a switch in Options,
+  which is owed.
+-->
+<resources>
+    <style name="Fueros" parent="@android:style/Theme.DeviceDefault">
+        <!-- the title bar the design replaces with the content's own -->
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowActionBar">false</item>
+
+        <item name="android:windowBackground">@color/ground</item>
+        <item name="android:colorBackground">@color/ground</item>
+
+        <!-- what a TextView draws in when it sets nothing, which is most
+             of them: the 4.0:1 this replaces is why the app read as a
+             diagnostic harness -->
+        <item name="android:textColor">@color/ink</item>
+        <item name="android:textColorPrimary">@color/ink</item>
+        <item name="android:textColorSecondary">@color/muted</item>
+        <item name="android:textColorTertiary">@color/sub</item>
+        <item name="android:textColorHint">@color/sub</item>
+        <item name="android:editTextColor">@color/ink</item>
+
+        <item name="android:colorAccent">@color/accent</item>
+
+        <!-- the bars continue the screen rather than framing it in grey -->
+        <item name="android:statusBarColor">@color/chrome</item>
+        <item name="android:navigationBarColor">@color/sunken</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+</resources>

@@ -1,7 +1,6 @@
 package com.comptus.fueros
 
 import android.app.Activity
-import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
 import android.widget.Button
@@ -44,13 +43,13 @@ class CatalogActivity : Activity() {
         narration = TextView(this).apply {
             textSize = 13f
             typeface = Typeface.MONOSPACE
-            setTextColor(Color.GRAY)
+            setTextColor(Palette.now.sub)
             text = "What your serving node holds. Sweep to ask it."
         }
         answer = TextView(this).apply {
             textSize = 13f
             typeface = Typeface.MONOSPACE
-            setTextColor(Color.DKGRAY)
+            setTextColor(Palette.now.muted)
         }
         val path = EditText(this).apply {
             hint = "a path to ask for, such as /"
@@ -124,7 +123,7 @@ class CatalogActivity : Activity() {
 
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(Screen.GUTTER, 48, Screen.GUTTER, 48)
+            setPadding(Screen.gutter(context), 48, Screen.gutter(context), 48)
             addView(
                 TextView(this@CatalogActivity).apply {
                     textSize = 28f
@@ -139,7 +138,7 @@ class CatalogActivity : Activity() {
                     setPadding(0, 32, 0, 8)
                     textSize = 12f
                     typeface = Typeface.DEFAULT_BOLD
-                    setTextColor(Color.GRAY)
+                    setTextColor(Palette.now.sub)
                     text = "What is offered"
                 },
             )
@@ -149,7 +148,7 @@ class CatalogActivity : Activity() {
                     setPadding(0, 32, 0, 8)
                     textSize = 12f
                     typeface = Typeface.DEFAULT_BOLD
-                    setTextColor(Color.GRAY)
+                    setTextColor(Palette.now.sub)
                     text = "Ask one for something"
                 },
             )

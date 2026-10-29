@@ -28,18 +28,22 @@ import android.view.WindowInsets
 object Screen {
 
     /**
-     * **The side gutter every screen but the optical exchange carries**,
-     * in raw pixels as every other padding in this shell is
+     * **The side gutter every screen but the optical exchange carries**
      * (`Robot/light-client-screens.md`, the gutter rule).
      *
-     * **Zero is where it stands today and is not yet a decision.** The
-     * ruling is *none on the optical exchange, very narrow everywhere
-     * else* [author, 2026-10-27]; the number itself is the author's and is
-     * owed. Until it lands this holds what the framework was doing by
-     * accident, so that fixing the bars changed nothing anyone could see
-     * except the foot of the screen. One edit here moves every screen.
+     * The ruling is *none on the optical exchange, very narrow everywhere
+     * else* [author, 2026-10-27]. **This is the drawing's own number**,
+     * not a guess at what narrow means: the artboards set 14 against a
+     * 390-wide phone, so 14dp is that at any density. It stood at zero
+     * while nothing was drawn to the design, which was what the framework
+     * had been doing by accident, and read as text flush to the glass the
+     * moment a screen was dark. One edit here moves every screen.
      */
-    const val GUTTER = 0
+    const val GUTTER_DP = 14
+
+    /** The gutter in this screen's pixels. */
+    fun gutter(context: android.content.Context): Int =
+        (GUTTER_DP * context.resources.displayMetrics.density).toInt()
 
     /** A view's four paddings, or the four insets, in raw pixels. */
     data class Pad(val left: Int, val top: Int, val right: Int, val bottom: Int)

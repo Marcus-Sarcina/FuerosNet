@@ -168,7 +168,7 @@ class MeetActivity : Activity() {
             }
         }
         previewHost = FrameLayout(this).apply {
-            setBackgroundColor(Color.DKGRAY)
+            setBackgroundColor(Palette.now.sunken)
             clipChildren = true
             clipToPadding = true
             // the camera's 4:3 frame drawn at full width, centred, and
@@ -194,7 +194,7 @@ class MeetActivity : Activity() {
         // under the status bar. This was the only screen that met it and
         // the only one that handled it; [`Screen`] is that handling,
         // shared with the seven that did not [2026-10-27]. The padding
-        // stays this screen's own 48 rather than `Screen.GUTTER` until
+        // stays this screen's own 48 rather than `Screen.gutter(context)` until
         // the optical step is restructured to take the full width, which
         // the gutter ruling asks for and this does not do.
         Screen.insetting(root)
@@ -402,7 +402,7 @@ class MeetActivity : Activity() {
         // peering and the backup follows from it.
         val peer = CheckBox(this).apply {
             text = "Also peer with this person"
-            setTextColor(Color.DKGRAY)
+            setTextColor(Palette.now.muted)
         }
         body.addView(peer)
         para("A peering is an edge between the two of you where neither is over the other, priced in this meeting (design §6.3). It is what lets either of you hold an encrypted backup of the other's contacts and records.")

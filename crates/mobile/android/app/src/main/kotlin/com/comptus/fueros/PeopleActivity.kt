@@ -52,7 +52,7 @@ class PeopleActivity : Activity() {
         narration = TextView(this).apply {
             textSize = 13f
             typeface = Typeface.MONOSPACE
-            setTextColor(Color.GRAY)
+            setTextColor(Palette.now.sub)
             text = "Scan a code somebody showed you, or paste one."
         }
         roll = TextView(this).apply {
@@ -120,7 +120,7 @@ class PeopleActivity : Activity() {
 
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(Screen.GUTTER, 48, Screen.GUTTER, 48)
+            setPadding(Screen.gutter(context), 48, Screen.gutter(context), 48)
             addView(authority)
             addView(narration)
             addView(scan)
@@ -132,7 +132,7 @@ class PeopleActivity : Activity() {
             addView(
                 TextView(this@PeopleActivity).apply {
                     textSize = 12f
-                    setTextColor(Color.GRAY)
+                    setTextColor(Palette.now.sub)
                     text = "\nHeld:"
                 },
             )

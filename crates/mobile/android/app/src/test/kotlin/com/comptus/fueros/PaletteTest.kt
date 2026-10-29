@@ -141,4 +141,100 @@ class PaletteTest {
         assertEquals(Palette.Mode.DARK, Palette.mode)
         assertEquals(Palette.DARK, Palette.now)
     }
+
+    // ---- the theme, which is the same colours in the other language ----
+
+    private fun module(): java.io.File {
+        var at: java.io.File? = java.io.File(".").canonicalFile
+        while (at != null) {
+            if (java.io.File(at, "app/src/main/AndroidManifest.xml").isFile) return at
+            at = at.parentFile
+        }
+        throw AssertionError("no app/src/main/AndroidManifest.xml at or above here")
+    }
+
+    private fun res(name: String): String {
+        val f = java.io.File(module(), "app/src/main/res/values/$name")
+        assertTrue("no $name", f.isFile)
+        return f.readText()
+    }
+
+    /**
+     * **Two copies of the dark set, tied here.** A theme is what restyles
+     * thirteen Activities without editing thirteen Activities, and a
+     * theme's values must be resources; [Palette] is what a screen reads
+     * a colour from. So they are both real, and this is what stops them
+     * drifting apart silently.
+     */
+    @Test
+    fun the_theme_names_the_same_colours_the_palette_holds() {
+        val xml = res("colors.xml")
+        val named = Regex("""<color name="(\w+)">#([0-9A-Fa-f]{8})</color>""")
+            .findAll(xml)
+            .associate { it.groupValues[1] to it.groupValues[2].uppercase() }
+        assertTrue("no colours parsed out of colors.xml", named.size >= 10)
+        for ((name, hex) in named) {
+            val mine = Palette.of(Palette.DARK, name)
+            assertEquals(
+                "colors.xml and Palette.DARK disagree about $name",
+                "%08X".format(mine),
+                hex,
+            )
+        }
+        // and every ink and surface the shell draws with is in the theme
+        for (needed in listOf("ground", "chrome", "sunken", "control", "ink", "muted", "sub")) {
+            assertTrue("the theme does not name $needed", named.containsKey(needed))
+        }
+    }
+
+    /** And the theme is what every screen wears, rather than each one
+     *  asking for it. */
+    @Test
+    fun the_application_wears_it_so_no_screen_has_to_ask() {
+        val manifest = java.io.File(module(), "app/src/main/AndroidManifest.xml").readText()
+        assertTrue(
+            "the application does not carry the theme, so a screen gets the platform's",
+            manifest.contains("""android:theme="@style/Fueros""""),
+        )
+        val theme = res("themes.xml")
+        for (item in listOf(
+            "android:windowNoTitle",
+            "android:windowBackground",
+            "android:textColor",
+            "android:statusBarColor",
+            "android:navigationBarColor",
+        )) {
+            assertTrue("the theme does not set $item", theme.contains(item))
+        }
+    }
+
+    /**
+     * **No screen reaches for a platform grey.** `Color.GRAY` at 3.1:1
+     * and a `TextView`'s own ink at 4.0:1 were what the app drew in, and
+     * nothing said so. The QR codes keep black and white: a symbol is
+     * read by a camera and has no palette.
+     */
+    @Test
+    fun no_screen_draws_in_the_platforms_own_colours() {
+        val sources = java.io.File(module(), "app/src/main/kotlin").walkTopDown()
+            .filter { it.extension == "kt" }
+            .toList()
+        assertTrue("no sources found", sources.size > 10)
+        val greyed = sources
+            .filter { it.name != "Palette.kt" }
+            .filter { Regex("""Color\.(GRAY|DKGRAY|LTGRAY)""").containsMatchIn(it.readText()) }
+            .map { it.name }
+        assertTrue("these draw in a platform grey: $greyed", greyed.isEmpty())
+
+        // black and white survive only where a camera reads the result
+        val monochrome = sources
+            .filter { Regex("""Color\.(BLACK|WHITE)""").containsMatchIn(it.readText()) }
+            .map { it.name }
+            .sorted()
+        assertEquals(
+            "black and white belong to the symbologies and nowhere else",
+            listOf("MeetActivity.kt", "PeopleActivity.kt", "Tracking.kt"),
+            monochrome,
+        )
+    }
 }

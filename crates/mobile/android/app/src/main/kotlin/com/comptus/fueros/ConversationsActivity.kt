@@ -2,7 +2,6 @@ package com.comptus.fueros
 
 import android.app.Activity
 import android.content.Intent
-import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
 import android.view.Gravity
@@ -45,7 +44,7 @@ class ConversationsActivity : Activity() {
         }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(Screen.GUTTER, 48, Screen.GUTTER, 48)
+            setPadding(Screen.gutter(context), 48, Screen.gutter(context), 48)
             addView(title)
             addView(scroll)
         }
@@ -81,7 +80,7 @@ class ConversationsActivity : Activity() {
                         text = line
                         textSize = 13f
                         typeface = Typeface.MONOSPACE
-                        setTextColor(Color.GRAY)
+                        setTextColor(Palette.now.sub)
                         setPadding(0, 4, 0, 4)
                     },
                 )
@@ -99,7 +98,7 @@ class ConversationsActivity : Activity() {
         val chip = TextView(this).apply {
             text = if (t.direct) "· direct" else "· relayed"
             textSize = 12f
-            setTextColor(Color.GRAY)
+            setTextColor(Palette.now.sub)
         }
         val head = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -115,7 +114,7 @@ class ConversationsActivity : Activity() {
                 else -> "${last.who}: ${last.text}"
             }
             textSize = 14f
-            setTextColor(Color.GRAY)
+            setTextColor(Palette.now.sub)
             maxLines = 1
         }
         return LinearLayout(this).apply {

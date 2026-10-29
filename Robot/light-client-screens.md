@@ -23,12 +23,15 @@ Two rules govern every screen before any is drawn:
   [author, 2026-10-27]. D2 gives the symbol every pixel it can have, which
   is a decision about what that screen is for and not an oversight; every
   other screen carries a narrow margin so its lines do not run to the glass.
-  **What the framework does today is neither.** A screen that sets its
-  padding and `fitsSystemWindows` on the same view has that padding
-  *replaced* by the window insets, so seven screens lost their margin by
-  accident — and D2, the one screen that should have none, has the largest
-  in the application, because `MeetActivity` is the one place that adds the
-  insets to its padding instead of letting them replace it.
+  **Fixed 2026-10-27**: a screen that set its padding and
+  `fitsSystemWindows` on the same view had that padding *replaced* by the
+  window insets, so seven screens lost their margin by accident while D2,
+  the one screen that should have none, had the largest in the
+  application. **And the number landed 2026-10-29**, the drawing's own
+  rather than a guess at what narrow means: the artboards set 14 against a
+  390-wide phone, so `Screen.GUTTER_DP` is 14. It stood at zero while
+  nothing was drawn to the design, which read as text flush to the glass
+  the moment a screen was dark.
 
 ## The shell: a rail, a foot, and one content area [author, 2026-10-27]
 
@@ -500,7 +503,7 @@ and what each owes are unchanged.
 
 | Element | Beneath | Owes |
 |---|---|---|
-| **Appearance: dark or light** [author, 2026-10-27], dark being what a person meets first | **Built, 2026-10-28** (`Palette`): both sets, dark in force, one assignment restyling the shell. The dark set is sampled from the artboards; **the light set is derived rather than drawn** and wants redrawing. **Owed**: the switch itself, which is an Options row | |
+| **Appearance: dark or light** [author, 2026-10-27], dark being what a person meets first | **Built, 2026-10-28** (`Palette`), and **every screen wears it since 2026-10-29** (`@style/Fueros`): the title bar the design replaces is gone, the system bars continue the screen, and a `TextView` that sets no colour draws in the shell's ink rather than the platform's 4.0:1. A theme is what restyles thirteen Activities without editing thirteen Activities, and what keeps a fourteenth from being written in the platform's defaults by accident; `PaletteTest` ties its colours to `Palette`'s so neither drifts. The dark set is sampled from the artboards; **the light set is derived rather than drawn** and wants redrawing. **Owed**: the switch itself, which is an Options row, and a second theme for it | |
 | Retention: the years this device declares at its intent, stated in the brief | `retention_years`, `set_retention_years` (refused during a ceremony); the field-test build takes it from the provision | design §7.5.1 |
 | Verifier limits, seal cost | **Owed**: `Config::default()` fixed at start | `capability-matrix.md` §1 |
 | Wake endpoint: the user's chosen service, handed in as URL and key, withdrawable | `wake(Some(..))`, `wake(None)` | `light-client-requirements.md` §4.1 |

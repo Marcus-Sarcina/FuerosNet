@@ -1,6 +1,7 @@
 package com.comptus.fueros
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -58,10 +59,18 @@ class ScreenTest {
         }
     }
 
-    /** The gutter is one number for every screen but the optical
-     *  exchange, and it is the author's to set. */
+    /**
+     * **The gutter is one number for every screen but the optical
+     *  exchange**, and it is the drawing's: the artboards set 14 against
+     *  a 390-wide phone [2026-10-29]. It stood at zero while nothing was
+     *  drawn to the design, and read as text flush to the glass the
+     *  moment a screen was dark.
+     */
     @Test
-    fun the_gutter_is_one_number_and_is_not_negative() {
-        assertEquals(0, Screen.GUTTER)
+    fun the_gutter_is_the_drawings_own_number_and_is_narrow() {
+        assertEquals(14, Screen.GUTTER_DP)
+        // narrow, which is the ruling: a gutter wide enough to notice as
+        // a margin is not what *very narrow* meant
+        assertTrue("a gutter of ${Screen.GUTTER_DP}dp is not narrow", Screen.GUTTER_DP in 1..20)
     }
 }

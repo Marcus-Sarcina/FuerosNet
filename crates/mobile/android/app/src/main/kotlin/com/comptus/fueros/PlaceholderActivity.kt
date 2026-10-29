@@ -1,7 +1,6 @@
 package com.comptus.fueros
 
 import android.app.Activity
-import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
 import android.widget.LinearLayout
@@ -27,11 +26,11 @@ class PlaceholderActivity : Activity() {
         val body = TextView(this).apply {
             text = "$note\n\nNot in this build slice."
             textSize = 16f
-            setTextColor(Color.GRAY)
+            setTextColor(Palette.now.sub)
         }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(Screen.GUTTER, 48, Screen.GUTTER, 48)
+            setPadding(Screen.gutter(context), 48, Screen.gutter(context), 48)
             addView(title)
             addView(body)
         }

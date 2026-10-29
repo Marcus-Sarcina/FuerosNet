@@ -2,7 +2,6 @@ package com.comptus.fueros
 
 import android.annotation.SuppressLint
 import android.app.Activity
-import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
 import android.webkit.WebResourceRequest
@@ -68,20 +67,20 @@ class ResourceActivity : Activity() {
             textSize = 19f
             typeface = Typeface.DEFAULT_BOLD
             text = name.ifBlank { "A resource" }
-            setPadding(Screen.GUTTER, 20, Screen.GUTTER, 2)
+            setPadding(Screen.gutter(context), 20, Screen.gutter(context), 2)
         }
         val from = TextView(this).apply {
             textSize = 12f
             typeface = Typeface.MONOSPACE
-            setTextColor(Color.GRAY)
+            setTextColor(Palette.now.sub)
             text = ResourcePage.provenance(resource, node)
-            setPadding(Screen.GUTTER, 0, Screen.GUTTER, 6)
+            setPadding(Screen.gutter(context), 0, Screen.gutter(context), 6)
         }
         val says = TextView(this).apply {
             textSize = 12f
-            setTextColor(Color.GRAY)
+            setTextColor(Palette.now.sub)
             text = ResourcePage.FRAME_SAYS
-            setPadding(Screen.GUTTER, 0, Screen.GUTTER, 10)
+            setPadding(Screen.gutter(context), 0, Screen.gutter(context), 10)
         }
         val held = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -193,7 +192,7 @@ class ResourceActivity : Activity() {
                 textSize = 14f
                 typeface = Typeface.MONOSPACE
                 text = body
-                setPadding(Screen.GUTTER, 8, Screen.GUTTER, 48)
+                setPadding(Screen.gutter(context), 8, Screen.gutter(context), 48)
             },
         )
     }
@@ -201,7 +200,7 @@ class ResourceActivity : Activity() {
     private fun note(t: String) = TextView(this).apply {
         textSize = 14f
         text = t
-        setPadding(Screen.GUTTER, 12, Screen.GUTTER, 24)
+        setPadding(Screen.gutter(context), 12, Screen.gutter(context), 24)
     }
 
     override fun onDestroy() {

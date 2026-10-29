@@ -2,7 +2,6 @@ package com.comptus.fueros
 
 import android.app.Activity
 import android.content.Intent
-import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
 import android.view.Gravity
@@ -67,7 +66,7 @@ class HomeActivity : Activity() {
         statusBar = TextView(this).apply {
             textSize = 12f
             typeface = Typeface.MONOSPACE
-            setTextColor(Color.GRAY)
+            setTextColor(Palette.now.sub)
             setPadding(0, 0, 0, 24)
             text = Home.statusBar("starting the kernel…")
             isClickable = true
@@ -81,7 +80,7 @@ class HomeActivity : Activity() {
         }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(Screen.GUTTER, 48, Screen.GUTTER, 48)
+            setPadding(Screen.gutter(context), 48, Screen.gutter(context), 48)
             addView(statusBar)
             addView(title)
             destinations.forEach { (label, go) -> addView(navRow(label, go)) }

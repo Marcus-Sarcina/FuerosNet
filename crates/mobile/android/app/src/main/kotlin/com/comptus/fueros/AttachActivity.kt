@@ -1,7 +1,6 @@
 package com.comptus.fueros
 
 import android.app.Activity
-import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
 import android.view.Gravity
@@ -84,7 +83,7 @@ class AttachActivity : Activity() {
 
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(Screen.GUTTER, 32, Screen.GUTTER, 48)
+            setPadding(Screen.gutter(context), 32, Screen.gutter(context), 48)
             addView(title("Serving node"))
             addView(statusLine)
             addView(note(WHY))
@@ -136,7 +135,7 @@ class AttachActivity : Activity() {
     private fun note(t: String) = TextView(this).apply {
         text = t
         textSize = 14f
-        setTextColor(Color.GRAY)
+        setTextColor(Palette.now.sub)
         setPadding(0, 8, 0, 8)
     }
 

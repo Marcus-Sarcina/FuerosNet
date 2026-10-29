@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The shell's dark set, as `Palette.DARK` holds it.
+
+  **Two copies, tied by a test.** `Palette` is authoritative and is
+  where a screen reads a colour; these exist because a theme is what
+  restyles thirteen Activities at once without touching any of them, and
+  a theme's values must be resources. `PaletteTest` asserts the two
+  agree, so neither can drift from the other unnoticed.
+-->
+<resources>
+    <color name="ground">#FF1C1F24</color>
+    <color name="chrome">#FF15171A</color>
+    <color name="sunken">#FF101215</color>
+    <color name="control">#FF2E3540</color>
+    <color name="ink">#FFE8EAED</color>
+    <color name="muted">#FF9AA1AA</color>
+    <color name="sub">#FF808891</color>
+    <color name="rule">#FF23272E</color>
+    <color name="accent">#FF5FB3A1</color>
+    <color name="warn">#FFD08A3E</color>
+</resources>

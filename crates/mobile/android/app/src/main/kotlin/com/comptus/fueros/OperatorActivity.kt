@@ -2,7 +2,6 @@ package com.comptus.fueros
 
 import android.app.Activity
 import android.content.Intent
-import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
 import android.text.InputType
@@ -114,7 +113,7 @@ class OperatorActivity : Activity() {
             roll.addView(
                 TextView(this).apply {
                     textSize = 13f
-                    setTextColor(Color.GRAY)
+                    setTextColor(Palette.now.sub)
                     text = "none yet — an instance serves one subnet, and this is where every one you run is administered"
                 },
             )
@@ -132,7 +131,7 @@ class OperatorActivity : Activity() {
                 TextView(this).apply {
                     textSize = 13f
                     typeface = Typeface.MONOSPACE
-                    setTextColor(Color.GRAY)
+                    setTextColor(Palette.now.sub)
                     text = i.at
                 },
             )
@@ -222,7 +221,7 @@ class OperatorActivity : Activity() {
         narration = TextView(this).apply {
             textSize = 13f
             typeface = Typeface.MONOSPACE
-            setTextColor(Color.GRAY)
+            setTextColor(Palette.now.sub)
             text = ""
         }
         open = Button(this).apply {
@@ -250,7 +249,7 @@ class OperatorActivity : Activity() {
                 addView(
                     TextView(this@OperatorActivity).apply {
                         textSize = 13f
-                        setTextColor(Color.GRAY)
+                        setTextColor(Palette.now.sub)
                         text = when (val s = scopes.singleOrNull()) {
                             null -> "you hold a position in no subnet yet; an instance enrolled now serves none"
                             else -> "your one subnet, ${s.label()}: an instance enrolled here serves it"
@@ -262,7 +261,7 @@ class OperatorActivity : Activity() {
                 addView(
                     TextView(this@OperatorActivity).apply {
                         textSize = 13f
-                        setTextColor(Color.GRAY)
+                        setTextColor(Palette.now.sub)
                         text = "You hold positions in several; choose which one this instance serves:"
                     },
                 )
@@ -330,7 +329,7 @@ class OperatorActivity : Activity() {
 
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(Screen.GUTTER, 48, Screen.GUTTER, 48)
+            setPadding(Screen.gutter(context), 48, Screen.gutter(context), 48)
             addView(
                 TextView(this@OperatorActivity).apply {
                     textSize = 28f
@@ -341,7 +340,7 @@ class OperatorActivity : Activity() {
             addView(
                 TextView(this@OperatorActivity).apply {
                     textSize = 13f
-                    setTextColor(Color.GRAY)
+                    setTextColor(Palette.now.sub)
                     setPadding(0, 8, 0, 32)
                     text = "An instance holds no seed. It mints a transport key and waits for a " +
                         "run you sign over it — and for the endpoint record and anchor entry it " +
@@ -354,7 +353,7 @@ class OperatorActivity : Activity() {
                     setPadding(0, 8, 0, 8)
                     textSize = 12f
                     typeface = Typeface.DEFAULT_BOLD
-                    setTextColor(Color.GRAY)
+                    setTextColor(Palette.now.sub)
                     text = "Instances you run"
                 },
             )
@@ -366,7 +365,7 @@ class OperatorActivity : Activity() {
                     setPadding(0, 32, 0, 8)
                     textSize = 12f
                     typeface = Typeface.DEFAULT_BOLD
-                    setTextColor(Color.GRAY)
+                    setTextColor(Palette.now.sub)
                     text = "Which of your subnets the instance serves"
                 },
             )
@@ -376,7 +375,7 @@ class OperatorActivity : Activity() {
                     setPadding(0, 32, 0, 8)
                     textSize = 12f
                     typeface = Typeface.DEFAULT_BOLD
-                    setTextColor(Color.GRAY)
+                    setTextColor(Palette.now.sub)
                     text = "Launch one at a provider"
                 },
             )
@@ -386,7 +385,7 @@ class OperatorActivity : Activity() {
                     setPadding(0, 32, 0, 8)
                     textSize = 12f
                     typeface = Typeface.DEFAULT_BOLD
-                    setTextColor(Color.GRAY)
+                    setTextColor(Palette.now.sub)
                     text = "Enrol one by hand"
                 },
             )
@@ -398,7 +397,7 @@ class OperatorActivity : Activity() {
                     setPadding(0, 32, 0, 8)
                     textSize = 12f
                     typeface = Typeface.DEFAULT_BOLD
-                    setTextColor(Color.GRAY)
+                    setTextColor(Palette.now.sub)
                     text = "What happened"
                 },
             )
@@ -455,7 +454,7 @@ class OperatorActivity : Activity() {
         var sizeRows: List<Launch.Size> = listOf()
         val about = TextView(this).apply {
             textSize = 13f
-            setTextColor(Color.GRAY)
+            setTextColor(Palette.now.sub)
         }
         fun describe() {
             val (count, crowded) = Kernel.crowded(provider.asn)
@@ -617,15 +616,15 @@ class OperatorActivity : Activity() {
         }
         return LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            addView(TextView(this@OperatorActivity).apply { textSize = 12f; setTextColor(Color.GRAY); text = "Provider" })
+            addView(TextView(this@OperatorActivity).apply { textSize = 12f; setTextColor(Palette.now.sub); text = "Provider" })
             addView(chooser)
             addView(about)
             addView(getToken)
             addView(credential)
             addView(fetch)
-            addView(TextView(this@OperatorActivity).apply { textSize = 12f; setTextColor(Color.GRAY); text = "Region" })
+            addView(TextView(this@OperatorActivity).apply { textSize = 12f; setTextColor(Palette.now.sub); text = "Region" })
             addView(regions)
-            addView(TextView(this@OperatorActivity).apply { textSize = 12f; setTextColor(Color.GRAY); text = "Size" })
+            addView(TextView(this@OperatorActivity).apply { textSize = 12f; setTextColor(Palette.now.sub); text = "Size" })
             addView(sizes)
             addView(registry)
             addView(tag)

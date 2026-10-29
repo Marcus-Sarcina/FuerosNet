@@ -1,7 +1,6 @@
 package com.comptus.fueros
 
 import android.app.Activity
-import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
 import android.view.Gravity
@@ -68,7 +67,7 @@ class ConversationActivity : Activity() {
         }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(Screen.GUTTER, 24, Screen.GUTTER, 16)
+            setPadding(Screen.gutter(context), 24, Screen.gutter(context), 16)
             addView(header())
             addView(scroll)
             addView(row)

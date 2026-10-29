@@ -16452,3 +16452,41 @@ rather than applying it. The test floods both, as a serving node does.
 
 TOP-54 and TOP-55. Workspace tests 888, Android 277, the binding
 regenerated.
+
+### 2026-10-29 (every screen wears the shell's own chrome)
+
+**Thirteen screens were still drawing in the platform's defaults** — a
+light ground the app never chose, a title bar reading *Fueros* above each
+one, a `TextView`'s own ink at 4.0:1 and `Color.GRAY` at 3.1:1 where
+something needed to look secondary. The shell and the resource frame had
+been restyled as they were built; the rest had not.
+
+**A theme is what restyles thirteen Activities without editing thirteen
+Activities.** `@style/Fueros` on the application drops the title bar,
+grounds the window, gives the system bars the shell's colours, and sets
+what a `TextView` draws in when it sets nothing — which is most of them.
+It also means a fourteenth screen cannot be written in the platform's
+defaults by forgetting to ask.
+
+**Two copies of the dark set, tied by a test.** A theme's values must be
+resources and a screen reads its colours from `Palette`, so both are
+real; `PaletteTest` asserts they agree, which is what stops them drifting
+apart unnoticed. The thirty-one greys became `Palette` tokens, and a
+sweep test now refuses a platform grey anywhere outside the palette
+itself — black and white survive only in the three files that build a
+symbology, a QR being read by a camera rather than looked at.
+
+**And the gutter stopped being a placeholder.** The ruling was *none on
+the optical exchange, very narrow everywhere else* [author, 2026-10-27]
+with the number owed, and zero was what the framework had been doing by
+accident. It read as text flush against the glass the moment a screen was
+dark. The drawing has the number: the artboards set 14 against a 390-wide
+phone, so the gutter is 14dp — the design's own rather than a guess at
+what narrow means. Fifteen call sites, one place to move it.
+
+Driven on a phone screen by screen, which is the only way this kind of
+work can be checked: Home, People, Catalog, Operator, Conversations and
+Meet each read, with the gutter visible and the controls dark.
+
+**Installed on all four bench phones** for the UI validation run, each
+launching clean. Android tests 280.
