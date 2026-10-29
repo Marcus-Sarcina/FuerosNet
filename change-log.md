@@ -16397,7 +16397,7 @@ an emulator, which is how this kind of work has to be checked.
 Android tests 277, three gaps named on the screen rather than faked: the
 unseen counts, the crowns' standing, and the content views.
 
-### 2026-10-28 (what a key is in each subnet, which is two of a crown's three)
+### 2026-10-28 (what a key is in each subnet: three crowns, three records)
 
 **The crowns wanted a standing the kernel did not export.** A subnet's
 orb is to sit in a thin silver circlet where this person has a
@@ -16405,19 +16405,27 @@ subordinate there, a golden one where they run a node, and a full crown
 where they are its root [author, 2026-10-27] — and nothing could say
 which.
 
-**Two of the three are the kernel's and are built** (`subnet_standing`):
-whether this key roots a subnet, from the position whose anchor is
-itself at no depth, and how many subordinates it still holds there.
+**All three are built** (`subnet_standing`), and each is read off the
+record that settles it: the patron named in the subnet's anchoring
+adoption, an endpoint record of this key's own on the line it holds
+there, and the adoptions it granted there.
 
-**The third is not, and the reason is worth keeping.** Whether somebody
-operates a node in a subnet cannot be answered from this key at all:
-`wire-format.md` §7.6's endpoint record names a node and its addresses
-and **no subnet**, and an instance is a key of its own rather than the
-person's. So which subnet an instance serves is the operator's own
-record of what they administer — the list the operator screen already
-keeps as its own state. It is an Options-side question rather than a
-kernel gap, and the crown function takes it as a separate argument
-because of that.
+**The third I called unanswerable, and was wrong** — corrected the same
+day [author, 2026-10-28]: *the crowns are all derivable from local
+records*. Two things I had taken as given were not. An endpoint record
+does name no subnet, but it is **signed on the line its publisher holds
+in one** (`Client::endpoint_record_in`), and that series is what ties it
+to a subnet. And an instance is **not** a key of its own: it runs under
+a delegation of the operator's identity, so the node's endpoint record
+is the operator's own record. *An infra node of mine in this subnet* is
+therefore one question of local state — does this key hold an endpoint
+record on this subnet's line — and `Horizon::infra_on` answers it.
+
+**The root test moved too**, to the record the author named: a subnet's
+id is the txid of the adoption that first gave its root a subordinate
+(design §13.8), so the root is the **patron named in that very record**,
+which a root holds, having signed it. That is one record behind one
+answer, where the position derived from it was a step further away.
 
 **A line counts until something says it ended**, which is the safe way
 round for a mark on a screen. The adoptions are read from the granting
@@ -16433,4 +16441,5 @@ must not overstate and a mark must not understate.
 binding it ends, so a copy never told of the adoption holds it pending
 rather than applying it. The test floods both, as a serving node does.
 
-TOP-54. Workspace tests 887, Android 277, the binding regenerated.
+TOP-54 and TOP-55. Workspace tests 888, Android 277, the binding
+regenerated.

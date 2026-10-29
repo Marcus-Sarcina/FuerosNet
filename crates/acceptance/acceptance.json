@@ -15136,7 +15136,7 @@
     "id": "TOP-54",
     "area": "topology",
     "gap": "topology",
-    "title": "A key knows what it is in each subnet it holds a position in",
+    "title": "A key knows what it is in each subnet, off the records that settle it",
     "milestone": "after-5",
     "kind": "positive",
     "spec": [
@@ -15151,8 +15151,30 @@
     ],
     "given": "A key that adopted two parties into a subnet it roots, and one of those parties.",
     "when": "Each asks what it is in that subnet.",
-    "then": "The root is told it roots it and holds two subordinates there; the subordinate is told it roots nothing and holds none. A line ended by a departure the propagated copy has taken stops being counted, and a line the propagated copy has not been told of at all still counts — the adoptions being read from the granting key's own archive and only an ended binding taken off, so that a patron is not left standing for nothing for want of news about adoptions it signed itself.",
+    "then": "The root is told it roots it and holds two subordinates there, the root being the patron named in the subnet's own anchoring record; the subordinate is told it roots nothing and holds none. A line ended by a departure the propagated copy has taken stops being counted, and a line the propagated copy has not been told of at all still counts — the adoptions being read from the granting key's own archive and only an ended binding taken off, so that a patron is not left standing for nothing for want of news about adoptions it signed itself.",
     "oracle": "behaviour",
-    "interpretation": "Two of the three standings a client can draw. Whether a person operates a node in a subnet is not among them: wire-format.md §7.6's endpoint record names a node and its addresses and no subnet, and an instance is a key of its own, so which subnet one serves is the operator's own record rather than anything this key holds."
+    "interpretation": "A subnet's id is the txid of the adoption that first gave its root a subordinate, so the root is the patron named in the record that txid resolves to — which a root holds, having signed it. Reading the anchoring record rather than the position derived from it keeps one record behind one answer."
+  },
+  {
+    "id": "TOP-55",
+    "area": "topology",
+    "gap": "topology",
+    "title": "An endpoint record on a subnet's own line is what makes a node in that subnet",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "wire-format.md §7.6"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §7.6",
+        "text": "Published by infra nodes only."
+      }
+    ],
+    "given": "A key holding a position in a subnet and having published nothing.",
+    "when": "It publishes an endpoint record on the line it holds in that subnet, and the record reaches its own copy as it reaches everyone's.",
+    "then": "It is an infra node in that subnet and in no other, which rooting the subnet and holding subordinates there are separately and simultaneously false of it. The record names a node and its addresses and no subnet, so what ties one to a subnet is the series it is signed on; the instance runs under a delegation of this identity rather than a key of its own, so the record is this key's.",
+    "oracle": "behaviour",
+    "interpretation": "The third of the three standings a crown is drawn from. Each comes off a different local record — the subnet's anchoring adoption, this key's endpoint record on that subnet's line, and the adoptions it granted there — and the precedence between them, only the highest being drawn, belongs to the client that draws."
   }
 ]

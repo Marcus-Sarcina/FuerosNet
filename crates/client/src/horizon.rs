@@ -457,6 +457,19 @@ impl Horizon {
         out
     }
 
+    /// **Whether `node` published an endpoint record on `series`**
+    /// (`wire-format.md` §7.6).
+    ///
+    /// The series is what ties a record to a subnet: an endpoint record
+    /// names a node and its addresses and no subnet, and is signed on
+    /// the line its publisher holds in the subnet it serves
+    /// ([`crate::ceremony::Client::endpoint_record_in`]). So *is there
+    /// an infra node of mine in this subnet* is this question, asked of
+    /// this key on the line it holds there.
+    pub fn infra_on(&self, node: &Keyhash, series: u32) -> bool {
+        self.endpoints.contains_key(&(*node, series))
+    }
+
     /// The infrastructure this client can reach without asking anyone: the
     /// parties in its horizon that have published an endpoint record, with
     /// where each answers.

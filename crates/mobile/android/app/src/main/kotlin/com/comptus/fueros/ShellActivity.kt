@@ -37,12 +37,9 @@ import android.widget.TextView
  *
  * **What it does not do yet**, each one named rather than faked: the
  * content region holds a placeholder per place, because the content
- * views are the next piece; the unseen counts are zero everywhere,
- * nothing in the kernel or this shell tracking read state; and **the
- * gold circlet never shows**, which subnet an instance serves being the
- * operator's own record and this shell not yet reading its own list.
- * The silver and the full crown are real, out of `subnet_standing`
- * [2026-10-28].
+ * views are the next piece; and the unseen counts are zero everywhere,
+ * nothing in the kernel or this shell tracking read state. **All three
+ * crowns are real**, out of `subnet_standing` [2026-10-28].
  */
 class ShellActivity : Activity() {
 
@@ -165,11 +162,7 @@ class ShellActivity : Activity() {
                     unseen = 0,
                     crown = Chrome.crown(
                         root = s?.root == true,
-                        // **still the shell's to know, and it does not
-                        // yet**: which subnet an instance serves is the
-                        // operator's own record, an endpoint record
-                        // naming none
-                        operator = false,
+                        operator = s?.operator == true,
                         hasSubordinate = (s?.subordinates ?: 0) > 0,
                     ),
                 )

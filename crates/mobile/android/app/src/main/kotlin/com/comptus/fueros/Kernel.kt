@@ -873,18 +873,23 @@ object Kernel {
      * **What this key is in each subnet**, for the crown an orb sits in
      * (`Robot/light-client-screens.md`, the crowns).
      *
-     * **Two of the three.** Whether this person runs a node in a subnet
-     * is not the kernel's to say — an endpoint record names no subnet
-     * and an instance is a key of its own — so it comes from the
-     * operator's own list of instances, which is this shell's state.
+     * **All three off local records** [author, 2026-10-28]: the patron
+     * in the subnet's anchoring record, an endpoint record of this key's
+     * own on the line it holds there, and the adoptions it granted
+     * there. Which one is drawn is [Chrome.crown]'s precedence.
      */
-    data class Standing(val subnet: String, val root: Boolean, val subordinates: Int)
+    data class Standing(
+        val subnet: String,
+        val root: Boolean,
+        val operator: Boolean,
+        val subordinates: Int,
+    )
 
     fun standings(): List<Standing> {
         val p = participant ?: return emptyList()
         return call("subnet_standing", { emptyList() }) {
             p.subnetStanding().map {
-                Standing(hex(it.subnet), it.root, it.subordinates.toInt())
+                Standing(hex(it.subnet), it.root, it.operator, it.subordinates.toInt())
             }
         }
     }

@@ -462,6 +462,7 @@ fn a_key_knows_whether_it_roots_a_subnet_and_how_many_sit_under_it_there() {
         .unwrap_or_else(|| panic!("alice's own subnet is among {standing:?}"));
     assert!(here.root, "alice is the root this subnet descends from");
     assert_eq!(here.subordinates, 2, "both the lines she granted");
+    assert!(!here.operator, "and she has published no endpoint record");
 
     // **and the subordinate's own view is the other one**: bob is in the
     // same subnet, roots nothing, and holds nobody under him
@@ -528,4 +529,53 @@ fn a_line_that_ended_stops_being_counted_and_an_untold_one_still_counts() {
         .expect("her subnet");
     assert!(here.root, "she is still its root");
     assert_eq!(here.subordinates, 1, "carol alone now: {after:?}");
+}
+
+// acceptance: TOP-55
+/// **The gold circlet: an infra node of this key's own, in this subnet**
+/// [author, 2026-10-28].
+///
+/// An endpoint record names a node and its addresses and **no subnet**
+/// (`wire-format.md` §7.6); what ties one to a subnet is the line it is
+/// signed on. And the instance is a device of this identity rather than
+/// a key of its own, so the record is this key's.
+#[test]
+fn an_endpoint_record_on_a_subnets_own_line_is_what_makes_a_node_here() {
+    let mut s = setup(&PARTIES);
+    let subnet = s.adopted("bob", "alice", "w2", 1);
+
+    // bob sits in it and runs nothing
+    assert!(
+        !s.client("bob")
+            .subnet_standing()
+            .iter()
+            .find(|x| x.subnet == subnet)
+            .expect("his subnet")
+            .operator,
+    );
+
+    // he publishes where his instance answers, on the line he holds here
+    let points = vec![{
+        let mut p = Vec::new();
+        rhtn_transport::session::NetworkPoint::new([127, 0, 0, 1], Some(7449)).encode(&mut p);
+        p
+    }];
+    let rec = s
+        .client("bob")
+        .endpoint_record_in(Some(subnet), &points, 0)
+        .expect("a record on this subnet's line");
+    {
+        let c = s.client("bob");
+        assert_eq!(
+            c.horizon.ingest_endpoint(&rec, &c.known),
+            rhtn_client::horizon::Took::Applied,
+            "and it comes back to him as it does to everyone",
+        );
+    }
+
+    let his = s.client("bob").subnet_standing();
+    let here = his.iter().find(|x| x.subnet == subnet).expect("his subnet");
+    assert!(here.operator, "so he runs a node in this subnet: {his:?}");
+    assert!(!here.root, "which is not the same as rooting it");
+    assert_eq!(here.subordinates, 0, "nor as holding anybody under him");
 }

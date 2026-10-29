@@ -593,17 +593,20 @@ impl Active {
 /// **What this key is in one subnet**, as a crown is drawn from
 /// (`Robot/light-client-screens.md`, the crowns).
 ///
-/// **Two facts and not three**: whether this person operates a node in
-/// the subnet is the operator's own record of their instances, an
-/// endpoint record naming no subnet and an instance being a key of its
-/// own.
+/// **Three facts, each off a local record** [author, 2026-10-28]. Which
+/// of them a crown shows is the shell's precedence, not this type's:
+/// they overlap, and only the highest is drawn.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SubnetStanding {
     /// The subnet (design §13.8).
     pub subnet: Txid,
-    /// Whether this key is the root the subnet descends from.
+    /// Whether this key is the patron in the subnet's anchoring record,
+    /// which is what makes it the root.
     pub root: bool,
-    /// How many subordinates it still holds there.
+    /// Whether this key published an endpoint record on the line it
+    /// holds here, which is what makes it an infra node in this subnet.
+    pub operator: bool,
+    /// How many subordinates it still holds here.
     pub subordinates: usize,
 }
 
@@ -4305,13 +4308,27 @@ impl Client {
     /// the crowns): whether it is the root there, and how many
     /// subordinates it still holds there.
     ///
-    /// **Two of the three standings a crown draws.** The third — whether
-    /// this person operates a node in that subnet — is not a question
-    /// this client can answer: an `EndpointRecord` (`wire-format.md`
-    /// §7.6) names a node and its addresses and **no subnet**, and an
-    /// instance is a key of its own rather than this one, so holding one
-    /// is the operator's own record of what they administer. A shell
-    /// that knows its instances supplies that and this supplies the rest.
+    /// **All three are local records** [author, 2026-10-28], and each is
+    /// read off the one that settles it:
+    ///
+    /// - **The root is the patron named in the subnet's own anchoring
+    ///   record.** A subnet's id *is* the txid of the adoption that first
+    ///   gave its root a subordinate (design §13.8), so the question is
+    ///   whether this key is the patron in the record that txid names —
+    ///   which a root holds, having signed it.
+    /// - **An infra node is one this key published an endpoint record
+    ///   for, on the line it holds in that subnet.** The record names no
+    ///   subnet (`wire-format.md` §7.6) and is signed on that line's
+    ///   series ([`Client::endpoint_record_in`]), which is what ties it
+    ///   to one. **The instance is a device of this identity, not a key
+    ///   of its own** — it runs under a delegation — so the node's
+    ///   endpoint record is this key's own.
+    /// - **A subordinate is an adoption this key granted** into that
+    ///   subnet that nothing has since ended.
+    ///
+    /// The three overlap and only the highest is drawn; **that
+    /// precedence is the shell's**, in one place, rather than decided
+    /// again here.
     pub fn subnet_standing(&self) -> Vec<SubnetStanding> {
         let me = self.keyhash();
         // the adoptions this key granted, by the subnet each placed
@@ -4344,12 +4361,20 @@ impl Client {
             .filter(|b| !b.open())
             .map(|b| b.adoption)
             .collect();
-        let rooted = self.scopes_rooted();
         self.subnets()
             .into_iter()
             .map(|subnet| SubnetStanding {
                 subnet,
-                root: rooted.contains(&subnet),
+                // the anchoring record itself, rather than the position
+                // this key derived from it: one record, one reading
+                root: self
+                    .archive
+                    .get(&subnet)
+                    .is_some_and(|r| r.tx_type == TYPE_ADOPTION && r.field_hash(2) == Some(me)),
+                operator: self
+                    .line_in(Some(subnet))
+                    .ok()
+                    .is_some_and(|series| self.horizon.infra_on(&me, series)),
                 subordinates: granted
                     .get(&subnet)
                     .map(|v| v.iter().filter(|t| !ended.contains(*t)).count())

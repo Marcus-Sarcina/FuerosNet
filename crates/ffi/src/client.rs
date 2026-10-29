@@ -2928,9 +2928,8 @@ impl Participant {
     /// would blank a patron's crown for want of news about their own
     /// adoptions.
     ///
-    /// **The third standing is the shell's.** Whether this person
-    /// operates a node in a subnet cannot be answered here — see
-    /// [`SubnetStanding`].
+    /// **All three are local** [author, 2026-10-28], each off the record
+    /// that settles it — see [`SubnetStanding`].
     #[must_use]
     pub fn subnet_standing(&self) -> Vec<SubnetStanding> {
         crate::diag::call_plain("subnet_standing", || {
@@ -2940,6 +2939,7 @@ impl Participant {
                     .map(|s| SubnetStanding {
                         subnet: s.subnet.to_vec(),
                         root: s.root,
+                        operator: s.operator,
                         subordinates: s.subordinates as u32,
                     })
                     .collect()
@@ -3629,19 +3629,24 @@ fn cost_outward(c: rhtn_client::leaving::Cost) -> LeavingCost {
 /// **What this key is in one subnet**, which is what a crown is drawn
 /// from (`Robot/light-client-screens.md`, the crowns).
 ///
-/// **Two facts and not three.** Whether this person operates a node in
-/// the subnet is not here: an `EndpointRecord` (`wire-format.md` §7.6)
-/// names a node and its addresses and **no subnet**, and an instance is
-/// a key of its own rather than this one — so which subnet an instance
-/// serves is the operator's own record of what they administer, and the
-/// shell holding that list supplies it.
+/// **Three facts, each off a record this key already holds** [author,
+/// 2026-10-28]: the patron named in the subnet's anchoring record, an
+/// endpoint record of this key's own on the line it holds there, and the
+/// adoptions it granted there. They overlap, and **which one a crown
+/// shows is the shell's precedence** rather than this type's.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct SubnetStanding {
     /// The subnet (design §13.8).
     pub subnet: Id,
-    /// Whether this key is the root the subnet descends from.
+    /// Whether this key is the patron in the subnet's anchoring record,
+    /// which is what makes it the root.
     pub root: bool,
-    /// How many subordinates it still holds there.
+    /// Whether this key published an endpoint record on the line it
+    /// holds here, which is what makes it an infra node in this subnet.
+    /// **The instance is a device of this identity** — it runs under a
+    /// delegation — so the node's record is this key's own.
+    pub operator: bool,
+    /// How many subordinates it still holds here.
     pub subordinates: u32,
 }
 
