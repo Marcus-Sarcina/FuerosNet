@@ -16394,6 +16394,15 @@ bars' appearance was set before `setContentView`, and
 `window.insetsController` is null until the decor view exists. Driven on
 an emulator, which is how this kind of work has to be checked.
 
+**Driven on the bench, where the crown was first seen on glass**
+[2026-10-28]. A phone still holding its position from an earlier run
+draws two subnet orbs, one of them wearing the full crown because that
+key is the patron in that subnet's anchoring record. The points peaked
+at 0.65 of the orb and reached into the mark's glyphs, which is more
+than *only the lowermost part of the circle* — they sit a sixteenth
+lower now, clear of a centred mark. Neither the emulator nor a unit test
+could have said so.
+
 Android tests 277, three gaps named on the screen rather than faked: the
 unseen counts, the crowns' standing, and the content views.
 

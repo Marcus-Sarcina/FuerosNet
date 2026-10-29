@@ -478,11 +478,19 @@ object Crowns {
         override fun getOpacity(): Int = android.graphics.PixelFormat.TRANSLUCENT
     }
 
-    /** The three visible points, as fractions of the orb's box: each a
-     *  plain filled triangle whose base follows the band. */
+    /**
+     * The three visible points, as fractions of the orb's box: each a
+     * plain filled triangle whose base follows the band.
+     *
+     * **Lowered after seeing them on a phone** [2026-10-28]: the middle
+     * point peaked at 0.65 of the orb and reached into the mark's
+     * glyphs, which is more than *only the lowermost part of the circle*
+     * [author, 2026-10-27]. The peaks sit a sixteenth lower, clear of a
+     * centred mark.
+     */
     private val POINTS = listOf(
-        Triple(0.203f to 0.792f, 0.286f to 0.697f, 0.370f to 0.874f),
-        Triple(0.409f to 0.885f, 0.500f to 0.652f, 0.591f to 0.885f),
-        Triple(0.630f to 0.874f, 0.714f to 0.697f, 0.797f to 0.792f),
+        Triple(0.203f to 0.792f, 0.286f to 0.757f, 0.370f to 0.874f),
+        Triple(0.409f to 0.885f, 0.500f to 0.712f, 0.591f to 0.885f),
+        Triple(0.630f to 0.874f, 0.714f to 0.757f, 0.797f to 0.792f),
     )
 }
