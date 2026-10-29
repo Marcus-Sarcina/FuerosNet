@@ -3258,6 +3258,7 @@ dependencies = [
  "rhtn-archive",
  "rhtn-codec",
  "rhtn-crypto",
+ "rhtn-model",
  "rhtn-node",
  "rhtn-policy",
  "rhtn-transport",
@@ -3369,6 +3370,7 @@ dependencies = [
  "rhtn-crypto",
  "rhtn-engine",
  "rhtn-launch",
+ "rhtn-model",
  "rhtn-node",
  "rhtn-transport",
  "tokio",
@@ -3383,6 +3385,13 @@ name = "rhtn-launch"
 version = "0.1.0"
 dependencies = [
  "serde_json",
+]
+
+[[package]]
+name = "rhtn-model"
+version = "0.1.0"
+dependencies = [
+ "uniffi",
 ]
 
 [[package]]

@@ -57,8 +57,7 @@ class ShellActivity : Activity() {
     private var place: Chrome.Place = Chrome.Place.Home
 
     /** The subnets as the rail last read them, for a place that names one. */
-    private var scopes: List<Meet.Scope> = emptyList()
-    private var standing: Map<String, Kernel.Standing> = emptyMap()
+    private var scopes: List<uniffi.rhtn_model.Subnet> = emptyList()
 
     /** The Options row that reads the connection, while Options is shown. */
     private var connection: TextView? = null
@@ -204,8 +203,7 @@ class ShellActivity : Activity() {
             // that shows names, so it is where the asking belongs — it was
             // the People screen's until that went [2026-10-29]
             Kernel.requestProfiles()
-            val rows = Kernel.scopes()
-            val held = Kernel.standings().associateBy { it.subnet }
+            val rows = Kernel.subnets()
             val mine = Kernel.ownAlias()
             // **a kernel up with no default name is a first run that was
             // cut short**: the name is required [author, 2026-10-29], and
@@ -226,8 +224,7 @@ class ShellActivity : Activity() {
                 // a keyhash is what a kernel that is up answers with
                 if (mine.second.isNotEmpty()) drawnFromKernel = true
                 scopes = rows
-                standing = held
-                drawRail(rows, held)
+                drawRail(rows)
                 drawFoot(mine)
             }
         }, "fueros-rail").start()
@@ -271,21 +268,20 @@ class ShellActivity : Activity() {
 
     // ---- the rail ------------------------------------------------------
 
-    private fun drawRail(subnets: List<Meet.Scope>, standing: Map<String, Kernel.Standing>) {
+    private fun drawRail(subnets: List<uniffi.rhtn_model.Subnet>) {
         railColumn.removeAllViews()
         val rungs = Chrome.rail(
             // **zero, and not a guess**: nothing tracks read state yet
             unseenDirect = 0,
             subnets = subnets.map {
-                val s = standing[it.id]
                 Chrome.Rung.Subnet(
-                    id = it.id,
+                    id = it.id.hex(),
                     alias = it.alias,
                     unseen = 0,
                     crown = Chrome.crown(
-                        root = s?.root == true,
-                        operator = s?.operator == true,
-                        hasSubordinate = (s?.subordinates ?: 0) > 0,
+                        root = it.standing.root,
+                        operator = it.standing.operator,
+                        hasSubordinate = it.standing.subordinates > 0u,
                     ),
                 )
             },
@@ -469,7 +465,7 @@ class ShellActivity : Activity() {
                 )
             }
             is Chrome.Place.Subnet -> {
-                val scope = scopes.firstOrNull { it.id == where.id }
+                val scope = scopes.firstOrNull { it.id.hex() == where.id }
                 column.addView(
                     bar(scope?.alias ?: "subnet ${where.id.take(8)}…", back = null) {
                         go(Chrome.Place.SubnetOptions(where.id))
@@ -522,8 +518,8 @@ class ShellActivity : Activity() {
                 )
             }
             is Chrome.Place.SubnetOptions -> {
-                val scope = scopes.firstOrNull { it.id == where.id }
-                val s = standing[where.id]
+                val scope = scopes.firstOrNull { it.id.hex() == where.id }
+                val s = scope?.standing
                 column.addView(
                     bar(scope?.alias ?: "subnet ${where.id.take(8)}…", back = Chrome.Place.Subnet(where.id)),
                 )

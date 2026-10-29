@@ -1,5 +1,11 @@
 package com.comptus.fueros
 
+import uniffi.rhtn_model.Cost
+import uniffi.rhtn_model.Limit
+import uniffi.rhtn_model.Line
+import uniffi.rhtn_model.Loss
+import uniffi.rhtn_model.LossReason
+
 /**
  * **What the screen says before a person ends an authority relationship**
  * — the pure part, so a test can hold it (`light-client-requirements.md`
@@ -52,15 +58,16 @@ object Leaving {
      * received copy rather than a fact. So the name leads and the
      * keyhash settles it.
      */
-    fun party(n: Kernel.Named): String =
-        if (n.alias.isNullOrBlank()) {
-            "${n.who.take(SHORT)}…"
+    fun party(who: String, alias: String?): String =
+        if (alias.isNullOrBlank()) {
+            "${who.take(SHORT)}…"
         } else {
-            "${n.alias}, ${n.who.take(SHORT)}…"
+            "$alias, ${who.take(SHORT)}…"
         }
 
-    /** One line this key holds, as the roll draws it. */
-    fun line(l: Kernel.Line): String = "${party(l.patron)}   series ${l.series}"
+    /** One line this key holds, as the roll draws it, with the patron's
+     *  alias where one is held. */
+    fun line(l: Line, alias: String?): String = "${party(l.patron.hex(), alias)}   series ${l.series}"
 
     /**
      * What to say where this key is under no patron at all.
@@ -81,7 +88,7 @@ object Leaving {
      * told the shape of its own line cannot subtract it. Everything the
      * screen says about cost is conditioned on this.
      */
-    fun computed(c: Kernel.Cost): Boolean = c.limits.none { it is Kernel.Limit.NotInTable }
+    fun computed(c: Cost): Boolean = c.limits.none { it is Limit.NotInTable }
 
     /** `1 resource` / `4 resources`. */
     private fun many(n: Int, one: String, more: String): String =
@@ -95,7 +102,7 @@ object Leaving {
         "${many(n, "person", "people")} ${verb(n, "leaves", "leave")} your horizon"
 
     /** The sentence the screen leads with. */
-    fun headline(c: Kernel.Cost): String = when {
+    fun headline(c: Cost): String = when {
         !computed(c) ->
             "What leaving costs cannot be worked out on this device."
         c.losing.isEmpty() && c.leaving.isEmpty() ->
@@ -108,10 +115,10 @@ object Leaving {
     }
 
     /** What is kept, where anything is and the answer is one. */
-    fun kept(c: Kernel.Cost): String? = when {
-        !computed(c) || c.keeping == 0 -> null
-        else -> "${many(c.keeping, "resource", "resources")} " +
-            "${verb(c.keeping, "stays", "stay")} within reach."
+    fun kept(c: Cost): String? = when {
+        !computed(c) || c.keeping == 0u -> null
+        else -> "${many(c.keeping.toInt(), "resource", "resources")} " +
+            "${verb(c.keeping.toInt(), "stays", "stay")} within reach."
     }
 
     /**
@@ -120,14 +127,15 @@ object Leaving {
      * to ask, while a host still in view whose owner has gone is a door
      * that is still there and will not open.
      */
-    fun lost(r: Kernel.Lost): String {
-        val why = if (r.hostLeaves) {
-            "the node serving it leaves your horizon: ${party(r.node)}"
+    /** One resource that goes, its host and owner named from `names`. */
+    fun lost(r: Loss, names: Map<String, String> = emptyMap()): String {
+        val why = if (r.reason == LossReason.HOST_LEAVES) {
+            "the node serving it leaves your horizon: ${party(r.node.hex(), names[r.node.hex()])}"
         } else {
-            "its owner leaves your horizon: ${party(r.owner)} — " +
+            "its owner leaves your horizon: ${party(r.owner.hex(), names[r.owner.hex()])} — " +
                 "the node stays, and admission is theirs to gate"
         }
-        val named = r.instance.ifBlank { r.resource.take(SHORT) + "…" }
+        val named = r.instance.ifBlank { r.resource.hex().take(SHORT) + "…" }
         return "$named   ${r.serviceType}\n    $why"
     }
 
@@ -137,11 +145,11 @@ object Leaving {
      * known to be missing from the list, then the condition that always
      * holds.
      */
-    fun limits(c: Kernel.Cost): List<String> {
+    fun limits(c: Cost): List<String> {
         val out = mutableListOf<String>()
         if (!computed(c)) out.add(LIMIT_UNCOMPUTED)
         for (l in c.limits) {
-            if (l is Kernel.Limit.SeveralLines) {
+            if (l is Limit.SeveralLines) {
                 out.add(
                     "This relationship runs on ${l.lines} lines in this device's copy, " +
                         "and one departure ends one of them. What is above is the cost " +
@@ -149,7 +157,7 @@ object Leaving {
                 )
             }
         }
-        val stale = c.limits.filterIsInstance<Kernel.Limit.Stale>()
+        val stale = c.limits.filterIsInstance<Limit.Stale>()
         if (stale.isNotEmpty()) {
             out.add(
                 "${many(stale.size, "node's list", "nodes' lists")} could not be " +
@@ -157,7 +165,7 @@ object Leaving {
                     "is what was counted then.",
             )
         }
-        val cut = c.limits.filterIsInstance<Kernel.Limit.Truncated>()
+        val cut = c.limits.filterIsInstance<Limit.Truncated>()
         if (cut.isNotEmpty()) {
             out.add(
                 "${many(cut.size, "node", "nodes")} " +
@@ -167,7 +175,7 @@ object Leaving {
                     "has never seen.",
             )
         }
-        val unswept = c.limits.filterIsInstance<Kernel.Limit.Unswept>()
+        val unswept = c.limits.filterIsInstance<Limit.Unswept>()
         if (unswept.isNotEmpty()) {
             out.add(
                 "${many(unswept.size, "node", "nodes")} within reach " +
@@ -176,23 +184,24 @@ object Leaving {
                     "that is, it is not counted above.",
             )
         }
-        if (c.limits.any { it is Kernel.Limit.PredicateNotHeld }) out.add(LIMIT_PREDICATE)
+        if (c.limits.any { it is Limit.PredicateNotHeld }) out.add(LIMIT_PREDICATE)
         return out
     }
 
     /** The whole warning, as the screen shows it. */
-    fun words(c: Kernel.Cost): String {
+    /** The whole warning; `names` are the aliases held, by keyhash. */
+    fun words(c: Cost, names: Map<String, String> = emptyMap()): String {
         val parts = mutableListOf(headline(c))
         kept(c)?.let { parts.add(it) }
         if (c.losing.isNotEmpty()) {
             parts.add("")
-            parts.add(c.losing.joinToString("\n") { lost(it) })
+            parts.add(c.losing.joinToString("\n") { lost(it, names) })
         }
         if (c.leaving.isNotEmpty() && computed(c)) {
             parts.add("")
             parts.add(
                 "Out of your horizon: " +
-                    c.leaving.joinToString(", ") { it.alias ?: "${it.who.take(SHORT)}…" },
+                    c.leaving.joinToString(", ") { k -> names[k.hex()] ?: "${k.hex().take(SHORT)}…" },
             )
         }
         val why = limits(c)
@@ -210,12 +219,12 @@ object Leaving {
      * having been read. It is two taps because it is not undoable, not
      * because anybody must approve.
      */
-    fun button(patron: Kernel.Named, armed: Boolean): String {
+    fun button(who: String, alias: String?, armed: Boolean): String {
         // **the name alone on the button**, the keyhash being on the row
         // above and in the warning: a button is read at a glance and a
         // prefix of a hash is not read at all
-        val who = patron.alias ?: "${patron.who.take(SHORT)}…"
-        return if (armed) "Tap again to leave $who" else "Leave $who"
+        val name = alias ?: "${who.take(SHORT)}…"
+        return if (armed) "Tap again to leave $name" else "Leave $name"
     }
 
     /** Said every time, because it is true every time. */

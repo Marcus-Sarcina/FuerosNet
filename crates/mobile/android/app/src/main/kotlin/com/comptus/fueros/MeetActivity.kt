@@ -263,7 +263,7 @@ class MeetActivity : Activity() {
         // initiator between the choice of transaction and the invitation,
         // for the party that read it between the scan and the acceptance
         val choice = if (m.step() == Meet.Step.INTENT || m.step() == Meet.Step.BRIEF) {
-            m.pendingChoice(Kernel.scopes(), Kernel.scopesRooted())
+            m.pendingChoice(Kernel.subnets().map(Meet.Scope::of), Kernel.subnetsRooted().map(Meet.Scope::of))
         } else {
             null
         }
@@ -688,14 +688,14 @@ class MeetActivity : Activity() {
             Meet.Choice.ADOPT_INTO -> {
                 heading("Adopt into which scope?")
                 para("${m.counterpartyName} will sit one hop below you. Which of your subnets do they join?")
-                (Kernel.scopes() + Meet.Scope.OWN).forEach { s ->
+                (Kernel.subnets().map(Meet.Scope::of) + Meet.Scope.OWN).forEach { s ->
                     button(s.label()) { m.chooseScope(s) }
                 }
             }
             Meet.Choice.SUBMIT_AS -> {
                 heading("Submit as which scope?")
                 para("${m.counterpartyName} will be your patron. Do you bring a scope you root with you — everyone in it coming to sit in their subnet — or join as an individual, your scopes standing as they are?")
-                Kernel.scopesRooted().forEach { s ->
+                Kernel.subnetsRooted().map(Meet.Scope::of).forEach { s ->
                     button("Bring ${s.label()}") { m.chooseCarrying(s) }
                 }
                 button("Join as an individual") { m.chooseCarrying(Meet.Scope.INDIVIDUAL) }

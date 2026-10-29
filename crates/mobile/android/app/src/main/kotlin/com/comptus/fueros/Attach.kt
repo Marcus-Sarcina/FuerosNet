@@ -1,5 +1,7 @@
 package com.comptus.fueros
 
+import uniffi.rhtn_model.Instance
+
 /**
  * **What the attach screen reads and says** — the pure part, so a test can
  * hold it (`light-client-requirements.md` §4; the capability matrix's
@@ -94,8 +96,8 @@ object Attach {
     }
 
     /** One node this device already knows how to reach. */
-    fun line(n: Kernel.Node): String =
-        "${n.node.take(16)}…  ${if (n.addresses.isEmpty()) "no address held" else n.addresses.joinToString(" ")}"
+    fun line(n: Instance): String =
+        "${n.keyhash.hex().take(16)}…  ${if (n.addresses.isEmpty()) "no address held" else n.addresses.joinToString(" ")}"
 
     /**
      * The nodes whose endpoint records this device holds, which is what a
@@ -105,7 +107,7 @@ object Attach {
      * to the meeting screen's scanner** [author, 2026-10-29], the People
      * screen that held it having no successor.
      */
-    fun roll(known: List<Kernel.Node>): String =
+    fun roll(known: List<Instance>): String =
         if (known.isEmpty()) {
             "No node's record has reached this device yet. Type where a node answers below."
         } else {

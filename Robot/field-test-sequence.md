@@ -154,8 +154,8 @@ Four ceremonies, each read back from the streams:
 | T4 | MRK ↔ 4VC | regular meeting with the peering | `ba03f4c4` | peering `39009a9d`; backups 93,732 and 93,573 bytes, direct, each held by the other | 3 |
 
 **What it found, all fixed on the run and in `ce0fa62`**: the attach
-refused its own re-sent profile and the FFI detached on it (§4.4's
-*higher counter* rule, PRD-20); nothing fetched profiles after the People
+refused its own re-sent profile and the FFI detached on it
+(`light-client-requirements.md` §4.4's *higher counter* rule, PRD-20); nothing fetched profiles after the People
 screen went, and a contact's subnet was known only from a locator; a
 subordinate asked the subnet's name of a record it does not hold; the
 rail drew once at start. And the author's ruling that the name crosses

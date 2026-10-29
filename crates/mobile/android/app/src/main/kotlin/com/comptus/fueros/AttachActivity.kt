@@ -108,7 +108,7 @@ class AttachActivity : Activity() {
         // in `nextEvent` for its poll interval, and this screen must not
         // wait on that where the person is looking
         Thread({
-            val roll = Attach.roll(Kernel.nodesKnown())
+            val roll = Attach.roll(Kernel.instances())
             runOnUiThread { known.text = roll }
         }, "fueros-nodes").start()
     }

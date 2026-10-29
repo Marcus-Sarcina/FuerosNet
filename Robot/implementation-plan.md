@@ -831,6 +831,36 @@ types were shaped by whichever screen needed one first.
    the three clients share is a noun the documents should already be
    using in one way.
 
+**Built, stage one, 2026-10-29** — the model and its three readers.
+`rhtn-model` holds the nouns and nothing else: `Contact`, `Subnet` with
+`Standing` and `Position`, `Line`, `Instance`, `Resource`, `Profile`,
+`Cost` with `Loss`, `LossReason` and `Limit`, `Connection`, `Placed`,
+the wire's `How`, and `Noun` for the sync. Identities are thirty-two
+bytes (`Hash32`, a custom type that crosses the FFI as bytes); enums are
+the wire's; no field is English. Under its `ffi` feature the Kotlin
+records are generated from it — one library, two packages,
+`uniffi.rhtn_model` and `uniffi.rhtn_ffi`, the second importing the
+first — so the shell holds no copy. The kernel composes each noun once
+(`client/src/model.rs`); its `How`, `Place` and the leaving cost's types
+*are* the model's, re-exported. The FFI lost eleven records of its own
+and the translations between them, and `Status` is the model's
+`Connection`. The shell lost its third copy and every truncation in the
+data layer; the screens' pure parts format from the model and take the
+alias map as an argument; `Meet.Scope` survives only as the chooser's
+option, built from a model `Subnet`. The participant driver, the
+simulator and the boundary test read the same records. **Names as the
+author approved them** [author, 2026-10-29: *these names are fine*]:
+*contact*, *line*, *instance*, *meeting*. **Owed from stage one**: the
+`Meeting` noun, which is the ceremony screen's state and the riskiest
+to move; the catalog's resource answer (`ResourceAnswer`, `ResourcePage`)
+and the launch records, which stayed FFI records for now.
+
+**Stage two is the sync**: the kernel says *changed(noun)* whenever its
+store changes one, the shell keeps one snapshot per noun and refreshes
+on it, and screens read the snapshot. **Stage three is the documents**:
+the schema into `light-client-requirements.md` §9 as a table, the
+vocabulary rows into design §2, and the terminology pass.
+
 **Sequenced after a brief validation run** [author, 2026-10-29] — the
 meeting and its core variants, on the restyled build — because the
 refactor crosses `MeetActivity`, which is the ceremony that run

@@ -1,5 +1,7 @@
 package com.comptus.fueros
 
+import uniffi.rhtn_model.Resource
+
 /**
  * **What the Catalog screen shows** — the pure part, so a test can say it
  * (`wire-format.md` §6.4, §11.1).
@@ -10,17 +12,18 @@ package com.comptus.fueros
  */
 object Catalog {
     /** One entry's line. */
-    fun line(e: Kernel.Offered): String {
+    /** One entry, the owner and the serving node shortened here and nowhere else. */
+    fun line(e: Resource): String {
         val marks = buildList {
             if (e.truncated) add("more than this held")
             if (e.stale) add("not reached last sweep")
         }
         val tail = if (marks.isEmpty()) "" else " — ${marks.joinToString(", ")}"
-        return "${e.serviceType}  ${e.instance}  by ${e.owner}  at ${e.node}$tail"
+        return "${e.serviceType}  ${e.instance}  by ${e.owner.hex().take(8)}  at ${e.node.hex().take(8)}$tail"
     }
 
     /** The whole roll, or what to say when nothing is held. */
-    fun roll(held: List<Kernel.Offered>): String =
+    fun roll(held: List<Resource>): String =
         if (held.isEmpty()) "nothing held yet" else held.joinToString("\n") { line(it) }
 
     /**

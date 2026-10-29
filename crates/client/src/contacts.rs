@@ -13,38 +13,7 @@ use std::collections::BTreeMap;
 
 /// How a contact came to be held: the first way, kept for what it says
 /// about the party, never a rank.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum How {
-    /// Met: pinned from their screen at a ceremony.
-    Counterparty = 0,
-    /// Introduced in a counterparty's bundle, selected or not.
-    Introduced = 1,
-    /// A nominee that answered, attesting or declining.
-    Nominee = 2,
-    /// A verifier that answered.
-    Verifier = 3,
-    /// Infrastructure this client went through.
-    Infra = 4,
-    /// A candidate proposed in fishing and declined.
-    Declined = 5,
-    /// Named at start by whoever started this client.
-    Provisioned = 6,
-}
-
-impl How {
-    fn of(n: u64) -> Option<How> {
-        Some(match n {
-            0 => How::Counterparty,
-            1 => How::Introduced,
-            2 => How::Nominee,
-            3 => How::Verifier,
-            4 => How::Infra,
-            5 => How::Declined,
-            6 => How::Provisioned,
-            _ => return None,
-        })
-    }
-}
+pub use rhtn_model::How;
 
 /// One contact, as the store keeps it.
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -9,7 +9,7 @@ use common::*;
 use rhtn_archive::catalog::{CatalogEntry, EntryFields};
 use rhtn_archive::tx::Seqno;
 use rhtn_client::horizon::Took;
-use rhtn_client::leaving::{Caveat, Why};
+use rhtn_client::leaving::{Limit, LossReason};
 
 const PARTIES: [&str; 4] = ["alice", "bob", "w1", "w2"];
 
@@ -85,7 +85,7 @@ fn leaving_a_patron_names_the_resources_it_takes_and_keeps_the_rest() {
     let lost = &cost.losing[0];
     assert_eq!(lost.resource, res(1));
     assert_eq!(lost.node, alice, "reached through the patron");
-    assert_eq!(lost.why, Why::HostLeaves);
+    assert_eq!(lost.reason, LossReason::HostLeaves);
     assert_eq!(lost.instance, "the patron's board");
     assert_eq!(cost.keeping, 1, "his own is his own");
 
@@ -93,9 +93,9 @@ fn leaving_a_patron_names_the_resources_it_takes_and_keeps_the_rest() {
     // predicate and this client holds none, so the cost is a floor: a
     // host still in view may refuse once the line is gone.
     assert!(
-        cost.caveats.contains(&Caveat::PredicateNotHeld),
+        cost.limits.contains(&Limit::PredicateNotHeld),
         "always, because it is always true: {:?}",
-        cost.caveats
+        cost.limits
     );
 }
 
@@ -115,12 +115,12 @@ fn a_portion_that_could_not_be_refreshed_is_marked_rather_than_used_quietly() {
     }
     let cost = s.client("bob").cost_of_leaving(&alice).expect("a patron");
     assert!(
-        cost.caveats.contains(&Caveat::Stale(alice)),
+        cost.limits.contains(&Limit::Stale { node: alice }),
         "the portion is stale and the list says so: {:?}",
-        cost.caveats
+        cost.limits
     );
     assert!(
-        cost.caveats.contains(&Caveat::Truncated(alice)),
+        cost.limits.contains(&Limit::Truncated { node: alice }),
         "and that the node held more than this client ever saw"
     );
     assert_eq!(
@@ -176,9 +176,9 @@ fn infrastructure_in_the_horizon_that_was_never_swept_is_named_as_a_gap() {
 
     let cost = s.client("bob").cost_of_leaving(&alice).expect("a patron");
     assert!(
-        cost.caveats.contains(&Caveat::Unswept(alice)),
+        cost.limits.contains(&Limit::Unswept { node: alice }),
         "what it serves is not in the list at all, and the list says so: {:?}",
-        cost.caveats
+        cost.limits
     );
     assert!(
         cost.losing.is_empty(),
@@ -250,8 +250,8 @@ fn a_resource_whose_owner_goes_is_lost_though_its_host_stays() {
     assert_eq!(cost.losing[0].node, bob, "the host is still in view");
     assert_eq!(cost.losing[0].owner, alice);
     assert_eq!(
-        cost.losing[0].why,
-        Why::OwnerLeaves,
+        cost.losing[0].reason,
+        LossReason::OwnerLeaves,
         "and that is a different thing to be told than a host gone"
     );
 }

@@ -43,7 +43,9 @@ class LeavingActivity : Activity() {
     private lateinit var leave: Button
 
     /** The patron whose cost is on screen, and whether the button is armed. */
-    private var chosen: Kernel.Named? = null
+    /** The patron whose cost is on screen: keyhash in hex, and the alias held. */
+    private var chosen: Pair<String, String?>? = null
+    private var names: Map<String, String> = emptyMap()
     private var armed = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -94,7 +96,9 @@ class LeavingActivity : Activity() {
         armed = false
         Thread({
             val held = Kernel.lines()
+            val known = Kernel.aliases()
             runOnUiThread {
+                names = known
                 if (isFinishing) return@runOnUiThread
                 roll.text = if (held.isEmpty()) Leaving.NONE else ""
                 lines.removeAllViews()
@@ -104,20 +108,23 @@ class LeavingActivity : Activity() {
     }
 
     /** One line, tappable: tapping it asks what leaving it would cost. */
-    private fun row(l: Kernel.Line): TextView = body(Leaving.line(l)).apply {
-        setPadding(0, 20, 0, 20)
-        isClickable = true
-        setOnClickListener { cost(l.patron) }
+    private fun row(l: uniffi.rhtn_model.Line): TextView {
+        val who = l.patron.hex()
+        return body(Leaving.line(l, names[who])).apply {
+            setPadding(0, 20, 0, 20)
+            isClickable = true
+            setOnClickListener { cost(who to names[who]) }
+        }
     }
 
-    private fun cost(patron: Kernel.Named) {
+    private fun cost(patron: Pair<String, String?>) {
         chosen = patron
         armed = false
         warning.text = "working it out…"
         leave.visibility = android.view.View.GONE
         said.text = ""
         Thread({
-            val (c, why) = Kernel.costOfLeaving(patron.who)
+            val (c, why) = Kernel.costOfLeaving(patron.first)
             runOnUiThread {
                 if (isFinishing || chosen != patron) return@runOnUiThread
                 if (c == null) {
@@ -126,12 +133,12 @@ class LeavingActivity : Activity() {
                     // with reads differently from a kernel that has not
                     // come up, and the screen is not the place to decide
                     // which happened
-                    warning.text = "No cost for ${Leaving.party(patron)}: $why"
+                    warning.text = "No cost for ${Leaving.party(patron.first, patron.second)}: $why"
                     leave.visibility = android.view.View.GONE
                     return@runOnUiThread
                 }
-                warning.text = Leaving.words(c)
-                leave.text = Leaving.button(patron, false)
+                warning.text = Leaving.words(c, names)
+                leave.text = Leaving.button(patron.first, patron.second, false)
                 leave.visibility = android.view.View.VISIBLE
             }
         }, "fueros-cost").start()
@@ -147,14 +154,14 @@ class LeavingActivity : Activity() {
         val patron = chosen ?: return
         if (!armed) {
             armed = true
-            leave.text = Leaving.button(patron, true)
+            leave.text = Leaving.button(patron.first, patron.second, true)
             said.text = "This cannot be taken back."
             return
         }
         leave.visibility = android.view.View.GONE
         said.text = "leaving…"
         Thread({
-            val out = Kernel.departFrom(patron.who)
+            val out = Kernel.departFrom(patron.first)
             runOnUiThread {
                 if (isFinishing) return@runOnUiThread
                 said.text = out

@@ -12,7 +12,7 @@
 //! against the asker's reach (design §11.5): a host that stays in view
 //! may still refuse once a line is gone, and this client holds no
 //! predicate to try. So [`Cost`] carries its own limits in
-//! [`Cost::caveats`] rather than presenting a list that reads as
+//! [`Cost::limits`] rather than presenting a list that reads as
 //! complete — a stale or partial answer is worth having, and worth having
 //! marked.
 
@@ -22,83 +22,9 @@ use rhtn_archive::Txid;
 use rhtn_archive::catalog::CatalogEntry;
 use std::collections::BTreeMap;
 
-/// Why one resource goes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Why {
-    /// The node that serves it leaves this client's horizon, so there is
-    /// nothing left to ask.
-    HostLeaves,
-    /// The host stays in view and the resource's owner does not.
-    OwnerLeaves,
-}
-
-/// One resource an ending takes away.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Loss {
-    /// The resource.
-    pub resource: Keyhash,
-    /// The node that served its entry, which is the node it is reached
-    /// through.
-    pub node: Keyhash,
-    /// Its owner.
-    pub owner: Keyhash,
-    /// Its declared type, as the entry carries it.
-    pub service_type: String,
-    /// Its instance name, as the entry carries it.
-    pub instance: String,
-    /// Which of the two reasons applies.
-    pub why: Why,
-}
-
-/// Why the list is not the whole answer.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Caveat {
-    /// Access is the resource's own predicate and this client holds none
-    /// of them: a host that stays reachable may still refuse. **Always
-    /// present**, because it is always true, and a list that did not say
-    /// so would read as the complete cost.
-    PredicateNotHeld,
-    /// This node's portion could not be refreshed on the last sweep, so
-    /// what it lists is what it listed then.
-    Stale(Keyhash),
-    /// This node held more than one reply's bound, so it serves
-    /// resources this client has never seen.
-    Truncated(Keyhash),
-    /// This node is infrastructure in the horizon whose catalog has
-    /// never been swept: whatever it serves is not in this list at all.
-    Unswept(Keyhash),
-    /// The relationship with this patron runs on more than one open line
-    /// in the propagated copy, and one departure ends one of them: the
-    /// cost shown is of ending them all.
-    SeveralLines(usize),
-    /// This client's propagated copy holds no open binding to the patron
-    /// although its own archive holds the relationship, so there is no
-    /// edge here to remove and the cost cannot be read off the topology.
-    NotInTable,
-}
-
-/// What ending an authority relationship would cost.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Cost {
-    /// The resources reachable now and not after, each with its reason,
-    /// in the order their keyhashes sort.
-    pub losing: Vec<Loss>,
-    /// How many reachable resources the ending does not touch.  By
-    /// resource: one still served by another node in view is kept.
-    pub keeping: usize,
-    /// The parties that leave this client's horizon with the lines.
-    pub leaving: Vec<Keyhash>,
-    /// Why this is a floor: see [`Caveat`].
-    pub caveats: Vec<Caveat>,
-}
-
-impl Cost {
-    /// Whether anything at all is lost, which is what decides whether
-    /// there is a warning to show.
-    pub fn is_free(&self) -> bool {
-        self.losing.is_empty() && self.leaving.is_empty()
-    }
-}
+/// The cost's own types are the model's (`rhtn_model`): a loss, why it
+/// goes, every reason the list is a floor, and the whole.
+pub use rhtn_model::{Cost, Limit, Loss, LossReason};
 
 /// The horizon radius every reading in this client uses (design §15.1).
 const H: usize = 2;
@@ -154,7 +80,7 @@ impl Client {
             ways.entry(e.resource).or_default().push((node, e));
         }
         let mut losing = Vec::new();
-        let mut keeping = 0usize;
+        let mut keeping = 0u32;
         for (resource, served) in ways {
             // a resource already out of reach is not a cost of leaving
             let open_now: Vec<&(Keyhash, CatalogEntry)> = served
@@ -185,41 +111,43 @@ impl Client {
                 owner: e.owner,
                 service_type: e.service_type.clone(),
                 instance: e.instance.clone(),
-                why: match after.contains(node) {
-                    true => Why::OwnerLeaves,
-                    false => Why::HostLeaves,
+                reason: match after.contains(node) {
+                    true => LossReason::OwnerLeaves,
+                    false => LossReason::HostLeaves,
                 },
             });
         }
 
-        let mut caveats = vec![Caveat::PredicateNotHeld];
+        let mut limits = vec![Limit::PredicateNotHeld];
         for (n, p) in &self.catalog.portions {
             if !inside.contains(n) {
                 continue;
             }
             if p.stale {
-                caveats.push(Caveat::Stale(*n));
+                limits.push(Limit::Stale { node: *n });
             }
             if p.truncated {
-                caveats.push(Caveat::Truncated(*n));
+                limits.push(Limit::Truncated { node: *n });
             }
         }
         for (n, _) in self.horizon.reachable_infra() {
             if !self.catalog.portions.contains_key(&n) {
-                caveats.push(Caveat::Unswept(n));
+                limits.push(Limit::Unswept { node: n });
             }
         }
         if lines.len() > 1 {
-            caveats.push(Caveat::SeveralLines(lines.len()));
+            limits.push(Limit::SeveralLines {
+                lines: lines.len() as u32,
+            });
         }
         if lines.is_empty() {
-            caveats.push(Caveat::NotInTable);
+            limits.push(Limit::NotInTable);
         }
         Cost {
             losing,
             keeping,
             leaving,
-            caveats,
+            limits,
         }
     }
 }

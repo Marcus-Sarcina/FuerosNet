@@ -109,7 +109,7 @@ class CatalogActivity : Activity() {
                 isEnabled = false
                 answer.text = "asking ${entry.node}…"
                 Thread {
-                    val got = Kernel.ask(entry.node, entry.resource, path.text.toString().trim())
+                    val got = Kernel.ask(entry.node.hex(), entry.resource.hex(), path.text.toString().trim())
                     runOnUiThread {
                         answer.text = when {
                             got == null -> "the kernel would not ask"
@@ -173,13 +173,13 @@ class CatalogActivity : Activity() {
     }
 
     /** The catalog entry the pasted keyhash names, or null. */
-    private fun chosen(which: EditText): Kernel.Offered? {
+    private fun chosen(which: EditText): uniffi.rhtn_model.Resource? {
         val want = which.text.toString().trim().lowercase()
-        return Kernel.catalog().firstOrNull { it.resource == want }
+        return Kernel.resources().firstOrNull { it.resource.hex() == want }
     }
 
     private fun draw() {
-        roll.text = Catalog.roll(Kernel.catalog())
+        roll.text = Catalog.roll(Kernel.resources())
     }
 
     private fun said(a: Kernel.Answered): String = Catalog.answer(a)

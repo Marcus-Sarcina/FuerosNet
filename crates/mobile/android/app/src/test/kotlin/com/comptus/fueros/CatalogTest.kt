@@ -3,6 +3,7 @@ package com.comptus.fueros
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import uniffi.rhtn_model.Resource
 
 /**
  * What the Catalog screen says of what it holds (`wire-format.md` §6.4)
@@ -10,12 +11,14 @@ import org.junit.Test
  */
 class CatalogTest {
     private fun offered(truncated: Boolean = false, stale: Boolean = false) =
-        Kernel.Offered(
-            node = "ab12cd34",
-            resource = "ef".repeat(32),
-            owner = "99887766",
+        Resource(
+            node = ("ab12cd34" + "00".repeat(28)).unhex(),
+            resource = "ef".repeat(32).unhex(),
+            owner = ("99887766" + "00".repeat(28)).unhex(),
             serviceType = "rhtn-forum",
             instance = "the parish board",
+            endpoint = ByteArray(0),
+            dataPractice = null,
             truncated = truncated,
             stale = stale,
         )

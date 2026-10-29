@@ -242,6 +242,11 @@ class Meet(
         }
 
         companion object {
+            /** **The option for a subnet the model holds**: the chooser's
+             *  projection of `rhtn_model.Subnet`, which is the noun; this
+             *  is what the screen offers and labels. */
+            fun of(s: uniffi.rhtn_model.Subnet): Scope = Scope(s.id.hex(), s.alias, s.ownAlias)
+
             /** A new subnet under this device's own key. */
             val OWN = Scope("", null, null)
 

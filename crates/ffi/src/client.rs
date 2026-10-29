@@ -186,29 +186,6 @@ impl Drop for SealedStore {
 /// unless something is due, and a pool at its floor waits at most this long.
 pub const MAINTAIN_EVERY: std::time::Duration = std::time::Duration::from_secs(10);
 
-/// One catalog entry as this client holds it (`wire-format.md` §6.1).
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct CatalogItem {
-    /// The node that served it.
-    pub node: Id,
-    /// The resource the entry is under.
-    pub resource: Id,
-    /// Who owns the service.
-    pub owner: Id,
-    /// The service type, as the entry names it.
-    pub service_type: String,
-    /// The instance name, which distinguishes two of a type from one owner.
-    pub instance: String,
-    /// The endpoint as the entry carries it, undecoded.
-    pub endpoint: Vec<u8>,
-    /// The declared data practice, where the entry declares one.
-    pub data_practice: Option<u64>,
-    /// The serving node held more than one page carries for some type.
-    pub truncated: bool,
-    /// The serving node could not be reached on the last sweep.
-    pub stale: bool,
-}
-
 /// What a restore from a backup did.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Restored {
@@ -452,26 +429,6 @@ pub struct PeerContact {
     pub how: String,
 }
 
-/// One contact as the shell lists it (`light-client-requirements.md` §4.3).
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct ContactRow {
-    /// The party.
-    pub who: Id,
-    /// How it came to be held: 0 met, 1 introduced, 2 nominee, 3 verifier,
-    /// 4 infrastructure, 5 declined, 6 provisioned.
-    pub how: u8,
-    /// When last dealt with, seconds.
-    pub last_at: u64,
-    /// How many times.
-    pub count: u64,
-    /// Whether a locator is held, which is what makes it introducible.
-    pub located: bool,
-    /// The alias it published for the subnet its locator is in, where one
-    /// has reached this client (`wire-format.md` §7.11); **the keyhash
-    /// stands in where none has** (`light-client-requirements.md` §4.3).
-    pub alias: Option<String>,
-}
-
 /// What a resource answered (`wire-format.md` §11.1).
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct ResourceAnswer {
@@ -535,18 +492,6 @@ pub struct ProviderRow {
     /// [author, 2026-10-16]: the count is beside it either way, and
     /// nothing is hidden.
     pub crowded: bool,
-}
-
-/// One subnet this client holds a position in, as a chooser lists it
-/// (`light-client-requirements.md` §7, §10).
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct SubnetRow {
-    /// The subnet's id (design §13.8).
-    pub id: Id,
-    /// Its alias, where its profile is held (`wire-format.md` §7.11).
-    pub alias: Option<String>,
-    /// This client's own alias there, where it published one.
-    pub own_alias: Option<String>,
 }
 
 /// The two nominee lists a ceremony holds: this side's and the other's.
@@ -633,16 +578,6 @@ impl Progress {
             refused: ids(&p.refused),
         }
     }
-}
-
-/// An infrastructure node this client can reach directly, with the
-/// addresses it holds for it.
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct ReachableNode {
-    /// The node.
-    pub node: Id,
-    /// The addresses held for it.
-    pub addresses: Vec<String>,
 }
 
 /// What a proposer holds after proposing: the record as every signer is
@@ -1202,34 +1137,22 @@ impl Participant {
         })
     }
 
-    /// The catalog as this client holds it: every entry served, with the
-    /// node that served it and whether that node's portion is known
-    /// incomplete or stale.
+    /// Every resource the catalog holds (`rhtn_model::Resource`;
+    /// `wire-format.md` §6.4), attributed to the node that served its
+    /// entry and marked where that node's portion was not whole.
     #[must_use]
-    pub fn catalog(&self) -> Vec<CatalogItem> {
-        crate::diag::call_plain("catalog", || {
-            self.handle.with_blocking(|c| {
-                c.catalog
-                    .portions
-                    .iter()
-                    .flat_map(|(node, p)| {
-                        p.entries.values().filter_map(move |b| {
-                            let e = rhtn_archive::catalog::CatalogEntry::parse(b).ok()?;
-                            Some(CatalogItem {
-                                node: id_of(node),
-                                resource: id_of(&e.resource),
-                                owner: id_of(&e.owner),
-                                service_type: e.service_type,
-                                instance: e.instance,
-                                endpoint: e.endpoint,
-                                data_practice: e.data_practice,
-                                truncated: p.truncated,
-                                stale: p.stale,
-                            })
-                        })
-                    })
-                    .collect()
-            })
+    pub fn resources(&self) -> Vec<rhtn_model::Resource> {
+        crate::diag::call_plain("resources", || {
+            self.handle.with_blocking(|c| c.resources_held())
+        })
+    }
+
+    /// Every profile held: this client's own, by subnet, and the subnets'
+    /// (`rhtn_model::Profile`; `wire-format.md` §7.11).
+    #[must_use]
+    pub fn profiles(&self) -> Vec<rhtn_model::Profile> {
+        crate::diag::call_plain("profiles", || {
+            self.handle.with_blocking(|c| c.profiles_held())
         })
     }
 
@@ -1919,15 +1842,10 @@ impl Participant {
         })
     }
 
-    /// What this client holds of its own neighbourhood, and what it can
-    /// do with it without asking anyone (design §15.1.1).
-    ///
-    /// **This is the whole point of keeping a copy.** A participant that
-    /// had to ask its patron where somebody is cannot route around a
-    /// patron that is not answering, and cannot weigh trust distance
-    /// either (`light-client-requirements.md` §4.2).
+    /// Where every node this client can resolve sits (`rhtn_model::Placed`;
+    /// `light-client-requirements.md` §4.2), one row per position.
     #[must_use]
-    pub fn places(&self) -> Vec<Placed> {
+    pub fn places(&self) -> Vec<rhtn_model::Placed> {
         crate::diag::call_plain("places", || {
             self.handle.with_blocking(|c| {
                 c.horizon
@@ -1937,11 +1855,9 @@ impl Participant {
                         c.horizon
                             .places_of(&n)
                             .into_iter()
-                            .map(move |p| Placed {
-                                node: id_of(&n),
-                                anchor: id_of(&p.anchor),
-                                path: p.path.clone(),
-                                nibbles: p.nibbles,
+                            .map(move |p| rhtn_model::Placed {
+                                node: n,
+                                position: p.clone(),
                             })
                             .collect::<Vec<_>>()
                     })
@@ -1950,32 +1866,26 @@ impl Participant {
         })
     }
 
-    /// The infrastructure this client can reach without asking anyone:
-    /// the parties in its horizon that published an endpoint record, and
-    /// where each says it answers.
-    ///
-    /// **This is what failing over is made of.** A client that had to ask
-    /// its patron where the alternatives are cannot use them when the
-    /// patron is what is down (`light-client-requirements.md` §4.2).
+    /// The infra nodes whose endpoint records this client holds, each with
+    /// the addresses it answers at (`rhtn_model::Instance`;
+    /// `light-client-requirements.md` §4). Composed here rather than in
+    /// the kernel because an address is a transport point.
     #[must_use]
-    pub fn reachable(&self) -> Vec<ReachableNode> {
-        crate::diag::call_plain("reachable", || {
+    pub fn instances(&self) -> Vec<rhtn_model::Instance> {
+        crate::diag::call_plain("instances", || {
             self.handle.with_blocking(|c| {
                 c.horizon
                     .reachable_infra()
                     .into_iter()
-                    .map(|(n, points)| {
-                        let addrs = points
+                    .map(|(keyhash, points)| rhtn_model::Instance {
+                        keyhash,
+                        addresses: points
                             .iter()
                             .filter_map(|p| {
                                 rhtn_transport::session::NetworkPoint::decode_bytes(p).ok()
                             })
                             .map(|p| p.socket().to_string())
-                            .collect();
-                        ReachableNode {
-                            node: id_of(&n),
-                            addresses: addrs,
-                        }
+                            .collect(),
                     })
                     .collect()
             })
@@ -2494,27 +2404,13 @@ impl Participant {
         })
     }
 
-    /// The contacts this client keeps, most recently dealt with first.
+    /// Every contact held, most recently met first (`rhtn_model::Contact`;
+    /// `light-client-requirements.md` §4.3): full keyhashes and the
+    /// wire's `How`, nothing shortened or worded.
     #[must_use]
-    pub fn contacts(&self) -> Vec<ContactRow> {
+    pub fn contacts(&self) -> Vec<rhtn_model::Contact> {
         crate::diag::call_plain("contacts", || {
-            self.handle.with_blocking(|c| {
-                let mut rows: Vec<ContactRow> = c
-                    .store
-                    .contacts
-                    .iter()
-                    .map(|(k, v)| ContactRow {
-                        who: id_of(k),
-                        how: v.how as u8,
-                        last_at: v.last_at,
-                        count: v.count,
-                        located: v.locator.is_some(),
-                        alias: v.alias.clone(),
-                    })
-                    .collect();
-                rows.sort_by_key(|r| std::cmp::Reverse(r.last_at));
-                rows
-            })
+            self.handle.with_blocking(|c| c.contacts_held())
         })
     }
 
@@ -2926,62 +2822,13 @@ impl Participant {
         })
     }
 
-    /// Every subnet this client has a position in: the one under its own
-    /// key first, where its first adoption as a lone root has named one.
+    /// Every subnet this client holds a position in (`rhtn_model::Subnet`):
+    /// what it is called, what this client is called there, what this
+    /// client is in it, and where it sits.
     #[must_use]
-    pub fn subnets(&self) -> Vec<Id> {
+    pub fn subnets(&self) -> Vec<rhtn_model::Subnet> {
         crate::diag::call_plain("subnets", || {
-            self.handle
-                .with_blocking(|c| c.subnets().iter().map(id_of).collect())
-        })
-    }
-
-    /// **What this key is in each subnet it holds a position in**
-    /// (`Robot/light-client-screens.md`, the crowns): the root of it, and
-    /// how many subordinates it still holds there.
-    ///
-    /// **A line this key granted counts until something says it ended**,
-    /// which is the safe way round for a mark on a screen: the adoptions
-    /// are read from this key's own archive, where they are whether or
-    /// not anything propagated them back, and only a binding the
-    /// propagated copy shows ended is taken off. The other way round
-    /// would blank a patron's crown for want of news about their own
-    /// adoptions.
-    ///
-    /// **All three are local** [author, 2026-10-28], each off the record
-    /// that settles it — see [`SubnetStanding`].
-    #[must_use]
-    pub fn subnet_standing(&self) -> Vec<SubnetStanding> {
-        crate::diag::call_plain("subnet_standing", || {
-            self.handle.with_blocking(|c| {
-                c.subnet_standing()
-                    .into_iter()
-                    .map(|s| SubnetStanding {
-                        subnet: s.subnet.to_vec(),
-                        root: s.root,
-                        operator: s.operator,
-                        subordinates: s.subordinates as u32,
-                    })
-                    .collect()
-            })
-        })
-    }
-
-    /// The same, each with the aliases a chooser labels it by: the
-    /// subnet's own and this client's there, where either is held.
-    #[must_use]
-    pub fn subnet_rows(&self) -> Vec<SubnetRow> {
-        crate::diag::call_plain("subnet_rows", || {
-            self.handle.with_blocking(|c| {
-                c.subnets()
-                    .iter()
-                    .map(|s| SubnetRow {
-                        id: id_of(s),
-                        alias: c.subnet_alias(s),
-                        own_alias: c.own_alias(s),
-                    })
-                    .collect()
-            })
+            self.handle.with_blocking(|c| c.subnets_held())
         })
     }
 
@@ -3041,21 +2888,11 @@ impl Participant {
         })
     }
 
-    /// The scopes this client roots and could bring under a patron
-    /// (`wire-format.md` §4.1 field 10), with their aliases where held.
+    /// The subnets this client roots and could bring under a patron.
     #[must_use]
-    pub fn scopes_rooted(&self) -> Vec<SubnetRow> {
-        crate::diag::call_plain("scopes_rooted", || {
-            self.handle.with_blocking(|c| {
-                c.scopes_rooted()
-                    .iter()
-                    .map(|s| SubnetRow {
-                        id: id_of(s),
-                        alias: c.subnet_alias(s),
-                        own_alias: c.own_alias(s),
-                    })
-                    .collect()
-            })
+    pub fn subnets_rooted(&self) -> Vec<rhtn_model::Subnet> {
+        crate::diag::call_plain("subnets_rooted", || {
+            self.handle.with_blocking(|c| c.subnets_rooted_held())
         })
     }
 
@@ -3254,28 +3091,11 @@ impl Participant {
 
     // ---- ending an authority (E3) --------------------------------------
 
-    /// **Every patron relationship this key holds**, one per patron it was
-    /// adopted under, with the series its line is currently on.
-    ///
-    /// What a screen needs before [`Participant::depart`]: a person is not
-    /// shown *leave* against a keyhash they cannot place, and the series
-    /// is what tells one line from another where a patron appears twice
-    /// over a key's life.
+    /// The lines of authority this key holds (`rhtn_model::Line`;
+    /// `light-client-requirements.md` §6).
     #[must_use]
-    pub fn relationships(&self) -> Vec<Relationship> {
-        crate::diag::call_plain("relationships", || {
-            self.handle.with_blocking(|c| {
-                rhtn_client::rotation::relationships(&c.archive)
-                    .iter()
-                    .map(|r| Relationship {
-                        patron: id_of(&r.patron),
-                        series: r.series(),
-                        anchor: id_of(&r.position.anchor),
-                        nibbles: r.position.nibbles,
-                    })
-                    .collect()
-            })
-        })
+    pub fn lines(&self) -> Vec<rhtn_model::Line> {
+        crate::diag::call_plain("lines", || self.handle.with_blocking(|c| c.lines_held()))
     }
 
     /// **What leaving `patron` would cost** (`light-client-requirements.md`
@@ -3299,12 +3119,11 @@ impl Participant {
     /// Refused where this key holds no relationship with `patron` —
     /// the same refusal `depart` gives, so a cost is never quoted for a
     /// departure that would not happen.
-    pub fn cost_of_leaving(&self, patron: Id) -> Result<LeavingCost, Refused> {
+    pub fn cost_of_leaving(&self, patron: Id) -> Result<rhtn_model::Cost, Refused> {
         crate::diag::call("cost_of_leaving", || {
             let p = keyhash(&patron).ok_or_else(|| Refused::new("a patron is 32 bytes"))?;
             self.handle.with_blocking(move |c| {
                 c.cost_of_leaving(&p)
-                    .map(cost_outward)
                     .map_err(|a| Refused::new(rhtn_client::diag::abort(&a)))
             })
         })
@@ -3517,159 +3336,6 @@ impl Participant {
     }
 }
 
-/// One patron relationship, as a shell is shown it.
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct Relationship {
-    /// The patron this line is under.
-    pub patron: Id,
-    /// The series the line is currently on (`wire-format.md` §4.6).
-    pub series: u32,
-    /// The anchor the position the adoption gave is relative to.
-    pub anchor: Id,
-    /// How deep under that anchor the position sits.
-    pub nibbles: u64,
-}
-
-/// Why one resource goes when a relationship ends.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
-pub enum LossReason {
-    /// The node that serves it leaves this client's horizon, so there is
-    /// nothing left to ask.
-    HostLeaves,
-    /// The host stays in view and the resource's owner does not.
-    OwnerLeaves,
-}
-
-/// One resource an ending takes away.
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct LostResource {
-    /// The resource.
-    pub resource: Id,
-    /// The node its entry came from, which is the node it is reached
-    /// through.
-    pub node: Id,
-    /// Its owner.
-    pub owner: Id,
-    /// Its declared type.
-    pub service_type: String,
-    /// Its instance name.
-    pub instance: String,
-    /// Which of the two reasons applies.
-    pub reason: LossReason,
-}
-
-/// Why the list of what leaving costs is a floor and not the whole
-/// answer.  **Never empty**: the first is always there.
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
-pub enum CostLimit {
-    /// Access is a resource's own predicate and this client holds none
-    /// of them, so a host that stays in view may still refuse.
-    PredicateNotHeld,
-    /// This node's portion of the catalog could not be refreshed on the
-    /// last sweep: what it lists is what it listed then.
-    Stale {
-        /// The node.
-        node: Id,
-    },
-    /// This node held more than one reply's bound, so it serves
-    /// resources this client has never seen.
-    Truncated {
-        /// The node.
-        node: Id,
-    },
-    /// This node is infrastructure in the horizon whose catalog has
-    /// never been swept: what it serves is not in the list at all.
-    Unswept {
-        /// The node.
-        node: Id,
-    },
-    /// The relationship runs on more than one open line in the
-    /// propagated copy and one departure ends one of them: the cost
-    /// shown is of ending them all.
-    SeveralLines {
-        /// How many lines there are.
-        lines: u32,
-    },
-    /// The propagated copy holds no open binding to the patron although
-    /// this key's own archive holds the relationship, so the cost cannot
-    /// be read off the topology.  What the horizon has not been told
-    /// about, it cannot subtract.
-    NotInTable,
-}
-
-/// What ending an authority relationship would cost.
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct LeavingCost {
-    /// The resources reachable now and not after, each with its reason.
-    pub losing: Vec<LostResource>,
-    /// How many reachable resources the ending does not touch.
-    pub keeping: u32,
-    /// The parties that leave this client's horizon with the line.
-    pub leaving: Vec<Id>,
-    /// Why this is a floor: see [`CostLimit`].
-    pub limits: Vec<CostLimit>,
-}
-
-/// A cost as the shell is shown it.
-fn cost_outward(c: rhtn_client::leaving::Cost) -> LeavingCost {
-    use rhtn_client::leaving::{Caveat, Why};
-    LeavingCost {
-        losing: c
-            .losing
-            .into_iter()
-            .map(|l| LostResource {
-                resource: id_of(&l.resource),
-                node: id_of(&l.node),
-                owner: id_of(&l.owner),
-                service_type: l.service_type,
-                instance: l.instance,
-                reason: match l.why {
-                    Why::HostLeaves => LossReason::HostLeaves,
-                    Why::OwnerLeaves => LossReason::OwnerLeaves,
-                },
-            })
-            .collect(),
-        keeping: c.keeping as u32,
-        leaving: c.leaving.iter().map(id_of).collect(),
-        limits: c
-            .caveats
-            .into_iter()
-            .map(|v| match v {
-                Caveat::PredicateNotHeld => CostLimit::PredicateNotHeld,
-                Caveat::Stale(n) => CostLimit::Stale { node: id_of(&n) },
-                Caveat::Truncated(n) => CostLimit::Truncated { node: id_of(&n) },
-                Caveat::Unswept(n) => CostLimit::Unswept { node: id_of(&n) },
-                Caveat::SeveralLines(n) => CostLimit::SeveralLines { lines: n as u32 },
-                Caveat::NotInTable => CostLimit::NotInTable,
-            })
-            .collect(),
-    }
-}
-
-/// **What this key is in one subnet**, which is what a crown is drawn
-/// from (`Robot/light-client-screens.md`, the crowns).
-///
-/// **Three facts, each off a record this key already holds** [author,
-/// 2026-10-28]: the patron named in the subnet's anchoring record, an
-/// endpoint record of this key's own on the line it holds there, and the
-/// adoptions it granted there. They overlap, and **which one a crown
-/// shows is the shell's precedence** rather than this type's.
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct SubnetStanding {
-    /// The subnet (design §13.8).
-    pub subnet: Id,
-    /// Whether this key is the patron in the subnet's anchoring record,
-    /// which is what makes it the root.
-    pub root: bool,
-    /// Whether this key published an endpoint record on the line it
-    /// holds here, which is what makes it an infra node in this subnet.
-    /// **The instance is a device of this identity** — it runs under a
-    /// delegation — so the node's record is this key's own.
-    pub operator: bool,
-    /// How many subordinates it still holds here.
-    pub subordinates: u32,
-}
-
 /// One candidate's standing under this client's own policy.
 #[derive(Debug, Clone, PartialEq, uniffi::Record)]
 pub struct Standing {
@@ -3708,21 +3374,6 @@ pub struct SealedLine {
     pub patron: Id,
     /// The self-signed locator that closes it.
     pub seal: Vec<u8>,
-}
-
-/// Where a party sits, as a shell is shown it: one of these per subnet
-/// they are in.
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct Placed {
-    /// The party placed.
-    pub node: Id,
-    /// The anchor the path is relative to.
-    pub anchor: Id,
-    /// The path under that anchor, packed two nibbles to a byte
-    /// (`wire-format.md` §7.7.3).
-    pub path: Vec<u8>,
-    /// How many of the packed nibbles are the path's.
-    pub nibbles: u64,
 }
 
 /// The envelope a presence record travels in, from the body every signer

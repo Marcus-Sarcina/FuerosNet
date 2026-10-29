@@ -1156,7 +1156,7 @@ fn authority_recovery_and_standing_answer_before_there_is_anything_to_answer_abo
     let p = Participant::start(seeds("alice"), known, platform_of(shell.clone())).expect("starts");
 
     // ADOPTED BY NOBODY, so there is no line and nothing to leave.
-    assert!(p.relationships().is_empty(), "no patron, no relationship");
+    assert!(p.lines().is_empty(), "no patron, no relationship");
     let no_line = p.depart(id("bob"), None).expect_err("nothing to leave");
     assert!(
         no_line.reason().contains("NoRelationship"),

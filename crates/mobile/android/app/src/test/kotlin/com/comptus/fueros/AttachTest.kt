@@ -70,11 +70,11 @@ class AttachTest {
     fun the_roll_says_what_to_do_when_no_node_is_known() {
         val empty = Attach.roll(emptyList())
         assertTrue(empty.contains("Type where a node answers"))
-        val one = Attach.roll(listOf(Kernel.Node(key, listOf("192.168.0.8:7447"))))
+        val one = Attach.roll(listOf(uniffi.rhtn_model.Instance(key.unhex(), listOf("192.168.0.8:7447"))))
         assertTrue(one.contains("192.168.0.8:7447"))
         assertTrue(one.startsWith(key.take(16)))
         // a node held with no address says so rather than looking reachable
-        assertTrue(Attach.roll(listOf(Kernel.Node(key, emptyList()))).contains("no address held"))
+        assertTrue(Attach.roll(listOf(uniffi.rhtn_model.Instance(key.unhex(), emptyList()))).contains("no address held"))
     }
 
     @Test

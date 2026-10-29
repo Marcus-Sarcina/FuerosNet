@@ -50,15 +50,7 @@ pub enum Woke {
 /// A place derived from a subordinate's record — the anchor's own, at the
 /// empty path — has no series to claim, and claiming one would be
 /// inventing what nobody propagated.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Place {
-    /// The anchor the path is relative to.
-    pub anchor: Keyhash,
-    /// The path under it, packed two nibbles to a byte.
-    pub path: Vec<u8>,
-    /// How many of the packed nibbles are the path's.
-    pub nibbles: u64,
-}
+pub type Place = rhtn_model::Position;
 
 /// A party, and the subnet a place of theirs is in.
 pub type Placement = (Keyhash, Keyhash);

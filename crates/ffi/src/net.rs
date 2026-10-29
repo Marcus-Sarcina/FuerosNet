@@ -57,37 +57,10 @@ pub struct Wake {
     pub lapses_at: Option<u64>,
 }
 
-/// The connection as a screen shows it (`light-client-requirements.md`
-/// §4: the user is told when attachment is degraded, and when it is gone).
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
-pub enum Status {
-    /// No session: never attached, or detached on purpose.
-    Detached,
-    /// A session with `serving`.  `primary` false is the degraded kind: a
-    /// sibling holds the replicated state and not the authority to
-    /// countersign, so the subnet-scoped transactions the patron
-    /// countersigns wait for the patron (design §14.1.2).
-    Attached {
-        /// The node the session is with.
-        serving: Id,
-        /// Whether that node is the patron rather than a sibling.
-        primary: bool,
-    },
-    /// The serving node was judged unreachable and the cached siblings are
-    /// being tried, in order.
-    Reconnecting {
-        /// The node judged unreachable.
-        from: Id,
-    },
-    /// Judged unreachable and no cached sibling answered: the kernel has
-    /// no session and will not get one without an attach.
-    Lost {
-        /// The node judged unreachable.
-        from: Id,
-        /// Why the last attempt failed, in words.
-        reason: String,
-    },
-}
+/// **The connection, which is the model's** (`rhtn_model::Connection`):
+/// detached, attached and to whom, reconnecting, lost and why. Changes
+/// arrive as [`Event::Connection`].
+pub use rhtn_model::Connection as Status;
 
 /// Something that arrived, already decrypted; or the connection changing.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
@@ -952,7 +925,7 @@ impl Net {
         // the previous session's readers stop when this replaces it
         *self.live.lock().unwrap() = Some(live);
         *self.status.lock().unwrap() = Status::Attached {
-            serving: id_of(&serving_node),
+            serving: serving_node,
             primary: mode == 0,
         };
         Ok(Attached {
@@ -1399,7 +1372,7 @@ async fn watch(
             *status.lock().unwrap() = s.clone();
             let _ = events.send(Event::Connection(s));
         };
-        tell(Status::Reconnecting { from: id_of(&peer) });
+        tell(Status::Reconnecting { from: peer });
         session.conn.close(quinn::VarInt::from_u32(0), b"failover");
         *current.lock().unwrap() = None;
         let landed = try_siblings(&cfg, &ep).await;
@@ -1407,7 +1380,7 @@ async fn watch(
             Ok(l) => l,
             Err(last) => {
                 tell(Status::Lost {
-                    from: id_of(&peer),
+                    from: peer,
                     reason: last,
                 });
                 return;
@@ -1427,7 +1400,7 @@ async fn watch(
         tokio::spawn(attached::follow(handle.clone(), frames));
         tokio::spawn(attached::collect(courier.inbound(), deliveries));
         tell(Status::Attached {
-            serving: id_of(&to),
+            serving: to,
             primary: mode == 0,
         });
         session = sess;

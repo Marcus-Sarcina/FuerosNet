@@ -242,9 +242,9 @@ impl Instrument {
                     format!(
                         "place {} anchor={} path={} nibbles={}",
                         hex(&p.node),
-                        hex(&p.anchor),
-                        hex(&p.path),
-                        p.nibbles
+                        hex(&p.position.anchor),
+                        hex(&p.position.path),
+                        p.position.nibbles
                     )
                 }));
                 Ok(out)
@@ -255,10 +255,10 @@ impl Instrument {
             )]),
             ["reachable"] => Ok(self
                 .client
-                .reachable()
+                .instances()
                 .iter()
                 .map(|r| {
-                    let (n, a) = (&r.node, &r.addresses);
+                    let (n, a) = (&r.keyhash, &r.addresses);
                     format!(
                         "reachable {} at={}",
                         hex(n),
@@ -554,7 +554,7 @@ impl Instrument {
             // ending an authority, and what this client's policy makes
             // of a party: `light-client-requirements.md` §§4.2, 6
             ["relationships"] => Ok(c
-                .relationships()
+                .lines()
                 .iter()
                 .map(|r| format!("relationship {} series {}", hex(&r.patron), r.series))
                 .collect()),
@@ -602,7 +602,7 @@ impl Instrument {
             ["where"] => Ok(c
                 .subnets()
                 .iter()
-                .map(|s| format!("subnet {}", hex(s)))
+                .map(|s| format!("subnet {}", hex(&s.id)))
                 .chain(std::iter::once(format!("position {}", hex(&c.position()))))
                 .collect()),
             ["where", subnet] => Ok(vec![match c.position_in(id(subnet)?) {

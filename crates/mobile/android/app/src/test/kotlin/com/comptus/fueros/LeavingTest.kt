@@ -4,6 +4,11 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import uniffi.rhtn_model.Cost
+import uniffi.rhtn_model.Limit
+import uniffi.rhtn_model.Line
+import uniffi.rhtn_model.Loss
+import uniffi.rhtn_model.LossReason
 
 /**
  * **What the authority screen says before a departure** (the screens
@@ -22,29 +27,29 @@ class LeavingTest {
     private val node = "5046da3700000000000000000000000000000000000000000000000000000000"
     private val owner = "9b2c7e4100000000000000000000000000000000000000000000000000000000"
 
-    private val patron = Kernel.Named(patronKey, "Rosa")
-    private val nameless = Kernel.Named(patronKey, null)
+    /** The aliases held, by keyhash: what the screen names a party by. */
+    private val names = mapOf(patronKey to "Rosa", node to "Hallkeeper", owner to "Rosa")
 
     private fun cost(
-        losing: List<Kernel.Lost> = emptyList(),
-        keeping: Int = 0,
-        leaving: List<Kernel.Named> = emptyList(),
-        limits: List<Kernel.Limit> = listOf(Kernel.Limit.PredicateNotHeld),
-    ) = Kernel.Cost(losing, keeping, leaving, limits)
+        losing: List<Loss> = emptyList(),
+        keeping: UInt = 0u,
+        leaving: List<ByteArray> = emptyList(),
+        limits: List<Limit> = listOf(Limit.PredicateNotHeld),
+    ) = Cost(losing, keeping, leaving, limits)
 
     private fun lost(
         hostLeaves: Boolean = true,
         instance: String = "Standpipe rota",
-        nodeAlias: String? = "Hallkeeper",
-        ownerAlias: String? = "Rosa",
-    ) = Kernel.Lost(
-        resource = "0101010101010101010101010101010101010101010101010101010101010101",
-        node = Kernel.Named(node, nodeAlias),
-        owner = Kernel.Named(owner, ownerAlias),
+    ) = Loss(
+        resource = "01".repeat(32).unhex(),
+        node = node.unhex(),
+        owner = owner.unhex(),
         serviceType = "rhtn-forum",
         instance = instance,
-        hostLeaves = hostLeaves,
+        reason = if (hostLeaves) LossReason.HOST_LEAVES else LossReason.OWNER_LEAVES,
     )
+
+    private fun line(series: UInt) = Line(patronKey.unhex(), series, patronKey.unhex(), 0u)
 
     // ---- the empty list, which is two different answers ----------------
 
@@ -52,7 +57,7 @@ class LeavingTest {
     fun a_cost_of_nothing_and_a_cost_that_could_not_be_worked_out_read_differently() {
         val free = cost(leaving = emptyList())
         val unknown = cost(
-            limits = listOf(Kernel.Limit.PredicateNotHeld, Kernel.Limit.NotInTable),
+            limits = listOf(Limit.PredicateNotHeld, Limit.NotInTable),
         )
         assertTrue(Leaving.computed(free))
         assertFalse(Leaving.computed(unknown))
@@ -80,7 +85,7 @@ class LeavingTest {
         }
         // and it is last, where it reads as a condition rather than news
         val c = cost(
-            limits = listOf(Kernel.Limit.PredicateNotHeld, Kernel.Limit.Stale(node)),
+            limits = listOf(Limit.PredicateNotHeld, Limit.Stale(node.unhex())),
         )
         assertEquals(Leaving.LIMIT_PREDICATE, Leaving.limits(c).last())
     }
@@ -89,9 +94,9 @@ class LeavingTest {
     fun what_cannot_be_computed_is_said_before_anything_else() {
         val c = cost(
             limits = listOf(
-                Kernel.Limit.PredicateNotHeld,
-                Kernel.Limit.Stale(node),
-                Kernel.Limit.NotInTable,
+                Limit.PredicateNotHeld,
+                Limit.Stale(node.unhex()),
+                Limit.NotInTable,
             ),
         )
         assertEquals(Leaving.LIMIT_UNCOMPUTED, Leaving.limits(c).first())
@@ -103,10 +108,10 @@ class LeavingTest {
     fun a_stale_a_truncated_and_an_unswept_node_are_each_named_as_a_gap() {
         val c = cost(
             limits = listOf(
-                Kernel.Limit.PredicateNotHeld,
-                Kernel.Limit.Stale(node),
-                Kernel.Limit.Truncated(node),
-                Kernel.Limit.Unswept(owner),
+                Limit.PredicateNotHeld,
+                Limit.Stale(node.unhex()),
+                Limit.Truncated(node.unhex()),
+                Limit.Unswept(owner.unhex()),
             ),
         )
         val said = Leaving.limits(c)
@@ -119,10 +124,10 @@ class LeavingTest {
     fun several_nodes_of_one_kind_are_counted_rather_than_listed_one_each() {
         val c = cost(
             limits = listOf(
-                Kernel.Limit.Unswept(node),
-                Kernel.Limit.Unswept(owner),
-                Kernel.Limit.Unswept(patronKey),
-                Kernel.Limit.PredicateNotHeld,
+                Limit.Unswept(node.unhex()),
+                Limit.Unswept(owner.unhex()),
+                Limit.Unswept(patronKey.unhex()),
+                Limit.PredicateNotHeld,
             ),
         )
         val said = Leaving.limits(c)
@@ -133,7 +138,7 @@ class LeavingTest {
     @Test
     fun more_than_one_line_to_one_patron_says_the_cost_is_of_ending_them_all() {
         val c = cost(
-            limits = listOf(Kernel.Limit.SeveralLines(2), Kernel.Limit.PredicateNotHeld),
+            limits = listOf(Limit.SeveralLines(2u), Limit.PredicateNotHeld),
         )
         assertTrue(
             Leaving.limits(c).toString(),
@@ -149,27 +154,27 @@ class LeavingTest {
     fun the_headline_counts_what_goes_and_who_goes_with_it() {
         assertEquals(
             "1 resource goes, and 1 person leaves your horizon.",
-            Leaving.headline(cost(losing = listOf(lost()), leaving = listOf(patron))),
+            Leaving.headline(cost(losing = listOf(lost()), leaving = listOf(patronKey.unhex()))),
         )
         assertEquals(
             "2 resources go, and 3 people leave your horizon.",
             Leaving.headline(
                 cost(
                     losing = listOf(lost(), lost(instance = "Minutes")),
-                    leaving = listOf(patron, Kernel.Named(node, "Hallkeeper"), nameless),
+                    leaving = listOf(patronKey.unhex(), node.unhex(), owner.unhex()),
                 ),
             ),
         )
         assertEquals(
             "No resource this device knows of goes, but 2 people leave your horizon.",
-            Leaving.headline(cost(leaving = listOf(patron, nameless))),
+            Leaving.headline(cost(leaving = listOf(patronKey.unhex(), owner.unhex()))),
         )
     }
 
     @Test
     fun a_host_that_goes_and_an_owner_that_goes_are_told_apart() {
-        val host = Leaving.lost(lost(hostLeaves = true))
-        val own = Leaving.lost(lost(hostLeaves = false))
+        val host = Leaving.lost(lost(hostLeaves = true), names)
+        val own = Leaving.lost(lost(hostLeaves = false), names)
         assertTrue(host, host.contains("the node serving it leaves your horizon: Hallkeeper, 5046da370000…"))
         assertTrue(own, own.contains("its owner leaves your horizon: Rosa, 9b2c7e410000…"))
         assertTrue(
@@ -186,24 +191,24 @@ class LeavingTest {
      *  the act is not undoable. */
     @Test
     fun a_party_is_named_by_the_alias_and_the_keyhash_together() {
-        assertEquals("Rosa, a3f21c081234…", Leaving.party(patron))
+        assertEquals("Rosa, a3f21c081234…", Leaving.party(patronKey, "Rosa"))
         assertEquals(
             "a published alias that arrived blank is no name at all",
             "a3f21c081234…",
-            Leaving.party(Kernel.Named(patronKey, "  ")),
+            Leaving.party(patronKey, "  "),
         )
     }
 
     @Test
     fun a_party_who_published_no_name_is_shown_by_the_keyhash_alone() {
-        assertEquals("a3f21c081234…", Leaving.party(nameless))
-        assertEquals("a3f21c081234…   series 3", Leaving.line(Kernel.Line(nameless, 3U)))
-        assertEquals("Leave a3f21c081234…", Leaving.button(nameless, armed = false))
+        assertEquals("a3f21c081234…", Leaving.party(patronKey, null))
+        assertEquals("a3f21c081234…   series 3", Leaving.line(line(3u), null))
+        assertEquals("Leave a3f21c081234…", Leaving.button(patronKey, null, armed = false))
     }
 
     @Test
     fun a_resource_whose_host_published_no_name_still_says_which_node() {
-        val said = Leaving.lost(lost(nodeAlias = null))
+        val said = Leaving.lost(lost(), emptyMap())
         assertTrue(said, said.contains("leaves your horizon: 5046da370000…"))
     }
 
@@ -215,13 +220,13 @@ class LeavingTest {
 
     @Test
     fun what_stays_is_counted_only_where_the_answer_is_one() {
-        assertEquals("4 resources stay within reach.", Leaving.kept(cost(keeping = 4)))
-        assertEquals("1 resource stays within reach.", Leaving.kept(cost(keeping = 1)))
-        assertEquals(null, Leaving.kept(cost(keeping = 0)))
+        assertEquals("4 resources stay within reach.", Leaving.kept(cost(keeping = 4u)))
+        assertEquals("1 resource stays within reach.", Leaving.kept(cost(keeping = 1u)))
+        assertEquals(null, Leaving.kept(cost(keeping = 0u)))
         assertEquals(
             "a count of what stays means nothing where nothing was computed",
             null,
-            Leaving.kept(cost(keeping = 4, limits = listOf(Kernel.Limit.NotInTable))),
+            Leaving.kept(cost(keeping = 4u, limits = listOf(Limit.NotInTable))),
         )
     }
 
@@ -231,32 +236,32 @@ class LeavingTest {
     fun no_patron_says_there_is_nothing_to_leave_and_where_one_comes_from() {
         assertTrue(Leaving.NONE, Leaving.NONE.contains("under no patron"))
         assertTrue(Leaving.NONE, Leaving.NONE.contains("Meet screen"))
-        assertEquals("Rosa, a3f21c081234…   series 3", Leaving.line(Kernel.Line(patron, 3U)))
+        assertEquals("Rosa, a3f21c081234…   series 3", Leaving.line(line(3u), "Rosa"))
     }
 
     /** The same slip as *1 person leave your horizon*, twice more: a
      *  singular count with a plural pronoun after it. */
     @Test
     fun one_node_and_several_nodes_each_take_the_pronoun_that_agrees() {
-        fun said(n: Int, of: (String) -> Kernel.Limit) =
-            Leaving.limits(cost(limits = List(n) { of(node) })).first()
+        fun said(n: Int, of: (ByteArray) -> Limit) =
+            Leaving.limits(cost(limits = List(n) { of(node.unhex()) })).first()
         assertEquals(
             "1 node holds more than it will list at once, so it serves things this " +
                 "device has never seen.",
-            said(1) { Kernel.Limit.Truncated(it) },
+            said(1) { Limit.Truncated(it) },
         )
-        assertTrue(said(2) { Kernel.Limit.Truncated(it) }.startsWith("2 nodes hold more than they will"))
+        assertTrue(said(2) { Limit.Truncated(it) }.startsWith("2 nodes hold more than they will"))
         assertEquals(
             "1 node within reach has never been asked what it serves, so whatever " +
                 "that is, it is not counted above.",
-            said(1) { Kernel.Limit.Unswept(it) },
+            said(1) { Limit.Unswept(it) },
         )
-        assertTrue(said(2) { Kernel.Limit.Unswept(it) }.contains("have never been asked what they serve"))
+        assertTrue(said(2) { Limit.Unswept(it) }.contains("have never been asked what they serve"))
     }
 
     @Test
     fun the_button_asks_twice_and_says_so_the_second_time() {
-        assertEquals("Leave Rosa", Leaving.button(patron, armed = false))
-        assertEquals("Tap again to leave Rosa", Leaving.button(patron, armed = true))
+        assertEquals("Leave Rosa", Leaving.button(patronKey, "Rosa", armed = false))
+        assertEquals("Tap again to leave Rosa", Leaving.button(patronKey, "Rosa", armed = true))
     }
 }

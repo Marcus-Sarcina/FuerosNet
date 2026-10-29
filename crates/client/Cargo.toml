@@ -36,6 +36,7 @@ zeroize = { workspace = true }
 rhtn-codec = { path = "../codec" }
 rhtn-crypto = { path = "../crypto" }
 rhtn-archive = { path = "../archive" }
+rhtn-model = { path = "../model" }
 rhtn-policy = { path = "../policy" }
 aws-lc-rs = "1.18"
 # the sealed store's AEAD is XChaCha20-Poly1305 (design §7.5.2.6), whose

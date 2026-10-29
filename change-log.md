@@ -16453,6 +16453,39 @@ rather than applying it. The test floods both, as a serving node does.
 TOP-54 and TOP-55. Workspace tests 888, Android 277, the binding
 regenerated.
 
+### 2026-10-29 (one model: the nouns in a crate of their own)
+
+**The author's refactor, stage one.** The subnet was a type declared in
+the meeting screen's file; the contacts' vocabulary was fixed in the
+data layer; a keyhash was eight characters of hex before any screen saw
+it; and three partial models of a party existed because none of them
+was the model [author, 2026-10-29]. The fix is a
+crate holding the nouns and nothing else, read by the kernel, the FFI,
+the shell, the participant driver and the simulator alike.
+
+**`rhtn-model`**: `Contact`, `Subnet` with `Standing` and `Position`,
+`Line`, `Instance`, `Resource`, `Profile`, `Cost` with `Loss`,
+`LossReason` and `Limit`, `Connection`, `Placed`, the wire's `How`, and
+`Noun`. Thirty-two-byte identities throughout, wire enums, no English.
+Under its `ffi` feature the Kotlin records are generated from these
+definitions: one library yields two packages, the FFI's importing the
+model's, which the binding generator handles in library mode without
+being told.
+
+**What each reader lost.** The kernel: its own `How`, `Place` and the
+leaving cost's four types, now the model's re-exported; it gained one
+file composing each noun once. The FFI: eleven records and the
+functions translating into them; `Status` is `Connection`. The shell:
+`Kernel.Person`, `Named`, `Line`, `Lost`, `Limit`, `Cost`, `Offered`,
+`Node`, `Standing`, the wording of a contact's kind, and every
+truncation in the data layer — the screens' pure parts shorten a
+keyhash where they show one and take the alias map as an argument;
+`Meet.Scope` is the chooser's option built from a model `Subnet`, not
+the noun. The names stand as proposed [author, 2026-10-29].
+
+**Owed from this stage**: the `Meeting` noun, the resource answer and
+the launch records. Then the sync, then the documents.
+
 ### 2026-10-29 (names: on the invitation, on the channel, re-signed at attach)
 
 **T1 on fresh phones found three things about names, one of them a

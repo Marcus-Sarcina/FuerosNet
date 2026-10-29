@@ -4,6 +4,7 @@
 // `tools/kotlin-roundtrip.sh`; the node and the identities come from the
 // facade's `harness` feature, which a shell never builds.
 import uniffi.rhtn_ffi.*
+import uniffi.rhtn_model.Connection
 
 class Shell : Camera, Clock, Random, Operator, Notices, Storage, Custody, Diagnostics {
     private val kept = HashMap<String, ByteArray>()
@@ -42,7 +43,7 @@ fun main() {
     val known = listOf(alice.material, bob.material, carol.material)
     val a = Participant.start(alice.seeds, known, platformOf())
     val c = Participant.start(carol.seeds, known, platformOf())
-    check(a.status() == Status.Detached) { "detached before attaching" }
+    check(a.status() == Connection.Detached) { "detached before attaching" }
     c.attach(bob.id, listOf(addr), listOf())
     val attached = a.attach(bob.id, listOf(addr), listOf(carol.id))
     check(attached.primary) { "alice is in bob's subtree" }
@@ -59,7 +60,7 @@ fun main() {
     // nobody, so there is no line to leave and no cost to quote for one.
     // What this proves is that the call and its refusal cross the binding
     // in a shell's own language (`light-client-requirements.md` §6).
-    check(a.relationships().isEmpty()) { "attached is not adopted: no line" }
+    check(a.lines().isEmpty()) { "attached is not adopted: no line" }
     var noCost = ""
     try { a.costOfLeaving(bob.id) } catch (e: Refused.Reason) { noCost = e.reason }
     check(noCost.contains("NoRelationship")) { "the cost is refused by name, got '$noCost'" }

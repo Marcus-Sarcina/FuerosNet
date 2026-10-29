@@ -5,7 +5,7 @@ import org.junit.Test
 
 /** The wording of the shell's content where it says a number. */
 class ShellTest {
-    private fun standing(n: Int) = Kernel.Standing(subnet = "ab12", root = false, operator = false, subordinates = n)
+    private fun standing(n: Int) = uniffi.rhtn_model.Standing(root = false, operator = false, subordinates = n.toUInt())
 
     @Test
     fun the_downline_is_the_direct_count_and_agrees_in_number() {

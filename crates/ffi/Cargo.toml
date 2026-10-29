@@ -55,6 +55,7 @@ rhtn-archive = { path = "../archive" }
 rhtn-engine = { path = "../engine" }
 rhtn-launch = { path = "../launch" }
 rhtn-client = { path = "../client", default-features = false }
+rhtn-model = { path = "../model", features = ["ffi"] }
 rhtn-crypto = { path = "../crypto" }
 rhtn-transport = { path = "../transport" }
 tokio = { version = "1", features = ["rt-multi-thread", "time", "sync"] }

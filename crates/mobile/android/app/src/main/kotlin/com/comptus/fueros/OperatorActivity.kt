@@ -238,7 +238,7 @@ class OperatorActivity : Activity() {
         }
         // **which subnet the instance serves** [author, 2026-10-15]: one
         // it holds a position in, chosen here; where it holds one, that one
-        val scopes = Kernel.scopes()
+        val scopes = Kernel.subnets().map(Meet.Scope::of)
         chosen = scopes.singleOrNull()
         val choice = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -548,7 +548,7 @@ class OperatorActivity : Activity() {
                     narration.text = "fetch the regions and sizes first, and pick one of each"
                     return@setOnClickListener
                 }
-                val scopes = Kernel.scopes()
+                val scopes = Kernel.subnets().map(Meet.Scope::of)
                 if (scopes.size > 1 && chosen == null) {
                     narration.text = "choose which subnet the instance serves first"
                     return@setOnClickListener

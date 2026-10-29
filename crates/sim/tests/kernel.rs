@@ -111,6 +111,11 @@ fn material(n: &str) -> Vec<u8> {
     id(n).public.key_material()
 }
 
+/// The same, as the model carries an id.
+fn id32(n: &str) -> [u8; 32] {
+    idv(n).try_into().expect("32 bytes")
+}
+
 fn idv(n: &str) -> Vec<u8> {
     kh(n).to_vec()
 }
@@ -206,7 +211,7 @@ async fn the_kernel_fails_over_to_the_named_sibling_and_starts_cold_from_the_lis
     assert_eq!(
         alice.status(),
         Status::Attached {
-            serving: idv("bob"),
+            serving: id32("bob"),
             primary: true
         }
     );
@@ -249,7 +254,7 @@ async fn the_kernel_fails_over_to_the_named_sibling_and_starts_cold_from_the_lis
     assert_eq!(
         alice2.status(),
         Status::Attached {
-            serving: idv("carol"),
+            serving: id32("carol"),
             primary: false
         }
     );
@@ -278,13 +283,15 @@ async fn the_kernel_fails_over_to_the_named_sibling_and_starts_cold_from_the_lis
     let next = |p: Arc<Participant>| tokio::task::spawn_blocking(move || p.next_event(15_000));
     assert_eq!(
         next(alice.clone()).await.unwrap(),
-        Some(Event::Connection(Status::Reconnecting { from: idv("bob") })),
+        Some(Event::Connection(Status::Reconnecting {
+            from: id32("bob")
+        })),
         "judged unreachable after three missed intervals"
     );
     assert_eq!(
         next(alice.clone()).await.unwrap(),
         Some(Event::Connection(Status::Attached {
-            serving: idv("carol"),
+            serving: id32("carol"),
             primary: false
         })),
         "landed on S, degraded: alice is not in S's subtree"
@@ -292,7 +299,7 @@ async fn the_kernel_fails_over_to_the_named_sibling_and_starts_cold_from_the_lis
     assert_eq!(
         alice.status(),
         Status::Attached {
-            serving: idv("carol"),
+            serving: id32("carol"),
             primary: false
         }
     );
@@ -521,12 +528,12 @@ async fn the_kernel_joins_the_direct_path_honours_the_override_and_sweeps_the_ca
             .unwrap()
             .expect("swept");
     }
-    let items = alice.catalog();
+    let items = alice.resources();
     assert_eq!(items.len(), 1);
     let it = &items[0];
-    assert_eq!(it.node, idv("bob"));
-    assert_eq!(it.resource, idv("w1"));
-    assert_eq!(it.owner, idv("alice"));
+    assert_eq!(it.node, id32("bob"));
+    assert_eq!(it.resource, id32("w1"));
+    assert_eq!(it.owner, id32("alice"));
     assert_eq!(it.service_type, "_rhtn-files._tcp");
     assert_eq!(it.data_practice, Some(0));
     assert!(!it.truncated && !it.stale);

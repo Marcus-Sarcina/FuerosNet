@@ -1,0 +1,16 @@
+[package]
+name = "rhtn-model"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+authors.workspace = true
+description = "The nouns every RHTN client holds: one vocabulary for the kernel, the FFI, the node and the desktop, with full identities and wire-level enums and no display in it"
+
+[features]
+default = []
+# the same records cross the FFI boundary as they are: the Kotlin binding
+# is generated from these definitions, so a light client holds no copy
+ffi = ["dep:uniffi"]
+
+[dependencies]
+uniffi = { version = "0.32", optional = true }

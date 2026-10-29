@@ -8,7 +8,14 @@ import uniffi.rhtn_ffi.Conversation
 import uniffi.rhtn_ffi.Event
 import uniffi.rhtn_ffi.Participant
 import uniffi.rhtn_ffi.Refused
-import uniffi.rhtn_ffi.Status
+import uniffi.rhtn_model.Connection
+import uniffi.rhtn_model.Contact
+import uniffi.rhtn_model.Cost
+import uniffi.rhtn_model.How
+import uniffi.rhtn_model.Instance
+import uniffi.rhtn_model.Line
+import uniffi.rhtn_model.Resource
+import uniffi.rhtn_model.Subnet
 import uniffi.rhtn_ffi.Told
 import uniffi.rhtn_ffi.TraceStep
 import uniffi.rhtn_ffi.kindApplication
@@ -286,45 +293,8 @@ object Kernel {
 
     // ---- intake: a party who was never met ----------------------------
 
-    /** One contact, as the People screen draws it. */
-    data class Person(
-        val who: String,
-        /** The alias it published, or null: the keyhash stands in. */
-        val alias: String?,
-        val how: String,
-        val located: Boolean,
-        val addressed: Boolean,
-        val count: ULong,
-        val lastAt: ULong,
-    )
 
-    private fun howOf(n: UByte): String = when (n.toInt()) {
-        0 -> "met"
-        1 -> "introduced"
-        2 -> "nominee"
-        3 -> "verifier"
-        4 -> "a node"
-        5 -> "declined"
-        else -> "named at start"
-    }
 
-    /** Everyone this client holds, most recently dealt with first. */
-    fun people(): List<Person> {
-        val p = participant ?: return emptyList()
-        return call("contacts", { emptyList() }) {
-            p.contacts().map {
-                Person(
-                    who = Provision.hex(it.who).take(8),
-                    alias = it.alias,
-                    how = howOf(it.how),
-                    located = it.located,
-                    addressed = false,
-                    count = it.count,
-                    lastAt = it.lastAt,
-                )
-            }
-        }
-    }
 
     /**
      * **Take whatever an intake code carries.** An `AnchoredIntroduction`
@@ -722,7 +692,7 @@ object Kernel {
         // there, as its claim: the scope chosen as patron, or the subnet
         // this device acts in otherwise, so a regular meeting carries a
         // name too (`light-client-requirements.md` §7)
-        val scope = m.scope() ?: scopes().firstOrNull { it.id == subnet() }
+        val scope = m.scope() ?: subnets().firstOrNull { it.id.hex() == subnet() }?.let { Meet.Scope.of(it) }
         // **and the name, so it is visible from the scan** [author,
         // 2026-10-29]: the one published there, else the default
         val alias = scope?.ownAlias?.takeIf { it.isNotBlank() } ?: defaultAlias()
@@ -746,18 +716,6 @@ object Kernel {
         call("requestProfiles", { }) { p.requestProfiles() }
     }
 
-    /** One catalog entry, as the Catalog screen draws it. */
-    data class Offered(
-        val node: String,
-        val resource: String,
-        val owner: String,
-        val serviceType: String,
-        val instance: String,
-        /** The serving node holds more than one page carries for a type. */
-        val truncated: Boolean,
-        /** It could not be reached on the last sweep. */
-        val stale: Boolean,
-    )
 
     /**
      * **What a client may show of a resource's answer**
@@ -799,23 +757,6 @@ object Kernel {
         return why
     }
 
-    /** The catalog as this device holds it, most recently swept. */
-    fun catalog(): List<Offered> {
-        val p = participant ?: return emptyList()
-        return call("catalog", { emptyList() }) {
-            p.catalog().map {
-                Offered(
-                    node = Provision.hex(it.node).take(8),
-                    resource = Provision.hex(it.resource),
-                    owner = Provision.hex(it.owner).take(8),
-                    serviceType = it.serviceType,
-                    instance = it.instance,
-                    truncated = it.truncated,
-                    stale = it.stale,
-                )
-            }
-        }
-    }
 
     /**
      * **Ask a resource for something** (`wire-format.md` §11.1), through
@@ -848,13 +789,6 @@ object Kernel {
         }
     }
 
-    /** The scopes this device roots and could bring under a patron. */
-    fun scopesRooted(): List<Meet.Scope> {
-        val p = participant ?: return emptyList()
-        return call("scopesRooted", { emptyList() }) {
-            p.scopesRooted().map { Meet.Scope(hex(it.id), it.alias, it.ownAlias) }
-        }
-    }
 
     /** The subnets this device holds a position in, labelled. */
     /**
@@ -875,42 +809,13 @@ object Kernel {
         val me = call("me", { "" }) { hex(p.me()) }
         // a subnet's own name for this person first, then the default the
         // foot carries [author, 2026-10-27]
-        val named = scopes().firstNotNullOfOrNull { it.ownAlias?.takeIf { a -> a.isNotBlank() } }
+        val named = subnets().firstNotNullOfOrNull { it.ownAlias?.takeIf { a -> a.isNotBlank() } }
             ?: call("defaultAlias", { null }) { p.defaultAlias() }
         return named to me
     }
 
-    /**
-     * **What this key is in each subnet**, for the crown an orb sits in
-     * (`Robot/light-client-screens.md`, the crowns).
-     *
-     * **All three off local records** [author, 2026-10-28]: the patron
-     * in the subnet's anchoring record, an endpoint record of this key's
-     * own on the line it holds there, and the adoptions it granted
-     * there. Which one is drawn is [Chrome.crown]'s precedence.
-     */
-    data class Standing(
-        val subnet: String,
-        val root: Boolean,
-        val operator: Boolean,
-        val subordinates: Int,
-    )
 
-    fun standings(): List<Standing> {
-        val p = participant ?: return emptyList()
-        return call("subnet_standing", { emptyList() }) {
-            p.subnetStanding().map {
-                Standing(hex(it.subnet), it.root, it.operator, it.subordinates.toInt())
-            }
-        }
-    }
 
-    fun scopes(): List<Meet.Scope> {
-        val p = participant ?: return emptyList()
-        return call("subnetRows", { emptyList() }) {
-            p.subnetRows().map { Meet.Scope(hex(it.id), it.alias, it.ownAlias) }
-        }
-    }
 
     /** The subnet this device acts in, hex, where it is in one. */
     fun subnet(): String? {
@@ -1909,21 +1814,7 @@ object Kernel {
 
     // ---- the device's own attach ---------------------------------------
 
-    /** One serving node this device knows how to reach, as the attach
-     *  screen draws it. */
-    data class Node(val node: String, val addresses: List<String>)
 
-    /**
-     * **The nodes whose endpoint records this device holds**, from the
-     * horizon: a node whose code was taken as an intake is here without
-     * this device ever having attached to one.
-     */
-    fun nodesKnown(): List<Node> {
-        val p = participant ?: return emptyList()
-        return call("reachable", { emptyList() }) {
-            p.reachable().map { Node(hex(it.node), it.addresses) }
-        }
-    }
 
     /**
      * **Attach to a serving node the person named** [2026-10-27].
@@ -1951,7 +1842,7 @@ object Kernel {
         Thread({
             val population = call("contacts", { emptyList() }) {
                 // the people, not the infrastructure: `how` 4 is a node
-                p.contacts().filter { it.how.toInt() != 4 }.map { it.who }
+                p.contacts().filter { it.how != How.INFRA }.map { it.keyhash }
             }
             val a = call("attach", { e -> front.note("· attach refused: ${e.reason}"); null }) {
                 p.attach(node, listOf(at), population)
@@ -1960,12 +1851,12 @@ object Kernel {
                 // **a node that did not answer is the detached case**, as
                 // it is on the provision's path: the loop goes on running
                 front.note("· $at did not answer: this device stays detached.")
-                show(p, Status.Detached)
+                show(p, Connection.Detached)
             } else {
                 // **not the provision's flag**: that one says a blob was
                 // read, and this attach is the person's own
                 front.note("· attached to ${hex(node).take(8)}… at $at; ${a.queued} queued there.")
-                show(p, Status.Attached(node, a.primary))
+                show(p, Connection.Attached(node, a.primary))
             }
         }, "fueros-attach").start()
     }
@@ -1982,71 +1873,17 @@ object Kernel {
             call("detach", { e -> front.note("· detach refused: ${e.reason}") }) {
                 p.detach()
                 front.note("· detached. Nothing is queued for this device from here.")
-                show(p, Status.Detached)
+                show(p, Connection.Detached)
             }
         }, "fueros-detach").start()
     }
 
     // ---- authority: the lines this key holds, and what ending one costs
 
-    /**
-     * **A party as a screen names them**: the alias they published to
-     * this device where one has reached it, and the keyhash always.
-     *
-     * **Never a name that has not been received** — the rule `People`
-     * already keeps — and never the alias alone either, on a screen
-     * about an act that cannot be undone: an alias is what somebody
-     * signed about themselves, and two parties may sign the same one.
-     */
-    data class Named(val who: String, val alias: String?)
 
-    /** One patron line this key holds (`wire-format.md` §4.6). */
-    data class Line(val patron: Named, val series: UInt)
 
-    /** One resource an ending takes away. */
-    data class Lost(
-        val resource: String,
-        val node: Named,
-        val owner: Named,
-        val serviceType: String,
-        val instance: String,
-        /** True where the node serving it goes; false where the owner does. */
-        val hostLeaves: Boolean,
-    )
 
-    /**
-     * **Why a cost is a floor and not the whole answer.** The kernel's own
-     * variants, carried up as they are: the screen says each in its own
-     * words, and a variant it did not expect would be a variant it could
-     * not have worded.
-     */
-    sealed class Limit {
-        /** Access is the resource's own rule, held nowhere here. */
-        object PredicateNotHeld : Limit()
 
-        /** This node's list could not be refreshed on the last sweep. */
-        data class Stale(val node: String) : Limit()
-
-        /** This node holds more than it will list at once. */
-        data class Truncated(val node: String) : Limit()
-
-        /** This node within reach has never been asked what it serves. */
-        data class Unswept(val node: String) : Limit()
-
-        /** The relationship runs on more than one open line. */
-        data class SeveralLines(val lines: Int) : Limit()
-
-        /** This device's copy of the topology holds no edge to subtract. */
-        object NotInTable : Limit()
-    }
-
-    /** What ending one line would cost (`light-client-requirements.md` §6). */
-    data class Cost(
-        val losing: List<Lost>,
-        val keeping: Int,
-        val leaving: List<Named>,
-        val limits: List<Limit>,
-    )
 
     /**
      * **The aliases this device has been told**, by keyhash: what the
@@ -2056,71 +1893,69 @@ object Kernel {
      */
     private fun aliases(p: Participant): Map<String, String> =
         call("contacts", { emptyMap() }) {
-            p.contacts().mapNotNull { c -> c.alias?.let { a -> hex(c.who) to a } }.toMap()
+            p.contacts().mapNotNull { c -> c.alias?.let { a -> c.keyhash.hex() to a } }.toMap()
         }
+
+    /** The aliases held, by keyhash in hex: what a screen names a party by. */
+    fun aliases(): Map<String, String> = participant?.let { aliases(it) } ?: emptyMap()
+
+    // ---- the nouns, as the model holds them --------------------------
+    //
+    // **Ports, not wrappers** (`Robot/implementation-plan.md` section 8):
+    // each hands up the kernel's record as the model defines it — full
+    // keyhashes, the wire's enums — and a screen's pure part decides what
+    // to show of it. Nothing here shortens, words or renames.
+
+    fun contacts(): List<Contact> {
+        val p = participant ?: return emptyList()
+        return call("contacts", { emptyList() }) { p.contacts() }
+    }
+
+    fun subnets(): List<Subnet> {
+        val p = participant ?: return emptyList()
+        return call("subnets", { emptyList() }) { p.subnets() }
+    }
+
+    /** The subnets this device roots and could bring under a patron. */
+    fun subnetsRooted(): List<Subnet> {
+        val p = participant ?: return emptyList()
+        return call("subnetsRooted", { emptyList() }) { p.subnetsRooted() }
+    }
 
     /** The patron lines this key holds, newest series and all. */
     fun lines(): List<Line> {
         val p = participant ?: return emptyList()
-        val names = aliases(p)
-        return call("relationships", { emptyList() }) {
-            p.relationships().map {
-                val k = hex(it.patron)
-                Line(Named(k, names[k]), it.series)
-            }
-        }
+        return call("lines", { emptyList() }) { p.lines() }
+    }
+
+    /** The infra nodes whose endpoint records this device holds. */
+    fun instances(): List<Instance> {
+        val p = participant ?: return emptyList()
+        return call("instances", { emptyList() }) { p.instances() }
+    }
+
+    /** What the catalog holds, with each node's portion marked. */
+    fun resources(): List<Resource> {
+        val p = participant ?: return emptyList()
+        return call("resources", { emptyList() }) { p.resources() }
     }
 
     /**
-     * **What leaving `patronHex` would cost**, computed on demand and kept
-     * nowhere — or null **and the reason why**, which the screen says
-     * rather than guessing at.
-     *
-     * The kernel refuses this for a patron this key holds no relationship
-     * with, the same refusal the departure gives, so no price is ever
-     * quoted for an act that would not happen. **A null that carried no
-     * reason** would have had the screen report that refusal for a kernel
-     * that had simply not come up yet.
-     *
-     * Blocking: the caller runs it off the drawing thread.
+     * **What leaving `patronHex` costs** (`light-client-requirements.md`
+     * §6), or why it could not be said — the kernel's own reason, so a
+     * patron this key holds no relationship with reads differently from
+     * a kernel that has not come up.
      */
     fun costOfLeaving(patronHex: String): Pair<Cost?, String> {
         val p = participant ?: return null to "the kernel is not up yet"
         val who = runCatching { unhex(patronHex) }.getOrNull()
             ?: return null to "not a key: ${patronHex.take(16)}…"
-        val names = aliases(p)
-        fun named(b: ByteArray): Named {
-            val k = hex(b)
-            return Named(k, names[k])
-        }
         return call("cost_of_leaving", { e -> front.note("· cost refused: ${e.reason}"); null to e.reason }) {
-            val k = p.costOfLeaving(who)
-            Cost(
-                losing = k.losing.map {
-                    Lost(
-                        resource = hex(it.resource),
-                        node = named(it.node),
-                        owner = named(it.owner),
-                        serviceType = it.serviceType,
-                        instance = it.instance,
-                        hostLeaves = it.reason == uniffi.rhtn_ffi.LossReason.HOST_LEAVES,
-                    )
-                },
-                keeping = k.keeping.toInt(),
-                leaving = k.leaving.map { w -> named(w) },
-                limits = k.limits.map { l ->
-                    when (l) {
-                        is uniffi.rhtn_ffi.CostLimit.PredicateNotHeld -> Limit.PredicateNotHeld
-                        is uniffi.rhtn_ffi.CostLimit.Stale -> Limit.Stale(hex(l.node))
-                        is uniffi.rhtn_ffi.CostLimit.Truncated -> Limit.Truncated(hex(l.node))
-                        is uniffi.rhtn_ffi.CostLimit.Unswept -> Limit.Unswept(hex(l.node))
-                        is uniffi.rhtn_ffi.CostLimit.SeveralLines -> Limit.SeveralLines(l.lines.toInt())
-                        is uniffi.rhtn_ffi.CostLimit.NotInTable -> Limit.NotInTable
-                    }
-                },
-            ) to ""
+            p.costOfLeaving(who) to ""
         }
     }
+
+
 
     /**
      * **Leave a patron**: minted, signed, appended and posted in one act.
@@ -2184,7 +2019,7 @@ object Kernel {
             Participant.start(heldSeeds(shell), known, platformOf(shell))
         } ?: return
         participant = p
-        show(p, Status.Detached)
+        show(p, Connection.Detached)
         watchNetwork(p)
         // **a nominee arrives as an introduction** (`wire-format.md` §2.3):
         // material and a signed locator, taken as a person would take one
@@ -2255,7 +2090,7 @@ object Kernel {
                 front.note("· no node in the provision: this device stays detached,")
                 front.note("  and a meeting crosses the bearer alone (design §6.4).")
             }
-            show(p, Status.Detached)
+            show(p, Connection.Detached)
         } else {
             val node = unhex(nodeHex)
             val a = call("attach", { e -> front.setStatus("attach refused: ${e.reason}"); null }) {
@@ -2280,9 +2115,9 @@ object Kernel {
                 front.note("· the node named in the provision did not answer:")
                 front.note("  this device stays detached, and a meeting crosses")
                 front.note("  the bearer alone (design §6.4).")
-                show(p, Status.Detached)
+                show(p, Connection.Detached)
             } else {
-                show(p, Status.Attached(node, a.primary))
+                show(p, Connection.Attached(node, a.primary))
             }
         }
         // **the loop's own first word.** Said once, before any turn, so
@@ -2454,13 +2289,13 @@ object Kernel {
      * direct-path chip is updated here too — **status, never a choice**: the
      * path order is fixed (design §12.6.3).
      */
-    private fun show(p: Participant, s: Status) {
+    private fun show(p: Participant, s: Connection) {
         val key = p.presentedKey().joinToString("") { "%02x".format(it) }.take(16)
         val line = when (s) {
-            is Status.Detached -> "detached"
-            is Status.Attached -> if (s.primary) "attached, primary" else "attached"
-            is Status.Reconnecting -> "reconnecting…"
-            is Status.Lost -> "lost: no serving node reachable"
+            is Connection.Detached -> "detached"
+            is Connection.Attached -> if (s.primary) "attached, primary" else "attached"
+            is Connection.Reconnecting -> "reconnecting…"
+            is Connection.Lost -> "lost: no serving node reachable"
         }
         // the kernel says which; the words are this shell's
         val construction = when (p.payloadConstruction()) {
