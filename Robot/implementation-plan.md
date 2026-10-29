@@ -788,3 +788,51 @@ checks it and the implementation's test suite is the first check.
 own abstractions, so an established row still needs the implementation shown to
 agree with the model, which is what the sim scenarios are for. And nothing in either
 table validates the social claims; `Robot/review-plan.md` says why.
+
+---
+
+## 8. One model across the three clients [author, 2026-10-29]
+
+**Raised by the author against the light client's shell**, where the
+entanglement was visible from the outside: a capability — *what leaving
+costs* — was described as belonging to a screen, because the shell's
+types were shaped by whichever screen needed one first.
+
+**What was found, and is the whole of the diagnosis:**
+
+- **A noun defined inside a screen.** The subnet is `Meet.Scope`, declared
+  in the meeting screen's own file, and read from there by the rail, the
+  operator screen, the bootstrap encoder and the kernel wrapper.
+- **Display decided in the data layer.** `Kernel.howOf` turns the wire's
+  enum into English, so the contacts list's vocabulary is fixed where no
+  screen can choose it; and `people()` and `catalog()` truncate a keyhash
+  to eight characters **in the model**, so a screen that needs the whole
+  one cannot have it.
+- **The duplication that follows from both.** `Named` exists beside
+  `Person` only because `Person` had already thrown the keyhash away, and
+  an act that cannot be undone needs all of it. Three partial models of a
+  party, because none of them was the model.
+
+**The design, which the author confirmed and widened:**
+
+1. **A model layer per client, holding the nouns** — subnet, party,
+   resource, meeting, and the ones already clean — **with full identities
+   and wire-level enums**: no English, no truncation, and no screen's
+   name on a type. The kernel wrapper becomes purely a port, and the
+   screens' pure parts do the formatting, as `Leaving.party` and
+   `People.line` already do.
+2. **The three model layers match.** The light client's, the node's and
+   the desktop client's are one vocabulary, not three
+   [author, 2026-10-29], **with update logic that keeps them in sync** —
+   which is the part that does not exist and is the substance of the
+   work.
+3. **The schema propagates back into the design documents**, and then
+   everything is reviewed for consistent terminology throughout. A noun
+   the three clients share is a noun the documents should already be
+   using in one way.
+
+**Sequenced after a brief validation run** [author, 2026-10-29] — the
+meeting and its core variants, on the restyled build — because the
+refactor crosses `MeetActivity`, which is the ceremony that run
+exercises, and a mechanical change there before the run would make the
+run about the refactor.
