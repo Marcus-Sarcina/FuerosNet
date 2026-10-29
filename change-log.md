@@ -16453,6 +16453,48 @@ rather than applying it. The test floods both, as a serving node does.
 TOP-54 and TOP-55. Workspace tests 888, Android 277, the binding
 regenerated.
 
+### 2026-10-29 (the shell is the launcher, and the old Home goes)
+
+**The provisioned phones still opened on the old Home** [author]: a list
+of destinations above a status line, with the shell one row among them.
+The author's ruling: the app launches onto the shell's Home view, the
+meeting is reached through the rail's Meet orb, and the pages the old
+Home linked that have no place in the new navigation go with it.
+
+**What went.** `HomeActivity` and its status bar; `PlaceholderActivity`,
+which stood for Settings; and `PeopleActivity` with its pure `People`,
+which the author had already ruled has no successor — its scanner and
+own-code button are the meeting screen's, its contacts the Direct
+screen's. Six files, and the manifest rows and the test that named them.
+**Taking a node's or a person's code is owed** until the meeting screen's
+scanner reads whatever is put in front of it; the attach screen's empty
+roll no longer points at a screen that is not there.
+
+**What moved.** The launcher's duties — bringing the kernel up, the
+provision extra, the bench's stream target and its levers on the peer
+exchange, `singleTop` with `onNewIntent`, hosting the consent dialogs —
+are `ShellActivity`'s now. The status line and its *tap to attach* hint
+moved from `Home` to `Attach`, where the attach screen's other wording
+already was. Every bench script and the procedure start
+`.ShellActivity`.
+
+**What each place reaches**, since every surviving screen has to be
+opened from somewhere and the design says where: the DM orb opens the
+conversations screen and the Meet orb the meeting; a subnet's view
+carries its name (to its options) and a row to the catalog, said to be
+the sweep as swept and not yet sorted by subnet; Options carries the
+serving-node row, its status live, and the operator's instances; a
+subnet's options carry the authority row to E3, the direct downline
+count in `Shell.downline` — *1 direct line*, *4 direct lines*, *no line of
+yours is issued here*, or *not read yet* — and the operator's instance
+where the standing says so. What a place does not hold is still named
+on it in the muted ink. Back from a subnet's options is that subnet;
+from any other chromeless place, Home.
+
+**`ManifestTest` now reads which Activity carries the launcher filter**
+rather than checking that a name appears somewhere in the manifest, so a
+launcher handed to the wrong screen fails rather than passes.
+
 ### 2026-10-29 (every screen wears the shell's own chrome)
 
 **Thirteen screens were still drawing in the platform's defaults** — a

@@ -526,12 +526,12 @@ PY
       # stream target (diag_stream, diag_serial) is stored the same way and
       # read by the fieldtest flavour alone; `off` forgets an earlier one
       "$ADB" -s "${ADB_ID[$s]}" shell am force-stop "$APP"
-      "$ADB" -s "${ADB_ID[$s]}" shell am start -W -n "$APP/.HomeActivity" --es provision "'$blob'" \
+      "$ADB" -s "${ADB_ID[$s]}" shell am start -W -n "$APP/.ShellActivity" --es provision "'$blob'" \
         --es diag_stream "${STREAM_ADDR:-off}" --es diag_serial "$s" > /dev/null 2>&1 \
         || say "$s: am start with the provision failed"
       sleep 3
       "$ADB" -s "${ADB_ID[$s]}" shell am force-stop "$APP"
-      "$ADB" -s "${ADB_ID[$s]}" shell am start -W -n "$APP/.HomeActivity" > /dev/null 2>&1 || say "$s: am start failed"
+      "$ADB" -s "${ADB_ID[$s]}" shell am start -W -n "$APP/.ShellActivity" > /dev/null 2>&1 || say "$s: am start failed"
       provisioned=true
       say "$s: provisioned to attach at $ADDR with peer $peer_name, nominating $nominee_name${STREAM_ADDR:+, streaming to $STREAM_ADDR}"
     fi

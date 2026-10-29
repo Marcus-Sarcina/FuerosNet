@@ -86,13 +86,17 @@ class ManifestTest {
         )
     }
 
-    /** And the launcher is still the launcher: a manifest that declared no
-     *  `MAIN`/`LAUNCHER` filter would install an app with no way in. */
+    /** And the launcher is the shell [author, 2026-10-29]: a manifest that
+     *  declared no `MAIN`/`LAUNCHER` filter would install an app with no
+     *  way in, and one that gave it to another screen would open on a
+     *  navigation the design replaced. */
     @Test
-    fun home_is_the_launcher() {
+    fun the_shell_is_the_launcher() {
         val declared = manifests(module())
-        assertTrue(declared.contains("android.intent.action.MAIN"))
-        assertTrue(declared.contains("android.intent.category.LAUNCHER"))
-        assertTrue(declared.contains("\".HomeActivity\""))
+        val launcher = Regex(
+            """<activity\s+android:name="\.(\w+)"[^>]*>\s*<intent-filter>\s*<action android:name="android\.intent\.action\.MAIN" />\s*<category android:name="android\.intent\.category\.LAUNCHER" />""",
+        ).find(declared)
+        assertTrue("no launcher declared", launcher != null)
+        assertTrue("the launcher is ${launcher!!.groupValues[1]}, not the shell", launcher.groupValues[1] == "ShellActivity")
     }
 }

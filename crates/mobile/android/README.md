@@ -14,13 +14,15 @@ wants exactly the symbols the packaged library has. The application id
 
 | Screen | What it does |
 |---|---|
-| Home | Brings the kernel up, shows what this device presents and whether it is attached; the connection line opens the attach screen |
-| Attach | This device's own attach to a serving node: the nodes whose records it holds, or a key and an address typed, and a detach |
+| The shell | The launcher since 2026-10-29: the rail of orbs down the left (direct messages, the meeting, each joined subnet in its crown), the foot with this person's name, and the content between them. Brings the kernel up and takes the bench's provision. Each place carries the rows that reach the screens below and names what it does not hold yet |
+| Attach | This device's own attach to a serving node, from Options: the nodes whose records it holds, or a key and an address typed, and a detach |
 | Meet | The ceremony end to end: the invitation, both briefs, the optical exchange, the window, the guided capture, verifiers and witnesses, the review, the record, and the peering and adoption that follow |
-| Conversations | A thread per party met, each sending to its own party, with an honest *sending* / *sent* / *unsent* and no *delivered* |
-| People | Contacts: a code scanned or pasted, this device's own card, the roll |
-| Catalog | The sweep, what it holds with truncation and staleness said, and one request to a resource through the node that served its entry |
-| Operator | An instance enrolled by hand or launched at a provider, its run renewed, its pages framed, the machine destroyed |
+| Conversations | From the rail's DM orb: a thread per party met, each sending to its own party, with an honest *sending* / *sent* / *unsent* and no *delivered* |
+| Catalog | From inside a subnet: the sweep, what it holds with truncation and staleness said, and one request to a resource through the node that served its entry |
+| Authority | From a subnet's options: the lines this key holds, what leaving one costs, and the departure behind two taps |
+| Operator | From Options: an instance enrolled by hand or launched at a provider, its run renewed, its pages framed, the machine destroyed |
+
+**Removed 2026-10-29** [author]: the old Home, a list of destinations; the Settings placeholder; and People, whose scanner and own-code button belong to the meeting screen and whose contacts belong to the Direct view, neither built yet — so taking a node's or a person's code is owed until the meeting screen's scanner reads whatever is put in front of it.
 
 **What this shell still owes**, beyond rendering the client's states:
 
@@ -121,7 +123,7 @@ and the file pulled at the end of the run is the record.
 The target arrives through the provisioning step
 (`crates/tools/field-run.sh`), as two more extras on the same `am start`
 that carries `provision`: `--es diag_stream <host:port>` and `--es
-diag_serial <adb serial>`. `HomeActivity` hands them to
+diag_serial <adb serial>`. `ShellActivity` hands them to
 `FuerosApp.streamTo`, which keeps them in `filesDir/diag/stream.target`
 (two lines: address, serial) and switches the stream at once; every later
 cold start reads that file in `FuerosApp.onCreate` before the first event.

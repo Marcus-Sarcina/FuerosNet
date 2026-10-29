@@ -204,7 +204,7 @@ for s in "${SERIALS[@]}"; do
   say "$s: installing $(basename "$APK")"
   "$ADB" -s "${ADB_ID[$s]}" install -r "$APK" > /dev/null || die "$s: the install failed"
   # the first start mints the identity; the material shows in Conversations
-  "$ADB" -s "${ADB_ID[$s]}" shell am start -W -n "$APP/.HomeActivity" > /dev/null 2>&1 || die "$s: the app did not start"
+  "$ADB" -s "${ADB_ID[$s]}" shell am start -W -n "$APP/.ShellActivity" > /dev/null 2>&1 || die "$s: the app did not start"
 done
 
 # ------------------------------------------------------- the material -----

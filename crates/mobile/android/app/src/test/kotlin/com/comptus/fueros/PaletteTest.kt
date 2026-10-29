@@ -233,7 +233,7 @@ class PaletteTest {
             .sorted()
         assertEquals(
             "black and white belong to the symbologies and nowhere else",
-            listOf("MeetActivity.kt", "PeopleActivity.kt", "Tracking.kt"),
+            listOf("MeetActivity.kt", "Tracking.kt"),
             monochrome,
         )
     }

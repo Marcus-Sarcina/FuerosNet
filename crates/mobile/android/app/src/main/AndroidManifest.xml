@@ -40,10 +40,13 @@
         android:allowBackup="false"
         android:networkSecurityConfig="@xml/network_security_config">
 
-        <!-- Home is the launcher and navigation-first; it brings the kernel
-             up and takes a provision extra. The rest are destinations. -->
+        <!-- The shell is the launcher [author, 2026-10-29]: the rail, the
+             foot and the content between them, the places of the drawn
+             design. It brings the kernel up and takes a provision extra;
+             `singleTop` so the bench's `am start` reaches the running
+             instance. The rest are screens it opens. -->
         <activity
-            android:name=".HomeActivity"
+            android:name=".ShellActivity"
             android:launchMode="singleTop"
             android:exported="true">
             <intent-filter>
@@ -52,6 +55,8 @@
             </intent-filter>
         </activity>
 
+        <!-- Direct messages, opened from the rail until the Direct view is
+             built in the shell. -->
         <activity android:name=".ConversationsActivity" android:exported="false" />
         <!-- Portrait, fixed: D2 has the phone turned around to face the
              counterparty, and a rotation would rebuild the screen, restart
@@ -59,26 +64,20 @@
         <activity android:name=".MeetActivity" android:exported="false"
             android:screenOrientation="portrait" />
         <activity android:name=".ConversationActivity" android:exported="false" />
-        <activity android:name=".PlaceholderActivity" android:exported="false" />
-        <activity android:name=".PeopleActivity" android:exported="false" />
+        <!-- F's catalog, reached from inside a subnet, and the device's own
+             attach, reached from Options. An Activity a screen names and a
+             manifest does not declare throws where it is opened, and the
+             catalog did from 2026-10-16 until 2026-10-27, no test having
+             touched an Activity. `ManifestTest` holds every one a source
+             names. -->
         <activity android:name=".CatalogActivity" android:exported="false" />
-        <!-- F's catalog and the device's own attach. Declared here because
-             Home opens them: an Activity a screen names and a manifest does
-             not declare throws where it is opened, and the catalog did from
-             2026-10-16 until 2026-10-27, no test having touched an Activity.
-             `ManifestTest` now holds every one a source names. -->
         <activity android:name=".AttachActivity" android:exported="false" />
         <!-- E3: the lines this key holds, what leaving one costs, and the
-             departure behind it.  Reached from People. -->
+             departure behind it. Reached from a subnet's options. -->
         <activity android:name=".LeavingActivity" android:exported="false" />
         <!-- F: a resource's own page, in the frame `ResourcePage` sets out.
              Reached from the catalog. -->
         <activity android:name=".ResourceActivity" android:exported="false" />
-        <!-- The shell of the drawn design: one screen, a rail and a foot
-             that persist, the content between them changing. Reached from
-             Home while it is partial; it becomes the launcher when it
-             carries more than Home does. -->
-        <activity android:name=".ShellActivity" android:exported="false" />
         <!-- H3's provisioning pages, and the frame the node's own pages are
              presented in (PRD-12, PRD-13; §8.3). The frame is a separate
              Activity so that what it holds is a WebView and nothing else. -->

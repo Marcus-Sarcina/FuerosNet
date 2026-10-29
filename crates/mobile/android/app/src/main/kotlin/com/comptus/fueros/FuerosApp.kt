@@ -31,7 +31,7 @@ class FuerosApp : Application() {
         /**
          * Point the live stream at `address` (`host:port`; blank or `off`
          * forgets it) under `serial`, keep the target for the next launch,
-         * and switch to it now. Called by `HomeActivity` for the bench's
+         * and switch to it now. Called by `ShellActivity` for the bench's
          * `diag_stream` extra in the fieldtest flavour alone.
          */
         fun streamTo(context: Context, address: String, serial: String?) {

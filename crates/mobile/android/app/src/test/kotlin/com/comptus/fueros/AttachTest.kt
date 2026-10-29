@@ -69,7 +69,7 @@ class AttachTest {
     @Test
     fun the_roll_says_what_to_do_when_no_node_is_known() {
         val empty = Attach.roll(emptyList())
-        assertTrue(empty.contains("People"))
+        assertTrue(empty.contains("Type where a node answers"))
         val one = Attach.roll(listOf(Kernel.Node(key, listOf("192.168.0.8:7447"))))
         assertTrue(one.contains("192.168.0.8:7447"))
         assertTrue(one.startsWith(key.take(16)))
@@ -79,13 +79,13 @@ class AttachTest {
 
     @Test
     fun the_status_bar_keeps_the_kernels_words_and_says_the_line_is_a_door() {
-        val bar = Home.statusBar("detached · presents 5046da37…\npayload: the Double Ratchet")
+        val bar = Attach.statusLine("detached · presents 5046da37…\npayload: the Double Ratchet")
         assertTrue(bar.startsWith("detached · presents 5046da37…"))
         assertTrue(bar.contains("tap to attach"))
         // the second line of the kernel's status is not the bar's
         assertTrue(!bar.contains("payload:"))
-        assertEquals("tap to attach", Home.hint("lost: no serving node reachable"))
-        assertEquals("tap to change", Home.hint("attached, primary · presents x…"))
-        assertNotNull(Home.hint("starting the kernel…"))
+        assertEquals("tap to attach", Attach.hint("lost: no serving node reachable"))
+        assertEquals("tap to change", Attach.hint("attached, primary · presents x…"))
+        assertNotNull(Attach.hint("starting the kernel…"))
     }
 }

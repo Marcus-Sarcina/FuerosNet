@@ -128,8 +128,8 @@ object Chrome {
     /**
      * **What an orb says when it has no picture**: two letters of the
      * name, or four hex characters of the keyhash where no name has
-     * reached this device — never a name that was not received, which is
-     * the rule `People` already keeps.
+     * reached this device — never a name that was not received
+     * (`light-client-requirements.md` §4.3).
      */
     fun mark(alias: String?, id: String): String {
         val name = alias?.trim().orEmpty()

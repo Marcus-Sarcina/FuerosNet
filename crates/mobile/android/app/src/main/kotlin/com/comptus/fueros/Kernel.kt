@@ -1891,8 +1891,8 @@ object Kernel {
 
     /**
      * **The nodes whose endpoint records this device holds**, from the
-     * horizon: a node whose code was taken on the People screen is here
-     * without this device ever having attached to one.
+     * horizon: a node whose code was taken as an intake is here without
+     * this device ever having attached to one.
      */
     fun nodesKnown(): List<Node> {
         val p = participant ?: return emptyList()

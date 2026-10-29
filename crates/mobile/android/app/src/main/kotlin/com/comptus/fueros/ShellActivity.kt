@@ -19,16 +19,21 @@ import android.widget.TextView
  * **The shell: one screen, a rail down the left and a bar along the
  * foot** (`Robot/light-client-screens.md`, *the shell*).
  *
- * What this replaces: thirteen Activities, one screen each, no chrome of
+ * What this replaced: thirteen Activities, one screen each, no chrome of
  * their own and the system gesture for a way back. The design is a
- * persistent rail and foot with the content between them changing —
- * which is a different shape, not another screen, so it is built beside
- * the old one and takes over when it carries more than the old one does.
+ * persistent rail and foot with the content between them changing.
  *
- * **Reachable from Home while it is partial** [2026-10-28]. Making it
- * the launcher now would take away screens it cannot yet draw; a row on
- * Home costs nothing and the launcher moves in one line when the content
- * views have landed. The old Activities keep working throughout.
+ * **The launcher since 2026-10-29** [author]. The old Home — a list of
+ * destinations — went with the screens that had no place in this
+ * navigation: the Settings placeholder, and People, whose scanner and
+ * own-code button are the meeting screen's and whose contacts are the
+ * Direct screen's. What survives is reached from where the design puts
+ * it: the meeting from the rail's own orb, direct messages from the one
+ * above it, the catalog from inside a subnet, the serving node and the
+ * operator's instances from Options, and authority from a subnet's own
+ * options. So the launcher's duties are this screen's: the kernel is
+ * brought up here, a provision arrives here, and the bench's levers land
+ * here.
  *
  * **[Chrome] decides and this draws.** Which places keep the chrome, what
  * the rail holds, what the foot says and what an orb's mark is are all
@@ -36,10 +41,11 @@ import android.widget.TextView
  * pixels.
  *
  * **What it does not do yet**, each one named rather than faked: the
- * content region holds a placeholder per place, because the content
- * views are the next piece; and the unseen counts are zero everywhere,
- * nothing in the kernel or this shell tracking read state. **All three
- * crowns are real**, out of `subnet_standing` [2026-10-28].
+ * content views are partial — a place carries the rows that reach the
+ * screens already built and says what it does not hold — and the unseen
+ * counts are zero everywhere, nothing in the kernel or this shell
+ * tracking read state. **All three crowns are real**, out of
+ * `subnet_standing` [2026-10-28].
  */
 class ShellActivity : Activity() {
 
@@ -50,14 +56,36 @@ class ShellActivity : Activity() {
 
     private var place: Chrome.Place = Chrome.Place.Home
 
+    /** The subnets as the rail last read them, for a place that names one. */
+    private var scopes: List<Meet.Scope> = emptyList()
+    private var standing: Map<String, Kernel.Standing> = emptyMap()
+
+    /** The Options row that reads the connection, while Options is shown. */
+    private var connection: TextView? = null
+
+    /**
+     * Whether the rail and the foot have been drawn from a kernel that was
+     * up. **The launcher starts the kernel and draws before it has come
+     * up** — a foot read then is a blank mark and an ellipsis for a name,
+     * which is what the first launch on glass showed [2026-10-29] — so
+     * the first status the kernel reports redraws them.
+     */
+    private var drawnFromKernel = false
+    private val reading = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    private val sink = object : Front.Ui {
+        override fun render() {
+            val line = Kernel.front.status()
+            runOnUiThread { connection?.text = Attach.statusLine(line) }
+            if (!drawnFromKernel) readRail()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val c = Palette.now
-        // **the chrome is the theme's now** [2026-10-29]. This screen set
-        // its own title flag and bar colours while it was the only one
-        // drawn to the design; every screen is, so `@style/Fueros` does
-        // it once for all of them and a fourteenth cannot be written in
-        // the platform's defaults by forgetting to.
+        // **the chrome is the theme's** [2026-10-29]: `@style/Fueros` drops
+        // the title bar and colours the system bars once for every screen
 
         railColumn = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -94,25 +122,86 @@ class ShellActivity : Activity() {
         }
         Screen.insetting(root)
         setContentView(root)
+
+        // where a provision arrives, and where the kernel is brought up:
+        // both are the launcher's, once
+        intent.getStringExtra("provision")?.let { Kernel.provision(this, it) }
+        // the bench's live stream target, taken in the fieldtest flavour
+        // alone (`FuerosApp.streamTo`); the releasable never reads it
+        if (BuildConfig.FIELD_TEST) {
+            intent.getStringExtra("diag_stream")?.let {
+                FuerosApp.streamTo(this, it, intent.getStringExtra("diag_serial"))
+            }
+        }
+        Kernel.start(this)
+        benchLevers(intent)
         go(Chrome.Place.Home)
+    }
+
+    /**
+     * **A second start lands here, not in [onCreate]**: `am start` on a
+     * task whose root this activity already is delivers the intent to the
+     * running instance (`singleTop`), which is how the bench reached a
+     * phone sitting on its Done screen and nothing happened (run
+     * `0c8c8f8-a3-node-1`, 2026-10-24).
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        benchLevers(intent)
+    }
+
+    /**
+     * The bench's levers on the peer exchange (design §6.3), fieldtest
+     * alone: `--es forget_contact <keyhash>` takes one contact out of the
+     * dataset, `--es forget_captures <keyhash>` drops every sealed capture
+     * held of that party, `--ez contact_peers true` reaches for the peers
+     * now.
+     */
+    private fun benchLevers(intent: Intent) {
+        if (!BuildConfig.FIELD_TEST) return
+        intent.getStringExtra("forget_contact")?.let { Kernel.forgetContact(it) }
+        intent.getStringExtra("forget_captures")?.let { Kernel.forgetCaptures(it) }
+        if (intent.getBooleanExtra("contact_peers", false)) Kernel.contactPeersNow()
     }
 
     override fun onStart() {
         super.onStart()
-        // **off the drawing thread**: the rail is built from the subnets
-        // the kernel holds, and reading them is a blocking call into a
-        // client that may be parked in `nextEvent`
+        Consent.host(this)
+        Kernel.bind(sink)
+        readRail()
+    }
+
+    /**
+     * **Off the drawing thread**: the rail is built from the subnets the
+     * kernel holds, and reading them is a blocking call into a client
+     * that may be parked in `nextEvent`. One read at a time; a render
+     * that arrives while one is out is not a second one.
+     */
+    private fun readRail() {
+        if (!reading.compareAndSet(false, true)) return
         Thread({
             val rows = Kernel.scopes()
-            val standing = Kernel.standings().associateBy { it.subnet }
+            val held = Kernel.standings().associateBy { it.subnet }
             val mine = Kernel.ownAlias()
             runOnUiThread {
+                reading.set(false)
                 if (!isFinishing) {
-                    drawRail(rows, standing)
+                    // a keyhash is what a kernel that is up answers with
+                    if (mine.second.isNotEmpty()) drawnFromKernel = true
+                    scopes = rows
+                    standing = held
+                    drawRail(rows, held)
                     drawFoot(mine)
                 }
             }
         }, "fueros-rail").start()
+    }
+
+    override fun onStop() {
+        Kernel.unbind(sink)
+        Consent.release(this)
+        super.onStop()
     }
 
     /** Go to `where`, and show or hide the chrome as [Chrome] says. */
@@ -121,22 +210,27 @@ class ShellActivity : Activity() {
         val on = Chrome.chrome(where)
         rail.visibility = if (on) View.VISIBLE else View.GONE
         footBar.visibility = if (on) View.VISIBLE else View.GONE
+        connection = null
         content.removeAllViews()
-        content.addView(placeholder(where))
+        content.addView(view(where))
     }
 
     /**
      * **Back is out of a chromeless place and no further.** From Home it
-     * is the system's, which leaves the app; from a thread or a
-     * resource it is the way the rail would have been.
+     * is the system's, which leaves the app; from a subnet's options it
+     * is that subnet; from anywhere else chromeless it is Home, the way
+     * the rail would have been.
      */
     @Deprecated("the platform's own, which this overrides deliberately")
     override fun onBackPressed() {
-        if (Chrome.chrome(place)) {
-            @Suppress("DEPRECATION")
-            super.onBackPressed()
-        } else {
-            go(Chrome.Place.Home)
+        val here = place
+        when {
+            Chrome.chrome(here) -> {
+                @Suppress("DEPRECATION")
+                super.onBackPressed()
+            }
+            here is Chrome.Place.SubnetOptions -> go(Chrome.Place.Subnet(here.id))
+            else -> go(Chrome.Place.Home)
         }
     }
 
@@ -164,13 +258,20 @@ class ShellActivity : Activity() {
         for (rung in rungs) railColumn.addView(rungView(rung))
     }
 
+    /**
+     * **Two orbs open a screen of their own rather than a place**, until
+     * the content views land: direct messages are still the
+     * conversations screen, and a meeting owns the screen in any case.
+     */
     private fun rungView(rung: Chrome.Rung): View = when (rung) {
         is Chrome.Rung.Divider -> View(this).apply {
             setBackgroundColor(Palette.RAIL_DIVIDER)
             layoutParams = LinearLayout.LayoutParams(dp(30), dp(1))
                 .apply { setMargins(0, dp(3), 0, dp(13)) }
         }
-        is Chrome.Rung.Direct -> orb(rung, "DM") { go(Chrome.Place.Direct) }
+        is Chrome.Rung.Direct -> orb(rung, "DM") {
+            startActivity(Intent(this, ConversationsActivity::class.java))
+        }
         is Chrome.Rung.Meet -> orb(rung, "◎") {
             startActivity(Intent(this, MeetActivity::class.java))
         }
@@ -310,45 +411,188 @@ class ShellActivity : Activity() {
         )
     }
 
-    // ---- the content region, which is the next piece -------------------
+    // ---- the content region --------------------------------------------
 
     /**
-     * **Named, not faked.** Each place says what it will hold and that it
-     * does not hold it yet, so the container can be walked and judged
-     * without anything pretending to be a screen.
+     * **What each place holds, and what it says it does not.** A place
+     * carries the rows that reach the screens already built, where the
+     * design puts them, and names the rest rather than faking it, so the
+     * shell can be walked and judged without anything pretending to be a
+     * view it is not.
      */
-    private fun placeholder(where: Chrome.Place): View {
-        val c = Palette.now
-        val what = when (where) {
-            is Chrome.Place.Home ->
-                "Home — every subnet's notices, newest first, each saying where it is from.\n\n" +
-                    "Owed: the kernel's notices are a ring of twelve strings in memory, " +
-                    "unpersisted and without the patron, subnet, resource and type this line needs."
-            is Chrome.Place.Subnet ->
-                "A subnet — its resources across the top, its board beneath.\n\n" +
-                    "Owed: which resources belong to a subnet is not a question the catalog " +
-                    "can answer yet, and the board is the shell's own and not yet built."
-            is Chrome.Place.Direct ->
-                "Direct — recent threads, searched by alias or hash, and the contacts list.\n\n" +
-                    "The contacts are held; a thread list with its last message is not."
-            is Chrome.Place.Options ->
-                "Options — your name and picture, this device's settings, backup and recovery.\n\n" +
-                    "Most of it crosses the boundary already; it wants this shell's chrome."
-            is Chrome.Place.SubnetOptions -> "This subnet's options."
-            is Chrome.Place.Thread -> "One thread, full screen."
-            is Chrome.Place.Resource -> "A resource's page, in its frame."
-            is Chrome.Place.Meet -> "Meeting somebody."
+    private fun view(where: Chrome.Place): View {
+        val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        when (where) {
+            is Chrome.Place.Home -> {
+                column.addView(
+                    owed(
+                        "Home — every subnet's notices, newest first, each saying where it " +
+                            "is from.\n\nOwed: the kernel's notices are a ring of twelve strings " +
+                            "in memory, unpersisted and without the patron, subnet, resource " +
+                            "and type this line needs.",
+                    ),
+                )
+            }
+            is Chrome.Place.Subnet -> {
+                val scope = scopes.firstOrNull { it.id == where.id }
+                column.addView(
+                    bar(scope?.alias ?: "subnet ${where.id.take(8)}…", back = null) {
+                        go(Chrome.Place.SubnetOptions(where.id))
+                    }.apply { contentDescription = "This subnet's options" },
+                )
+                column.addView(
+                    row(
+                        "Resources",
+                        "the catalog as swept from your serving node — which of them " +
+                            "belong to this subnet is not a question it can answer yet",
+                    ) { startActivity(Intent(this, CatalogActivity::class.java)) },
+                )
+                column.addView(
+                    owed(
+                        "The board — one per subnet, every post saying how far it " +
+                            "travels — is the shell's own and not yet built.",
+                    ),
+                )
+            }
+            is Chrome.Place.Direct -> {
+                // not reached: the rail's orb opens the conversations
+                // screen until the Direct view is built
+                column.addView(owed("Direct — recent threads, searched by alias or hash, and the contacts list."))
+            }
+            is Chrome.Place.Options -> {
+                column.addView(bar("Options", back = Chrome.Place.Home))
+                val line = TextView(this).apply {
+                    textSize = 12f
+                    typeface = Typeface.MONOSPACE
+                    setTextColor(Palette.now.sub)
+                    text = Attach.statusLine(Kernel.front.status())
+                }
+                connection = line
+                column.addView(
+                    row("Serving node", null, line) {
+                        startActivity(Intent(this, AttachActivity::class.java))
+                    },
+                )
+                column.addView(
+                    row("Instances you run", "enrol one, launch one at a provider, its pages, its run") {
+                        startActivity(Intent(this, OperatorActivity::class.java))
+                    },
+                )
+                column.addView(
+                    owed(
+                        "Owed here: your name and picture, appearance (dark or light), " +
+                            "retention, the wake endpoint, backup and recovery. Most of it " +
+                            "crosses the boundary already; it wants this screen.",
+                    ),
+                )
+            }
+            is Chrome.Place.SubnetOptions -> {
+                val scope = scopes.firstOrNull { it.id == where.id }
+                val s = standing[where.id]
+                column.addView(
+                    bar(scope?.alias ?: "subnet ${where.id.take(8)}…", back = Chrome.Place.Subnet(where.id)),
+                )
+                column.addView(
+                    row(
+                        "Authority — who you are under, and what leaving costs",
+                        "every line this key holds, not this subnet's alone; tap one for the cost of ending it",
+                    ) { startActivity(Intent(this, LeavingActivity::class.java)) },
+                )
+                column.addView(owed(Shell.downline(s)))
+                if (s?.operator == true) {
+                    column.addView(
+                        row("Your instance here", "its administration pages, through the operator's own section") {
+                            startActivity(Intent(this, OperatorActivity::class.java))
+                        },
+                    )
+                }
+                column.addView(
+                    owed(
+                        "Owed here: this subnet's notices, on or off; the upline drawn as a " +
+                            "line to the root; and for the root, the name and the logo.",
+                    ),
+                )
+            }
+            is Chrome.Place.Thread -> column.addView(owed("One thread, full screen."))
+            is Chrome.Place.Resource -> column.addView(owed("A resource's page, in its frame."))
+            is Chrome.Place.Meet -> column.addView(owed("Meeting somebody."))
         }
-        return ScrollView(this).apply {
+        return ScrollView(this).apply { addView(column) }
+    }
+
+    /**
+     * A place's title, with a back control where the chrome is hidden
+     * ([Chrome.back]) and nothing where it is not; `go` is what tapping
+     * the title does, where it does anything.
+     */
+    private fun bar(title: String, back: Chrome.Place?, go: (() -> Unit)? = null): View {
+        val c = Palette.now
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(8), dp(14), dp(16), dp(10))
+            if (back != null) {
+                addView(
+                    TextView(this@ShellActivity).apply {
+                        text = "‹"
+                        textSize = 26f
+                        setTextColor(c.ink)
+                        setPadding(dp(8), 0, dp(14), dp(2))
+                        contentDescription = "Back"
+                        isClickable = true
+                        setOnClickListener { this@ShellActivity.go(back) }
+                    },
+                )
+            } else {
+                setPadding(dp(16), dp(14), dp(16), dp(10))
+            }
             addView(
                 TextView(this@ShellActivity).apply {
-                    text = what
-                    textSize = 14f
-                    setTextColor(c.muted)
-                    setPadding(dp(16), dp(20), dp(16), dp(32))
+                    text = title
+                    textSize = 19f
+                    typeface = Typeface.DEFAULT_BOLD
+                    setTextColor(c.ink)
+                    if (go != null) {
+                        isClickable = true
+                        setOnClickListener { go() }
+                    }
                 },
             )
         }
+    }
+
+    /** One row that goes somewhere: a label, and beneath it what that is. */
+    private fun row(label: String, sub: String?, subView: TextView? = null, go: () -> Unit): View {
+        val c = Palette.now
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(14), dp(16), dp(14))
+            isClickable = true
+            setOnClickListener { go() }
+            addView(
+                TextView(this@ShellActivity).apply {
+                    text = label
+                    textSize = 16f
+                    setTextColor(c.ink)
+                },
+            )
+            val under = subView ?: sub?.let {
+                TextView(this@ShellActivity).apply {
+                    text = it
+                    textSize = 12f
+                    setTextColor(c.sub)
+                }
+            }
+            under?.let { addView(it.apply { setPadding(0, dp(3), 0, 0) }) }
+        }
+    }
+
+    /** What a place does not hold yet, said in the muted ink. */
+    private fun owed(what: String): View = TextView(this).apply {
+        text = what
+        textSize = 14f
+        setTextColor(Palette.now.muted)
+        setPadding(dp(16), dp(12), dp(16), dp(16))
     }
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()

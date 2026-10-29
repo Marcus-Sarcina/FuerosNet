@@ -32,7 +32,7 @@ import android.widget.TextView
  * of *nothing goes*, and prints the limits whether or not anything is
  * lost.
  *
- * Reached from People, where the rest of the neighbourhood is shown.
+ * Reached from a subnet's options, under the upline it shows.
  */
 class LeavingActivity : Activity() {
 

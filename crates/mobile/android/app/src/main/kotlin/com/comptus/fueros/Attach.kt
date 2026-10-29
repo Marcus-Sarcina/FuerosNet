@@ -2,8 +2,8 @@ package com.comptus.fueros
 
 /**
  * **What the attach screen reads and says** — the pure part, so a test can
- * hold it (`light-client-requirements.md` §4; the screens sheet's B status
- * line, and the capability matrix's *attach to the serving node*).
+ * hold it (`light-client-requirements.md` §4; the capability matrix's
+ * *attach to the serving node*).
  *
  * Until now the only way this device attached to a node was the bench's
  * provision blob, read once at a cold start: an installed app could meet
@@ -18,6 +18,26 @@ package com.comptus.fueros
  * attach rather than an attach to somebody else.
  */
 object Attach {
+
+    /**
+     * **The connection as a row reads it**: the first line of the kernel's
+     * status, kept verbatim, with the hint that the line is a door —
+     * attaching lives behind it [2026-10-27] and a line with no hint is a
+     * line nobody taps. On Options since 2026-10-29, the old Home's status
+     * bar having gone with it.
+     */
+    fun statusLine(status: String): String {
+        val line = status.substringBefore('\n')
+        return "$line   ·   ${hint(line)}"
+    }
+
+    /** What tapping does, said for the state the line reports. */
+    fun hint(line: String): String =
+        when {
+            line.startsWith("detached") || line.startsWith("lost") -> "tap to attach"
+            line.startsWith("starting") -> "starting…"
+            else -> "tap to change"
+        }
 
     /** How many hex characters a keyhash is. */
     const val KEY_CHARS = 64
@@ -80,14 +100,14 @@ object Attach {
     /**
      * The nodes whose endpoint records this device holds, which is what a
      * person can attach to without typing anything. Empty before any
-     * record has reached it, which is the ordinary state of a fresh device:
-     * a node's code is taken on the People screen, or its address typed
-     * here.
+     * record has reached it, which is the ordinary state of a fresh device,
+     * and then its address is typed here. **Taking a node's code is owed
+     * to the meeting screen's scanner** [author, 2026-10-29], the People
+     * screen that held it having no successor.
      */
     fun roll(known: List<Kernel.Node>): String =
         if (known.isEmpty()) {
-            "No node's record has reached this device yet. Take one on the People " +
-                "screen, or type where a node answers below."
+            "No node's record has reached this device yet. Type where a node answers below."
         } else {
             known.joinToString("\n") { line(it) }
         }

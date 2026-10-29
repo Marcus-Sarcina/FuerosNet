@@ -152,12 +152,12 @@ for i in 0 1; do
   printf '{"known":[],"nominees":[]}' > "$RUN/phones/$s/provision.json"
   blob="$(cat "$RUN/phones/$s/provision.json")"
   "$ADB" -s "$s" shell am force-stop "$APP"
-  "$ADB" -s "$s" shell am start -W -n "$APP/.HomeActivity" --es provision "'$blob'" \
+  "$ADB" -s "$s" shell am start -W -n "$APP/.ShellActivity" --es provision "'$blob'" \
     --es diag_stream "$ADDR:$PORT" --es diag_serial "$s" > /dev/null 2>&1 \
     || say "$s: am start with the provision failed"
   sleep 3
   "$ADB" -s "$s" shell am force-stop "$APP"
-  "$ADB" -s "$s" shell am start -W -n "$APP/.HomeActivity" > /dev/null 2>&1 || say "$s: am start failed"
+  "$ADB" -s "$s" shell am start -W -n "$APP/.ShellActivity" > /dev/null 2>&1 || say "$s: am start failed"
   say "$s: provisioned knowing nobody — no node, no peer, no nominees"
 done
 

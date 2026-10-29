@@ -249,8 +249,8 @@ phone, watch the peer's copy bring it back — is a step of the sequence
 it is driven from the tethered machine with two intent extras, fieldtest
 alone:
 
-    adb -s <serial> shell am start -n com.comptus.fueros/.HomeActivity --es forget_contact <keyhash-hex>
-    adb -s <serial> shell am start -n com.comptus.fueros/.HomeActivity --ez contact_peers true
+    adb -s <serial> shell am start -n com.comptus.fueros/.ShellActivity --es forget_contact <keyhash-hex>
+    adb -s <serial> shell am start -n com.comptus.fueros/.ShellActivity --ez contact_peers true
 
 **A third lever, for the verifier rows** (2026-10-25): drop every sealed
 capture a phone holds of one party, so that, selected as that party's
@@ -259,7 +259,7 @@ VER-008's case, which no meeting produces by itself, since a subject
 introduces only parties it has met and every one of them sealed a
 capture of it. The captures come back at the pair's next meeting.
 
-    adb -s <serial> shell am start -n com.comptus.fueros/.HomeActivity --es forget_captures <subject-keyhash-hex>
+    adb -s <serial> shell am start -n com.comptus.fueros/.ShellActivity --es forget_captures <subject-keyhash-hex>
 
 Forget a contact *other than the peer* — the peer is what the direct path
 is gated on — and take its full keyhash from the bench's own record of

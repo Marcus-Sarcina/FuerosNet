@@ -130,11 +130,15 @@ block, as the rail's icons do.
 **The container is built, 2026-10-28** (`ShellActivity`, with [`Chrome`]
 deciding and [`Palette`] colouring): one screen, the russet rail down the
 left and the bar along the foot, the content between them changing, and
-the places that take the whole screen hiding both. **It is reached from
-Home while it is partial** rather than being the launcher, since making
-it the way in before it can draw the content views would take screens
-away; one line moves it when they land. **The platform's chrome is
-gone** with it — no title bar saying *Fueros* above the design, and the
+the places that take the whole screen hiding both. **The launcher since
+2026-10-29** [author]: the old Home, a list of destinations, went with
+the two screens that had no place in this navigation — the Settings
+placeholder, and People — and what survives is opened from where the
+design puts it: the meeting from the rail's own orb, direct messages
+from the orb above it, the catalog from inside a subnet, the serving node
+and the operator's instances from Options, authority from a subnet's own
+options. Each place carries those rows and names what it does not hold.
+**The platform's chrome is gone** with it — no title bar saying *Fueros* above the design, and the
 system bars in the shell's own colours rather than a light grey bar under
 a dark foot.
 
@@ -155,8 +159,9 @@ news about them.
 
 **What the rail still cannot draw**, named on the screen rather than
 faked: the unseen counts, nothing tracking read state anywhere, and the
-content itself, which is the next piece. The orbs, the crowns, the foot
-and the chrome rule are real.
+content views themselves — the notices, the board, the Direct list, the
+options' own controls — which are the next piece. The orbs, the crowns,
+the foot, the chrome rule and the way to every built screen are real.
 
 **Subnet view** is what a subnet's icon opens: content from that subnet
 alone, the content area split between navigation buttons to that subnet's
@@ -334,6 +339,13 @@ still the platform's default and is the other place the mark belongs.
 
 ## B. Home — navigation first, status peripheral [author, 2026-09-27]
 
+**Superseded by the shell above and removed 2026-10-29** [author]: the
+launcher is the shell's Home view, the navigation is the rail and the
+foot, and the status line below is the serving-node row on Options. The
+state-keyed nudges and the operator frame are still owed, now as
+notices or as Options rows rather than as elements of a screen that no
+longer exists.
+
 | Element | Beneath | Owes |
 |---|---|---|
 | Status line: detached / attached, primary / degraded on a sibling / reconnecting / lost — with the failover's meaning stated, and the mailbox count explained as *queued at the node*, never as delivered/read | `status`, `Event::Connection`, `Attached.queued` | UX-012; `light-client-requirements.md` §4 |
@@ -345,6 +357,9 @@ still the platform's default and is the other place the mark belongs.
 | **The status line is the way to the connection** [2026-10-27]: tapping it opens the attach screen — the nodes whose endpoint records this device holds, or a node's key and the address it answers at, and a detach. Built because there was no other way in: the only attach was the one the kernel performs at a cold start from the bench's provision blob, so an installed app could meet whoever was in front of it and could never reach a node, a verifier beyond the people present, a mailbox or a catalog. Not a seventh navigation row, the six above being the author's | `reachable`, `attach`, `detach` | `light-client-requirements.md` §4 |
 
 ## C. Conversations
+
+**Opened from the rail's direct-messages orb** since 2026-10-29, as the
+whole screen, until the Direct view is built in the shell's content.
 
 | Step | Elements | Beneath | Owes |
 |---|---|---|---|
@@ -461,7 +476,7 @@ a reason and a way back (UX-013 validates these by walking them).
 |---|---|---|---|
 | E1 The horizon | **Users, never devices** [author, 2026-09-27]: every endpoint of a person sits behind one displayed representation, and the infra/non-infra distinction is an icon state on the person — read from current topology, never a stored species (promotion changes it). Positions, distance, reachability; the operator-itself versus person-behind distinction stays (the `.0` presentation), rendered on the person | `places`, `distance`, `reachable`, `resolvable` | UX-014. **And a question of 2026-10-29, the author's**: the new navigation gives this no home. The subnet's own options draw the patronage upline and the count below; the Direct screen draws the people you hold, searchable. Between them they may be the whole of it — in which case E1 is not owed a screen but satisfied by two — or a view of the neighbourhood as a shape is still wanted somewhere |
 | E2 Accept a patron | An in-horizon adoption offer — a non-PoP transfer — **arrives as a notification with accept/deny** [author, 2026-09-27]; the acceptance shows the upward-reaching policy list with **expanded names and counts** — a count alone is insufficient — framed as a reminder, the policy being the user's own | `standing`, `evaluate` [2026-10-27] | PRD-02, UX-007; `light-client-requirements.md` §6 |
-| E3 End or alter authority | The computed warning: which currently used resources this revokes — transfers and disavowals included, not departure alone; a stale permission list **identified as stale**, never silently used | **Built, 2026-10-28** (`LeavingActivity`, behind a row on the harness's People screen — **which has no successor** [author, 2026-10-29]: its scanner and its own-code button are the meeting screen's, its held contacts are the Direct screen's, so this row moves to the subnet upline where the artboard already puts it): the lines this key holds, the cost of ending one on tapping it, and the departure behind two taps. `relationships`, `depart` [2026-10-27]; `cost_of_leaving(patron)` [2026-10-28], which is the warning's content: what goes, what stays, who leaves the horizon, and in `limits` every reason the list is a floor — a predicate no client holds, a stale or truncated portion, a node in the horizon never swept. **The empty list is two answers and the screen says which**: a cost of nothing leads with *nothing this device can see goes with it*, a cost that could not be computed with *cannot be worked out on this device*, and the limits print either way. **The act is not gated on the cost having been read** — leaving is a right (design §6.2) — and asks twice because it cannot be undone. **A transfer is the same call named on the former patron**, the adoption that carries it ending that line; a disavowal is minted by a node holding its own seed (`rhtn-node`'s `disavow`), so it is the operator's surface and not this one. **The patron's own side carries no cost at all** [author, 2026-10-28]: a subnet's options show the count of your downline there and nothing about what ending one would revoke. **A party is named by their published alias and their keyhash together** [author, 2026-10-28] — both, an alias being what somebody signed about themselves and the act not being undoable; the keyhash alone where no alias has reached this device. **Drawn on the canvas too** (`NewLeave`, reached by tapping your patron in the subnet's own upline), with the three answers on a tweak | PRD-02, UX-006; `light-client-requirements.md` §6 |
+| E3 End or alter authority | The computed warning: which currently used resources this revokes — transfers and disavowals included, not departure alone; a stale permission list **identified as stale**, never silently used | **Built, 2026-10-28** (`LeavingActivity`, behind the authority row on a subnet's options since 2026-10-29 — it stood behind a row on the harness's People screen, **which has no successor** [author, 2026-10-29]: its scanner and its own-code button are the meeting screen's, its held contacts are the Direct screen's, and the screen went with the old Home): the lines this key holds, the cost of ending one on tapping it, and the departure behind two taps. `relationships`, `depart` [2026-10-27]; `cost_of_leaving(patron)` [2026-10-28], which is the warning's content: what goes, what stays, who leaves the horizon, and in `limits` every reason the list is a floor — a predicate no client holds, a stale or truncated portion, a node in the horizon never swept. **The empty list is two answers and the screen says which**: a cost of nothing leads with *nothing this device can see goes with it*, a cost that could not be computed with *cannot be worked out on this device*, and the limits print either way. **The act is not gated on the cost having been read** — leaving is a right (design §6.2) — and asks twice because it cannot be undone. **A transfer is the same call named on the former patron**, the adoption that carries it ending that line; a disavowal is minted by a node holding its own seed (`rhtn-node`'s `disavow`), so it is the operator's surface and not this one. **The patron's own side carries no cost at all** [author, 2026-10-28]: a subnet's options show the count of your downline there and nothing about what ending one would revoke. **A party is named by their published alias and their keyhash together** [author, 2026-10-28] — both, an alias being what somebody signed about themselves and the act not being undoable; the keyhash alone where no alias has reached this device. **Drawn on the canvas too** (`NewLeave`, reached by tapping your patron in the subnet's own upline), with the three answers on a tweak | PRD-02, UX-006; `light-client-requirements.md` §6 |
 | E4 Recovery | Whole across the boundary [2026-10-27]: entered at A1's third door, driven from either side; the identity-fork warning of A1 applies here | `recovering`, `recovery_query`, `recognise`, `prior_key`, `take_recovery_response`, `recovery_block`, `seal_old_lines`, `present_chain` | REC-*, UX-008 |
 
 ## F. Catalog and resources

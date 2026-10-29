@@ -27,8 +27,8 @@ import android.widget.TextView
  * else. Where a node's own record has already reached this device its
  * details are listed to be read off rather than typed.
  *
- * Reached by tapping the connection line on Home, where the status this
- * screen changes already lives. Owned by nothing: the kernel holds the
+ * Reached from Options, by the row that reads the status this screen
+ * changes. Owned by nothing: the kernel holds the
  * session for the life of the process and this binds to its front while
  * visible.
  */
