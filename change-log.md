@@ -16453,6 +16453,25 @@ rather than applying it. The test floods both, as a serving node does.
 TOP-54 and TOP-55. Workspace tests 888, Android 277, the binding
 regenerated.
 
+### 2026-10-29 (one model, stage three: the schema in the documents)
+
+**The nouns are in the specification now.** `light-client-requirements.md`
+§9.1 states, one row per noun, what the kernel offers the application
+and what each carries — contact, subnet, line, instance, resource,
+profile, cost, connection — by role and never by identifier, with the
+two rules that make them one vocabulary: an identity crosses whole, and
+a kind crosses as the wire numbers it; and the sync in one sentence,
+the kernel naming which nouns changed after each exchange. Design §2's
+vocabulary gained *Contact*, *Line*, *Instance* and *Meeting*, each
+defined against the phrase the documents already use — *patron
+relationship*, *infra node*, *presence ceremony* — so the documents'
+sentences stand as written; whether to sweep *patron relationship* to
+*line* across four documents is the author's.
+
+**One collision found by writing the rows**: *standing* already means a
+party's score under a policy in the design and in the FFI, and the
+model uses it for what a key is in a subnet. Left to the author.
+
 ### 2026-10-29 (one model, stage two: the kernel says what changed)
 
 **The sync** [author, 2026-10-29: update logic that keeps them in sync].

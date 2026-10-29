@@ -1212,6 +1212,35 @@ on the wire.
   it rather than a silence the application has to interpret, which is design
   §1.1's posture at this boundary.
 
+### 9.1 The nouns the kernel offers
+
+**What crosses outward is one vocabulary** [author, 2026-10-29]: the kernel
+holds each of the following as one record, the application reads it as that
+record and shows what it chooses of it, and a second client — a desktop, an
+operator's console — reads the same. **Identities cross whole**: a keyhash is
+its thirty-two bytes, never a prefix of them; what is shortened for a screen
+is shortened by the screen. **Kinds cross as the wire numbers them**: how a
+contact came to be held, why a resource would be lost, what bounds a cost,
+each is the enumeration and not a sentence about it. Nothing in a record is
+a display decision.
+
+| Noun | What it is | What it carries |
+|---|---|---|
+| **Contact** | A party this client holds (§4.3) | Its keyhash; the alias it published for the subnet its locator names, or none, since a name not received is never shown; how it came to be held — met, introduced, nominated, queried, serving, declined, provisioned; whether a locator of it is held; whether an address of it is held; how many times it has been met or heard from; when last |
+| **Subnet** | A subnet this client holds a position in (design §13.8) | Its id; its alias where its profile is held; this client's own alias there, where it published one; what this client is in it — the root, an operator, a patron and of how many direct lines, or none of these; where this client sits — the anchor, the path and how much of it is this client's own |
+| **Line** | A patron relationship this key holds (§6), as the subordinate holds it | The patron; the series it runs on; the anchor and depth it puts this key at |
+| **Instance** | An infra node whose endpoint record this client holds (§4; §10 where this operator runs it) | Its keyhash; the addresses it answers at |
+| **Resource** | An entry as a catalog served it (§8; `wire-format.md` §6.4) | The node that served the entry, which is the node asked for the resource; the resource; its owner; its service type and instance name; its endpoint; its data practice where stated; whether the portion it came in was truncated, and whether it was stale |
+| **Profile** | What a party or a subnet published about itself (§4.4; `wire-format.md` §7.11) | The subject; the subnet; whether it is the subject's own or the subnet's; the alias; the image where one is carried; when it was published |
+| **Cost** | What ending a line costs (§6), computed before the act and never retained | What goes, each with why — the node serving it leaves the horizon, or its owner does; how many stay; who leaves the horizon; and every reason the list is a floor rather than a total — a predicate no client holds, a node whose portion is stale, one whose portion was truncated, one never swept, several lines to the one patron, this key's own adoption not yet in its table |
+| **Connection** | Where this client stands with its serving node (§4) | Detached; attached, to whom, and whether as a member of that node's subtree; reconnecting, from whom; lost, from whom and why |
+
+**And the kernel says which of these changed.** After each exchange it names
+the nouns it altered, once each, so an application keeping a copy refreshes
+those and no others, and never learns of a change by polling the status
+line. A copy is the application's convenience; the kernel's record is the
+one that is true.
+
 ---
 
 ## 10. The instances you run

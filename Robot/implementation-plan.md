@@ -874,7 +874,24 @@ the snapshot tells its watchers the nouns and nothing on an empty set.
 opening (leaving, catalog, attach), which is correct and one-shot; the
 `Meeting` noun is still the ceremony screen's own state.
 
-**Stage three is the documents**:
+**Built, stage three, 2026-10-29** — the documents. The schema is
+`light-client-requirements.md` §9.1: one row per noun, what it is and
+what it carries, by role and never by identifier, with the two rules
+that make it one vocabulary (identities cross whole; kinds cross as the
+wire numbers them) and the sentence on the sync. Design §2 gained
+*Contact*, *Line*, *Instance* and *Meeting*, each tied to the phrase the
+documents already use (*patron relationship*, *infra node*, *presence
+ceremony*). **The sentences were left as written** [assumed, 2026-10-29,
+the author not having said otherwise]: each existing phrase maps to one
+row and nothing is contradicted; the alternative, *patron relationship*
+→ *line* in some 120 places across four documents, is the author's call.
+**Open with the author**: the model's `Standing` (root, operator, patron
+of so many lines — the crowns) collides with the design's *standing*, a
+party's score under a policy, which the FFI also exports as `Standing`;
+one of them wants another name before a vocabulary row is written for
+it.
+
+**Stage three was the documents**:
 the schema into `light-client-requirements.md` §9 as a table, the
 vocabulary rows into design §2, and the terminology pass.
 

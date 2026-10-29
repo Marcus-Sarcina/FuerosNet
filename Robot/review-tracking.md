@@ -19676,3 +19676,9 @@ joins `dec_02_seeded_mutations` as a known load-dependent failure. The
 shape of a fix is the usual one — bind port 0 and read back what the
 kernel gave — but which tests choose ports and whether any of them must
 know the number in advance is what would have to be read first.
+
+**`dec_02_seeded_mutations` again, 2026-10-29**: failed its time budget
+twice in gate runs while a native build and an APK build shared the
+machine; alone it passes in 91 s, which is most of the budget. The
+budget is the test's own constant and the work is the decoder's; neither
+was touched today. Load-dependent, as recorded above.

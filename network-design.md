@@ -474,6 +474,10 @@ latency for a stranger's key**, not bandwidth.
 | **Lineage** | The history an archive carries across rotations. A lineage may be claimed by more than one node identity at once (§9.0.2), which is why "an identity has one current key" is false, the *lineage* may have several claimants, though each *node identity* is exactly one keypair |
 | **Resource** | A service, data store or application owned by a node, addressed relative to it, with access adjudicated by the requester's position (§11) |
 | **Agent** | A resource with permission to act with respect to users and other resources; borrows all standing from its owner (§11.3) |
+| **Contact** | A party a client holds (`light-client-requirements.md` §4.3): met, introduced, nominated, queried, serving it, declined or provisioned — by keyhash, with the alias it published where one has reached that client |
+| **Line** | A patron relationship as the subordinate holds it: the patron, the series it runs on, and where it puts the subordinate. The subordinate's word for what the patron holds as an adoption it granted |
+| **Instance** | An infra node as a client holds it: its keyhash and the addresses it answers at. *The instances you run* (`light-client-requirements.md` §10) are the ones this operator enrolled |
+| **Meeting** | A presence ceremony (§7.1) as a client names it to the person standing in it; the same event, the client's word |
 
 ---
 
