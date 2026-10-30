@@ -691,11 +691,20 @@ impl Courier {
                             Some(reply) => Some(reply),
                             None => me.serving.prekey(me.me(), &b).await,
                         };
-                        if let Some(reply) = answered {
-                            let more = me.handle.with(move |c| c.take_prekey_reply(&reply)).await;
-                            if let Ok(more) = more {
-                                out.absorb(me.carry(more).await);
+                        match answered {
+                            Some(reply) => {
+                                let more =
+                                    me.handle.with(move |c| c.take_prekey_reply(&reply)).await;
+                                match more {
+                                    Ok(more) => out.absorb(me.carry(more).await),
+                                    Err(why) => {
+                                        tracing::info!(target: "pay", why = %why, "pay.prekey.refused");
+                                    }
+                                }
                             }
+                            // said, not swallowed: the kernel asks again
+                            // after its patience
+                            None => tracing::info!(target: "pay", "pay.prekey.unanswered"),
                         }
                     }
                     Msg::Payload { to, bytes, device } => {

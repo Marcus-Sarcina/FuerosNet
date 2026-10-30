@@ -618,3 +618,41 @@ fn a_peering_record_in_the_greeting_makes_the_sender_a_peer_of_a_client_that_los
         "w1 is not in it"
     );
 }
+
+/// **A prekey request that got no answer is asked again after a
+/// patience** [bench `61c672c-restore-kind30-1`, 2026-10-30]: the first
+/// may have met a node that had nothing for the peer yet, and until it
+/// is asked again every message to that peer parks behind it.
+// acceptance: TX-031
+#[test]
+fn an_unanswered_prekey_request_is_asked_again_after_a_patience() {
+    use rhtn_client::ceremony::{Client, Msg};
+    let mut s = setup(&PARTIES);
+    let _ = peered(&mut s);
+    sessions_between(&mut s, "alice", "bob");
+    let asks = |out: &[Msg]| {
+        out.iter()
+            .filter(|m| matches!(m, Msg::PrekeyRequest(_)))
+            .count()
+    };
+    let c = s.client("alice");
+    let _ = c.outbox();
+    // two silent rounds: the session is set aside and a bundle asked for
+    assert!(c.greet_peer(kh("bob"), true).is_some());
+    let _ = c.outbox();
+    assert!(c.greet_peer(kh("bob"), false).is_some());
+    assert_eq!(asks(&c.outbox()), 1, "asked once");
+    // asked again at once: no — the first request stands
+    assert!(c.greet_peer(kh("bob"), false).is_some());
+    assert_eq!(
+        asks(&c.outbox()),
+        0,
+        "the first request stands within the patience"
+    );
+    // past the patience with no answer: asked again
+    s.clock
+        .set(s.clock.get() + (Client::PREKEY_PATIENCE_S + 1) * 1000);
+    let c = s.client("alice");
+    assert!(c.greet_peer(kh("bob"), false).is_some());
+    assert_eq!(asks(&c.outbox()), 1, "asked again after the patience");
+}

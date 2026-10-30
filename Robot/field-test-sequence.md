@@ -218,6 +218,18 @@ to replay, each run's node being minted fresh (run 1's held T1–T3, run
 record (kind 30); `field-run.sh --node <dir>` keeps the node across runs.
 Stopped after 12 rounds, the fifth run to prove the rest.
 
+**The fifth run, `61c672c-restore-kind30-1`, 2026-10-30**, kind 30 on all
+four (APKs stamped `46682d3`, built before their commit), the serving
+node persistent at `runs/node` for the first time. **Nothing reached
+4VC**: MRK held no session with it (`peer.reopen displaced=0`), its first
+greeting at 4.7 s asked the node for 4VC's bundle before 4VC had attached
+and published one, the courier got no answer and said nothing, and the
+kernel kept the request outstanding — every later send to 4VC, the
+record, the locator, the deposit over a direct path that *did* hold at
+the next round, parked behind it for seven rounds. The fourth run passed
+this point only because its first request came a round later. **Found**:
+an unanswered prekey request must be asked again; fixed under the run.
+
 **Not exercised**: the Done screen's subnet-naming prompt (T1's published
 nothing and the stream could not say whether it was shown; it is
 instrumented now and the root named the subnet from the subnet's options

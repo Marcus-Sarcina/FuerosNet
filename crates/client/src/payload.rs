@@ -1353,6 +1353,12 @@ pub struct PayloadState {
     pub pending: BTreeMap<PeerDevice, Vec<Vec<u8>>>,
     /// One-time requests in flight, by nonce: the peer device asked for.
     pub outstanding: BTreeMap<[u8; 16], PeerDevice>,
+    /// When each peer device was last asked for, so a request that got
+    /// no answer — a node that had no bundle yet, a path that dropped it
+    /// — is asked again after a patience rather than parking every
+    /// later message behind it [bench 61c672c-restore-kind30-1,
+    /// 2026-10-30: one such request held a peer unreachable for a run].
+    pub asked_at: BTreeMap<PeerDevice, u64>,
     /// **One-time keys a counterparty handed over in person**
     /// (`wire-format.md` §14.3.4), by the device they belong to: spent on
     /// the first session opened with that device and gone with it.
@@ -1441,6 +1447,7 @@ impl PayloadState {
             signed_bundle,
             pending,
             outstanding: BTreeMap::new(),
+            asked_at: BTreeMap::new(),
             handed: BTreeMap::new(),
             pool_reported: uint(&f[6])? as usize,
             wanted: BTreeSet::new(),
@@ -1458,6 +1465,7 @@ impl PayloadState {
             signed_bundle: None,
             pending: BTreeMap::new(),
             outstanding: BTreeMap::new(),
+            asked_at: BTreeMap::new(),
             handed: BTreeMap::new(),
             pool_reported: 0,
             wanted: BTreeSet::new(),

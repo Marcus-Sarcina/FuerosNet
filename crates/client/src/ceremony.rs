@@ -4175,6 +4175,9 @@ impl Client {
         n
     }
 
+    /// How long a one-time prekey request stands unanswered before the
+    /// next send asks again, in seconds.  A client's own number.
+    pub const PREKEY_PATIENCE_S: u64 = 30;
     /// Rounds a peer may stay silent before the session with it is opened
     /// anew, the first time; the interval doubles after each reopening up
     /// to [`PEER_REOPEN_CEILING`], so a peer that is gone costs a prekey
@@ -5863,16 +5866,31 @@ impl Client {
                 .entry((to, device))
                 .or_default()
                 .push(plaintext.clone());
+            // **an unanswered request is asked again after a patience**:
+            // the first may have met a node that had nothing for the peer
+            // yet, and nothing of the peer's would ever go otherwise
+            let now = self.now_s();
             if self
                 .payload
                 .outstanding
                 .values()
                 .any(|t| *t == (to, device))
             {
-                continue;
+                let asked = self.payload.asked_at.get(&(to, device)).copied();
+                if asked.is_some_and(|at| now < at.saturating_add(Self::PREKEY_PATIENCE_S)) {
+                    continue;
+                }
+                self.payload.outstanding.retain(|_, t| *t != (to, device));
+                tracing::info!(
+                    target: "pay",
+                    to = %id8(&to),
+                    device = %id8(&device),
+                    "pay.prekey.again"
+                );
             }
             let nonce = self.nonce();
             self.payload.outstanding.insert(nonce, (to, device));
+            self.payload.asked_at.insert((to, device), now);
             out.push(Msg::PrekeyRequest(payload::one_time_request(
                 to, device, nonce,
             )));

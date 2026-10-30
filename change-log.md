@@ -16488,6 +16488,21 @@ Tested: a first message to a party holding nothing of the sender is
 refused on the binding alone and opens once the introduction is taken;
 a card naming another party is not taken.
 
+### 2026-10-30 (an unanswered prekey request is asked again)
+
+**Nothing reached the restored phone in the fifth run** [bench,
+`61c672c-restore-kind30-1`]: its peer held no session with it, the first
+greeting asked the node for its bundle at 4.7 s — before the phone had
+attached and published one — the courier got no answer and said nothing,
+and the kernel kept that one request outstanding, parking every later
+message to the peer behind it: the record, the locator, and the deposit
+over a direct path that held from the next round on. The fourth run had
+passed this point by luck of timing. **A one-time prekey request that
+stands unanswered for thirty seconds is asked again on the next send**,
+a client's own number beside the verifier patience of `light-client-
+requirements.md` §3; the courier now says when a request got no answer
+or a reply was refused. Kernel test.
+
 ### 2026-10-30 (the greeting carries the peering record: kind 30)
 
 **The restore run stopped at the wire's own rule** [bench,
