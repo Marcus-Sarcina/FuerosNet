@@ -653,12 +653,42 @@ pub fn unwrap(plaintext: &[u8]) -> Result<(u64, Vec<u8>), String> {
 /// session is with a device (design §14.2.4), so what arrives says which
 /// of the sender's devices it is from.
 fn channel(tag: u64, device: &[u8; 32], bytes: &[u8]) -> Vec<u8> {
+    channel_with(tag, device, bytes, None)
+}
+
+/// The same frame with a fourth element: **the sender's own introduction
+/// on an initial message** [author, 2026-10-30], so a first message to a
+/// stranger carries what the stranger needs to attribute it — the
+/// material that hashes to the keyhash the channel names, and a locator
+/// to answer at. A recipient that already holds the sender ignores it.
+fn channel_with(tag: u64, device: &[u8; 32], bytes: &[u8], intro: Option<&[u8]>) -> Vec<u8> {
     let mut out = Vec::new();
-    emit_array_head(&mut out, 3);
+    emit_array_head(&mut out, 3 + intro.is_some() as usize);
     emit_uint(&mut out, tag);
     emit_bstr(&mut out, device);
     emit_bstr(&mut out, bytes);
+    if let Some(i) = intro {
+        emit_bstr(&mut out, i);
+    }
     out
+}
+
+/// **The introduction an initial message carries**, where it carries one:
+/// what a recipient takes before anything else, so the binding and the
+/// message after it are attributable on arrival.
+#[must_use]
+pub fn introduction_in(b: &[u8]) -> Option<Vec<u8>> {
+    let f = unchannel(b).ok()?;
+    (f.tag == CHANNEL_INITIAL).then_some(f.intro).flatten()
+}
+
+/// A channel frame, read: the tag, the sending device, the bytes, and the
+/// introduction an initial message carries.
+struct Frame {
+    tag: u64,
+    device: [u8; 32],
+    bytes: Vec<u8>,
+    intro: Option<Vec<u8>>,
 }
 
 /// A ratchet message on the channel from `me`.
@@ -666,21 +696,29 @@ pub fn channel_message(me: &[u8; 32], m: &[u8]) -> Vec<u8> {
     channel(CHANNEL_MESSAGE, me, m)
 }
 
-fn unchannel(b: &[u8]) -> Result<(u64, [u8; 32], Vec<u8>), String> {
+fn unchannel(b: &[u8]) -> Result<Frame, String> {
     let parts = array_item_ranges(b, 0).ok_or("channel not an array")?;
-    if parts.len() != 3 {
-        return Err("channel is tag, device and bytes".into());
+    if parts.len() != 3 && parts.len() != 4 {
+        return Err("channel is tag, device and bytes, with an introduction or without".into());
     }
     let p = Parser { b };
     let (tg, _) = p.item(parts[0].start).map_err(|e| e.0)?;
     let (d, _) = p.item(parts[1].start).map_err(|e| e.0)?;
     let (v, _) = p.item(parts[2].start).map_err(|e| e.0)?;
+    let intro = match parts.get(3) {
+        None => None,
+        Some(r) => match &p.item(r.start).map_err(|e| e.0)?.0 {
+            Item::Bytes(ir) => Some(b[ir.clone()].to_vec()),
+            _ => return Err("the introduction is bytes".into()),
+        },
+    };
     match (as_uint(&tg), &d, &v) {
-        (Some(tag), Item::Bytes(dr), Item::Bytes(r)) if dr.len() == 32 => Ok((
+        (Some(tag), Item::Bytes(dr), Item::Bytes(r)) if dr.len() == 32 => Ok(Frame {
             tag,
-            b[dr.clone()].try_into().unwrap(),
-            b[r.clone()].to_vec(),
-        )),
+            device: b[dr.clone()].try_into().unwrap(),
+            bytes: b[r.clone()].to_vec(),
+            intro,
+        }),
         _ => Err("channel shape".into()),
     }
 }
@@ -817,6 +855,12 @@ pub struct Sessions {
     /// for sending.  Held in memory only: once both sides are on the one
     /// session that stands, nothing more is sent on the other.
     pub previous: BTreeMap<PeerDevice, Vec<Ratchet>>,
+    /// **This device's own introduction, carried on every initial message**
+    /// [author, 2026-10-30: a first message to a stranger carries it; a
+    /// keyhash binds its material, so it verifies]. None until this client
+    /// holds a position to be found at. **Not persisted**: refreshed from
+    /// the positions at attach and whenever they move.
+    pub card: Option<Vec<u8>>,
 }
 
 /// How many initial messages' ephemeral keys are remembered.
@@ -926,6 +970,7 @@ impl Sessions {
             ratchets,
             prefetched,
             previous,
+            card: None,
         })
     }
 
@@ -1039,7 +1084,12 @@ impl Sessions {
             opk_id: one_time.map(|o| o.id),
             first,
         };
-        Ok(channel(CHANNEL_INITIAL, me, &msg.encode()))
+        Ok(channel_with(
+            CHANNEL_INITIAL,
+            me,
+            &msg.encode(),
+            self.card.as_deref(),
+        ))
     }
 
     /// Encrypt on every open session with `to`: one ciphertext per device,
@@ -1104,7 +1154,12 @@ impl Sessions {
         bytes: &[u8],
         fresh: Fresh,
     ) -> Result<Vec<u8>, PayloadError> {
-        let (tag, device, inner) = unchannel(bytes).map_err(PayloadError::Malformed)?;
+        let Frame {
+            tag,
+            device,
+            bytes: inner,
+            ..
+        } = unchannel(bytes).map_err(PayloadError::Malformed)?;
         let mut next = |out: &mut [u8; 32]| fresh(out);
         match tag {
             CHANNEL_INITIAL => {

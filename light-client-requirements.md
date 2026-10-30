@@ -864,6 +864,17 @@ anchor up in, and it is what you hand onward in a bundle (§1.1,
   a contact with no upstream among your holdings goes last, because
   pruning it is losing it: that party you will need introduced again,
   which is the ordinary way of meeting anybody (design §12.3 Case 0).
+- **Take a cold call** [author, 2026-10-30]: anyone holding your locator can
+  write to you first, and their first message carries their introduction
+  (`wire-format.md` §7.10.1). Take it where the material hashes to the
+  keyhash the channel names — it is what a scanned code carries, presented
+  by its own holder — and hold them as a contact introduced, so the
+  message that follows is attributable. **Whether to accept what they then
+  say is your policy, and the default is yes**; a query the subject of a
+  ceremony consented to is accepted whatever that policy says of other cold
+  messages, since the consent names the one asking and the subject is a
+  prior counterparty of yours. Design §12.4's rule stands: there is no cold
+  *lookup* — the locator had to reach them some other way.
 - **Show a contact by the alias and image it published for the subnet its
   locator is in, and by keyhash where none has reached you** [author,
   2026-10-15]. A locator names a subnet (`wire-format.md` §2.3), and a

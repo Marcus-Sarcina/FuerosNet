@@ -529,10 +529,12 @@ fn a_one_time_prekey_is_spent_only_when_the_message_it_opened_authenticates() {
     n.s.handles["alice"].reach.0.set(false);
     n.send("alice", "bob", "the real one");
     let (_, good) = n.queued("bob");
-    // one ciphertext byte flipped: the copy fails
+    // one ciphertext byte flipped: the copy fails. **Inside the message**
+    // and not at the frame's end, which since 2026-10-30 is the sender's
+    // introduction, ignored by a recipient that holds the sender
     let mut corrupt = good.clone();
-    let last = corrupt.len() - 1;
-    corrupt[last] ^= 1;
+    let inside = 100;
+    corrupt[inside] ^= 1;
     assert!(
         n.s.client("bob")
             .receive_payload(kh("alice"), &corrupt)
@@ -1480,4 +1482,101 @@ fn legs_queued_for_an_unreached_peer_go_with_the_ceremony() {
         "the legs went, the application's word stays: {left:?}"
     );
     assert_eq!(left[0], wrap(KIND_APPLICATION, b"a word for later"));
+}
+
+/// **A first message to a stranger carries the sender's introduction, and
+/// the stranger takes it** [author, 2026-10-30: anyone with a locator can
+/// cold-call its user; a keyhash binds its material, so it verifies].
+/// Bob has never heard of alice — no material, no bundle — and her first
+/// message opens at him once the frame's introduction is taken, in the
+/// order the courier takes things: the introduction, then the binding the
+/// node carried, then the message. Without the introduction the binding
+/// verifies under nothing and the message is refused, as design §14.2.4.2
+/// requires.
+#[test]
+fn a_first_message_to_a_stranger_carries_an_introduction_the_stranger_takes() {
+    use rhtn_client::contacts::How;
+    let mut n = net(&["w1", "w2"], &[("alice", "w1"), ("bob", "w2")]);
+    n.attach("bob");
+    n.attach("alice");
+    n.sweep("alice");
+    assert!(
+        n.s.client("alice").payload.sessions.card.is_some(),
+        "an attached client with a position carries its introduction"
+    );
+    // bob forgets alice entirely
+    {
+        let bob = n.s.client("bob");
+        bob.known.retain(|i| i.keyhash != kh("alice"));
+        bob.payload
+            .sessions
+            .prefetched
+            .retain(|(k, _), _| *k != kh("alice"));
+        bob.store.contacts.remove(&kh("alice"));
+    }
+    // the sender holds no direct path, so the message goes by the node
+    // and waits there, where this test can look at it
+    n.s.handles["alice"].reach.0.set(false);
+    n.send("alice", "bob", "hello, stranger");
+    let (_, first) = n.queued("bob");
+    let intro =
+        rhtn_client::payload::introduction_in(&first).expect("the frame carries her introduction");
+    let binding = n.nodes["w1"]
+        .prekeys
+        .bundle(&kh("alice"))
+        .cloned()
+        .expect("the node holds her bundle");
+
+    // the binding alone verifies under nobody bob holds
+    assert!(
+        !n.s.client("bob").take_binding(&binding),
+        "a stranger's binding is not taken"
+    );
+    let err =
+        n.s.client("bob")
+            .receive_payload(kh("alice"), &first)
+            .unwrap_err();
+    assert!(
+        err.contains("no bundle"),
+        "refused for want of material: {err}"
+    );
+
+    // the courier's order: the introduction, the binding, the message
+    assert!(
+        n.s.client("bob")
+            .take_cold_introduction(&kh("alice"), &intro),
+        "the cold call is taken"
+    );
+    assert!(
+        n.s.client("bob").take_binding(&binding),
+        "and now the binding verifies"
+    );
+    n.s.client("bob")
+        .receive_payload(kh("alice"), &first)
+        .expect("and the message opens");
+    let bob = n.s.client("bob");
+    assert!(
+        bob.known.iter().any(|i| i.keyhash == kh("alice")),
+        "bob holds alice now"
+    );
+    let c = bob
+        .store
+        .contacts
+        .get(&kh("alice"))
+        .expect("and as a contact");
+    assert_eq!(c.how, How::Introduced);
+    assert!(c.locator.is_some(), "with a locator to answer at");
+    // a second cold call from a party already held does nothing
+    assert!(
+        !n.s.client("bob")
+            .take_cold_introduction(&kh("alice"), &intro)
+    );
+
+    // and a card that names somebody else is not taken for alice
+    let forged = n.s.client("alice").payload.sessions.card.clone().unwrap();
+    assert!(
+        !n.s.client("bob")
+            .take_cold_introduction(&kh("carol"), &forged),
+        "the material must hash to the keyhash the channel names"
+    );
 }

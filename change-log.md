@@ -16453,6 +16453,33 @@ rather than applying it. The test floods both, as a serving node does.
 TOP-54 and TOP-55. Workspace tests 888, Android 277, the binding
 regenerated.
 
+### 2026-10-30 (a first message to a stranger carries the sender's introduction)
+
+**The query that could not be opened** (the run's T3): the selector asked
+a verifier it was a stranger to, and the verifier refused the message for
+want of the selector's material — the binding the node carried verifies
+under the sender's identity, and the verifier held none. The design was
+doing its job (§14.2.4.2: held under no binding, not opened); what was
+missing was how a stranger's material arrives. **The author's ruling**:
+the message carries it. The channel frame of an initial message has a
+fourth element, the sender's introduction — its material and a signed
+locator, what a scanned code carries — and the recipient takes it where
+the material hashes to the keyhash the channel names, then the binding,
+then the message, in that order at the courier. Anyone holding a locator
+can cold-call its user; whether to accept is the recipient's policy,
+defaulting to yes, and a query the subject consented to is accepted
+regardless. **Stated** in `wire-format.md` §7.10.1 (the frame) and
+`light-client-requirements.md` §4.3 (the rule); design §12.4's no cold
+*lookup* stands, the locator having had to arrive some other way.
+
+**In the kernel**: the sessions hold this device's card, refreshed at
+attach and whenever its positions move; an initial message carries it;
+`take_cold_introduction` takes a stranger's, refusing one whose material
+names somebody else. The test network delivers in the courier's order.
+Tested: a first message to a party holding nothing of the sender is
+refused on the binding alone and opens once the introduction is taken;
+a card naming another party is not taken.
+
 ### 2026-10-30 (verifiers: at least one is asked, and recognition ranks rather than excludes)
 
 **Two corrections to the kernel, from the bench** [author, 2026-10-30].

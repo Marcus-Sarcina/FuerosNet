@@ -201,6 +201,16 @@ impl Net {
                             device: [0; 32],
                         },
                     ));
+                    // **as the courier delivers** (`adaptors/src/courier.rs`):
+                    // the introduction a first message carries is taken
+                    // first, then the submitter's binding the node attaches
+                    // where it holds one, then the message
+                    if let Some(i) = rhtn_client::payload::introduction_in(&bytes) {
+                        self.s.h.client(&to).take_cold_introduction(&from, &i);
+                    }
+                    if let Some(b) = self.nodes[node].prekeys.bundle(&from).cloned() {
+                        self.s.h.client(&to).take_binding(&b);
+                    }
                     let d = self
                         .s
                         .h

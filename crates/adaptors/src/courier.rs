@@ -344,6 +344,12 @@ impl Courier {
         let (d, owed) = self
             .handle
             .with(move |c| {
+                // **a stranger's first message carries its introduction**
+                // [author, 2026-10-30], taken before the binding so the
+                // binding verifies under material this client now holds
+                if let Some(i) = rhtn_client::payload::introduction_in(&bytes) {
+                    c.take_cold_introduction(&from, &i);
+                }
                 if let Some(b) = binding {
                     c.take_binding(&b);
                 }

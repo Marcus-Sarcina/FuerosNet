@@ -3583,6 +3583,19 @@ is bad.
 
 #### 7.10.1 What the end-to-end plaintext carries
 
+**The frame around the ciphertext** is the payload construction's own:
+`[tag, device, bytes]` — the message's kind on the channel (an initial
+message or a ratchet message), the sending device's key (§7.8; a session is
+with a device, design §14.2.4), and the bytes. **An initial message carries a
+fourth element, the sender's introduction** (§2.3: its key material and a
+signed locator) [author, 2026-10-30], so that a first message to a party
+that holds nothing of the sender can be attributed on arrival: the
+recipient checks the material hashes to the keyhash the channel names,
+takes the introduction as it would a scanned one, and the binding the node
+carried then verifies. A recipient that already holds the sender ignores
+it. A ratchet message carries no fourth element, and a frame of any other
+shape is not this construction's.
+
 **A kind tag in front of the plaintext, and nothing else** [2026-09-30]. Once
 a message on the end-to-end channel (§7.8, design §14.2.4) is opened, its
 plaintext is `uint kind || bytes`, the tag a deterministic CBOR uint. Protocol

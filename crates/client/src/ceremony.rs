@@ -4452,6 +4452,7 @@ impl Client {
     fn adopt_own_positions(&mut self) {
         self.changed.insert(rhtn_model::Noun::Subnets);
         self.changed.insert(rhtn_model::Noun::Lines);
+        self.refresh_card();
         let me = self.keyhash();
         // **the relationship's own order decides, not the archive's**
         // [found 2026-10-14]: this folded `records()`, which is by txid —
@@ -4632,7 +4633,52 @@ impl Client {
         // and ask after everybody's, the session being the first chance
         out.extend(self.profile_requests());
         out.extend(self.sweep(population));
+        self.refresh_card();
         out
+    }
+
+    /// **The introduction this device carries on a first message**
+    /// [author, 2026-10-30]: its material and a signed locator, where it
+    /// holds a position to be found at; none where it does not. Refreshed
+    /// at attach and whenever its positions move, so a stranger it writes
+    /// to first can attribute the message and answer.
+    pub fn refresh_card(&mut self) {
+        self.payload.sessions.card = self
+            .own_locator()
+            .ok()
+            .map(|l| rhtn_archive::locator::introduction(&self.public.key_material(), &l));
+    }
+
+    /// **A cold call** [author, 2026-10-30: anyone with a locator can
+    /// cold-call its user; whether to accept is the recipient's policy,
+    /// defaulting to yes]: the introduction a stranger's first message
+    /// carried, taken where its material hashes to the keyhash the
+    /// channel names, so the binding and the message after it are
+    /// attributable. Nothing where the sender is already held. The
+    /// policy is the default and nothing else yet; a query the subject
+    /// consented to is taken by the same rule, since the consent names
+    /// the selector and the subject is a prior counterparty.
+    pub fn take_cold_introduction(&mut self, from: &Keyhash, bytes: &[u8]) -> bool {
+        if self.known.iter().any(|k| k.keyhash == *from) {
+            return false;
+        }
+        let Ok(intro) = rhtn_archive::locator::Introduction::parse(bytes) else {
+            return false;
+        };
+        if intro.identity.keyhash != *from {
+            tracing::warn!(target: "pay", from = %id8(from), "pay.cold_call.not_theirs");
+            return false;
+        }
+        match self.take_introduction(bytes) {
+            Ok(_) => {
+                tracing::info!(target: "pay", from = %id8(from), "pay.cold_call");
+                true
+            }
+            Err(e) => {
+                tracing::warn!(target: "pay", from = %id8(from), why = %e, "pay.cold_call.refused");
+                false
+            }
+        }
     }
 
     /// This client's own profile for the subnet it acts in, and the
