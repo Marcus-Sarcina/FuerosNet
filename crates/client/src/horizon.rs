@@ -159,6 +159,11 @@ pub enum Took {
     /// Not well-formed, not signed by whom it names, or refused by the
     /// table.  Nothing here changed.
     Refused,
+    /// Signed by a party whose material this client does not hold yet:
+    /// held until it does, as a node holds an object for a signer's key
+    /// (`wire-format.md` §10.1.1), and applied then.  What a client
+    /// restored from its phrase sees of the serving node's whole replay.
+    Pending,
     /// Equal `seqno`, different signed contents (`wire-format.md`
     /// §10.1.2): the pair is malformed, **neither** is current now, and
     /// what was held is dropped.  Repaired by re-resolving (§7.7).
@@ -239,7 +244,16 @@ pub struct Horizon {
     /// content is current and no later one for that pair is taken
     /// (`wire-format.md` §10.1.2).
     conflicts: BTreeSet<(Keyhash, u32, u32)>,
+    /// Records whose signatures could not be checked, by the signer whose
+    /// material is missing: what the node's replay is to a client that
+    /// knows nobody yet, applied when the material comes — from an
+    /// introduction, a first message, or a peer's returned blob.  Bounded
+    /// by [`PENDING_MAX`] records in all; the oldest held goes first.
+    pending: BTreeMap<Keyhash, Vec<Vec<u8>>>,
 }
+
+/// The most records held pending a signer's material, in all.
+pub const PENDING_MAX: usize = 512;
 
 /// The ASN in a peering's address field, where that field is a network
 /// point carrying one (`wire-format.md` §4.4: a point's field 2, absent
@@ -273,7 +287,53 @@ impl Horizon {
             endpoints: BTreeMap::new(),
             delegations: BTreeMap::new(),
             conflicts: BTreeSet::new(),
+            pending: BTreeMap::new(),
         }
+    }
+
+    /// How many records are held pending a signer's material.
+    pub fn pending(&self) -> usize {
+        self.pending.values().map(Vec::len).sum()
+    }
+
+    /// Hold `bytes` until `missing`'s material comes, the oldest held
+    /// going where the bound is met.
+    fn park(&mut self, missing: Keyhash, bytes: &[u8]) {
+        let held = self.pending.entry(missing).or_default();
+        if held.iter().any(|b| b == bytes) {
+            return;
+        }
+        held.push(bytes.to_vec());
+        while self.pending() > PENDING_MAX {
+            let Some(first) = self.pending.keys().next().copied() else {
+                break;
+            };
+            let list = self.pending.get_mut(&first).expect("a key just read");
+            list.remove(0);
+            if list.is_empty() {
+                self.pending.remove(&first);
+            }
+        }
+    }
+
+    /// **`who`'s material is held now**: whatever waited on it is taken
+    /// again, oldest first, each parking anew under the next signer still
+    /// missing.  How many applied.
+    pub fn material_arrived<L: Lookup + ?Sized>(&mut self, who: &Keyhash, ids: &L) -> usize {
+        let Some(mut held) = self.pending.remove(who) else {
+            return 0;
+        };
+        held.sort_by_key(|b| Record::parse(b).map(|r| (r.effective, r.txid)).ok());
+        let mut applied = 0;
+        for bytes in held {
+            if matches!(self.ingest(&bytes, ids), Took::Applied) {
+                applied += 1;
+            }
+        }
+        if applied > 0 {
+            tracing::info!(target: "hz", who = %crate::diag::id8(who), applied, "hz.pending.applied");
+        }
+        applied
     }
 
     /// Whose horizon this is.
@@ -624,12 +684,18 @@ impl Horizon {
         if self.seen.contains_key(&rec.txid) && self.applied.contains(&rec.txid) {
             return Took::Duplicate;
         }
-        if self
+        match self
             .table
             .apply_with(&rec, ids, &self.records, None, Evaluation::Deferred)
-            .is_err()
         {
-            return Took::Refused;
+            Ok(_) => {}
+            Err(rhtn_archive::topology::Refusal::Signatures(
+                rhtn_archive::record::SigStatus::Unverifiable { missing },
+            )) => {
+                self.park(missing, bytes);
+                return Took::Pending;
+            }
+            Err(_) => return Took::Refused,
         }
         self.note_locator(&rec);
         self.note_end(&rec);
@@ -871,6 +937,37 @@ impl Horizon {
                 if let Some(asn) = asn_at(body, field) {
                     out.entry(asn).or_default().insert(who);
                 }
+            }
+        }
+        out
+    }
+
+    /// **The parties peered with `me` by the peering records held here.**
+    /// What the serving node replayed at attach, which is what a client
+    /// that lost its archive has of its own peerings before anything of
+    /// its own comes back from them (design §6.3, §10.2): it is how such
+    /// a client knows whose greeting to take and whom to ask.
+    pub fn peers_of(&self, me: &Keyhash) -> Vec<Keyhash> {
+        let mut out = Vec::new();
+        for bytes in self.records.values() {
+            let Ok(rec) = Record::parse(bytes) else {
+                continue;
+            };
+            if rec.tx_type != rhtn_archive::tx::TYPE_PEERING {
+                continue;
+            }
+            let (Some(a), Some(b)) = (rec.field_hash(1), rec.field_hash(2)) else {
+                continue;
+            };
+            let other = if a == *me {
+                b
+            } else if b == *me {
+                a
+            } else {
+                continue;
+            };
+            if !out.contains(&other) {
+                out.push(other);
             }
         }
         out

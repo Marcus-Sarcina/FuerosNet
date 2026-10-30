@@ -638,6 +638,14 @@ pub struct Client {
     /// changed nothing deposits nothing.  This process's memory alone: a
     /// restart deposits once more, which is the cheaper error.
     deposited: BTreeMap<Keyhash, [u8; 32]>,
+    /// Rounds a peer has been greeted without a word back, and the count
+    /// at which the session with it is opened anew: `light-client-
+    /// requirements.md` §3's rule for a verifier that lost its sessions,
+    /// applied to a peer — only the sender can open another, and the
+    /// first message on it carries this side's introduction, which is
+    /// what a peer restored from its phrase needs to bind this side at
+    /// all. Doubling, so a peer that is gone drains no prekey pool.
+    peer_silence: BTreeMap<Keyhash, (u32, u32)>,
     /// Its state as a subject.
     pub subject: SubjectState,
     /// Its state as a verifier.
@@ -897,6 +905,7 @@ impl Client {
             verifier: VerifierState::new(cfg.verifier.clone()),
             acquaintance: Acquaintance::default(),
             deposited: BTreeMap::new(),
+            peer_silence: BTreeMap::new(),
             horizon: Horizon::new(kh),
             cfg,
             device,
@@ -1126,6 +1135,7 @@ impl Client {
         // binds (`wire-format.md` §9.1)
         if !self.known.iter().any(|i| i.keyhash == card.anchor.keyhash) {
             self.known.push(card.anchor.clone());
+            self.learned(card.anchor.keyhash);
         }
         self.take_endpoint(&card.endpoint.bytes)?;
         // the entry says what subtree the anchor claims, which a caching
@@ -1335,6 +1345,7 @@ impl Client {
         let who = identity.keyhash;
         if !self.known.iter().any(|k| k.keyhash == who) {
             self.known.push(identity.clone());
+            self.learned(who);
         }
         match self.store.contacts.get_mut(&who) {
             Some(c) => {
@@ -1393,7 +1404,26 @@ impl Client {
             .filter(|(k, _)| !have.contains(*k))
             .filter_map(|(_, c)| Identity::from_key_material(&c.material))
             .collect();
+        let who: Vec<Keyhash> = learned.iter().map(|i| i.keyhash).collect();
         self.known.extend(learned);
+        for k in who {
+            self.learned(k);
+        }
+    }
+
+    /// **`who`'s material is held now**: the horizon's records that
+    /// waited on it are applied, which for a client restored from its
+    /// phrase is how the serving node's replay — its own adoptions and
+    /// peerings among it — comes to count, one signer at a time.
+    fn learned(&mut self, who: Keyhash) {
+        let applied = self.horizon.material_arrived(&who, &self.known);
+        if applied > 0 {
+            self.changed.extend([
+                rhtn_model::Noun::Subnets,
+                rhtn_model::Noun::Lines,
+                rhtn_model::Noun::Meetings,
+            ]);
+        }
     }
 
     /// This client's own `SignedLocator` for the subnet it acts in: its
@@ -2337,7 +2367,17 @@ impl Client {
     /// The parties this client is peered with (design §6.3), from the
     /// peering records it holds.
     pub fn peers(&self) -> Vec<Keyhash> {
-        self.store.peers(&self.public.keyhash)
+        let me = self.public.keyhash;
+        let mut out = self.store.peers(&me);
+        // and the peerings the horizon holds of this client: a client
+        // that lost its archive has those from the serving node's replay
+        // before its own records come back (design §6.3, §10.2)
+        for p in self.horizon.peers_of(&me) {
+            if !out.contains(&p) {
+                out.push(p);
+            }
+        }
+        out
     }
 
     /// Who is in front of this device in the active ceremony, where one is
@@ -4039,6 +4079,20 @@ impl Client {
         }
         contents.scan(self.now_s(), self.cfg.subject.retention_seconds);
         let mut out = Reconciled::default();
+        let theirs = std::mem::take(&mut contents.store);
+        // **the blob's contacts carry the material its records verify
+        // under**: a client restored from its phrase knows nobody, so the
+        // material comes in ahead of the records, and the pins follow the
+        // contacts (§9.1)
+        for c in theirs.contacts.values() {
+            if let Some(idn) = Identity::from_key_material(&c.material)
+                && !self.known.iter().any(|k| k.keyhash == idn.keyhash)
+            {
+                let who = idn.keyhash;
+                self.known.push(idn);
+                self.learned(who);
+            }
+        }
         // records: the ones not held, oldest first, each verified under the
         // keys this client knows before it is appended
         let mut parsed: Vec<Record> = contents
@@ -4061,7 +4115,11 @@ impl Client {
                 out.refused += 1;
             }
         }
-        let theirs = std::mem::take(&mut contents.store);
+        // the name this client went by, where it has none now
+        if self.store.default_alias.is_none() && theirs.default_alias.is_some() {
+            self.store.default_alias = theirs.default_alias.clone();
+            out.other += 1;
+        }
         out.contacts += insert_absent(&mut self.store.contacts, theirs.contacts);
         out.other += insert_absent(&mut self.store.records, theirs.records);
         out.other += insert_absent(&mut self.store.own, theirs.own);
@@ -4117,21 +4175,50 @@ impl Client {
         n
     }
 
+    /// Rounds a peer may stay silent before the session with it is opened
+    /// anew, the first time; the interval doubles after each reopening up
+    /// to [`PEER_REOPEN_CEILING`], so a peer that is gone costs a prekey
+    /// fetch ever more rarely. A client's own number, no part of the wire.
+    pub const PEER_REOPEN_AFTER: u32 = 2;
+    /// The longest a reopening interval grows to, in rounds.
+    pub const PEER_REOPEN_CEILING: u32 = 64;
+
     /// **What goes to a peer on contact** (design §6.3): this client's
     /// current locator, so the peer's copy of where it stands is the
     /// present one; a request for the blob the peer holds of it; and a
     /// fresh deposit where the dataset changed since the last.  Queued in
     /// the outbox; `None` where `peer` is not one.
-    pub fn greet_peer(&mut self, peer: Keyhash) -> Option<()> {
+    pub fn greet_peer(&mut self, peer: Keyhash, held: bool) -> Option<()> {
         if !self.peers().contains(&peer) {
             return None;
+        }
+        // **a peer silent for too many rounds is opened to anew**: a
+        // process that lost its sessions reads nothing sent on the old
+        // ones and has none to say so on, so the sender opens another,
+        // as it does for a verifier; what it had deposited there is
+        // taken as lost with the rest, and goes again at the next held
+        // contact
+        let (silent, at) = self
+            .peer_silence
+            .entry(peer)
+            .or_insert((0, Self::PEER_REOPEN_AFTER));
+        *silent += 1;
+        if *silent >= *at {
+            *silent = 0;
+            *at = (*at * 2).min(Self::PEER_REOPEN_CEILING);
+            let next = *at;
+            let displaced = self.payload.sessions.displace(&peer);
+            self.deposited.remove(&peer);
+            tracing::info!(target: "peer", peer = %id8(&peer), displaced, next_after = next, "peer.reopen");
         }
         if let Ok(sl) = self.own_locator() {
             self.queue_to_peer(peer, payload::KIND_PEER_LOCATOR, &sl);
         }
         self.queue_to_peer(peer, payload::KIND_BACKUP_REQUEST, &[]);
+        // the deposit on the direct path alone (design §6.3): where none
+        // is held it waits for the contact that holds one
         let digest = self.peer_blob_digest();
-        if self.deposited.get(&peer) != Some(&digest) {
+        if held && self.deposited.get(&peer) != Some(&digest) {
             match self.export_for_peer() {
                 Ok(blob) => {
                     tracing::info!(target: "peer", peer = %id8(&peer), bytes = blob.len(), "peer.deposit");
@@ -4144,6 +4231,13 @@ impl Client {
             }
         }
         Some(())
+    }
+
+    /// A peer said something: its silence is over, and the next reopening
+    /// is as far off as the first.
+    fn heard_peer(&mut self, peer: Keyhash) -> &mut Self {
+        self.peer_silence.remove(&peer);
+        self
     }
 
     fn queue_to_peer(&mut self, peer: Keyhash, kind: u64, bytes: &[u8]) {
@@ -6247,11 +6341,15 @@ impl Client {
                     hex8(&from)
                 ))
             }
-            payload::KIND_PEER_LOCATOR => match self.hold_locator(&from, &inner, false) {
+            payload::KIND_PEER_LOCATOR => match self
+                .heard_peer(from)
+                .hold_locator(&from, &inner, false)
+            {
                 Ok(()) => Dispatched::Peer(format!("{}'s current locator is held", hex8(&from))),
                 Err(e) => Dispatched::Peer(format!("{}'s locator was refused: {e:?}", hex8(&from))),
             },
             payload::KIND_BACKUP_DEPOSIT => {
+                self.heard_peer(from);
                 let bytes = inner.len();
                 self.store.held_for.insert(from, inner);
                 tracing::info!(target: "peer", from = %id8(&from), bytes, "peer.held");
@@ -6260,35 +6358,39 @@ impl Client {
                     hex8(&from)
                 ))
             }
-            payload::KIND_BACKUP_REQUEST => match self.store.held_for.get(&from).cloned() {
-                Some(blob) => {
-                    let bytes = blob.len();
-                    self.queue_to_peer(from, payload::KIND_BACKUP_RETURN, &blob);
-                    tracing::info!(target: "peer", from = %id8(&from), bytes, "peer.returned");
-                    Dispatched::Peer(format!(
-                        "returned {bytes} bytes of backup to {}",
+            payload::KIND_BACKUP_REQUEST => {
+                match self.heard_peer(from).store.held_for.get(&from).cloned() {
+                    Some(blob) => {
+                        let bytes = blob.len();
+                        self.queue_to_peer(from, payload::KIND_BACKUP_RETURN, &blob);
+                        tracing::info!(target: "peer", from = %id8(&from), bytes, "peer.returned");
+                        Dispatched::Peer(format!(
+                            "returned {bytes} bytes of backup to {}",
+                            hex8(&from)
+                        ))
+                    }
+                    None => Dispatched::Peer(format!(
+                        "{} asked for a backup and none is held",
                         hex8(&from)
-                    ))
+                    )),
                 }
-                None => Dispatched::Peer(format!(
-                    "{} asked for a backup and none is held",
-                    hex8(&from)
-                )),
-            },
-            payload::KIND_BACKUP_RETURN => match self.reconcile_from_peer(&inner) {
-                Ok(r) => Dispatched::Peer(format!(
-                    "reconciled with {}: {} record(s), {} contact(s), {} other item(s) taken, {} refused",
-                    hex8(&from),
-                    r.records,
-                    r.contacts,
-                    r.other,
-                    r.refused
-                )),
-                Err(e) => Dispatched::Peer(format!(
-                    "the backup {} returned was not taken: {e}",
-                    hex8(&from)
-                )),
-            },
+            }
+            payload::KIND_BACKUP_RETURN => {
+                match self.heard_peer(from).reconcile_from_peer(&inner) {
+                    Ok(r) => Dispatched::Peer(format!(
+                        "reconciled with {}: {} record(s), {} contact(s), {} other item(s) taken, {} refused",
+                        hex8(&from),
+                        r.records,
+                        r.contacts,
+                        r.other,
+                        r.refused
+                    )),
+                    Err(e) => Dispatched::Peer(format!(
+                        "the backup {} returned was not taken: {e}",
+                        hex8(&from)
+                    )),
+                }
+            }
             payload::KIND_RESPONSE_COPY => {
                 Dispatched::ResponseCopy(self.take_response_copy(&inner))
             }

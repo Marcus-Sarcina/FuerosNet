@@ -204,7 +204,7 @@ fn a_peering_body_is_refused_where_it_misstates_this_partys_own_side() {
 
 /// Alice and bob, peered: the record held by both, as the test above
 /// builds it.
-fn peered(s: &mut common::harness::Setup) {
+fn peered(s: &mut common::harness::Setup) -> Vec<u8> {
     s.adopted("alice", "w1", "w2", 1);
     s.adopted("bob", "w1", "w2", 2);
     let pop = s.met_in_person("alice", "bob", "w2");
@@ -227,6 +227,7 @@ fn peered(s: &mut common::harness::Setup) {
         .take_peering(&env)
         .expect("alice takes it");
     s.client("bob").take_peering(&env).expect("bob takes it");
+    env
 }
 
 /// **What a peer holds, and what it gives back** (design §6.3, the author's
@@ -238,7 +239,7 @@ fn peered(s: &mut common::harness::Setup) {
 #[test]
 fn a_peer_holds_a_blob_it_cannot_open_and_the_owner_recovers_a_lost_contact_from_it() {
     let mut s = setup(&PARTIES);
-    peered(&mut s);
+    let _ = peered(&mut s);
     assert!(
         s.client("alice").store.contacts.contains_key(&kh("w2")),
         "the witness is a contact"
@@ -326,13 +327,237 @@ fn a_peer_holds_a_blob_it_cannot_open_and_the_owner_recovers_a_lost_contact_from
     assert_eq!(s.client("alice").forget_contacts(), gone);
 
     // and the greeting queues for a peer and for nobody else
-    assert!(s.client("alice").greet_peer(kh("bob")).is_some());
+    assert!(s.client("alice").greet_peer(kh("bob"), true).is_some());
     assert!(
         !s.client("alice").outbox().is_empty(),
         "a request and a deposit are queued"
     );
     assert!(
-        s.client("alice").greet_peer(kh("w1")).is_none(),
+        s.client("alice").greet_peer(kh("w1"), true).is_none(),
         "a witness is not a peer"
+    );
+}
+
+/// A session each way between two clients on the harness, as a bearer
+/// handover gives it: each takes the other's prekeys, so a first message
+/// opens with no node asked (`carriage.rs` has the full case).
+fn sessions_between(s: &mut common::harness::Setup, a: &'static str, b: &'static str) {
+    s.face_off(a, b);
+    s.client(a).begin(Some(kh(b)), vec![], true).unwrap();
+    s.client(b).begin(Some(kh(a)), vec![], false).unwrap();
+    let oa = s.client(a).optical_contribution().unwrap();
+    let ob = s.client(b).optical_contribution().unwrap();
+    s.client(a).take_optical(&ob).unwrap();
+    s.client(b).take_optical(&oa).unwrap();
+    let ta = s.client(a).transcript_confirm().unwrap();
+    let tb = s.client(b).transcript_confirm().unwrap();
+    s.client(a).take_transcript(&tb).unwrap();
+    s.client(b).take_transcript(&ta).unwrap();
+    let ha = s.client(a).prekey_carriage().unwrap();
+    let hb = s.client(b).prekey_carriage().unwrap();
+    s.client(a).take_prekey_carriage(&hb).unwrap();
+    s.client(b).take_prekey_carriage(&ha).unwrap();
+    s.client(a).abandon();
+    s.client(b).abandon();
+}
+
+/// Only `Msg::Payload`s, which is what a greeting queues: the locator,
+/// the request, and the deposit where one goes.
+fn payloads(msgs: &[rhtn_client::ceremony::Msg]) -> usize {
+    use rhtn_client::ceremony::Msg;
+    msgs.iter()
+        .filter(|m| matches!(m, Msg::Payload { .. } | Msg::Relay { .. }))
+        .count()
+}
+
+/// **A client restored from its phrase knows nobody and holds nothing;
+/// its peers are what the serving node's replay names, and its dataset
+/// is what a peer gives back** (design §6.3, §10.2).  A fresh alice,
+/// handed the records the node holds of her — hers and bob's adoptions,
+/// their peering — names bob as a peer before her archive is back; the
+/// blob bob returns verifies under the material its own contacts carry,
+/// and brings the records, the contacts, her name and bob as a peer of
+/// her own.
+// acceptance: TX-031
+#[test]
+fn a_restored_client_knows_its_peers_from_the_horizon_and_takes_its_dataset_from_the_blob() {
+    let mut s = setup(&PARTIES);
+    let peering = peered(&mut s);
+    s.client("alice").set_default_alias("Alice").expect("named");
+    // what the serving node holds of the two: every record either archive
+    // holds, in the order they took effect, the peering among them
+    let mut replay: std::collections::BTreeMap<(u64, [u8; 32]), (u64, Vec<u8>)> =
+        std::collections::BTreeMap::new();
+    for who in ["alice", "bob"] {
+        for r in s.client(who).archive.records() {
+            // the topology class does not carry presence records
+            // (`wire-format.md` §10.1), so a node replays none
+            if r.tx_type == rhtn_archive::tx::TYPE_PRESENCE {
+                continue;
+            }
+            replay.insert((r.effective, r.txid), (r.tx_type, r.bytes.clone()));
+        }
+    }
+    assert!(
+        replay
+            .values()
+            .any(|(t, _)| *t == rhtn_archive::tx::TYPE_PEERING),
+        "the peering is among them"
+    );
+    let blob = s
+        .client("alice")
+        .export_for_peer()
+        .expect("alice's blob, as bob holds it");
+
+    // a new process, the same identity, nothing else: what the phrase gives
+    let mut fresh = setup(&["alice"]);
+    let me = kh("alice");
+    let c = fresh.client("alice");
+    c.known.retain(|k| k.keyhash == me);
+    assert!(c.peers().is_empty(), "nothing of her own: no peers");
+    assert!(c.default_alias().is_none());
+    // the serving node replays what it holds of her, and she can verify
+    // none of it: every record is signed by somebody she does not hold
+    // the material of, so each is held pending that material rather than
+    // refused, as a node holds an object for a signer's key
+    for (tx_type, rec) in replay.values() {
+        let known = c.known.clone();
+        let took = c.horizon.ingest(rec, &known);
+        assert!(
+            matches!(took, rhtn_client::horizon::Took::Pending),
+            "the node's replay waits on material, type {tx_type}: {took:?}"
+        );
+    }
+    assert_eq!(c.horizon.pending(), replay.len(), "all of it held");
+    assert!(c.peers().is_empty(), "nobody is a peer she can name yet");
+    // bob's first message carries his introduction: with his material the
+    // peering — signed by the two of them alone — applies, and he is a
+    // peer by the horizon alone, before anything of her own is back
+    c.contact(
+        &id("bob").public,
+        rhtn_client::contacts::How::Introduced,
+        true,
+    );
+    assert_eq!(
+        c.peers(),
+        vec![kh("bob")],
+        "bob is a peer by the horizon alone"
+    );
+    assert!(
+        c.horizon.pending() < replay.len(),
+        "the peering applied; the adoptions wait on the witnesses"
+    );
+    assert!(
+        c.greet_peer(kh("bob"), false).is_some(),
+        "so he is greeted, for what he holds"
+    );
+    // with no session to him yet, the greeting asks for his bundle first
+    // and waits (on the bench his own reopening has opened one by now)
+    let out = c.outbox();
+    assert!(
+        out.iter()
+            .any(|m| matches!(m, rhtn_client::ceremony::Msg::PrekeyRequest(_))),
+        "the request waits on a session: {} messages",
+        out.len()
+    );
+    assert_eq!(payloads(&out), 0, "nothing went on no session");
+    let _ = peering;
+
+    // and what bob holds comes back whole
+    let r = c
+        .reconcile_from_peer(&blob)
+        .expect("her own blob opens under her key");
+    assert_eq!(
+        r.refused, 0,
+        "every record verified: the contacts' material came first"
+    );
+    assert!(r.records >= 3, "adoptions and the peering: {}", r.records);
+    assert!(r.contacts >= 2, "bob and the witnesses: {}", r.contacts);
+    assert_eq!(c.default_alias(), Some("Alice"), "her name came back");
+    assert!(
+        c.known.iter().any(|k| k.keyhash == kh("bob")),
+        "bob's material is hers to verify by"
+    );
+    assert_eq!(
+        c.store.peers(&me),
+        vec![kh("bob")],
+        "and bob is a peer of her own records"
+    );
+    assert_eq!(
+        c.horizon.pending(),
+        0,
+        "the witnesses' material came with the contacts"
+    );
+    assert!(
+        c.take_changed().contains(&rhtn_model::Noun::Contacts),
+        "the shell is told"
+    );
+}
+
+/// **A peer silent for two rounds is opened to anew, and the deposit goes
+/// again** (`light-client-requirements.md` §3's rule for a verifier that
+/// lost its sessions, applied to a peer): the greeting on a held path
+/// carries the deposit once per dataset; on an unheld one never; after
+/// two rounds with no word back the session is set aside — the next
+/// message asks for a bundle, as a first message does, and the harness
+/// has no node to answer, so the asking is the proof — the deposit memory
+/// with it, so the next held contact on a session deposits afresh; and
+/// the silence allowed doubles.
+// acceptance: TX-031
+#[test]
+fn a_peer_silent_for_two_rounds_is_opened_to_anew_and_deposited_to_again() {
+    use rhtn_client::ceremony::Msg;
+    let mut s = setup(&PARTIES);
+    let _ = peered(&mut s);
+    sessions_between(&mut s, "alice", "bob");
+    let c = s.client("alice");
+    let _ = c.outbox(); // the peering's own submission, not a greeting
+    // round 1, held: locator, request, deposit
+    assert!(c.greet_peer(kh("bob"), true).is_some());
+    assert_eq!(payloads(&c.outbox()), 3, "locator, request and the deposit");
+    // round 2, unheld, and the second of silence: the session is set
+    // aside and the greeting waits on a bundle
+    assert!(c.greet_peer(kh("bob"), false).is_some());
+    let out = c.outbox();
+    assert!(
+        out.iter().any(|m| matches!(m, Msg::PrekeyRequest(_))),
+        "reopened: a bundle is asked for, as for a first message: {out:?}"
+    );
+    assert_eq!(payloads(&out), 0, "nothing goes on a session set aside");
+    // a session again (the bench's node would have answered the request),
+    // and round 3 held: the deposit memory went with the session, so the
+    // same dataset goes once more, with whatever had waited
+    sessions_between(&mut s, "alice", "bob");
+    let c = s.client("alice");
+    let _ = c.outbox();
+    assert!(c.greet_peer(kh("bob"), true).is_some());
+    assert!(
+        payloads(&c.outbox()) >= 3,
+        "deposited again after the reopening"
+    );
+    // the silence allowed doubled: rounds 4 and 5 reopen nothing
+    for _ in 0..2 {
+        assert!(c.greet_peer(kh("bob"), true).is_some());
+        let out = c.outbox();
+        assert!(
+            !out.iter().any(|m| matches!(m, Msg::PrekeyRequest(_))),
+            "the session stands"
+        );
+        assert_eq!(payloads(&out), 2, "nothing to deposit: {out:?}");
+    }
+    // round 6 is the fourth of silence: reopened at the doubled interval
+    // — on a bundle still held, so the first message goes at once and
+    // the deposit with it; on none, a bundle is asked for first
+    assert!(c.greet_peer(kh("bob"), true).is_some());
+    let out = c.outbox();
+    // on the harness, with no node to answer the bundle asked for in
+    // round 2, the greeting parks behind that request: anything but the
+    // plain two-payload greeting of a standing session is the reopening
+    let n = payloads(&out);
+    assert_ne!(
+        n,
+        2,
+        "reopened at the doubled interval: {} messages",
+        out.len()
     );
 }

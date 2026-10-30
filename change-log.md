@@ -16488,6 +16488,36 @@ Tested: a first message to a party holding nothing of the sender is
 refused on the binding alone and opens once the introduction is taken;
 a card naming another party is not taken.
 
+### 2026-10-30 (a client restored from its phrase is reached by its peers and gets its dataset back)
+
+**The next bench test is a wipe, a reinstall and a restore from the
+phrase, the restored phone reached by its peer and repopulated from the
+blob the peer holds** [author, 2026-10-30], and four things stood in the
+way, each now built. **The horizon holds a record whose signer it cannot
+verify until the material comes**, as a node holds an object for a
+signer's key (`wire-format.md` §10.1.1): the serving node replays its
+store at attach, and a client that knows nobody refused all of it,
+its own adoptions and peerings among it; held instead, each applies as
+its signers become known — from an introduction, a first message, or a
+peer's returned blob. **A client's peers are those its records name and
+those the horizon's peering records name**, so a client that lost its
+archive knows whose greeting to take and whom to ask before anything of
+its own is back. **The
+greeting goes on whatever path there is**: the locator and the request
+over the relay where no direct path is held, which is how a peer whose
+address or storage is gone is reached at all; the deposit and its return
+stay on the direct path, as design §6.3 says. **A peer silent for two
+rounds is opened to anew**, `light-client-requirements.md` §3's rule for
+a verifier that lost its sessions applied to a peer: the sender sets the
+old session aside and opens another, whose first message carries its
+introduction — the material a restored peer needs to bind the sender's
+dial — and what it had deposited there is taken as lost and goes again
+at the next held contact; the interval doubles to a ceiling so a peer
+that is gone drains no prekey pool. **A reconcile takes the blob's
+contacts' material before it verifies the blob's records**, since a
+restored client knows nobody, and restores the default alias where the
+client has none. Kernel tests for each; nothing on the wire changed.
+
 ### 2026-10-30 (a bench lever forgets every contact; a reconcile says what came back)
 
 **For the next bench test, one peer's contact data taken out to watch

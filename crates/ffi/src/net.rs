@@ -1278,13 +1278,15 @@ async fn contact_round(
         };
         let held = courier.direct.reachable().holds(&peer);
         tracing::info!(target: "peer", peer = %hex4(&peer), how, held, "peer.contact");
-        // **what peers exchange on contact** (design §6.3): the locator,
-        // the request for what the peer holds, the deposit where the
-        // dataset moved — each over the path just confirmed
-        if held {
+        // **what peers exchange on contact** (design §6.3): the locator
+        // and the request for what the peer holds on whatever path there
+        // is — the relay where none is direct, which is also where a
+        // peer that lost its address, or its storage, is reached at all
+        // — and the deposit on a held path alone
+        {
             let owed = handle
                 .with(move |c| {
-                    c.greet_peer(peer);
+                    c.greet_peer(peer, held);
                     c.outbox()
                 })
                 .await;
