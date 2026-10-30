@@ -2336,6 +2336,17 @@ impl Participant {
         })
     }
 
+    /// **Forget every contact** (the bench's lever, design §6.3): the
+    /// store's contacts go, how many is answered, and the next round's
+    /// returned blob is what brings them back.
+    pub fn forget_contacts(&self) -> Result<u32, Refused> {
+        crate::diag::call("forget_contacts", || {
+            let n = self.handle.with_blocking(|c| c.forget_contacts());
+            self.save()?;
+            Ok(n as u32)
+        })
+    }
+
     /// **The provider credentials this operator holds**, opaque to the
     /// kernel (`light-client-requirements.md` §2, §10): what a launch flow
     /// speaks to a hosting provider with, carried in the backup under the

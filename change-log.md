@@ -16488,6 +16488,19 @@ Tested: a first message to a party holding nothing of the sender is
 refused on the binding alone and opens once the introduction is taken;
 a card naming another party is not taken.
 
+### 2026-10-30 (a bench lever forgets every contact; a reconcile says what came back)
+
+**For the next bench test, one peer's contact data taken out to watch
+the other's copy bring it back** [author, 2026-10-30]: the fieldtest
+shell's `forget_contact` lever took one contact by keyhash; a
+`forget_contacts` lever beside it empties the store in one go, the
+kernel answering how many went. And a reconcile from a returned blob
+now marks what it inserted as changed — contacts, profiles, and the
+subnets, lines and meetings where records came back — so a shell that
+draws from the model redraws them; it marked nothing before, and the
+rail would have waited for the next unrelated change. TX-031's
+lost-contact test extended.
+
 ### 2026-10-30 (the transport pins what the kernel knows, and keeps it across a restart)
 
 **A peer's every dial after a restart was closed *unbound*, once a

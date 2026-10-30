@@ -4077,6 +4077,21 @@ impl Client {
             self.root_carried = false;
             self.adopt_own_positions();
         }
+        // what came back is a change like any other: the shell redraws
+        // what it shows of it
+        if out.contacts > 0 {
+            self.changed.insert(rhtn_model::Noun::Contacts);
+        }
+        if out.other > 0 {
+            self.changed.insert(rhtn_model::Noun::Profiles);
+        }
+        if out.records > 0 {
+            self.changed.extend([
+                rhtn_model::Noun::Subnets,
+                rhtn_model::Noun::Lines,
+                rhtn_model::Noun::Meetings,
+            ]);
+        }
         tracing::info!(
             target: "peer",
             records = out.records,
@@ -4086,6 +4101,20 @@ impl Client {
             "peer.reconciled"
         );
         Ok(out)
+    }
+
+    /// **Every contact out of the dataset**, how many went: the bench's
+    /// lever for watching a peer's copy bring them back (design §6.3).
+    /// What this client verifies by is untouched, so its sessions and
+    /// its pins stand; the contacts are what the next round's returned
+    /// blob is reconciled against.
+    pub fn forget_contacts(&mut self) -> usize {
+        let n = self.store.contacts.len();
+        self.store.contacts.clear();
+        if n > 0 {
+            self.changed.insert(rhtn_model::Noun::Contacts);
+        }
+        n
     }
 
     /// **What goes to a peer on contact** (design §6.3): this client's

@@ -297,6 +297,34 @@ fn a_peer_holds_a_blob_it_cannot_open_and_the_owner_recovers_a_lost_contact_from
     let r = s.client("alice").reconcile_from_peer(&held).expect("again");
     assert_eq!(r, rhtn_client::ceremony::Reconciled::default());
 
+    // the bench's lever: every contact out, and the same return brings
+    // every one back, each said to the shell as a change to the contacts
+    let _ = s.client("alice").take_changed();
+    let gone = s.client("alice").forget_contacts();
+    assert!(
+        gone >= 2,
+        "the peer and the witnesses were contacts: {gone}"
+    );
+    assert!(s.client("alice").store.contacts.is_empty());
+    assert!(
+        s.client("alice")
+            .take_changed()
+            .contains(&rhtn_model::Noun::Contacts),
+        "forgetting is a change"
+    );
+    let r = s
+        .client("alice")
+        .reconcile_from_peer(&held)
+        .expect("the owner takes its own blob");
+    assert_eq!(r.contacts, gone, "every forgotten contact came back");
+    assert!(
+        s.client("alice")
+            .take_changed()
+            .contains(&rhtn_model::Noun::Contacts),
+        "and coming back is one"
+    );
+    assert_eq!(s.client("alice").forget_contacts(), gone);
+
     // and the greeting queues for a peer and for nobody else
     assert!(s.client("alice").greet_peer(kh("bob")).is_some());
     assert!(

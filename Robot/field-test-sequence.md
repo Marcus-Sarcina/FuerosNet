@@ -189,6 +189,20 @@ peering, the shell's object never having been cleared: fixed. **Owed
 from this run**: a re-attach on backoff after *Lost*; the next candidate
 when an asked verifier does not answer.
 
+**The third run, `5a04cce-peering-restart-1`, 2026-10-30**, the fix for
+the restart installed over the second run's state, four identities kept.
+**The peering recovered at the first round**: 4VC's start-up round
+dialled MRK at 2.3 s, held, deposited 118,799 bytes and took its own
+86,634 back; T6, ZU8 meets MRK, chosen as a peering (`53d16e28`), ZU8
+holding the path from the ceremony itself and the two exchanging
+122,249 and 129,291 bytes. **The TCL restart** (4VC force-stopped and
+relaunched, 19:09 UTC): the new process restored five sessions and its
+first round dialled MRK at 2.3 s and held — the case the second run
+spent four hours failing; MRK, restarted on its own at 19:06, dialled
+4VC at 0.66 s. Three peerings' rounds held throughout; the run was
+stopped at the author's word, 107 MB collected. **Next**: one peer's
+contact data taken out, to watch it come back from the other.
+
 **Not exercised**: the Done screen's subnet-naming prompt (T1's published
 nothing and the stream could not say whether it was shown; it is
 instrumented now and the root named the subnet from the subnet's options

@@ -1788,6 +1788,17 @@ object Kernel {
         }, "fueros-forget").start()
     }
 
+    /** Every contact out, for the same watch; how many went is noted. */
+    fun forgetContacts() {
+        val p = participant ?: run { front.note("· no kernel yet"); return }
+        Thread({
+            call("forget_contacts", { e -> front.note("· forget refused: ${e.reason}") }) {
+                val n = p.forgetContacts()
+                front.note("· forgot $n contact(s)")
+            }
+        }, "fueros-forget").start()
+    }
+
     /**
      * **The provider credentials, kept by the kernel** (`light-client-
      * requirements.md` §10): one JSON document, providers by name, which
