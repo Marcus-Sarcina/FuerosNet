@@ -16488,6 +16488,25 @@ Tested: a first message to a party holding nothing of the sender is
 refused on the binding alone and opens once the introduction is taken;
 a card naming another party is not taken.
 
+### 2026-10-30 (the transport pins what the kernel knows, and keeps it across a restart)
+
+**A peer's every dial after a restart was closed *unbound*, once a
+minute for four hours** [bench, `9ea2c16-model-validation-1`]. The direct
+path binds the key a peer presents by the pin (`wire-format.md` §9.1),
+and the reference client's pin set was filled at open from what the
+shell handed it, from the sibling cache and at first optical contact —
+nowhere else. A party a ceremony or an introduction taught the kernel
+was pinned once and lost at the next start, when the kernel re-learned
+its contacts from the state and the transport did not; a party learned
+by a cold call was never pinned. T4's peering rounds held and exchanged
+deposits both ways until MRK's restart 34 s after the last; from then
+4VC's 221 dials were refused at MRK and MRK's own never left the gate,
+the greeting going on a held path alone (design §6.3). **The pin set is
+refilled from the kernel's known identities at open, at each
+introduction taken and whenever the contacts change**, pinning being
+idempotent; boundary test and TRN-28 added. No document moved: §9.1
+already says what binds.
+
 ### 2026-10-30 (verifiers: at least one is asked, and recognition ranks rather than excludes)
 
 **Two corrections to the kernel, from the bench** [author, 2026-10-30].

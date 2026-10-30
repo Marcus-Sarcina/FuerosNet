@@ -13442,6 +13442,33 @@
     "interpretation": null
   },
   {
+    "id": "TRN-28",
+    "area": "transport",
+    "gap": "transport",
+    "title": "Pin every identity the kernel verifies by, so a direct dial binds in both directions after a restart",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "wire-format.md §9.1",
+      "light-client-requirements.md §4.3"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §9.1",
+        "text": "the key is the classical member of the `KeyMaterial`\npinned for that keyhash"
+      },
+      {
+        "where": "light-client-requirements.md §4.3",
+        "text": "for every party it\nhas learned a locator for, the most recent `SignedLocator` it holds for\nthem and the key material that verifies it"
+      }
+    ],
+    "given": "A client that learned a party after it started — by an introduction, a cold call or a ceremony — and holds that party as a contact; the party presents its own classical member when it dials.",
+    "when": "The party dials the client's candidates, before and after the client's process is replaced by one started from its stored state.",
+    "then": "Both dials are bound by the pin and held: the material the contact carries is pinned for the transport when the party is learned, and again when the stored contacts are read back at the start.",
+    "oracle": "behaviour",
+    "interpretation": "§9.1 says what binds a presented key and §4.3 says a contact carries the material; that the transport's pin set is refilled from the contacts at a start is the implementation's reading of the two together. The bench showed the alternative: after a restart, every dial from a peer closed unbound and none was made [9ea2c16-model-validation-1, 2026-10-30]."
+  },
+  {
     "id": "TRV-01",
     "area": "traversal",
     "gap": "traversal",

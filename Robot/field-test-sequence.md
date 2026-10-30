@@ -179,7 +179,7 @@ material, which the first message now carries (`0853458`). T4 regular
 meeting with the peering (`414367a5`, **two signers**: MRK's session had
 closed to *Lost* before it and nothing retries after *Lost*; peering
 `f7c6b2b8` and an 86,475-byte backup rode the direct path regardless;
-the cold call was taken at GXV). **T5, 4VC meets GXV: the first record
+the cold call was taken at GXV). **Peering after MRK's restart**, 34 s after T4's last held round: 4VC's 221 dials were closed *unbound* at MRK and MRK never dialled, once a minute for four hours — the transport's pin set was filled at open from the shell's `known` and at optical contact only, never from the contacts the kernel re-learns at a start; fixed under the run (TRN-28). **T5, 4VC meets GXV: the first record
 on the bench with verifier answers** — `35bad415`, four signers,
 `witnesses 2, responses 2`: ZU8 answered *Match* about GXV (0.546
 against a match at 0.363) and *NoMatch* about 4VC (0.140 against a floor

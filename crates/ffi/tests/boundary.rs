@@ -1068,6 +1068,140 @@ async fn a_kernel_restarts_from_the_storage_seam_with_its_session_and_its_queue_
     assert!(e.reason().contains("did not unwrap"), "{e}");
 }
 
+/// **A party the kernel learned is pinned for the transport, and still
+/// after a restart** (`wire-format.md` §9.1: a dial binds by the pin, in
+/// both directions).  Carol starts knowing nobody but the node and takes
+/// alice's introduction; alice's dial on her holds.  Her process is
+/// replaced by one started from what it wrote, still knowing nobody but
+/// the node: the kernel re-learns alice from the contacts, the transport
+/// with it, and alice's dial holds again.  Where it did not, a peer's
+/// every dial after a restart was closed *unbound* and none was made
+/// back [bench `9ea2c16-model-validation-1`, 2026-10-30].
+// acceptance: TRN-28
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_party_the_kernel_learned_binds_a_direct_dial_across_a_restart() {
+    let node = serving("bob");
+    let addr = node.addr.to_string();
+    let start = |name: &'static str, known: Vec<Vec<u8>>, shell: Arc<Shell>| {
+        tokio::task::spawn_blocking(move || {
+            Participant::start(seeds(name), known, platform_of(shell)).expect("starts")
+        })
+    };
+    // alice knows carol from the start; carol knows only the node
+    let alice = Arc::new(
+        start(
+            "alice",
+            vec![material("alice"), material("bob"), material("carol")],
+            Arc::new(Shell::default()),
+        )
+        .await
+        .unwrap(),
+    );
+    let carol_shell = Arc::new(Shell::default());
+    let carol = Arc::new(
+        start("carol", vec![material("bob")], carol_shell.clone())
+            .await
+            .unwrap(),
+    );
+    let attach = |p: Arc<Participant>, pop: Vec<Vec<u8>>| {
+        let addr = addr.clone();
+        tokio::task::spawn_blocking(move || p.attach(id("bob"), vec![addr], pop))
+    };
+    attach(alice.clone(), vec![])
+        .await
+        .unwrap()
+        .expect("alice attaches");
+    attach(carol.clone(), vec![])
+        .await
+        .unwrap()
+        .expect("carol attaches");
+    // each takes the other's introduction: a contact both ways, which is
+    // what the direct path is gated on, and for carol the first she hears
+    // of alice's material
+    let intro = |p: Arc<Participant>| {
+        tokio::task::spawn_blocking(move || p.own_introduction().expect("attached, so a locator"))
+    };
+    let take = |p: Arc<Participant>, i: Vec<u8>| {
+        tokio::task::spawn_blocking(move || p.take_introduction(i).expect("taken"))
+    };
+    let from_alice = intro(alice.clone()).await.unwrap();
+    let from_carol = intro(carol.clone()).await.unwrap();
+    assert_eq!(take(carol.clone(), from_alice).await.unwrap(), id("alice"));
+    assert_eq!(take(alice.clone(), from_carol).await.unwrap(), id("carol"));
+    // carol's first message offers her candidates over the relay; alice
+    // dials them, and carol binds the key alice presents by the pin she
+    // took a moment ago, not at start
+    let send = |p: Arc<Participant>, to: Vec<u8>, what: &'static [u8]| {
+        tokio::task::spawn_blocking(move || p.send(to, KIND_APPLICATION, what.to_vec()))
+    };
+    let next = |p: Arc<Participant>| tokio::task::spawn_blocking(move || p.next_event(5000));
+    async fn held(p: Arc<Participant>, peer: Vec<u8>) -> bool {
+        for _ in 0..50 {
+            if p.direct_to(peer.clone()) {
+                return true;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+        false
+    }
+    send(carol.clone(), id("alice"), b"first")
+        .await
+        .unwrap()
+        .expect("sent");
+    assert_eq!(
+        next(alice.clone()).await.unwrap(),
+        Some(Event::Payload {
+            from: id("carol"),
+            kind: 0,
+            bytes: b"first".to_vec()
+        })
+    );
+    assert!(
+        held(carol.clone(), id("alice")).await,
+        "carol holds the path alice opened: alice's key bound by the pin"
+    );
+    assert!(held(alice.clone(), id("carol")).await, "and alice holds it");
+    // carol's process ends; another starts from what it wrote, handed the
+    // node's material and nobody else's
+    {
+        let q = carol.clone();
+        tokio::task::spawn_blocking(move || q.detach())
+            .await
+            .unwrap()
+            .expect("detaches");
+    }
+    drop(carol);
+    let carol2 = Arc::new(
+        start("carol", vec![material("bob")], carol_shell.clone())
+            .await
+            .unwrap(),
+    );
+    attach(carol2.clone(), vec![])
+        .await
+        .unwrap()
+        .expect("carol attaches again");
+    send(carol2.clone(), id("alice"), b"second")
+        .await
+        .unwrap()
+        .expect("sent");
+    assert_eq!(
+        next(alice.clone()).await.unwrap(),
+        Some(Event::Payload {
+            from: id("carol"),
+            kind: 0,
+            bytes: b"second".to_vec()
+        })
+    );
+    assert!(
+        held(carol2.clone(), id("alice")).await,
+        "the new process binds alice's dial by the pin it refilled from its contacts"
+    );
+    assert!(
+        held(alice.clone(), id("carol")).await,
+        "and alice holds the new path"
+    );
+}
+
 // functional APP-011
 #[test]
 fn state_written_before_the_kernel_sealed_is_read_and_resealed() {

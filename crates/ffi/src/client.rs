@@ -805,7 +805,29 @@ impl Participant {
                 tracing::info!(target: "pay", sessions = r.sessions, ?held, "pay.restored");
                 Ok(())
             })
-            .map_err(|e| Refused::new(format!("the stored state does not open: {e}")))
+            .map_err(|e| Refused::new(format!("the stored state does not open: {e}")))?;
+        // the kernel re-learned its contacts from the state; the transport
+        // binds a dial by them (`wire-format.md` §9.1), so it learns them too
+        self.pin_known();
+        Ok(())
+    }
+
+    /// **Every identity the kernel verifies by is pinned for the
+    /// transport** (`wire-format.md` §9.1): the direct path binds the key
+    /// a peer presents by the pin, in both directions, and the pin set is
+    /// the transport's own — filled at open from what the shell handed
+    /// over, from the sibling cache and at first optical contact, which
+    /// left out every party a ceremony, an introduction or a cold call
+    /// taught the kernel afterwards, and lost those at the next start.
+    /// Refilled from the kernel's `known` at open, at an introduction
+    /// taken and whenever the contacts change; pinning is idempotent
+    /// [bench `9ea2c16-model-validation-1`, 2026-10-30: after a restart a
+    /// peer's every dial was closed *unbound* and none was made].
+    fn pin_known(&self) {
+        let ids = self.handle.with_blocking(|c| c.known.clone());
+        for id in &ids {
+            self.net.pin_identity(id);
+        }
     }
 }
 
@@ -1862,6 +1884,9 @@ impl Participant {
             match e {
                 Some(e) => {
                     let nouns = self.handle.with_blocking(|c| c.take_changed());
+                    if nouns.contains(&rhtn_model::Noun::Contacts) {
+                        self.pin_known();
+                    }
                     if !nouns.is_empty() {
                         self.pending_changed.lock().unwrap().push(nouns);
                     }
@@ -1870,6 +1895,9 @@ impl Participant {
                 None => {
                     let mut pending = std::mem::take(&mut *self.pending_changed.lock().unwrap());
                     let fresh = self.handle.with_blocking(|c| c.take_changed());
+                    if fresh.contains(&rhtn_model::Noun::Contacts) {
+                        self.pin_known();
+                    }
                     if !fresh.is_empty() {
                         pending.push(fresh);
                     }
@@ -2375,6 +2403,7 @@ impl Participant {
                 .handle
                 .with_blocking(move |c| c.take_introduction(&bytes))
                 .map_err(Refused::new)?;
+            self.pin_known();
             self.save()?;
             Ok(id_of(&who))
         })
