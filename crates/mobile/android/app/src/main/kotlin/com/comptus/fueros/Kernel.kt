@@ -14,6 +14,7 @@ import uniffi.rhtn_model.Cost
 import uniffi.rhtn_model.How
 import uniffi.rhtn_model.Instance
 import uniffi.rhtn_model.Line
+import uniffi.rhtn_model.Meeting
 import uniffi.rhtn_model.Resource
 import uniffi.rhtn_model.Subnet
 import uniffi.rhtn_ffi.Told
@@ -1926,6 +1927,12 @@ object Kernel {
     fun lines(): List<Line> {
         val p = participant ?: return emptyList()
         return call("lines", { emptyList() }) { p.lines() }
+    }
+
+    /** The meetings this device took part in, newest first, as outcomes. */
+    fun meetings(): List<Meeting> {
+        val p = participant ?: return emptyList()
+        return call("meetings", { emptyList() }) { p.meetings() }
     }
 
     /** The infra nodes whose endpoint records this device holds. */

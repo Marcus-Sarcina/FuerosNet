@@ -8,7 +8,8 @@
 //! addresses are transport points, and the kernel holds no transport.
 
 use crate::ceremony::Client;
-use rhtn_model::{Contact, How, Line, Profile, Resource, Subnet};
+use rhtn_archive::Txid;
+use rhtn_model::{Contact, How, Line, Meeting, Profile, Resource, Subnet};
 
 impl Client {
     /// Every contact held, most recently met first
@@ -119,6 +120,50 @@ impl Client {
                 })
             })
             .collect()
+    }
+
+    /// **Every meeting this client took part in**, newest first: each
+    /// presence record it holds naming it, and the adoption or peering
+    /// that rested on that record (field 8 of either), where this client
+    /// holds one.
+    #[must_use]
+    pub fn meetings_held(&self) -> Vec<Meeting> {
+        use rhtn_archive::tx::{TYPE_ADOPTION, TYPE_PEERING, TYPE_PRESENCE};
+        let me = self.keyhash();
+        let rested: Vec<(Txid, u64, Txid)> = self
+            .archive
+            .records()
+            .filter(|r| r.tx_type == TYPE_ADOPTION || r.tx_type == TYPE_PEERING)
+            .filter_map(|r| r.field_hash(8).map(|pop| (pop, r.tx_type, r.txid)))
+            .collect();
+        let mut out: Vec<Meeting> = self
+            .archive
+            .records()
+            .filter(|r| r.tx_type == TYPE_PRESENCE)
+            .filter_map(|r| {
+                let parts = r.participants();
+                if !parts.contains(&me) {
+                    return None;
+                }
+                let counterparty = parts.into_iter().find(|p| *p != me)?;
+                let on = |t: u64| {
+                    rested
+                        .iter()
+                        .find(|(pop, ty, _)| *pop == r.txid && *ty == t)
+                        .map(|(_, _, x)| *x)
+                };
+                Some(Meeting {
+                    record: r.txid,
+                    counterparty,
+                    finalized_at: r.time,
+                    witnesses: r.witnesses().into_iter().map(|(w, _)| w).collect(),
+                    adoption: on(TYPE_ADOPTION),
+                    peering: on(TYPE_PEERING),
+                })
+            })
+            .collect();
+        out.sort_by_key(|m| std::cmp::Reverse(m.finalized_at));
+        out
     }
 
     /// Every profile held: this client's own, by subnet, and the subnets'.

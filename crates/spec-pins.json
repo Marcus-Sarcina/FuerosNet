@@ -2,7 +2,7 @@
  "specs": {
   "network-design.md": "8cf84445dc8bbeea5168dfc35a152d087ca106d36bceb87af0cc4c7ecb291deb",
   "wire-format.md": "c23284d4ac217326b384ef6e0fa611819b8e399367313cfe3f68ffdcd2b3cba6",
-  "light-client-requirements.md": "2c94a257f2e4b746b0de08e092a1bb566f49e6ef2c868e4960cf01ff947b9fb5",
+  "light-client-requirements.md": "8befa9acc178e96317189fcbd19afc8142b4006e05084f50b80d5c000b8bc1cc",
   "infra-client-requirements.md": "1a56d5f79d77c077ff08d29ef6566f97e003dfcecc1335184b0f736f8928838f",
   "resource-requirements.md": "17108cd7b60a66f3a3a3eeb61e225afd1fcdaa5b0e37ebd1c4c5c59bd6046a0e",
   "functional_tests.md": "218824c96a093313a56c23d253dce4cdaf6a2741c2a304cfebe1104bd1c689cf"

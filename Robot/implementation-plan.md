@@ -892,6 +892,16 @@ FFI also exports as `Standing`; the crowns are `Rank` now — root above
 operator above patron is an order, and that is how they are drawn — and
 design §2 says so. The author's to overturn.
 
+**The `Meeting` noun, 2026-10-29** [author: *the meeting outcome needs
+to be persisted; the screen state is in-flight process*]: the model's
+`Meeting` is the outcome — the presence record held, the counterparty,
+when it finalised, the witnesses that signed, and the adoption or
+peering that rested on it (field 8 of either), composed from the
+archive and marked changed when a record lands. The ceremony screen's
+state machine stays the shell's, as it was; nothing of it is persisted
+or modelled. The resource answer and the launch records are still FFI
+records.
+
 **Stage three was the documents**:
 the schema into `light-client-requirements.md` §9 as a table, the
 vocabulary rows into design §2, and the terminology pass.

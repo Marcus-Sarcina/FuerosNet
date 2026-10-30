@@ -4,6 +4,7 @@ import uniffi.rhtn_model.Connection
 import uniffi.rhtn_model.Contact
 import uniffi.rhtn_model.Instance
 import uniffi.rhtn_model.Line
+import uniffi.rhtn_model.Meeting
 import uniffi.rhtn_model.Noun
 import uniffi.rhtn_model.Resource
 import uniffi.rhtn_model.Subnet
@@ -37,6 +38,9 @@ object Model {
     @Volatile var lines: List<Line> = emptyList(); private set
     @Volatile var instances: List<Instance> = emptyList(); private set
     @Volatile var resources: List<Resource> = emptyList(); private set
+
+    /** The meetings this device took part in, newest first: outcomes, not the ceremony's state. */
+    @Volatile var meetings: List<Meeting> = emptyList(); private set
     @Volatile var connection: Connection = Connection.Detached; private set
 
     /** The aliases held, by keyhash in hex, which is how a screen names a party. */
@@ -66,6 +70,7 @@ object Model {
             if (Noun.LINES in nouns) lines = Kernel.lines()
             if (Noun.INSTANCES in nouns) instances = Kernel.instances()
             if (Noun.RESOURCES in nouns) resources = Kernel.resources()
+            if (Noun.MEETINGS in nouns) meetings = Kernel.meetings()
             Diag.event("model.refreshed", "nouns" to nouns.joinToString(",") { it.name.lowercase() })
             tell(nouns)
         }, "fueros-model").start()

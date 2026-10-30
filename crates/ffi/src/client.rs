@@ -1151,6 +1151,16 @@ impl Participant {
         })
     }
 
+    /// Every meeting this client took part in, newest first
+    /// (`rhtn_model::Meeting`): the record, the counterparty, the
+    /// witnesses, and the adoption or peering that rested on it.
+    #[must_use]
+    pub fn meetings(&self) -> Vec<rhtn_model::Meeting> {
+        crate::diag::call_plain("meetings", || {
+            self.handle.with_blocking(|c| c.meetings_held())
+        })
+    }
+
     /// Every profile held: this client's own, by subnet, and the subnets'
     /// (`rhtn_model::Profile`; `wire-format.md` §7.11).
     #[must_use]

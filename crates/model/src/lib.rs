@@ -202,6 +202,29 @@ pub struct Profile {
     pub published_at: u64,
 }
 
+/// **A meeting this client took part in, as its outcome** (design §7.1,
+/// §8.1): the presence record held, with whom, when, witnessed by whom,
+/// and what rested on it. **The ceremony's own state is not here**: the
+/// step, the optical exchange, the window and the nominees' answers are
+/// the client's in-flight state, bound to a camera and a four-minute
+/// window, and nothing of them survives the process or should
+/// [author, 2026-10-29].
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "ffi", derive(uniffi::Record))]
+pub struct Meeting {
+    /// The presence record.
+    pub record: Txid,
+    pub counterparty: Keyhash,
+    /// When the record finalised, by the proposer's clock.
+    pub finalized_at: u64,
+    /// Every witness that signed it.
+    pub witnesses: Vec<Keyhash>,
+    /// The adoption that rested on it, where one did.
+    pub adoption: Option<Txid>,
+    /// The peering that rested on it, where one did.
+    pub peering: Option<Txid>,
+}
+
 /// Why a resource goes with a departure (`light-client-requirements.md` §6).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "ffi", derive(uniffi::Enum))]
@@ -287,6 +310,7 @@ pub enum Noun {
     Resources,
     Profiles,
     Connection,
+    Meetings,
 }
 
 #[cfg(test)]

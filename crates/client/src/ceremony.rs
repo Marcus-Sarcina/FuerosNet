@@ -2956,6 +2956,7 @@ impl Client {
         // participant or a witness: a witness holds it and its signature
         // is in it, so it is as much the witness's to propagate
         self.outbox.push(Msg::Record(envelope.to_vec()));
+        self.changed.insert(rhtn_model::Noun::Meetings);
         Ok(txid)
     }
 }
@@ -3430,6 +3431,7 @@ impl Client {
     /// Take a finalized adoption I signed: appended, kept, and — where it
     /// is an adoption *of me* — folded into where I sit.
     pub fn take_adoption(&mut self, envelope: &[u8]) -> Result<Txid, Abort> {
+        self.changed.insert(rhtn_model::Noun::Meetings);
         let rec = Record::parse(envelope).map_err(Abort::Record)?;
         verify::envelope(&self.known, envelope).map_err(|e| Abort::Record(e.to_string()))?;
         let t = rec.txid;
@@ -3608,6 +3610,7 @@ impl Client {
     /// flood (`wire-format.md` §10.1). A peering is no part of this
     /// client's position, so nothing refolds.
     pub fn take_peering(&mut self, envelope: &[u8]) -> Result<Txid, Abort> {
+        self.changed.insert(rhtn_model::Noun::Meetings);
         let rec = Record::parse(envelope).map_err(Abort::Record)?;
         if rec.tx_type != rhtn_archive::tx::TYPE_PEERING {
             return Err(Abort::Malformed("not a peering".into()));

@@ -16453,6 +16453,21 @@ rather than applying it. The test floods both, as a serving node does.
 TOP-54 and TOP-55. Workspace tests 888, Android 277, the binding
 regenerated.
 
+### 2026-10-29 (one model: a meeting is its outcome)
+
+**Whether the ceremony screen's state is a noun** [author, 2026-10-29:
+the outcome needs persisting; the screen state is in-flight process;
+whichever is simpler and less risky]. It is not. The outcome already
+persisted — the presence record in the archive, the adoption or peering
+that rested on it — and the model's `Meeting` is that outcome read off
+the records: the record, the counterparty, when it finalised, every
+witness that signed, and what rested on it, newest first, marked
+changed when a record lands. The step, the optical exchange, the window
+and the nominees' answers stay the shell's in-flight state, bound to a
+camera and a window of minutes, which is why they could never resume
+and should not be kept. `light-client-requirements.md` §9.1 says so in
+its row.
+
 ### 2026-10-29 (one model, stage three: the schema in the documents)
 
 **The nouns are in the specification now.** `light-client-requirements.md`

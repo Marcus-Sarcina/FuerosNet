@@ -135,3 +135,41 @@ fn the_kernel_marks_the_nouns_it_changes_and_drains_them_once() {
         "and nothing twice"
     );
 }
+
+/// **A meeting is its outcome**: the presence record held, with whom,
+/// witnessed by whom, and what rested on it — composed from the archive
+/// and nothing of the ceremony's in-flight state [author, 2026-10-29].
+#[test]
+fn a_meeting_is_read_off_the_records_with_what_rested_on_it() {
+    use rhtn_model::Noun;
+    let mut s = setup(&PARTIES);
+    assert!(
+        s.client("alice").meetings_held().is_empty(),
+        "nothing met yet"
+    );
+    let adoption = s.adopted("bob", "alice", "w1", 1);
+    let mine = s.client("alice").meetings_held();
+    assert_eq!(
+        mine.len(),
+        1,
+        "one meeting, the one the adoption rested on: {mine:?}"
+    );
+    let m = &mine[0];
+    assert_eq!(m.counterparty, kh("bob"));
+    assert_eq!(m.adoption, Some(adoption), "the adoption rested on it");
+    assert_eq!(m.peering, None);
+    // the harness's record is witnessless, and the noun says so rather
+    // than filling it in
+    assert!(
+        m.witnesses.is_empty(),
+        "no witness signed it: {:?}",
+        m.witnesses
+    );
+    // and bob reads the same meeting from his side
+    let his = s.client("bob").meetings_held();
+    assert_eq!(his.len(), 1);
+    assert_eq!(his[0].record, m.record);
+    assert_eq!(his[0].counterparty, kh("alice"));
+    // the kernel said so
+    assert!(s.client("bob").take_changed().contains(&Noun::Meetings));
+}
