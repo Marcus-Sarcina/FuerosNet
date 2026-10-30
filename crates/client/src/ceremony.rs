@@ -18,7 +18,7 @@ use crate::record::{
     sort_responses, witness_check,
 };
 use crate::rotation::Rotation;
-use crate::selection::{self, Acquaintance, SelectionBasis, required};
+use crate::selection::{self, Acquaintance, SelectionBasis, attempt, required};
 use crate::store::{Capture, ClientStore, OwnCapture, SealParams, SealedCapture, seal};
 use crate::subject::{SubjectConfig, SubjectState};
 use crate::verifier::{GrantOutcome, QueryOutcome, VerifierConfig, VerifierState, Verifying};
@@ -2046,12 +2046,18 @@ impl Client {
             self.device.notifier.notify(Notice::NoCandidateRecognised);
         }
         let need = required(pool.n, pool.candidates.len());
-        let picked = selection::select(&pool, &self.acquaintance, need, true);
+        // **at least one is asked wherever one is offered** [author,
+        // 2026-10-30]: the criterion is the ceiling on what the record
+        // carries, and whether the one prior counterparty answers is not
+        // what makes the requirement met
+        let ask = attempt(pool.n, pool.candidates.len());
+        let picked = selection::select(&pool, &self.acquaintance, ask);
         tracing::info!(
             target: "cer",
             n = pool.n,
             pool = pool.candidates.len(),
             required = need,
+            asked = ask,
             selected = picked.len(),
             bases = ?picked.iter().map(|(_, b)| *b as u64).collect::<Vec<_>>(),
             "cer.select"

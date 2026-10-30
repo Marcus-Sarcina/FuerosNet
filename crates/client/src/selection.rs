@@ -84,8 +84,20 @@ pub fn supersedes(new: &Introduction, have: &Introduction) -> bool {
 }
 
 /// The reasonableness criterion (§5.2): `min(floor(n / 2), 10, |candidates|)`.
+/// **A ceiling, not a floor** [author, 2026-10-30]: the most verifiers a
+/// party's side of the record carries, ten being the cap that keeps the
+/// record short and the leak to bystanders bounded.
 pub fn required(n: usize, candidates: usize) -> usize {
     (n / 2).min(10).min(candidates)
+}
+
+/// **How many to ask**: as many as the criterion allows, and **at least one
+/// wherever one is offered** [author, 2026-10-30: a participant attempts
+/// its prior counterparties until the required number is reached; one
+/// prior counterparty is asked, and the requirement is met whether or not
+/// they answer]. Zero only where there is nobody to ask.
+pub fn attempt(n: usize, candidates: usize) -> usize {
+    required(n, candidates).max(1).min(candidates)
 }
 
 /// The selector's claim of why a verifier was picked (`wire-format.md`
@@ -137,35 +149,22 @@ impl Acquaintance {
     }
 }
 
-/// Pick up to `required` verifiers from the pool in descending tier, each
-/// with the basis claimed for it; `fill` says whether the remainder is
-/// filled at the selector's discretion from strangers, marked as such.
-pub fn select(
-    pool: &Pool,
-    me: &Acquaintance,
-    required: usize,
-    fill: bool,
-) -> Vec<(Keyhash, SelectionBasis)> {
+/// Pick up to `count` verifiers from the pool, **recognition ranking the
+/// pool and never shortening it** [author, 2026-10-30: a criterion for
+/// choosing among the offered, not a limit on who may verify; one
+/// stranger is better than no verifier]: the selector's own tiers first,
+/// met before in-horizon before reachable, then strangers at the
+/// selector's discretion, marked as such.
+pub fn select(pool: &Pool, me: &Acquaintance, count: usize) -> Vec<(Keyhash, SelectionBasis)> {
     let mut ranked: Vec<(SelectionBasis, Keyhash)> = pool
         .candidates
         .iter()
-        .filter_map(|c| me.basis_of(c).map(|b| (b, *c)))
+        .map(|c| (me.basis_of(c).unwrap_or(SelectionBasis::Discretionary), *c))
         .collect();
     ranked.sort();
-    let mut out: Vec<(Keyhash, SelectionBasis)> = ranked
+    ranked
         .into_iter()
-        .take(required)
+        .take(count)
         .map(|(b, k)| (k, b))
-        .collect();
-    if fill {
-        for c in &pool.candidates {
-            if out.len() >= required {
-                break;
-            }
-            if !out.iter().any(|(k, _)| k == c) {
-                out.push((*c, SelectionBasis::Discretionary));
-            }
-        }
-    }
-    out
+        .collect()
 }

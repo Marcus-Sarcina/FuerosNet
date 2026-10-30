@@ -351,7 +351,12 @@ shell exists.
   reply. **Tell the user when you recognise none of it**: a `match` from strangers
   establishes nothing, however many you queried, and a candidate set holding
   nobody you know defeats the shared-identity check outright rather than merely
-  weakening it (design §7.3).
+  weakening it (design §7.3). **And ask anyway** [author, 2026-10-30]: recognition
+  is how you rank the offered, never a reason to query nobody. Ask at least one
+  prior counterparty wherever one is offered, never more than the criterion
+  allows (design §8.1), those you recognise first and strangers after, marked as
+  your discretion; a subject with one prior counterparty is asked of that one,
+  and the record stands with or without the answer.
 
   With the `nominated_by` check in §1.1, **these are the three checks that protect
   you against the person in front of you** rather than against an outsider.

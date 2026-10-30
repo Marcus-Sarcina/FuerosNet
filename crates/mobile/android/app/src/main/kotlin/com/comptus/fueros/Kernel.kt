@@ -531,7 +531,15 @@ object Kernel {
         // the responder states the direction and which subnet, in words,
         // in the other side's frame: "a new subnet under <me>", not "under
         // your own key" [bench, 2026-10-15]
-        val label = m.labelForCounterparty(hex(p.me()).take(8))
+        // **by the name this device goes by**, where it has one [bench,
+        // 2026-10-30: "a new subnet under bfcb69c0" read on the other
+        // phone while its rail said GXV]: the subnet's own name for it,
+        // else the default, else the keyhash's first characters
+        val label = m.labelForCounterparty(
+            subnets().firstNotNullOfOrNull { it.ownAlias?.takeIf { a -> a.isNotBlank() } }
+                ?: defaultAlias()
+                ?: hex(p.me()).take(8),
+        )
         Thread { if (settled != null) a.settle(settled, label) else a.begin() }.start()
     }
 

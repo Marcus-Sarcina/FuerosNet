@@ -482,7 +482,17 @@ async fn the_capture_key_goes_directly_to_the_selected_verifier_and_nowhere_else
             _ => None,
         })
         .collect();
-    assert_eq!(copies.len(), 1, "one answer about alice: {copies:?}");
+    // **two answers about alice, one per meeting** [author, 2026-10-30:
+    // at least one prior counterparty is asked wherever one is offered]:
+    // when alice met bob, bob asked w2 — her one prior counterparty, a
+    // stranger to bob, asked at his discretion — and when she met carol,
+    // carol asked bob. Each answered about alice from its own capture of
+    // her; neither needed the key she released to the other
+    assert_eq!(
+        copies.len(),
+        2,
+        "one answer about alice per meeting: {copies:?}"
+    );
     let seed = m
         .party("alice")
         .with(move |c| c.store.own[&ab].clone())

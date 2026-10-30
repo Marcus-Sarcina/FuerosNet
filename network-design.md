@@ -1371,11 +1371,14 @@ universe is permeable wherever the victim meets a human being.**
 
 **This does not extend to an established user — from the third encounter.**
 `min(floor(n/2), 10, |candidates|)` is zero at *n* = 0 **and at *n* = 1**, because
-`floor(1/2)` is zero: a subject with exactly one prior meeting is verified by nobody,
-and the threshold first bites at *n* = 2. **The second encounter of any identity
-therefore has no continuity check**, and rests on liveness and proximity alone —
-which establish that *someone* is present, not that they are who the existing
-identity represents. Accepted: the case requires an attacker holding both the key and
+`floor(1/2)` is zero: a subject with exactly one prior meeting is **asked of that
+one and required of nobody** [author, 2026-10-30] — the counterparty queries the
+one prior counterparty wherever it is offered, and the record is valid with or
+without the answer; the threshold first bites at *n* = 2. **The second encounter
+of any identity therefore has a continuity check only where its one prior
+counterparty answers**, and rests on liveness and proximity alone where they do
+not — which establish that *someone* is present, not that they are who the
+existing identity represents. Accepted: the case requires an attacker holding both the key and
 the archive, and buying one clean false-continuity edge before the identity has a
 history is worth less than the ceremony costs. From *n* = 2 the sample is non-empty, so
 verifier responses are sought and their absence is something an evaluator weighs
@@ -2983,8 +2986,14 @@ retro-inserted (`wire-format.md` §5.5). Present encoding:
 > bundle the subject curates, so this is a **reasonableness criterion**, never a
 > security check (§8.1.2).
 
-A brand-new identity has n=0 and queries none; an established one caps at ten, so
-the check never scales with history. Non-responsive verifiers are noticed and
+**The number is a ceiling, and at least one is asked** [author, 2026-10-30]: it is
+the most verifiers a party's side of the record carries, ten being the cap that
+keeps the record of manageable length and bounds what bystanders learn; and a
+selector asks at least one of the offered wherever one is offered, attempting
+prior counterparties until the number is reached, so a subject with a single
+prior counterparty is asked of that one and the criterion is met with or without
+their answer. A brand-new identity has n=0 and queries none; an established one
+caps at ten, so the check never scales with history. Non-responsive verifiers are noticed and
 de-trusted **separately**, as a fact about the verifier, rather than blocking the
 transaction.
 
@@ -3123,6 +3132,13 @@ criterion, not a security check.** *n* counts a bundle the subject curates, so
 it is entirely the subject's claim; the formula sizes diligence, and an
 evaluator comparing a record's response count against it learns how thorough
 the ceremony was, never how complete the history is.
+
+**Recognition ranks the pool and never shortens it** [author, 2026-10-30]: it
+is the criterion for choosing among the offered — those the selector has met
+before those in its horizon before those one edge beyond — and not a limit on
+who may verify. Where the selector recognises nobody it asks strangers, marked
+as its discretion, since one verifier who is a stranger is better than none; what
+such an answer establishes is the evaluator's to weigh (§7.3).
 
 **What protects each party is their own act, not a recomputation.** The
 selector queried people *it* trusts about the counterparty's continuity; the

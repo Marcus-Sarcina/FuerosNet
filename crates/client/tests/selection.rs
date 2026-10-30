@@ -124,17 +124,14 @@ fn selection_runs_by_the_selectors_own_tiers_and_marks_the_fill() {
         reachable: BTreeSet::from([kh("w3")]),
     };
     assert!(me.recognises_any(&pool));
-    let picked = select(&pool, &me, 4, false);
+    let picked = select(&pool, &me, 4);
     assert_eq!(picked[0], (kh("w2"), SelectionBasis::Met));
     assert_eq!(picked[1].1, SelectionBasis::InHorizon);
     assert_eq!(picked[2].1, SelectionBasis::InHorizon);
     assert_eq!(picked[3], (kh("w3"), SelectionBasis::Reachable));
-    assert_eq!(
-        select(&pool, &me, 5, false).len(),
-        4,
-        "nobody unrecognised without the fill"
-    );
-    let filled = select(&pool, &me, 5, true);
+    // recognition ranks the pool and never shortens it [author,
+    // 2026-10-30]: the fifth is a stranger, marked as such
+    let filled = select(&pool, &me, 5);
     assert_eq!(filled.len(), 5);
     assert_eq!(filled[4], (kh("c1"), SelectionBasis::Discretionary));
     let stranger = Acquaintance::default();
@@ -142,5 +139,31 @@ fn selection_runs_by_the_selectors_own_tiers_and_marks_the_fill() {
         !stranger.recognises_any(&pool),
         "a pool holding nobody the selector knows"
     );
-    assert!(select(&pool, &stranger, 3, false).is_empty());
+    // and a selector who knows nobody still asks: one stranger is better
+    // than no verifier
+    let asked = select(&pool, &stranger, 3);
+    assert_eq!(asked.len(), 3);
+    assert!(
+        asked
+            .iter()
+            .all(|(_, b)| *b == SelectionBasis::Discretionary)
+    );
+}
+
+/// **How many are asked**: the criterion's ceiling, and at least one
+/// wherever one is offered [author, 2026-10-30].
+#[test]
+fn at_least_one_is_asked_wherever_one_is_offered_and_never_more_than_the_ceiling() {
+    use rhtn_client::selection::attempt;
+    assert_eq!(attempt(0, 0), 0, "nobody to ask");
+    assert_eq!(
+        attempt(1, 1),
+        1,
+        "one prior counterparty is asked, required or not"
+    );
+    assert_eq!(required(1, 1), 0, "and nothing is required of them");
+    assert_eq!(attempt(2, 1), 1);
+    assert_eq!(attempt(7, 7), 3);
+    assert_eq!(attempt(40, 40), 10, "ten is the ceiling");
+    assert_eq!(attempt(40, 4), 4, "and the pool bounds it");
 }

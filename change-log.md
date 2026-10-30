@@ -16453,6 +16453,33 @@ rather than applying it. The test floods both, as a serving node does.
 TOP-54 and TOP-55. Workspace tests 888, Android 277, the binding
 regenerated.
 
+### 2026-10-30 (verifiers: at least one is asked, and recognition ranks rather than excludes)
+
+**Two corrections to the kernel, from the bench** [author, 2026-10-30].
+On the fresh phones' second ceremony, GXV's one prior counterparty was
+not asked about GXV: the kernel read `min(floor(n/2), 10, |candidates|)`
+as the number to ask, and at *n* = 1 that is zero; and the selector,
+recognising nobody in the pool, would not have asked a stranger. Both
+were the wrong reading. **The criterion is a ceiling** — the most
+verifiers a party's side of the record carries, ten keeping the record
+short and the leak to bystanders bounded — and **a participant asks at
+least one prior counterparty wherever one is offered**, attempting them
+until the number is reached; a subject with one prior counterparty is
+asked of that one, and the record stands with or without the answer.
+**Recognition ranks the pool and never shortens it**: those met before
+those in the horizon before those one edge beyond, then strangers at
+the selector's discretion and marked so — one stranger is better than
+no verifier. The design said *verified by nobody* at *n* = 1 and
+*the second encounter has no continuity check*; it now says what the
+author meant, in §8.1 and in the eclipse passage, and
+`light-client-requirements.md` §1.4 says *and ask anyway*.
+
+**In the kernel**: `attempt(n, candidates)` beside `required`, the
+selection taking the selector's tiers first and strangers after rather
+than stopping where recognition stops. **Owed**: trying the next
+candidate when an asked one does not answer within the window — today
+the asked are asked at once and the patience is the shell's.
+
 ### 2026-10-29 (one model: a meeting is its outcome)
 
 **Whether the ceremony screen's state is a noun** [author, 2026-10-29:
