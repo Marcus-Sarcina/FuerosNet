@@ -1247,8 +1247,15 @@ consequence of subnet plurality, not a gap in this mechanism.
   one, so a client dials each peer it holds no path to at the address it
   last offered, hands its own current address back over the path that
   opens, and on every contact exchanges what `wire-format.md` §7.10.3
-  states: its locator, a request for what the peer holds of it, and a
-  fresh deposit where its dataset has moved. **The deposit and its return
+  states: its locator, the peering record itself, a request for what the
+  peer holds of it, and a fresh deposit where its dataset has moved.
+  **The record goes with the greeting so that a peer which lost
+  everything can be reached** [author, 2026-10-30]: a client restored from
+  its phrase holds no record and takes nothing of a peer's from a party it
+  holds no peering with; the record, signed by the two of them, is what it
+  takes the sender as a peer by, the sender's material having come with
+  its first message, and from then the rest of its dataset comes back
+  from the blob the peer holds. **The deposit and its return
   travel on the direct path only** [author, 2026-10-25]: a blob is larger
   than a relay's request frame (`wire-format.md` §9.2), the serving node's
   mailbox is for mail (§14.1.6), and a peer that cannot be reached

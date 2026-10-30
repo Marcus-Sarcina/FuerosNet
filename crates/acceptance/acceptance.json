@@ -14241,6 +14241,33 @@
     "interpretation": "A peering carries none of the subnet's authority, so nothing consults a patron [design §15.1]."
   },
   {
+    "id": "REP-18",
+    "area": "replication-peering",
+    "gap": "replication-peering",
+    "title": "Send the peering record with every greeting, and take it from a party that is not yet a peer",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "wire-format.md §7.10.3",
+      "design §6.3"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §7.10.3",
+        "text": "Kind 30 is the one taken from a party that is not yet a peer"
+      },
+      {
+        "where": "design §6.3",
+        "text": "The record goes with the greeting so that a peer which lost\n  everything can be reached"
+      }
+    ],
+    "given": "Two peers, one of them restored from its phrase and holding no record of anybody; the other's first message has carried its introduction.",
+    "when": "The other greets: its locator, the peering record naming the two, and a request.",
+    "then": "The restored client holds the record pending the sender's material, applies it once that material is held, and from then names the sender as a peer, takes kinds 26 to 29 from it, and greets it in turn; a kind 30 not naming the sender and the recipient is dropped.",
+    "oracle": "behaviour",
+    "interpretation": ""
+  },
+  {
     "id": "DMN-28",
     "area": "daemon",
     "gap": "daemon",

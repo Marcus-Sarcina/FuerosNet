@@ -621,6 +621,10 @@ pub const KIND_BACKUP_DEPOSIT: u64 = 27;
 pub const KIND_BACKUP_REQUEST: u64 = 28;
 /// A peer's answer: the recipient's own blob, as held (kind 29).
 pub const KIND_BACKUP_RETURN: u64 = 29;
+/// The peering record itself, from a peer on every contact
+/// (`wire-format.md` §7.10.3): what a peer that lost everything takes the
+/// sender as a peer by, verified under its own material and the sender's.
+pub const KIND_PEERING_RECORD: u64 = 30;
 // kind 25 (`ProximityUpdate`) was RETIRED 2026-10-24: ranging is not used
 // (design §7.6.3). The number is not reused and a decoder meeting it rejects.
 

@@ -514,7 +514,11 @@ fn a_peer_silent_for_two_rounds_is_opened_to_anew_and_deposited_to_again() {
     let _ = c.outbox(); // the peering's own submission, not a greeting
     // round 1, held: locator, request, deposit
     assert!(c.greet_peer(kh("bob"), true).is_some());
-    assert_eq!(payloads(&c.outbox()), 3, "locator, request and the deposit");
+    assert_eq!(
+        payloads(&c.outbox()),
+        4,
+        "locator, the record, request and the deposit"
+    );
     // round 2, unheld, and the second of silence: the session is set
     // aside and the greeting waits on a bundle
     assert!(c.greet_peer(kh("bob"), false).is_some());
@@ -532,7 +536,7 @@ fn a_peer_silent_for_two_rounds_is_opened_to_anew_and_deposited_to_again() {
     let _ = c.outbox();
     assert!(c.greet_peer(kh("bob"), true).is_some());
     assert!(
-        payloads(&c.outbox()) >= 3,
+        payloads(&c.outbox()) >= 4,
         "deposited again after the reopening"
     );
     // the silence allowed doubled: rounds 4 and 5 reopen nothing
@@ -543,7 +547,7 @@ fn a_peer_silent_for_two_rounds_is_opened_to_anew_and_deposited_to_again() {
             !out.iter().any(|m| matches!(m, Msg::PrekeyRequest(_))),
             "the session stands"
         );
-        assert_eq!(payloads(&out), 2, "nothing to deposit: {out:?}");
+        assert_eq!(payloads(&out), 3, "nothing to deposit: {out:?}");
     }
     // round 6 is the fourth of silence: reopened at the doubled interval
     // — on a bundle still held, so the first message goes at once and
@@ -556,8 +560,61 @@ fn a_peer_silent_for_two_rounds_is_opened_to_anew_and_deposited_to_again() {
     let n = payloads(&out);
     assert_ne!(
         n,
-        2,
+        3,
         "reopened at the doubled interval: {} messages",
         out.len()
+    );
+}
+
+/// **The greeting carries the peering record, and a peer that lost
+/// everything takes the sender as a peer by it** [author, 2026-10-30;
+/// `wire-format.md` §7.10.3, kind 30], node or no node.  A fresh alice,
+/// knowing nobody: the record arrives before bob's material and waits;
+/// his introduction comes, and it applies, and he is a peer — the one
+/// kind taken from a party that is not yet one.  A record naming other
+/// parties, or sent by a party it does not name, is refused.
+// acceptance: REP-18
+#[test]
+fn a_peering_record_in_the_greeting_makes_the_sender_a_peer_of_a_client_that_lost_everything() {
+    let mut s = setup(&PARTIES);
+    let peering = peered(&mut s);
+    sessions_between(&mut s, "alice", "bob");
+    // the record goes with every greeting, from either side
+    let _ = s.client("bob").outbox();
+    assert!(s.client("bob").greet_peer(kh("alice"), false).is_some());
+    let out = s.client("bob").outbox();
+    assert_eq!(payloads(&out), 3, "locator, the record, and the request");
+
+    let mut fresh = setup(&["alice"]);
+    let me = kh("alice");
+    let c = fresh.client("alice");
+    c.known.retain(|k| k.keyhash == me);
+    // ahead of his material: held, not refused, and not yet a peer
+    let what = c
+        .take_peering_record(&kh("bob"), &peering)
+        .expect("a record of the two of them");
+    assert!(what.contains("waits"), "{what}");
+    assert!(c.peers().is_empty());
+    // his first message brings his material: the record applies
+    c.contact(
+        &id("bob").public,
+        rhtn_client::contacts::How::Introduced,
+        true,
+    );
+    assert_eq!(
+        c.peers(),
+        vec![kh("bob")],
+        "bob is a peer by the record he sent"
+    );
+    let what = c
+        .take_peering_record(&kh("bob"), &peering)
+        .expect("again, held already");
+    assert!(what.contains("held"), "{what}");
+    // and his own greeting now goes with the record he was handed
+    assert!(c.greet_peer(kh("bob"), false).is_some());
+    // not of the two of them: refused from either side
+    assert!(
+        c.take_peering_record(&kh("w1"), &peering).is_err(),
+        "w1 is not in it"
     );
 }

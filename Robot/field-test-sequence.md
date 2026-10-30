@@ -203,6 +203,21 @@ spent four hours failing; MRK, restarted on its own at 19:06, dialled
 stopped at the author's word, 107 MB collected. **Next**: one peer's
 contact data taken out, to watch it come back from the other.
 
+**The fourth run, `46682d3-restore-from-peer-1`, 2026-10-30**: 4VC wiped,
+reinstalled and restored from its phrase (the APKs stamped `a485e37`,
+built before the commit they carry), the other three keeping their state.
+**The chain ran to the wire's own rule and stopped there**: MRK's greeting
+over the relay reached 4VC unread (no session), MRK reopened at the second
+silent round (`peer.reopen displaced=1 next_after=4`), its first message
+carried its introduction and 4VC took it (`cer.introduction.taken`,
+`pay.cold_call`), MRK's next dial held and it deposited 126,527 bytes —
+and 4VC dropped locator, request and deposit as *not a peer*
+(`wire-format.md` §7.10.3), holding no peering record: the node had none
+to replay, each run's node being minted fresh (run 1's held T1–T3, run
+2's T6, this one nothing). **Ruled**: the greeting carries the peering
+record (kind 30); `field-run.sh --node <dir>` keeps the node across runs.
+Stopped after 12 rounds, the fifth run to prove the rest.
+
 **Not exercised**: the Done screen's subnet-naming prompt (T1's published
 nothing and the stream could not say whether it was shown; it is
 instrumented now and the root named the subnet from the subnet's options

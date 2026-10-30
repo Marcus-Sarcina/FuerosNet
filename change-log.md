@@ -16488,6 +16488,24 @@ Tested: a first message to a party holding nothing of the sender is
 refused on the binding alone and opens once the introduction is taken;
 a card naming another party is not taken.
 
+### 2026-10-30 (the greeting carries the peering record: kind 30)
+
+**The restore run stopped at the wire's own rule** [bench,
+`46682d3-restore-from-peer-1`]: MRK's relayed greeting reached the restored
+4VC, MRK reopened the session after two silent rounds and 4VC took its
+introduction from the first message — and then dropped MRK's locator,
+request and deposit as *not a peer*, `wire-format.md` §7.10.3 taking
+kinds 26 to 29 from a party the recipient holds a peering record with and
+from nobody else. The restored phone held no record, and the bench node
+had none to replay: `field-run.sh` mints a node per run, so no node on
+the bench ever held the peering. **Ruled** [author, 2026-10-30]: **the
+greeting carries the peering record**, kind 30, the one peer kind taken
+from a party that is not yet a peer: verified under the recipient's own
+material and the sender's, it makes the sender a peer, and the rest
+follows — node or no node. `wire-format.md` §7.10 and §7.10.3, design
+§6.3, PAY-018 amended and a row for the restore, REP-18. The bench
+script gained `--node <dir>` so the serving node outlives a run.
+
 ### 2026-10-30 (a client restored from its phrase is reached by its peers and gets its dataset back)
 
 **The next bench test is a wipe, a reinstall and a restore from the

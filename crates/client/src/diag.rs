@@ -117,6 +117,7 @@ pub fn kind_name(kind: u64) -> &'static str {
         KIND_BACKUP_DEPOSIT => "backup_deposit",
         KIND_BACKUP_REQUEST => "backup_request",
         KIND_BACKUP_RETURN => "backup_return",
+        KIND_PEERING_RECORD => "peering_record",
         _ => "unknown",
     }
 }

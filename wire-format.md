@@ -3637,6 +3637,7 @@ attribute it; here nothing is read before attribution.
 | 27 | `BackupDeposit` (§7.10.3) | Peer to peer: the sender's blob, for the recipient to hold (design §6.3) |
 | 28 | `BackupRequest` (§7.10.3) | Peer to peer: asks for the blob the recipient holds of the sender |
 | 29 | `BackupReturn` (§7.10.3) | Peer to peer: the recipient's own blob, as the sender holds it |
+| 30 | `PeeringRecord` (§7.10.3) | Peer to peer, on contact: the peering record naming the two, which a recipient that holds none takes the sender as a peer by |
 
 An unknown kind is application payload to a recipient that does not know it,
 and a kind whose body does not decode is dropped by the recipient that
@@ -3868,9 +3869,16 @@ taken from a party the recipient holds a peering record with (§4.4) and
 dropped from anybody else: what a peer holds for a peer is the one thing an
 acquaintance does not get (design §6.3). A client reaches for its peers on a
 clock of its own and when its network comes back, and on each contact sends
-its current locator (kind 26), asks for what the peer holds of it (kind 28)
-and deposits a fresh blob where its dataset moved (kind 27); the peer answers
-the request with the blob it holds (kind 29).
+its current locator (kind 26), the peering record itself (kind 30), asks for
+what the peer holds of it (kind 28) and deposits a fresh blob where its
+dataset moved (kind 27); the peer answers the request with the blob it holds
+(kind 29). **Kind 30 is the one taken from a party that is not yet a peer**
+[author, 2026-10-30]: a client restored from its phrase holds no record of
+anybody, and the record naming the two of them, verified under its own
+material and the sender's — which the sender's first message carried
+(§7.10.1) — is what makes the sender a peer, after which kinds 26 to 29 are
+taken from it. A kind 30 that does not name the sender and the recipient is
+dropped.
 
 ```
 BackupDeposit = bstr   ; kind 27: the sender's backup, design §13.7.1's
@@ -3887,6 +3895,13 @@ BackupReturn = bstr    ; kind 29: the recipient's own blob, exactly as the
                        ;   takes what it holds and the recipient does not —
                        ;   records that verify, contacts and the view beside
                        ;   them — replacing nothing it already has
+
+PeeringRecord = bstr   ; kind 30: the peering transaction's signed envelope
+                       ;   (§4.4) naming the sender and the recipient, byte-
+                       ;   for-byte as recorded. Taken from anybody it names;
+                       ;   held as a record the recipient's node propagated
+                       ;   would be, pending the sender's material where that
+                       ;   is not held yet
 ```
 
 **What a blob carries is the owner's business** (design §6.3): the records
@@ -3899,7 +3914,7 @@ blob is ordinarily larger than one request frame (§9.2's 256 KiB), a relay
 submission is one request frame, and a serving node's mailbox holds mail
 (design §14.1.6); so a deposit or a return for a peer no direct path is
 held to **waits** for the next contact that holds one, and is never put to
-a relay. Kinds 26 and 28 are small and go either way.
+a relay. Kinds 26, 28 and 30 are small and go either way.
 
 ### 7.11 Profile
 

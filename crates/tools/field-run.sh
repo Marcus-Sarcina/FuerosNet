@@ -8,6 +8,12 @@
 #    field-run.sh stop                 end the run in progress, from any shell
 #
 #  Options:
+#    --node <dir>            keep the serving node's identity and stores in
+#                            <dir> across runs (minted there the first time),
+#                            so the node holds the topology of every run
+#                            before, as a real one would; without it a node
+#                            is minted per run and holds nothing of earlier
+#                            ones. Logs and the peers file stay with the run.
 #    --addr <ip[:port]>      where rhtnd serves. Default: the address this
 #                            machine routes out of, port 7447.
 #    --phone <serial>=<hex>[@<ip[:port]>]
@@ -135,6 +141,7 @@ fi
 
 # ------------------------------------------------------------- arguments -----
 ADDR=""
+NODE_DIR=""
 LEVEL=debug
 STREAM_PORT=7448
 RETENTION=""
@@ -157,6 +164,7 @@ add_phone() {
 while [ $# -gt 0 ]; do
   case "$1" in
     --addr) ADDR="${2:-}"; shift 2 ;;
+    --node) NODE_DIR="${2:-}"; shift 2 ;;
     --level) LEVEL="${2:-}"; shift 2 ;;
     --stream-port) STREAM_PORT="${2:-}"; shift 2 ;;
     --retention) RETENTION="${2:-}"; shift 2 ;;
@@ -297,7 +305,31 @@ mint() { # dir -> keyhash and material in globals
   MATERIAL="$(awk '$1 == "material" {print $2}' "$1/identity.txt")"
   [ -n "$KEYHASH" ] && [ -n "$MATERIAL" ] || die "rhtn keys mint said nothing useful for $1"
 }
-mint "$RUN/daemon"; DAEMON_KEYHASH="$KEYHASH"; DAEMON_MATERIAL="$MATERIAL"
+# **the serving node outlives a run where asked** (--node): a node holds
+# the topology it stored and replays it to whoever attaches, which is what
+# a phone restored from its phrase has of its own peerings before its peers
+# give the rest back (design §6.3) — a node minted per run holds nothing of
+# any earlier run, and every restore test would start from an empty one
+# [run 46682d3-restore-from-peer-1, 2026-10-30]. The identity and the
+# stores live in the node directory; the logs and the peers file stay with
+# the run, which is what gets collected
+if [ -n "${NODE_DIR:-}" ]; then
+  mkdir -p "$NODE_DIR"
+  if [ -s "$NODE_DIR/identity.txt" ] && [ -f "$NODE_DIR/identity.key" ]; then
+    KEYHASH="$(awk '$1 == "keyhash" {print $2}' "$NODE_DIR/identity.txt")"
+    MATERIAL="$(awk '$1 == "material" {print $2}' "$NODE_DIR/identity.txt")"
+    [ -n "$KEYHASH" ] && [ -n "$MATERIAL" ] || die "$NODE_DIR/identity.txt names no identity"
+    say "node: reusing $NODE_DIR (keyhash ${KEYHASH:0:16}..., $(wc -l < "$NODE_DIR/topology/seen" 2>/dev/null || echo 0) record(s) seen)"
+  else
+    mint "$NODE_DIR"
+    say "node: minted in $NODE_DIR, to be reused by the next --node run"
+  fi
+  DAEMON_HOME="$NODE_DIR"
+else
+  mint "$RUN/daemon"
+  DAEMON_HOME="$RUN/daemon"
+fi
+DAEMON_KEYHASH="$KEYHASH"; DAEMON_MATERIAL="$MATERIAL"
 mint "$RUN/witness-1"; W_KEYHASH1="$KEYHASH"; W_MATERIAL1="$MATERIAL"
 mint "$RUN/witness-2"; W_KEYHASH2="$KEYHASH"; W_MATERIAL2="$MATERIAL"
 PHONE_KEYHASHES=()
@@ -323,12 +355,12 @@ done
 # ----------------------------------------------------------- the daemon ------
 cat > "$RUN/rhtnd.conf" <<EOF
 # written by crates/tools/field-run.sh for run $RUN_NAME
-identity = "$RUN/daemon/identity.key"
+identity = "$DAEMON_HOME/identity.key"
 listen = "$ADDR"
-queue = "$RUN/daemon/queue"
-prekeys = "$RUN/daemon/prekeys"
-topology = "$RUN/daemon/topology"
-archive = "$RUN/daemon/archive"
+queue = "$DAEMON_HOME/queue"
+prekeys = "$DAEMON_HOME/prekeys"
+topology = "$DAEMON_HOME/topology"
+archive = "$DAEMON_HOME/archive"
 heartbeat = 30
 ingestion = "unverified-gossip"
 

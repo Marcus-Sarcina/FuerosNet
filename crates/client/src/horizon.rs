@@ -255,6 +255,20 @@ pub struct Horizon {
 /// The most records held pending a signer's material, in all.
 pub const PENDING_MAX: usize = 512;
 
+/// Whether `bytes` is a peering record naming exactly `a` and `b`.
+pub fn peering_names(bytes: &[u8], a: &Keyhash, b: &Keyhash) -> bool {
+    let Ok(rec) = Record::parse(bytes) else {
+        return false;
+    };
+    if rec.tx_type != rhtn_archive::tx::TYPE_PEERING {
+        return false;
+    }
+    let (Some(x), Some(y)) = (rec.field_hash(1), rec.field_hash(2)) else {
+        return false;
+    };
+    (x == *a && y == *b) || (x == *b && y == *a)
+}
+
 /// The ASN in a peering's address field, where that field is a network
 /// point carrying one (`wire-format.md` §4.4: a point's field 2, absent
 /// where the peer did not state it). **Nothing where the field is a
@@ -971,6 +985,14 @@ impl Horizon {
             }
         }
         out
+    }
+
+    /// The peering record between `me` and `other` held here, as bytes.
+    pub fn peering_record(&self, me: &Keyhash, other: &Keyhash) -> Option<Vec<u8>> {
+        self.records
+            .values()
+            .find(|bytes| peering_names(bytes, me, other))
+            .cloned()
     }
 
     /// How many adoption or sibling edges away `other` is; nothing beyond

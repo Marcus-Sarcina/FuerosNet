@@ -4214,6 +4214,15 @@ impl Client {
         if let Ok(sl) = self.own_locator() {
             self.queue_to_peer(peer, payload::KIND_PEER_LOCATOR, &sl);
         }
+        // **the peering record itself goes with every greeting**
+        // [author, 2026-10-30]: a peer restored from its phrase holds no
+        // record and takes nothing of kinds 26 to 29 from a party it holds
+        // none with; the record, signed by the two of them, is what it
+        // takes the sender as a peer by — the sender's own material having
+        // come with the first message
+        if let Some(rec) = self.peering_record_with(&peer) {
+            self.queue_to_peer(peer, payload::KIND_PEERING_RECORD, &rec);
+        }
         self.queue_to_peer(peer, payload::KIND_BACKUP_REQUEST, &[]);
         // the deposit on the direct path alone (design §6.3): where none
         // is held it waits for the contact that holds one
@@ -4231,6 +4240,43 @@ impl Client {
             }
         }
         Some(())
+    }
+
+    /// The peering record between this client and `peer`, from its own
+    /// records or, where those are gone, from the horizon.
+    fn peering_record_with(&self, peer: &Keyhash) -> Option<Vec<u8>> {
+        let me = self.public.keyhash;
+        self.store
+            .records
+            .values()
+            .find(|b| crate::horizon::peering_names(b, &me, peer))
+            .cloned()
+            .or_else(|| self.horizon.peering_record(&me, peer))
+    }
+
+    /// **A peering record a party sent of itself and this client**
+    /// (`wire-format.md` §7.10.3, kind 30): taken from anybody, since it
+    /// is what makes the sender a peer, and held where it names the two
+    /// of them and verifies under their material — pending the sender's
+    /// where that has not come, as the horizon holds any record.  What
+    /// became of it, or why not.
+    pub fn take_peering_record(&mut self, from: &Keyhash, bytes: &[u8]) -> Result<String, String> {
+        let me = self.public.keyhash;
+        if !crate::horizon::peering_names(bytes, &me, from) {
+            return Err("not a peering record of the sender and this client".into());
+        }
+        let took = self.horizon.ingest(bytes, &self.known);
+        tracing::info!(target: "peer", from = %id8(from), ?took, "peer.record");
+        match took {
+            crate::horizon::Took::Applied | crate::horizon::Took::Duplicate => {
+                self.heard_peer(*from);
+                Ok(format!("{}'s peering record is held", hex8(from)))
+            }
+            crate::horizon::Took::Pending => {
+                Ok(format!("{}'s peering record waits on material", hex8(from)))
+            }
+            other => Err(format!("the peering record was refused: {other:?}")),
+        }
     }
 
     /// A peer said something: its silence is over, and the next reopening
@@ -6326,6 +6372,11 @@ impl Client {
                 self.store.direct_hints.insert(from, inner.clone());
                 Dispatched::Candidates(inner)
             }
+            // the record that makes a peer, from anybody it names
+            payload::KIND_PEERING_RECORD => match self.take_peering_record(&from, &inner) {
+                Ok(what) => Dispatched::Peer(what),
+                Err(why) => Dispatched::Peer(format!("{}: {why}", hex8(&from))),
+            },
             // **between peers** (design §6.3): each is taken from a peer
             // and from nobody else, since what a peer holds is the one
             // thing an acquaintance does not get
