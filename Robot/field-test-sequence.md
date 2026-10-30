@@ -163,6 +163,32 @@ in the shell's own frames: on the invitation for the scanner, on the
 channel for the inviter — seen on every ceremony after T1 (*4VC asks to
 be adopted here, into ZU8's Garden Club*).
 
+**The second run, `9ea2c16-model-validation-1`, 2026-10-29/30**, four
+identities made anew through the first-run screen on the model-layer
+build, same pairs. T1 formation (record `9be1edb0`, adoption `70ca2a98`,
+**the Done screen's naming prompt proven**: asked, refused once for an
+empty name, published), the subnet Culture Club reaching both rails by
+the sync alone. T2 adoption (`aefc34e0`, `2b699984`); T3 client-initiated
+(`f6f6930d`, four signers, `ad980926`). **What T2 and T3 found**, each
+fixed and committed under the run: the kernel read the verifier
+criterion as the number to ask, so a subject with one prior counterparty
+was asked of nobody and a selector recognising nobody asked no stranger
+(the author's two corrections, `8cde34b`); and the first query to a
+stranger was refused at the verifier for want of the selector's
+material, which the first message now carries (`0853458`). T4 regular
+meeting with the peering (`414367a5`, **two signers**: MRK's session had
+closed to *Lost* before it and nothing retries after *Lost*; peering
+`f7c6b2b8` and an 86,475-byte backup rode the direct path regardless;
+the cold call was taken at GXV). **T5, 4VC meets GXV: the first record
+on the bench with verifier answers** — `35bad415`, four signers,
+`witnesses 2, responses 2`: ZU8 answered *Match* about GXV (0.546
+against a match at 0.363) and *NoMatch* about 4VC (0.140 against a floor
+of 0.200), both captures whole-faced; whose face was in front of which
+camera is the author's to say. T5's Done screen on 4VC reported T4's
+peering, the shell's object never having been cleared: fixed. **Owed
+from this run**: a re-attach on backoff after *Lost*; the next candidate
+when an asked verifier does not answer.
+
 **Not exercised**: the Done screen's subnet-naming prompt (T1's published
 nothing and the stream could not say whether it was shown; it is
 instrumented now and the root named the subnet from the subnet's options

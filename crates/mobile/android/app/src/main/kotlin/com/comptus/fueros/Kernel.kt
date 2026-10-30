@@ -356,6 +356,12 @@ object Kernel {
             // a meeting still under way is the one to return to; one that
             // ended either way is residue, and the next starts clean
             meet?.let { if (it.step() != Meet.Step.DONE && it.step() != Meet.Step.STOPPED) return it }
+            // **and carries nothing of the last** [bench, 2026-10-30: T5's
+            // Done screen reported T4's peering, the object never having
+            // been cleared]: the adoption and the peering are this
+            // meeting's or nobody's
+            adoption = null
+            peering = null
             // nobody is named here: the codes say who is being met
             // (`wire-format.md` §14.3.1), the provision's peer being the
             // payload demo's and no part of a ceremony
@@ -1189,6 +1195,7 @@ object Kernel {
             // of the next meeting's would otherwise reach the last one's,
             // which refuses it for coming from the wrong party
             adoption = null
+            peering = null
             opticalTaken = false
             transcriptTaken = false
             ble?.close()

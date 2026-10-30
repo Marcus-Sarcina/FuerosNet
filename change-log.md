@@ -16453,6 +16453,14 @@ rather than applying it. The test floods both, as a serving node does.
 TOP-54 and TOP-55. Workspace tests 888, Android 277, the binding
 regenerated.
 
+### 2026-10-30 (a meeting carries nothing of the last)
+
+**T5's Done screen reported T4's peering.** The shell's peering object
+was set when a meeting carried one and never cleared, so the next
+meeting's Done screen found it and said so. Both the adoption and the
+peering are cleared when a meeting starts and when it stops; a meeting
+still under way is returned as it was.
+
 ### 2026-10-30 (a first message to a stranger carries the sender's introduction)
 
 **The query that could not be opened** (the run's T3): the selector asked

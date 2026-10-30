@@ -902,6 +902,15 @@ state machine stays the shell's, as it was; nothing of it is persisted
 or modelled. The resource answer and the launch records are still FFI
 records.
 
+**Owed from the second bench run, 2026-10-30**: after *Lost* nothing
+retries — the kernel's failover returns once no sibling answers and the
+shell re-attaches only on the platform's network-available callback, so
+a close the node initiates leaves a phone detached until restarted
+(MRK at T4); a re-attach on backoff belongs in the kernel's maintenance.
+And an asked verifier that does not answer within the window is not
+replaced by the next candidate (the *do… until* of the author's ruling);
+that is a re-entrant selection.
+
 **Stage three was the documents**:
 the schema into `light-client-requirements.md` §9 as a table, the
 vocabulary rows into design §2, and the terminology pass.
