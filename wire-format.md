@@ -5083,7 +5083,8 @@ portion of one HTTP message in field 2 and the same resource in field 1, with th
 requester closing its side of the stream when the message ends; the node puts the
 portions together before anything parses them (§11.2), and a portion naming
 another resource, or one that does not decode, fails the stream as a malformed
-frame does (§9.2). **Either way the whole message is bounded at 16 MiB**: a node
+frame does (§9.2). **Either way the whole message is bounded at 16 MiB** [author,
+2026-10-31]: a node
 drops a request past it unanswered, as it drops an over-bound frame, and a
 requester stops reading a response past it. **The bound is per message, not per
 frame**, which is what a scan or a photograph needs and a frame does not; a
