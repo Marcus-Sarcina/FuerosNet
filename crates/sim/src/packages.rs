@@ -209,3 +209,86 @@ pub fn mute() -> Vec<u8> {
     )
     .expect("a component")
 }
+
+/// The host instance with the block, the log and the clock beside the
+/// two bindings every package has, lowered for a module that keeps notes.
+const BINDINGS_FULL: &str = r#"
+  (import "rhtn:host/bindings@1.0.0" (instance $b
+    (export "request" (func (result (list u8))))
+    (export "response" (func (param "body" (list u8))))
+    (export "block-write" (func (param "name" string) (param "offset" u64) (param "bytes" (list u8)) (result u64)))
+    (export "block-read" (func (param "name" string) (param "offset" u64) (param "len" u32) (result (list u8))))
+    (export "log" (func (param "line" string)))
+    (export "clock" (func (result u64)))
+  ))
+"#;
+
+const LOWER_FULL: &str = r#"
+  (core func $req (canon lower (func $b "request") (memory (core memory $arenai "memory")) (realloc (core func $arenai "cabi_realloc"))))
+  (core func $resp (canon lower (func $b "response") (memory (core memory $arenai "memory")) (realloc (core func $arenai "cabi_realloc"))))
+  (core func $bw (canon lower (func $b "block-write") (memory (core memory $arenai "memory")) (realloc (core func $arenai "cabi_realloc"))))
+  (core func $br (canon lower (func $b "block-read") (memory (core memory $arenai "memory")) (realloc (core func $arenai "cabi_realloc"))))
+  (core func $log (canon lower (func $b "log") (memory (core memory $arenai "memory")) (realloc (core func $arenai "cabi_realloc"))))
+  (core func $clk (canon lower (func $b "clock")))
+"#;
+
+const WIRE_FULL: &str = r#"
+  (core instance $maini (instantiate $main
+    (with "host" (instance
+      (export "request" (func $req)) (export "response" (func $resp))
+      (export "block-write" (func $bw)) (export "block-read" (func $br))
+      (export "log" (func $log)) (export "clock" (func $clk))))
+    (with "arena" (instance $arenai))))
+  (func (export "handle") (canon lift (core func $maini "handle")))
+"#;
+
+const PREAMBLE_FULL: &str = r#"
+    (import "host" "request" (func $request (param i32)))
+    (import "host" "response" (func $response (param i32 i32)))
+    (import "host" "block-write" (func $bwrite (param i32 i32 i64 i32 i32) (result i64)))
+    (import "host" "block-read" (func $bread (param i32 i32 i64 i32 i32)))
+    (import "host" "log" (func $log (param i32 i32)))
+    (import "host" "clock" (func $clock (result i64)))
+    (import "arena" "memory" (memory 1))
+"#;
+
+fn bound_full(body: &str) -> Vec<u8> {
+    let src = format!(
+        "(component {BINDINGS_FULL}{ARENA}{LOWER_FULL}\n  (core module $main{PREAMBLE_FULL}{body}\n  )\n{WIRE_FULL}\n)"
+    );
+    wat::parse_str(&src).expect("a component")
+}
+
+/// **Keeps what it was handed in its block, logs that it did, and answers
+/// with what it reads back**: the request body is written to the file
+/// `note` at offset 0, read back, and returned, with the host's clock in
+/// the log line.  The round trip through the block is the claim.
+pub fn noting() -> Vec<u8> {
+    bound_full(
+        r#"
+    (data (i32.const 2000) "note")
+    (data (i32.const 2010) "kept a note")
+    (func (export "handle")
+      (call $request (i32.const 0))
+      (drop (call $bwrite (i32.const 2000) (i32.const 4) (i64.const 0) (i32.load (i32.const 0)) (i32.load (i32.const 4))))
+      (call $bread (i32.const 2000) (i32.const 4) (i64.const 0) (i32.load (i32.const 4)) (i32.const 8))
+      (drop (call $clock))
+      (call $log (i32.const 2010) (i32.const 11))
+      (call $response (i32.load (i32.const 8)) (i32.load (i32.const 12))))
+"#,
+    )
+}
+
+/// Writes `bytes` of its request into the block at offset `at`, which is
+/// how a test takes a block past its quota.
+pub fn hoarding(at: u64) -> Vec<u8> {
+    bound_full(&format!(
+        r#"
+    (data (i32.const 2000) "hoard")
+    (func (export "handle")
+      (call $request (i32.const 0))
+      (drop (call $bwrite (i32.const 2000) (i32.const 5) (i64.const {at}) (i32.load (i32.const 0)) (i32.load (i32.const 4))))
+      (call $response (i32.const 0) (i32.const 0)))
+"#
+    ))
+}

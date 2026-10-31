@@ -149,6 +149,12 @@ pub struct Config {
     /// restart or a re-read. Absent, a grant act has nowhere to persist
     /// and says so.
     pub grants: Option<PathBuf>,
+    /// **Where this node keeps what its hosted packages own**
+    /// (`infra-client-requirements.md` §9.3): a storage block per instance
+    /// under `blocks/`, a log per instance under `logs/`. Absent, a package
+    /// that needs either cannot be hosted here, which §9 makes ordinary
+    /// capacity, said at installation.
+    pub state: Option<PathBuf>,
     /// Where a field-test build writes its diagnostic events, and down to
     /// which level (`Robot/field-test-diagnostics.md`).  Accepted by every
     /// build so one configuration serves both flavours; a releasable build
@@ -331,6 +337,7 @@ struct File {
     upstream: Option<Spanned<Upstream>>,
     resources: Option<PathBuf>,
     grants: Option<PathBuf>,
+    state: Option<PathBuf>,
     #[serde(rename = "resource-limits")]
     resource_limits: Option<Spanned<Limits>>,
     administration: Option<Spanned<AdministrationTable>>,
@@ -592,6 +599,7 @@ impl Config {
             archive: f.archive,
             resources: f.resources,
             grants: f.grants,
+            state: f.state,
             resource_limits,
             log,
         })

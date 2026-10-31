@@ -633,7 +633,19 @@ impl crate::federation::Addresses for Gateway {
 /// §9.2): its credentialled request traffic and nothing else.  There is no
 /// binding for topology, liveness, the queue, prekeys or role inputs, so a
 /// manifest importing one cannot be instantiated.
-pub const HOST_EXPORTS: [&str; 2] = ["rhtn/1:request", "rhtn/1:response"];
+pub const HOST_EXPORTS: [&str; 5] = [
+    "rhtn/1:request",
+    "rhtn/1:response",
+    "rhtn/1:block",
+    "rhtn/1:log",
+    "rhtn/1:clock",
+];
+
+/// The versions of the host surface this node offers a package
+/// (`infra-client-requirements.md` §9.3): a manifest names the ones it
+/// tolerates, and one that tolerates none of these is refused at
+/// installation with both lists named.
+pub const HOST_VERSIONS: [&str; 1] = ["rhtn/host@1"];
 
 /// Reserved for the node's own evaluation and never an application role
 /// (`resource-requirements.md` §3, design §11.4).  `connect` is the gate
@@ -840,6 +852,97 @@ pub struct Manifest {
     /// The grants it ships ready-made
     /// ([`crate::grant::Template`]), which an operator may take or ignore.
     pub templates: Vec<Template>,
+    /// The host-surface versions it tolerates ([`HOST_VERSIONS`]); empty
+    /// where it names none, which a package written before the surface
+    /// was versioned does.
+    pub host: Vec<String>,
+    /// What it asks its host to bound it at ([`Budget`]).
+    pub budget: Budget,
+    /// The destinations it may fetch from, each `https://host[:port]`
+    /// exactly, no wildcard ([`destination_refused`]): delivered with the
+    /// package, read by the operator at installation, replaced whole by
+    /// an update [author, 2026-10-30].
+    pub fetch: Vec<String>,
+}
+
+/// What a package declares it needs of its host, and is bounded at
+/// (`infra-client-requirements.md` §9.3): each absent where the package
+/// does not use that binding.  The first values are the package's own
+/// claims; the host enforces them and names the one exceeded.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Budget {
+    /// The storage block's ceiling, in bytes.
+    pub block_bytes: Option<u64>,
+    /// The operator-visible log retained, in bytes.
+    pub log_bytes: Option<u64>,
+    /// Jobs in flight at once.
+    pub jobs: Option<u64>,
+    /// Requests a minute.
+    pub requests_per_minute: Option<u64>,
+    /// Job compute a day, in seconds.
+    pub job_seconds_per_day: Option<u64>,
+}
+
+/// Why a fetch destination is refused, or nothing where it is one a
+/// package may name: `https://host` or `https://host:port`, nothing
+/// else — no path, no query, no userinfo, no wildcard — and a host that
+/// is a name or a public address, never the node's own machine or its
+/// network (the discipline every adapter owes, stated once here).
+#[must_use]
+pub fn destination_refused(d: &str) -> Option<String> {
+    let Some(rest) = d.strip_prefix("https://") else {
+        return Some(format!(
+            "`{d}`: a destination is https://host or https://host:port"
+        ));
+    };
+    if rest.is_empty() || rest.contains(['/', '?', '#', '@', '*', ' ']) {
+        return Some(format!(
+            "`{d}`: a destination names a host and at most a port, with no path, query, user or wildcard"
+        ));
+    }
+    let (host, port) = match rest.rsplit_once(':') {
+        Some((h, p)) if !h.contains(':') => (h, Some(p)),
+        _ => (rest, None),
+    };
+    if let Some(p) = port
+        && p.parse::<u16>().is_err()
+    {
+        return Some(format!("`{d}`: `{p}` is not a port"));
+    }
+    if host.is_empty() {
+        return Some(format!("`{d}`: no host"));
+    }
+    if host.eq_ignore_ascii_case("localhost")
+        || host.ends_with(".local")
+        || host.ends_with(".internal")
+    {
+        return Some(format!(
+            "`{d}`: the node's own machine and network are not destinations"
+        ));
+    }
+    if let Ok(ip) = host.trim_matches(['[', ']']).parse::<std::net::IpAddr>() {
+        let private = match ip {
+            std::net::IpAddr::V4(v) => {
+                v.is_loopback()
+                    || v.is_private()
+                    || v.is_link_local()
+                    || v.is_unspecified()
+                    || v.is_broadcast()
+            }
+            std::net::IpAddr::V6(v) => {
+                v.is_loopback()
+                    || v.is_unspecified()
+                    || (v.segments()[0] & 0xfe00) == 0xfc00
+                    || (v.segments()[0] & 0xffc0) == 0xfe80
+            }
+        };
+        if private {
+            return Some(format!(
+                "`{d}`: the node's own machine and network are not destinations"
+            ));
+        }
+    }
+    None
 }
 
 /// A package instantiated against the host's exports.
@@ -862,6 +965,17 @@ pub fn instantiate(m: &Manifest) -> Result<Package, String> {
         .find(|i| !HOST_EXPORTS.contains(&i.as_str()))
     {
         return Err(format!("no such binding: {i}"));
+    }
+    // **a package whose tolerances meet none of the host's versions is
+    // refused at installation with the versions named on both sides**
+    if !m.host.is_empty() && !m.host.iter().any(|v| HOST_VERSIONS.contains(&v.as_str())) {
+        return Err(format!(
+            "the package tolerates {:?} and this host offers {:?}",
+            m.host, HOST_VERSIONS
+        ));
+    }
+    if let Some(why) = m.fetch.iter().find_map(|d| destination_refused(d)) {
+        return Err(why);
     }
     if m.admin.len() > MAX_OPERATIONS {
         return Err(format!(

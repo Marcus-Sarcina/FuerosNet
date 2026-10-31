@@ -14937,6 +14937,34 @@
     "interpretation": null
   },
   {
+    "id": "DMN-35",
+    "area": "daemon",
+    "gap": "daemon",
+    "title": "Read the manifest's host versions, budget and destinations, provision the block and the log, and tell the instance where they are on the relationships exchange",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "infra-client-requirements.md §9.3",
+      "resource-requirements.md §8",
+      "resource-requirements.md §3.3"
+    ],
+    "rule": [
+      {
+        "where": "infra-client-requirements.md §9.3",
+        "text": "a\npackage whose tolerances meet none of yours is refused at installation\nwith both lists named"
+      },
+      {
+        "where": "infra-client-requirements.md §9.3",
+        "text": "you tell it where its block and its log are, and\nwhat it may fill them to, on the relationships exchange"
+      }
+    ],
+    "given": "A hosting file naming a package whose manifest declares host versions, a block and log budget, fetch destinations and an instance key, and a node with a state directory.",
+    "when": "The file is applied, and again with a package tolerating only versions this host does not offer, with an ill-formed destination, with a bad key, and on a node with no state directory.",
+    "then": "The block exists under the state directory at the declared quota and the log beside it; the instance's plane carries rhtn-host, rhtn-block, rhtn-block-bytes, rhtn-log and rhtn-log-bytes on its relationships PUT, told again when they move; the version mismatch, the destination, the key and the missing state directory are each refused at installation with the reason named.",
+    "oracle": "behaviour",
+    "interpretation": ""
+  },
+  {
     "id": "TOP-52",
     "area": "topology",
     "gap": "topology",
@@ -15239,6 +15267,33 @@
     "then": "One reader answers how the body is delimited, and the socket reads that much while the parser reads what arrived to the same decision; a counted, a chunked and an unframed answer each come to the same canonical message. The reader refuses a duplicated or comma-listed length, a length beside an encoding and an encoding the node does not decode, so the refusal happens once rather than differently in each place. The socket hands up what it read without re-framing it, and the host path joins a chunked answer with the same parser rather than handing a caller its chunk sizes.",
     "oracle": "behaviour",
     "interpretation": "§11.2's hazard is two parties disagreeing about a message boundary. A socket must parse enough to know when to stop reading and cannot defer that, so the division is between reading — which stays where the bytes arrive, with the bound an unauthenticated far end can make the node spend — and deciding, which belongs to one reader. Three implementations of the second is the hazard inside one node."
+  },
+  {
+    "id": "RSC-63",
+    "area": "resources",
+    "gap": "resources",
+    "title": "Serve a sandboxed package its storage block, its log and the host's clock as bindings, enforcing the block's quota on every write",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "infra-client-requirements.md §9.3",
+      "resource-requirements.md §8"
+    ],
+    "rule": [
+      {
+        "where": "infra-client-requirements.md §9.3",
+        "text": "a **byte ceiling the package declared and you enforce on every write**, the refusal naming the ceiling"
+      },
+      {
+        "where": "infra-client-requirements.md §9.3",
+        "text": "reaches nothing it did not declare"
+      }
+    ],
+    "given": "A package admitted to the sandbox importing the block, the log and the clock beside request and response, and an instance with a block of a known quota and a log.",
+    "when": "It writes what it was handed into its block, reads it back, logs a line and reads the clock; then writes past the quota; and a package granted no block touches it.",
+    "then": "The round trip returns what was written and the file persists between requests; the log line is host-stamped; the write past the quota is refused with the quota named and nothing of it lands; the ungranted touch traps the request; a name with a path in it is not a block name.",
+    "oracle": "behaviour",
+    "interpretation": ""
   },
   {
     "id": "TOP-54",

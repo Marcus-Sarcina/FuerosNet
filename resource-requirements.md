@@ -231,7 +231,7 @@ operator bound and `rhtn-audience` naming you.
 
 | Request | Carries | Your answer |
 |---|---|---|
-| `PUT /.rhtn/relationships` | the instances your operator configured yours to federate with: a patron's instance, subordinates' instances, named kin, each a resource keyhash | 2xx once taken; it is repeated until then, and again whenever they change. **Nothing else is delivered to you until you take it** [2026-10-27]: a directive is acted on under a snapshot of who may send you one, and until you answer you have accepted no snapshot |
+| `PUT /.rhtn/relationships` | the instances your operator configured yours to federate with: a patron's instance, subordinates' instances, named kin, each a resource keyhash; **and what your host provides you** [2026-10-30], as headers — `rhtn-host`, the surface versions it offers; `rhtn-block` and `rhtn-block-bytes`, where your storage block is and its ceiling; `rhtn-log` and `rhtn-log-bytes`, your log and its retention (`infra-client-requirements.md` §9.3) | 2xx once taken; it is repeated until then, and again whenever they or the host's facts change. **Nothing else is delivered to you until you take it** [2026-10-27]: a directive is acted on under a snapshot of who may send you one, and until you answer you have accepted no snapshot |
 | `PUT /.rhtn/envelope` | one **envelope** from a related instance, with `rhtn-origin` (that instance, hex) and `rhtn-relation` (`patron`, `subordinate` or `kin:<name>`, the node's reading of your operator's configuration) | 2xx to take it, which the node remembers; the body may carry envelopes to send (below) |
 | `GET /.rhtn/outbox` | **the items the node has taken**, as `?taken=a,b` [2026-10-27] | 2xx with `{"emit": [{"item": …, "to": …, "envelope": …}, …]}`, empty where you have nothing to send; `to` is `patron`, `subordinates`, `kin:<name>` or one related instance in hex |
 
@@ -754,6 +754,21 @@ that cannot use you. That is ordinary capacity rather than a defect on either si
 Declaring it here makes the mismatch visible before installation instead of at first
 request, which is packaging hygiene rather than something the protocol enforces. The
 operator's side of the same fact is `infra-client-requirements.md` §9.
+
+**What the manifest says of its host** [author, 2026-10-30], beside the roles and
+the bindings it imports: **`host`**, the surface versions you tolerate
+(`infra-client-requirements.md` §9.3; `rhtn/host@1` today), absent only in a
+package written before the surface had a version; **`[budget]`**, what you ask to be
+bounded at — `block_bytes`, `log_bytes`, `jobs`, `requests_per_minute`,
+`job_seconds_per_day` — each absent where you do not use the binding, each your own
+claim that the host enforces and names when exceeded; and **`fetch`**, the
+destinations you may reach outward, each `https://host` or `https://host:port`
+exactly and nothing with a path, a wildcard or the node's own machine in it —
+delivered with the package so the operator reads it at installation, and replaced
+whole by an update, since an allow-list a package could grow at run time is no
+list. A host that offers none of your versions, or cannot keep a block, refuses you
+at installation with the reason; one that can tells your instance where its block
+and its log are on the relationships exchange (§3.3).
 
 ---
 

@@ -46,7 +46,9 @@ fn run(d: &Dir, text: &str) -> Result<usize, String> {
         Path::new(&f),
         Limits::default(),
         Some(&d.0.join("grants")),
+        Some(&d.0.join("state")),
     )
+    .map(|a| a.bound)
     .map_err(|e| e.to_string())
 }
 
@@ -191,7 +193,8 @@ fn a_grant_is_checked_against_the_package_before_anything_is_bound() {
             &mut g,
             Path::new(&f),
             Limits::default(),
-            Some(&d.0.join("grants"))
+            Some(&d.0.join("grants")),
+            Some(&d.0.join("state")),
         )
         .is_err()
     );
@@ -265,6 +268,7 @@ fn a_manifest_declares_administrative_operations_and_their_bounds() {
         Path::new(&f),
         Limits::default(),
         Some(&d.0.join("grants")),
+        Some(&d.0.join("state")),
     )
     .expect("a manifest with operations binds");
     let bound = g.bound();
@@ -367,6 +371,7 @@ fn a_manifest_ships_templates_in_the_operators_own_vocabulary() {
         Path::new(&f),
         Limits::default(),
         Some(&d.0.join("grants")),
+        Some(&d.0.join("state")),
     )
     .expect("a manifest with templates binds");
     let bound = g.bound();
@@ -548,6 +553,7 @@ fn a_resource_that_holds_its_own_port_is_reached_over_a_socket() {
         Path::new(&f),
         Limits::default(),
         Some(&d.0.join("grants")),
+        Some(&d.0.join("state")),
     )
     .expect("an address binds");
     let resource = g.bound()[0];
@@ -639,6 +645,7 @@ fn a_resource_with_neither_component_nor_address_is_brokered() {
         Path::new(&f),
         Limits::default(),
         Some(&d.0.join("grants")),
+        Some(&d.0.join("state")),
     )
     .expect("a brokered resource binds");
     let b = g.binding(&g.bound()[0]).expect("bound");
@@ -885,6 +892,7 @@ fn a_directive_crosses_between_two_hosted_instances_and_a_member_cannot_speak_on
         Path::new(&f),
         Limits::default(),
         Some(&d.0.join("grants")),
+        Some(&d.0.join("state")),
     )
     .expect("binds");
     let rs = rhtn_daemon::hosting::relationships(Path::new(&f)).expect("relationships read");
@@ -1043,6 +1051,7 @@ fn a_package_answering_with_something_that_is_not_a_response_is_unavailable() {
         Path::new(&f),
         Limits::default(),
         Some(&d.0.join("grants")),
+        Some(&d.0.join("state")),
     )
     .expect("the package binds");
     let resource = g.bound()[0];
@@ -1079,6 +1088,7 @@ fn a_package_answering_with_something_that_is_not_a_response_is_unavailable() {
         Path::new(&f2),
         Limits::default(),
         Some(&d2.0.join("grants")),
+        Some(&d2.0.join("state")),
     )
     .expect("the package binds");
     g2.refresh(&table, &Standing::unknown());
@@ -1093,4 +1103,106 @@ fn a_package_answering_with_something_that_is_not_a_response_is_unavailable() {
         String::from_utf8_lossy(&body).contains("rhtn-principal:"),
         "and the credentialed request it was handed is still readable in the body",
     );
+}
+
+/// **The manifest names the host surface it tolerates, what it asks to be
+/// bounded at, and where it may fetch from** (`resource-requirements.md`
+/// §8, `infra-client-requirements.md` §9.3): a package tolerating none of
+/// this host's versions is refused at installation with both lists named;
+/// a block is provisioned under the node's state directory at the budget
+/// the package declared, and the instance is to be told where; a fetch
+/// destination with a path, a wildcard or the node's own machine in it is
+/// refused; and an instance key that is not 32 bytes of hex is refused.
+// acceptance: DMN-35
+#[test]
+fn a_manifest_declares_its_host_version_its_budget_and_its_destinations() {
+    let d = Dir::new("surface");
+    d.put("echo.wasm", rhtn_sim::packages::echo());
+    let future = d.put(
+        "future.manifest",
+        "roles = [\"reader\"]\nimports = [\"rhtn/1:request\", \"rhtn/1:response\"]\ncomponent = \"echo.wasm\"\nhost = [\"rhtn/host@2\", \"rhtn/host@3\"]\n",
+    );
+    let why = run(&d, &host(&future)).expect_err("refused");
+    assert!(
+        why.contains("tolerates") && why.contains("rhtn/host@1"),
+        "{why}"
+    );
+    let tolerant = d.put(
+        "tolerant.manifest",
+        "roles = [\"reader\"]\nimports = [\"rhtn/1:request\", \"rhtn/1:response\"]\ncomponent = \"echo.wasm\"\nhost = [\"rhtn/host@1\", \"rhtn/host@2\"]\n",
+    );
+    assert_eq!(
+        run(&d, &host(&tolerant)),
+        Ok(1),
+        "one version in common is enough"
+    );
+
+    // a block at the declared budget, provisioned where the node keeps state
+    d.put("noting.wasm", rhtn_sim::packages::noting());
+    let noting = d.put(
+        "noting.manifest",
+        "roles = [\"reader\"]\nimports = [\"rhtn/1:request\", \"rhtn/1:response\", \"rhtn/1:block\", \"rhtn/1:log\", \"rhtn/1:clock\"]\ncomponent = \"noting.wasm\"\n[budget]\nblock_bytes = 4096\nlog_bytes = 512\n",
+    );
+    let f = d.put("hosting", host(&noting));
+    let mut g = Gateway::default();
+    let applied = apply(
+        &mut g,
+        Path::new(&f),
+        Limits::default(),
+        Some(&d.0.join("grants")),
+        Some(&d.0.join("state")),
+    )
+    .expect("bound");
+    assert_eq!(applied.bound, 1);
+    assert!(
+        d.0.join("state").join("blocks").join(RES).is_dir(),
+        "the block exists"
+    );
+    let (_, facts) = &applied.facts[0];
+    let get = |n: &str| facts.iter().find(|(k, _)| k == n).map(|(_, v)| v.clone());
+    assert_eq!(get("rhtn-host").as_deref(), Some("rhtn/host@1"));
+    assert!(get("rhtn-block").unwrap().ends_with(RES));
+    assert_eq!(get("rhtn-block-bytes").as_deref(), Some("4096"));
+    assert!(get("rhtn-log").unwrap().ends_with(&format!("{RES}.log")));
+    assert_eq!(get("rhtn-log-bytes").as_deref(), Some("512"));
+    // and with no state directory, a node cannot host it, and says so
+    let mut g2 = Gateway::default();
+    let why = apply(&mut g2, Path::new(&f), Limits::default(), None, None)
+        .err()
+        .map(|e| e.to_string())
+        .expect("refused");
+    assert!(why.contains("state directory"), "{why}");
+
+    // destinations: exact hosts only
+    for (dest, word) in [
+        ("http://feeds.example", "https://host"),
+        ("https://feeds.example/rss", "no path"),
+        ("https://*.example", "no path"),
+        ("https://localhost:8080", "own machine"),
+        ("https://127.0.0.1", "own machine"),
+        ("https://10.0.0.5", "own machine"),
+        ("https://feeds.example:notaport", "not a port"),
+    ] {
+        let m = d.put(
+            "fetch.manifest",
+            format!(
+                "roles = [\"reader\"]\nimports = [\"rhtn/1:request\", \"rhtn/1:response\"]\ncomponent = \"echo.wasm\"\nfetch = [\"{dest}\"]\n"
+            ),
+        );
+        let why = run(&d, &host(&m)).expect_err(dest);
+        assert!(why.contains(word), "{dest}: {why}");
+    }
+    let ok = d.put(
+        "fetch-ok.manifest",
+        "roles = [\"reader\"]\nimports = [\"rhtn/1:request\", \"rhtn/1:response\"]\ncomponent = \"echo.wasm\"\nfetch = [\"https://feeds.example\", \"https://api.example:8443\"]\n",
+    );
+    assert_eq!(run(&d, &host(&ok)), Ok(1));
+
+    // an instance key is 32 bytes of hex, or nothing
+    let keyed = format!(
+        "[[host]]\nresource = \"{RES}\"\nowner = \"{WHO}\"\nauthority = \"shop.internal\"\nmanifest = \"{}\"\nkey = \"deadbeef\"\n",
+        tolerant.display()
+    );
+    let why = run(&d, &keyed).expect_err("refused");
+    assert!(why.contains("instance key"), "{why}");
 }

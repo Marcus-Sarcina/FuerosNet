@@ -697,6 +697,60 @@ and deliverable at the other node's surface by hand.
 
 ---
 
+### 9.3 What a host provides a package
+
+**The host surface is versioned, and this is `rhtn/host@1`** [author,
+2026-10-30]. A package's manifest names the versions it tolerates
+(`resource-requirements.md` §8); you offer the ones you implement; **a
+package whose tolerances meet none of yours is refused at installation
+with both lists named**, which is ordinary capacity (§9) said before any
+request. Bindings are only ever added within a version, and a removal is a
+new one.
+
+**Five bindings, and the list is closed.** Each is answered here against
+§9.2's test — *does this give the package anything of the network?* — and
+a binding that cannot answer it is not in the surface.
+
+| Binding | What it is | The §9.2 answer |
+|---|---|---|
+| **request and response** | the gateway's door as §3 and `resource-requirements.md` §3 have it, and the exchanges on your own paths (§3.3 there) | unchanged: the credential-bearing request traffic and nothing else |
+| **the storage block** | a durable region of your own storage, provisioned per instance when you bind it and destroyed only by an operator's act, never by a reload; flat files under names of the package's choosing; a **byte ceiling the package declared and you enforce on every write**, the refusal naming the ceiling; `sync` as the whole of the durability discipline — when it returns, the bytes are on stable storage | instance-local data the package wrote; you read none of it, keep no persistence logic for it, and share it with no other instance |
+| **the log** | lines the package writes for its operator, each stamped by you, kept per instance within the bytes the package declared, the oldest going first, shown on your administration surface (§8.3) | outward only: the package writes, the operator reads; it is for operators and never carries member content, which is the package's rule to keep |
+| **the clock** | your time, milliseconds since the epoch | advisory by nature: wire timestamps are signer-controlled (`wire-format.md` §3.3) and nothing here treats yours as proof of anything |
+| **fetch** | an outbound request to one of the destinations the package's manifest declared — `https://host` or `https://host:port`, exactly, no wildcard, never your own machine or network — with the response bounded and a redirect honoured only within the list; *the binding is specified here and built after the block* [author, 2026-10-30] | the package's own traffic to parties its operator read and accepted at installation; you are its egress and learn nothing of the network by carrying it |
+
+**Jobs** — durable scheduled work under the instance's authority as of the
+configuration epoch, budgeted, cancellable — are the sixth binding this
+version owes and does not yet carry; a package that needs them runs on a
+socket of its own meanwhile.
+
+**Where the surface lives.** A package in your sandbox reaches the block,
+the log and the clock as `rhtn/1:block`, `rhtn/1:log` and `rhtn/1:clock`,
+imported the way it imports `rhtn/1:request` and `rhtn/1:response`, and
+reaches nothing it did not declare. A package on a socket of its own has
+your filesystem already; **you tell it where its block and its log are, and
+what it may fill them to, on the relationships exchange**
+(`resource-requirements.md` §3.3): `rhtn-host` with the versions you offer,
+`rhtn-block` and `rhtn-block-bytes`, `rhtn-log` and `rhtn-log-bytes`,
+repeated with the relationships until the instance takes them, and again
+when any of it moves. **Keep the blocks and the logs in a directory of your
+own**, one block and one log per instance, named to it; a node that keeps
+no such directory cannot host a package that needs one, and says so at
+installation.
+
+**Budgets are the package's claims and your enforcement.** The manifest
+names the block's bytes, the log's bytes, jobs in flight, requests a minute
+and job compute a day; you bound what you have built, name the one exceeded
+on your operator's surface, and treat the rest as the package's own
+accounting above your ceiling. Their first values are the package author's,
+unmeasured, and the field is where they become measured.
+
+**An instance's key** — the one its envelopes are signed under
+(`resource-requirements.md` §3.3) — is provisioned per instance at its
+creation, written beside the resource in your hosting file as its public
+half, shown on your surface, and never present in a package. You carry the
+signature it makes and do not verify it in this version.
+
 ## 10. Role assignment and hosted-session lifecycle
 
 **The node evaluates access and presents the result as a credential**

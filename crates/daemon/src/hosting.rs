@@ -153,6 +153,12 @@ struct HostEntry {
     owner: String,
     authority: String,
     manifest: std::path::PathBuf,
+    /// The instance's own public key, provisioned at instance creation
+    /// and never in a package (`resource-requirements.md` §3.3's envelope
+    /// signature): 32 bytes of Ed25519, hex. Recorded and shown; the node
+    /// carries the signature it makes and does not verify it in this
+    /// version.
+    key: Option<String>,
     /// Where the resource listens, where it holds its own port rather
     /// than running inside this node's sandbox
     /// (`resource-requirements.md` §3's second leg,
@@ -412,6 +418,24 @@ pub fn relationships(path: &Path) -> Result<Vec<(Keyhash, Relationships)>, Refus
     Ok(out)
 }
 
+/// What applying the hosting file bound, and what each instance is to be
+/// told of its host (`infra-client-requirements.md` §9.3): the surface
+/// version, and where its block and its log are — carried on the
+/// relationships exchange, which is repeated until the instance takes it.
+pub struct Applied {
+    /// How many resources were bound.
+    pub bound: usize,
+    /// Per resource, the host facts as headers.
+    pub facts: Vec<(Keyhash, Vec<(String, String)>)>,
+}
+
+/// A block's ceiling where the manifest imports the block and budgets
+/// nothing: a package's own claim is expected, and this is the host's
+/// floor for one that made none.
+pub const DEFAULT_BLOCK_BYTES: u64 = 64 << 20;
+/// A log's retention where the manifest names none.
+pub const DEFAULT_LOG_BYTES: u64 = 1 << 20;
+
 /// Read `path` and bind what it names into `gateway`.
 ///
 /// **Every package is admitted before any is bound**, and every grant is
@@ -424,7 +448,8 @@ pub fn apply(
     path: &Path,
     limits: Limits,
     grants_dir: Option<&Path>,
-) -> Result<usize, Refused> {
+    state: Option<&Path>,
+) -> Result<Applied, Refused> {
     let text =
         std::fs::read_to_string(path).map_err(|e| at(0, format!("{}: {e}", path.display())))?;
     let file: File = toml::from_str(&text).map_err(|e| {
@@ -442,6 +467,7 @@ pub fn apply(
 
     let mut hosts: Vec<(Keyhash, Binding)> = Vec::new();
     let mut grants: Vec<(Keyhash, Vec<Grant>)> = Vec::new();
+    let mut facts: Vec<(Keyhash, Vec<(String, String)>)> = Vec::new();
     // **two resources at one address is a collision, not a choice.**
     // Nothing partitions ports across package authors and nothing could,
     // so where the operator names the address the file is the only place
@@ -465,6 +491,70 @@ pub fn apply(
         }
         let (manifest, component) = read_manifest(&h.manifest).map_err(|e| at(0, named(&e)))?;
         instantiate(&manifest).map_err(|e| at(0, named(&e)))?;
+        if let Some(k) = &h.key
+            && (k.len() != 64
+                || !k
+                    .bytes()
+                    .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase()))
+        {
+            return Err(at(
+                0,
+                format!(
+                    "`{}`: an instance key is 32 bytes of Ed25519 as 64 lower-case hex digits",
+                    h.resource
+                ),
+            ));
+        }
+        // **the host surface the package asked for, provisioned**
+        // (`infra-client-requirements.md` §9.3): a block where it budgeted
+        // or imports one, a log where it imports or budgets one, each
+        // under the node's state directory and named to the instance; a
+        // node with no such directory cannot host a package that needs
+        // one, which §9 makes ordinary capacity, said at installation
+        let wants_block = manifest.budget.block_bytes.is_some()
+            || manifest.imports.iter().any(|i| i == "rhtn/1:block");
+        let wants_log = manifest.budget.log_bytes.is_some()
+            || manifest.imports.iter().any(|i| i == "rhtn/1:log");
+        let env = match (state, wants_block || wants_log) {
+            (None, true) => {
+                return Err(at(
+                    0,
+                    named(
+                        "the package needs a storage block or a log, and this node keeps no \
+                         state directory for its packages (`state` in the configuration): \
+                         it cannot host it",
+                    ),
+                ));
+            }
+            (Some(root), _) => {
+                let mut env = rhtn_resources::Env::default();
+                let mut own: Vec<(String, String)> = vec![(
+                    "rhtn-host".into(),
+                    rhtn_node::resources::HOST_VERSIONS.join(" "),
+                )];
+                if wants_block {
+                    let quota = manifest.budget.block_bytes.unwrap_or(DEFAULT_BLOCK_BYTES);
+                    let dir = root.join("blocks").join(&h.resource);
+                    let block = rhtn_resources::Block::provision(&dir, quota)
+                        .map_err(|e| at(0, format!("{}: {e}", dir.display())))?;
+                    own.push(("rhtn-block".into(), dir.display().to_string()));
+                    own.push(("rhtn-block-bytes".into(), quota.to_string()));
+                    env.block = Some(Arc::new(block));
+                }
+                if wants_log {
+                    let retain = manifest.budget.log_bytes.unwrap_or(DEFAULT_LOG_BYTES);
+                    let file = root.join("logs").join(format!("{}.log", h.resource));
+                    let log = rhtn_resources::LogFile::at(&file, retain)
+                        .map_err(|e| at(0, format!("{}: {e}", file.display())))?;
+                    own.push(("rhtn-log".into(), file.display().to_string()));
+                    own.push(("rhtn-log-bytes".into(), retain.to_string()));
+                    env.log = Some(Arc::new(log));
+                }
+                facts.push((res, own));
+                env
+            }
+            (None, false) => rhtn_resources::Env::default(),
+        };
         // **a resource is reached one way, and the file says which**
         // (§10.6): an address and this node proxies to it, a component
         // and this node runs it.  Both is a contradiction rather than a
@@ -534,7 +624,7 @@ pub fn apply(
                         )),
                     ));
                 }
-                Some(Arc::new(Hosted::new(sandbox)))
+                Some(Arc::new(Hosted::with(sandbox, env)))
             }
             // **brokered**: the node authenticates and the caller's
             // traffic never passes through it (design §11.7, §10.6)
@@ -589,7 +679,7 @@ pub fn apply(
             .set_grants(res, written)
             .map_err(|e| at(0, e.to_string()))?;
     }
-    Ok(bound)
+    Ok(Applied { bound, facts })
 }
 
 /// TOML's own message with the line it is about, as `config.rs` renders
@@ -640,10 +730,30 @@ fn read_manifest(path: &Path) -> Result<(Manifest, Option<std::path::PathBuf>), 
         roles: Vec<String>,
         #[serde(default)]
         imports: Vec<String>,
+        /// The host-surface versions the package tolerates
+        /// (`rhtn_node::resources::HOST_VERSIONS`).
+        #[serde(default)]
+        host: Vec<String>,
+        /// What it asks to be bounded at (`infra-client-requirements.md`
+        /// §9.3).
+        #[serde(default)]
+        budget: BudgetEntry,
+        /// The destinations it may fetch from, delivered with the package.
+        #[serde(default)]
+        fetch: Vec<String>,
         #[serde(default)]
         admin: Vec<Op>,
         #[serde(default)]
         template: Vec<Tpl>,
+    }
+    #[derive(serde::Deserialize, Default)]
+    #[serde(deny_unknown_fields)]
+    struct BudgetEntry {
+        block_bytes: Option<u64>,
+        log_bytes: Option<u64>,
+        jobs: Option<u64>,
+        requests_per_minute: Option<u64>,
+        job_seconds_per_day: Option<u64>,
     }
     /// A grant the package ships ready-made
     /// (`infra-client-requirements.md` §10.4), in the same clause
@@ -747,6 +857,15 @@ fn read_manifest(path: &Path) -> Result<(Manifest, Option<std::path::PathBuf>), 
         imports: f.imports,
         admin,
         templates,
+        host: f.host,
+        budget: rhtn_node::resources::Budget {
+            block_bytes: f.budget.block_bytes,
+            log_bytes: f.budget.log_bytes,
+            jobs: f.budget.jobs,
+            requests_per_minute: f.budget.requests_per_minute,
+            job_seconds_per_day: f.budget.job_seconds_per_day,
+        },
+        fetch: f.fetch,
     };
     // relative to the manifest, so a package is a directory an operator
     // can move without rewriting what is inside it

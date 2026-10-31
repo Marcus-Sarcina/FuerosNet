@@ -155,6 +155,10 @@ pub struct Surface {
     /// an act has nowhere to persist and refuses rather than changing a
     /// table that would not survive a restart.
     pub grants: Option<PathBuf>,
+    /// Where this node keeps its packages' blocks and logs
+    /// (`infra-client-requirements.md` §9.3), for a reload to provision
+    /// against.
+    pub state: Option<PathBuf>,
     /// Told when an act asks this node to stop; the service's own loop is
     /// waiting on it, so the act triggers the shutdown that exists rather
     /// than inventing one.
@@ -598,8 +602,18 @@ impl Surface {
             return (409, "the configuration names no `resources` file\n".into());
         };
         let mut view = node.view.lock().unwrap();
-        match crate::hosting::apply(&mut view.resources, &path, limits, self.grants.as_deref()) {
-            Ok(n) => {
+        match crate::hosting::apply(
+            &mut view.resources,
+            &path,
+            limits,
+            self.grants.as_deref(),
+            self.state.as_deref(),
+        ) {
+            Ok(applied) => {
+                let n = applied.bound;
+                for (res, facts) in applied.facts {
+                    view.federation.set_host(res, facts);
+                }
                 // §10.2: the operator has just configured roles
                 view.expand_grants();
                 // and the instances' relationships, from the same file

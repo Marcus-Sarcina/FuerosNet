@@ -878,6 +878,11 @@ pub struct Pending {
 pub struct Plane {
     /// The operator's configuration for this instance.
     pub relationships: Relationships,
+    /// What the instance is told of its host beside its relationships
+    /// (`infra-client-requirements.md` §9.3): the surface version, where
+    /// its block and its log are, as headers on the relationships
+    /// exchange.
+    pub host: Vec<(String, String)>,
     /// Whether the resource has been told its relationships since they
     /// were last set.
     pub relationships_told: bool,
@@ -1511,6 +1516,17 @@ impl Federation {
         Ok(())
     }
 
+    /// **Tell an instance of its host** (`infra-client-requirements.md`
+    /// §9.3): the headers that ride the relationships exchange. A change
+    /// is told again, since what it says moved.
+    pub fn set_host(&mut self, resource: Keyhash, host: Vec<(String, String)>) {
+        let plane = self.planes.entry(resource).or_default();
+        if plane.host != host {
+            plane.host = host;
+            plane.relationships_told = false;
+        }
+    }
+
     /// Forget a resource that is no longer hosted.
     pub fn forget(&mut self, resource: &Keyhash) {
         self.planes.remove(resource);
@@ -1668,6 +1684,11 @@ impl Federation {
             let epoch = plane.epoch;
             if !plane.relationships_told {
                 let body = plane.relationships.to_json().to_string();
+                let extra: Vec<(&str, String)> = plane
+                    .host
+                    .iter()
+                    .map(|(n, v)| (n.as_str(), v.clone()))
+                    .collect();
                 out.push(Exchange {
                     resource: res,
                     backend,
@@ -1676,7 +1697,7 @@ impl Federation {
                         PATH_RELATIONSHIPS,
                         &authority,
                         &res,
-                        &[],
+                        &extra,
                         body.as_bytes(),
                     ),
                     about: About::Relationships,
@@ -2405,6 +2426,50 @@ mod tests {
             );
         }
         assert_eq!(up.records(), vec![("receipt-policy-1".to_string(), 1)]);
+    }
+
+    /// **An instance is told of its host on the exchange that tells it its
+    /// relationships** (`infra-client-requirements.md` §9.3): the surface
+    /// version and where its block and its log are, as headers; a change
+    /// to them is told again, and nothing else of the plane changes.
+    // acceptance: DMN-35
+    #[test]
+    fn an_instance_is_told_of_its_host_beside_its_relationships() {
+        let res = k(5);
+        let i = Instance::new();
+        let at = Backends(BTreeMap::from([(res, i.clone())]));
+        let mut f = Federation::default();
+        f.configure(res, patron_of(k(1))).unwrap();
+        f.set_host(
+            res,
+            vec![
+                ("rhtn-host".into(), "rhtn/host@1".into()),
+                ("rhtn-block".into(), "/state/blocks/05".into()),
+                ("rhtn-block-bytes".into(), "4096".into()),
+            ],
+        );
+        settle(&mut f, &at);
+        let told = i.saw().into_iter().next().expect("told");
+        assert!(told.starts_with("PUT /.rhtn/relationships"), "{told}");
+        assert!(told.contains("rhtn-host: rhtn/host@1\r\n"), "{told}");
+        assert!(told.contains("rhtn-block: /state/blocks/05\r\n"), "{told}");
+        assert!(told.contains("rhtn-block-bytes: 4096\r\n"), "{told}");
+        assert!(f.plane(&res).unwrap().relationships_told);
+        // the same facts again change nothing; moved facts are told again
+        f.set_host(
+            res,
+            vec![
+                ("rhtn-host".into(), "rhtn/host@1".into()),
+                ("rhtn-block".into(), "/state/blocks/05".into()),
+                ("rhtn-block-bytes".into(), "4096".into()),
+            ],
+        );
+        assert!(f.plane(&res).unwrap().relationships_told);
+        f.set_host(res, vec![("rhtn-host".into(), "rhtn/host@1".into())]);
+        assert!(!f.plane(&res).unwrap().relationships_told);
+        settle(&mut f, &at);
+        let again = i.saw().into_iter().nth(1).expect("told again");
+        assert!(!again.contains("rhtn-block:"), "{again}");
     }
 
     /// **Nothing is delivered to an instance that has not taken its

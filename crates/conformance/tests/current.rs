@@ -103,7 +103,7 @@ fn r08_reserved_node_roles_must_not_reach_the_backend() {
     }
     let owner=test_identity("alice").public.keyhash;
     let resource=[9;32];
-    let manifest=Manifest{roles:BTreeSet::from(["connect".into(),"discover".into(),"read".into()]),imports:vec![],admin:vec![],templates:vec![]};
+    let manifest=Manifest{roles:BTreeSet::from(["connect".into(),"discover".into(),"read".into()]),imports:vec![],admin:vec![],templates:vec![],..Default::default()};
     // Rejecting the reserved declarations at install time is also conforming.
     let Ok(package)=instantiate(&manifest) else { return };
     let mut gateway=Gateway::default();

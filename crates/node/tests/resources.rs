@@ -982,17 +982,31 @@ fn no_network_primitive_is_exposed_to_a_hosted_package() {
             imports: vec!["rhtn/1:request".into(), import.into()],
             admin: Vec::new(),
             templates: Vec::new(),
+            ..Default::default()
         };
         let e = instantiate(&m).unwrap_err();
         assert!(e.contains("no such binding"), "{import}: {e}");
         assert!(!exports().contains(&import));
     }
-    assert_eq!(exports(), &["rhtn/1:request", "rhtn/1:response"]);
+    // the whole of what a host offers, none of it of the network: the
+    // request and its answer, the package's own block, log and clock
+    // (`infra-client-requirements.md` §9.3)
+    assert_eq!(
+        exports(),
+        &[
+            "rhtn/1:request",
+            "rhtn/1:response",
+            "rhtn/1:block",
+            "rhtn/1:log",
+            "rhtn/1:clock"
+        ]
+    );
     let ok = Manifest {
         roles: BTreeSet::from(["reader".to_string()]),
         imports: vec!["rhtn/1:request".into(), "rhtn/1:response".into()],
         admin: Vec::new(),
         templates: Vec::new(),
+        ..Default::default()
     };
     assert!(instantiate(&ok).is_ok());
     assert!(
@@ -1001,6 +1015,7 @@ fn no_network_primitive_is_exposed_to_a_hosted_package() {
             imports: vec![],
             admin: Vec::new(),
             templates: Vec::new(),
+            ..Default::default()
         })
         .is_err()
     );
@@ -1366,6 +1381,7 @@ fn a_reserved_role_name_is_refused_where_it_is_written_and_never_reaches_a_backe
             .collect(),
         admin: Vec::new(),
         templates: Vec::new(),
+        ..Default::default()
     };
     let err = instantiate(&m).unwrap_err();
     assert!(err.contains("connect") && err.contains("reserved"), "{err}");
@@ -1375,6 +1391,7 @@ fn a_reserved_role_name_is_refused_where_it_is_written_and_never_reaches_a_backe
             roles: BTreeSet::from(["discover".to_string()]),
             admin: Vec::new(),
             templates: Vec::new(),
+            ..Default::default()
         })
         .is_err()
     );
@@ -1383,6 +1400,7 @@ fn a_reserved_role_name_is_refused_where_it_is_written_and_never_reaches_a_backe
         roles: BTreeSet::from(["read".to_string()]),
         admin: Vec::new(),
         templates: Vec::new(),
+        ..Default::default()
     })
     .expect("an application role");
     assert_eq!(ok.roles, BTreeSet::from(["read".to_string()]));

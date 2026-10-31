@@ -399,6 +399,7 @@ impl Service {
                             anchor_entry: cfg.anchor_entry.clone(),
                             node: serving_node.clone(),
                             grants: cfg.grants.clone(),
+                            state: cfg.state.clone(),
                             hosting: cfg.resources.clone().map(|p| {
                                 let (memory, fuel) = cfg
                                     .resource_limits
@@ -564,9 +565,15 @@ impl Service {
                     fuel,
                     ..Limits::default()
                 };
-                let bound =
-                    crate::hosting::apply(&mut view.resources, path, limits, cfg.grants.as_deref())
-                        .map_err(|e| Startup::Hosting(format!("{}: {e}", path.display())))?;
+                let applied = crate::hosting::apply(
+                    &mut view.resources,
+                    path,
+                    limits,
+                    cfg.grants.as_deref(),
+                    cfg.state.as_deref(),
+                )
+                .map_err(|e| Startup::Hosting(format!("{}: {e}", path.display())))?;
+                let bound = applied.bound;
                 // **configuring roles is one of §10.2's four moments**, so
                 // the grants this file wrote are expanded now rather than
                 // waiting for the topology to move under them
@@ -595,6 +602,11 @@ impl Service {
                     view.federation
                         .locate(instance, at)
                         .map_err(|e| Startup::Hosting(format!("{}: {e}", path.display())))?;
+                }
+                // what each instance is told of its host, on the same
+                // exchange as its relationships (§9.3)
+                for (res, facts) in applied.facts {
+                    view.federation.set_host(res, facts);
                 }
                 let hosted = view.resources.bound();
                 view.federation.hosted_now(&hosted);

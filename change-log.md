@@ -16488,6 +16488,31 @@ Tested: a first message to a party holding nothing of the sender is
 refused on the binding alone and opens once the introduction is taken;
 a card naming another party is not taken.
 
+### 2026-10-30 (the host surface: `rhtn/host@1`, the block, the log, the clock)
+
+**The core against the application suite's environment expectations**
+[author, 2026-10-30]: the audit (`Robot/applications-compatibility.md`)
+found the directive plane built and the host surface beneath the
+applications absent — four of their contract's five bindings nowhere, and
+the manifest it describes refused by the daemon. **Ruled**: the bindings
+enter the root documents as the host's obligations; the WASM profile is
+the host's own bindings rather than a WASI preopen, since a preopen can
+neither enforce a quota nor say what `sync` means and would put the whole
+WASI world into a sandbox whose rule is that the hooks do not exist; a
+`fetch` binding comes with destinations the package delivers and an
+update replaces, no wildcards; and the typed utility request a resource
+makes of the client is wanted, for the types their document names.
+**Built now**: `infra-client-requirements.md` §9.3, the five bindings
+each with its §9.2 answer, versioning, budgets, the state directory; the
+manifest's `host`, `[budget]`, `fetch` and the instance `key`
+(`resource-requirements.md` §8); the storage block, the log and the clock
+as `rhtn/1:block`, `rhtn/1:log`, `rhtn/1:clock` in the sandbox, the block
+quota enforced per write with the ceiling named; the same block and log
+provisioned for a socket-backed package and told to it on the
+relationships exchange as headers (§3.3). Fetch and jobs are specified in
+§9.3 and owed; the utility request is the client document's next item.
+PKG-017, RSC-63, DMN-35.
+
 ### 2026-10-30 (a first message on the direct path: the recipient fetches the sender's bundle)
 
 **The nodeless run opened the path and refused every first message**

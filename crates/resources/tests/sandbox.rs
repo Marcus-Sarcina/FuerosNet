@@ -1,7 +1,7 @@
 //! What a hosted package may reach, and what it costs before it is stopped.
 
-use rhtn_node::resources::{Backend, HOST_EXPORTS, Manifest};
-use rhtn_resources::{HOST_INSTANCE, Hosted, Limits, Refusal, Sandbox};
+use rhtn_node::resources::{Backend, Manifest};
+use rhtn_resources::{Env, HOST_INSTANCE, Hosted, Limits, Refusal, Sandbox};
 use rhtn_sim::packages::*;
 
 fn refusal(r: &Result<Sandbox, Refusal>) -> String {
@@ -23,7 +23,7 @@ fn a_package_reaching_past_the_two_bindings_is_not_admitted() {
     let ok = Sandbox::admit(&echo(), Limits::default()).expect("the two bindings are offered");
     assert_eq!(
         ok.reaches(),
-        HOST_EXPORTS.to_vec(),
+        vec!["rhtn/1:request".to_string(), "rhtn/1:response".to_string()],
         "and it says which, in the manifest's own vocabulary"
     );
     assert!(
@@ -93,7 +93,7 @@ fn a_package_reaching_past_the_two_bindings_is_not_admitted() {
 fn a_package_is_handed_its_request_and_gives_back_its_answer() {
     let s = Sandbox::admit(&echo(), Limits::default()).expect("admitted");
     let message = b"GET /thing HTTP/1.1\r\nhost: shop.example\r\nrhtn-principal: AAAA\r\nrhtn-roles: reader\r\nrhtn-audience: BBBB\r\nrhtn-session: CCCC\r\n\r\n";
-    let back = s.serve(message).expect("served");
+    let back = s.serve(message, &Env::default()).expect("served");
     assert_eq!(
         back, message,
         "the package sees the message the node built and nothing else"
@@ -104,7 +104,7 @@ fn a_package_is_handed_its_request_and_gives_back_its_answer() {
     // bytes it was given, which is not a response and is refused at the
     // gateway. `replies` is the one a hosting test uses.
     let r = Sandbox::admit(&rhtn_sim::packages::replies(), Limits::default()).expect("admitted");
-    let answered = r.serve(message).expect("served");
+    let answered = r.serve(message, &Env::default()).expect("served");
     assert!(
         answered.starts_with(b"HTTP/1.1 200 OK\r\n"),
         "it answers with a status line: {:?}",
@@ -117,7 +117,9 @@ fn a_package_is_handed_its_request_and_gives_back_its_answer() {
 
     // nothing carries between requests: each one gets its own store, and
     // the bindings offer no other door
-    let second = s.serve(b"GET / HTTP/1.1\r\n\r\n").expect("served");
+    let second = s
+        .serve(b"GET / HTTP/1.1\r\n\r\n", &Env::default())
+        .expect("served");
     assert_eq!(
         second, b"GET / HTTP/1.1\r\n\r\n",
         "and the next request is not the last one's"
@@ -126,7 +128,10 @@ fn a_package_is_handed_its_request_and_gives_back_its_answer() {
     // a package that answers nothing has answered nothing, which is not
     // an error the host invents a body for
     let quiet = Sandbox::admit(&silent(), Limits::default()).expect("admitted");
-    assert_eq!(quiet.serve(message).expect("served"), Vec::<u8>::new());
+    assert_eq!(
+        quiet.serve(message, &Env::default()).expect("served"),
+        Vec::<u8>::new()
+    );
 }
 
 // acceptance: RSC-32
@@ -138,24 +143,33 @@ fn a_package_that_will_not_stop_is_stopped_and_costs_the_next_caller_nothing() {
     };
     let s = Sandbox::admit(&spinning(), limits).expect("admitted");
     assert!(
-        matches!(s.serve(b"GET / HTTP/1.1\r\n\r\n"), Err(Refusal::Exhausted)),
+        matches!(
+            s.serve(b"GET / HTTP/1.1\r\n\r\n", &Env::default()),
+            Err(Refusal::Exhausted)
+        ),
         "a loop is stopped rather than run"
     );
     assert!(
-        matches!(s.serve(b"GET / HTTP/1.1\r\n\r\n"), Err(Refusal::Exhausted)),
+        matches!(
+            s.serve(b"GET / HTTP/1.1\r\n\r\n", &Env::default()),
+            Err(Refusal::Exhausted)
+        ),
         "and stopped again, with its own budget"
     );
 
     // a package that breaks is a different fact from one that spends
     let b = Sandbox::admit(&broken(), Limits::default()).expect("admitted");
     assert!(
-        matches!(b.serve(b"GET / HTTP/1.1\r\n\r\n"), Err(Refusal::Trapped(_))),
+        matches!(
+            b.serve(b"GET / HTTP/1.1\r\n\r\n", &Env::default()),
+            Err(Refusal::Trapped(_))
+        ),
         "a trap is a defect, not capacity"
     );
 
     // and neither costs a package sharing the host anything
     let good = Sandbox::admit(&echo(), Limits::default()).expect("admitted");
-    assert_eq!(good.serve(b"ok").expect("served"), b"ok");
+    assert_eq!(good.serve(b"ok", &Env::default()).expect("served"), b"ok");
 }
 
 // acceptance: RSC-33
@@ -167,7 +181,7 @@ fn a_package_that_grows_without_bound_is_bounded() {
     };
     let s = Sandbox::admit(&greedy(), limits).expect("admitted");
     let back = s
-        .serve(b"GET / HTTP/1.1\r\n\r\n")
+        .serve(b"GET / HTTP/1.1\r\n\r\n", &Env::default())
         .expect("it stops rather than trapping");
     let pages = u32::from_le_bytes(back[..4].try_into().unwrap()) as usize;
     assert!(
@@ -192,7 +206,7 @@ fn a_package_that_grows_without_bound_is_bounded() {
     .expect("admitted");
     assert!(
         matches!(
-            loud.serve(b"GET / HTTP/1.1\r\n\r\n"),
+            loud.serve(b"GET / HTTP/1.1\r\n\r\n", &Env::default()),
             Err(Refusal::Oversized(4096))
         ),
         "the host says how big it was"
@@ -306,4 +320,117 @@ fn what_reaches_a_package_through_the_gateway_is_the_credential_and_the_request(
             "and nothing about the network: {absent}"
         );
     }
+}
+
+/// A directory of this test's own, gone with it.
+struct Dir(std::path::PathBuf);
+impl Dir {
+    fn new(tag: &str) -> Dir {
+        let d = std::env::temp_dir().join(format!("rhtn-sandbox-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).expect("a directory");
+        Dir(d)
+    }
+}
+impl Drop for Dir {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+/// **The storage block, the log and the clock behind the bindings**
+/// (`infra-client-requirements.md` §9.3): a package keeps what it was
+/// handed in its block and reads it back, logs a line the host stamps,
+/// reads the host's clock; a package that was granted none of them traps
+/// on the first touch; and a write past the block's quota is refused with
+/// the quota named, and nothing of it lands.
+// acceptance: RSC-63
+#[test]
+fn a_package_keeps_what_it_wrote_in_its_block_and_logs_with_the_hosts_clock() {
+    use rhtn_resources::{Block, LogFile};
+    let d = Dir::new("block");
+    let s = Sandbox::admit(&noting(), Limits::default()).expect("the five bindings are offered");
+    assert_eq!(
+        s.reaches(),
+        vec![
+            "rhtn/1:block".to_string(),
+            "rhtn/1:clock".to_string(),
+            "rhtn/1:log".to_string(),
+            "rhtn/1:request".to_string(),
+            "rhtn/1:response".to_string()
+        ],
+        "every binding it reaches, in the manifest's vocabulary"
+    );
+    // granted nothing but the two: the first touch of the block traps
+    let bare = s.serve(b"hello", &Env::default());
+    assert!(
+        matches!(&bare, Err(Refusal::Trapped(why)) if why.contains("no block was granted")),
+        "{bare:?}"
+    );
+    let block =
+        std::sync::Arc::new(Block::provision(d.0.join("block"), 1 << 20).expect("provisioned"));
+    let log = std::sync::Arc::new(LogFile::at(d.0.join("log"), 4096).expect("a log"));
+    let env = Env {
+        block: Some(block.clone()),
+        log: Some(log.clone()),
+        clock: std::sync::Arc::new(|| 1_793_400_000_000),
+    };
+    let back = s.serve(b"a note to keep", &env).expect("served");
+    assert_eq!(back, b"a note to keep", "read back out of the block");
+    assert_eq!(block.list(), vec!["note".to_string()]);
+    assert_eq!(block.read("note", 0, 64).unwrap(), b"a note to keep");
+    assert_eq!(block.used(), 14);
+    let lines = log.lines();
+    assert_eq!(lines.len(), 1, "{lines:?}");
+    assert!(lines[0].ends_with(" kept a note"), "{lines:?}");
+    assert!(
+        lines[0].split(' ').next().unwrap().parse::<u64>().is_ok(),
+        "stamped"
+    );
+    // the second request finds the first's note still there: durable
+    // between requests, which is what a block is for
+    let again = s.serve(b"xy", &env).expect("served");
+    assert_eq!(again, b"xy");
+    assert_eq!(
+        block.read("note", 0, 64).unwrap(),
+        b"xynote to keep",
+        "written in place"
+    );
+}
+
+// acceptance: RSC-63
+#[test]
+fn a_write_past_the_blocks_quota_is_refused_with_the_quota_named() {
+    use rhtn_resources::Block;
+    let d = Dir::new("quota");
+    let block = std::sync::Arc::new(Block::provision(d.0.join("block"), 100).expect("provisioned"));
+    let env = Env {
+        block: Some(block.clone()),
+        ..Env::default()
+    };
+    let s = Sandbox::admit(&hoarding(0), Limits::default()).expect("admitted");
+    assert!(s.serve(&[7u8; 60], &env).is_ok(), "60 of 100");
+    let over = Sandbox::admit(&hoarding(60), Limits::default())
+        .expect("admitted")
+        .serve(&[7u8; 60], &env);
+    assert!(
+        matches!(&over, Err(Refusal::Budget(why)) if why.contains("quota is 100 bytes")),
+        "{over:?}"
+    );
+    assert_eq!(block.used(), 60, "nothing of the refused write landed");
+    // at an offset that takes the file past the ceiling, likewise
+    let far = Sandbox::admit(&hoarding(90), Limits::default()).expect("admitted");
+    assert!(matches!(
+        far.serve(&[1u8; 20], &env),
+        Err(Refusal::Budget(_))
+    ));
+    assert_eq!(block.used(), 60);
+    // and a name with a path in it is not a block name
+    assert!(
+        block
+            .write("../escape", 0, b"x")
+            .unwrap_err()
+            .contains("not a block name")
+    );
+    assert!(block.write("a/b", 0, b"x").is_err());
 }
