@@ -245,6 +245,26 @@ shell redrew contacts, subnets, lines, profiles and meetings. From a
 phrase and a peer, with a node that had never seen a record of 4VC's.
 Fifth and sixth runs' APKs stamped one commit behind what they carry.
 
+**The seventh and eighth runs, nodeless** — `9dbf607-restore-nodeless-1`
+and `e5f32a3-restore-nodeless-1`, 2026-10-30, MRK and 4VC alone, no node,
+nothing provisioned about anybody, 4VC the identity restored from its
+phrase once more (and once more again after the first-run screen gave
+back the choice on the keyboard's relaunch — not a wipe; fixed). The
+seventh opened the path on MRK's introduction (`pay.direct.cold_call` at
+4VC), answered MRK's prekey request on the path and opened MRK's session
+— and 4VC refused every first message with *no bundle for that peer*,
+the sender's binding being what the node carries on the relay and
+nothing carries direct; fixed under the run. **The eighth is the proof
+the author asked for**: MRK's round at 61 s dialled 4VC at its last
+address, 4VC took the introduction on the dial, each asked the other for
+its bundle on the path (`pay.direct.bundle.fetched` at 4VC for MRK's
+first message), both sessions opened, 4VC took the peering record
+(`peer.record Applied`), held MRK's 133,023-byte deposit, greeted back,
+and at 61.3 s **reconciled the return of its own blob: 5 records, 12
+contacts, 13 other items, 0 refused**, the shell redrawing contacts,
+subnets, lines, profiles and meetings; its next held round deposited its
+restored dataset, 131,626 bytes. No node anywhere.
+
 **Not exercised**: the Done screen's subnet-naming prompt (T1's published
 nothing and the stream could not say whether it was shown; it is
 instrumented now and the root named the subnet from the subnet's options
