@@ -86,6 +86,7 @@ pub mod sequence;
 pub mod store;
 pub mod subject;
 pub mod trust;
+pub mod utility;
 pub mod verifier;
 
 pub use rhtn_archive::{Keyhash, Txid};

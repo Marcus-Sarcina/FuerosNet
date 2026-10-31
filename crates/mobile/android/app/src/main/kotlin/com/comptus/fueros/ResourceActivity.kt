@@ -9,6 +9,7 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebStorage
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -99,21 +100,109 @@ class ResourceActivity : Activity() {
         Screen.insetting(root)
         setContentView(root)
 
+        this.held = held
         held.addView(note("asking…"))
         // **off the drawing thread**: asking a resource is a round trip
         // through the hosting node
-        Thread({
-            val answered = Kernel.ask(node, resource, path)
-            runOnUiThread {
-                if (isFinishing) return@runOnUiThread
-                held.removeAllViews()
-                when (val showing = ResourcePage.showing(answered)) {
-                    is ResourcePage.Showing.Page -> held.addView(frame(showing.html))
-                    is ResourcePage.Showing.Text -> held.addView(text(showing.text))
-                    is ResourcePage.Showing.Said -> held.addView(note(showing.why))
-                }
+        Thread({ show(Kernel.ask(node, resource, path)) }, "fueros-resource").start()
+    }
+
+    private var held: LinearLayout? = null
+    private var camera: QrCamera? = null
+
+    /** Draw what the resource answered, from any thread. */
+    private fun show(answered: Kernel.Answered?) {
+        runOnUiThread {
+            if (isFinishing) return@runOnUiThread
+            val held = held ?: return@runOnUiThread
+            held.removeAllViews()
+            when (val showing = ResourcePage.showing(answered)) {
+                is ResourcePage.Showing.Page -> held.addView(frame(showing.html))
+                is ResourcePage.Showing.Text -> held.addView(text(showing.text))
+                is ResourcePage.Showing.Said -> held.addView(note(showing.why))
+                is ResourcePage.Showing.Ask -> held.addView(asking(showing.ask))
             }
-        }, "fueros-resource").start()
+        }
+    }
+
+    /**
+     * **An ask, put to the person** (`light-client-requirements.md` §8.1).
+     * The question is the kernel's reading in words; the answer goes back
+     * through the kernel, which composes it. **Nothing is given that the
+     * person did not press a button for**, and a utility this app cannot
+     * give on this device is declined with that as the reason — the
+     * application sees a refusal, never a silence.
+     */
+    private fun asking(ask: Kernel.Ask): LinearLayout = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        addView(
+            TextView(this@ResourceActivity).apply {
+                textSize = 15f
+                text = ResourcePage.asking(ask)
+                setPadding(Screen.gutter(context), 12, Screen.gutter(context), 16)
+            },
+        )
+        val buttons = LinearLayout(this@ResourceActivity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(Screen.gutter(context), 0, Screen.gutter(context), 16)
+        }
+        buttons.addView(
+            Button(this@ResourceActivity).apply {
+                text = "Decline"
+                setOnClickListener { answer(ask, uniffi.rhtn_ffi.UtilityOutcome.Declined("declined")) }
+            },
+        )
+        if (ResourcePage.canGive(ask.utility)) {
+            buttons.addView(
+                Button(this@ResourceActivity).apply {
+                    text = "Give"
+                    setOnClickListener { give(ask) }
+                },
+            )
+        } else {
+            addView(note("This app cannot give that on this device yet; declining says so."))
+            buttons.addView(
+                Button(this@ResourceActivity).apply {
+                    text = "Decline, as unsupported"
+                    setOnClickListener {
+                        answer(ask, uniffi.rhtn_ffi.UtilityOutcome.Declined("not on this device yet"))
+                    }
+                },
+            )
+        }
+        addView(buttons)
+    }
+
+    /** Give what the ask wants: a tag, read with the camera. */
+    private fun give(ask: Kernel.Ask) {
+        when (ask.utility) {
+            "tag" -> {
+                held?.let { h ->
+                    h.removeAllViews()
+                    h.addView(note("Point the camera at the code…"))
+                }
+                val cam = camera ?: QrCamera(this).also { camera = it }
+                cam.readOne(
+                    QrCamera.Facing.REAR,
+                    null,
+                    "utility-tag",
+                    failed = { why -> show(null).also { runOnUiThread { held?.addView(note(why)) } } },
+                ) { bytes ->
+                    cam.close()
+                    answer(ask, uniffi.rhtn_ffi.UtilityOutcome.Text(String(bytes)))
+                }?.let { why -> held?.addView(note(why)) }
+            }
+            else -> answer(ask, uniffi.rhtn_ffi.UtilityOutcome.Declined("not on this device yet"))
+        }
+    }
+
+    /** Hand the outcome to the kernel and draw what comes back. */
+    private fun answer(ask: Kernel.Ask, outcome: uniffi.rhtn_ffi.UtilityOutcome) {
+        held?.let { h ->
+            h.removeAllViews()
+            h.addView(note("answering…"))
+        }
+        Thread({ show(Kernel.answerUtility(ask.id, outcome)) }, "fueros-resource-answer").start()
     }
 
     /** The frame, and the whole of what it permits. */
@@ -204,6 +293,8 @@ class ResourceActivity : Activity() {
     }
 
     override fun onDestroy() {
+        camera?.close()
+        camera = null
         // **nothing the page left behind outlives the screen**
         web?.let {
             it.stopLoading()

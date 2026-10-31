@@ -444,6 +444,83 @@ pub struct ResourceAnswer {
     /// Why the delivered message could not be read, where it could not.
     /// A shell shows this and renders nothing.
     pub unreadable: Option<String>,
+    /// **A typed ask of this client** (`light-client-requirements.md`
+    /// §8.1), where the resource answered with one instead of a page:
+    /// read here, held under its number, and put to the person by the
+    /// shell as a question.  Answered with [`Participant::answer_utility`].
+    pub ask: Option<UtilityAsk>,
+}
+
+/// **What a resource asked of this client**, read by the kernel and
+/// shown whole: the utility, its purpose and retention in the resource's
+/// own words, and what the utility needs.  The resource and node are the
+/// ones the answer goes back to; a shell shows them and cannot change
+/// them.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct UtilityAsk {
+    /// The number the answer names.
+    pub id: u64,
+    /// The utility: `scan`, `capture`, `location`, `check-in`, `tag`,
+    /// `sign`, `live`, `notify`, `export`, `import`.
+    pub utility: String,
+    /// What it is for, in the resource's words.
+    pub purpose: String,
+    /// How long the resource says it keeps the result.
+    pub retention: String,
+    /// The resource that asked.
+    pub resource: Id,
+    /// The node that served it.
+    pub node: Id,
+    /// `sign`: the exact bytes to be approved and signed.
+    pub payload: Option<Vec<u8>>,
+    /// `location`: the geohash length asked for.
+    pub precision: Option<u8>,
+    /// `scan`, `capture`, `import`: the media types the resource takes.
+    pub media: Vec<String>,
+    /// `check-in`, `tag`: the channel the resource minds.
+    pub channel: Option<String>,
+    /// `live`: the seconds asked for.
+    pub seconds: Option<u64>,
+}
+
+/// **What the person did with an ask.**  The kernel checks it against the
+/// ask, signs where the utility signs, composes the answer and sends it;
+/// a shell supplies the capture and nothing else.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Enum)]
+pub enum UtilityOutcome {
+    /// Declined, with why: the person said no, or this device has no
+    /// such utility.  The application sees the refusal.
+    Declined {
+        /// Why, in words.
+        reason: String,
+    },
+    /// Bytes under a media type: a scan, a capture, a file.
+    Bytes {
+        /// The declared type.
+        media: String,
+        /// The bytes.
+        bytes: Vec<u8>,
+    },
+    /// Text: a geohash, what a tag said.
+    Text {
+        /// The text.
+        text: String,
+    },
+    /// Approved and nothing to carry: a signature over the ask's own
+    /// payload, a live session, a standing permission, an export taken.
+    Approved,
+}
+
+impl UtilityOutcome {
+    fn inward(self) -> rhtn_client::utility::Outcome {
+        use rhtn_client::utility::Outcome;
+        match self {
+            UtilityOutcome::Declined { reason } => Outcome::Declined(reason),
+            UtilityOutcome::Bytes { media, bytes } => Outcome::Bytes { media, bytes },
+            UtilityOutcome::Text { text } => Outcome::Text(text),
+            UtilityOutcome::Approved => Outcome::Approved,
+        }
+    }
 }
 
 /// **What a client may show of a resource's answer**
@@ -2587,7 +2664,8 @@ impl Participant {
     /// the application's answer where one was delivered.
     ///
     /// **Held nowhere.** A resource's answer is the application's
-    /// business; this client keeps none of it.
+    /// business; this client keeps none of it — except an ask it made of
+    /// this client, which is held until the person answers it.
     pub fn request_resource(
         &self,
         node: Id,
@@ -2600,45 +2678,34 @@ impl Participant {
             let msg = self
                 .handle
                 .with_blocking(move |c| c.request_resource(n, r, message));
-            let answers = self.net.carry_for_answer(vec![msg])?;
-            let reply = answers
-                .into_iter()
-                .next()
-                .ok_or_else(|| Refused::new("the node hosting it answered nothing"))?;
-            let (status, body) = self
+            self.carry_to_resource(n, r, msg)
+        })
+    }
+
+    /// **Answer an ask a resource made** (`light-client-requirements.md`
+    /// §8.1): the outcome is checked against the ask, the claim made
+    /// where the utility signs, and the one request composed and sent to
+    /// the resource that asked.  What comes back is that resource's next
+    /// answer — a page, or another ask.
+    pub fn answer_utility(
+        &self,
+        id: u64,
+        outcome: UtilityOutcome,
+    ) -> Result<ResourceAnswer, Refused> {
+        crate::diag::call("answer_utility", || {
+            let (n, r) = self
                 .handle
-                .with_blocking(move |c| c.take_resource_response(&reply))
+                .with_blocking(move |c| c.asks.get(&id).map(|p| (p.node, p.resource)))
+                .ok_or_else(|| Refused::new("no such ask is waiting"))?;
+            let inward = outcome.inward();
+            let msg = self
+                .handle
+                .with_blocking(move |c| c.answer_utility(id, inward))
                 .map_err(Refused::new)?;
-            // **the HTTP message is read here.** `wire-format.md` §11.2
-            // names the hazard a second parser creates on the node's side
-            // of this exchange — two parties disagreeing where one
-            // message ends — and a shell parsing what the kernel handed
-            // it raw would be that second parser on this side.
-            let (page, unreadable) = match body {
-                None => (None, None),
-                Some(bytes) => match rhtn_client::resource::answer(&bytes) {
-                    Ok(a) => (
-                        Some(ResourcePage {
-                            http_status: a.http_status as u32,
-                            media: a.media,
-                            charset: a.charset,
-                            shape: match a.shape {
-                                rhtn_client::resource::Shape::Page => PageShape::Page,
-                                rhtn_client::resource::Shape::Text => PageShape::Text,
-                                rhtn_client::resource::Shape::Other => PageShape::Other,
-                            },
-                            body: a.body,
-                        }),
-                        None,
-                    ),
-                    Err(e) => (None, Some(e.say())),
-                },
-            };
-            Ok(ResourceAnswer {
-                status,
-                page,
-                unreadable,
-            })
+            let answered = self.carry_to_resource(n, r, msg)?;
+            // the application secret may have been minted
+            self.save()?;
+            Ok(answered)
         })
     }
 
@@ -3669,4 +3736,86 @@ pub fn network_point(host: String, port: u16) -> Result<Vec<u8>, Refused> {
     let mut out = Vec::new();
     point.encode(&mut out);
     Ok(out)
+}
+
+impl Participant {
+    /// Carry one request to a resource and read what came back, once.
+    fn carry_to_resource(
+        &self,
+        node: rhtn_model::Keyhash,
+        resource: rhtn_model::Keyhash,
+        msg: rhtn_client::ceremony::Msg,
+    ) -> Result<ResourceAnswer, Refused> {
+        let answers = self.net.carry_for_answer(vec![msg])?;
+        let reply = answers
+            .into_iter()
+            .next()
+            .ok_or_else(|| Refused::new("the node hosting it answered nothing"))?;
+        let (status, body) = self
+            .handle
+            .with_blocking(move |c| c.take_resource_response(&reply))
+            .map_err(Refused::new)?;
+        // **the HTTP message is read here.** `wire-format.md` §11.2
+        // names the hazard a second parser creates on the node's side
+        // of this exchange — two parties disagreeing where one
+        // message ends — and a shell parsing what the kernel handed
+        // it raw would be that second parser on this side.
+        let mut answer = ResourceAnswer {
+            status,
+            page: None,
+            unreadable: None,
+            ask: None,
+        };
+        let Some(bytes) = body else {
+            return Ok(answer);
+        };
+        match rhtn_client::resource::answer(&bytes) {
+            Err(e) => answer.unreadable = Some(e.say()),
+            // **an ask is read, not shown**: the body is the question,
+            // taken by the kernel under a number
+            Ok(a) if a.shape == rhtn_client::resource::Shape::Ask => {
+                let body = a.body;
+                match self
+                    .handle
+                    .with_blocking(move |c| c.take_utility_ask(node, resource, &body))
+                {
+                    Ok((id, ask)) => {
+                        answer.ask = Some(UtilityAsk {
+                            id,
+                            utility: ask.utility.name().into(),
+                            purpose: ask.purpose,
+                            retention: ask.retention,
+                            resource: resource.to_vec(),
+                            node: node.to_vec(),
+                            payload: ask.payload,
+                            precision: ask.precision,
+                            media: ask.media,
+                            channel: ask.channel,
+                            seconds: ask.seconds,
+                        })
+                    }
+                    Err(m) => {
+                        answer.unreadable =
+                            Some(format!("the resource's ask could not be read: {}", m.say()))
+                    }
+                }
+            }
+            Ok(a) => {
+                answer.page = Some(ResourcePage {
+                    http_status: a.http_status as u32,
+                    media: a.media,
+                    charset: a.charset,
+                    shape: match a.shape {
+                        rhtn_client::resource::Shape::Page => PageShape::Page,
+                        rhtn_client::resource::Shape::Text => PageShape::Text,
+                        rhtn_client::resource::Shape::Other | rhtn_client::resource::Shape::Ask => {
+                            PageShape::Other
+                        }
+                    },
+                    body: a.body,
+                })
+            }
+        }
+        Ok(answer)
+    }
 }

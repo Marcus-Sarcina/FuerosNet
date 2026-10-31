@@ -63,9 +63,9 @@ what remains. Checked against the code:
 
 | Expectation | Core today | State |
 |---|---|---|
-| **the utility request contract** (their section 6): a resource presents a typed utility request over its ordinary response channel; the kernel mediates; the user consents; the result returns as application data | `light-client-requirements.md` §8 frames a resource's page with *no bridge into the client* and has the client carry a form; no typed request from a resource to the kernel exists | **ruled wanted** [author, 2026-10-30], for the types their document names; a new interface in `light-client-requirements.md` §8 and `light-client-requirements.md` §9, owed |
+| **the utility request contract** (their section 6): a resource presents a typed utility request over its ordinary response channel; the kernel mediates; the user consents; the result returns as application data | **built 2026-10-31**: `light-client-requirements.md` §8.1 and `resource-requirements.md` §3.4 — one typed ask under `application/vnd.rhtn.utility+json`, read by the kernel, put to the person, answered by the kernel as one `POST` of multipart form data to the ask's return path; ten utilities; a per-device, per-audience application key, never the identity, with the claim array stated for their side to verify; the shell puts the ask to the person and gives a tag by the camera today, declining the rest as unsupported | **provided** (CAT-026, PKG-018, RSC-66); their section 6 should take the media type, the fields and the claim array as the core states them |
 | **delivery** (their section 4): foreground polling of instances on the client's own sessions; a wake path that carries a hint and never content; nothing assumes the protocol's liveness signals carry resource notifications | hosted sessions with opaque IDs exist; the wake endpoint (design §14.1.5) is the node's mail doorbell and nothing says it carries a resource's hint | **consistent; nothing to build until a template needs it** |
-| a per-device **application key** distinct from the network identity (their section 6's signing rows) | nothing | **nothing** — a product decision, theirs to ask for |
+| a per-device **application key** distinct from the network identity (their section 6's signing rows) | **built 2026-10-31** with the ask: expanded per audience from a device secret, never in the backup, so a restore mints a new one | **provided** |
 | optical code exchange | exists on Android | provided |
 | clock discipline as displayed uncertainty | nothing | theirs to build on the kernel's clock |
 
@@ -106,12 +106,17 @@ adapters' SSRF discipline is now the host's.
 Done 2026-10-30/31 (`20e5fc8`, `eb0eb1f` and the commit after): the
 manifest's fields and the version refusal; the block as a binding on both
 runtimes; the log, on the administration surface with the host's
-refusals in it; the clock; fetch to declared destinations; jobs;
+refusals in it; the clock; fetch to declared destinations; jobs; the
+utility request contract and the application key;
 `infra-client-requirements.md` §9.3 and the manifest text; PKG-017, RSC-63, RSC-64, RSC-65, DMN-35. Owed, in
 order:
 
-1. **The utility request contract** in `light-client-requirements.md`
-   §8 and `light-client-requirements.md` §9, for the types their document names, and its kernel half.
+1. **The utility request's device half**: the shell gives a tag today;
+   scan, capture with provenance, location, check-in, the biometric
+   unlock for `sign`, live, notify, export and import are each a platform
+   capability still to wire to the ask; and a result larger than a
+   request frame (256 KiB) waits on a request sequence in
+   `wire-format.md` §11, which is the author's call.
 2. **Budgets not yet enforced**: requests a minute, and a bound on fetches
    a minute, which `infra-client-requirements.md` §9.3 does not yet name.
 3. **Jobs across a reload**: a reload re-provisions the table (the files

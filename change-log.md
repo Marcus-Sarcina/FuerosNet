@@ -16488,6 +16488,37 @@ Tested: a first message to a party holding nothing of the sender is
 refused on the binding alone and opens once the introduction is taken;
 a card naming another party is not taken.
 
+### 2026-10-31 (the utility request: what a resource may ask of the client)
+
+**A page that reaches nothing cannot take anything, so what needs the
+device is asked for** [author's ruling of 2026-10-30 carried out, for the
+utilities the application suite names]. `light-client-requirements.md` §8.1
+and `resource-requirements.md` §3.4: a resource answers with one typed ask
+under `application/vnd.rhtn.utility+json` — the utility, its purpose and
+retention in the resource's words, a return path, a token, and what the
+utility needs — and the kernel reads it once below the boundary, bounded
+and refused by field name rather than guessed at, holds it as in-flight
+state, and puts it to the person whole with the resource's words marked
+as the resource's. The person gives or declines; **the kernel composes
+the answer** — one `POST` to the return path on the resource that asked,
+through the node that served it, as multipart form data with named parts
+— and the application supplies the capture and nothing else. Ten
+utilities: scan, capture, location, check-in, tag, sign, live, notify,
+export, import. **A capture and a signature are claimed under the
+application key for that one audience**: an Ed25519 key expanded from a
+device secret and the resource's keyhash, never the network identity,
+kept with the device's own state and never in the backup, so a restored
+device signs under a new key; the claim is over
+`["rhtn/utility@1", audience, utility, token, digest, at]`, the audience
+inside the signature. A result is bounded by the request frame, which a
+resource request is one of. **Three things kept apart**: the platform's
+local unlock, an application signature, and a ceremony claim — `sign` is
+the second, never the third. Built in the kernel (`rhtn-client`'s
+`utility`), the FFI (`UtilityAsk`, `answer_utility`) and the Android
+shell (the ask put to the person on the resource screen, declining with
+a reason, a tag given by the camera; the rest declined as not on this
+device yet). CAT-026, PKG-018, RSC-66.
+
 ### 2026-10-31 (jobs: the sixth binding, and the host surface is whole)
 
 **Durable scheduled work for a sandboxed package** [author's ruling of

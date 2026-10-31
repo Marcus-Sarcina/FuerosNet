@@ -579,6 +579,7 @@ The Cargo workspace has **16 crates**. Components below follow responsibilities 
 | CAT-023 | C | **Read a delivered resource response once, below any interface boundary, and reject rather than normalise what is ambiguous**: a line not terminated by CRLF, a folded header, a duplicated content-length, a content-length beside a transfer-encoding, an encoding other than chunked, a malformed or extended chunk, a trailer section, bytes after the declared body. A second parser above the boundary is W §11.2's hazard on the client's side of the same exchange. Test each refusal by name, and that nothing of a refused message is shown. | W §§11, 11.2; L §8 |
 | CAT-024 | C | **The declared media type decides what is rendered and nothing else does**: render the types the client has decided to render, name every other one to the user with its declared type and size, treat an absent declaration as declaring nothing, and never inspect a body to determine its type. Test that identical markup is framed when declared text/html and named when undeclared. | L §8; R §3 |
 | CAT-025 | C | **Frame a resource's page so it reaches nothing of the user's**: no script, no bridge into the client, no file or content access, no storage surviving the screen, no network fetch, no navigation, and an opaque origin — the response arrives through the kernel and has no origin to be same-origin with. Apply the client's own styling beneath the page's, overridable by it, and never rewrite the resource's markup. Test that a page cannot reach client state and that a navigation is refused. | L §8; D §§11.2, 18.1, 23.3; R §9 |
+| CAT-026 | C | **A resource's typed ask is read by the kernel once and put to the person as a question; the answer is composed by the kernel.** Only the declared type `application/vnd.rhtn.utility+json` makes a body an ask; it is parsed below the boundary, bounded, and refused by the name of the field that fails rather than guessed at; the purpose and retention are shown whole in the resource's words, marked as the resource's; declining is an answer the resource sees; a given result is checked against the utility's shape and the request frame; the answer is one POST to the ask's return path on the resource that asked, through the node that served it, as multipart form data with the named parts; a capture and a signature carry a claim under a per-device, per-audience application key that is never the network identity, kept with the device's state and never in the backup. Test: the same body under `text/plain` is text; each malformed field refused by name; a geohash at the wrong precision refused; the POST's parts; the claim verifies for the resource asked and not for another; the key survives the device's own state and is absent from a backup. | L §§8.1, 9; R §3.4 |
 
 ### Membership gates, subtree acknowledgements and role tables
 
@@ -651,6 +652,7 @@ The Cargo workspace has **16 crates**. Components below follow responsibilities 
 | PKG-010 | S | AbuseReport is a resource-signed standalone object with category 0–5 and optional detail bounded at 1024 bytes. Validate the resource key/domain and category; it is not a participant-signed archive transaction. | W §6.3; D §11.6 |
 | PKG-011 | C | Deliver abuse reports privately to the relevant owner for local action. Do not flood them, add resource assertions to social trust, or append them to identity archives; application detail may identify a complainant but there is no extra protocol reporter identity field. | D §§11.0.3, 11.6; W §6.3 |
 | PKG-012 | C | A local application-report bridge may submit the resource's bounded report, but must not hand a package privileged participant signing keys or general network transaction primitives. Receipt does not imply an automatic punishment or an unspecified report-response protocol. | R §9; I §9.2; W §6.3 |
+| PKG-018 | C | **Ask a member's client for a utility only by answering with one typed ask**, and read what comes back as submitted application data: a POST to the return path with the named parts, `outcome` given or declined with a reason, and for a capture or a signature the digest, key and claim verified over the stated array with the key the answer carried. An ask the client could not read gets no answer; a declined ask is an answer and is not re-asked in a loop; the key is the device's for this resource alone and changes on a restore. Test: a package answering with an ask and taking the POST; the claim verified and refused under another audience; a malformed ask yielding nothing. | R §3.4; L §8.1 |
 
 ### Resource-side session and portability behavior
 
@@ -1020,7 +1022,7 @@ Open local parameters are not all specification defects: cache TTLs, queue cap, 
 
 ## 10. Document baseline and coverage totals
 
-This specification contains **546 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
+This specification contains **548 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
 
 | Prefix | Families |
 |---|---:|
@@ -1040,9 +1042,9 @@ This specification contains **546 numbered requirement/test families** across **
 | REC | 12 |
 | PAY | 17 |
 | POL | 22 |
-| CAT | 25 |
+| CAT | 26 |
 | GAT | 40 |
-| PKG | 17 |
+| PKG | 18 |
 | APP | 14 |
 | UX | 20 |
 | OPS | 22 |

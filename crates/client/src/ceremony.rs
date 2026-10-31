@@ -21,6 +21,7 @@ use crate::rotation::Rotation;
 use crate::selection::{self, Acquaintance, SelectionBasis, attempt, required};
 use crate::store::{Capture, ClientStore, OwnCapture, SealParams, SealedCapture, seal};
 use crate::subject::{SubjectConfig, SubjectState};
+use crate::utility;
 use crate::verifier::{GrantOutcome, QueryOutcome, VerifierConfig, VerifierState, Verifying};
 use crate::{Keyhash, Txid};
 use rhtn_archive::chain::Archive;
@@ -610,6 +611,21 @@ pub struct SubnetRank {
     pub subordinates: usize,
 }
 
+/// An ask a resource made and the person has not answered
+/// (`crate::utility`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PendingAsk {
+    /// The node that served the resource, which the answer goes through.
+    pub node: Keyhash,
+    /// The resource that asked, which the answer goes to and the claim
+    /// is addressed to.
+    pub resource: Keyhash,
+    /// The ask.
+    pub ask: utility::Ask,
+    /// When it arrived, in milliseconds.
+    pub at: u64,
+}
+
 /// A participant client: its identity, archive and store, its two query
 /// roles, whom it recognises, and the device it runs on.
 pub struct Client {
@@ -699,6 +715,19 @@ pub struct Client {
     /// As a recovering subject: the rotation from the prior key, holding
     /// that key until the lines are sealed.
     pub rotation: Option<Box<Rotation>>,
+    /// **Asks resources have made of this client and the person has not
+    /// yet answered** (`crate::utility`), by the number handed out with
+    /// each: the resource and node to answer, and the ask.  In-flight
+    /// state bound to a screen, bounded, and nothing of it outlives the
+    /// process.
+    pub asks: BTreeMap<u64, PendingAsk>,
+    /// The number the next ask gets.
+    pub asked: u64,
+    /// **The device's application secret** (`crate::utility`): what every
+    /// per-audience application key expands from.  Minted at first need,
+    /// kept with the device's own state and never in the backup — a
+    /// device restored from its phrase signs under a new key.
+    pub application_secret: Option<Zeroizing<[u8; 32]>>,
     /// Records this client made and has not yet handed to its serving
     /// node.
     ///
@@ -919,6 +948,9 @@ impl Client {
             browsing: None,
             fetching: BTreeMap::new(),
             rotation: None,
+            asks: BTreeMap::new(),
+            asked: 0,
+            application_secret: None,
             recovery_responses: Vec::new(),
             active: None,
             witnessing: BTreeMap::new(),
@@ -3824,9 +3856,11 @@ impl Client {
         // the holder: whose state this is, so a blob is refused by any other
         // client, a device's material and sessions being its own; and what
         // it holds for its provider
-        emit_array_head(&mut out, 2);
+        // and the application secret, the device's own, beside them
+        emit_array_head(&mut out, 3);
         emit_bstr(&mut out, &self.public.keyhash);
         crate::durable::emit_opt_bstr(&mut out, self.provider_credential.as_deref());
+        crate::durable::emit_opt_bstr(&mut out, self.application_secret.as_ref().map(|s| &s[..]));
         out
     }
 
@@ -3849,7 +3883,7 @@ impl Client {
         // holder is named it is checked; where it is not, the device and the
         // archive's own signer rule are what bind the state to this client.
         let holder: Option<[u8; 32]> = match &f[6] {
-            rhtn_codec::cbor::Item::Array(a) if a.len() == 2 => {
+            rhtn_codec::cbor::Item::Array(a) if a.len() == 2 || a.len() == 3 => {
                 let parts = array(&f[6]).ok_or("holder")?;
                 Some(fixed::<32>(b, &parts[0]).ok_or("owner")?)
             }
@@ -3895,12 +3929,24 @@ impl Client {
             .ok_or("snapshot")?;
         let delegations = bytes(b, &f[5]).ok_or("delegations")?;
         let provider = match &f[6] {
-            rhtn_codec::cbor::Item::Array(a) if a.len() == 2 => {
+            rhtn_codec::cbor::Item::Array(a) if a.len() == 2 || a.len() == 3 => {
                 let parts = array(&f[6]).ok_or("holder")?;
                 optional(&parts[1], |it| bytes(b, it)).ok_or("provider")?
             }
             // the preceding shapes: a byte string, or nothing
             rhtn_codec::cbor::Item::Bytes(_) => Some(bytes(b, &f[6]).ok_or("provider")?),
+            _ => None,
+        };
+        // the application secret, where the blob was written since one
+        // was kept (three in the holder's array); a blob without one is a
+        // device that has signed nothing yet
+        let application_secret: Option<Zeroizing<[u8; 32]>> = match &f[6] {
+            rhtn_codec::cbor::Item::Array(a) if a.len() == 3 => {
+                let parts = array(&f[6]).ok_or("holder")?;
+                optional(&parts[2], |it| fixed::<32>(b, it))
+                    .ok_or("application secret")?
+                    .map(Zeroizing::new)
+            }
             _ => None,
         };
         if payload.device != self.payload.device {
@@ -3940,6 +3986,7 @@ impl Client {
         self.payload = payload;
         self.horizon = horizon;
         self.provider_credential = provider;
+        self.application_secret = application_secret;
         self.positions.clear();
         self.root_subnet = None;
         self.scopes.clear();
@@ -5228,6 +5275,105 @@ impl Client {
         let r = rhtn_archive::catalog::ResourceResponse::decode(bytes)?;
         tracing::info!(target: "cer", status = r.status, "cer.resource");
         Ok((r.status, r.body))
+    }
+
+    /// **Take a resource's ask** (`crate::utility`): read once, held under
+    /// a number for the person to answer, bounded at [`utility::PENDING`]
+    /// with the oldest let go.  The resource and node are the ones the
+    /// answer goes back to, and no ask can name others.
+    pub fn take_utility_ask(
+        &mut self,
+        node: Keyhash,
+        resource: Keyhash,
+        body: &[u8],
+    ) -> Result<(u64, utility::Ask), utility::Malformed> {
+        let ask = utility::parse(body)?;
+        while self.asks.len() >= utility::PENDING {
+            let oldest = *self.asks.keys().next().expect("non-empty");
+            self.asks.remove(&oldest);
+        }
+        self.asked += 1;
+        let id = self.asked;
+        tracing::info!(target: "cer", id, utility = ask.utility.name(), resource = %id8(&resource), "cer.ask");
+        self.asks.insert(
+            id,
+            PendingAsk {
+                node,
+                resource,
+                ask: ask.clone(),
+                at: self.device.clock.now_ms(),
+            },
+        );
+        Ok((id, ask))
+    }
+
+    /// The asks the person has not answered.
+    pub fn pending_asks(&self) -> impl Iterator<Item = (u64, &PendingAsk)> {
+        self.asks.iter().map(|(k, v)| (*k, v))
+    }
+
+    /// **Answer an ask**: the outcome checked against what was asked, the
+    /// claim made where the utility signs — under the application key for
+    /// that one audience, the secret minted here at first need — and the
+    /// one request composed and addressed to the resource that asked,
+    /// through the node that served it.  The ask is spent whatever the
+    /// outcome: a second answer to one question is not a thing.
+    pub fn answer_utility(&mut self, id: u64, outcome: utility::Outcome) -> Result<Msg, String> {
+        let pending = self.asks.remove(&id).ok_or("no such ask is waiting")?;
+        utility::fits(&pending.ask, &outcome).map_err(|m| m.say())?;
+        let at = self.device.clock.now_ms();
+        let signed =
+            if pending.ask.utility.signs() && !matches!(outcome, utility::Outcome::Declined(_)) {
+                let digest = utility::claimed(&pending.ask, &outcome).ok_or("nothing to claim")?;
+                let secret = self.application_secret.get_or_insert_with(|| {
+                    let mut s = Zeroizing::new([0u8; 32]);
+                    self.device.random.fill(&mut s[..]);
+                    s
+                });
+                let c = utility::claim(
+                    secret,
+                    &pending.resource,
+                    pending.ask.utility,
+                    &pending.ask.token,
+                    &digest,
+                    at,
+                );
+                Some((digest, c))
+            } else {
+                None
+            };
+        let mut request = None;
+        for _ in 0..4 {
+            let mut r = [0u8; 12];
+            self.device.random.fill(&mut r);
+            match utility::return_request(
+                &pending.ask,
+                &outcome,
+                at,
+                signed.as_ref().map(|(d, c)| (d, c)),
+                &utility::boundary(&r),
+            ) {
+                Ok(bytes) => {
+                    request = Some(bytes);
+                    break;
+                }
+                Err(utility::Compose::Boundary) => continue,
+                Err(utility::Compose::TooLarge) => {
+                    return Err("the answer exceeds the request frame".into());
+                }
+            }
+        }
+        let bytes = request.ok_or("no boundary could be drawn")?;
+        tracing::info!(
+            target: "cer",
+            id,
+            utility = pending.ask.utility.name(),
+            given = !matches!(outcome, utility::Outcome::Declined(_)),
+            claimed = signed.is_some(),
+            bytes = bytes.len(),
+            "cer.ask.answered"
+        );
+        Ok(self.request_resource(pending.node, pending.resource, bytes))
     }
 
     /// Browse the catalog of the node this client is attached to

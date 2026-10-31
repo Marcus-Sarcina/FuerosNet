@@ -1168,6 +1168,101 @@ to show a resource's page has to read one.
   document to make it safe would assert that the client understood the document;
   the frame's refusals do not depend on understanding it at all.
 
+### 8.1 What a resource may ask of the client
+
+**A page that reaches nothing cannot take anything, so what needs the
+device is asked for** [author, 2026-10-30: wanted, for the utilities named
+below]. A scan, a photograph with its provenance, a place, a tag read, a
+signature over a document: each needs a capability of the device under the
+person's consent, and the frame above has no bridge a page could reach one
+through. **The resource asks instead, in one typed ask; the kernel reads
+it, puts it to the person, and composes the answer itself.** Nothing of
+what a page may do changes, and nothing the resource layer may see widens:
+what goes back is user-submitted application data, exactly as a form the
+client carried would be.
+
+- **An ask is a resource's answer declared `application/vnd.rhtn.utility+json`**,
+  and only that declaration makes it one — the rule above holds, and a
+  body under any other type or none is never inspected to find out whether
+  it might be a question. The body is one JSON object: `utility`, one of
+  the names in the table; `ask`, what it is for, in the resource's words;
+  `retention`, how long the resource keeps what it gets, in its words;
+  `return`, a rooted path on the same resource the answer goes to; `token`,
+  the resource's own name for the ask, `[A-Za-z0-9._-]` and at most 64
+  bytes, echoed back; and what the utility needs — `payload` as hex for a
+  signature, `precision` for a place, `media` for a scan, a capture or an
+  import, `channel` for a tag or a check-in, `seconds` for a live session.
+  **Read once, below the boundary, and refused rather than guessed at**:
+  the ask is bounded at 16 KiB, a sentence shown to a person at 280 bytes,
+  and a field absent, ill-formed or out of bounds is the whole ask refused
+  by that field's name — a question half-read is a question half-put. An
+  ask the kernel could not read is shown to the person as unreadable and
+  **nothing is sent back**.
+
+| Utility | What the person is asked to give |
+|---|---|
+| `scan` | a document, scanned with the camera, as a PDF or an image |
+| `capture` | a photograph or a video taken now, with the time it was taken and a claim that this device took it |
+| `location` | a place, as a geohash at the precision asked, sent once |
+| `check-in` | presence at a place, read from a tag on a proximity channel |
+| `tag` | a tag read: the code on a thing |
+| `sign` | a signature over the exact payload the ask carried, authorised by the person — the platform's own unlock where it has one |
+| `live` | a live session: capture pushed to a service the resource names, for the seconds asked, with its own consent, duration and indicator |
+| `notify` | standing permission to be shown that resource's notifications |
+| `export` | a copy of what the resource holds, handed to the person as a file |
+| `import` | a file the person picks, handed to the resource |
+
+- **Put to the person whole.** The purpose and the retention are shown in
+  the resource's words and marked as the resource's: §1.1's test applies —
+  the client shares no state with the resource and cannot hold it to
+  either — so they are shown as what it said, never as what the client
+  promises. Every result is the person's act at the moment of asking:
+  **no utility reads a sensor ambiently**, a place is never bundled into
+  another action and never accumulates into a track, and the client keeps
+  no location history for any resource to ask after. A live session is the
+  one stated exception to *results, not streams*, and is a distinct ask
+  with its own display rather than a quiet relaxation of the rule.
+- **Declining is an answer the resource sees**, with a reason — the
+  person said no, or this device has no such utility — never a silence it
+  has to interpret or an error loop. An ask is spent by its answer, whatever
+  the answer; the kernel holds at most eight unanswered, the oldest let go,
+  and nothing of one outlives the process.
+- **The kernel composes the answer**: one `POST` to the ask's return path,
+  on the resource that asked and through the node that served it, as
+  `multipart/form-data` — the parts `resource-requirements.md` §3.4 lists,
+  each once. The application supplies the capture the person chose to give
+  and nothing else; a result is checked against the utility's shape (a
+  geohash at the precision asked, bytes under a declared type, text, or an
+  approval) and against the request frame (`wire-format.md` §9.2), which a
+  resource request is one of — so a capture larger than fits is the
+  client's to shrink before it is offered.
+- **The audience is the resource that asked**, never one a resource names.
+  Where the utility signs — a capture's provenance, a signature — the
+  answer carries a claim under **the application key for that one
+  audience**: an Ed25519 key expanded from a secret the device mints at
+  first need and the resource's keyhash, so each resource sees a key of its
+  own and no two can be matched. **It is never the network identity**, and
+  the identity's keys sign nothing here — publishing that key to a
+  resource would undo the resource layer's pairwise separation. The secret
+  is kept with the device's own state (§9) and **never in the backup**: a
+  device restored from its phrase signs under a new key, which is the
+  recovery policy — an application key is not the identity and comes back
+  with nothing. The claim is a signature over the CBOR array `["rhtn/utility@1",
+  audience, utility, token, digest, at]` — the resource's keyhash, the
+  utility's name, the ask's token, SHA-256 of the result (of the payload,
+  for a signature) and the time in milliseconds — so a claim given to one
+  resource says nothing shown to another.
+- **Three things a signature must not conflate**: a *local unlock*, by
+  which the platform vouches the holder to the device; an *application
+  signature*, by which the device vouches a payload to a stated audience;
+  and a *ceremony claim*, the presence machinery of design §7, untouched by
+  any of this. `sign` is the second, authorised by the first where the
+  device offers one, and is never the third — the key says so.
+- **What crosses the interface** (§9): the ask crosses outward as the
+  question, the person's capture crosses inward as their act, and the
+  answer is the kernel's. The application never composes, signs or
+  addresses it.
+
 ---
 
 ## 9. The interface between the kernel and the application
@@ -1223,6 +1318,14 @@ on the wire.
   rest. Sealed state that fails to open refuses the start — beginning fresh
   over unreadable state would mint new material and silently lose every
   message queued for the old.
+- **A resource's ask crosses outward as a question, and its answer is the
+  kernel's** (§8.1). The kernel reads the ask and hands up what was asked,
+  in whose words; the application shows it, and hands in the capture the
+  person chose to give, or their refusal; the kernel checks it, signs it
+  where the utility signs, composes the one request and sends it. The
+  application composes nothing of the answer and holds no key it is
+  signed under — the shell keeps the sensor, the kernel keeps the policy,
+  which is the ceremony's own shape.
 - **Refusals are values that carry their reason.** A bad length, an absent
   session, an endpoint the node would not take: each is an answer with words in
   it rather than a silence the application has to interpret, which is design

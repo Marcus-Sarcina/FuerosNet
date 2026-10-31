@@ -313,6 +313,76 @@ what a directive means, what to apply, what to report and what your members are
 shown of it — including who set a policy — is your application's to decide and to
 make legible.
 
+### 3.4 What you may ask of a member's client
+
+**A member's client frames your page so that it reaches nothing of theirs**
+(`light-client-requirements.md` §8): no script, no bridge, no fetch. So a
+capability of their device — a scan, a photograph, a place, a tag read, a
+signature — is not yours to take from a page; **you ask for it, in one typed
+ask, and their client answers** [author, 2026-10-30]. The kernel on their
+side reads the ask, puts it to the person, and composes the answer; what
+reaches you is submitted application data, exactly as a form would be.
+
+**To ask, answer a request with `content-type: application/vnd.rhtn.utility+json`**
+and one JSON object. Nothing else is read as an ask: a client never inspects
+a body to find out whether it might be one.
+
+| Field | What it is |
+|---|---|
+| `utility` | one of `scan`, `capture`, `location`, `check-in`, `tag`, `sign`, `live`, `notify`, `export`, `import` (`light-client-requirements.md` §8.1 says what each asks the person for) |
+| `ask` | what it is for, in your words, shown to the person whole and marked as yours; at most 280 bytes |
+| `retention` | how long you keep what you get, in your words, shown the same way; at most 280 bytes. **A statement the client cannot hold you to**, and shows as such |
+| `return` | a rooted path on this resource the answer is posted to; never under `/.rhtn/` |
+| `token` | your own name for the ask, `[A-Za-z0-9._-]`, at most 64 bytes, echoed back so you know which was answered |
+| `payload` | `sign` only, required: the exact bytes to be approved and signed, as hex, at most 64 KiB |
+| `precision` | `location` only, required: the geohash length wanted, 1 to 12 |
+| `media` | `scan`, `capture`, `import`: the media types you take, at most 16 |
+| `channel` | `check-in`, `tag`: `nfc`, `uwb` or `qr`, where you mind |
+| `seconds` | `live`: the duration wanted |
+
+The whole ask is at most 16 KiB. **An ask the client could not read gets
+no answer**: it is shown to the person as unreadable and nothing is posted,
+so a return path that is never reached means you asked badly, not that the
+person is slow. Ask once per answer; what you answer the post with may be a
+page or another ask.
+
+**The answer is one `POST` to your return path**, `multipart/form-data`,
+composed by the kernel and not by any page — so its parts are these and in
+this order, each once:
+
+| Part | What it carries |
+|---|---|
+| `utility` | the name, as asked |
+| `token` | yours, echoed |
+| `at` | when the person answered, milliseconds since the epoch, by their clock |
+| `outcome` | `given` or `declined` |
+| `reason` | where declined: why, in words — the person said no, or their device has no such utility. **A refusal is an answer; treat it as one** and do not ask again in a loop |
+| `result` | where given and there is something to carry: a file part under its media type with `filename="result"` for a scan, a capture, a file or a tag's bytes; a text part for a place or a tag's text. Absent for an approval — a signature, a live session, a standing permission, an export taken |
+| `digest`, `key`, `claim` | where the utility signs (`capture`, `sign`), hex: SHA-256 of the result — of your `payload`, for a signature — the public half of the application key for you, and an Ed25519 signature |
+
+**Verify a claim over the CBOR array** `["rhtn/utility@1", audience, utility,
+token, digest, at]`: the tag as text, your resource keyhash as 32 bytes, the
+utility's name, the token, the digest as 32 bytes, and `at` as an unsigned
+integer — with the key the answer carried. **What it proves, and what it
+does not.** The key is the device's application key *for you*: expanded for
+one audience, so the same device shows another resource another key and
+the two cannot be matched; **it is not the member's network identity and
+cannot be tied to it**, by design (`light-client-requirements.md` §8.1). A
+claim says that a device holding that key produced the result for you, for
+that ask, at that time; it names no person, it is not a presence claim, and
+a device restored from its phrase signs under a new key — keep the key
+beside what it signed, and expect it to change. The audience is inside the
+signature, so a claim shown to you was made for you.
+
+**What you cannot ask for.** Nothing reads a sensor without the person's
+act at the moment of asking; a place is given once, at the precision they
+agreed to, and no history of places exists to ask after; a signature is an
+application signature under the key above and never the ceremony's, and
+`sign` is authorised by the device's own unlock where it has one, which is
+the device vouching the holder to itself and not to you. A result is bounded
+by a request frame (`wire-format.md` §9.2): the client shrinks a capture to
+fit, so ask for the size you need.
+
 ---
 
 ## 4. What a resource is

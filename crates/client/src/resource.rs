@@ -46,6 +46,9 @@ pub enum Shape {
     Page,
     /// `text/plain`: text, which is not a page and wants no frame.
     Text,
+    /// **A typed ask of the client** (`crate::utility`): not shown at
+    /// all, but read, and put to the person as a question.
+    Ask,
     /// Anything else, named rather than rendered — and an absent
     /// declaration, which names nothing.
     Other,
@@ -103,6 +106,7 @@ fn shape_of(media: Option<&str>) -> Shape {
     match media {
         Some("text/html") => Shape::Page,
         Some("text/plain") => Shape::Text,
+        Some(crate::utility::MEDIA) => Shape::Ask,
         _ => Shape::Other,
     }
 }

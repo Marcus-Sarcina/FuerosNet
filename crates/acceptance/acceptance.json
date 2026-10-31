@@ -15350,6 +15350,37 @@
     "interpretation": ""
   },
   {
+    "id": "RSC-66",
+    "area": "resources",
+    "gap": "resources",
+    "title": "A resource's ask is read once by the kernel, put to the person, and answered by the kernel to the resource that asked, claimed under a key for that audience alone",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "light-client-requirements.md §8.1",
+      "resource-requirements.md §3.4"
+    ],
+    "rule": [
+      {
+        "where": "light-client-requirements.md §8.1",
+        "text": "**The audience is the resource that asked**, never one a resource names."
+      },
+      {
+        "where": "light-client-requirements.md §8.1",
+        "text": "**It is never the network identity**"
+      },
+      {
+        "where": "resource-requirements.md §3.4",
+        "text": "**An ask the client could not read gets\nno answer**"
+      }
+    ],
+    "given": "A client, and a resource served by a node, answering with asks under the utility media type.",
+    "when": "The client reads a capture ask, a location ask, a sign ask and malformed asks; the person gives a place at the precision asked, a photograph, an approval of the payload, and declines a scan.",
+    "then": "The same body under text/plain is text and only the declared type is an ask; each malformed ask is refused by the name of its field; the place at another precision is refused; each answer is one POST to the return path on the resource that asked through the node that served it, with the named parts; the declined scan carries its reason and no result; the photograph and the approval carry a digest, a key and a claim that verify over the stated array for that resource and not for another; the key is not the identity's and another resource sees another key; the secret survives the device's own state and is absent from the backup; a blob written before the secret was kept opens.",
+    "oracle": "behaviour",
+    "interpretation": ""
+  },
+  {
     "id": "TOP-54",
     "area": "topology",
     "gap": "topology",

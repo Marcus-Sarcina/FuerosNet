@@ -762,7 +762,79 @@ object Kernel {
         val status: ULong,
         val page: Page?,
         val unreadable: String?,
+        /** **A typed ask of this client**, where the resource answered
+         *  with one instead of a page (`light-client-requirements.md`
+         *  §8.1): read by the kernel, put to the person by the shell. */
+        val ask: Ask? = null,
     )
+
+    /**
+     * **What a resource asked of this client**, in the resource's own
+     * words where they are its, and in the kernel's reading otherwise.
+     * The resource and node are the ones the answer goes to; this shell
+     * shows them and cannot change them.
+     */
+    data class Ask(
+        val id: ULong,
+        /** `scan`, `capture`, `location`, `check-in`, `tag`, `sign`,
+         *  `live`, `notify`, `export`, `import`. */
+        val utility: String,
+        val purpose: String,
+        val retention: String,
+        val resource: String,
+        val node: String,
+        /** `sign`: the exact bytes to be approved. */
+        val payload: ByteArray?,
+        /** `location`: the geohash length asked for. */
+        val precision: Int?,
+        val media: List<String>,
+        val channel: String?,
+        val seconds: ULong?,
+    )
+
+    private fun answered(a: uniffi.rhtn_ffi.ResourceAnswer): Answered = Answered(
+        status = a.status,
+        page = a.page?.let { q ->
+            Page(
+                httpStatus = q.httpStatus.toInt(),
+                media = q.media,
+                charset = q.charset,
+                shape = when (q.shape) {
+                    uniffi.rhtn_ffi.PageShape.PAGE -> Shape.PAGE
+                    uniffi.rhtn_ffi.PageShape.TEXT -> Shape.TEXT
+                    uniffi.rhtn_ffi.PageShape.OTHER -> Shape.OTHER
+                },
+                body = q.body,
+            )
+        },
+        unreadable = a.unreadable,
+        ask = a.ask?.let { k ->
+            Ask(
+                id = k.id,
+                utility = k.utility,
+                purpose = k.purpose,
+                retention = k.retention,
+                resource = k.resource.hex(),
+                node = k.node.hex(),
+                payload = k.payload,
+                precision = k.precision?.toInt(),
+                media = k.media,
+                channel = k.channel,
+                seconds = k.seconds,
+            )
+        },
+    )
+
+    /**
+     * **Answer an ask** (`light-client-requirements.md` §8.1): the kernel
+     * checks the outcome against the ask, signs where the utility signs,
+     * composes the one request and sends it to the resource that asked.
+     * What comes back is that resource's next answer.
+     */
+    fun answerUtility(id: ULong, outcome: uniffi.rhtn_ffi.UtilityOutcome): Answered? {
+        val p = participant ?: return null
+        return call("answerUtility", { null }) { answered(p.answerUtility(id, outcome)) }
+    }
 
     /** Sweep the serving node's catalog (`wire-format.md` §6.4). */
     fun browse(): String? {
@@ -783,24 +855,7 @@ object Kernel {
         val p = participant ?: return null
         val request = ("GET $path HTTP/1.1\r\nhost: resource\r\n\r\n").toByteArray()
         return call("requestResource", { null }) {
-            val a = p.requestResource(unhex(node), unhex(resource), request)
-            Answered(
-                status = a.status,
-                page = a.page?.let { q ->
-                    Page(
-                        httpStatus = q.httpStatus.toInt(),
-                        media = q.media,
-                        charset = q.charset,
-                        shape = when (q.shape) {
-                            uniffi.rhtn_ffi.PageShape.PAGE -> Shape.PAGE
-                            uniffi.rhtn_ffi.PageShape.TEXT -> Shape.TEXT
-                            uniffi.rhtn_ffi.PageShape.OTHER -> Shape.OTHER
-                        },
-                        body = q.body,
-                    )
-                },
-                unreadable = a.unreadable,
-            )
+            answered(p.requestResource(unhex(node), unhex(resource), request))
         }
     }
 

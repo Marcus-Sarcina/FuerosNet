@@ -153,7 +153,21 @@ impl SigningIdentity {
     pub fn sign_ed(&self, tbs: &[u8]) -> Vec<u8> {
         self.ed_sk.sign(tbs).to_bytes().to_vec()
     }
+}
 
+/// **An Ed25519 signature under a key that is not the identity's**: the
+/// public key the seed expands to, and the signature over `tbs`. For a
+/// key derived for one audience and one purpose — a client's application
+/// key (`light-client-requirements.md` §8.1) — which must never be the
+/// network identity, since publishing that would undo the resource
+/// layer's pairwise separation.
+pub fn sign_ed_seed(seed: &[u8; 32], tbs: &[u8]) -> ([u8; 32], [u8; 64]) {
+    let sk = ed25519_dalek::SigningKey::from_bytes(seed);
+    let public = sk.verifying_key().to_bytes();
+    (public, sk.sign(tbs).to_bytes())
+}
+
+impl SigningIdentity {
     /// Deterministic ML-DSA-65 with empty context (`wire-format.md` §2.2).
     pub fn sign_pq(&self, tbs: &[u8]) -> Vec<u8> {
         self.pq_sk

@@ -29,7 +29,7 @@ releasable = [
 # The field-test flavour: the hooks stay compiled in and `diag::json`
 # renders them.  Built with `--no-default-features --features fieldtest`;
 # the two features together are refused at compile time (`lib.rs`).
-fieldtest = ["dep:tracing-subscriber", "dep:serde_json"]
+fieldtest = ["dep:tracing-subscriber"]
 
 [dependencies]
 zeroize = { workspace = true }
@@ -50,7 +50,9 @@ tracing = { version = "0.1", default-features = false, features = ["std"] }
 log = { version = "0.4", default-features = false }
 # MIT; the registry alone, for the field-test renderer in `diag::json`
 tracing-subscriber = { version = "0.3", default-features = false, features = ["std", "registry"], optional = true }
-serde_json = { workspace = true, optional = true }
+# MIT OR Apache-2.0; a resource's ask of the client is JSON (`utility`),
+# which is what an application writes
+serde_json = { workspace = true }
 
 [dev-dependencies]
 hex = { workspace = true }

@@ -138,7 +138,43 @@ object ResourcePage {
 
         /** Show this sentence and render nothing. */
         data class Said(val why: String) : Showing()
+
+        /** **Put this ask to the person**: a question, not a page
+         *  (`light-client-requirements.md` §8.1). */
+        data class Ask(val ask: Kernel.Ask) : Showing()
     }
+
+    /**
+     * **What the person is asked, in words**: the utility named as the
+     * thing it would hand over, the resource's purpose and retention in
+     * its own words and marked as such, and where what they give goes.
+     * The kernel's reading decides the kind; this only words it.
+     */
+    fun asking(a: Kernel.Ask): String {
+        val what = when (a.utility) {
+            "scan" -> "a document scanned with the camera"
+            "capture" -> "a photograph or video taken now, with the time it was taken and a claim, signed by this device, that it took it"
+            "location" -> "your place, as a geohash of ${a.precision ?: 0} characters, sent once"
+            "check-in" -> "a check-in: that you are at a place, read from a tag there"
+            "tag" -> "a tag read: the code on a thing"
+            "sign" -> "a signature over ${a.payload?.size ?: 0} bytes it supplied, under this device's key for it"
+            "live" -> "a live audio/video session of ${a.seconds ?: 0} seconds"
+            "notify" -> "standing permission to show you its notifications"
+            "export" -> "a copy of what it holds, handed to you as a file"
+            "import" -> "a file you pick, handed to it"
+            else -> a.utility
+        }
+        return "This resource asks for $what.\n\n" +
+            "It says it is for: \u201c${a.purpose}\u201d\n" +
+            "It says it keeps it: \u201c${a.retention}\u201d\n\n" +
+            "Those are its words, not promises this app can hold it to. " +
+            "What you give goes back to this resource and nowhere else, through the node that served it, " +
+            "as something you submitted. Your network identity is not in it: a claim is signed under a key " +
+            "made for this resource alone. Declining is an answer it sees."
+    }
+
+    /** Whether this app can give that utility on this device today. */
+    fun canGive(utility: String): Boolean = utility == "tag"
 
     /**
      * **The whole of the policy as one decision.** A screen that branched
@@ -156,6 +192,7 @@ object ResourcePage {
                     "Nothing of it is shown rather than some of it.",
             )
         }
+        a.ask?.let { return Showing.Ask(it) }
         val p = a.page ?: return Showing.Said("The resource answered with nothing.")
         return when (p.shape) {
             Kernel.Shape.PAGE -> Showing.Page(styled(String(p.body)))
