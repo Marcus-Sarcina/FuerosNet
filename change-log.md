@@ -16508,6 +16508,35 @@ down to be decided cold. The bound on fetches a minute that
 question. No code changed; that section's "you bound what you have built"
 already accommodates an unenforced field, so no document says *not yet*.
 
+### 2026-10-31 (the device half of the utility request, in the shell)
+
+**Nine of the ten utilities are wired to the device** (`light-client-requirements.md`
+§8.1). `Giving` is the pure half and holds every decision: which
+capability a utility needs, whether this device has it, and what the
+person is told while it happens — so a unit test reads the decisions and
+the sentences, and the kernel's own table of utility names is read out of
+the client crate by that test, which is what stops a utility added there
+from meeting a silence here. `Still` is the camera: one photograph, taken
+by this shell rather than handed to the platform's camera app, for the
+same reason the ceremony's camera is here. The screen drives the rest —
+the document picker both ways, the location service, the near-field radio
+in reader mode, the platform's unlock, and the notification permission.
+
+**What the person sees before anything is sent**: the photograph itself,
+with a second deliberate act to send it; a place as the cell it would go
+in, how wide that is, and a note where this device's own fix is coarser
+than the cell the resource asked for; the exact bytes of a signature,
+shown as text only where they are text. **And every gap is a refusal
+with words in it** rather than a silence: a utility this device has not
+got, a permission refused, a channel the resource named and the device
+lacks, a result over the bound. `live` is declined as not built — it
+wants a media service — and `scan` photographs a document rather than
+reading it into a PDF, which a resource asking only for a PDF is told.
+The permissions enter the manifest asked for at the moment the utility
+needs them: the coarse location alone below a cell of 153 m, the fine one
+above it, the near-field radio read-only, and notifications. UX-022, and
+§8.1 gains the obligation to show what would be sent.
+
 ### 2026-10-31 (a resource request travels as a sequence; the bound is per message)
 
 **A request larger than the frame bound is sent as a sequence too**

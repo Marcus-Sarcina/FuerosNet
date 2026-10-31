@@ -1219,7 +1219,11 @@ client carried would be.
   promises. Every result is the person's act at the moment of asking:
   **no utility reads a sensor ambiently**, a place is never bundled into
   another action and never accumulates into a track, and the client keeps
-  no location history for any resource to ask after. A live session is the
+  no location history for any resource to ask after. **What would be sent
+  is shown before it is sent** — the photograph taken, the place as the
+  cell it would go in, the exact bytes to be signed — and a capability
+  this device has not got, or has not been allowed, is a refusal carrying
+  that as its reason rather than a silence. A live session is the
   one stated exception to *results, not streams*, and is a distinct ask
   with its own display rather than a quiet relaxation of the rule.
 - **Declining is an answer the resource sees**, with a reason — the

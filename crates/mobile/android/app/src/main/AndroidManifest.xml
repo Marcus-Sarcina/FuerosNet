@@ -23,6 +23,24 @@
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <!-- the cue at the switch to capture: a buzz the person feels with the phones face to face -->
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- **The device half of a resource's typed ask**
+         (`light-client-requirements.md` §8.1). Each is asked for at the
+         moment a resource asks for the utility it belongs to and never
+         before, and a refusal is the answer the resource is given
+         (`Giving`, `ResourceActivity`).
+         A place, at the precision the resource asked and the person
+         agreed: the coarse permission alone where a cell of a kilometre
+         or more will do, the fine one only above that. Neither is used
+         for anything else: the ceremony derives no location and the
+         Bluetooth bearer declares so. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <!-- A tag read for a check-in or an asset: read only, never written,
+         and only while the resource screen is in front. -->
+    <uses-permission android:name="android.permission.NFC" />
+    <!-- A resource's standing permission to be shown notifications
+         (API 33 and up; below it the declaration is enough). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Neither is required to install: a device without one carries the
          exchange another way, and `light-client-requirements.md` §1.3 has a
          missing capability reported unavailable rather than absent. -->
@@ -30,6 +48,11 @@
         android:required="false" />
     <uses-feature android:name="android.hardware.bluetooth_le"
         android:required="false" />
+    <!-- Nor is either of these: a device without the radio or the
+         location service declines the utility that needs it, with that as
+         the reason the resource is told. -->
+    <uses-feature android:name="android.hardware.nfc" android:required="false" />
+    <uses-feature android:name="android.hardware.location" android:required="false" />
 
     <!-- `FuerosApp` plants the log trees, the event sink and the crash
          handler, each only in the fieldtest flavour (`FuerosApp.kt`). -->

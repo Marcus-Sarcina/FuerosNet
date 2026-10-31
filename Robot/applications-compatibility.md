@@ -111,10 +111,17 @@ utility request contract and the application key;
 `infra-client-requirements.md` §9.3 and the manifest text; PKG-017, RSC-63, RSC-64, RSC-65, DMN-35. Owed, in
 order:
 
-1. **The utility request's device half**: the shell gives a tag today;
-   scan, capture with provenance, location, check-in, the biometric
-   unlock for `sign`, live, notify, export and import are each a platform
-   capability still to wire to the ask. (A result is bounded at
+1. **The utility request's device half**: **built 2026-10-31** for nine
+   of the ten — a photograph taken by the shell's own camera (`Still`)
+   for `capture` and `scan`, a place as a geohash at the precision asked,
+   a tag by the near-field radio or the camera for `tag` and `check-in`,
+   the platform's unlock for `sign`, the document picker both ways for
+   `import` and `export`, and the notification permission for `notify`.
+   What remains: **`live`**, which wants a media service and an adapter
+   the shell has none of; and **`scan`'s own shape**, since the shell
+   photographs a document rather than deskewing, reading and assembling a
+   PDF — a resource that will take only a PDF is told so. Their
+   client-utilities page should know both. (A result is bounded at
    `wire-format.md` §11's 16 MiB per message since 2026-10-31, the
    request travelling as a sequence; the frame no longer bounds it.)
 2. **Budgets not yet enforced**: requests a minute, and a bound on fetches

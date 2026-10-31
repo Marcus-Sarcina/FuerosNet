@@ -173,8 +173,9 @@ object ResourcePage {
             "made for this resource alone. Declining is an answer it sees."
     }
 
-    /** Whether this app can give that utility on this device today. */
-    fun canGive(utility: String): Boolean = utility == "tag"
+    /** **Whether this device can give a utility is [Giving]'s**, since it
+     *  depends on what the device has; this file holds what the person is
+     *  told, which does not. */
 
     /**
      * **The whole of the policy as one decision.** A screen that branched
