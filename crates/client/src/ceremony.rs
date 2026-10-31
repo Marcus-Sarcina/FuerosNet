@@ -4214,6 +4214,23 @@ impl Client {
             self.deposited.remove(&peer);
             tracing::info!(target: "peer", peer = %id8(&peer), displaced, next_after = next, "peer.reopen");
         }
+        // **a greeting that waited for a session is stale once another
+        // goes**: whatever of the last greetings parked behind a bundle
+        // request is dropped before this one is queued, so a session that
+        // opens carries one greeting and not a round per minute of
+        // waiting [bench 584a275-restore-kind30-1, 2026-10-30: a dozen
+        // flushed at once, each answered with a 130 KB return]
+        let stale = [
+            payload::KIND_PEER_LOCATOR,
+            payload::KIND_PEERING_RECORD,
+            payload::KIND_BACKUP_REQUEST,
+            payload::KIND_BACKUP_DEPOSIT,
+        ];
+        for ((to, _), parked) in self.payload.pending.iter_mut() {
+            if *to == peer {
+                parked.retain(|p| !payload::unwrap(p).is_ok_and(|(k, _)| stale.contains(&k)));
+            }
+        }
         if let Ok(sl) = self.own_locator() {
             self.queue_to_peer(peer, payload::KIND_PEER_LOCATOR, &sl);
         }
@@ -6132,6 +6149,46 @@ impl Client {
             Some((over, signed)) if *over == blob => Some(Msg::PublishBundle(signed.clone())),
             _ => None,
         }
+    }
+
+    /// **A peer's prekey request, answered from this device over a held
+    /// direct path** (`wire-format.md` §7.8, §9.1): this device's signed
+    /// bundle and one one-time key, as the bearer hands them in a ceremony
+    /// (§14.3.4), so the peer opens a session with no node asked — which
+    /// is what a client restored from its phrase has to offer the peer
+    /// that reaches it.  None where the request is for another subject or
+    /// device, or this device has no signed bundle.
+    pub fn answer_prekey_request(&mut self, from: &Keyhash, bytes: &[u8]) -> Option<Vec<u8>> {
+        let (subject, device, nonce) = match rhtn_archive::prekey::PrekeyRequest::decode(bytes) {
+            Ok(rhtn_archive::prekey::PrekeyRequest::One {
+                subject,
+                device,
+                nonce,
+                ..
+            }) => (subject, device, nonce),
+            _ => return None,
+        };
+        if subject != self.public.keyhash || device.is_some_and(|d| d != self.payload.device) {
+            tracing::info!(target: "pay", from = %id8(from), "pay.prekey.not_mine");
+            return None;
+        }
+        let now = self.now_s();
+        let Some(Msg::PublishBundle(bundle)) = self.bundle_to_publish(now) else {
+            return None;
+        };
+        let random = self.device.random.clone();
+        let mut fresh = |out: &mut [u8]| random.fill(out);
+        let one_time = self.payload.keys.one_time_keys(1, &mut fresh).pop();
+        tracing::info!(target: "pay", from = %id8(from), one_time = one_time.is_some(), "pay.prekey.answered");
+        Some(
+            rhtn_archive::prekey::PrekeyReply {
+                nonce,
+                bundles: vec![bundle],
+                one_time,
+                code: None,
+            }
+            .encode(),
+        )
     }
 
     /// On a device holding no seed: the unsigned bundle over this device's

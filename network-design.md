@@ -1255,7 +1255,14 @@ consequence of subnet plurality, not a gap in this mechanism.
   holds no peering with; the record, signed by the two of them, is what it
   takes the sender as a peer by, the sender's material having come with
   its first message, and from then the rest of its dataset comes back
-  from the blob the peer holds. **The deposit and its return
+  from the blob the peer holds. **No node is needed for the recovery**
+  [author, 2026-10-30]: the peer dials the last address it held, presents
+  its introduction first on the connection so a client that knows nobody
+  can take it as a cold call, asks that client for its prekey material on
+  the same path, and opens the session; the greeting, the record, the
+  request and the return all travel direct. A node is needed only where
+  the address moved, and a meeting with the peer serves the same.
+  **The deposit and its return
   travel on the direct path only** [author, 2026-10-25]: a blob is larger
   than a relay's request frame (`wire-format.md` §9.2), the serving node's
   mailbox is for mail (§14.1.6), and a peer that cannot be reached

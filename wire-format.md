@@ -4513,8 +4513,24 @@ any of three binds it: the key is the classical member of the `KeyMaterial`
 pinned for that keyhash; a delegation from that keyhash naming it is already held
 from the topology class (§10.1); or the peer presents that delegation first on
 the connection (§8.2), in the attach where there is one and as a control frame
-where there is not [author, 2026-09-21]. A connection on which none holds is
-refused, whether or not it would have opened a session. **The
+where there is not [author, 2026-09-21]; **or, on the direct path, the peer
+presents its introduction (§2.3) first on the connection and the recipient's
+policy admits a cold call** (§7.10.1) [author, 2026-10-30] — the material's
+classical member is the key presented, the recipient takes the party as it
+takes any cold call, and the key binds by the pin from then. A connection on
+which none holds is refused, whether or not it would have opened a session.
+
+**Control streams on the direct path** [author, 2026-10-30]. Payload travels
+on unidirectional streams as before, one message each. A bidirectional stream
+is a control stream, and its first byte says which: **2**, the dialler's
+`Introduction` (§2.3), presented first on a dial, which the recipient answers
+with one byte, 1 where it took the party or needed nothing and 0 where it did
+not; **3**, a `PrekeyRequest` (§7.8) for the recipient's own material, which
+the recipient answers on the same stream with a `PrekeyReply` exactly as its
+node would, from its own signed bundle and one-time pool, or with nothing.
+This is what lets a session open between two parties with no node asked, and
+a client restored from its phrase be reached and restored by a peer that
+dials it at its last address with nothing between them (design §6.3).
 post-quantum component authenticates nothing at the transport layer, and does
 not need to.** design §5.1's rule is that an object may use the classical
 component alone where its relevance expires before the post-quantum horizon, and
@@ -5684,7 +5700,9 @@ other's prekey material: a session is opened from a published bundle, and a
 bundle is fetched (§7.8). **This object carries it across the local session
 instead**, so a co-present pair can open an end-to-end channel afterwards
 without either party's own node having cooperated in anything [author,
-2026-10-05].
+2026-10-05]. The same material is asked of a peer over a held direct path,
+as §9.1's control stream 3, so two parties that can reach each other need no
+node for a session either [author, 2026-10-30].
 
 ```
 PrekeyHandover = [             ; the sender's prekey material, locally

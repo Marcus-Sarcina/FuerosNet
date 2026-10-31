@@ -685,11 +685,27 @@ impl Courier {
                         }
                     }
                     Msg::PrekeyRequest(b) => {
-                        // the subject's own node first, and this client's
-                        // where that one could not be reached
-                        let answered = match me.their_prekeys(&b).await {
+                        // **the subject itself, where a direct path to it
+                        // is held** (`wire-format.md` §9.1: a session opens
+                        // with no node asked); the subject's own node next,
+                        // and this client's where that one could not be
+                        // reached
+                        let subject = match PrekeyRequest::decode(&b) {
+                            Ok(PrekeyRequest::One { subject, .. }) => Some(subject),
+                            _ => None,
+                        };
+                        let direct = match subject {
+                            Some(s) if me.direct.reachable().holds(&s) => {
+                                me.direct.request(s, b.clone()).await
+                            }
+                            _ => None,
+                        };
+                        let answered = match direct {
                             Some(reply) => Some(reply),
-                            None => me.serving.prekey(me.me(), &b).await,
+                            None => match me.their_prekeys(&b).await {
+                                Some(reply) => Some(reply),
+                                None => me.serving.prekey(me.me(), &b).await,
+                            },
                         };
                         match answered {
                             Some(reply) => {

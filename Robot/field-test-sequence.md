@@ -230,6 +230,21 @@ the next round, parked behind it for seven rounds. The fourth run passed
 this point only because its first request came a round later. **Found**:
 an unanswered prekey request must be asked again; fixed under the run.
 
+**The sixth run, `584a275-restore-kind30-1`, 2026-10-30 — the restore
+proven**, 4VC still the identity restored from its phrase before the
+fourth run, the node persistent. MRK's first request for 4VC's bundle
+went unanswered (`pay.prekey.unanswered`, 4VC not yet attached); at the
+next send past the patience, `pay.prekey.again` and the bundle came, the
+session opened and everything parked went at once: 4VC took the peering
+record at 58.1 s (`peer.record Applied`) after refusing the locator and
+request that preceded it as *not a peer* — the order within one flush,
+not a fault — held MRK's 130,805-byte deposit, greeted back with the
+record it had just been handed, and at 62.7 s **reconciled MRK's return
+of its own blob: 5 records, 7 contacts, 12 other items, 0 refused**; the
+shell redrew contacts, subnets, lines, profiles and meetings. From a
+phrase and a peer, with a node that had never seen a record of 4VC's.
+Fifth and sixth runs' APKs stamped one commit behind what they carry.
+
 **Not exercised**: the Done screen's subnet-naming prompt (T1's published
 nothing and the stream could not say whether it was shown; it is
 instrumented now and the root named the subnet from the subnet's options

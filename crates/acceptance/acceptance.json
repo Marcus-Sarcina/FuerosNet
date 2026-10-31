@@ -13469,6 +13469,33 @@
     "interpretation": "§9.1 says what binds a presented key and §4.3 says a contact carries the material; that the transport's pin set is refilled from the contacts at a start is the implementation's reading of the two together. The bench showed the alternative: after a restart, every dial from a peer closed unbound and none was made [9ea2c16-model-validation-1, 2026-10-30]."
   },
   {
+    "id": "TRN-29",
+    "area": "transport",
+    "gap": "transport",
+    "title": "Bind a dialler by the introduction it presents first on the direct connection, and answer its prekey request on the same path",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "wire-format.md §9.1",
+      "wire-format.md §14.3.4"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §9.1",
+        "text": "the peer\npresents its introduction (§2.3) first on the connection and the recipient's\npolicy admits a cold call"
+      },
+      {
+        "where": "wire-format.md §9.1",
+        "text": "the recipient answers on the same stream with a `PrekeyReply` exactly as its\nnode would"
+      }
+    ],
+    "given": "A client that holds nothing binding a dialler's key — not pinned, no delegation held — and no node; the dialler holds the client as a contact and has an introduction of its own.",
+    "when": "The dialler opens a connection, presents its introduction on the first control stream, and then asks for the client's prekey material on another.",
+    "then": "The client takes the introduction as a cold call, pins the party and holds the path; the prekey request is answered from the client's own signed bundle and one-time pool; a request for another subject's material is not answered.",
+    "oracle": "behaviour",
+    "interpretation": ""
+  },
+  {
     "id": "TRV-01",
     "area": "traversal",
     "gap": "traversal",

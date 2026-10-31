@@ -621,6 +621,37 @@ impl Net {
                     h.with_blocking(move |c| c.store.contacts.contains_key(&peer))
                 })
             };
+            // the control streams (`wire-format.md` §9.1): this side's
+            // introduction on a dial, a dialler's taken as a cold call,
+            // and a peer's prekey request answered from the kernel
+            let control = {
+                let h1 = handle_for_task.clone();
+                let h2 = handle_for_task.clone();
+                let h3 = handle_for_task.clone();
+                rhtn_adaptors::direct::Control {
+                    introduce: Arc::new(move || {
+                        let h = h1.clone();
+                        Box::pin(async move { h.with(|c| c.own_introduction().ok()).await })
+                    }),
+                    introduced: Arc::new(move |from, bytes| {
+                        let h = h2.clone();
+                        Box::pin(async move {
+                            h.with(move |c| {
+                                c.known.iter().any(|k| k.keyhash == from)
+                                    || c.take_cold_introduction(&from, &bytes)
+                            })
+                            .await
+                        })
+                    }),
+                    answer: Arc::new(move |from, bytes| {
+                        let h = h3.clone();
+                        Box::pin(async move {
+                            h.with(move |c| c.answer_prekey_request(&from, &bytes))
+                                .await
+                        })
+                    }),
+                }
+            };
             // the interface the default route leaves by: a host candidate a
             // peer on the same network can dial, with no node to ask
             let local = interface_toward("1.1.1.1:443".parse().unwrap());
@@ -639,6 +670,7 @@ impl Net {
                     None,
                     gate.clone(),
                     inlet.inbound(),
+                    control.clone(),
                 ) {
                     Ok(d) => {
                         bound = Some(d);

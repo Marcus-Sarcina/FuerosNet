@@ -58,6 +58,54 @@ pub type Gate = Arc<dyn Fn(&Keyhash) -> bool + Send + Sync>;
 
 type Fut<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
+/// **What the direct path asks of the client for its control streams**
+/// (`wire-format.md` §9.1): this side's own introduction to present on
+/// a dial, the taking of one a dialler presented — a cold call, admitted
+/// by the client's policy — and the answer to a peer's prekey request
+/// over a held path, so a session opens with no node asked.
+#[derive(Clone)]
+pub struct Control {
+    /// This side's introduction (`wire-format.md` §2.3), or none where it
+    /// has no locator to introduce itself by yet.
+    pub introduce: Introduce,
+    /// An introduction a dialler presented: whether the dialler is a
+    /// party this client now holds.
+    pub introduced: Introduced,
+    /// A prekey request (`wire-format.md` §7.8) from a peer on the path:
+    /// the reply, or none where this side will not answer it.
+    pub answer: Answer,
+}
+
+/// See [`Control::introduce`].
+pub type Introduce = Arc<dyn Fn() -> Fut<'static, Option<Vec<u8>>> + Send + Sync>;
+/// See [`Control::introduced`].
+pub type Introduced = Arc<dyn Fn(Keyhash, Vec<u8>) -> Fut<'static, bool> + Send + Sync>;
+/// See [`Control::answer`].
+pub type Answer = Arc<dyn Fn(Keyhash, Vec<u8>) -> Fut<'static, Option<Vec<u8>>> + Send + Sync>;
+
+impl Control {
+    /// Introduces nobody, takes no introduction, answers nothing: the
+    /// direct path as it was before control streams.
+    pub fn none() -> Control {
+        Control {
+            introduce: Arc::new(|| Box::pin(async { None })),
+            introduced: Arc::new(|_, _| Box::pin(async { false })),
+            answer: Arc::new(|_, _| Box::pin(async { None })),
+        }
+    }
+}
+
+/// The first byte of a control stream: the dialler's introduction, or a
+/// prekey request answered on the same stream (`wire-format.md` §9.1).
+pub const CONTROL_INTRODUCTION: u8 = 2;
+/// See [`CONTROL_INTRODUCTION`].
+pub const CONTROL_PREKEY: u8 = 3;
+/// How long an acceptor waits for the introduction of a dialler it
+/// cannot bind otherwise, and a requester for a reply.
+const CONTROL_WAIT: Duration = Duration::from_secs(3);
+/// The most a control stream carries either way.
+const CONTROL_BYTES: usize = 1 << 20;
+
 /// The transport side of the direct path.
 pub trait Direct: Send + Sync {
     /// Where this side can be reached, as the transport knows it.
@@ -70,6 +118,12 @@ pub trait Direct: Send + Sync {
     /// Deliver on the path held; false leaves the message with the caller,
     /// and the relay is next.
     fn deliver(&self, peer: Keyhash, bytes: Vec<u8>) -> Fut<'_, bool>;
+    /// Ask `peer`, on the path held, for its prekey material
+    /// (`wire-format.md` §7.8) and hand the reply back; none where no
+    /// path is held or the peer did not answer.
+    fn request(&self, _peer: Keyhash, _bytes: Vec<u8>) -> Fut<'_, Option<Vec<u8>>> {
+        Box::pin(async { None })
+    }
 }
 
 /// No direct path to anyone.
@@ -112,6 +166,8 @@ struct Light {
     dial_timeout: Duration,
     /// Where the checks' events go: nowhere by default.
     log: rhtn_transport::session::Log,
+    /// What the client does for the control streams.
+    control: Control,
 }
 
 /// A light client's own socket: candidates gathered on it, the peer's
@@ -135,6 +191,7 @@ impl LightDirect {
         stun: Option<SocketAddr>,
         gate: Gate,
         inbound: Inbound,
+        control: Control,
     ) -> io::Result<LightDirect> {
         let socket = TraversalSocket::bind(addr, nat)?;
         let presenter = match &bind.credential {
@@ -160,6 +217,7 @@ impl LightDirect {
             reachable,
             dial_timeout: Duration::from_secs(3),
             log: rhtn_transport::session::Log::default(),
+            control,
         }));
         // what a peer opens toward this socket
         let accepting = light.clone();
@@ -168,7 +226,7 @@ impl LightDirect {
                 let l = accepting.clone();
                 tokio::spawn(async move {
                     if let Ok(conn) = incoming.await {
-                        l.hold(conn);
+                        l.accept(conn).await;
                     }
                 });
             }
@@ -195,12 +253,11 @@ impl LightDirect {
         self.0.endpoint.close(quinn::VarInt::from_u32(0), b"moved");
     }
 
-    /// Hold `conn` under the peer it authenticates and read what it
-    /// delivers until it closes.  The presented key is bound by the pin
-    /// or by a delegation held in the horizon view, with no frame
-    /// (`wire-format.md` §9.1); a peer bound by neither is closed unheld.
-    fn hold(&self, conn: quinn::Connection) -> bool {
-        let Some(peer) = tls::peer_key(&conn).and_then(|k| {
+    /// Whom the key `conn` presented speaks as, by what this side holds
+    /// with no frame (`wire-format.md` §9.1): the pin, or a delegation
+    /// held in the horizon view.
+    fn bound_key(&self, conn: &quinn::Connection) -> Option<Keyhash> {
+        tls::peer_key(conn).and_then(|k| {
             self.0.pins.keyhash_for_key(&k).or_else(|| {
                 self.0
                     .bind
@@ -209,10 +266,110 @@ impl LightDirect {
                     .filter(|d| self.0.bind.in_window(d))
                     .map(|d| d.keyhash)
             })
-        }) else {
+        })
+    }
+
+    /// **A connection a peer opened toward this socket.** Bound by what
+    /// this side holds, it is held at once; bound by nothing, this side
+    /// waits for the dialler's introduction on its first control stream
+    /// (`wire-format.md` §9.1, §2.3) and takes it as a cold call where
+    /// the client's policy admits one — which is how a peer reaches a
+    /// client restored from its phrase, that knows nobody, with no node
+    /// between them [author, 2026-10-30].  Refused where nothing came,
+    /// or what came did not bind the key presented.
+    async fn accept(&self, conn: quinn::Connection) -> bool {
+        if let Some(peer) = self.bound_key(&conn) {
+            return self.hold_as(peer, conn);
+        }
+        let Some(presented) = tls::peer_key(&conn) else {
             conn.close(quinn::VarInt::from_u32(CLOSE_REFUSED), b"unbound");
             return false;
         };
+        let intro = tokio::time::timeout(CONTROL_WAIT, async {
+            let (send, mut recv) = conn.accept_bi().await.ok()?;
+            let bytes = recv.read_to_end(CONTROL_BYTES).await.ok()?;
+            Some((send, bytes))
+        })
+        .await
+        .ok()
+        .flatten();
+        let Some((mut send, bytes)) = intro else {
+            conn.close(quinn::VarInt::from_u32(CLOSE_REFUSED), b"unbound");
+            return false;
+        };
+        let taken = match bytes.split_first() {
+            Some((&CONTROL_INTRODUCTION, body)) => self.take_introduction(presented, body).await,
+            _ => None,
+        };
+        let Some(peer) = taken else {
+            let _ = send.write_all(&[0]).await;
+            let _ = send.finish();
+            conn.close(quinn::VarInt::from_u32(CLOSE_REFUSED), b"unbound");
+            return false;
+        };
+        let _ = send.write_all(&[1]).await;
+        let _ = send.finish();
+        self.hold_as(peer, conn)
+    }
+
+    /// An introduction presented first on a connection: the party it
+    /// names, where the material's classical member is the key presented
+    /// and the client took the party as a cold call; pinned then, so the
+    /// key binds from here on.
+    async fn take_introduction(&self, presented: [u8; 32], body: &[u8]) -> Option<Keyhash> {
+        let intro = rhtn_archive::locator::Introduction::parse(body).ok()?;
+        if intro.identity.ed.as_bytes() != &presented {
+            tracing::info!(target: "pay", "pay.direct.introduction.not_theirs");
+            return None;
+        }
+        let who = intro.identity.keyhash;
+        if !(self.0.control.introduced)(who, body.to_vec()).await {
+            tracing::info!(target: "pay", peer = %hex4(&who), "pay.direct.introduction.refused");
+            return None;
+        }
+        self.0.pins.pin_identity(&intro.identity);
+        tracing::info!(target: "pay", peer = %hex4(&who), "pay.direct.cold_call");
+        Some(who)
+    }
+
+    /// **This side's introduction, presented first on a dial** where it
+    /// has one: the peer may hold nothing that binds this key.  Whether
+    /// the peer took it — or needed nothing, which it says the same way.
+    async fn present(&self, conn: &quinn::Connection) -> bool {
+        let Some(intro) = (self.0.control.introduce)().await else {
+            return true;
+        };
+        let mut frame = Vec::with_capacity(intro.len() + 1);
+        frame.push(CONTROL_INTRODUCTION);
+        frame.extend_from_slice(&intro);
+        tokio::time::timeout(CONTROL_WAIT, async {
+            let (mut send, mut recv) = conn.open_bi().await.ok()?;
+            send.write_all(&frame).await.ok()?;
+            send.finish().ok()?;
+            let ack = recv.read_to_end(8).await.ok()?;
+            Some(ack.first() == Some(&1))
+        })
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or(false)
+    }
+
+    /// Hold a connection this side dialled: bound by what it holds, since
+    /// it dialled a party it knew.
+    fn hold(&self, conn: quinn::Connection) -> bool {
+        match self.bound_key(&conn) {
+            Some(peer) => self.hold_as(peer, conn),
+            None => {
+                conn.close(quinn::VarInt::from_u32(CLOSE_REFUSED), b"unbound");
+                false
+            }
+        }
+    }
+
+    /// Hold `conn` as `peer`'s and read what it delivers until it closes;
+    /// answer its control streams meanwhile.
+    fn hold_as(&self, peer: Keyhash, conn: quinn::Connection) -> bool {
         // A connection this side would not have dialled is not one it
         // accepts: the direct path is refused in both directions by the
         // same local decision, or a peer outside the horizon opens it by
@@ -223,6 +380,31 @@ impl LightDirect {
         }
         self.0.conns.lock().unwrap().insert(peer, conn.clone());
         self.0.reachable.set(peer, true);
+        // the control streams: an introduction (taken, or needed by
+        // nothing), and a prekey request answered on the same stream
+        let ctl = self.clone();
+        let serving = conn.clone();
+        tokio::spawn(async move {
+            while let Ok((mut send, mut recv)) = serving.accept_bi().await {
+                let Ok(bytes) = recv.read_to_end(CONTROL_BYTES).await else {
+                    continue;
+                };
+                match bytes.split_first() {
+                    Some((&CONTROL_INTRODUCTION, body)) => {
+                        let _ = (ctl.0.control.introduced)(peer, body.to_vec()).await;
+                        let _ = send.write_all(&[1]).await;
+                    }
+                    Some((&CONTROL_PREKEY, body)) => {
+                        if let Some(reply) = (ctl.0.control.answer)(peer, body.to_vec()).await {
+                            tracing::info!(target: "pay", peer = %hex4(&peer), bytes = reply.len(), "pay.direct.prekey.answered");
+                            let _ = send.write_all(&reply).await;
+                        }
+                    }
+                    _ => {}
+                }
+                let _ = send.finish();
+            }
+        });
         let l = self.clone();
         tokio::spawn(async move {
             while let Ok(mut s) = conn.accept_uni().await {
@@ -288,9 +470,39 @@ impl Direct for LightDirect {
             )
             .await
             {
-                Some(conn) => self.hold(conn),
+                Some(conn) => {
+                    // the peer may hold nothing that binds this key: this
+                    // side's introduction goes first, and the peer says
+                    // whether it took it or needed nothing
+                    if !self.present(&conn).await {
+                        conn.close(quinn::VarInt::from_u32(CLOSE_REFUSED), b"not introduced");
+                        return false;
+                    }
+                    self.hold(conn)
+                }
                 None => false,
             }
+        })
+    }
+
+    fn request(&self, peer: Keyhash, bytes: Vec<u8>) -> Fut<'_, Option<Vec<u8>>> {
+        Box::pin(async move {
+            let conn = self.0.conns.lock().unwrap().get(&peer).cloned()?;
+            let mut frame = Vec::with_capacity(bytes.len() + 1);
+            frame.push(CONTROL_PREKEY);
+            frame.extend_from_slice(&bytes);
+            let reply = tokio::time::timeout(CONTROL_WAIT, async {
+                let (mut send, mut recv) = conn.open_bi().await.ok()?;
+                send.write_all(&frame).await.ok()?;
+                send.finish().ok()?;
+                recv.read_to_end(CONTROL_BYTES).await.ok()
+            })
+            .await
+            .ok()
+            .flatten()
+            .filter(|r| !r.is_empty());
+            tracing::info!(target: "pay", peer = %hex4(&peer), answered = reply.is_some(), "pay.direct.prekey.asked");
+            reply
         })
     }
 

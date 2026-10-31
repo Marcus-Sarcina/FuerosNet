@@ -535,9 +535,10 @@ fn a_peer_silent_for_two_rounds_is_opened_to_anew_and_deposited_to_again() {
     let c = s.client("alice");
     let _ = c.outbox();
     assert!(c.greet_peer(kh("bob"), true).is_some());
-    assert!(
-        payloads(&c.outbox()) >= 4,
-        "deposited again after the reopening"
+    assert_eq!(
+        payloads(&c.outbox()),
+        4,
+        "deposited again after the reopening, and the greeting that waited was dropped"
     );
     // the silence allowed doubled: rounds 4 and 5 reopen nothing
     for _ in 0..2 {

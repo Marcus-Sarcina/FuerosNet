@@ -16488,6 +16488,40 @@ Tested: a first message to a party holding nothing of the sender is
 refused on the binding alone and opens once the introduction is taken;
 a card naming another party is not taken.
 
+### 2026-10-30 (no node is needed for a recovery: the introduction on the dial, the bundle on the path)
+
+**Ruled** [author, 2026-10-30]: a client restored from its phrase is
+recovered by its peer with no node between them. Two additions to the
+direct path, both as control streams the path did not use before
+(bidirectional, the first byte saying which; payload stays on
+unidirectional streams untouched): **a dialler the recipient cannot bind
+presents its introduction first on the connection** — §9.1's fourth
+bind, the recipient taking the party as it takes any cold call and
+pinning it — and **a peer asks the recipient for its prekey material on
+the held path**, answered from the recipient's own signed bundle and
+one-time pool exactly as its node would answer. The courier asks the
+subject itself first, where a path is held, before any node. With the
+greeting carrying the peering record and the return travelling direct,
+the whole restore runs with nothing but the two phones; a node is needed
+only where the address moved, and a meeting with the peer serves the
+same. `wire-format.md` §9.1 and §14.3.4, design §6.3, PAY-019, TRN-29;
+direct-path test.
+
+### 2026-10-30 (the restore proven; a greeting that waited is dropped)
+
+**A phone restored from its phrase got its dataset back from its peer**
+[bench, `584a275-restore-kind30-1`]: the peer's bundle request, asked
+again past the patience, opened the session; the first message carried
+the introduction and the greeting the peering record, taken at 58 s; the
+restored phone greeted back and at 63 s reconciled the return of its own
+blob — 5 records, 7 contacts, 12 other items, nothing refused — with a
+serving node that had never held a record of it. **One thing found**:
+the greetings parked behind the bundle request through five runs'
+worth of rounds (parked plaintexts persist with the sessions) all went
+at once when it opened, each answered with a 130 KB return. A new
+greeting now drops what of the last ones is still parked to that peer:
+one greeting goes, not a round per minute of waiting.
+
 ### 2026-10-30 (an unanswered prekey request is asked again)
 
 **Nothing reached the restored phone in the fifth run** [bench,

@@ -9,7 +9,7 @@ mod common;
 use common::*;
 use rhtn_adaptors::actor::Handle;
 use rhtn_adaptors::courier::{Courier, Inlet};
-use rhtn_adaptors::direct::{Direct, Gate, LightDirect, NodeDirect, Reachable};
+use rhtn_adaptors::direct::{Control, Direct, Gate, LightDirect, NodeDirect, Reachable};
 use rhtn_adaptors::serving::{Answer, Inboxes, LocalNode, Serving};
 use rhtn_archive::Keyhash;
 use rhtn_archive::submission::WakeEndpoint;
@@ -133,6 +133,7 @@ fn light(
         None,
         gate,
         inlet.inbound(),
+        Control::none(),
     )
     .expect("bound");
     let reachable = direct.reachable();
@@ -172,6 +173,7 @@ fn light_refusing(name: &'static str, serving: &Arc<dyn Serving>, inboxes: &Inbo
         None,
         gate,
         inlet.inbound(),
+        Control::none(),
     )
     .expect("bound");
     let reachable = direct.reachable();
@@ -470,6 +472,7 @@ fn light_holding(
         None,
         gate,
         inlet.inbound(),
+        Control::none(),
     )
     .expect("bound");
     let reachable = direct.reachable();
@@ -593,4 +596,167 @@ async fn top_43_a_light_client_holds_delegations_and_binds_a_direct_peer_by_one(
     assert!(
         matches!(&d, Dispatched::Application { bytes, .. } if bytes == b"to the desktop, directly")
     );
+}
+
+/// A light client whose direct path runs the control streams off its own
+/// kernel (`wire-format.md` §9.1): it introduces itself on a dial, takes
+/// a dialler's introduction as a cold call, and answers a peer's prekey
+/// request from its own material.  `forget` names the parties this
+/// client is to know nothing of — neither pinned nor among what it
+/// verifies by — which is what a client restored from its phrase is to
+/// everybody.
+fn light_with(
+    name: &'static str,
+    serving: &Arc<dyn Serving>,
+    inboxes: &Inboxes,
+    forget: &[&str],
+) -> (Party, LightDirect) {
+    let inlet = Inlet::default();
+    let slot: Arc<std::sync::Mutex<Option<rhtn_adaptors::actor::Handle>>> = Arc::default();
+    let gate: Gate = {
+        let slot = slot.clone();
+        Arc::new(move |peer| {
+            let peer = *peer;
+            match slot.lock().unwrap().clone() {
+                Some(h) => h.with_blocking(move |c| c.store.contacts.contains_key(&peer)),
+                None => false,
+            }
+        })
+    };
+    let pins = rhtn_transport::tls::Pins::new();
+    for n in NAMES {
+        if !forget.contains(&n) {
+            pins.pin_identity(&id(n).public);
+        }
+    }
+    let control = {
+        let (s1, s2, s3) = (slot.clone(), slot.clone(), slot.clone());
+        Control {
+            introduce: Arc::new(move || {
+                let h = s1.lock().unwrap().clone();
+                Box::pin(async move {
+                    match h {
+                        Some(h) => h.with(|c| c.own_introduction().ok()).await,
+                        None => None,
+                    }
+                })
+            }),
+            introduced: Arc::new(move |from, bytes| {
+                let h = s2.lock().unwrap().clone();
+                Box::pin(async move {
+                    match h {
+                        Some(h) => {
+                            h.with(move |c| {
+                                c.known.iter().any(|k| k.keyhash == from)
+                                    || c.take_cold_introduction(&from, &bytes)
+                            })
+                            .await
+                        }
+                        None => false,
+                    }
+                })
+            }),
+            answer: Arc::new(move |from, bytes| {
+                let h = s3.lock().unwrap().clone();
+                Box::pin(async move {
+                    match h {
+                        Some(h) => {
+                            h.with(move |c| c.answer_prekey_request(&from, &bytes))
+                                .await
+                        }
+                        None => None,
+                    }
+                })
+            }),
+        }
+    };
+    let direct = LightDirect::bind(
+        rhtn_transport::tls::Party::of(Arc::new(id(name))),
+        pins,
+        Default::default(),
+        Reachable::default(),
+        loopback(),
+        None,
+        None,
+        gate,
+        inlet.inbound(),
+        control,
+    )
+    .expect("bound");
+    let reachable = direct.reachable();
+    let handle = spawn_client(name, Config::default(), reachable.clone());
+    let gone: Vec<Keyhash> = forget.iter().map(|n| kh(n)).collect();
+    handle.with_blocking(move |c| c.known.retain(|k| !gone.contains(&k.keyhash)));
+    *slot.lock().unwrap() = Some(handle.clone());
+    let (courier, app) = Courier::new(handle.clone(), serving.clone(), Arc::new(direct.clone()));
+    inlet.bind(courier.inbound());
+    inboxes.host(kh(name), courier.inbound());
+    (
+        Party {
+            handle,
+            courier,
+            app,
+            reachable,
+        },
+        direct,
+    )
+}
+
+/// **A dialler the acceptor cannot bind presents its introduction first on
+/// the connection, and is taken as a cold call; a peer's prekey request
+/// is answered over the path** (`wire-format.md` §9.1, §7.8; author,
+/// 2026-10-30: no node is needed for a recovery).  Bob knows nothing of
+/// alice — not pinned, not among what he verifies by — and holds no
+/// node.  Alice, holding bob as a contact, dials his socket: the handshake
+/// presents a key bob binds by nothing, her introduction follows on the
+/// first control stream, bob takes it, pins her and holds the path; and
+/// her request for his bundle, on the same path, comes back answered from
+/// his own material, one-time key and all.
+// acceptance: TRN-29
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_stranger_that_introduces_itself_on_the_dial_is_held_and_handed_a_bundle_over_the_path() {
+    let inboxes = Inboxes::default();
+    let serving: Arc<dyn Serving> = Arc::new(rhtn_adaptors::serving::Nobody);
+    let (bob, bob_direct) = light_with("bob", &serving, &inboxes, &["alice"]);
+    let (alice, alice_direct) = light_with("alice", &serving, &inboxes, &[]);
+    hold(&alice, "bob");
+    assert!(
+        !bob.handle
+            .with_blocking(|c| c.known.iter().any(|k| k.keyhash == kh("alice"))),
+        "bob has never heard of alice"
+    );
+    // bob's gate would gather nothing for a stranger, so alice is handed
+    // his host address as a candidate exchange would carry it
+    let cand = rhtn_transport::traversal::Candidate {
+        kind: rhtn_transport::traversal::CandidateKind::Host,
+        addr: bob_direct.addr().expect("bound"),
+    };
+    assert!(
+        alice_direct.open(kh("bob"), vec![cand]).await,
+        "alice holds the path: bob took her introduction"
+    );
+    assert!(
+        until(3000, || bob.reachable.holds(&kh("alice"))).await,
+        "and so does bob"
+    );
+    assert!(
+        bob.handle
+            .with_blocking(|c| c.store.contacts.contains_key(&kh("alice"))),
+        "alice is a contact of bob's now, by the cold call"
+    );
+    // the bundle, asked of bob himself on the path he holds
+    let bob_device = *id("bob").public.ed.as_bytes();
+    let req = rhtn_client::payload::one_time_request(kh("bob"), bob_device, [7u8; 16]);
+    let reply = alice_direct
+        .request(kh("bob"), req)
+        .await
+        .expect("bob answered on the path");
+    let r = rhtn_archive::prekey::PrekeyReply::decode(&reply).expect("a prekey reply");
+    assert_eq!(r.nonce, [7u8; 16]);
+    assert_eq!(r.bundles.len(), 1, "his signed bundle");
+    assert!(r.one_time.is_some(), "and a one-time key");
+    // a request for somebody else's material is not answered
+    let other = rhtn_client::payload::one_time_request(kh("carol"), bob_device, [8u8; 16]);
+    assert!(alice_direct.request(kh("bob"), other).await.is_none());
+    let _ = alice;
 }
