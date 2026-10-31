@@ -633,12 +633,13 @@ impl crate::federation::Addresses for Gateway {
 /// §9.2): its credentialled request traffic and nothing else.  There is no
 /// binding for topology, liveness, the queue, prekeys or role inputs, so a
 /// manifest importing one cannot be instantiated.
-pub const HOST_EXPORTS: [&str; 5] = [
+pub const HOST_EXPORTS: [&str; 6] = [
     "rhtn/1:request",
     "rhtn/1:response",
     "rhtn/1:block",
     "rhtn/1:log",
     "rhtn/1:clock",
+    "rhtn/1:fetch",
 ];
 
 /// The versions of the host surface this node offers a package
@@ -976,6 +977,9 @@ pub fn instantiate(m: &Manifest) -> Result<Package, String> {
     }
     if let Some(why) = m.fetch.iter().find_map(|d| destination_refused(d)) {
         return Err(why);
+    }
+    if m.imports.iter().any(|i| i == "rhtn/1:fetch") && m.fetch.is_empty() {
+        return Err("the package imports fetch and names no destination".into());
     }
     if m.admin.len() > MAX_OPERATIONS {
         return Err(format!(

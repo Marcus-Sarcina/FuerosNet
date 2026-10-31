@@ -1141,7 +1141,7 @@ fn a_manifest_declares_its_host_version_its_budget_and_its_destinations() {
     d.put("noting.wasm", rhtn_sim::packages::noting());
     let noting = d.put(
         "noting.manifest",
-        "roles = [\"reader\"]\nimports = [\"rhtn/1:request\", \"rhtn/1:response\", \"rhtn/1:block\", \"rhtn/1:log\", \"rhtn/1:clock\"]\ncomponent = \"noting.wasm\"\n[budget]\nblock_bytes = 4096\nlog_bytes = 512\n",
+        "roles = [\"reader\"]\nimports = [\"rhtn/1:request\", \"rhtn/1:response\", \"rhtn/1:block\", \"rhtn/1:log\", \"rhtn/1:clock\", \"rhtn/1:fetch\"]\ncomponent = \"noting.wasm\"\nfetch = [\"https://feeds.example\"]\n[budget]\nblock_bytes = 4096\nlog_bytes = 512\n",
     );
     let f = d.put("hosting", host(&noting));
     let mut g = Gateway::default();

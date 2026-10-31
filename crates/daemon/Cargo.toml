@@ -46,6 +46,9 @@ toml = "1"
 # public keys as the transport already presents them (`federation`)
 rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs", "std", "tls12"] }
 rustls-pki-types = "1"
+# Apache-2.0 OR ISC OR MIT; the operating system's roots, for a package's
+# outbound fetch (`infra-client-requirements.md` §9.3)
+rustls-native-certs = "0.8"
 # MIT; the lifecycle events, and the cap the `releasable` feature sets
 tracing = { version = "0.1", default-features = false, features = ["std"] }
 # MIT OR Apache-2.0; already in the graph through tracing, named so

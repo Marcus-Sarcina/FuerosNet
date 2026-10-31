@@ -16488,6 +16488,25 @@ Tested: a first message to a party holding nothing of the sender is
 refused on the binding alone and opens once the introduction is taken;
 a card naming another party is not taken.
 
+### 2026-10-30 (fetch: the host as a package's egress, to declared destinations)
+
+**The fifth binding built** [author, 2026-10-30, ruled with the
+constraint that the package delivers its allow-list and an update
+replaces it, no wildcards]: `rhtn/1:fetch` hands the host one HTTP/1.1
+request as bytes and takes one response as bytes — the shape of
+`request` and `response`, and the one parser on both ends. The host
+sends only to a destination the manifest declared, with its own `host`
+and `connection: close`, over TLS under the operating system's roots,
+bounds the response at a mebibyte, follows at most three redirects and
+only within the list, refuses a method it does not send, and refuses a
+declared name that resolves to its own machine or network, since the
+list is of names and the hazard is of addresses. A refusal is written to
+the instance's log and returned to the package; a package importing
+fetch with no destination is refused at installation. The instance's log
+is on the administration surface (`GET /node/resource/<hex>/log`), with
+the budget refusals in it. `infra-client-requirements.md` §9.3, PKG-017,
+RSC-64.
+
 ### 2026-10-30 (the host surface: `rhtn/host@1`, the block, the log, the clock)
 
 **The core against the application suite's environment expectations**

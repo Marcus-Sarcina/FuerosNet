@@ -220,6 +220,7 @@ const BINDINGS_FULL: &str = r#"
     (export "block-read" (func (param "name" string) (param "offset" u64) (param "len" u32) (result (list u8))))
     (export "log" (func (param "line" string)))
     (export "clock" (func (result u64)))
+    (export "fetch" (func (param "request" (list u8)) (result (list u8))))
   ))
 "#;
 
@@ -230,6 +231,7 @@ const LOWER_FULL: &str = r#"
   (core func $br (canon lower (func $b "block-read") (memory (core memory $arenai "memory")) (realloc (core func $arenai "cabi_realloc"))))
   (core func $log (canon lower (func $b "log") (memory (core memory $arenai "memory")) (realloc (core func $arenai "cabi_realloc"))))
   (core func $clk (canon lower (func $b "clock")))
+  (core func $fetch (canon lower (func $b "fetch") (memory (core memory $arenai "memory")) (realloc (core func $arenai "cabi_realloc"))))
 "#;
 
 const WIRE_FULL: &str = r#"
@@ -237,7 +239,7 @@ const WIRE_FULL: &str = r#"
     (with "host" (instance
       (export "request" (func $req)) (export "response" (func $resp))
       (export "block-write" (func $bw)) (export "block-read" (func $br))
-      (export "log" (func $log)) (export "clock" (func $clk))))
+      (export "log" (func $log)) (export "clock" (func $clk)) (export "fetch" (func $fetch))))
     (with "arena" (instance $arenai))))
   (func (export "handle") (canon lift (core func $maini "handle")))
 "#;
@@ -249,6 +251,7 @@ const PREAMBLE_FULL: &str = r#"
     (import "host" "block-read" (func $bread (param i32 i32 i64 i32 i32)))
     (import "host" "log" (func $log (param i32 i32)))
     (import "host" "clock" (func $clock (result i64)))
+    (import "host" "fetch" (func $fetch (param i32 i32 i32)))
     (import "arena" "memory" (memory 1))
 "#;
 
@@ -291,4 +294,18 @@ pub fn hoarding(at: u64) -> Vec<u8> {
       (call $response (i32.const 0) (i32.const 0)))
 "#
     ))
+}
+
+/// **Hands its request onward as an outbound one and answers with what
+/// came back**: the request body is the HTTP/1.1 request the package
+/// sends through the host's fetch, and the host's reply is the answer.
+pub fn fetching() -> Vec<u8> {
+    bound_full(
+        r#"
+    (func (export "handle")
+      (call $request (i32.const 0))
+      (call $fetch (i32.load (i32.const 0)) (i32.load (i32.const 4)) (i32.const 8))
+      (call $response (i32.load (i32.const 8)) (i32.load (i32.const 12))))
+"#,
+    )
 }

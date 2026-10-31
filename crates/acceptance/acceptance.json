@@ -15296,6 +15296,33 @@
     "interpretation": ""
   },
   {
+    "id": "RSC-64",
+    "area": "resources",
+    "gap": "resources",
+    "title": "Fetch on a package's behalf to a declared destination only, and say a refusal in its log",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "infra-client-requirements.md §9.3",
+      "resource-requirements.md §8"
+    ],
+    "rule": [
+      {
+        "where": "infra-client-requirements.md §9.3",
+        "text": "the destination is the request's `host`, you send with your own `host` and `connection: close` over TLS"
+      },
+      {
+        "where": "infra-client-requirements.md §9.3",
+        "text": "refuse a declared name that resolves to your own machine or network"
+      }
+    ],
+    "given": "A package importing fetch whose manifest declares two destinations, and a host's fetcher over them.",
+    "when": "It hands the host a request to a declared destination, one to an undeclared one, one with no host, one with a method the host does not send, and one that is not HTTP; and a declared name resolves to the node's own address.",
+    "then": "The declared request is sent and its response handed back as bytes; each other is refused with the reason named, the refusal written to the instance's log; a package granted no fetch traps on the first touch; an address of the node's own machine or network is never connected to.",
+    "oracle": "behaviour",
+    "interpretation": "The TLS exchange itself is exercised against the operating system's roots and a live destination, which the gate has none of; what the gate holds is the refusals, the address rule and the sandbox round trip through a fetcher of the test's own."
+  },
+  {
     "id": "TOP-54",
     "area": "topology",
     "gap": "topology",

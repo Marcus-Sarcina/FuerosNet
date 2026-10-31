@@ -36,7 +36,7 @@ pub const GUEST_ENTRY: &str = "handle";
 /// The functions each binding of [`HOST_EXPORTS`] puts in the host
 /// instance, in the manifest's vocabulary: `rhtn/1:block` is the six
 /// functions of the storage block, the rest one function each.
-const BINDING_FUNCS: [(&str, &[&str]); 5] = [
+const BINDING_FUNCS: [(&str, &[&str]); 6] = [
     ("rhtn/1:request", &["request"]),
     ("rhtn/1:response", &["response"]),
     (
@@ -52,7 +52,23 @@ const BINDING_FUNCS: [(&str, &[&str]); 5] = [
     ),
     ("rhtn/1:log", &["log"]),
     ("rhtn/1:clock", &["clock"]),
+    ("rhtn/1:fetch", &["fetch"]),
 ];
+
+/// **An outbound request on a package's behalf** (`infra-client-
+/// requirements.md` §9.3's fetch): the package hands one HTTP/1.1
+/// request as bytes, the host sends it to the destination the request's
+/// `host` names — one the manifest declared — and hands the response
+/// back as bytes, exactly as the gateway hands a request in and takes a
+/// response out.  Refused, with the reason, where the destination is not
+/// declared, the request does not read, or the response is over what the
+/// host carries; a refusal is the package's to see and the operator's to
+/// read in the log.
+pub trait Fetcher: Send + Sync {
+    /// Send `request` and return the response, both as one HTTP/1.1
+    /// message.
+    fn fetch(&self, request: &[u8]) -> Result<Vec<u8>, String>;
+}
 
 /// The binding a host-instance function belongs to, in the manifest's
 /// vocabulary.
@@ -311,6 +327,9 @@ pub struct Env {
     pub block: Option<Arc<Block>>,
     /// The instance's operator-visible log.
     pub log: Option<Arc<LogFile>>,
+    /// The host's outbound request on the instance's behalf, to the
+    /// destinations its manifest declared.
+    pub fetch: Option<Arc<dyn Fetcher>>,
     /// The host's clock, milliseconds since the epoch: advisory, and
     /// nothing in the protocol treats it as proof of anything.
     pub clock: Arc<dyn Fn() -> u64 + Send + Sync>,
@@ -321,6 +340,7 @@ impl Default for Env {
         Env {
             block: None,
             log: None,
+            fetch: None,
             clock: Arc::new(|| {
                 std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
@@ -537,6 +557,38 @@ impl Sandbox {
                 },
             )
             .map_err(|e| Refusal::NotAComponent(e.to_string()))?;
+            inst.func_new(
+                "fetch",
+                |store: wasmtime::StoreContextMut<'_, Call>,
+                 _: wasmtime::component::types::ComponentFunc,
+                 args: &[Val],
+                 out: &mut [Val]| {
+                    let request: Vec<u8> = match args.first() {
+                        Some(Val::List(l)) => l
+                            .iter()
+                            .map(|v| if let Val::U8(b) = v { *b } else { 0 })
+                            .collect(),
+                        _ => return Err(wasmtime::Error::msg("fetch takes one list<u8>")),
+                    };
+                    let Some(f) = store.data().env.fetch.clone() else {
+                        return Err(wasmtime::Error::msg("no fetch was granted"));
+                    };
+                    match f.fetch(&request) {
+                        Ok(reply) => {
+                            out[0] = Val::List(reply.into_iter().map(Val::U8).collect());
+                            Ok(())
+                        }
+                        Err(why) => {
+                            // said where the operator reads it, then to the package
+                            if let Some(l) = &store.data().env.log {
+                                l.write(&format!("host: refused a fetch: {why}"));
+                            }
+                            Err(wasmtime::Error::msg(format!("fetch: {why}")))
+                        }
+                    }
+                },
+            )
+            .map_err(|e| Refusal::NotAComponent(e.to_string()))?;
         }
 
         Ok(Self {
@@ -688,9 +740,16 @@ impl Backend for Hosted {
         if !self.running() {
             return Err("the package is not running".into());
         }
-        self.sandbox
-            .serve(message, &self.env)
-            .map_err(|r| r.to_string())
+        // **a budget exceeded is said on the operator's surface**
+        // (`infra-client-requirements.md` §9.3): the instance's own log is
+        // where the operator reads it, so the refusal goes there in the
+        // host's words before it goes back to the caller
+        self.sandbox.serve(message, &self.env).map_err(|r| {
+            if let (Refusal::Budget(why), Some(log)) = (&r, &self.env.log) {
+                log.write(&format!("host: refused a request over budget: {why}"));
+            }
+            r.to_string()
+        })
     }
 
     fn running(&self) -> bool {

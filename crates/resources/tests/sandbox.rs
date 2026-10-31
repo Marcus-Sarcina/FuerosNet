@@ -355,6 +355,7 @@ fn a_package_keeps_what_it_wrote_in_its_block_and_logs_with_the_hosts_clock() {
         vec![
             "rhtn/1:block".to_string(),
             "rhtn/1:clock".to_string(),
+            "rhtn/1:fetch".to_string(),
             "rhtn/1:log".to_string(),
             "rhtn/1:request".to_string(),
             "rhtn/1:response".to_string()
@@ -373,6 +374,7 @@ fn a_package_keeps_what_it_wrote_in_its_block_and_logs_with_the_hosts_clock() {
     let env = Env {
         block: Some(block.clone()),
         log: Some(log.clone()),
+        fetch: None,
         clock: std::sync::Arc::new(|| 1_793_400_000_000),
     };
     let back = s.serve(b"a note to keep", &env).expect("served");
@@ -433,4 +435,55 @@ fn a_write_past_the_blocks_quota_is_refused_with_the_quota_named() {
             .contains("not a block name")
     );
     assert!(block.write("a/b", 0, b"x").is_err());
+}
+
+/// **The host's fetch on a package's behalf** (`infra-client-requirements.md`
+/// §9.3): the package hands one request as bytes and gets one response
+/// as bytes, and what the host refuses it is said in its log and to it.
+// acceptance: RSC-64
+#[test]
+fn a_package_fetches_through_the_host_and_a_refusal_is_said_in_its_log() {
+    use rhtn_resources::{Fetcher, LogFile};
+    struct Fake;
+    impl Fetcher for Fake {
+        fn fetch(&self, request: &[u8]) -> Result<Vec<u8>, String> {
+            let text = String::from_utf8_lossy(request);
+            if text.contains("host: feeds.example") {
+                Ok(b"HTTP/1.1 200 OK\r\ncontent-type: text/plain\r\ncontent-length: 7\r\n\r\nbulletin".to_vec())
+            } else {
+                Err("`other.example` is not a destination the package declared".into())
+            }
+        }
+    }
+    let d = Dir::new("fetch");
+    let log = std::sync::Arc::new(LogFile::at(d.0.join("log"), 4096).expect("a log"));
+    let env = Env {
+        fetch: Some(std::sync::Arc::new(Fake)),
+        log: Some(log.clone()),
+        ..Env::default()
+    };
+    let s = Sandbox::admit(&fetching(), Limits::default()).expect("admitted");
+    assert!(s.reaches().contains(&"rhtn/1:fetch".to_string()));
+    let back = s
+        .serve(b"GET /rss HTTP/1.1\r\nhost: feeds.example\r\n\r\n", &env)
+        .expect("fetched");
+    assert!(
+        back.starts_with(b"HTTP/1.1 200 OK"),
+        "{}",
+        String::from_utf8_lossy(&back)
+    );
+    let refused = s.serve(b"GET /rss HTTP/1.1\r\nhost: other.example\r\n\r\n", &env);
+    assert!(
+        matches!(&refused, Err(Refusal::Trapped(why)) if why.contains("not a destination")),
+        "{refused:?}"
+    );
+    let lines = log.lines();
+    assert_eq!(lines.len(), 1, "{lines:?}");
+    assert!(lines[0].contains("host: refused a fetch"), "{lines:?}");
+    // granted no fetch at all: the first touch traps
+    let none = s.serve(
+        b"GET / HTTP/1.1\r\nhost: feeds.example\r\n\r\n",
+        &Env::default(),
+    );
+    assert!(matches!(&none, Err(Refusal::Trapped(why)) if why.contains("no fetch was granted")));
 }

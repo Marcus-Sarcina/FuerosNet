@@ -555,6 +555,12 @@ pub fn apply(
             }
             (None, false) => rhtn_resources::Env::default(),
         };
+        let mut env = env;
+        // the host as the package's egress, to the destinations it
+        // declared and nowhere else (§9.3)
+        if manifest.imports.iter().any(|i| i == "rhtn/1:fetch") {
+            env.fetch = Some(Arc::new(crate::fetch::Outbound::new(&manifest.fetch)));
+        }
         // **a resource is reached one way, and the file says which**
         // (§10.6): an address and this node proxies to it, a component
         // and this node runs it.  Both is a contradiction rather than a

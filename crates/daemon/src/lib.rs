@@ -29,6 +29,7 @@ pub mod diag;
 /// for the instances this node hosts, and the carrier that delivers
 /// pending ones to the nodes the operator located.
 pub mod federation;
+pub mod fetch;
 pub mod hosting;
 
 /// Where a resource's grants are kept: the node's own table, as

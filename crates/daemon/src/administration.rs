@@ -335,8 +335,8 @@ impl Surface {
                  PUT /node/{run,endpoint-record,anchor-entry}, \
                  POST /node/{acknowledge,reload,stop}, \
                  POST /node/grant[/narrow|/drop|/template], and for a hosted instance \
-                 GET /node/resource/<hex>/federation, PUT /node/resource/<hex>/envelope \
-                 and POST /node/resource/<hex>/federate\n"
+                 GET /node/resource/<hex>/federation, GET /node/resource/<hex>/log, \
+                 PUT /node/resource/<hex>/envelope and POST /node/resource/<hex>/federate\n"
                     .into(),
             ),
             _ => (405, "this surface answers GET and PUT\n".into()),
@@ -673,7 +673,8 @@ impl Surface {
         let Some((res_hex, act)) = rest.split_once('/') else {
             return (
                 404,
-                "GET /node/resource/<hex>/federation, PUT …/envelope, POST …/federate\n".into(),
+                "GET /node/resource/<hex>/federation, GET …/log, PUT …/envelope, POST …/federate\n"
+                    .into(),
             );
         };
         let Some(resource) = unhex(res_hex).and_then(|b| <[u8; 32]>::try_from(b.as_slice()).ok())
@@ -773,9 +774,38 @@ impl Surface {
             // the local rounds; what is pending for another node goes on
             // the tick, which is where the transport lives
             ("POST", "federate") => (200, format!("{:?}\n", crate::federation::rounds(&node))),
+            // **the instance's own log, for its operator**
+            // (`infra-client-requirements.md` §9.3): what the package
+            // wrote and what the host refused it, the newest at the end,
+            // the last 64 KiB where it is longer
+            ("GET", "log") => {
+                let Some(root) = &self.state else {
+                    return (
+                        404,
+                        "this node keeps no state directory for its packages\n".into(),
+                    );
+                };
+                let file = root.join("logs").join(format!("{res_hex}.log"));
+                match std::fs::read(&file) {
+                    Ok(bytes) => {
+                        let cut = bytes.len().saturating_sub(64 << 10);
+                        let from = if cut == 0 {
+                            0
+                        } else {
+                            bytes[cut..]
+                                .iter()
+                                .position(|b| *b == b'\n')
+                                .map_or(cut, |i| cut + i + 1)
+                        };
+                        (200, String::from_utf8_lossy(&bytes[from..]).into_owned())
+                    }
+                    Err(_) => (404, "this instance has no log\n".into()),
+                }
+            }
             _ => (
                 404,
-                "GET /node/resource/<hex>/federation, PUT …/envelope, POST …/federate\n".into(),
+                "GET /node/resource/<hex>/federation, GET …/log, PUT …/envelope, POST …/federate\n"
+                    .into(),
             ),
         }
     }

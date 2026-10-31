@@ -717,7 +717,7 @@ a binding that cannot answer it is not in the surface.
 | **the storage block** | a durable region of your own storage, provisioned per instance when you bind it and destroyed only by an operator's act, never by a reload; flat files under names of the package's choosing; a **byte ceiling the package declared and you enforce on every write**, the refusal naming the ceiling; `sync` as the whole of the durability discipline — when it returns, the bytes are on stable storage | instance-local data the package wrote; you read none of it, keep no persistence logic for it, and share it with no other instance |
 | **the log** | lines the package writes for its operator, each stamped by you, kept per instance within the bytes the package declared, the oldest going first, shown on your administration surface (§8.3) | outward only: the package writes, the operator reads; it is for operators and never carries member content, which is the package's rule to keep |
 | **the clock** | your time, milliseconds since the epoch | advisory by nature: wire timestamps are signer-controlled (`wire-format.md` §3.3) and nothing here treats yours as proof of anything |
-| **fetch** | an outbound request to one of the destinations the package's manifest declared — `https://host` or `https://host:port`, exactly, no wildcard, never your own machine or network — with the response bounded and a redirect honoured only within the list; *the binding is specified here and built after the block* [author, 2026-10-30] | the package's own traffic to parties its operator read and accepted at installation; you are its egress and learn nothing of the network by carrying it |
+| **fetch** | an outbound request to one of the destinations the package's manifest declared — `https://host` or `https://host:port`, exactly, no wildcard, never your own machine or network — the package handing you one HTTP/1.1 request as bytes and taking one response as bytes, as the gateway hands it a request and takes its answer; the destination is the request's `host`, you send with your own `host` and `connection: close` over TLS to the roots your operating system trusts, bound what you read back, honour a redirect only to a declared destination and only a few times, and refuse a declared name that resolves to your own machine or network | the package's own traffic to parties its operator read and accepted at installation; you are its egress and learn nothing of the network by carrying it |
 
 **Jobs** — durable scheduled work under the instance's authority as of the
 configuration epoch, budgeted, cancellable — are the sixth binding this
@@ -725,9 +725,12 @@ version owes and does not yet carry; a package that needs them runs on a
 socket of its own meanwhile.
 
 **Where the surface lives.** A package in your sandbox reaches the block,
-the log and the clock as `rhtn/1:block`, `rhtn/1:log` and `rhtn/1:clock`,
-imported the way it imports `rhtn/1:request` and `rhtn/1:response`, and
-reaches nothing it did not declare. A package on a socket of its own has
+the log, the clock and fetch as `rhtn/1:block`, `rhtn/1:log`,
+`rhtn/1:clock` and `rhtn/1:fetch`, imported the way it imports
+`rhtn/1:request` and `rhtn/1:response`, and reaches nothing it did not
+declare; a package importing fetch that names no destination is refused at
+installation. A package on a socket of its own has its own network, and the
+list it declared is its operator's to read. A package on a socket of its own has
 your filesystem already; **you tell it where its block and its log are, and
 what it may fill them to, on the relationships exchange**
 (`resource-requirements.md` §3.3): `rhtn-host` with the versions you offer,

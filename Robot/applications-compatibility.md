@@ -27,7 +27,7 @@ core's to meet or to refuse.
 | **request/response**: the gateway's door and the `/.rhtn/` exchanges | the gateway; `rhtn/1:request` and `rhtn/1:response`, the sandbox's only two bindings (`resources/src/lib.rs`, `HOST_EXPORTS`); the three exchanges in `node/src/federation.rs` | **provided** |
 | **storage block**: a per-instance durable region with `sync`, a byte quota, provision/destroy lifecycle; a WASM guest's block is a preopened directory | **built 2026-10-30** as the host's own binding `rhtn/1:block` (file-shaped: read, write, sync, size, list, remove under flat names), not a WASI preopen — a preopen cannot enforce a quota or say what `sync` means; provisioned per instance under the daemon's `state` directory at the manifest's `block_bytes`, enforced on every write; a socket-backed package is handed the path and the ceiling on the relationships exchange (`rhtn-block`, `rhtn-block-bytes`); destroy is an operator's act, not a reload's | **provided** (`infra-client-requirements.md` §9.3, PKG-017, RSC-63, DMN-35) |
 | **jobs**: `schedule(at\|in, task, budget) → id`, `cancel`, `list`; durable across restart; under the instance's authority as of the configuration epoch; budgeted | nothing; §9.3 names it as the sixth binding owed | **owed** |
-| **log**: a bounded, timestamped, per-instance operator-visible stream | **built**: `rhtn/1:log` in the sandbox, a per-instance file for a socket-backed package (`rhtn-log`, `rhtn-log-bytes`), host-stamped lines, bounded at `log_bytes`, oldest out first; not yet shown on the administration surface | **provided, surface owed** |
+| **log**: a bounded, timestamped, per-instance operator-visible stream | **built**: `rhtn/1:log` in the sandbox, a per-instance file for a socket-backed package (`rhtn-log`, `rhtn-log-bytes`), host-stamped lines, bounded at `log_bytes`, oldest out first; on the administration surface as `GET /node/resource/<hex>/log`, with the host's budget and fetch refusals written into it | **provided** |
 | **clock**: the host's time, advisory | **built**: `rhtn/1:clock`, milliseconds since the epoch | **provided** |
 | **versioning**: `rhtn/host@N` offered by the host, tolerated by the manifest, refused at installation with both sides named; bindings only ever added | **built**: `HOST_VERSIONS = ["rhtn/host@1"]`; the manifest's `host` list; a package tolerating none is refused at installation naming both lists | **provided** |
 | **quotas and budgets** in the manifest: block bytes, jobs in flight, log bytes retained, request rate, job compute per day; refusals named on the operator's surface | **built**: `[budget]` with all five, the block's and the log's enforced; jobs, request rate and job compute recorded and not yet enforced (the bindings they bound are not built) | **provided for what exists** |
@@ -76,10 +76,13 @@ the sandbox links no WASI sockets or `wasi:http`. **Ruled** [author,
 2026-10-30]: a `fetch` binding, destinations declared in the manifest
 (`https://host[:port]` exactly, no wildcard, never the node's own machine
 or network), delivered with the package and replaced whole by an update.
-The manifest's `fetch` list and its validation are built; the binding is
-specified in `infra-client-requirements.md` §9.3 and owed. Their contract
-should gain the binding, and their adapters' SSRF discipline becomes the
-host's.
+**Built 2026-10-30**: `rhtn/1:fetch` — one HTTP/1.1 request in, one
+response out, the one parser on both ends; the host sends only to a
+declared destination over TLS under the operating system's roots,
+bounds the response at a mebibyte, follows at most three redirects within
+the list, and refuses a declared name that resolves to its own machine
+or network (RSC-64). Their contract should gain the binding, and their
+adapters' SSRF discipline is now the host's.
 
 ## 5. The bundles and federation documents
 
@@ -98,26 +101,26 @@ host's.
 
 ## 6. What follows, in order
 
-Done 2026-10-30 (commit after `f15489e`): items 1–4 below as built —
-the manifest's fields and the version refusal; the block as a binding on
-both runtimes; the log; the clock; §9.3 and the manifest text; PKG-017,
-RSC-63, DMN-35. Owed, in order:
+Done 2026-10-30 (`20e5fc8` and the commit after): the manifest's fields
+and the version refusal; the block as a binding on both runtimes; the
+log, on the administration surface with the host's refusals in it; the
+clock; fetch to declared destinations; §9.3 and the manifest text;
+PKG-017, RSC-63, RSC-64, DMN-35. Owed, in order:
 
-1. **The log on the administration surface** (`GET
-   /node/resource/<hex>/log`) and the budget refusals shown there.
-2. **Fetch**: the binding `rhtn/1:fetch` against the manifest's
-   destinations, bounded responses, redirects within the list; for a
-   socket-backed package, nothing — it has its own network, and the
-   list is the operator's to read.
-3. **Jobs**: `schedule`/`cancel`/`list` with a durable table per instance,
+1. **Jobs**: `schedule`/`cancel`/`list` with a durable table per instance,
    a guest export `job`, budgets enforced, cancellation on removal; the
    sixth binding of §9.3.
-4. **The utility request contract** in `light-client-requirements.md`
+2. **The utility request contract** in `light-client-requirements.md`
    §8/§9, for the types their document names, and its kernel half.
-5. **Fixtures**: durability of a block across a kill; the sender-restart
+3. **Budgets not yet enforced**: requests a minute, job compute a day
+   (with jobs), and a bound on fetches a minute, which §9.3 does not yet
+   name.
+4. **Fixtures**: durability of a block across a kill; the sender-restart
    and lost-acknowledgement halves of the crash matrix; the parity
-   fixture once a package runs on both runtimes.
-6. **For the applications' side**: the §3.3 paragraph of 2026-10-28
+   fixture once a package runs on both runtimes; a live fetch against a
+   real destination, which the gate has none of.
+5. **For the applications' side**: the §3.3 paragraph of 2026-10-28
    (response `rhtn-*` headers dropped on the member path); the `fetch`
-   binding added to their contract's list; the WASM profile's block as a
-   binding rather than a preopen.
+   binding added to their contract's list, in the request-in,
+   response-out shape; the WASM profile's block as a binding rather than
+   a preopen; `GET …/log` on the operator's surface.
