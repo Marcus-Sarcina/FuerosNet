@@ -1233,9 +1233,10 @@ client carried would be.
   each once. The application supplies the capture the person chose to give
   and nothing else; a result is checked against the utility's shape (a
   geohash at the precision asked, bytes under a declared type, text, or an
-  approval) and against the request frame (`wire-format.md` §9.2), which a
-  resource request is one of — so a capture larger than fits is the
-  client's to shrink before it is offered.
+  approval) and against `wire-format.md` §11's message bound of 16 MiB —
+  a request larger than one frame travels as a sequence of them — so a
+  capture larger than that is the client's to shrink before it is
+  offered.
 - **The audience is the resource that asked**, never one a resource names.
   Where the utility signs — a capture's provenance, a signature — the
   answer carries a claim under **the application key for that one

@@ -429,7 +429,7 @@ fn the_application_secret_is_the_devices_and_survives_its_restart_but_not_a_back
 }
 
 #[test]
-fn a_result_is_bounded_by_the_request_frame_and_a_boundary_inside_a_part_is_redrawn() {
+fn a_result_is_bounded_by_the_message_bound_and_a_boundary_inside_a_part_is_redrawn() {
     let ask = parse(&ask_json("scan", "")).unwrap();
     let big = Outcome::Bytes {
         media: "application/pdf".into(),
@@ -441,8 +441,8 @@ fn a_result_is_bounded_by_the_request_frame_and_a_boundary_inside_a_part_is_redr
         bytes: vec![0; RESULT_BYTES],
     };
     assert_eq!(fits(&ask, &fine), Ok(()));
-    let req = return_request(&ask, &fine, 1, None, &boundary(&[9; 12])).expect("fits the frame");
-    assert!(req.len() <= rhtn_codec::bounds::REQUEST_FRAME_BYTES);
+    let req = return_request(&ask, &fine, 1, None, &boundary(&[9; 12])).expect("fits the bound");
+    assert!(req.len() <= rhtn_codec::bounds::RESOURCE_MESSAGE_BYTES);
 
     let b = boundary(&[9; 12]);
     let poisoned = Outcome::Bytes {

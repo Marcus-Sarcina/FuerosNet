@@ -62,6 +62,8 @@ serde_json = { workspace = true }
 
 [dev-dependencies]
 rhtn-sim = { path = "../sim" }
+# the attached courier, for the test that sends a resource request as a sequence
+rhtn-adaptors = { path = "../adaptors" }
 rhtn-resources = { path = "../resources" }
 # the merge tool, for the field-test test that reads two daemons' files
 # into one timeline

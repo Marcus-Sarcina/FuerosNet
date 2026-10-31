@@ -3318,6 +3318,7 @@ version = "0.1.0"
 dependencies = [
  "aws-lc-rs",
  "log",
+ "rhtn-adaptors",
  "rhtn-archive",
  "rhtn-cli",
  "rhtn-codec",

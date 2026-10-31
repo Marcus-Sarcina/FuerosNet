@@ -16488,6 +16488,25 @@ Tested: a first message to a party holding nothing of the sender is
 refused on the binding alone and opens once the introduction is taken;
 a card naming another party is not taken.
 
+### 2026-10-31 (a resource request travels as a sequence; the bound is per message)
+
+**A request larger than the frame bound is sent as a sequence too**
+[author, 2026-10-31: "build the sequence"]. `wire-format.md` §11 had the
+response sequenced and the request one frame of 256 KiB, which was the
+size of a scan or a photograph a hosted package could be handed; the
+brokered path (design §11.7) never had the bound, but the applications'
+packages run behind the node. Now `ResourceRequest` repeats on the one
+stream as the response does, each portion naming the same resource and
+carrying the next part of the one HTTP message, the requester closing its
+side when it ends; the node joins the portions before anything parses
+them (§11.2), and a portion naming another resource fails the stream.
+**The whole message is bounded at 16 MiB either way**, per message rather
+than per frame. Built in the transport (the node reassembles a request
+sequence and writes a delivered response larger than a frame as a
+sequence, which §11 specified and nothing did; a client sends and reads
+sequences) and the attached courier (the split and the join); the utility
+result's bound follows the message bound. GAT-041, TRN-30.
+
 ### 2026-10-31 (the utility request: what a resource may ask of the client)
 
 **A page that reaches nothing cannot take anything, so what needs the

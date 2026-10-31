@@ -117,6 +117,12 @@ pub const DEVICE_BUNDLE_BYTES: usize = 5120;
 pub const CONTROL_FRAME_BYTES: usize = 65_536;
 /// Bidirectional request frames (§9.2).
 pub const REQUEST_FRAME_BYTES: usize = 262_144;
+/// One HTTP message of a resource exchange, either way (§11): a request
+/// or a response larger than a frame travels as a sequence of them on the
+/// one stream, and this is what the whole may come to.  Per message, not
+/// per frame, which is what a scan or a photograph needs and a frame does
+/// not [author, 2026-10-31].
+pub const RESOURCE_MESSAGE_BYTES: usize = 16 << 20;
 
 /// Envelope `COSE_Signature` entries for a transaction type: twice the
 /// logical-signer ceiling, which is the sum of the type's per-role bounds

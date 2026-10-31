@@ -635,6 +635,7 @@ The Cargo workspace has **16 crates**. Components below follow responsibilities 
 | GAT-038 | C | **Parse the backend's response and forward what the parser produced, never the bytes received**, which W §11 field 2 extends to the response by *same reasoning as the request*. Answer `resource unavailable` — the status already used for a trapped or oversized reply, a defect in the package rather than a refusal of the asker — and send no body, where the response carries two messages or an ambiguity no rewriting settles: duplicated or conflicting content-length, a length beside a transfer-encoding, an encoding other than chunked, obsolete folding, two content-types, an interim 1xx, a protocol switch, an extended chunk size, a trailer section, a version other than HTTP/1.1, a control character in a header value. Test each by name. | W §§11, 11.2; R §3 |
 | GAT-039 | C | **The response written out declares its extent exactly once and narrows nothing the package may answer with.** Bare-newline, chunked and unframed answers all become one canonical message whose length agrees with its content, and re-parsing that output yields the same response. Every body byte survives, including bytes that read as a second message; repeated headers stay repeated and the declared type and content-encoding are untouched. Test that framing is settled and semantics are not. | W §11.2 |
 | GAT-040 | C | **Strip the resource's `rhtn-*` headers from its response as the caller's are stripped from the request**, so that an `rhtn-*` header on the member path was written by the node in both directions. Strip rather than reject — a stray header is a package defect for the operator, not a reason to take the resource down — and leave the node's own control exchanges with a resource untouched, they being a different path. Test that none of the namespace travels, that the package's own headers and body do, and that the answer is still delivered. | W §11.2; R §§3.1, 3.3 |
+| GAT-041 | S | **A resource request or response larger than one frame travels as a sequence of frames on the one stream, and the whole is bounded per message.** A `ResourceRequest` may repeat, each portion naming the same resource and carrying the next part of one HTTP message, the requester closing its side when it ends; the node joins the portions before parsing, and a portion naming another resource or failing to decode fails the stream. A delivered response larger than a frame is written as repeated status-0 frames. Either message is bounded at 16 MiB; a request past it is dropped unanswered and a response past it is not read on. Test: a request body and a response body each over the frame bound crossing a real node whole; a portion naming another resource failing the stream; a one-frame request unchanged. | W §§9.2, 11, 11.2 |
 
 ### Package admission, isolation, federation and abuse reporting
 
@@ -1022,7 +1023,7 @@ Open local parameters are not all specification defects: cache TTLs, queue cap, 
 
 ## 10. Document baseline and coverage totals
 
-This specification contains **548 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
+This specification contains **549 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
 
 | Prefix | Families |
 |---|---:|
@@ -1043,7 +1044,7 @@ This specification contains **548 numbered requirement/test families** across **
 | PAY | 17 |
 | POL | 22 |
 | CAT | 26 |
-| GAT | 40 |
+| GAT | 41 |
 | PKG | 18 |
 | APP | 14 |
 | UX | 20 |

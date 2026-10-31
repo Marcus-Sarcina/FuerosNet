@@ -1922,7 +1922,7 @@ async fn drain(node: Arc<Node>, recipient: [u8; 32], device: [u8; 32], conn: Con
 /// installed; otherwise a currency request gets `cannot issue` (§7.1) and
 /// anything else fails the stream (§9.2).
 async fn answer_request(
-    send: SendStream,
+    mut send: SendStream,
     mut recv: RecvStream,
     peer: [u8; 32],
     device: [u8; 32],
@@ -1946,7 +1946,134 @@ async fn answer_request(
         }
         FrameRead::Closed(_) => return,
     };
+    // **a resource request larger than a frame arrives as a sequence**
+    // (`wire-format.md` §11): the frames that follow on the stream carry
+    // the next portions of the one HTTP message, and the whole is put
+    // together here before anything parses it (§11.2).  Any other request
+    // is one frame, and a second frame on its stream is nothing.
+    let p = match frame::parse_outer(Stream::Request, &p) {
+        Ok(f) if f.family == Some(Family::ResourceRequest) => {
+            match reassemble_request(&mut recv, p, &peer).await {
+                Some(whole) => whole,
+                None => {
+                    let _ = send.reset(VarInt::from_u32(0));
+                    return;
+                }
+            }
+        }
+        _ => p,
+    };
     answer_payload(send, p, peer, device, handler).await
+}
+
+/// Read the portions that follow the first frame of a resource request,
+/// if any, and hand back one frame payload carrying the whole message —
+/// the first payload unchanged where nothing followed, so a lone
+/// malformed body still reaches its handler to be answered code 3.
+/// `None` where a portion names another resource, does not decode, or
+/// the whole passes [`bounds::RESOURCE_MESSAGE_BYTES`]: the stream is
+/// failed, as a malformed frame fails it (§9.2).
+async fn reassemble_request(
+    recv: &mut RecvStream,
+    first: Vec<u8>,
+    peer: &[u8; 32],
+) -> Option<Vec<u8>> {
+    use rhtn_archive::catalog::ResourceRequest;
+    let mut portions: Vec<Vec<u8>> = vec![first];
+    let mut total = portions[0].len();
+    loop {
+        match read_frame(recv, bounds::REQUEST_FRAME_BYTES).await {
+            FrameRead::Payload(p) => {
+                total += p.len();
+                if total > bounds::RESOURCE_MESSAGE_BYTES {
+                    tracing::info!(
+                        target: "transport",
+                        peer = %peer[..4].iter().map(|b| format!("{b:02x}")).collect::<String>(),
+                        bound = bounds::RESOURCE_MESSAGE_BYTES,
+                        "transport.request.sequence.over_bound"
+                    );
+                    return None;
+                }
+                portions.push(p);
+            }
+            FrameRead::OverBound(_) => return None,
+            // the requester closed its side: the message is whole
+            FrameRead::Closed(_) => break,
+        }
+    }
+    if portions.len() == 1 {
+        return portions.pop();
+    }
+    let mut resource = None;
+    let mut message = Vec::new();
+    for p in &portions {
+        let f = frame::parse_payload(Stream::Request, p).ok()?;
+        if f.family != Some(Family::ResourceRequest) {
+            return None;
+        }
+        let r = ResourceRequest::decode(&p[f.body.clone()]).ok()?;
+        match resource {
+            None => resource = Some(r.resource),
+            Some(named) if named != r.resource => return None,
+            Some(_) => {}
+        }
+        message.extend_from_slice(&r.message);
+    }
+    tracing::debug!(
+        target: "transport",
+        portions = portions.len(),
+        bytes = message.len(),
+        "transport.request.sequence"
+    );
+    let whole = ResourceRequest {
+        resource: resource?,
+        message,
+    }
+    .encode();
+    let mut payload = Vec::with_capacity(whole.len() + 4);
+    emit_array_head(&mut payload, 2);
+    emit_uint(&mut payload, rhtn_archive::catalog::REQUEST_RESOURCE);
+    payload.extend_from_slice(&whole);
+    Some(payload)
+}
+
+/// Write `reply` on `send` as the frames the bound allows: one, or — for
+/// a resource response whose body is larger than a frame — a sequence of
+/// `ResourceResponse` frames each carrying the next portion of the one
+/// HTTP message (`wire-format.md` §11), the stream closing when it ends.
+async fn write_reply(send: &mut SendStream, family: Option<Family>, reply: Vec<u8>) {
+    use rhtn_archive::catalog::{ResourceResponse, STATUS_DELIVERED};
+    if reply.len() + 4 <= bounds::REQUEST_FRAME_BYTES || family != Some(Family::ResourceRequest) {
+        let mut out = (reply.len() as u32).to_be_bytes().to_vec();
+        out.extend_from_slice(&reply);
+        let _ = send.write_all(&out).await;
+        return;
+    }
+    let Ok(r) = ResourceResponse::decode(&reply) else {
+        let _ = send.reset(VarInt::from_u32(0));
+        return;
+    };
+    let (Some(body), STATUS_DELIVERED) = (r.body, r.status) else {
+        let _ = send.reset(VarInt::from_u32(0));
+        return;
+    };
+    // the portion leaves room for the map and the length prefix
+    let portion = bounds::REQUEST_FRAME_BYTES - 64;
+    let mut sent = 0usize;
+    for chunk in body.chunks(portion) {
+        let one = ResourceResponse {
+            status: STATUS_DELIVERED,
+            body: Some(chunk.to_vec()),
+        }
+        .encode();
+        let mut out = (one.len() as u32).to_be_bytes().to_vec();
+        out.extend_from_slice(&one);
+        if send.write_all(&out).await.is_err() {
+            return;
+        }
+        sent += 1;
+    }
+    tracing::debug!(target: "transport", portions = sent, bytes = body.len(), "transport.response.sequence");
 }
 
 /// Answer one request whose payload is already read, on `send`.
@@ -1977,9 +2104,7 @@ async fn answer_payload(
         let body = p[f.body.clone()].to_vec();
         match h(peer, device, fam, body).await {
             Some(reply) => {
-                let mut out = (reply.len() as u32).to_be_bytes().to_vec();
-                out.extend_from_slice(&reply);
-                let _ = send.write_all(&out).await;
+                write_reply(&mut send, f.family, reply).await;
                 let _ = send.finish();
             }
             None => {
@@ -2410,6 +2535,67 @@ impl Session {
     /// the framed request out, the length-prefixed reply body back.
     pub async fn request(&self, frame_type: u64, body: &[u8]) -> Result<Vec<u8>, String> {
         request_on(&self.conn, frame_type, body).await
+    }
+
+    /// **A resource exchange as sequences** (`wire-format.md` §11): the
+    /// request's portions out on one fresh stream, each a frame of
+    /// `frame_type`, the stream closed after the last; then every reply
+    /// frame on it until the node closes its side, in order.  One portion
+    /// is the ordinary request; the caller splits and joins the HTTP
+    /// messages, which this does not read.
+    pub async fn request_sequence(
+        &self,
+        frame_type: u64,
+        portions: &[Vec<u8>],
+    ) -> Result<Vec<Vec<u8>>, String> {
+        request_sequence_on(&self.conn, frame_type, portions).await
+    }
+}
+
+/// [`Session::request_sequence`] on `conn`.
+pub async fn request_sequence_on(
+    conn: &Connection,
+    frame_type: u64,
+    portions: &[Vec<u8>],
+) -> Result<Vec<Vec<u8>>, String> {
+    if portions.is_empty() {
+        return Err("nothing to send".into());
+    }
+    let (mut send, mut recv) = conn.open_bi().await.map_err(|e| e.to_string())?;
+    let mut total = 0usize;
+    for body in portions {
+        total += body.len();
+        if total > bounds::RESOURCE_MESSAGE_BYTES {
+            return Err(format!(
+                "the request exceeds {} bytes",
+                bounds::RESOURCE_MESSAGE_BYTES
+            ));
+        }
+        send.write_all(&control_frame(frame_type, body))
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    send.finish().map_err(|e| e.to_string())?;
+    let mut replies = Vec::new();
+    let mut got = 0usize;
+    loop {
+        match read_frame(&mut recv, bounds::REQUEST_FRAME_BYTES).await {
+            FrameRead::Payload(p) => {
+                got += p.len();
+                if got > bounds::RESOURCE_MESSAGE_BYTES {
+                    return Err(format!(
+                        "the reply exceeds {} bytes",
+                        bounds::RESOURCE_MESSAGE_BYTES
+                    ));
+                }
+                replies.push(p);
+            }
+            FrameRead::OverBound(n) => return Err(format!("reply over bound: {n}")),
+            FrameRead::Closed(e) if replies.is_empty() => {
+                return Err(format!("stream ended: {e:?}"));
+            }
+            FrameRead::Closed(_) => return Ok(replies),
+        }
     }
 }
 

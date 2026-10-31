@@ -57,11 +57,12 @@ pub const PATH_BYTES: usize = 256;
 /// The most an exact payload to be signed may be.
 pub const PAYLOAD_BYTES: usize = 65_536;
 
-/// The most a result may be.  **Bounded by the request frame**
-/// (`wire-format.md` §9.2): a resource request is one frame, so a result
-/// is what fits in one beside its headers, and a capture larger than
-/// this is the client's to shrink before it is offered.
-pub const RESULT_BYTES: usize = rhtn_codec::bounds::REQUEST_FRAME_BYTES - 4096;
+/// The most a result may be.  **Bounded by §11's message bound**
+/// (`wire-format.md` §11): a request larger than a frame travels as a
+/// sequence of them, and the whole is what this leaves room in beside
+/// its headers; a capture larger than this is the client's to shrink
+/// before it is offered.
+pub const RESULT_BYTES: usize = rhtn_codec::bounds::RESOURCE_MESSAGE_BYTES - 4096;
 
 /// The most asks held unanswered at once; the oldest goes when another
 /// arrives.  An ask is in-flight state, bound to a screen: nothing of it
@@ -600,7 +601,7 @@ pub fn return_request(
     );
     let mut out = head.into_bytes();
     out.extend_from_slice(&body);
-    if out.len() > rhtn_codec::bounds::REQUEST_FRAME_BYTES {
+    if out.len() > rhtn_codec::bounds::RESOURCE_MESSAGE_BYTES {
         return Err(Compose::TooLarge);
     }
     Ok(out)
@@ -611,7 +612,7 @@ pub fn return_request(
 pub enum Compose {
     /// The boundary drawn occurs in a part; draw another.
     Boundary,
-    /// The whole exceeds the request frame.
+    /// The whole exceeds the message bound.
     TooLarge,
 }
 

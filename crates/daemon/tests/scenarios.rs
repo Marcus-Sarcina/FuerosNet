@@ -526,3 +526,179 @@ async fn a_daemon_hosts_the_package_its_configuration_names_and_serves_a_request
         "the daemon says which binding it would not give"
     );
 }
+
+// acceptance: TRN-30
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_request_and_a_response_larger_than_one_frame_cross_a_node_as_sequences() {
+    use rhtn_adaptors::attached::AttachedNode;
+    use rhtn_adaptors::serving::Serving;
+    use rhtn_archive::catalog::{
+        REQUEST_RESOURCE, ResourceRequest, ResourceResponse, STATUS_DELIVERED,
+    };
+    use rhtn_codec::bounds::REQUEST_FRAME_BYTES;
+    use std::io::{Read, Write};
+
+    // the resource: an ordinary HTTP server that reads the whole request
+    // it is handed and answers with a body larger than a frame
+    let l = std::net::TcpListener::bind("127.0.0.1:0").expect("a port of its own");
+    let addr = l.local_addr().expect("its address");
+    // what reached it, by request line: the daemon probes a backend on
+    // its own, so only the test's requests are counted
+    let got = Arc::new(Mutex::new(Vec::<(String, usize)>::new()));
+    let keep = got.clone();
+    let answer_bytes = REQUEST_FRAME_BYTES + 150_000;
+    std::thread::spawn(move || {
+        for c in l.incoming().flatten() {
+            let mut c = c;
+            let mut buf = Vec::new();
+            let mut chunk = [0u8; 65536];
+            let mut line = String::new();
+            let body_len = loop {
+                let n = c.read(&mut chunk).expect("the request arrives");
+                if n == 0 {
+                    break None;
+                }
+                buf.extend_from_slice(&chunk[..n]);
+                if let Some(i) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
+                    let head = String::from_utf8_lossy(&buf[..i]).to_ascii_lowercase();
+                    line = head.lines().next().unwrap_or("").to_string();
+                    let want: usize = head
+                        .lines()
+                        .find_map(|l| l.strip_prefix("content-length:"))
+                        .map(|v| v.trim().parse().unwrap())
+                        .unwrap_or(0);
+                    while buf.len() < i + 4 + want {
+                        let n = c.read(&mut chunk).expect("the body arrives");
+                        if n == 0 {
+                            break;
+                        }
+                        buf.extend_from_slice(&chunk[..n]);
+                    }
+                    break Some(buf.len() - i - 4);
+                }
+            };
+            keep.lock().unwrap().push((line, body_len.unwrap_or(0)));
+            let body = vec![b'z'; answer_bytes];
+            let head = format!(
+                "HTTP/1.1 200 OK\r\ncontent-type: application/octet-stream\r\ncontent-length: {}\r\n\r\n",
+                body.len()
+            );
+            c.write_all(head.as_bytes()).expect("answered");
+            c.write_all(&body).expect("answered");
+        }
+    });
+
+    let mut set = Daemons::new(env!("CARGO_BIN_EXE_rhtnd"), "sequence");
+    let manifest = set.dir("alice").join("bin.manifest");
+    std::fs::write(&manifest, "roles = [\"reader\"]\n").expect("a manifest");
+    let shop = [9u8; 32];
+    set.hosting(
+        "alice",
+        &format!(
+            "[[host]]\nresource = \"{}\"\nowner = \"{}\"\nauthority = \"bin.internal\"\nmanifest = \"{}\"\naddress = \"{addr}\"\n",
+            hex(&shop),
+            hex(&kh("w1")),
+            manifest.display()
+        ),
+    );
+    set.grants(
+        "alice",
+        &shop,
+        &format!(
+            "[[grant]]\nroles = [\"reader\"]\n\n[[grant.where]]\nof = \"named\"\nwho = \"{}\"\n",
+            hex(&kh("w1"))
+        ),
+    );
+    let node_addr = set.start("alice", &CAST, None);
+    let s = Arc::new(attach_to("w1", kh("alice"), node_addr).await);
+
+    // a request whose body is larger than a frame, through the courier
+    // that splits it (`wire-format.md` §11)
+    let upload = vec![b'q'; REQUEST_FRAME_BYTES + 100_000];
+    let mut message = format!(
+        "POST /up HTTP/1.1\r\nhost: bin\r\ncontent-type: application/octet-stream\r\ncontent-length: {}\r\n\r\n",
+        upload.len()
+    )
+    .into_bytes();
+    message.extend_from_slice(&upload);
+    let request = ResourceRequest {
+        resource: shop,
+        message,
+    }
+    .encode();
+    assert!(
+        request.len() > REQUEST_FRAME_BYTES,
+        "the case the sequence exists for"
+    );
+    let held = s.clone();
+    let courier = AttachedNode::new(
+        kh("alice"),
+        Arc::new(move || Some(held.clone())),
+        Arc::new(|| [7u8; 16]),
+    );
+    let reply = courier
+        .resource(kh("w1"), &request)
+        .await
+        .expect("the node answers the sequence");
+    let answer = ResourceResponse::decode(&reply).expect("one response, joined");
+    assert_eq!(answer.status, STATUS_DELIVERED);
+    let body = answer.body.expect("a body");
+    let text = String::from_utf8_lossy(&body[..body.len().min(200)]).to_string();
+    assert!(text.starts_with("HTTP/1.1 200 OK"), "{text}");
+    assert!(
+        body.ends_with(&vec![b'z'; 1000]) && body.len() > answer_bytes,
+        "the response larger than a frame came back whole: {} bytes",
+        body.len()
+    );
+    let uploads = |g: &Vec<(String, usize)>| -> Vec<usize> {
+        g.iter()
+            .filter(|(l, _)| l.starts_with("post /up"))
+            .map(|(_, n)| *n)
+            .collect()
+    };
+    assert_eq!(
+        uploads(&got.lock().unwrap()),
+        vec![upload.len()],
+        "the resource received the whole upload once"
+    );
+
+    // a one-frame request is one frame, as before
+    let small = ResourceRequest {
+        resource: shop,
+        message: b"GET /one HTTP/1.1\r\nhost: bin\r\n\r\n".to_vec(),
+    }
+    .encode();
+    let reply = courier.resource(kh("w1"), &small).await.expect("answered");
+    assert_eq!(
+        ResourceResponse::decode(&reply).unwrap().status,
+        STATUS_DELIVERED
+    );
+    assert_eq!(
+        got.lock()
+            .unwrap()
+            .iter()
+            .filter(|(l, _)| l.starts_with("get /one"))
+            .count(),
+        1
+    );
+
+    // a portion naming another resource fails the stream: nothing comes
+    // back, and the resource is never asked
+    let first = ResourceRequest {
+        resource: shop,
+        message: b"POST /up HTTP/1.1\r\nhost: bin\r\ncontent-length: 4\r\n\r\nab".to_vec(),
+    }
+    .encode();
+    let other = ResourceRequest {
+        resource: [8u8; 32],
+        message: b"cd".to_vec(),
+    }
+    .encode();
+    let failed = s.request_sequence(REQUEST_RESOURCE, &[first, other]).await;
+    assert!(failed.is_err(), "{failed:?}");
+    assert_eq!(
+        uploads(&got.lock().unwrap()),
+        vec![upload.len()],
+        "the resource was not asked"
+    );
+}

@@ -114,9 +114,9 @@ order:
 1. **The utility request's device half**: the shell gives a tag today;
    scan, capture with provenance, location, check-in, the biometric
    unlock for `sign`, live, notify, export and import are each a platform
-   capability still to wire to the ask; and a result larger than a
-   request frame (256 KiB) waits on a request sequence in
-   `wire-format.md` §11, which is the author's call.
+   capability still to wire to the ask. (A result is bounded at
+   `wire-format.md` §11's 16 MiB per message since 2026-10-31, the
+   request travelling as a sequence; the frame no longer bounds it.)
 2. **Budgets not yet enforced**: requests a minute, and a bound on fetches
    a minute, which `infra-client-requirements.md` §9.3 does not yet name.
 3. **Jobs across a reload**: a reload re-provisions the table (the files

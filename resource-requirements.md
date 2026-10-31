@@ -380,8 +380,9 @@ agreed to, and no history of places exists to ask after; a signature is an
 application signature under the key above and never the ceremony's, and
 `sign` is authorised by the device's own unlock where it has one, which is
 the device vouching the holder to itself and not to you. A result is bounded
-by a request frame (`wire-format.md` §9.2): the client shrinks a capture to
-fit, so ask for the size you need.
+by `wire-format.md` §11's message bound of 16 MiB, carried as a sequence of
+frames where it is larger than one: the client shrinks a capture to fit, so
+ask for the size you need.
 
 ---
 

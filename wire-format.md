@@ -5077,6 +5077,18 @@ with the stream closing when it ends. **No length is declared up front**: a reso
 streaming a response does not know one, and requiring it would forbid exactly the
 case the sequence exists for.
 
+**A request larger than the frame bound is sent as a sequence too** [author,
+2026-10-31]. `ResourceRequest` may repeat on the same stream, each carrying the next
+portion of one HTTP message in field 2 and the same resource in field 1, with the
+requester closing its side of the stream when the message ends; the node puts the
+portions together before anything parses them (§11.2), and a portion naming
+another resource, or one that does not decode, fails the stream as a malformed
+frame does (§9.2). **Either way the whole message is bounded at 16 MiB**: a node
+drops a request past it unanswered, as it drops an over-bound frame, and a
+requester stops reading a response past it. **The bound is per message, not per
+frame**, which is what a scan or a photograph needs and a frame does not; a
+resource request that fits one frame is one frame, as before.
+
 **A non-zero status ends the exchange** and may not be followed by further frames.
 There is one answer and the stream carries it.
 

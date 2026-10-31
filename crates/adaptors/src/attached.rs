@@ -156,8 +156,61 @@ impl Serving for AttachedNode {
         Box::pin(async move { self.ask(REQUEST_PROFILE, body.to_vec()).await })
     }
 
+    /// **A resource exchange travels as sequences where a frame is not
+    /// enough** (`wire-format.md` §11): the request split into portions
+    /// under the frame bound, each a `ResourceRequest` naming the same
+    /// resource; the reply's portions joined into one `ResourceResponse`
+    /// — the first's status, and the bodies in order where it delivered.
     fn resource<'a>(&'a self, _from: Keyhash, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {
-        Box::pin(async move { self.ask(REQUEST_RESOURCE, body.to_vec()).await })
+        use rhtn_archive::catalog::{ResourceRequest, ResourceResponse, STATUS_DELIVERED};
+        use rhtn_codec::bounds::REQUEST_FRAME_BYTES;
+        Box::pin(async move {
+            let s = (self.session)()?;
+            let req = ResourceRequest::decode(body).ok()?;
+            let portion = REQUEST_FRAME_BYTES - 128;
+            let portions: Vec<Vec<u8>> = if req.message.len() <= portion {
+                vec![body.to_vec()]
+            } else {
+                req.message
+                    .chunks(portion)
+                    .map(|c| {
+                        ResourceRequest {
+                            resource: req.resource,
+                            message: c.to_vec(),
+                        }
+                        .encode()
+                    })
+                    .collect()
+            };
+            let replies = s.request_sequence(REQUEST_RESOURCE, &portions).await.ok()?;
+            if replies.len() == 1 {
+                return replies.into_iter().next();
+            }
+            let mut status = None;
+            let mut joined = Vec::new();
+            for r in &replies {
+                let one = ResourceResponse::decode(r).ok()?;
+                match status {
+                    None => status = Some(one.status),
+                    // a non-zero status ends the exchange; a frame after
+                    // one is not the protocol
+                    Some(st) if st != STATUS_DELIVERED => return None,
+                    Some(_) if one.status != STATUS_DELIVERED => return None,
+                    Some(_) => {}
+                }
+                if let Some(b) = one.body {
+                    joined.extend_from_slice(&b);
+                }
+            }
+            let status = status?;
+            Some(
+                ResourceResponse {
+                    status,
+                    body: (status == STATUS_DELIVERED).then_some(joined),
+                }
+                .encode(),
+            )
+        })
     }
 
     fn catalog<'a>(&'a self, _from: Keyhash, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {

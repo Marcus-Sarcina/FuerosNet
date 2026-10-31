@@ -13496,6 +13496,33 @@
     "interpretation": ""
   },
   {
+    "id": "TRN-30",
+    "area": "transport",
+    "gap": "transport",
+    "title": "A resource request or response larger than one frame travels as a sequence on the one stream, bounded per message",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "wire-format.md §11",
+      "wire-format.md §9.2"
+    ],
+    "rule": [
+      {
+        "where": "wire-format.md §11",
+        "text": "**A request larger than the frame bound is sent as a sequence too**"
+      },
+      {
+        "where": "wire-format.md §11",
+        "text": "**The bound is per message, not per\nframe**"
+      }
+    ],
+    "given": "A client attached to a node hosting a socket-backed resource, the request's body and the resource's answer each larger than one request frame.",
+    "when": "The client sends the request as a sequence of ResourceRequest frames naming the one resource and closes its side; the node joins them, hands the resource one HTTP message, and writes the answer back as repeated delivered frames.",
+    "then": "The resource receives the whole body once; the client reads every reply frame until the node closes, joins the bodies, and holds the resource's whole answer under one delivered status; a one-frame request is unchanged; a portion naming another resource fails the stream.",
+    "oracle": "behaviour",
+    "interpretation": ""
+  },
+  {
     "id": "TRV-01",
     "area": "traversal",
     "gap": "traversal",

@@ -5359,7 +5359,7 @@ impl Client {
                 }
                 Err(utility::Compose::Boundary) => continue,
                 Err(utility::Compose::TooLarge) => {
-                    return Err("the answer exceeds the request frame".into());
+                    return Err("the answer exceeds the message bound".into());
                 }
             }
         }
