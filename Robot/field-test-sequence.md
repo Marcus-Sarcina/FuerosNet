@@ -273,6 +273,62 @@ pool being unrecognised on fresh phones. **Known and left**: the
 post-finalise `optical_trace` refusals noted on the Done screen, and
 MRK's nine `sendmsg` I/O warnings at start (`Robot/review-tracking.md`).
 
+## F. The application run: the utility request on the bench, planned
+
+**Asked for** [author, 2026-10-31]: a test application that exercises the
+available utilities, sends a packet from the node to the light client,
+posts a notification, and accepts a return packet after a UI
+interaction — walked on both the node operator's phone and a subordinate
+light client, after a wipe, a fresh meeting sequence, and a recovery from
+a peer.
+
+**What is built for it.** `crates/testapp` is the resource: a
+socket-backed package the node carries the traffic for, which asks for
+every utility in turn, takes each answer back, verifies the claims that
+carry one, and hands the person a file at the end. Its eleven steps are
+`notify`, `tag`, `check-in`, `location`, `capture`, `scan`, `sign`,
+`import`, `live`, a `scan` it will take only as a PDF, and `export`; the
+last two of those three are the refusal paths, which a shell that cannot
+give them must answer with words. `field-run.sh --testapp` hosts it: the
+hosting file, the manifest and a grant with no clause (every member of
+the owner's horizon), the resource minted per run and its keyhash said at
+startup. The owner is a phone, so the resource is reachable by that phone
+and by whoever is within two steps of it in the node's topology, which is
+what the meetings put there.
+
+**The sequence, in order.**
+
+1. **Wipe and install** all four phones: `field-setup.sh --no-build <serial>`
+   per phone, which also writes each one's fresh material into
+   `phones.conf`.
+2. **Start the run** with a node that outlives it and the test resource
+   hosted, naming the phone that will be the operator:
+   `field-run.sh --addr 192.168.0.8:7447 --node runs/node --testapp <serial> <label>`.
+   Note the two lines it prints: the resource's keyhash, and the owner.
+3. **The meeting sequence**, on the phones, recreating the subnet and the
+   peers: a formation under the operator's key, an adoption of the
+   subordinate into it, and a regular meeting with the peering between the
+   two phones that will stand in as each other's backup.
+4. **The data wipe and the recovery from the peer**: clear the
+   subordinate's app data, restore its key from the phrase, name it, and
+   watch it be reached by its peer and repopulated (§E's runs 7 and 8 are
+   the procedure).
+5. **The application test, twice.** On the operator's phone and on the
+   subordinate: Catalog, paste the resource's keyhash, ask for `/`. The
+   first ask is `notify`; allow it, and every ask after it is posted in
+   the shade as well as drawn. Walk the eleven steps. The `live` step and
+   the PDF `scan` must come back refusals with reasons, not silences. The
+   last step hands over a file: save it, and it is the run's own record of
+   what the resource saw.
+
+**What to read afterwards**: `runs/<run>/testapp/log.jsonl` (one line per
+ask and per answer, with the claim's verdict), the saved file from each
+phone, and the phones' own streams for the `utility` events — `asked`,
+`giving`, `notified`, `given` or `declined`, with the utility on each.
+**The claims are the thing to check**: `capture` and `sign` must read
+`verified` in the log and in the file, since that is the application key
+contract holding across a real device, a real node and a real resource.
+
 ## Order
 
 A1 is done; a second plain pair was met deliberately (`82ffd1b-a2-adoption-1`, mislabelled) for series B. B1 nodeless hung at witness selection and showed that nothing met nodeless is reachable afterwards and no cross-pair verifier can qualify — so **B and A4 are with-node**, and the node bench (C1's proven half plus `field-run.sh`) is now the gate for nearly everything left. **[ruled, author, 2026-10-10]** witnesses are required where available and a witnessless meeting is not genesis-only; proceeding witnessless past genesis needs design §13.2 / `wire-format.md` §3.2 amended, which gates any nodeless meeting between non-genesis phones. **That amendment was made** [author, 2026-10-19] — no witness floor, design §13.2 reasoning from the same case the ruling was about — so the condition is met and the gate is lifted, and the rows above are re-planned against it below. **The node bench is up (2026-10-11, `82ffd1b-a4-node-1`), all four phones re-provisioned at genesis on it; the two met pairs are to be re-met there for B.** A4, B's with-node

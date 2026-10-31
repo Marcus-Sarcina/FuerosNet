@@ -121,7 +121,11 @@ order:
    the shell has none of; and **`scan`'s own shape**, since the shell
    photographs a document rather than deskewing, reading and assembling a
    PDF — a resource that will take only a PDF is told so. Their
-   client-utilities page should know both. (A result is bounded at
+   client-utilities page should know both. **Both halves of
+   `resource-requirements.md` §3.4 are now
+   exercised against each other** by `crates/testapp`, a resource that
+   walks every utility and verifies the claims; their own packages can be
+   written against it. (A result is bounded at
    `wire-format.md` §11's 16 MiB per message since 2026-10-31, the
    request travelling as a sequence; the frame no longer bounds it.)
 2. **Budgets not yet enforced**: requests a minute, and a bound on fetches

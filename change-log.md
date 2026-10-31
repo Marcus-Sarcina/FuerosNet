@@ -16508,6 +16508,43 @@ down to be decided cold. The bound on fetches a minute that
 question. No code changed; that section's "you bound what you have built"
 already accommodates an unenforced field, so no document says *not yet*.
 
+### 2026-10-31 (a test application for the utility request, and the notification)
+
+**Asked for** [author, 2026-10-31]: an application that exercises the
+available utilities, sends a packet from the node to the light client,
+posts a notification, and takes a return packet after a UI interaction.
+Built as three things.
+
+**The resource** (`crates/testapp`): a socket-backed package the node
+carries the traffic for, written the way an application is written —
+ordinary HTTP behind the gateway, reading the credential headers the node
+inserts. It walks eleven steps, one per utility with two refusal paths
+among them, answering each request with the next typed ask and taking the
+multipart answer back; it verifies every claim over the stated CBOR array
+for its own keyhash, refuses a digest that is not over what came back,
+and hands the person a file at the end. The whole application is one
+function from request bytes to response bytes, so its tests drive the
+sequence with **the kernel's own composer and reader on the other side**:
+the asks are parsed by `rhtn_client::utility::parse` and the answers are
+built by `return_request` and `claim`, which holds the two halves of
+`resource-requirements.md` §3.4 against each other without a phone.
+
+**The notification** (`Notify`): where a resource holds the standing
+permission the `notify` ask records, its ask is posted in the platform's
+shade as well as drawn, and tapping it opens that resource's screen.
+**It claims nothing about delivery**: the client still learns of an ask by
+asking, no wake path carries a resource's hint, and what is posted is what
+has already arrived.
+
+**And a way to reach a resource nobody published an entry for**: a
+`CatalogEntry` is optional (`wire-format.md` §11.5), so the catalog screen
+takes 64 hex digits and asks this device's own serving node, which is the
+host §11.1 reaches a resource through. `field-run.sh --testapp [<serial>]`
+hosts the resource for a run: the hosting file, the manifest, a grant with
+no clause, the resource minted per run, the owner a phone so the meetings
+put the askers in its horizon. The run it is for is planned with the
+bench's own sequence.
+
 ### 2026-10-31 (the device half of the utility request, in the shell)
 
 **Nine of the ten utilities are wired to the device** (`light-client-requirements.md`

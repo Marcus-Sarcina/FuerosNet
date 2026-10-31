@@ -144,7 +144,13 @@ class ResourceActivity : Activity() {
                     // agreed to, among others — goes where they choose
                     last?.takeIf { it.body.isNotEmpty() }?.let { held.addView(saveable(it)) }
                 }
-                is ResourcePage.Showing.Ask -> held.addView(asking(showing.ask))
+                is ResourcePage.Showing.Ask -> {
+                    // **and in the shade, where the resource holds the
+                    // standing permission** ([Notify]): the person may
+                    // have left the screen, and what waits is said once
+                    Notify.post(this, showing.ask)
+                    held.addView(asking(showing.ask))
+                }
             }
         }
     }

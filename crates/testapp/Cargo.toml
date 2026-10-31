@@ -1,0 +1,26 @@
+[package]
+name = "rhtn-testapp"
+version = "0.1.0"
+edition = "2024"
+license.workspace = true
+authors.workspace = true
+publish = false
+
+# **A resource package for the bench, and nothing a node depends on.**
+# It is an ordinary HTTP server behind the gateway: it reads the credential
+# headers `resource-requirements.md` §2 inserts, answers with the typed asks
+# of §3.4, and takes the answers back. Its one unusual dependency is the
+# kernel's own `utility` module, as a dev-dependency only: the tests compose
+# the client's half with it and parse it here, so the two halves of the
+# contract are held against each other without a phone.
+[dependencies]
+rhtn-codec = { path = "../codec" }
+rhtn-crypto = { path = "../crypto" }
+
+[dev-dependencies]
+rhtn-client = { path = "../client" }
+hex = { workspace = true }
+
+[[bin]]
+name = "rhtn-testapp"
+path = "src/main.rs"

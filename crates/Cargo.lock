@@ -3463,6 +3463,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "rhtn-testapp"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "rhtn-client",
+ "rhtn-codec",
+ "rhtn-crypto",
+]
+
+[[package]]
 name = "rhtn-transport"
 version = "0.1.0"
 dependencies = [

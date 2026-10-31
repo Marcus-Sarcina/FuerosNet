@@ -44,6 +44,17 @@
 #    --retention <years>     the retention each phone declares at its intent,
 #                            in whole years (design §7.5.1), carried in the
 #                            provision; default: the kernel's own, 2.
+#    --testapp [<serial>]    host the utility test resource on this node
+#                            (`crates/testapp`): a socket-backed package on
+#                            127.0.0.1:7460 that asks the client for every
+#                            utility in turn, takes each answer back and
+#                            verifies the claims. The OWNER is the named
+#                            phone, or the first one: the resource is
+#                            reachable by that phone and by every party
+#                            within two steps of it in the node's topology,
+#                            so it works once the meetings have run. The
+#                            resource's keyhash is said at startup, and is
+#                            what the catalog screen is given.
 #    --no-build              do not run cargo; the binaries must exist.
 #
 #  The run is named <short commit>-<label>-<n> and everything it produces
@@ -146,6 +157,8 @@ LEVEL=debug
 STREAM_PORT=7448
 RETENTION=""
 BUILD=yes
+TESTAPP=no
+TESTAPP_OWNER=""
 PHONE_SERIALS=()
 PHONE_MATERIALS=()
 PHONE_ADDRS=()
@@ -169,6 +182,10 @@ while [ $# -gt 0 ]; do
     --stream-port) STREAM_PORT="${2:-}"; shift 2 ;;
     --retention) RETENTION="${2:-}"; shift 2 ;;
     --no-build) BUILD=no; shift ;;
+    --testapp)
+      TESTAPP=yes
+      case "${2:-}" in -* | '') shift ;; *) TESTAPP_OWNER="$2"; shift 2 ;; esac
+      ;;
     --phone)
       p="${2:-}"
       # a trailing newline is forgiven here
@@ -288,12 +305,16 @@ if [ "$BUILD" = yes ]; then
   (
     cd "$CRATES" && cargo build --release --target-dir "$CRATES/target/fieldtest" -p rhtn-cli \
       && cargo build --release --target-dir "$CRATES/target/fieldtest" -p rhtn-daemon -p rhtn-participant \
-        --no-default-features --features rhtn-daemon/fieldtest,rhtn-participant/fieldtest
+        --no-default-features --features rhtn-daemon/fieldtest,rhtn-participant/fieldtest \
+      && cargo build --release --target-dir "$CRATES/target/fieldtest" -p rhtn-testapp
   ) > "$RUN/build.log" 2>&1 || { tail -20 "$RUN/build.log" >&2; die "the build failed; see $RUN/build.log"; }
 fi
 for b in rhtn rhtnd rhtnp; do
   [ -x "$TARGET/$b" ] || die "$TARGET/$b is missing; run without --no-build"
 done
+if [ "$TESTAPP" = yes ]; then
+  [ -x "$TARGET/rhtn-testapp" ] || die "$TARGET/rhtn-testapp is missing; run without --no-build"
+fi
 # a releasable binary accepts [log] and writes nothing: refuse to run one
 grep -a -q 'daemon.lifecycle' "$TARGET/rhtnd" \
   || die "$TARGET/rhtnd is not a field-test build (no event names in it)"
@@ -338,6 +359,66 @@ for m in ${PHONE_MATERIALS[@]+"${PHONE_MATERIALS[@]}"}; do
   PHONE_KEYHASHES+=("$(python3 -c 'import hashlib, sys; print(hashlib.sha256(bytes.fromhex(sys.argv[1])).hexdigest())' "$m")")
 done
 
+# ------------------------------------------------------------ the test app ---
+# **The utility test resource** (`crates/testapp`), where --testapp asked
+# for it: a socket-backed package the node carries the traffic for
+# (`resource-requirements.md` §3's second leg). The owner is a phone, so
+# the resource is reachable by that phone and by whoever is within two
+# steps of it in this node's topology -- which is what the meetings put
+# there, and why the app test comes after them.
+TESTAPP_CONF=""
+TESTAPP_RESOURCE=""
+TESTAPP_PORT=7460
+TESTAPP_INDEX=0
+if [ "$TESTAPP" = yes ]; then
+  [ ${#PHONE_SERIALS[@]} -gt 0 ] || die "--testapp needs a phone to own the resource"
+  if [ -n "$TESTAPP_OWNER" ]; then
+    TESTAPP_INDEX=-1
+    for i in "${!PHONE_SERIALS[@]}"; do
+      [ "${PHONE_SERIALS[$i]}" = "$TESTAPP_OWNER" ] && TESTAPP_INDEX="$i"
+    done
+    [ "$TESTAPP_INDEX" -ge 0 ] || die "--testapp $TESTAPP_OWNER is not one of this run's phones"
+  fi
+  TESTAPP_OWNER_SERIAL="${PHONE_SERIALS[$TESTAPP_INDEX]}"
+  TESTAPP_OWNER_KEYHASH="${PHONE_KEYHASHES[$TESTAPP_INDEX]}"
+  mkdir -p "$RUN/testapp" "$RUN/grants" "$DAEMON_HOME/state"
+  mint "$RUN/testapp"
+  TESTAPP_RESOURCE="$KEYHASH"
+  cat > "$RUN/testapp/manifest" <<EOF
+# written by field-run.sh for run $RUN_NAME: the utility test resource
+roles = ["reader"]
+EOF
+  cat > "$RUN/testapp/hosting" <<EOF
+# written by field-run.sh for run $RUN_NAME
+[[host]]
+resource = "$TESTAPP_RESOURCE"
+owner = "$TESTAPP_OWNER_KEYHASH"
+authority = "testapp.internal"
+manifest = "$RUN/testapp/manifest"
+address = "127.0.0.1:$TESTAPP_PORT"
+EOF
+  # **a grant with no clause admits every member of the owner's horizon**
+  # (`rhtn_node::grant::Grant`), which is the simplest predicate there is
+  # and the one a bench wants: the owner and its subordinates, nobody else
+  cat > "$RUN/grants/$TESTAPP_RESOURCE.toml" <<EOF
+[[grant]]
+roles = ["reader"]
+EOF
+  TESTAPP_CONF="resources = \"$RUN/testapp/hosting\"
+grants = \"$RUN/grants\"
+state = \"$DAEMON_HOME/state\""
+  "$TARGET/rhtn-testapp" --listen "127.0.0.1:$TESTAPP_PORT" --resource "$TESTAPP_RESOURCE" \
+    --log "$RUN/testapp/log.jsonl" > "$RUN/testapp/stdout.txt" 2> "$RUN/testapp/stderr.txt" &
+  TESTAPP_PID=$!
+  PIDS+=("$TESTAPP_PID")
+  if ! await_text "$RUN/testapp/stdout.txt" "rhtn-testapp:" 20 "$TESTAPP_PID"; then
+    cat "$RUN/testapp/stderr.txt" >&2
+    die "rhtn-testapp did not come up on 127.0.0.1:$TESTAPP_PORT"
+  fi
+  say "testapp: $TESTAPP_RESOURCE"
+  say "testapp: owned by $TESTAPP_OWNER_SERIAL (${TESTAPP_OWNER_KEYHASH:0:16}...), on 127.0.0.1:$TESTAPP_PORT"
+fi
+
 # the peers each party authenticates: everybody but itself
 {
   echo "$W_MATERIAL1"; echo "$W_MATERIAL2"
@@ -363,6 +444,7 @@ topology = "$DAEMON_HOME/topology"
 archive = "$DAEMON_HOME/archive"
 heartbeat = 30
 ingestion = "unverified-gossip"
+$TESTAPP_CONF
 
 # the exchange's trace is one relayed request per event, never batched
 # (design §7.1 item 1): ~120 per nominee per exchange, which the earlier

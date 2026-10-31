@@ -86,7 +86,28 @@ class CatalogActivity : Activity() {
             setOnClickListener {
                 val entry = chosen(which)
                 if (entry == null) {
-                    answer.text = "no entry held names that resource; sweep, or paste one from the list"
+                    // **a resource nobody published an entry for is still
+                    // reachable** (`wire-format.md` §11: a `CatalogEntry`
+                    // is optional, and §11.1 has a resource reached
+                    // through its host): with 64 hex digits and a serving
+                    // node, that node is the host to ask. Told about out
+                    // of band is how a resource without an entry arrives.
+                    val typed = which.text.toString().trim().lowercase()
+                    val serving = (Model.connection as? uniffi.rhtn_model.Connection.Attached)
+                        ?.serving?.hex()
+                    if (typed.length == 64 && typed.all { it in "0123456789abcdef" } && serving != null) {
+                        startActivity(
+                            android.content.Intent(this@CatalogActivity, ResourceActivity::class.java)
+                                .putExtra("node", serving)
+                                .putExtra("resource", typed)
+                                .putExtra("name", "A resource with no entry")
+                                .putExtra("path", path.text.toString().trim().ifBlank { "/" }),
+                        )
+                        return@setOnClickListener
+                    }
+                    answer.text =
+                        "no entry held names that resource; sweep, paste one from the list, " +
+                        "or give 64 hex digits while attached and this device will ask its own node"
                     return@setOnClickListener
                 }
                 startActivity(
