@@ -16488,6 +16488,26 @@ Tested: a first message to a party holding nothing of the sender is
 refused on the binding alone and opens once the introduction is taken;
 a card naming another party is not taken.
 
+### 2026-10-31 (the utility request's three open decisions, ruled)
+
+**All three accepted as built** [author, 2026-10-31]. (1) **The
+application key is the device's and never in the backup**: a device
+restored from its phrase signs under a new key, and `light-client-requirements.md`
+§8.1 now carries the ruling with what the alternative would have cost —
+deriving it from the identity root would bring every claim a resource
+holds back with the phrase, which is the opposite of a key per audience.
+(2) **The media type `application/vnd.rhtn.utility+json` and the claim
+array `["rhtn/utility@1", audience, utility, token, digest, at]` are
+fixed**, being what a resource is written against; §8.1 says so, and
+`resource-requirements.md` §3.4 states them for the resource author
+citing it. (3) **A package's request-rate budget stays recorded and not
+enforced**, because the one answer missing is what a *member* is told
+when it is spent: deferred, with the four options and their costs written
+down to be decided cold. The bound on fetches a minute that
+`infra-client-requirements.md` §9.3 does not name waits on the same
+question. No code changed; that section's "you bound what you have built"
+already accommodates an unenforced field, so no document says *not yet*.
+
 ### 2026-10-31 (a resource request travels as a sequence; the bound is per message)
 
 **A request larger than the frame bound is sent as a sequence too**

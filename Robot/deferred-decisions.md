@@ -101,3 +101,44 @@ over the course of a day or so after loss of on-device storage."
   the rounds and multiplies the recovery rate alike.
 - **When it arose.** 2026-10-24 (the build); deferred 2026-10-25.
 
+---
+
+## What a member is told when a package's request-rate budget is spent
+
+**Deferred** [author, 2026-10-31]: the three assumptions of the utility
+build were accepted as they stood, this among them — the budget is
+recorded and not enforced until there is an answer to give.
+
+- **What prompted it.** The host surface's manifest (`infra-client-requirements.md`
+  §9.3, `resource-requirements.md` §8) names five budgets, and four are
+  enforced: the block's bytes, the log's bytes, jobs in flight and job
+  seconds a day. `requests_per_minute` is recorded and not enforced,
+  because enforcing it is the one budget whose refusal a *member* sees
+  rather than the operator, and `wire-format.md` §11's six statuses were
+  written before the budget existed. A bound on fetches a minute does not
+  exist in `infra-client-requirements.md` §9.3 at all and would raise the
+  same question.
+- **The options.** (a) Reuse status 2, *resource unavailable*, which is
+  true and tells the member nothing to act on. (b) A seventh status for a
+  rate refusal, which is a wire change and tells a member precisely what
+  a stranger should not learn about a resource's traffic — though that
+  section's own rule is that a member inside the owner's horizon is owed the
+  specific reason. (c) The host composes an HTTP 429 inside status 0, so
+  the refusal is the application's shape and the network says *delivered*,
+  which is what it did. (d) Leave it to the package, whose own accounting
+  sits above the host's ceiling, which is what `infra-client-requirements.md` §9.3's "treat the rest as
+  the package's own accounting" already permits.
+- **What was done meanwhile.** Nothing enforces it; the field is read,
+  validated and carried. `infra-client-requirements.md` §9.3's "you bound
+  what you have built, name the
+  one exceeded on your operator's surface" accommodates this without a
+  change, so no document says *not yet*. The audit's owed list points
+  here.
+- **What changes if it goes the other way.** (a) and (d) are a few lines
+  in the node's gateway. (c) is the same plus a composed response, and
+  sets a precedent for the host answering as the application. (b) is
+  `wire-format.md` §11's status list, its normative evaluation order, the
+  client's reading of it, the Kotlin binding and the vectors — the only
+  option that is not cheap, and the reason to decide before anything
+  starts counting.
+- **When it arose.** 2026-10-30 (the budgets landed); deferred 2026-10-31.

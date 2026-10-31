@@ -30,7 +30,7 @@ core's to meet or to refuse.
 | **log**: a bounded, timestamped, per-instance operator-visible stream | **built**: `rhtn/1:log` in the sandbox, a per-instance file for a socket-backed package (`rhtn-log`, `rhtn-log-bytes`), host-stamped lines, bounded at `log_bytes`, oldest out first; on the administration surface as `GET /node/resource/<hex>/log`, with the host's budget and fetch refusals written into it | **provided** |
 | **clock**: the host's time, advisory | **built**: `rhtn/1:clock`, milliseconds since the epoch | **provided** |
 | **versioning**: `rhtn/host@N` offered by the host, tolerated by the manifest, refused at installation with both sides named; bindings only ever added | **built**: `HOST_VERSIONS = ["rhtn/host@1"]`; the manifest's `host` list; a package tolerating none is refused at installation naming both lists | **provided** |
-| **quotas and budgets** in the manifest: block bytes, jobs in flight, log bytes retained, request rate, job compute per day; refusals named on the operator's surface | **built**: `[budget]` with all five; block bytes, log bytes, jobs in flight and job seconds a day enforced, refusals in the instance's log on the surface; requests a minute recorded and not yet enforced | **provided, one budget owed** |
+| **quotas and budgets** in the manifest: block bytes, jobs in flight, log bytes retained, request rate, job compute per day; refusals named on the operator's surface | **built**: `[budget]` with all five; block bytes, log bytes, jobs in flight and job seconds a day enforced, refusals in the instance's log on the surface; requests a minute recorded and not enforced, deferred [author, 2026-10-31] on what a member is told | **provided, one budget deferred** |
 | **runtime**: a socket-backed service first, as its own OS user; a WASM profile second; a parity fixture across both | both runtimes exist (`[[host]]` with `address` → a socket backend; with `component` → the sandbox); OS-user confinement is the operator's deployment; no parity fixture | **provided, the fixture absent** |
 | **envelope key scheme**: Ed25519 in v1 under the node's 512-byte bound; instance public keys introduced in the manifest; proof of possession; rotation; per-instance custody | `MAX_SIGNATURE = 512` (consistent); **the instance's public key is written beside the resource in the hosting file** (`key`, 32 bytes hex, validated at installation) — per instance, which is where the contract's own custody rule puts it; the node carries the signature and does not verify it, by both documents' agreement; proof of possession and rotation wait on verification | **consistent; the key recorded** |
 | **their section 9's absences** (no session-close notification, no cross-instance reads, no network access) | the same absences | **provided** |
@@ -119,6 +119,9 @@ order:
    request travelling as a sequence; the frame no longer bounds it.)
 2. **Budgets not yet enforced**: requests a minute, and a bound on fetches
    a minute, which `infra-client-requirements.md` §9.3 does not yet name.
+   **Both wait on one question** — what a member is told when the rate is
+   spent — deferred by the author 2026-10-31 and written up in
+   `Robot/deferred-decisions.md`.
 3. **Jobs across a reload**: a reload re-provisions the table (the files
    stand); destroying a block or a table on an instance's removal is an
    operator's act not yet on the surface.

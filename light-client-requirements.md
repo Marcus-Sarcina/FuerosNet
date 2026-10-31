@@ -1245,10 +1245,15 @@ client carried would be.
   own and no two can be matched. **It is never the network identity**, and
   the identity's keys sign nothing here — publishing that key to a
   resource would undo the resource layer's pairwise separation. The secret
-  is kept with the device's own state (§9) and **never in the backup**: a
-  device restored from its phrase signs under a new key, which is the
-  recovery policy — an application key is not the identity and comes back
-  with nothing. The claim is a signature over the CBOR array `["rhtn/utility@1",
+  is kept with the device's own state (§9) and **never in the backup**
+  [author, 2026-10-31]: a device restored from its phrase signs under a
+  new key, which is the recovery policy — an application key is not the
+  identity and comes back with nothing. Deriving it from the identity root
+  instead would bring it back with the phrase and tie every claim a
+  resource holds to the one recoverable secret, which is the opposite of
+  what a key per audience is for. **The media type above and this array
+  are fixed** [author, 2026-10-31], being what a resource is written
+  against: the claim is a signature over the CBOR array `["rhtn/utility@1",
   audience, utility, token, digest, at]` — the resource's keyhash, the
   utility's name, the ask's token, SHA-256 of the result (of the payload,
   for a signature) and the time in milliseconds — so a claim given to one
