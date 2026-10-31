@@ -221,6 +221,9 @@ const BINDINGS_FULL: &str = r#"
     (export "log" (func (param "line" string)))
     (export "clock" (func (result u64)))
     (export "fetch" (func (param "request" (list u8)) (result (list u8))))
+    (export "job-schedule" (func (param "at" u64) (param "task" (list u8)) (param "budget" u64) (result u64)))
+    (export "job-cancel" (func (param "id" u64) (result bool)))
+    (export "job-list" (func (result (list u64))))
   ))
 "#;
 
@@ -232,6 +235,9 @@ const LOWER_FULL: &str = r#"
   (core func $log (canon lower (func $b "log") (memory (core memory $arenai "memory")) (realloc (core func $arenai "cabi_realloc"))))
   (core func $clk (canon lower (func $b "clock")))
   (core func $fetch (canon lower (func $b "fetch") (memory (core memory $arenai "memory")) (realloc (core func $arenai "cabi_realloc"))))
+  (core func $jsched (canon lower (func $b "job-schedule") (memory (core memory $arenai "memory")) (realloc (core func $arenai "cabi_realloc"))))
+  (core func $jcancel (canon lower (func $b "job-cancel")))
+  (core func $jlist (canon lower (func $b "job-list") (memory (core memory $arenai "memory")) (realloc (core func $arenai "cabi_realloc"))))
 "#;
 
 const WIRE_FULL: &str = r#"
@@ -239,9 +245,11 @@ const WIRE_FULL: &str = r#"
     (with "host" (instance
       (export "request" (func $req)) (export "response" (func $resp))
       (export "block-write" (func $bw)) (export "block-read" (func $br))
-      (export "log" (func $log)) (export "clock" (func $clk)) (export "fetch" (func $fetch))))
+      (export "log" (func $log)) (export "clock" (func $clk)) (export "fetch" (func $fetch))
+      (export "job-schedule" (func $jsched)) (export "job-cancel" (func $jcancel)) (export "job-list" (func $jlist))))
     (with "arena" (instance $arenai))))
   (func (export "handle") (canon lift (core func $maini "handle")))
+  (func (export "job") (param "id" u64) (param "task" (list u8)) (canon lift (core func $maini "job") (memory (core memory $arenai "memory")) (realloc (core func $arenai "cabi_realloc"))))
 "#;
 
 const PREAMBLE_FULL: &str = r#"
@@ -252,12 +260,23 @@ const PREAMBLE_FULL: &str = r#"
     (import "host" "log" (func $log (param i32 i32)))
     (import "host" "clock" (func $clock (result i64)))
     (import "host" "fetch" (func $fetch (param i32 i32 i32)))
+    (import "host" "job-schedule" (func $jsched (param i64 i32 i32 i64) (result i64)))
+    (import "host" "job-cancel" (func $jcancel (param i64) (result i32)))
+    (import "host" "job-list" (func $jlist (param i32)))
     (import "arena" "memory" (memory 1))
 "#;
 
 fn bound_full(body: &str) -> Vec<u8> {
+    // every full-binding package exports a `job` as well, since the host
+    // instance it imports carries the jobs binding; one that does not
+    // schedule anything keeps the trivial one
+    let job = if body.contains("(export \"job\")") {
+        ""
+    } else {
+        "\n    (func (export \"job\") (param i64 i32 i32))"
+    };
     let src = format!(
-        "(component {BINDINGS_FULL}{ARENA}{LOWER_FULL}\n  (core module $main{PREAMBLE_FULL}{body}\n  )\n{WIRE_FULL}\n)"
+        "(component {BINDINGS_FULL}{ARENA}{LOWER_FULL}\n  (core module $main{PREAMBLE_FULL}{body}{job}\n  )\n{WIRE_FULL}\n)"
     );
     wat::parse_str(&src).expect("a component")
 }
@@ -306,6 +325,24 @@ pub fn fetching() -> Vec<u8> {
       (call $request (i32.const 0))
       (call $fetch (i32.load (i32.const 0)) (i32.load (i32.const 4)) (i32.const 8))
       (call $response (i32.load (i32.const 8)) (i32.load (i32.const 12))))
+"#,
+    )
+}
+
+/// **Schedules a job for right now with its request as the task, and the
+/// job writes the task into the block under `ran`**: the round trip
+/// through the host's table, the tick and the guest's `job` entry.  The
+/// answer is the job's id as eight bytes.
+pub fn scheduling() -> Vec<u8> {
+    bound_full(
+        r#"
+    (data (i32.const 2000) "ran")
+    (func (export "handle")
+      (call $request (i32.const 0))
+      (i64.store (i32.const 16) (call $jsched (i64.const 0) (i32.load (i32.const 0)) (i32.load (i32.const 4)) (i64.const 1000)))
+      (call $response (i32.const 16) (i32.const 8)))
+    (func (export "job") (param $id i64) (param $ptr i32) (param $len i32)
+      (drop (call $bwrite (i32.const 2000) (i32.const 3) (i64.const 0) (local.get $ptr) (local.get $len))))
 "#,
     )
 }

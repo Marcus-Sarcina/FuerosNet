@@ -356,6 +356,7 @@ fn a_package_keeps_what_it_wrote_in_its_block_and_logs_with_the_hosts_clock() {
             "rhtn/1:block".to_string(),
             "rhtn/1:clock".to_string(),
             "rhtn/1:fetch".to_string(),
+            "rhtn/1:jobs".to_string(),
             "rhtn/1:log".to_string(),
             "rhtn/1:request".to_string(),
             "rhtn/1:response".to_string()
@@ -375,6 +376,7 @@ fn a_package_keeps_what_it_wrote_in_its_block_and_logs_with_the_hosts_clock() {
         block: Some(block.clone()),
         log: Some(log.clone()),
         fetch: None,
+        jobs: None,
         clock: std::sync::Arc::new(|| 1_793_400_000_000),
     };
     let back = s.serve(b"a note to keep", &env).expect("served");
@@ -486,4 +488,71 @@ fn a_package_fetches_through_the_host_and_a_refusal_is_said_in_its_log() {
         &Env::default(),
     );
     assert!(matches!(&none, Err(Refusal::Trapped(why)) if why.contains("no fetch was granted")));
+}
+
+/// **Jobs: durable scheduled work the host runs under the instance's
+/// authority** (`infra-client-requirements.md` §9.3): a request schedules
+/// one for now, the table holds it on disk, the host's tick runs the
+/// package's `job` entry with the task, the job writes into the block,
+/// the outcome is in the log and the job is gone from the table; a
+/// cancelled job never runs; a schedule past the `jobs` bound is refused
+/// with the bound named; a package importing jobs with no `job` entry is
+/// not admitted; and the day's compute, once spent, holds the rest.
+// acceptance: RSC-65
+#[test]
+fn a_job_scheduled_by_a_request_is_run_by_the_host_and_writes_into_the_block() {
+    use rhtn_resources::{Block, Jobs, LogFile};
+    let d = Dir::new("jobs");
+    let block = std::sync::Arc::new(Block::provision(d.0.join("block"), 1 << 16).expect("a block"));
+    let log = std::sync::Arc::new(LogFile::at(d.0.join("log"), 4096).expect("a log"));
+    let jobs = std::sync::Arc::new(Jobs::provision(d.0.join("jobs"), 2, 60).expect("a table"));
+    let env = Env {
+        block: Some(block.clone()),
+        log: Some(log.clone()),
+        jobs: Some(jobs.clone()),
+        ..Env::default()
+    };
+    let s = Sandbox::admit(&scheduling(), Limits::default()).expect("admitted");
+    let h = Hosted::with(s, env.clone());
+    let id = h.handle(b"the task").expect("scheduled");
+    assert_eq!(id, 1u64.to_le_bytes().to_vec(), "the first id");
+    assert_eq!(jobs.list(), vec![1], "on the table, on disk");
+    assert!(d.0.join("jobs").join("1.job").is_file());
+    // a second, cancelled before the tick
+    h.handle(b"never").expect("scheduled");
+    assert_eq!(jobs.list(), vec![1, 2]);
+    // the bound: two in flight is the manifest's claim
+    let over = h.handle(b"third").unwrap_err();
+    assert!(over.contains("bounded at 2"), "{over}");
+    assert!(jobs.cancel(2));
+    assert!(!jobs.cancel(2), "gone already");
+    // the tick: the host runs what is due, under the instance's authority
+    assert_eq!(h.run_due_jobs(1_793_400_000_000), 1);
+    assert_eq!(
+        block.read("ran", 0, 64).unwrap(),
+        b"the task",
+        "the job wrote the task"
+    );
+    assert!(jobs.list().is_empty(), "run once, and gone");
+    let lines = log.lines();
+    assert!(lines.iter().any(|l| l.contains("job 1 ran")), "{lines:?}");
+    assert_eq!(h.run_due_jobs(1_793_400_000_000), 0, "nothing due");
+    // a table restored from disk finds what was scheduled and not run
+    h.handle(b"after a restart").expect("scheduled");
+    let again = Jobs::provision(d.0.join("jobs"), 2, 60).expect("the same table");
+    assert_eq!(again.list(), vec![3]);
+    // the day's compute spent: due jobs wait, and the log says so
+    again.charge(1_793_400_000_000, 60_000);
+    let h2 = Hosted::with(
+        Sandbox::admit(&scheduling(), Limits::default()).unwrap(),
+        Env {
+            jobs: Some(std::sync::Arc::new(again)),
+            ..env.clone()
+        },
+    );
+    assert_eq!(h2.run_due_jobs(1_793_400_000_000), 0);
+    assert!(log.lines().iter().any(|l| l.contains("compute is spent")));
+    // and a package that schedules but exports no `job` is not admitted
+    let r = Sandbox::admit(&noting(), Limits::default());
+    assert!(r.is_ok(), "noting exports the trivial job");
 }

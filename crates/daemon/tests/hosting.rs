@@ -1141,7 +1141,7 @@ fn a_manifest_declares_its_host_version_its_budget_and_its_destinations() {
     d.put("noting.wasm", rhtn_sim::packages::noting());
     let noting = d.put(
         "noting.manifest",
-        "roles = [\"reader\"]\nimports = [\"rhtn/1:request\", \"rhtn/1:response\", \"rhtn/1:block\", \"rhtn/1:log\", \"rhtn/1:clock\", \"rhtn/1:fetch\"]\ncomponent = \"noting.wasm\"\nfetch = [\"https://feeds.example\"]\n[budget]\nblock_bytes = 4096\nlog_bytes = 512\n",
+        "roles = [\"reader\"]\nimports = [\"rhtn/1:request\", \"rhtn/1:response\", \"rhtn/1:block\", \"rhtn/1:log\", \"rhtn/1:clock\", \"rhtn/1:fetch\", \"rhtn/1:jobs\"]\ncomponent = \"noting.wasm\"\nfetch = [\"https://feeds.example\"]\n[budget]\nblock_bytes = 4096\nlog_bytes = 512\n",
     );
     let f = d.put("hosting", host(&noting));
     let mut g = Gateway::default();
@@ -1205,4 +1205,30 @@ fn a_manifest_declares_its_host_version_its_budget_and_its_destinations() {
     );
     let why = run(&d, &keyed).expect_err("refused");
     assert!(why.contains("instance key"), "{why}");
+}
+
+/// **A package that schedules jobs gets its table under the node's state
+/// directory, bounded as it declared; a node with none cannot host it**
+/// (`infra-client-requirements.md` §9.3).
+// acceptance: DMN-35
+#[test]
+fn a_package_that_schedules_jobs_is_given_a_table_where_the_node_keeps_state() {
+    let d = Dir::new("jobs");
+    d.put("scheduling.wasm", rhtn_sim::packages::scheduling());
+    let m = d.put(
+        "scheduling.manifest",
+        "roles = [\"reader\"]\nimports = [\"rhtn/1:request\", \"rhtn/1:response\", \"rhtn/1:block\", \"rhtn/1:log\", \"rhtn/1:clock\", \"rhtn/1:fetch\", \"rhtn/1:jobs\"]\ncomponent = \"scheduling.wasm\"\nfetch = [\"https://feeds.example\"]\n[budget]\njobs = 3\njob_seconds_per_day = 30\n",
+    );
+    assert_eq!(run(&d, &host(&m)), Ok(1));
+    assert!(
+        d.0.join("state").join("jobs").join(RES).is_dir(),
+        "the table exists"
+    );
+    let f = d.put("hosting", host(&m));
+    let mut g = Gateway::default();
+    let why = apply(&mut g, Path::new(&f), Limits::default(), None, None)
+        .err()
+        .map(|e| e.to_string())
+        .expect("refused");
+    assert!(why.contains("state directory"), "{why}");
 }

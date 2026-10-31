@@ -36,7 +36,7 @@ pub const GUEST_ENTRY: &str = "handle";
 /// The functions each binding of [`HOST_EXPORTS`] puts in the host
 /// instance, in the manifest's vocabulary: `rhtn/1:block` is the six
 /// functions of the storage block, the rest one function each.
-const BINDING_FUNCS: [(&str, &[&str]); 6] = [
+const BINDING_FUNCS: [(&str, &[&str]); 7] = [
     ("rhtn/1:request", &["request"]),
     ("rhtn/1:response", &["response"]),
     (
@@ -53,7 +53,199 @@ const BINDING_FUNCS: [(&str, &[&str]); 6] = [
     ("rhtn/1:log", &["log"]),
     ("rhtn/1:clock", &["clock"]),
     ("rhtn/1:fetch", &["fetch"]),
+    ("rhtn/1:jobs", &["job-schedule", "job-cancel", "job-list"]),
 ];
+
+/// The export a package that schedules jobs provides, and the whole of
+/// what the host calls for one: `job(id: u64, task: list<u8>)`.
+pub const JOB_ENTRY: &str = "job";
+
+/// The most jobs an instance keeps scheduled at once where its manifest
+/// names no `jobs` budget.
+pub const DEFAULT_JOBS: u64 = 64;
+/// Job compute an instance may spend a day, in seconds, where its
+/// manifest names none.
+pub const DEFAULT_JOB_SECONDS_PER_DAY: u64 = 600;
+
+/// One scheduled job as the table keeps it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Job {
+    /// The host's number for it, unique within the instance.
+    pub id: u64,
+    /// When it is due, milliseconds since the epoch.
+    pub at_ms: u64,
+    /// What the package handed itself to run.
+    pub task: Vec<u8>,
+    /// What the package declared it may spend, milliseconds.
+    pub budget_ms: u64,
+}
+
+/// **An instance's jobs** (`infra-client-requirements.md` §9.3): durable
+/// scheduled work, one file per job under a directory of the host's, so
+/// a restart finds every job that was scheduled and not yet run; bounded
+/// by the manifest's `jobs` in flight and `job_seconds_per_day`, the
+/// day's spend kept in a ledger beside them.  A job runs under the
+/// instance's authority as of now — never under any caller's session,
+/// which ends without notice — and runs once: a job that fails is not
+/// retried by the host.
+pub struct Jobs {
+    dir: std::path::PathBuf,
+    in_flight: u64,
+    seconds_per_day: u64,
+    lock: Mutex<()>,
+}
+
+impl Jobs {
+    /// The table at `dir`, created where it is not, with its bounds.
+    pub fn provision(
+        dir: impl Into<std::path::PathBuf>,
+        in_flight: u64,
+        seconds_per_day: u64,
+    ) -> std::io::Result<Jobs> {
+        let dir = dir.into();
+        std::fs::create_dir_all(&dir)?;
+        Ok(Jobs {
+            dir,
+            in_flight,
+            seconds_per_day,
+            lock: Mutex::new(()),
+        })
+    }
+
+    /// Where the table is.
+    #[must_use]
+    pub fn dir(&self) -> &std::path::Path {
+        &self.dir
+    }
+
+    fn read_all(&self) -> Vec<Job> {
+        let mut out: Vec<Job> = std::fs::read_dir(&self.dir)
+            .map(|rd| {
+                rd.filter_map(|e| e.ok())
+                    .filter(|e| e.path().extension().is_some_and(|x| x == "job"))
+                    .filter_map(|e| std::fs::read(e.path()).ok())
+                    .filter_map(|b| decode_job(&b))
+                    .collect()
+            })
+            .unwrap_or_default();
+        out.sort_by_key(|j| (j.at_ms, j.id));
+        out
+    }
+
+    fn next_id(&self) -> u64 {
+        let p = self.dir.join("next");
+        let n: u64 = std::fs::read_to_string(&p)
+            .ok()
+            .and_then(|s| s.trim().parse().ok())
+            .unwrap_or(1);
+        let _ = std::fs::write(&p, (n + 1).to_string());
+        n
+    }
+
+    /// Schedule `task` for `at_ms` with `budget_ms` to spend; the job's
+    /// id.  **Refused where the instance already has its `jobs` in
+    /// flight**, the bound named.
+    pub fn schedule(&self, at_ms: u64, task: Vec<u8>, budget_ms: u64) -> Result<u64, String> {
+        let _held = self.lock.lock().unwrap();
+        let have = self.read_all().len() as u64;
+        if have >= self.in_flight {
+            return Err(format!(
+                "the instance's jobs in flight are bounded at {}: {have} are scheduled",
+                self.in_flight
+            ));
+        }
+        let id = self.next_id();
+        let job = Job {
+            id,
+            at_ms,
+            task,
+            budget_ms,
+        };
+        let p = self.dir.join(format!("{id}.job"));
+        std::fs::write(&p, encode_job(&job)).map_err(|e| e.to_string())?;
+        if let Ok(f) = std::fs::File::open(&p) {
+            let _ = f.sync_all();
+        }
+        Ok(id)
+    }
+
+    /// Cancel `id`: whether there was such a job.
+    pub fn cancel(&self, id: u64) -> bool {
+        let _held = self.lock.lock().unwrap();
+        std::fs::remove_file(self.dir.join(format!("{id}.job"))).is_ok()
+    }
+
+    /// The ids scheduled, soonest first.
+    #[must_use]
+    pub fn list(&self) -> Vec<u64> {
+        self.read_all().into_iter().map(|j| j.id).collect()
+    }
+
+    /// The jobs due by `now_ms`, soonest first.
+    #[must_use]
+    pub fn due(&self, now_ms: u64) -> Vec<Job> {
+        self.read_all()
+            .into_iter()
+            .filter(|j| j.at_ms <= now_ms)
+            .collect()
+    }
+
+    /// Take `id` out of the table: it has run, however it went.
+    pub fn took(&self, id: u64) {
+        let _ = self.cancel(id);
+    }
+
+    /// What the day has spent so far, milliseconds, and the day it is.
+    fn ledger(&self, now_ms: u64) -> (u64, u64) {
+        let day = now_ms / 86_400_000;
+        let p = self.dir.join("ledger");
+        let (d, spent) = std::fs::read_to_string(&p)
+            .ok()
+            .and_then(|s| {
+                let (a, b) = s.trim().split_once(' ')?;
+                Some((a.parse::<u64>().ok()?, b.parse::<u64>().ok()?))
+            })
+            .unwrap_or((day, 0));
+        if d == day { (day, spent) } else { (day, 0) }
+    }
+
+    /// Whether the day's compute budget has room for another job.
+    #[must_use]
+    pub fn has_budget(&self, now_ms: u64) -> bool {
+        let (_, spent) = self.ledger(now_ms);
+        spent < self.seconds_per_day.saturating_mul(1000)
+    }
+
+    /// Charge `spent_ms` to the day.
+    pub fn charge(&self, now_ms: u64, spent_ms: u64) {
+        let _held = self.lock.lock().unwrap();
+        let (day, spent) = self.ledger(now_ms);
+        let _ = std::fs::write(
+            self.dir.join("ledger"),
+            format!("{day} {}", spent.saturating_add(spent_ms)),
+        );
+    }
+}
+
+/// `id at_ms budget_ms` on one line, the task after it: the host's own
+/// file, read by nobody else.
+fn encode_job(j: &Job) -> Vec<u8> {
+    let mut out = format!("{} {} {}\n", j.id, j.at_ms, j.budget_ms).into_bytes();
+    out.extend_from_slice(&j.task);
+    out
+}
+
+fn decode_job(b: &[u8]) -> Option<Job> {
+    let nl = b.iter().position(|c| *c == b'\n')?;
+    let head = std::str::from_utf8(&b[..nl]).ok()?;
+    let mut parts = head.split(' ');
+    Some(Job {
+        id: parts.next()?.parse().ok()?,
+        at_ms: parts.next()?.parse().ok()?,
+        budget_ms: parts.next()?.parse().ok()?,
+        task: b[nl + 1..].to_vec(),
+    })
+}
 
 /// **An outbound request on a package's behalf** (`infra-client-
 /// requirements.md` §9.3's fetch): the package hands one HTTP/1.1
@@ -330,6 +522,8 @@ pub struct Env {
     /// The host's outbound request on the instance's behalf, to the
     /// destinations its manifest declared.
     pub fetch: Option<Arc<dyn Fetcher>>,
+    /// The instance's scheduled work.
+    pub jobs: Option<Arc<Jobs>>,
     /// The host's clock, milliseconds since the epoch: advisory, and
     /// nothing in the protocol treats it as proof of anything.
     pub clock: Arc<dyn Fn() -> u64 + Send + Sync>,
@@ -341,6 +535,7 @@ impl Default for Env {
             block: None,
             log: None,
             fetch: None,
+            jobs: None,
             clock: Arc::new(|| {
                 std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
@@ -401,6 +596,9 @@ pub enum Refusal {
     Oversized(usize),
     /// The request ran into a budget the package declared, named.
     Budget(String),
+    /// It schedules jobs and does not export the entry the host runs one
+    /// through.
+    NoJobEntry,
 }
 
 impl std::fmt::Display for Refusal {
@@ -415,6 +613,7 @@ impl std::fmt::Display for Refusal {
                 write!(f, "the response is {n} bytes, over what the host carries")
             }
             Self::Budget(why) => write!(f, "over budget: {why}"),
+            Self::NoJobEntry => write!(f, "imports jobs and has no `{JOB_ENTRY}` export"),
         }
     }
 }
@@ -483,6 +682,14 @@ impl Sandbox {
             .any(|(n, _)| n == GUEST_ENTRY)
         {
             return Err(Refusal::NoEntry);
+        }
+        if imports.iter().any(|i| i == "rhtn/1:jobs")
+            && !component
+                .component_type()
+                .exports(&engine)
+                .any(|(n, _)| n == JOB_ENTRY)
+        {
+            return Err(Refusal::NoJobEntry);
         }
 
         let mut linker: Linker<Call> = Linker::new(&engine);
@@ -589,6 +796,7 @@ impl Sandbox {
                 },
             )
             .map_err(|e| Refusal::NotAComponent(e.to_string()))?;
+            link_jobs(&mut inst)?;
         }
 
         Ok(Self {
@@ -622,7 +830,7 @@ impl Sandbox {
     /// only durable state a resource has is on the far side of its own
     /// door.  A trap therefore costs the caller its answer and costs the
     /// next caller nothing.
-    pub fn serve(&self, message: &[u8], env: &Env) -> Result<Vec<u8>, Refusal> {
+    fn store(&self, message: &[u8], env: &Env) -> Result<Store<Call>, Refusal> {
         let mut store = Store::new(
             &self.engine,
             Call {
@@ -649,29 +857,56 @@ impl Sandbox {
         store
             .set_fuel(self.limits.fuel)
             .map_err(|e| Refusal::Trapped(e.to_string()))?;
+        Ok(store)
+    }
 
+    fn call(&self, store: &mut Store<Call>, entry: &str, args: &[Val]) -> Result<(), Refusal> {
         let instance = self
             .linker
-            .instantiate(&mut store, &self.component)
-            .map_err(|e| classify(&e, &store))?;
-        let entry = instance
-            .get_func(&mut store, GUEST_ENTRY)
-            .ok_or(Refusal::NoEntry)?;
-        if let Err(e) = entry.call(&mut store, &[], &mut []) {
+            .instantiate(&mut *store, &self.component)
+            .map_err(|e| classify(&e, store))?;
+        let f = instance
+            .get_func(&mut *store, entry)
+            .ok_or(if entry == JOB_ENTRY {
+                Refusal::NoJobEntry
+            } else {
+                Refusal::NoEntry
+            })?;
+        if let Err(e) = f.call(&mut *store, args, &mut []) {
             if let Some(n) = store.data().over {
                 return Err(Refusal::Oversized(n));
             }
             if let Some(why) = store.data().budget.clone() {
                 return Err(Refusal::Budget(why));
             }
-            return Err(classify(&e, &store));
+            return Err(classify(&e, store));
         }
+        Ok(())
+    }
 
+    /// **Serve one request**: the package's `handle` entry with `message`
+    /// as what `request` hands it, under the limits, with `env` behind the
+    /// bindings; what it gave `response`, bounded.
+    pub fn serve(&self, message: &[u8], env: &Env) -> Result<Vec<u8>, Refusal> {
+        let mut store = self.store(message, env)?;
+        self.call(&mut store, GUEST_ENTRY, &[])?;
         let out = store.data_mut().response.take().unwrap_or_default();
         if out.len() > self.limits.response {
             return Err(Refusal::Oversized(out.len()));
         }
         Ok(out)
+    }
+
+    /// **Run one job**: the package's `job` entry with the id and the
+    /// task, under the same bounds a request has and `env` behind the
+    /// bindings; nothing comes back but whether it ran.
+    pub fn job(&self, id: u64, task: &[u8], env: &Env) -> Result<(), Refusal> {
+        let mut store = self.store(&[], env)?;
+        let args = [
+            Val::U64(id),
+            Val::List(task.iter().map(|b| Val::U8(*b)).collect()),
+        ];
+        self.call(&mut store, JOB_ENTRY, &args)
     }
 }
 
@@ -754,6 +989,38 @@ impl Backend for Hosted {
 
     fn running(&self) -> bool {
         *self.running.lock().unwrap()
+    }
+
+    fn run_due_jobs(&self, now_ms: u64) -> usize {
+        let Some(jobs) = &self.env.jobs else {
+            return 0;
+        };
+        if !self.running() {
+            return 0;
+        }
+        let mut ran = 0;
+        for job in jobs.due(now_ms) {
+            // the day's compute spent: the rest wait for tomorrow, said once
+            if !jobs.has_budget(now_ms) {
+                if let Some(l) = &self.env.log {
+                    l.write("host: the day's job compute is spent; the jobs due wait");
+                }
+                break;
+            }
+            let started = std::time::Instant::now();
+            let outcome = self.sandbox.job(job.id, &job.task, &self.env);
+            let spent = started.elapsed().as_millis() as u64;
+            jobs.charge(now_ms, spent);
+            jobs.took(job.id);
+            ran += 1;
+            if let Some(l) = &self.env.log {
+                match &outcome {
+                    Ok(()) => l.write(&format!("host: job {} ran in {spent} ms", job.id)),
+                    Err(e) => l.write(&format!("host: job {} failed: {e}", job.id)),
+                }
+            }
+        }
+        ran
     }
 }
 
@@ -877,6 +1144,83 @@ fn link_block(inst: &mut wasmtime::component::LinkerInstance<'_, Call>) -> Resul
             let b = block(&store)?;
             b.remove(&string(args.first(), "name")?)
                 .map_err(wasmtime::Error::msg)
+        },
+    )
+    .map_err(|e| Refusal::NotAComponent(e.to_string()))?;
+    Ok(())
+}
+
+/// The jobs binding's functions: schedule, cancel and list, each a thin
+/// call into [`Jobs`]; a schedule the table refuses names the bound.
+fn link_jobs(inst: &mut wasmtime::component::LinkerInstance<'_, Call>) -> Result<(), Refusal> {
+    fn jobs(store: &wasmtime::StoreContextMut<'_, Call>) -> Result<Arc<Jobs>, wasmtime::Error> {
+        store
+            .data()
+            .env
+            .jobs
+            .clone()
+            .ok_or_else(|| wasmtime::Error::msg("no jobs were granted"))
+    }
+    inst.func_new(
+        "job-schedule",
+        |mut store: wasmtime::StoreContextMut<'_, Call>,
+         _: wasmtime::component::types::ComponentFunc,
+         args: &[Val],
+         out: &mut [Val]| {
+            let j = jobs(&store)?;
+            let at = match args.first() {
+                Some(Val::U64(n)) => *n,
+                _ => return Err(wasmtime::Error::msg("at is a u64")),
+            };
+            let task: Vec<u8> = match args.get(1) {
+                Some(Val::List(l)) => l
+                    .iter()
+                    .map(|v| if let Val::U8(b) = v { *b } else { 0 })
+                    .collect(),
+                _ => return Err(wasmtime::Error::msg("task is a list<u8>")),
+            };
+            let budget = match args.get(2) {
+                Some(Val::U64(n)) => *n,
+                _ => return Err(wasmtime::Error::msg("budget is a u64")),
+            };
+            match j.schedule(at, task, budget) {
+                Ok(id) => {
+                    out[0] = Val::U64(id);
+                    Ok(())
+                }
+                Err(why) => {
+                    store.data_mut().budget = Some(why.clone());
+                    Err(wasmtime::Error::msg(why))
+                }
+            }
+        },
+    )
+    .map_err(|e| Refusal::NotAComponent(e.to_string()))?;
+    inst.func_new(
+        "job-cancel",
+        |store: wasmtime::StoreContextMut<'_, Call>,
+         _: wasmtime::component::types::ComponentFunc,
+         args: &[Val],
+         out: &mut [Val]| {
+            let j = jobs(&store)?;
+            let id = match args.first() {
+                Some(Val::U64(n)) => *n,
+                _ => return Err(wasmtime::Error::msg("id is a u64")),
+            };
+            out[0] = Val::Bool(j.cancel(id));
+            Ok(())
+        },
+    )
+    .map_err(|e| Refusal::NotAComponent(e.to_string()))?;
+    inst.func_new(
+        "job-list",
+        |store: wasmtime::StoreContextMut<'_, Call>,
+         _: wasmtime::component::types::ComponentFunc,
+         _: &[Val],
+         out: &mut [Val]| {
+            let j = jobs(&store)?;
+            out[0] = Val::List(j.list().into_iter().map(Val::U64).collect());
+            Ok(())
         },
     )
     .map_err(|e| Refusal::NotAComponent(e.to_string()))?;

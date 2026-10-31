@@ -707,29 +707,29 @@ with both lists named**, which is ordinary capacity (§9) said before any
 request. Bindings are only ever added within a version, and a removal is a
 new one.
 
-**Five bindings, and the list is closed.** Each is answered here against
+**Six bindings, and the list is closed.** Each is answered here against
 §9.2's test — *does this give the package anything of the network?* — and
 a binding that cannot answer it is not in the surface.
 
 | Binding | What it is | The §9.2 answer |
 |---|---|---|
-| **request and response** | the gateway's door as §3 and `resource-requirements.md` §3 have it, and the exchanges on your own paths (§3.3 there) | unchanged: the credential-bearing request traffic and nothing else |
+| **request and response** | the gateway's door as §3 and `resource-requirements.md` §3 have it, and the exchanges on your own paths (`resource-requirements.md` §3.3) | unchanged: the credential-bearing request traffic and nothing else |
 | **the storage block** | a durable region of your own storage, provisioned per instance when you bind it and destroyed only by an operator's act, never by a reload; flat files under names of the package's choosing; a **byte ceiling the package declared and you enforce on every write**, the refusal naming the ceiling; `sync` as the whole of the durability discipline — when it returns, the bytes are on stable storage | instance-local data the package wrote; you read none of it, keep no persistence logic for it, and share it with no other instance |
 | **the log** | lines the package writes for its operator, each stamped by you, kept per instance within the bytes the package declared, the oldest going first, shown on your administration surface (§8.3) | outward only: the package writes, the operator reads; it is for operators and never carries member content, which is the package's rule to keep |
 | **the clock** | your time, milliseconds since the epoch | advisory by nature: wire timestamps are signer-controlled (`wire-format.md` §3.3) and nothing here treats yours as proof of anything |
 | **fetch** | an outbound request to one of the destinations the package's manifest declared — `https://host` or `https://host:port`, exactly, no wildcard, never your own machine or network — the package handing you one HTTP/1.1 request as bytes and taking one response as bytes, as the gateway hands it a request and takes its answer; the destination is the request's `host`, you send with your own `host` and `connection: close` over TLS to the roots your operating system trusts, bound what you read back, honour a redirect only to a declared destination and only a few times, and refuse a declared name that resolves to your own machine or network | the package's own traffic to parties its operator read and accepted at installation; you are its egress and learn nothing of the network by carrying it |
 
-**Jobs** — durable scheduled work under the instance's authority as of the
-configuration epoch, budgeted, cancellable — are the sixth binding this
-version owes and does not yet carry; a package that needs them runs on a
-socket of its own meanwhile.
+| **jobs** | durable scheduled work: the package schedules a task for a time with a budget and gets a number back, may cancel it or list what stands, and you run each job that is due on your tick by calling the package's `job` entry with the number and the task — **under the instance's authority as of now, never under any caller's session**, which ends without notice; one file per job in a directory of yours, so a restart finds every job scheduled and not yet run; a job runs once and is not retried by you; bounded by the manifest's `jobs` in flight, the refusal naming the bound, and by `job_seconds_per_day`, the day's spend kept beside the jobs and the rest waiting when it is spent, said in the log | instance-local work the package gave itself; you carry the clock and the table and nothing of the network |
+
+A package on a socket of its own has its own timers and schedules nothing
+through you.
 
 **Where the surface lives.** A package in your sandbox reaches the block,
-the log, the clock and fetch as `rhtn/1:block`, `rhtn/1:log`,
-`rhtn/1:clock` and `rhtn/1:fetch`, imported the way it imports
-`rhtn/1:request` and `rhtn/1:response`, and reaches nothing it did not
-declare; a package importing fetch that names no destination is refused at
-installation. A package on a socket of its own has its own network, and the
+the log, the clock, fetch and jobs as `rhtn/1:block`, `rhtn/1:log`,
+`rhtn/1:clock`, `rhtn/1:fetch` and `rhtn/1:jobs`, imported the way it
+imports `rhtn/1:request` and `rhtn/1:response`, and reaches nothing it did
+not declare; a package importing fetch that names no destination, or jobs
+without a `job` entry, is refused at installation. A package on a socket of its own has its own network, and the
 list it declared is its operator's to read. A package on a socket of its own has
 your filesystem already; **you tell it where its block and its log are, and
 what it may fill them to, on the relationships exchange**

@@ -15323,6 +15323,33 @@
     "interpretation": "The TLS exchange itself is exercised against the operating system's roots and a live destination, which the gate has none of; what the gate holds is the refusals, the address rule and the sandbox round trip through a fetcher of the test's own."
   },
   {
+    "id": "RSC-65",
+    "area": "resources",
+    "gap": "resources",
+    "title": "Keep a package's scheduled jobs on disk, run each once on the tick under the instance's authority, and bound them as declared",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "infra-client-requirements.md §9.3",
+      "resource-requirements.md §8"
+    ],
+    "rule": [
+      {
+        "where": "infra-client-requirements.md §9.3",
+        "text": "one file per job in a directory of yours, so a restart finds every job scheduled and not yet run"
+      },
+      {
+        "where": "infra-client-requirements.md §9.3",
+        "text": "**under the instance's authority as of now, never under any caller's session**"
+      }
+    ],
+    "given": "A sandboxed package importing jobs, with a table bounded at two in flight and sixty seconds a day, a block and a log.",
+    "when": "A request schedules a job for now; another is scheduled and cancelled; a third schedule is attempted; the host's tick runs; the table is reopened; the day's compute is charged out and the tick runs again.",
+    "then": "The job is on disk at once; the third schedule is refused naming the bound; the tick runs the package's `job` entry with the task, which writes into the block, the outcome is in the log and the job is gone; the reopened table lists what was scheduled and not run; with the day spent, nothing runs and the log says the jobs wait.",
+    "oracle": "behaviour",
+    "interpretation": ""
+  },
+  {
     "id": "TOP-54",
     "area": "topology",
     "gap": "topology",

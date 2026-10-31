@@ -929,6 +929,25 @@ impl Service {
     /// nothing, and commits under it again; the rounds are bounded, and
     /// one delivery an instance a round keeps a slow instance to its own
     /// round rather than to everyone's.
+    /// **Run the jobs due at every hosted instance** (§9.3): the backends
+    /// are taken under the view lock and called outside it, since a job
+    /// may take as long as a request.  How many ran.
+    pub fn run_jobs(&self) -> usize {
+        let backends: Vec<Arc<dyn rhtn_node::resources::Backend>> = {
+            let view = self.node.view.lock().unwrap();
+            view.resources
+                .bound()
+                .iter()
+                .filter_map(|r| view.resources.binding(r).and_then(|b| b.backend.clone()))
+                .collect()
+        };
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+        backends.iter().map(|b| b.run_due_jobs(now)).sum()
+    }
+
     pub fn federate(&self) -> rhtn_node::federation::Passed {
         let mut passed = crate::federation::rounds(&self.node);
         // then across to other nodes, outside the lock as well: the far
@@ -1011,6 +1030,13 @@ impl Service {
                     }
                     for why in self.federate().refused {
                         crate::say!("rhtnd: federation: {why}");
+                    }
+                    // the packages' jobs due by now, each instance's
+                    // backend called holding nothing of the node's
+                    // (`infra-client-requirements.md` §9.3)
+                    let ran = self.run_jobs();
+                    if ran > 0 {
+                        tracing::info!(target: "daemon", step = "jobs", ran, "daemon.lifecycle");
                     }
                     // the store is written on the tick as well as on the
                     // way out, so a kill that never reaches the handler

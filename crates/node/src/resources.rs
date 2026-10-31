@@ -25,6 +25,12 @@ pub trait Backend: Send + Sync {
     fn handle(&self, message: &[u8]) -> Result<Vec<u8>, String>;
     /// Whether the backend is up.
     fn running(&self) -> bool;
+    /// **Run the jobs due by `now_ms`** (`infra-client-requirements.md`
+    /// §9.3): how many ran.  A backend that keeps no jobs runs none,
+    /// which is every backend but a sandboxed package's.
+    fn run_due_jobs(&self, _now_ms: u64) -> usize {
+        0
+    }
 }
 
 /// A resource bound at this node: its owner, the authority the backend is
@@ -633,13 +639,14 @@ impl crate::federation::Addresses for Gateway {
 /// §9.2): its credentialled request traffic and nothing else.  There is no
 /// binding for topology, liveness, the queue, prekeys or role inputs, so a
 /// manifest importing one cannot be instantiated.
-pub const HOST_EXPORTS: [&str; 6] = [
+pub const HOST_EXPORTS: [&str; 7] = [
     "rhtn/1:request",
     "rhtn/1:response",
     "rhtn/1:block",
     "rhtn/1:log",
     "rhtn/1:clock",
     "rhtn/1:fetch",
+    "rhtn/1:jobs",
 ];
 
 /// The versions of the host surface this node offers a package

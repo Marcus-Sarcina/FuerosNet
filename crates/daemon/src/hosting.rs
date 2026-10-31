@@ -561,6 +561,30 @@ pub fn apply(
         if manifest.imports.iter().any(|i| i == "rhtn/1:fetch") {
             env.fetch = Some(Arc::new(crate::fetch::Outbound::new(&manifest.fetch)));
         }
+        // its jobs, kept on disk beside its block and bounded as it
+        // declared (§9.3): a node with no state directory cannot keep them
+        if manifest.imports.iter().any(|i| i == "rhtn/1:jobs") {
+            let Some(root) = state else {
+                return Err(at(
+                    0,
+                    named(
+                        "the package schedules jobs, and this node keeps no state directory \
+                         for its packages (`state` in the configuration): it cannot host it",
+                    ),
+                ));
+            };
+            let dir = root.join("jobs").join(&h.resource);
+            let table = rhtn_resources::Jobs::provision(
+                &dir,
+                manifest.budget.jobs.unwrap_or(rhtn_resources::DEFAULT_JOBS),
+                manifest
+                    .budget
+                    .job_seconds_per_day
+                    .unwrap_or(rhtn_resources::DEFAULT_JOB_SECONDS_PER_DAY),
+            )
+            .map_err(|e| at(0, format!("{}: {e}", dir.display())))?;
+            env.jobs = Some(Arc::new(table));
+        }
         // **a resource is reached one way, and the file says which**
         // (§10.6): an address and this node proxies to it, a component
         // and this node runs it.  Both is a contradiction rather than a

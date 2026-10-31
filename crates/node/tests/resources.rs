@@ -999,7 +999,8 @@ fn no_network_primitive_is_exposed_to_a_hosted_package() {
             "rhtn/1:block",
             "rhtn/1:log",
             "rhtn/1:clock",
-            "rhtn/1:fetch"
+            "rhtn/1:fetch",
+            "rhtn/1:jobs"
         ]
     );
     let ok = Manifest {

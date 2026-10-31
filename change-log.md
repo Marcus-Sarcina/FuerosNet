@@ -16488,6 +16488,23 @@ Tested: a first message to a party holding nothing of the sender is
 refused on the binding alone and opens once the introduction is taken;
 a card naming another party is not taken.
 
+### 2026-10-31 (jobs: the sixth binding, and the host surface is whole)
+
+**Durable scheduled work for a sandboxed package** [author's ruling of
+2026-10-30 carried out]: `rhtn/1:jobs` — schedule a task for a time with
+a budget and get a number, cancel, list — one file per job under the
+node's state directory so a restart finds what was scheduled and not
+run; the daemon's tick runs each job that is due through the package's
+`job` entry, under the instance's authority and never a caller's
+session, once and without retry, with the outcome in the instance's
+log; bounded by the manifest's `jobs` in flight (the refusal naming the
+bound) and `job_seconds_per_day` (the day's spend in a ledger beside the
+jobs, the rest waiting when it is spent, said in the log). A package
+importing jobs with no `job` entry is refused at admission. With this
+the six bindings of `infra-client-requirements.md` §9.3 are all built,
+and the applications' `rhtn/host@1` is met in full on the sandbox.
+RSC-65; PKG-017 extended.
+
 ### 2026-10-30 (fetch: the host as a package's egress, to declared destinations)
 
 **The fifth binding built** [author, 2026-10-30, ruled with the
@@ -16510,8 +16527,8 @@ RSC-64.
 ### 2026-10-30 (the host surface: `rhtn/host@1`, the block, the log, the clock)
 
 **The core against the application suite's environment expectations**
-[author, 2026-10-30]: the audit (`Robot/applications-compatibility.md`)
-found the directive plane built and the host surface beneath the
+[author, 2026-10-30]: an audit of the application suite's environment
+expectations against the core found the directive plane built and the host surface beneath the
 applications absent — four of their contract's five bindings nowhere, and
 the manifest it describes refused by the daemon. **Ruled**: the bindings
 enter the root documents as the host's obligations; the WASM profile is
