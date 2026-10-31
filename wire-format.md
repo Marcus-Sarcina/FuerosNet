@@ -4528,9 +4528,13 @@ with one byte, 1 where it took the party or needed nothing and 0 where it did
 not; **3**, a `PrekeyRequest` (§7.8) for the recipient's own material, which
 the recipient answers on the same stream with a `PrekeyReply` exactly as its
 node would, from its own signed bundle and one-time pool, or with nothing.
-This is what lets a session open between two parties with no node asked, and
-a client restored from its phrase be reached and restored by a peer that
-dials it at its last address with nothing between them (design §6.3).
+The recipient of a first message on the direct path that holds no bundle of
+the sender's — the node carries the sender's binding on the relay (§7.10),
+nothing does here — asks the sender for it the same way before it takes the
+message. This is what lets a session open between two parties with no node
+asked, and a client restored from its phrase be reached and restored by a
+peer that dials it at its last address with nothing between them (design
+§6.3).
 post-quantum component authenticates nothing at the transport layer, and does
 not need to.** design §5.1's rule is that an object may use the classical
 component alone where its relevance expires before the post-quantum horizon, and

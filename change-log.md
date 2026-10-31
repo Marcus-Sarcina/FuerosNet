@@ -16488,6 +16488,28 @@ Tested: a first message to a party holding nothing of the sender is
 refused on the binding alone and opens once the introduction is taken;
 a card naming another party is not taken.
 
+### 2026-10-30 (a first message on the direct path: the recipient fetches the sender's bundle)
+
+**The nodeless run opened the path and refused every first message**
+[bench, `9dbf607-restore-nodeless-1`]: MRK's dial was taken on its
+introduction, 4VC answered MRK's prekey request on the path, MRK opened
+the session — and 4VC refused the initial message with *no bundle for
+that peer*: a recipient takes a first message only against the sender's
+bundle, which the node carries as the binding on the relay
+(`wire-format.md` §7.10) and nothing carries on the direct path. The
+recipient now asks the sender for its bundle on the path it opened, the
+same control stream, and takes the message again. `wire-format.md` §9.1.
+
+### 2026-10-30 (the first-run screen decides by what the device holds)
+
+**A restored identity "wiped itself"** [bench, 2026-10-30]: 4VC restored
+from its phrase at 21:17, sat unnamed on the name step, and at 21:28 the
+keyboard's appearance recreated the first-run activity on the TCL, which
+chose its screen from the intent that first opened it and showed new or
+restored again — the seeds, the state and the custody were all on disk.
+The screen now decides by what the device holds: no identity, the
+choice; an identity with no name, the name step; a named one, the shell.
+
 ### 2026-10-30 (no node is needed for a recovery: the introduction on the dial, the bundle on the path)
 
 **Ruled** [author, 2026-10-30]: a client restored from its phrase is

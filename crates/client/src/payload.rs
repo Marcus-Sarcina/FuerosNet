@@ -688,11 +688,15 @@ pub fn introduction_in(b: &[u8]) -> Option<Vec<u8>> {
 
 /// A channel frame, read: the tag, the sending device, the bytes, and the
 /// introduction an initial message carries.
-struct Frame {
-    tag: u64,
-    device: [u8; 32],
-    bytes: Vec<u8>,
-    intro: Option<Vec<u8>>,
+pub struct Frame {
+    /// `CHANNEL_INITIAL` or `CHANNEL_MESSAGE`.
+    pub tag: u64,
+    /// The sending device, by the key it presents.
+    pub device: [u8; 32],
+    /// The channel's bytes: an initial message or a ratchet message.
+    pub bytes: Vec<u8>,
+    /// The sender's introduction, on an initial message to a stranger.
+    pub intro: Option<Vec<u8>>,
 }
 
 /// A ratchet message on the channel from `me`.
@@ -700,7 +704,9 @@ pub fn channel_message(me: &[u8; 32], m: &[u8]) -> Vec<u8> {
     channel(CHANNEL_MESSAGE, me, m)
 }
 
-fn unchannel(b: &[u8]) -> Result<Frame, String> {
+/// A channel frame apart: the tag, the device, the bytes and the
+/// introduction where one rode along (`wire-format.md` §7.10.1).
+pub fn unchannel(b: &[u8]) -> Result<Frame, String> {
     let parts = array_item_ranges(b, 0).ok_or("channel not an array")?;
     if parts.len() != 3 && parts.len() != 4 {
         return Err("channel is tag, device and bytes, with an introduction or without".into());

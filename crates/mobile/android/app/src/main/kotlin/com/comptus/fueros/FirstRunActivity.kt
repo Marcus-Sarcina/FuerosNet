@@ -65,8 +65,20 @@ class FirstRunActivity : Activity() {
         // **an identity with no name yet lands on the name step** [2026-10-29]:
         // the seeds are sealed before the material is shown, so a process
         // killed between that screen and the name — the bench's restart
-        // does exactly this — has an identity and owes the name still
-        if (intent.getBooleanExtra(NAME_ONLY, false)) name() else choice()
+        // does exactly this — has an identity and owes the name still.
+        // **Decided by what the device holds, not by the intent that first
+        // opened this screen** [bench, 2026-10-30]: the keyboard's
+        // appearance recreates this activity on the TCLs, and a restored
+        // identity sitting on the name step came back as the choice of new
+        // or restored, which reads as a wipe
+        when {
+            !Kernel.hasIdentity(this) -> choice()
+            intent.getBooleanExtra(NAME_ONLY, false) || Kernel.defaultAlias() == null -> name()
+            else -> {
+                startActivity(Intent(this, ShellActivity::class.java))
+                finish()
+            }
+        }
     }
 
     companion object {

@@ -341,6 +341,7 @@ impl Courier {
         // message from a peer this client has never held one for is
         // attributable on arrival rather than a message too late
         // (`wire-format.md` §7.10).
+        let again = bytes.clone();
         let (d, owed) = self
             .handle
             .with(move |c| {
@@ -360,6 +361,40 @@ impl Courier {
                 (d, c.outbox())
             })
             .await;
+        // **a first message on the direct path, from a peer whose bundle
+        // this client does not hold**: the node carries the sender's
+        // binding on the relay (`wire-format.md` §7.10), and nothing does
+        // here — so the sender is asked for it on the path it opened
+        // (§9.1, control stream 3) and the message is taken again, once
+        // [bench 9dbf607-restore-nodeless-1, 2026-10-30: every first
+        // message met "no bundle for that peer"]
+        let (d, owed) = match d {
+            Err(why) if why.contains("no bundle") && self.direct.reachable().holds(&from) => {
+                let device = rhtn_client::payload::unchannel(&again)
+                    .ok()
+                    .map(|f| f.device)
+                    .unwrap_or([0; 32]);
+                let nonce = rhtn_transport::tls::random_bytes();
+                let req = rhtn_client::payload::one_time_request(from, device, nonce);
+                match self.direct.request(from, req).await {
+                    Some(reply) => {
+                        tracing::info!(target: "pay", from = %hex8(&from), "pay.direct.bundle.fetched");
+                        let bytes = again;
+                        self.handle
+                            .with(move |c| {
+                                let _ = c.take_prekey_reply(&reply);
+                                let d = c.receive_payload(from, &bytes);
+                                let mut more = owed;
+                                more.extend(c.outbox());
+                                (d, more)
+                            })
+                            .await
+                    }
+                    None => (Err(why), owed),
+                }
+            }
+            other => (other, owed),
+        };
         // **the state goes down before anything else happens**: the ratchet
         // this arrival moved, the session it opened, the query it answered
         self.wrote();

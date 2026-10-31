@@ -758,5 +758,27 @@ async fn a_stranger_that_introduces_itself_on_the_dial_is_held_and_handed_a_bund
     // a request for somebody else's material is not answered
     let other = rhtn_client::payload::one_time_request(kh("carol"), bob_device, [8u8; 16]);
     assert!(alice_direct.request(kh("bob"), other).await.is_none());
-    let _ = alice;
+    // and a first message: alice opens on the bundle she was handed; bob,
+    // holding no bundle of hers, asks her for it on the path she opened
+    // and takes the message — a session with no node anywhere
+    alice
+        .handle
+        .with_blocking(move |c| c.take_prekey_reply(&reply))
+        .expect("kept");
+    alice
+        .courier
+        .send(
+            kh("bob"),
+            KIND_APPLICATION,
+            b"with nothing between us".to_vec(),
+        )
+        .await
+        .expect("sent on the direct path");
+    let mut bob = bob;
+    let (from, d) = next(&mut bob.app, 5000).await.expect("delivered");
+    assert_eq!(from, kh("alice"));
+    assert!(
+        matches!(&d, Dispatched::Application { bytes, .. } if bytes == b"with nothing between us"),
+        "{d:?}"
+    );
 }
