@@ -741,6 +741,19 @@ own**, one block and one log per instance, named to it; a node that keeps
 no such directory cannot host a package that needs one, and says so at
 installation.
 
+**You are not always older than the subnet you serve** [2026-11-01]. An
+instance is launched into a subnet that already exists, replaces a machine,
+or takes over hosting from another; its store starts empty either way, and
+nothing in its configuration carries a subnet. **It learns from the clients
+that attach**: each replays the records it was party to on the serving edge
+(`wire-format.md` §10.1.3, `light-client-requirements.md` §4), you store
+what your own rule admits and forward it as you forward anything, and the
+union of a subnet's members is the subnet. Until a member has attached once,
+you can resolve no position for them and materialise no role row naming
+them, and a request of theirs is refused as a stranger's — which is correct
+and is why the first thing an operator does with a new instance is attach
+to it.
+
 **Your operator reaches this machine as themselves** [2026-10-31]. A
 launched instance takes one `authorized_keys` line: the ssh key its
 operator's client derives from their own signing seed

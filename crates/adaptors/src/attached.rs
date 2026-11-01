@@ -161,6 +161,22 @@ impl Serving for AttachedNode {
     /// under the frame bound, each a `ResourceRequest` naming the same
     /// resource; the reply's portions joined into one `ResourceResponse`
     /// — the first's status, and the bodies in order where it delivered.
+    fn teach<'a>(&'a self, frames: Vec<Vec<u8>>) -> Answer<'a, usize> {
+        Box::pin(async move {
+            let Some(s) = (self.session)() else {
+                return 0;
+            };
+            let mut sent = 0usize;
+            for frame in frames {
+                if !s.send_control(rhtn_archive::topology::FRAME_TOPOLOGY_PUSH, &frame) {
+                    break;
+                }
+                sent += 1;
+            }
+            sent
+        })
+    }
+
     fn resource<'a>(&'a self, _from: Keyhash, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {
         use rhtn_archive::catalog::{ResourceRequest, ResourceResponse, STATUS_DELIVERED};
         use rhtn_codec::bounds::REQUEST_FRAME_BYTES;

@@ -16508,6 +16508,39 @@ down to be decided cold. The bound on fetches a minute that
 question. No code changed; that section's "you bound what you have built"
 already accommodates an unenforced field, so no document says *not yet*.
 
+### 2026-11-01 (an attach replays both ways: a node learns a subnet older than itself)
+
+**A defect, not a thing to work around** [author, 2026-11-01]: "the
+topology must survive changes in hosting and operator status. If the node
+is not currently capable of accepting role assignments from its operator
+based on an existing subnet, then this is a defect to be fixed." It was
+one, and it was one-directional. A node replayed its whole store to a
+client that attached, and to the patron it attached to; **nothing replayed
+the other way**. The node's own control handler already took a topology
+push from any peer it held a session with, an attached client included,
+and applied its store rule to what arrived — the client simply never sent
+one. So an instance launched into a subnet that already existed held none
+of it: no position to resolve, no role row to materialise, and a member's
+request refused as a stranger's for ever.
+
+**An attach now replays in both directions.** The client offers the
+records it was party to as the pushes §10.1 defines, before the attach's
+own carry, and the node stores what its own rule admits and forwards it as
+it forwards anything. **Its own acts and nothing else**: what a client
+keeps of a transaction it was no party to is the fact and not the body
+(`infra-client-requirements.md` §4.3), so there is nothing else it could
+honestly offer — and the party that was there offers the body when it
+attaches, which makes the union of a subnet's members the subnet. A client
+replays at every attach, so an object dropped as out of store because the
+node had not yet heard of its neighbourhood is offered again once it has.
+
+The push codec moved to the archive, where both ends of the edge can see
+one definition of it. `wire-format.md` §10.1.3 states the rule,
+`light-client-requirements.md` §4 the client's obligation, and
+`infra-client-requirements.md` §9 the operator's side: an instance is not
+always older than the subnet it serves, and the first thing to do with a
+new one is attach to it. TOP-046, PRP-29.
+
 ### 2026-10-31 (the way in to a rented machine, derived from the signing secret)
 
 **Asked for** [author, 2026-10-31]: an ssh key on the launch, derivable

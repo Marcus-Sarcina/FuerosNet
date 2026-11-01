@@ -4825,6 +4825,20 @@ ought to hold reconciles with its siblings and its patron, and reconciliation is
 **replay of the same frames** rather than a distinct mechanism. There is no repair
 protocol to specify beyond what propagation already defines.
 
+**An attach replays in both directions** [2026-11-01]. The serving edge is an
+adjacency like any other (§10.1.1), so when a client attaches, **the node replays
+what it holds to the client and the client replays its own acts to the node** —
+the same frames, each way, decided by each side's own store rule. **It is not an
+optimisation**: a node newly enrolled into a subnet that already exists has heard
+of none of it, and a node that learned only from acts made after it started could
+never serve a subnet older than itself. What a client replays is what it was party
+to; of a transaction it was not, it keeps the fact and not the body
+(`infra-client-requirements.md` §4.3), so there is nothing further it could offer
+and nothing further it needs to — the party that was there offers the body when it
+attaches, and the union of a subnet's members is the subnet. A client replays at
+**every** attach, so an object dropped as out of store because the node had not
+yet heard of its neighbourhood is offered again once the node has.
+
 **And acknowledgement aimed at a party you share no state with is design §1.1's
 unenforceable direction.** You cannot make a peer forward. Acks and retries would
 also make gossip traffic scale with population, inverting design §15's stated

@@ -1416,6 +1416,22 @@ one that is true.
   operator names another**, which is how a custom or third-party node is
   launched by the same pages. Order the providers and zones offered as §6
   says, by concentration inside this operator's own horizon.
+- **Teach the node you attach to what you hold** [author, 2026-11-01].
+  Attaching is two replays, not one: the node replays its store to you
+  (`wire-format.md` §10.1.3), and **you replay the records you were party
+  to** on the same edge, as the topology pushes `wire-format.md` §10.1
+  defines. A node is
+  not always older than the subnet it serves — an operator launches one
+  into a subnet that already exists, moves hosting, or replaces a machine
+  — and a node that has never heard of a member can resolve no position
+  for them and materialise no role row, so the subnet would be invisible
+  on its own infrastructure. **Your own acts and nothing else**: what you
+  keep of a transaction you were no party to is that you took it and the
+  shape it produced (`infra-client-requirements.md` §4.3), and the party
+  that was there replays the body when it attaches. Replay at every
+  attach, including a failover to a sibling: what the node drops as
+  outside its store is offered again next time, by which point it may be
+  inside.
 - **Install a way in to every machine you launch, derived from the
   signing secret** [author, 2026-10-31]. An operator needs a shell on a
   machine they rent — installing a package is theirs to do

@@ -59,6 +59,12 @@ impl Serving for Counting {
     fn serves(&self, client: &Keyhash) -> bool {
         self.inner.serves(client)
     }
+    /// Nothing to teach: this stub is a node for the direct path's sake
+    /// and holds no topology at all.
+    fn teach<'a>(&'a self, _: Vec<Vec<u8>>) -> Answer<'a, usize> {
+        Box::pin(async { 0 })
+    }
+
     fn catalog<'a>(&'a self, from: Keyhash, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {
         self.inner.catalog(from, body)
     }

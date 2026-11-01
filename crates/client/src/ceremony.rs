@@ -5251,6 +5251,35 @@ impl Client {
         }
     }
 
+    /// **What this client teaches the node it attaches to**
+    /// (`wire-format.md` §10.1.1: a client's floods enter and leave
+    /// through the node that serves it).
+    ///
+    /// **Why a client replays at all** [author, 2026-11-01]: a node
+    /// replays what it holds to a client that attaches, and to the patron
+    /// it attaches to, and nothing replayed the other way — so a node
+    /// enrolled into a subnet that already existed held none of it, could
+    /// materialise no role row for a member it had never heard of, and
+    /// the topology did not survive a change of hosting. It does now:
+    /// every party hands the node the acts it was party to, and the union
+    /// of its members' archives is the subnet.
+    ///
+    /// **Its own acts and nothing else.** What a client keeps of a
+    /// transaction it was no party to is that it took it and the shape it
+    /// produced (`infra-client-requirements.md` §4.3), not the body, so
+    /// there is nothing else it could honestly replay — and nothing it
+    /// needs to: the party that was there holds the body and hands it
+    /// over when it attaches. A node drops whatever falls outside its own
+    /// store reach, exactly as it does from a patron.
+    pub fn replay_frames(&self) -> Vec<Vec<u8>> {
+        use rhtn_archive::topology::encode_push;
+        // kind 0, a transaction: what a key's own archive holds
+        self.archive
+            .records()
+            .map(|r| encode_push(0, &r.bytes))
+            .collect()
+    }
+
     /// **Ask a resource for something** (`wire-format.md` §11.1): the
     /// request goes to the node hosting it, which parses and re-serialises
     /// the application message and evaluates the asker's reach before the

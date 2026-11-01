@@ -21,6 +21,12 @@ impl Random for DeviceStub { fn fill(&self,b:&mut[u8]) { b.fill(17); } }
 impl Operator for DeviceStub { fn ask(&self,_:&str)->bool { true } }
 struct ServingStub;
 impl Serving for ServingStub {
+    /// Nothing to teach: a stub node holds no topology
+    /// (`wire-format.md` §10.1.3's replay is a live node's).
+    fn teach<'a>(&'a self, _: Vec<Vec<u8>>) -> rhtn_adaptors::serving::Answer<'a, usize> {
+        Box::pin(async { 0 })
+    }
+
     fn node_device(&self) -> [u8; 32] {
         [0; 32]
     }

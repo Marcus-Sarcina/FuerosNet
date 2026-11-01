@@ -1844,3 +1844,46 @@ impl Table {
         Some(t)
     }
 }
+
+// ---- the push frame, which both a node and a client send ---------------
+
+/// Control frame 5 on stream 0: a topology push (`wire-format.md` §10.1).
+///
+/// **Both directions use it.** A node replays what it holds to a client
+/// that attaches and to the patron it attaches to; **a client replays its
+/// own acts to the node that serves it** (§10.1.1: a client's floods
+/// enter and leave through the node serving it), which is how a node
+/// enrolled into a subnet that already exists comes to hold it.
+pub const FRAME_TOPOLOGY_PUSH: u64 = 5;
+
+/// A push frame's bytes, carrying one object of `kind`.
+///
+/// **Here rather than in the node** [2026-11-01]: the frame is a wire
+/// shape of §10.1 and both ends of the edge compose it, so one definition
+/// serves the node and the light client alike.
+pub fn encode_push(kind: u64, object: &[u8]) -> Vec<u8> {
+    let mut out = Vec::new();
+    emit_map_head(&mut out, 2);
+    emit_uint(&mut out, 1);
+    emit_uint(&mut out, kind);
+    emit_uint(&mut out, 2);
+    emit_bstr(&mut out, object);
+    out
+}
+
+/// The kind and object a push frame carries.
+pub fn decode_push(body: &[u8]) -> Result<(u64, Vec<u8>), String> {
+    let item = parse_all(body).map_err(|e| e.0)?;
+    let Item::Map(m) = &item else {
+        return Err("push not a map".into());
+    };
+    if m.len() != 2 {
+        return Err("push carries a field beyond the body-kind tag".into());
+    }
+    let kind = map_get(m, 1).and_then(as_uint).ok_or("field 1")?;
+    let object = match map_get(m, 2) {
+        Some(Item::Bytes(r)) => body[r.clone()].to_vec(),
+        _ => return Err("field 2".into()),
+    };
+    Ok((kind, object))
+}

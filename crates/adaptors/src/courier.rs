@@ -539,6 +539,21 @@ impl Courier {
             .handle
             .with(move |c| c.attach(serving, &population))
             .await;
+        // **and the node is taught what this client holds**
+        // (`wire-format.md` §10.1.1; `rhtn_client::ceremony::Client::replay_frames`):
+        // the node replays its store to a client that attaches, and this
+        // is the other half of that edge. Without it a node enrolled into
+        // a subnet that already exists holds none of it, so it can
+        // materialise no role row for a member it never heard of and the
+        // topology does not survive a change of hosting [author,
+        // 2026-11-01]. Before the carry, so the node holds this client's
+        // acts by the time anything it publishes is evaluated.
+        let frames = self.handle.with(|c| c.replay_frames()).await;
+        let offered = frames.len();
+        if offered > 0 {
+            let took = self.serving.teach(frames).await;
+            tracing::info!(target: "pay", offered, took, "pay.taught");
+        }
         self.carry(msgs).await
     }
 

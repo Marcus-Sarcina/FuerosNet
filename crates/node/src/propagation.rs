@@ -40,8 +40,7 @@ impl Horizon for HorizonSnapshot {
     }
 }
 
-/// Control frame 5: topology pushed to an attached client.
-pub const FRAME_TOPOLOGY_PUSH: u64 = 5;
+pub use rhtn_archive::topology::FRAME_TOPOLOGY_PUSH;
 /// Control frame 6: a rootward memo.
 pub const FRAME_TOPOLOGY_MEMO: u64 = 6;
 
@@ -61,33 +60,11 @@ pub struct Rebuilt {
     pub records: usize,
 }
 
-/// A push frame's bytes, carrying one object of `kind`.
-pub fn encode_push(kind: u64, object: &[u8]) -> Vec<u8> {
-    let mut out = Vec::new();
-    emit_map_head(&mut out, 2);
-    emit_uint(&mut out, 1);
-    emit_uint(&mut out, kind);
-    emit_uint(&mut out, 2);
-    emit_bstr(&mut out, object);
-    out
-}
-
-/// The kind and object a push frame carries.
-pub fn decode_push(body: &[u8]) -> Result<(u64, Vec<u8>), String> {
-    let item = parse_all(body).map_err(|e| e.0)?;
-    let Item::Map(m) = &item else {
-        return Err("push not a map".into());
-    };
-    if m.len() != 2 {
-        return Err("push carries a field beyond the body-kind tag".into());
-    }
-    let kind = map_get(m, 1).and_then(as_uint).ok_or("field 1")?;
-    let object = match map_get(m, 2) {
-        Some(Item::Bytes(r)) => body[r.clone()].to_vec(),
-        _ => return Err("field 2".into()),
-    };
-    Ok((kind, object))
-}
+// **the push codec is the archive's** [2026-11-01]: both ends of the edge
+// compose the frame -- a node replaying to a client or a patron, and a
+// client replaying its own acts to the node serving it -- so it has one
+// definition where both can see it.
+pub use rhtn_archive::topology::{decode_push, encode_push};
 
 /// `TopologyMemo` (`wire-format.md` §10.2).
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -73,6 +73,17 @@ pub trait Serving: Send + Sync {
     fn serves(&self, client: &Keyhash) -> bool;
     /// Publish the caller's own bundle; whether the node took it.
     fn publish<'a>(&'a self, bytes: &'a [u8]) -> Answer<'a, bool>;
+    /// **Teach this node what the client holds** (`wire-format.md`
+    /// §10.1.1): the push frames of [`rhtn_client::ceremony::Client::replay_frames`],
+    /// sent on the session's stream 0 as the node sends its own the other
+    /// way. How many went; none where there is no node.
+    ///
+    /// **It is an attach's second half** [author, 2026-11-01]: a node
+    /// enrolled into a subnet that already exists holds none of it until
+    /// its members teach it, and a role row cannot be materialised for a
+    /// member the node has never heard of — so the topology would not
+    /// survive a change of hosting, which it must.
+    fn teach<'a>(&'a self, frames: Vec<Vec<u8>>) -> Answer<'a, usize>;
     /// Stock `subject`'s one-time pool; whether the node took the
     /// deposit, which a bound may refuse whole.
     fn stock<'a>(&'a self, subject: Keyhash, keys: Vec<Vec<u8>>) -> Answer<'a, bool>;
@@ -138,6 +149,9 @@ impl Serving for Nobody {
     }
     fn publish<'a>(&'a self, _: &'a [u8]) -> Answer<'a, bool> {
         Box::pin(async { false })
+    }
+    fn teach<'a>(&'a self, _: Vec<Vec<u8>>) -> Answer<'a, usize> {
+        Box::pin(async { 0 })
     }
     fn stock<'a>(&'a self, _: Keyhash, _: Vec<Vec<u8>>) -> Answer<'a, bool> {
         Box::pin(async { false })
@@ -234,6 +248,28 @@ impl Serving for LocalNode {
 
     fn stock<'a>(&'a self, subject: Keyhash, keys: Vec<Vec<u8>>) -> Answer<'a, bool> {
         Box::pin(async move { self.node.view.lock().unwrap().prekeys.stock(subject, keys) })
+    }
+
+    /// **The in-process node takes the client's acts as a remote one
+    /// does** (`wire-format.md` §10.1.1): through its own receive, so the
+    /// store reach, the verification and the forwarding are the node's
+    /// and not a harness's shortcut.
+    fn teach<'a>(&'a self, frames: Vec<Vec<u8>>) -> Answer<'a, usize> {
+        Box::pin(async move {
+            let me = self.node.me();
+            let mut took = 0usize;
+            for frame in frames {
+                let decided = {
+                    let mut view = self.node.view.lock().unwrap();
+                    let ids = self.node.ids.lock().unwrap();
+                    view.receive_push(&self.node.adjacency, &me, &frame, &*ids)
+                };
+                if decided == rhtn_node::store::Decision::Stored {
+                    took += 1;
+                }
+            }
+            took
+        })
     }
 
     fn publish_profile<'a>(&'a self, bytes: &'a [u8]) -> Answer<'a, bool> {
