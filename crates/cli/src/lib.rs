@@ -27,3 +27,4 @@ pub mod keys;
 pub mod launch;
 pub mod live;
 pub mod probe;
+pub mod resource;

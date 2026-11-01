@@ -1,0 +1,55 @@
+# =============================================================================
+#  The utility test resource as an image (`crates/testapp`).
+#
+#  **A package is delivered the way a node is**: `infra-client-requirements.md`
+#  §10.6 has a resource the node carries the traffic for run as its own
+#  service, and §9.2's own preference is "a socket-backed service first, as
+#  its own OS user". So this is a second image beside the node's, run as a
+#  second container on the same host network, reached by the node at
+#  127.0.0.1 and named in the node's hosting file. Nothing of it is in the
+#  node's image, and nothing of the node's is in it.
+#
+#  TWO STAGES for the same reason the node's image has two: the crypto
+#  provider needs a C toolchain to build and the binary needs none to run.
+#
+#  NO CA BUNDLE, deliberately, as in the node's image: this resource speaks
+#  plain HTTP on the loopback to the node that hosts it and reaches nothing
+#  else, so a trust store would be a root it never consults.
+# =============================================================================
+
+ARG RUST=1.98-bookworm
+ARG RUNTIME=debian:bookworm-slim
+
+FROM rust:${RUST} AS build
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends cmake clang \
+ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+COPY . .
+
+RUN cargo build --locked --release -p rhtn-testapp \
+ && install -m 0755 target/release/rhtn-testapp /usr/local/bin/rhtn-testapp
+
+FROM ${RUNTIME}
+
+# **Its own user, not the node's** (§9.2): a package the operator runs
+# beside their node is confined by the deployment, and sharing the node's
+# uid would be sharing the node's state volume's permissions with it.
+ARG UID=10002
+ARG GID=10002
+RUN groupadd -g ${GID} testapp \
+ && useradd -u ${UID} -g ${GID} -M -d /nonexistent -s /usr/sbin/nologin testapp
+
+COPY --from=build /usr/local/bin/rhtn-testapp /usr/local/bin/rhtn-testapp
+
+# the resource holds nothing on disk unless an operator mounts somewhere for
+# its log: its own record of a walk is in memory and in its container's log
+USER testapp
+WORKDIR /tmp
+
+# where the node reaches it, on the loopback of the host network they share
+EXPOSE 7460/tcp
+
+ENTRYPOINT ["/usr/local/bin/rhtn-testapp"]

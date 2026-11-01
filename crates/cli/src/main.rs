@@ -1,6 +1,6 @@
 //! The command line's entry point.
 
-use rhtn_cli::{diag, enrol, inspect, keys, launch, live, probe};
+use rhtn_cli::{diag, enrol, inspect, keys, launch, live, probe, resource};
 use rhtn_codec::frame::Stream;
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -59,6 +59,15 @@ usage: rhtn <command> [...]
           catalog [<service-type>]
         --peer <keyhash>:<material> pins another identity; repeatable.
 
+  resource <identity> <node-keyhash> <address> <resource-keyhash> [<path>]
+        Ask a resource for something through the node hosting it (W §11.1),
+        as a client of that host: the node evaluates this identity's reach
+        as it evaluates any client's. **Not in `probe`**, which sends only
+        what changes nothing; a resource request has an application effect.
+        The operator's own check that what they installed answers.
+          --post <media-type>  read a body from stdin and POST it instead
+        --peer <keyhash>:<material> pins another identity; repeatable.
+
   diag merge <file>...
         Merge field-test diagnostic files (one JSON object a line, as a
         daemon's [log], rhtnp --log or a phone's bundle writes them) into
@@ -87,6 +96,7 @@ fn main() -> ExitCode {
         Some((&"keys", rest)) => do_keys(rest),
         Some((&"node", rest)) => do_node(rest),
         Some((&"probe", rest)) => do_probe(rest),
+        Some((&"resource", rest)) => do_resource(rest),
         Some((&"diag", rest)) => match rest.split_first() {
             Some((&"merge", files)) => diag::merge_files(files),
             Some((&"collect", opts)) => {
@@ -401,6 +411,61 @@ fn do_probe(rest: &[&str]) -> Result<String, String> {
     rt.block_on(async move {
         let (session, _ep) = probe::attached(me, &peers, target, addr).await?;
         probe::ask(&session, &ask, rhtn_transport::tls::random_bytes::<16>()).await
+    })
+}
+
+/// **One request to a resource, which has an application effect**
+/// (`crate::resource`): named apart from `probe` for that reason.
+fn do_resource(rest: &[&str]) -> Result<String, String> {
+    let mut args: Vec<&str> = rest.to_vec();
+    let mut peers: Vec<rhtn_crypto::Identity> = Vec::new();
+    while let Some(p) = flag(&mut args, "--peer") {
+        let (_, material) = p.split_once(':').ok_or("--peer is <keyhash>:<material>")?;
+        let bytes = hex_bytes(material).ok_or("--peer material is not hex")?;
+        peers.push(
+            rhtn_crypto::Identity::from_key_material(&bytes)
+                .ok_or("--peer material is not a KeyMaterial array")?,
+        );
+    }
+    let post = flag(&mut args, "--post");
+    let [identity, target, addr, which, rest @ ..] = args.as_slice() else {
+        return Err(
+            "resource <identity> <node-keyhash> <address> <resource-keyhash> [<path>]".into(),
+        );
+    };
+    let path = rest.first().copied().unwrap_or("/").to_string();
+    let which = keyhash(which)?;
+    let target = keyhash(target)?;
+    let addr: std::net::SocketAddr = addr
+        .parse()
+        .map_err(|_| format!("{addr} is not an address and port"))?;
+    // the body, where one was asked for: read whole from stdin, so a file
+    // or a here-document reaches the resource unaltered
+    let body = match post {
+        None => None,
+        Some(media) => {
+            use std::io::Read;
+            let mut bytes = Vec::new();
+            std::io::stdin()
+                .read_to_end(&mut bytes)
+                .map_err(|e| format!("reading the body from stdin: {e}"))?;
+            Some((media, bytes))
+        }
+    };
+    let me = read_identity(identity)?;
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .map_err(|e| e.to_string())?;
+    rt.block_on(async move {
+        let (session, _ep) = probe::attached(me, &peers, target, addr).await?;
+        resource::ask(
+            &session,
+            which,
+            &path,
+            body.as_ref().map(|(m, b)| (*m, b.clone())),
+        )
+        .await
     })
 }
 

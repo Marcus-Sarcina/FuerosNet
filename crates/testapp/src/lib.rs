@@ -478,9 +478,12 @@ impl App {
     }
 
     fn say(&mut self, principal: &str, what: &str, detail: &str) {
+        // the principal as the node writes it is base64url
+        // (`rhtn_node::http::serialise`), so a prefix of it is ASCII and
+        // a slice of it cannot fall inside a character
         self.said.push(format!(
             "{{\"who\":\"{}\",\"what\":\"{what}\",\"detail\":\"{}\"}}",
-            &principal[..principal.len().min(16)],
+            principal.chars().take(16).collect::<String>(),
             detail.replace('"', "'")
         ));
     }
@@ -492,7 +495,7 @@ pub fn summary(principal: &str, roles: &str, walk: &Walk) -> String {
     out.push_str(&format!(
         "<p>You are <code>{}…</code>, holding <code>{}</code>. \
          Every utility this application asked for, and what came back.</p>",
-        &principal[..principal.len().min(16)],
+        principal.chars().take(16).collect::<String>(),
         if roles.is_empty() { "no role" } else { roles }
     ));
     out.push_str(

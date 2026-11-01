@@ -3234,6 +3234,7 @@ dependencies = [
  "hex",
  "quinn",
  "rhtn-archive",
+ "rhtn-client",
  "rhtn-codec",
  "rhtn-crypto",
  "rhtn-daemon",

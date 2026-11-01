@@ -49,6 +49,19 @@
 
 use serde_json::{Value, json};
 
+/// **Where a launched instance keeps what it hosts**
+/// (`infra-client-requirements.md` §9, §9.3): the hosting file the
+/// operator adds a package to, and the directory a package's block and
+/// log are provisioned under.  **Both are named and both start empty**
+/// [2026-10-31]: an instance whose configuration named neither could host
+/// nothing at all, and nothing but a reprovisioning would change that —
+/// where an empty hosting file is a true statement, as the empty `peers`
+/// file beside it is, and installing a package is then the operator
+/// writing one entry and the node re-reading it.
+pub const HOSTING: &str = "/var/lib/rhtn/hosting";
+/// The state directory [`HOSTING`] names for the same reason.
+pub const HOSTED_STATE: &str = "/var/lib/rhtn/state";
+
 /// The port the node serves on: `wire-format.md` §4.4's default, so an
 /// endpoint record may omit it.
 pub const QUIC_PORT: u16 = 7431;
@@ -135,6 +148,8 @@ pub fn node_config(token_hex: &str, quic: u16, admin: u16) -> String {
          topology = \"/var/lib/rhtn/topology\"\n\
          archive = \"/var/lib/rhtn/archive\"\n\
          grants = \"/var/lib/rhtn/grants\"\n\
+         resources = \"/var/lib/rhtn/hosting\"\n\
+         state = \"/var/lib/rhtn/state\"\n\
          heartbeat = 30\n\
          ingestion = \"unverified-gossip\"\n\
          [allowance]\n\
@@ -207,7 +222,12 @@ pub fn user_data(
          \x20   permissions: '0644'\n\
          \x20   content: |\n\
          \x20     {operator_material_hex}\n\
+         \x20 - path: {HOSTING}\n\
+         \x20   permissions: '0600'\n\
+         \x20   content: |\n\
+         \x20     # the packages this instance hosts: none yet\n\
          runcmd:\n\
+         \x20 - mkdir -p {HOSTED_STATE}\n\
          \x20 - chown -R {IMAGE_UID}:{IMAGE_UID} /var/lib/rhtn\n\
          \x20 - chmod 0700 /var/lib/rhtn\n\
          \x20 - systemctl enable --now podman-restart.service\n\
@@ -912,6 +932,11 @@ mod tests {
         assert!(conf.contains(&format!("token = \"{token}\"")));
         assert!(conf.contains("listen = \"0.0.0.0:7431\""));
         assert!(conf.contains("listen = \"0.0.0.0:7449\""));
+        // **a launched instance can host a package**: the hosting file and
+        // the state directory are named, so installing one is an entry
+        // written and a re-read rather than a reprovisioning
+        assert!(conf.contains("resources = \"/var/lib/rhtn/hosting\""));
+        assert!(conf.contains("state = \"/var/lib/rhtn/state\""));
         let image = Image {
             registry: "reg.example/x".into(),
             tag: "abc123".into(),
@@ -922,6 +947,11 @@ mod tests {
         assert!(script.contains(&format!("      token = \"{token}\"")));
         assert!(script.contains("      82a301\n"));
         assert!(script.contains("chown -R 10001:10001 /var/lib/rhtn"));
+        assert!(
+            script.contains("- path: /var/lib/rhtn/hosting\n"),
+            "{script}"
+        );
+        assert!(script.contains("mkdir -p /var/lib/rhtn/state"), "{script}");
         assert!(script.contains("-v /var/lib/rhtn:/var/lib/rhtn reg.example/x/rhtnd:abc123\n"));
         assert!(!script.contains("seed"));
     }

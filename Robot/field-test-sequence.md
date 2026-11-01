@@ -273,61 +273,88 @@ pool being unrecognised on fresh phones. **Known and left**: the
 post-finalise `optical_trace` refusals noted on the Done screen, and
 MRK's nine `sendmsg` I/O warnings at start (`Robot/review-tracking.md`).
 
-## F. The application run: the utility request on the bench, planned
+## F. The application run, in the shape production takes, planned
 
-**Asked for** [author, 2026-10-31]: a test application that exercises the
-available utilities, sends a packet from the node to the light client,
-posts a notification, and accepts a return packet after a UI
-interaction — walked on both the node operator's phone and a subordinate
-light client, after a wipe, a fresh meeting sequence, and a recovery from
-a peer.
+**Asked for** [author, 2026-10-31]: the complete architecture as it is
+meant to exist in production. The phones wiped and made new, the meetings
+redone, **a node launched at DigitalOcean from one of the phones**, the
+test application **installed on that rented node**, and the utility
+surfaces, the two-way transfer and the resource frame's own interaction
+walked by the operator's identity and then by a subordinate of it.
 
-**What is built for it.** `crates/testapp` is the resource: a
-socket-backed package the node carries the traffic for, which asks for
-every utility in turn, takes each answer back, verifies the claims that
-carry one, and hands the person a file at the end. Its eleven steps are
-`notify`, `tag`, `check-in`, `location`, `capture`, `scan`, `sign`,
-`import`, `live`, a `scan` it will take only as a PDF, and `export`; the
-last two of those three are the refusal paths, which a shell that cannot
-give them must answer with words. `field-run.sh --testapp` hosts it: the
-hosting file, the manifest and a grant with no clause (every member of
-the owner's horizon), the resource minted per run and its keyhash said at
-startup. The owner is a phone, so the resource is reachable by that phone
-and by whoever is within two steps of it in the node's topology, which is
-what the meetings put there.
+**What is built for it**, each piece proven on this machine against a
+containerised node before any of it is rented:
+
+- **The resource** is `crates/testapp`, delivered as its **own image**
+  (`packaging/Containerfile.testapp`), run as its own container beside the
+  node's and reached by the node on the loopback they share. That is
+  `infra-client-requirements.md` §10.6's socket-backed package, which the
+  applications' own hosting contract prefers, and it keeps the test out of
+  the node's own image.
+- **A launched instance can host a package at all**, which it could not
+  before: `rhtn_launch::node_config` now names the hosting file and the
+  state directory, and the cloud-init creates both empty. Without them an
+  instance could host nothing until it was reprovisioned.
+- **Installing it is one command**, the same one locally and on a rented
+  machine: `packaging/testapp.sh install [--host <ssh-destination>]`. It
+  mints the resource once and keeps its keyhash with the node, derives the
+  **owner from the node's own `operator.material`** (so the owner is the
+  identity whose phone provisioned it, and the askers are inside its
+  horizon by construction), writes the manifest, the hosting entry and a
+  grant with no clause, adds the two configuration keys where an older
+  node lacks them, restarts the node, **checks that it came back**, and
+  starts the package's container.
+- **The operator can check it without a phone**: `rhtn resource <identity>
+  <node> <address> <resource> [<path>]`, a new verb kept apart from
+  `probe` because a resource request has an application effect and
+  `probe`'s own rule is that it sends nothing that does.
+
+**Proven locally on 2026-10-31**, against `rhtn-local-node` with the
+package installed by the same script: the ask out (`status 0 delivered`,
+`application/vnd.rhtn.utility+json`, the `notify` ask), an answer posted
+back to its return path, and the next ask (`t2-tag`) in the reply — the
+node evaluating membership and the role row on the way in each time, and
+the package logging one line per ask and per answer. **Two findings came
+out of it**: a node whose daemon predates the `state` key refuses its
+configuration and does not come up, which is why the install now checks;
+and a node that publishes ports rather than sharing the host's network
+needs the package in its own namespace, which the install now detects.
 
 **The sequence, in order.**
 
-1. **Wipe and install** all four phones: `field-setup.sh --no-build <serial>`
-   per phone, which also writes each one's fresh material into
-   `phones.conf`.
-2. **Start the run** with a node that outlives it and the test resource
-   hosted, naming the phone that will be the operator:
-   `field-run.sh --addr 192.168.0.8:7447 --node runs/node --testapp <serial> <label>`.
-   Note the two lines it prints: the resource's keyhash, and the owner.
-3. **The meeting sequence**, on the phones, recreating the subnet and the
-   peers: a formation under the operator's key, an adoption of the
-   subordinate into it, and a regular meeting with the peering between the
-   two phones that will stand in as each other's backup.
-4. **The data wipe and the recovery from the peer**: clear the
-   subordinate's app data, restore its key from the phrase, name it, and
-   watch it be reached by its peer and repopulated (§E's runs 7 and 8 are
-   the procedure).
-5. **The application test, twice.** On the operator's phone and on the
-   subordinate: Catalog, paste the resource's keyhash, ask for `/`. The
-   first ask is `notify`; allow it, and every ask after it is posted in
-   the shade as well as drawn. Walk the eleven steps. The `live` step and
-   the PDF `scan` must come back refusals with reasons, not silences. The
-   last step hands over a file: save it, and it is the run's own record of
-   what the resource saw.
+1. **Push a current image.** A rented instance runs what the registry
+   holds: `packaging/build.sh --push`. Without this the droplet carries
+   whatever was pushed last, which is a daemon older than the host
+   surface.
+2. **Wipe and install all four phones**: `field-setup.sh --no-build <serial>`
+   per phone, each one made new through the first-run screen.
+3. **Redo the meetings** so the subnet and the peers exist again: a
+   formation under the operator's key, an adoption of the subordinate into
+   it, and a regular meeting with the peering between the pair that will
+   back each other up.
+4. **Launch the node from the operator's phone**, through the provisioning
+   pages: the provider's token pasted, the region and size chosen, the
+   droplet made, the instance enrolled over its administration surface,
+   and the endpoint record and anchor entry signed. Both phones then
+   attach to it.
+5. **Install the application on it**:
+   `packaging/testapp.sh install --host root@<droplet>`. It prints the
+   resource's keyhash; that is what the phones are given.
+6. **Walk it as the operator**: Catalog, paste the resource keyhash, ask
+   for `/`. Eleven steps: `notify` first, so every ask after it is posted
+   in the shade as well as drawn. The `live` step and the PDF `scan` must
+   come back refusals with reasons. The last step hands over a file;
+   saving it is the two-way transfer completed, and the file is the run's
+   own record.
+7. **Walk it as the subordinate**, which proves the membership gate for a
+   party that is in the owner's horizon without being the owner.
 
-**What to read afterwards**: `runs/<run>/testapp/log.jsonl` (one line per
-ask and per answer, with the claim's verdict), the saved file from each
-phone, and the phones' own streams for the `utility` events — `asked`,
-`giving`, `notified`, `given` or `declined`, with the utility on each.
-**The claims are the thing to check**: `capture` and `sign` must read
-`verified` in the log and in the file, since that is the application key
-contract holding across a real device, a real node and a real resource.
+**What to read afterwards**: `packaging/testapp.sh logs --host root@<droplet>`
+for one line per ask and answer with each claim's verdict, the saved file
+from each phone, and the phones' own `utility` events. **The claims are
+the thing to check**: `capture` and `sign` must read `verified`, which is
+the application key contract holding across a real device, a rented node
+and a package in its own container.
 
 ## Order
 

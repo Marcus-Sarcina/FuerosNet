@@ -17,6 +17,12 @@ const ME: [u8; 32] = [0x5a; 32];
 /// A device's application secret, as the kernel mints one.
 const SECRET: [u8; 32] = [0x11; 32];
 
+/// **A principal as the node writes it**: `rhtn-principal` carries the
+/// keyhash base64url-encoded (`rhtn_node::http::serialise`), not hex, so
+/// the walks below are keyed the way a real one is.
+const WHO: &str = "VbYt9MK4_CcF36KUQ0ZvbGRlcg";
+const OTHER: &str = "Zm9sZGVyAAAAAAAAAAAAAAAAAA";
+
 fn get(app: &mut App, who: &str) -> (u16, String, Vec<u8>) {
     let request = format!(
         "GET / HTTP/1.1\r\nhost: testapp.internal\r\nrhtn-principal: {who}\r\nrhtn-roles: reader\r\n\r\n"
@@ -123,7 +129,7 @@ fn compose(ask: &utility::Ask, outcome: &Outcome, at: u64) -> Vec<u8> {
 #[test]
 fn the_whole_sequence_walks_and_every_claim_verifies_at_the_resource() {
     let mut app = App::new(ME);
-    let who = "aa".repeat(32);
+    let who = WHO.to_string();
 
     // the first request is answered with the first ask, under the media
     // type that makes it one
@@ -181,7 +187,7 @@ fn the_whole_sequence_walks_and_every_claim_verifies_at_the_resource() {
     assert_eq!(app.walks[&who].taken.len(), STEPS.len());
 
     // another principal walks its own sequence from the start
-    let (_, media, body) = get(&mut app, &"bb".repeat(32));
+    let (_, media, body) = get(&mut app, OTHER);
     assert_eq!(media, rhtn_testapp::ASK_MEDIA);
     assert_eq!(utility::parse(&body).unwrap().token, STEPS[0].token);
 }
@@ -190,7 +196,7 @@ fn the_whole_sequence_walks_and_every_claim_verifies_at_the_resource() {
 #[test]
 fn a_claim_for_another_audience_or_over_other_bytes_is_refused_here() {
     let mut app = App::new(ME);
-    let who = "cc".repeat(32);
+    let who = WHO.to_string();
     // walk to the capture, which is the first step that signs
     let mut body = get(&mut app, &who).2;
     let mut at = 1_700_000_000_000u64;
@@ -268,7 +274,7 @@ fn body_of(request: &[u8]) -> &[u8] {
 #[test]
 fn an_answer_that_crosses_the_walk_is_refused_and_the_walk_stands() {
     let mut app = App::new(ME);
-    let who = "dd".repeat(32);
+    let who = WHO.to_string();
     let body = get(&mut app, &who).2;
     let ask = utility::parse(&body).expect("the first ask");
     assert_eq!(ask.token, "t1-notify");

@@ -16508,6 +16508,49 @@ down to be decided cold. The bound on fetches a minute that
 question. No code changed; that section's "you bound what you have built"
 already accommodates an unenforced field, so no document says *not yet*.
 
+### 2026-10-31 (the test application where production puts it: its own image, on a rented node)
+
+**The architecture as it is meant to exist** [author, 2026-10-31]: the
+node launched at a provider from a phone, and the package installed on
+that node. Three things were missing for it.
+
+**A launched instance could host nothing at all.** `rhtn_launch::node_config`
+named neither a hosting file nor a state directory, so an operator who
+wanted to host a package had no path but to reprovision. Both are named
+now and the cloud-init creates them empty, which is a true statement about
+an instance that hosts nothing yet, as the empty `peers` file beside it
+is.
+
+**A package is delivered the way a node is**: `packaging/Containerfile.testapp`
+builds the test resource as its own image, run as its own container under
+its own uid and reached by the node on the loopback they share
+(`infra-client-requirements.md` §10.6, §9.2's socket-backed preference).
+Nothing of the test is in the node's image. `packaging/testapp.sh install`
+is the operator's act, the same locally and over ssh to a rented machine:
+the resource minted once and kept with the node, the owner derived from
+the node's own operator material, the manifest, the hosting entry and a
+grant with no clause written, the two configuration keys added where an
+older node lacks them, the node restarted **and checked**, the package's
+container started in whichever network the node has. `packaging/build.sh
+--push` sends the node's image to the registry a launch pulls from, since
+a rented instance runs what the registry holds.
+
+**And the operator can check it without a phone**: `rhtn resource
+<identity> <node> <address> <resource> [<path>]`, with `--post` for a body
+on standard input. It is a verb of its own rather than an ask of `probe`,
+whose written rule is that it sends only what changes nothing and whose
+omission of this is deliberate.
+
+**Proven on this machine** against a containerised node with the package
+installed by that script: the typed ask out through the gateway
+(`delivered`, under the ask's media type), an answer posted back to its
+return path, and the next ask in the reply, with the node evaluating
+membership and the role row each way. Two findings: a daemon older than
+the `state` key refuses its configuration, so the install checks the node
+came back; and a node publishing ports rather than sharing the host
+network needs the package inside its namespace, which the install
+detects.
+
 ### 2026-10-31 (a test application for the utility request, and the notification)
 
 **Asked for** [author, 2026-10-31]: an application that exercises the

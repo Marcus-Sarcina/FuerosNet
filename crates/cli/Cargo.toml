@@ -21,6 +21,9 @@ rhtn-crypto = { path = "../crypto" }
 rhtn-archive = { path = "../archive" }
 rhtn-node = { path = "../node" }
 rhtn-transport = { path = "../transport" }
+# the client's own reader for a resource's answer: the parse below a light
+# client's boundary, not a second one in a tool (`wire-format.md` §11.2)
+rhtn-client = { path = "../client" }
 # the operator's end of the node's administration surface shares one
 # definition of its proof with the node's end (`enrol`)
 rhtn-daemon = { path = "../daemon" }
