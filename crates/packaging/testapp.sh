@@ -24,6 +24,11 @@
 #                        whoever is within two steps of it in this node's
 #                        topology (`wire-format.md` §11's membership gate).
 #
+#  **It needs a shell on the machine**, which a rented one does not come
+#  with: the launch installs no key (`rhtn_launch::Plan` carries none), so
+#  reach it with a key added at the provider's console, or the root
+#  password the provider sent. RHTN_SSH passes options to ssh.
+#
 #  **What installing a package is** (`infra-client-requirements.md` §9, §10):
 #  the operator puts the package where their node can reach it, writes one
 #  entry in the hosting file naming the resource, its owner, the authority
@@ -94,7 +99,12 @@ fi
 # runs there. Every step below is written once because of it.
 there() { # command...
   if [ -n "$HOST" ]; then
-    ssh -o BatchMode=yes "$HOST" "$@"
+    # **not BatchMode**: a rented machine launched from a phone has no key
+    # of this machine's on it (`rhtn_launch::Plan` carries none), so the
+    # operator's shell is the provider's console, a key they added there,
+    # or the root password the provider sent them -- and a password prompt
+    # has to be able to appear
+    ssh ${RHTN_SSH:-} "$HOST" "$@"
   else
     bash -c "$@"
   fi
