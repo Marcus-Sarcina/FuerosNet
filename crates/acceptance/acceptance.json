@@ -7283,6 +7283,32 @@
     "interpretation": "What local.sh does on one machine, done at a provider over a transport the platform supplies; the enrolment that follows is the one PRT-04's by-hand path already exercises, the token and the address having come from here rather than been typed."
   },
   {
+    "id": "PRT-09",
+    "area": "participant",
+    "gap": "participant",
+    "title": "A launched machine takes one ssh key derived from the operator's signing seed, and the client keeps none of it",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "light-client-requirements.md §10"
+    ],
+    "rule": [
+      {
+        "where": "light-client-requirements.md §10",
+        "text": "**the\n  phrase that restores the identity restores control of the machines it\n  launched**"
+      },
+      {
+        "where": "light-client-requirements.md §10",
+        "text": "**It is one key for this identity,\n  not one per machine**"
+      }
+    ],
+    "given": "An operator identity with its two seeds, and a launch plan at a provider.",
+    "when": "The client derives the key and composes the script the machine runs once, with and without a key; and the same identity is built again from the same seeds, as a device restored from the phrase builds it.",
+    "then": "The script installs the public line as root's authorized_keys at 0600 with the directory at 0700, and a launch with no key writes no such file; the private half is the OpenSSH container `ssh -i` reads, with the right magic, one key and no cipher; the identity built again derives the same key, another identity derives another, the post-quantum seed does not enter it, and the key is not the identity's own.",
+    "oracle": "behaviour",
+    "interpretation": ""
+  },
+  {
     "id": "QUE-01",
     "area": "queue",
     "gap": "queue",

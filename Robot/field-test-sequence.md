@@ -308,9 +308,23 @@ containerised node before any of it is rented:
   <node> <address> <resource> [<path>]`, a new verb kept apart from
   `probe` because a resource request has an application effect and
   `probe`'s own rule is that it sends nothing that does.
+- **And the operator has a shell on the machine they rent**, which they
+  did not before: the launch installs an ssh key derived from the
+  identity's signing seed (`rhtn_crypto::ssh`), so `--host root@<droplet>`
+  works with `-i` on a key the phone shows, and a machine outlives the
+  phone that launched it.
 
-**Proven locally on 2026-10-31**, against `rhtn-local-node` with the
-package installed by the same script: the ask out (`status 0 delivered`,
+**What exists today, said plainly**: **no remote node is running.** The
+instances launched in earlier testing were destroyed straight after, so
+every node named in the steps below is one still to be launched. What was
+proven on 2026-10-31 was proven against **the local node container on the
+author's workstation** (`packaging/local.sh`'s `rhtn-local-node`), which
+is the same image, configuration shape and install procedure as a rented
+one and is not a rented one.
+
+**Proven on 2026-10-31 on the workstation's own node container**, with
+the package installed by the same script that installs it on a rented
+machine: the ask out (`status 0 delivered`,
 `application/vnd.rhtn.utility+json`, the `notify` ask), an answer posted
 back to its return path, and the next ask (`t2-tag`) in the reply — the
 node evaluating membership and the role row on the way in each time, and
@@ -337,9 +351,11 @@ needs the package in its own namespace, which the install now detects.
    droplet made, the instance enrolled over its administration surface,
    and the endpoint record and anchor entry signed. Both phones then
    attach to it.
-5. **Install the application on it**:
-   `packaging/testapp.sh install --host root@<droplet>`. It prints the
-   resource's keyhash; that is what the phones are given.
+5. **Install the application on it**. The operator's key is already on
+   the machine, so take the private half from the phone (Operator, *Show
+   this identity's node-control ssh key*), put it in a file at 0600, and
+   `RHTN_SSH='-i <file>' packaging/testapp.sh install --host root@<droplet>`.
+   It prints the resource's keyhash; that is what the phones are given.
 6. **Walk it as the operator**: Catalog, paste the resource keyhash, ask
    for `/`. Eleven steps: `notify` first, so every ask after it is posted
    in the shade as well as drawn. The `live` step and the PDF `scan` must

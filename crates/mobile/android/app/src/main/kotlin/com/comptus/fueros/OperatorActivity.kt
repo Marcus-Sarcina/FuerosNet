@@ -1,6 +1,7 @@
 package com.comptus.fueros
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.Typeface
 import android.os.Bundle
@@ -37,6 +38,7 @@ class OperatorActivity : Activity() {
 
     private lateinit var narration: TextView
     private lateinit var open: Button
+    private lateinit var controlKey: Button
     private lateinit var roll: LinearLayout
     private var pageAt: String? = null
     private var chosen: Meet.Scope? = null
@@ -193,6 +195,66 @@ class OperatorActivity : Activity() {
         }
     }
 
+    /**
+     * **The key that controls the machines this identity launched.**  The
+     * public line first, because that is what is already on them; then
+     * the private half on asking again, with what holding it means said
+     * before it appears rather than after.
+     */
+    private fun showControlKey() {
+        val line = Kernel.hostControlPublicKey()
+        if (line == null) {
+            narration.text = "this device holds no seed, so it derives no key"
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Node-control ssh key")
+            .setMessage(
+                "This is on every machine you have launched, in root's " +
+                    "authorized_keys:\n\n$line\n\n" +
+                    "The private half is what ssh needs. Anyone who has it has a " +
+                    "shell on those machines. It is derived from this identity, so " +
+                    "it is not stored anywhere and a device restored from your " +
+                    "phrase derives it again.",
+            )
+            .setPositiveButton("Copy the public line") { _, _ -> copy("the public line", line) }
+            .setNeutralButton("Show the private key") { _, _ -> showPrivateKey() }
+            .setNegativeButton("Close", null)
+            .show()
+    }
+
+    private fun showPrivateKey() {
+        val key = Kernel.hostControlPrivateKey()
+        if (key == null) {
+            narration.text = "this device holds no seed, so it derives no key"
+            return
+        }
+        val text = TextView(this).apply {
+            textSize = 10f
+            typeface = Typeface.MONOSPACE
+            setTextIsSelectable(true)
+            this.text = key
+            setPadding(Screen.gutter(context), 12, Screen.gutter(context), 12)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("The private key — a secret")
+            .setView(ScrollView(this).apply { addView(text) })
+            .setPositiveButton("Copy") { _, _ -> copy("the private key", key) }
+            .setNegativeButton("Close", null)
+            .show()
+        Diag.event("operator", "op" to "control-key", "state" to "shown")
+    }
+
+    private fun copy(what: String, value: String) {
+        val clip = getSystemService(android.content.ClipboardManager::class.java)
+        if (clip == null) {
+            narration.text = "this device offers no clipboard"
+            return
+        }
+        clip.setPrimaryClip(android.content.ClipData.newPlainText("rhtn-host-control", value))
+        narration.text = "$what is on the clipboard"
+    }
+
     private fun field(hint: String, value: String = "", numeric: Boolean = false, secret: Boolean = false): EditText =
         EditText(this).apply {
             this.hint = hint
@@ -223,6 +285,15 @@ class OperatorActivity : Activity() {
             typeface = Typeface.MONOSPACE
             setTextColor(Palette.now.sub)
             text = ""
+        }
+        // **the operator's own key, shown on the one screen that is about
+        // their machines** (`rhtn_crypto::ssh`): the public line is what a
+        // launch installs, and the private half is a secret this shell
+        // shows and never writes. It is derived, so showing it again is
+        // not a second copy of anything.
+        controlKey = Button(this).apply {
+            text = "Show this identity's node-control ssh key"
+            setOnClickListener { showControlKey() }
         }
         open = Button(this).apply {
             text = "Open its administration page"
@@ -392,6 +463,27 @@ class OperatorActivity : Activity() {
             listOf(at, token, credentials, endpoint).forEach { addView(it) }
             addView(go)
             addView(open)
+            addView(
+                TextView(this@OperatorActivity).apply {
+                    setPadding(0, 32, 0, 8)
+                    textSize = 12f
+                    typeface = Typeface.DEFAULT_BOLD
+                    setTextColor(Palette.now.sub)
+                    text = "Your way in to the machines you rent"
+                },
+            )
+            addView(
+                TextView(this@OperatorActivity).apply {
+                    textSize = 13f
+                    setTextColor(Palette.now.sub)
+                    text = "Every machine you launch takes an ssh key this identity " +
+                        "derives, so you have a shell on it. It is derived from your own " +
+                        "signing key: restore this identity from its phrase on any device " +
+                        "and the same key comes back, which is how a machine outlives the " +
+                        "phone that launched it."
+                },
+            )
+            addView(controlKey)
             addView(
                 TextView(this@OperatorActivity).apply {
                     setPadding(0, 32, 0, 8)

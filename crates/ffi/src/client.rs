@@ -2656,6 +2656,39 @@ impl Participant {
         })
     }
 
+    /// **The `authorized_keys` line for a node this identity launches**
+    /// (`rhtn_crypto::ssh`; `light-client-requirements.md` §10): what the
+    /// launch installs on the machine, so the operator has a shell on it.
+    ///
+    /// **Derived from the signing seed**, so the phrase that restores this
+    /// identity restores control of the machines it launched. Nothing is
+    /// minted and nothing is kept.
+    pub fn host_control_public_key(&self) -> Result<String, Refused> {
+        crate::diag::call("host_control_public_key", || {
+            self.handle.with_blocking(|c| {
+                c.signer()
+                    .map(|id| id.host_control_key().public_line)
+                    .map_err(|_| Refused::new("this device holds no seed, so it derives no key"))
+            })
+        })
+    }
+
+    /// **The private half of that key**, in the form `ssh -i` reads.
+    ///
+    /// **It is a secret and it is shown, not stored**: whoever holds it
+    /// has a shell on the machines this identity launched, which is why
+    /// nothing writes it anywhere and why a screen that shows it says so.
+    /// A device restored from the phrase derives the same one.
+    pub fn host_control_private_key(&self) -> Result<String, Refused> {
+        crate::diag::call("host_control_private_key", || {
+            self.handle.with_blocking(|c| {
+                c.signer()
+                    .map(|id| id.host_control_key().private_key)
+                    .map_err(|_| Refused::new("this device holds no seed, so it derives no key"))
+            })
+        })
+    }
+
     /// **Ask a resource for something, through the node hosting it**
     /// (`wire-format.md` §11.1): the message is the application's own
     /// HTTP/1.1 request and nothing here reads it. What comes back is the

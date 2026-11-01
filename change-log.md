@@ -16508,6 +16508,39 @@ down to be decided cold. The bound on fetches a minute that
 question. No code changed; that section's "you bound what you have built"
 already accommodates an unenforced field, so no document says *not yet*.
 
+### 2026-10-31 (the way in to a rented machine, derived from the signing secret)
+
+**Asked for** [author, 2026-10-31]: an ssh key on the launch, derivable
+from the signing secret, so that node control is recovered when the
+launching device is lost and the phrase is known.
+
+**`rhtn_crypto::ssh`**: an Ed25519 ssh key whose seed is HKDF-SHA256 of
+the identity's classical seed under one fixed label, in the two shapes ssh
+reads — the `authorized_keys` line and the OpenSSH private key container,
+written by hand since the format is ssh's and not this project's.
+Validated against `ssh-keygen` itself: it reads the private key written
+here and derives the same public line, comment and all. **One key per
+identity**, not per machine, since the machines are already named
+together by their endpoint records and a per-machine key would want a
+label the recovery path must carry. It is not the identity's key, signs
+nothing for it, and cannot be walked back to the seed.
+
+**The launch installs it**: `rhtn_launch::user_data` takes the public line
+and writes root's `authorized_keys`, with the directory at 0700; given
+none it writes no such file, since a launch that wrote an empty one would
+leave a file saying what it does not mean. It is written in the script
+rather than registered with the provider, so it is the same key at every
+provider the crate drives. **The client shows it rather than storing it**:
+the kernel derives both halves on asking (`Participant::host_control_public_key`,
+`host_control_private_key`), the operator screen shows the public line
+with what the private half means before showing it, and `rhtn keys ssh
+<identity> [--private <file>]` does the same where the identity is a file.
+
+`light-client-requirements.md` §10 carries the obligation and why it is
+one key; `infra-client-requirements.md` §9 carries the operator's side,
+including that the administration surface is not that shell and does not
+become one. OPS-023, PRT-09.
+
 ### 2026-10-31 (the test application where production puts it: its own image, on a rented node)
 
 **The architecture as it is meant to exist** [author, 2026-10-31]: the

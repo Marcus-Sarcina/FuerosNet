@@ -741,6 +741,17 @@ own**, one block and one log per instance, named to it; a node that keeps
 no such directory cannot host a package that needs one, and says so at
 installation.
 
+**Your operator reaches this machine as themselves** [2026-10-31]. A
+launched instance takes one `authorized_keys` line: the ssh key its
+operator's client derives from their own signing seed
+(`light-client-requirements.md` §10). That shell is what installing a
+package here needs, since the hosting file and the package itself are
+yours to put in place and no protocol act does it; and because the key is
+derived, **an operator who lost the device that launched this machine
+controls it again from their phrase**. The surface of §8.2 is not that
+shell and does not become one: it carries what an operator's client
+signs, not what an operator types.
+
 **Budgets are the package's claims and your enforcement.** The manifest
 names the block's bytes, the log's bytes, jobs in flight, requests a minute
 and job compute a day; you bound what you have built, name the one exceeded

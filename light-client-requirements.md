@@ -1416,6 +1416,26 @@ one that is true.
   operator names another**, which is how a custom or third-party node is
   launched by the same pages. Order the providers and zones offered as §6
   says, by concentration inside this operator's own horizon.
+- **Install a way in to every machine you launch, derived from the
+  signing secret** [author, 2026-10-31]. An operator needs a shell on a
+  machine they rent — installing a package is theirs to do
+  (`infra-client-requirements.md` §9), and so is taking the machine apart
+  — and a key the provider holds or a device keeps is a key that dies with
+  that device. So the client derives an Ed25519 **ssh** key from the
+  identity's own signing seed under one fixed label, hands the public line
+  to the machine in the script it runs once, and keeps nothing: **the
+  phrase that restores the identity restores control of the machines it
+  launched**, which is the only recovery story a rented node can have
+  once the launching device is gone. **It is one key for this identity,
+  not one per machine**, since the machines are already named together by
+  their endpoint records and a key per machine would want a label the
+  recovery path has to carry. **It is not the identity's key and signs
+  nothing for it**: a derived key cannot be walked back to the seed, it is
+  no part of the protocol, and ordinary tools read it as the ordinary ssh
+  key it is. **Show it to the operator rather than storing it**: the
+  public line is on the machines already, and the private half is derived
+  again wherever the identity is, so a copy is never the only one and a
+  screen that shows it says what holding it means.
 - **Renew a run before it lapses, from where it ends** [author,
   2026-10-16]. An instance holds 45 credentials of 48 hours and signs none
   of them: it tells its operator before the last one

@@ -198,18 +198,27 @@ pub fn launch(me: &SigningIdentity, ask: &Ask) -> Result<String, String> {
     let token_hex = rhtn_launch::token_hex(&random);
     let token = enrol::hex32(&token_hex).ok_or("the token did not read back")?;
     let material = hex(&me.public.key_material());
+    // **the operator's own way in** (`rhtn_crypto::ssh`): derived from the
+    // seed this instrument was handed, so the machine takes a key that
+    // comes back wherever the identity does
+    let control = me.host_control_key();
     let script = rhtn_launch::user_data(
         &material,
         &token_hex,
         &ask.plan.image,
         rhtn_launch::QUIC_PORT,
         rhtn_launch::ADMIN_PORT,
+        Some(&control.public_line),
     );
     let name = ask
         .name
         .clone()
         .unwrap_or_else(|| format!("rhtn-{}", &token_hex[..8]));
     let mut said = Vec::new();
+    said.push(format!(
+        "its ssh key will be {}; `rhtn keys ssh <identity> --private <file>` writes the private half",
+        control.public_line
+    ));
     let launched = provider.launch(&t, &ask.credential, &ask.plan, &name, &script)?;
     said.push(format!(
         "{} created machine {} in {} as {name}; waiting for its address",

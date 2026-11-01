@@ -836,6 +836,28 @@ object Kernel {
         return call("answerUtility", { null }) { answered(p.answerUtility(id, outcome)) }
     }
 
+    /**
+     * **The `authorized_keys` line a launch installs on a machine this
+     * identity rents** (`light-client-requirements.md` §10): derived from
+     * the signing seed, so a device restored from the phrase derives the
+     * same one and the operator's shell comes back with their identity.
+     */
+    fun hostControlPublicKey(): String? {
+        val p = participant ?: return null
+        return call("hostControlPublicKey", { null }) { p.hostControlPublicKey() }
+    }
+
+    /**
+     * **The private half, in the form `ssh -i` reads.** A secret: whoever
+     * holds it has a shell on the machines this identity launched. Shown
+     * to the person, never written by this shell, and derived again
+     * wherever the identity is.
+     */
+    fun hostControlPrivateKey(): String? {
+        val p = participant ?: return null
+        return call("hostControlPrivateKey", { null }) { p.hostControlPrivateKey() }
+    }
+
     /** Sweep the serving node's catalog (`wire-format.md` §6.4). */
     fun browse(): String? {
         val p = participant ?: return "the kernel is not running"

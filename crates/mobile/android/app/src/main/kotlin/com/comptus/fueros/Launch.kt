@@ -54,9 +54,20 @@ object Launch {
         return b.joinToString("") { "%02x".format(it) }
     }
 
-    /** The once-run script, composed by the kernel. */
-    fun userData(operatorMaterialHex: String, token: String, registry: String = REGISTRY_DEFAULT, tag: String = TAG_DEFAULT): String =
-        launchUserData(operatorMaterialHex, token, registry, tag)
+    /** The once-run script, composed by the kernel.
+     *
+     *  **With the operator's own way in** [author, 2026-10-31]: the
+     *  `authorized_keys` line this identity derives, so the machine takes
+     *  a key that comes back with the phrase ([Kernel.hostControlPublicKey]).
+     *  Given none, the machine takes no key and the only shell is the
+     *  provider's console. */
+    fun userData(
+        operatorMaterialHex: String,
+        token: String,
+        registry: String = REGISTRY_DEFAULT,
+        tag: String = TAG_DEFAULT,
+        sshPublicLine: String? = Kernel.hostControlPublicKey(),
+    ): String = launchUserData(operatorMaterialHex, token, registry, tag, sshPublicLine)
 
     /** What to launch: where, how big, from which registry. */
     data class Plan(

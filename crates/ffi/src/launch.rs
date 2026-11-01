@@ -154,12 +154,18 @@ pub fn launch_registry_default() -> String {
 
 /// The once-run script for a machine: the operator's public material as
 /// hex, the token as 64 hex digits, the registry and the tag.
+///
+/// **`ssh_public_line` is the operator's own way in**: pass
+/// `Participant::host_control_public_key`, so the machine takes the key
+/// this identity derives and a device restored from the phrase controls
+/// it again (`rhtn_crypto::ssh`). Given none, the machine takes no key.
 #[uniffi::export]
 pub fn launch_user_data(
     material_hex: String,
     token_hex: String,
     registry: String,
     tag: String,
+    ssh_public_line: Option<String>,
 ) -> String {
     let image = rhtn_launch::Image { registry, tag };
     rhtn_launch::user_data(
@@ -168,6 +174,7 @@ pub fn launch_user_data(
         &image,
         rhtn_launch::QUIC_PORT,
         rhtn_launch::ADMIN_PORT,
+        ssh_public_line.as_deref(),
     )
 }
 

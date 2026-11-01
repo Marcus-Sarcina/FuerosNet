@@ -24,10 +24,15 @@
 #                        whoever is within two steps of it in this node's
 #                        topology (`wire-format.md` §11's membership gate).
 #
-#  **It needs a shell on the machine**, which a rented one does not come
-#  with: the launch installs no key (`rhtn_launch::Plan` carries none), so
-#  reach it with a key added at the provider's console, or the root
-#  password the provider sent. RHTN_SSH passes options to ssh.
+#  **It needs a shell on the machine**, which a launch now provides: the
+#  machine takes the ssh key its operator's client derives from their
+#  signing seed (`rhtn_crypto::ssh`, `light-client-requirements.md` §10).
+#  Take the private half from the phone -- Operator, *Show this identity's
+#  node-control ssh key* -- or from `rhtn keys ssh <identity> --private
+#  <file>` where the identity is a file, then
+#  `RHTN_SSH='-i <file>' testapp.sh install --host root@<machine>`.
+#  A machine launched before that key existed has whatever way in its
+#  operator arranged at the provider.
 #
 #  **What installing a package is** (`infra-client-requirements.md` §9, §10):
 #  the operator puts the package where their node can reach it, writes one

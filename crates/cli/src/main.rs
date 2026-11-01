@@ -17,6 +17,12 @@ usage: rhtn <command> [...]
         replace one.
   keys show <file>
         Print an identity file's keyhash and key material.
+  keys ssh <identity> [--private <file>]
+        The node-control ssh key this identity derives: the authorized_keys
+        line a launch installs on a machine, and with --private the private
+        key written at 0600 for `ssh -i`. Derived from the signing seed, so
+        the phrase that restores the identity restores the shell on the
+        machines it launched (L §10).
   keys test <name>
         Print the test identity test-vectors/keys.md derives for <name>.
         These are not secret.
@@ -178,6 +184,13 @@ fn do_keys(rest: &[&str]) -> Result<String, String> {
             Ok(format!("written   {path}\n{}", keys::public_lines(&id)))
         }
         ["show", path] => keys::describe(&PathBuf::from(path)),
+        // **the ssh key the identity derives** (`rhtn_crypto::ssh`): the
+        // shell on the machines this identity launched, which the phrase
+        // restores along with the identity
+        ["ssh", path] => keys::host_control(&PathBuf::from(path), None),
+        ["ssh", path, "--private", to] => {
+            keys::host_control(&PathBuf::from(path), Some(&PathBuf::from(to)))
+        }
         ["test", name] => {
             let [ed, pq] = keys::test_seeds(name);
             let id = rhtn_crypto::SigningIdentity::from_seeds(&ed, &pq).public;

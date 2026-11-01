@@ -105,3 +105,49 @@ pub fn test_seeds(name: &str) -> [[u8; 32]; 2] {
         rhtn_codec::cose::sha256(format!("rhtn-test-vectors:{name}:ml-dsa-65-seed").as_bytes()),
     ]
 }
+
+/// **The node-control ssh key this identity derives**
+/// (`rhtn_crypto::ssh`): the `authorized_keys` line a launch installs and
+/// the private key the operator keeps, both derived from the signing seed
+/// and neither stored anywhere.
+///
+/// `--private` writes the private key to `where` at 0600, which is what
+/// `ssh -i` wants; without it only the public line is printed, since a
+/// private key on a terminal is a private key in a scroll-back.
+pub fn host_control(path: &Path, private: Option<&Path>) -> Result<String, String> {
+    let bytes = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    if bytes.len() != IDENTITY_BYTES {
+        return Err(format!(
+            "{} is {} bytes, not {IDENTITY_BYTES}",
+            path.display(),
+            bytes.len()
+        ));
+    }
+    let (ed, pq): ([u8; 32], [u8; 32]) = (
+        bytes[..32].try_into().unwrap(),
+        bytes[32..].try_into().unwrap(),
+    );
+    let id = rhtn_crypto::SigningIdentity::from_seeds(&ed, &pq);
+    let key = id.host_control_key();
+    let mut out = format!("{}\n", key.public_line);
+    if let Some(to) = private {
+        std::fs::write(to, key.private_key.as_bytes())
+            .map_err(|e| format!("{}: {e}", to.display()))?;
+        restrict(to)?;
+        out.push_str(&format!("private   {}\n", to.display()));
+    }
+    Ok(out)
+}
+
+/// 0600 on a private key, which ssh refuses to read without.
+#[cfg(unix)]
+fn restrict(p: &Path) -> Result<(), String> {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(p, std::fs::Permissions::from_mode(0o600))
+        .map_err(|e| format!("{}: {e}", p.display()))
+}
+
+#[cfg(not(unix))]
+fn restrict(_: &Path) -> Result<(), String> {
+    Ok(())
+}

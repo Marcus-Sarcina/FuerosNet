@@ -197,17 +197,45 @@ impl Image {
 /// written, the state directory handed to the image's uid, and the
 /// container started on the host's network and restarted with the machine.
 /// The operator's seed is in none of it (design §23.3).
+///
+/// **And the operator's own way in** [author, 2026-10-31]:
+/// `ssh_public_line` is installed as root's `authorized_keys`, so the
+/// operator has a shell on the machine they rented — which installing a
+/// package needs (`infra-client-requirements.md` §9) and nothing else
+/// provided. It is the key `rhtn_crypto::ssh` derives from the signing
+/// seed, so **it comes back with the phrase**: a machine launched from a
+/// device since lost is controlled from a device restored from the
+/// phrase, with nothing kept anywhere in between. Given none, the machine
+/// takes no key and the operator's shell is whatever the provider offers.
+///
+/// **It is written here rather than registered with the provider**: every
+/// provider's key registry is its own, and a key in the script is the same
+/// key at every provider this crate drives. The public half is not a
+/// secret, and the script already carries the enrolment token, which is.
 pub fn user_data(
     operator_material_hex: &str,
     token_hex: &str,
     image: &Image,
     quic: u16,
     admin: u16,
+    ssh_public_line: Option<&str>,
 ) -> String {
     let conf: String = node_config(token_hex, quic, admin)
         .lines()
         .map(|l| format!("      {l}\n"))
         .collect();
+    // the operator's own key, where they have one: root's, since that is
+    // who the provider's image gives a shell to
+    let ssh: String = match ssh_public_line {
+        None => String::new(),
+        Some(line) => format!(
+            "\x20 - path: /root/.ssh/authorized_keys\n\
+             \x20   permissions: '0600'\n\
+             \x20   content: |\n\
+             \x20     {}\n",
+            line.trim()
+        ),
+    };
     format!(
         "#cloud-config\n\
          package_update: true\n\
@@ -226,10 +254,12 @@ pub fn user_data(
          \x20   permissions: '0600'\n\
          \x20   content: |\n\
          \x20     # the packages this instance hosts: none yet\n\
+         {ssh}\
          runcmd:\n\
          \x20 - mkdir -p {HOSTED_STATE}\n\
          \x20 - chown -R {IMAGE_UID}:{IMAGE_UID} /var/lib/rhtn\n\
          \x20 - chmod 0700 /var/lib/rhtn\n\
+         \x20 - chmod 0700 /root/.ssh\n\
          \x20 - systemctl enable --now podman-restart.service\n\
          \x20 - podman run -d --name rhtnd --restart=always --network=host -v /var/lib/rhtn:/var/lib/rhtn {}\n",
         image.reference()
@@ -941,7 +971,7 @@ mod tests {
             registry: "reg.example/x".into(),
             tag: "abc123".into(),
         };
-        let script = user_data("82a301", &token, &image, QUIC_PORT, ADMIN_PORT);
+        let script = user_data("82a301", &token, &image, QUIC_PORT, ADMIN_PORT, None);
         assert!(script.starts_with("#cloud-config\n"));
         assert!(script.contains("  - podman\n"));
         assert!(script.contains(&format!("      token = \"{token}\"")));
@@ -952,6 +982,31 @@ mod tests {
             "{script}"
         );
         assert!(script.contains("mkdir -p /var/lib/rhtn/state"), "{script}");
+        // **no key, no authorized_keys**: a launch that installed an empty
+        // one would leave a file saying something it does not mean
+        assert!(!script.contains("authorized_keys"), "{script}");
+
+        // **and the operator's own way in where they have a key**: the
+        // line as `authorized_keys` takes it, and the directory it wants
+        let keyed = user_data(
+            "82a301",
+            &token,
+            &image,
+            QUIC_PORT,
+            ADMIN_PORT,
+            Some("ssh-ed25519 AAAAC3Nza... rhtn-host-control"),
+        );
+        assert!(
+            keyed.contains("  - path: /root/.ssh/authorized_keys\n"),
+            "{keyed}"
+        );
+        assert!(
+            keyed.contains("      ssh-ed25519 AAAAC3Nza... rhtn-host-control\n"),
+            "{keyed}"
+        );
+        assert!(keyed.contains("chmod 0700 /root/.ssh"), "{keyed}");
+        // the seed is in none of it, keyed or not
+        assert!(!keyed.contains("seed"));
         assert!(script.contains("-v /var/lib/rhtn:/var/lib/rhtn reg.example/x/rhtnd:abc123\n"));
         assert!(!script.contains("seed"));
     }

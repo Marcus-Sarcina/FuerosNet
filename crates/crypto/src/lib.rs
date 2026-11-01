@@ -24,9 +24,14 @@ pub mod enrolment;
 pub mod identity;
 /// PQXDH (design §5.3): the key agreement a payload session opens with.
 pub mod pqxdh;
+pub mod signer;
 /// What a caller must provide to sign: the trait the profile's signing
 /// contexts are written against.
-pub mod signer;
+/// **The ssh key that controls a node this identity launched**: derived
+/// from the signing seed, so the phrase that restores the identity
+/// restores the shell on its machines (`light-client-requirements.md`
+/// §10).
+pub mod ssh;
 /// Verification of the structures `rhtn-codec` parses, up to a complete
 /// transaction envelope with its embedded evidence.
 pub mod verify;
