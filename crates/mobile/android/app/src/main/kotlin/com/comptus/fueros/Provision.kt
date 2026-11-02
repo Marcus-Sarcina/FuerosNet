@@ -99,6 +99,81 @@ object Provision {
         exchange(at, "PUT", path, body).map { it.lineSequence().firstOrNull()?.trim() ?: "" }
 
     /**
+     * **The target a management act carries**
+     * (`infra-client-requirements.md` §8.2): the path, a nonce of this
+     * device's own, and the proof over the act.
+     *
+     * **This is why the acts are drawn here and not in the node's page.**
+     * A proof is `HMAC-SHA256` under the instance's token over the
+     * method, the target without the proof, and the body — and HTML in a
+     * frame can compute no such thing (§8.3). So the page declares and
+     * this makes.
+     *
+     * The three routes that carry the operator's own signature need none
+     * of this: a run and the two records verify themselves, so [put] is
+     * unchanged.
+     */
+    fun proved(
+        tokenHex: String,
+        method: String,
+        path: String,
+        body: ByteArray,
+    ): Result<String> = runCatching {
+        val token = unhex(tokenHex.trim())
+        require(token.size == 32) { "an administration token is 64 lower-case hex digits" }
+        val n = nonce()
+        val joiner = if (path.contains('?')) '&' else '?'
+        // **the target as the instance will re-derive it**: everything a
+        // caller could change is inside what the proof covers, and only
+        // the proof itself is outside
+        val signed = "$path${joiner}nonce=${hex(n)}"
+        val proof = uniffi.rhtn_ffi.administrationActProof(token, n, method, signed, body)
+        "$signed&proof=$proof"
+    }
+
+    /**
+     * **One declared act, invoked** (`rhtn_daemon::acts`): the act's name
+     * on the one route a client needs, with its declared fields as the
+     * body, proved.
+     *
+     * The whole answer comes back rather than its first line: an act that
+     * reached the machine has the host's own words in it, and an operator
+     * reading them is being told something they can act on.
+     */
+    fun act(at: String, tokenHex: String, name: String, fields: List<Pair<String, String>>): Result<String> =
+        runCatching {
+            val body = form(fields)
+            val target = proved(tokenHex, "POST", "/node/act/$name", body).getOrThrow()
+            exchange(at, "POST", target, body, "application/x-www-form-urlencoded").getOrThrow()
+        }
+
+    /** **What the instance declares it can be asked for**, as it sent it. */
+    fun acts(at: String, tokenHex: String): Result<String> = runCatching {
+        val target = proved(tokenHex, "GET", "/node/acts", ByteArray(0)).getOrThrow()
+        exchange(at, "GET", target, null).getOrThrow()
+    }
+
+    /** `application/x-www-form-urlencoded`, as the surface reads it. */
+    fun form(fields: List<Pair<String, String>>): ByteArray =
+        fields.joinToString("&") { (k, v) -> "$k=${escape(v)}" }.toByteArray()
+
+    /**
+     * Percent-escaping, leaving the unreserved set alone.
+     *
+     * **Decided per byte and not per character**: a manifest is UTF-8 and
+     * a label may be anything a person writes, so what is escaped is the
+     * byte — a check on a character reconstructed from a signed byte is
+     * wrong above 0x7f, which is where the interesting values are.
+     */
+    fun escape(s: String): String =
+        s.toByteArray(Charsets.UTF_8).joinToString("") { b ->
+            val v = b.toInt() and 0xff
+            val unreserved = v in 0x41..0x5a || v in 0x61..0x7a || v in 0x30..0x39 ||
+                v == '-'.code || v == '_'.code || v == '.'.code || v == '~'.code
+            if (unreserved) v.toChar().toString() else "%%%02X".format(v)
+        }
+
+    /**
      * One exchange with the surface.
      *
      * **A status other than 200 is a refusal, not an answer**, and it
@@ -106,7 +181,13 @@ object Provision {
      * this operator's" is being told something they can act on, and
      * replacing it with a code would throw that away.
      */
-    private fun exchange(at: String, method: String, path: String, body: ByteArray?): Result<String> =
+    fun exchange(
+        at: String,
+        method: String,
+        path: String,
+        body: ByteArray?,
+        contentType: String = "application/octet-stream",
+    ): Result<String> =
         runCatching {
             val c = URL("http://$at$path").openConnection() as HttpURLConnection
             try {
@@ -118,7 +199,7 @@ object Provision {
                 if (body != null) {
                     c.doOutput = true
                     c.setFixedLengthStreamingMode(body.size)
-                    c.setRequestProperty("content-type", "application/octet-stream")
+                    c.setRequestProperty("content-type", contentType)
                     c.outputStream.use { it.write(body) }
                 }
                 val code = c.responseCode

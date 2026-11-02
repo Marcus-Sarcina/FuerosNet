@@ -16508,6 +16508,68 @@ down to be decided cold. The bound on fetches a minute that
 question. No code changed; that section's "you bound what you have built"
 already accommodates an unenforced field, so no document says *not yet*.
 
+### 2026-11-02 (the device half: a bounce out of the frame, and a link that opens the app)
+
+**Built the client's side of the two mechanisms the author asked for.**
+
+**The frame bounces.** `NodePageActivity` already intercepted every
+navigation to keep the page on one origin; it now recognises `rhtn-act:`
+and hands the act to `ActActivity` instead. **And the frame proves its own
+reads**: a page load is a `GET`, a `GET` carries no body, so the proof is
+over the method and the target alone and this client can mint one for a URL
+it is about to load. That was the whole of what reading the page from a
+phone needed — no session, no cookie, nothing standing. A URL already
+carrying a proof is let through, which is what stops the intercept
+re-entering itself.
+
+**`ActActivity` knows no act.** It is handed a name, reads
+`GET /node/acts`, finds the act there, and draws a field per declared
+parameter from the closed set — so an instance that gains an act gains a
+screen without this client changing, which is what §8.3's division is for.
+It does the three things the page cannot: proves the act, brings the
+credential where the declaration says to (derived from the seed for that
+one act, which the frame is isolated from by design), and waits for the
+person.
+
+**What it refuses rather than guesses at**: a vocabulary it does not read,
+a parameter kind it does not draw, and a credential it does not know how to
+bring. Each is said with *a newer client will make this act* rather than
+drawn half-right or sent short.
+
+**A hint is a hint.** `Acts.hints` keeps only the fields the act declares
+and drops the rest, so a page cannot put a value where this client was not
+going to ask — a `key=` in a bounce reaches nothing. The declared bounds
+are checked before the act is sent, so a refusal lands on the screen the
+person is looking at rather than after a round trip. A `several` posts one
+field per value, which is the shape the node's own checkbox group had.
+
+**The offering opens the app.** `fueros://install` is an intent filter now,
+so a tapped link or a code read anywhere reaches `OfferingActivity`, which
+reads it through the one definition in Rust and shows **what the package
+declares before anything is agreed to** — that being what the operator is
+admitting (§9.1's supply chain). The distributor's name for it is presented
+as their claim. What the link could not say is asked for there: which
+instance, the authority, the port; the resource is minted and the owner is
+the operator's own identity. Then it hands the install to `ActActivity`
+pre-filled, where it is confirmed like any other act — so there is one
+path for an install and not two.
+
+**Also a paste field**, for an offering that arrived by a route with no
+handler, and an entry on the Operator screen for the same reason.
+
+Three ffi exports: `administration_act_proof` (the client could verify a
+proof and not make one), `package_offering_read`/`compose`, and
+`fresh_resource_keyhash` — a fresh identity of which only the keyhash is
+kept, which is what `packaging/testapp.sh` has always done, with why the
+secret is not wanted written down beside it.
+
+PRD-22. Android tests 303.
+
+**Still owed on this path**: reading an offering from the camera rather
+than from a tap or a paste (`QrCamera` exists; the integration does not),
+and the run itself — relaunch, attach all four phones, install the test
+application through the act, and walk the eleven steps.
+
 ### 2026-11-02 (the page shows, the client asks, and a link fills the screen)
 
 **Ruled** [author, 2026-11-02]: declared acts with framed readouts. And two

@@ -917,6 +917,24 @@ object Kernel {
      * name this key has published and the keyhash where it has published
      * none.
      */
+    /**
+     * **This identity's keyhash**, which is who an install's resource is
+     * owned by (`infra-client-requirements.md` §9.4): the owner whose
+     * horizon §11's membership gate is evaluated against.
+     */
+    fun keyhash(): String? {
+        val p = participant ?: return null
+        return call("me", { null }) { hex(p.me()) }
+    }
+
+    /**
+     * **A fresh identity for a resource, of which only the keyhash is
+     * kept** (`fresh_resource_keyhash`): an offering cannot carry one and
+     * the operator should not be typing one.
+     */
+    fun mintResource(): String? =
+        runCatching { uniffi.rhtn_ffi.freshResourceKeyhash() }.getOrNull()
+
     fun ownAlias(): Pair<String?, String> {
         val p = participant ?: return null to ""
         val me = call("me", { "" }) { hex(p.me()) }

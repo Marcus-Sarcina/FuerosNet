@@ -47,6 +47,9 @@ import android.widget.TextView
  */
 class NodePageActivity : Activity() {
 
+    private var at: String = ""
+    private var token: String = ""
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val at = intent.getStringExtra("at")
@@ -60,6 +63,12 @@ class NodePageActivity : Activity() {
             return
         }
         val origin = "http://$at"
+        this.at = at
+        // **the token, for the proof every read carries**: the page is
+        // this instance's own state, so reading it is an act like any
+        // other and proves itself the same way (§8.2)
+        this.token = getSharedPreferences("operator", MODE_PRIVATE)
+            .getString("token:$at", null) ?: ""
 
         val bar = TextView(this).apply {
             textSize = 12f
@@ -114,7 +123,41 @@ class NodePageActivity : Activity() {
                 request: WebResourceRequest,
             ): Boolean {
                 val going = request.url.toString()
-                if (going.startsWith("$origin/") || going == origin) return false
+                // **an act bounces out of the frame to this client**
+                // [author, 2026-11-02]: the page carries no form, because
+                // a form cannot compute the MAC an act proves itself
+                // with and cannot reach the key an act on the machine
+                // needs (`infra-client-requirements.md` §8.3). So each
+                // act is a link in this scheme, and **what rides in it is
+                // a hint**: `ActActivity` fills a field the person
+                // confirms, and the page makes nothing happen.
+                val bounced = Acts.bounced(going)
+                if (bounced != null) {
+                    val (name, query) = bounced
+                    startActivity(
+                        android.content.Intent(
+                            this@NodePageActivity,
+                            ActActivity::class.java,
+                        )
+                            .putExtra("at", at)
+                            .putExtra("act", name)
+                            .putExtra("query", query),
+                    )
+                    return true
+                }
+                // **a read of this instance's own page is proved too**, so
+                // the frame re-signs each navigation inside the origin
+                // rather than following it bare
+                if (going.startsWith("$origin/") || going == origin) {
+                    // **a URL this frame already proved is let through**,
+                    // which is what stops `go` re-entering itself: a
+                    // target carrying a proof is one we minted, and a
+                    // page that put one there of its own reaches an
+                    // instance that refuses it
+                    if (going.contains("&proof=") || going.contains("?proof=")) return false
+                    go(view, origin, going)
+                    return true
+                }
                 view.post {
                     android.widget.Toast.makeText(
                         view.context,
@@ -125,7 +168,31 @@ class NodePageActivity : Activity() {
                 return true
             }
         }
-        loadUrl("$origin/")
+        go(this, origin, "$origin/")
+    }
+
+    /**
+     * **Load one page of the instance's own, proved.**
+     *
+     * A read of the administration surface is an act like any other off
+     * the loopback (§8.2), and a `GET` carries no body — so the proof is
+     * over the method and the target alone and **this client can mint it
+     * for a URL the frame is about to load**. That is the whole of what
+     * reading the page from a phone needed; no session and no cookie.
+     *
+     * Where there is no token the bare URL is loaded anyway: on a
+     * loopback instance arriving is the authorisation, and an operator
+     * running one there should see their page rather than a refusal this
+     * client invented.
+     */
+    private fun go(view: WebView, origin: String, url: String) {
+        if (token.isEmpty()) {
+            view.loadUrl(url)
+            return
+        }
+        val path = url.removePrefix(origin).ifEmpty { "/" }
+        val target = Provision.proved(token, "GET", path, ByteArray(0))
+        view.loadUrl(target.fold({ "$origin$it" }, { url }))
     }
 
     override fun onDestroy() {

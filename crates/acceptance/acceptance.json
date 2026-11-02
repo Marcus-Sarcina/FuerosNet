@@ -14669,6 +14669,37 @@
     "interpretation": ""
   },
   {
+    "id": "PRD-22",
+    "area": "product",
+    "gap": "product",
+    "title": "A client draws an instance's acts from its declaration and treats the page's bounce as a hint",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "light-client-requirements.md §10",
+      "infra-client-requirements.md §8.3"
+    ],
+    "rule": [
+      {
+        "where": "infra-client-requirements.md §8.3",
+        "text": "The page shows; the client asks"
+      },
+      {
+        "where": "infra-client-requirements.md §8.3",
+        "text": "What\nrides in it is a hint and never an instruction"
+      },
+      {
+        "where": "light-client-requirements.md §10",
+        "text": "Read the version first."
+      }
+    ],
+    "given": "A declaration from an instance: acts about the node and about a resource it hosts, with parameters of every kind in the closed set.",
+    "when": "It is read; read at a vocabulary this client does not know, with a parameter kind it does not draw and with a credential it does not know how to bring; a bounce from the node's page is taken, carrying a field the act does not declare and a credential field; each declared bound is answered inside and outside its range; and an act carrying a set is sent.",
+    "then": "The declaration reads back with each act's subject, what the client must bring and every kind's own bounds; a vocabulary this client does not read is said rather than drawn; an act with an undrawable kind or an unknown credential is refused whole with the words that a newer client will make it, while the acts it does understand stay drawable; a bounce names only an act whose name is a name, and its query fills only the fields the act declares — a credential field never among them; each declared bound is checked before the act is sent; and a set reaches the instance as one field per value, an empty field being left out rather than sent empty.",
+    "oracle": "behaviour",
+    "interpretation": ""
+  },
+  {
     "id": "RSC-43",
     "area": "resources",
     "gap": "resources",

@@ -3782,6 +3782,124 @@ pub fn enrolment_proof_checks(
     Ok(rhtn_crypto::enrolment::checks(&token, &nonce, &key, &shown))
 }
 
+/// **The proof a management act carries** (`rhtn_crypto::enrolment::act_proof`;
+/// `infra-client-requirements.md` §8.2, §8.3).
+///
+/// An act that does not arrive on the instance's own loopback proves
+/// itself with `HMAC-SHA256` under the token, over the method, the target
+/// without the proof, and the body. **HTML in a frame cannot compute
+/// that**, which is why the acts are declared and the client makes them
+/// (`rhtn_daemon::acts`): this is the client's half of that MAC.
+///
+/// `path` is the target as it will be sent **less the proof itself** —
+/// including the nonce, which is already in the query — because that is
+/// what the instance re-derives over. Everything comes back as hex, since
+/// a shell is where this ends up.
+#[uniffi::export]
+pub fn administration_act_proof(
+    token: Vec<u8>,
+    nonce: Vec<u8>,
+    method: String,
+    path: String,
+    body: Vec<u8>,
+) -> Result<String, Refused> {
+    let token: [u8; 32] = token
+        .as_slice()
+        .try_into()
+        .map_err(|_| Refused::new("an administration token is 32 bytes"))?;
+    if nonce.len() != rhtn_crypto::enrolment::NONCE_BYTES {
+        return Err(Refused::new(format!(
+            "a nonce is {} bytes",
+            rhtn_crypto::enrolment::NONCE_BYTES
+        )));
+    }
+    let p = rhtn_crypto::enrolment::act_proof(&token, &nonce, &method, &path, &body);
+    Ok(p.iter().map(|b| format!("{b:02x}")).collect())
+}
+
+/// **A package offered for installation, as a link or a code carries it**
+/// (`rhtn_client::offering`; `light-client-requirements.md` §10).
+#[derive(uniffi::Record)]
+pub struct PackageOffering {
+    /// What the operator reads: the distributor's own label, **and a claim
+    /// rather than a checked fact** — nothing here compares it against the
+    /// image or the manifest.
+    pub name: String,
+    /// The image reference the machine will pull.
+    pub image: String,
+    /// The authority suggested for it, which the operator may change.
+    pub authority: String,
+    /// The port suggested, where one is suggested.
+    pub port: Option<u16>,
+    /// **The package's own manifest**, which is what the operator is
+    /// admitting: show it before the act (§9.1's supply chain).
+    pub manifest: String,
+}
+
+/// **Read an offering**, or refuse it with the words a person is told.
+///
+/// **It authorises nothing.** What comes back fills a screen its reader
+/// confirms: there is no resource identity here, no owner, no instance and
+/// no key, because the format has no such field — an offering naming one
+/// is read without it.
+#[uniffi::export]
+pub fn package_offering_read(text: String) -> Result<PackageOffering, Refused> {
+    let o = rhtn_client::offering::parse(&text).map_err(|r| Refused::new(r.say()))?;
+    Ok(PackageOffering {
+        name: o.name,
+        image: o.image,
+        authority: o.authority,
+        port: o.port,
+        manifest: o.manifest,
+    })
+}
+
+/// **Compose one**, which is what a distributor does — exported so this
+/// project can offer its own test application through the same definition
+/// a client reads, rather than a second one written beside it.
+#[uniffi::export]
+pub fn package_offering_compose(offering: PackageOffering) -> String {
+    rhtn_client::offering::compose(&rhtn_client::offering::Offering {
+        name: offering.name,
+        image: offering.image,
+        authority: offering.authority,
+        port: offering.port,
+        manifest: offering.manifest,
+    })
+}
+
+/// **A fresh identity for a resource, of which only the keyhash is kept**
+/// (`infra-client-requirements.md` §9.4).
+///
+/// An install names the resource the package is hosted as, and an offering
+/// cannot carry one — the identity is the operator's to mint, and they
+/// should not be typing sixty-four hex digits. So one is minted here and
+/// **the secret halves are dropped**, which is what `packaging/testapp.sh`
+/// has always done for the same reason.
+///
+/// **What that is and is not.** For a socket-backed package the resource
+/// keyhash is an identifier its host hands out and its members name; the
+/// key an instance *signs* with is a different thing, provisioned per
+/// instance at its creation and written into the hosting file as its
+/// public half (`resource-requirements.md` §3.3,
+/// `infra-client-requirements.md` §9.3). The node carries that signature
+/// and does not verify it in this version, so nothing here needs the
+/// secret — and when verification arrives, provisioning that key is the
+/// work that arrives with it, not a key this client should have kept.
+#[uniffi::export]
+pub fn fresh_resource_keyhash() -> String {
+    let (ed, pq) = (
+        rhtn_transport::tls::random_bytes::<32>(),
+        rhtn_transport::tls::random_bytes::<32>(),
+    );
+    let id = rhtn_crypto::SigningIdentity::from_seeds(&ed, &pq);
+    id.public
+        .keyhash
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
 /// **A `NetworkPoint` for an instance at this address** (`wire-format.md`
 /// §4.4), encoded, for the two records below.
 ///

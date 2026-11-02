@@ -109,6 +109,28 @@
              Activity so that what it holds is a WebView and nothing else. -->
         <activity android:name=".OperatorActivity" android:exported="false" />
         <activity android:name=".NodePageActivity" android:exported="false" />
+        <!-- One act an instance declared, drawn from its declaration
+             [author, 2026-11-02]. The node's framed page carries no form:
+             each act is a link in `rhtn-act:` that the frame hands here,
+             because this is where the proof can be computed and where the
+             key for an act on the machine can be derived. Not exported:
+             the frame reaches it inside this process, and nothing on the
+             device should be able to open an act. -->
+        <activity android:name=".ActActivity" android:exported="false" />
+        <!-- A package offered for installation, opened from a link or a
+             code. **Exported, because that is the point**: a distributor
+             publishes one string and "open with Fueros" is how an operator
+             begins. It authorises nothing - every field fills a screen
+             they confirm, and the resource, the owner, the instance and
+             the key are this client's to supply. -->
+        <activity android:name=".OfferingActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="fueros" android:host="install" />
+            </intent-filter>
+        </activity>
 
     </application>
 </manifest>

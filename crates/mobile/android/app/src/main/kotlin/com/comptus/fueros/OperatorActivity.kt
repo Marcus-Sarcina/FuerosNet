@@ -39,6 +39,7 @@ class OperatorActivity : Activity() {
     private lateinit var narration: TextView
     private lateinit var open: Button
     private lateinit var controlKey: Button
+    private lateinit var offering: Button
     private lateinit var roll: LinearLayout
     private var pageAt: String? = null
     private var chosen: Meet.Scope? = null
@@ -295,6 +296,18 @@ class OperatorActivity : Activity() {
             text = "Show this identity's node-control ssh key"
             setOnClickListener { showControlKey() }
         }
+        // **a package offered for installation** [author, 2026-11-02]: a
+        // link opens this client on its own (the manifest's intent
+        // filter), and this is the way in for one that arrived by some
+        // route with no handler — a page read on a desktop, a code
+        // somebody read out. It authorises nothing either way
+        // ([OfferingActivity]).
+        offering = Button(this).apply {
+            text = "Install a package from an offering"
+            setOnClickListener {
+                startActivity(Intent(this@OperatorActivity, OfferingActivity::class.java))
+            }
+        }
         open = Button(this).apply {
             text = "Open its administration page"
             isEnabled = false
@@ -484,6 +497,20 @@ class OperatorActivity : Activity() {
                 },
             )
             addView(controlKey)
+            addView(
+                TextView(this@OperatorActivity).apply {
+                    setPadding(0, 32, 0, 8)
+                    textSize = 12f
+                    typeface = Typeface.MONOSPACE
+                    setTextColor(Palette.now.sub)
+                    text = "A package's distributor publishes one link or code carrying the " +
+                        "image, a suggested authority and port, and the package's own " +
+                        "manifest. Opening one fills this screen's install and nothing more: " +
+                        "the resource is minted here, the owner is you, and which instance it " +
+                        "goes on is your choice."
+                },
+            )
+            addView(offering)
             addView(
                 TextView(this@OperatorActivity).apply {
                     setPadding(0, 32, 0, 8)
