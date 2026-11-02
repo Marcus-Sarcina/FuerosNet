@@ -9,3 +9,5 @@ description = "Launching an instance at a hosting provider (light-client §10, i
 serde_json = { workspace = true }
 
 [dev-dependencies]
+# the two derived ssh keys, for the script's own test
+rhtn-crypto = { path = "../crypto" }

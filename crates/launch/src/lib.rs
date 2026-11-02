@@ -62,6 +62,17 @@ pub const HOSTING: &str = "/var/lib/rhtn/hosting";
 /// The state directory [`HOSTING`] names for the same reason.
 pub const HOSTED_STATE: &str = "/var/lib/rhtn/state";
 
+/// **Where the host keeps the one program an instance may run on it**
+/// (`rhtn_crypto::ssh::RUNNER_PROGRAM`, which the key's own
+/// `authorized_keys` entry names).
+pub const RUNNER_PATH: &str = "/usr/local/bin/rhtn-package-runner";
+
+/// **The runner, as the repository holds it** (`packaging/package-runner.sh`):
+/// carried into the machine by the script it runs once, so the vocabulary
+/// an instance may ask for is one file, versioned with this crate and
+/// readable on the host it lands on.
+pub const PACKAGE_RUNNER: &str = include_str!("../../packaging/package-runner.sh");
+
 /// The port the node serves on: `wire-format.md` §4.4's default, so an
 /// endpoint record may omit it.
 pub const QUIC_PORT: u16 = 7431;
@@ -228,6 +239,7 @@ pub fn user_data(
     quic: u16,
     admin: u16,
     ssh_public_line: Option<&str>,
+    runner_restricted_line: Option<&str>,
 ) -> String {
     let conf: String = node_config(token_hex, quic, admin)
         .lines()
@@ -235,14 +247,37 @@ pub fn user_data(
         .collect();
     // the operator's own key, where they have one: root's, since that is
     // who the provider's image gives a shell to
-    let ssh: String = match ssh_public_line {
-        None => String::new(),
-        Some(line) => format!(
+    // **two keys, and what each may do** [author, 2026-11-02]: the
+    // operator's own, which is a shell, and the runner's, which the line
+    // below binds to `rhtn-package-runner` and nothing else — the one an
+    // instance is handed for an act (`rhtn_crypto::ssh`).
+    let keys: Vec<String> = [ssh_public_line, runner_restricted_line]
+        .into_iter()
+        .flatten()
+        .map(|l| format!("\x20     {}\n", l.trim()))
+        .collect();
+    let ssh: String = if keys.is_empty() {
+        String::new()
+    } else {
+        format!(
             "\x20 - path: /root/.ssh/authorized_keys\n\
              \x20   permissions: '0600'\n\
-             \x20   content: |\n\
-             \x20     {}\n",
-            line.trim()
+             \x20   content: |\n{}",
+            keys.concat()
+        )
+    };
+    // **the runner itself, as the repository holds it**: one definition,
+    // readable where it runs and versioned where it is written
+    let runner: String = match runner_restricted_line {
+        None => String::new(),
+        Some(_) => format!(
+            "\x20 - path: {RUNNER_PATH}\n\
+             \x20   permissions: '0755'\n\
+             \x20   content: |\n{}",
+            PACKAGE_RUNNER
+                .lines()
+                .map(|l| format!("\x20     {l}\n"))
+                .collect::<String>()
         ),
     };
     format!(
@@ -267,6 +302,7 @@ pub fn user_data(
          \x20   content: |\n\
          \x20     # the packages this instance hosts: none yet\n\
          {ssh}\
+         {runner}\
          runcmd:\n\
          \x20 - mkdir -p {HOSTED_STATE}\n\
          \x20 - chown -R {IMAGE_UID}:{IMAGE_UID} /var/lib/rhtn\n\
@@ -983,7 +1019,7 @@ mod tests {
             registry: "reg.example/x".into(),
             tag: "abc123".into(),
         };
-        let script = user_data("82a301", &token, &image, QUIC_PORT, ADMIN_PORT, None);
+        let script = user_data("82a301", &token, &image, QUIC_PORT, ADMIN_PORT, None, None);
         assert!(script.starts_with("#cloud-config\n"));
         assert!(script.contains("  - podman\n"));
         assert!(script.contains(&format!("      token = \"{token}\"")));
@@ -1007,6 +1043,7 @@ mod tests {
             QUIC_PORT,
             ADMIN_PORT,
             Some("ssh-ed25519 AAAAC3Nza... rhtn-host-control"),
+            None,
         );
         assert!(
             keyed.contains("  - path: /root/.ssh/authorized_keys\n"),
@@ -1017,6 +1054,59 @@ mod tests {
             "{keyed}"
         );
         assert!(keyed.contains("chmod 0700 /root/.ssh"), "{keyed}");
+        // **no runner where no runner key is installed**: the program and
+        // the key that may run it arrive together or not at all
+        assert!(!keyed.contains("rhtn-package-runner"), "{keyed}");
+
+        // **and both keys with the runner**, the operator's as a shell and
+        // the instance's bound to the one program [author, 2026-11-02]
+        let id = rhtn_crypto::SigningIdentity::from_seeds(&[4u8; 32], &[5u8; 32]);
+        let control = id.host_control_key();
+        let runner = id.host_runner_key();
+        let both = user_data(
+            "82a301",
+            &token,
+            &image,
+            QUIC_PORT,
+            ADMIN_PORT,
+            Some(&control.public_line),
+            Some(&runner.restricted_line()),
+        );
+        assert!(
+            both.contains(&format!("     {}\n", control.public_line)),
+            "{both}"
+        );
+        assert!(
+            both.contains("     command=\"/usr/local/bin/rhtn-package-runner\""),
+            "{both}"
+        );
+        // the runner's own text lands beside them, indented into the block
+        assert!(
+            both.contains("- path: /usr/local/bin/rhtn-package-runner\n"),
+            "{both}"
+        );
+        assert!(both.contains("permissions: '0755'"), "{both}");
+        assert!(
+            both.contains(
+                "     #  rhtn-package-runner -- the one program an instance may run on its host."
+            ),
+            "the runner's own words are carried verbatim"
+        );
+        // and no line of it escapes the block, which is what a stray
+        // unindented line would do to the whole configuration
+        for line in both.lines() {
+            assert!(
+                line.is_empty()
+                    || line.starts_with(' ')
+                    || line.starts_with("#cloud-config")
+                    || line.ends_with(':')
+                    || line.starts_with("package_update")
+                    || line.starts_with("ssh_pwauth"),
+                "a line of the script is outside its block: {line:?}"
+            );
+        }
+        // the seed is in none of it, keyed or not
+        assert!(!both.contains("seed"));
         // **and nothing stands between the key and a shell**: a provider
         // that sets an expired root password would block the first
         // key-authenticated command before it ran (found on the bench,

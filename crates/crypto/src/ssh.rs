@@ -39,12 +39,39 @@ pub const HOST_CONTROL_TAG: &[u8] = b"rhtn/1:host-control-ssh";
 /// operator reading `authorized_keys` on a machine knows what the key is.
 pub const COMMENT: &str = "rhtn-host-control";
 
+/// **The second key's label**: the one the operator's client hands to its
+/// own instance for one act, which the host's `authorized_keys` binds to
+/// the package runner and nothing else.
+pub const HOST_RUNNER_TAG: &[u8] = b"rhtn/1:host-runner-ssh";
+
+/// What the runner key names itself.
+pub const RUNNER_COMMENT: &str = "rhtn-host-runner";
+
+/// **Where the host's own file binds the runner key** [author,
+/// 2026-11-02]: the forced command, so a key handed to an instance can
+/// run that program and nothing else.
+pub const RUNNER_PROGRAM: &str = "/usr/local/bin/rhtn-package-runner";
+
+/// The options the host's `authorized_keys` entry carries for the runner
+/// key: the forced command, and every door ssh offers shut.
+pub const RUNNER_OPTIONS: &str =
+    "no-pty,no-port-forwarding,no-agent-forwarding,no-X11-forwarding,no-user-rc,restrict";
+
 /// **The ssh key's seed, from the identity's classical seed.**  HKDF-SHA256
 /// under [`HOST_CONTROL_TAG`], which is one way: the ssh key cannot be
 /// walked back to the seed that made it.
 pub fn host_control_seed(ed_seed: &[u8; 32]) -> Zeroizing<[u8; 32]> {
     let mut out = Zeroizing::new([0u8; 32]);
     crate::pqxdh::hkdf_sha256(&[], ed_seed, HOST_CONTROL_TAG, &mut out[..]);
+    out
+}
+
+/// **The runner key's seed**, under its own label: a different key from
+/// the same secret, so one may be given away for an act and the other
+/// never is.
+pub fn host_runner_seed(ed_seed: &[u8; 32]) -> Zeroizing<[u8; 32]> {
+    let mut out = Zeroizing::new([0u8; 32]);
+    crate::pqxdh::hkdf_sha256(&[], ed_seed, HOST_RUNNER_TAG, &mut out[..]);
     out
 }
 
@@ -58,6 +85,24 @@ impl SigningIdentity {
     pub fn host_control_key(&self) -> HostControlKey {
         let seed = host_control_seed(&self.ed_signing_key().to_bytes());
         HostControlKey::from_seed(&seed)
+    }
+
+    /// **The key this identity hands its own instance for one act**
+    /// (`infra-client-requirements.md` §9): a second key from the same
+    /// secret, which the host's `authorized_keys` binds to
+    /// [`RUNNER_PROGRAM`] alone.
+    ///
+    /// **Why a second one and not the first** [author, 2026-11-02]: the
+    /// act is the instance asking its own host to start or stop a
+    /// package, and the authority for it arrives with the request rather
+    /// than sitting on the machine — so the instance holds a key only
+    /// while it uses it. A node already seized would keep what it was
+    /// handed, so what it is handed must be worth little: this key opens
+    /// the runner's own vocabulary and no shell, and the operator's own
+    /// key, which does open a shell, is never given to it.
+    pub fn host_runner_key(&self) -> HostControlKey {
+        let seed = host_runner_seed(&self.ed_signing_key().to_bytes());
+        HostControlKey::from_seed_named(&seed, RUNNER_COMMENT)
     }
 }
 
@@ -75,24 +120,46 @@ pub struct HostControlKey {
 }
 
 impl HostControlKey {
-    /// The pair a seed expands to.
+    /// The pair a seed expands to, named [`COMMENT`].
     pub fn from_seed(seed: &[u8; 32]) -> HostControlKey {
+        HostControlKey::from_seed_named(seed, COMMENT)
+    }
+
+    /// The same under a comment of its own, which is how the two keys are
+    /// told apart in a host's file and in a fingerprint listing.
+    pub fn from_seed_named(seed: &[u8; 32], comment: &str) -> HostControlKey {
         let sk = ed25519_dalek::SigningKey::from_bytes(seed);
         let public = sk.verifying_key().to_bytes();
         HostControlKey {
-            public_line: public_line(&public),
-            private_key: private_key(seed, &public),
+            public_line: format!("{} {comment}", public_line_bare(&public)),
+            private_key: private_key_named(seed, &public, comment),
             public_bytes: public,
         }
     }
+
+    /// **The `authorized_keys` entry a host binds the runner key by**:
+    /// the forced command and every door shut, then the key itself.
+    /// Nothing but [`RUNNER_PROGRAM`] runs under it, whatever is asked.
+    pub fn restricted_line(&self) -> String {
+        format!(
+            "command=\"{RUNNER_PROGRAM}\",{RUNNER_OPTIONS} {}",
+            self.public_line
+        )
+    }
 }
 
-/// The `authorized_keys` line for an Ed25519 public half.
+/// The `authorized_keys` line for an Ed25519 public half, named
+/// [`COMMENT`].
 pub fn public_line(public: &[u8; 32]) -> String {
+    format!("{} {COMMENT}", public_line_bare(public))
+}
+
+/// The same without a comment: the type and the key.
+pub fn public_line_bare(public: &[u8; 32]) -> String {
     let mut blob = Vec::new();
     string(&mut blob, b"ssh-ed25519");
     string(&mut blob, public);
-    format!("ssh-ed25519 {} {COMMENT}", base64(&blob))
+    format!("ssh-ed25519 {}", base64(&blob))
 }
 
 /// **The private key as OpenSSH writes one** (the `openssh-key-v1`
@@ -101,6 +168,11 @@ pub fn public_line(public: &[u8; 32]) -> String {
 /// its two equal check words, the key, the comment and the padding that
 /// rounds it to eight bytes.
 pub fn private_key(seed: &[u8; 32], public: &[u8; 32]) -> String {
+    private_key_named(seed, public, COMMENT)
+}
+
+/// The same under a comment of its own.
+pub fn private_key_named(seed: &[u8; 32], public: &[u8; 32], comment: &str) -> String {
     let mut pub_blob = Vec::new();
     string(&mut pub_blob, b"ssh-ed25519");
     string(&mut pub_blob, public);
@@ -117,7 +189,7 @@ pub fn private_key(seed: &[u8; 32], public: &[u8; 32]) -> String {
     secret.extend_from_slice(seed);
     secret.extend_from_slice(public);
     string(&mut private, &secret);
-    string(&mut private, COMMENT.as_bytes());
+    string(&mut private, comment.as_bytes());
     // the padding is 1, 2, 3 … to the cipher's block size, which for no
     // cipher is eight
     let mut pad = 1u8;
@@ -276,6 +348,59 @@ mod tests {
             }
         }
         out
+    }
+
+    // acceptance: PRT-10
+    #[test]
+    fn the_runner_key_is_a_second_key_bound_to_one_program() {
+        let id = SigningIdentity::from_seeds(&[7u8; 32], &[9u8; 32]);
+        let control = id.host_control_key();
+        let runner = id.host_runner_key();
+
+        // **two keys from the one secret**: the operator's own, and the
+        // one an instance may be handed for an act
+        assert_ne!(control.public_bytes, runner.public_bytes);
+        assert_ne!(control.public_line, runner.public_line);
+        assert!(control.public_line.ends_with(" rhtn-host-control"));
+        assert!(runner.public_line.ends_with(" rhtn-host-runner"));
+        // each comes back with the identity, which is the recovery
+        assert_eq!(
+            runner,
+            SigningIdentity::from_seeds(&[7u8; 32], &[9u8; 32]).host_runner_key()
+        );
+
+        // **and the host binds the runner key to one program**: the
+        // forced command first, every door shut, then the key
+        let line = runner.restricted_line();
+        assert!(
+            line.starts_with("command=\"/usr/local/bin/rhtn-package-runner\","),
+            "{line}"
+        );
+        assert!(line.contains(",restrict "), "{line}");
+        for shut in [
+            "no-pty",
+            "no-port-forwarding",
+            "no-agent-forwarding",
+            "no-X11-forwarding",
+        ] {
+            assert!(line.contains(shut), "{line} lacks {shut}");
+        }
+        assert!(line.ends_with(&runner.public_line), "{line}");
+        // the operator's own key carries no such binding: it is a shell
+        assert!(!control.public_line.contains("command="));
+
+        // the private files are distinct and each is the shape ssh reads
+        assert_ne!(control.private_key, runner.private_key);
+        for k in [&control, &runner] {
+            assert!(
+                k.private_key
+                    .starts_with("-----BEGIN OPENSSH PRIVATE KEY-----\n")
+            );
+            assert!(
+                k.private_key
+                    .ends_with("-----END OPENSSH PRIVATE KEY-----\n")
+            );
+        }
     }
 
     #[test]

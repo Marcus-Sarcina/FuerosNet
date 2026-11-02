@@ -51,6 +51,19 @@ FROM ${RUNTIME}
 # writes a queue; nothing it does wants privilege, and a seized instance is a
 # case this design plans for (design §18.1).  The uid is fixed so a mounted
 # state volume can be chowned to it before the container ever runs.
+# **The one client the node needs on its host's loopback** [author,
+# 2026-11-02]: a socket-backed package has to be started by something with
+# control of the machine, and this node has none — so it asks its own host
+# over the loopback they share (`--network=host`), with a key its
+# operator's client hands it for that act, which the host's
+# `authorized_keys` binds to `rhtn-package-runner` and nothing else
+# (`crates/packaging/package-runner.sh`). No server, no keys of its own,
+# and no known hosts: what it may ask for is the host's to decide and is
+# written down there.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends openssh-client \
+ && rm -rf /var/lib/apt/lists/*
+
 ARG UID=10001
 ARG GID=10001
 RUN groupadd -g ${GID} rhtn \

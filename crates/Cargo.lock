@@ -3387,6 +3387,7 @@ dependencies = [
 name = "rhtn-launch"
 version = "0.1.0"
 dependencies = [
+ "rhtn-crypto",
  "serde_json",
 ]
 

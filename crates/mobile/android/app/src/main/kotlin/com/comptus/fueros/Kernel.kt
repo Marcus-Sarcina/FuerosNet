@@ -858,6 +858,27 @@ object Kernel {
         return call("hostControlPrivateKey", { null }) { p.hostControlPrivateKey() }
     }
 
+    /**
+     * **The `authorized_keys` entry for the key this identity hands its
+     * own instance**: bound by the host to the package runner and nothing
+     * else, so installing a resource is an act through this client rather
+     * than a shell on the machine.
+     */
+    fun hostRunnerAuthorizedLine(): String? {
+        val p = participant ?: return null
+        return call("hostRunnerAuthorizedLine", { null }) { p.hostRunnerAuthorizedLine() }
+    }
+
+    /**
+     * **The private half of the runner's key**, which goes to the
+     * instance with a request and is kept there no longer than the act.
+     * Never the operator's own key, which opens a shell.
+     */
+    fun hostRunnerPrivateKey(): String? {
+        val p = participant ?: return null
+        return call("hostRunnerPrivateKey", { null }) { p.hostRunnerPrivateKey() }
+    }
+
     /** Sweep the serving node's catalog (`wire-format.md` §6.4). */
     fun browse(): String? {
         val p = participant ?: return "the kernel is not running"

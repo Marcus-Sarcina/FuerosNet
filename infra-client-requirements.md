@@ -754,6 +754,21 @@ them, and a request of theirs is refused as a stranger's — which is correct
 and is why the first thing an operator does with a new instance is attach
 to it.
 
+**What you may ask of your own host, and what may ask it** [2026-11-02].
+You hold no standing authority over the machine you run on: no engine
+socket, no privilege, nothing that would let a seized instance reach its
+host. What you have instead is a door your operator opens per act. Their
+client hands you an ssh key with a request and you use it over the
+loopback you share with the host; **what an instance may ask of its host
+is one program's vocabulary**, because the host's own `authorized_keys`
+binds that key to that program and shuts every other ssh door. Start a
+package, stop one, list them, read one's log, fetch an image, restart
+yourself: that is the list, it is written on the host where it can be
+read, and a package is named by the program rather than by the asker, so
+nothing you ask can name your own container. **Keep the key no longer
+than the act**, and nothing of it on disk: the authority was the
+operator's, lent for one request.
+
 **Your operator reaches this machine as themselves** [2026-10-31]. A
 launched instance takes one `authorized_keys` line: the ssh key its
 operator's client derives from their own signing seed

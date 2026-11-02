@@ -2673,6 +2673,34 @@ impl Participant {
         })
     }
 
+    /// **The `authorized_keys` entry for the key this identity hands its
+    /// own instance** (`rhtn_crypto::ssh`): the forced command and every
+    /// ssh door shut, then the key. A launch installs it beside the
+    /// operator's own, and what an instance may ask of its host is the
+    /// runner's vocabulary and nothing else.
+    pub fn host_runner_authorized_line(&self) -> Result<String, Refused> {
+        crate::diag::call("host_runner_authorized_line", || {
+            self.handle.with_blocking(|c| {
+                c.signer()
+                    .map(|id| id.host_runner_key().restricted_line())
+                    .map_err(|_| Refused::new("this device holds no seed, so it derives no key"))
+            })
+        })
+    }
+
+    /// **The private half of the runner's key**, which the client hands
+    /// its instance with a request and the instance keeps no longer than
+    /// the act. Never the operator's own key, which opens a shell.
+    pub fn host_runner_private_key(&self) -> Result<String, Refused> {
+        crate::diag::call("host_runner_private_key", || {
+            self.handle.with_blocking(|c| {
+                c.signer()
+                    .map(|id| id.host_runner_key().private_key)
+                    .map_err(|_| Refused::new("this device holds no seed, so it derives no key"))
+            })
+        })
+    }
+
     /// **The private half of that key**, in the form `ssh -i` reads.
     ///
     /// **It is a secret and it is shown, not stored**: whoever holds it

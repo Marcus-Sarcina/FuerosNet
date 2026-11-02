@@ -209,6 +209,7 @@ pub fn launch(me: &SigningIdentity, ask: &Ask) -> Result<String, String> {
         rhtn_launch::QUIC_PORT,
         rhtn_launch::ADMIN_PORT,
         Some(&control.public_line),
+        Some(&me.host_runner_key().restricted_line()),
     );
     let name = ask
         .name

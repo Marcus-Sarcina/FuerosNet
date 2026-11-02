@@ -159,6 +159,12 @@ pub fn launch_registry_default() -> String {
 /// `Participant::host_control_public_key`, so the machine takes the key
 /// this identity derives and a device restored from the phrase controls
 /// it again (`rhtn_crypto::ssh`). Given none, the machine takes no key.
+///
+/// **`runner_restricted_line` is the instance's own door back to its
+/// host**: `Participant::host_runner_authorized_line`, which the host
+/// binds to the package runner and nothing else, so an operator installs
+/// a resource through their client rather than a shell. Given none, the
+/// machine carries neither that key nor the runner.
 #[uniffi::export]
 pub fn launch_user_data(
     material_hex: String,
@@ -166,6 +172,7 @@ pub fn launch_user_data(
     registry: String,
     tag: String,
     ssh_public_line: Option<String>,
+    runner_restricted_line: Option<String>,
 ) -> String {
     let image = rhtn_launch::Image { registry, tag };
     rhtn_launch::user_data(
@@ -175,6 +182,7 @@ pub fn launch_user_data(
         rhtn_launch::QUIC_PORT,
         rhtn_launch::ADMIN_PORT,
         ssh_public_line.as_deref(),
+        runner_restricted_line.as_deref(),
     )
 }
 

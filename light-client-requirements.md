@@ -1416,6 +1416,22 @@ one that is true.
   operator names another**, which is how a custom or third-party node is
   launched by the same pages. Order the providers and zones offered as §6
   says, by concentration inside this operator's own horizon.
+- **Install a resource on your own instance from here, not from a shell**
+  [author, 2026-11-02]. An operator's only window on their machine may be
+  this client, so installing a package is an act on the administration
+  surface (`infra-client-requirements.md` §8.2) rather than a command
+  somebody types. A package that runs as a service of its own has to be
+  *started* by something with control of the machine, and the instance has
+  none: so **the instance asks its own host, and the authority arrives
+  with the request**. Derive a second ssh key from the signing seed under
+  its own label, hand its public half to the machine at launch beside your
+  own, and give the private half to the instance **with the request and
+  for that act**. **The key it hands over is never the one that opens a
+  shell**: the host binds the second key to one program, whose vocabulary
+  is what an instance may ask for, so an instance already seized keeps
+  something worth little and the key that opens a shell is never on the
+  machine at all. Keep neither key: both come back from the phrase
+  wherever the identity does.
 - **Teach the node you attach to what you hold** [author, 2026-11-01].
   Attaching is two replays, not one: the node replays its store to you
   (`wire-format.md` §10.1.3), and **you replay the records you were party

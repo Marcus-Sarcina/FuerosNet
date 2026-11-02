@@ -16508,6 +16508,53 @@ down to be decided cold. The bound on fetches a minute that
 question. No code changed; that section's "you bound what you have built"
 already accommodates an unenforced field, so no document says *not yet*.
 
+### 2026-11-02 (the one program an instance may run on its host)
+
+**The author's design** [2026-11-02], and better than the two options put
+to him: *"The node could hold the shell scripts appropriate to its own
+installation and function as package manager for its own version of the
+infra node stack, the user could access this package manager function
+through the framed admin page in the light client, and the light client
+could inject the SSH key for the host instance into the parameterized
+installation scripts along with the UI request."*
+
+**What makes it sound.** The loopback is already there: the node runs on
+its host's network, so `127.0.0.1:22` is its host's own sshd, unused until
+now. The node holds no standing authority over the machine — it cannot
+reach it at all on its own — and the key arrives with the request, from
+the device that holds the identity, for one act. That is the posture of
+everything else here: the instance holds no seed, the operator signs per
+act, and a seized instance has nothing durable to take. Mounting the
+engine's socket, the alternative, would have handed a seized node its
+host.
+
+**Built so far, which is everything but the route.** A **second derived
+key** beside the operator's own, under its own label, from the same
+secret: the operator's opens a shell, and the runner's is the one an
+instance may be handed. The host binds it in `authorized_keys` to
+`command="/usr/local/bin/rhtn-package-runner"` with every door ssh offers
+shut, so a node already seized that keeps it gains that program's
+vocabulary and no shell. **The runner itself** is
+`crates/packaging/package-runner.sh`, held in the repository rather than
+buried in a configuration string: six verbs (start, stop, list, logs,
+pull, node-restart), read from `SSH_ORIGINAL_COMMAND`, never through
+`eval`, with every package named `rhtn-pkg-<name>` by the runner so no
+request can name the node's own container, and a package's arguments
+passed after the image where an engine reads no flags of its own. Its
+refusals are exercised: shell punctuation, a flag where an image belongs,
+a name reaching elsewhere, an unknown verb, an empty request. **The
+launch carries both keys and the runner** into the machine, and the test
+holds that no line of the embedded script escapes its block. **And the
+node image gains an ssh client**, which is all it needs: no server, no
+key of its own.
+
+**What waits on the author**: the route itself, because a management act
+on the administration surface is authorised today by *reaching the port*
+[author, 2026-10-08], and a launched instance binds that surface on
+`0.0.0.0`. A route that starts images would then be open to the internet.
+That is a defect of its own and is stated as a question in the session
+rather than papered over.
+
 ### 2026-11-02 (the launch's own door: an expired password let no key through)
 
 **Found on the bench**, launching a node from the operator's phone and

@@ -7336,6 +7336,33 @@
     "interpretation": ""
   },
   {
+    "id": "PRT-10",
+    "area": "participant",
+    "gap": "participant",
+    "title": "A second derived key, which a host binds to one program, is what an instance may be handed for an act",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "light-client-requirements.md §10",
+      "infra-client-requirements.md §9"
+    ],
+    "rule": [
+      {
+        "where": "light-client-requirements.md §10",
+        "text": "**the key it hands over is never the one that opens a shell**"
+      },
+      {
+        "where": "infra-client-requirements.md §9",
+        "text": "what an instance may ask of its host is one program's vocabulary"
+      }
+    ],
+    "given": "An operator identity, and a machine its client launched.",
+    "when": "The client derives both keys and the launch installs them, and the client hands its instance the runner's key with a request.",
+    "then": "The two keys differ and each returns with the identity; the operator's own entry carries no forced command, and the runner's names the one program with every ssh door shut, so a key captured from an instance runs that program's vocabulary and opens no shell; the runner refuses shell punctuation, a flag where an image belongs, a name reaching beyond the packages it made, and any verb it does not know; and the launch carries the program itself, every line of it inside its own block.",
+    "oracle": "behaviour",
+    "interpretation": ""
+  },
+  {
     "id": "QUE-01",
     "area": "queue",
     "gap": "queue",

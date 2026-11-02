@@ -67,7 +67,15 @@ object Launch {
         registry: String = REGISTRY_DEFAULT,
         tag: String = TAG_DEFAULT,
         sshPublicLine: String? = Kernel.hostControlPublicKey(),
-    ): String = launchUserData(operatorMaterialHex, token, registry, tag, sshPublicLine)
+        runnerRestrictedLine: String? = Kernel.hostRunnerAuthorizedLine(),
+    ): String = launchUserData(
+        operatorMaterialHex,
+        token,
+        registry,
+        tag,
+        sshPublicLine,
+        runnerRestrictedLine,
+    )
 
     /** What to launch: where, how big, from which registry. */
     data class Plan(
