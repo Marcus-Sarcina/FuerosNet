@@ -60,6 +60,13 @@ fn seqno(counter: u32) -> rhtn_archive::tx::Seqno {
 /// delivers a record has to know the port in advance. One per test: these
 /// run in one binary, and two daemons cannot hold one port.
 fn layout(tag: &str, token: &[u8; 32], quic_port: u16) -> Layout {
+    layout_on(tag, token, quic_port, "127.0.0.1:0")
+}
+
+/// The same with the surface bound where the caller says, so a test can
+/// reach it from an address that is not the loopback — which is where an
+/// act must prove itself (`Surface::authorised`).
+fn layout_on(tag: &str, token: &[u8; 32], quic_port: u16, surface: &str) -> Layout {
     let dir = std::env::temp_dir().join(format!("rhtnd-enrol-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
@@ -87,7 +94,7 @@ fn layout(tag: &str, token: &[u8; 32], quic_port: u16) -> Layout {
              resources = \"{}\"\ngrants = \"{}\"\n\
              heartbeat = 30\ningestion = \"unverified-gossip\"\n\
              [allowance]\nrequests = 120\nseconds = 60\n\
-             [administration]\nlisten = \"127.0.0.1:0\"\ntoken = \"{}\"\n",
+             [administration]\nlisten = \"{}\"\ntoken = \"{}\"\ntoken-file = \"{}\"\n",
             dir.join("operator").display(),
             dir.join("transport.key").display(),
             delegations.display(),
@@ -100,7 +107,9 @@ fn layout(tag: &str, token: &[u8; 32], quic_port: u16) -> Layout {
             dir.join("archive").display(),
             dir.join("hosting").display(),
             dir.join("grants").display(),
+            surface,
             hex(token),
+            dir.join("administration.token").display(),
         ),
     )
     .unwrap();
@@ -1146,4 +1155,238 @@ fn the_fetch_says_the_subtree_it_counts_and_the_page_owes_a_re_signed_entry() {
     );
     d.stop();
     let _ = std::fs::remove_dir_all(&l.dir);
+}
+
+/// **An enrolled instance whose surface is bound on every interface**,
+/// which is what a rented one binds: enrolled over the loopback, where
+/// arriving is the authorisation, and then reachable from this machine's
+/// own address, where an act must prove itself.
+fn enrolled_on(tag: &str, quic: u16, token: &[u8; 32]) -> (Layout, Daemon, SocketAddr) {
+    let l = layout_on(tag, token, quic, "0.0.0.0:0");
+    let mut d = spawn(&l);
+    let port = d.surface_at().port();
+    let at: SocketAddr = (std::net::Ipv4Addr::LOCALHOST, port).into();
+    let got = ask(
+        at,
+        &format!("GET /node?nonce={} HTTP/1.1", hex(&[2u8; 16])),
+        b"",
+    );
+    let key: [u8; 32] = unhex(&field(&got, "transport").expect("a key"))
+        .try_into()
+        .expect("32 bytes");
+    let bob = test_identity("bob");
+    let point = NetworkPoint::new([127, 0, 0, 1], Some(u64::from(quic)));
+    let record = endpoint_record(&bob, std::slice::from_ref(&point), seqno(1));
+    let entry = anchor_entry(&bob, std::slice::from_ref(&point), 3, seqno(1));
+    assert_eq!(
+        200,
+        status(&ask(at, "PUT /node/endpoint-record HTTP/1.1", &record))
+    );
+    assert_eq!(
+        200,
+        status(&ask(at, "PUT /node/anchor-entry HTTP/1.1", &entry))
+    );
+    for c in issue_run(&bob, &key, now(), 1) {
+        assert_eq!(200, status(&ask(at, "PUT /node/run HTTP/1.1", &c)));
+    }
+    assert!(d.serving().is_some(), "it serves once enrolled");
+    (l, d, at)
+}
+
+/// This machine's own outbound address, for reaching a surface from
+/// somewhere that is not the loopback.  **Nothing is sent**: a connected
+/// UDP socket only tells the kernel to pick a route, and the test says so
+/// and skips where there is none.
+fn outbound_address() -> Option<std::net::IpAddr> {
+    let s = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
+    s.connect("192.0.2.1:9").ok()?;
+    let ip = s.local_addr().ok()?.ip();
+    (!ip.is_loopback() && !ip.is_unspecified()).then_some(ip)
+}
+
+/// A nonce and the proof an act carries, as a query.
+fn proved(token: &[u8; 32], method: &str, path: &str, body: &[u8], nonce: &[u8; 16]) -> String {
+    let signed = format!("{path}?nonce={}", hex(nonce));
+    let p = rhtn_crypto::enrolment::act_proof(token, nonce, method, &signed, body);
+    format!("{signed}&proof={}", hex(&p))
+}
+
+// acceptance: DMN-36
+#[test]
+fn an_act_that_did_not_arrive_on_the_loopback_proves_itself_under_the_token() {
+    let Some(ip) = outbound_address() else {
+        eprintln!("no outbound address on this machine; the off-loopback half is skipped");
+        return;
+    };
+    let token = [0x5au8; 32];
+    let (_l, d, at) = enrolled_on("proof", 7489, &token);
+    let away: SocketAddr = (ip, at.port()).into();
+
+    // **on the loopback, arriving is the authorisation**, which is the
+    // rule §8.2 rests on and holds exactly there
+    let on_loopback = ask(at, "POST /node/acknowledge HTTP/1.1", b"acknowledge=on");
+    assert!(on_loopback.starts_with("HTTP/1.1 200"), "{on_loopback}");
+
+    // **from anywhere else it is not**: this is the surface a rented
+    // instance binds, where reaching the port is evidence of nothing
+    let bare = ask(away, "POST /node/acknowledge HTTP/1.1", b"acknowledge=off");
+    assert!(bare.starts_with("HTTP/1.1 401"), "{bare}");
+    assert!(body(&bare).contains("nonce and proof"), "{bare}");
+
+    // with the proof it is taken
+    let nonce = [1u8; 16];
+    let target = proved(
+        &token,
+        "POST",
+        "/node/acknowledge",
+        b"acknowledge=off",
+        &nonce,
+    );
+    let took = ask(away, &format!("POST {target} HTTP/1.1"), b"acknowledge=off");
+    assert!(took.starts_with("HTTP/1.1 200"), "{took}");
+
+    // **and a proof is worth the one act**: the same nonce again is
+    // refused, and so is a proof made for another path or another body
+    let again = ask(away, &format!("POST {target} HTTP/1.1"), b"acknowledge=off");
+    assert!(again.starts_with("HTTP/1.1 401"), "{again}");
+    assert!(body(&again).contains("has been used"), "{again}");
+
+    let elsewhere = proved(
+        &token,
+        "POST",
+        "/node/acknowledge",
+        b"acknowledge=on",
+        &[2u8; 16],
+    );
+    let wrong_body = ask(
+        away,
+        &format!("POST {elsewhere} HTTP/1.1"),
+        b"acknowledge=off",
+    );
+    assert!(wrong_body.starts_with("HTTP/1.1 401"), "{wrong_body}");
+
+    let other_token = proved(
+        &[0u8; 32],
+        "POST",
+        "/node/acknowledge",
+        b"acknowledge=on",
+        &[3u8; 16],
+    );
+    let wrong_token = ask(
+        away,
+        &format!("POST {other_token} HTTP/1.1"),
+        b"acknowledge=on",
+    );
+    assert!(wrong_token.starts_with("HTTP/1.1 401"), "{wrong_token}");
+
+    // the fetch stays open: it is the bootstrap, and what it discloses is
+    // the public half and a proof over it
+    let fetch = ask(
+        away,
+        &format!("GET /node?nonce={} HTTP/1.1", hex(&[4u8; 16])),
+        b"",
+    );
+    assert!(fetch.starts_with("HTTP/1.1 200"), "{fetch}");
+
+    d.stop();
+}
+
+// acceptance: DMN-36
+#[test]
+fn the_token_is_replaced_at_enrolment_and_the_replacement_survives_a_restart() {
+    let Some(ip) = outbound_address() else {
+        eprintln!("no outbound address on this machine; this test needs one");
+        return;
+    };
+    let old = [0x11u8; 32];
+    let fresh = [0x22u8; 32];
+    let (l, d, at) = enrolled_on("rotate", 7491, &old);
+    let away: SocketAddr = (ip, at.port()).into();
+
+    // **the replacement is set under the old token**, so a caller who
+    // cannot prove the old one cannot set a new one
+    let body_text = format!("token={}", hex(&fresh));
+    let unproved = ask(away, "POST /node/token HTTP/1.1", body_text.as_bytes());
+    assert!(unproved.starts_with("HTTP/1.1 401"), "{unproved}");
+
+    let target = proved(
+        &old,
+        "POST",
+        "/node/token",
+        body_text.as_bytes(),
+        &[7u8; 16],
+    );
+    let rotated = ask(
+        away,
+        &format!("POST {target} HTTP/1.1"),
+        body_text.as_bytes(),
+    );
+    assert!(rotated.starts_with("HTTP/1.1 200"), "{rotated}");
+
+    // kept where the next start will find it, and not readable by anyone
+    // else on the machine
+    let kept = l.dir.join("administration.token");
+    assert_eq!(
+        std::fs::read_to_string(&kept).unwrap().trim(),
+        hex(&fresh),
+        "the replacement is written"
+    );
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(&kept).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600, "the token in force is 0600");
+    }
+
+    // **the old token is spent**: an act proved under it is refused, and
+    // one proved under the replacement is taken
+    let stale = proved(
+        &old,
+        "POST",
+        "/node/acknowledge",
+        b"acknowledge=on",
+        &[8u8; 16],
+    );
+    let refused = ask(away, &format!("POST {stale} HTTP/1.1"), b"acknowledge=on");
+    assert!(refused.starts_with("HTTP/1.1 401"), "{refused}");
+    let now = proved(
+        &fresh,
+        "POST",
+        "/node/acknowledge",
+        b"acknowledge=on",
+        &[9u8; 16],
+    );
+    let took = ask(away, &format!("POST {now} HTTP/1.1"), b"acknowledge=on");
+    assert!(took.starts_with("HTTP/1.1 200"), "{took}");
+
+    // **and it survives a restart**, which is why it is refused where
+    // there is nowhere to keep it
+    d.stop();
+    let mut again = spawn(&l);
+    let away: SocketAddr = (ip, again.surface_at().port()).into();
+    // the restarted instance reads its run before it serves, and an act
+    // waits on that as any caller would
+    assert!(
+        again.serving().is_some(),
+        "it serves again from its own files"
+    );
+    let after = proved(
+        &fresh,
+        "POST",
+        "/node/acknowledge",
+        b"acknowledge=off",
+        &[10u8; 16],
+    );
+    let still = ask(away, &format!("POST {after} HTTP/1.1"), b"acknowledge=off");
+    assert!(still.starts_with("HTTP/1.1 200"), "{still}");
+    let stale = proved(
+        &old,
+        "POST",
+        "/node/acknowledge",
+        b"acknowledge=on",
+        &[11u8; 16],
+    );
+    let refused = ask(away, &format!("POST {stale} HTTP/1.1"), b"acknowledge=on");
+    assert!(refused.starts_with("HTTP/1.1 401"), "{refused}");
+    again.stop();
 }

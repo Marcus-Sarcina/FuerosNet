@@ -107,10 +107,81 @@ use tokio::net::{TcpListener, TcpStream};
 /// nothing else in this project claims it [author, 2026-10-08].
 pub const DEFAULT_PORT: u16 = 7449;
 
+/// **The token acts are proved under at this start**: the replacement the
+/// operator's client set, where a file holds one, and the configuration's
+/// otherwise.
+///
+/// **Why a replacement at all** [author, 2026-11-02]: the configuration's
+/// token arrived in the machine's provisioning data, which anything on the
+/// machine can read back from the provider's metadata service — a hosted
+/// package among them. So the client rotates it once the surface has
+/// proved itself, and the standing secret is one that was never written
+/// anywhere but here.
+pub fn token_in_force(configured: [u8; 32], file: Option<&std::path::Path>) -> [u8; 32] {
+    let Some(path) = file else {
+        return configured;
+    };
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return configured;
+    };
+    match bytes_of(text.trim()).and_then(|b| <[u8; 32]>::try_from(b).ok()) {
+        Some(token) => {
+            crate::say!(
+                "rhtnd: the administration token in force is the one in {}",
+                path.display()
+            );
+            token
+        }
+        // a file that is not a token is not a reason to refuse to serve,
+        // and saying so is what an operator can act on
+        None => {
+            crate::say!(
+                "rhtnd: {} does not hold 64 hex digits; the configuration's token stands",
+                path.display()
+            );
+            configured
+        }
+    }
+}
+
+/// **0600 on a secret this instance keeps**: the token in force is what
+/// authorises an act, and a file anybody on the machine may read is not a
+/// secret.  Said rather than failed where the mode cannot be set, since
+/// the token is already written and refusing afterwards would leave the
+/// operator locked out.
+#[cfg(unix)]
+fn restrict(path: &std::path::Path) {
+    use std::os::unix::fs::PermissionsExt;
+    if let Err(e) = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600)) {
+        crate::say!("rhtnd: {}: could not set 0600: {e}", path.display());
+    }
+}
+
+#[cfg(not(unix))]
+fn restrict(_: &std::path::Path) {}
+
+/// Bytes out of lower-case hex, or nothing where it is not hex of whole
+/// bytes: what a nonce and a proof arrive as.
+fn bytes_of(s: &str) -> Option<Vec<u8>> {
+    if !s.len().is_multiple_of(2) {
+        return None;
+    }
+    (0..s.len() / 2)
+        .map(|i| u8::from_str_radix(s.get(i * 2..i * 2 + 2)?, 16).ok())
+        .collect()
+}
+
+/// **How many nonces an instance remembers refusing a second time**: a
+/// proof is worth one act, and a captured one is worth nothing once its
+/// nonce is spent.  Bounded because an instance must not grow a set an
+/// unauthenticated caller fills; the oldest goes, and a caller whose
+/// nonce has fallen out of the set simply chooses another.
+pub const NONCES_REMEMBERED: usize = 1024;
+
 /// The domain separation over the proof, and the nonce's width: the
 /// instance's end of a MAC whose other end is the operator's client, so
 /// both read one definition (`rhtn_crypto::enrolment`).
-pub use rhtn_crypto::enrolment::{NONCE_BYTES, PROOF_INFO, proof};
+pub use rhtn_crypto::enrolment::{ACT_INFO, NONCE_BYTES, PROOF_INFO, act_checks, proof};
 
 /// The most one request may carry. A run's delegations are a few
 /// hundred bytes each; this is room for a generous batch and no more, so a
@@ -126,8 +197,25 @@ pub const CALLER_TIMEOUT: Duration = Duration::from_secs(10);
 pub struct Surface {
     /// Where it listens, from the configuration's `[administration]`.
     pub listen: SocketAddr,
-    /// The one-time token, used as a MAC key and never sent.
-    pub token: [u8; 32],
+    /// **The token, used as a MAC key and never sent**: the instance
+    /// proves it holds it when a client fetches, and a client proves it
+    /// holds it on every act that does not arrive on the loopback.
+    ///
+    /// **It is replaced once the surface is trusted** [author,
+    /// 2026-11-02]: the one in the configuration travelled in the
+    /// machine's own provisioning data, which anything on the machine can
+    /// read back, so the operator's client sets a fresh one over the
+    /// surface at enrolment and that is the one acts are proved under.
+    pub token: Arc<Mutex<[u8; 32]>>,
+    /// **Where a replacement token is kept**, so a rotation survives a
+    /// restart.  Absent, a rotation has nowhere to persist and refuses
+    /// rather than holding a token the next start would forget — the same
+    /// answer a grant act gives without a grants directory.
+    pub token_file: Option<PathBuf>,
+    /// The nonces this instance has taken an act under, newest last: a
+    /// proof is worth one act, and this is what makes a second use of one
+    /// worth nothing ([`NONCES_REMEMBERED`]).
+    pub nonces: Arc<Mutex<std::collections::VecDeque<Vec<u8>>>>,
     /// The transport credential, for its public half and to verify a run
     /// into.
     pub credential: Arc<Credential>,
@@ -291,7 +379,7 @@ impl Surface {
                 }
             }
         };
-        let (code, body) = self.answer_to(&req);
+        let (code, body) = self.answer_to(&req, Some(from));
         tracing::info!(
             target: "daemon",
             step = "surface_request",
@@ -306,11 +394,18 @@ impl Surface {
 
     /// What a request comes to: the status and the body, both decided
     /// without touching the socket so a test can hold this alone.
-    pub fn answer_to(&self, req: &http::Request) -> (u16, String) {
+    ///
+    /// `from` is where the request arrived from, which is half of what
+    /// authorises it ([`Surface::authorised`]); `None` is a caller in this
+    /// process, which is a test or the service itself.
+    pub fn answer_to(&self, req: &http::Request, from: Option<SocketAddr>) -> (u16, String) {
         let (path, query) = match req.target.split_once('?') {
             Some((p, q)) => (p, Some(q)),
             None => (req.target.as_str(), None),
         };
+        if let Err(refusal) = self.authorised(req, path, query, from) {
+            return refusal;
+        }
         match (req.method.as_str(), path) {
             ("GET", "/") | ("GET", "/index.html") => self.page(query),
             ("GET", "/node") => self.fetch(query),
@@ -319,6 +414,7 @@ impl Surface {
             ("POST", "/node/grant/narrow") => self.grant_narrow(&req.body),
             ("POST", "/node/grant/drop") => self.grant_drop(&req.body),
             ("POST", "/node/grant/template") => self.grant_template(&req.body),
+            ("POST", "/node/token") => self.rotate(&req.body),
             ("POST", "/node/reload") => self.reload(),
             ("POST", "/node/stop") => self.stop(),
             ("PUT", "/node/run") | ("POST", "/node/run") => self.take_run(&req.body),
@@ -391,12 +487,110 @@ impl Surface {
         )
     }
 
-    /// **A management act, and what authorises one** [author, 2026-10-08]:
-    /// reaching this port. `infra-client-requirements.md` §8.2 puts
-    /// administration "out of band, with everything else about the host",
-    /// so where the surface binds is the access decision — and an act
-    /// carries no key, which is what lets an operator administer from a
-    /// desktop holding no seed (design §23.3).
+    /// **What authorises an act** [author, 2026-10-08, narrowed
+    /// 2026-11-02]: arriving on the loopback, or a proof under this
+    /// instance's token.
+    ///
+    /// §8.2 puts administration "out of band, with everything else about
+    /// the host", and where the surface binds was the whole access
+    /// decision. **That holds on the loopback and nowhere else**: a
+    /// rented instance binds this surface on every interface it has, so
+    /// reaching the port there is no evidence of anything — anyone could
+    /// stop the node or grant themselves a role on a hosted resource.
+    ///
+    /// So an act that did not arrive on the loopback carries `nonce` and
+    /// `proof` in its query, and the proof is
+    /// `HMAC-SHA256` under the token over the method, the target without
+    /// the proof itself, and the body
+    /// (`rhtn_crypto::enrolment::act_proof`). **The token is still never
+    /// sent**, an act still carries no signature, and a desktop holding
+    /// no seed can still administer — which is what the original rule was
+    /// for.
+    ///
+    /// **The fetch is the one exception**: it is the bootstrap, where the
+    /// client has not yet been told anything by this instance and the
+    /// instance proves itself to the client. It discloses the transport
+    /// key it minted, which is public, and the proof over it.
+    fn authorised(
+        &self,
+        req: &http::Request,
+        path: &str,
+        query: Option<&str>,
+        from: Option<SocketAddr>,
+    ) -> Result<(), (u16, String)> {
+        // the bootstrap, and a caller inside this process
+        if path == "/node" && req.method == "GET" {
+            return Ok(());
+        }
+        match from {
+            None => return Ok(()),
+            Some(a) if a.ip().is_loopback() => return Ok(()),
+            Some(_) => {}
+        }
+        let refused = |why: &str| {
+            Err((
+                401,
+                format!(
+                    "this act is not authorised: {why}. An act that does not arrive on the \
+                     loopback carries nonce and proof in its query, the proof being \
+                     HMAC-SHA256 under this instance's token over the method, the target \
+                     without the proof, and the body\n"
+                ),
+            ))
+        };
+        let q = query.unwrap_or("");
+        let field = |name: &str| -> Option<String> {
+            q.split('&')
+                .find_map(|p| p.strip_prefix(&format!("{name}=")))
+                .map(str::to_string)
+        };
+        let (Some(nonce_hex), Some(proof_hex)) = (field("nonce"), field("proof")) else {
+            return refused("it carries no nonce and proof");
+        };
+        let Some(nonce) = bytes_of(&nonce_hex) else {
+            return refused("the nonce is not hex");
+        };
+        if nonce.len() != NONCE_BYTES {
+            return refused("the nonce is not 16 bytes");
+        }
+        let Some(shown) = bytes_of(&proof_hex) else {
+            return refused("the proof is not hex");
+        };
+        // **the target as it was, less the proof**: everything else a
+        // caller could change is inside what the proof covers
+        let signed: String = {
+            let kept: Vec<&str> = q.split('&').filter(|p| !p.starts_with("proof=")).collect();
+            if kept.is_empty() {
+                path.to_string()
+            } else {
+                format!("{path}?{}", kept.join("&"))
+            }
+        };
+        if !act_checks(
+            &self.token.lock().unwrap(),
+            &nonce,
+            &req.method,
+            &signed,
+            &req.body,
+            &shown,
+        ) {
+            return refused("the proof is not this token's over this act");
+        }
+        // **a nonce is spent by the act it authorised**, so a captured
+        // proof is worth nothing afterwards
+        let mut seen = self.nonces.lock().unwrap();
+        if seen.contains(&nonce) {
+            return refused("that nonce has been used");
+        }
+        if seen.len() >= NONCES_REMEMBERED {
+            seen.pop_front();
+        }
+        seen.push_back(nonce);
+        Ok(())
+    }
+
+    /// **A management act carries no key**, which is what lets an operator
+    /// administer from a desktop holding no seed (design §23.3).
     ///
     /// **None of these is what §8.1 and OPS-011 forbid**: no frame is
     /// composed, nothing is replayed, no signature is made and no packet
@@ -405,6 +599,65 @@ impl Surface {
         self.running()
             .map(|(n, _)| n)
             .ok_or((409, "this node is not serving yet\n".into()))
+    }
+
+    /// **Replace the token acts are proved under** [author, 2026-11-02],
+    /// which the operator's client does once at enrolment: the one the
+    /// configuration carried travelled in the machine's provisioning
+    /// data, and anything on the machine can read that back from the
+    /// provider's metadata service — a hosted package among them. The
+    /// replacement was never written anywhere but the file below.
+    ///
+    /// **Authorised as every act is**: on the loopback by arriving there,
+    /// and otherwise by a proof under the token in force, which is the
+    /// one being replaced. So a caller who cannot prove the old token
+    /// cannot set a new one.
+    ///
+    /// **Refused where there is nowhere to keep it**, as a grant act is
+    /// without a grants directory: a token held only in memory would be
+    /// forgotten at the next start, and an operator would be locked out
+    /// of their own instance with no way to tell why.
+    fn rotate(&self, body: &[u8]) -> (u16, String) {
+        let Some(path) = self.token_file.clone() else {
+            return (
+                409,
+                "this instance names no `[administration] token-file`, so a replacement token \
+                 has nowhere to survive a restart\n"
+                    .into(),
+            );
+        };
+        let f = form(body);
+        let given = field(&f, "token");
+        let Some(fresh) = bytes_of(given).and_then(|b| <[u8; 32]>::try_from(b).ok()) else {
+            return (400, "a token is 64 hex digits\n".into());
+        };
+        if fresh == *self.token.lock().unwrap() {
+            return (400, "that is the token already in force\n".into());
+        }
+        // **the file first, then the memory**: a token in force that the
+        // next start would not find is the one state worth refusing to
+        // hold
+        if let Some(dir) = path.parent()
+            && let Err(e) = std::fs::create_dir_all(dir)
+        {
+            return (500, format!("{}: {e}\n", dir.display()));
+        }
+        if let Err(e) = std::fs::write(&path, format!("{}\n", hex(&fresh))) {
+            return (500, format!("{}: {e}\n", path.display()));
+        }
+        restrict(&path);
+        *self.token.lock().unwrap() = fresh;
+        // every proof made under the old token is worth nothing now, and
+        // the nonces it spent are of no further interest
+        self.nonces.lock().unwrap().clear();
+        tracing::info!(target: "daemon", step = "token_rotated", "daemon.lifecycle");
+        (
+            200,
+            format!(
+                "the token in force is the one you set, kept in {}\n",
+                path.display()
+            ),
+        )
     }
 
     /// The standing acknowledgement policy (design §11.2.1): whether every
@@ -875,7 +1128,7 @@ impl Surface {
         let mut said = format!(
             "transport {}\nproof {}\nphase {}\ncredentials {}\nrun-ends {}\nendpoint-record {}\nanchor-entry {}\nsubtree {subtree}\n",
             hex(&key),
-            hex(&proof(&self.token, &nonce, &key)),
+            hex(&proof(&self.token.lock().unwrap(), &nonce, &key)),
             if running.is_some() {
                 "serving"
             } else {

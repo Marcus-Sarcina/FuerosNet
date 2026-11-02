@@ -15072,6 +15072,28 @@
     "interpretation": ""
   },
   {
+    "id": "DMN-36",
+    "area": "daemon",
+    "gap": "daemon",
+    "title": "An act on the administration surface is authorised by arriving on the loopback or by a proof under the token, which is replaced at enrolment",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "infra-client-requirements.md §8.2"
+    ],
+    "rule": [
+      {
+        "where": "infra-client-requirements.md §8.2",
+        "text": "out of band, with everything else about the host"
+      }
+    ],
+    "given": "An enrolled instance whose administration surface is bound on every interface, as a rented one binds it, with somewhere to keep a replacement token.",
+    "when": "Acts arrive on the loopback and from another address of the same machine, with no proof, with a proof over the act, with that proof a second time, with a proof over another body and under another token; and the client replaces the token and the instance is restarted.",
+    "then": "An act on the loopback is taken as before; one from elsewhere without a proof is refused, with a proof is taken, and with the same nonce again is refused; a proof over another body or under another token is refused; the enrolment fetch stays open, being the bootstrap and disclosing a public half; the replacement is set only under the token in force, is written where the next start reads it at 0600, spends the old token, and is still in force after a restart.",
+    "oracle": "behaviour",
+    "interpretation": ""
+  },
+  {
     "id": "TOP-52",
     "area": "topology",
     "gap": "topology",

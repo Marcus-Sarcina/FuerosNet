@@ -62,6 +62,13 @@ pub const HOSTING: &str = "/var/lib/rhtn/hosting";
 /// The state directory [`HOSTING`] names for the same reason.
 pub const HOSTED_STATE: &str = "/var/lib/rhtn/state";
 
+/// **Where a replacement administration token is kept** [author,
+/// 2026-11-02]: the token in the configuration travelled in this script,
+/// which anything on the machine can read back from the provider's
+/// metadata service, so the operator's client sets a fresh one once the
+/// surface has proved itself and the instance keeps it here.
+pub const ADMIN_TOKEN_FILE: &str = "/var/lib/rhtn/administration.token";
+
 /// **Where the host keeps the one program an instance may run on it**
 /// (`rhtn_crypto::ssh::RUNNER_PROGRAM`, which the key's own
 /// `authorized_keys` entry names).
@@ -169,6 +176,7 @@ pub fn node_config(token_hex: &str, quic: u16, admin: u16) -> String {
          [administration]\n\
          listen = \"0.0.0.0:{admin}\"\n\
          token = \"{token_hex}\"\n\
+         token-file = \"{ADMIN_TOKEN_FILE}\"\n\
          [federation]\n\
          store = \"/var/lib/rhtn/federation\"\n"
     )
@@ -1014,6 +1022,9 @@ mod tests {
         // the state directory are named, so installing one is an entry
         // written and a re-read rather than a reprovisioning
         assert!(conf.contains("resources = \"/var/lib/rhtn/hosting\""));
+        // **a rented instance can replace the token it was given**, which
+        // it must, the first one having travelled in this very script
+        assert!(conf.contains("token-file = \"/var/lib/rhtn/administration.token\""));
         assert!(conf.contains("state = \"/var/lib/rhtn/state\""));
         let image = Image {
             registry: "reg.example/x".into(),

@@ -102,3 +102,132 @@ mod tests {
         assert!(!checks(&token, &nonce, &key, &p[..31]), "a short proof");
     }
 }
+
+// ---- the other direction: a client proving an act to its instance ------
+
+/// The domain separation over an **act's** proof, distinct from
+/// [`PROOF_INFO`] so a proof made in one direction can never serve the
+/// other.
+pub const ACT_INFO: &[u8] = b"rhtn/1:administration-act";
+
+/// **The proof a client offers for a management act** [author,
+/// 2026-11-02]: `HMAC-SHA256` under the instance's token over [`ACT_INFO`],
+/// the caller's nonce, the method, the path and the body.
+///
+/// **Why the act and not the nonce alone.** A proof over a nonce would
+/// carry to any request that arrived with it, so a captured one could be
+/// replayed as a different act entirely. Binding the method, the path and
+/// the body makes a proof worth exactly the act it was made for — which,
+/// with a nonce the instance will not take twice, is the whole of what an
+/// act needs to be authorised by something other than reaching the port.
+///
+/// **The token is still never sent**, as it is not in the other
+/// direction: both parties know it because the operator's client wrote it
+/// into the instance's configuration, and each proves knowledge of it.
+#[must_use]
+pub fn act_proof(
+    token: &[u8; 32],
+    nonce: &[u8],
+    method: &str,
+    path: &str,
+    body: &[u8],
+) -> [u8; 32] {
+    let mut mac =
+        <Hmac<Sha256> as KeyInit>::new_from_slice(token).expect("any length is a MAC key");
+    mac.update(ACT_INFO);
+    mac.update(&(nonce.len() as u32).to_be_bytes());
+    mac.update(nonce);
+    mac.update(&(method.len() as u32).to_be_bytes());
+    mac.update(method.as_bytes());
+    mac.update(&(path.len() as u32).to_be_bytes());
+    mac.update(path.as_bytes());
+    mac.update(&(body.len() as u32).to_be_bytes());
+    mac.update(body);
+    let mut out = [0u8; 32];
+    out.copy_from_slice(&mac.finalize().into_bytes());
+    out
+}
+
+/// Whether `shown` is the proof this token and nonce make over this act.
+///
+/// **Compared in constant time**, for the reason [`checks`] is.
+#[must_use]
+pub fn act_checks(
+    token: &[u8; 32],
+    nonce: &[u8],
+    method: &str,
+    path: &str,
+    body: &[u8],
+    shown: &[u8],
+) -> bool {
+    let mut mac =
+        <Hmac<Sha256> as KeyInit>::new_from_slice(token).expect("any length is a MAC key");
+    mac.update(ACT_INFO);
+    mac.update(&(nonce.len() as u32).to_be_bytes());
+    mac.update(nonce);
+    mac.update(&(method.len() as u32).to_be_bytes());
+    mac.update(method.as_bytes());
+    mac.update(&(path.len() as u32).to_be_bytes());
+    mac.update(path.as_bytes());
+    mac.update(&(body.len() as u32).to_be_bytes());
+    mac.update(body);
+    mac.verify_slice(shown).is_ok()
+}
+
+#[cfg(test)]
+mod act_tests {
+    use super::*;
+
+    // acceptance: DMN-36
+    #[test]
+    fn a_proof_is_worth_the_one_act_it_was_made_for() {
+        let token = [3u8; 32];
+        let nonce = [9u8; 16];
+        let body = b"resource=aa&roles=reader";
+        let p = act_proof(&token, &nonce, "POST", "/node/grant", body);
+        assert!(act_checks(&token, &nonce, "POST", "/node/grant", body, &p));
+
+        // not another path, another method, another body, another nonce,
+        // or another token
+        assert!(!act_checks(&token, &nonce, "POST", "/node/stop", body, &p));
+        assert!(!act_checks(&token, &nonce, "PUT", "/node/grant", body, &p));
+        assert!(!act_checks(
+            &token,
+            &nonce,
+            "POST",
+            "/node/grant",
+            b"resource=bb",
+            &p
+        ));
+        assert!(!act_checks(
+            &token,
+            &[8u8; 16],
+            "POST",
+            "/node/grant",
+            body,
+            &p
+        ));
+        assert!(!act_checks(
+            &[4u8; 32],
+            &nonce,
+            "POST",
+            "/node/grant",
+            body,
+            &p
+        ));
+
+        // **and never the other direction's proof**: the two tags part
+        // them, so an instance's answer cannot authorise an act
+        let theirs = proof(&token, &nonce, &[7u8; 32]);
+        assert!(!act_checks(
+            &token, &nonce, "GET", "/node", &[7u8; 32], &theirs
+        ));
+        assert_ne!(ACT_INFO, PROOF_INFO);
+
+        // the fields cannot be slid into one another: a length precedes
+        // each, so these two acts do not share a proof
+        let a = act_proof(&token, &nonce, "POST", "/node/ab", b"c");
+        let b = act_proof(&token, &nonce, "POST", "/node/a", b"bc");
+        assert_ne!(a, b);
+    }
+}

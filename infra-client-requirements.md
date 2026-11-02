@@ -754,6 +754,33 @@ them, and a request of theirs is refused as a stranger's — which is correct
 and is why the first thing an operator does with a new instance is attach
 to it.
 
+**What authorises an act on your surface** [author, 2026-10-08, narrowed
+2026-11-02]: arriving on the loopback, or a proof under your token. §8.2
+puts administration out of band with everything else about the host, and
+where the surface binds was the whole of the access decision — which
+holds on the loopback and nowhere else. **A rented instance binds this
+surface on every interface it has**, where reaching the port is evidence
+of nothing: anyone could stop you or grant themselves a role on a package
+you host. So an act arriving from anywhere else carries a nonce and a
+proof, the proof being `HMAC-SHA256` under your token over the method,
+the target and the body; a nonce is spent by the act it authorised, so a
+captured proof is worth nothing after it; and the enrolment fetch stays
+open, being the bootstrap, where you prove yourself to a client that has
+been told nothing yet and what you disclose is a public half. **The token
+is still never sent**, an act still carries no signature, and a desktop
+holding no seed still administers — which is what the original rule was
+for.
+
+**And the token an act is proved under is not the one you were given.**
+The token in your configuration arrived in the provisioning data of the
+machine, which anything on it can read back from a provider's metadata
+service — a package you host among them. So your operator's client
+replaces it once your surface has proved itself, and you keep the
+replacement where the next start will find it (`[administration]
+token-file`). **Refuse a replacement you cannot keep**: a token held only
+in memory would be forgotten at a restart, and your operator would be
+locked out with nothing to tell them why.
+
 **What you may ask of your own host, and what may ask it** [2026-11-02].
 You hold no standing authority over the machine you run on: no engine
 socket, no privilege, nothing that would let a seized instance reach its

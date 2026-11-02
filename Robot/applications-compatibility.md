@@ -31,7 +31,7 @@ core's to meet or to refuse.
 | **clock**: the host's time, advisory | **built**: `rhtn/1:clock`, milliseconds since the epoch | **provided** |
 | **versioning**: `rhtn/host@N` offered by the host, tolerated by the manifest, refused at installation with both sides named; bindings only ever added | **built**: `HOST_VERSIONS = ["rhtn/host@1"]`; the manifest's `host` list; a package tolerating none is refused at installation naming both lists | **provided** |
 | **quotas and budgets** in the manifest: block bytes, jobs in flight, log bytes retained, request rate, job compute per day; refusals named on the operator's surface | **built**: `[budget]` with all five; block bytes, log bytes, jobs in flight and job seconds a day enforced, refusals in the instance's log on the surface; requests a minute recorded and not enforced, deferred [author, 2026-10-31] on what a member is told | **provided, one budget deferred** |
-| **runtime**: a socket-backed service first, as its own OS user; a WASM profile second; a parity fixture across both | both runtimes exist (`[[host]]` with `address` → a socket backend; with `component` → the sandbox); **the socket-backed shape is now exercised as a deployment** [2026-10-31]: a package as its own image under its own uid, installed on a launched instance beside the node's container and reached on their shared loopback (`packaging/testapp.sh`, `packaging/Containerfile.testapp`); no parity fixture | **provided, the fixture absent** |
+| **runtime**: a socket-backed service first, as its own OS user; a WASM profile second; a parity fixture across both | **ruled** [author, 2026-11-02]: **socket-backed is the way**, being more flexible and what a ported or third-party application can be, and **the test application runs in the mode production applications will** — so no component is owed for it, and the installation path is the one below. | both runtimes exist (`[[host]]` with `address` → a socket backend; with `component` → the sandbox); **the socket-backed shape is now exercised as a deployment** [2026-10-31]: a package as its own image under its own uid, installed on a launched instance beside the node's container and reached on their shared loopback (`packaging/testapp.sh`, `packaging/Containerfile.testapp`); no parity fixture | **provided, the fixture absent** |
 | **envelope key scheme**: Ed25519 in v1 under the node's 512-byte bound; instance public keys introduced in the manifest; proof of possession; rotation; per-instance custody | `MAX_SIGNATURE = 512` (consistent); **the instance's public key is written beside the resource in the hosting file** (`key`, 32 bytes hex, validated at installation) — per instance, which is where the contract's own custody rule puts it; the node carries the signature and does not verify it, by both documents' agreement; proof of possession and rotation wait on verification | **consistent; the key recorded** |
 | **their section 9's absences** (no session-close notification, no cross-instance reads, no network access) | the same absences | **provided** |
 | **their section 10's conformance**: golden byte shapes of the exchanges; block, quota, durability, atomicity, cancellation and parity fixtures | the exchanges are tested in `node/src/federation.rs` and `daemon/tests/federation.rs` (an admitted envelope survives a restart); the rest cannot exist before the bindings do | **partly** |
@@ -111,6 +111,14 @@ utility request contract and the application key;
 `infra-client-requirements.md` §9.3 and the manifest text; PKG-017, RSC-63, RSC-64, RSC-65, DMN-35. Owed, in
 order:
 
+0. **Installing a resource from the client** [author, 2026-11-02], which
+   is where the next work is: a socket-backed package is the kind
+   production uses and the kind the test application stays, so the install
+   path is the operator's client asking its own instance, and the instance
+   asking its host through the one program its operator's key is bound to
+   (`crates/packaging/package-runner.sh`). The authorisation for such an
+   act is settled (the token proof, rotated at enrolment); the route, the
+   instance's call to the runner and the screen are owed.
 1. **The utility request's device half**: **built 2026-10-31** for nine
    of the ten — a photograph taken by the shell's own camera (`Still`)
    for `capture` and `scan`, a place as a geohash at the precision asked,

@@ -391,7 +391,18 @@ impl Service {
                     tokio::spawn(
                         crate::administration::Surface {
                             listen: a.listen,
-                            token: a.token,
+                            // **the token acts are proved under**: the
+                            // replacement where the operator's client has
+                            // set one, and the configuration's until then
+                            // (`Surface::token`)
+                            token: Arc::new(std::sync::Mutex::new(
+                                crate::administration::token_in_force(
+                                    a.token,
+                                    a.token_file.as_deref(),
+                                ),
+                            )),
+                            token_file: a.token_file.clone(),
+                            nonces: Arc::new(std::sync::Mutex::new(Default::default())),
                             credential: cred.clone(),
                             operator: operator.clone(),
                             delegations: dir.clone(),

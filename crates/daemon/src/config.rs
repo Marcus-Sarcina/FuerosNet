@@ -176,8 +176,14 @@ pub struct Administration {
     /// Where the surface listens. TCP, and not the QUIC address: §8.2 puts
     /// administration beside the protocol rather than inside it.
     pub listen: SocketAddr,
-    /// The one-time token, 32 bytes.
+    /// The token the configuration carries, 32 bytes: what answers a
+    /// fetch, and what an act is proved under until a replacement is set.
     pub token: [u8; 32],
+    /// **Where a replacement token is kept** [author, 2026-11-02], so the
+    /// rotation an enrolment performs survives a restart. Absent, a
+    /// rotation refuses rather than holding a token the next start would
+    /// forget.
+    pub token_file: Option<PathBuf>,
 }
 
 /// The `[federation]` table: where this node listens for envelopes from
@@ -357,6 +363,8 @@ struct FederationTable {
 struct AdministrationTable {
     listen: String,
     token: String,
+    #[serde(rename = "token-file")]
+    token_file: Option<PathBuf>,
 }
 
 #[derive(serde::Deserialize)]
@@ -530,7 +538,11 @@ impl Config {
                         "`[administration]` is an instance's: a node naming `identity` holds its seed and signs its own run and records",
                     ));
                 }
-                Some(Administration { listen, token })
+                Some(Administration {
+                    listen,
+                    token,
+                    token_file: e.get_ref().token_file.clone(),
+                })
             }
         };
         let federation = match &f.federation {

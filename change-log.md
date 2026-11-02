@@ -16508,6 +16508,50 @@ down to be decided cold. The bound on fetches a minute that
 question. No code changed; that section's "you bound what you have built"
 already accommodates an unenforced field, so no document says *not yet*.
 
+### 2026-11-02 (an act proves itself, and the token it proves is not the one the machine was given)
+
+**Ruled** [author, 2026-11-02]: the token proof per act, rotated at
+enrolment. And two questions answered with it: **socket-backed is the
+way** for a resource package, being the more flexible kind and what a
+ported or third-party application can be, and **the test application runs
+in whatever mode production applications run** — so no WASM component is
+owed for it, and the installation path is the operator's client asking
+its own instance, which asks its host through the one program its key is
+bound to.
+
+**What authorises an act, narrowed.** It was *reaching this port*
+[author, 2026-10-08], which §8.2's "out of band, with everything else
+about the host" supports on a loopback surface and nowhere else. **A
+launched instance binds that surface on every interface**, where reaching
+it is evidence of nothing: anyone could have stopped the node or granted
+themselves a role on a hosted package. So an act arriving from anywhere
+but the loopback now carries a nonce and a proof in its query, the proof
+being `HMAC-SHA256` under the instance's token over the method, the
+target without the proof, and the body (`rhtn_crypto::enrolment::act_proof`,
+a tag of its own so a proof in one direction can never serve the other).
+**A nonce is spent by the act it authorised**, bounded at a thousand, so
+a captured proof is worth nothing afterwards. The enrolment fetch stays
+open: it is the bootstrap, where the instance proves itself to a client
+that has been told nothing, and what it discloses is a public half. The
+token is still never sent, an act still carries no signature, and a
+desktop holding no seed still administers, which is what the original
+rule was for.
+
+**And the token acts are proved under is replaced at enrolment.** The one
+in the configuration arrived in the machine's provisioning data, which
+anything on the machine can read back from the provider's metadata
+service — a hosted package among them. So `POST /node/token`, authorised
+under the token in force, writes a fresh one at 0600 where the next start
+reads it, spends every proof made under the old, and is refused outright
+where the configuration names nowhere to keep it, as a grant act is
+without a grants directory. A launched instance now names that place.
+
+Tested against a real daemon on a surface bound beyond the loopback: the
+loopback act taken as before, the bare act refused, the proved act taken,
+the replay refused, a proof over another body or under another token
+refused, the fetch still open, and the rotation in force after a restart
+with the old token spent. DMN-36.
+
 ### 2026-11-02 (the one program an instance may run on its host)
 
 **The author's design** [2026-11-02], and better than the two options put
