@@ -23,6 +23,10 @@
 pub mod diag;
 pub mod enrol;
 pub mod inspect;
+/// **The package manager an operator with no shell has**: the install
+/// acts a node makes on its own host, driven over its administration
+/// surface.
+pub mod install;
 pub mod keys;
 pub mod launch;
 pub mod live;

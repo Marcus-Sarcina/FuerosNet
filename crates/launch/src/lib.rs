@@ -74,6 +74,17 @@ pub const ADMIN_TOKEN_FILE: &str = "/var/lib/rhtn/administration.token";
 /// `authorized_keys` entry names).
 pub const RUNNER_PATH: &str = "/usr/local/bin/rhtn-package-runner";
 
+/// **Where the instance finds its own host's shell** [author,
+/// 2026-11-02]: the loopback they share, because the node runs
+/// `--network=host`, and the port a provider's image answers ssh on.
+///
+/// What it is for is `rhtn_daemon::runner`: the node asks its host to
+/// pull and start a package its operator installed, with the restricted
+/// key the client injects for that act. A configuration naming none has
+/// a node that installs nothing, which is what every instance launched
+/// before this line was.
+pub const HOST_SHELL: &str = "127.0.0.1:22";
+
 /// **The runner, as the repository holds it** (`packaging/package-runner.sh`):
 /// carried into the machine by the script it runs once, so the vocabulary
 /// an instance may ask for is one file, versioned with this crate and
@@ -177,6 +188,7 @@ pub fn node_config(token_hex: &str, quic: u16, admin: u16) -> String {
          listen = \"0.0.0.0:{admin}\"\n\
          token = \"{token_hex}\"\n\
          token-file = \"{ADMIN_TOKEN_FILE}\"\n\
+         host-shell = \"{HOST_SHELL}\"\n\
          [federation]\n\
          store = \"/var/lib/rhtn/federation\"\n"
     )
@@ -1026,6 +1038,11 @@ mod tests {
         // it must, the first one having travelled in this very script
         assert!(conf.contains("token-file = \"/var/lib/rhtn/administration.token\""));
         assert!(conf.contains("state = \"/var/lib/rhtn/state\""));
+        // **and it can ask its own host to start one** [author,
+        // 2026-11-02]: the loopback the `--network=host` run below shares
+        // with the machine, which is what `rhtn_daemon::runner` opens a
+        // session to with the key an install carries
+        assert!(conf.contains("host-shell = \"127.0.0.1:22\""), "{conf}");
         let image = Image {
             registry: "reg.example/x".into(),
             tag: "abc123".into(),

@@ -16508,6 +16508,94 @@ down to be decided cold. The bound on fetches a minute that
 question. No code changed; that section's "you bound what you have built"
 already accommodates an unenforced field, so no document says *not yet*.
 
+### 2026-11-02 (a node is the package manager for the operator who has no shell)
+
+**Built** the act the ruling pointed at: `POST /node/package/install` on
+the operator's surface, the node's call to its own host through
+`rhtn-package-runner`, and `remove`, `packages`, `running` and `logs`
+beside them. `infra-client-requirements.md` §9.4 states it, and
+`light-client-requirements.md` §10 gained what the act carries.
+
+**Four contributions, one act.** The operator chooses the resource, its
+owner, the authority and the port. **Their client relays the package's own
+manifest** rather than either party composing one — §9.1 puts the
+declaration in the manifest that ships with the package, and a node
+writing role names of its own would be declaring them on the package's
+behalf. The client hands over the restricted key for that one act, which
+the node writes at 0600, uses, overwrites and removes. The host decides
+what may be asked of it, which is the runner's vocabulary and nothing
+else.
+
+**Both legs or neither.** The image is fetched before anything is
+written, so a reference the machine cannot pull changes nothing on it. The
+node re-reads its own configuration *before* the package starts, so a
+manifest it will not admit leaves nothing running. And either leg failing
+puts the record, the generated entries and the relayed manifest back and
+re-reads them — the discipline a grant act already keeps.
+
+**No grant is written, and the answer says so.** §7 has a package's roles
+start bound to nobody, which is the right state for something just
+installed; `packaging/testapp.sh` wrote one for convenience and that was
+the convenience, not the rule.
+
+**The hosting file has two owners now** (`rhtn_daemon::packages`), which
+is a change to what `crates/daemon/src/hosting.rs` stated: *the operator
+writes it and the node never rewrites it*. That was right while
+installing was something done with a shell. The operator this is for has
+no shell, so the ownership is divided rather than reversed — their lines
+above a sentinel, untouched; the node's entries below it, generated whole
+from its own `packages.toml` whenever a package comes or goes; and the
+sentinel says in words that an edit below it is lost, so an operator
+learns that before they lose one. A resource they wrote by hand stays
+theirs to remove by hand, and a removal act refuses one.
+
+**A removal keeps the grants, the block, the log and the jobs**, because
+a removal and an install of one resource is how a package is upgraded,
+and an upgrade that silently dropped who may reach it would be the worse
+surprise.
+
+**Fixed, in my own last commit**: the act proof had been applied to every
+route, the three that carry the operator's signature among them. The
+module's own heading has settled since 2026-10-08 that those authorise
+themselves — a run is verified to be the operator's over *this* transport
+key, a record over this node's own keyhash — and requiring a proof broke
+the enrolment it was meant to protect, since those three routes *are* the
+exchange that first gives a client anything to prove with. A phone could
+not have enrolled a launched instance. Restored, with a test that drives
+the whole enrolment from off the loopback and still meets 401 on an act
+that carries no signature.
+
+**Also fixed in passing**: the surface answered 409 and 401 with the
+reason phrase *Internal Server Error*, having no entry for either.
+
+**A new timeout, because a pull is not a stalled caller.** The exchange is
+bounded at 300s where it reaches the host, and the *read* keeps the 10s
+bound inside that — a caller that sends nothing is stalled whatever it
+was going to ask for.
+
+`rhtn keys ssh <file> --runner` prints the restricted `authorized_keys`
+line and writes the private half, and `rhtn node install|remove|packages|
+running|logs` drives the surface as the app will, so the two are one
+procedure. The install path is tested end to end with a recorder in the
+ssh client's place (`RHTN_SSH_CLIENT`), including both rollbacks.
+
+OPS-025, DMN-37, DMN-38, DMN-39.
+
+**Still owed on this path**: the screen in the app, and the question
+below it.
+
+**Asked** [2026-11-02]: **the framed administration page can no longer
+act from a phone, and the shape of the fix is the author's.** An HTML form
+cannot compute a MAC over its own body, so with the proof required on
+every act that carries no signature, the page's grant, acknowledge,
+reload and stop controls answer 401 to anyone who is not on the
+instance's loopback — and `GET /` does too. Three ways out, none of them
+assumed: the acts move into the app as native screens making proved
+requests, and the framed page becomes read-only; or a proved `GET /`
+mints a short-lived page session the forms ride on, which is a bearer the
+surface does not have today; or the page is loopback-only and §8.3's
+division is restated. Nothing was built for it in this commit.
+
 ### 2026-11-02 (an act proves itself, and the token it proves is not the one the machine was given)
 
 **Ruled** [author, 2026-11-02]: the token proof per act, rotated at

@@ -59,6 +59,9 @@ tracing-subscriber = { version = "0.3", default-features = false, features = ["s
 # MIT/Apache-2.0; the directive plane's envelopes on the operator's surface
 # and the field-test log
 serde_json = { workspace = true }
+# Apache-2.0 OR MIT; the restricted ssh key an install carries is held no
+# longer than the act (`runner`, `administration::runner_key`)
+zeroize = { workspace = true }
 
 [dev-dependencies]
 rhtn-sim = { path = "../sim" }

@@ -820,6 +820,86 @@ creation, written beside the resource in your hosting file as its public
 half, shown on your surface, and never present in a package. You carry the
 signature it makes and do not verify it in this version.
 
+### 9.4 Installing a package from your operator's client
+
+**The operator this is written for has no shell on the machine** [author,
+2026-11-02]. Their only window on it is their light client, so an install
+cannot be a thing they do with a terminal: **installing a package is an
+act on your administration surface** (§8.2), and for that act **you are
+the package manager**.
+
+**It is not a protocol act.** No request type carries it, no frame is
+composed and no signature is made: it writes configuration of yours and
+asks your host to start an image. §8.1's rule is untouched.
+
+**What arrives, and whose each part is.** The operator chooses the
+resource, its owner, the authority it answers under and where it listens.
+**The package's own manifest is relayed rather than composed**: §9.1 puts
+the capability declaration in the manifest that ships with the package, so
+their client carries that manifest to you and you write it where you will
+read it — a node that wrote role names of its own would be declaring them
+on the package's behalf. And the act carries **the one key that opens your
+host**, described below.
+
+**What you do with it, in an order that leaves nothing half-done.** Fetch
+the image first, so a reference the machine cannot fetch changes nothing on
+it. Write the manifest, the entry and your record of it. **Re-read your
+own configuration before the package is started**, so a manifest you will
+not admit leaves nothing running. Then start the package. **Either leg
+failing puts your configuration back as it was and re-reads it**: what is
+in force is what is on disk, as it is for a grant (§10.2).
+
+**Who may reach it afterwards: nobody.** §7 has a package's roles start
+bound to nobody, and that is where an install leaves them. Say so in the
+answer, because an operator who has just installed something will otherwise
+look for why it refuses them.
+
+**The hosting file has two owners from here on.** The lines your operator
+wrote by hand are theirs and you never touch them; the entries you
+generated from your own record are yours and you rewrite them whole
+whenever a package comes or goes. **Say which is which in the file
+itself**, so an operator editing the generated half learns it will be lost
+before they lose it. A resource they wrote by hand is theirs to remove by
+hand.
+
+**Removal keeps what the operator decided.** Stop the package, drop the
+entry, re-read. The grants, the storage block, the log and the jobs stay:
+a removal and an install of the same resource is **how a package is
+upgraded**, and an upgrade that silently dropped who may reach it, or its
+data, is the worse surprise. Say what was kept. A container already gone is
+not a failure — the removal is from your configuration, which is the part
+the act is about.
+
+#### The door onto your host, and why it is not a standing one
+
+A socket-backed package has to be **started by something with control of
+the machine**, and that is deliberately not you: your container is given
+no engine socket and no privilege, because a seized instance must not
+reach its host (design §18.1).
+
+**So you ask your own host, and your operator opens the door for the one
+act.** The key is derived from their signing seed, installed on the machine
+at launch beside their own, and bound by the machine's `authorized_keys` to
+**one program whose vocabulary is written down on the host** (§9, OPS-024).
+Their client hands you the private half with the request; **you keep it no
+longer than the act** — not in your state, not in your configuration, not
+in your backup. An instance seized between two acts holds nothing that
+would let it ask its host for anything, which is what makes having the door
+at all defensible.
+
+**You reach your host over the loopback you share with it and over nothing
+else.** The session is plain ssh to a host key you pin nothing about, which
+is a reasonable thing between a container and the machine it is running on
+and is not a reasonable thing to anywhere else. An operator whose shell is
+elsewhere is told so rather than having their key sent there.
+
+**A node with no way to reach its host installs nothing, and says which
+line of its configuration is missing.** That is §9's ordinary capacity
+again — *not meeting a package's requirements is ordinary capacity, not a
+conformance failure* — and it is the state of every instance launched
+before this door existed. What it must not do is fail an install for a
+reason it made up.
+
 ## 10. Role assignment and hosted-session lifecycle
 
 **The node evaluates access and presents the result as a credential**

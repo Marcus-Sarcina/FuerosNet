@@ -1432,6 +1432,20 @@ one that is true.
   something worth little and the key that opens a shell is never on the
   machine at all. Keep neither key: both come back from the phrase
   wherever the identity does.
+- **What the install act carries is the operator's choices and the
+  package's own declaration** [author, 2026-11-02]. The resource, its
+  owner, the authority it answers under, the image and the port are the
+  operator's, taken on this screen. **The manifest is the package's, and
+  this client relays it**: `infra-client-requirements.md` §9.1 puts the
+  capability declaration in the manifest that ships with the package, so
+  carry that manifest to the instance rather than letting either of you
+  compose one — a node or a client that wrote role names of its own would
+  be declaring them on the package's behalf. Show the operator what the
+  manifest declares before the act, since what they are admitting is what
+  it says. **Then show them that nobody may reach it yet** and offer the
+  grant as the next step (`infra-client-requirements.md` §7, §9.4): a
+  package's roles start bound to nobody, and an operator who has just
+  installed something will otherwise look for why it refuses them.
 - **Teach the node you attach to what you hold** [author, 2026-11-01].
   Attaching is two replays, not one: the node replays its store to you
   (`wire-format.md` §10.1.3), and **you replay the records you were party

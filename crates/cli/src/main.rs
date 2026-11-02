@@ -1,6 +1,6 @@
 //! The command line's entry point.
 
-use rhtn_cli::{diag, enrol, inspect, keys, launch, live, probe, resource};
+use rhtn_cli::{diag, enrol, inspect, install, keys, launch, live, probe, resource};
 use rhtn_codec::frame::Stream;
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -187,9 +187,16 @@ fn do_keys(rest: &[&str]) -> Result<String, String> {
         // **the ssh key the identity derives** (`rhtn_crypto::ssh`): the
         // shell on the machines this identity launched, which the phrase
         // restores along with the identity
-        ["ssh", path] => keys::host_control(&PathBuf::from(path), None),
+        ["ssh", path] => keys::host_control(&PathBuf::from(path), None, false),
         ["ssh", path, "--private", to] => {
-            keys::host_control(&PathBuf::from(path), Some(&PathBuf::from(to)))
+            keys::host_control(&PathBuf::from(path), Some(&PathBuf::from(to)), false)
+        }
+        // **the second key, which is not a shell**: the restricted one an
+        // install carries, which the host's `authorized_keys` binds to
+        // `rhtn-package-runner` and nothing else
+        ["ssh", path, "--runner"] => keys::host_control(&PathBuf::from(path), None, true),
+        ["ssh", path, "--runner", "--private", to] => {
+            keys::host_control(&PathBuf::from(path), Some(&PathBuf::from(to)), true)
         }
         ["test", name] => {
             let [ed, pq] = keys::test_seeds(name);
@@ -201,7 +208,7 @@ fn do_keys(rest: &[&str]) -> Result<String, String> {
                 inspect::hex(&pq)
             ))
         }
-        _ => Err("keys mint <file> | keys show <file> | keys test <name>".into()),
+        _ => Err("keys mint <file> | keys show <file> | keys ssh <file> [--runner] [--private <file>] | keys test <name>".into()),
     }
 }
 
@@ -213,6 +220,14 @@ fn do_node(rest: &[&str]) -> Result<String, String> {
         Some("offers") => return do_offers(&rest[1..]),
         Some("credential") => return do_credential(&rest[1..]),
         Some("destroy") => return do_destroy(&rest[1..]),
+        // **the package manager an operator with no shell has**
+        // (`infra-client-requirements.md` §9.4): the acts this node makes
+        // on its own host, driven from here as the app drives them
+        Some("install") => return do_package(&rest[1..], Package::Install),
+        Some("remove") => return do_package(&rest[1..], Package::Remove),
+        Some("packages") => return do_package(&rest[1..], Package::Listed),
+        Some("running") => return do_package(&rest[1..], Package::Running),
+        Some("logs") => return do_package(&rest[1..], Package::Logs),
         _ => {}
     }
     let [sub, identity, at, opts @ ..] = rest else {
@@ -220,7 +235,7 @@ fn do_node(rest: &[&str]) -> Result<String, String> {
     };
     if *sub != "enrol" && *sub != "renew" {
         return Err(format!(
-            "`node {sub}` is not a command; there are `node launch`, `node offers`, `node credential`, `node destroy`, `node enrol` and `node renew`"
+            "`node {sub}` is not a command; there are `node launch`, `node offers`,              `node credential`, `node destroy`, `node enrol`, `node renew`,              `node install`, `node remove`, `node packages`, `node running` and `node logs`"
         ));
     }
     let (mut token, mut credentials, mut endpoint) = (None, 7usize, None);
@@ -373,6 +388,75 @@ fn do_destroy(opts: &[&str]) -> Result<String, String> {
         &launch::credential_from(&need("credential-file")?)?,
         &need("id")?,
     )
+}
+
+/// Which of the five package acts `node <verb>` named.
+enum Package {
+    Install,
+    Remove,
+    Listed,
+    Running,
+    Logs,
+}
+
+/// **`node install|remove|packages|running|logs`**: the acts an operator
+/// makes on the packages their own instance hosts ([`install`];
+/// `infra-client-requirements.md` §9.4).
+///
+/// **`--token` is what an act off the loopback is proved under**
+/// (`rhtn_daemon::administration::Surface::authorised`). Run on the
+/// instance itself it is not wanted, because arriving on the loopback is
+/// the authorisation there.
+fn do_package(opts: &[&str], which: Package) -> Result<String, String> {
+    let o = options(
+        opts,
+        &[
+            "at",
+            "token",
+            "identity",
+            "resource",
+            "owner",
+            "authority",
+            "image",
+            "port",
+            "manifest",
+            "lines",
+        ],
+    )?;
+    let number = |k: &str| -> Result<Option<u16>, String> {
+        match o.get(k) {
+            None => Ok(None),
+            Some(v) => v
+                .parse()
+                .map(Some)
+                .map_err(|_| format!("--{k} takes a number")),
+        }
+    };
+    let token = match o.get("token") {
+        None => None,
+        Some(t) => {
+            Some(enrol::hex32(t).ok_or("--token is 64 hex digits, the one acts are proved under")?)
+        }
+    };
+    let ask = install::Ask {
+        at: o.get("at").cloned().unwrap_or_default(),
+        token,
+        identity: o.get("identity").map(PathBuf::from),
+        resource: o.get("resource").cloned(),
+        owner: o.get("owner").cloned(),
+        authority: o.get("authority").cloned(),
+        image: o.get("image").cloned(),
+        port: number("port")?,
+        manifest: o.get("manifest").map(PathBuf::from),
+        lines: number("lines")?.map(usize::from),
+    };
+    match which {
+        Package::Install => install::install(&ask),
+        Package::Remove => install::remove(&ask),
+        Package::Listed => install::packages(&ask),
+        Package::Running => install::running(&ask, false),
+        Package::Logs => install::running(&ask, true),
+    }
 }
 
 fn do_probe(rest: &[&str]) -> Result<String, String> {

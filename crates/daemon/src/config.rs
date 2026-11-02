@@ -184,6 +184,17 @@ pub struct Administration {
     /// rotation refuses rather than holding a token the next start would
     /// forget.
     pub token_file: Option<PathBuf>,
+    /// **Where this instance's own host answers a shell** [author,
+    /// 2026-11-02], so the node can ask it to pull and start a package
+    /// its operator installed ([`crate::runner`]).
+    ///
+    /// **Absent, this node installs nothing**, which is the honest state
+    /// of a node whose operator gave it no way to reach their machine: a
+    /// node that assumed one would be telling its operator an install had
+    /// failed for a reason it had invented. It must be a loopback
+    /// address, because an instance asks its own host and no other
+    /// machine.
+    pub host_shell: Option<SocketAddr>,
 }
 
 /// The `[federation]` table: where this node listens for envelopes from
@@ -365,6 +376,8 @@ struct AdministrationTable {
     token: String,
     #[serde(rename = "token-file")]
     token_file: Option<PathBuf>,
+    #[serde(rename = "host-shell")]
+    host_shell: Option<String>,
 }
 
 #[derive(serde::Deserialize)]
@@ -538,10 +551,26 @@ impl Config {
                         "`[administration]` is an instance's: a node naming `identity` holds its seed and signs its own run and records",
                     ));
                 }
+                // **a loopback address and no other**, which
+                // `rhtn_daemon::runner::Shell::of` is the authority on:
+                // refused here so an operator meets it in the
+                // configuration rather than in an install
+                let host_shell = match &e.get_ref().host_shell {
+                    None => None,
+                    Some(a) => {
+                        let addr = a.parse::<SocketAddr>().map_err(|_| {
+                            at(n, "`administration.host-shell` is not an address and port")
+                        })?;
+                        crate::runner::Shell::of(addr)
+                            .map_err(|why| at(n, format!("`administration.host-shell`: {why}")))?;
+                        Some(addr)
+                    }
+                };
                 Some(Administration {
                     listen,
                     token,
                     token_file: e.get_ref().token_file.clone(),
+                    host_shell,
                 })
             }
         };

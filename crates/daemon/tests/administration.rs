@@ -43,6 +43,12 @@ struct Layout {
     config: PathBuf,
     peers: PathBuf,
     delegations: PathBuf,
+    /// **What stands in for the image's ssh client**
+    /// (`rhtn_daemon::runner::client`): a recorder, so the whole install
+    /// path can be exercised without a machine to install on. Absent
+    /// leaves the daemon reaching for the real one, which is what it
+    /// does in the field.
+    ssh_client: Option<PathBuf>,
 }
 
 /// The first sequence number of a series, which is what a first record
@@ -94,7 +100,8 @@ fn layout_on(tag: &str, token: &[u8; 32], quic_port: u16, surface: &str) -> Layo
              resources = \"{}\"\ngrants = \"{}\"\n\
              heartbeat = 30\ningestion = \"unverified-gossip\"\n\
              [allowance]\nrequests = 120\nseconds = 60\n\
-             [administration]\nlisten = \"{}\"\ntoken = \"{}\"\ntoken-file = \"{}\"\n",
+             [administration]\nlisten = \"{}\"\ntoken = \"{}\"\ntoken-file = \"{}\"\n\
+             host-shell = \"127.0.0.1:22\"\n",
             dir.join("operator").display(),
             dir.join("transport.key").display(),
             delegations.display(),
@@ -118,6 +125,7 @@ fn layout_on(tag: &str, token: &[u8; 32], quic_port: u16, surface: &str) -> Layo
         config,
         peers,
         delegations,
+        ssh_client: None,
     }
 }
 
@@ -128,9 +136,12 @@ struct Daemon {
 }
 
 fn spawn(l: &Layout) -> Daemon {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_rhtnd"))
-        .arg(&l.config)
-        .arg(&l.peers)
+    let mut command = Command::new(env!("CARGO_BIN_EXE_rhtnd"));
+    command.arg(&l.config).arg(&l.peers);
+    if let Some(client) = &l.ssh_client {
+        command.env("RHTN_SSH_CLIENT", client);
+    }
+    let mut child = command
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -595,14 +606,15 @@ fn enrolled(tag: &str, quic: u16) -> (Layout, Daemon, SocketAddr) {
     enrolled_with(tag, quic, |_| {})
 }
 
-/// The same, with a chance to write files the daemon reads at start.
+/// The same, with a chance to write files the daemon reads at start and
+/// to shape the layout itself.
 fn enrolled_with(
     tag: &str,
     quic: u16,
-    before: impl FnOnce(&Layout),
+    before: impl FnOnce(&mut Layout),
 ) -> (Layout, Daemon, SocketAddr) {
-    let l = layout(tag, &TOKEN, quic);
-    before(&l);
+    let mut l = layout(tag, &TOKEN, quic);
+    before(&mut l);
     let mut d = spawn(&l);
     let at = d.surface_at();
     let got = ask(
@@ -1389,4 +1401,475 @@ fn the_token_is_replaced_at_enrolment_and_the_replacement_survives_a_restart() {
     let refused = ask(away, &format!("POST {stale} HTTP/1.1"), b"acknowledge=on");
     assert!(refused.starts_with("HTTP/1.1 401"), "{refused}");
     again.stop();
+}
+
+/// **A recorder in the ssh client's place** (`rhtn_daemon::runner::client`).
+///
+/// It writes the request it was given — the last argument, which is what
+/// `SSH_ORIGINAL_COMMAND` would carry — one line per act, and answers as
+/// the runner would. `refuse` is a verb it fails on, so a test can have
+/// the host decline one act and nothing else.
+fn recorder(dir: &Path, refuse: &str) -> PathBuf {
+    let log = dir.join("asked");
+    let at = dir.join("ssh-recorder");
+    std::fs::write(
+        &at,
+        format!(
+            "#!/bin/sh\n\
+             for a in \"$@\"; do last=\"$a\"; done\n\
+             printf '%s\\n' \"$last\" >> '{}'\n\
+             case \"$last\" in\n\
+             \x20 {refuse}*) echo \"the host refused it\" >&2; exit 2 ;;\n\
+             esac\n\
+             echo \"ok: $last\"\n",
+            log.display()
+        ),
+    )
+    .expect("a recorder");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&at, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    at
+}
+
+/// What the host was asked for, in order.
+fn asked_of_host(dir: &Path) -> Vec<String> {
+    std::fs::read_to_string(dir.join("asked"))
+        .unwrap_or_default()
+        .lines()
+        .map(str::to_string)
+        .collect()
+}
+
+/// A private key as the operator's client would send one. **Nothing
+/// verifies it here**: the host does, and the recorder is the host.
+const RUNNER_KEY: &str =
+    "-----BEGIN OPENSSH PRIVATE KEY-----\nbm90aGluZw==\n-----END OPENSSH PRIVATE KEY-----";
+
+/// The body of an install act, form-encoded as a client sends it.
+fn install_body(resource: &str, owner: &str, image: &str, port: u16, manifest: &str) -> Vec<u8> {
+    let escape = |s: &str| {
+        s.bytes()
+            .map(|b| match b {
+                b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                    (b as char).to_string()
+                }
+                _ => format!("%{b:02X}"),
+            })
+            .collect::<String>()
+    };
+    format!(
+        "resource={resource}&owner={owner}&authority=testapp.internal&image={}&port={port}&manifest={}&key={}",
+        escape(image),
+        escape(manifest),
+        escape(RUNNER_KEY)
+    )
+    .into_bytes()
+}
+
+// acceptance: DMN-39
+#[test]
+fn a_package_is_installed_on_the_hosts_shell_and_the_node_then_hosts_it() {
+    let (l, d, at) = enrolled_with("install", 37455, |l| {
+        l.ssh_client = Some(recorder(&l.dir, "none"));
+    });
+    let resource = hex(&[0xa7u8; 32]);
+    let owner = hex(&test_identity("bob").public.keyhash);
+    let image = "ggcr.io/mzuech/fuerosnet/rhtn-testapp:abc12345";
+
+    // nothing installed yet, and the surface says so
+    let none = ask(at, "GET /node/packages HTTP/1.1", b"");
+    assert_eq!(field(&none, "packages").as_deref(), Some("0"), "{none}");
+
+    let said = ask(
+        at,
+        "POST /node/package/install HTTP/1.1",
+        &install_body(&resource, &owner, image, 37460, "roles = [\"reader\"]\n"),
+    );
+    assert!(said.starts_with("HTTP/1.1 200"), "{said}");
+    assert_eq!(field(&said, "installed").as_deref(), Some(&resource[..]));
+    assert_eq!(field(&said, "address").as_deref(), Some("127.0.0.1:37460"));
+    // **no grant**: §7 has a package's roles start bound to nobody, and
+    // the answer says so rather than leaving the operator to find out
+    assert_eq!(field(&said, "grants").as_deref(), Some("none"));
+
+    // **the host was asked for the image before anything was written,
+    // and for the package afterwards**
+    let asked = asked_of_host(&l.dir);
+    assert_eq!(
+        asked,
+        vec![
+            format!("pull {image}"),
+            format!(
+                "start {} {image} --listen 127.0.0.1:37460 --resource {resource}",
+                &resource[..16]
+            ),
+        ],
+        "the vocabulary, in order"
+    );
+
+    // the manifest where the node reads it, and the package's own words
+    let manifest = l.dir.join("packages").join(format!("{resource}.manifest"));
+    assert_eq!(
+        std::fs::read_to_string(&manifest).expect("the manifest is written"),
+        "roles = [\"reader\"]\n"
+    );
+
+    // the record, and the half of the hosting file generated from it
+    let hosting = std::fs::read_to_string(l.dir.join("hosting")).unwrap();
+    assert!(
+        hosting.contains(rhtn_daemon::packages::SENTINEL),
+        "{hosting}"
+    );
+    assert!(
+        hosting.contains(&format!("resource = \"{resource}\"")),
+        "{hosting}"
+    );
+    assert!(
+        hosting.contains("address = \"127.0.0.1:37460\""),
+        "{hosting}"
+    );
+    let record = std::fs::read_to_string(l.dir.join("packages.toml")).unwrap();
+    assert!(record.contains(&resource), "{record}");
+
+    // **and the node has re-read it**, so it is hosting the resource: the
+    // surface's own listing says so, and so does the page
+    let listed = ask(at, "GET /node/packages HTTP/1.1", b"");
+    assert_eq!(field(&listed, "packages").as_deref(), Some("1"), "{listed}");
+    let page = ask(at, "GET / HTTP/1.1", b"");
+    assert!(page.contains(&resource), "the page shows what it hosts");
+
+    // **a second install of the same resource replaces it** rather than
+    // running beside it, which is how a package is upgraded
+    let again = ask(
+        at,
+        "POST /node/package/install HTTP/1.1",
+        &install_body(
+            &resource,
+            &owner,
+            "ggcr.io/mzuech/fuerosnet/rhtn-testapp:def67890",
+            37460,
+            "roles = [\"reader\"]\n",
+        ),
+    );
+    assert!(again.starts_with("HTTP/1.1 200"), "{again}");
+    let listed = ask(at, "GET /node/packages HTTP/1.1", b"");
+    assert_eq!(field(&listed, "packages").as_deref(), Some("1"), "{listed}");
+
+    // removed: the host is asked to stop it, the entry goes, and what the
+    // operator decided about it is kept
+    let gone = ask(
+        at,
+        "POST /node/package/remove HTTP/1.1",
+        format!(
+            "resource={resource}&key={}",
+            RUNNER_KEY.replace('\n', "%0A")
+        )
+        .as_bytes(),
+    );
+    assert!(gone.starts_with("HTTP/1.1 200"), "{gone}");
+    assert!(
+        asked_of_host(&l.dir)
+            .iter()
+            .any(|a| a == &format!("stop {}", &resource[..16])),
+        "the host was asked to stop it"
+    );
+    let listed = ask(at, "GET /node/packages HTTP/1.1", b"");
+    assert_eq!(field(&listed, "packages").as_deref(), Some("0"), "{listed}");
+    assert!(!manifest.exists(), "the relayed manifest goes with it");
+
+    d.stop();
+    let _ = std::fs::remove_dir_all(&l.dir);
+}
+
+// acceptance: DMN-39
+#[test]
+fn an_install_the_node_or_the_host_refuses_leaves_the_configuration_as_it_was() {
+    let (l, d, at) = enrolled_with("install-undo", 37456, |l| {
+        l.ssh_client = Some(recorder(&l.dir, "start"));
+    });
+    // the operator's own line, which no install may touch
+    let theirs = "# mine, by hand\n";
+    std::fs::write(l.dir.join("hosting"), theirs).unwrap();
+    let resource = hex(&[0xb3u8; 32]);
+    let owner = hex(&test_identity("bob").public.keyhash);
+    let image = "ggcr.io/mzuech/fuerosnet/rhtn-testapp:abc12345";
+
+    // **a manifest this host will not admit**: refused before the package
+    // is ever started, so the host is asked for the image and no more
+    let refused = ask(
+        at,
+        "POST /node/package/install HTTP/1.1",
+        &install_body(
+            &resource,
+            &owner,
+            image,
+            37461,
+            "roles = [\"reader\"]\nimports = [\"rhtn/1:nothing-like-this\"]\n",
+        ),
+    );
+    assert!(refused.starts_with("HTTP/1.1 400"), "{refused}");
+    assert!(body(&refused).contains("nothing changed"), "{refused}");
+    assert_eq!(
+        asked_of_host(&l.dir),
+        vec![format!("pull {image}")],
+        "nothing was started"
+    );
+    assert_eq!(
+        rhtn_daemon::packages::above(&std::fs::read_to_string(l.dir.join("hosting")).unwrap()),
+        theirs,
+        "the operator's own half is as they left it"
+    );
+    let listed = ask(at, "GET /node/packages HTTP/1.1", b"");
+    assert_eq!(field(&listed, "packages").as_deref(), Some("0"), "{listed}");
+
+    // **and a host that will not start it** puts the entry back too: the
+    // recorder above refuses every `start`
+    let undone = ask(
+        at,
+        "POST /node/package/install HTTP/1.1",
+        &install_body(&resource, &owner, image, 37461, "roles = [\"reader\"]\n"),
+    );
+    assert!(undone.starts_with("HTTP/1.1 502"), "{undone}");
+    assert!(body(&undone).contains("nothing changed"), "{undone}");
+    let listed = ask(at, "GET /node/packages HTTP/1.1", b"");
+    assert_eq!(field(&listed, "packages").as_deref(), Some("0"), "{listed}");
+    assert_eq!(
+        rhtn_daemon::packages::above(&std::fs::read_to_string(l.dir.join("hosting")).unwrap()),
+        theirs
+    );
+    assert!(
+        !l.dir
+            .join("packages")
+            .join(format!("{resource}.manifest"))
+            .exists(),
+        "the manifest it wrote is gone with the rest"
+    );
+
+    d.stop();
+    let _ = std::fs::remove_dir_all(&l.dir);
+}
+
+// acceptance: DMN-39
+#[test]
+fn an_install_says_what_it_was_missing_rather_than_half_doing_it() {
+    let (l, d, at) = enrolled_with("install-refusals", 37457, |l| {
+        l.ssh_client = Some(recorder(&l.dir, "none"));
+    });
+    let resource = hex(&[0xc1u8; 32]);
+    let owner = hex(&test_identity("bob").public.keyhash);
+    let image = "ggcr.io/mzuech/fuerosnet/rhtn-testapp:abc12345";
+    let manifest = "roles = [\"reader\"]\n";
+
+    let refusing = |body_: Vec<u8>| ask(at, "POST /node/package/install HTTP/1.1", &body_);
+
+    // **no key**: an instance holds none of its own, and is handed one
+    let no_key = refusing(
+        format!(
+            "resource={resource}&owner={owner}&authority=testapp.internal&image={image}&port=37462&manifest=roles"
+        )
+        .into_bytes(),
+    );
+    assert!(no_key.starts_with("HTTP/1.1 400"), "{no_key}");
+    assert!(body(&no_key).contains("restricted ssh key"), "{no_key}");
+
+    // a key that is not one
+    let wrong = refusing(
+        format!("resource={resource}&owner={owner}&authority=testapp.internal&image={image}&port=37462&manifest=roles&key=hello")
+            .into_bytes(),
+    );
+    assert!(wrong.starts_with("HTTP/1.1 400"), "{wrong}");
+    assert!(body(&wrong).contains("OpenSSH private key"), "{wrong}");
+
+    // **no manifest**: what a package declares is the package's, and this
+    // node will not compose one on its behalf
+    let bare = refusing(install_body(&resource, &owner, image, 37462, ""));
+    assert!(bare.starts_with("HTTP/1.1 400"), "{bare}");
+    assert!(body(&bare).contains("own manifest"), "{bare}");
+
+    // an authority, an image and a port that are not what they say
+    for (what, body_) in [
+        (
+            "authority",
+            format!(
+                "resource={resource}&owner={owner}&authority=Shop%2Finternal&image={image}&port=1&manifest=x&key={}",
+                RUNNER_KEY.replace('\n', "%0A")
+            ),
+        ),
+        (
+            "image",
+            format!(
+                "resource={resource}&owner={owner}&authority=a.b&image=-rm&port=1&manifest=x&key={}",
+                RUNNER_KEY.replace('\n', "%0A")
+            ),
+        ),
+        (
+            "port",
+            format!(
+                "resource={resource}&owner={owner}&authority=a.b&image={image}&port=0&manifest=x&key={}",
+                RUNNER_KEY.replace('\n', "%0A")
+            ),
+        ),
+    ] {
+        let said = refusing(body_.into_bytes());
+        assert!(said.starts_with("HTTP/1.1 400"), "{what}: {said}");
+    }
+
+    // **the surface's own port is not a package's**
+    let mine = refusing(install_body(&resource, &owner, image, at.port(), manifest));
+    assert!(mine.starts_with("HTTP/1.1 400"), "{mine}");
+    assert!(body(&mine).contains("administration surface"), "{mine}");
+
+    // **two resources at one address is one resource answering for both**
+    assert!(
+        refusing(install_body(&resource, &owner, image, 37462, manifest))
+            .starts_with("HTTP/1.1 200")
+    );
+    let other = hex(&[0xc2u8; 32]);
+    let clash = refusing(install_body(&other, &owner, image, 37462, manifest));
+    assert!(clash.starts_with("HTTP/1.1 400"), "{clash}");
+    assert!(body(&clash).contains("already listens"), "{clash}");
+
+    // **a package this node did not install is not its to remove**: the
+    // hosting file's upper half is the operator's
+    let theirs = ask(
+        at,
+        "POST /node/package/remove HTTP/1.1",
+        format!("resource={other}&key={}", RUNNER_KEY.replace('\n', "%0A")).as_bytes(),
+    );
+    assert!(theirs.starts_with("HTTP/1.1 404"), "{theirs}");
+    assert!(body(&theirs).contains("by hand"), "{theirs}");
+
+    // nothing was asked of the host but the one install that succeeded
+    assert_eq!(asked_of_host(&l.dir).len(), 2, "one pull and one start");
+
+    d.stop();
+    let _ = std::fs::remove_dir_all(&l.dir);
+}
+
+// acceptance: DMN-39
+#[test]
+fn an_instance_with_no_shell_on_its_host_installs_nothing_and_says_which_line_is_missing() {
+    // **a serving node, and no way to reach its host**: an instance
+    // provisioned before the host could be asked for anything names no
+    // `host-shell`, and the install it cannot make must say which line
+    let (l, d, at) = enrolled_with("install-no-shell", 37458, |l| {
+        let conf = std::fs::read_to_string(&l.config).unwrap();
+        std::fs::write(
+            &l.config,
+            conf.replace("host-shell = \"127.0.0.1:22\"\n", ""),
+        )
+        .unwrap();
+    });
+    let said = ask(
+        at,
+        "POST /node/package/install HTTP/1.1",
+        &install_body(&hex(&[1u8; 32]), &hex(&[2u8; 32]), "a/b:1", 37463, "x"),
+    );
+    assert!(said.starts_with("HTTP/1.1 409"), "{said}");
+    assert!(body(&said).contains("host-shell"), "{said}");
+    assert!(
+        body(&said).contains("reason it invented"),
+        "it says why rather than failing for an invented one: {said}"
+    );
+    d.stop();
+    let _ = std::fs::remove_dir_all(&l.dir);
+}
+
+// acceptance: DMN-39
+#[test]
+fn a_host_shell_that_is_not_this_instances_own_is_refused_in_the_configuration() {
+    let l = layout("install-far-shell", &TOKEN, 37459);
+    let conf = std::fs::read_to_string(&l.config).unwrap();
+    std::fs::write(
+        &l.config,
+        conf.replace(
+            "host-shell = \"127.0.0.1:22\"",
+            "host-shell = \"203.0.113.9:22\"",
+        ),
+    )
+    .unwrap();
+    let d = spawn(&l);
+    // it does not come up at all: a key that would be sent to another
+    // machine is refused where the operator wrote it
+    assert!(
+        d.wait_line("loopback", 20).is_some(),
+        "the daemon said {:?}",
+        d.lines()
+    );
+    d.stop();
+    let _ = std::fs::remove_dir_all(&l.dir);
+}
+
+// acceptance: DMN-36
+#[test]
+fn the_three_routes_that_carry_a_signature_need_no_proof_from_anywhere() {
+    // **the regression this is written against** [2026-11-02]: the act
+    // proof was applied to every route, including the three that verify
+    // the operator's own signature — so a client enrolling a launched
+    // instance from a phone met 401 on the very exchange that would have
+    // given it something to prove with.
+    let Some(ip) = outbound_address() else {
+        eprintln!("no outbound address on this machine; this test needs one");
+        return;
+    };
+    let token = [0x77u8; 32];
+    let l = layout_on("unproved-records", &token, 37464, "0.0.0.0:0");
+    let mut d = spawn(&l);
+    let port = d.surface_at().port();
+    let away: SocketAddr = (ip, port).into();
+
+    // the bootstrap, from off the loopback: it is the one read that
+    // discloses only what is public, and proves the instance to the client
+    let got = ask(
+        away,
+        &format!("GET /node?nonce={} HTTP/1.1", hex(&[2u8; 16])),
+        b"",
+    );
+    assert_eq!(200, status(&got), "{got}");
+    let key: [u8; 32] = unhex(&field(&got, "transport").expect("a key"))
+        .try_into()
+        .expect("32 bytes");
+
+    // and the three that carry a signature, with no nonce and no proof
+    let bob = test_identity("bob");
+    let point = NetworkPoint::new([127, 0, 0, 1], Some(37464));
+    let record = endpoint_record(&bob, std::slice::from_ref(&point), seqno(1));
+    let entry = anchor_entry(&bob, std::slice::from_ref(&point), 3, seqno(1));
+    assert_eq!(
+        200,
+        status(&ask(away, "PUT /node/endpoint-record HTTP/1.1", &record)),
+        "a record the operator signed authorises itself"
+    );
+    assert_eq!(
+        200,
+        status(&ask(away, "PUT /node/anchor-entry HTTP/1.1", &entry))
+    );
+    for c in issue_run(&bob, &key, now(), 1) {
+        assert_eq!(200, status(&ask(away, "PUT /node/run HTTP/1.1", &c)));
+    }
+    assert!(
+        d.serving().is_some(),
+        "it serves, enrolled from off the loopback"
+    );
+
+    // **and what carries no signature still proves itself there**: the
+    // exemption is the three, not the surface
+    let open = ask(away, "POST /node/acknowledge HTTP/1.1", b"acknowledge=on");
+    assert_eq!(401, status(&open), "{open}");
+    // as does a run that is not this operator's
+    let eve = test_identity("eve");
+    for c in issue_run(&eve, &key, now(), 1) {
+        let refused = ask(away, "PUT /node/run HTTP/1.1", &c);
+        assert_eq!(
+            400,
+            status(&refused),
+            "a stranger's run is refused: {refused}"
+        );
+    }
+
+    d.stop();
+    let _ = std::fs::remove_dir_all(&l.dir);
 }

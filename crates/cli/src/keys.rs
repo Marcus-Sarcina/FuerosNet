@@ -114,7 +114,13 @@ pub fn test_seeds(name: &str) -> [[u8; 32]; 2] {
 /// `--private` writes the private key to `where` at 0600, which is what
 /// `ssh -i` wants; without it only the public line is printed, since a
 /// private key on a terminal is a private key in a scroll-back.
-pub fn host_control(path: &Path, private: Option<&Path>) -> Result<String, String> {
+///
+/// **`runner` is the second key** [author, 2026-11-02]: not a shell, but
+/// the one the host's `authorized_keys` binds to
+/// `rhtn-package-runner` — so the line printed for it is the restricted
+/// one, with the forced command and every door shut, which is the whole
+/// of what the key can do and is readable on the host that holds it.
+pub fn host_control(path: &Path, private: Option<&Path>, runner: bool) -> Result<String, String> {
     let bytes = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
     if bytes.len() != IDENTITY_BYTES {
         return Err(format!(
@@ -128,8 +134,16 @@ pub fn host_control(path: &Path, private: Option<&Path>) -> Result<String, Strin
         bytes[32..].try_into().unwrap(),
     );
     let id = rhtn_crypto::SigningIdentity::from_seeds(&ed, &pq);
-    let key = id.host_control_key();
-    let mut out = format!("{}\n", key.public_line);
+    let key = if runner {
+        id.host_runner_key()
+    } else {
+        id.host_control_key()
+    };
+    let mut out = if runner {
+        format!("{}\n", key.restricted_line())
+    } else {
+        format!("{}\n", key.public_line)
+    };
     if let Some(to) = private {
         std::fs::write(to, key.private_key.as_bytes())
             .map_err(|e| format!("{}: {e}", to.display()))?;

@@ -36,6 +36,15 @@ pub mod hosting;
 /// against the operator's hosting file.
 pub mod grants;
 pub mod operator;
+
+/// **What this node installed on its own host**: the record it keeps of
+/// the packages its operator asked for through its surface, and the half
+/// of the hosting file it generates from that record.
+pub mod packages;
+
+/// **The one program an instance may run on its host**: how a node asks
+/// its own host's shell to pull and start a package it was told to host.
+pub mod runner;
 pub mod service;
 
 /// A line to the operator on stderr.  **A closed pipe is not the daemon's

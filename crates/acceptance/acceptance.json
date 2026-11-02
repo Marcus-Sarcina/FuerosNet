@@ -15094,6 +15094,88 @@
     "interpretation": ""
   },
   {
+    "id": "DMN-37",
+    "area": "daemon",
+    "gap": "daemon",
+    "title": "An instance asks its own host over the loopback they share, with a key it holds for one act and keeps no longer",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "infra-client-requirements.md §9.4"
+    ],
+    "rule": [
+      {
+        "where": "infra-client-requirements.md §9.4",
+        "text": "you keep it no\nlonger than the act"
+      },
+      {
+        "where": "infra-client-requirements.md §9.4",
+        "text": "A node with no way to reach its host installs nothing, and says which\nline of its configuration is missing"
+      }
+    ],
+    "given": "A node configured with the address its host's shell answers on, and the private half of the restricted key its operator's client derived.",
+    "when": "It is asked for an act; and with a host address that is not a loopback one; and with a request carrying a word a shell would read; and the key is examined on disk while the act is in flight and after it returns.",
+    "then": "The request is the runner's vocabulary joined by single spaces and nothing else; a host address that is not loopback is refused where the operator wrote it, the key never being sent there; a word carrying shell punctuation, an empty word or no verb at all is refused before any session; the key is written at 0600 for the act alone and is overwritten and removed when it returns; a node naming no host shell refuses an install naming the configuration key that is missing.",
+    "oracle": "behaviour",
+    "interpretation": ""
+  },
+  {
+    "id": "DMN-38",
+    "area": "daemon",
+    "gap": "daemon",
+    "title": "The hosting file has two owners: the operator's lines by hand, and the entries a node generates from its own record",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "infra-client-requirements.md §9.4"
+    ],
+    "rule": [
+      {
+        "where": "infra-client-requirements.md §9.4",
+        "text": "The hosting file has two owners from here on."
+      },
+      {
+        "where": "infra-client-requirements.md §9.4",
+        "text": "The package's own manifest is relayed rather than composed"
+      }
+    ],
+    "given": "A hosting file carrying entries its operator wrote by hand, and a node that installs packages through its own surface.",
+    "when": "Packages are installed, installed again over themselves, and removed, and the file and the record are read back.",
+    "then": "Every line the operator wrote survives each install and each removal; the generated half is below one sentinel that says it is generated and will be rewritten, there being exactly one sentinel however many acts have been made; each generated entry is a hosting entry the node's own reader parses, naming the relayed manifest's path and the loopback address; the record reads back as it was written; a package's name on the host is derived from its resource, fits what the host's program takes and differs for a different resource; a package is told where to listen and which resource it is and nothing else.",
+    "oracle": "behaviour",
+    "interpretation": ""
+  },
+  {
+    "id": "DMN-39",
+    "area": "daemon",
+    "gap": "daemon",
+    "title": "A package is installed on an instance's own host from its operator's client, both legs or neither",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "infra-client-requirements.md §9.4"
+    ],
+    "rule": [
+      {
+        "where": "infra-client-requirements.md §9.4",
+        "text": "installing a package is an\nact on your administration surface"
+      },
+      {
+        "where": "infra-client-requirements.md §9.4",
+        "text": "Either leg\nfailing puts your configuration back as it was and re-reads it"
+      },
+      {
+        "where": "infra-client-requirements.md §9.4",
+        "text": "Removal keeps what the operator decided."
+      }
+    ],
+    "given": "A serving instance whose operator's client holds the restricted key, and a host that answers the instance's requests.",
+    "when": "An install act arrives carrying the resource, the owner, the authority, the image, the port, the package's manifest and the key; with a manifest the node will not admit; with a host that refuses to start it; with no key, a key that is not one, no manifest, a malformed authority, image or port, the surface's own port, and a port another package already listens on; then a removal, and a removal of a package the node did not install.",
+    "then": "The host is asked for the image before anything is written and for the package afterwards, and for nothing else; the manifest is written where the node reads it, the entry generated, the node's configuration re-read and the package bound and listed; a second install of the same resource replaces it rather than adding one; a manifest the node refuses and a host that will not start it each leave the record, the generated entries and the relayed manifest as they were, with nothing started and the reason said; no grant is written and the answer says nobody may reach it yet; each malformed field, the missing key and the missing manifest are refused with what was wanted named; the surface's own port and a port already taken are refused; a removal stops the package, drops the entry, re-reads, and says that the grants, the block, the log and the jobs were kept; a package the node did not install is refused as the operator's to remove by hand.",
+    "oracle": "behaviour",
+    "interpretation": ""
+  },
+  {
     "id": "TOP-52",
     "area": "topology",
     "gap": "topology",

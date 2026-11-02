@@ -424,6 +424,8 @@ impl Service {
                                     },
                                 )
                             }),
+                            host_shell: a.host_shell,
+                            bound: Arc::new(std::sync::Mutex::new(None)),
                             stopping: stopping.clone(),
                         }
                         .serve(),

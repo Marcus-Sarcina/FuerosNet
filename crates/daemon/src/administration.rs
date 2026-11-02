@@ -192,6 +192,16 @@ pub const MAX_REQUEST: usize = 64 * 1024;
 /// push; a connection that takes longer than this is not enrolling.
 pub const CALLER_TIMEOUT: Duration = Duration::from_secs(10);
 
+/// **How long an act that reaches this instance's host may take**
+/// [author, 2026-11-02]: an install asks the host to pull an image over
+/// the machine's own network, which is minutes where it is anything, and
+/// is not a stalled caller.
+///
+/// It bounds the whole exchange, so it is the outer budget; the read is
+/// still held to [`CALLER_TIMEOUT`] inside it, because a caller that
+/// sends nothing is a stalled caller whatever it was going to ask for.
+pub const PACKAGE_TIMEOUT: Duration = Duration::from_secs(300);
+
 /// The surface an operator reaches their instance over: what it needs to
 /// answer a fetch, to take a run, and to hand the node a record.
 pub struct Surface {
@@ -247,6 +257,16 @@ pub struct Surface {
     /// (`infra-client-requirements.md` §9.3), for a reload to provision
     /// against.
     pub state: Option<PathBuf>,
+    /// **Where this instance's own host answers a shell**, where its
+    /// operator gave it one: what an install asks to pull and start a
+    /// package ([`crate::runner`]).  Absent, this node installs nothing
+    /// and says so.
+    pub host_shell: Option<SocketAddr>,
+    /// **Where this surface actually bound**, which is not always what
+    /// [`Surface::listen`] says: an operator naming port 0 has the system
+    /// pick one, and the node's own line reports the one it got.  Kept so
+    /// an act can refuse a package the port this surface is answering on.
+    pub bound: Arc<Mutex<Option<SocketAddr>>>,
     /// Told when an act asks this node to stop; the service's own loop is
     /// waiting on it, so the act triggers the shutdown that exists rather
     /// than inventing one.
@@ -316,6 +336,7 @@ impl Surface {
         // **the address it actually bound**, which an operator needs when
         // the configuration named port 0, as the node's own line does
         let bound = listener.local_addr().unwrap_or(self.listen);
+        *self.bound.lock().unwrap() = Some(bound);
         tracing::info!(
             target: "daemon",
             step = "surface_open",
@@ -332,8 +353,11 @@ impl Surface {
                 continue;
             };
             // a caller that stalls holds nothing: the exchange is bounded
-            // and the next one is waiting
-            let _ = tokio::time::timeout(CALLER_TIMEOUT, self.exchange(stream, from)).await;
+            // and the next one is waiting.  **The outer bound is the
+            // longer one** ([`PACKAGE_TIMEOUT`]), because an install
+            // waits on the host's engine; the read inside it keeps the
+            // short one, which is what a stalled caller meets.
+            let _ = tokio::time::timeout(PACKAGE_TIMEOUT, self.exchange(stream, from)).await;
         }
         // the listener runs until it is dropped, which the service's own end
         // does to it
@@ -342,12 +366,27 @@ impl Surface {
     /// One connection: read a request, answer it, close.
     async fn exchange(&self, mut stream: TcpStream, from: SocketAddr) {
         let mut buf = Vec::new();
+        let began = std::time::Instant::now();
         let req = loop {
             let mut chunk = [0u8; 4096];
-            match stream.read(&mut chunk).await {
-                Ok(0) => return,
-                Ok(n) => buf.extend_from_slice(&chunk[..n]),
-                Err(_) => return,
+            // **the message itself is held to the short budget**: the
+            // long one above is for what answering costs, not for how
+            // long a caller may take to ask
+            let left = match CALLER_TIMEOUT.checked_sub(began.elapsed()) {
+                Some(d) => d,
+                None => {
+                    let _ = answer(&mut stream, 408, "the request did not all arrive\n").await;
+                    return;
+                }
+            };
+            match tokio::time::timeout(left, stream.read(&mut chunk)).await {
+                Err(_) => {
+                    let _ = answer(&mut stream, 408, "the request did not all arrive\n").await;
+                    return;
+                }
+                Ok(Ok(0)) => return,
+                Ok(Ok(n)) => buf.extend_from_slice(&chunk[..n]),
+                Ok(Err(_)) => return,
             }
             if buf.len() > MAX_REQUEST {
                 let _ = answer(
@@ -415,6 +454,11 @@ impl Surface {
             ("POST", "/node/grant/drop") => self.grant_drop(&req.body),
             ("POST", "/node/grant/template") => self.grant_template(&req.body),
             ("POST", "/node/token") => self.rotate(&req.body),
+            ("GET", "/node/packages") => self.package_list(),
+            ("POST", "/node/package/install") => self.package_install(&req.body),
+            ("POST", "/node/package/remove") => self.package_remove(&req.body),
+            ("POST", "/node/package/running") => self.package_said(&req.body, false),
+            ("POST", "/node/package/logs") => self.package_said(&req.body, true),
             ("POST", "/node/reload") => self.reload(),
             ("POST", "/node/stop") => self.stop(),
             ("PUT", "/node/run") | ("POST", "/node/run") => self.take_run(&req.body),
@@ -427,10 +471,11 @@ impl Surface {
             }
             ("GET", _) | ("PUT", _) | ("POST", _) => (
                 404,
-                "this surface answers GET /, GET /node, \
+                "this surface answers GET /, GET /node, GET /node/packages, \
                  PUT /node/{run,endpoint-record,anchor-entry}, \
-                 POST /node/{acknowledge,reload,stop}, \
-                 POST /node/grant[/narrow|/drop|/template], and for a hosted instance \
+                 POST /node/{acknowledge,reload,stop,token}, \
+                 POST /node/grant[/narrow|/drop|/template], \
+                 POST /node/package/{install,remove,running,logs}, and for a hosted instance \
                  GET /node/resource/<hex>/federation, GET /node/resource/<hex>/log, \
                  PUT /node/resource/<hex>/envelope and POST /node/resource/<hex>/federate\n"
                     .into(),
@@ -520,6 +565,26 @@ impl Surface {
     ) -> Result<(), (u16, String)> {
         // the bootstrap, and a caller inside this process
         if path == "/node" && req.method == "GET" {
+            return Ok(());
+        }
+        // **the three routes that carry a signature authorise
+        // themselves**, which this module's own heading has settled since
+        // 2026-10-08 and the narrowing above briefly forgot [2026-11-02].
+        //
+        // A run is verified to be the operator's over *this* transport
+        // key; each record is verified to be the operator's over this
+        // node's own keyhash. Bytes from any caller are therefore either
+        // the operator's or refused, so **a proof would add nothing** —
+        // and requiring one broke the enrolment it was meant to protect:
+        // these three routes *are* the exchange that first puts a
+        // credential on a launched instance, and a client that cannot
+        // complete it has no instance to administer at all.
+        if matches!(req.method.as_str(), "PUT" | "POST")
+            && matches!(
+                path,
+                "/node/run" | "/node/endpoint-record" | "/node/anchor-entry"
+            )
+        {
             return Ok(());
         }
         match from {
@@ -658,6 +723,389 @@ impl Surface {
                 path.display()
             ),
         )
+    }
+
+    /// **The host's shell, where this instance's operator gave it one.**
+    fn shell(&self) -> Result<crate::runner::Shell, (u16, String)> {
+        let Some(at) = self.host_shell else {
+            return Err((
+                409,
+                "this instance names no `[administration] host-shell`, so it cannot ask its own \
+                 host to start anything: it installs nothing, and says so rather than failing \
+                 an install for a reason it invented\n"
+                    .into(),
+            ));
+        };
+        crate::runner::Shell::of(at).map_err(|why| (409, format!("{why}\n")))
+    }
+
+    /// **Install a package on this instance's own host** [author,
+    /// 2026-11-02], which is the act an operator with no shell makes
+    /// instead of having one.
+    ///
+    /// ## What it is, and what each party contributes
+    ///
+    /// Installing a package is five things
+    /// (`infra-client-requirements.md` §9, §9.4): the image on the
+    /// machine, the package's manifest where the node reads it, an entry
+    /// in the hosting file, the package running on a port of its own, and
+    /// the node having re-read both. **Nothing of it is a protocol act
+    /// and nothing of it touches the operator's seed.**
+    ///
+    /// - **The client brings the key**, the restricted one derived from
+    ///   its operator's signing seed (`rhtn_crypto::ssh::host_runner_key`),
+    ///   for this act and no other: the node is handed it, uses it, and
+    ///   keeps nothing ([`crate::runner`]).
+    /// - **The client brings the package's manifest**, which is the
+    ///   package's own declaration relayed rather than the operator's
+    ///   statement about it — an operator writing role names into their
+    ///   node's configuration would be declaring them on the package's
+    ///   behalf (§9.1, [`crate::hosting`]).
+    /// - **The node brings the record**, so the entry it generates
+    ///   survives a restart and a removal names what an install made
+    ///   ([`crate::packages`]).
+    /// - **The host brings the engine**, and decides what it will be
+    ///   asked for: the runner's vocabulary and nothing else.
+    ///
+    /// ## Both or neither
+    ///
+    /// The image is pulled before anything is written, so a reference the
+    /// machine cannot fetch changes nothing. The node re-reads its
+    /// configuration before the package is started, so a manifest it
+    /// refuses leaves nothing running. **And either failing puts the
+    /// record and the hosting file back as they were and re-reads them**,
+    /// which is the discipline a grant act already follows: what is in
+    /// force is what is on disk.
+    ///
+    /// ## Who may reach it afterwards: nobody, yet
+    ///
+    /// No grant is written. §7 has a package's roles start bound to
+    /// nobody, and that is the state a package just installed should be
+    /// in — the operator decides who may reach it as a second, explicit
+    /// act. The answer says so rather than leaving them to discover it.
+    fn package_install(&self, body: &[u8]) -> (u16, String) {
+        if self.acting().is_err() {
+            return (409, "this node is not serving yet\n".into());
+        }
+        let Some((hosting, _)) = self.hosting.clone() else {
+            return (
+                409,
+                "the configuration names no `resources` file, so there is nowhere to write down \
+                 what this node hosts\n"
+                    .into(),
+            );
+        };
+        let shell = match self.shell() {
+            Ok(s) => s,
+            Err(e) => return e,
+        };
+        let f = form(body);
+        let key = match runner_key(&f) {
+            Ok(k) => k,
+            Err(e) => return e,
+        };
+        let want = match asked(&f) {
+            Ok(w) => w,
+            Err(why) => return (400, format!("{why}\n")),
+        };
+        let manifest = field(&f, "manifest");
+        if manifest.trim().is_empty() {
+            return (
+                400,
+                "an install carries the package's own manifest as `manifest`: what a package \
+                 declares is the package's, and this node writes it where it reads it rather \
+                 than composing one on the package's behalf\n"
+                    .into(),
+            );
+        }
+        // **what this node already installed**, which is what the entry
+        // is generated from and what a failure is put back to
+        let was = match crate::packages::read(&hosting) {
+            Ok(w) => w,
+            Err(why) => return (500, format!("{why}\n")),
+        };
+        if let Some(other) = was
+            .iter()
+            .find(|p| p.port == want.port && p.resource != want.resource)
+        {
+            return (
+                400,
+                format!(
+                    "`{}` already listens on 127.0.0.1:{}: two resources at one address is one \
+                     resource answering for both\n",
+                    hex(&other.resource),
+                    want.port
+                ),
+            );
+        }
+        let mine = self
+            .bound
+            .lock()
+            .unwrap()
+            .map_or(self.listen.port(), |a| a.port());
+        if want.port == mine {
+            return (
+                400,
+                format!("{mine} is where this instance's own administration surface answers\n"),
+            );
+        }
+
+        // **the image first**: a reference the machine cannot fetch
+        // changes nothing on it
+        let pulled = match shell.ask(&key, &["pull", &want.image]) {
+            Ok(said) => said,
+            Err(why) => return (502, format!("the image was not pulled: {why}\n")),
+        };
+
+        let manifest_at = crate::packages::manifest_at(&hosting, &want.resource);
+        let held_manifest = std::fs::read(&manifest_at).ok();
+        let mut now: Vec<crate::packages::Package> = was
+            .iter()
+            .filter(|p| p.resource != want.resource)
+            .cloned()
+            .collect();
+        now.push(want.clone());
+        let name = crate::packages::Package::name(&want.resource);
+
+        // what putting it back means, wherever this goes wrong after here
+        let undo = || {
+            match &held_manifest {
+                Some(bytes) => {
+                    let _ = std::fs::write(&manifest_at, bytes);
+                }
+                None => {
+                    let _ = std::fs::remove_file(&manifest_at);
+                }
+            }
+            let _ = crate::packages::write(&hosting, &was);
+            let _ = self.reload();
+        };
+
+        if let Some(dir) = manifest_at.parent()
+            && let Err(e) = std::fs::create_dir_all(dir)
+        {
+            return (500, format!("{}: {e}\n", dir.display()));
+        }
+        if let Err(e) = std::fs::write(&manifest_at, manifest) {
+            return (500, format!("{}: {e}\n", manifest_at.display()));
+        }
+        if let Err(why) = crate::packages::write(&hosting, &now) {
+            undo();
+            return (500, format!("{why}; nothing changed\n"));
+        }
+        // **the node re-reads before the package is started**: a manifest
+        // this host will not admit leaves nothing running
+        let (code, said) = self.reload();
+        if code != 200 {
+            undo();
+            return (
+                400,
+                format!("this node did not take the package: {said}\nnothing changed\n"),
+            );
+        }
+        // and now the package itself, under a name derived from the
+        // resource so a second install replaces it
+        let mut request: Vec<String> = vec!["start".into(), name.clone(), want.image.clone()];
+        request.extend(want.arguments());
+        let words: Vec<&str> = request.iter().map(String::as_str).collect();
+        let started = match shell.ask(&key, &words) {
+            Ok(s) => s,
+            Err(why) => {
+                undo();
+                return (
+                    502,
+                    format!("the host did not start it: {why}\nnothing changed\n"),
+                );
+            }
+        };
+        tracing::info!(
+            target: "daemon",
+            step = "surface_act",
+            act = "install",
+            resource = %hex(&want.resource),
+            image = %want.image,
+            port = want.port,
+            "daemon.lifecycle"
+        );
+        (
+            200,
+            format!(
+                "installed {}\nname rhtn-pkg-{name}\nimage {}\naddress 127.0.0.1:{}\nauthority \
+                 {}\nowner {}\ngrants none\nnext nobody may reach it until a role is granted on \
+                 it\npulled {}\nstarted {}\n",
+                hex(&want.resource),
+                want.image,
+                want.port,
+                want.authority,
+                hex(&want.owner),
+                pulled.trim(),
+                started.trim(),
+            ),
+        )
+    }
+
+    /// **Remove a package this node installed**: the container stopped,
+    /// the entry dropped, the configuration re-read.
+    ///
+    /// **A container already gone is not a failure.** An operator
+    /// removing a package whose process died, or whose machine was
+    /// rebuilt, is removing it from the node's configuration, which is
+    /// the part this act is about; what the host said is reported rather
+    /// than refused.
+    ///
+    /// **What is kept**: the grants, the storage block, the log and the
+    /// jobs. A removal is how an operator upgrades — it is a removal and
+    /// an install of the same resource — and an upgrade that silently
+    /// dropped who may reach the package, or its data, would be the worse
+    /// surprise. The answer names what was left behind.
+    fn package_remove(&self, body: &[u8]) -> (u16, String) {
+        if self.acting().is_err() {
+            return (409, "this node is not serving yet\n".into());
+        }
+        let Some((hosting, _)) = self.hosting.clone() else {
+            return (409, "the configuration names no `resources` file\n".into());
+        };
+        let shell = match self.shell() {
+            Ok(s) => s,
+            Err(e) => return e,
+        };
+        let f = form(body);
+        let key = match runner_key(&f) {
+            Ok(k) => k,
+            Err(e) => return e,
+        };
+        let Some(resource) = unhex(field(&f, "resource"))
+            .and_then(|b| <[u8; 32]>::try_from(b.as_slice()).ok())
+            .map(|k: [u8; 32]| k)
+        else {
+            return (400, "a resource is 64 lower-case hex digits\n".into());
+        };
+        let was = match crate::packages::read(&hosting) {
+            Ok(w) => w,
+            Err(why) => return (500, format!("{why}\n")),
+        };
+        if !was.iter().any(|p| p.resource == resource) {
+            return (
+                404,
+                "this node installed no such package through its surface. A resource its \
+                 operator wrote into the hosting file by hand is theirs to remove there\n"
+                    .into(),
+            );
+        }
+        let name = crate::packages::Package::name(&resource);
+        let stopped = match shell.ask(&key, &["stop", &name]) {
+            Ok(said) => format!("stopped {}", said.trim()),
+            Err(why) => format!("the host said: {why}"),
+        };
+        let now: Vec<crate::packages::Package> = was
+            .iter()
+            .filter(|p| p.resource != resource)
+            .cloned()
+            .collect();
+        if let Err(why) = crate::packages::write(&hosting, &now) {
+            return (500, format!("{why}; nothing changed\n"));
+        }
+        let (code, said) = self.reload();
+        if code != 200 {
+            let _ = crate::packages::write(&hosting, &was);
+            let _ = self.reload();
+            return (
+                400,
+                format!("this node did not re-read its configuration: {said}\nnothing changed\n"),
+            );
+        }
+        let _ = std::fs::remove_file(crate::packages::manifest_at(&hosting, &resource));
+        tracing::info!(
+            target: "daemon",
+            step = "surface_act",
+            act = "remove",
+            resource = %hex(&resource),
+            "daemon.lifecycle"
+        );
+        (
+            200,
+            format!(
+                "removed {}\n{stopped}\nkept the grants, the storage block, the log and the \
+                 jobs: a removal is also how a package is upgraded\n",
+                hex(&resource)
+            ),
+        )
+    }
+
+    /// **What this node installed through its own surface**, as its record
+    /// holds it: what the operator's client reads to draw them.
+    ///
+    /// It reads the record and does not ask the host, so it needs no key.
+    /// What is *running* is the host's answer to a `list`, which the act
+    /// below carries a key for.
+    fn package_list(&self) -> (u16, String) {
+        let Some((hosting, _)) = self.hosting.clone() else {
+            return (409, "the configuration names no `resources` file\n".into());
+        };
+        match crate::packages::read(&hosting) {
+            Err(why) => (500, format!("{why}\n")),
+            Ok(ps) => {
+                let mut out = format!("packages {}\n", ps.len());
+                for p in &ps {
+                    out.push_str(&format!(
+                        "package {} rhtn-pkg-{} {} 127.0.0.1:{} {}\n",
+                        hex(&p.resource),
+                        crate::packages::Package::name(&p.resource),
+                        p.image,
+                        p.port,
+                        p.authority
+                    ));
+                }
+                (200, out)
+            }
+        }
+    }
+
+    /// **What the host says about the packages it is running**, and what
+    /// one of them wrote: the runner's `list` and `logs`, carried through
+    /// so an operator with no shell can read them.
+    ///
+    /// This is the package's *process* output, as the engine kept it. The
+    /// instance's own log — what it wrote through the host binding §9.3
+    /// gives it — is `GET /node/resource/<hex>/log`, which is a different
+    /// thing and needs no key.
+    fn package_said(&self, body: &[u8], logs: bool) -> (u16, String) {
+        let shell = match self.shell() {
+            Ok(s) => s,
+            Err(e) => return e,
+        };
+        let f = form(body);
+        let key = match runner_key(&f) {
+            Ok(k) => k,
+            Err(e) => return e,
+        };
+        let request: Vec<String> = if logs {
+            let Some(resource) = unhex(field(&f, "resource"))
+                .and_then(|b| <[u8; 32]>::try_from(b.as_slice()).ok())
+                .map(|k: [u8; 32]| k)
+            else {
+                return (400, "a resource is 64 lower-case hex digits\n".into());
+            };
+            let lines = match field(&f, "lines") {
+                "" => "40".to_string(),
+                n => match n.parse::<usize>() {
+                    Ok(n) if n <= 500 => n.to_string(),
+                    _ => return (400, "a line count is a number, at most 500\n".into()),
+                },
+            };
+            vec![
+                "logs".into(),
+                crate::packages::Package::name(&resource),
+                lines,
+            ]
+        } else {
+            vec!["list".into()]
+        };
+        let words: Vec<&str> = request.iter().map(String::as_str).collect();
+        match shell.ask(&key, &words) {
+            Ok(said) => (200, said),
+            Err(why) => (502, format!("{why}\n")),
+        }
     }
 
     /// The standing acknowledgement policy (design §11.2.1): whether every
@@ -1339,8 +1787,11 @@ async fn answer(stream: &mut TcpStream, code: u16, body: &str) -> std::io::Resul
     let reason = match code {
         200 => "OK",
         400 => "Bad Request",
+        401 => "Unauthorized",
         404 => "Not Found",
         405 => "Method Not Allowed",
+        408 => "Request Timeout",
+        409 => "Conflict",
         413 => "Content Too Large",
         _ => "Internal Server Error",
     };
@@ -1469,6 +1920,64 @@ fn resource_views(node: &LiveNode) -> Vec<crate::operator::ResourceView> {
             })
         })
         .collect()
+}
+
+/// **The restricted key an install carries**, as the operator's client
+/// sent it: the private half of the key the host's `authorized_keys`
+/// binds to the runner (`rhtn_crypto::ssh::host_runner_key`).
+///
+/// **Held no longer than the act.** It is zeroized when this value is
+/// dropped, and the file [`crate::runner`] writes it to is overwritten
+/// and removed when the call returns. The node keeps no copy, which is
+/// what makes an instance seized between two acts hold nothing that would
+/// let it ask its host for anything.
+fn runner_key(f: &[(String, String)]) -> Result<zeroize::Zeroizing<String>, (u16, String)> {
+    let key = field(f, "key");
+    if key.trim().is_empty() {
+        return Err((
+            400,
+            "this act carries the restricted ssh key as `key`: an instance has no key of its \
+             own for its host, and is handed one for the act it is making. Take it from your \
+             client — Operator, the node's runner key — or from `rhtn keys ssh <identity> \
+             --runner --private <file>`\n"
+                .into(),
+        ));
+    }
+    if !key.contains("OPENSSH PRIVATE KEY") {
+        return Err((
+            400,
+            "`key` is not an OpenSSH private key: the private half is wanted here, which is \
+             what opens the session, and the public half is what the host already holds\n"
+                .into(),
+        ));
+    }
+    Ok(zeroize::Zeroizing::new(key.to_string()))
+}
+
+/// What an install asked for, checked.
+fn asked(f: &[(String, String)]) -> Result<crate::packages::Package, String> {
+    let keyhash = |name: &str| -> Result<[u8; 32], String> {
+        let given = field(f, name);
+        if given.len() != 64 || given.bytes().any(|b| b.is_ascii_uppercase()) {
+            return Err(format!("`{name}` is 64 lower-case hex digits"));
+        }
+        unhex(given)
+            .and_then(|b| <[u8; 32]>::try_from(b.as_slice()).ok())
+            .ok_or_else(|| format!("`{name}` is 64 lower-case hex digits"))
+    };
+    let port: u16 = field(f, "port")
+        .parse()
+        .map_err(|_| "`port` is a number between 1 and 65535".to_string())?;
+    if port == 0 {
+        return Err("`port` is a number between 1 and 65535".into());
+    }
+    Ok(crate::packages::Package {
+        resource: keyhash("resource")?,
+        owner: keyhash("owner")?,
+        authority: crate::packages::authority(field(f, "authority"))?,
+        image: crate::packages::image(field(f, "image"))?,
+        port,
+    })
 }
 
 fn hex(b: &[u8]) -> String {
