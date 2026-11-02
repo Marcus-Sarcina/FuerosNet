@@ -334,6 +334,32 @@ configuration and does not come up, which is why the install now checks;
 and a node that publishes ports rather than sharing the host's network
 needs the package in its own namespace, which the install now detects.
 
+**The meetings, run nodeless on 2026-11-02** [author's ruling: meetings
+first, attached to nothing, "the topology must survive changes in hosting
+and operator status"]. Four phones wiped and made new through the
+first-run screen, then four ceremonies with **no node and no instruments
+anywhere** — every one witnessless, two signers, which the design permits
+with no floor and the record says permanently of itself:
+
+| # | Who | What | Record | Adoption / peering |
+|---|---|---|---|---|
+| T1 | GXV ← MRK | formation under GXV's own key | `00afa329` | `1872fd7b`, which is the subnet's id; named **Share Society** by its root |
+| T2 | GXV ← ZU8 | adoption into Share Society | `9ff13044` | `66687722` |
+| T3 | 4VC → ZU8 | client-initiated adoption, 4VC under ZU8 | `29ab05e7` | `2553042b` |
+| T4 | MRK ↔ 4VC | regular meeting with the peering | `8a2d5c01` | peering `c9e09ed3`, applied at both |
+
+So the subnet is GXV rooting it, MRK and ZU8 under GXV, 4VC under ZU8 —
+**4VC two steps from the root**, which is what makes it the member the
+application test needs: inside the owner's horizon without being the
+owner. The topology exists on the four phones and **on nothing else**,
+which is the state the attach's replay is for.
+
+**What it found**: 4VC's own frame named the subnet by its id rather than
+its name (*ZU8's subnet `1872fd7b`…*), where T2's named it *GXV's Share
+Society*. Correct and worth knowing: a subnet's name is a profile
+published to a serving node (`wire-format.md` §7.11), and nodeless there
+is nowhere to fetch it from, so a name not received is not shown.
+
 **The sequence, in order.**
 
 1. **Push a current image.** A rented instance runs what the registry
