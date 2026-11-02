@@ -512,6 +512,64 @@ stays in step with it as that software changes.
   holds the seed, which is exactly what design §23.3's arrangement is there to
   prevent.
 
+#### What is shown and what may be asked are different halves
+
+**The page shows; the client asks** [author, 2026-11-02]. The division above
+held while a form could act, and a form cannot: an act that does not arrive on
+your loopback proves itself with a MAC over its own body (§8.2), and HTML has no
+way to compute one. An act on the machine itself needs more than that — the key
+for it is derived from a signing seed, and **the frame is deliberately isolated
+from that seed**, which is the paragraph above. So the half that acts had to move
+out of the page, and the half that shows did not.
+
+| | Whose it is | How it travels |
+|---|---|---|
+| **what is shown** — your state, the rows, the planes, the counts, a package's log | yours, and it should match your software | your own page, in the client's frame, read-only |
+| **what may be asked** | yours, **declared** | a declaration the client reads |
+| **the asking** | the client's | one proved invocation, on one route |
+
+**You declare your acts the way a package declares its operations**, which is
+the mechanism §9 already has one level down: a name, a label, a sentence, and
+parameters from a closed set — a flag, a bounded number, length-limited text, one
+of a list, any of a list, a keyhash. Nothing of markup, layout or behaviour is
+agreed between you and a client, which is what the paragraph above declined to
+fix universally. **Only the field types are common**, and they were already a
+closed set because you had to render every one of them yourself.
+
+- **Declare the vocabulary's version**, as the host surface of §9.3 is versioned.
+  Fields are only ever added within a version, and a change to what a declaration
+  *means* is a new one. A client meeting a version it does not know draws what it
+  understands and says plainly that the rest wants a newer client.
+- **Declare what each act is about** — yourself, or one resource you host — so a
+  client fills in the resource an operator is already looking at rather than
+  asking them to retype a keyhash they can see.
+- **Declare what the client must bring**, which is the reason any of this moved:
+  an act that reaches your machine wants the key of §9.4, and you cannot hold one
+  and the frame must not see one. Say that you need it; the client is where it
+  can be had.
+- **Never declare a field for a credential.** What a person answers is declared;
+  what their client supplies is the line above. A declaration that could name the
+  key field would be a page that could ask for a key.
+- **Declare what is true now.** The roles a grant may carry are the package's;
+  the grants that may be narrowed are the ones that stand. A declaration is of
+  this instant, which is also what lets a client show an accurate bound instead of
+  a guess.
+- **Draw your own page from the same declaration.** Then the list an operator
+  reads and the list their client reads cannot drift apart, because there is one.
+
+**A control on your page is a link that bounces the act to the client**, in a
+scheme the frame recognises as not yours and takes rather than follows. **What
+rides in it is a hint and never an instruction**: the resource of the tab they
+are on, the place in the list of the grant beside the button, so nobody retypes
+what they are reading. A client treats every value in it as text to put in a
+field the person confirms — a seized node is a case this design plans for (design
+§18.1), and a page that could make an act happen would be a page that could grant
+itself a role.
+
+**One route invokes any declared act, named by its name.** Everything beneath it
+is yours: which of your own routes implements an act, and how, is the software the
+paragraph above says your surface should match.
+
 ---
 
 ## 9. Package hosting
@@ -869,6 +927,25 @@ upgraded**, and an upgrade that silently dropped who may reach it, or its
 data, is the worse surprise. Say what was kept. A container already gone is
 not a failure — the removal is from your configuration, which is the part
 the act is about.
+
+**The act is declared like every other** (§8.3), so your page carries a control
+for it and the client makes it: that is how the key gets in without ever being
+in the frame. Say that the act brings the host key, and the client that draws it
+will know to derive one and to ask the person first.
+
+**And an operator should not be typing five fields off a web page.** A package's
+distributor may publish the whole of what they can say as one string — a link
+where the operator is reading, a code on a screen where they are not — carrying
+the image, a suggested authority and port, and **the package's own manifest**,
+which §9.1 puts with the package and which therefore has to come from them.
+`light-client-requirements.md` §10 has the client's half of it.
+
+**What such a string cannot carry is the install.** No resource identity, no
+owner, no instance, no key: those are the operator's, and a string that arrived
+with them would be an installation somebody else composed. What it does is fill
+a screen its reader confirms — **with what the package declares shown before
+they agree**, because §9.1's supply chain is trusting the package author's
+judgment about access and that judgment is what the manifest states.
 
 #### The door onto your host, and why it is not a standing one
 

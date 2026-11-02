@@ -454,6 +454,10 @@ impl Surface {
             ("POST", "/node/grant/drop") => self.grant_drop(&req.body),
             ("POST", "/node/grant/template") => self.grant_template(&req.body),
             ("POST", "/node/token") => self.rotate(&req.body),
+            ("GET", "/node/acts") => self.declared(),
+            ("POST", p) if p.starts_with("/node/act/") => {
+                self.invoke(p.trim_start_matches("/node/act/"), &req.body)
+            }
             ("GET", "/node/packages") => self.package_list(),
             ("POST", "/node/package/install") => self.package_install(&req.body),
             ("POST", "/node/package/remove") => self.package_remove(&req.body),
@@ -471,7 +475,8 @@ impl Surface {
             }
             ("GET", _) | ("PUT", _) | ("POST", _) => (
                 404,
-                "this surface answers GET /, GET /node, GET /node/packages, \
+                "this surface answers GET /, GET /node, GET /node/acts, \
+                 POST /node/act/<declared act>, GET /node/packages, \
                  PUT /node/{run,endpoint-record,anchor-entry}, \
                  POST /node/{acknowledge,reload,stop,token}, \
                  POST /node/grant[/narrow|/drop|/template], \
@@ -723,6 +728,81 @@ impl Surface {
                 path.display()
             ),
         )
+    }
+
+    /// **What this instance declares it can be asked for**
+    /// ([`crate::acts`]), which is what a client draws its own screens
+    /// from.
+    ///
+    /// **It describes this instant.** The acknowledgement policy decides
+    /// a label, the grants that stand decide which grant may be named,
+    /// and a package's declared operations travel beside the node's own —
+    /// so a client that asks again after an act draws the page as it is
+    /// rather than as it was built.
+    fn declared(&self) -> (u16, String) {
+        let Some((node, _)) = self.running() else {
+            return (
+                409,
+                "this node is not serving yet, so it declares nothing it could be asked for\n"
+                    .into(),
+            );
+        };
+        let installed: Vec<[u8; 32]> = self
+            .hosting
+            .as_ref()
+            .and_then(|(p, _)| crate::packages::read(p).ok())
+            .map(|ps| ps.iter().map(|p| p.resource).collect())
+            .unwrap_or_default();
+        let acknowledging = node.view.lock().unwrap().ack_policy.is_some();
+        let views: Vec<(crate::operator::ResourceView, bool)> = resource_views(&node)
+            .into_iter()
+            .map(|v| {
+                let mine = installed.contains(&v.resource);
+                (v, mine)
+            })
+            .collect();
+        (
+            200,
+            format!("{}\n", crate::acts::declaration(acknowledging, &views)),
+        )
+    }
+
+    /// **Invoke one declared act by name**, which is the one route a
+    /// client needs beyond the declaration itself.
+    ///
+    /// **The declared parameter names are the field names the act
+    /// reads**, so an invocation body is the body the implementing route
+    /// already takes and nothing is translated here. What this adds is
+    /// the name: a client that knows `/node/act/<name>` and the
+    /// declaration knows the whole surface, and the routes beneath are
+    /// the node's own business — which is what §8.3 means by a surface
+    /// that *"matches its software"*.
+    ///
+    /// **An unknown name is a 404 that names the declaration**, because a
+    /// client meeting one is a client built against another version and
+    /// the thing it needs is to go and read.
+    fn invoke(&self, name: &str, body: &[u8]) -> (u16, String) {
+        match name {
+            "acknowledge" => self.acknowledge(body),
+            "reload" => self.reload(),
+            "stop" => self.stop(),
+            "grant" => self.grant_add(body),
+            "grant-narrow" => self.grant_narrow(body),
+            "grant-drop" => self.grant_drop(body),
+            "grant-template" => self.grant_template(body),
+            "install" => self.package_install(body),
+            "remove" => self.package_remove(body),
+            "running" => self.package_said(body, false),
+            "logs" => self.package_said(body, true),
+            other => (
+                404,
+                format!(
+                    "`{other}` is not an act this instance declares. GET /node/acts is the \
+                     list, and `{SURFACE}` is the vocabulary it is written in\n",
+                    SURFACE = crate::acts::SURFACE
+                ),
+            ),
+        }
     }
 
     /// **The host's shell, where this instance's operator gave it one.**

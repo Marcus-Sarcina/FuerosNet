@@ -782,18 +782,12 @@ pub fn page(
                font: 13px/1.5 ui-monospace, monospace; white-space: pre-wrap;\n\
                word-break: break-all }}\n\
          footer {{ margin-top: 2rem; opacity: .7; font-size: .85rem }}\n\
-         form.act {{ margin: .5rem 0 0; display: flex; flex-wrap: wrap;\n\
-               gap: .4rem; align-items: center }}\n\
-         form.act label {{ font-size: .85rem; opacity: .85 }}\n\
-         form.act input[type=text], form.act select {{ font: inherit;\n\
-               font-size: .85rem; padding: .15rem .3rem }}\n\
-         form.act button {{ font: inherit; font-size: .85rem;\n\
-               padding: .15rem .6rem }}\n\
+         h3 {{ font-size: .9rem; margin: 1rem 0 .3rem }}\n\
+         a.act {{ display: inline-block; margin: .4rem .4rem 0 0;\n\
+               padding: .2rem .7rem; font-size: .85rem; text-decoration: none;\n\
+               border: 1px solid rgba(127,127,127,.5); border-radius: 4px }}\n\
          div.act {{ display: flex; flex-wrap: wrap; gap: .5rem;\n\
                align-items: center }}\n\
-         fieldset {{ border: 1px solid rgba(127,127,127,.35);\n\
-               border-radius: 4px; margin: .6rem 0 0; padding: .4rem .7rem .7rem }}\n\
-         legend {{ font-size: .8rem; opacity: .7; padding: 0 .3rem }}\n\
          </style></head><body>\n",
         &hex(&status.keyhash)[..16]
     );
@@ -1023,28 +1017,23 @@ impl ResourceView {
         let who = hex(&self.resource);
         for (at, g) in self.grants.iter().enumerate() {
             let _ = writeln!(out, "<pre>{}</pre>", escape(g));
-            let _ = write!(
-                out,
-                "<form class=\"act\" method=\"post\" action=\"/node/grant/drop\">\
-                 <input type=\"hidden\" name=\"resource\" value=\"{who}\">\
-                 <input type=\"hidden\" name=\"at\" value=\"{at}\">\
-                 <button>Withdraw</button></form>\n\
-                 <form class=\"act\" method=\"post\" action=\"/node/grant/narrow\">\
-                 <input type=\"hidden\" name=\"resource\" value=\"{who}\">\
-                 <input type=\"hidden\" name=\"at\" value=\"{at}\">\
-                 <label>and also</label>{}<button>Narrow</button></form>\n",
-                clause_picker(false)
+            let hints = [("resource", who.as_str()), ("at", &at.to_string())];
+            out.push_str("<div class=\"act\">");
+            out.push_str(&control("grant-drop", "Withdraw", &hints));
+            out.push_str(&control("grant-narrow", "Narrow", &hints));
+            out.push_str("</div>\n");
+        }
+        if self.roles.is_empty() {
+            out.push_str(
+                "<p class=\"sub\">This package declares no role, so a grant here carries \
+                 none: reaching the resource is the whole of it.</p>\n",
             );
         }
-        let _ = write!(
-            out,
-            "<form class=\"act\" method=\"post\" action=\"/node/grant\">\
-             <fieldset><legend>grant</legend>\n\
-             <input type=\"hidden\" name=\"resource\" value=\"{who}\">\n{}\
-             <div class=\"act\">{}<button>Grant</button></div></fieldset></form>\n",
-            self.role_boxes(),
-            clause_picker(true)
-        );
+        out.push_str(&control(
+            "grant",
+            "Grant a role",
+            &[("resource", who.as_str())],
+        ));
         if self.rows.is_empty() {
             out.push_str("<pre>no member holds a row here</pre>\n");
         } else {
@@ -1078,29 +1067,6 @@ impl ResourceView {
 }
 
 impl ResourceView {
-    /// A checkbox per declared role, with the unbound ones marked: §7
-    /// wants *"you installed this and have not decided who may use it"*
-    /// visible, and the place an operator reads that is the place they
-    /// decide it.
-    fn role_boxes(&self) -> String {
-        if self.roles.is_empty() {
-            return "<p class=\"sub\">This package declares no role, so a grant here carries \
-                    none: reaching the resource is the whole of it.</p>\n"
-                .into();
-        }
-        let mut out = String::from("<div class=\"act\">");
-        for (role, bound) in &self.roles {
-            let _ = write!(
-                out,
-                "<label><input type=\"checkbox\" name=\"roles\" value=\"{0}\"> {0}{1}</label>",
-                escape(role),
-                if *bound { "" } else { " (nobody)" }
-            );
-        }
-        out.push_str("</div>\n");
-        out
-    }
-
     /// **What the package declared it can be asked to do**, drawn in the
     /// node's own vocabulary and not the package's
     /// (`infra-client-requirements.md` §8.3, `resource-requirements.md`
@@ -1127,14 +1093,11 @@ impl ResourceView {
                      horizon is now"
                 ))
             );
-            let _ = writeln!(
-                out,
-                "<form class=\"act\" method=\"post\" action=\"/node/grant/template\">\
-                 <input type=\"hidden\" name=\"resource\" value=\"{who}\">\
-                 <input type=\"hidden\" name=\"name\" value=\"{}\">\
-                 <button>Take it</button></form>",
-                escape(name)
-            );
+            out.push_str(&control(
+                "grant-template",
+                "Take it",
+                &[("resource", who.as_str()), ("name", name)],
+            ));
         }
         out.push_str(
             "<p class=\"sub\">Offered, not applied. \
@@ -1162,6 +1125,7 @@ impl ResourceView {
                     Kind::Number { low, high } => format!("a number, {low} to {high}"),
                     Kind::Text { max } => format!("text, at most {max} characters"),
                     Kind::Choice { of } => format!("one of: {}", of.join(", ")),
+                    Kind::Several { of } => format!("any of: {}", of.join(", ")),
                     Kind::Keyhash => "a keyhash".to_string(),
                 };
                 let _ = writeln!(says, "{}  {}  ({what})", p.name, p.label);
@@ -1172,13 +1136,82 @@ impl ResourceView {
             let _ = writeln!(out, "<pre>{}</pre>", escape(&says));
         }
         out.push_str(
-            "<p class=\"sub\">Invoking one is not here yet: a reserved role has to be added \
-             first, since a package could otherwise declare the same name as an application \
-             role and a member granted it would be indistinguishable from the operator \
-             (<code>rhtn_node::resources::RESERVED_ROLES</code>).</p>\n",
+            "<p class=\"sub\">These travel to the client in the same shape this node\u{2019}s \
+             own acts do (<code>GET /node/acts</code>), so an operator reads one idiom for \
+             both. <strong>Invoking one is not here yet</strong>: a reserved role has to be \
+             added first, since a package could otherwise declare the same name as an \
+             application role and a member granted it would be indistinguishable from the \
+             operator (<code>rhtn_node::resources::RESERVED_ROLES</code>).</p>\n",
         );
         out
     }
+}
+
+/// **The scheme a control on this page bounces an act back to the client
+/// through** [author, 2026-11-02].
+///
+/// A form cannot prove itself ([`crate::acts`]), so the page does not
+/// carry one: each act is a link in this scheme, which the client's frame
+/// recognises as *not this instance's origin* and takes rather than
+/// follows. The client then draws the act's declared fields, asks the
+/// person, supplies what [`crate::acts::Brings`] names, and makes one
+/// proved invocation.
+///
+/// **What rides in the link is a hint and never an instruction.** The
+/// query pre-fills what the operator is already looking at — the resource
+/// of the tab they are on, the place in the list of the grant beside the
+/// button — so they are not asked to retype a keyhash they can see. But
+/// **this page comes from the node**, and a seized node is a case this
+/// design plans for (design §18.1): the client must treat every value
+/// here as text to put in a field the person confirms, never as an act to
+/// perform. A page that could make an act happen would be a page that
+/// could grant itself a role.
+pub const ACT_SCHEME: &str = "rhtn-act";
+
+/// One control: the act's name, what the operator reads, and the hints.
+fn control(name: &str, label: &str, hints: &[(&str, &str)]) -> String {
+    let mut target = format!("{ACT_SCHEME}:{name}");
+    for (i, (k, v)) in hints.iter().enumerate() {
+        let _ = write!(
+            target,
+            "{}{}={}",
+            if i == 0 { '?' } else { '&' },
+            k,
+            escape_query(v)
+        );
+    }
+    format!(
+        "<a class=\"act\" href=\"{}\">{}</a>\n",
+        escape(&target),
+        escape(label)
+    )
+}
+
+/// Percent-escaping for a hint's value, which is a keyhash or a number
+/// today and is escaped anyway: a renderer that relies on what its inputs
+/// happen to contain is one new field away from being wrong.
+fn escape_query(s: &str) -> String {
+    s.bytes()
+        .map(|b| match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                (b as char).to_string()
+            }
+            _ => format!("%{b:02X}"),
+        })
+        .collect()
+}
+
+/// **What a page without a client can say about an act**: that the act is
+/// the client's to make, and what the instrument is for a machine with a
+/// shell.
+fn acts_are_the_clients() -> &'static str {
+    "<p class=\"sub\">An act is made by the client this page is framed in, not by this page: \
+     it carries no form because a form cannot prove itself under this instance\u{2019}s token, \
+     and because the key an act on the machine needs is derived from a seed the frame is \
+     isolated from (<code>infra-client-requirements.md</code> \u{a7}8.2, \u{a7}8.3). \
+     This instance declares what it can be asked for at \
+     <code>GET /node/acts</code>; a browser that is not a client reads this page and makes \
+     acts with <code>rhtn node</code>.</p>\n"
 }
 
 /// The tab strip: the node itself, then one per resource bound here.
@@ -1241,7 +1274,8 @@ fn owed(status: &StatusView) -> String {
     )
 }
 
-/// **The acts this node can take on its own authority.**
+/// **The acts this node can take on its own authority, as controls that
+/// bounce them to the client.**
 ///
 /// §8.1 forbids the interface composing, signing or sending on the wire,
 /// and OPS-011 forbids frame composition, traffic replay, signature
@@ -1249,66 +1283,36 @@ fn owed(status: &StatusView) -> String {
 /// and OPS-012 has an operator's hosting and standing policies kept as
 /// exactly such acts.
 ///
-/// **What authorises one is reaching this port** [author, 2026-10-08].
-/// §8.2 puts administration "out of band, with everything else about the
-/// host", so where the surface binds is the access decision — and these
-/// carry no key, which is what lets an operator administer from a desktop
-/// holding no seed (design §23.3).
+/// **The page draws what it declares** ([`crate::acts::node_acts`]), so
+/// the list here and the list a client reads cannot drift: there is one.
+/// What the page does *not* do is carry a form — an act off the loopback
+/// proves itself under this instance's token and HTML cannot compute that
+/// MAC, and an act on the machine needs a key derived from a seed this
+/// frame is isolated from (§8.3). So each control is a link in
+/// [`ACT_SCHEME`] and the client makes the act.
 fn node_controls(status: &StatusView) -> String {
-    format!(
-        "<h2>Acts</h2>\n\
-         <form method=\"post\" action=\"/node/acknowledge\">\n\
-         <p>Standing acknowledgement is <strong>{}</strong>: whether this node countersigns \
-         every adoption beneath it as it is stored (design §11.2.1).<br>\
-         <button name=\"acknowledge\" value=\"{}\">{}</button></p>\n</form>\n\
-         <form method=\"post\" action=\"/node/reload\">\n\
-         <p>Re-read the hosting file, without a restart.<br><button>Reload</button></p>\n\
-         </form>\n\
-         <form method=\"post\" action=\"/node/stop\">\n\
-         <p>Stop, writing back what is held and losing nothing in flight: the same path a \
-         SIGTERM takes.<br><button>Stop this node</button></p>\n</form>\n",
-        if status.acknowledging { "on" } else { "off" },
-        if status.acknowledging { "off" } else { "on" },
-        if status.acknowledging {
-            "Turn it off"
-        } else {
-            "Turn it on"
-        },
-    )
+    let mut out = String::from("<h2>Acts</h2>\n");
+    for a in crate::acts::node_acts(status.acknowledging) {
+        let _ = writeln!(out, "<h3>{}</h3>", escape(&a.operation.label));
+        if !a.operation.help.is_empty() {
+            let _ = writeln!(out, "<p class=\"sub\">{}</p>", escape(&a.operation.help));
+        }
+        if a.brings == crate::acts::Brings::HostKey {
+            out.push_str(
+                "<p class=\"sub\">This one asks the machine, so the client brings the \
+                 restricted key for it and keeps it no longer than the act.</p>\n",
+            );
+        }
+        out.push_str(&control(&a.operation.name, "Make this act", &[]));
+    }
+    out.push_str(acts_are_the_clients());
+    out
 }
 
 /// The five characters that would otherwise close a tag or an attribute.
 /// **Everything on the page goes through this**, counts included: a keyhash
 /// cannot carry one of them today, and a renderer that relies on what its
 /// inputs happen to contain is one new field away from being wrong.
-/// **The vocabulary, as a control.**
-///
-/// The names and the prompts come from the language itself
-/// (`rhtn_node::grant::VOCABULARY`), so a page cannot offer a clause the
-/// node would not read, or call one by a word the file does not use.
-/// `everyone` is offered only where a whole grant is being made: it is the
-/// *absence* of a clause rather than one of them, so narrowing a grant to
-/// it would mean nothing.
-fn clause_picker(whole: bool) -> String {
-    let mut out = String::from("<select name=\"of\">");
-    if whole {
-        out.push_str("<option value=\"everyone\">every member of my trust horizon</option>");
-    }
-    for n in rhtn_node::grant::VOCABULARY.iter() {
-        let _ = write!(
-            out,
-            "<option value=\"{}\">{}</option>",
-            n.of,
-            escape(n.prompt)
-        );
-    }
-    out.push_str(
-        "</select><label><input type=\"text\" name=\"with\" size=\"10\"> \
-         its parameter, where it takes one</label>",
-    );
-    out
-}
-
 fn escape(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for c in s.chars() {

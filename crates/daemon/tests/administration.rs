@@ -714,13 +714,28 @@ fn a_standing_policy_is_changed_from_the_page_and_a_stop_is_the_signal_s_path() 
     // the page offers the act, and says where the policy stands
     let page = ask(at, "GET / HTTP/1.1", b"");
     assert!(body(&page).contains("acknowledges no"), "off to begin with");
+    // **the control bounces the act to the client** [author, 2026-11-02]:
+    // the page carries no form, because a form cannot compute the MAC an
+    // act off the loopback proves itself with (`rhtn_daemon::acts`)
     assert!(
-        body(&page).contains("/node/acknowledge"),
-        "and the act is offered: {}",
+        body(&page).contains("rhtn-act:acknowledge"),
+        "and the act is offered as a control: {}",
+        body(&page)
+    );
+    assert!(
+        !body(&page).contains("<form"),
+        "and the page carries no form at all: {}",
+        body(&page)
+    );
+    // and the label is what the act does rather than what is true
+    assert!(
+        body(&page).contains("Countersign every adoption"),
+        "{}",
         body(&page)
     );
 
-    let done = ask(at, "POST /node/acknowledge HTTP/1.1", b"acknowledge=on");
+    // the act, through the one route a client needs
+    let done = ask(at, "POST /node/act/acknowledge HTTP/1.1", b"acknowledge=on");
     assert_eq!(200, status(&done), "the act is taken: {done}");
     let page = ask(at, "GET / HTTP/1.1", b"");
     assert!(
@@ -825,18 +840,18 @@ fn a_grant_is_made_and_withdrawn_from_the_page_and_is_written_back() {
         "§7: a role bound to nobody is visible, not a silent default: {page}"
     );
     assert!(
-        page.contains("action=\"/node/grant\""),
-        "the page carries the control: {page}"
+        page.contains(&format!("rhtn-act:grant?resource={RES}")),
+        "the page carries the control, with the resource as a hint: {page}"
     );
     assert!(
-        page.contains("Take it") && page.contains("org-read"),
+        page.contains("rhtn-act:grant-template") && page.contains("org-read"),
         "§10.4: the package's own grant is offered: {page}"
     );
 
     // a grant over everyone, which is the absence of a clause
     let made = ask(
         at,
-        "POST /node/grant HTTP/1.1",
+        "POST /node/act/grant HTTP/1.1",
         format!("resource={RES}&roles=reader&of=everyone").as_bytes(),
     );
     assert_eq!(200, status(&made), "{made}");
@@ -1872,4 +1887,195 @@ fn the_three_routes_that_carry_a_signature_need_no_proof_from_anywhere() {
 
     d.stop();
     let _ = std::fs::remove_dir_all(&l.dir);
+}
+
+// acceptance: DMN-40
+#[test]
+fn an_instance_declares_what_it_can_be_asked_for_and_one_route_invokes_it() {
+    const RES: &str = "aa00000000000000000000000000000000000000000000000000000000000001";
+    let (l, d, at) = enrolled_with("declared", 37465, |l| {
+        l.ssh_client = Some(recorder(&l.dir, "none"));
+        let manifest = l.dir.join("declared.manifest");
+        std::fs::write(
+            &manifest,
+            "roles = [\"reader\", \"writer\"]\n\n[[admin]]\nname = \"rename\"\nlabel = \"Rename \
+             this instance\"\n\n[[admin.parameter]]\nname = \"title\"\nlabel = \"its name\"\n\
+             type = \"text\"\nmax = 40\n",
+        )
+        .unwrap();
+        std::fs::write(
+            l.dir.join("hosting"),
+            format!(
+                "[[host]]\nresource = \"{RES}\"\nowner = \"{}\"\nauthority = \
+                 \"shop.internal\"\nmanifest = \"{}\"\n",
+                hex(&test_identity("bob").public.keyhash),
+                manifest.display()
+            ),
+        )
+        .unwrap();
+    });
+
+    // **the declaration, which is what a client draws its screens from**
+    let said = ask(at, "GET /node/acts HTTP/1.1", b"");
+    assert_eq!(200, status(&said), "{said}");
+    let d_json: serde_json::Value =
+        serde_json::from_str(body(&said)).expect("the declaration is JSON");
+    assert_eq!(
+        d_json["surface"], "rhtn/administration@1",
+        "it names the vocabulary it is written in"
+    );
+
+    // the node's own acts, each with what a client must bring
+    let acts = d_json["node"].as_array().expect("the node's acts");
+    let find = |name: &str| {
+        acts.iter()
+            .find(|a| a["name"] == name)
+            .unwrap_or_else(|| panic!("{name} is declared"))
+            .clone()
+    };
+    assert_eq!(find("reload")["brings"], "nothing");
+    assert_eq!(find("stop")["brings"], "nothing");
+    // **the act that reaches the machine says the client brings the key**,
+    // which is the whole reason the acts left the page: the frame is
+    // isolated from the seed it is derived from
+    assert_eq!(find("install")["brings"], "host-key");
+    assert_eq!(find("running")["brings"], "host-key");
+    // and the key is never a field a person is asked for
+    for a in acts {
+        let names: Vec<&str> = a["parameters"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| p["name"].as_str().unwrap())
+            .collect();
+        assert!(!names.contains(&"key"), "{} declares key", a["name"]);
+    }
+    // the install's fields are the ones the route reads, so nothing is
+    // translated between a declaration and the act it describes
+    let installing = find("install");
+    let install: Vec<&str> = installing["parameters"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        install,
+        vec![
+            "resource",
+            "owner",
+            "authority",
+            "image",
+            "port",
+            "manifest"
+        ]
+    );
+
+    // **the resource's acts are of this instant**: the roles come from
+    // the package's manifest, and with no grant standing there is nothing
+    // to narrow or withdraw
+    let per = d_json["resources"].as_array().expect("per resource");
+    assert_eq!(per.len(), 1);
+    assert_eq!(per[0]["resource"], RES);
+    let theirs = per[0]["acts"].as_array().unwrap();
+    let named: Vec<&str> = theirs.iter().map(|a| a["name"].as_str().unwrap()).collect();
+    assert!(named.contains(&"grant"), "{named:?}");
+    assert!(!named.contains(&"grant-drop"), "nothing to withdraw yet");
+    // the package's own declared operation travels in the same shape
+    assert!(named.contains(&"rename"), "{named:?}");
+    // a grant's roles are the package's, as a set rather than a choice
+    let grant = theirs.iter().find(|a| a["name"] == "grant").unwrap();
+    let roles = grant["parameters"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["name"] == "roles")
+        .expect("roles");
+    assert_eq!(roles["kind"], "several");
+    assert_eq!(
+        roles["of"],
+        serde_json::json!(["reader", "writer"]),
+        "the roles the package declared and no others"
+    );
+    // **and it is not of this build**: a grant made adds what may be
+    // narrowed
+    assert_eq!(
+        200,
+        status(&ask(
+            at,
+            "POST /node/act/grant HTTP/1.1",
+            format!("resource={RES}&roles=reader&of=everyone").as_bytes()
+        ))
+    );
+    let again: serde_json::Value =
+        serde_json::from_str(body(&ask(at, "GET /node/acts HTTP/1.1", b""))).unwrap();
+    let named: Vec<&str> = again["resources"][0]["acts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|a| a["name"].as_str().unwrap())
+        .collect();
+    assert!(named.contains(&"grant-drop"), "{named:?}");
+    assert!(named.contains(&"grant-narrow"), "{named:?}");
+
+    // **one route invokes any of them**, and an act's declared fields are
+    // its body
+    assert_eq!(
+        200,
+        status(&ask(at, "POST /node/act/reload HTTP/1.1", b"")),
+        "a node act"
+    );
+    assert_eq!(
+        200,
+        status(&ask(
+            at,
+            "POST /node/act/grant-drop HTTP/1.1",
+            format!("resource={RES}&at=0").as_bytes()
+        )),
+        "a resource act"
+    );
+
+    // **an unknown name sends a client to the declaration** rather than
+    // guessing: it is a client built against another version
+    let unknown = ask(at, "POST /node/act/fly HTTP/1.1", b"");
+    assert_eq!(404, status(&unknown), "{unknown}");
+    assert!(body(&unknown).contains("/node/acts"), "{unknown}");
+    assert!(
+        body(&unknown).contains("rhtn/administration@1"),
+        "{unknown}"
+    );
+
+    d.stop();
+    let _ = std::fs::remove_dir_all(&l.dir);
+}
+
+// acceptance: DMN-40
+#[test]
+fn a_declared_act_is_proved_as_any_act_is_and_not_otherwise() {
+    let Some(ip) = outbound_address() else {
+        eprintln!("no outbound address on this machine; this test needs one");
+        return;
+    };
+    let token = [0x3cu8; 32];
+    let (_l, d, at) = enrolled_on("declared-proof", 37466, &token);
+    let away: SocketAddr = (ip, at.port()).into();
+
+    // the declaration is a read of this instance's own state, so it is an
+    // act like any other: refused off the loopback without a proof
+    assert_eq!(401, status(&ask(away, "GET /node/acts HTTP/1.1", b"")));
+    let target = proved(&token, "GET", "/node/acts", b"", &[21u8; 16]);
+    let said = ask(away, &format!("GET {target} HTTP/1.1"), b"");
+    assert_eq!(200, status(&said), "{said}");
+
+    // and so is an invocation
+    let body_ = b"acknowledge=on";
+    assert_eq!(
+        401,
+        status(&ask(away, "POST /node/act/acknowledge HTTP/1.1", body_))
+    );
+    let target = proved(&token, "POST", "/node/act/acknowledge", body_, &[22u8; 16]);
+    let done = ask(away, &format!("POST {target} HTTP/1.1"), body_);
+    assert_eq!(200, status(&done), "{done}");
+
+    d.stop();
 }

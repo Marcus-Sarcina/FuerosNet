@@ -14638,6 +14638,37 @@
     "interpretation": "Resending the held bytes unchanged satisfies \"at attach\" and not \"at a higher counter\"; the node's rule makes the second reading the only one that attaches twice."
   },
   {
+    "id": "PRD-21",
+    "area": "product",
+    "gap": "product",
+    "title": "A package offering is read from a link or a code and authorises nothing",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "light-client-requirements.md §10",
+      "infra-client-requirements.md §9.4"
+    ],
+    "rule": [
+      {
+        "where": "light-client-requirements.md §10",
+        "text": "It is untrusted content and it authorises nothing."
+      },
+      {
+        "where": "light-client-requirements.md §10",
+        "text": "Show what the package declares before they agree"
+      },
+      {
+        "where": "infra-client-requirements.md §9.4",
+        "text": "What such a string cannot carry is the install."
+      }
+    ],
+    "given": "A package offering composed by a distributor: a label, an image reference, a suggested authority and port, and the package's own manifest.",
+    "when": "It is read; and read at a version this client does not know, with a field missing, repeated or malformed, with a label of more than one line, with an image reference that reads as a flag, with a manifest that is not text or is over the bound, longer than the bound as a whole, and carrying a resource, an owner or a key.",
+    "then": "An offering composes and reads back unchanged, the manifest's every byte among it, and reads the same with whitespace around it as a code gives it; the version is checked before any field, a version this client does not read refused with the words that a newer client will read it; each malformed or missing field is refused naming the field, a repeated field refused rather than resolved, and an over-long offering refused unread; a port is optional; and a resource, an owner, an instance or a key is not a field this format has, an offering naming one being read without it.",
+    "oracle": "behaviour",
+    "interpretation": ""
+  },
+  {
     "id": "RSC-43",
     "area": "resources",
     "gap": "resources",
@@ -15172,6 +15203,48 @@
     "given": "A serving instance whose operator's client holds the restricted key, and a host that answers the instance's requests.",
     "when": "An install act arrives carrying the resource, the owner, the authority, the image, the port, the package's manifest and the key; with a manifest the node will not admit; with a host that refuses to start it; with no key, a key that is not one, no manifest, a malformed authority, image or port, the surface's own port, and a port another package already listens on; then a removal, and a removal of a package the node did not install.",
     "then": "The host is asked for the image before anything is written and for the package afterwards, and for nothing else; the manifest is written where the node reads it, the entry generated, the node's configuration re-read and the package bound and listed; a second install of the same resource replaces it rather than adding one; a manifest the node refuses and a host that will not start it each leave the record, the generated entries and the relayed manifest as they were, with nothing started and the reason said; no grant is written and the answer says nobody may reach it yet; each malformed field, the missing key and the missing manifest are refused with what was wanted named; the surface's own port and a port already taken are refused; a removal stops the package, drops the entry, re-reads, and says that the grants, the block, the log and the jobs were kept; a package the node did not install is refused as the operator's to remove by hand.",
+    "oracle": "behaviour",
+    "interpretation": ""
+  },
+  {
+    "id": "DMN-40",
+    "area": "daemon",
+    "gap": "daemon",
+    "title": "An instance declares what it can be asked for, its page shows and bounces, and one route invokes",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "infra-client-requirements.md §8.3"
+    ],
+    "rule": [
+      {
+        "where": "infra-client-requirements.md §8.3",
+        "text": "The page shows; the client asks"
+      },
+      {
+        "where": "infra-client-requirements.md §8.3",
+        "text": "You declare your acts the way a package declares its operations"
+      },
+      {
+        "where": "infra-client-requirements.md §8.3",
+        "text": "Never declare a field for a credential."
+      },
+      {
+        "where": "infra-client-requirements.md §8.3",
+        "text": "Declare what is true now."
+      },
+      {
+        "where": "infra-client-requirements.md §8.3",
+        "text": "A control on your page is a link that bounces the act to the client"
+      },
+      {
+        "where": "infra-client-requirements.md §8.3",
+        "text": "One route invokes any declared act, named by its name."
+      }
+    ],
+    "given": "A serving instance hosting a package whose manifest declares roles and an operation of its own, with a host shell configured.",
+    "when": "Its declaration is read, read again after a grant is made, and acts are invoked by name on the one route — including one it does not declare; and its own page is read.",
+    "then": "The declaration names the vocabulary's version; every act carries what it is about and what the client must bring, the acts reaching the machine naming the host key and the others nothing; no act declares a field for a credential; an act's declared parameter names are the fields the implementing route reads; a resource's acts carry the roles its package declared as a set and offer nothing to narrow until a grant stands, and carry the package's own declared operations in the same shape; invoking a declared act by name is taken and an undeclared name is refused with the declaration and the version named; the page carries no form at all, each act appearing as a control in this client's scheme with the resource and the grant's place as hints; the page's list is drawn from the same declaration a client reads; and the declaration and an invocation are each authorised as any act is — by the loopback or by a proof.",
     "oracle": "behaviour",
     "interpretation": ""
   },

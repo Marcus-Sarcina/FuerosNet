@@ -849,11 +849,12 @@ fn read_manifest(path: &Path) -> Result<(Manifest, Option<std::path::PathBuf>), 
                         .ok_or_else(|| format!("`{}`: text names `max`, its length", p.name))?,
                 },
                 "choice" => Kind::Choice { of: p.of.clone() },
+                "several" => Kind::Several { of: p.of.clone() },
                 "keyhash" => Kind::Keyhash,
                 other => {
                     return Err(format!(
                         "`{}`: `{other}` is not a parameter type; they are \
-                         flag, number, text, choice and keyhash",
+                         flag, number, text, choice, several and keyhash",
                         p.name
                     ));
                 }

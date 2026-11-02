@@ -74,6 +74,10 @@ pub mod leaving;
 pub mod local;
 pub mod model;
 pub mod notice;
+/// **A package offered for installation, as a link or a code**: what a
+/// distributor publishes and the client reads to fill an install screen
+/// the operator confirms.
+pub mod offering;
 pub mod payload;
 pub mod query;
 pub mod ratchet;

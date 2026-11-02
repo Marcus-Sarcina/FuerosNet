@@ -22,6 +22,11 @@ compile_error!(
      build the field-test flavour with `--no-default-features --features fieldtest`"
 );
 
+/// **What this instance declares it can be asked for**: the node's own
+/// administration acts in the vocabulary a package declares its
+/// operations in, so something other than the node's own page can draw
+/// them.
+pub mod acts;
 pub mod administration;
 pub mod config;
 pub mod diag;

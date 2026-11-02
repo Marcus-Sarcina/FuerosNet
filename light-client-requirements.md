@@ -1446,6 +1446,47 @@ one that is true.
   grant as the next step (`infra-client-requirements.md` §7, §9.4): a
   package's roles start bound to nobody, and an operator who has just
   installed something will otherwise look for why it refuses them.
+- **Draw the acts the instance declares, and make them yourself** [author,
+  2026-11-02]. `infra-client-requirements.md` §8.3 divides the surface: the node's
+  page shows what it knows, framed and read-only, and **what may be asked arrives
+  as a declaration you draw** — a name, a label, a sentence, and parameters from a
+  closed set. Ship no screen of your own for an act: a native screen per node
+  version, and per third-party package, is the thing `infra-client-requirements.md`
+  §8.3 exists to prevent, and a
+  declaration is how the same acts reach you without one.
+  - **Read the version first.** Where it is one you do not know, draw what you
+    understand and **say plainly that the rest wants a newer client** rather than
+    guessing at a field whose meaning may have moved.
+  - **Supply what the declaration says you must bring**, and nothing it does not
+    ask for. Today that is the restricted host key of §10's bullet above, derived
+    for the one act. **Ask the person before you derive it**: an act that reaches
+    their machine is one they should be looking at.
+  - **The page's control is a bounce, not an act.** A node's page carries a link
+    in a scheme of this client's; take it, and treat **every value in it as text
+    that fills a field the person confirms** — never as an act to perform. The page
+    came from the node, a seized node is planned for (design §18.1, §23.3), and a
+    page that could make an act happen could grant itself a role.
+  - **Read a refusal back to them.** An act is one proved request and its answer
+    is the instance's own words; show them rather than a spinner that stops.
+- **Take a package offering from a link or a code** [author, 2026-11-02]. A
+  distributor publishes the image, a suggested authority and port, and **the
+  package's own manifest** (`infra-client-requirements.md` §9.1, §9.4) as one
+  string; register for it at the device's own level so "open with this client" is
+  how an operator starts, and read one from a code where there is nothing to tap.
+  - **It is untrusted content and it authorises nothing.** Every field fills a
+    screen the operator confirms. The resource identity you mint, the owner is
+    their identity, the instance is their choice, and the key is yours to derive —
+    **none of those is in the string**, and one that names them is read without
+    them.
+  - **Show what the package declares before they agree**, which is what they are
+    admitting: §9.1's supply chain is trusting the package author's judgment about
+    access, and `resource-requirements.md` §7.3 has that author's incentive run
+    toward breadth. A name in the offering is a label its distributor chose and
+    nothing you have checked — present it as one.
+  - **Bound every field on the way in**, and refuse an offering longer than you
+    will read. A label that is not one line, an image reference that reads as a
+    flag, a manifest that is not text: each is refused where the person is
+    standing rather than carried to the instance to be refused there.
 - **Teach the node you attach to what you hold** [author, 2026-11-01].
   Attaching is two replays, not one: the node replays its store to you
   (`wire-format.md` §10.1.3), and **you replay the records you were party

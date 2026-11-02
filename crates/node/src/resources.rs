@@ -741,6 +741,20 @@ pub enum Kind {
         /// What it may be.
         of: Vec<String>,
     },
+    /// **Any number of a fixed list, none of them included** [author,
+    /// 2026-11-02]: a set rather than a choice, which is what a grant's
+    /// roles are and what a checkbox group has always drawn on the node's
+    /// own page.
+    ///
+    /// It joined the closed set when the set became something a *client*
+    /// draws as well (`infra-client-requirements.md` §8.3): the node's own
+    /// acts are declared in this vocabulary now, and a grant carries a set
+    /// of roles, so a vocabulary without this one could not describe the
+    /// act an operator makes most.
+    Several {
+        /// What may be chosen.
+        of: Vec<String>,
+    },
     /// A keyhash, which the node checks for shape before it is sent.
     Keyhash,
 }
@@ -831,11 +845,15 @@ impl Kind {
                 "a text field takes 1 to {MAX_TEXT} characters, not {max}"
             )),
             Kind::Text { .. } => None,
-            Kind::Choice { of } if of.is_empty() || of.len() > MAX_CHOICES => Some(format!(
-                "a choice is 1 to {MAX_CHOICES} literals, not {}",
-                of.len()
-            )),
-            Kind::Choice { of } => of
+            Kind::Choice { of } | Kind::Several { of }
+                if of.is_empty() || of.len() > MAX_CHOICES =>
+            {
+                Some(format!(
+                    "a choice is 1 to {MAX_CHOICES} literals, not {}",
+                    of.len()
+                ))
+            }
+            Kind::Choice { of } | Kind::Several { of } => of
                 .iter()
                 .find(|c| !namelike(c))
                 .map(|c| format!("`{c}` is not [a-z0-9_-], 1 to 32 bytes")),

@@ -56,39 +56,135 @@ pub struct Ask {
     /// The package's own manifest, which is relayed rather than composed
     /// here (`infra-client-requirements.md` §9.1).
     pub manifest: Option<PathBuf>,
+    /// What a person reads in an offering: the package's name.
+    pub name: Option<String>,
     /// How many lines of a package's output to read.
     pub lines: Option<usize>,
+    /// **A package offering, as a link or a code**
+    /// (`rhtn_client::offering`): where one is given it fills the image,
+    /// the authority, the port and the manifest, and what it cannot say
+    /// is still named here — the resource, its owner, and which instance.
+    pub offering: Option<String>,
 }
 
 /// Install the package `ask` describes, and say what the node and its
 /// host answered.
 pub fn install(ask: &Ask) -> Result<String, String> {
     let key = runner_key(ask)?;
-    let want = |name: &str, v: &Option<String>| {
-        v.clone()
-            .ok_or_else(|| format!("`node install` names --{name}"))
+    // **an offering fills what a distributor can say and nothing else**:
+    // an option given here wins over it, which is the operator overriding
+    // a suggestion, and the three things a link cannot carry are still
+    // wanted on the command line
+    let offered = match &ask.offering {
+        None => None,
+        Some(text) => Some(rhtn_client::offering::parse(text).map_err(|r| r.say())?),
     };
-    let manifest =
-        match &ask.manifest {
-            None => return Err(
-                "`node install` names --manifest <file>, which is the package's own declaration"
-                    .into(),
-            ),
-            Some(p) => std::fs::read_to_string(p).map_err(|e| format!("{}: {e}", p.display()))?,
+    if let Some(o) = &offered {
+        // **what they are admitting, before the act**: §9.1's supply
+        // chain is trusting the package author's judgment about access,
+        // so the declaration is read out rather than relayed unseen
+        eprintln!("offering  {}", o.name);
+        for line in o.manifest.lines() {
+            eprintln!("manifest  {line}");
+        }
+    }
+    let or =
+        |mine: &Option<String>, theirs: Option<&String>, name: &str| -> Result<String, String> {
+            mine.clone()
+                .or_else(|| theirs.cloned())
+                .ok_or_else(|| format!("`node install` names --{name}, and no offering carried it"))
         };
+    let manifest = match (&ask.manifest, &offered) {
+        (Some(p), _) => std::fs::read_to_string(p).map_err(|e| format!("{}: {e}", p.display()))?,
+        (None, Some(o)) => o.manifest.clone(),
+        (None, None) => {
+            return Err(
+                "`node install` names --manifest <file> or --offering <link>, either of \
+                        which carries the package's own declaration"
+                    .into(),
+            );
+        }
+    };
+    let port = ask
+        .port
+        .or_else(|| offered.as_ref().and_then(|o| o.port))
+        .ok_or("`node install` names --port, and no offering carried one")?;
     let body = form(&[
-        ("resource", &want("resource", &ask.resource)?),
-        ("owner", &want("owner", &ask.owner)?),
-        ("authority", &want("authority", &ask.authority)?),
-        ("image", &want("image", &ask.image)?),
         (
-            "port",
-            &ask.port.ok_or("`node install` names --port")?.to_string(),
+            "resource",
+            &ask.resource
+                .clone()
+                .ok_or("`node install` names --resource; `rhtn keys mint` makes one")?,
         ),
+        (
+            "owner",
+            &ask.owner
+                .clone()
+                .ok_or("`node install` names --owner, which is yours and not an offering's")?,
+        ),
+        (
+            "authority",
+            &or(
+                &ask.authority,
+                offered.as_ref().map(|o| &o.authority),
+                "authority",
+            )?,
+        ),
+        (
+            "image",
+            &or(&ask.image, offered.as_ref().map(|o| &o.image), "image")?,
+        ),
+        ("port", &port.to_string()),
         ("manifest", &manifest),
         ("key", &key),
     ]);
     act(ask, "/node/package/install", &body, SLOW)
+}
+
+/// **What this instance declares it can be asked for**
+/// (`rhtn_daemon::acts`), which is what a client draws its own screens
+/// from — printed here so the two can be compared.
+pub fn acts(ask: &Ask) -> Result<String, String> {
+    let addr = resolve(&ask.at)?;
+    let target = proved(ask, "GET", "/node/acts", b"")?;
+    said(&exchange(
+        addr,
+        &format!("GET {target} HTTP/1.1"),
+        b"",
+        QUICK,
+    )?)
+}
+
+/// **Compose a package offering**, which is what a distributor publishes
+/// as a link or a code (`rhtn_client::offering`).
+///
+/// It is here so the format has one definition: what this project offers
+/// for its own test application and what a client reads cannot drift
+/// apart, because both are that module.
+pub fn offer(ask: &Ask) -> Result<String, String> {
+    let manifest = match &ask.manifest {
+        None => return Err("`node offer` names --manifest <file>".into()),
+        Some(p) => std::fs::read_to_string(p).map_err(|e| format!("{}: {e}", p.display()))?,
+    };
+    let o = rhtn_client::offering::Offering {
+        name: ask
+            .name
+            .clone()
+            .ok_or("`node offer` names --name, which is what a person reads")?,
+        image: ask.image.clone().ok_or("`node offer` names --image")?,
+        authority: ask
+            .authority
+            .clone()
+            .ok_or("`node offer` names --authority")?,
+        port: ask.port,
+        manifest,
+    };
+    let link = rhtn_client::offering::compose(&o);
+    // **read back before it is printed**: a link this composes is a link
+    // a client takes, or it is not printed at all
+    rhtn_client::offering::parse(&link)
+        .map_err(|r| format!("composed and not readable: {}", r.say()))?;
+    Ok(format!("{link}\n"))
 }
 
 /// Remove one.

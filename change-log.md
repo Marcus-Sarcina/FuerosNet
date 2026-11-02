@@ -16508,6 +16508,96 @@ down to be decided cold. The bound on fetches a minute that
 question. No code changed; that section's "you bound what you have built"
 already accommodates an unenforced field, so no document says *not yet*.
 
+### 2026-11-02 (the page shows, the client asks, and a link fills the screen)
+
+**Ruled** [author, 2026-11-02]: declared acts with framed readouts. And two
+mechanisms with it — a control on the node's own page that bounces the act back
+to the client, which is where a credential can be asked for and injected; and a
+link or a code that starts an installation, registered at the device's own level
+so *open with FuerosNet* is how an operator begins.
+
+**The question that produced it was the right one.** Asked what would keep the
+app in step with the node distribution and with third-party resources under
+native act screens, the answer was that nothing would: `infra-client-requirements.md`
+§8.3 already says *"a client ships the provisioning pages and no others"* and has
+a node's surface *"stay in step with it as that software changes"*. Native screens
+are the client shipping other pages, one per node version and one per package.
+The option should not have been offered as though it were cheap.
+
+**So the mechanism is the one a package already uses, one level up.** A package
+does not ship its administration page either: it declares its operations — a
+name, a label, parameters from a closed set — and the node draws them. The node
+now declares its own acts in that same vocabulary (`rhtn_daemon::acts`), a client
+draws them, and **nothing about layout or behaviour is agreed between the two**,
+which is what §8.3 declined to fix universally. Only the field types are common,
+and they were already closed because the node had to render every one itself.
+
+**§8.3 gained the half that was missing**, as a table: what is shown is the
+node's and travels as its own page, framed and read-only; what may be asked is
+the node's and travels as a declaration; the asking is the client's and is one
+proved invocation on one route.
+
+**Three fields a page cannot carry.** A version, so a client and an instance
+built apart can tell how far apart — `rhtn/administration@1`, versioned as the
+host surface of §9.3 is, with a client meeting an unknown one drawing what it
+understands and saying the rest wants a newer client. What an act is about, so a
+client fills in the resource the operator is looking at. And **what the client
+must bring**, which is the whole reason the acts left the page: an install needs
+the restricted host key, derived from a signing seed, and the frame is
+deliberately isolated from that seed.
+
+**`key` is never a declared parameter.** What a person answers is declared; what
+their client supplies is `brings`. A page that could name the key field could ask
+for a key.
+
+**The declared names are the field names the route already reads**, so an
+invocation of `grant` is the body `/node/grant` takes and nothing is translated.
+A parameter nobody read would have to be wired to be read, which is what keeps a
+declaration from drifting from the act it describes.
+
+**The declaration is of this instant, not of this build.** A grant's roles are
+the package's; `at` is bounded by the grants that stand, so after one is made
+there is something to narrow and the declaration says so. And **the page draws
+from the same declaration**, so the list an operator reads and the list their
+client reads cannot drift: there is one.
+
+**`Kind::Several` joined the closed set.** A grant carries a set of roles, which
+the page had always drawn as a checkbox group and the vocabulary could not
+describe. It joined when the set became something a client draws too.
+
+**Every form is gone from the page.** Each act is a link in `rhtn-act:`, which
+the frame recognises as not the instance's origin and takes rather than follows.
+**What rides in it is a hint and never an instruction** — the resource of the tab,
+the grant's place in the list — and a client must treat every value as text
+filling a field the person confirms. The page comes from the node; a seized node
+is planned for (design §18.1), and a page that could make an act happen could
+grant itself a role. A browser that is not a client reads the page and acts with
+`rhtn node`.
+
+**The offering** (`rhtn_client::offering`): `fueros://install?v=1&name=…&image=…
+&authority=…&port=…&manifest=<base64url>`, about 180 characters for the test
+application, which a code holds comfortably. **The manifest travels inline**
+rather than as a URL to fetch — a fetch would have the client retrieve
+attacker-chosen content before the operator had agreed to anything, and would
+stop a code working where there is no network.
+
+**What the format cannot say is the half that matters**: no resource identity, no
+owner, no instance, no key. Those are the operator's, and an offering carrying
+them would be an installation somebody else composed. An offering that names them
+anyway is read without them, which a test asserts. Everything else is bounded,
+and the manifest is read out before the act because §9.1's supply chain is
+trusting the package author's judgment about access and the manifest is that
+judgment.
+
+`rhtn node acts` reads a declaration, `rhtn node offer` composes an offering
+(parsing it back before printing it), and `rhtn node install --offering <link>`
+takes one, printing what the package declares before it acts. `UX-023`, `DMN-40`,
+`PRD-21`.
+
+**Still owed**: the Android half — the frame's `rhtn-act:` intercept, the sheet
+that draws a declared act, the intent filter that makes a link open this client,
+and the code reader for one. The daemon and the formats are in place for it.
+
 ### 2026-11-02 (a node is the package manager for the operator who has no shell)
 
 **Built** the act the ruling pointed at: `POST /node/package/install` on

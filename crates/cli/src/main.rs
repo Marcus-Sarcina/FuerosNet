@@ -223,6 +223,8 @@ fn do_node(rest: &[&str]) -> Result<String, String> {
         // **the package manager an operator with no shell has**
         // (`infra-client-requirements.md` §9.4): the acts this node makes
         // on its own host, driven from here as the app drives them
+        Some("acts") => return do_package(&rest[1..], Package::Acts),
+        Some("offer") => return do_package(&rest[1..], Package::Offer),
         Some("install") => return do_package(&rest[1..], Package::Install),
         Some("remove") => return do_package(&rest[1..], Package::Remove),
         Some("packages") => return do_package(&rest[1..], Package::Listed),
@@ -235,7 +237,8 @@ fn do_node(rest: &[&str]) -> Result<String, String> {
     };
     if *sub != "enrol" && *sub != "renew" {
         return Err(format!(
-            "`node {sub}` is not a command; there are `node launch`, `node offers`,              `node credential`, `node destroy`, `node enrol`, `node renew`,              `node install`, `node remove`, `node packages`, `node running` and `node logs`"
+            "`node {sub}` is not a command; there are `node launch`, `node offers`,              `node credential`, `node destroy`, `node enrol`, `node renew`,              `node acts`, `node offer`, `node install`, `node remove`, \
+             `node packages`, `node running` and `node logs`"
         ));
     }
     let (mut token, mut credentials, mut endpoint) = (None, 7usize, None);
@@ -392,6 +395,8 @@ fn do_destroy(opts: &[&str]) -> Result<String, String> {
 
 /// Which of the five package acts `node <verb>` named.
 enum Package {
+    Acts,
+    Offer,
     Install,
     Remove,
     Listed,
@@ -421,6 +426,8 @@ fn do_package(opts: &[&str], which: Package) -> Result<String, String> {
             "port",
             "manifest",
             "lines",
+            "name",
+            "offering",
         ],
     )?;
     let number = |k: &str| -> Result<Option<u16>, String> {
@@ -448,9 +455,13 @@ fn do_package(opts: &[&str], which: Package) -> Result<String, String> {
         image: o.get("image").cloned(),
         port: number("port")?,
         manifest: o.get("manifest").map(PathBuf::from),
+        name: o.get("name").cloned(),
         lines: number("lines")?.map(usize::from),
+        offering: o.get("offering").cloned(),
     };
     match which {
+        Package::Acts => install::acts(&ask),
+        Package::Offer => install::offer(&ask),
         Package::Install => install::install(&ask),
         Package::Remove => install::remove(&ask),
         Package::Listed => install::packages(&ask),
