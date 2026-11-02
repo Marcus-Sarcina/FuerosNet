@@ -360,9 +360,44 @@ Society*. Correct and worth knowing: a subnet's name is a profile
 published to a serving node (`wire-format.md` §7.11), and nodeless there
 is nowhere to fetch it from, so a name not received is not shown.
 
+**The node, launched from GXV on 2026-11-02, and what it found.** The
+droplet came up at a DigitalOcean address, enrolled, and served Share
+Society (subnet `1872fd7b…`) with the node speaking as GXV. **Two things
+were learned and one was a defect.**
+
+- **The image needed no pushing.** The project's CI publishes the node
+  image on every commit to master that passed the gate, tagged with the
+  commit and `latest`, pullable without credentials. `ggcr.io/mzuech/fuerosnet`
+  is the registry host GitLab supplies on this instance, which is what
+  `rhtn_launch::REGISTRY_DEFAULT` already names; `latest` was the image
+  for `7319c96`, built 25 minutes after that commit. Nothing on the
+  workstation holds a credential for that registry and nothing needs one.
+- **The derived ssh key works.** GXV's 24-word phrase, run through the
+  shell's own derivation on the workstation, reproduced its identity
+  (keyhash `09fb48fc…`, the same the phone showed) and from it the
+  node-control key, which the machine authenticated with no password
+  asked. That is the recovery story end to end, and no test on one
+  machine could have shown it.
+- **And the machine then refused the session**: an expired root password,
+  which a provider sets when no key of its own is registered, blocks a
+  key-authenticated command before it runs. Fixed in the cloud-init
+  (`chpasswd: expire: false`, `ssh_pwauth: false`); the fix reaches a
+  machine only at creation, so that droplet was destroyed and the launch
+  is to be redone. Nothing was lost: a new instance starts empty and the
+  members teach it the subnet when they attach.
+
+**And a requirement, from the author** [2026-11-02]: *"We have to assume
+operator-users whose only interaction with cloud administration is
+through our own app interface."* So installing a resource must be an act
+on the administration surface rather than a shell command, which makes
+the **sandboxed package the app-installable kind** — a socket-backed
+service needs a shell by definition — and means the test application has
+to become a component to be the thing installed that way. Both are owed,
+and both wait on the author's ruling as stated in the session.
+
 **The sequence, in order.**
 
-1. **Push a current image.** A rented instance runs what the registry
+1. **No image to push**: the project's CI publishes one per commit. A rented instance runs what the registry
    holds: `packaging/build.sh --push`. Without this the droplet carries
    whatever was pushed last, which is a daemon older than the host
    surface.

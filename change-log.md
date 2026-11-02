@@ -16508,6 +16508,30 @@ down to be decided cold. The bound on fetches a minute that
 question. No code changed; that section's "you bound what you have built"
 already accommodates an unenforced field, so no document says *not yet*.
 
+### 2026-11-02 (the launch's own door: an expired password let no key through)
+
+**Found on the bench**, launching a node from the operator's phone and
+then installing a package on it. The ssh key the launch installs worked:
+the machine authenticated it with no password asked, which is the first
+proof that a key derived from the signing seed opens a machine that
+identity launched, and it was derived on another computer from the
+phrase alone. What stopped the install was the machine, not the key:
+`You are required to change your password immediately (administrator
+enforced)`, then `password change required but no TTY available`. A
+provider that creates a machine with **no key registered of its own**
+sets a root password and marks it expired, so the first login must change
+it, and that blocks a key-authenticated command before it runs.
+
+**So the script takes the password out of the way**: `chpasswd: expire:
+false`, and `ssh_pwauth: false` beside it — the key the launch installs
+is the way in, and a password nobody chose is not a second one. The test
+asserts both in the keyed script and the unkeyed one.
+
+**It reaches a machine only at creation**, so the instance this was found
+on was destroyed rather than mended. That cost minutes and nothing else,
+which is what the morning's other work bought: a new instance starts
+empty and the members teach it their subnet when they attach.
+
 ### 2026-11-01 (an attach replays both ways: a node learns a subnet older than itself)
 
 **A defect, not a thing to work around** [author, 2026-11-01]: "the

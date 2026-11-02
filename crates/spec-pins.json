@@ -7,6 +7,6 @@
   "resource-requirements.md": "ce994f094d8e6a62b67a785c04d897a66d31a8270d8f125c88535afeacbeebd7",
   "functional_tests.md": "d368981aca2284aaa0dfe2b129565079a847e2d0af622d51f4dace21558cd904"
  },
- "accepted": "2026-11-01",
+ "accepted": "2026-11-02",
  "note": "the documents crates/check.sh last passed against; rewritten only by tools/pincheck.py --accept"
 }

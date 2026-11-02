@@ -212,6 +212,15 @@ impl Image {
 /// provider's key registry is its own, and a key in the script is the same
 /// key at every provider this crate drives. The public half is not a
 /// secret, and the script already carries the enrolment token, which is.
+///
+/// **And the password is taken out of the way** [found on the bench,
+/// 2026-11-02]. A provider that creates a machine with no key of its own
+/// registered sets a root password and marks it expired, so the first
+/// login must change it — which blocks a key-authenticated command before
+/// it runs, with *password change required but no TTY available*, and no
+/// amount of key material gets past it. So the script turns password
+/// expiry off, and password authentication off with it: the key installed
+/// above is the way in, and a password nobody set is not a second one.
 pub fn user_data(
     operator_material_hex: &str,
     token_hex: &str,
@@ -241,6 +250,9 @@ pub fn user_data(
          package_update: true\n\
          packages:\n\
          \x20 - podman\n\
+         ssh_pwauth: false\n\
+         chpasswd:\n\
+         \x20 expire: false\n\
          write_files:\n\
          \x20 - path: /var/lib/rhtn/rhtnd.conf\n\
          \x20   permissions: '0600'\n\
@@ -1005,6 +1017,14 @@ mod tests {
             "{keyed}"
         );
         assert!(keyed.contains("chmod 0700 /root/.ssh"), "{keyed}");
+        // **and nothing stands between the key and a shell**: a provider
+        // that sets an expired root password would block the first
+        // key-authenticated command before it ran (found on the bench,
+        // 2026-11-02), and a password is not a second way in
+        for both in [&script, &keyed] {
+            assert!(both.contains("ssh_pwauth: false\n"), "{both}");
+            assert!(both.contains("chpasswd:\n  expire: false\n"), "{both}");
+        }
         // the seed is in none of it, keyed or not
         assert!(!keyed.contains("seed"));
         assert!(script.contains("-v /var/lib/rhtn:/var/lib/rhtn reg.example/x/rhtnd:abc123\n"));

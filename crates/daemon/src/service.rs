@@ -948,6 +948,11 @@ impl Service {
         backends.iter().map(|b| b.run_due_jobs(now)).sum()
     }
 
+    /// **One federation pass** (`resource-requirements.md` §3.3): the
+    /// rounds this node's own instances owe each other, then what crosses
+    /// to other nodes, each outside the view's lock since a far end may
+    /// be slow or absent and nothing here waits on it.  What passed, and
+    /// what was refused with it.
     pub fn federate(&self) -> rhtn_node::federation::Passed {
         let mut passed = crate::federation::rounds(&self.node);
         // then across to other nodes, outside the lock as well: the far
