@@ -211,3 +211,54 @@ step for (a); the launch gaining a pull credential, a field for it, and a
 walkthrough like the provider token's for (b). The launch screen already lets an
 operator name another registry, so (a) does not take that choice away from
 anybody.
+
+---
+
+## How a node is taught a subnet older than itself [raised 2026-11-03, open]
+
+**The bench established it with the field-test node's own log.** GXV attached and
+replayed four transactions; the node judged each and stored none:
+
+| bytes | verdict | `rhtn_node::store::Decision` |
+|---|---|---|
+| 7134 | `OutOfStore` | *the subject lies outside this node's own `h_store`* (`wire-format.md` §10.1.1) |
+| 7170 | `Held(transaction)` | *held for a prerequisite; nothing is forwarded meanwhile* |
+| 7205 | `Held(transaction)` | the same |
+| 7134 | `OutOfStore` | outside `h_store` |
+
+Afterwards: `attached 1`, `subordinates 0`, `holding 1 topology object(s), 0
+record(s)` — the one object being the operator-signed endpoint record from
+enrolment, not anything taught.
+
+**The deadlock, stated.** The two held records wait for a prerequisite, and the
+records that would supply it are among the two just refused for being out of
+store. So the edges that would bring a subject inside the horizon are judged by a
+horizon that does not yet contain them. **An empty node cannot be taught by a
+replay evaluated record by record**, which is what the teaching of 2026-11-01
+does.
+
+**And it is why the three subordinates cannot attach at all.** With no records,
+the node can bind only the identity it pins from `operator.material`; every other
+member is `Refusal::Unbound` — *"presented key bound by nothing"* — so the attach
+that would teach it is refused, and the one client it does admit teaches it
+nothing that survives the store rule.
+
+**The decision**: what admits a replay from a client the node has already bound.
+The store rule exists so a node does not hoard the world (§10.1.1), and a bounded
+replay from an attaching member is a different case from a flood.
+
+| | What it changes | What it costs |
+|---|---|---|
+| **a. Admit the replay as a unit** — evaluate what the attaching client sent for internal consistency, apply what hangs together, judge reach afterwards | the teaching works for any member, which is what makes a subnet survive a change of hosting | a second admission path beside the per-object one, and a bound on how much one attach may teach |
+| **b. Privilege the operator's own replay** — the client whose `operator.material` this node holds is the authority it serves under, so its records skip the reach test | smallest change; the operator can always repair their own node | only the operator can teach, so a subnet is taught only what its operator holds — and a member two steps down is invisible until its own patron attaches, which needs the same fix one level along |
+| **c. Order the replay topologically** and let each record extend the horizon before the next is judged | possibly nothing else needed, if order is the whole of it | the log shows two records refused on **reach** and not on order, so this looks necessary and not sufficient |
+| **d. Provision the node with the subnet** at launch | no protocol change | an operator's client would hand over records the node could have been taught, and a node that moves hosting still cannot be taught by the members it serves |
+
+**What was done meanwhile**: nothing. The node is enrolled and serving with GXV
+attached, the three subordinates refused, and the field-test image in place so
+the verdicts are readable.
+
+**What would make the next step quick**: an instrument that lists what a client's
+archive holds — tx type, subject, counterparty, predecessors — so *which* four
+records these are is a command rather than an inference. The sizes (7134, 7170,
+7205, 7134) and the verdicts are all the bench has today.
