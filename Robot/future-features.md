@@ -90,3 +90,43 @@ about the catalogue and not a reservation: DigitalOcean can still refuse a
 creation for capacity in a region that lists the size. So the constraint removes
 the combinations that are *known* wrong; a refusal at creation stays possible and
 must keep arriving in the provider's own words, as it does now.
+
+---
+
+## 3. The enrolment form fills itself [author, 2026-11-02]
+
+**Asked for from the bench**, after enrolling a machine whose launch had not
+enrolled it: the form had to be filled by hand, and **the one field an operator
+cannot fill is the token** — their client minted it, keeps it, and never shows
+it, so a launch that got as far as creating a machine leaves them with a form
+they are unable to complete.
+
+**Everything it wants is already held.** This is population, not retrieval:
+
+| field | where its value already is | what the form does today |
+|---|---|---|
+| the instance's surface | the instance row the launch wrote (`instances`, first column) | defaults to `10.0.2.2:7449`, a development address |
+| its enrolment token | `token:<surface>` in the operator preferences, written by the launch (`rememberToken`) and read by `tokenFor` for a renewal | **blank, and unobtainable by the operator** — no screen shows it |
+| credentials | — | `7`, which is right |
+| the address to publish | the machine's address, and `QUIC_PORT` beside it | blank, which signs no endpoint record at all |
+
+**So the shape is: enrolling is an act on an instance, not a form beside one.**
+An instance in the list that holds no run already offers *Renew its run*, which
+refuses because there is nothing to renew (`Kernel.enrol` says so). The same row
+should offer **Enrol it** where the run is absent, filling the surface from the
+row, the token from the store, and the published address from the row's own
+machine — leaving the operator the choice of how many credentials and the one
+tap. The hand-entry form stays for an instance this client did not launch, which
+is what it was written for.
+
+**Two things to keep while doing it.** The proof must still be checked before
+anything is signed — the whole point of the exchange is that a stranger at that
+address gets no signature (`infra-client-requirements.md` §8.3) — and the
+published address is a choice rather than a default: a machine reachable at an
+address its provider gave is the ordinary case, and an operator behind their own
+routing may want another. Fill it; do not fix it.
+
+**And it would have been noticed sooner with the launch's own silence fixed**
+(UX-024): what sent an operator to this form was a launch that created a machine
+and could not enrol it, which is now a verdict with a cause rather than a form
+to fill in the dark.
