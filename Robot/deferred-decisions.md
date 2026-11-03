@@ -142,3 +142,72 @@ recorded and not enforced until there is an answer to give.
   option that is not cheap, and the reason to decide before anything
   starts counting.
 - **When it arose.** 2026-10-30 (the budgets landed); deferred 2026-10-31.
+
+---
+
+## Where the image a launch pulls from lives [raised 2026-11-02, open]
+
+**What prompted it.** Two nodes launched from GXV and neither served. The cause,
+read off the second machine's own `cloud-init-output.log`:
+
+```
+Trying to pull ggcr.io/mzuech/fuerosnet/rhtnd:latest...
+Error: initializing source docker://…/rhtnd:latest:
+  Requesting bearer token: invalid status code from registry 403 (Forbidden)
+```
+
+**The chain, established on the machine.** The registry answers `401` with
+`www-authenticate: Bearer realm="https://gitgud.io/jwt/auth"`, which is the
+ordinary anonymous-pull handshake. The engine then asks that realm for a token
+and **Cloudflare answers the challenge page** — `Just a moment…`, 403, 5.7 KB of
+HTML — which no container engine can pass. A browser user-agent is challenged
+too; **a request carrying any credentials is let through**, GitLab then answering
+a clean `401 application/json` for wrong ones. So the wall is on anonymous
+requests to the token endpoint and nowhere else.
+
+**It is not the image, the tag or the configuration.** `latest` was
+`0a94bba6` at the second launch, well past the `host-shell` key — the earlier
+suspect — and nothing was pulled at all, so no container existed to refuse
+anything.
+
+**And it is not that the registry cannot serve an anonymous pull: it did,
+hours earlier the same day** [author, 2026-11-02, correcting the first reading
+of this]. The 2026-11-02 entry on the launch's own door records a node launched
+from the phone and its *own administration page* opened in the app, which only a
+running node serves — so that machine pulled this image anonymously and
+succeeded. The first filing of this question reasoned from one observation to a
+structural conclusion and skipped the obvious test.
+
+**Tested afterwards, ten times.** Anonymous requests to the token endpoint are
+challenged from the laptop five times out of five and from the droplet five out
+of five, and a pull of a second tag fails the same way. So it is **consistent
+right now and was absent earlier**: not intermittent within this hour, not
+particular to one address, and not a permission on the repository — something
+changed in gitgud's own protection between the two launches.
+
+**Which is the thing to decide about.** The question is not whether that
+registry can serve a pull but whether a launch may *depend* on it: what stands
+between an operator and a working node is then a third party's bot-protection
+setting, changed without notice, invisible until a machine comes up with no node
+on it.
+
+**The decision**: a launch has to pull from somewhere an engine can pull from
+without a person, and the options differ in what they ask of an operator who is
+not the author.
+
+| | What it costs | What it asks of a third-party operator |
+|---|---|---|
+| **a. Mirror the released image to a registry that allows anonymous pulls** (Docker Hub, GHCR, Quay), `REGISTRY_DEFAULT` pointing there; gitgud keeps the per-commit builds | an account and a CI push target | nothing: they launch and it works |
+| **d. Wait, and see whether the challenge lifts** | nothing | a launch that works or does not by the hour, with no way to tell which beforehand |
+| **b. Authenticate the pull** with a registry-scoped read-only token | the token travels in the machine's user data, readable from the provider's metadata service by anything on the machine — the hazard rotation was built for — and the project must not *ship* one (`no-shipped-provider-secrets`, author 2026-10-25) | **paste a registry credential as well as a provider one**, for an image that is meant to be published |
+| **c. Carry the image to the machine over ssh** | ~170 MB per launch, and a launch that needs the operator's laptop | a laptop and the key, which the phone-only operator does not have |
+
+**What was done meanwhile**: the image is built from the tree and side-loaded over
+ssh so the bench run can proceed — (c), by hand, for one machine. Nothing in the
+client changed.
+
+**What changes if it goes the other way**: `REGISTRY_DEFAULT` and the CI publish
+step for (a); the launch gaining a pull credential, a field for it, and a
+walkthrough like the provider token's for (b). The launch screen already lets an
+operator name another registry, so (a) does not take that choice away from
+anybody.

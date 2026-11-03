@@ -52,3 +52,41 @@ of the consent.
 (`Robot/light-client-screens.md` section D) is a live handshake between two phones
 and is not this; what a scan should take is the card one of them hands over
 (`Kernel.ownCard`), which is made and never read by a screen today.
+
+---
+
+## 2. The launch screen's pickers constrain each other [author, 2026-11-02]
+
+**Asked for from the bench**: *"the 'fetch regions and sizes' control on the
+launch screen populates every size and every region, but many combinations result
+in a rejected request for that size not being available on that region. If there
+is a way to query currently available instance sizes by region, that would be
+helpful."*
+
+**There is, and the client already has the answer in hand.** This wants no new
+request and no new provider call: **both adapters already parse which regions each
+size is offered in**, and it already reaches the shell.
+
+| | where the availability comes from | what is kept |
+|---|---|---|
+| DigitalOcean | `/v2/sizes` returns each size with its own `regions` array | `Size.regions`, parsed, and sizes marked unavailable are dropped |
+| Hetzner | `/v1/server_types` returns each type with `locations`, each flagged `available`; the prices' locations where a type carries no list | `Size.regions`, the unavailable locations filtered out, and a deprecated or non-x86 type dropped |
+| the ffi | `LaunchSize.regions` | carried |
+| the shell | `Launch.Size(…, regions: List<String>)` | **held and not used** |
+
+So the gap is only in the drawing: the two pickers are populated independently
+from lists that already know how they intersect. **The work is to make one
+constrain the other** — picking a region narrows the sizes to those offering it,
+picking a size narrows the regions, and whichever was chosen first stays chosen.
+
+**And to say why a combination is absent rather than only hiding it**, which is
+this project's rule for every other refusal (`light-client-requirements.md` §9:
+a refusal renders its reason). A size that exists but is offered nowhere the
+operator can reach is a different fact from a size that does not exist, and an
+operator comparing prices will want to know which they are looking at.
+
+**One thing to check before trusting it.** A provider's own list is a statement
+about the catalogue and not a reservation: DigitalOcean can still refuse a
+creation for capacity in a region that lists the size. So the constraint removes
+the combinations that are *known* wrong; a refusal at creation stays possible and
+must keep arriving in the provider's own words, as it does now.

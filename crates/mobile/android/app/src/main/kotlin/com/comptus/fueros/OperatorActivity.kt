@@ -701,15 +701,37 @@ class OperatorActivity : Activity() {
                     }
                     val surface = "$ip:${Launch.ADMIN_PORT}"
                     said += "address $ip; waiting for the instance to install, pull the image and open its surface"; show()
-                    val up = System.currentTimeMillis() + 8 * 60_000
+                    val began = System.currentTimeMillis()
+                    val up = began + 8 * 60_000
                     var answered = false
+                    // **the wait says what it is waiting for, and stops as
+                    // soon as the answer is known** [author, 2026-11-02]:
+                    // a machine answering ssh with no node has had its
+                    // engine and its pull, so there is nothing further to
+                    // wait for ([Launch.silence])
+                    var reachedSsh = false
+                    var waited = 0L
                     while (!answered && System.currentTimeMillis() < up) {
                         Thread.sleep(10_000)
+                        waited = (System.currentTimeMillis() - began) / 1000
                         answered = Provision.fetch(surface).isSuccess
+                        if (answered) break
+                        reachedSsh = Launch.reachable(ip, 22)
+                        if (reachedSsh && waited >= Launch.firstBootSeconds()) break
+                        // one progress line, replaced rather than piled up
+                        if (said.isNotEmpty() && said.last().startsWith("waiting ")) {
+                            said.removeAt(said.size - 1)
+                        }
+                        said += Launch.silence(reachedSsh, false, waited, false, surface, provider.name, id)
+                        show()
                     }
                     if (!answered) {
-                        said += "the surface at $surface did not answer within eight minutes; the machine is running and can be enrolled by hand or destroyed"
-                        remember(Instance(surface, subnet, "$label — launched, not enrolled", provider.name.lowercase(), id))
+                        // **what it was, and the one place the truth is**:
+                        // the client cannot read the machine's log, and
+                        // the operator's own key can
+                        said += Launch.silence(reachedSsh, false, waited, true, surface, provider.name, id)
+                        val how = Launch.silenceLabel(reachedSsh, false, waited, true)
+                        remember(Instance(surface, subnet, "$label — $how", provider.name.lowercase(), id))
                         rememberToken(surface, minted)
                         show(); runOnUiThread { isEnabled = true; drawInstances() }; return@Thread
                     }

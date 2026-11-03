@@ -47,6 +47,11 @@
 
 #![warn(missing_docs)]
 
+/// **Why a launched machine's node is not answering**: what a client can
+/// establish from two sockets and a clock, and what to tell the operator
+/// when the answer is that the node did not start.
+pub mod silence;
+
 use serde_json::{Value, json};
 
 /// **Where a launched instance keeps what it hosts**

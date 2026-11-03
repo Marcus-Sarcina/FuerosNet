@@ -1446,6 +1446,31 @@ one that is true.
   grant as the next step (`infra-client-requirements.md` §7, §9.4): a
   package's roles start bound to nobody, and an operator who has just
   installed something will otherwise look for why it refuses them.
+- **A launch that does not come up says why, as far as it can establish, and
+  says where the rest of the truth is** [author, 2026-11-02]. A machine is
+  created, an engine installed and an image pulled before any node answers, and
+  every one of those can fail on a machine that is otherwise healthy. **A client
+  that reports only that the surface did not answer has told its operator
+  nothing they can act on** — and for the operator this path is for, whose only
+  window is this client, there is nowhere else to look.
+  - **Say what the wait is for while it waits.** A first boot installs a
+    container engine and pulls the node's image; an operator watching a blank
+    screen cannot tell that from a failure.
+  - **Open the machine's other door to tell the two apart.** A machine that
+    answers ssh and serves no node is a machine that is up and whose **node did
+    not start** — which is a different fact from a machine that is not answering
+    at all, and calls for a different act. **Stop waiting once that is known**:
+    the engine and the pull have had their chance by then.
+  - **Name the causes without claiming which it was.** The image could not be
+    pulled, the configuration was refused, the container started and exited —
+    in the order they happen. A client that asserted one of them would be
+    reporting something it did not look at.
+  - **Say where the truth is, and that it is reachable.** It is in the machine's
+    own log, which wants a shell this client does not have and the operator's
+    own derived key does open (§10's key above). Give them the command.
+  - **Keep the verdict with the instance**, not only in the line that was on
+    screen: an operator who looked away should still find out what became of a
+    machine they are paying for, and what is theirs to destroy.
 - **Draw the acts the instance declares, and make them yourself** [author,
   2026-11-02]. `infra-client-requirements.md` §8.3 divides the surface: the node's
   page shows what it knows, framed and read-only, and **what may be asked arrives

@@ -47,6 +47,55 @@ object Launch {
     /** Where the image is pulled from unless the operator names another. */
     val REGISTRY_DEFAULT: String get() = launchRegistryDefault()
 
+    /**
+     * **Whether a port at the machine answers**, which is the half of
+     * diagnosing a silent launch that belongs to the shell: a plain
+     * connect, no request, nothing written.
+     *
+     * It is here and not in the kernel because the kernel holds no
+     * network of its own (`rhtn_launch`), and what it is *for* is in
+     * `rhtn_launch::silence`: a machine answering ssh with no node is a
+     * machine whose node did not start, and that is worth saying rather
+     * than waiting out.
+     */
+    fun reachable(host: String, port: Int, millis: Int = 4_000): Boolean =
+        runCatching {
+            java.net.Socket().use { s ->
+                s.connect(java.net.InetSocketAddress(host, port), millis)
+                true
+            }
+        }.getOrDefault(false)
+
+    /**
+     * **What to tell the operator about a silence**
+     * (`rhtn_launch::silence`): the lines, from what was reached and how
+     * long it has been.
+     */
+    fun silence(
+        ssh: Boolean,
+        surface: Boolean,
+        waitedSecs: Long,
+        gaveUp: Boolean,
+        host: String,
+        provider: String,
+        id: String,
+    ): List<String> =
+        runCatching {
+            uniffi.rhtn_ffi.launchSilence(
+                ssh, surface, waitedSecs.toULong(), gaveUp, host, provider, id,
+            )
+        }.getOrElse { listOf("$host did not answer: ${it.message}") }
+
+    /** The label the instance is remembered under afterwards. */
+    fun silenceLabel(ssh: Boolean, surface: Boolean, waitedSecs: Long, gaveUp: Boolean): String =
+        runCatching {
+            uniffi.rhtn_ffi.launchSilenceLabel(ssh, surface, waitedSecs.toULong(), gaveUp)
+        }.getOrDefault("launched, not enrolled")
+
+    /** How long a first boot may reasonably take, in seconds. */
+    fun firstBootSeconds(): Long =
+        runCatching { uniffi.rhtn_ffi.launchFirstBootSeconds().toLong() }.getOrDefault(240L)
+
     /** A fresh enrolment token: 32 random bytes as 64 hex digits, written
      *  into the instance's configuration and never sent ([Provision]). */
     fun token(): String {

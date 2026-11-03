@@ -235,6 +235,53 @@ pub fn launch_sizes(
         .collect())
 }
 
+/// **Why a launched machine's node is not answering**
+/// (`rhtn_launch::silence`): what to tell the operator, as lines, once
+/// the client has opened two sockets and looked at a clock.
+///
+/// **The sockets are the shell's**, because a plain TCP connect is one
+/// line there and this crate holds no network of its own; the reading of
+/// them is here, so both clients say the same thing and the saying is
+/// tested.
+#[uniffi::export]
+pub fn launch_silence(
+    ssh: bool,
+    surface: bool,
+    waited_secs: u64,
+    gave_up: bool,
+    host: String,
+    provider: String,
+    id: String,
+) -> Vec<String> {
+    let p = rhtn_launch::silence::Probed {
+        ssh,
+        surface,
+        waited_secs,
+        gave_up,
+    };
+    rhtn_launch::silence::said(&p, &host, &provider, &id)
+}
+
+/// **The label a silent instance is remembered under**, so the list says
+/// what is wrong after the operator has stopped watching.
+#[uniffi::export]
+pub fn launch_silence_label(ssh: bool, surface: bool, waited_secs: u64, gave_up: bool) -> String {
+    rhtn_launch::silence::label(&rhtn_launch::silence::Probed {
+        ssh,
+        surface,
+        waited_secs,
+        gave_up,
+    })
+    .to_string()
+}
+
+/// How long a first boot may reasonably take before a wait stops being
+/// progress (`rhtn_launch::silence::FIRST_BOOT_SECS`).
+#[uniffi::export]
+pub fn launch_first_boot_seconds() -> u64 {
+    rhtn_launch::silence::FIRST_BOOT_SECS
+}
+
 /// Create the machine: the provider's id for it comes back.
 #[uniffi::export]
 #[allow(clippy::too_many_arguments)]

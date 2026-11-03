@@ -16508,6 +16508,56 @@ down to be decided cold. The bound on fetches a minute that
 question. No code changed; that section's "you bound what you have built"
 already accommodates an unenforced field, so no document says *not yet*.
 
+### 2026-11-02 (the launch stops being silent)
+
+**Ruled** [author, 2026-11-02]: fix the launch's silence first. And the
+registry stayed public throughout — the repository and the container
+registry both — so the 403 was never a permission. A cleanup of the
+registry's old builds and automatic cleanup set afterwards did not change
+it: the anonymous pull is still refused at the token endpoint. **Which
+makes the cause gitgud's own protection and nothing of this project's**,
+and leaves where a launch pulls from still open.
+
+**The defect that mattered more.** What the client said when two machines
+came up with no node was *"the surface did not answer within eight
+minutes; the machine is running and can be enrolled by hand or
+destroyed"*. True, naming no cause, and offering a hand enrolment that
+cannot work when there is no node to enrol — and for the operator this
+whole path is for, whose only window is the app, nowhere else to look.
+Finding the real cause took an ssh session that an expired password was
+blocking, which is to say it was not findable at all.
+
+**What a client can honestly establish is two sockets and a clock**
+(`rhtn_launch::silence`), and it is enough to separate the cases that
+call for different acts:
+
+| ssh | surface | past the window | what it is |
+|---|---|---|---|
+| no | no | no | still coming: an engine installed, an image pulled |
+| no | no | yes | the machine, not the node |
+| **yes** | no | — | **the machine is up and its node did not start** |
+| — | yes | — | no silence at all |
+
+**The third row ends the wait rather than running it out.** A machine
+answering ssh has booted and runs a daemon, so the engine and the pull
+have had their chance; waiting out seven more minutes tells nobody
+anything. It also names **the three things that stop a node starting, in
+the order they happen** — the image not pulled, the configuration refused,
+the container started and exited — and **asserts none of them**, because
+which it was is on the machine and the client did not look. What it does
+instead is say where the truth is and that the operator can reach it: the
+machine's own log, and the command, with their own derived key, which this
+client already shows them. **It cannot read it for them and says so.**
+
+**And the verdict is kept with the instance**, as its label, so an
+operator who looked away still finds out what became of a machine they are
+paying for and what is theirs to destroy.
+
+**The reading is in Rust and the sockets are in the shell**: a plain
+connect is one line there and the kernel holds no network of its own, so
+what is testable is tested and both clients would say the same thing.
+`light-client-requirements.md` §10 states the obligation. UX-024, PRD-23.
+
 ### 2026-11-02 (the same door, the second time: an expiry cloud-init never set)
 
 **A node launched from GXV and never served.** The machine was alive and

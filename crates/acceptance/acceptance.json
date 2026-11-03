@@ -14700,6 +14700,40 @@
     "interpretation": ""
   },
   {
+    "id": "PRD-23",
+    "area": "product",
+    "gap": "product",
+    "title": "A launch that does not come up says why as far as it can establish, and where the rest is",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "light-client-requirements.md §10"
+    ],
+    "rule": [
+      {
+        "where": "light-client-requirements.md §10",
+        "text": "A client\n  that reports only that the surface did not answer has told its operator\n  nothing they can act on"
+      },
+      {
+        "where": "light-client-requirements.md §10",
+        "text": "Name the causes without claiming which it was."
+      },
+      {
+        "where": "light-client-requirements.md §10",
+        "text": "Say where the truth is, and that it is reachable."
+      },
+      {
+        "where": "light-client-requirements.md §10",
+        "text": "Keep the verdict with the instance"
+      }
+    ],
+    "given": "A machine launched at a provider whose node has not opened its administration surface, and what the client reached at it: its ssh port, its surface, and how long it has waited.",
+    "when": "The surface answers; it does not and nothing else does either, inside the window and past it; and it does not while the ssh port does, at every elapsed time.",
+    "then": "A surface that answers is no silence. Nothing answering inside the window is said to be still coming, naming the engine install and the image pull it is waiting for and calling nothing a failure. Nothing answering past the window is the machine rather than the node. **The ssh port answering settles it at any elapsed time**: the machine is up and the node did not start, so the wait ends rather than running out. That verdict names the three causes in the order they happen — the image not pulled, the configuration refused, the container started and exited — asserts none of them, says the machine's own log is where the truth is with the command that reads it and that this client cannot, names the machine and its provider since each verdict ends in a choice about it, and is kept as the instance's own label so an operator who looked away still finds it.",
+    "oracle": "behaviour",
+    "interpretation": ""
+  },
+  {
     "id": "RSC-43",
     "area": "resources",
     "gap": "resources",
