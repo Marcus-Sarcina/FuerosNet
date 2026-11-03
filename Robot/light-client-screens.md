@@ -54,7 +54,7 @@ Two rules govern every screen before any is drawn:
     syncs, the "published 4 records" — which teaches the vocabulary of the
     protocol to somebody who came to use an application.
   - **An operator is a user too, in their own moments.** The operator's surface
-    discloses what their configuration exposes because §8 obliges it, and that is
+    discloses what their configuration exposes because `infra-client-requirements.md` §8 obliges it, and that is
     a disclosure rather than chatter. The test is the same: a thing they decide,
     or a thing they are told after it happened, is not the same as a thing they
     are asked to acknowledge so that code may continue.
