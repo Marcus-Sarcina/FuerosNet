@@ -16508,6 +16508,49 @@ down to be decided cold. The bound on fetches a minute that
 question. No code changed; that section's "you bound what you have built"
 already accommodates an unenforced field, so no document says *not yet*.
 
+### 2026-11-02 (built and installed on the bench; and the pairing nobody was checking)
+
+**Built and installed** for the run: the field-test native library for both
+ABIs with the three new ffi exports in it, the binding regenerated, the
+APK assembled, and `adb install -r` on all four phones — **over their
+state rather than through a wipe**, so Share Society and the four
+ceremonies recorded earlier survive. GXV, MRK, ZU8, 4VC each reported
+Success.
+
+**And a test for the one coupling that had broken twice.**
+`rhtn_launch::node_config` composes the configuration an instance is
+launched with, `rhtn_daemon::config` reads it on the machine, and
+**nothing checked that the two agreed**. On 2026-10-31 it was the
+`resources` and `state` keys, found by trying to install on a launched
+instance. The same shape from the other side is worse: the configuration
+is strict by design — *an unknown key is an error naming its line* — so a
+client writing a key the image's daemon does not know has **an instance
+that refuses to start at all**, and the operator sees a machine that came
+up and a node that did not, on a rented machine, at the moment of launch.
+`host-shell` is exactly such a key, added today.
+
+So `crates/daemon/tests/launched.rs` reads the client's configuration with
+the daemon's own reader, and reads the copy the cloud-init script carries
+after lifting it back out of the block — the indentation being part of the
+pairing too. DMN-41.
+
+**What that means for the run**: the image a launch pulls must be built
+from `9d0e805` or later, which is where the configuration gained
+`host-shell`. CI publishes `rhtnd:<short-sha>` and `rhtnd:latest` on every
+build, so `latest` is right once the pipeline for the current commit has
+finished — and an older one refuses the configuration rather than starting
+badly, which is the failure being honest.
+
+**Recorded in the assistant's own working files**, in a new list of
+features asked for whose turn has not come, each with what already exists
+to build on. Its first entry is the author's — **one scan interface for
+everything a code can carry** [author, 2026-11-02], consolidating the
+package offering with a locator and a meeting invite. `QrCamera` exists and is instantiated inside
+two flows; `Kernel.takeIntake` already decides by parsing between an
+anchored introduction, a bare introduction and an endpoint record, and is
+**called from no screen at all**. So the dispatch is built and the front
+door is not.
+
 ### 2026-11-02 (the device half: a bounce out of the frame, and a link that opens the app)
 
 **Built the client's side of the two mechanisms the author asked for.**

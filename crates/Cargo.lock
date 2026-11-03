@@ -3324,6 +3324,7 @@ dependencies = [
  "rhtn-cli",
  "rhtn-codec",
  "rhtn-crypto",
+ "rhtn-launch",
  "rhtn-node",
  "rhtn-resources",
  "rhtn-sim",

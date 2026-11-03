@@ -15280,6 +15280,33 @@
     "interpretation": ""
   },
   {
+    "id": "DMN-41",
+    "area": "daemon",
+    "gap": "daemon",
+    "title": "The configuration a client writes for an instance is one the daemon it is given to reads",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "light-client-requirements.md §10",
+      "infra-client-requirements.md §9.4"
+    ],
+    "rule": [
+      {
+        "where": "light-client-requirements.md §10",
+        "text": "composes the configuration the instance cannot\n  supply for itself"
+      },
+      {
+        "where": "infra-client-requirements.md §9.4",
+        "text": "A node with no way to reach its host installs nothing, and says which\nline of its configuration is missing"
+      }
+    ],
+    "given": "The configuration a light client composes for an instance it is launching, and the daemon's own reader.",
+    "when": "The configuration is read by that reader; and the copy the launch script carries is lifted back out of the script and read the same way.",
+    "then": "It reads without error — a key one side writes and the other does not know is a machine that comes up with no node on it, and the configuration is strict by design; it describes an instance and not a node holding a seed, naming the operator's material, a transport key and a delegations directory and no identity; it names a hosting file and a state directory, so the instance can host a package at all; and it names the administration surface with a replaceable token and a loopback host shell, so an install can be asked for and the machine can be reached for it. The script's copy reads identically, the block's indentation being part of the pairing.",
+    "oracle": "behaviour",
+    "interpretation": ""
+  },
+  {
     "id": "TOP-52",
     "area": "topology",
     "gap": "topology",

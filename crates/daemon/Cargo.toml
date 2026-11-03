@@ -65,6 +65,10 @@ zeroize = { workspace = true }
 
 [dev-dependencies]
 rhtn-sim = { path = "../sim" }
+# **the configuration a light client writes for an instance**, read here
+# by the daemon that will be given it: the one coupling between the two
+# that a document cannot check (`tests/launched.rs`)
+rhtn-launch = { path = "../launch" }
 # the attached courier, for the test that sends a resource request as a sequence
 rhtn-adaptors = { path = "../adaptors" }
 rhtn-resources = { path = "../resources" }
