@@ -34,12 +34,25 @@ COPY . .
 ARG FLAVOUR=releasable
 # No cache mounts: they need BuildKit, and this has to build under podman and
 # under a plain docker alike.  A slower build is a smaller contract.
+# **Two invocations for the field-test flavour, and why** [2026-11-03]:
+# `rhtn-cli` depends on `rhtn-client` without `default-features = false`,
+# so selecting both binaries in one command unifies `rhtn-client`'s
+# `releasable` in beside the `fieldtest` asked for, and the two-flavours
+# guard in its `lib.rs` stops the build.  The gate never met this because
+# `check.sh`'s flavour lint selects the daemon and not the CLI.  **The
+# flavour is the daemon's**: the CLI in this image is an operator's
+# instrument and wants no diagnostic hooks, so it is built as it ships.
+# **And the flavour names only this crate's own feature**: `rhtn-daemon`
+# does not depend on `rhtn-client`, so the `rhtn-client/fieldtest` this
+# line used to carry was never a feature it could set — the daemon is the
+# leaf that caps `tracing`'s static level, and turning its default off is
+# the whole of what keeps `rhtn-node`'s debug events in the binary.
 RUN set -eu; \
     case "$FLAVOUR" in \
       releasable) cargo build --locked --release -p rhtn-daemon -p rhtn-cli ;; \
       fieldtest)  cargo build --locked --release --no-default-features \
-                    -p rhtn-daemon -p rhtn-cli \
-                    --features rhtn-daemon/fieldtest,rhtn-client/fieldtest ;; \
+                    -p rhtn-daemon --features fieldtest; \
+                  cargo build --locked --release -p rhtn-cli ;; \
       *) echo "FLAVOUR is releasable or fieldtest, not $FLAVOUR" >&2; exit 2 ;; \
     esac; \
     install -m 0755 target/release/rhtnd /usr/local/bin/rhtnd; \

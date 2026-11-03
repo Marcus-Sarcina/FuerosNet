@@ -16508,6 +16508,61 @@ down to be decided cold. The bound on fetches a minute that
 question. No code changed; that section's "you bound what you have built"
 already accommodates an unenforced field, so no document says *not yet*.
 
+### 2026-11-03 (the field-test image had never been built, and what the refusal actually is)
+
+**Ruled** [author, 2026-11-02]: build the field-test image and find out
+which frames were refused.
+
+**`packaging/build.sh --flavour fieldtest` had never worked.** Two
+defects in one line of the Containerfile, both found by running it:
+
+- it selected `-p rhtn-cli` beside the daemon, and `rhtn-cli` depends on
+  `rhtn-client` without `default-features = false` — so `releasable`
+  unified in beside the `fieldtest` asked for and the two-flavours guard
+  in `client/src/lib.rs` stopped the build;
+- it named `--features rhtn-client/fieldtest` from a selection containing
+  only `rhtn-daemon`, which **does not depend on `rhtn-client` at all**,
+  so that was never a feature it could set.
+
+The flavour is the daemon's: it is the leaf that caps `tracing`'s static
+level, and turning its default off is the whole of what keeps
+`rhtn-node`'s debug events in the binary. So the field-test branch builds
+the daemon alone with its own feature and the CLI as it ships, in two
+invocations. **The gate never met this** because `check.sh`'s flavour lint
+selects crates and never builds the image — a gap worth naming: a
+packaging file that nothing exercises rots quietly, and this one had.
+
+**What the refusal is.** From MRK's own log, the node's close frame:
+`Close(Application(ApplicationClose { error_code: 1, reason: b"unbound" }))`.
+Not the attach policy, which is accept-all and nothing overrides.
+`rhtn_transport::bind::Refusal::Unbound` is *"presented key bound by
+nothing: not pinned, nothing held, nothing presented"* — and the attach
+frame's field 4 carries a delegation, which a light client holding its own
+seed does not have. GXV is the exception because the node holds its
+`operator.material` and so pins it: its log shows `Bound(Presented)`, and
+MRK gets no `Bound` event at all.
+
+**So a node launched into an existing subnet can bind only its operator**,
+and refuses the attach of every member whose record it does not hold —
+while the attach is the only thing that would have given it that record.
+The teaching of 2026-11-01 was tested over an in-process adaptor that
+admits everyone, so it never met this gate: that test proved the replay
+works and said nothing about whether a real node would accept the
+replayer.
+
+**And the teaching is not replayed on a reconnect.** When the node was
+swapped the session dropped, and what GXV's client pushed on coming back
+was an endpoint record and a delegation, both `Duplicate` — no
+transactions. Only an explicit attach replays the archive, so a node that
+drops out loses the teaching until its operator taps Attach again.
+
+**Still unestablished**: which of the four 7.1 KB frames GXV pushed on its
+first attach the node refused, and why. The field-test node is in place
+and logging `node.object` with each decision; what is missing is one
+explicit attach, which UI automation would not reliably produce — the
+button's exact coordinates were tapped and no session reached the node.
+That is one tap by the operator, and the answer lands in the log.
+
 ### 2026-11-02 (the launch stops being silent)
 
 **Ruled** [author, 2026-11-02]: fix the launch's silence first. And the
