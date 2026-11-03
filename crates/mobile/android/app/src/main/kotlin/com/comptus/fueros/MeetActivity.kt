@@ -422,20 +422,18 @@ class MeetActivity : Activity() {
         }
         heading("Or join theirs")
         para("The other person has shown you a code. Their choice of transaction is in it, and the next screen is where you accept or refuse it.")
+        // **The scanning side carries no choice of its own** [author,
+        // 2026-11-03]. The kind is the inviter's and the responder's to
+        // refuse (`Meet.settled`, [author, 2026-09-29]), so a direction
+        // chosen here could only ever be discarded where the code carried
+        // none — which it was, silently, on the bench: a patron tapped
+        // *Scan — I will be the Patron* against a plain invitation and
+        // got an ordinary meeting with no adoption and no word about it
+        // (run `2026-11-03-meetings`, record `2564e32a`). A control that
+        // cannot act does not belong on the screen. The two buttons that
+        // stood here from 2026-10-24 are gone with the opposed case they
+        // were added to reach.
         button("Scan a QR code") { start(Meet.Kind(), Meet.Role.RESPONDER) }
-        // **the responder's own D1a** (design §7.1; PRD-05): each side chooses
-        // a direction before seeing the other's, which is how two people
-        // both offer to be the patron — an ordinary thing and not a fault.
-        // Until here the shell let only the inviter choose, so the opposed
-        // case could not arise on the bench [bench, 2026-10-24]. Developer
-        // wording until the UX pass.
-        para("Or scan with a choice of your own, made before you see theirs:")
-        button("Scan — I will be the Patron") {
-            start(Meet.Kind(Meet.Adopt.THEM_UNDER_ME), Meet.Role.RESPONDER)
-        }
-        button("Scan — I will be the Client") {
-            start(Meet.Kind(Meet.Adopt.ME_UNDER_THEM), Meet.Role.RESPONDER)
-        }
     }
 
     /**
