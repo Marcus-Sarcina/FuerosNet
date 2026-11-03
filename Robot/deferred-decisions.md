@@ -263,6 +263,48 @@ archive holds — tx type, subject, counterparty, predecessors — so *which* fo
 records these are is a command rather than an inference. The sizes (7134, 7170,
 7205, 7134) and the verdicts are all the bench has today.
 
+### What the fix proved, and the second gate behind it [2026-11-03]
+
+**Built, deployed to the node and the phones, and the live node settles the
+question.** A push from the node's own identity is now judged against its own
+state, and the held set drains until a pass stores nothing
+(`infra-client-requirements.md` §4.4, OPS-026, PRP-30). Both halves were
+necessary and the verdicts prove **neither was sufficient**: GXV replayed, and
+the node's log reads exactly as before.
+
+**Because two of the four were never reach refusals.** `TYPE_PRESENCE` is 5 and
+`is_topology_class` takes only adoption, departure, disavowal, peering and
+reissue — so a presence record returns `OutOfStore` from the *type* test at
+`store.rs:564` and not from `stores()`, and no horizon can change that. The
+topology store is for topology objects; it is right to refuse them.
+
+**So the chain is:**
+
+| | |
+|---|---|
+| 2 records of 7134 bytes | presence records — refused on **type**, correctly, and never stored |
+| 2 records of 7170 and 7205 bytes | adoptions or peerings — **`Held` for a signer's key material** |
+| the key material | carried by the presence records the store will not take |
+
+**The node's `ids` set is the thing that is empty**, not its store.
+`release_pending` frees a held object when `ids.identity(k).is_some()`, and a
+node learns identities from `operator.material`, from delegations and from the
+topology objects it stores. **A member's key material arrives in the ceremony
+record, which is not a topology object** — so the adoptions naming them stay
+held for ever.
+
+**The decision this leaves**, and it is narrower than the one above:
+
+| | What it does | What it costs |
+|---|---|---|
+| **a. Learn key material from the operator's replay whatever the object's class** — a presence record pushed by this node's own identity yields its parties' `KeyMaterial` into `known` and is then discarded, never stored | smallest change that completes the path; nothing enters the topology store that does not belong there | the node holds identities it has no topology object for, which is a set to bound and to expire |
+| **b. Carry the material on the adoption** — `Adoption.key_material` exists and is `None` on the bench's records | the topology object becomes self-sufficient, which is what a node needs it to be | a wire-level choice about what an adoption carries, and it does nothing for subnets already recorded |
+| **c. Let the node fetch it** — `wire-format.md` §7.9 has a participant's archive serve a record on request | no new object anywhere | the party to fetch from is reached through the node that is down, which is `wire-format.md` §10.1.1's own objection to fetching |
+
+**What is not in question**: the reach fix and the drain both stay. They were
+real defects, they are fixed, and this one sits behind them rather than instead
+of them.
+
 ### Asked alongside it [author, 2026-11-03]
 
 *"Can the light client maintain a view of its current trust horizon with the
