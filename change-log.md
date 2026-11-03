@@ -16508,6 +16508,76 @@ down to be decided cold. The bound on fetches a minute that
 question. No code changed; that section's "you bound what you have built"
 already accommodates an unenforced field, so no document says *not yet*.
 
+### 2026-11-03 (the decoder's budget measured the machine, not the decoder)
+
+**The gate failed once on a markdown-only change**, which is the useful
+kind of failure. `dec_02` panicked with *"decode exceeded the time
+budget"* — `crypto/tests/decoder.rs`'s own assertion and not nextest's,
+which by default reports a slow test and never kills one. **I had called
+it a timeout under contention earlier the same day without reading the
+output**, which was the right direction and the wrong mechanism.
+
+**What it actually is**: `T` is one second of **wall clock**, asserted
+thousands of times inside one test while the rest of the suite runs
+beside it. A thread descheduled at the wrong moment fails a decode that
+takes microseconds of its own. It failed on two of eleven runs that day,
+both while the machine was also building container images.
+
+**The budget is not changed; the instrument is.** The acceptance entries
+parameterise `T` and it stays a second. What changed is that a miss is
+**measured a second time and only a second miss fails** — because a
+pathological input exceeds the budget every time and a stall does not. The
+guard keeps its teeth against the thing it is for, a decoder that blows up
+on adversarial bytes, and stops reporting the machine's load as a defect
+in the decoder.
+
+### 2026-11-03 (what the ceremony leaks below the protocol, said as an accepted risk)
+
+**Stated** [author, 2026-11-03], on being told that routing a contact
+detail through the application rather than the system's composer shifts
+the privacy story slightly: *"this is fine. One consequence of FN's in
+person meeting conceit is that users are clustering themselves in all
+sorts of device-level signals. We can secure our own records as much as
+we like, but the fact that devices co-locate and establish bluetooth
+connections and so on are all visible to the host device as a whole. We
+harden our network to minimize it's value as an aggregation surface, but
+we can't eliminate the leakage that occurs from a stolen or compromised
+device per se."*
+
+**So design §18.3 gained the bullet it was missing.** Its existing
+entries describe what a stolen device does *not* give up — sealed
+captures stay ciphertext, the seed is released per query, the window
+bounds it — and all of that is what **this protocol** withholds. None of
+it touches what the platform logged about where the handset has been and
+what it stood next to, and a ceremony metered against physical presence
+(§7.1) necessarily produces exactly that: a pairing, a proximity, a time
+and a place, recorded by a layer this design defines no object in.
+
+**The limit on what may be claimed** is the point of putting it in §18
+rather than §19: §19.8's work minimising this network's own value as an
+aggregation surface stands on its own and **does not extend downward**.
+
+**And the author's analogy replaced the corollary first written there**
+[author, 2026-11-03]: *"a treasure map versus a spy satellite. Fueros'
+topology and transaction records represent a high-value source of
+contextualized information, like a treasure map. It is worth preserving
+the privacy and restricting the distribution of your treasure map even
+though it's contents describe things which can be viewed from less
+curated and contextualized sources, like a spy satellite's picture of an
+entire landmass."* The first draft said only that what an application
+touched was a small part of what the platform already holds — true, and
+an invitation to the misreading that the records therefore matter less.
+**The difference is curation**: what the map adds is which parts of the
+landmass matter and how they relate, which is the thing an adversary
+would otherwise have to construct. So the section now carries both
+conclusions together — keep this network's records tight *because* their
+value is the contextualisation, and do not read a platform-level leak as
+licence to hand over an interpretation of it.
+
+No test row: §18 is accepted risks, and a statement about what the design
+does not claim is not functionality to verify. The disclosure obligation
+that *does* bear on it already exists as OPS-013.
+
 ### 2026-11-03 (the field-test image had never been built, and what the refusal actually is)
 
 **Ruled** [author, 2026-11-02]: build the field-test image and find out

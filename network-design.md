@@ -7716,6 +7716,44 @@ several at once, not one per acquisition.
   will not release the seed for them. Real, and hard to target: no captured device
   releases all of its archive this way, and most release none.
 
+- **The ceremony clusters people in signals below this protocol, and a
+  compromised device yields those too** [author, 2026-11-03]. §7.1 meters trust
+  against physical presence, so taking part means **being in a room with a
+  counterparty and letting two devices find each other**. The pairing, the
+  proximity, the times and the places are the operating system's to record and the
+  handset vendor's to receive; none of it is an object this design defines, and
+  none of it is reachable by any discipline stated here. So the clustering a
+  ceremony performs is partly done **outside** the protocol, in a layer that keeps
+  its own history.
+
+  **What follows for the design is a limit on what it may claim.** §19.8 minimises
+  this network's own value as an aggregation surface and that work stands on its
+  own; **it does not extend downward.** A seized or compromised handset hands over
+  what the platform logged about where it has been and what it has stood next to,
+  and §18.3's bullets above — the sealed captures, the per-query seed release, the
+  bounded window — describe what is withheld *by this protocol* and not what is
+  withheld by the device.
+
+  **This is not an argument for holding the records loosely, and the difference is
+  curation** [author, 2026-11-03]. A treasure map and a spy satellite may describe
+  the same landmass. The satellite sees more of it, continuously, and nobody is
+  guarding the view; the map is worth keeping anyway, because **what it adds is
+  which parts of that landmass matter and how they relate** — and that is the thing
+  an adversary would otherwise have to construct. This protocol's topology and
+  transaction records are the map: contextualised, curated, and ordered by
+  relationships somebody already worked out. The platform's traces are the
+  satellite picture: broader, less interpreted, and nothing here can make them go
+  away.
+
+  So the two conclusions hold together rather than cancelling. **Keep this
+  network's own records tight** — their value is the contextualisation, which is
+  exactly what §19.8 is minimising and what §14.2's compartments are for. And
+  **do not read a platform-level leak as licence**: that an operating system
+  already records co-location is not an argument for handing it an interpretation
+  of what the co-location meant. Where the line genuinely falls below the
+  protocol — a seized handset, a vendor's telemetry — the decisive question is the
+  device, and this design says so rather than claiming a reach it has not got.
+
 ### 18.4 Eclipse, and occupying a region
 
 - **Patron eclipse of a new joiner.** An attacker who volunteers to be someone's
