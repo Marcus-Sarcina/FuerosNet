@@ -30,6 +30,12 @@
 #    --address-only   steps 5 and 6 alone: no build, wipe, install or read;
 #                     the material in the file stays. For a phone that was
 #                     rebooted, or whose address changed.
+#    --identity-only  step 4 alone: reads the material and the phrase from
+#                     phones already standing on the first-run screen. No
+#                     build, wipe, install or re-pairing — **the narrowest
+#                     invocation of this script, and the only one that
+#                     cannot alter a phone.** For a step 4 interrupted, or
+#                     a phrase left unread.
 #    --no-wifi        skip step 5; the file keeps whatever address it had.
 #    --conf <file>    the phones file to read and write (default:
 #                     crates/tools/phones.conf).
@@ -39,8 +45,14 @@
 #  at the address phones.conf records from an earlier setup (the phone's
 #  adb must still be in TCP mode, which a reboot undoes); cargo, cargo-ndk and
 #  an NDK for the native library; the JBR under ~/opt/android-studio/jbr or
-#  $JAVA_HOME for Gradle. The material read is public, as the screen that
-#  shows it says; nothing secret leaves the phone here.
+#  $JAVA_HOME for Gradle.
+#
+#  **What this reads off the screen**: the material, which is public, as the
+#  screen that shows it says — and, since step 4 gained it, the 24-word
+#  recovery phrase, which is not. That is a credential, and it is kept
+#  [author, 2026-10-29: test identities only, so persisting them is no
+#  vulnerability]. It belongs to a phone this script wipes on every other
+#  run; no phrase worth anything is ever on these screens.
 # =============================================================================
 set -u
 set -o pipefail
@@ -54,6 +66,7 @@ CONF="$HERE/phones.conf"
 BUILD=yes
 WIFI=yes
 ADDRESS_ONLY=no
+IDENTITY_ONLY=no
 INTERVAL=5
 ADB_PORT=5555
 
@@ -75,6 +88,12 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --no-build) BUILD=no; shift ;;
     --address-only) ADDRESS_ONLY=yes; BUILD=no; shift ;;
+    # **reads the screens and nothing else**: no build, no wipe, no
+    # install, no re-pairing. For a run already standing on the
+    # first-run screen — a step 4 that was interrupted, or one whose
+    # phrase went unread — and so that the narrowest useful invocation
+    # of this script is one that cannot alter a phone [2026-11-03].
+    --identity-only) IDENTITY_ONLY=yes; BUILD=no; WIFI=no; shift ;;
     --no-wifi) WIFI=no; shift ;;
     --conf) CONF="${2:-}"; shift 2 ;;
     -h | --help) awk '/^# =+$/ {n++; if (n == 2) exit; next} n == 1 {sub(/^# ?/, ""); print}' "$0"; exit 0 ;;
@@ -195,10 +214,15 @@ if [ "$BUILD" = yes ]; then
   say "building the fieldtest debug APK (Gradle)"
   (cd "$ANDROID" && ./gradlew --no-daemon -q assembleFieldtestDebug) || die "the APK build failed"
 fi
-[ -f "$APK" ] || die "$APK is missing; run without --no-build"
+[ "$IDENTITY_ONLY" = yes ] || [ -f "$APK" ] \
+  || die "$APK is missing; run without --no-build"
 
 # ------------------------------------------------- wipe, install, launch -----
+# **--identity-only stops short of all of it**: the phones are already
+# standing where the next step reads them, and nothing here would do
+# anything but take that away.
 for s in "${SERIALS[@]}"; do
+  [ "$IDENTITY_ONLY" = yes ] && break
   model="$("$ADB" -s "${ADB_ID[$s]}" shell getprop ro.product.model 2> /dev/null | tr -d '\r')"
   say "$s ($model): uninstalling $APP (and its data)"
   # not installed is not a failure
