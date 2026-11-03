@@ -214,20 +214,49 @@ typing them back in is the operator's job today**. Each known node becomes a
 control; tapping it fills both fields; the fields stay editable, because a node
 this device has never heard of is still the case the form was written for.
 
-**Three things to keep.**
+### What the tap is for, which decides when there must be one
 
-- **Fill, do not attach.** Tapping a known node should put its values in the
-  fields and stop there. Attaching is a session and a publication of this
-  device's payload material; it stays a separate, deliberate tap.
-- **An address can be stale.** A record that reached this device named where the
-  node answered *then*; a node moves, and `wire-format.md` §4.4 has the record
-  re-signed when it does. So the control offers what is held and the operator may
-  overwrite it — and where both an older and a newer record are held, the newer
-  counter wins rather than the first drawn.
-- **The two ports are the trap again** (feature 4): an instance row holds the
-  administration surface's port and an attach wants the node's. Whatever fills
-  these fields takes the address apart and puts the right port back, or the
-  operator waits out a timeout for a reason the screen did not explain.
+**Ruled** [author, 2026-11-03]: *"future state should have automatic re-attach on
+any known current node for which the connection information has not changed. The
+requirement for a human tap is to prevent stealth insertion of a node the user did
+not choose."*
+
+**So the consent is about the choice of node, not about the act of attaching.**
+That is a sharper rule than the one this entry first carried — which had the tap
+guarding the session itself, on the grounds that attaching publishes this device's
+payload material — and it reverses the default in the common case:
+
+| | what happens |
+|---|---|
+| a node this device already chose, connection information unchanged | **re-attach, with no tap**: nothing is being chosen that was not chosen before |
+| a node this device has not attached to before | **a tap**, because this is the choice |
+| a node already chosen whose **connection information has changed** | **a tap**, because a changed address is exactly the shape a substitution takes |
+
+**And it is what the design already does one level along.** A client fails over to
+a cached sibling without asking (`light-client-requirements.md` §4): that list was
+pushed by the node the user chose, so following it is not an insertion of anybody.
+The rule above is the same principle stated generally — a node reached on the
+authority of a choice already made needs no second consent.
+
+**Two consequences worth writing down now.**
+
+- **An automatic re-attach must do what an attach does**, the replay included.
+  Tonight's finding was that a reconnect pushes an endpoint record and a
+  delegation and **no transactions**, so the teaching happens only on an explicit
+  attach. Make re-attach automatic without fixing that and a node that drops out
+  stops being taught, silently, with nobody tapping anything.
+- **A newer record with a different address is the change, not a detail.** This
+  entry first said the newer counter should simply win; under the rule above it
+  wins the *display* and not the attach — it is precisely the case that wants the
+  human, and a client that quietly followed a re-signed record to a new address
+  would be doing the thing the tap exists to prevent. What makes it safe to show
+  is that the record is signed; what makes it want a tap is that the operator is
+  entitled to know their node moved.
+
+**And the two ports are the trap again** (feature 4): an instance row holds the
+administration surface's port and an attach wants the node's. Whatever fills these
+fields takes the address apart and puts the right port back, or the operator waits
+out a timeout for a reason the screen did not explain.
 
 **And the roll should say which it is.** A node known from a signed record, a
 node this device is attached to now, and a node typed in by hand once are three
