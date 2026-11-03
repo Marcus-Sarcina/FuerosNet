@@ -244,7 +244,7 @@ that would teach it is refused, and the one client it does admit teaches it
 nothing that survives the store rule.
 
 **The decision**: what admits a replay from a client the node has already bound.
-The store rule exists so a node does not hoard the world (§10.1.1), and a bounded
+The store rule exists so a node does not hoard the world (`wire-format.md` §10.1.1), and a bounded
 replay from an attaching member is a different case from a flood.
 
 | | What it changes | What it costs |
