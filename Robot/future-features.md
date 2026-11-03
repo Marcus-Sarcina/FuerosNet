@@ -130,3 +130,65 @@ routing may want another. Fill it; do not fix it.
 (UX-024): what sent an operator to this form was a launch that created a machine
 and could not enrol it, which is now a verdict with a cause rather than a form
 to fill in the dark.
+
+---
+
+## 4. The attach form fills itself, and a member learns the node without a cable [author, 2026-11-02]
+
+**Asked for from the bench**, with the harder half named in the same breath:
+*"we'll need to figure out how to obtain server information on the other phones
+without side-loading."* Filling the form on the operator's own device is
+bookkeeping; getting the same two values onto a subordinate's phone is a
+protocol question.
+
+**The form wants two things** (`AttachActivity`): the serving node's **identity
+keyhash**, 64 hex — not its transport key, which is what the screen already
+shows beside *detached* and is a different value — and an address it answers on.
+A member with one and not the other attaches to nothing.
+
+### On the operator's own device: already held
+
+| field | where it already is |
+|---|---|
+| the node's keyhash | **it is the operator's own identity**: a delegated instance speaks as its operator, so this device's own keyhash is the answer |
+| the address | the instance row the launch wrote, with `QUIC_PORT` rather than the surface's port |
+
+So for the one device that launched the instance, this is the same shape as
+feature 3: an act on the instance row — *Attach this device to it* — rather than
+a form beside it. **The two ports are the trap**: the surface answers on 7449
+and the node on 7431, the row holds the first, and an attach to it waits
+forever. Whatever fills this must take the address apart and put the right port
+back.
+
+### On a member's device: the protocol already carries it
+
+**This is not a new mechanism and should not become one.** `wire-format.md`
+§2.4's **anchored introduction** is *"somebody's key and locator together with
+the anchor that locator names and where it answers"* — which is exactly these
+two values, and `Kernel.takeIntake` already parses it, and `Kernel.ownCard`
+already makes one. What is missing is only a screen that reads one, **which is
+feature 1 of this list**: the consolidated scan. So the answer to the question
+asked is that feature 1 delivers it, and the two should be built together.
+
+**Three paths, and what each is good for:**
+
+- **A code from the operator's phone, scanned by the member** (feature 1). Works
+  with no network between them and no infrastructure at all, which is the case
+  that matters: a member who can reach no node cannot be *told* where one is by
+  the network. This is the bootstrap.
+- **A re-signed endpoint record through the topology** (`wire-format.md` §4.4,
+  §7.6; `infra-client-requirements.md` §4.4). This is how a member learns that a
+  node they already reach has **moved** — the record is re-signed at a higher
+  counter and travels on the attach replays. It covers every address change
+  after the first, and covers nothing before it.
+- **At the meeting itself.** The card handed over in D2 already carries the
+  anchor and where it answers, so a member adopted *after* an instance exists
+  learns of it as part of being adopted and needs none of the above. **The four
+  bench phones met before this instance existed**, which is exactly why they
+  need the bootstrap now.
+
+**What must not be built**: an address typed by an operator into somebody else's
+phone, and nothing that makes a member's client trust an address because a
+message said so. An introduction is signed; a scanned code is confirmed by the
+person holding both phones. Those are the two warrants, and a bare address in a
+notice is neither.
