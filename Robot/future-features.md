@@ -262,3 +262,65 @@ out a timeout for a reason the screen did not explain.
 node this device is attached to now, and a node typed in by hand once are three
 different kinds of knowledge, and an operator choosing between two of them is
 entitled to know which they are looking at.
+
+---
+
+## 6. A side channel for a node invite, from the patron's own handset [author, 2026-11-03]
+
+**Asked for** [author, 2026-11-03]: *"we'll need a side channel for distributing
+server invites. It might make sense to capture an email or phone number along with
+the adoption and use that to push an invite any time the patron sets up a node.
+Phone number for an SMS push would probably be best since that way the data can
+stay on the patron's mobile device and be used directly from there."*
+
+**What is sent is an object this design already has.** `wire-format.md` §2.4's
+anchored introduction is *the key and locator with the anchor that locator names
+and where it answers* — the node's keyhash and its address, which is precisely
+what the attach form wants (feature 4) and what the scan reads (feature 1). So
+this is a **third carrier for one object**, not a third object: a code on a
+screen, a card at a meeting, and now a message to a number. Whichever arrives,
+`Kernel.takeIntake` already parses it.
+
+**The instinct to keep the number on the handset is the whole of what makes it
+safe**, and it should be written down as the rule rather than the implementation:
+
+- **No gateway, and nothing of the project holds a number.** The message goes
+  through the handset's own messaging, composed by the client and handed to the
+  system by intent. The project ships no SMS service, registers no sender, and
+  learns nothing — which is the same posture as the provider credential, pasted
+  and never registered to the author (`no-shipped-provider-secrets`).
+- **The patron sees the message before it goes.** Handing it to the system's
+  composer is also a consent point, and the one place a patron notices they are
+  about to tell four people where their node is.
+
+**An invite is not a warrant.** The attach rule stands: the tap guards the choice
+of node (feature 5). A message is spoofable, forwardable and arrives from a
+network nobody here controls, so what it does is **fill a screen its reader
+confirms** — exactly as a package offering does. A client that attached because a
+message said so would be doing the thing the tap exists to prevent.
+
+### The decision inside it, which is the author's
+
+**Capturing a number at adoption is capturing personal data at a ceremony**, and
+this project has rules about that: retention windows on captures (design
+§13.7.1), the retention scan that runs on import and expires a capture on its
+*subject's* declared window (OPS-018), and `network-design.md` §19's disclosure discipline. A phone
+number held by a patron about every party they adopted is a contact graph with
+identifiers in it — the kind of aggregation design §19.8 names.
+
+| | What it gives | What it costs |
+|---|---|---|
+| **a. Capture a number at adoption, optional, with a retention window** | the patron can reach every member the moment they stand up a node, which is the case that prompted this | personal data about others on the patron's device, under the capture discipline: a window, an expiry, a disclosure, and a scan that removes it |
+| **b. Capture nothing; the member scans a code at the next meeting** (feature 1) | nothing to hold, nothing to expire, nothing to leak | a member is unreachable until they are next in a room with their patron, which for a node stood up between meetings is the wrong answer |
+| **c. Capture an opaque address the member supplies for this purpose** — a push token, a throwaway number, an address they chose | reachable without a number that identifies them elsewhere | a thing to define and carry, and most members will supply the number anyway |
+
+**One property worth weighing on a's side**: a number taken at an adoption is
+**corroborated by presence**, since the ceremony is metered against physical
+presence — unlike one typed in from anywhere. That is a stronger provenance than
+most address books have, and it is the reason this capture is not quite like
+others.
+
+**And whichever way it goes, two things hold.** It is **optional** — a member who
+declines gives nothing and is reached by code at the next meeting — and it is
+**the patron's to delete**, visible where the rest of what they hold about that
+member is visible.

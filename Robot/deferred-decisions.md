@@ -262,3 +262,43 @@ the verdicts are readable.
 archive holds — tx type, subject, counterparty, predecessors — so *which* four
 records these are is a command rather than an inference. The sizes (7134, 7170,
 7205, 7134) and the verdicts are all the bench has today.
+
+### Asked alongside it [author, 2026-11-03]
+
+*"Can the light client maintain a view of its current trust horizon with the
+information about each member needed to allow connection and provision the
+current version of this data whenever it launches a node?"*
+
+**It already maintains one, and what it may hand over is records and not the
+view.** `rhtn_client::horizon` keeps the horizon so every node in it can be
+resolved directly, and its own heading fixes the limit: *"the patron's propagation
+is the system of record… a client never presents it as authority, to a user or to
+a counterparty."* A node is a counterparty. Shipping the derived view would be
+shipping one party's reading of the topology as another party's state, which is
+the shared-state reading this design refuses.
+
+**Shipping the records is a different thing and is sound.** Their authority is
+their own signers', the node verifies each as it verifies anything, and its view
+stays its own — which is also why **binding falls out for free**: a member's
+`KeyMaterial` travels inside the records, which is why the four on the bench are
+7.1 KB each. A node given them can bind the members they name, and the three
+refused subordinates would attach.
+
+**Two things it does not settle.**
+
+- **It does not avoid the decision above.** If a provisioned bundle is applied
+  record by record it meets the same deadlock: the two prerequisites and the two
+  out-of-store subjects do not care which door they came through. So
+  provisioning needs *a* or *c* anyway, and chiefly the willingness to take a
+  bounded bundle that cannot be reach-tested yet.
+- **It is a bootstrap and not a repair.** It serves the node the operator is
+  launching now. A node that moves hosting, a member adopted later, a subnet
+  taught by somebody two steps down — each still wants the attach path to work,
+  which is the same decision again.
+
+**Where it would travel.** Not the launch script: cloud-init user data is
+bounded at tens of kilobytes and four records already fill a quarter of it. The
+administration surface is the place — the same channel that already takes the run
+and the two signed records at enrolment — so the bundle arrives after the machine
+is up, bounded by what the surface takes, and a node whose operator provisions
+nothing is unchanged.
