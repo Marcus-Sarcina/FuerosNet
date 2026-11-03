@@ -1700,3 +1700,91 @@ fn the_held_set_is_drained_until_it_stops_yielding() {
     // only if it stored something
     assert_eq!(n.settle(&*fab, &ids()), 0);
 }
+
+// acceptance: PRP-31
+#[test]
+fn a_record_carries_its_subjects_material_and_certifies_it_against_its_own_name() {
+    let mut w = World::new();
+    let rec = w.adopt_with_material("bob", "alice", 1);
+
+    // what it carries is bob, and `Identity::from_key_material` agrees
+    // with the keyhash the record names in field 1
+    let got = rec.carried_identity().expect("it carries bob's material");
+    assert_eq!(got.keyhash, kh("bob"));
+
+    // **an adoption that carries none yields none**, which is every
+    // record this harness made before today
+    let plain = w.adopt("carol", "bob", 2).0;
+    assert!(plain.carried_identity().is_none());
+
+    // **and material that does not hash to the name it arrives under is
+    // refused**, which is the whole of why this may be read before
+    // anything is verified: a record introduces an identity under its own
+    // hash and under no other
+    let mut forged = rec.clone();
+    let at = forged
+        .bytes
+        .windows(32)
+        .position(|w| w == kh("bob"))
+        .expect("field 1 is in there");
+    forged.bytes[at..at + 32].copy_from_slice(&kh("carol"));
+    let reparsed = rhtn_archive::record::Record::parse(&forged.bytes);
+    match reparsed {
+        // either the record no longer parses, or it parses and the
+        // material no longer certifies the name it arrives under
+        Err(_) => {}
+        Ok(r) => assert!(
+            r.carried_identity().is_none(),
+            "material must not certify a name it does not hash to"
+        ),
+    }
+}
+
+// acceptance: PRP-31
+#[test]
+fn a_node_knowing_nobody_learns_the_subnet_from_its_operators_replay() {
+    let mut w = World::new();
+    // the subnet as the ceremonies made it, each adoption carrying the
+    // adopted node's material as §4.1 has it
+    let bob = w.adopt_with_material("bob", "alice", 1);
+    let carol = w.adopt_with_material("carol", "bob", 2);
+
+    // **a node that knows only its operator**, which is a launched
+    // instance: alice's material, because it is alice, and nobody else's
+    let me = kh("alice");
+    let mut n = view("alice", Table::with_me(me), "alice", &[]);
+    let fab = Fabric::with(&[kh("bob"), kh("carol")]);
+    let alone: Vec<_> = ids().into_iter().filter(|i| i.keyhash == me).collect();
+    assert_eq!(alone.len(), 1, "it knows itself and no member");
+
+    // the operator replays, carol's adoption first — signed by bob, whom
+    // this node has never heard of, so unverifiable until bob's own
+    // adoption arrives and introduces him
+    let mut known = alone.clone();
+    let mut settled = 0usize;
+    for r in [&carol, &bob] {
+        // what the push handler does: harvest, push, settle
+        if let Some(id) = r.carried_identity()
+            && !known.iter().any(|k| k.keyhash == id.keyhash)
+        {
+            known.push(id);
+        }
+        n.receive_push(&*fab, &me, &encode_push(KIND_TRANSACTION, &r.bytes), &known);
+        settled += n.settle(&*fab, &known);
+    }
+
+    // **the subnet is there, in the order the archive happened to hold
+    // it**, which is the whole of what the bench could not get
+    let horizon = n.table.horizon(&me, 2);
+    assert!(horizon.contains(&kh("bob")), "{horizon:?}");
+    assert!(
+        horizon.contains(&kh("carol")),
+        "carol was pushed before the record that introduces her patron: {horizon:?}"
+    );
+    assert!(
+        n.store.holds_txid(&bob.txid) && n.store.holds_txid(&carol.txid),
+        "both records are held, not merely folded"
+    );
+    assert!(n.store.pending().is_empty(), "and nothing is left waiting");
+    assert!(settled > 0, "the settling is what released the held one");
+}

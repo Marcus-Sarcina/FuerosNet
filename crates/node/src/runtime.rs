@@ -384,16 +384,55 @@ impl LiveNode {
             let ids = i.lock().unwrap();
             match ft {
                 5 => {
-                    if view.receive_push(&a, &peer, &body, &*ids) == Decision::Stored {
-                        if let Ok((kind, object)) = decode_push(&body) {
-                            carry_supersession(&s, &ids, kind, &object);
+                    // **key material from this node's own replay**
+                    // [author, 2026-11-03], before anything is verified,
+                    // because verification is what wants it: a record is
+                    // `Unverifiable` until every signer's identity is
+                    // known, and a subnet's records are signed by the
+                    // members they introduce.
+                    //
+                    // **Only from this node's own identity**, which is
+                    // its operator on another device (§4.4): the sender
+                    // bound as this keyhash, which the session proved.
+                    // **And only what certifies itself** —
+                    // `Record::carried_identity` accepts the material
+                    // only where it hashes to the keyhash the record
+                    // names, so a record introduces an identity under its
+                    // own hash and under no other.
+                    let mut ids = ids;
+                    let carried = (peer == view.me())
+                        .then(|| decode_push(&body).ok())
+                        .flatten()
+                        .filter(|(kind, _)| *kind == KIND_TRANSACTION)
+                        .and_then(|(_, object)| {
+                            rhtn_archive::record::Record::parse(&object)
+                                .ok()
+                                .and_then(|r| r.carried_identity())
+                        });
+                    let learned = match carried {
+                        Some(id) if !ids.iter().any(|k| k.keyhash == id.keyhash) => {
+                            tracing::debug!(
+                                target: "node",
+                                who8 = %crate::diag::id8(&id.keyhash),
+                                "node.learned"
+                            );
+                            ids.push(id);
+                            true
                         }
-                        // **what was held for this may now be ready**
-                        // [2026-11-03]: an object's arrival is the only
-                        // thing that makes a prerequisite come good, and
-                        // before this nothing in a running node drained
-                        // the held set at all
-                        // (`Propagation::settle`).
+                        _ => false,
+                    };
+                    let stored = view.receive_push(&a, &peer, &body, &*ids) == Decision::Stored;
+                    if stored && let Ok((kind, object)) = decode_push(&body) {
+                        carry_supersession(&s, &ids, kind, &object);
+                    }
+                    // **what was held for this may now be ready**
+                    // [2026-11-03]: an object's arrival is the only thing
+                    // that makes a prerequisite come good, and before this
+                    // nothing in a running node drained the held set at
+                    // all (`Propagation::settle`). A key learned counts as
+                    // an arrival too: it is exactly what a held object was
+                    // waiting for.
+                    if stored || learned {
                         view.settle(&a, &*ids);
                     }
                 }

@@ -16508,6 +16508,47 @@ down to be decided cold. The bound on fetches a minute that
 question. No code changed; that section's "you bound what you have built"
 already accommodates an unenforced field, so no document says *not yet*.
 
+### 2026-11-03 (the third gate: a record introduces its own subject)
+
+**Ruled** [author, 2026-11-03]: learn the key material from the operator's
+replay. Which completes the path the previous two fixes opened and could
+not finish.
+
+**Why neither of those was enough.** A record is `Unverifiable` until
+**every signer's** identity is known — `Record::check_signatures` wants
+`ids.identity` for each — and a subnet's records are signed by the members
+they introduce. So the bench's node had the reach test answered and the
+held set draining and still learned nothing: its operator's two presence
+records were refused on **class**, rightly, the topology store being for
+topology objects, and the two adoptions behind them were held for signers
+whose material the node had no way to get.
+
+**The material was in the records the whole time.** `wire-format.md` §4.1
+has an adoption's field 5 carry *the adopted node's* key material — never
+the patron's — and nothing read it. `Record::carried_identity` does now.
+
+**It is read before verification, which is the only order that works**:
+waiting for a record to verify before taking its material waits for the
+thing the material would have made possible. **And it is safe in that
+order because it certifies itself** — the material is accepted only where
+it hashes to the keyhash the record names as its subject, so a record
+introduces an identity under its own hash and under no other, and a liar
+registers a key nobody will look up. A test forges the name and holds
+that the material no longer certifies it.
+
+**Harvested only from this node's own identity**, by the same rule as the
+reach fix: the sender bound as that keyhash and the session proved it. And
+**a key learned settles the held set**, because a missing signer is
+exactly what a held object was waiting for and the record introducing them
+is often the next one in the replay.
+
+**Proven in the order that broke the bench**: a node knowing only its
+operator is replayed carol's adoption — signed by bob, whom it has never
+heard of — and then bob's, and ends holding both with the whole subnet in
+its horizon and nothing waiting.
+
+`infra-client-requirements.md` §4.4 states it. OPS-027, PRP-31.
+
 ### 2026-11-03 (the teaching fix: a node's own state, and a held set that drains)
 
 **Built**, on the author's corrections rather than on my own reading of

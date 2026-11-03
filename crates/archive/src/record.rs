@@ -169,6 +169,25 @@ impl Record {
         body[r.start + br.start..r.start + br.end].try_into().ok()
     }
 
+    /// **The key material a record carries for its subject, where it
+    /// carries any** (`wire-format.md` §4.1: field 5 is *"the adopted
+    /// node's key material, never the patron's"*).
+    ///
+    /// **Self-certifying, which is the whole reason it is safe to read
+    /// before anything is verified.** What comes back is accepted only if
+    /// the material hashes to the keyhash the record itself names in field
+    /// 1 — so a record can introduce an identity under its own hash and
+    /// under no other. A liar registers a key nobody will look up.
+    ///
+    /// `None` where the record carries none, names no subject, or the two
+    /// do not agree.
+    pub fn carried_identity(&self) -> Option<rhtn_crypto::Identity> {
+        let body = &self.bytes[self.body.clone()];
+        let r = value_slice(body, 5)?;
+        let id = rhtn_crypto::Identity::from_key_material(&body[r])?;
+        (id.keyhash == self.field_hash(1)?).then_some(id)
+    }
+
     /// The unsigned integer at a body key, where the key holds one.
     pub fn field_uint(&self, key: u64) -> Option<u64> {
         map_get(&self.body_map(), key).and_then(as_uint)

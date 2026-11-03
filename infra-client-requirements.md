@@ -305,6 +305,39 @@ of them, and **refuses the attach of every client that would have taught
 it**. The subnet then cannot survive a change of hosting, which §4.4
 requires it to.
 
+#### Learn key material from your operator's replay
+
+**A record is unverifiable until every signer's identity is known, and a
+subnet's records are signed by the members they introduce** [author,
+2026-11-03]. So a node that knows only its operator can verify nothing of
+the subnet it was launched into — and the material it needs is **in the
+records themselves**: `wire-format.md` §4.1 has an adoption's field 5
+carry *the adopted node's* key material. Read it, and keep it.
+
+- **Read it before you verify, because verification is what wants it.**
+  Waiting for a record to verify before taking its material is waiting for
+  the thing the material would have made possible.
+- **Accept it only where it certifies itself.** The material must hash to
+  the keyhash the record names as its subject. Then a record can introduce
+  an identity **under its own hash and under no other**, and a liar
+  registers a key nobody will ever look up — which is why reading it
+  unverified costs nothing.
+- **Only from your operator's own replay**, by the same rule as above: the
+  sender bound as your own keyhash. A push from any other peer introduces
+  nobody.
+- **A key learned is an arrival.** Settle the held set afterwards as you
+  would after a store: a missing signer is exactly what a held object was
+  waiting for, and the record that introduces them is often the next one
+  in the replay.
+
+**Without this the other two are not enough.** The bench's node had the
+reach test answered and the held set draining, and still learned nothing:
+two of its operator's four records were presence records, refused on
+**class** and rightly — the topology store is for topology objects — and
+the two adoptions behind them were held for signers whose material the
+node had no way to obtain. The identities were never the store's to
+supply; they were the records' to carry.
+
 #### Drain what you hold for a prerequisite
 
 **`wire-format.md` §10.1.1's *hold it, fetch the key* has two halves, and

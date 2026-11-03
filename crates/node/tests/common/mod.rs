@@ -295,6 +295,40 @@ impl World {
         (rec, pop)
     }
 
+    /// **An adoption carrying the adopted node's key material**, as
+    /// `wire-format.md` §4.1 has field 5 carry it: what a real ceremony
+    /// produces, and what `Record::carried_identity` reads.
+    ///
+    /// `adopt` above leaves it `None`, which is what most tests want
+    /// because they hand every identity to the lookup anyway. A node
+    /// being taught a subnet it knows nobody in does not have that
+    /// luxury.
+    pub fn adopt_with_material(&mut self, node: &str, patron: &str, series: u32) -> Record {
+        let pop = self.meet(patron, node);
+        let t = self.tick();
+        let slot = self.slot_for(node, patron);
+        let (bn, bp) = (self.back(node), self.back(patron));
+        let a = Adoption {
+            node: kh(node),
+            patron: kh(patron),
+            locator: Locator {
+                anchor: kh(patron),
+                path: vec![0x10 | slot],
+                nibbles: 2,
+                seqno: Seqno { series, counter: 0 },
+                subnet: Some(SUBNET),
+            },
+            timestamp: t,
+            key_material: Some(id(node).public.key_material()),
+            evidence: Evidence::Presence(pop.txid),
+            presented_head: None,
+            back: [&bn, &bp],
+            carrying: None,
+        };
+        let body = adoption_body(&a);
+        self.commit(TYPE_ADOPTION, &body, &[node, patron])
+    }
+
     /// An adoption placing `node` in a slot of the caller's choosing, for
     /// the tests that need a patron to get it wrong.
     pub fn adopt_in_slot(

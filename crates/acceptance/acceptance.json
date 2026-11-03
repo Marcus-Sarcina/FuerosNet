@@ -7155,6 +7155,37 @@
     "interpretation": ""
   },
   {
+    "id": "PRP-31",
+    "area": "propagation",
+    "gap": "propagation",
+    "title": "A node learns key material from its operator's replay, accepted only where it certifies itself",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "infra-client-requirements.md §4.4",
+      "wire-format.md §4.1"
+    ],
+    "rule": [
+      {
+        "where": "infra-client-requirements.md §4.4",
+        "text": "Read it before you verify, because verification is what wants it."
+      },
+      {
+        "where": "infra-client-requirements.md §4.4",
+        "text": "Accept it only where it certifies itself."
+      },
+      {
+        "where": "infra-client-requirements.md §4.4",
+        "text": "A key learned is an arrival."
+      }
+    ],
+    "given": "A node whose known identities are its operator's alone, as a launched instance has, and that operator's replay of a subnet whose adoptions carry the adopted node's key material in field 5.",
+    "when": "A record carrying material is read; one carrying none; one whose material does not hash to the subject it names; and the operator replays the subnet with the record about a member arriving before the record that introduces that member's patron.",
+    "then": "A record carrying material yields the subject's identity, one carrying none yields nothing, and material that does not hash to the name it arrives under is refused — so a record introduces an identity under its own hash and under no other, which is what makes reading it before verification safe. The replay lands whatever its order: the material is taken as each record arrives, the held set settles afterwards because a key learned is an arrival, and the node ends holding both records with the whole subnet in its horizon and nothing left waiting. Material offered by any sender other than the node's own identity introduces nobody.",
+    "oracle": "behaviour",
+    "interpretation": ""
+  },
+  {
     "id": "PRT-01",
     "area": "participant",
     "gap": "participant",

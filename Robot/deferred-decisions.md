@@ -293,7 +293,15 @@ topology objects it stores. **A member's key material arrives in the ceremony
 record, which is not a topology object** — so the adoptions naming them stay
 held for ever.
 
-**The decision this leaves**, and it is narrower than the one above:
+**Ruled** [author, 2026-11-03]: *"learn the key material from the operator's
+replay."* Built the same day — `Record::carried_identity` reads field 5 and
+accepts it only where it hashes to the subject the record names, the push
+handler harvests it from a push whose sender bound as the node's own keyhash,
+and the held set settles afterwards because a key learned is an arrival
+(`infra-client-requirements.md` §4.4, OPS-027, PRP-31). **This question is
+closed**; what follows is the record of what was weighed.
+
+**The decision this left**, and it was narrower than the one above:
 
 | | What it does | What it costs |
 |---|---|---|
