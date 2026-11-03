@@ -16508,6 +16508,57 @@ down to be decided cold. The bound on fetches a minute that
 question. No code changed; that section's "you bound what you have built"
 already accommodates an unenforced field, so no document says *not yet*.
 
+### 2026-11-03 (the writing side: an adoption introduces its own subject)
+
+**The reading side had nothing to read.** The node deployed with
+`Record::carried_identity` logged no `node.learned` at all, because GXV's
+real adoptions carry no field 5: `Ceremony::propose_adoption_in` took
+whatever the caller passed, and the ffi's ordinary adoption path passes
+`key_material: None`. Only the *recovery* path ever filled it. So
+`wire-format.md` §4.1's field — *"the adopted node's key material, never
+the patron's"* — has been empty on every record this project has ever
+made.
+
+**So the composition fills it**, from `Ceremony::known`: a patron
+composing an adoption has just met that node in person and holds their
+material already. A caller's own value still wins, which is the recovery
+path introducing a party deliberately.
+
+**Why it matters far from where it is written.** A record is unverifiable
+until every signer's identity is known and this one is signed by the node
+it introduces, so a party given it afterwards has no other way to obtain
+that identity: the material does not travel in the topology class, and
+whoever could serve it is reached through the node that does not yet
+work. `light-client-requirements.md` §10 states it. CER-71, UX-025.
+
+**The limit, stated plainly**: Share Society's four records are signed and
+cannot be amended, so they carry nothing and **the bench's existing
+subnet still cannot be taught**. Only ceremonies run from here produce
+records that introduce their subjects. That is a reason to fill the field
+from now on and not a reason to invent a second way to distribute
+material.
+
+**Two process notes, because both cost real time today.**
+
+**A rewrite anchored on the first match destroyed thirteen tests.** The
+new test was appended with a marker, then a `python` replace keyed on
+`s.index("// acceptance: CER-61")` — which found an *existing* test's
+marker 350 lines earlier and replaced everything from there to the end of
+the file. `git diff --stat` said 28 insertions and 323 deletions, which is
+how it was caught; `git checkout` restored it and the test was appended
+again without a rewrite. **Read what you are about to edit** applies to
+the anchor as much as to the target.
+
+**And the marker was somebody else's number.** `CER-61` is *"refuse
+adoption back-pointers that are not this archive's"*; the family already
+ran to `CER-70`, and the new entry is `CER-71`. It was caught by an
+`assert` in the script that adds the row and **not** by the acceptance
+checker, which reports `flags: 0` for a marker naming a row that exists
+but is about something else, and counts it as implementing that row. A
+mis-attributed marker is therefore silent — worth a check of its own,
+since the authoring conventions have numbers never reused precisely
+so a citation resolves to what it says.
+
 ### 2026-11-03 (the third gate: a record introduces its own subject)
 
 **Ruled** [author, 2026-11-03]: learn the key material from the operator's

@@ -1446,6 +1446,23 @@ one that is true.
   grant as the next step (`infra-client-requirements.md` §7, §9.4): a
   package's roles start bound to nobody, and an operator who has just
   installed something will otherwise look for why it refuses them.
+- **Carry the adopted node's key material in the adoption you compose**
+  [author, 2026-11-03]. `wire-format.md` §4.1's field 5 is what it is for, and a
+  patron composing one has **just met that node in person**, so it already holds
+  their material. Fill it.
+  - **Because a record is unverifiable until every signer's identity is known**,
+    and this one is signed by the node it introduces. A party given it afterwards
+    — a node being taught the subnet it was launched into
+    (`infra-client-requirements.md` §4.4) — has **no other way to obtain that
+    identity**: the material does not travel in the topology class, and the party
+    who could serve it is reached through the node that does not yet work.
+    Carried, the record introduces its own subject and verifies anywhere.
+  - **It is the adopted node's and never the patron's**, which §4.1 fixes: the
+    patron is already known to anyone who holds the record above it.
+  - **A subnet whose records were made without it stays unverifiable to a new
+    node**, since the records are signed and cannot be amended. That is a reason
+    to fill the field from now on and not a reason to invent a second way to
+    distribute material.
 - **A launch that does not come up says why, as far as it can establish, and
   says where the rest of the truth is** [author, 2026-11-02]. A machine is
   created, an engine installed and an image pulled before any node answers, and

@@ -14608,6 +14608,33 @@
     "interpretation": ""
   },
   {
+    "id": "CER-71",
+    "area": "ceremony",
+    "gap": "ceremony",
+    "title": "An adoption carries the adopted node's key material, so it introduces its own subject",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "light-client-requirements.md §10",
+      "wire-format.md §4.1"
+    ],
+    "rule": [
+      {
+        "where": "light-client-requirements.md §10",
+        "text": "Carry the adopted node's key material in the adoption you compose"
+      },
+      {
+        "where": "light-client-requirements.md §10",
+        "text": "It is the adopted node's and never the patron's"
+      }
+    ],
+    "given": "A patron and a node that have just met in person, so the patron holds the node's key material, and an adoption composed by the ordinary path with no material named by the caller.",
+    "when": "The adoption is composed, signed by both, and read by a party holding only the patron's identity, then by one holding the patron's and the material the record carried.",
+    "then": "The record carries the adopted node's key material and not the patron's, and that material hashes to the keyhash the record names as its subject. A holder of the patron's identity alone meets the unverifiable outcome naming the node as missing, rather than a rejection; adding the material the record carried verifies it. So the record introduces its own subject and can be verified by a party holding nothing else of the subnet. A caller that names material of its own keeps it, which is the recovery path introducing a party deliberately.",
+    "oracle": "behaviour",
+    "interpretation": ""
+  },
+  {
     "id": "PRD-17",
     "area": "product",
     "gap": "product",

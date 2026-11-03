@@ -3168,6 +3168,29 @@ impl Client {
             key_material,
             carrying,
         } = what;
+        // **carry the adopted node's key material** [author, 2026-11-03]:
+        // `wire-format.md` §4.1 is what the field is for, and a patron
+        // composing this has just met that node in person, so it holds
+        // their material already (`Ceremony::known`).
+        //
+        // **Why it matters later, far from here.** A record is
+        // unverifiable until every signer's identity is known, and this
+        // one is signed by the node it introduces. A party given this
+        // record afterwards — a node being taught the subnet it was
+        // launched into (`infra-client-requirements.md` §4.4) — has no
+        // other way to obtain that identity: the material does not travel
+        // in the topology class, and the one who could serve it is reached
+        // through the node that does not yet work. Carried here, the
+        // record introduces its own subject and verifies anywhere.
+        //
+        // The caller's value wins where it gave one, which is the recovery
+        // path naming a party it is introducing deliberately.
+        let key_material = key_material.or_else(|| {
+            self.known
+                .iter()
+                .find(|i| i.keyhash == node)
+                .map(|i| i.key_material())
+        });
         let pos = match subnet {
             Some(s) => self
                 .position_in(&s)

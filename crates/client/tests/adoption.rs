@@ -579,3 +579,40 @@ fn an_endpoint_record_on_a_subnets_own_line_is_what_makes_a_node_here() {
     assert!(!here.root, "which is not the same as rooting it");
     assert_eq!(here.subordinates, 0, "nor as holding anybody under him");
 }
+
+// acceptance: CER-71
+#[test]
+fn an_adoption_carries_the_adopted_nodes_key_material_so_it_introduces_its_own_subject() {
+    let mut s = setup(&PARTIES);
+    // **the ordinary path**: a meeting in person, then the patron adopts
+    // — the caller names no key material and the composition fills it
+    // from what the patron learned at that meeting
+    let txid = s.adopted("bob", "carol", "w2", 1);
+    let bytes = s.client("carol").store.records[&txid].clone();
+    let rec = rhtn_archive::record::Record::parse(&bytes).expect("a record");
+
+    // **it introduces its own subject**: the material hashes to the
+    // keyhash the record names, so a party given this record and nothing
+    // else of the subnet can verify it
+    // (`infra-client-requirements.md` §4.4, `wire-format.md` §4.1)
+    let carried = rec
+        .carried_identity()
+        .expect("the adoption carries bob's material");
+    assert_eq!(carried.keyhash, kh("bob"));
+    // the adopted node's, never the patron's, as §4.1 says
+    assert_ne!(carried.keyhash, kh("carol"));
+
+    // **and it is what completes the verification**: the record is signed
+    // by both, so a holder of the patron's identity alone meets the third
+    // outcome rather than a rejection, and the material the record
+    // carried is what settles it
+    use rhtn_archive::record::SigStatus;
+    assert_eq!(
+        rec.check_signatures(&[id("carol").public][..]),
+        SigStatus::Unverifiable { missing: kh("bob") },
+    );
+    assert_eq!(
+        rec.check_signatures(&[id("carol").public, carried][..]),
+        SigStatus::Verified,
+    );
+}
