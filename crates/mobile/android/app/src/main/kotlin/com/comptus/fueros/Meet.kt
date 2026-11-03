@@ -498,10 +498,9 @@ class Meet(
     private var scope: Scope? = kind.scope
     private var claim: Claim? = null
     private var carrying: Scope? = null
-    /** What the counterparty proposed, where they proposed the opposite. */
+    /** What the counterparty's code asked for, once one has been read. */
     private var theirAdopt: Adopt? = null
     private var theirPeering = false
-    private var direction: Adopt? = null
     /** Facts the pre-sign warnings are drawn from, as the flow learns them. */
     private var witnessesMine = 0
     private var witnessesTheirs = 0
@@ -819,29 +818,11 @@ class Meet(
         // whose own D1a asked for nothing was shown a regular meeting's
         // brief while the other phone proposed to adopt it. The brief is
         // where that is said or it is said nowhere.
+        // **One direction, always, and it is the inviter's** [author,
+        // 2026-11-03]: the scanning side carries no choice, so there is no
+        // opposition for the brief to describe and nothing deferred past
+        // the record.
         when (settled()) {
-            // both asked to be the patron, which is not settled until D7
-            // (PRD-05): the meeting carries one of the two and the
-            // consequences of each are what there is to warn about
-            null -> {
-                out += Item(
-                    "PRD-02",
-                    "You both asked to be the other's patron. One of you will be, " +
-                        "and the two of you choose which after the record — so both " +
-                        "of the next two items may turn out to be yours.",
-                )
-                out += Item(
-                    "PRD-02",
-                    "If $counterpartyName becomes your patron they hold authority " +
-                        "over your position, and resources whose access reaches " +
-                        "upward will reach through them.",
-                )
-                out += Item(
-                    "PRD-02",
-                    "If you become theirs, your outage cascades to them and to " +
-                        "anyone beneath them, which is their risk and not only yours.",
-                )
-            }
             Adopt.NONE -> {}
             Adopt.ME_UNDER_THEM -> {
                 // UX-016: which subnet, by the inviter's claim, said before
@@ -1445,17 +1426,19 @@ class Meet(
 
     /**
      * **What the two people's choices came to**, in this device's own
-     * frame, or null while an opposition is still to be resolved.
+     * frame.
      *
      * **The responder's question to answer**, since it is the only side
      * holding both choices: its own from its D1a and the initiator's from
      * the bootstrap it read. The initiator is told the answer
      * ([Adoption]'s direction frame) rather than working it out, which it
      * could not do.
+     *
+     * **There is never an opposition to wait for** [author, 2026-11-03]:
+     * the scanning side carries no choice, so the two cannot have asked
+     * for opposite directions in one meeting and this always answers.
      */
-    fun settled(): Adopt? = synchronized(lock) {
-        direction?.let { return it }
-        if (opposedAdoptions()) return null
+    fun settled(): Adopt = synchronized(lock) {
         // **the kind is the initiator's choice and the responder's to
         // refuse** [author, 2026-09-29], and the brief is where it was
         // accepted: so what the two came to is the initiator's, mirrored
@@ -1566,33 +1549,6 @@ class Meet(
             }
             Adopt.ME_UNDER_THEM -> claim?.label(counterpartyName)
             else -> null
-        }
-    }
-
-    /** Whether both sides proposed to adopt the other. */
-    fun opposedAdoptions(): Boolean = synchronized(lock) {
-        val theirs = theirAdopt ?: return false
-        (kind.adopt == Adopt.THEM_UNDER_ME && theirs == Adopt.THEM_UNDER_ME) ||
-            (kind.adopt == Adopt.ME_UNDER_THEM && theirs == Adopt.ME_UNDER_THEM)
-    }
-
-    /** The direction the two settled on, once they have. */
-    fun direction(): Adopt? = synchronized(lock) { direction }
-
-    /**
-     * The direction chosen out of an opposition. Choosing [Adopt.NONE] is a
-     * real answer: the two met and left the authority question alone, which
-     * costs them nothing they had.
-     */
-    fun chooseDirection(d: Adopt) {
-        synchronized(lock) {
-            check(opposedAdoptions()) { "there is no opposition to resolve" }
-            direction = d
-            // the opposition and its answer, as the diagnostics see them: the
-            // run that first produced it left only a 22 s gap to read it by
-            // (cb53936-a2-opposed-1, 2026-10-24)
-            Diag.event("meet.direction", "mine" to kind.adopt, "theirs" to theirAdopt, "chosen" to d)
-            changed()
         }
     }
 

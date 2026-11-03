@@ -1174,26 +1174,6 @@ class MeetRowsTest {
     }
 
     /**
-     * **Both asking to be the patron is a brief of its own** (PRD-05): the
-     * question is settled at D7, so what the brief can say is that one of
-     * the two will hold authority and both consequences are in play.
-     */
-    @Test
-    fun an_unresolved_opposition_briefs_both_consequences() {
-        val m = meet(Meet.Adopt.THEM_UNDER_ME, role = Meet.Role.RESPONDER)
-        m.counterparty("bb")
-        m.theirAdopt(Meet.Adopt.THEM_UNDER_ME)
-        assertTrue("the two cannot both be patron", m.opposedAdoptions())
-        assertNull("and nothing is settled until they choose", m.settled())
-        val text = m.brief().joinToString(" ") { it.text }
-        assertTrue(rows(m.brief()).contains("PRD-02"))
-        assertTrue("says both asked: $text", text.contains("You both asked"))
-        assertTrue("names the one consequence", text.contains("becomes your patron"))
-        assertTrue("and the other", text.contains("outage cascades"))
-        assertTrue("and when it is decided", text.contains("after the record"))
-    }
-
-    /**
      * **The acceptance states which subnet** [author, 2026-10-15]: the
      * party being adopted reads the inviter's claim off the bootstrap and
      * is told it is a claim.
@@ -1404,39 +1384,33 @@ class MeetRowsTest {
     }
 
 
-    // ---- D7: PRD-05 ---------------------------------------------------
+    // ---- D7 -------------------------------------------------------------
+    //
+    // **The three opposition tests that stood here are gone** [author,
+    // 2026-11-03]. They covered two people each asking to be the patron in
+    // one meeting, which the scanning side's own choice made possible; that
+    // choice is removed, so `settled()` always answers and there is no
+    // opposition to resolve, brief or screen. The mutual adoption built
+    // across two meetings is untouched and is design §6.2.5's down-line
+    // check, covered by TOP-027 and TOP-028.
 
     @Test
-    fun two_people_both_offering_to_be_patron_is_not_a_protocol_failure() {
-        val m = meet(Meet.Adopt.THEM_UNDER_ME)
-        assertFalse("nothing opposed until the other's is known", m.opposedAdoptions())
+    fun the_scanning_side_carries_no_direction_of_its_own() {
+        // whatever this device holds, a responder's answer is the
+        // inviter's, mirrored — and it is never absent
+        val m = meet(Meet.Adopt.THEM_UNDER_ME, role = Meet.Role.RESPONDER)
+        m.counterparty("bb")
         m.theirAdopt(Meet.Adopt.THEM_UNDER_ME)
-        assertTrue(m.opposedAdoptions())
-        // the flow is not stopped and nothing is reported broken
-        assertEquals(Meet.Step.INTENT, m.step())
-        assertNull(m.stopReason())
-        assertNull(m.direction())
-        m.chooseDirection(Meet.Adopt.ME_UNDER_THEM)
-        assertEquals(Meet.Adopt.ME_UNDER_THEM, m.direction())
-    }
-
-    @Test
-    fun agreeing_directions_are_not_an_opposition_at_all() {
-        val m = meet(Meet.Adopt.THEM_UNDER_ME)
-        // they chose to be the client, which agrees with this side
-        m.theirAdopt(Meet.Adopt.ME_UNDER_THEM)
-        assertFalse(m.opposedAdoptions())
-        assertThrows(IllegalStateException::class.java) {
-            m.chooseDirection(Meet.Adopt.NONE)
-        }
-    }
-
-    @Test
-    fun leaving_the_authority_question_alone_is_one_of_the_answers() {
-        val m = meet(Meet.Adopt.ME_UNDER_THEM)
-        m.theirAdopt(Meet.Adopt.ME_UNDER_THEM)
-        assertTrue(m.opposedAdoptions())
-        m.chooseDirection(Meet.Adopt.NONE)
-        assertEquals(Meet.Adopt.NONE, m.direction())
+        assertEquals(Meet.Adopt.ME_UNDER_THEM, m.settled())
+        // and where the code asked for nothing, nothing is what it comes to
+        val plain = meet(Meet.Adopt.THEM_UNDER_ME, role = Meet.Role.RESPONDER)
+        plain.counterparty("bb")
+        plain.theirAdopt(Meet.Adopt.NONE)
+        assertEquals(Meet.Adopt.NONE, plain.settled())
+        // the run that bought this: a patron scanned a plain invitation and
+        // got an ordinary meeting, its direction discarded without a word
+        // (2026-11-03-meetings, record 2564e32a)
+        val text = plain.brief().joinToString(" ") { it.text }
+        assertFalse("no opposition is described: $text", text.contains("You both asked"))
     }
 }

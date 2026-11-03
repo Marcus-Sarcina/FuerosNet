@@ -1037,26 +1037,12 @@ class MeetActivity : Activity() {
 
     private fun done(m: Meet) {
         para("The record: ${m.recordTxid()}")
-        // PRD-05: two people who each chose to be the patron have not hit
-        // a protocol failure, and the screen must not say they have
-        if (m.opposedAdoptions() && m.direction() == null) {
-            heading("You both offered to be the patron")
-            para("Each of you chose a direction before seeing the other's, so this is two intentions rather than a fault — nothing malformed has happened, and the meeting itself stands whichever way this goes.")
-            para("Choose a direction between you, or leave the authority question alone.")
-            button("I will be the patron") {
-                m.chooseDirection(Meet.Adopt.THEM_UNDER_ME)
-                Kernel.adoptionBegins()
-            }
-            button("${m.counterpartyName} will be the patron") {
-                m.chooseDirection(Meet.Adopt.ME_UNDER_THEM)
-                Kernel.adoptionBegins()
-            }
-            button("Neither — just the meeting") {
-                m.chooseDirection(Meet.Adopt.NONE)
-                Kernel.adoptionBegins()
-            }
-            return
-        }
+        // **No two intentions to reconcile here** [author, 2026-11-03]:
+        // the kind is the inviter's and the scanning side carries none, so
+        // the two cannot have proposed opposite directions in one meeting.
+        // The mutual adoption that does arise is built across two meetings
+        // and is a cycle in the topology, caught by the down-line check of
+        // design §6.2.5 rather than by anything on this screen.
         witnessed(m)
         adoption(m, Kernel.adoption())
         peering(m, Kernel.peering())
@@ -1123,10 +1109,12 @@ class MeetActivity : Activity() {
 
     /** What the adoption the meeting carried came to, where it carried one. */
     private fun adoption(m: Meet, a: Adoption?) {
-        if (m.direction() == Meet.Adopt.NONE && a == null) {
-            para("You left the authority question alone. The meeting stands on its own, which costs neither of you anything you had.")
-            return
-        }
+        // **Nothing is said for a meeting that carried no adoption**
+        // [author, 2026-11-03]. The line that stood here spoke to a
+        // *settled* "neither" — an opposition resolved by leaving
+        // authority alone — and with the scanning side's choice gone there
+        // is no opposition to settle: a plain meeting is simply one whose
+        // code asked for nothing, and it needs no telling.
         if (a == null) {
             if (m.adopt != Meet.Adopt.NONE) {
                 para("The adoption is next: this screen will say what it came to.")

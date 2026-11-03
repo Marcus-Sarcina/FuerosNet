@@ -504,11 +504,11 @@ object Kernel {
         val txid = m.recordTxid() ?: return
         val them = m.counterpartyKey ?: return
         if (adoption != null) return
-        val settled = if (m.role == Meet.Role.RESPONDER) (m.settled() ?: return) else null
+        val settled = if (m.role == Meet.Role.RESPONDER) m.settled() else null
         // **a meeting that was never going to move authority says
-        // nothing.** A *resolved* "neither" is different: the other
-        // device is waiting to be told, and it is
-        if (settled == Meet.Adopt.NONE && m.direction() == null) return
+        // nothing**: the inviter's code asked for none, so the responder
+        // has nothing to state and the initiator nothing to be told
+        if (settled == Meet.Adopt.NONE) return
         if (m.role == Meet.Role.INITIATOR && m.adopt == Meet.Adopt.NONE) {
             // the initiator's own choice is the transaction's kind; where
             // it asked for no adoption the responder has nothing to settle

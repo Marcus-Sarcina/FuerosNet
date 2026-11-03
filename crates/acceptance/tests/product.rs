@@ -52,22 +52,6 @@ fn prd_04_encourage_a_second_independent_adoption_early() {
     todo!("PRD-04: Encourage a second independent adoption early")
 }
 
-/// Resolve simultaneous opposite adoptions by asking the two to choose a direction
-///
-/// Spec: light-client-requirements.md §7
-/// Milestone: manual.  Kind: manual.  Oracle: behaviour.
-///
-/// Rule (light-client-requirements.md §7): "ask them to choose one direction rather than reporting a protocol failure"
-///
-/// Given: Two release-build clients in one ceremony each proposing to adopt the other.
-/// When: A reviewer triggers the conflict.
-/// Then: Both clients present a choice of direction and neither reports a protocol error.
-#[test]
-#[ignore = "acceptance PRD-05: owed at milestone manual"]
-fn prd_05_resolve_simultaneous_opposite_adoptions_by_askin() {
-    todo!("PRD-05: Resolve simultaneous opposite adoptions by asking the two to choose a direction")
-}
-
 /// Disclose to operators what their subordinates are exposed to, the hosting model, and the roles users hold
 ///
 /// Spec: infra-client-requirements.md §8; infra-client-requirements.md §10.6; infra-client-requirements.md §10.7

@@ -996,10 +996,20 @@ anchor up in, and it is what you hand onward in a bundle (§1.1,
 
 ## 7. Cycle handling
 
-- **When two participants simultaneously propose authority relationships in
-  opposite directions (each becoming the other's superior), ask them to choose one
-  direction rather than reporting a protocol failure.** Two people setting up
-  together will each reasonably try to adopt the other (design §6.2.5).
+- **The kind is the inviter's, and the side reading the code carries no
+  direction of its own** [author, 2026-11-03]. Two participants cannot propose
+  authority in opposite directions within one meeting: the invitation states
+  what the meeting is, and the other person accepts or refuses it at the brief
+  (§1.5). So there is no opposition to resolve here, nothing deferred past the
+  record, and no question to ask. **A choice offered where it cannot act is
+  worse than none** — a client that lets the reading side pick a direction
+  will discard it wherever the invitation asked for no adoption, and the
+  person is told nothing.
+- **The mutual adoption that does arise is built across two meetings**, each
+  party adopting the other in turn, and that is a cycle in the topology rather
+  than a collision of intentions. It is detected from local state — whether the
+  proposed patron sits in one's own down-line — and handled as design §6.2.5
+  requires, on positive knowledge only.
 - **Check an adoption body before you sign it.** The patron builds the body and
   you are shown it, and design §6.1.1 has an adoption carry both signatures — so
   what your signature says is that *this* patron, *this* series and *this*

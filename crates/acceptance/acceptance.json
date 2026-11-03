@@ -6074,23 +6074,16 @@
     "id": "PRD-05",
     "area": "product",
     "gap": "product",
-    "title": "Resolve simultaneous opposite adoptions by asking the two to choose a direction",
+    "title": "Withdrawn: resolve simultaneous opposite adoptions by asking the two to choose a direction",
     "milestone": "manual",
-    "kind": "manual",
-    "spec": [
-      "light-client-requirements.md §7"
-    ],
-    "rule": [
-      {
-        "where": "light-client-requirements.md §7",
-        "text": "ask them to choose one direction rather than reporting a protocol failure"
-      }
-    ],
-    "given": "Two release-build clients in one ceremony each proposing to adopt the other.",
-    "when": "A reviewer triggers the conflict.",
-    "then": "Both clients present a choice of direction and neither reports a protocol error.",
+    "kind": "withdrawn",
+    "spec": [],
+    "rule": [],
+    "given": "Withdrawn.",
+    "when": "Withdrawn.",
+    "then": "Withdrawn.",
     "oracle": "behaviour",
-    "interpretation": null
+    "interpretation": "Withdrawn 2026-11-03 [author]. The condition cannot arise: the kind is the inviter's and the side reading the code carries no direction of its own, so two participants cannot propose opposite directions within one meeting (light-client-requirements.md §7). The two buttons that let a responder choose are gone, and with them the opposition, its brief and the screen that asked. The bench found this when a patron tapped 'Scan — I will be the Patron' against a plain invitation and got an ordinary meeting, its direction discarded without a word (run 2026-11-03-meetings, record 2564e32a). The mutual adoption built across two meetings is untouched: it is a cycle in the topology, caught by design §6.2.5's down-line check and covered by TOP-027 and TOP-028. Nothing replaces this entry."
   },
   {
     "id": "PRD-06",
