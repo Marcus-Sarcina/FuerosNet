@@ -157,6 +157,43 @@ finding.
 
 ---
 
+## The harness is not the code [author, 2026-11-03]
+
+The assistant runs inside a tool with its own permission layer, timeouts and
+output limits. **These can stop a command without the code ever running, and
+an absence reported as a result becomes unspecified behaviour in the app that
+was never there.** The author then designs around an artefact of someone
+else's security settings.
+
+Four things produce this, all of them visible to the assistant at the moment
+they happen:
+
+| Source | What it resembles |
+|---|---|
+| The permission classifier | a command that "didn't work" |
+| The Bash timeout (120s default, 600s cap) | a build or test that hung |
+| Tool-output truncation | a search with no matches past the cutoff |
+| Sandboxing, where active | a network or write failure of the app's own |
+
+**So: a call that did not execute is reported as a call that did not execute**,
+naming which of the four stopped it, and never folded into a claim about this
+code. "The phrase could not be read" is a statement about FuerosNet and was
+false; "the classifier refused the command that reads it" is a statement about
+the harness and was true.
+
+**The author's shell has no such layer**, which is the backstop and the reason
+`Report numbers, not states` below is load-bearing beyond style: a finding
+given as a number and a command is one he can reproduce unmediated. A finding
+that cannot be put that way is not yet reported.
+
+**It changes without notice and is not versioned with anything here.** Phrase
+capture worked on 2026-11-01 and was refused on 2026-11-03 with no local
+change — same script, same repo, same pinned binary. So its behaviour is not
+evidence about this project in either direction, and a regression must never be
+attributed here without a reproduction outside the harness.
+
+---
+
 ## Operational
 
 **Reference checking runs with no exemptions.** Every `§N` in every document, in
