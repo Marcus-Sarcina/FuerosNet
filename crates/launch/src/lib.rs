@@ -85,6 +85,32 @@ pub const RUNNER_PATH: &str = "/usr/local/bin/rhtn-package-runner";
 /// before this line was.
 pub const HOST_SHELL: &str = "127.0.0.1:22";
 
+/// **The root password's expiry, cleared** [author, 2026-11-02].
+///
+/// **The second attempt at this door, and the first was wrong about where
+/// the expiry comes from.** A provider that creates a machine with no key
+/// of its own sets a root password and marks it expired, so the first
+/// login must change it — and that blocks a key-authenticated command
+/// before it runs, with *"password change required but no TTY
+/// available"*. On 2026-11-02 the script gained `chpasswd: expire: false`
+/// against it, and a machine launched that afternoon refused a shell the
+/// same way.
+///
+/// **Because `chpasswd.expire` only governs a password cloud-init itself
+/// set.** The cloud-config carries none, so there is nothing for that
+/// setting to decline to expire; the password and its expiry are the
+/// provider's, written outside cloud-init's view. The setting stays —
+/// it is correct about this script's own intent — but it was never the
+/// thing holding the door.
+///
+/// So the expiry is cleared where it actually lives, in the shadow file,
+/// as the first thing the machine does: the aging maximum removed and the
+/// last-change date set to today, which is what PAM reads. **The password
+/// is still no way in** — `ssh_pwauth: false` stands, and the key the
+/// launch installs is the only door. This only stops a credential nobody
+/// chose from locking out the one its operator did.
+pub const CLEAR_EXPIRY: &str = "chage -M -1 -d $(date +%Y-%m-%d) root || true";
+
 /// **The runner, as the repository holds it** (`packaging/package-runner.sh`):
 /// carried into the machine by the script it runs once, so the vocabulary
 /// an instance may ask for is one file, versioned with this crate and
@@ -324,6 +350,7 @@ pub fn user_data(
          {ssh}\
          {runner}\
          runcmd:\n\
+         \x20 - {CLEAR_EXPIRY}\n\
          \x20 - mkdir -p {HOSTED_STATE}\n\
          \x20 - chown -R {IMAGE_UID}:{IMAGE_UID} /var/lib/rhtn\n\
          \x20 - chmod 0700 /var/lib/rhtn\n\
@@ -1142,6 +1169,19 @@ mod tests {
         for both in [&script, &keyed] {
             assert!(both.contains("ssh_pwauth: false\n"), "{both}");
             assert!(both.contains("chpasswd:\n  expire: false\n"), "{both}");
+            // **and the provider's own expiry cleared, which is the half
+            // that was missing** [2026-11-02]: `chpasswd.expire` governs
+            // only a password cloud-init set, and the provider's is
+            // written outside its view — so the shadow file is where it
+            // has to be undone, and first, before anything else the
+            // machine does needs a shell
+            let cleared = format!("  - {CLEAR_EXPIRY}\n");
+            assert!(both.contains(&cleared), "{both}");
+            let runcmd = both.find("runcmd:\n").expect("a runcmd block");
+            assert!(
+                both[runcmd..].starts_with(&format!("runcmd:\n{cleared}")),
+                "the expiry is cleared before anything else runs: {both}"
+            );
         }
         // the seed is in none of it, keyed or not
         assert!(!keyed.contains("seed"));

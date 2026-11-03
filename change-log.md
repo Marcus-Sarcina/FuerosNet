@@ -16508,6 +16508,56 @@ down to be decided cold. The bound on fetches a minute that
 question. No code changed; that section's "you bound what you have built"
 already accommodates an unenforced field, so no document says *not yet*.
 
+### 2026-11-02 (the same door, the second time: an expiry cloud-init never set)
+
+**A node launched from GXV and never served.** The machine was alive and
+routable, sshd open, and `7449` refused in 34 ms — a refusal that fast
+being nothing listening rather than a firewall. The app had it recorded as
+*Share Society — launched, not enrolled*.
+
+**The key opened it and the machine shut the door anyway.** The
+node-control key authenticated, and then: *"WARNING: Your password has
+expired. Password change required but no TTY available."* Which is the
+defect of this morning's third commit, **unfixed by this morning's third
+commit**.
+
+**Because `chpasswd: expire: false` governs only a password cloud-init
+itself set.** The cloud-config carries none — the password and its expiry
+are the provider's, written outside cloud-init's view — so that setting
+had nothing to decline to expire. It was correct about the script's own
+intent and was never the thing holding the door. The first fix was aimed
+at the wrong half.
+
+**So the expiry is cleared where it lives**: `chage -M -1 -d $(date
++%Y-%m-%d) root`, in the shadow file, as the **first** thing `runcmd` runs
+— before anything else the machine does could want a shell. The test
+asserts both that the line is there and that it is first, in the keyed
+script and the unkeyed one. `ssh_pwauth: false` stands: the password is
+still no way in, and this only stops a credential nobody chose from
+locking out the one its operator did.
+
+**What is still unknown, and why.** Whether the node itself would have
+served is not established: the shell was the only way to read
+`podman logs rhtnd`, and the expired password took it. A port forward
+opens — the account check blocks a session and not a direct channel — but
+there was nothing listening on the far side to forward to, and ssh carries
+no file transfer without a session. The machine could not be diagnosed and
+could not be mended in place, so it is to be destroyed rather than
+investigated, as the one before it was.
+
+**The standing suspect is the image.** A launch pulls `rhtnd:latest`, and
+the configuration the client now writes carries `host-shell` — a key a
+daemon older than `9d0e805` does not know, and the configuration reader is
+strict, so such an image exits on startup and `--restart=always` loops it
+with `7449` never opening. That is the same shape as the `state` key on
+2026-10-31 and is exactly what `tests/launched.rs` was written for an hour
+earlier; what the test cannot check is which build the registry is
+serving. **So the next launch pins the tag** rather than trusting what
+`latest` happens to be.
+
+Rebuilt and installed on all four phones, since the script is composed by
+the client and a fix to it reaches a machine only through a new APK.
+
 ### 2026-11-02 (built and installed on the bench; and the pairing nobody was checking)
 
 **Built and installed** for the run: the field-test native library for both
