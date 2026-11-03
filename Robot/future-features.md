@@ -192,3 +192,44 @@ phone, and nothing that makes a member's client trust an address because a
 message said so. An introduction is signed; a scanned code is confirmed by the
 person holding both phones. Those are the two warrants, and a bare address in a
 notice is neither.
+
+---
+
+## 5. A known node on the attach screen is selectable [author, 2026-11-03]
+
+**Found on the bench**, re-entering the same sixty-four hex digits for the third
+time: *"it's displaying on the screen as a known node, but it is not selectable
+so a manual entry is again required."*
+
+**The screen already knows.** `AttachActivity` reads `Kernel.instances()` on
+every visit and draws `Attach.roll(...)` into a `TextView` — the node's keyhash
+and where it answers, the two values the fields below want, **rendered as text
+nobody can touch**. The roll's own empty-case line says *"Type where a node
+answers below"*, which is the right instruction when nothing is known and the
+wrong one the moment something is.
+
+So this is the same shape as features 3 and 4 and should be built with them: the
+values are held, and what is missing is that **reading them off a screen and
+typing them back in is the operator's job today**. Each known node becomes a
+control; tapping it fills both fields; the fields stay editable, because a node
+this device has never heard of is still the case the form was written for.
+
+**Three things to keep.**
+
+- **Fill, do not attach.** Tapping a known node should put its values in the
+  fields and stop there. Attaching is a session and a publication of this
+  device's payload material; it stays a separate, deliberate tap.
+- **An address can be stale.** A record that reached this device named where the
+  node answered *then*; a node moves, and `wire-format.md` §4.4 has the record
+  re-signed when it does. So the control offers what is held and the operator may
+  overwrite it — and where both an older and a newer record are held, the newer
+  counter wins rather than the first drawn.
+- **The two ports are the trap again** (feature 4): an instance row holds the
+  administration surface's port and an attach wants the node's. Whatever fills
+  these fields takes the address apart and puts the right port back, or the
+  operator waits out a timeout for a reason the screen did not explain.
+
+**And the roll should say which it is.** A node known from a signed record, a
+node this device is attached to now, and a node typed in by hand once are three
+different kinds of knowledge, and an operator choosing between two of them is
+entitled to know which they are looking at.
