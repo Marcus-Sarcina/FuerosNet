@@ -40,6 +40,47 @@ impl Horizon for HorizonSnapshot {
     }
 }
 
+/// **The horizon used for a push from this node's own identity** [author,
+/// 2026-11-03]: everything is within it.
+///
+/// **Not a relaxation of §10.1.1 but an application of whose state this
+/// is.** An instance runs on a credential its operator's client signed and
+/// holds no seed (design §23.3); it speaks as its operator, and the
+/// network sees one identity — *"the operator's own node is not a
+/// counterparty… the operator's node is identical to the operator from the
+/// network's point of view"* [author, 2026-11-03]. So a push whose sender
+/// bound as this node's own keyhash is **this identity's state arriving on
+/// its other device**, and the operator's `h_store` is by definition what
+/// this node's store should hold. Asking whether the operator's own
+/// records are within the operator's own horizon is asking the wrong
+/// question.
+///
+/// **What this does not touch.** Every signature, shape, supersession and
+/// slot check in `TopologyStore::accept` and `Table::admits_slot` applies
+/// unchanged; only the reach test is answered differently. A push from any
+/// other sender meets [`HorizonSnapshot`] as before, so gossip is
+/// unaffected and no peer can reach this path — the sender bound as this
+/// keyhash, which the session proved.
+///
+/// **And it adds no exposure.** A compromised operator device already
+/// holds the delegation this node runs on, so it could compel the node
+/// directly; being able to fill its store is not a new power.
+///
+/// **The defect it answers** [2026-11-03]: a node launched into a subnet
+/// older than itself refused its operator's whole replay. Two records were
+/// `OutOfStore` because their subjects were not yet in a horizon the
+/// replay had not yet built, and two were `Held` waiting for key material
+/// carried by the two refused — so nothing stored, the node knew no
+/// member, and it could bind none of them, which refused the attach that
+/// would have taught it.
+struct OwnState;
+
+impl Horizon for OwnState {
+    fn within(&self, _x: &Keyhash, _h: usize) -> bool {
+        true
+    }
+}
+
 pub use rhtn_archive::topology::FRAME_TOPOLOGY_PUSH;
 /// Control frame 6: a rootward memo.
 pub const FRAME_TOPOLOGY_MEMO: u64 = 6;
@@ -305,11 +346,17 @@ impl NodeView {
         // the storage question is answered against this node's own view,
         // taken now rather than when the object was sent (§10.1.1)
         let me = self.me();
-        let hz = HorizonSnapshot {
+        // **whose horizon answers the storage question** [author,
+        // 2026-11-03]: this node's own, except for a push from this node's
+        // own identity, which is this identity's state arriving on its
+        // other device ([`OwnState`]).
+        let snapshot = HorizonSnapshot {
             me,
             balls: (0..=2).map(|h| self.table.horizon(&me, h)).collect(),
             attached: self.attached.clone(),
         };
+        let own = OwnState;
+        let hz: &dyn Horizon = if *from == me { &own } else { &snapshot };
         // **a forwarding node vouches with its storage decision**
         // (`wire-format.md` §10.1.2), so what this node's own table will
         // not hold is not stored and not forwarded either.  Asked before
@@ -332,7 +379,7 @@ impl NodeView {
         if kind == KIND_SUBTREE_ACK {
             return self.take_ack_object(adj, from, object, ids);
         }
-        let decision = self.store.accept(kind, object, from, ids, &hz);
+        let decision = self.store.accept(kind, object, from, ids, hz);
         match &decision {
             Decision::Stored => {
                 // forward byte-for-byte, on every adjacency but the arrival one
@@ -865,6 +912,45 @@ impl NodeView {
             .iter()
             .map(|p| self.take_object(adj, &p.from.clone(), p.kind, &p.bytes.clone(), ids))
             .collect()
+    }
+
+    /// **Settle the held set: release, re-offer, and go round again while
+    /// anything stored** [2026-11-03].
+    ///
+    /// **The defect this answers.** `release_pending` existed and nothing
+    /// in a running node ever called it — only tests did — so an object
+    /// held for a prerequisite stayed held for the life of the process
+    /// even after the prerequisite arrived. §10.1.1's *hold it, fetch the
+    /// key* had the holding and not the releasing.
+    ///
+    /// **Why a loop and not one pass.** A replay arrives in whatever order
+    /// an archive holds it, and one record's arrival can make several
+    /// others ready, each of which can make more: the bench's case was a
+    /// record waiting on key material that a later record carried. One
+    /// pass releases a layer; the layers have to come off until none does.
+    ///
+    /// **It terminates.** A pass goes round again only if it *stored*
+    /// something, and a stored object leaves the held set, which is
+    /// bounded — so the number of passes is bounded by the set's size.
+    /// Something merely released and re-held makes no pass.
+    ///
+    /// Returns how many objects stored, which is what a caller reports.
+    pub fn settle<L: Lookup + ?Sized>(&mut self, adj: &dyn Adjacency, ids: &L) -> usize {
+        let mut stored = 0usize;
+        loop {
+            let outcomes = self.release_pending(adj, ids);
+            let took = outcomes.iter().filter(|d| **d == Decision::Stored).count();
+            stored += took;
+            if took == 0 {
+                tracing::debug!(
+                    target: "node",
+                    stored,
+                    still_held = self.store.pending().len(),
+                    "node.settled"
+                );
+                return stored;
+            }
+        }
     }
 
     /// Replay to `to` as `TopologyPush` frames: that is the whole of

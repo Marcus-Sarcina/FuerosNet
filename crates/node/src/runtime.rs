@@ -384,10 +384,17 @@ impl LiveNode {
             let ids = i.lock().unwrap();
             match ft {
                 5 => {
-                    if view.receive_push(&a, &peer, &body, &*ids) == Decision::Stored
-                        && let Ok((kind, object)) = decode_push(&body)
-                    {
-                        carry_supersession(&s, &ids, kind, &object);
+                    if view.receive_push(&a, &peer, &body, &*ids) == Decision::Stored {
+                        if let Ok((kind, object)) = decode_push(&body) {
+                            carry_supersession(&s, &ids, kind, &object);
+                        }
+                        // **what was held for this may now be ready**
+                        // [2026-11-03]: an object's arrival is the only
+                        // thing that makes a prerequisite come good, and
+                        // before this nothing in a running node drained
+                        // the held set at all
+                        // (`Propagation::settle`).
+                        view.settle(&a, &*ids);
                     }
                 }
                 6 => {

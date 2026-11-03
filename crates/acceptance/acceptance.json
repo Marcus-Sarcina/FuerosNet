@@ -7120,6 +7120,41 @@
     "interpretation": ""
   },
   {
+    "id": "PRP-30",
+    "area": "propagation",
+    "gap": "propagation",
+    "title": "A node takes its own operator's replay as its own state, and drains what it held for a prerequisite",
+    "milestone": "after-5",
+    "kind": "positive",
+    "spec": [
+      "infra-client-requirements.md §4.4",
+      "wire-format.md §10.1.1"
+    ],
+    "rule": [
+      {
+        "where": "infra-client-requirements.md §4.4",
+        "text": "the storage rule's reach test is the wrong question\nto ask of it"
+      },
+      {
+        "where": "infra-client-requirements.md §4.4",
+        "text": "Take it against your own state, in whatever order it arrives."
+      },
+      {
+        "where": "infra-client-requirements.md §4.4",
+        "text": "Everything else about the object still applies."
+      },
+      {
+        "where": "infra-client-requirements.md §4.4",
+        "text": "Go round while a pass stored something"
+      }
+    ],
+    "given": "A node launched into a subnet older than itself, holding a table with only itself in it, speaking as its operator; and that operator's archive, which holds the subnet's records in its own order.",
+    "when": "The operator's client replays them, the record about a subject arriving before the record that would put that subject within reach; the same records arrive from a peer instead; and a record arrives whose key material is missing and arrives afterwards.",
+    "then": "Every record from the node's own identity is stored whatever order it arrives in, and the subnet is in the node's horizon afterwards — so it can bind the members it serves and no longer refuses their attach. The same records from any other sender are refused as out of store exactly as before, the reach rule being untouched for gossip and unreachable by any peer, since the session proved which key sent it. A record held for a missing key is stored once the key is known, the held set is drained until a pass stores nothing, and a further settle is a no-op rather than a loop.",
+    "oracle": "behaviour",
+    "interpretation": ""
+  },
+  {
     "id": "PRT-01",
     "area": "participant",
     "gap": "participant",

@@ -1568,3 +1568,135 @@ fn a_second_occupant_of_a_filled_slot_is_neither_stored_nor_forwarded() {
     );
     assert!(!s.fab.frames().is_empty(), "and it is forwarded");
 }
+
+// ---------------------------------------------------------------------------
+// **A node taught a subnet older than itself** [2026-11-03].
+//
+// The bench's case, which the in-process adaptor test of 2026-11-01 could
+// not see: a node launched into an existing subnet holds an empty table,
+// its operator's client replays its archive, and every record is refused.
+// Two were `OutOfStore` — their subjects were not in a horizon the replay
+// had not yet built — and two were `Held` for key material that the two
+// refused records carried. Nothing stored, so the node knew no member, so
+// it could bind none of them, so it refused the attach that would have
+// taught it.
+//
+// What the two tests below hold is the two halves of the fix: a push from
+// this node's own identity is judged against its own state rather than
+// against a horizon it has not been given yet, and the held set is drained
+// until it stops yielding.
+// ---------------------------------------------------------------------------
+
+/// A node whose table holds only itself, as a freshly launched instance
+/// does, speaking as `alice` — which is what a delegated instance is: its
+/// operator's identity on another device (design §23.3).
+struct Launched {
+    n: NodeView,
+    fab: Arc<Fabric>,
+    /// Alice's adoption of bob, and bob's of carol: what the operator's
+    /// archive holds and replays.
+    bob: rhtn_archive::record::Record,
+    carol: rhtn_archive::record::Record,
+}
+
+fn freshly_launched() -> Launched {
+    let mut w = World::new();
+    // the subnet as it already exists, before this node was launched
+    let (bob, _) = w.adopt("bob", "alice", 1);
+    let (carol, _) = w.adopt("carol", "bob", 2);
+    Launched {
+        n: view("alice", Table::with_me(kh("alice")), "alice", &[]),
+        fab: Fabric::with(&[kh("bob"), kh("carol")]),
+        bob,
+        carol,
+    }
+}
+
+// acceptance: PRP-30
+#[test]
+fn a_node_takes_its_own_operators_replay_against_its_own_state() {
+    let Launched {
+        mut n,
+        fab,
+        bob,
+        carol,
+    } = freshly_launched();
+    let me = kh("alice");
+    assert!(
+        !n.table.horizon(&me, 2).contains(&kh("carol")),
+        "it starts knowing nothing of the subnet it was launched into"
+    );
+
+    // **the operator's client replays, in the order its archive holds**:
+    // carol's adoption first, whose subject is nobody this node has heard
+    // of, then bob's, which is the edge that would have put her in reach
+    for r in [&carol, &bob] {
+        let d = n.receive_push(&*fab, &me, &encode_push(KIND_TRANSACTION, &r.bytes), &ids());
+        assert_eq!(
+            d,
+            Decision::Stored,
+            "a push from this node's own identity is its own state, whatever order it arrives in"
+        );
+    }
+
+    // and the subnet is there: the whole of what the launch could not
+    // supply and the attach was refusing to provide
+    let horizon = n.table.horizon(&me, 2);
+    assert!(horizon.contains(&kh("bob")), "{horizon:?}");
+    assert!(horizon.contains(&kh("carol")), "{horizon:?}");
+
+    // **the reach rule is untouched for everyone else**: the same two
+    // records from a peer, into a node that holds nothing, are refused as
+    // they were before
+    let second = freshly_launched();
+    let (mut other, fab2, far) = (second.n, second.fab, second.carol);
+    assert_eq!(
+        other.receive_push(
+            &*fab2,
+            &kh("bob"),
+            &encode_push(KIND_TRANSACTION, &far.bytes),
+            &ids()
+        ),
+        Decision::OutOfStore,
+        "gossip still meets §10.1.1, and no peer reaches the operator's path"
+    );
+}
+
+// acceptance: PRP-30
+#[test]
+fn the_held_set_is_drained_until_it_stops_yielding() {
+    let Launched {
+        mut n, fab, carol, ..
+    } = freshly_launched();
+    let me = kh("alice");
+    // **the key material is what was missing on the bench**: a lookup
+    // without carol, so her adoption is held for her key rather than
+    // refused
+    let partial: Vec<_> = ids()
+        .into_iter()
+        .filter(|i| i.keyhash != kh("carol"))
+        .collect();
+    let d = n.receive_push(
+        &*fab,
+        &me,
+        &encode_push(KIND_TRANSACTION, &carol.bytes),
+        &partial,
+    );
+    match &d {
+        Decision::Held(p) => assert_eq!(p.missing_key, Some(kh("carol"))),
+        other => panic!("held for the key it lacks, not {other:?}"),
+    }
+    assert!(!n.store.holds_txid(&carol.txid), "nothing stored yet");
+
+    // **before this change nothing in a running node ever drained it**:
+    // `release_pending` existed and only tests called it, so the record
+    // stayed held for the life of the process after the key arrived
+    let stored = n.settle(&*fab, &ids());
+    assert_eq!(stored, 1, "the key is known now, so the layer comes off");
+    assert!(n.store.holds_txid(&carol.txid));
+    assert!(n.store.pending().is_empty(), "and nothing is left waiting");
+
+    // settling again is a no-op rather than a loop: a pass goes round
+    // only if it stored something
+    assert_eq!(n.settle(&*fab, &ids()), 0);
+}

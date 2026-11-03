@@ -16508,6 +16508,54 @@ down to be decided cold. The bound on fetches a minute that
 question. No code changed; that section's "you bound what you have built"
 already accommodates an unenforced field, so no document says *not yet*.
 
+### 2026-11-03 (the teaching fix: a node's own state, and a held set that drains)
+
+**Built**, on the author's corrections rather than on my own reading of
+them. Two defects, both necessary.
+
+**The reach test was asked the wrong question.** `decide_object` judged
+every push against a `HorizonSnapshot`, including a push from the node's
+**own identity** — and an instance is its operator on another device,
+running on a credential that client signed and holding no seed (design
+§23.3). *"The operator's own node is not a counterparty… identical to the
+operator from the network's point of view"* [author, 2026-11-03]. So the
+operator's `h_store` is by definition what this node's store should hold,
+and asking whether the operator's own records are within the operator's
+own horizon is asking nothing. A push whose sender bound as `me` is now
+judged against `OwnState`, for which everything is within reach.
+
+**Nothing else moved.** Signatures, shape, supersession, `admits_slot`,
+the seen-set: unchanged. Only the reach test is answered differently and
+only for that one sender — the session proved which key sent it, so no
+peer reaches the path, and a test holds that the same records from a peer
+are still `OutOfStore`. And it is no new exposure: a compromised operator
+device holds the credential the node runs on and can direct it outright.
+
+**And the held set was never drained.** `release_pending` existed —
+`wire-format.md` §10.1.1's *hold it, fetch the key* — and **only tests
+called it**. In a running node an object held for a prerequisite stayed
+held for the life of the process after the prerequisite arrived.
+`Propagation::settle` now releases and re-offers while a pass stores
+something, and the push handler calls it on every store. It terminates
+because a stored object leaves a bounded set.
+
+**Both were needed, which the bench showed.** Of the four records GXV
+replayed, two were `OutOfStore` for reach and two were `Held` for key
+material **the two refused records carried** — so parking the refused ones
+would not have helped and draining alone could not start: nothing ever
+stored. The first fix lets the key-bearing records store in any order; the
+second releases what was waiting on them.
+
+**Why the earlier test missed it**: the teaching of 2026-11-01 was driven
+through `LocalNode`, an in-process adaptor that admits everyone and
+applies the push directly. It proved the replay is *sent* and said nothing
+about whether a real node keeps any of it. The new tests drive
+`receive_push` against a node whose table holds only itself, which is what
+a launched instance is.
+
+`infra-client-requirements.md` §4.4 states both obligations. OPS-026,
+PRP-30.
+
 ### 2026-11-03 (the decoder's budget measured the machine, not the decoder)
 
 **The gate failed once on a markdown-only change**, which is the useful

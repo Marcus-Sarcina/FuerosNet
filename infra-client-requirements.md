@@ -270,6 +270,55 @@ per relationship line** (`wire-format.md` §7.6), each carrying that line's own
 `seqno` [2026-09-02].
 
 
+
+#### A node takes its own operator's replay as its own state
+
+**An instance is its operator on another device, and a replay from it is
+not gossip** [author, 2026-11-03]. §4.4 already has you run on a credential
+your operator's client signed and hold no seed; design §23.3 is why. So a
+topology push whose sender bound as **your own keyhash** is this identity's
+state arriving from its other device — *"the operator's own node is not a
+counterparty"* — and **the storage rule's reach test is the wrong question
+to ask of it**: your operator's `h_store` is by definition what your store
+should hold.
+
+- **Take it against your own state, in whatever order it arrives.** An
+  archive replays in the order it holds, so the record that puts a subject
+  within reach may arrive after the records about that subject. Judging
+  each against the horizon built so far refuses the ones that would have
+  built it.
+- **Everything else about the object still applies.** Signatures, shape,
+  supersession, the slot discipline, the seen-set: unchanged. Only the
+  reach test is answered differently, and only for this sender — a push
+  from any other peer meets `wire-format.md` §10.1.1 exactly as before, so
+  gossip is untouched and no peer can reach this path. The session proved
+  which key sent it.
+- **It is no new exposure.** A compromised operator device holds the
+  credential you run on and can direct you outright; that it can also fill
+  your store is not a power it gained here.
+
+**Why this is not optional** [2026-11-03]. A node launched into a subnet
+older than itself holds an empty table. Without this it refuses its
+operator's whole replay — some records for reach, the rest held for key
+material the refused ones carried — so it learns no member, can bind none
+of them, and **refuses the attach of every client that would have taught
+it**. The subnet then cannot survive a change of hosting, which §4.4
+requires it to.
+
+#### Drain what you hold for a prerequisite
+
+**`wire-format.md` §10.1.1's *hold it, fetch the key* has two halves, and
+the second is easy to leave out.** An object held for a prerequisite has to
+be re-offered when the prerequisite arrives, and **re-offered again** while
+each release makes others ready: a replay arrives in an arbitrary order, so
+one record's arrival can free a layer whose arrival frees another.
+
+- **Settle after anything stores**, not on a timer: an object's arrival is
+  the only thing that makes a prerequisite come good.
+- **Go round while a pass stored something**, and stop when one does not.
+  That terminates, because a stored object leaves the held set and the set
+  is bounded; something merely released and re-held makes no pass.
+
 ### 4.5 What a query discloses
 
 **A resolution request tells you who wants to reach whom**, before any contact
