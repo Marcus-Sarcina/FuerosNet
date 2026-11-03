@@ -158,12 +158,16 @@ class FirstRunActivity : Activity() {
                     "you, and nothing can show them again.",
             )
             mono(Identity.laidOut(phrase))
-            button("I have written them down") { name() }
         }
         heading("Public key material")
         para("What a node is told about you. The bench reads it from here.")
         mono(material ?: "the kernel did not come up in time; the material will show on a later start")
-        if (phrase == null) button("Continue") { name() }
+        // **the way on goes after both, never between them** [2026-11-03].
+        // It used to sit under the phrase and above the material, so on a
+        // short screen the only control was reached before the second
+        // half of what the screen exists to show — and tapping it was how
+        // a tester got past the material without seeing it.
+        button(if (phrase == null) "Continue" else "I have written them down") { name() }
     }
 
     // ---- restore -------------------------------------------------------
@@ -243,6 +247,24 @@ class FirstRunActivity : Activity() {
     private fun name() {
         body.removeAllViews()
         title("Your name")
+        // **the material again, because the screen that showed it can be
+        // lost** [2026-11-03]. `create` brings the kernel up and *then*
+        // waits for the material — five seconds on a low-specification
+        // phone — and `onCreate` sends an identity with no name straight
+        // here. So anything that recreates this activity in that window,
+        // which a small-memory device does routinely, took the material
+        // screen with it and nothing showed it again.
+        //
+        // **It is public and derived, so showing it twice costs nothing**
+        // — unlike the phrase, which is not stored and genuinely cannot
+        // come back. A person who lost the first screen is not asked to
+        // wipe the device to see their own public identity.
+        Kernel.materialHex()?.let {
+            heading("Public key material")
+            para("What a node is told about you. The bench reads it from here.")
+            mono(it)
+        }
+        heading("The name people will see")
         para(
             "What people will see you as, in every subnet where you do not " +
                 "choose a different name. Yours to change later.",

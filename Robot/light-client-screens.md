@@ -385,6 +385,37 @@ still the platform's default and is the other place the mark belongs.
 | A2 New identity | **A screen since 2026-10-29** [author]: the material and the phrase shown once, then the name. The seeds are still kept under the shell's own custody and never cross the storage seam; what changed is that nothing is minted silently, and a kernel started with none says so | `start(seeds, …)`; `seal("seeds")` | APP-011 |
 | A3 Restore | Envelope picker; passphrase field (the key kept apart from the device); import scan report naming anything past its retention; result framed **"recovered on trust"**, never *verified-complete* | `restore_backup(blob, secret)` | PRD-07, PRD-09; ARC-24 |
 
+### The key material screen, and how a tester got past it [2026-11-03]
+
+**Found on the bench**, on the two low-specification phones and not the two
+tall ones: *"figure out why it skipped past the key material page."* Two causes,
+measured rather than guessed.
+
+**The way on sat between the two halves of the screen.** `shown()` laid out the
+phrase, then the button, then the material. On a 720×1560 phone the button
+measures at y=660 and the material at y=918 — so the material *is* on screen,
+and the only control is reached first. Someone reading to the end of the 24
+words taps the thing directly beneath them. **The button now comes after both**,
+for the restore path and the new-identity path alike.
+
+**And the screen can be lost outright, which is the one that matters.**
+`create()` brings the kernel up and *then* waits for the material — 5.3 seconds
+on ZU8 against a fraction of that on GXV — while `onCreate` sends an identity
+that has no name **straight to the name step**. So anything recreating the
+activity inside that window takes the material screen with it, and nothing ever
+shows it again. A small-memory device recreates activities routinely, which is
+why it was the low-specification phones.
+
+**So the name step shows the material too.** It is public and derived from the
+identity, so showing it twice costs nothing — unlike the phrase, which is not
+stored and genuinely cannot come back. A person who lost the first screen is not
+asked to wipe their device to read their own public identity.
+
+**The rule this leaves**: a screen whose whole purpose is that somebody reads
+something **must not offer the way on before it**, and anything shown *once*
+must be something that genuinely cannot be shown twice. The phrase qualifies.
+The material never did.
+
 ## B. Home — navigation first, status peripheral [author, 2026-09-27]
 
 **Superseded by the shell above and removed 2026-10-29** [author]: the

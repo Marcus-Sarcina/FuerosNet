@@ -16508,6 +16508,43 @@ down to be decided cold. The bound on fetches a minute that
 question. No code changed; that section's "you bound what you have built"
 already accommodates an unenforced field, so no document says *not yet*.
 
+### 2026-11-03 (how a tester got past the key material page)
+
+**Found on the bench** [author, 2026-11-03], on the two low-specification
+phones and not the two tall ones. Two causes, both measured.
+
+**The way on sat between the two halves of the screen.** `shown()` drew
+the phrase, then the button, then the material. Measured on ZU8's 720×1560
+display: the button at y=660, the material at y=918. So the material *was*
+on screen and the only control was reached first — somebody reading to the
+end of the 24 words taps what is directly beneath them. The button now
+comes after both halves, on the restore path and the new-identity path
+alike.
+
+**And the screen can be lost outright, which is the cause that matters.**
+`create()` brings the kernel up and *then* waits for the material — 5.3
+seconds on ZU8 against a fraction of that on GXV — while
+`FirstRunActivity.onCreate` sends an identity that has no name **straight
+to the name step**. Anything that recreates the activity inside that
+window takes the material screen with it and nothing shows it again. A
+small-memory device recreates activities routinely, which is why it was
+the low-specification phones and not the others.
+
+**So the name step shows the material too.** It is public and derived from
+the identity, so showing it twice costs nothing — unlike the phrase, which
+is not stored and genuinely cannot come back. A person who lost the first
+screen is not asked to wipe the device to read their own public identity.
+
+**The evidence was pulled before the wipe**, which is the only reason any
+of this was answerable: ZU8's own log carries the 5.3-second
+`Participant.start` and a later start finding `custody key present: True`.
+A wipe takes the diagnostics with it.
+
+The screens document's section A carries the rule: a screen whose
+purpose is that somebody reads something must not offer the way on before
+it, and anything shown *once* must be something that genuinely cannot be
+shown twice. The phrase qualifies; the material never did.
+
 ### 2026-11-03 (the writing side: an adoption introduces its own subject)
 
 **The reading side had nothing to read.** The node deployed with
