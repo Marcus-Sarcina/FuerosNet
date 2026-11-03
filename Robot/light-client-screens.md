@@ -33,6 +33,32 @@ Two rules govern every screen before any is drawn:
   nothing was drawn to the design, which read as text flush to the glass
   the moment a screen was dark.
 
+- **The abstractions are the network's, not the user's** [author, 2026-11-03].
+  *"I want the required click-throughs and exposure of network plumbing to be
+  minimized… The network chatter keeping the 'subnet' and 'trust horizon'
+  abstractions in sync should not be visible to regular users."* A patron who
+  adopted people into a subnet **has already decided** to give them access to the
+  node that serves it; an invite carrying that out, a replay teaching a node what
+  the patron already holds, a record re-signed because an address moved — none of
+  these is a decision, and **a plumbing step presented as a decision is a decision
+  the user already made, asked again**.
+  - **Two questions tell them apart.** *Is something being chosen that was not
+    chosen before?* and *could this go somewhere the person did not intend?* Where
+    both are no, it happens. The attach tap survives this test because a node not
+    chosen before is a choice and a changed address could be a substitution
+    [author, 2026-11-03]; confirming an invite to somebody already adopted does
+    not.
+  - **Where the plumbing fails, say so; where it works, say nothing.** A refusal
+    renders its reason (`light-client-requirements.md` §9) and that rule is
+    untouched. What this removes is the narration of success — the counts, the
+    syncs, the "published 4 records" — which teaches the vocabulary of the
+    protocol to somebody who came to use an application.
+  - **An operator is a user too, in their own moments.** The operator's surface
+    discloses what their configuration exposes because §8 obliges it, and that is
+    a disclosure rather than chatter. The test is the same: a thing they decide,
+    or a thing they are told after it happened, is not the same as a thing they
+    are asked to acknowledge so that code may continue.
+
 ## The shell: a rail, a foot, and one content area [author, 2026-10-27]
 
 **The core graphical design is a derivative of common chat applications,

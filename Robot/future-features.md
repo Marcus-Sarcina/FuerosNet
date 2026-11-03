@@ -289,9 +289,25 @@ safe**, and it should be written down as the rule rather than the implementation
   system by intent. The project ships no SMS service, registers no sender, and
   learns nothing — which is the same posture as the provider credential, pasted
   and never registered to the author (`no-shipped-provider-secrets`).
-- **The patron sees the message before it goes.** Handing it to the system's
-  composer is also a consent point, and the one place a patron notices they are
-  about to tell four people where their node is.
+**Corrected** [author, 2026-11-03]: *"No, don't do this. I want the required
+click-throughs and exposure of network plumbing to be minimized… If the patron
+has adopted people into a subnet then he has decided to give those people access
+to his node that serves that subnet."* This entry first had the patron confirm
+each message, on the grounds that it was the moment they noticed what they were
+telling people. **That reasoning was wrong about where the consent is.** The
+decision to give those people access was made at the adoption; the invite is the
+plumbing that carries it out, and **a plumbing step presented as a decision is a
+decision the user has already made, asked again** — see the rule now at the head
+of `light-client-screens.md`.
+
+**So it sends without asking.** One consequence to weigh rather than discover: on
+Android a message sent with no interaction wants `SEND_SMS`, which the store
+treats as restricted and which routes the number through this application
+instead of through the system's composer. The number still never leaves the
+device, but *this* code touches it, where the composer route meant it did not.
+If that permission is unwelcome, the carrier has to change — a share intent
+without a chooser is not available, so the alternatives are the code at the next
+meeting (feature 1) or an address the member supplied for the purpose.
 
 **An invite is not a warrant.** The attach rule stands: the tap guards the choice
 of node (feature 5). A message is spoofable, forwardable and arrives from a

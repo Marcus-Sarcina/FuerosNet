@@ -269,35 +269,47 @@ records these are is a command rather than an inference. The sizes (7134, 7170,
 information about each member needed to allow connection and provision the
 current version of this data whenever it launches a node?"*
 
-**It already maintains one, and what it may hand over is records and not the
-view.** `rhtn_client::horizon` keeps the horizon so every node in it can be
-resolved directly, and its own heading fixes the limit: *"the patron's propagation
-is the system of record… a client never presents it as authority, to a user or to
-a counterparty."* A node is a counterparty. Shipping the derived view would be
-shipping one party's reading of the topology as another party's state, which is
-the shared-state reading this design refuses.
+**Yes, and it already maintains the view.** `rhtn_client::horizon` keeps the
+horizon so every node in it can be resolved directly.
 
-**Shipping the records is a different thing and is sound.** Their authority is
-their own signers', the node verifies each as it verifies anything, and its view
-stays its own — which is also why **binding falls out for free**: a member's
-`KeyMaterial` travels inside the records, which is why the four on the bench are
-7.1 KB each. A node given them can bind the members they name, and the three
+**Corrected** [author, 2026-11-03]: *"the operator's own node is not a
+counterparty. The operator's node is identical to the operator from the network's
+point of view."* This entry first reached for `horizon.rs`'s rule — *"a client
+never presents it as authority, to a user or to a counterparty"* — and called the
+node a counterparty. It is not one. An instance runs on a credential its
+operator's client signed and holds no seed (design §23.3); it speaks as its
+operator, and the network sees one identity. **So this is not two parties sharing
+state; it is one identity's state on two devices**, and nothing in the no-shared-
+state rule touches it.
+
+**What travels is therefore the view and the records it was folded from.** The
+view because the node may simply have it, the records because they are what
+carries each member's `KeyMaterial` — which is why the four on the bench are
+7.1 KB each, and why a node given them can bind the members they name. The three
 refused subordinates would attach.
 
-**Two things it does not settle.**
+**Corrected too** [author, 2026-11-03]: *"a node that moves hosting is a newly
+launched node with some preloaded data. The provisioning and auth process will
+have to be re-run."* So the bootstrap/repair distinction this entry drew
+collapses: **there is no rehosting case separate from a launch**, and
+provisioning is not a stopgap in front of the attach path but the ordinary way a
+node comes to know its subnet.
 
-- **It does not avoid the decision above.** If a provisioned bundle is applied
-  record by record it meets the same deadlock: the two prerequisites and the two
-  out-of-store subjects do not care which door they came through. So
-  provisioning needs *a* or *c* anyway, and chiefly the willingness to take a
-  bounded bundle that cannot be reach-tested yet.
-- **It is a bootstrap and not a repair.** It serves the node the operator is
-  launching now. A node that moves hosting, a member adopted later, a subnet
-  taught by somebody two steps down — each still wants the attach path to work,
-  which is the same decision again.
+**Which narrows what the deadlock above is still about.** Not the operator's own
+node — that one is provisioned. It is about being taught by a **member**, and
+even that narrows: an operator's horizon reaches two steps, so what a member
+holds that their patron does not is mostly outside the node's own `h_store`
+anyway. **The teaching at attach is a top-up, and provisioning is the mechanism**
+— the inverse of the order this entry first assumed.
 
-**Where it would travel.** Not the launch script: cloud-init user data is
-bounded at tens of kilobytes and four records already fill a quarter of it. The
+**But the deadlock still has to be answered**, because a provisioned bundle
+applied record by record meets it unchanged: the prerequisites and the
+out-of-store subjects do not care which door they came through. What provisioning
+needs is exactly what *a* describes — the willingness to take a bounded bundle
+from the operator's own client and judge reach after applying it, not before.
+
+**Where it travels.** Not the launch script: cloud-init user data is bounded at
+tens of kilobytes and four records already fill a quarter of it. The
 administration surface is the place — the same channel that already takes the run
 and the two signed records at enrolment — so the bundle arrives after the machine
 is up, bounded by what the surface takes, and a node whose operator provisions
