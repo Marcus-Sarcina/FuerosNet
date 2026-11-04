@@ -37,3 +37,8 @@ runs
 # Anonymising sidenet research: contextual work outside the core FN project
 /anonymizing-sidenet/
 crates/tools/phones-recovery.conf
+
+# The assistant's throwaway checkouts. `.claude/settings.json` beside them is
+# tracked on purpose — it carries a ruling (`1a22ca4`) — so this names the one
+# directory rather than `.claude/`.
+/.claude/worktrees/
