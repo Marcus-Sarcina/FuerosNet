@@ -433,6 +433,84 @@ the thing to check**: `capture` and `sign` must read `verified`, which is
 the application key contract holding across a real device, a rented node
 and a package in its own container.
 
+## G. The meetings re-run on the key-material build, 2026-11-03
+
+**Why they were re-run**: `ceb1d19` is the first build whose adoptions carry
+the adopted node's key material (`wire-format.md` §4.1 field 5). The records
+of the previous subnet carry none and cannot be amended, so no node could be
+taught that subnet (`infra-client-requirements.md` §4.4). Four phones wiped
+and made new through the first-run screen, identities in
+`runs/2026-11-03-meetings/identities.txt`; then four ceremonies **nodeless,
+no instruments** [author's ruling: meetings first, attached to nothing]. Every
+record witnessless, two signers.
+
+| # | Who | What | Record | Adoption / peering |
+|---|---|---|---|---|
+| T1 | GXV ← MRK | formation under GXV's own key | `b143d285` | subnet `bb10ab89`, named **Malkovich Manor** by its root |
+| T2 | GXV ← ZU8 | adoption into Malkovich Manor | `18aa415f` | `24cb46cf`, series 1 |
+| T3 | 4VC → ZU8 | client-initiated adoption, 4VC under ZU8 | `62773977` | `68bfcb8b`, series 1 |
+| T4 | MRK ↔ 4VC | regular meeting with the peering | `bc415ad0` | peering `0f9ccd61`; deposits 69,394 and 69,499 bytes, direct, each held by the other |
+
+GXV roots the subnet, MRK and ZU8 under GXV, 4VC under ZU8 — **4VC two steps
+from the root**, the member the application run needs: inside the owner's
+horizon without being the owner. The topology exists on the four phones and
+on nothing else, which is the state the attach's replay is for.
+
+**What it found.**
+
+- **T2's first attempt carried no adoption at all** (`2564e32a`, a plain
+  normal record; ZU8 held no position). The patron declared the adoption on
+  the *scan* side — `cer.begin initiator=false` — and `Meet.settled` discards
+  a responder's direction where the code carried none, the kind being the
+  inviter's and the responder's to refuse [author, 2026-09-29]. Nothing was
+  said on either screen. **Fixed by removing the choice rather than
+  honouring it** [author, 2026-11-03]: the two scan-with-a-direction buttons
+  are gone, `light-client-requirements.md` §7 now states the rule that
+  prevents the collision instead of describing how to resolve it, and PRD-05
+  is withdrawn with the opposition, its brief and its screen (`28f0dc1`,
+  `22cfc27`). The mutual adoption built across two meetings is untouched:
+  design §6.2.5's down-line check, TOP-027 and TOP-028.
+- **A series belongs to the node being adopted, not to the patron's count**:
+  series 1 for MRK, ZU8 and 4VC alike, each its own first
+  (`light-client-requirements.md` §7).
+- **The subnet's name does not reach the adopted party, and says so.** Both
+  phones: *"the name could not be sent: the serving node would not take the
+  message: it is unsent"*. A profile is hosted by the serving node and
+  carried in no transaction (`wire-format.md` §7.11), so nodeless the
+  publish has nowhere to go and the fetch nowhere to ask. The claim does
+  travel in the invitation — `publish_profile` stores locally before
+  returning its send, so the root holds the name whatever the send does —
+  but a patron that only *received* a subnet has no name to pass on, which
+  is why 4VC's frame read *"ZU8 will be the patron, in ZU8's subnet
+  `bb10ab89`…"*, by id. The same artefact the 2026-11-02 run recorded, now
+  with the failing send quoted rather than inferred. It also reads *ZU8's
+  subnet* where GXV roots it: the label is composed from the inviting
+  party's position, not the subnet's root.
+- **Field 5 is still not proven on the bench.** No phone event says whether
+  an adoption carried the key material, no shell extra dumps a record, and
+  grepping a patron's store proves nothing since it holds the counterparty's
+  material as a contact regardless. Proven in-process (CER-71); the bench
+  proof is functional and waits on a node being taught this subnet.
+- **The brief leaves no trace at all.** `MeetActivity` renders `brief()`
+  straight to the screen and logs no item, yet the brief carries the
+  authority consequences, the subnet claim as a claim (UX-016) and the
+  retention disclosure — and it is the screen the manual rows are about. A
+  row is covered only where a person watched at the time; for this run
+  nobody did, and it cannot be recovered afterwards. **Open with the
+  author**: whether to log the brief's row ids, and their text under
+  `fieldtest`.
+- **One carry refused with no reason.** MRK's `peer.carry sent=4 refused=1
+  left=0` against 4VC's `refused=0`. The deposits reconcile exactly in both
+  directions, so nothing was lost, and the refusal was not the deposit — that
+  went direct at 69,507 bytes. The count is logged deliberately ("what did
+  not go is said, not swallowed", `ffi/src/net.rs`) but the reason is not, so
+  what it was cannot be said from the trace.
+- **Every leg went point-to-point.** `pay.route path=direct` throughout,
+  including the 69,507-byte deposit, with no node anywhere.
+- The new build was installed over the top with `adb install -r` between T1
+  and T2 and **every store survived** — GXV 2.5 MB, MRK 1.27 MB, ZU8 944 KB,
+  4VC 437 B — so the records held before the install were not remade.
+
 ## Order
 
 A1 is done; a second plain pair was met deliberately (`82ffd1b-a2-adoption-1`, mislabelled) for series B. B1 nodeless hung at witness selection and showed that nothing met nodeless is reachable afterwards and no cross-pair verifier can qualify — so **B and A4 are with-node**, and the node bench (C1's proven half plus `field-run.sh`) is now the gate for nearly everything left. **[ruled, author, 2026-10-10]** witnesses are required where available and a witnessless meeting is not genesis-only; proceeding witnessless past genesis needs design §13.2 / `wire-format.md` §3.2 amended, which gates any nodeless meeting between non-genesis phones. **That amendment was made** [author, 2026-10-19] — no witness floor, design §13.2 reasoning from the same case the ruling was about — so the condition is met and the gate is lifted, and the rows above are re-planned against it below. **The node bench is up (2026-10-11, `82ffd1b-a4-node-1`), all four phones re-provisioned at genesis on it; the two met pairs are to be re-met there for B.** A4, B's with-node
