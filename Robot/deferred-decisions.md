@@ -229,12 +229,36 @@ this does not wait on A3b's question.
 
 **What (e) leaves open, and none of it is rhetorical:**
 
-1. **Propagation and proof.** A node told a row holds nothing to forward and
-   cannot show a sceptic why a member is a member. Is an operator's node a
-   propagation participant for topology at all, or does the evidence live
-   with the members' own clients while the node only serves them? This
-   decides whether the table is the node's whole topology or a projection
-   beside the store.
+1. **Propagation and proof — mostly answered 2026-11-04, and the answer was
+   already in the tree.** The design has this category: `resolution::Ingestion`
+   is `VerifiedOnAcceptance` or `UnverifiedGossip`, the latter *"holds
+   unverified gossip; verification happens on contact"*, with the boundary
+   required to be explicit (`wire-format.md` §7.2) and the anchor table called
+   *"an index, not a credential store"*. The running node is configured
+   `unverified-gossip` today. So a node holding operator-asserted rows may
+   **forward** them as labelled gossip; it may not **prove** a membership, and
+   an index was never asked to.
+
+   **Verification at contact is unusually strong here**: contact is when the
+   material appears, and `Pins::keyhash_for_key` matches the presented
+   classical key against the material in the row — so **a row carrying key
+   material is self-verifying at contact.** The member proves the row by
+   turning up, with no record chain in that step.
+
+   **The asymmetry to build to** [author's two cases, 2026-11-04]: an
+   operator's own node may take rows **bare**, because the assertion is the
+   authority it already serves under; a row that travels **node to node** wants
+   the asserting operator's signature over it, because a sibling or a new
+   patron is not this node's authority and could otherwise assert members of a
+   subnet it does not root. Same row, signed outward, bare inward — which
+   keeps "no justification" exactly where the author wants it.
+
+   **What remains of this question**: whether an operator's node should hold
+   records *as well*, for the cases where proof rather than service is wanted,
+   or whether the table is the whole of its topology. An operator's signature
+   is authoritative only for what that operator roots, so nothing here lets a
+   node prove a binding in a third party's subnet — taken as the right limit
+   rather than a gap, subject to the author.
 2. **Acknowledgements.** `NodeView::ack_policy` has the node acknowledge
    adoptions of its subordinates under its delegated credential — an
    attestation to others. May it sign one over a binding it was told about

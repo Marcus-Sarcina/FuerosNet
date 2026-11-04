@@ -1358,3 +1358,128 @@ fn leaving_a_binding_keeps_whatever_another_binding_still_reaches() {
         "a txid that is not an adoption of this node changes nothing"
     );
 }
+
+// ---- the horizon as a table its operator maintains ---------------------
+//
+// `Robot/deferred-decisions.md` option (e), the author's direction of
+// 2026-11-04: a holder asserts a row per horizon member, with no
+// transaction behind it and no reason carried. No acceptance markers yet —
+// an entry wants a rule quoted from a root document, and the rule waits on
+// the three questions still open under that option.
+
+fn asserted(w: &World, node: &str, patron: &str, series: u32, version: u64) -> Asserted {
+    Asserted {
+        node: w.kh(node),
+        patron: w.kh(patron),
+        series,
+        adoption: [version as u8; 32],
+        from: 1_000 + version,
+        anchor: Some(SUBNET),
+        slot: Some(1),
+        version,
+    }
+}
+
+#[test]
+fn an_asserted_row_binds_a_member_without_any_transaction() {
+    let w = World::new(&["alice", "bob"]);
+    let mut t = Table::with_me(w.kh("alice"));
+    assert_eq!(
+        t.assert(&asserted(&w, "bob", "alice", 1, 1)),
+        Asserting::Bound
+    );
+
+    // bound for every question an attach asks
+    assert!(t.subordinates(&w.kh("alice")).contains(&w.kh("bob")));
+    assert!(t.patrons(&w.kh("bob")).contains(&w.kh("alice")));
+    assert!(t.is_node(&w.kh("bob")));
+    assert!(t.in_h_store(&w.kh("alice"), &w.kh("bob")));
+
+    // **and not weighed as evidence**: a position, not an edge
+    let b = t
+        .bindings()
+        .iter()
+        .find(|b| b.node == w.kh("bob"))
+        .expect("the row");
+    assert_eq!(b.evidence, EvidenceStatus::Unevaluated);
+    assert!(b.open());
+}
+
+#[test]
+fn a_later_version_updates_the_row_and_an_earlier_one_does_nothing() {
+    let w = World::new(&["alice", "bob"]);
+    let mut t = Table::with_me(w.kh("alice"));
+    t.assert(&asserted(&w, "bob", "alice", 1, 1));
+
+    let mut second = asserted(&w, "bob", "alice", 1, 2);
+    second.slot = Some(4);
+    assert_eq!(t.assert(&second), Asserting::Updated);
+    assert_eq!(t.bindings().len(), 1, "an update replaces rather than adds");
+    assert_eq!(t.bindings()[0].slot, Some(4));
+
+    // the same version again, and an older one, are both stale
+    assert_eq!(t.assert(&second), Asserting::Stale { held: 2 });
+    assert_eq!(
+        t.assert(&asserted(&w, "bob", "alice", 1, 1)),
+        Asserting::Stale { held: 2 }
+    );
+    assert_eq!(t.bindings()[0].slot, Some(4), "nothing moved");
+}
+
+#[test]
+fn a_retraction_a_second_device_has_not_seen_is_not_undone_by_its_stale_insert() {
+    // **the author's motivating case** [2026-11-04]: two client devices,
+    // each posting what it holds. Without a version per row the one that
+    // has not seen the retraction brings the member back.
+    let w = World::new(&["alice", "bob"]);
+    let mut t = Table::with_me(w.kh("alice"));
+    t.assert(&asserted(&w, "bob", "alice", 1, 1));
+    assert_eq!(
+        t.retract(&w.kh("bob"), &w.kh("alice"), 1, 2),
+        Asserting::Retracted
+    );
+    assert!(!t.subordinates(&w.kh("alice")).contains(&w.kh("bob")));
+
+    // the other device, still at version 1, insists
+    assert_eq!(
+        t.assert(&asserted(&w, "bob", "alice", 1, 1)),
+        Asserting::Stale { held: 2 }
+    );
+    assert!(
+        !t.subordinates(&w.kh("alice")).contains(&w.kh("bob")),
+        "a stale insert must not resurrect a retracted row"
+    );
+
+    // and that device, once caught up, may assert it again
+    assert_eq!(
+        t.assert(&asserted(&w, "bob", "alice", 1, 3)),
+        Asserting::Bound
+    );
+    assert!(t.subordinates(&w.kh("alice")).contains(&w.kh("bob")));
+}
+
+#[test]
+fn only_an_asserted_row_is_retractable() {
+    let w = World::new(&["alice", "bob"]);
+    let mut t = Table::with_me(w.kh("alice"));
+    // nothing asserted under that identity
+    assert_eq!(
+        t.retract(&w.kh("bob"), &w.kh("alice"), 1, 1),
+        Asserting::Absent
+    );
+}
+
+#[test]
+fn the_versions_travel_with_a_table_handed_to_another_holder() {
+    // clone_for is how a table moves; a holder given one must not accept an
+    // assertion that table already superseded
+    let w = World::new(&["alice", "bob"]);
+    let mut t = Table::with_me(w.kh("alice"));
+    t.assert(&asserted(&w, "bob", "alice", 1, 7));
+    let mut moved = t.clone_for(w.kh("bob"));
+    assert_eq!(
+        moved.assert(&asserted(&w, "bob", "alice", 1, 7)),
+        Asserting::Stale { held: 7 }
+    );
+    assert_eq!(moved.asserted().count(), 1);
+}

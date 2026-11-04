@@ -273,6 +273,60 @@ type PendingDisavowal = (Keyhash, Keyhash, u64, Txid, Option<u64>);
 /// patron, series, txid, time.
 type PendingDeparture = (Keyhash, Keyhash, u32, Txid, u64);
 
+/// **A horizon row its holder asserts, with no transaction behind it.**
+///
+/// What an operator's client posts to its own node for each member of the
+/// horizon it serves, and what one holder hands another when a table moves
+/// rather than being replayed. It carries the binding's own identity so a
+/// row merges with one learned from the record itself, and `version` so two
+/// of the operator's devices converge.
+///
+/// **It carries no reason** [author, 2026-11-04]: the node runs under its
+/// operator's authority and is not being persuaded, so there is nothing to
+/// justify. The key material a row needs in order to authenticate the
+/// member at contact is the caller's to pin, not this table's to hold.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Asserted {
+    /// The subordinate.
+    pub node: Keyhash,
+    /// The patron.
+    pub patron: Keyhash,
+    /// The series the adoption opened.
+    pub series: u32,
+    /// The adoption the asserter names as the row's origin, kept so the row
+    /// carries provenance and merges with the record's own binding.
+    pub adoption: Txid,
+    /// The patron's clock on that adoption.
+    pub from: u64,
+    /// The subnet the adoption's locator named.
+    pub anchor: Option<Keyhash>,
+    /// The patron's slot the locator claimed.
+    pub slot: Option<u8>,
+    /// The asserter's own monotonic version for this row. Strictly greater
+    /// than the last accepted for the same row, or the assertion is stale
+    /// and nothing moves.
+    pub version: u64,
+}
+
+/// What an assertion or a retraction came to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Asserting {
+    /// The row is in the table and was not before.
+    Bound,
+    /// The row was already there and this version replaced it.
+    Updated,
+    /// The row is gone from the table.
+    Retracted,
+    /// Nothing moved: the version is not ahead of what this row already
+    /// accepted.
+    Stale {
+        /// The version the table holds for the row.
+        held: u64,
+    },
+    /// Nothing to retract under that identity.
+    Absent,
+}
+
 /// The local table of verified bindings and what a node derives from it
 /// (design §6, §11.2.1). **Every node's table is its own** and nothing
 /// here is shared state.
@@ -304,6 +358,13 @@ pub struct Table {
     /// Which of two bindings to prefer where both are open, for a holder that
     /// has a reason; `None` leaves the table's own order.
     pub prefer: Option<Preference>,
+    /// **The version last accepted for each asserted row**, by
+    /// `(node, patron, series)`: see [`Table::assert`].  An assertion
+    /// carries no transaction, so it carries no order of its own, and two
+    /// of the operator's devices asserting the same horizon would
+    /// otherwise resurrect each other's retractions.  Holds the version of
+    /// a retraction too, so a stale insert cannot undo it.
+    asserted: BTreeMap<(Keyhash, Keyhash, u32), u64>,
 }
 
 impl Table {
@@ -356,6 +417,9 @@ impl Table {
             pending_seq: self.pending_seq,
             pending_ceiling: self.pending_ceiling,
             prefer: self.prefer.clone(),
+            // the versions travel with the rows: a holder handed this table
+            // must not accept an assertion the table already superseded
+            asserted: self.asserted.clone(),
         }
     }
 
@@ -706,6 +770,95 @@ impl Table {
             }),
             None => Ok(()),
         }
+    }
+
+    /// **Take an asserted row** (`Robot/deferred-decisions.md`, the horizon
+    /// as a table its operator maintains).
+    ///
+    /// The binding lands with [`EvidenceStatus::Unevaluated`] — the
+    /// design's own words for it, *"a position, not yet a weighed edge"* —
+    /// which is exactly what an assertion is: enough to bind a member and
+    /// let it attach, not enough to weigh as evidence. A row that the
+    /// record later supplies for real goes through [`Table::apply`] and
+    /// supersedes this one on the usual path.
+    ///
+    /// **Refuses nothing but staleness.** A node takes what its operator
+    /// says about the horizon its operator roots; the structural checks
+    /// that guard a *transaction* are checks on a claim by somebody else.
+    pub fn assert(&mut self, a: &Asserted) -> Asserting {
+        let id = (a.node, a.patron, a.series);
+        if let Some(&held) = self.asserted.get(&id)
+            && a.version <= held
+        {
+            return Asserting::Stale { held };
+        }
+        self.asserted.insert(id, a.version);
+        self.nodes.insert(a.node);
+        self.nodes.insert(a.patron);
+        let row = Binding {
+            node: a.node,
+            patron: a.patron,
+            series: a.series,
+            adoption: a.adoption,
+            from: a.from,
+            end: None,
+            anchor: a.anchor,
+            slot: a.slot,
+            evidence: EvidenceStatus::Unevaluated,
+        };
+        match self
+            .bindings
+            .iter_mut()
+            .find(|b| b.node == a.node && b.patron == a.patron && b.series == a.series)
+        {
+            Some(b) => {
+                *b = row;
+                Asserting::Updated
+            }
+            None => {
+                self.bindings.push(row);
+                Asserting::Bound
+            }
+        }
+    }
+
+    /// **Retract an asserted row**: the delete of the same interface.
+    ///
+    /// The row leaves the table and the version is kept, so an insert that
+    /// was in flight from another of the operator's devices cannot bring it
+    /// back. Only a row this table accepted as an assertion is retractable
+    /// — a binding learned from a transaction is ended by a transaction,
+    /// not by an operator changing their mind.
+    pub fn retract(
+        &mut self,
+        node: &Keyhash,
+        patron: &Keyhash,
+        series: u32,
+        version: u64,
+    ) -> Asserting {
+        let id = (*node, *patron, series);
+        match self.asserted.get(&id) {
+            Some(&held) if version <= held => Asserting::Stale { held },
+            None => Asserting::Absent,
+            Some(_) => {
+                self.asserted.insert(id, version);
+                let before = self.bindings.len();
+                self.bindings
+                    .retain(|b| !(b.node == *node && b.patron == *patron && b.series == series));
+                if self.bindings.len() == before {
+                    Asserting::Absent
+                } else {
+                    Asserting::Retracted
+                }
+            }
+        }
+    }
+
+    /// The rows this table took as assertions, by `(node, patron, series)`
+    /// and the version each stands at: what a holder re-publishes, and what
+    /// it persists so a restart does not forget which rows were asserted.
+    pub fn asserted(&self) -> impl Iterator<Item = ((Keyhash, Keyhash, u32), u64)> + '_ {
+        self.asserted.iter().map(|(k, v)| (*k, *v))
     }
 
     /// Apply one verified transaction to the table, issuing acknowledgements
