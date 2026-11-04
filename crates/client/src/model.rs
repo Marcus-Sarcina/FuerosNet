@@ -228,14 +228,27 @@ pub struct HorizonRow {
 }
 
 impl Client {
-    /// **Every row this client would assert about its own horizon.**
+    /// **Every row this client would assert about the horizon it serves.**
     ///
-    /// Open bindings only: a binding that ended is not a member, and the
-    /// retraction that says so is its own act. A binding whose member's
-    /// key material this client does not hold is **left out rather than
-    /// sent incomplete** — a row without material names a member the node
-    /// could never recognise, so sending it would bind a position that can
-    /// never attach and report success.
+    /// **Read from this client's own archive, which is the only complete
+    /// record of what it has issued** — the same answer
+    /// [`Client::free_index`] gives, and for the same reason. The
+    /// propagated copy is fed by a serving node, so a client with none
+    /// holds no edge of its own in it: a subnet formed with no node at all
+    /// — which `Robot/field-test-sequence.md` §G is entirely made of —
+    /// would otherwise leave every patron unable to name a single member.
+    ///
+    /// **An ending is taken only where this client can see one.** A
+    /// departure or disavowal in the propagated copy closes a row; where
+    /// nothing propagated, every adoption this client issued stands, which
+    /// is the conservative half of the same asymmetry: a patron with no
+    /// news has no grounds to drop a member it adopted. Dropping one on
+    /// silence would unbind a party that is still there.
+    ///
+    /// A member whose key material this client does not hold is **left out
+    /// rather than sent incomplete**: a row without material names a
+    /// member the node could never recognise, so sending it would bind a
+    /// position that can never attach and report success.
     ///
     /// **The revision is this client's clock** [2026-11-04, and the
     /// weakest part of this]: an assertion carries no transaction and so
@@ -244,33 +257,55 @@ impl Client {
     /// right when two devices agree about the time and wrong by exactly
     /// their skew when they do not. The node answers a losing post with
     /// the revision it holds, so a caller that is refused can come back
-    /// above it — which is the self-healing counter this should become.
+    /// above it — the self-healing counter this wants next.
     #[must_use]
     pub fn horizon_rows(&self) -> Vec<HorizonRow> {
         let now = self.now_s();
-        self.horizon
+        let me = self.public.keyhash;
+        // endings this client has actually been told about
+        let ended: std::collections::BTreeSet<rhtn_archive::Keyhash> = self
+            .horizon
             .table
             .bindings()
             .iter()
-            .filter(|b| b.open())
-            .filter_map(|b| {
-                let material = self
-                    .known
-                    .iter()
-                    .find(|i| i.keyhash == b.node)
-                    .map(rhtn_crypto::Identity::key_material)?;
-                Some(HorizonRow {
-                    node: b.node,
-                    patron: b.patron,
-                    series: b.series,
-                    adoption: b.adoption,
-                    from: b.from,
-                    anchor: b.anchor,
-                    slot: b.slot,
-                    material,
-                    revision: now,
-                })
-            })
-            .collect()
+            .filter(|b| b.patron == me && b.end.is_some())
+            .map(|b| b.node)
+            .collect();
+        let mut rows = Vec::new();
+        for rec in self
+            .archive
+            .records()
+            .filter(|r| r.tx_type == rhtn_archive::tx::TYPE_ADOPTION)
+        {
+            let (Some(node), Some(patron)) = (rec.field_hash(1), rec.field_hash(2)) else {
+                continue;
+            };
+            if patron != me || ended.contains(&node) {
+                continue;
+            }
+            let Some(series) = rec.seqno().map(|s| s.series) else {
+                continue;
+            };
+            let Some(material) = self
+                .known
+                .iter()
+                .find(|i| i.keyhash == node)
+                .map(rhtn_crypto::Identity::key_material)
+            else {
+                continue;
+            };
+            rows.push(HorizonRow {
+                node,
+                patron,
+                series,
+                adoption: rec.txid,
+                from: rec.time,
+                anchor: rec.locator().map(|l| l.anchor),
+                slot: rec.locator().and_then(|l| l.slot()),
+                material,
+                revision: now,
+            });
+        }
+        rows
     }
 }

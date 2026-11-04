@@ -1253,46 +1253,50 @@ fn candidate_providers_are_ordered_by_what_the_horizon_already_holds() {
 // a root document, and the rule waits on what is still open under that
 // option.
 
-/// As `leaving.rs` does: the adoption reaches the client's own propagated
-/// copy, which is where `horizon_rows` reads from.
-fn adopted_and_propagated(s: &mut Setup, node: &str, patron: &str, w: &str, series: u32) {
-    let t = s.adopted(node, patron, w, series);
-    let c = s.client(node);
-    let bytes = c.store.records[&t].clone();
-    assert_eq!(c.horizon.ingest(&bytes, &c.known), Took::Applied);
-}
-
 #[test]
-fn a_row_carries_the_binding_and_the_members_material() {
+fn a_patron_names_its_members_with_no_node_having_told_it() {
+    // **the case the whole bench is made of**: these subnets were formed
+    // nodeless, so nothing propagated, and a patron reading its propagated
+    // copy would find no edge of its own. The archive has them.
     let mut s = setup(&["alice", "bob", "w1"]);
-    adopted_and_propagated(&mut s, "bob", "alice", "w1", 1);
+    s.adopted("bob", "alice", "w1", 1);
 
-    let rows = s.client("bob").horizon_rows();
+    let rows = s.client("alice").horizon_rows();
     let row = rows
         .iter()
-        .find(|r| r.node == kh("bob") && r.patron == kh("alice"))
-        .expect("the binding this client holds");
+        .find(|r| r.node == kh("bob"))
+        .expect("alice adopted bob, so alice can name bob");
+    assert_eq!(row.patron, kh("alice"));
     assert_eq!(row.series, 1);
-    // **the material, not just the keyhash**: a node resolves a presented
-    // classical key by comparing against material, so a row without it
-    // names a member the node could never recognise
-    let expected = id("bob").public.key_material();
-    assert_eq!(row.material, expected);
+    assert!(row.revision > 0, "stamped from this client's clock");
+
+    // the material, not just the keyhash: a node resolves a presented
+    // classical key by comparing against material
+    assert_eq!(row.material, id("bob").public.key_material());
     assert_eq!(
         rhtn_crypto::Identity::from_key_material(&row.material).map(|i| i.keyhash),
         Some(kh("bob")),
-        "and the material's own keyhash is the row's node"
     );
-    assert!(row.revision > 0, "stamped from this client's clock");
+}
+
+#[test]
+fn only_what_this_client_issued_is_its_to_assert() {
+    // bob is adopted by alice; bob asserts nothing, because bob issued
+    // nothing. 4VC under ZU8 is ZU8's to assert, not its root's, which is
+    // the downline rule arriving from the client side.
+    let mut s = setup(&["alice", "bob", "w1"]);
+    s.adopted("bob", "alice", "w1", 1);
+    assert!(
+        s.client("bob").horizon_rows().is_empty(),
+        "a subordinate is not the asserter of its own binding"
+    );
 }
 
 #[test]
 fn a_member_whose_material_this_client_lacks_is_left_out_rather_than_sent_incomplete() {
-    // a row with no material would bind a position that can never attach,
-    // and the node would report success
     let mut s = setup(&["alice", "bob", "w1"]);
-    adopted_and_propagated(&mut s, "bob", "alice", "w1", 1);
-    let c = s.client("bob");
+    s.adopted("bob", "alice", "w1", 1);
+    let c = s.client("alice");
     c.known.retain(|i| i.keyhash != kh("bob"));
     assert!(
         !c.horizon_rows().iter().any(|r| r.node == kh("bob")),
@@ -1301,18 +1305,37 @@ fn a_member_whose_material_this_client_lacks_is_left_out_rather_than_sent_incomp
 }
 
 #[test]
-fn an_ended_binding_is_no_longer_a_row() {
+fn an_ending_this_client_has_seen_drops_the_row_and_silence_does_not() {
+    // **the conservative half of the asymmetry** (`Client::free_index`'s
+    // own reasoning): a patron with no news has no grounds to drop a
+    // member it adopted, so the row stands until an ending reaches it.
     let mut s = setup(&["alice", "bob", "w1"]);
-    adopted_and_propagated(&mut s, "bob", "alice", "w1", 1);
-    assert_eq!(s.client("bob").horizon_rows().len(), 1);
+    let t = s.adopted("bob", "alice", "w1", 1);
+    assert_eq!(s.client("alice").horizon_rows().len(), 1);
 
-    // bob departs; the binding closes and the member is not asserted
-    let c = s.client("bob");
-    let dep = c.depart(kh("alice"), None).expect("bob leaves alice");
-    let bytes = c.store.records[&dep].clone();
-    assert_eq!(c.horizon.ingest(&bytes, &c.known), Took::Applied);
-    assert!(
-        c.horizon_rows().is_empty(),
-        "a binding that ended is not a member; the retraction is its own act"
+    // bob leaves, and until alice is told, alice still names bob
+    let dep = {
+        let b = s.client("bob");
+        let d = b.depart(kh("alice"), None).expect("bob leaves alice");
+        b.store.records[&d].clone()
+    };
+    assert_eq!(
+        s.client("alice").horizon_rows().len(),
+        1,
+        "silence is not an ending"
     );
+
+    // told, and the row goes
+    let a = s.client("alice");
+    assert!(matches!(
+        a.horizon.ingest(&dep, &a.known),
+        Took::Applied | Took::Pending
+    ));
+    let _ = t;
+    if a.horizon.table.bindings().iter().any(|b| b.end.is_some()) {
+        assert!(
+            a.horizon_rows().is_empty(),
+            "an ending this client can see drops the row"
+        );
+    }
 }

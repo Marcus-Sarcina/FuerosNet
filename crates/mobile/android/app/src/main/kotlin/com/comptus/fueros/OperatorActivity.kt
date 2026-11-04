@@ -313,6 +313,14 @@ class OperatorActivity : Activity() {
             isEnabled = false
             setOnClickListener {
                 pageAt?.let {
+                    // **and its horizon goes with the visit.** A node
+                    // enrolled before it could be told, or one whose
+                    // operator has adopted somebody since, is caught up by
+                    // the tap they were making anyway rather than by a
+                    // control they have to know about. Idempotent: a row
+                    // the node already holds at a later revision is
+                    // answered `Stale` and nothing moves.
+                    tokenFor(it)?.let { t -> assertHorizon(it, t, narration) }
                     startActivity(
                         Intent(this@OperatorActivity, NodePageActivity::class.java)
                             .putExtra("at", it),
@@ -752,6 +760,12 @@ class OperatorActivity : Activity() {
                         if (took) {
                             remember(Instance(surface, subnet, label, provider.name.lowercase(), id))
                             rememberToken(surface, minted)
+                            // **the launch enrols too, and this is the path
+                            // a new machine actually takes** [2026-11-04]:
+                            // the first wiring of this put it only on the
+                            // separate enrolment flow, so a node launched
+                            // from here was never told its horizon.
+                            assertHorizon(surface, minted, narration)
                             atField.setText(surface)
                             tokenField.setText(minted)
                             endpointField.setText("$ip:${Launch.QUIC_PORT}")
