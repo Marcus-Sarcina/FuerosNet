@@ -184,6 +184,77 @@ replay from an attaching member is a different case from a flood.
 | **b. Privilege the operator's own replay** — the client whose `operator.material` this node holds is the authority it serves under, so its records skip the reach test | smallest change; the operator can always repair their own node | only the operator can teach, so a subnet is taught only what its operator holds — and a member two steps down is invisible until its own patron attaches, which needs the same fix one level along |
 | **c. Order the replay topologically** and let each record extend the horizon before the next is judged | possibly nothing else needed, if order is the whole of it | the log shows two records refused on **reach** and not on order, so this looks necessary and not sufficient |
 | **d. Provision the node with the subnet** at launch | no protocol change | an operator's client would hand over records the node could have been taught, and a node that moves hosting still cannot be taught by the members it serves |
+| **e. The horizon is a table the operator maintains** — CRUD on the administration surface, one row per member, no justification carried | the replay stops being how a node learns at all; teaching works for any member, two devices converge, and node-to-node merges are the same operation | the node holds no evidence for what it was told, so it can neither forward that topology nor prove a membership to a third party; and a row needs a version, or two devices resurrect each other's deletes |
+
+**(e) is the author's stated direction** [author, 2026-11-04]: *"I want the
+trust horizon to function more like a database table on both the node and the
+light client… the light client posts an insertion for each held horizon
+member, then later may post an update or a delete, all without needing to
+express to the node the reason or justification for the change."* The entry
+stays open for the four questions below it raises, not for the direction.
+
+**Why it fits rather than fights the design.** The node runs on
+`operator.material` under a delegated credential — verified on the bench
+2026-11-04, its `operator.material` hashing to GXV's own keyhash — so from
+the network's point of view it *is* its operator (author, on this run: "the
+operator's node is identical to the operator"). The per-record reach test
+treats it as a stranger to be convinced by evidence, when it is an agent
+acting under the authority whose table it is being handed. Authority comes
+from the channel here, as it already does for the three signature-carrying
+routes; the payload needs to carry no reason.
+
+**Most of it exists.** `rhtn_archive::topology::Table` is the table, held in
+`NodeView` as `table` beside `store`, and `Table::clone_for(me)` already
+copies one holder's bindings into another's, reprojected — used by
+`node/runtime.rs`, `daemon/administration.rs` and four tests, and documented
+as "what a test does when both learned the same transactions". What is
+missing is a wire form, a route, and a merge rule, not a subsystem.
+
+**A row is `Binding` plus key material.** `Binding` carries `node`, `patron`,
+`series`, the `adoption` txid, `from` (the patron's clock), `end`, `anchor`,
+`slot` and `evidence: EvidenceStatus` — already enough to merge on
+`(node, patron, series)` without any replay order, and `EvidenceStatus`
+already admits a binding known without its proof. **Material is the
+addition, and it is not optional**: a keyhash is taken over the classical and
+post-quantum keys together, the transport presents only the 32-byte classical
+key, and `Pins::keyhash_for_key` resolves it by `classical_member(km) ==
+Some(key)` over `(keyhash, material)` pairs. So a keyhash alone cannot
+authenticate a presented key, which is what `Refusal::Unbound` was on this
+run. **This is what field 5 is for**: an adoption carrying the adopted node's
+key material is how a row acquires the one thing the node must have.
+
+**Chunking is answered** [author, 2026-11-04]: one row per post, ~2 KB, so
+`wire-format.md` §9.2's 256 KiB request-frame bound is never approached and
+this does not wait on A3b's question.
+
+**What (e) leaves open, and none of it is rhetorical:**
+
+1. **Propagation and proof.** A node told a row holds nothing to forward and
+   cannot show a sceptic why a member is a member. Is an operator's node a
+   propagation participant for topology at all, or does the evidence live
+   with the members' own clients while the node only serves them? This
+   decides whether the table is the node's whole topology or a projection
+   beside the store.
+2. **Acknowledgements.** `NodeView::ack_policy` has the node acknowledge
+   adoptions of its subordinates under its delegated credential — an
+   attestation to others. May it sign one over a binding it was told about
+   and holds no evidence for? It is vouching on its operator's word, which
+   may be exactly right, but it is an attestation leaving the node.
+3. **A row's version.** CRUD with no justification has no ordering of its
+   own. Two devices, which the author names as a motivating case, will
+   resurrect each other's deletes unless each row carries a monotonic
+   version the operator sets. Needed even single-device if posts can arrive
+   out of order.
+4. **Divergence from the records.** A delete removes access; a departure or
+   disavowal is a signed transaction. The operator may delete a row the
+   network's records still support, or hold one they do not. Every node's
+   view being its own, this is probably allowed — but it should be allowed
+   on purpose.
+
+**Not yet in any root document**, deliberately: this would be an
+administration-surface act (`infra-client-requirements.md` §8.2) and touches
+`light-client-requirements.md` §10, and the four questions above change what
+those would say.
 
 **What was done meanwhile**: nothing. The node is enrolled and serving with GXV
 attached, the three subordinates refused, and the field-test image in place so
