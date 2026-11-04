@@ -131,8 +131,22 @@ pub const ADMIN_PORT: u16 = 7449;
 /// volume is chowned to before the container runs.
 pub const IMAGE_UID: u32 = 10001;
 /// **Where the image is pulled from unless the operator names another**
-/// [author, 2026-10-25]: the project's registry, as its page names it.
-pub const REGISTRY_DEFAULT: &str = "ggcr.io/mzuech/fuerosnet";
+/// [author, 2026-11-03]: Docker Hub, which is built to serve pulls at a
+/// rate a launch path produces and the project's own forge is not.
+///
+/// **It is not the forge's registry, and the reason is not visibility**
+/// [bench, 2026-11-03]. The image there is public, but the registry's
+/// token endpoint sits behind a bot challenge — `ggcr.io/v2/` answers
+/// `401` naming the realm `gitgud.io/jwt/auth`, and that realm answers an
+/// anonymous pull scope with `403` and an interstitial page. No container
+/// engine passes it, so `podman pull` fails in `cloud-init` and the
+/// machine comes up with no node: twice, before the cause was found
+/// ([`silence`]). A launch is for an operator with no shell, so the one
+/// thing the pull may not need is a credential.
+///
+/// The forge still holds every commit-tagged image beside the code that
+/// built it, which is what traces a rented host back to a tree.
+pub const REGISTRY_DEFAULT: &str = "docker.io/sarcina";
 /// The image's name under the registry.
 pub const IMAGE: &str = "rhtnd";
 /// The tag pulled unless another is named.

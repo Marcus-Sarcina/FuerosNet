@@ -19,7 +19,9 @@ WORKSPACE="$(cd "$HERE/.." && pwd)"
 FLAVOUR=releasable
 TAG=""
 PUSH=no
-REGISTRY="${RHTN_REGISTRY:-ggcr.io/mzuech/fuerosnet}"
+# the registry a launch pulls from, so a hand-built image can stand in for
+# CI's (`launch::REGISTRY_DEFAULT`); $RHTN_REGISTRY names another
+REGISTRY="${RHTN_REGISTRY:-docker.io/sarcina}"
 NAME="${RHTN_IMAGE:-rhtnd}"
 
 while [ $# -gt 0 ]; do
