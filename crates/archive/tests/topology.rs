@@ -1459,14 +1459,61 @@ fn a_retraction_a_second_device_has_not_seen_is_not_undone_by_its_stale_insert()
 }
 
 #[test]
-fn only_an_asserted_row_is_retractable() {
-    let w = World::new(&["alice", "bob"]);
+fn a_row_no_transaction_can_end_is_still_the_holders_to_delete() {
+    // **the author's reason** [2026-11-04]: "there is no guarantee that the
+    // inverse transaction will reach the node, since transactions change
+    // topology and networks have outages." So a binding this table learned
+    // from a real adoption is retractable too, or a node whose departure
+    // never arrived serves a member who has gone.
+    let mut w = World::new(&["alice", "bob"]);
+    let f = w.formation("alice", "bob");
+    let rec = w.adopt_in_slot("bob", "alice", f.txid, 1, 1);
     let mut t = Table::with_me(w.kh("alice"));
-    // nothing asserted under that identity
+    apply(&mut t, &w, &f);
+    apply(&mut t, &w, &rec);
+    let b = t
+        .bindings()
+        .iter()
+        .find(|b| b.node == w.kh("bob"))
+        .expect("the adoption bound bob")
+        .clone();
+
     assert_eq!(
-        t.retract(&w.kh("bob"), &w.kh("alice"), 1, 1),
+        t.retract(&b.node, &b.patron, b.series, 1),
+        Asserting::Retracted
+    );
+    assert!(t.bindings().is_empty());
+
+    // nothing under an identity the table never held
+    assert_eq!(
+        t.retract(&w.kh("bob"), &w.kh("alice"), 9, 1),
         Asserting::Absent
     );
+}
+
+#[test]
+fn an_asserter_may_speak_only_for_its_own_downline() {
+    // alice roots it, bob is under alice, carol under bob
+    let w = World::new(&["alice", "bob", "carol", "dave"]);
+    let mut t = Table::with_me(w.kh("alice"));
+    t.assert(&asserted(&w, "bob", "alice", 1, 1));
+    t.assert(&asserted(&w, "carol", "bob", 1, 1));
+
+    // bob may assert about its own subordinates, and about carol's
+    let under_bob = asserted(&w, "dave", "bob", 1, 2);
+    assert!(t.may_assert(&w.kh("bob"), &under_bob));
+    let under_carol = asserted(&w, "dave", "carol", 1, 2);
+    assert!(
+        t.may_assert(&w.kh("bob"), &under_carol),
+        "carol is in bob's downline, so bob speaks for carol's edges"
+    );
+
+    // but carol may not assert about bob's edges, nor about alice's
+    assert!(!t.may_assert(&w.kh("carol"), &under_bob));
+    assert!(!t.may_assert(&w.kh("carol"), &asserted(&w, "dave", "alice", 1, 2)));
+
+    // and a party the table does not know speaks for nothing
+    assert!(!t.may_assert(&w.kh("dave"), &under_bob));
 }
 
 #[test]

@@ -822,13 +822,23 @@ impl Table {
         }
     }
 
-    /// **Retract an asserted row**: the delete of the same interface.
+    /// **Retract a row**: the delete of the same interface.
     ///
-    /// The row leaves the table and the version is kept, so an insert that
-    /// was in flight from another of the operator's devices cannot bring it
-    /// back. Only a row this table accepted as an assertion is retractable
-    /// — a binding learned from a transaction is ended by a transaction,
-    /// not by an operator changing their mind.
+    /// The row leaves the table and the version is kept, so an insert in
+    /// flight from another of the holder's devices cannot bring it back.
+    ///
+    /// **Any row, not only an asserted one** [author, 2026-11-04]: *"there
+    /// is no guarantee that the inverse transaction will reach the node,
+    /// since transactions change topology and networks have outages."* A
+    /// binding learned from a transaction is ordinarily ended by one — a
+    /// departure or a disavowal through [`Table::apply`] — but a holder
+    /// whose node never received that transaction would otherwise be left
+    /// serving a member who has gone, with no way to say so. The table is
+    /// its holder's own view, and this is the holder correcting it.
+    ///
+    /// A transaction arriving later still applies: an adoption that turns
+    /// up after a retraction re-binds, which is a transaction being
+    /// authoritative over an assertion, and the holder may retract again.
     pub fn retract(
         &mut self,
         node: &Keyhash,
@@ -837,21 +847,45 @@ impl Table {
         version: u64,
     ) -> Asserting {
         let id = (*node, *patron, series);
-        match self.asserted.get(&id) {
-            Some(&held) if version <= held => Asserting::Stale { held },
-            None => Asserting::Absent,
-            Some(_) => {
-                self.asserted.insert(id, version);
-                let before = self.bindings.len();
-                self.bindings
-                    .retain(|b| !(b.node == *node && b.patron == *patron && b.series == series));
-                if self.bindings.len() == before {
-                    Asserting::Absent
-                } else {
-                    Asserting::Retracted
-                }
-            }
+        if let Some(&held) = self.asserted.get(&id)
+            && version <= held
+        {
+            return Asserting::Stale { held };
         }
+        self.asserted.insert(id, version);
+        let before = self.bindings.len();
+        self.bindings
+            .retain(|b| !(b.node == *node && b.patron == *patron && b.series == series));
+        if self.bindings.len() == before {
+            Asserting::Absent
+        } else {
+            Asserting::Retracted
+        }
+    }
+
+    /// **Whether `asserter` may assert `row` to this table**, where the
+    /// assertion came from another party rather than from this table's own
+    /// holder.
+    ///
+    /// **Authority follows the topology** [author, 2026-11-04]: *"the node
+    /// trusts its operator completely. Once the operator has taught it
+    /// about a node in its horizon, it trusts that node for everything in
+    /// that node's downline."* So an asserter may speak for an edge whose
+    /// patron is itself or sits beneath it, and for nothing else — which
+    /// stops a sibling or a new patron asserting members of a subnet it
+    /// does not root.
+    ///
+    /// **The asserter's identity is the channel's, not the row's.** The
+    /// transport binds a connection to a keyhash before anything is read
+    /// (`Pins::keyhash_for_key`), so a row needs no signature of its own
+    /// for this test to mean something.
+    ///
+    /// This does not cover the holder's own assertions: those arrive over
+    /// an authorised administration channel and are the authority the node
+    /// serves under, so nothing here is asked about them.
+    #[must_use]
+    pub fn may_assert(&self, asserter: &Keyhash, row: &Asserted) -> bool {
+        *asserter == row.patron || self.downline_contains(asserter, &row.patron)
     }
 
     /// The rows this table took as assertions, by `(node, patron, series)`
