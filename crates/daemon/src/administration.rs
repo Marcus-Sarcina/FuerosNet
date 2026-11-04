@@ -253,6 +253,11 @@ pub struct Surface {
     /// an act has nowhere to persist and refuses rather than changing a
     /// table that would not survive a restart.
     pub grants: Option<PathBuf>,
+    /// **Where this node keeps the rows its operator asserts about its
+    /// horizon** ([`crate::horizon`]). Absent, an assertion has nowhere to
+    /// persist and refuses rather than binding a member who would be gone
+    /// at the next restart.
+    pub horizon: Option<PathBuf>,
     /// Where this node keeps its packages' blocks and logs
     /// (`infra-client-requirements.md` §9.3), for a reload to provision
     /// against.
@@ -449,6 +454,14 @@ impl Surface {
             ("GET", "/") | ("GET", "/index.html") => self.page(query),
             ("GET", "/node") => self.fetch(query),
             ("POST", "/node/acknowledge") => self.acknowledge(&req.body),
+            // **two routes, kept apart from any peer's** [author,
+            // 2026-11-04: "separate routes"]: what arrives here is the
+            // operator's own, authorised by the act proof this surface
+            // demands, and needs no downline test. A row asserted by
+            // another node is a different authority and will have its own
+            // route, gated by `Table::may_assert`.
+            ("POST", "/node/horizon") => self.horizon_assert(&req.body),
+            ("POST", "/node/horizon/drop") => self.horizon_retract(&req.body),
             ("POST", "/node/grant") => self.grant_add(&req.body),
             ("POST", "/node/grant/narrow") => self.grant_narrow(&req.body),
             ("POST", "/node/grant/drop") => self.grant_drop(&req.body),
@@ -1297,6 +1310,210 @@ impl Surface {
         ))
     }
 
+    /// **Assert one row of this node's horizon** — the insert and the
+    /// update of the operator's own CRUD interface onto the table
+    /// (`Robot/deferred-decisions.md`, the horizon as a table its operator
+    /// maintains).
+    ///
+    /// **It carries no reason and none is asked for** [author,
+    /// 2026-11-04]: this node runs under its operator's authority and is
+    /// not being persuaded of anything. What authorises the act is the
+    /// channel — the act proof every route here demands, or arrival on the
+    /// loopback — and nothing in the body.
+    ///
+    /// **The material is not optional.** A keyhash is taken over the
+    /// classical and post-quantum keys together and the transport presents
+    /// only the classical one, so `Pins::keyhash_for_key` resolves a
+    /// connection by comparing against material. A row without it names a
+    /// member this node could never recognise, which is the
+    /// `Refusal::Unbound` the bench met on 2026-11-03.
+    fn horizon_assert(&self, body: &[u8]) -> (u16, String) {
+        let f = form(body);
+        let Ok(node) = self.acting() else {
+            return (409, "this node is not serving yet\n".into());
+        };
+        let Some(dir) = self.horizon.clone() else {
+            return (
+                409,
+                "the configuration names no `horizon` directory, so a row could not survive a \
+                 restart and is refused rather than binding a member who would be gone at the \
+                 next start\n"
+                    .into(),
+            );
+        };
+        let (Some(subject), Some(patron)) = (key32(field(&f, "node")), key32(field(&f, "patron")))
+        else {
+            return (
+                400,
+                "`node` and `patron` are 64 lower-case hex digits\n".into(),
+            );
+        };
+        let Ok(series) = field(&f, "series").parse::<u32>() else {
+            return (400, "`series` is a number\n".into());
+        };
+        let Ok(revision) = field(&f, "revision").parse::<u64>() else {
+            return (
+                400,
+                "`revision` is a number, and is this client's own counter for the row: a second \
+                 device posting an older one changes nothing\n"
+                    .into(),
+            );
+        };
+        let Some(material) = unhex(field(&f, "material")) else {
+            return (
+                400,
+                "`material` is the member's key material, in hex\n".into(),
+            );
+        };
+        if rhtn_crypto::Identity::from_key_material(&material)
+            .is_none_or(|id| id.keyhash != subject)
+        {
+            return (
+                400,
+                "that material is not a KeyMaterial array whose keyhash is `node`\n".into(),
+            );
+        }
+        let row = rhtn_archive::topology::Asserted {
+            node: subject,
+            patron,
+            series,
+            adoption: key32(field(&f, "adoption")).unwrap_or([0; 32]),
+            from: field(&f, "from").parse::<u64>().unwrap_or(0),
+            anchor: key32(field(&f, "anchor")),
+            slot: field(&f, "slot").parse::<u8>().ok(),
+            revision,
+        };
+        // **the disk first, then the table.** A row bound in memory and not
+        // written is a member who attaches until the next restart, which is
+        // the failure `grants` refuses for the same reason.
+        if let Err(e) = crate::horizon::write(
+            &dir,
+            &crate::horizon::Row {
+                row: row.clone(),
+                material: Some(material.clone()),
+                retracted: false,
+            },
+        ) {
+            return (500, format!("{e}; nothing changed\n"));
+        }
+        let outcome = {
+            let mut view = node.view.lock().unwrap();
+            view.table.assert(&row)
+        };
+        // **pinned, and known.** The pin is what lets the transport resolve
+        // the key this member presents; `ids` is what lets the node verify
+        // what that member signs. A row that gave only one of the two binds
+        // a member whose records this node could not check.
+        let pinned = node.node.cfg.pins.pin(subject, &material).is_ok();
+        if let Some(id) = rhtn_crypto::Identity::from_key_material(&material) {
+            let mut ids = node.ids.lock().unwrap();
+            if !ids.iter().any(|k| k.keyhash == subject) {
+                ids.push(id);
+            }
+        }
+        tracing::info!(
+            target: "daemon",
+            step = "surface_act",
+            act = "horizon-assert",
+            node8 = %rhtn_node::diag::id8(&subject),
+            outcome = ?outcome,
+            pinned,
+            "daemon.lifecycle"
+        );
+        seen(format!(
+            "{outcome:?}: {} under {} at series {series}, revision {revision}. The row is written, \
+             so a restart takes it{}.",
+            rhtn_node::diag::id8(&subject),
+            rhtn_node::diag::id8(&patron),
+            if pinned {
+                ""
+            } else {
+                ", but its material could not be pinned, so it cannot attach until that is fixed"
+            }
+        ))
+    }
+
+    /// **Retract one row** — the delete of the same interface.
+    ///
+    /// **Any row, not only one this node was told.** A binding a
+    /// transaction made is ordinarily ended by one, but [author,
+    /// 2026-11-04] *"there is no guarantee that the inverse transaction
+    /// will reach the node, since transactions change topology and
+    /// networks have outages"* — so an operator whose node never received
+    /// a departure can still say the member has gone.
+    ///
+    /// **It takes the row's identity and its revision, and nothing else**,
+    /// so it is the one act here that a node of any version can honour:
+    /// a retraction that depended on the row's own format would stop
+    /// working the moment the two ends ran different builds.
+    fn horizon_retract(&self, body: &[u8]) -> (u16, String) {
+        let f = form(body);
+        let Ok(node) = self.acting() else {
+            return (409, "this node is not serving yet\n".into());
+        };
+        let Some(dir) = self.horizon.clone() else {
+            return (
+                409,
+                "the configuration names no `horizon` directory, so a retraction could not \
+                 survive a restart and is refused rather than letting the row come back\n"
+                    .into(),
+            );
+        };
+        let (Some(subject), Some(patron)) = (key32(field(&f, "node")), key32(field(&f, "patron")))
+        else {
+            return (
+                400,
+                "`node` and `patron` are 64 lower-case hex digits\n".into(),
+            );
+        };
+        let Ok(series) = field(&f, "series").parse::<u32>() else {
+            return (400, "`series` is a number\n".into());
+        };
+        let Ok(revision) = field(&f, "revision").parse::<u64>() else {
+            return (400, "`revision` is a number\n".into());
+        };
+        // **the tombstone first.** If the row left the table and the
+        // tombstone were not written, the next start would read the row
+        // back and bind the member again.
+        if let Err(e) = crate::horizon::write(
+            &dir,
+            &crate::horizon::Row {
+                row: rhtn_archive::topology::Asserted {
+                    node: subject,
+                    patron,
+                    series,
+                    adoption: [0; 32],
+                    from: 0,
+                    anchor: None,
+                    slot: None,
+                    revision,
+                },
+                material: None,
+                retracted: true,
+            },
+        ) {
+            return (500, format!("{e}; nothing changed\n"));
+        }
+        let outcome = {
+            let mut view = node.view.lock().unwrap();
+            view.table.retract(&subject, &patron, series, revision)
+        };
+        tracing::info!(
+            target: "daemon",
+            step = "surface_act",
+            act = "horizon-retract",
+            node8 = %rhtn_node::diag::id8(&subject),
+            outcome = ?outcome,
+            "daemon.lifecycle"
+        );
+        seen(format!(
+            "{outcome:?}: {} under {} at series {series}. The tombstone is written at revision \
+             {revision}, so neither a restart nor another device's older insert brings it back.",
+            rhtn_node::diag::id8(&subject),
+            rhtn_node::diag::id8(&patron),
+        ))
+    }
+
     /// Add a grant: roles, and one clause of §10.3's vocabulary or none at
     /// all, which grants over every member of the owner's horizon.
     fn grant_add(&self, body: &[u8]) -> (u16, String) {
@@ -2062,6 +2279,11 @@ fn asked(f: &[(String, String)]) -> Result<crate::packages::Package, String> {
 
 fn hex(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
+}
+
+/// A keyhash from a form field: 64 hex digits, or nothing.
+fn key32(s: &str) -> Option<[u8; 32]> {
+    unhex(s).and_then(|v| <[u8; 32]>::try_from(v).ok())
 }
 
 fn unhex(s: &str) -> Option<Vec<u8>> {

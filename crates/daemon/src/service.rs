@@ -410,6 +410,7 @@ impl Service {
                             anchor_entry: cfg.anchor_entry.clone(),
                             node: serving_node.clone(),
                             grants: cfg.grants.clone(),
+                            horizon: cfg.horizon.clone(),
                             state: cfg.state.clone(),
                             hosting: cfg.resources.clone().map(|p| {
                                 let (memory, fuel) = cfg
@@ -559,6 +560,60 @@ impl Service {
                 );
             }
             _ => {}
+        }
+        // **after the fold, never before it.**  `restore_materialised`
+        // rebuilds the table from the snapshot and the store, so rows
+        // asserted ahead of it would be the first thing it discarded
+        // [2026-11-04].
+        // **the rows this node's operator asserted about its horizon**
+        // ([`crate::horizon`]), taken before anything serves: a member
+        // bound by an assertion must be bound at the start, or the first
+        // thing it meets is a refusal for a row the operator can see on
+        // their own page.  The material is pinned with the row, because a
+        // keyhash cannot authenticate a presented key on its own
+        // (`Pins::keyhash_for_key` compares against material).
+        if let Some(dir) = cfg.horizon.as_deref() {
+            let (rows, refused) = crate::horizon::read_all(dir);
+            let mut bound = 0usize;
+            let mut tombstones = 0usize;
+            for r in &rows {
+                if r.retracted {
+                    // the revision alone, so an insert in flight from
+                    // another of the operator's devices cannot resurrect it
+                    view.table
+                        .retract(&r.row.node, &r.row.patron, r.row.series, r.row.revision);
+                    tombstones += 1;
+                    continue;
+                }
+                view.table.assert(&r.row);
+                bound += 1;
+                if let Some(m) = &r.material
+                    && pins.pin(r.row.node, m).is_err()
+                {
+                    tracing::warn!(
+                        target: "daemon",
+                        step = "horizon_material_refused",
+                        node8 = %rhtn_node::diag::id8(&r.row.node),
+                        "daemon.lifecycle"
+                    );
+                }
+            }
+            for e in &refused {
+                tracing::warn!(
+                    target: "daemon",
+                    step = "horizon_row_refused",
+                    why = %e,
+                    "daemon.lifecycle"
+                );
+            }
+            tracing::info!(
+                target: "daemon",
+                step = "horizon_read",
+                bound,
+                tombstones,
+                refused = refused.len(),
+                "daemon.lifecycle"
+            );
         }
         if let Some((patron, _)) = &cfg.upstream {
             view.serving_node = Some(*patron);

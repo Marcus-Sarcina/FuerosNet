@@ -67,6 +67,13 @@ pub const HOSTING: &str = "/var/lib/rhtn/hosting";
 /// The state directory [`HOSTING`] names for the same reason.
 pub const HOSTED_STATE: &str = "/var/lib/rhtn/state";
 
+/// **Where an instance keeps the rows its operator asserts about its
+/// horizon** (`rhtn_daemon::horizon`), named and created for the same
+/// reason the two above are: an instance whose configuration named none
+/// would refuse every such act, and nothing but a reprovisioning would
+/// change that.
+pub const HORIZON: &str = "/var/lib/rhtn/horizon";
+
 /// **Where a replacement administration token is kept** [author,
 /// 2026-11-02]: the token in the configuration travelled in this script,
 /// which anything on the machine can read back from the provider's
@@ -222,6 +229,7 @@ pub fn node_config(token_hex: &str, quic: u16, admin: u16) -> String {
          topology = \"/var/lib/rhtn/topology\"\n\
          archive = \"/var/lib/rhtn/archive\"\n\
          grants = \"/var/lib/rhtn/grants\"\n\
+         horizon = \"/var/lib/rhtn/horizon\"\n\
          resources = \"/var/lib/rhtn/hosting\"\n\
          state = \"/var/lib/rhtn/state\"\n\
          heartbeat = 30\n\
@@ -371,6 +379,7 @@ pub fn user_data(
          runcmd:\n\
          \x20 - {CLEAR_EXPIRY}\n\
          \x20 - mkdir -p {HOSTED_STATE}\n\
+         \x20 - mkdir -p {HORIZON}\n\
          \x20 - chown -R {IMAGE_UID}:{IMAGE_UID} /var/lib/rhtn\n\
          \x20 - chmod 0700 /var/lib/rhtn\n\
          \x20 - chmod 0700 /root/.ssh\n\

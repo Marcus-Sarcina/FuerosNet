@@ -149,6 +149,19 @@ pub struct Config {
     /// restart or a re-read. Absent, a grant act has nowhere to persist
     /// and says so.
     pub grants: Option<PathBuf>,
+    /// **Where this node keeps the rows its operator asserts about its
+    /// horizon** ([`crate::horizon`]): a directory the node owns, one file
+    /// per row.
+    ///
+    /// **Not the topology store.** That is this node's seen-set, which a
+    /// node that forgets replays a forwarding wave over
+    /// (`infra-client-requirements.md` §4.3). These are assertions with no
+    /// transaction behind them, which bind a member so it can attach;
+    /// the same distinction `archive` already has from `topology`.
+    ///
+    /// Absent, an act asserting a row has nowhere to persist and refuses
+    /// rather than binding a member who would be gone at the next restart.
+    pub horizon: Option<PathBuf>,
     /// **Where this node keeps what its hosted packages own**
     /// (`infra-client-requirements.md` §9.3): a storage block per instance
     /// under `blocks/`, a log per instance under `logs/`. Absent, a package
@@ -354,6 +367,7 @@ struct File {
     upstream: Option<Spanned<Upstream>>,
     resources: Option<PathBuf>,
     grants: Option<PathBuf>,
+    horizon: Option<PathBuf>,
     state: Option<PathBuf>,
     #[serde(rename = "resource-limits")]
     resource_limits: Option<Spanned<Limits>>,
@@ -640,6 +654,7 @@ impl Config {
             archive: f.archive,
             resources: f.resources,
             grants: f.grants,
+            horizon: f.horizon,
             state: f.state,
             resource_limits,
             log,
