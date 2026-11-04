@@ -340,3 +340,45 @@ others.
 declines gives nothing and is reached by code at the next meeting — and it is
 **the patron's to delete**, visible where the rest of what they hold about that
 member is visible.
+
+---
+
+## 7. A socket-backed package has nowhere to keep its data [queued, author, 2026-11-04]
+
+**Specified and not implemented.** `infra-client-requirements.md` §9.3 gives
+each hosted instance a storage block — *"a durable region of your own
+storage, provisioned per instance when you bind it and destroyed only by an
+operator's act, never by a reload; **flat files under names of the package's
+choosing**; a byte ceiling the package declared and you enforce on every
+write; `sync` as the whole of the durability discipline"* — and
+`resource-requirements.md` §3.3 delivers `rhtn-block` and
+`rhtn-block-bytes` on the relationships exchange so an instance is told
+where its block is.
+
+**The wasm path has it; the container path does not.** RSC-63 serves a
+sandboxed package its block *as bindings*, which a host function can do
+without any filesystem, and DMN-35 provisions the block and the log. Both
+are implemented and neither is about containers. But
+`packaging/package-runner.sh`'s `start` runs a socket-backed package
+
+    podman run -d --name <name> --restart=always --network=host \
+      --read-only --tmpfs /tmp --cap-drop=all --security-opt=no-new-privileges
+
+with **nothing mounted**, so the flat files `infra-client-requirements.md` §9.3 promises have nowhere to
+go and anything the package writes dies with its container.
+
+**The ceiling is the hard half.** `infra-client-requirements.md` §9.3 makes it the host's to enforce *on
+every write*, and a bind mount gives a host no way to see a write at all. A
+loopback filesystem image sized to the declared ceiling, mounted per
+instance, would enforce it exactly and bound what one package can take from
+a small VM — which matters, since the author's point about VM storage is
+that it is limited [2026-11-04]. The alternatives are a filesystem quota,
+which ties the node to the host's filesystem, or periodic checking, which
+is not "on every write".
+
+**Why it is queued rather than open**: the author has said to burn down owed
+features, and this is one — written down, relied on by
+`resource-requirements.md`, and reachable the moment a hosted package tries
+to keep anything. It is not on the acceptance catalogue's owed list because
+the two entries that name a block are satisfied by the wasm path, so nothing
+currently counts this as missing.
