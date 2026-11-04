@@ -147,6 +147,74 @@ object Provision {
             exchange(at, "POST", target, body, "application/x-www-form-urlencoded").getOrThrow()
         }
 
+    /**
+     * **One proved POST to a route that is not a declared act.**
+     *
+     * The declared acts are what an operator is *offered* on a page, with
+     * their fields drawn as a form. The horizon routes are not that: a row
+     * is hex a person has no reason to read or type, and putting them on
+     * that surface would be plumbing in front of a user. So they are plain
+     * routes, posted with the same proof.
+     */
+    fun post(
+        at: String,
+        tokenHex: String,
+        path: String,
+        fields: List<Pair<String, String>>,
+    ): Result<String> = runCatching {
+        val body = form(fields)
+        val target = proved(tokenHex, "POST", path, body).getOrThrow()
+        exchange(at, "POST", target, body, "application/x-www-form-urlencoded").getOrThrow()
+    }
+
+    /**
+     * **Assert this client's whole horizon to a node it operates**, a row
+     * at a time (`Robot/deferred-decisions.md`, the horizon as a table its
+     * operator maintains).
+     *
+     * **A row at a time, not a table at once** [author, 2026-11-04:
+     * "chunking is fine"]: one row is about two kilobytes, so nothing here
+     * approaches `wire-format.md` §9.2's request-frame bound, and a row
+     * that is refused does not take the others with it.
+     *
+     * **What the kernel decided is not re-decided here.** Which bindings
+     * are rows, what each carries and what was left out for want of key
+     * material are all settled by `Participant.horizonRows`; this posts
+     * them and counts what the node said.
+     */
+    fun assertHorizon(
+        at: String,
+        tokenHex: String,
+        rows: List<uniffi.rhtn_ffi.HorizonRow>,
+    ): Result<Posted> = runCatching {
+        var taken = 0
+        val refused = mutableListOf<String>()
+        for (r in rows) {
+            val fields = buildList {
+                add("node" to r.node)
+                add("patron" to r.patron)
+                add("series" to r.series.toString())
+                add("revision" to r.revision.toString())
+                add("material" to r.material)
+                add("adoption" to r.adoption)
+                add("from" to r.from.toString())
+                r.anchor?.let { add("anchor" to it) }
+                r.slot?.let { add("slot" to it.toString()) }
+            }
+            post(at, tokenHex, "/node/horizon", fields).fold(
+                onSuccess = { taken += 1 },
+                // **the member, and what the node said about it**: a row
+                // refused for one member is not the others' problem, and an
+                // operator reading this is being told which one
+                onFailure = { refused += "${r.node.take(8)}: ${it.message ?: "refused"}" },
+            )
+        }
+        Posted(taken, refused)
+    }
+
+    /** What asserting a horizon came to: rows the node took, and what it refused. */
+    data class Posted(val taken: Int, val refused: List<String>)
+
     /** **What the instance declares it can be asked for**, as it sent it. */
     fun acts(at: String, tokenHex: String): Result<String> = runCatching {
         val target = proved(tokenHex, "GET", "/node/acts", ByteArray(0)).getOrThrow()

@@ -4,6 +4,7 @@
 
 mod common;
 
+use common::harness::*;
 use common::*;
 use rhtn_archive::record::Record;
 use rhtn_archive::topology::Snapshot;
@@ -1243,4 +1244,75 @@ fn candidate_providers_are_ordered_by_what_the_horizon_already_holds() {
     );
     assert_eq!(seen.get(&64501).map(|s| s.len()), Some(1), "w1 alone");
     assert_eq!(seen.get(&64502), None, "nothing is held of an unseen ASN");
+}
+
+// ---- the rows a client would assert to a node it operates -------------
+//
+// `Robot/deferred-decisions.md` option (e), the author's direction of
+// 2026-11-04. No acceptance markers yet: an entry wants a rule quoted from
+// a root document, and the rule waits on what is still open under that
+// option.
+
+/// As `leaving.rs` does: the adoption reaches the client's own propagated
+/// copy, which is where `horizon_rows` reads from.
+fn adopted_and_propagated(s: &mut Setup, node: &str, patron: &str, w: &str, series: u32) {
+    let t = s.adopted(node, patron, w, series);
+    let c = s.client(node);
+    let bytes = c.store.records[&t].clone();
+    assert_eq!(c.horizon.ingest(&bytes, &c.known), Took::Applied);
+}
+
+#[test]
+fn a_row_carries_the_binding_and_the_members_material() {
+    let mut s = setup(&["alice", "bob", "w1"]);
+    adopted_and_propagated(&mut s, "bob", "alice", "w1", 1);
+
+    let rows = s.client("bob").horizon_rows();
+    let row = rows
+        .iter()
+        .find(|r| r.node == kh("bob") && r.patron == kh("alice"))
+        .expect("the binding this client holds");
+    assert_eq!(row.series, 1);
+    // **the material, not just the keyhash**: a node resolves a presented
+    // classical key by comparing against material, so a row without it
+    // names a member the node could never recognise
+    let expected = id("bob").public.key_material();
+    assert_eq!(row.material, expected);
+    assert_eq!(
+        rhtn_crypto::Identity::from_key_material(&row.material).map(|i| i.keyhash),
+        Some(kh("bob")),
+        "and the material's own keyhash is the row's node"
+    );
+    assert!(row.revision > 0, "stamped from this client's clock");
+}
+
+#[test]
+fn a_member_whose_material_this_client_lacks_is_left_out_rather_than_sent_incomplete() {
+    // a row with no material would bind a position that can never attach,
+    // and the node would report success
+    let mut s = setup(&["alice", "bob", "w1"]);
+    adopted_and_propagated(&mut s, "bob", "alice", "w1", 1);
+    let c = s.client("bob");
+    c.known.retain(|i| i.keyhash != kh("bob"));
+    assert!(
+        !c.horizon_rows().iter().any(|r| r.node == kh("bob")),
+        "left out, not sent without material"
+    );
+}
+
+#[test]
+fn an_ended_binding_is_no_longer_a_row() {
+    let mut s = setup(&["alice", "bob", "w1"]);
+    adopted_and_propagated(&mut s, "bob", "alice", "w1", 1);
+    assert_eq!(s.client("bob").horizon_rows().len(), 1);
+
+    // bob departs; the binding closes and the member is not asserted
+    let c = s.client("bob");
+    let dep = c.depart(kh("alice"), None).expect("bob leaves alice");
+    let bytes = c.store.records[&dep].clone();
+    assert_eq!(c.horizon.ingest(&bytes, &c.known), Took::Applied);
+    assert!(
+        c.horizon_rows().is_empty(),
+        "a binding that ended is not a member; the retraction is its own act"
+    );
 }

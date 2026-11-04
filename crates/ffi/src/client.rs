@@ -3104,6 +3104,38 @@ impl Participant {
         })
     }
 
+    /// **Every row this client would assert about its own horizon to a
+    /// node it operates** (`Robot/deferred-decisions.md`, the horizon as a
+    /// table its operator maintains).
+    ///
+    /// Open bindings whose member's key material this client holds. A
+    /// binding that ended is not a member; a member whose material is
+    /// missing is left out rather than sent incomplete, since a row
+    /// without it names a member the node could never recognise.
+    ///
+    /// **A shell posts these and decides nothing**: the order, the
+    /// revisions and what is left out are all settled here.
+    #[must_use]
+    pub fn horizon_rows(&self) -> Vec<HorizonRow> {
+        crate::diag::call_plain("horizon_rows", || {
+            self.handle
+                .with_blocking(|c| c.horizon_rows())
+                .into_iter()
+                .map(|r| HorizonRow {
+                    node: hex(&r.node),
+                    patron: hex(&r.patron),
+                    series: r.series,
+                    adoption: hex(&r.adoption),
+                    from: r.from,
+                    anchor: r.anchor.as_ref().map(|a| hex(a)),
+                    slot: r.slot,
+                    material: hex(&r.material),
+                    revision: r.revision,
+                })
+                .collect()
+        })
+    }
+
     /// **As the party being adopted: check the body, then sign it**
     /// (`light-client-requirements.md` §7). The patron built it and this
     /// device is shown it, so every field is checked against what this
@@ -3815,6 +3847,42 @@ pub fn administration_act_proof(
     }
     let p = rhtn_crypto::enrolment::act_proof(&token, &nonce, &method, &path, &body);
     Ok(p.iter().map(|b| format!("{b:02x}")).collect())
+}
+
+/// Bytes as lower-case hex, in this file's own idiom.
+fn hex(b: &[u8]) -> String {
+    b.iter().map(|x| format!("{x:02x}")).collect()
+}
+
+/// **One row of this client's own horizon, ready to post to a node it
+/// operates** (`rhtn_client::model::HorizonRow`): every field already in
+/// the form the administration surface reads, so a shell composes a body
+/// and does not compose a protocol.
+///
+/// **Hex, because this ends up in a form.** The surface takes
+/// `application/x-www-form-urlencoded` like the acts beside it, so a shell
+/// posts these as they are.
+#[derive(uniffi::Record)]
+pub struct HorizonRow {
+    /// The subordinate, 64 hex digits.
+    pub node: String,
+    /// The patron, 64 hex digits.
+    pub patron: String,
+    /// The series the adoption opened.
+    pub series: u32,
+    /// The adoption that opened it, 64 hex digits.
+    pub adoption: String,
+    /// The patron's clock on that adoption.
+    pub from: u64,
+    /// The subnet the locator named, where it named one.
+    pub anchor: Option<String>,
+    /// The patron's slot the locator claimed, where it claimed one.
+    pub slot: Option<u8>,
+    /// The member's key material, hex: what lets the node authenticate the
+    /// member when it connects, which a keyhash cannot do alone.
+    pub material: String,
+    /// This client's own counter for the row.
+    pub revision: u64,
 }
 
 /// **A package offered for installation, as a link or a code carries it**

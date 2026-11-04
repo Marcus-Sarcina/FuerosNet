@@ -192,3 +192,85 @@ impl Client {
         How::of(n)
     }
 }
+
+/// **A row this client would assert to a node it operates**
+/// (`Robot/deferred-decisions.md`, the horizon as a table its operator
+/// maintains): one binding of this client's own horizon, with the key
+/// material that lets the node authenticate the member when it connects.
+///
+/// **Not a transaction and not evidence.** It carries the binding's
+/// identity so it merges with one the node later learns from the record
+/// itself, and no reason at all: a node runs under its operator's
+/// authority and is not being persuaded of anything.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HorizonRow {
+    /// The subordinate.
+    pub node: rhtn_archive::Keyhash,
+    /// The patron.
+    pub patron: rhtn_archive::Keyhash,
+    /// The series the adoption opened.
+    pub series: u32,
+    /// The adoption that opened it.
+    pub adoption: Txid,
+    /// The patron's clock on that adoption.
+    pub from: u64,
+    /// The subnet the adoption's locator named.
+    pub anchor: Option<rhtn_archive::Keyhash>,
+    /// The patron's slot the locator claimed.
+    pub slot: Option<u8>,
+    /// **The member's key material**, which is the part a keyhash cannot
+    /// replace: a keyhash is taken over both keys and the transport
+    /// presents only the classical one, so a node resolves a connection by
+    /// comparing the presented key against material it holds.
+    pub material: Vec<u8>,
+    /// This client's own counter for the row.
+    pub revision: u64,
+}
+
+impl Client {
+    /// **Every row this client would assert about its own horizon.**
+    ///
+    /// Open bindings only: a binding that ended is not a member, and the
+    /// retraction that says so is its own act. A binding whose member's
+    /// key material this client does not hold is **left out rather than
+    /// sent incomplete** — a row without material names a member the node
+    /// could never recognise, so sending it would bind a position that can
+    /// never attach and report success.
+    ///
+    /// **The revision is this client's clock** [2026-11-04, and the
+    /// weakest part of this]: an assertion carries no transaction and so
+    /// no order of its own, and two of an operator's devices must still
+    /// converge. Wall-clock seconds make the later post win, which is
+    /// right when two devices agree about the time and wrong by exactly
+    /// their skew when they do not. The node answers a losing post with
+    /// the revision it holds, so a caller that is refused can come back
+    /// above it — which is the self-healing counter this should become.
+    #[must_use]
+    pub fn horizon_rows(&self) -> Vec<HorizonRow> {
+        let now = self.now_s();
+        self.horizon
+            .table
+            .bindings()
+            .iter()
+            .filter(|b| b.open())
+            .filter_map(|b| {
+                let material = self
+                    .known
+                    .iter()
+                    .find(|i| i.keyhash == b.node)
+                    .map(rhtn_crypto::Identity::key_material)?;
+                Some(HorizonRow {
+                    node: b.node,
+                    patron: b.patron,
+                    series: b.series,
+                    adoption: b.adoption,
+                    from: b.from,
+                    anchor: b.anchor,
+                    slot: b.slot,
+                    material,
+                    revision: now,
+                })
+            })
+            .collect()
+    }
+}

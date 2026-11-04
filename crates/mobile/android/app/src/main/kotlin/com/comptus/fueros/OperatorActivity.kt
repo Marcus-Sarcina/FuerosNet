@@ -405,6 +405,14 @@ class OperatorActivity : Activity() {
                             remember(Instance(ask.at, s?.id, s?.label() ?: "an instance (subnet not named)"))
                             rememberToken(ask.at, ask.token)
                             drawInstances()
+                            // **and it is told who is in the horizon it
+                            // serves** [author, 2026-11-04]: a node learns
+                            // its members from the table its operator
+                            // maintains, not from a replay it has no reach
+                            // to judge. Off this thread, since it is a row
+                            // per member over the network, and the operator
+                            // is told the count rather than asked anything.
+                            assertHorizon(ask.at, ask.token, narration)
                         }
                     }
                 }.start()
@@ -802,4 +810,36 @@ class OperatorActivity : Activity() {
         val endpoint: String?,
         val subnet: String?,
     )
+
+    /**
+     * **Tell a node this operator administers who is in the horizon it
+     * serves**, a row per member (`Robot/deferred-decisions.md`, the
+     * horizon as a table its operator maintains).
+     *
+     * **What the operator is told is a count, and what was refused.** They
+     * are not asked anything: a node runs under their authority, and the
+     * rows are hex they have no reason to read. A member left out for want
+     * of key material is the kernel's decision and is not reported here as
+     * a failure, because nothing failed.
+     */
+    private fun assertHorizon(at: String, token: String, narration: TextView) {
+        Thread {
+            val rows = Kernel.horizonRows()
+            if (rows.isEmpty()) {
+                return@Thread
+            }
+            val said = Provision.assertHorizon(at, token, rows).fold(
+                onSuccess = { p ->
+                    val refused = if (p.refused.isEmpty()) {
+                        ""
+                    } else {
+                        "\n" + p.refused.joinToString("\n") { "  refused — $it" }
+                    }
+                    "the node holds ${p.taken} of ${rows.size} member(s) of its horizon$refused"
+                },
+                onFailure = { "the horizon could not be sent: ${it.message ?: "refused"}" },
+            )
+            runOnUiThread { narration.text = "${narration.text}\n$said" }
+        }.start()
+    }
 }

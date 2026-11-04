@@ -973,7 +973,10 @@ impl Client {
         self.signer.as_deref().ok_or(Abort::NoSeed)
     }
 
-    fn now_s(&self) -> u64 {
+    /// This client's own clock in seconds. `pub(crate)` so the model
+    /// module can stamp a horizon row's revision from the same clock a
+    /// test sets [2026-11-04].
+    pub(crate) fn now_s(&self) -> u64 {
         self.device.clock.now_ms() / 1000
     }
 

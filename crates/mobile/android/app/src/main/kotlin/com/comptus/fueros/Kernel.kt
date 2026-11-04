@@ -2059,6 +2059,15 @@ object Kernel {
         return call("subnets", { emptyList() }) { p.subnets() }
     }
 
+    /** **Every row this device would assert about its horizon** to a node
+     *  it operates (`rhtn_client::model::HorizonRow`): open bindings whose
+     *  member's key material this device holds, each already in the form
+     *  the administration surface reads. */
+    fun horizonRows(): List<uniffi.rhtn_ffi.HorizonRow> {
+        val p = participant ?: return emptyList()
+        return call("horizonRows", { emptyList() }) { p.horizonRows() }
+    }
+
     /** The subnets this device roots and could bring under a patron. */
     fun subnetsRooted(): List<Subnet> {
         val p = participant ?: return emptyList()
