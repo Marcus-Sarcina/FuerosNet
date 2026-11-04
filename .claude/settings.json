@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(crates/tools/field-setup.sh --identity-only:*)",
+      "Bash(bash crates/tools/field-setup.sh --identity-only:*)"
+    ]
+  }
+}
