@@ -40,6 +40,9 @@ pub mod hosting;
 /// Where a resource's grants are kept: the node's own table, as
 /// against the operator's hosting file.
 pub mod grants;
+/// Where the rows an operator asserts about its horizon are kept: the
+/// table, as against the topology store's seen-set.
+pub mod horizon;
 pub mod operator;
 
 /// **What this node installed on its own host**: the record it keeps of

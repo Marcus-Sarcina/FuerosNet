@@ -1367,16 +1367,16 @@ fn leaving_a_binding_keeps_whatever_another_binding_still_reaches() {
 // an entry wants a rule quoted from a root document, and the rule waits on
 // the three questions still open under that option.
 
-fn asserted(w: &World, node: &str, patron: &str, series: u32, version: u64) -> Asserted {
+fn asserted(w: &World, node: &str, patron: &str, series: u32, revision: u64) -> Asserted {
     Asserted {
         node: w.kh(node),
         patron: w.kh(patron),
         series,
-        adoption: [version as u8; 32],
-        from: 1_000 + version,
+        adoption: [revision as u8; 32],
+        from: 1_000 + revision,
         anchor: Some(SUBNET),
         slot: Some(1),
-        version,
+        revision,
     }
 }
 
@@ -1417,7 +1417,7 @@ fn a_later_version_updates_the_row_and_an_earlier_one_does_nothing() {
     assert_eq!(t.bindings().len(), 1, "an update replaces rather than adds");
     assert_eq!(t.bindings()[0].slot, Some(4));
 
-    // the same version again, and an older one, are both stale
+    // the same revision again, and an older one, are both stale
     assert_eq!(t.assert(&second), Asserting::Stale { held: 2 });
     assert_eq!(
         t.assert(&asserted(&w, "bob", "alice", 1, 1)),
@@ -1429,7 +1429,7 @@ fn a_later_version_updates_the_row_and_an_earlier_one_does_nothing() {
 #[test]
 fn a_retraction_a_second_device_has_not_seen_is_not_undone_by_its_stale_insert() {
     // **the author's motivating case** [2026-11-04]: two client devices,
-    // each posting what it holds. Without a version per row the one that
+    // each posting what it holds. Without a revision per row the one that
     // has not seen the retraction brings the member back.
     let w = World::new(&["alice", "bob"]);
     let mut t = Table::with_me(w.kh("alice"));
@@ -1440,7 +1440,7 @@ fn a_retraction_a_second_device_has_not_seen_is_not_undone_by_its_stale_insert()
     );
     assert!(!t.subordinates(&w.kh("alice")).contains(&w.kh("bob")));
 
-    // the other device, still at version 1, insists
+    // the other device, still at revision 1, insists
     assert_eq!(
         t.assert(&asserted(&w, "bob", "alice", 1, 1)),
         Asserting::Stale { held: 2 }

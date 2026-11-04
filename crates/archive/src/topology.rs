@@ -302,10 +302,12 @@ pub struct Asserted {
     pub anchor: Option<Keyhash>,
     /// The patron's slot the locator claimed.
     pub slot: Option<u8>,
-    /// The asserter's own monotonic version for this row. Strictly greater
-    /// than the last accepted for the same row, or the assertion is stale
-    /// and nothing moves.
-    pub version: u64,
+    /// **The asserter's own monotonic counter for this row**, and nothing
+    /// to do with a format or software version [renamed 2026-11-04 after
+    /// the first name was read that way]. Strictly greater than the last
+    /// accepted for the same row, or the assertion is stale and nothing
+    /// moves. It is what makes two of a holder's devices converge.
+    pub revision: u64,
 }
 
 /// What an assertion or a retraction came to.
@@ -320,7 +322,7 @@ pub enum Asserting {
     /// Nothing moved: the version is not ahead of what this row already
     /// accepted.
     Stale {
-        /// The version the table holds for the row.
+        /// The revision the table holds for the row.
         held: u64,
     },
     /// Nothing to retract under that identity.
@@ -358,12 +360,12 @@ pub struct Table {
     /// Which of two bindings to prefer where both are open, for a holder that
     /// has a reason; `None` leaves the table's own order.
     pub prefer: Option<Preference>,
-    /// **The version last accepted for each asserted row**, by
+    /// **The revision last accepted for each asserted row**, by
     /// `(node, patron, series)`: see [`Table::assert`].  An assertion
     /// carries no transaction, so it carries no order of its own, and two
     /// of the operator's devices asserting the same horizon would
-    /// otherwise resurrect each other's retractions.  Holds the version of
-    /// a retraction too, so a stale insert cannot undo it.
+    /// otherwise resurrect each other's retractions.  Holds the revision
+    /// of a retraction too, so a stale insert cannot undo it.
     asserted: BTreeMap<(Keyhash, Keyhash, u32), u64>,
 }
 
@@ -417,7 +419,7 @@ impl Table {
             pending_seq: self.pending_seq,
             pending_ceiling: self.pending_ceiling,
             prefer: self.prefer.clone(),
-            // the versions travel with the rows: a holder handed this table
+            // the revisions travel with the rows: a holder handed this table
             // must not accept an assertion the table already superseded
             asserted: self.asserted.clone(),
         }
@@ -788,11 +790,11 @@ impl Table {
     pub fn assert(&mut self, a: &Asserted) -> Asserting {
         let id = (a.node, a.patron, a.series);
         if let Some(&held) = self.asserted.get(&id)
-            && a.version <= held
+            && a.revision <= held
         {
             return Asserting::Stale { held };
         }
-        self.asserted.insert(id, a.version);
+        self.asserted.insert(id, a.revision);
         self.nodes.insert(a.node);
         self.nodes.insert(a.patron);
         let row = Binding {
@@ -844,15 +846,15 @@ impl Table {
         node: &Keyhash,
         patron: &Keyhash,
         series: u32,
-        version: u64,
+        revision: u64,
     ) -> Asserting {
         let id = (*node, *patron, series);
         if let Some(&held) = self.asserted.get(&id)
-            && version <= held
+            && revision <= held
         {
             return Asserting::Stale { held };
         }
-        self.asserted.insert(id, version);
+        self.asserted.insert(id, revision);
         let before = self.bindings.len();
         self.bindings
             .retain(|b| !(b.node == *node && b.patron == *patron && b.series == series));
