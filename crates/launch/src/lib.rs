@@ -1529,4 +1529,48 @@ mod tests {
             "{e}"
         );
     }
+
+    /// **The node's run arguments live in two places and must agree**
+    /// [2026-11-04]. `cloud-init` creates the node container at launch;
+    /// `package-runner.sh`'s `node-upgrade` recreates it on a new image,
+    /// which is how a node is upgraded without losing the address its
+    /// operator does not own. If the two drifted, an upgrade would quietly
+    /// hand the node a different machine: no state volume, or a network
+    /// mode that closes its ports.
+    #[test]
+    fn the_runner_recreates_the_node_with_the_arguments_cloud_init_used() {
+        let script = PACKAGE_RUNNER;
+        for arg in [
+            "--name \"$RHTN_UP_NODE\"",
+            "--restart=always",
+            "--network=host",
+            "-v /var/lib/rhtn:/var/lib/rhtn",
+        ] {
+            assert!(
+                script.contains(arg),
+                "node-upgrade must carry {arg}, as cloud-init does"
+            );
+        }
+        // and the cloud-init line itself still carries them, so this test
+        // fails if either side moves
+        let image = Image {
+            registry: "reg.example/x".into(),
+            tag: "abc123".into(),
+        };
+        let user_data = user_data("82a301", "tok", &image, QUIC_PORT, ADMIN_PORT, None, None);
+        for arg in [
+            "--name rhtnd",
+            "--restart=always",
+            "--network=host",
+            "-v /var/lib/rhtn:/var/lib/rhtn",
+        ] {
+            assert!(user_data.contains(arg), "cloud-init must carry {arg}");
+        }
+        // **the pull precedes the removal**: a machine whose node was
+        // removed before an image was in hand has no node and no shell
+        let up = script.split("node-upgrade)").nth(1).expect("the verb");
+        let pull = up.find("pull \"$image\"").expect("it pulls");
+        let rm = up.find("rm -f").expect("it removes");
+        assert!(pull < rm, "the pull must come before any removal");
+    }
 }

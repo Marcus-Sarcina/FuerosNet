@@ -23,6 +23,22 @@
 #    logs <name> [<lines>]                       what one said
 #    pull <image-ref>                            fetch an image
 #    node-restart                                restart the node itself
+#    node-upgrade <image-ref>                    replace the node on a new image
+#
+#  **Why `node-upgrade` exists at all** [author, 2026-11-04]: "the node
+#  operators do not own their address space and are taking a randomly
+#  assigned IP from the cloud provider, meaning that relaunch costs them
+#  their reachability until the new IP propagates."  A new node image must
+#  therefore be installable on the machine already serving, and
+#  `node-restart` cannot do it: it restarts the same container, which holds
+#  the image it was created from whatever `pull` has since fetched.
+#
+#  **It is ordered in the one safe sequence.**  The node is asking for its
+#  own container to be destroyed, so it never reads the reply, and a step
+#  that failed after the removal would leave a machine with no node and an
+#  operator with no shell.  So: pull first and refuse on failure, with the
+#  running node untouched; only then replace, detached from this session so
+#  the caller's death cannot take the replacement with it.
 #
 #  **Three things it will not do.**  It will not touch a container whose
 #  name it did not make: every package runs as `rhtn-pkg-<name>`, and
@@ -126,6 +142,43 @@ case "$verb" in
     [ $# -eq 0 ] || refuse "node-restart takes nothing"
     say "node-restart"
     "$ENGINE" restart "$NODE"
+    ;;
+  node-upgrade)
+    image="$(image_of "${1:-}")"
+    shift
+    [ $# -eq 0 ] || refuse "node-upgrade takes one image reference"
+    say "node-upgrade $image"
+    # **the pull comes first and its failure changes nothing.**  A machine
+    # whose node was removed before an image was in hand is a machine with
+    # no node, reachable only by a shell its operator does not have.
+    "$ENGINE" pull "$image" || refuse "that image could not be pulled; the node is untouched"
+    # the digest now in hand, so a replacement that will not start can be
+    # put back on what was serving a moment ago
+    was="$("$ENGINE" inspect --format '{{.Image}}' "$NODE" 2> /dev/null || true)"
+    # **detached, because this kills the container that asked for it**: the
+    # node's own ssh client dies with its container, and a replacement that
+    # died with the session would never be created.  The arguments are
+    # `rhtn_launch`'s own, which its cloud-init wrote at creation, and a
+    # test holds the two to each other.
+    # nothing is interpolated into the script below: the values go through
+    # the environment, so an image reference cannot become syntax
+    RHTN_UP_ENGINE="$ENGINE" RHTN_UP_NODE="$NODE" RHTN_UP_NEW="$image" \
+      RHTN_UP_OLD="$was" setsid sh -c '
+      run() {
+        "$RHTN_UP_ENGINE" rm -f "$RHTN_UP_NODE" > /dev/null 2>&1 || true
+        "$RHTN_UP_ENGINE" run -d --name "$RHTN_UP_NODE" --restart=always \
+          --network=host -v /var/lib/rhtn:/var/lib/rhtn "$1" > /dev/null 2>&1
+      }
+      run "$RHTN_UP_NEW" && exit 0
+      # **the replacement would not start, so what was serving goes back.**
+      # A machine with no node is reachable by a shell its operator does
+      # not have; a machine on its previous image is one they can try
+      # again from.  [assistant chose this; the alternative is to leave it
+      # down and visibly broken -- the author to rule]
+      [ -n "$RHTN_UP_OLD" ] || exit 1
+      run "$RHTN_UP_OLD"
+    ' < /dev/null > /dev/null 2>&1 &
+    say "replacing the node on $image; its surface answers again when it is up"
     ;;
   *)
     refuse "no such verb: $verb"
