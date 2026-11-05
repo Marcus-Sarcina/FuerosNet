@@ -28,17 +28,24 @@ package com.comptus.fueros
  * `{patron}` and `{subnet}`, which [fill] replaces, because what is fixed
  * by kind is the sentence and not the people in it.
  *
- * **What is still [Says.Owed] is owed**, and nothing here invents a
- * sentence to cover it: an owed topic shows the person nothing, exactly as
- * it does today, and the test says so rather than the screen saying
- * something nobody wrote.
+ * **Nothing is owed as of 2026-11-05.** A brokered resource's retained
+ * vendor session was a topic here until the author withdrew the
+ * disclosure: ending a session protects the resource from the person, not
+ * the person from anything, so a member who keeps access they were not cut
+ * off from has nothing to act on and telling them would announce an
+ * opportunity rather than correct a mistake (PRD-08, withdrawn).
+ *
+ * [Says.Owed] stays in the type for the next gap, and nothing here invents
+ * a sentence to cover one: an owed topic would show the person nothing,
+ * and the test would say so rather than a screen saying something nobody
+ * wrote.
  */
 object Disclosure {
 
     /**
      * **What a disclosure is about.** The transaction kinds, and the other
      * moments at which this client owes somebody words — a backup, a
-     * restore, a first brokered use, a provisioning choice. The acceptance
+     * restore, a provisioning choice. The acceptance
      * rows name all of these; nothing here is a screen, because two
      * screens can be about one kind and one screen about two.
      */
@@ -72,9 +79,6 @@ object Disclosure {
 
         /** A restored archive, and what its completeness rests on. */
         RESTORE,
-
-        /** First use of a brokered resource, and whose session it is. */
-        BROKERED,
 
         /** Provisioning: what the ordering of providers and zones means. */
         PROVISIONING,
@@ -228,11 +232,6 @@ object Disclosure {
                     "not recorded here.",
                 ),
             ),
-        )
-        Topic.BROKERED -> Says.Owed(
-            "PRD-08",
-            "that the vendor's session outlives membership — shown once, before any " +
-                "traffic is routed",
         )
         Topic.PROVISIONING -> Says.Here(
             listOf(

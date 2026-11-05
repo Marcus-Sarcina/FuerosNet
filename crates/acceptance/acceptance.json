@@ -6152,23 +6152,16 @@
   "id": "PRD-08",
   "area": "product",
   "gap": "product",
-  "title": "Tell the user on first brokered use that ending membership does not end the vendor's session",
+  "title": "Tell the user on first brokered use that ending membership does not end the vendor's session (withdrawn)",
   "milestone": "manual",
-  "kind": "manual",
-  "spec": [
-   "light-client-requirements.md §8"
-  ],
-  "rule": [
-   {
-    "where": "light-client-requirements.md §8",
-    "text": "Tell the user, when they first use a brokered resource, that ending their membership will not end that vendor's session."
-   }
-  ],
-  "given": "A release build with a brokered resource available.",
-  "when": "A reviewer opens the brokered resource for the first time.",
-  "then": "A notice states that the vendor's session outlives membership, shown once, before traffic is routed.",
+  "kind": "withdrawn",
+  "spec": [],
+  "rule": [],
+  "given": "",
+  "when": "",
+  "then": "",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": "Withdrawn [author, 2026-11-05]: the disclosure was aimed at the wrong party. Ending a session protects the resource from the person and not the person from anything, so a member who keeps access they were not cut off from has lost nothing and has nothing to act on; telling them would announce an opportunity rather than correct a mistake. The limit itself stands and is unchanged (design §11.2, functional_tests GAT-015: a client must not claim the network can revoke an established vendor session). Where it bears on anyone is an owner who believed revoking a membership was complete, and whether that owner is owed a note of it is open with the author. The number is not reused."
  },
  {
   "id": "PRD-09",

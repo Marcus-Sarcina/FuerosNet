@@ -420,35 +420,27 @@ object Kernel {
      */
     private fun engageNominees(p: Participant, m: Meet) {
         val c = courier(p)
-        for (attempt in 0 until ENGAGE_TRIES) {
+        for (attempt in 0 until Engagement.TRIES) {
             if (m.step() == Meet.Step.STOPPED) return
             c.engage()?.let { why ->
                 Diag.warn("witness.engage", "why" to why)
                 return
             }
             val reached = call("nomineesEngaged", { null }) { p.nomineesEngaged() } ?: return
-            if (reached.engaged == reached.nominated) {
-                if (reached.nominated > 0u) {
-                    m.note("${reached.engaged} of ${reached.nominated} nominees are engaged and watching.")
+            // **the decision is [Engagement]'s and the asking is this
+            // function's** [author, 2026-11-05]: the retry and the words
+            // were in here, where nothing could reach them without a live
+            // `Participant`, so two of PRD-17's clauses had no test
+            when (val next = Engagement.next(reached.engaged, reached.nominated, attempt)) {
+                is Engagement.Next.Stop -> return
+                is Engagement.Next.Say -> {
+                    m.note(next.note)
+                    return
                 }
-                return
+                is Engagement.Next.Again -> Thread.sleep(Engagement.WAIT_MS)
             }
-            if (attempt == ENGAGE_TRIES - 1) {
-                m.note(
-                    "${reached.engaged} of ${reached.nominated} nominees are engaged; " +
-                        "the rest were not reachable and will not appear.",
-                )
-                return
-            }
-            Thread.sleep(ENGAGE_WAIT_MS)
         }
     }
-
-    /** How many turns the engagement is given while the bindings land. */
-    private const val ENGAGE_TRIES = 12
-
-    /** The wait between them, in milliseconds. */
-    private const val ENGAGE_WAIT_MS = 250L
 
     /**
      * One call into the kernel, bracketed for the diagnostics

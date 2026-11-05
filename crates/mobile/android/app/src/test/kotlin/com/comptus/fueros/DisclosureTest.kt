@@ -37,17 +37,12 @@ class DisclosureTest {
     /**
      * **T1, the half that is owed: no kind is still waiting for words.**
      *
-     * **Ignored rather than red**, as the generated acceptance stubs are
-     * for work not yet done: a failing test would block every commit
-     * until the sentences exist, and the sentences are the author's to
-     * write ([Disclosure]). The failure message names each topic, the row
-     * that asks for its words and what that row asks, so taking the
-     * annotation off is the whole of closing it.
+     * **Live as of 2026-11-05**: it was ignored while the sentences were
+     * owed, because a failing test would have blocked every commit until
+     * prose arrived. The author wrote seven, one topic turned out to be
+     * written already on the node, and the last was withdrawn — so this
+     * holds now, and a topic added without words fails here.
      */
-    @org.junit.Ignore(
-        "owed: BROKERED alone, as of 2026-11-05 — the other eight landed, and " +
-            "this annotation comes off when it does",
-    )
     @Test
     fun no_kind_of_disclosure_is_still_owed_its_words() {
         val owed = Disclosure.owed()

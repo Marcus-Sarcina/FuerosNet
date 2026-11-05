@@ -600,7 +600,7 @@ The Cargo workspace has **16 crates**. Components below follow responsibilities 
 | GAT-012 | C | Owner movement preserves its own downline resource relationships where membership still holds, removes old upline eligibility and admits new eligible neighbors. Hosting migration is separate and may temporarily leave a light owner's resource unavailable. | D §11.2.2; R §12 |
 | GAT-013 | C | Any role-set change retires that principal's resource session, including additions and removals; next request gets fresh authorization and a new resource session ID. Do not mutate privileges inside the old session or close unrelated QUIC/resource sessions. | I §10.5; R §7; D §11.4 |
 | GAT-014 | C | A membership or role change during an in-flight hosted request lets that request complete under its entry snapshot, retires the resource-facing session so the next request is evaluated afresh, and leaves the transport connection untouched. Assert all three. | I §§10.1, 10.5 |
-| GAT-015 | C | For a brokered external service, prevent future establishment when membership/roles are lost, but do not claim the network can revoke an already established vendor session. Disclose that limitation at first use. | D §§11.2, 19.4; I §10.5; L §6 |
+| GAT-015 | C | For a brokered external service, prevent future establishment when membership/roles are lost, but do not claim the network can revoke an already established vendor session. **Do not disclose that limitation to the member** [author, 2026-11-05]: the session's end protects the resource from the person, so a member who retains access has nothing to act on, and the limit bears on an owner who thought revoking was complete. | D §§11.2, 19.4; I §10.5; L §6 |
 
 ### Pairwise credentials and gateway request evaluation
 

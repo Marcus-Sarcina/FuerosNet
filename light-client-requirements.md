@@ -1137,11 +1137,14 @@ anchor up in, and it is what you hand onward in a bundle (§1.1,
   someone at the cutoff. An absolute *top-k* does not behave this way, and the
   client should offer it as the plainer alternative when the operator's intent looks
   absolute.
-- **Tell the user, when they first use a brokered resource, that ending their
-  membership will not end that vendor's session.** The network can stop new
-  establishment; it cannot reach into a session already running on someone else's
-  terms (design §11.2). A user who leaves an organisation and assumes their access
-  ended everywhere is wrong in a way only the client can correct.
+- **The network can stop new establishment; it cannot reach into a session already
+  running on someone else's terms** (design §11.2). **Say nothing of this to the
+  member** [author, 2026-11-05]: ending a session protects the resource from the
+  person, not the person from anything, so a member who keeps access they were not
+  cut off from has lost nothing and has nothing to act on. What the limit bears on
+  is an owner's belief that revoking a membership was complete, and that belongs
+  where an owner reads it (`infra-client-requirements.md` §10.5, design §11.2) and
+  not on the member's first use.
 - **Confirm a brokered service matches the signed `CatalogEntry`** before routing
   traffic to it, and show the user which owner published it (design §11.5). That
   binding is the whole of what the network offers about a gateway; beyond it the

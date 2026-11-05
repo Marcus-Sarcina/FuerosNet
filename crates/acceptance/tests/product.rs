@@ -88,22 +88,6 @@ fn prd_07_encrypt_backups_under_a_key_kept_apart_say_what() {
     todo!("PRD-07: Encrypt backups under a key kept apart, say what losing the device costs, and scan imports for expired retention")
 }
 
-/// Tell the user on first brokered use that ending membership does not end the vendor's session
-///
-/// Spec: light-client-requirements.md §8
-/// Milestone: manual.  Kind: manual.  Oracle: behaviour.
-///
-/// Rule (light-client-requirements.md §8): "Tell the user, when they first use a brokered resource, that ending their membership will not end that vendor's session."
-///
-/// Given: A release build with a brokered resource available.
-/// When: A reviewer opens the brokered resource for the first time.
-/// Then: A notice states that the vendor's session outlives membership, shown once, before traffic is routed.
-#[test]
-#[ignore = "acceptance PRD-08: owed at milestone manual"]
-fn prd_08_tell_the_user_on_first_brokered_use_that_ending() {
-    todo!("PRD-08: Tell the user on first brokered use that ending membership does not end the vendor's session")
-}
-
 /// Present a restored archive as recovered on trust, never as verified-complete
 ///
 /// Spec: light-client-requirements.md §2
@@ -182,25 +166,6 @@ fn prd_12_present_a_node_s_administration_pages_in_a_frame() {
 #[ignore = "acceptance PRD-13: owed at milestone manual"]
 fn prd_13_ship_the_provisioning_pages_and_no_other_adminis() {
     todo!("PRD-13: Ship the provisioning pages and no other administration pages")
-}
-
-/// Engage the nominees before the code is shown, and stream the exchange to them as it runs
-///
-/// Spec: light-client-requirements.md §1.1; design §7.1
-/// Milestone: manual.  Kind: manual.  Oracle: behaviour.
-///
-/// Rule (light-client-requirements.md §1.1): "Engage the nominees with the intent: they are observers from before the ceremony-id exists, and that is their value"
-/// Rule (light-client-requirements.md §1.1): "**Stream the opening to your nominees as it happens**"
-///
-/// Given: A person starting a meeting on a device that holds contacts to nominate, with a nominee reachable and another whose session material is not held yet.
-/// When: The ceremony begins and the two codes cross.
-/// Then: Each reachable nominee is engaged before the code is shown, the unreachable one is retried while its binding is fetched, and the person is told how many of the nominated are watching. As the codes cross, each nominee receives the exchange's shape — both block counts, then each part as it lands and each part the other display acknowledges — one message per event and never the content.
-///
-/// Interpretation: A device run shows the nominee's diagnostics spread across the exchange rather than batched at its end; the kernel's own entries (CER-67) assert the ordering.
-#[test]
-#[ignore = "acceptance PRD-17: owed at milestone manual"]
-fn prd_17_engage_the_nominees_before_the_code_is_shown_and() {
-    todo!("PRD-17: Engage the nominees before the code is shown, and stream the exchange to them as it runs")
 }
 
 /// Show who witnessed the record and whose nominees they were, saying a witnessless one plainly
