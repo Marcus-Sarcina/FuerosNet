@@ -13,7 +13,23 @@ use rhtn_codec::cbor::*;
 use rhtn_codec::encode::*;
 use std::time::{Duration, Instant};
 
-const T: Duration = Duration::from_secs(1);
+/// **The decode budget, and why it is this generous** [2026-11-05].
+///
+/// What this guard is for is a decoder that blows up on adversarial bytes
+/// — quadratic behaviour, an unbounded allocation loop — and such a case
+/// exceeds *any* ceiling by orders of magnitude. A decode that takes
+/// microseconds of its own had six of them spare against one second, and
+/// still failed the gate three times: on two runs of 2026-11-03 while the
+/// machine built container images, and on 2026-11-05. **At one second this
+/// was measuring the machine's scheduler, not the decoder.**
+///
+/// `DEC-02` fixes no number — it says *"runs beyond T"*, and the rule it
+/// quotes has these ceilings *"set well above any use anyone has
+/// articulated"*. Ten seconds keeps seven orders of magnitude of headroom
+/// over a decode that is doing its job and makes a stall-induced failure
+/// not worth reporting. The measure-twice below stays: it is the second
+/// line, not the first.
+const T: Duration = Duration::from_secs(10);
 
 fn accept_set() -> Vec<Fixture> {
     fixtures()
@@ -39,6 +55,10 @@ fn accept_set() -> Vec<Fixture> {
 /// blows up on adversarial bytes, and that does not come good on a
 /// retry — while refusing to report the machine's load as a defect in
 /// the decoder.
+///
+/// **This was not enough on its own** [2026-11-05]: a stall long enough to
+/// cross a one-second budget twice running is a stall this machine
+/// produces under its own gate, so the budget moved as well ([`T`]).
 fn timed<R>(f: impl Fn() -> R) -> R {
     let t0 = Instant::now();
     let r = f();

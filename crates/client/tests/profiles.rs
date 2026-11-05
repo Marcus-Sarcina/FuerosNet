@@ -173,3 +173,45 @@ fn a_meeting_is_read_off_the_records_with_what_rested_on_it() {
     // the kernel said so
     assert!(s.client("bob").take_changed().contains(&Noun::Meetings));
 }
+
+/// **A name a person chose is published and never recorded** (PRD-14,
+/// `light-client-requirements.md` §4.3, §4.4; design §12.8): a profile is
+/// fetched by whoever asks and replaced by its subject, where a record is
+/// permanent and public to anyone shown it. A name inside one could never
+/// be withdrawn or corrected.
+///
+/// The other two halves of PRD-14 are held elsewhere:
+/// `a_held_profile_is_re_signed_at_a_higher_counter_at_each_attach` above
+/// for the publishing, and `ChromeTest`'s
+/// `an_orbs_mark_is_the_published_name_or_the_keyhash_and_never_a_guess`
+/// for showing a contact by its alias or else by its keyhash.
+// acceptance: PRD-14
+#[test]
+fn a_chosen_name_is_published_and_appears_in_no_record() {
+    const NAME: &str = "Quillfeather";
+    let mut s = setup(&PARTIES);
+    s.client("alice")
+        .set_default_alias(NAME)
+        .expect("a name is kept");
+    s.adopted("bob", "alice", "w1", 1);
+    let subnet = s.client("alice").subnets()[0];
+    let published = published_at(&s.client("alice").attach(kh("w1"), &[]));
+    assert_eq!(published.len(), 1, "the name went out as a profile");
+    assert_eq!(
+        s.client("alice").own_alias(&subnet).as_deref(),
+        Some(NAME),
+        "and is held as this client's own there"
+    );
+
+    // **and it is in nothing that was signed.** Every record this client
+    // holds, body and all: a name is in none of them.
+    let records: Vec<Vec<u8>> = s.client("alice").store.records.values().cloned().collect();
+    assert!(!records.is_empty(), "there are records to look through");
+    for r in &records {
+        assert!(
+            !r.windows(NAME.len()).any(|w| w == NAME.as_bytes()),
+            "a record carries the chosen name, which could then never be \
+             withdrawn or corrected"
+        );
+    }
+}

@@ -184,25 +184,6 @@ fn prd_13_ship_the_provisioning_pages_and_no_other_adminis() {
     todo!("PRD-13: Ship the provisioning pages and no other administration pages")
 }
 
-/// Show a contact by its published alias and image, or by keyhash, and never by a name not received
-///
-/// Spec: light-client-requirements.md §4.3; light-client-requirements.md §4.4; design §12.8
-/// Milestone: manual.  Kind: manual.  Oracle: behaviour.
-///
-/// Rule (light-client-requirements.md §4.3): "never show a name you have not received"
-/// Rule (light-client-requirements.md §4.4): "Publish an alias and, if you choose, an image, for each subnet you hold a position in"
-///
-/// Given: A client holding two contacts, one whose profile it fetched and one whose it could not.
-/// When: It renders them.
-/// Then: The first is shown by alias and image, the second by keyhash; its own alias is published per subnet at attach and on change and appears in no record.
-///
-/// Interpretation: The alias is display only and the keyhash is what a counterparty pinned.
-#[test]
-#[ignore = "acceptance PRD-14: owed at milestone manual"]
-fn prd_14_show_a_contact_by_its_published_alias_and_image() {
-    todo!("PRD-14: Show a contact by its published alias and image, or by keyhash, and never by a name not received")
-}
-
 /// Engage the nominees before the code is shown, and stream the exchange to them as it runs
 ///
 /// Spec: light-client-requirements.md §1.1; design §7.1

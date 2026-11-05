@@ -164,3 +164,28 @@ when the last clause of a row is met, not the first.
   it is a refactor of live code and not a test to be written.
 - **PRD-02's arming, PRD-14's "in no record", PRD-10, PRD-13, PRD-06,
   PRD-08** remain as the audit has them.
+
+### Closed so far [2026-11-05]
+
+- **PRD-14 — closed.** Three clauses: the alias-or-keyhash selection
+  (`ChromeTest`, already there), the publication at each attach
+  (`profiles.rs`, already there) and *appears in no record*, which nobody
+  had asserted. That last is now `a_chosen_name_is_published_and_appears_in_no_record`,
+  and the row carries the marker. 551 of 570.
+  **One assertion was written and deleted**: a check that the durable blob
+  held no name, which was trivially true because the client holds its own
+  profile — a vacuous assertion is worse than none, because it reads like
+  a check.
+- **PRD-11 — conduct closed**, narrative owed.
+- **PRD-13 — partly covered.** `the_client_ships_provisioning_and_no_administrative_page_of_its_own`
+  holds the half that matters most: no page of the client's own ships, the
+  one screen that shows a served page loads from the instance, and the
+  four settings that keep the frame off this device are asserted rather
+  than assumed. Not yet the clause about what the tab carries *before*
+  provisioning, so the row stays open.
+  **Its first draft failed on its own documentation** — it matched
+  `file://` inside a comment saying the frame cannot name one. It reads
+  code with comments stripped now.
+- **PRD-10 is not a missing test but a missing prompt**: nothing in the
+  shell prompts for a backup at all, so the row needs the mechanism built,
+  and its words are among the nine owed.

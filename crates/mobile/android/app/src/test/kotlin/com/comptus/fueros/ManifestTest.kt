@@ -138,4 +138,57 @@ class ManifestTest {
         assertTrue("no launcher declared", launcher != null)
         assertTrue("the launcher is ${launcher!!.groupValues[1]}, not the shell", launcher.groupValues[1] == "ShellActivity")
     }
+    /**
+     * **PRD-13: the client ships the provisioning pages and no other
+     * administration pages** (`infra-client-requirements.md` §8.3).
+     *
+     * Read from the sources and the shipped assets, as [InsetSweepTest]
+     * reads them: a JVM test cannot open a `WebView`, and what this
+     * asserts is not that a page renders but that **the client holds no
+     * administrative page of its own to render**. Provisioning is native
+     * Kotlin ([Provision]), so it works with no node present; everything
+     * that administers an instance is fetched from that instance.
+     */
+    @Test
+    fun the_client_ships_provisioning_and_no_administrative_page_of_its_own() {
+        val root = module()
+        val assets = File(root, "app/src/main/assets")
+        val pages = assets.walkTopDown()
+            .filter { it.isFile && it.extension.lowercase() in setOf("html", "htm", "xhtml") }
+            .map { it.name }
+            .toList()
+        assertEquals(
+            "the client ships a page of its own: administration is the instance's to serve",
+            emptyList<String>(),
+            pages,
+        )
+        // and the one screen that loads a page loads it from the instance,
+        // never from this device: no `file://` and no asset URL
+        val page = File(root, "app/src/main/kotlin/com/comptus/fueros/NodePageActivity.kt")
+            .readText()
+        assertTrue("NodePageActivity is where a served page is shown", page.contains("loadUrl"))
+        // **the code and not the prose**: the first draft of this matched
+        // `file://` inside a comment that says the frame cannot name one,
+        // and called the documentation a violation
+        val code = page.lines()
+            .filterNot { it.trimStart().startsWith("//") || it.trimStart().startsWith("*") }
+            .joinToString("\n")
+        for (local in listOf("android_asset", "loadData(")) {
+            assertTrue(
+                "NodePageActivity reaches for `$local`, which would make a page the client's own",
+                !code.contains(local),
+            )
+        }
+        // and what keeps the frame off this device is a setting, not a
+        // habit: the page gets no file, no content provider and no script
+        for (shut in listOf(
+            "javaScriptEnabled = false",
+            "domStorageEnabled = false",
+            "allowFileAccess = false",
+            "allowContentAccess = false",
+        )) {
+            assertTrue("NodePageActivity no longer sets `$shut`", code.contains(shut))
+        }
+    }
+
 }
