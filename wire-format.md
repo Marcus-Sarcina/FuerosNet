@@ -3982,6 +3982,78 @@ replaces it.
 biography; the image at 64 KiB, which holds a small picture and keeps a fetch
 near a prekey fetch in cost, and which design §3.3's horizon of 221 multiplies.
 
+### 7.12 The horizon a client asserts to its node
+
+**Not something the node does on a client's behalf**, which is what §7.10
+collects, and so not a member of that family. This is the other direction: a
+client telling the node what its own horizon is, so the node can recognise a
+member when it connects and know where that member sits.
+
+**Why it is told rather than replayed.** A node learns topology from
+transactions it judges against its own reach (§10.1.1), and an empty node
+cannot be taught that way: the records that would bring a subject inside the
+horizon are refused for being outside it. A party replaying its own
+transactions at a node that has none is the deadlock, and a subnet that
+formed with no node — every member's records held by the members alone — can
+reach a node no other way.
+
+**An assertion is not a transaction and carries no signature.** It is
+authorised by the connection it arrives on and bounded by where its sender
+sits, and it is **evidence of nothing**: a row binds a member for the
+purposes of serving it, and does not weigh as an edge (design §16.2's
+standing is computed from evidence, which this is not). A node that holds
+only asserted rows can say who its members are and cannot prove it, which is
+what an index is (§7.2's own distinction between a verified entry and
+unverified gossip).
+
+**Who may assert what.** Authority follows the topology. A node takes
+anything from the operator it runs as, over the administration surface
+(`infra-client-requirements.md` §8.2), because that operator is the authority
+it serves under. From an attached client it takes a row **whose patron is
+that client or sits beneath it**, and nothing else — so a member speaks for
+its own downline and cannot name a party in a subnet it does not root. The
+sender is the keyhash the connection bound (§9.1), never a field in the body,
+so a row needs no signature for that test to mean something.
+
+**One row per request, for two reasons.** A horizon of design §3.3's 221
+members carrying `KeyMaterial` each would pass §9.2's request-frame bound, and
+a row refused for one member must not take the others with it.
+
+```
+HorizonAssertion = {           ; request type 15
+  1: keyhash,                  ; the subordinate
+  2: keyhash,                  ; the patron
+  3: uint,                     ; the series the adoption opened
+  4: uint,                     ; the asserter's own counter for this row,
+                               ;   strictly greater than the last accepted
+                               ;   for the same (1,2,3) or the assertion is
+                               ;   stale and nothing moves
+  ? 5: bool,                   ; retracted; absent is false
+  ? 6: bstr .size 32,          ; the adoption that opened it, as the asserter
+                               ;   names it: provenance, unverified here
+  ? 7: uint,                   ; that adoption's timestamp
+  ? 8: keyhash,                ; the subnet the adoption's locator named
+  ? 9: uint,                   ; the patron's slot it claimed
+  ? 10: KeyMaterial,           ; the member's material (§1.1), without which
+                               ;   the node cannot recognise it at (§9.1)
+  11: bstr .size 16,           ; nonce, echoed in the reply
+}
+```
+
+**A retraction is fields 1 to 4 and 5 true, and nothing else.** It must
+remain readable by an implementation that does not know this version's row:
+two operators' nodes will not run the same build, and a member who has left
+must be removable by the older of them. **The counter outlives the row it
+removed**, or an assertion still in flight from another of the asserter's
+devices would bring the member back.
+
+**Field 10 is what a keyhash cannot replace.** A keyhash is taken over both
+keys (§1.1) and a handshake presents the classical one (§9.1), so a node
+resolves a connection by comparing the presented key against material it
+holds. A row without it names a member that node can never recognise.
+
+**Not read-only** (§9.2): it changes state at the node.
+
 ## 8. Session messages
 
 ### 8.0 Control frame framing
@@ -4606,6 +4678,7 @@ no continuation to preserve.
 | 12 | `WakeRegistration` (§7.10) |
 | 13 | `ProfilePublication` (§7.10) |
 | 14 | `ProfileRequest` (§7.11), read-only |
+| 15 | `HorizonAssertion` (§7.12) |
 
 **The reply carries no type tag and is framed identically otherwise**: the same
 `u32-be` length prefix and CBOR body. It answers a request whose type the requester

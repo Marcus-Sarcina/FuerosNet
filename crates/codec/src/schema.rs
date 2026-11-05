@@ -137,6 +137,10 @@ pub enum Family {
     ProfileRequest,
     /// The answer to a [`ProfileRequest`](Family::ProfileRequest).
     ProfileReply,
+    /// Request frame 15: one row of the horizon a client asserts to the
+    /// node serving it (§7.12). Not a transaction, carries no signature,
+    /// and is authorised by the connection it arrives on.
+    HorizonAssertion,
     /// The answer to a submission: accepted, over bound, or refused.
     SubmissionReply,
     /// Request frame 8: a currency attestation requested (§7.1).
@@ -246,6 +250,22 @@ const PROFILE_REQUEST: Fields = &[
     (4, true, Nonce16),
 ];
 const PROFILE_REPLY: Fields = &[(1, true, Nonce16), (2, false, Profile), (3, false, Uint)];
+// §7.12: the four required fields are a retraction's whole body, so an
+// implementation that does not know this version's row can still remove a
+// member; everything a row adds is optional for that reason
+const HORIZON_ASSERTION: Fields = &[
+    (1, true, Keyhash),
+    (2, true, Keyhash),
+    (3, true, Uint),
+    (4, true, Uint),
+    (5, false, Bool),
+    (6, false, Bytes32),
+    (7, false, Uint),
+    (8, false, Keyhash),
+    (9, false, Uint),
+    (10, false, KeyMaterial),
+    (11, true, Nonce16),
+];
 // §7.11: a signed map, its image checked by hand, so extensions above 7
 // are admitted by `check_map_signed`
 const PROFILE: Fields = &[
@@ -361,6 +381,7 @@ pub fn fields(f: Family) -> Option<Fields> {
         WakeRegistration => WAKE_REGISTRATION,
         ProfilePublication => PROFILE_PUBLICATION,
         ProfileRequest => PROFILE_REQUEST,
+        HorizonAssertion => HORIZON_ASSERTION,
         ProfileReply => PROFILE_REPLY,
         SubmissionReply => SUBMISSION_REPLY,
         CurrencyRequest => CURRENCY_REQUEST,

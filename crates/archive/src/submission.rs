@@ -423,3 +423,132 @@ pub fn unrelayed(b: &[u8]) -> Option<(Keyhash, Vec<u8>, Option<Vec<u8>>)> {
         binding,
     ))
 }
+
+/// **One row of the horizon a client asserts to the node serving it**
+/// (`wire-format.md` §7.12).
+///
+/// **Not a transaction and carrying no signature.** It is authorised by
+/// the connection it arrives on and bounded by where its sender sits, and
+/// it is evidence of nothing: a row binds a member so the node can serve
+/// it, and does not weigh as an edge.
+///
+/// **A retraction is the first four fields and `retracted`**, so an
+/// implementation that does not know this version's row can still remove a
+/// member — two operators' nodes will not run the same build.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HorizonAssertion {
+    /// The subordinate.
+    pub node: Keyhash,
+    /// The patron.
+    pub patron: Keyhash,
+    /// The series the adoption opened.
+    pub series: u64,
+    /// The asserter's own counter for this row.
+    pub revision: u64,
+    /// Whether this removes the row rather than asserting it.
+    pub retracted: bool,
+    /// The adoption the asserter names: provenance, unverified here.
+    pub adoption: Option<[u8; 32]>,
+    /// That adoption's timestamp.
+    pub from: Option<u64>,
+    /// The subnet the adoption's locator named.
+    pub anchor: Option<Keyhash>,
+    /// The patron's slot it claimed.
+    pub slot: Option<u64>,
+    /// **The member's key material**, without which the node cannot
+    /// recognise it at a handshake.
+    pub material: Option<Vec<u8>>,
+    /// The nonce the reply must echo.
+    pub nonce: [u8; 16],
+}
+
+impl HorizonAssertion {
+    /// The assertion's bytes.
+    #[must_use]
+    pub fn encode(&self) -> Vec<u8> {
+        let mut fields: Vec<(u64, Vec<u8>)> = Vec::new();
+        let bstr = |b: &[u8]| {
+            let mut v = Vec::new();
+            emit_bstr(&mut v, b);
+            v
+        };
+        let uint = |n: u64| {
+            let mut v = Vec::new();
+            emit_uint(&mut v, n);
+            v
+        };
+        fields.push((1, bstr(&self.node)));
+        fields.push((2, bstr(&self.patron)));
+        fields.push((3, uint(self.series)));
+        fields.push((4, uint(self.revision)));
+        if self.retracted {
+            fields.push((5, vec![0xf5]));
+        }
+        if let Some(a) = &self.adoption {
+            fields.push((6, bstr(a)));
+        }
+        if let Some(f) = self.from {
+            fields.push((7, uint(f)));
+        }
+        if let Some(a) = &self.anchor {
+            fields.push((8, bstr(a)));
+        }
+        if let Some(s) = self.slot {
+            fields.push((9, uint(s)));
+        }
+        if let Some(m) = &self.material {
+            // **its own CBOR, not wrapped in a bstr**: `KeyMaterial` is an
+            // array (§1.1), and the schema checks it as one — the same way
+            // a `ProfilePublication` carries its profile
+            fields.push((10, m.clone()));
+        }
+        fields.push((11, bstr(&self.nonce)));
+        let mut out = Vec::new();
+        emit_map_head(&mut out, fields.len());
+        for (k, v) in fields {
+            emit_uint(&mut out, k);
+            out.extend_from_slice(&v);
+        }
+        out
+    }
+
+    /// An assertion from its bytes.
+    pub fn decode(b: &[u8]) -> Result<Self, String> {
+        let item = parse_all(b).map_err(|e| e.0)?;
+        schema::check_unsigned(Family::HorizonAssertion, b, 0).map_err(|e| e.0)?;
+        let Item::Map(m) = &item else {
+            return Err("not a map".into());
+        };
+        let key = |k: u64| -> Result<Keyhash, String> {
+            bytes_at(b, m, k)?
+                .try_into()
+                .map_err(|_| format!("field {k} is not a keyhash"))
+        };
+        let uint = |k: u64| -> Result<u64, String> {
+            map_get(m, k).and_then(as_uint).ok_or(format!("field {k}"))
+        };
+        Ok(HorizonAssertion {
+            node: key(1)?,
+            patron: key(2)?,
+            series: uint(3)?,
+            revision: uint(4)?,
+            retracted: matches!(map_get(m, 5), Some(Item::Bool(true))),
+            adoption: match map_get(m, 6) {
+                Some(_) => Some(
+                    bytes_at(b, m, 6)?
+                        .try_into()
+                        .map_err(|_| "field 6 is not 32 bytes".to_string())?,
+                ),
+                None => None,
+            },
+            from: map_get(m, 7).and_then(as_uint),
+            anchor: match map_get(m, 8) {
+                Some(_) => Some(key(8)?),
+                None => None,
+            },
+            slot: map_get(m, 9).and_then(as_uint),
+            material: value_slice(b, 10).map(|r| b[r].to_vec()),
+            nonce: nonce_at(b, m, 11)?,
+        })
+    }
+}

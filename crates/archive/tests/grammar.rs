@@ -207,3 +207,76 @@ fn a_conditional_field_stands_or_falls_with_the_field_it_describes() {
         );
     }
 }
+
+// ---- the horizon a client asserts to its node (wire-format.md §7.12) ---
+
+fn assertion(retracted: bool) -> HorizonAssertion {
+    let id = rhtn_crypto::SigningIdentity::from_seeds(&[7u8; 32], &[0xf8u8; 32]).public;
+    HorizonAssertion {
+        // **the schema binds the two**: carried material must hash to the
+        // keyhash beside it, so a row cannot name one member and carry
+        // another's key
+        node: id.keyhash,
+        patron: [0x22; 32],
+        series: 3,
+        revision: 1793837637,
+        retracted,
+        adoption: (!retracted).then_some([0x33; 32]),
+        from: (!retracted).then_some(1793738918),
+        anchor: (!retracted).then_some([0x22; 32]),
+        slot: (!retracted).then_some(1),
+        // a real KeyMaterial array, since the schema checks it as one
+        material: (!retracted).then(|| id.key_material()),
+        nonce: [0x7e; 16],
+    }
+}
+
+#[test]
+fn an_asserted_row_round_trips_whole() {
+    let a = assertion(false);
+    let bytes = a.encode();
+    assert_eq!(HorizonAssertion::decode(&bytes).expect("reads back"), a);
+}
+
+#[test]
+fn a_retraction_is_the_four_required_fields_and_nothing_else() {
+    // **the forward-compatible half** (§7.12): two operators' nodes will
+    // not run the same build, and a member who has left must be removable
+    // by the older of them, so a retraction carries no part of the row
+    let a = assertion(true);
+    let bytes = a.encode();
+    let back = HorizonAssertion::decode(&bytes).expect("reads back");
+    assert!(back.retracted);
+    assert_eq!(back.revision, 1793837637, "the counter outlives the row");
+    assert!(back.material.is_none() && back.adoption.is_none());
+    // the four that identify the row, `retracted`, and the nonce: six,
+    // and no part of the row itself
+    assert_eq!(bytes[0] & 0x1f, 6, "a map of six entries");
+}
+
+#[test]
+fn a_row_without_its_identity_is_not_a_row() {
+    let a = assertion(false);
+    let bytes = a.encode();
+    for drop in [1u64, 2, 3, 4, 11] {
+        let without = rhtn_codec::cbor::map_without_key(&bytes, drop).expect("a map");
+        assert!(
+            HorizonAssertion::decode(&without).is_err(),
+            "field {drop} is required"
+        );
+    }
+}
+
+#[test]
+fn a_row_cannot_name_one_member_and_carry_anothers_key() {
+    // **the schema's own check**, found by writing the round trip wrong:
+    // "carried key material does not hash to the keyhash beside it". So
+    // the node need not compare them itself, and a row that tried to bind
+    // somebody else's key is refused before it is read.
+    let mut a = assertion(false);
+    a.node = rhtn_crypto::SigningIdentity::from_seeds(&[9u8; 32], &[0u8; 32])
+        .public
+        .keyhash;
+    let e = HorizonAssertion::decode(&a.encode()).expect_err("refused");
+    assert!(e.contains("does not hash to the keyhash"), "{e}");
+}
