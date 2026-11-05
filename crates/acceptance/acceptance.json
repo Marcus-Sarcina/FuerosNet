@@ -15933,5 +15933,32 @@
   "then": "Each secret reaches its own instance's block and no other's, with nothing of the other's held under the same name; no secret and an unknown secret are refused alike and say nothing of which instances exist; a secret stops with the binding rather than after it; and the ambiguous target is refused outright.",
   "oracle": "behaviour",
   "interpretation": ""
+ },
+ {
+  "id": "DMN-44",
+  "area": "daemon",
+  "gap": "daemon",
+  "title": "Tell the operator binding a brokered resource that revoking here does not close the session there",
+  "milestone": "after-5",
+  "kind": "positive",
+  "spec": [
+   "infra-client-requirements.md §10.5",
+   "infra-client-requirements.md §10.6"
+  ],
+  "rule": [
+   {
+    "where": "infra-client-requirements.md §10.5",
+    "text": "a session to a third-party service may have to be ended\nwith that service rather than here"
+   },
+   {
+    "where": "infra-client-requirements.md §10.6",
+    "text": "Display whether a resource is hosted here or brokered to an external service."
+   }
+  ],
+  "given": "A node with one resource hosted behind it and one brokered to an external service, shown to its operator.",
+  "when": "The operator reads each binding.",
+  "then": "The brokered one says it is brokered, that a session there continues on the service's terms, and that revoking here does not end it — with where to close it; the hosted one says a session ends when this node ends it and warns of nothing further. Neither is said to the member, for whom retained access is no hazard.",
+  "oracle": "behaviour",
+  "interpretation": ""
  }
 ]

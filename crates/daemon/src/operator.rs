@@ -139,6 +139,15 @@ impl BindingView {
                     s,
                     "  a session there continues on the terms of the service the operator chose"
                 );
+                // **and what closing it would take** [author, 2026-11-05]:
+                // the line above says the session outlives a revocation
+                // here and left an operator to infer the rest. The party
+                // that costs is one who revoked a membership and believed
+                // it finished (§10.5).
+                let _ = writeln!(
+                    s,
+                    "  revoking here does not end it: close it with that service"
+                );
             }
         }
         s
@@ -352,6 +361,7 @@ mod tests {
         }
     }
 
+    // acceptance: DMN-44
     #[test]
     fn hosted_and_brokered_render_differently() {
         let resource = [1u8; 32];
@@ -380,6 +390,18 @@ mod tests {
         // and the consequence that `infra-client-requirements.md` §10.6
         // says makes it matter: where the session ends
         assert!(hosted.render().contains("ends when this node ends it"));
+        // **and what closing it takes** (§10.5 [author, 2026-11-05]): an
+        // operator who revoked a membership and believed it finished is
+        // the party that costs, so the words say where to go
+        assert!(
+            brokered.render().contains("close it with that service"),
+            "{}",
+            brokered.render()
+        );
+        assert!(
+            !hosted.render().contains("close it with that service"),
+            "a hosted session ends here, and there is nothing to warn of"
+        );
         assert!(
             brokered
                 .render()

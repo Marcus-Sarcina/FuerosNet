@@ -1286,6 +1286,13 @@ any network service must regardless.
 connection cannot be relied on to drop: the node can drop its own leg, but the
 client-to-service session is one it never held, so enforcement there is at
 establishment, and an existing session continues on the service's terms.
+**Say that to the operator where they bind one** [author, 2026-11-05], with what
+closing it would take: a session to a third-party service may have to be ended
+with that service rather than here, and an operator who revoked a membership and
+believed it finished is the party that costs. **To the operator and not to the
+member**: ending a session protects the resource from the person rather than the
+person from anything, so a member who keeps access they were not cut off from has
+nothing to act on (`light-client-requirements.md` §8).
 
 ### 10.6 Show the hosting model when binding a resource
 
