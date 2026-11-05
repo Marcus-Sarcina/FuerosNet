@@ -1131,7 +1131,17 @@ class MeetRowsTest {
         assertTrue(rows(under).contains("PRD-02"))
         val u = under.joinToString(" ") { it.text }
         assertTrue("names them as patron", u.contains("carol becomes your patron"))
-        assertTrue("names the upward-reaching resources", u.contains("reaches upward"))
+        // **asserted against the table and not against a phrase**: the
+        // sentence is the author's and lives in [Disclosure], so changing
+        // it changes no test, and a brief that stopped rendering it fails
+        // here [2026-11-05]
+        for (said in Disclosure.words(
+            Disclosure.Topic.ADOPTION_UPWARD,
+            patron = "carol",
+            subnet = "that subnet",
+        )) {
+            assertTrue("the brief renders the table's sentence: $said", u.contains(said))
+        }
 
         val over = meet(Meet.Adopt.THEM_UNDER_ME).brief()
         assertTrue(rows(over).contains("PRD-02"))
@@ -1162,7 +1172,13 @@ class MeetRowsTest {
         val text = m.brief().joinToString(" ") { it.text }
         assertTrue("PRD-02 is answered", rows(m.brief()).contains("PRD-02"))
         assertTrue("names them as patron: $text", text.contains("becomes your patron"))
-        assertTrue("names the upward-reaching resources", text.contains("reaches upward"))
+        for (said in Disclosure.words(
+            Disclosure.Topic.ADOPTION_UPWARD,
+            patron = "carol",
+            subnet = "that subnet",
+        )) {
+            assertTrue("the brief renders the table's sentence: $said", text.contains(said))
+        }
 
         // and the other way round, the responder being asked to be patron
         val over = meet(role = Meet.Role.RESPONDER)

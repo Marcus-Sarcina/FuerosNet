@@ -854,12 +854,20 @@ class Meet(
                         "over your position, and ending it later is your act alone — " +
                         "but what it costs you is listed below before you agree.",
                 )
-                out += Item(
-                    "PRD-02",
-                    "Resources whose access reaches upward through a patron will reach " +
-                        "through $counterpartyName. None are known to this device yet, " +
-                        "and a release build names each one here.",
-                )
+                // **the author's own sentence, from the table** [author,
+                // 2026-11-05]. What stood here was mine — "resources whose
+                // access reaches upward through a patron" — and it did not
+                // survive being read back: asked what it meant, the author
+                // wrote the obligation plainly instead, and a patron's
+                // policies *and their patron's* applying to what you use
+                // or host is what the row was always about.
+                for (said in Disclosure.words(
+                    Disclosure.Topic.ADOPTION_UPWARD,
+                    patron = counterpartyName,
+                    subnet = claim?.label(counterpartyName) ?: "that subnet",
+                )) {
+                    out += Item("PRD-02", said)
+                }
             }
             Adopt.THEM_UNDER_ME -> {
                 out += Item(

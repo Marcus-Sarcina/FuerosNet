@@ -259,6 +259,23 @@ object Disclosure {
         )
     }
 
+    /**
+     * **The words a screen renders for a topic**, with the parties named:
+     * what this table holds, and nothing where the words live elsewhere or
+     * are owed.
+     *
+     * A screen calls this rather than casting [of]'s result, so a topic
+     * that moves between [Says.Here] and [Says.Elsewhere] changes no
+     * screen and throws nowhere. Empty means *this table has nothing to
+     * render* — not that nothing is owed, which is [owed]'s question.
+     */
+    fun words(topic: Topic, patron: String? = null, subnet: String? = null): List<String> =
+        when (val s = of(topic)) {
+            is Says.Here -> s.items.map { fill(it.text, patron, subnet) }
+            is Says.Elsewhere -> emptyList()
+            is Says.Owed -> emptyList()
+        }
+
     /** Every topic, for a test that must cover all of them. */
     fun topics(): List<Topic> = Topic.entries.toList()
 

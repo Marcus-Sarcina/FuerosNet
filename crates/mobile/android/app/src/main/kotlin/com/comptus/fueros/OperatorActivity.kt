@@ -672,6 +672,15 @@ class OperatorActivity : Activity() {
         // hides none and it scores none
         val all = Launch.providers().sortedBy { Kernel.crowded(it.asn).first }
         var provider = all.first()
+        // **and the ordering says what it is** (PRD-11), in the author's
+        // own words rather than this screen's: what the table holds is
+        // fixed by the kind of thing being disclosed, so the sentence
+        // lives in [Disclosure] and is rendered here
+        val ordering = TextView(this).apply {
+            textSize = 13f
+            setTextColor(Palette.now.sub)
+            text = Disclosure.words(Disclosure.Topic.PROVISIONING).joinToString("\n\n")
+        }
         val heldFor = { p: Launch.Provider -> Kernel.providerCredentials()[p.name.lowercase()] ?: "" }
         val credential = field("${provider.name} API token", heldFor(provider), secret = true)
         // the token is the operator's own, made at the provider's page:
@@ -894,6 +903,10 @@ class OperatorActivity : Activity() {
         return LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             addView(TextView(this@OperatorActivity).apply { textSize = 12f; setTextColor(Palette.now.sub); text = "Provider" })
+            // **what the ordering below means, before the list of it**
+            // (PRD-11): a person reading a sorted list is owed the basis
+            // of the sort before they act on it
+            addView(ordering)
             addView(chooser)
             addView(about)
             addView(getToken)
