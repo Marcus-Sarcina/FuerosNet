@@ -2625,6 +2625,31 @@ object Kernel {
         return true
     }
 
+    /**
+     * **Open a backup into this client** (`rhtn_client::backup`;
+     * `light-client-requirements.md` §2): the blob opens under this
+     * identity, the import scans it, and what came back is reported —
+     * records taken, and captures the scan discarded as past the window
+     * their *subject* declared (design §13.7.1).
+     *
+     * Refused where this client already holds an archive, where the blob
+     * belongs to another identity, or where it does not open; the kernel's
+     * own words come back rather than a guess at them.
+     *
+     * **Waits for the kernel**, as the first run calls this moments after
+     * starting it.
+     */
+    fun restoreBackup(blob: ByteArray): Result<uniffi.rhtn_ffi.Restored> {
+        val until = System.currentTimeMillis() + 30_000
+        var p = participant
+        while (p == null && System.currentTimeMillis() < until) {
+            Thread.sleep(200)
+            p = participant
+        }
+        val held = p ?: return Result.failure(IllegalStateException("the kernel did not start"))
+        return runCatching { held.restoreBackup(blob) }
+    }
+
     /** The default name the kernel holds, or null. */
     fun defaultAlias(): String? {
         val p = participant ?: return null

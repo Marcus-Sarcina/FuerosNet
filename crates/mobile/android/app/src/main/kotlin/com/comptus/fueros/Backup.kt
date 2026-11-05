@@ -47,6 +47,28 @@ object Backup {
     }
 
     /**
+     * **What an import came to, as the person is told it** (PRD-07,
+     * PRD-09): how much came back, and what the scan deleted on the way
+     * in.
+     *
+     * **The discard is said and not swallowed.** A capture past the window
+     * its *subject* declared is deleted on import (design §13.7.1), and a
+     * person who was not told would believe the backup had held less than
+     * it did — or that this device had lost something it never took.
+     */
+    fun imported(records: ULong, discarded: ULong): String {
+        val took = "$records record${if (records == 1uL) "" else "s"} came back"
+        return if (discarded == 0uL) {
+            "$took. Nothing in it was past its retention."
+        } else {
+            "$took. $discarded sealed capture" +
+                (if (discarded == 1uL) " was" else "s were") +
+                " past the window its subject declared, and was deleted on import " +
+                "rather than kept."
+        }
+    }
+
+    /**
      * **What a person is told once it is written.** Where it went, and the
      * one thing about it they have to keep separately — design §13.7.1
      * puts the blob under a key derived from the identity, so the phrase

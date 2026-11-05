@@ -84,6 +84,9 @@ class FirstRunActivity : Activity() {
     companion object {
         /** The extra that opens this screen at the name step alone. */
         const val NAME_ONLY = "name_only"
+
+        /** The one request code this screen opens a file under. */
+        private const val OPEN_BACKUP = 7449
     }
 
     // ---- the choice ----------------------------------------------------
@@ -144,6 +147,7 @@ class FirstRunActivity : Activity() {
      * was written for.
      */
     private fun shown(material: String?, phrase: List<String>?) {
+        if (phrase == null) restoredMaterial = material
         body.removeAllViews()
         title(if (phrase == null) "Your identity, restored" else "Your identity")
         // **the phrase above the material**: the phrase is what the
@@ -167,7 +171,79 @@ class FirstRunActivity : Activity() {
         // short screen the only control was reached before the second
         // half of what the screen exists to show — and tapping it was how
         // a tester got past the material without seeing it.
+        // **the archive is the half a phrase does not bring back**
+        // [2026-11-05], and the kernel has always been able to open a
+        // backup while the shell had no door. Offered on the restored path
+        // alone: a brand-new identity has no archive of its own to miss,
+        // and a backup made by somebody else would not open under it.
+        if (phrase == null) {
+            heading("The records")
+            para(
+                "Your identity is back. What a device loss also took is the history: " +
+                    "the records of what you did and who you met. If you kept a backup, " +
+                    "it opens under the identity you just restored.",
+            )
+            // PRD-09: what a restored archive is, in the author's words
+            for (said in Disclosure.words(Disclosure.Topic.RESTORE)) {
+                para(said)
+            }
+            restoreSaid?.let { para(it) }
+            button("Open a backup file") { openBackup() }
+        }
         button(if (phrase == null) "Continue" else "I have written them down") { name() }
+    }
+
+    // ---- the archive, from a backup the person kept ---------------------
+
+    /** What the import came to, across a redraw of [shown]. */
+    private var restoreSaid: String? = null
+
+    /** Whether this screen reached [shown] by restoring rather than creating. */
+    private var restoredMaterial: String? = null
+
+    private fun openBackup() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
+            .addCategory(Intent.CATEGORY_OPENABLE)
+            .setType("*/*")
+        runCatching {
+            @Suppress("DEPRECATION")
+            startActivityForResult(intent, OPEN_BACKUP)
+        }.onFailure {
+            restoreSaid = "This device offers no way to pick a file."
+            shown(restoredMaterial, null)
+        }
+    }
+
+    @Deprecated("the shell is on startActivityForResult throughout")
+    override fun onActivityResult(request: Int, result: Int, data: Intent?) {
+        @Suppress("DEPRECATION")
+        super.onActivityResult(request, result, data)
+        if (request != OPEN_BACKUP) return
+        val uri = data?.data ?: return
+        val blob = runCatching {
+            contentResolver.openInputStream(uri)?.use { it.readBytes() }
+        }.getOrNull()
+        if (blob == null) {
+            restoreSaid = "That file could not be read, so nothing was imported."
+            shown(restoredMaterial, null)
+            return
+        }
+        restoreSaid = "opening it…"
+        shown(restoredMaterial, null)
+        Thread({
+            val out = Kernel.restoreBackup(blob)
+            runOnUiThread {
+                if (isFinishing) return@runOnUiThread
+                restoreSaid = out.fold(
+                    // **PRD-07: what the scan discarded is said, not
+                    // swallowed**, and the words are [Backup]'s so a test
+                    // can hold them without a screen
+                    { r -> Backup.imported(r.records, r.discarded) },
+                    { e -> "That backup was not taken: ${e.message ?: "the kernel refused it"}" },
+                )
+                shown(restoredMaterial, null)
+            }
+        }, "fueros-restore-backup").start()
     }
 
     // ---- restore -------------------------------------------------------

@@ -86,6 +86,50 @@ class BackupTest {
         assertTrue("and to keep them apart: $said", said.contains("apart"))
     }
 
+    // acceptance: PRD-07
+    @Test
+    fun an_import_says_what_came_back_and_what_the_scan_deleted() {
+        // **nothing past its window**: said plainly, so a person is not
+        // left wondering whether something went quietly
+        val clean = Backup.imported(records = 42uL, discarded = 0uL)
+        assertTrue("says how much came back: $clean", clean.contains("42 records came back"))
+        assertTrue("and that nothing was dropped: $clean", clean.contains("Nothing in it was past"))
+
+        // **something past its window**: the count, whose window it was,
+        // and that it was deleted rather than kept (design §13.7.1)
+        val scanned = Backup.imported(records = 7uL, discarded = 3uL)
+        assertTrue("says how much came back: $scanned", scanned.contains("7 records came back"))
+        assertTrue("says how many went: $scanned", scanned.contains("3 sealed captures"))
+        assertTrue(
+            "says whose window decided it: $scanned",
+            scanned.contains("window its subject declared"),
+        )
+        assertTrue("and that they were deleted: $scanned", scanned.contains("deleted on import"))
+
+        // the singular reads as English, since one is the common case
+        val one = Backup.imported(records = 1uL, discarded = 1uL)
+        assertTrue("$one", one.contains("1 record came back"))
+        assertTrue("$one", one.contains("1 sealed capture was"))
+    }
+
+    // acceptance: PRD-09
+    @Test
+    fun a_restored_archive_is_presented_as_recovered_on_trust() {
+        val said = Disclosure.words(Disclosure.Topic.RESTORE).joinToString(" ")
+        assertTrue("the words come from the table", said.isNotEmpty())
+        // the author's sentence, by its substance: complete only for what
+        // it covers, and not a claim that nothing else existed
+        assertTrue("says it is complete only for a period: $said", said.contains("complete only"))
+        assertTrue(
+            "and does not claim there was nothing more: $said",
+            said.contains("does not preclude"),
+        )
+        // **and never as verified**, which is what PRD-09 forbids: the
+        // history is what its holder claims, and this device checked none
+        // of it
+        assertTrue("it calls the history verified: $said", !said.contains("verified"))
+    }
+
     @Test
     fun the_file_is_named_for_the_day_it_was_written() {
         // a person with several backups should be able to tell which is

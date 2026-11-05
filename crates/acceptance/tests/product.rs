@@ -70,40 +70,6 @@ fn prd_06_disclose_to_operators_what_their_subordinates_ar() {
     todo!("PRD-06: Disclose to operators what their subordinates are exposed to, the hosting model, and the roles users hold")
 }
 
-/// Encrypt backups under a key kept apart, say what losing the device costs, and scan imports for expired retention
-///
-/// Spec: design §13.7.1; light-client-requirements.md §2
-/// Milestone: manual.  Kind: manual.  Oracle: behaviour.
-///
-/// Rule (design §13.7.1): "Encrypt under a key not stored alongside it."
-/// Rule (light-client-requirements.md §2): "Maintain backups, and make the consequence visible to the user."
-/// Rule (light-client-requirements.md §2): "Scan any imported backup for expired retention"
-///
-/// Given: A release build.
-/// When: A reviewer creates a backup, reads the backup screen, and imports a backup containing captures past their window.
-/// Then: The backup is encrypted under a passphrase-derived key not stored with it; the screen states what device loss costs; the import deletes the expired captures and says so.
-#[test]
-#[ignore = "acceptance PRD-07: owed at milestone manual"]
-fn prd_07_encrypt_backups_under_a_key_kept_apart_say_what() {
-    todo!("PRD-07: Encrypt backups under a key kept apart, say what losing the device costs, and scan imports for expired retention")
-}
-
-/// Present a restored archive as recovered on trust, never as verified-complete
-///
-/// Spec: light-client-requirements.md §2
-/// Milestone: manual.  Kind: manual.  Oracle: behaviour.
-///
-/// Rule (light-client-requirements.md §2): "never present a restored archive as verified-complete"
-///
-/// Given: A release build on a device that lost its archive.
-/// When: A reviewer restores from a holder.
-/// Then: The interface states that the restored history is complete only as far as the holder claims and was not verified complete.
-#[test]
-#[ignore = "acceptance PRD-09: owed at milestone manual"]
-fn prd_09_present_a_restored_archive_as_recovered_on_trust() {
-    todo!("PRD-09: Present a restored archive as recovered on trust, never as verified-complete")
-}
-
 /// Order provider and zone choices by concentration inside the operator's own horizon
 ///
 /// Spec: light-client-requirements.md §6
