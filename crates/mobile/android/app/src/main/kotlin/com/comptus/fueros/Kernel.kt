@@ -2148,6 +2148,20 @@ object Kernel {
         return call("invitations", { emptyList() }) { p.invitations(at) }
     }
 
+    /**
+     * **This device's archive and store, enveloped** (design §13.7.1,
+     * `rhtn_client::backup`): what a device loss takes away, under a key
+     * derived from the identity, so the blob is unreadable wherever it is
+     * kept until the identity is in hand again.
+     *
+     * The identity is **not** in it: that is the one thing a backup must
+     * not carry, and the seed phrase is how it comes back.
+     */
+    fun exportBackup(): ByteArray? {
+        val p = participant ?: return null
+        return call("exportBackup", { null }) { p.exportBackup() }
+    }
+
     /** The subnets this device roots and could bring under a patron. */
     fun subnetsRooted(): List<Subnet> {
         val p = participant ?: return emptyList()

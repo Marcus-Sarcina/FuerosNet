@@ -10,6 +10,7 @@ import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
+import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -435,10 +436,54 @@ class ShellActivity : Activity() {
      * shell can be walked and judged without anything pretending to be a
      * view it is not.
      */
+    /**
+     * **The backup prompt, or nothing** (PRD-10, PRD-07).
+     *
+     * Unobtrusive by being a line and a button rather than a dialog: a
+     * person who has not made a backup is told what losing the device
+     * costs, in the author's words from [Disclosure], and can act or
+     * scroll past. Absent entirely once a backup exists, and back if it
+     * stops existing.
+     */
+    private fun backupPrompt(): View? {
+        val prefs = getSharedPreferences("backup", MODE_PRIVATE)
+        val kept = prefs.getString("where", null)
+        val present = kept != null && runCatching {
+            contentResolver.openInputStream(android.net.Uri.parse(kept))?.use { true } ?: false
+        }.getOrDefault(false)
+        if (!Backup.prompting(kept, present)) return null
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(Screen.gutter(this@ShellActivity), 0, Screen.gutter(this@ShellActivity), 0)
+        }
+        box.addView(
+            TextView(this).apply {
+                textSize = 13f
+                setTextColor(Palette.now.sub)
+                text = Backup.words().joinToString("\n\n")
+            },
+        )
+        box.addView(
+            Button(this).apply {
+                text = "Make a backup"
+                setOnClickListener {
+                    startActivity(Intent(this@ShellActivity, BackupActivity::class.java))
+                }
+            },
+        )
+        return box
+    }
+
     private fun view(where: Chrome.Place): View {
         val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         when (where) {
             is Chrome.Place.Home -> {
+                // **asked until there is a backup, and asked again if it
+                // goes** (PRD-10): the decision is [Backup.prompting]'s
+                // and takes nothing but whether the one this device wrote
+                // is still there, so there is nowhere to keep a count of
+                // having asked
+                backupPrompt()?.let { column.addView(it) }
                 column.addView(
                     owed(
                         "Home — every subnet's notices, newest first, each saying where it " +

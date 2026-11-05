@@ -104,22 +104,6 @@ fn prd_09_present_a_restored_archive_as_recovered_on_trust() {
     todo!("PRD-09: Present a restored archive as recovered on trust, never as verified-complete")
 }
 
-/// Prompt for a backup until one exists, and stop when it does
-///
-/// Spec: light-client-requirements.md §2
-/// Milestone: manual.  Kind: manual.  Oracle: behaviour.
-///
-/// Rule (light-client-requirements.md §2): "Prompt for a backup until one exists."
-///
-/// Given: A light client on a device with no backup made.
-/// When: A person uses the client across several sessions, then makes a backup, then deletes it.
-/// Then: The prompt appears until the backup exists, is absent while it exists, and returns after deletion, with no count or memory of having prompted.
-#[test]
-#[ignore = "acceptance PRD-10: owed at milestone manual"]
-fn prd_10_prompt_for_a_backup_until_one_exists_and_stop_wh() {
-    todo!("PRD-10: Prompt for a backup until one exists, and stop when it does")
-}
-
 /// Order provider and zone choices by concentration inside the operator's own horizon
 ///
 /// Spec: light-client-requirements.md §6
