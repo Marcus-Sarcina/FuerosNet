@@ -791,3 +791,240 @@ async fn a_stranger_that_introduces_itself_on_the_dial_is_held_and_handed_a_bund
         "{d:?}"
     );
 }
+
+// acceptance: TRV-12
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn candidates_handed_over_on_the_ceremony_s_own_interfaces_open_the_direct_path() {
+    // alice and w1 are served by bob and **neither has written to the
+    // other**: no offer has ridden the relay, no payload has moved, and
+    // the only thing between them is that they are standing in the same
+    // room (design §12.6.3)
+    let mut scene = Scene::new();
+    scene.adopt("alice", "bob", "bob", &[0]);
+    scene.adopt("w1", "bob", "bob", &[1]);
+    let node = live_node("bob", scene.table("bob", &["bob"]), "bob", &[]);
+    let inboxes = Inboxes::default();
+    let counting = Counting::over(LocalNode::new(node.clone(), inboxes.clone()));
+    let serving: Arc<dyn Serving> = counting.clone();
+    // **`light_with`, so the session is nodeless as well as the path**:
+    // its control answers a prekey request on the connection itself, which
+    // is how two parties who have never written to each other open one
+    // without the node being asked for anything at all
+    let (alice, alice_direct) = light_with("alice", &serving, &inboxes, &[]);
+    let (mut w1, _w1_direct) = light_with("w1", &serving, &inboxes, &[]);
+    hold(&alice, "w1");
+    hold(&w1, "alice");
+
+    // the ceremony, by hand as `conversation.rs` drives it: what fixes the
+    // id both carriages are anchored to.  **The local interface is the
+    // test's own hands**, which is what it is on the bench as well — the
+    // shell carries opaque bytes and this crate never learns which bearer
+    // moved them (`client::local`)
+    let ia = alice
+        .handle
+        .with_blocking(|c| c.begin(Some(kh("w1")), vec![], true))
+        .expect("alice begins");
+    let ib = w1
+        .handle
+        .with_blocking(|c| c.begin(Some(kh("alice")), vec![], false))
+        .expect("w1 begins");
+    let cid_a = alice
+        .handle
+        .with_blocking(move |c| c.take_intent(kh("w1"), &ib))
+        .expect("alice takes w1's intent");
+    let cid_b = w1
+        .handle
+        .with_blocking(move |c| c.take_intent(kh("alice"), &ia))
+        .expect("w1 takes alice's intent");
+    assert_eq!(cid_a, cid_b, "one ceremony");
+
+    // nothing has gone through the node for the sake of the direct path,
+    // and the count is taken here so the assertion below is about the
+    // handover and not about whatever attaching cost
+    let before = counting.relayed();
+
+    // each side gathers its own candidates and seals them to this
+    // ceremony; the bearer carries the sealed bytes across
+    let mine = alice
+        .courier
+        .offer_bytes(kh("w1"))
+        .await
+        .expect("alice gathers candidates");
+    let bare = mine.clone();
+    let carriage_a = alice
+        .handle
+        .with_blocking(move |c| c.candidate_carriage(mine))
+        .expect("alice seals hers");
+    let theirs = w1
+        .courier
+        .offer_bytes(kh("alice"))
+        .await
+        .expect("w1 gathers candidates");
+    let carriage_b = w1
+        .handle
+        .with_blocking(move |c| c.candidate_carriage(theirs))
+        .expect("w1 seals its own");
+    let hers = w1
+        .handle
+        .with_blocking(move |c| c.take_candidate_carriage(&carriage_a))
+        .expect("w1 opens alice's");
+    let its = alice
+        .handle
+        .with_blocking(move |c| c.take_candidate_carriage(&carriage_b))
+        .expect("alice opens w1's");
+    assert_eq!(hers, bare, "what came out is the array that went in");
+
+    // alice dials w1 at the candidates w1 handed her, and the path opens
+    // without the node being asked for anything
+    assert!(
+        alice.courier.open_offered(kh("w1"), &its).await,
+        "alice opens the path w1's candidates name"
+    );
+    assert!(
+        until(4000, || alice.reachable.holds(&kh("w1"))
+            && w1.reachable.holds(&kh("alice")))
+        .await,
+        "both hold the path"
+    );
+    assert_eq!(
+        counting.relayed(),
+        before,
+        "the candidates crossed the bearer: the serving node carried none of them"
+    );
+
+    // the material for the session, asked of w1 itself on the path that
+    // just opened: nothing of this touches the node either
+    let w1_device = *id("w1").public.ed.as_bytes();
+    let req = rhtn_client::payload::one_time_request(kh("w1"), w1_device, [11u8; 16]);
+    let reply = alice_direct
+        .request(kh("w1"), req)
+        .await
+        .expect("w1 answered on the path");
+    alice
+        .handle
+        .with_blocking(move |c| c.take_prekey_reply(&reply))
+        .expect("kept");
+
+    // and the payload takes that path
+    alice
+        .courier
+        .send(
+            kh("w1"),
+            KIND_APPLICATION,
+            b"met, then spoke directly".to_vec(),
+        )
+        .await
+        .expect("sent");
+    let (from, d) = next(&mut w1.app, 3000).await.expect("delivered");
+    assert_eq!(from, kh("alice"));
+    assert!(
+        matches!(&d, Dispatched::Application { bytes, .. } if bytes == b"met, then spoke directly"),
+        "{d:?}"
+    );
+    assert_eq!(
+        counting.relayed(),
+        before,
+        "nothing of this was relayed either"
+    );
+
+    // **open nothing from candidates that did not come from the party they
+    // name** (`light-client-requirements.md` §4): the bare array is what a
+    // relay carries, and handed to the anchored intake it is not a
+    // carriage at all
+    assert!(
+        alice
+            .handle
+            .with_blocking(move |c| c.take_candidate_carriage(&bare))
+            .is_err(),
+        "an unsealed array is not an anchored handover"
+    );
+}
+
+// acceptance: TRV-13
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn nothing_else_is_taken_as_local_and_no_local_carriage_travels_the_network() {
+    // **The property is unenforceable against a peer** (design §1.1,
+    // `wire-format.md` §14.1): what is checked here is this
+    // implementation's own two paths, which is all the MUST can bind.
+    let mut scene = Scene::new();
+    scene.adopt("alice", "bob", "bob", &[0]);
+    scene.adopt("w1", "bob", "bob", &[1]);
+    scene.adopt("w2", "bob", "bob", &[2]);
+    let node = live_node("bob", scene.table("bob", &["bob"]), "bob", &[]);
+    let inboxes = Inboxes::default();
+    let counting = Counting::over(LocalNode::new(node.clone(), inboxes.clone()));
+    let serving: Arc<dyn Serving> = counting.clone();
+    let alice = light("alice", &node, &serving, &inboxes);
+    let w1 = light("w1", &node, &serving, &inboxes);
+    let w2 = light("w2", &node, &serving, &inboxes);
+    hold(&alice, "w1");
+    hold(&w1, "alice");
+
+    let ia = alice
+        .handle
+        .with_blocking(|c| c.begin(Some(kh("w1")), vec![], true))
+        .expect("alice begins");
+    let ib = w1
+        .handle
+        .with_blocking(|c| c.begin(Some(kh("alice")), vec![], false))
+        .expect("w1 begins");
+    alice
+        .handle
+        .with_blocking(move |c| c.take_intent(kh("w1"), &ib))
+        .expect("alice takes w1's intent");
+    w1.handle
+        .with_blocking(move |c| c.take_intent(kh("alice"), &ia))
+        .expect("w1 takes alice's intent");
+
+    let bare = alice
+        .courier
+        .offer_bytes(kh("w1"))
+        .await
+        .expect("alice gathers candidates");
+    let sealed = {
+        let b = bare.clone();
+        alice
+            .handle
+            .with_blocking(move |c| c.candidate_carriage(b))
+            .expect("alice seals hers")
+    };
+
+    // **Nothing is treated as locally delivered that did not arrive on a
+    // local interface.**  What the network carries is the bare array
+    // (`KIND_CANDIDATES`); the anchored intake refuses it, so an address
+    // that came over the wide-area network cannot present itself as one
+    // handed across a room.
+    let b = bare.clone();
+    assert!(
+        w1.handle
+            .with_blocking(move |c| c.take_candidate_carriage(&b))
+            .is_err(),
+        "a bare array is not an anchored handover"
+    );
+
+    // **And the claim is checked, not taken**: w2 was in no ceremony with
+    // alice, so alice's carriage does not open for it — the per-ceremony
+    // key separates the two before any anchor is compared.
+    let s = sealed.clone();
+    assert!(
+        w2.handle
+            .with_blocking(move |c| c.take_candidate_carriage(&s))
+            .is_err(),
+        "a carriage from a ceremony this client was not in is refused"
+    );
+
+    // **No local interface is carried remotely.**  The anchored object has
+    // no kind of its own on the wire and nothing dials from it: a shell
+    // that pushed one over the network — the "pair remotely" §14.1 names —
+    // would be bridging nothing, rather than silently converting the
+    // ceremony's guarantees into assumptions.
+    assert!(
+        !alice.courier.open_offered(kh("w1"), &sealed).await,
+        "the local carriage opens no path when it arrives as candidates"
+    );
+    assert!(
+        !w1.reachable.holds(&kh("alice")) && !alice.reachable.holds(&kh("w1")),
+        "and no path was opened by any of it"
+    );
+    assert_eq!(counting.relayed(), 0, "none of this went through the node");
+}
