@@ -111,3 +111,56 @@ will be rewritten into friendlier language behind expandable headings — so
 those should wait for that pass rather than be composed twice. T1 fails
 loudly for a type with no text, which is the right way for the gap to be
 visible meanwhile.
+
+---
+
+## The conduct audit, clause by clause [2026-11-05]
+
+**Most of the conduct is already tested.** The rows are owed in large part
+because nobody mapped existing tests to their clauses, not because the
+behaviour is unproven. Checked by search, test by test:
+
+| Clause | Covered by | Verdict |
+|---|---|---|
+| PRD-02, the resources named and the gaps in them | `LeavingTest`: `the_standing_condition_is_said_every_time…`, `what_cannot_be_computed_is_said_before_anything_else`, `a_stale_a_truncated_and_an_unswept_node_are_each_named_as_a_gap` | **covered** |
+| PRD-02, warned before confirmation | the two-press arm in `LeavingActivity` | **gap** — no test holds the arming |
+| PRD-07, the key kept apart | `backup.rs`: `a_backup_is_enveloped_under_a_key_kept_apart_and_comes_back_whole` | **covered** |
+| PRD-07, the import deletes and says so | `backup.rs`: `a_scan_on_import_discards_what_is_past_its_window_and_keeps_the_history`, `a_client_scans_what_it_imports_and_reports_what_it_dropped` | **covered** |
+| PRD-14, alias or keyhash and never a guess | `ChromeTest`: `an_orbs_mark_is_the_published_name_or_the_keyhash_and_never_a_guess` | **covered** |
+| PRD-14, published per subnet at attach and on change | `profiles.rs`: `a_held_profile_is_re_signed_at_a_higher_counter_at_each_attach` | **covered** |
+| PRD-14, and in no record | — | **gap**, a negative nobody asserts |
+| PRD-19, the attested set and the `nominated_by` split | `MeetTest`: `the_attested_set_is_the_survivors_that_signed_split_by_side` | **covered** |
+| PRD-19, a witnessless record said plainly | `MeetTest`: `no_witness_is_surfaced_to_the_person_and_the_record_will_say_so`, `no_witnesses_is_the_formation_case_and_said_so` | **covered** |
+| PRD-17, engagement before the code shows | `MeetTest`'s recorder holds `calls` including `engage`, so the harness reaches it | **gap**, and a cheap one |
+| PRD-11, ordering by concentration | `Participant::providers_by_concentration` exists and **nothing tests it** | **gap** |
+| PRD-10, the prompt's lifecycle | — | **gap**, nothing about a backup prompt is tested anywhere |
+| PRD-13, which pages ship | — | **gap**, a source assertion like `ManifestTest`'s |
+| PRD-06, hosted against brokered, roles not predicates | — | **gap** |
+| PRD-08, once and before traffic | — | **gap** |
+| PRD-04, before any eclipse condition | — | **gap** |
+
+**So the conduct work is seven tests, not eleven**, and four rows
+(PRD-07, PRD-14, PRD-19, PRD-02) are already satisfied in conduct and wait
+only on a sentence.
+
+**No row is marked implemented on the strength of a covered clause
+alone.** PRD-07's conduct is proven and its narrative is owed, so marking
+it would close a row whose screen still says nothing. The marker goes on
+when the last clause of a row is met, not the first.
+
+### Where the remaining gaps actually live [2026-11-05]
+
+- **PRD-11 — closed in conduct.** The ordering now has a test. The
+  existing `candidate_providers_are_ordered_by_what_the_horizon_already_holds`
+  promised it in its name and asserted only `asns_seen`, its input; the
+  function it is about was never called. Least first, ties in the caller's
+  order, every candidate returned and the crowded marked by their count.
+- **PRD-17 — not unit-reachable as written.** The engagement order, the
+  retry while a binding is fetched and the "N of M are engaged and
+  watching" line are all inside `Kernel.engageNominees`, which is private
+  and needs a live `Participant`. Either an instrumented run, or the
+  policy becomes pure the way `Chrome` and `Leaving` already are — the
+  latter is the project's own pattern and would make it a unit test, but
+  it is a refactor of live code and not a test to be written.
+- **PRD-02's arming, PRD-14's "in no record", PRD-10, PRD-13, PRD-06,
+  PRD-08** remain as the audit has them.

@@ -1244,6 +1244,41 @@ fn candidate_providers_are_ordered_by_what_the_horizon_already_holds() {
     );
     assert_eq!(seen.get(&64501).map(|s| s.len()), Some(1), "w1 alone");
     assert_eq!(seen.get(&64502), None, "nothing is held of an unseen ASN");
+
+    // **and the ordering itself**, which this test promised in its name and
+    // did not reach: `asns_seen` is the input, and PRD-11 is about what is
+    // done with it — the least concentrated first, the crowded marked
+    // rather than hidden, and the caller's order kept where counts tie.
+    let mut c = rhtn_client::ceremony::Client::new(
+        common::id("alice"),
+        common::ids(),
+        Default::default(),
+        harness::device(
+            std::rc::Rc::new(std::cell::Cell::new(1_790_000_000_000u64)),
+            7,
+            0,
+        )
+        .0,
+    );
+    c.horizon = fed("alice", &recs);
+    let ordered = c.providers_by_concentration(&[64500, 64501, 64502, 64503]);
+    assert_eq!(
+        ordered,
+        vec![(64502, 0), (64503, 0), (64501, 1), (64500, 2)],
+        "least first, and two empties in the order they were offered"
+    );
+    assert_eq!(
+        ordered.len(),
+        4,
+        "every candidate comes back: the crowded are marked by their count \
+         and never dropped"
+    );
+    // offered the other way round, the empties swap and nothing else does:
+    // the order is the caller's only where the horizon cannot separate them
+    assert_eq!(
+        c.providers_by_concentration(&[64503, 64502, 64500, 64501]),
+        vec![(64503, 0), (64502, 0), (64501, 1), (64500, 2)],
+    );
 }
 
 // ---- the rows a client would assert to a node it operates -------------
