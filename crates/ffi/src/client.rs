@@ -3136,6 +3136,66 @@ impl Participant {
         })
     }
 
+    /// **Take a way to reach `who` outside this network**, as they gave it
+    /// at the adoption (`light-client-requirements.md` §1.5): optional,
+    /// theirs to have deleted, kept for the window *they* declared, and
+    /// carried by nothing — not a record, not an introduction, not a
+    /// backup.
+    ///
+    /// `window_s` is the subject's declared window. Nothing happens for a
+    /// `who` that is not a keyhash.
+    pub fn take_reach(&self, who: Id, address: String, window_s: u64) {
+        crate::diag::call_plain("take_reach", || {
+            let Some(k) = keyhash(&who) else { return };
+            self.handle
+                .with_blocking(move |c| c.take_reach(k, address, window_s));
+        })
+    }
+
+    /// **Forget it.** Its subject may ask at any time and owes no reason.
+    /// Whether one was held.
+    pub fn forget_reach(&self, who: Id) -> bool {
+        crate::diag::call_plain("forget_reach", || {
+            let Some(k) = keyhash(&who) else { return false };
+            self.handle.with_blocking(move |c| c.forget_reach(&k))
+        })
+    }
+
+    /// **The invitations this patron owes**, one per member whose address
+    /// is held and still inside its window: where to send it, and the link
+    /// to send.
+    ///
+    /// **Composed here rather than in a shell** so that no shell assembles
+    /// a `fueros://attach` link of its own. `at` is where the node
+    /// answers; the link carries no node key, an index into the
+    /// memberships the reader's own device holds being what places it
+    /// ([`Invited`]).
+    ///
+    /// Reading is also what collects: an address past its subject's window
+    /// is dropped rather than returned (`Client::reaches`).
+    pub fn invitations(&self, at: String) -> Vec<Invite> {
+        crate::diag::call_plain("invitations", || {
+            let me = self.handle.me();
+            self.handle.with_blocking(move |c| {
+                c.reaches()
+                    .into_iter()
+                    .map(|(k, to)| Invite {
+                        to,
+                        link: rhtn_client::invitation::compose(
+                            &rhtn_client::invitation::Invitation {
+                                at: at.clone(),
+                                patron: Some(me),
+                                subnet: None,
+                                member: Some(k),
+                                as_label: None,
+                            },
+                        ),
+                    })
+                    .collect()
+            })
+        })
+    }
+
     /// **Read an invitation and place it** against what this device holds
     /// (`rhtn_client::invitation`).
     ///
@@ -3902,6 +3962,18 @@ pub fn administration_act_proof(
     }
     let p = rhtn_crypto::enrolment::act_proof(&token, &nonce, &method, &path, &body);
     Ok(p.iter().map(|b| format!("{b:02x}")).collect())
+}
+
+/// **One invitation to send**: where to send it, and what to send.
+///
+/// The address is the member's own, given at the adoption, and leaves this
+/// device only toward that member (`light-client-requirements.md` §1.5).
+#[derive(uniffi::Record)]
+pub struct Invite {
+    /// The address its subject gave — a number, an address.
+    pub to: String,
+    /// The `fueros://attach` link, composed by the kernel.
+    pub link: String,
 }
 
 /// **An invitation to serve from a node, read and placed**

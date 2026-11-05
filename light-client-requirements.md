@@ -368,6 +368,24 @@ job.
 
 - **Tell participants what the record will contain and who will be able to read
   it**, at the moment of capture, not in a policy document.
+- **An address taken at a ceremony is optional, is the subject's to have
+  deleted, and never reaches a record or a wire** [author, 2026-11-05]. A
+  patron may be given a way to reach a member — a number, an address —
+  so that an invitation to a node the patron stands up later can arrive
+  without waiting for the next meeting (design §12.6.3's code is the
+  alternative). Ask for it at the adoption, where the decision to give
+  that member access was already made; take nothing from a member who
+  declines, and say that declining costs them only the invitation.
+  **Hold it for the window its subject declared** and drop it when that
+  closes, as a capture is dropped — but **say what the difference is
+  rather than implying the protections are the same**: a likeness is
+  sealed under its subject's keys, so retaining one past the window gets
+  a holder nothing it can open (design §7.5.2), where an address is
+  plaintext and nothing structural stops you keeping it. **So this window
+  is your own commitment**, design §1.1's unenforceable kind, and the
+  register says so (design §19.8, C25). It goes in no transaction, is
+  never propagated, never introduced with the contact, and is not part of
+  what a backup is for.
 
 
 ---

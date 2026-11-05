@@ -1408,6 +1408,74 @@ impl Client {
         self.prune_contacts();
     }
 
+    /// **Take a way to reach `who` outside this network**, as its subject
+    /// gave it at a ceremony (`light-client-requirements.md` §1.5): a
+    /// number or an address, so that an invitation to a node this client's
+    /// user stands up later can arrive without waiting for the next
+    /// meeting.
+    ///
+    /// `window_s` is the window **its subject declared**, not this
+    /// client's: a holder applying its own to somebody else's address
+    /// would be substituting its policy for theirs, which is the rule
+    /// already stated for a capture (design §7.5.1).
+    ///
+    /// Marked under [`rhtn_model::Noun::Contacts`], the table it lives
+    /// beside, rather than a noun of its own.
+    pub fn take_reach(&mut self, who: Keyhash, address: String, window_s: u64) {
+        self.changed.insert(rhtn_model::Noun::Contacts);
+        let taken_at = self.now_s();
+        self.store.reach.insert(
+            who,
+            crate::contacts::Reach {
+                address,
+                taken_at,
+                window_s,
+            },
+        );
+    }
+
+    /// **Forget it**, which is its subject's to ask for at any time and
+    /// needs no reason (`light-client-requirements.md` §1.5).  Whether one
+    /// was held.
+    pub fn forget_reach(&mut self, who: &Keyhash) -> bool {
+        let had = self.store.reach.remove(who).is_some();
+        if had {
+            self.changed.insert(rhtn_model::Noun::Contacts);
+        }
+        had
+    }
+
+    /// **Every address still inside the window its subject declared**, and
+    /// **the lapsed ones dropped as this reads**.
+    ///
+    /// There is no periodic sweep to claim: this is the read path, and it
+    /// is the only way an address is reached, so one past its window can
+    /// never be used and is deleted at the first moment it would have
+    /// been. The wake register answers the same shape for the same reason
+    /// (`rhtn_node::wake`: a lapsed endpoint is not posted to).
+    pub fn reaches(&mut self) -> Vec<(Keyhash, String)> {
+        let now = self.now_s();
+        let lapsed: Vec<Keyhash> = self
+            .store
+            .reach
+            .iter()
+            .filter(|(_, r)| r.lapsed(now))
+            .map(|(k, _)| *k)
+            .collect();
+        if !lapsed.is_empty() {
+            self.changed.insert(rhtn_model::Noun::Contacts);
+            for k in &lapsed {
+                self.store.reach.remove(k);
+            }
+            tracing::info!(target: "pay", dropped = lapsed.len(), "pay.reach.lapsed");
+        }
+        self.store
+            .reach
+            .iter()
+            .map(|(k, r)| (*k, r.address.clone()))
+            .collect()
+    }
+
     /// One more dealing with `who`, where they are a contact.
     pub fn touch_contact(&mut self, who: &Keyhash) {
         let now = self.now_s();

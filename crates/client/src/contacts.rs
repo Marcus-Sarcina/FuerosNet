@@ -15,6 +15,70 @@ use std::collections::BTreeMap;
 /// about the party, never a rank.
 pub use rhtn_model::How;
 
+/// **A way to reach a party outside this network**, given at a ceremony so
+/// that an invitation to a node its patron stands up later can arrive
+/// without waiting for the next meeting (`light-client-requirements.md`
+/// §1.5; design §12.6.3's code is the alternative).
+///
+/// **Kept in a table of its own and not on [`Contact`]** [2026-11-05]: a
+/// contact is encoded by the paths that introduce one and hand it on, and
+/// an address that must never be propagated has no business travelling
+/// through a function whose job is to propagate. Out here, no path that
+/// serialises a contact can carry it by accident.
+///
+/// **Plaintext, and that is the whole difference from a capture.** A
+/// likeness is sealed under its subject's keys, so a holder retains
+/// nothing it can open and the window enforces itself (design §7.5.1,
+/// §7.5.2); nothing structural stops a holder keeping an address. So the
+/// window here is this client's own commitment, design §1.1's
+/// unenforceable kind, and design §19.8's C25 registers what holding many
+/// of them composes into.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Reach {
+    /// The address as its subject gave it.
+    pub address: String,
+    /// When it was given, in seconds.
+    pub taken_at: u64,
+    /// The window its subject declared, in seconds.
+    pub window_s: u64,
+}
+
+impl Reach {
+    /// Whether the subject's window has closed by `now`.
+    #[must_use]
+    pub fn lapsed(&self, now: u64) -> bool {
+        now >= self.taken_at.saturating_add(self.window_s)
+    }
+
+    /// The holding as the store keeps it.
+    #[must_use]
+    pub fn encode(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        emit_array_head(&mut out, 4);
+        emit_uint(&mut out, 1);
+        emit_tstr(&mut out, &self.address);
+        emit_uint(&mut out, self.taken_at);
+        emit_uint(&mut out, self.window_s);
+        out
+    }
+
+    /// Read one back, or nothing.
+    #[must_use]
+    pub fn decode(b: &[u8]) -> Option<Reach> {
+        let item = parse_all(b).ok()?;
+        let Item::Array(a) = &item else { return None };
+        if a.len() != 4 || as_uint(&a[0]) != Some(1) {
+            return None;
+        }
+        let Item::Text(r) = &a[1] else { return None };
+        Some(Reach {
+            address: String::from_utf8(b[r.clone()].to_vec()).ok()?,
+            taken_at: as_uint(&a[2])?,
+            window_s: as_uint(&a[3])?,
+        })
+    }
+}
+
 /// One contact, as the store keeps it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Contact {

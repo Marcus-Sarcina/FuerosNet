@@ -584,3 +584,90 @@ fn a_record_that_arrives_leaves_every_signer_a_contact() {
         );
     }
 }
+
+/// **An address given at a ceremony is held apart from the contact**
+/// (`light-client-requirements.md` §1.5, design §19.8 C25): used only to
+/// reach its subject with an invitation, dropped when the window its
+/// subject declared closes, and never carried by anything that hands a
+/// contact on.
+#[test]
+fn an_address_is_held_for_its_subject_s_window_and_travels_with_nothing() {
+    let mut s = setup(&["alice", "bob", "witness"]);
+    s.met("alice", "bob", "witness");
+    let two_years = 2 * 365 * 86_400;
+    {
+        let a = s.client("alice");
+        a.take_reach(kh("bob"), "+15550001111".into(), two_years);
+        assert_eq!(
+            a.reaches(),
+            vec![(kh("bob"), "+15550001111".to_string())],
+            "held, and inside the window"
+        );
+
+        // **it is not on the contact**, so no path that encodes one can
+        // carry it: the propagating functions never see it
+        let contact = a.store.contacts.get(&kh("bob")).expect("a contact");
+        let encoded = contact.encode();
+        assert!(
+            !encoded.windows(12).any(|w| w == b"+15550001111"),
+            "an encoded contact carries no address"
+        );
+        let handed = a.own_introduction().expect("an introduction");
+        assert!(
+            !handed.windows(12).any(|w| w == b"+15550001111"),
+            "nor does an introduction"
+        );
+    }
+
+    // **the subject's to have deleted, at any time and for no reason**
+    {
+        let a = s.client("alice");
+        assert!(a.forget_reach(&kh("bob")));
+        assert!(a.reaches().is_empty());
+        assert!(!a.forget_reach(&kh("bob")), "and gone is gone");
+    }
+
+    // **it survives a restart**, since an act that did not would not be
+    // an act — the directory store keeps it beside the contacts
+    {
+        let a = s.client("alice");
+        a.take_reach(kh("bob"), "+15550003333".into(), two_years);
+        let dir = std::env::temp_dir().join(format!("rhtn-reach-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        a.store.save(&dir).expect("saved");
+        let back = rhtn_client::store::ClientStore::load(&dir).expect("loaded");
+        assert_eq!(
+            back.reach.get(&kh("bob")).map(|r| r.address.as_str()),
+            Some("+15550003333"),
+            "the holding came back"
+        );
+        // **and the backup blob does not carry it**, which §1.5 says
+        // plainly: a backup is for the archive, not for an address held
+        // about somebody else
+        let blob = a.store.encode();
+        assert!(
+            !blob.windows(12).any(|w| w == b"+15550003333"),
+            "no address in the durable blob"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+        a.forget_reach(&kh("bob"));
+    }
+
+    // **the window is the subject's, and the read path is what collects**:
+    // nothing past it is ever returned, and it is deleted as that is read
+    {
+        let a = s.client("alice");
+        a.take_reach(kh("bob"), "+15550002222".into(), 60);
+        assert_eq!(a.reaches().len(), 1);
+        let taken = a.store.reach.get(&kh("bob")).expect("held").taken_at;
+        a.store.reach.get_mut(&kh("bob")).expect("held").taken_at = taken.saturating_sub(120);
+        assert!(
+            a.reaches().is_empty(),
+            "past its window, it is not returned"
+        );
+        assert!(
+            !a.store.reach.contains_key(&kh("bob")),
+            "and not merely hidden: the read is what deletes it"
+        );
+    }
+}
