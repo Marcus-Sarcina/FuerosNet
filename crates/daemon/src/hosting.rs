@@ -427,6 +427,48 @@ pub struct Applied {
     pub bound: usize,
     /// Per resource, the host facts as headers.
     pub facts: Vec<(Keyhash, Vec<(String, String)>)>,
+    /// Per resource, the block and the log provisioned for it, so that
+    /// [`Applied::over`] can tell the instance where to reach them.
+    #[allow(clippy::type_complexity)]
+    pub provisioned: Vec<(
+        Keyhash,
+        Option<Arc<rhtn_resources::Block>>,
+        Option<Arc<rhtn_resources::LogFile>>,
+    )>,
+}
+
+impl Applied {
+    /// **Name the surface each instance reaches its block and log over**
+    /// (`infra-client-requirements.md` §9.3, `resource-requirements.md`
+    /// §3.3): every provisioned block and log is registered, and the
+    /// instance is told `rhtn-block`, `rhtn-log` and the `rhtn-secret`
+    /// that says which instance is calling.
+    ///
+    /// **Called by whoever applied the hosting file**, because the facts
+    /// are only true once this node is serving them: a URL told before
+    /// anything was bound would name nothing. The surface also forgets
+    /// every instance this file did not bind, so an instance the operator
+    /// stopped hosting loses its block with the binding and not after it.
+    pub fn over(&mut self, surface: &crate::host::HostSurface) {
+        let mine: Vec<Keyhash> = self.provisioned.iter().map(|(r, _, _)| *r).collect();
+        surface.retain(&mine);
+        for (res, block, log) in &self.provisioned {
+            if block.is_none() && log.is_none() {
+                continue;
+            }
+            let secret = surface.register(*res, block.clone(), log.clone());
+            let Some((_, own)) = self.facts.iter_mut().find(|(r, _)| r == res) else {
+                continue;
+            };
+            if block.is_some() {
+                own.push(("rhtn-block".into(), surface.block_url()));
+            }
+            if log.is_some() {
+                own.push(("rhtn-log".into(), surface.log_url()));
+            }
+            own.push(("rhtn-secret".into(), crate::host::hex_secret(&secret)));
+        }
+    }
 }
 
 /// A block's ceiling where the manifest imports the block and budgets
@@ -468,6 +510,12 @@ pub fn apply(
     let mut hosts: Vec<(Keyhash, Binding)> = Vec::new();
     let mut grants: Vec<(Keyhash, Vec<Grant>)> = Vec::new();
     let mut facts: Vec<(Keyhash, Vec<(String, String)>)> = Vec::new();
+    #[allow(clippy::type_complexity)]
+    let mut provisioned: Vec<(
+        Keyhash,
+        Option<Arc<rhtn_resources::Block>>,
+        Option<Arc<rhtn_resources::LogFile>>,
+    )> = Vec::new();
     // **two resources at one address is a collision, not a choice.**
     // Nothing partitions ports across package authors and nothing could,
     // so where the operator names the address the file is the only place
@@ -532,24 +580,36 @@ pub fn apply(
                     "rhtn-host".into(),
                     rhtn_node::resources::HOST_VERSIONS.join(" "),
                 )];
+                // **the ceiling is a fact of the instance's and goes with
+                // the facts; where to reach the block is the surface's to
+                // say** [author, 2026-11-05], so `rhtn-block` and
+                // `rhtn-log` are added by [`Applied::over`] and not here:
+                // a path on this node's filesystem is not something a
+                // package on a socket of its own can write
+                // (`infra-client-requirements.md` §9.3)
+                let mut kept_block = None;
+                let mut kept_log = None;
                 if wants_block {
                     let quota = manifest.budget.block_bytes.unwrap_or(DEFAULT_BLOCK_BYTES);
                     let dir = root.join("blocks").join(&h.resource);
                     let block = rhtn_resources::Block::provision(&dir, quota)
                         .map_err(|e| at(0, format!("{}: {e}", dir.display())))?;
-                    own.push(("rhtn-block".into(), dir.display().to_string()));
                     own.push(("rhtn-block-bytes".into(), quota.to_string()));
-                    env.block = Some(Arc::new(block));
+                    let block = Arc::new(block);
+                    kept_block = Some(block.clone());
+                    env.block = Some(block);
                 }
                 if wants_log {
                     let retain = manifest.budget.log_bytes.unwrap_or(DEFAULT_LOG_BYTES);
                     let file = root.join("logs").join(format!("{}.log", h.resource));
                     let log = rhtn_resources::LogFile::at(&file, retain)
                         .map_err(|e| at(0, format!("{}: {e}", file.display())))?;
-                    own.push(("rhtn-log".into(), file.display().to_string()));
                     own.push(("rhtn-log-bytes".into(), retain.to_string()));
-                    env.log = Some(Arc::new(log));
+                    let log = Arc::new(log);
+                    kept_log = Some(log.clone());
+                    env.log = Some(log);
                 }
+                provisioned.push((res, kept_block, kept_log));
                 facts.push((res, own));
                 env
             }
@@ -709,7 +769,11 @@ pub fn apply(
             .set_grants(res, written)
             .map_err(|e| at(0, e.to_string()))?;
     }
-    Ok(Applied { bound, facts })
+    Ok(Applied {
+        bound,
+        facts,
+        provisioned,
+    })
 }
 
 /// TOML's own message with the line it is about, as `config.rs` renders

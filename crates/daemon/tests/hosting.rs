@@ -1161,10 +1161,37 @@ fn a_manifest_declares_its_host_version_its_budget_and_its_destinations() {
     let (_, facts) = &applied.facts[0];
     let get = |n: &str| facts.iter().find(|(k, _)| k == n).map(|(_, v)| v.clone());
     assert_eq!(get("rhtn-host").as_deref(), Some("rhtn/host@1"));
-    assert!(get("rhtn-block").unwrap().ends_with(RES));
     assert_eq!(get("rhtn-block-bytes").as_deref(), Some("4096"));
-    assert!(get("rhtn-log").unwrap().ends_with(&format!("{RES}.log")));
     assert_eq!(get("rhtn-log-bytes").as_deref(), Some("512"));
+    // **the ceilings are told by applying; where to reach them is the
+    // surface's to say** [author, 2026-11-05], so until one is named
+    // there is nothing to tell — a path on this node's filesystem is not
+    // something a package on a socket of its own can write
+    // (`infra-client-requirements.md` §9.3)
+    assert_eq!(get("rhtn-block"), None, "no surface, nothing to tell");
+    assert_eq!(get("rhtn-log"), None);
+    assert_eq!(get("rhtn-secret"), None);
+
+    // **and named, the plane carries all of it**: where the block and the
+    // log are reached, and the secret that says which instance is asking
+    let rt = tokio::runtime::Runtime::new().expect("a runtime");
+    let surface = rt
+        .block_on(rhtn_daemon::host::HostSurface::bind())
+        .expect("bound");
+    let mut applied = applied;
+    applied.over(&surface);
+    let (_, facts) = &applied.facts[0];
+    let get = |n: &str| facts.iter().find(|(k, _)| k == n).map(|(_, v)| v.clone());
+    assert_eq!(
+        get("rhtn-block").as_deref(),
+        Some(surface.block_url().as_str())
+    );
+    assert_eq!(get("rhtn-log").as_deref(), Some(surface.log_url().as_str()));
+    assert_eq!(get("rhtn-block-bytes").as_deref(), Some("4096"));
+    let secret = get("rhtn-secret").expect("a secret");
+    assert_eq!(secret.len(), 64, "32 bytes as hex: {secret}");
+    assert!(secret.chars().all(|c| c.is_ascii_hexdigit()));
+    assert_ne!(secret, "0".repeat(64), "and not a guessable one");
     // and with no state directory, a node cannot host it, and says so
     let mut g2 = Gateway::default();
     let why = apply(&mut g2, Path::new(&f), Limits::default(), None, None)

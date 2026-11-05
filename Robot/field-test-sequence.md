@@ -491,14 +491,21 @@ on nothing else, which is the state the attach's replay is for.
   grepping a patron's store proves nothing since it holds the counterparty's
   material as a contact regardless. Proven in-process (CER-71); the bench
   proof is functional and waits on a node being taught this subnet.
-- **The brief leaves no trace at all.** `MeetActivity` renders `brief()`
-  straight to the screen and logs no item, yet the brief carries the
-  authority consequences, the subnet claim as a claim (UX-016) and the
-  retention disclosure — and it is the screen the manual rows are about. A
-  row is covered only where a person watched at the time; for this run
-  nobody did, and it cannot be recovered afterwards. **Open with the
-  author**: whether to log the brief's row ids, and their text under
-  `fieldtest`.
+- **The brief leaves no trace, and does not need one** [ruled, author,
+  2026-11-05]. `MeetActivity` renders `brief()` straight to the screen and
+  logs no item. This was filed as a gap, and the author closed it as the
+  wrong question: *"the contents of the briefing screen can be
+  reconstructed from the signed transaction by enumerating the participants
+  by type and inserting the boilerplate language, so there does not seem to
+  be a reason to memorialize its on-screen state. Likewise, the user's
+  agreement to the meeting is constructive proof that they saw the briefing
+  and accepted its contents."* So the record already determines what was
+  shown, and the acceptance is the evidence of having seen it — logging
+  would have memorialised a function of data already held. **What this
+  changes for the manual rows**: a row whose subject is brief *text* is
+  provable in-process against `brief()` for a constructed transaction, with
+  no screen and nobody watching; the rows about *framing* (PRD-12, PRD-13,
+  RSC-58) are not about the brief and are untouched by this.
 - **One carry refused with no reason.** MRK's `peer.carry sent=4 refused=1
   left=0` against 4VC's `refused=0`. The deposits reconcile exactly in both
   directions, so nothing was lost, and the refusal was not the deposit — that

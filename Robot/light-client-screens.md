@@ -511,6 +511,20 @@ screen cannot show a reassurance it has not earned and a test can say which
 items a given ceremony owes. **The rows these answer**: UX-001 and UX-002 at
 D1.5, PRD-02 where D1a chose an adoption, UX-003 at D6.
 
+**What the brief becomes** [author, 2026-11-05]: *"The briefing screen is
+mostly boilerplate and users are expected to read it maybe once on their
+first meeting and then mostly ignore it except for maybe the
+witness/verifier counts. In the final version, this is a case where most of
+the disclosure text will be translated into a more approachable language
+and then hidden behind expandable headings because what a meeting, peering,
+patron relationship etc implies is fixed across all occurrences. The
+information is available and the main topics of interest will be displayed
+for anyone so interested."* So what varies across occurrences — the counts,
+the parties — is what shows, and what is fixed is reachable rather than
+recited. **And the brief is not memorialised**: it is a function of the
+signed transaction plus that fixed language, and the acceptance is
+constructive proof it was seen (`Robot/field-test-sequence.md`).
+
 The **bootstrap object is the shell's own** and deliberately not a
 `wire-format.md` §14.3 one: that section fixes the *anchored* exchange, and
 the bootstrap carries only

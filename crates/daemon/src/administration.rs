@@ -248,6 +248,11 @@ pub struct Surface {
     pub node: Arc<Mutex<Option<Running>>>,
     /// The hosting file and its limits, for a reload.
     pub hosting: Option<(PathBuf, rhtn_resources::Limits)>,
+    /// **The surface its hosted instances reach their storage over**
+    /// ([`crate::host`]): a package bound here is told where to reach its
+    /// block and its log, and the secret that says which instance it is,
+    /// exactly as one bound at start is.
+    pub packages: std::sync::Arc<crate::host::HostSurface>,
     /// **Where this node keeps who may reach each resource**
     /// ([`crate::grants`]), which is what a grant act rewrites. Absent,
     /// an act has nowhere to persist and refuses rather than changing a
@@ -1607,8 +1612,10 @@ impl Surface {
             self.grants.as_deref(),
             self.state.as_deref(),
         ) {
-            Ok(applied) => {
+            Ok(mut applied) => {
                 let n = applied.bound;
+                // the same facts a start would have told it (§9.3)
+                applied.over(&self.packages);
                 for (res, facts) in applied.facts {
                     view.federation.set_host(res, facts);
                 }

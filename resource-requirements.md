@@ -231,7 +231,7 @@ operator bound and `rhtn-audience` naming you.
 
 | Request | Carries | Your answer |
 |---|---|---|
-| `PUT /.rhtn/relationships` | the instances your operator configured yours to federate with: a patron's instance, subordinates' instances, named kin, each a resource keyhash; **and what your host provides you** [2026-10-30], as headers — `rhtn-host`, the surface versions it offers; `rhtn-block` and `rhtn-block-bytes`, where your storage block is and its ceiling; `rhtn-log` and `rhtn-log-bytes`, your log and its retention (`infra-client-requirements.md` §9.3) | 2xx once taken; it is repeated until then, and again whenever they or the host's facts change. **Nothing else is delivered to you until you take it** [2026-10-27]: a directive is acted on under a snapshot of who may send you one, and until you answer you have accepted no snapshot |
+| `PUT /.rhtn/relationships` | the instances your operator configured yours to federate with: a patron's instance, subordinates' instances, named kin, each a resource keyhash; **and what your host provides you** [2026-10-30], as headers — `rhtn-host`, the surface versions it offers; `rhtn-block` and `rhtn-block-bytes`, where your storage block is and its ceiling; `rhtn-log` and `rhtn-log-bytes`, your log and its retention (`infra-client-requirements.md` §9.3); and `rhtn-secret`, what you present to reach either (below) | 2xx once taken; it is repeated until then, and again whenever they or the host's facts change. **Nothing else is delivered to you until you take it** [2026-10-27]: a directive is acted on under a snapshot of who may send you one, and until you answer you have accepted no snapshot |
 | `PUT /.rhtn/envelope` | one **envelope** from a related instance, with `rhtn-origin` (that instance, hex) and `rhtn-relation` (`patron`, `subordinate` or `kin:<name>`, the node's reading of your operator's configuration) | 2xx to take it, which the node remembers; the body may carry envelopes to send (below) |
 | `GET /.rhtn/outbox` | **the items the node has taken**, as `?taken=a,b` [2026-10-27] | 2xx with `{"emit": [{"item": …, "to": …, "envelope": …}, …]}`, empty where you have nothing to send; `to` is `patron`, `subordinates`, `kin:<name>` or one related instance in hex |
 
@@ -312,6 +312,23 @@ operator has since withdrawn. A directive binds only within its own relationship
 what a directive means, what to apply, what to report and what your members are
 shown of it — including who set a policy — is your application's to decide and to
 make legible.
+
+**One exchange goes the other way, and it is how you keep anything** [author,
+2026-11-05]. `rhtn-block` and `rhtn-log` name a surface of your host's, not a
+path on its filesystem: a package in the sandbox reaches its block as a binding
+it imported, and you reach the same block by asking the host, so one
+implementation enforces the ceiling for both of you
+(`infra-client-requirements.md` §9.3). **Present `rhtn-secret` on every
+request**; it is what says which instance is asking, so there is no instance to
+name and none you could name. Against `rhtn-block` you may list your files, and
+read, write, `sync`, size or remove one under a flat name of your choosing;
+against `rhtn-log` you may write a line, which your host stamps, **and nothing
+else** — the log is for your operator to read and not for you to read back. A
+write that would carry you past `rhtn-block-bytes` is refused with the ceiling
+named, and `sync` returning is what says your bytes are on stable storage.
+Your host binds this where only its own machine reaches it, which is a
+deployment fact and not a thing you can verify: **the secret is the whole of
+what authorises you**, as §3.1 says of the one running the other way.
 
 ### 3.4 What you may ask of a member's client
 

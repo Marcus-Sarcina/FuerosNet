@@ -5,8 +5,9 @@
 //! the configuration a node cannot derive ([`config`]), the lifecycle from
 //! start to signal to stop ([`service`]), the packages it was told to host
 //! ([`hosting`]), the out-of-band surface an operator reaches it over
-//! ([`administration`]), and the disclosures an operator is owed about what
-//! their configuration exposes ([`operator`]).
+//! ([`administration`]), the surface its hosted instances reach their own
+//! storage over ([`host`]), and the disclosures an operator is owed about
+//! what their configuration exposes ([`operator`]).
 //!
 //! It answers to `infra-client-requirements.md`, which states the operator
 //! obligations, and adds no protocol of its own: everything on the wire is
@@ -35,6 +36,10 @@ pub mod diag;
 /// pending ones to the nodes the operator located.
 pub mod federation;
 pub mod fetch;
+/// **The host surface a socket-backed instance calls** for its storage
+/// block and its log: the only leg on which an instance speaks to its
+/// node rather than being spoken to.
+pub mod host;
 pub mod hosting;
 
 /// Where a resource's grants are kept: the node's own table, as

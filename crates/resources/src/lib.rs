@@ -291,7 +291,10 @@ fn block_name_ok(name: &str) -> bool {
 /// discipline.  Files are flat and named ([`BLOCK_NAME`]); nothing in
 /// here is read by the host or by anybody else.  The same block serves a
 /// package in the sandbox, through the `rhtn/1:block` binding, and one
-/// on a socket of its own, which is handed the path.
+/// on a socket of its own, which reaches it over the host's own surface
+/// [author, 2026-11-05]: the ceiling is enforced *on every write*, and a
+/// package writing the host's filesystem directly is one the host does
+/// not interpose on.
 pub struct Block {
     dir: std::path::PathBuf,
     quota: u64,
@@ -388,6 +391,23 @@ impl Block {
             .map_err(|e| e.to_string())?;
         f.write_all(bytes).map_err(|e| e.to_string())?;
         Ok(after)
+    }
+
+    /// **Whether a write would pass the ceiling**, and the ceiling if it
+    /// would.  [`Block::write`] refuses on its own and names the quota in
+    /// doing so; this is for a caller that must also say *which kind* of
+    /// refusal it was — the host surface answering a socket-backed
+    /// instance (`infra-client-requirements.md` §9.3) distinguishes a
+    /// write over the ceiling from a write that failed for any other
+    /// reason, and the ceiling is not a server fault.
+    pub fn would_exceed(&self, name: &str, offset: u64, len: usize) -> Option<u64> {
+        let Ok(p) = self.path(name) else {
+            return None;
+        };
+        let before = std::fs::metadata(&p).map(|m| m.len()).unwrap_or(0);
+        let after = before.max(offset.saturating_add(len as u64));
+        let used = self.used();
+        (used - before + after > self.quota).then_some(self.quota)
     }
 
     /// `sync`: when this returns, what was written to `name` is on

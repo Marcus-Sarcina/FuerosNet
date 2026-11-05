@@ -870,8 +870,9 @@ the log, the clock, fetch and jobs as `rhtn/1:block`, `rhtn/1:log`,
 imports `rhtn/1:request` and `rhtn/1:response`, and reaches nothing it did
 not declare; a package importing fetch that names no destination, or jobs
 without a `job` entry, is refused at installation. A package on a socket of its own has its own network, and the
-list it declared is its operator's to read. A package on a socket of its own has
-your filesystem already; **you tell it where its block and its log are, and
+list it declared is its operator's to read. A package on a socket of its own
+reaches them on a surface of yours rather than on your filesystem [author,
+2026-11-05]; **you tell it where its block and its log are, and
 what it may fill them to, on the relationships exchange**
 (`resource-requirements.md` §3.3): `rhtn-host` with the versions you offer,
 `rhtn-block` and `rhtn-block-bytes`, `rhtn-log` and `rhtn-log-bytes`,
@@ -880,6 +881,28 @@ when any of it moves. **Keep the blocks and the logs in a directory of your
 own**, one block and one log per instance, named to it; a node that keeps
 no such directory cannot host a package that needs one, and says so at
 installation.
+
+**Why a surface and not a path** [author, 2026-11-05]. The ceiling above is
+yours to enforce *on every write*, and a package writing your filesystem
+directly is one you do not interpose on: the rule would bind nobody, and
+what named the ceiling would be your operating system's refusal rather than
+your own. Reaching the block over a surface of yours puts one
+implementation behind both kinds of package, and reserves nothing in
+advance on a machine whose storage is finite.
+
+**The terms of that surface.** It takes the block's own operations — list,
+read, write, `sync`, size and remove, under the flat names the package
+chose — and for the log a write alone, the log being outward only (above):
+a package reading its own log back is not something you owe it. **Bind it
+where only your own machine reaches it**, and tell the instance where that
+is with the facts above, so nothing has to agree on a number in advance.
+**What says which instance is calling is a secret you generate for it**,
+handed over the same way — not the path, and not a header naming one: an
+instance that could name another's block by addressing it is one you would
+have to defend against, where one that cannot ask for it needs no defence.
+Neither where you bound it nor what it is called is a secret, and a port a
+local process can open is on its own proof of nothing
+(`resource-requirements.md` §3.3).
 
 **You are not always older than the subnet you serve** [2026-11-01]. An
 instance is launched into a subnet that already exists, replaces a machine,

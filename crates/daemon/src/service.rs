@@ -337,6 +337,18 @@ impl Service {
             upstream = cfg.upstream.is_some(),
             "daemon.lifecycle"
         );
+        // **the surface its hosted instances reach their own storage
+        // over, bound before anything is hosted** ([`crate::host`]):
+        // where it bound is part of what the relationships exchange tells
+        // an instance, and hosting is applied below, so a surface raised
+        // after that would have been told to nobody.  Bound even where
+        // this node hosts nothing yet, because the operator may bind a
+        // package over the administration surface at any time after.
+        let packages = crate::host::HostSurface::bind()
+            .await
+            .map_err(|e| Startup::Hosting(format!("the surface for hosted packages: {e}")))?;
+        tokio::spawn(packages.clone().serve());
+
         // the seed, or the credential an instance holds instead of it
         // (design §23.3)
         // the surface, and the slot the running node goes into for it, are
@@ -409,6 +421,7 @@ impl Service {
                             endpoint_record: cfg.endpoint_record.clone(),
                             anchor_entry: cfg.anchor_entry.clone(),
                             node: serving_node.clone(),
+                            packages: packages.clone(),
                             grants: cfg.grants.clone(),
                             horizon: cfg.horizon.clone(),
                             state: cfg.state.clone(),
@@ -651,7 +664,7 @@ impl Service {
                     fuel,
                     ..Limits::default()
                 };
-                let applied = crate::hosting::apply(
+                let mut applied = crate::hosting::apply(
                     &mut view.resources,
                     path,
                     limits,
@@ -659,6 +672,9 @@ impl Service {
                     cfg.state.as_deref(),
                 )
                 .map_err(|e| Startup::Hosting(format!("{}: {e}", path.display())))?;
+                // where each instance reaches its block and its log, and
+                // the secret that says which instance is asking (§9.3)
+                applied.over(&packages);
                 let bound = applied.bound;
                 // **configuring roles is one of §10.2's four moments**, so
                 // the grants this file wrote are expanded now rather than
