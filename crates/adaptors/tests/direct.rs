@@ -80,6 +80,9 @@ impl Serving for Counting {
     fn publish_profile<'a>(&'a self, bytes: &'a [u8]) -> Answer<'a, bool> {
         self.inner.publish_profile(bytes)
     }
+    fn assert_horizon<'a>(&'a self, bytes: &'a [u8], nonce: [u8; 16]) -> Answer<'a, bool> {
+        self.inner.assert_horizon(bytes, nonce)
+    }
     fn profile<'a>(&'a self, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {
         self.inner.profile(body)
     }

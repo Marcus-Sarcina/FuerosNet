@@ -718,6 +718,16 @@ impl Courier {
                             out.refused.push(Msg::PublishProfile(b));
                         }
                     }
+                    // **a row refused is not retried** (`wire-format.md`
+                    // §7.12): the node refuses one it already holds at
+                    // this revision, one from a sender speaking past its
+                    // downline, and one it cannot pin — none of which a
+                    // second attempt changes. The next attach sends it
+                    // again at a later revision, which is the repair.
+                    Msg::AssertHorizon { bytes, nonce } => {
+                        let took = me.serving.assert_horizon(&bytes, nonce).await;
+                        tracing::debug!(target: "pay", took, "pay.horizon");
+                    }
                     // a profile is fetched from where the subject's locator
                     // leads (`wire-format.md` §7.11): the subject's own node
                     // first, and this client's where that one could not be

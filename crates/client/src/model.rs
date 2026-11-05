@@ -309,3 +309,42 @@ impl Client {
         rows
     }
 }
+
+impl Client {
+    /// **Every row of this client's horizon, as messages for the node
+    /// serving it** (`wire-format.md` §7.12).
+    ///
+    /// One per member this client issued an adoption for, each carrying
+    /// that member's key material — without which the node holds a name
+    /// it can never recognise at a handshake. What is a row at all, and
+    /// what was left out for want of material, is
+    /// [`Client::horizon_rows`]'s decision.
+    ///
+    /// **Sent at every attach**, not once: a node that was restarted,
+    /// replaced on a new image, or moved to another machine is told again
+    /// with nobody asked. A row the node already holds at the same
+    /// revision is answered refused and costs one frame.
+    pub(crate) fn horizon_assertions(&self) -> Vec<crate::ceremony::Msg> {
+        self.horizon_rows()
+            .into_iter()
+            .map(|r| {
+                let nonce = self.nonce();
+                let bytes = rhtn_archive::submission::HorizonAssertion {
+                    node: r.node,
+                    patron: r.patron,
+                    series: u64::from(r.series),
+                    revision: r.revision,
+                    retracted: false,
+                    adoption: Some(r.adoption),
+                    from: Some(r.from),
+                    anchor: r.anchor,
+                    slot: r.slot.map(u64::from),
+                    material: Some(r.material),
+                    nonce,
+                }
+                .encode();
+                crate::ceremony::Msg::AssertHorizon { bytes, nonce }
+            })
+            .collect()
+    }
+}

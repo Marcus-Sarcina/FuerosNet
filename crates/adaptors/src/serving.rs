@@ -93,6 +93,11 @@ pub trait Serving: Send + Sync {
     /// Publish the caller's own profile (`wire-format.md` §7.11); whether
     /// the node took it.
     fn publish_profile<'a>(&'a self, bytes: &'a [u8]) -> Answer<'a, bool>;
+    /// **One row of this client's horizon** (`wire-format.md` §7.12): the
+    /// bytes already built, with the nonce the reply must echo, because
+    /// the client composed the row and the node bounds it by where this
+    /// client sits. Whether the node took it.
+    fn assert_horizon<'a>(&'a self, bytes: &'a [u8], nonce: [u8; 16]) -> Answer<'a, bool>;
     /// A `ProfileRequest` (`wire-format.md` §7.11): the node's reply, or
     /// nothing where it answers none.
     fn profile<'a>(&'a self, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>>;
@@ -160,6 +165,9 @@ impl Serving for Nobody {
         Box::pin(async { None })
     }
     fn publish_profile<'a>(&'a self, _: &'a [u8]) -> Answer<'a, bool> {
+        Box::pin(async { false })
+    }
+    fn assert_horizon<'a>(&'a self, _: &'a [u8], _: [u8; 16]) -> Answer<'a, bool> {
         Box::pin(async { false })
     }
     fn profile<'a>(&'a self, _: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {
@@ -277,6 +285,22 @@ impl Serving for LocalNode {
             let mut view = self.node.view.lock().unwrap();
             let ids = self.node.ids.lock().unwrap();
             view.profiles.publish(&*ids, bytes).is_ok()
+        })
+    }
+
+    fn assert_horizon<'a>(&'a self, bytes: &'a [u8], _: [u8; 16]) -> Answer<'a, bool> {
+        Box::pin(async move {
+            // **the sender is this client, as the connection would have
+            // bound it** (`wire-format.md` §7.12): in process there is no
+            // handshake, so the identity is supplied rather than read, and
+            // it is the same keyhash a real one would have presented
+            let me = self.me();
+            let mut view = self.node.view.lock().unwrap();
+            let pins = &self.node.node.cfg.pins;
+            rhtn_node::submissions::horizon(&mut view, Some(pins), &me, bytes).is_some_and(|r| {
+                rhtn_archive::submission::SubmissionReply::decode(&r)
+                    .is_ok_and(|r| r.code == rhtn_archive::submission::SUBMISSION_ACCEPTED)
+            })
         })
     }
 

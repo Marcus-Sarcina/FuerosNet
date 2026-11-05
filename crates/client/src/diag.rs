@@ -265,6 +265,7 @@ pub fn msg(m: &crate::ceremony::Msg) -> &'static str {
         CatalogQuery(_) => "CatalogQuery",
         ResourceRequest { .. } => "ResourceRequest",
         PublishProfile(_) => "PublishProfile",
+        AssertHorizon { .. } => "AssertHorizon",
         ProfileRequest(_) => "ProfileRequest",
         PrekeyReply(_) => "PrekeyReply",
         PoolExhausted => "PoolExhausted",

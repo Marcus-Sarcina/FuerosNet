@@ -67,6 +67,82 @@ pub fn profile(
     Some(SubmissionReply::code(p.nonce, code).encode())
 }
 
+/// **Take one row of the horizon an attached client asserts**
+/// (`wire-format.md` §7.12).
+///
+/// **The one thing a client hands its node that names another party.** The
+/// four of §7.10 are each about the sender — its bundle, its pool, its
+/// message, its endpoint — so the authenticated requester is the subject
+/// and nothing has to be bounded. This is not: a row is about a member,
+/// and what keeps it honest is where the sender sits.
+///
+/// **So authority follows the topology** [author, 2026-11-04]: a row whose
+/// patron is this sender or sits beneath it, and nothing else, which is
+/// [`rhtn_archive::topology::Table::may_assert`]. The sender is the
+/// keyhash the connection bound, never a field in the body.
+///
+/// **The material is pinned with the row or the row is pointless**: a node
+/// resolves a connection by comparing the presented key against material
+/// it holds, so a row whose material this node cannot pin names a member
+/// it will never recognise. The schema has already bound that material to
+/// the row's own keyhash (§1.1), so nothing here compares them.
+pub fn horizon(
+    view: &mut NodeView,
+    pins: Option<&rhtn_transport::tls::Pins>,
+    peer: &Keyhash,
+    body: &[u8],
+) -> Option<Vec<u8>> {
+    let a = HorizonAssertion::decode(body).ok()?;
+    let series = u32::try_from(a.series).ok();
+    let row = series.map(|series| rhtn_archive::topology::Asserted {
+        node: a.node,
+        patron: a.patron,
+        series,
+        adoption: a.adoption.unwrap_or([0; 32]),
+        from: a.from.unwrap_or(0),
+        anchor: a.anchor,
+        slot: u8::try_from(a.slot.unwrap_or(0)).ok(),
+        revision: a.revision,
+    });
+    let code = match row {
+        None => SUBMISSION_REFUSED,
+        Some(row) if !view.table.may_assert(peer, &row) => {
+            // **a sender speaking past its own downline is refused, not
+            // held**: it is not a row waiting for something, it is a row
+            // this sender was never entitled to assert
+            SUBMISSION_REFUSED
+        }
+        Some(row) if a.retracted => {
+            match view
+                .table
+                .retract(&row.node, &row.patron, row.series, row.revision)
+            {
+                rhtn_archive::topology::Asserting::Stale { .. } => SUBMISSION_REFUSED,
+                _ => SUBMISSION_ACCEPTED,
+            }
+        }
+        Some(row) => {
+            // material first: a row bound without it names a member this
+            // node could not recognise, and would report success
+            // **a node not yet serving cannot pin**, and a row it took
+            // without pinning would bind a member it will never recognise
+            let pinned = match (pins, a.material.as_ref()) {
+                (Some(p), Some(m)) => p.pin(row.node, m).is_ok(),
+                _ => false,
+            };
+            if !pinned {
+                SUBMISSION_REFUSED
+            } else {
+                match view.table.assert(&row) {
+                    rhtn_archive::topology::Asserting::Stale { .. } => SUBMISSION_REFUSED,
+                    _ => SUBMISSION_ACCEPTED,
+                }
+            }
+        }
+    };
+    Some(SubmissionReply::code(a.nonce, code).encode())
+}
+
 /// Take one-time keys into the sender's own pool, bounded.  Over the
 /// bound the deposit is refused with the code rather than silently
 /// trimmed, so a client knows what its pool holds.

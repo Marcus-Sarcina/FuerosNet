@@ -885,9 +885,22 @@ impl Table {
     /// This does not cover the holder's own assertions: those arrive over
     /// an authorised administration channel and are the authority the node
     /// serves under, so nothing here is asked about them.
+    /// **And the asserter must be a party this table places.** The first
+    /// draft of this read `asserter == row.patron || downline_contains`,
+    /// which let *anybody* assert rows under themselves: a party the table
+    /// had never heard of could add members and have them bound, which is
+    /// the stealth insertion this predicate exists to prevent, arriving
+    /// from the other side. Found by the test that offers a row from a
+    /// party the table does not place [2026-11-04].
+    ///
+    /// `downline_contains` already implies the asserter is placed, since it
+    /// walks from it; the direct case is the one that needed saying.
     #[must_use]
     pub fn may_assert(&self, asserter: &Keyhash, row: &Asserted) -> bool {
-        *asserter == row.patron || self.downline_contains(asserter, &row.patron)
+        if *asserter == row.patron {
+            return self.is_node(asserter);
+        }
+        self.downline_contains(asserter, &row.patron)
     }
 
     /// The rows this table took as assertions, by `(node, patron, series)`

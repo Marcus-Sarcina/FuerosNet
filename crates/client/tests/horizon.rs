@@ -1339,3 +1339,49 @@ fn an_ending_this_client_has_seen_drops_the_row_and_silence_does_not() {
         );
     }
 }
+
+#[test]
+fn attaching_tells_the_node_what_this_clients_horizon_is() {
+    // **a node cannot be taught by a replay it has no reach to judge**
+    // (`wire-format.md` §7.12), so a client says what its horizon is at
+    // every attach — and a subnet formed with no node can reach one no
+    // other way.
+    let mut s = setup(&["alice", "bob", "w1"]);
+    s.adopted("bob", "alice", "w1", 1);
+
+    let msgs = s.client("alice").attach(kh("w1"), &[]);
+    let rows: Vec<_> = msgs
+        .iter()
+        .filter_map(|m| match m {
+            rhtn_client::ceremony::Msg::AssertHorizon { bytes, nonce } => Some((bytes, nonce)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(rows.len(), 1, "one row, for the member alice issued");
+
+    let a = rhtn_archive::submission::HorizonAssertion::decode(rows[0].0).expect("a row");
+    assert_eq!(a.node, kh("bob"));
+    assert_eq!(a.patron, kh("alice"));
+    assert!(!a.retracted);
+    assert_eq!(
+        a.material.as_deref(),
+        Some(id("bob").public.key_material().as_slice()),
+        "with the material the node needs to recognise bob at a handshake"
+    );
+    assert_eq!(a.nonce, *rows[0].1, "the nonce the reply echoes");
+}
+
+#[test]
+fn a_client_that_issued_nothing_asserts_nothing_at_attach() {
+    // bob is a member, not a patron: it has nothing to say about anyone,
+    // and the frame it does not send is the point
+    let mut s = setup(&["alice", "bob", "w1"]);
+    s.adopted("bob", "alice", "w1", 1);
+    let msgs = s.client("bob").attach(kh("w1"), &[]);
+    assert!(
+        !msgs
+            .iter()
+            .any(|m| matches!(m, rhtn_client::ceremony::Msg::AssertHorizon { .. })),
+        "a subordinate asserts nothing"
+    );
+}

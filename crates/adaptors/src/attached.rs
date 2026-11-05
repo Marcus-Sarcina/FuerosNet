@@ -152,6 +152,15 @@ impl Serving for AttachedNode {
         })
     }
 
+    fn assert_horizon<'a>(&'a self, bytes: &'a [u8], nonce: [u8; 16]) -> Answer<'a, bool> {
+        // the body is the client's: it holds the archive the row came from
+        // and the material the node needs, so nothing is composed here
+        Box::pin(async move {
+            self.submit(REQUEST_HORIZON_ASSERTION, nonce, bytes.to_vec())
+                .await
+        })
+    }
+
     fn profile<'a>(&'a self, body: &'a [u8]) -> Answer<'a, Option<Vec<u8>>> {
         Box::pin(async move { self.ask(REQUEST_PROFILE, body.to_vec()).await })
     }

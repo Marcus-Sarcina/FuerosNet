@@ -1530,3 +1530,23 @@ fn the_versions_travel_with_a_table_handed_to_another_holder() {
     );
     assert_eq!(moved.asserted().count(), 1);
 }
+
+#[test]
+fn a_party_this_table_does_not_place_speaks_for_nothing_even_under_itself() {
+    // **the hole the first draft had** [2026-11-04]: `asserter ==
+    // row.patron` alone let anybody assert rows under themselves, so a
+    // party the table had never heard of could add members and have them
+    // bound — the stealth insertion this predicate exists to prevent,
+    // arriving from the other side.
+    let w = World::new(&["alice", "bob", "carol", "dave"]);
+    let mut t = Table::with_me(w.kh("alice"));
+    t.assert(&asserted(&w, "bob", "alice", 1, 1));
+
+    // bob is placed, so bob may speak for its own subordinates
+    assert!(t.may_assert(&w.kh("bob"), &asserted(&w, "dave", "bob", 1, 2)));
+    // carol is not placed at all, and a row under carol is still refused
+    assert!(
+        !t.may_assert(&w.kh("carol"), &asserted(&w, "dave", "carol", 1, 2)),
+        "a stranger may not add members under itself"
+    );
+}

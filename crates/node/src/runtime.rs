@@ -720,6 +720,20 @@ impl LiveNode {
                         let mut view = v.lock().unwrap();
                         crate::submissions::wake(&mut view, &peer, &device, &body)
                     }
+                    // **the one a client hands its node that names
+                    // another party** (`wire-format.md` §7.12), which is
+                    // why it is the one bounded by where the sender sits
+                    // rather than by the sender being the subject
+                    Family::HorizonAssertion => {
+                        let node = s.lock().unwrap().clone();
+                        let mut view = v.lock().unwrap();
+                        crate::submissions::horizon(
+                            &mut view,
+                            node.as_ref().map(|n| &n.cfg.pins),
+                            &peer,
+                            &body,
+                        )
+                    }
                     Family::ProfilePublication => {
                         let mut view = v.lock().unwrap();
                         let i = ids_for_requests.lock().unwrap();

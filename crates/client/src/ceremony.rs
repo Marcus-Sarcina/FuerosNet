@@ -312,6 +312,16 @@ pub enum Msg {
     /// This client's own signed `Profile` (`wire-format.md` §7.11), to
     /// the serving node.
     PublishProfile(Vec<u8>),
+    /// **One row of this client's horizon, to the node serving it**
+    /// (`wire-format.md` §7.12): a member it issued an adoption for, with
+    /// the material that lets the node recognise it. Carries no signature;
+    /// the node bounds it by where this client sits.
+    AssertHorizon {
+        /// The encoded `HorizonAssertion`.
+        bytes: Vec<u8>,
+        /// Its nonce, which the reply echoes.
+        nonce: [u8; 16],
+    },
     /// A `ProfileRequest` (`wire-format.md` §7.11), to where the
     /// subject's locator leads.
     ProfileRequest(Vec<u8>),
@@ -4861,7 +4871,9 @@ impl Client {
 }
 
 impl Client {
-    fn nonce(&self) -> [u8; 16] {
+    /// A fresh nonce. `pub(crate)` so the model module can give a horizon
+    /// assertion one from the same source [2026-11-04].
+    pub(crate) fn nonce(&self) -> [u8; 16] {
         let mut n = [0u8; 16];
         self.device.random.fill(&mut n);
         n
@@ -4892,6 +4904,13 @@ impl Client {
             tracing::warn!(target: "cer", ?e, "the default alias could not be published");
         }
         out.extend(self.refreshed_profiles());
+        // **and what this client's own horizon is** (`wire-format.md`
+        // §7.12): a node cannot be taught by a replay it has no reach to
+        // judge, and a subnet formed with no node can reach one no other
+        // way. One row per member this client issued an adoption for, at
+        // every attach, so a node that was restarted or replaced is told
+        // again without anybody being asked.
+        out.extend(self.horizon_assertions());
         // and ask after everybody's, the session being the first chance
         out.extend(self.profile_requests());
         out.extend(self.sweep(population));

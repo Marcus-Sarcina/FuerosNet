@@ -20,6 +20,9 @@ pub const REQUEST_RELAY: u64 = 11;
 pub const REQUEST_WAKE: u64 = 12;
 /// Request frame 13: the client's own profile (`wire-format.md` §7.11).
 pub const REQUEST_PROFILE_PUBLICATION: u64 = 13;
+/// Request type 15 (`wire-format.md` §7.12): one row of the horizon a
+/// client asserts to the node serving it.
+pub const REQUEST_HORIZON_ASSERTION: u64 = 15;
 
 /// A client publishing its own bundle to the node that serves it
 /// (`wire-format.md` §7.10).
