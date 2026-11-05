@@ -72,6 +72,18 @@ class OperatorActivity : Activity() {
     private fun tokenFor(at: String): String? =
         getSharedPreferences("operator", MODE_PRIVATE).getString("token:$at", null)
 
+    /** The node address a member was last invited to, where they have
+     *  been: what keeps a redrawing of this screen from texting them
+     *  again.  Keyed by the member and never by their address, which is
+     *  the one thing here that names a person outside this network. */
+    private fun invitedTo(who: String): String? =
+        getSharedPreferences("operator", MODE_PRIVATE).getString("invited:$who", null)
+
+    private fun rememberInvited(who: String, at: String) {
+        getSharedPreferences("operator", MODE_PRIVATE).edit()
+            .putString("invited:$who", at).apply()
+    }
+
     private fun rememberToken(at: String, token: String) {
         getSharedPreferences("operator", MODE_PRIVATE).edit()
             .putString("token:$at", token).apply()
@@ -109,6 +121,87 @@ class OperatorActivity : Activity() {
             .apply()
     }
 
+    private companion object {
+        /** The one request code this screen asks a permission under. */
+        const val SMS_REQUEST = 7447
+    }
+
+    /**
+     * **The invitations this node owes its members, sent** (`Invite`,
+     * `light-client-requirements.md` §1.5).
+     *
+     * **It sends without asking, which is the ruling and not an
+     * oversight** [author, 2026-11-03]: *"I want the required
+     * click-throughs and exposure of network plumbing to be minimized… If
+     * the patron has adopted people into a subnet then he has decided to
+     * give those people access to his node that serves that subnet."* The
+     * decision was taken at the adoption; a confirmation here would be
+     * that decision asked again.
+     *
+     * **So `SEND_SMS` rather than the composer** [author, 2026-11-05]. The
+     * cost is named rather than hidden: the permission is restricted, and
+     * it routes the number through this application where the composer
+     * would have kept it in the system's hands. The number still reaches
+     * nothing off the device but the message itself.
+     *
+     * **Once per node address.** A member already invited to this address
+     * is not texted again however often this screen is drawn; a node at a
+     * new address owes a new invitation, which is the whole case for
+     * holding an address at all.
+     *
+     * **Asked for once, and never per invite.** Where the permission is
+     * not held the invitations wait and the screen says how many, with the
+     * grant as the only action — a denial leaves them waiting rather than
+     * turning each into a tap.
+     */
+    private fun sendInvitations(at: String) {
+        val owed = Kernel.invitations(at).filter { invitedTo(it.who) != at }
+        if (owed.isEmpty()) return
+        if (checkSelfPermission(android.Manifest.permission.SEND_SMS) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            narration.text = "${owed.size} invitation${if (owed.size == 1) "" else "s"} " +
+                "to send for $at. This phone needs permission to send them as messages; " +
+                "nothing of the numbers leaves it."
+            requestPermissions(arrayOf(android.Manifest.permission.SEND_SMS), SMS_REQUEST)
+            return
+        }
+        val sms = getSystemService(android.telephony.SmsManager::class.java) ?: return
+        var sent = 0
+        for (i in owed) {
+            try {
+                sms.sendTextMessage(i.to, null, i.link, null, null)
+                rememberInvited(i.who, at)
+                sent += 1
+            } catch (e: Exception) {
+                // **a number that will not take a message is not a reason
+                // to stop**: the rest are owed too, and the mark is only
+                // written for one that went
+                Diag.warn("operator.invite", "state" to "refused", "why" to (e.message ?: "unsaid"))
+            }
+        }
+        Diag.event("operator.invite", "sent" to sent, "owed" to owed.size)
+        if (sent > 0) {
+            narration.text = "$sent invitation${if (sent == 1) "" else "s"} sent for $at."
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        code: Int,
+        permissions: Array<out String>,
+        granted: IntArray,
+    ) {
+        super.onRequestPermissionsResult(code, permissions, granted)
+        if (code != SMS_REQUEST) return
+        if (granted.firstOrNull() == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            drawInstances()
+        } else {
+            narration.text = "The invitations are waiting: without permission to send a " +
+                "message this phone cannot deliver them, and your members can still scan a " +
+                "code at your next meeting."
+        }
+    }
+
     private fun drawInstances() {
         roll.removeAllViews()
         val held = instances()
@@ -122,6 +215,15 @@ class OperatorActivity : Activity() {
         for (i in held) {
             tokenFor(i.at)?.let { t -> assertHorizon(i.at, t, narration) }
         }
+        // **and the invitations the same way**, for the same reason the
+        // horizon is caught up here rather than hung off a button. The one
+        // difference is that a message is outward and costs its reader
+        // something, so it goes **once per node address** and not once per
+        // drawing: [invite] keeps that mark, and a node at a new address
+        // is a new invitation — which is the case that prompted the
+        // feature, an operator not owning their address space [author,
+        // 2026-11-04].
+        held.forEach { sendInvitations(it.at) }
         if (held.isEmpty()) {
             roll.addView(
                 TextView(this).apply {

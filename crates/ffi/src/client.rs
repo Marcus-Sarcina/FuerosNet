@@ -3206,6 +3206,7 @@ impl Participant {
                 c.reaches()
                     .into_iter()
                     .map(|(k, to)| Invite {
+                        who: k.iter().map(|b| format!("{b:02x}")).collect(),
                         to,
                         link: rhtn_client::invitation::compose(
                             &rhtn_client::invitation::Invitation {
@@ -3996,6 +3997,13 @@ pub fn administration_act_proof(
 /// device only toward that member (`light-client-requirements.md` §1.5).
 #[derive(uniffi::Record)]
 pub struct Invite {
+    /// **Whose invitation this is**, hex: the member the link indexes.
+    ///
+    /// Here so a shell can remember it has already sent to them for a
+    /// given node without parsing a link it did not compose, and without
+    /// keying that memory on the address — the one field here that
+    /// identifies a person outside this network.
+    pub who: String,
     /// The address its subject gave — a number, an address.
     pub to: String,
     /// The `fueros://attach` link, composed by the kernel.

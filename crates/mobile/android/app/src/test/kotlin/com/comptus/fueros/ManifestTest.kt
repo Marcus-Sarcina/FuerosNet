@@ -1,6 +1,7 @@
 package com.comptus.fueros
 
 import java.io.File
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -90,6 +91,44 @@ class ManifestTest {
      *  declared no `MAIN`/`LAUNCHER` filter would install an app with no
      *  way in, and one that gave it to another screen would open on a
      *  navigation the design replaced. */
+    /**
+     * **Every permission this app asks for is listed here too**, so that
+     * one cannot arrive without somebody looking at it.
+     *
+     * The manifest is where a permission is declared and this is where it
+     * is reviewed: adding one means editing this list, which is the whole
+     * point. `SEND_SMS` is the restricted one — a patron sends a member
+     * the invitation to its node [author, 2026-11-05], chosen over the
+     * system composer because the invitation carries out a decision taken
+     * at the adoption and a composer would put a tap on each one.
+     */
+    @Test
+    fun the_permissions_asked_for_are_the_ones_reviewed() {
+        val declared = Regex("android\\.permission\\.([A-Z_]+)")
+            .findAll(manifests(module()))
+            .map { it.groupValues[1] }
+            .toSortedSet()
+        val reviewed = sortedSetOf(
+            "ACCESS_COARSE_LOCATION",
+            "ACCESS_FINE_LOCATION",
+            "ACCESS_NETWORK_STATE",
+            "BLUETOOTH_ADVERTISE",
+            "BLUETOOTH_CONNECT",
+            "BLUETOOTH_SCAN",
+            "CAMERA",
+            "INTERNET",
+            "NFC",
+            "POST_NOTIFICATIONS",
+            "SEND_SMS",
+            "VIBRATE",
+        )
+        assertEquals(
+            "a permission was added or removed without review: edit this list and say why",
+            reviewed,
+            declared,
+        )
+    }
+
     @Test
     fun the_shell_is_the_launcher() {
         val declared = manifests(module())

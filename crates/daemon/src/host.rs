@@ -167,6 +167,19 @@ impl HostSurface {
             listen = %self.bound,
             "daemon.lifecycle"
         );
+        // **and said where an operator will actually see it** [2026-11-05]:
+        // a releasable build caps the static tracing level, so the line
+        // above exists in no shipped image — verified on the bench, where
+        // `podman logs` held every `say!` line and not one
+        // `daemon.lifecycle`. An operator whose hosted package cannot
+        // reach its block needs to know this is up and where, and the two
+        // surfaces beside it announce themselves the same way.
+        crate::say!(
+            "rhtnd: the surface its hosted packages reach their block and log over, on {} \
+             (loopback only; each instance is told the address and its own secret with its \
+             relationships)",
+            self.bound
+        );
         loop {
             let Ok((stream, _)) = self.listener.accept().await else {
                 continue;
