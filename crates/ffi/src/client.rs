@@ -3136,6 +3136,61 @@ impl Participant {
         })
     }
 
+    /// **Read an invitation and place it** against what this device holds
+    /// (`rhtn_client::invitation`).
+    ///
+    /// `None` where it is not an invitation this build reads;
+    /// [`invitation_say`] gives the words for that. Nothing here attaches:
+    /// what comes back fills a screen a person agrees to, and the
+    /// agreement is `serve_from`'s.
+    #[must_use]
+    pub fn invitation(&self, text: String) -> Option<Invited> {
+        crate::diag::call_plain("invitation", || {
+            let i = rhtn_client::invitation::parse(&text).ok()?;
+            let placed = {
+                let i = i.clone();
+                self.handle.with_blocking(move |c| c.place_invitation(&i))
+            };
+            use rhtn_client::invitation::Placed;
+            let (node, choose, why) = match placed {
+                Placed::Node(k) => (Some(hex(&k)), vec![], String::new()),
+                Placed::Choose(ks) => (None, ks.iter().map(|k| hex(k)).collect(), String::new()),
+                Placed::NotAPatron(k) => (
+                    None,
+                    vec![],
+                    format!(
+                        "This invitation is for a node belonging to {}…, who you are not under. \
+                         An invitation cannot introduce a patron: being adopted happens in \
+                         person.",
+                        &hex(&k)[..8]
+                    ),
+                ),
+                Placed::NoPatron => (
+                    None,
+                    vec![],
+                    "This identity is under nobody, so there is no node for it to serve from. \
+                     That changes when somebody adopts it, in person."
+                        .into(),
+                ),
+                Placed::NotThisMember(k) => (
+                    None,
+                    vec![],
+                    format!(
+                        "This invitation is for {}…, which is not the identity running here.",
+                        &hex(&k)[..8]
+                    ),
+                ),
+            };
+            Some(Invited {
+                at: i.at.clone(),
+                as_label: i.as_label.clone(),
+                node,
+                choose,
+                why,
+            })
+        })
+    }
+
     /// **As the party being adopted: check the body, then sign it**
     /// (`light-client-requirements.md` §7). The patron built it and this
     /// device is shown it, so every field is checked against what this
@@ -3847,6 +3902,43 @@ pub fn administration_act_proof(
     }
     let p = rhtn_crypto::enrolment::act_proof(&token, &nonce, &method, &path, &body);
     Ok(p.iter().map(|b| format!("{b:02x}")).collect())
+}
+
+/// **An invitation to serve from a node, read and placed**
+/// (`rhtn_client::invitation`).
+///
+/// **The node's key is not in the link and is not here from it.** A
+/// member's node is its patron's and the patron is in the member's own
+/// archive, so what a link carries is an address and an **index** into the
+/// memberships this device holds — which is checked, never believed. So a
+/// link cannot introduce a patron and cannot point at a stranger.
+#[derive(uniffi::Record)]
+pub struct Invited {
+    /// Where the node answers, as an address and a port.
+    pub at: String,
+    /// What the inviter calls themselves. **A claim and never a fact.**
+    pub as_label: Option<String>,
+    /// **The key that must answer there**, from this device's own records:
+    /// the patron whose node this is. Absent where the invitation could
+    /// not be placed, and `why` says what to tell the person.
+    pub node: Option<String>,
+    /// Where several memberships could be meant, the patrons to choose
+    /// between — hex, in the order the kernel holds them.
+    pub choose: Vec<String>,
+    /// What to tell the person where there is nothing to agree to: a
+    /// patron this device is not under, an identity that is not the one
+    /// running here, or no patron at all. Empty where [`Invited::node`] or
+    /// [`Invited::choose`] is the answer.
+    pub why: String,
+}
+
+/// **Read an invitation**, or refuse it in the words the person is told.
+#[uniffi::export]
+pub fn invitation_say(text: String) -> String {
+    match rhtn_client::invitation::parse(&text) {
+        Ok(_) => String::new(),
+        Err(e) => e.say(),
+    }
 }
 
 /// Bytes as lower-case hex, in this file's own idiom.

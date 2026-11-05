@@ -117,6 +117,21 @@
              the frame reaches it inside this process, and nothing on the
              device should be able to open an act. -->
         <activity android:name=".ActActivity" android:exported="false" />
+        <!-- An invitation to serve from a node, opened from a link.
+             **Exported, because that is the point**: a patron sends one
+             string by whatever reaches the person, and "open with Fueros"
+             is how a member agrees the once. It authorises nothing - the
+             key is placed against what this device already holds, a key it
+             has never met is said to be one, and the tap is the whole
+             protection against a node the user did not choose. -->
+        <activity android:name=".InviteActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="fueros" android:host="attach" />
+            </intent-filter>
+        </activity>
         <!-- A package offered for installation, opened from a link or a
              code. **Exported, because that is the point**: a distributor
              publishes one string and "open with Fueros" is how an operator

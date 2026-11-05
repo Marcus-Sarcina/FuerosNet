@@ -5,7 +5,6 @@ import android.graphics.Typeface
 import android.os.Bundle
 import android.view.Gravity
 import android.widget.Button
-import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -37,8 +36,7 @@ class AttachActivity : Activity() {
     private lateinit var statusLine: TextView
     private lateinit var known: TextView
     private lateinit var said: TextView
-    private lateinit var nodeField: EditText
-    private lateinit var addressField: EditText
+    private lateinit var mine: LinearLayout
 
     private val sink = object : Front.Ui {
         override fun render() = runOnUiThread {
@@ -53,23 +51,9 @@ class AttachActivity : Activity() {
         statusLine = mono("…")
         known = mono("")
         said = mono("")
-        nodeField = field("the node's key, 64 hex characters")
-        addressField = field("where it answers, like 192.168.0.8:7447")
+        mine = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        drawMine()
 
-        val attach = Button(this).apply {
-            text = "Attach"
-            setOnClickListener {
-                val n = nodeField.text.toString()
-                val a = addressField.text.toString()
-                val why = Attach.refusal(n, a)
-                if (why != null) {
-                    said.text = why
-                    return@setOnClickListener
-                }
-                said.text = "attaching…"
-                Kernel.attachTo(n, a)
-            }
-        }
         val detach = Button(this).apply {
             text = "Detach"
             setOnClickListener { Kernel.detachNow() }
@@ -77,7 +61,6 @@ class AttachActivity : Activity() {
         val buttons = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            addView(attach)
             addView(detach)
         }
 
@@ -88,10 +71,8 @@ class AttachActivity : Activity() {
             addView(statusLine)
             addView(note(WHY))
             addView(heading("Nodes this device knows of"))
+            addView(mine)
             addView(known)
-            addView(heading("Or name one"))
-            addView(nodeField)
-            addView(addressField)
             addView(buttons)
             addView(said)
         }
@@ -146,11 +127,70 @@ class AttachActivity : Activity() {
         setPadding(0, 4, 0, 4)
     }
 
-    private fun field(hintText: String) = EditText(this).apply {
-        hint = hintText
-        textSize = 15f
-        setSingleLine()
+    /**
+     * **The nodes this device administers, offered without any typing**
+     * [author, 2026-11-04: "GXV needs the node key and IP to attach. This
+     * is supposed to be automatic."].
+     *
+     * Both halves are already held. The **address** is the instance this
+     * device launched, remembered by [OperatorActivity]; the surface is
+     * kept there, and the node answers the protocol on
+     * [Launch.QUIC_PORT] at the same host. The **key** is this device's
+     * own keyhash, because an operator's node speaks as its operator —
+     * which is the author's own rule, and why the attach form was asking
+     * for something it could have answered itself.
+     *
+     * **One instance fills the fields outright**; several draw a row each,
+     * because choosing between them is a real choice. **The tap on Attach
+     * stays either way** [author, 2026-10-29: the tap "is to prevent
+     * stealth insertion of a node the user did not choose"] — nothing here
+     * attaches, it only stops a person transcribing hex.
+     */
+    private fun drawMine() {
+        mine.removeAllViews()
+        val me = Kernel.keyhash()
+        val rows = ownInstances()
+        if (me == null || rows.isEmpty()) {
+            return
+        }
+        mine.addView(
+            note(
+                "Serving from a node is one action, not a form: these are nodes this device " +
+                    "already knows how to reach, and agreeing once is the whole of it — it is " +
+                    "remembered, and this device comes back to it whenever it is detached.",
+            ),
+        )
+        for ((label, addr) in rows) {
+            mine.addView(
+                Button(this).apply {
+                    text = "Serve from $label"
+                    setOnClickListener {
+                        said.text = "attaching to $addr…"
+                        Kernel.serveFrom(this@AttachActivity, me, addr)
+                    }
+                },
+            )
+        }
     }
+
+    /**
+     * This operator's instances as `label to host:port`, the port being the
+     * one a node serves the protocol on rather than the administration
+     * surface this device talks to it over.
+     */
+    private fun ownInstances(): List<Pair<String, String>> =
+        getSharedPreferences("operator", MODE_PRIVATE)
+            .getString("instances", "")!!
+            .lines()
+            .filter { it.isNotBlank() }
+            .mapNotNull { line ->
+                val parts = line.split('\t')
+                val at = parts.getOrNull(0)?.trim().orEmpty()
+                val host = at.substringBeforeLast(':', "").ifEmpty { return@mapNotNull null }
+                val label = parts.getOrElse(2) { at }.ifEmpty { at }
+                label to "$host:${Launch.QUIC_PORT}"
+            }
+
 
     private companion object {
         /** Why a person would attach at all, in the screen's own words. */

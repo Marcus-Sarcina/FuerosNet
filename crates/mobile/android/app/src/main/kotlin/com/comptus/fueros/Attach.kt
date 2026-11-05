@@ -77,24 +77,6 @@ object Attach {
         return if (quads.all { q -> q.isNotEmpty() && q.toIntOrNull() in 0..255 }) t else null
     }
 
-    /**
-     * Why this pair is not worth trying, or null where it is. **One reason
-     * at a time, naming the field**: a screen that says "invalid" about
-     * two fields at once tells a person to check both.
-     */
-    fun refusal(node: String, address: String): String? {
-        if (node.isBlank() && address.isBlank()) return "The node's key and its address, both."
-        if (node(node) == null) {
-            return "A node's key is $KEY_CHARS hex characters; that is ${node.trim().length}."
-        }
-        if (address.isBlank()) return "An address too: where this node answers."
-        if (address(address) == null) {
-            return "An address is an IP and a port, like 192.168.0.8:7447. " +
-                "A name is not one here: the kernel resolves nothing."
-        }
-        return null
-    }
-
     /** One node this device already knows how to reach. */
     fun line(n: Instance): String =
         "${n.keyhash.hex().take(16)}…  ${if (n.addresses.isEmpty()) "no address held" else n.addresses.joinToString(" ")}"
@@ -109,7 +91,8 @@ object Attach {
      */
     fun roll(known: List<Instance>): String =
         if (known.isEmpty()) {
-            "No node's record has reached this device yet. Type where a node answers below."
+            "No node's record has reached this device yet. One arrives with an invitation, " +
+                "or with the node this device's own operator launched."
         } else {
             known.joinToString("\n") { line(it) }
         }

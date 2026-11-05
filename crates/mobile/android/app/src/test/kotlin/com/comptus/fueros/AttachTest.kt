@@ -56,20 +56,9 @@ class AttachTest {
     }
 
     @Test
-    fun the_refusal_names_one_field_at_a_time() {
-        assertTrue(Attach.refusal("", "")!!.contains("both"))
-        assertTrue(Attach.refusal("abc", "")!!.contains("hex characters"))
-        assertTrue(Attach.refusal(key, "")!!.contains("address too"))
-        assertTrue(Attach.refusal(key, "node.example:7447")!!.contains("A name is not one"))
-        assertNull(Attach.refusal(key, "192.168.0.8:7447"))
-        // the forms a person is likely to paste are worth trying, not refused
-        assertNull(Attach.refusal("0x${key.uppercase()}", " [::1]:7447 "))
-    }
-
-    @Test
     fun the_roll_says_what_to_do_when_no_node_is_known() {
         val empty = Attach.roll(emptyList())
-        assertTrue(empty.contains("Type where a node answers"))
+        assertTrue(empty.contains("an invitation"))
         val one = Attach.roll(listOf(uniffi.rhtn_model.Instance(key.unhex(), listOf("192.168.0.8:7447"))))
         assertTrue(one.contains("192.168.0.8:7447"))
         assertTrue(one.startsWith(key.take(16)))

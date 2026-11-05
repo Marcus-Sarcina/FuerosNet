@@ -74,6 +74,14 @@ class OfferingActivity : Activity() {
         Screen.insetting(root)
         setContentView(root)
 
+        // **a deep link opens this screen cold too** [2026-11-04]: nothing
+        // but the launcher brings the kernel up, and this screen needs one
+        // to mint a resource and to name its owner. Idempotent, and the
+        // bring-up runs on its own thread, so by the time an operator has
+        // read a manifest it is there.
+        if (Kernel.hasIdentity(this)) {
+            Kernel.start(this)
+        }
         // **the link as it arrived**, from a tap or from this screen being
         // opened with one in hand; a code reader hands over the same text
         val link = intent.data?.toString()

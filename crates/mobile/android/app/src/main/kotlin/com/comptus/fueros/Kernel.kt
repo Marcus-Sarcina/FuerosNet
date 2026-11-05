@@ -1800,6 +1800,42 @@ object Kernel {
      * where it was told to attach, and the screen says so rather than
      * appearing to have taken an instruction it did not.
      */
+    /**
+     * **Serve from this node from now on**, which is the whole of attaching
+     * [author, 2026-11-04: "attachment is not a separate act. The operator
+     * should attach upon launch and install, other horizon members should
+     * agree to attach once when invited and then all horizon members
+     * should re-attach every time they become detached."].
+     *
+     * Two things, because attaching once is not what was asked for. The
+     * node is **remembered in the provision**, which is what [bringUp]
+     * attaches from at every start — so a device that becomes detached
+     * comes back to the same node without being asked again. And it is
+     * **attached to now**, because a provision alone takes effect only at
+     * the next start and the operator who just launched a machine is
+     * entitled to be on it.
+     *
+     * **Nobody is asked for a key or an address.** The operator's own node
+     * speaks as its operator, so the key is this device's own keyhash; the
+     * address is the machine this device launched. A member learns both
+     * from the invitation it agreed to. There is nothing here a person
+     * could usefully type.
+     */
+    fun serveFrom(context: Context, nodeHex: String, address: String) {
+        val shell = AndroidShell(context.applicationContext)
+        // the rest of the provision is kept: `known` is what this device
+        // was told about other parties, and losing it to an attach would
+        // cost it the population it sweeps at start
+        val held = runCatching {
+            shell.read("provision")?.let { org.json.JSONObject(String(it)) }
+        }.getOrNull() ?: org.json.JSONObject()
+        held.put("node", nodeHex)
+        held.put("addr", address)
+        runCatching { shell.write("provision", held.toString().toByteArray()) }
+            .onFailure { front.note("· the node could not be remembered: ${it.message}") }
+        attachTo(nodeHex, address)
+    }
+
     fun provision(context: Context, blob: String) {
         AndroidShell(context.applicationContext).write("provision", blob.toByteArray())
         synchronized(lock) {
@@ -2058,6 +2094,18 @@ object Kernel {
         val p = participant ?: return emptyList()
         return call("subnets", { emptyList() }) { p.subnets() }
     }
+
+    /** **An invitation read and its key placed** against what this device
+     *  holds (`rhtn_client::invitation`); null where it is not one this
+     *  build reads, and [invitationSay] gives the words for that. */
+    fun invitation(text: String): uniffi.rhtn_ffi.Invited? {
+        val p = participant ?: return null
+        return call("invitation", { null }) { p.invitation(text) }
+    }
+
+    /** Why an invitation could not be read, in the words a person is told. */
+    fun invitationSay(text: String): String =
+        runCatching { uniffi.rhtn_ffi.invitationSay(text) }.getOrDefault("it could not be read")
 
     /** **Every row this device would assert about its horizon** to a node
      *  it operates (`rhtn_client::model::HorizonRow`): open bindings whose

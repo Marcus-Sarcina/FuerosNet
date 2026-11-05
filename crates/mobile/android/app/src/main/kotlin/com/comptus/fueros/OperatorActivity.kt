@@ -112,6 +112,16 @@ class OperatorActivity : Activity() {
     private fun drawInstances() {
         roll.removeAllViews()
         val held = instances()
+        // **the horizon is not a thing a screen remembers to send**
+        // [2026-11-04]. It hung off one of two "open its administration
+        // page" buttons and the other was the one an operator actually
+        // used, so a node was told nothing and nothing said why. Every
+        // instance this device holds a token for is caught up here, each
+        // time this list is drawn: idempotent, since a row the node holds
+        // at a later revision is answered `Stale` and nothing moves.
+        for (i in held) {
+            tokenFor(i.at)?.let { t -> assertHorizon(i.at, t, narration) }
+        }
         if (held.isEmpty()) {
             roll.addView(
                 TextView(this).apply {
@@ -313,14 +323,6 @@ class OperatorActivity : Activity() {
             isEnabled = false
             setOnClickListener {
                 pageAt?.let {
-                    // **and its horizon goes with the visit.** A node
-                    // enrolled before it could be told, or one whose
-                    // operator has adopted somebody since, is caught up by
-                    // the tap they were making anyway rather than by a
-                    // control they have to know about. Idempotent: a row
-                    // the node already holds at a later revision is
-                    // answered `Stale` and nothing moves.
-                    tokenFor(it)?.let { t -> assertHorizon(it, t, narration) }
                     startActivity(
                         Intent(this@OperatorActivity, NodePageActivity::class.java)
                             .putExtra("at", it),
@@ -766,6 +768,16 @@ class OperatorActivity : Activity() {
                             // separate enrolment flow, so a node launched
                             // from here was never told its horizon.
                             assertHorizon(surface, minted, narration)
+                            // **and this device serves from it, without
+                            // being asked** [author, 2026-11-04]:
+                            // "attachment is not a separate act. The
+                            // operator should attach upon launch". The key
+                            // is this device's own, because an operator's
+                            // node speaks as its operator; the address is
+                            // the machine it just launched.
+                            Kernel.keyhash()?.let { me ->
+                                Kernel.serveFrom(this@OperatorActivity, me, "$ip:${Launch.QUIC_PORT}")
+                            }
                             atField.setText(surface)
                             tokenField.setText(minted)
                             endpointField.setText("$ip:${Launch.QUIC_PORT}")

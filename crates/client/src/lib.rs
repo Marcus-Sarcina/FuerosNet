@@ -69,6 +69,9 @@ pub mod device;
 pub mod diag;
 pub mod durable;
 pub mod horizon;
+/// An invitation to serve from a node, as a link: what a patron sends a
+/// member whose first attach it cannot work out for itself.
+pub mod invitation;
 pub mod keys;
 pub mod leaving;
 pub mod local;
