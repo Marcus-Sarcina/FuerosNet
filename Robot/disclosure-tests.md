@@ -189,3 +189,67 @@ when the last clause of a row is met, not the first.
 - **PRD-10 is not a missing test but a missing prompt**: nothing in the
   shell prompts for a backup at all, so the row needs the mechanism built,
   and its words are among the nine owed.
+
+### Three operations I had as two [author, 2026-11-05]
+
+Corrected after I described a rotation as "a series reissue per patron
+relationship".
+
+**All three keep local status, permissions and state** [author,
+2026-11-05]. That is the invariant, and stating it per-row was what
+obscured it: none of these three is a way to lose standing in a subnet.
+What each one changes is narrower than that.
+
+- **Series reissue** — *"keeps the same ID and restarts the seqno… to
+  create a breakpoint in the history sequence and allow the history
+  sequence to branch on different subnets. The user continues with the
+  same ID but counts new transactions in a new series."* **The data is
+  kept as well as the ID**: nothing is reloaded and nothing is replaced,
+  so the only thing that moves is where the sequence counts from.
+- **Key rotation** — *"replaces the core ID on that local subnet…
+  equivalent to adopting a new member into a particular subnet as a
+  previously existing member such that the new member inherits all local
+  status, permissions, and state… to recover a subnet membership after a
+  lost or compromised key, re-anchoring to the new identity based on proof
+  by physical presence."* Design §9.0 is titled **Rotation is adoption**
+  and says the same: *"rotation is simply the case where the presented
+  archive belongs to a different key."*
+- **Recovery** — *"just reloading backed up data from a lost device to the
+  same ID operating on the same series."*
+
+**What this changed in the code.** `RotationActivity` offered "make a new
+identity, unlinked" and routed to the first-run door, which re-anchors
+nothing: a key made alone is a stranger to the subnet. A rotation happens
+**at a meeting with the patron**, so the screen sends you there and says
+why. `Disclosure`'s topics now say at their own definitions which of the
+three they are, because `RECOVERY` and `RESTORE` were one word apart and
+two operations apart.
+
+**And what the warnings must not be read as saying.** The unlinked path
+abandons *prior standing* in the sense design §9.0 means — the new key
+arrives as §9.0's *"genuinely-new user"*, vouched for afresh — not that
+rotating costs a member the status they hold in that subnet. All three
+procedures keep local status, permissions and state; what the unlinked
+path does not carry is the inheritance a `Recovery` would have brought
+across from the old key.
+
+**And the topics are renamed to the spec's own words** [2026-11-05].
+`light-client-requirements.md` §6 says *"identity path that does not
+cryptographically link the new credential to prior history"* and *"a path
+[that] does publish such a link"* — never "rotation", which is PRD-03's
+`when` paraphrasing. Under the author's taxonomy my names were backwards:
+`ROTATION` was the *unlinked path*, which is not a rotation at all, and
+`RECOVERY` was the *key rotation*, which is not a recovery. They are
+`UNLINKED_PATH` and `LINKED_PATH` now, beside `RESTORE`, and each says at
+its own definition which of the three operations it belongs to.
+
+**Renamed by search and not by recollection**: the first pass changed the
+three files I thought of and missed `DisclosureTest`, which the compiler
+caught. Every reference, in every direction — the rule the project already
+keeps for references.
+
+**What it did not change**: the two warnings. The unlinked path still
+abandons prior standing, because an adoption carrying no `Recovery` is
+design §9.0's *"genuinely-new user"* case, and the linked one still
+publishes the link, because the old key signs the `Recovery` that carries
+the inheritance. PRD-03's row was right; my placement of it was not.

@@ -25,11 +25,11 @@ import org.junit.Test
 class RotationTest {
 
     private fun rotation(patron: String = "Pat", subnet: String = "Ward") =
-        Disclosure.words(Disclosure.Topic.ROTATION, patron = patron, subnet = subnet)
+        Disclosure.words(Disclosure.Topic.UNLINKED_PATH, patron = patron, subnet = subnet)
             .joinToString(" ")
 
     private fun recovery(patron: String = "Pat", subnet: String = "Ward") =
-        Disclosure.words(Disclosure.Topic.RECOVERY, patron = patron, subnet = subnet)
+        Disclosure.words(Disclosure.Topic.LINKED_PATH, patron = patron, subnet = subnet)
             .joinToString(" ")
 
     @Test

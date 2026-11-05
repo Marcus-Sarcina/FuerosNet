@@ -65,11 +65,32 @@ object Disclosure {
         /** Leaving a patron: what access goes with it. */
         DEPARTURE,
 
-        /** A plain rotation, which abandons what the old key stood on. */
-        ROTATION,
+        /**
+         * **An identity path that does not link the new credential to
+         * prior history** — `light-client-requirements.md` §6's own words,
+         * and the reason this is not called a rotation [author,
+         * 2026-11-05]. The subnet adopts a new key of yours as design
+         * §9.0's *"genuinely-new user"*, vouched for afresh, so the
+         * inheritance a `Recovery` would have carried does not come with
+         * it. **Prior standing is abandoned in that sense alone**: all
+         * three of reissue, rotation and restore keep the local status,
+         * permissions and state a member holds.
+         */
+        UNLINKED_PATH,
 
-        /** A recovery, which publishes the link between the two keys. */
-        RECOVERY,
+        /**
+         * **An identity path that does publish the link** (§6), which is
+         * what the author calls a **key rotation**: the new key is adopted
+         * as the member the old one was, the old key signs the `Recovery`
+         * that carries the inheritance, and what is given up is
+         * unlinkability rather than standing.
+         *
+         * **Not restoring a backup** [author, 2026-11-05], which is
+         * [RESTORE]: that reloads data to the *same* key and changes who
+         * you are nowhere. These two were one word apart and two
+         * operations apart, which is why both say so here.
+         */
+        LINKED_PATH,
 
         /** Holding one patron only, and what a second would protect. */
         SECOND_PATRON,
@@ -77,7 +98,12 @@ object Disclosure {
         /** Making a backup, and what losing the device costs. */
         BACKUP,
 
-        /** A restored archive, and what its completeness rests on. */
+        /**
+         * **Data reloaded to the same key** from a backup — the same
+         * identity, carrying on [author, 2026-11-05]. Distinct from
+         * [RECOVERY], which replaces the key a subnet knows; nothing about
+         * a restore changes who you are anywhere.
+         */
         RESTORE,
 
         /** Provisioning: what the ordering of providers and zones means. */
@@ -176,7 +202,7 @@ object Disclosure {
                 ),
             ),
         )
-        Topic.ROTATION -> Says.Here(
+        Topic.UNLINKED_PATH -> Says.Here(
             listOf(
                 Item(
                     "PRD-03",
@@ -187,7 +213,7 @@ object Disclosure {
                 ),
             ),
         )
-        Topic.RECOVERY -> Says.Here(
+        Topic.LINKED_PATH -> Says.Here(
             listOf(
                 Item(
                     "PRD-03",

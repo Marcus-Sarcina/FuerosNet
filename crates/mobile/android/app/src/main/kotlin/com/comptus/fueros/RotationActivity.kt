@@ -13,15 +13,33 @@ import android.widget.TextView
  * **Changing the key a subnet knows you by** (design §9.0;
  * `wire-format.md` §4.6; `light-client-requirements.md` §2; PRD-03).
  *
+ * **Rotation is adoption** — design §9.0's own title, and the thing this
+ * screen first got wrong. *"Adoption and key rotation are one operation,
+ * not two… rotation is simply the case where the presented archive
+ * belongs to a different key."* So a rotation is not a setting and not a
+ * new identity made alone: **it happens at a meeting with the patron**,
+ * who adopts the new key, and it is re-anchored by physical presence
+ * [author, 2026-11-05] — the new key inheriting the local status,
+ * permissions and state the old one held in that subnet.
+ *
+ * **Which is why this screen sends you to a meeting.** A new identity made
+ * on its own re-anchors nothing: it is a stranger to the subnet, and the
+ * first draft of this screen offered exactly that under the word rotation.
+ *
+ * **And none of this is a series reissue** [author, 2026-11-05]. A reissue
+ * keeps the same key and restarts the sequence, so the history can branch
+ * per subnet; a rotation replaces the key the subnet knows. They are
+ * different operations and only one of them changes who you are there.
+ *
  * Two paths, and the whole of what this screen owes is that a person can
  * tell them apart before taking either.
  *
- * **Unlinked.** A new identity that says nothing of the old one. Nobody
- * can tie the two together, and nothing the old key stood on comes with
- * it: every adoption, every meeting, every verification is the old key's
- * and stays there. *"Your new identifier will carry only such privileges
- * and relationships as you have established directly through"* the patron
- * who adopts it [author, 2026-11-05].
+ * **Unlinked.** An adoption of a new key carrying no `Recovery`, so
+ * nothing ties it to the old one and nothing the old key stood on comes
+ * with it — design §9.0's *"genuinely-new user"* case. *"Your new
+ * identifier will carry only such privileges and relationships as you
+ * have established directly through"* the patron who adopts it [author,
+ * 2026-11-05].
  *
  * **Linked.** A recovery (`wire-format.md` §4.1), which carries both
  * halves — the old key's own signature and a prior counterparty's
@@ -90,11 +108,11 @@ class RotationActivity : Activity() {
                 Kernel.subnets().firstOrNull { it.id.hex() == line.anchor.hex() }?.alias,
             )
             heading("$subnet, under $patron")
-            for (said in Disclosure.words(Disclosure.Topic.ROTATION, patron = patron, subnet = subnet)) {
+            for (said in Disclosure.words(Disclosure.Topic.UNLINKED_PATH, patron = patron, subnet = subnet)) {
                 para(said)
             }
             sub("If you link instead:")
-            for (said in Disclosure.words(Disclosure.Topic.RECOVERY, patron = patron, subnet = subnet)) {
+            for (said in Disclosure.words(Disclosure.Topic.LINKED_PATH, patron = patron, subnet = subnet)) {
                 para(said)
             }
         }
@@ -109,16 +127,20 @@ class RotationActivity : Activity() {
                 "horizon that the two keys are the same person. You give up being two " +
                 "people rather than one.",
         )
-        button("Make a new identity, unlinked") {
-            startActivity(
-                Intent(this, FirstRunActivity::class.java)
-                    .putExtra(FirstRunActivity.NAME_ONLY, false),
-            )
+        para(
+            "Either way it happens in person, with the patron who adopts the new key: " +
+                "rotation is adoption, and what re-anchors you is the meeting rather " +
+                "than anything this screen can do alone.",
+        )
+        button("Meet the patron") {
+            startActivity(Intent(this, MeetActivity::class.java))
         }
         sub(
-            "The linked path is not yet a door on this device: it opens the new identity " +
-                "on this device's own storage, so it needs a resume the next start can " +
-                "finish, and that is being built rather than risked.",
+            "Carrying your standing across needs the old key present to sign the " +
+                "recovery, and the old line is sealed as that key's last act " +
+                "(`wire-format.md` §4.6). Neither half is a door on this device yet: " +
+                "the new key opens on this device's own storage, so it needs a resume " +
+                "the next start can finish, and that is being built rather than risked.",
         )
     }
 

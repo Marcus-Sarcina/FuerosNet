@@ -75,7 +75,7 @@ class DisclosureTest {
         // the distinctions the rows turn on: neither of a pair may answer
         // with the other's entry
         val pairs = listOf(
-            Disclosure.Topic.ROTATION to Disclosure.Topic.RECOVERY,
+            Disclosure.Topic.UNLINKED_PATH to Disclosure.Topic.LINKED_PATH,
             Disclosure.Topic.ADOPTION to Disclosure.Topic.DEPARTURE,
             Disclosure.Topic.ADOPTION to Disclosure.Topic.ADOPTION_UPWARD,
             Disclosure.Topic.MEETING to Disclosure.Topic.PEERING,
