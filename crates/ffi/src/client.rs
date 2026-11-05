@@ -3142,13 +3142,39 @@ impl Participant {
     /// carried by nothing — not a record, not an introduction, not a
     /// backup.
     ///
-    /// `window_s` is the subject's declared window. Nothing happens for a
-    /// `who` that is not a keyhash.
-    pub fn take_reach(&self, who: Id, address: String, window_s: u64) {
+    /// **`txid` is the record the two of them made**, and the window comes
+    /// out of it: the one *this subject* declared there. There is no window
+    /// argument because there is no window of the holder's to supply —
+    /// design §7.5.1's rule for a capture, made structural.
+    ///
+    /// Whether it was taken. Nothing is held for a `who` that is not a
+    /// keyhash, a record this device does not hold, or a record declaring
+    /// no window for them.
+    pub fn take_reach(&self, who: Id, address: String, txid: Id) -> bool {
         crate::diag::call_plain("take_reach", || {
-            let Some(k) = keyhash(&who) else { return };
+            let Some(k) = keyhash(&who) else { return false };
+            let Some(t) = keyhash(&txid) else {
+                return false;
+            };
             self.handle
-                .with_blocking(move |c| c.take_reach(k, address, window_s));
+                .with_blocking(move |c| c.take_reach(k, address, &t))
+        })
+    }
+
+    /// **The address held for `who`**, where one is and is still inside the
+    /// window its subject declared; `None` otherwise.
+    ///
+    /// Reading is what collects: one past its window is dropped here
+    /// rather than returned (`Client::reaches`).
+    pub fn reach(&self, who: Id) -> Option<String> {
+        crate::diag::call_plain("reach", || {
+            let k = keyhash(&who)?;
+            self.handle.with_blocking(move |c| {
+                c.reaches()
+                    .into_iter()
+                    .find(|(h, _)| *h == k)
+                    .map(|(_, a)| a)
+            })
         })
     }
 

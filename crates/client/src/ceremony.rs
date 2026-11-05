@@ -1414,16 +1414,26 @@ impl Client {
     /// user stands up later can arrive without waiting for the next
     /// meeting.
     ///
-    /// `window_s` is the window **its subject declared**, not this
-    /// client's: a holder applying its own to somebody else's address
-    /// would be substituting its policy for theirs, which is the rule
-    /// already stated for a capture (design §7.5.1).
+    /// **The window is the record's to say, which is why `txid` is the
+    /// argument and a window is not.** It is the one *its subject*
+    /// declared at that ceremony, read from the record's own disclosure
+    /// set: a holder applying its own to somebody else's address would be
+    /// substituting its policy for theirs, which design §7.5.1 already
+    /// rules for a capture. Passing a number here would have made that a
+    /// caller's duty to remember; passing the record makes it structural.
+    ///
+    /// Whether it was taken: nothing is held for a record this client does
+    /// not hold, or one that declares no window for `who` — there being no
+    /// window to honour, rather than a default to invent.
     ///
     /// Marked under [`rhtn_model::Noun::Contacts`], the table it lives
     /// beside, rather than a noun of its own.
-    pub fn take_reach(&mut self, who: Keyhash, address: String, window_s: u64) {
+    pub fn take_reach(&mut self, who: Keyhash, address: String, txid: &crate::Txid) -> bool {
+        let Some((taken_at, window_s)) = crate::backup::subject_window(&self.store, txid, &who)
+        else {
+            return false;
+        };
         self.changed.insert(rhtn_model::Noun::Contacts);
-        let taken_at = self.now_s();
         self.store.reach.insert(
             who,
             crate::contacts::Reach {
@@ -1432,6 +1442,7 @@ impl Client {
                 window_s,
             },
         );
+        true
     }
 
     /// **Forget it**, which is its subject's to ask for at any time and

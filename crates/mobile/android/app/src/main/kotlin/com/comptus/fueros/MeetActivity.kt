@@ -1139,6 +1139,7 @@ class MeetActivity : Activity() {
                     para("Where you sit now: ${a.position()}")
                     para("Your device will hand the record to its node when it has one. Until then it is held here, which is where it is evidence.")
                     if (a.patron && m.scope() == Meet.Scope.OWN) nameSubnet(t)
+                    if (a.patron) askReach(m, t)
                 }
             }
             Adoption.Step.REFUSED ->
@@ -1146,6 +1147,10 @@ class MeetActivity : Activity() {
             else -> para("Waiting on ${m.counterpartyName}'s device.")
         }
     }
+
+    /** The address field and what came of it, across a redraw. */
+    private var reachField: EditText? = null
+    private var reachSaid: String? = null
 
     /** The field and its outcome outlive a redraw of the Done screen. */
     private var subnetName: EditText? = null
@@ -1162,6 +1167,67 @@ class MeetActivity : Activity() {
      * to Options so a subnet is not shown to its first member as eight
      * hex characters.
      */
+    /**
+     * **Where to reach them, so an invitation need not wait for the next
+     * meeting** [author, 2026-11-03] (`light-client-requirements.md` §1.5).
+     *
+     * Asked here because this is where the decision it serves was already
+     * made: *"If the patron has adopted people into a subnet then he has
+     * decided to give those people access to his node that serves that
+     * subnet"* [author, 2026-11-03]. So it is not a second consent — it is
+     * the plumbing for the first, and the screen says what it is for and
+     * what declining costs.
+     *
+     * **Optional, and theirs to have deleted.** The window is not asked
+     * and not this device's to choose: the kernel takes the one they
+     * declared in this very record, so a patron cannot set a policy over
+     * somebody else's address.
+     *
+     * **Unlike the captures, nothing structural keeps this promise.** A
+     * likeness is sealed under its subject's keys; an address is plain
+     * text in this phone's hands, which design §19.8's C25 registers and
+     * the screen does not pretend otherwise.
+     */
+    private fun askReach(m: Meet, txid: String) {
+        val who = m.counterpartyKey ?: return
+        heading("Reaching ${m.counterpartyName} later")
+        val held = Kernel.reachHeld(who)
+        if (held != null) {
+            para("Held: $held — used only to send ${m.counterpartyName} an invitation to a node you stand up, and kept for the window they declared here.")
+            button("Delete it") {
+                Kernel.forgetReach(who)
+                reachSaid = "Deleted."
+                redraw()
+            }
+            return
+        }
+        reachSaid?.let { para(it); return }
+        para("If ${m.counterpartyName} gives you a number or an address, this phone can send them an invitation the moment you stand up a node — without waiting until you are next in a room together.")
+        para("Optional. Declining costs them nothing but that: they can still scan a code at your next meeting. It goes in no record, is sent to nobody else, and is theirs to have deleted.")
+        val field = reachField ?: EditText(this).apply {
+            hint = "their number or address"
+            textSize = 18f
+            setSingleLine()
+        }.also { reachField = it }
+        (field.parent as? android.view.ViewGroup)?.removeView(field)
+        body.addView(field)
+        button("Keep it") {
+            val typed = field.text.toString().trim()
+            if (typed.isEmpty()) {
+                reachSaid = null
+                return@button
+            }
+            val took = Kernel.takeReach(who, typed, txid)
+            Diag.event("meet.reach", "state" to if (took) "held" else "refused", "txid" to txid.take(8))
+            reachSaid = if (took) {
+                "Held. It will carry an invitation when you stand up a node."
+            } else {
+                "This phone could not read a retention window out of the record, so it is keeping nothing: an address with no window would be one with no end."
+            }
+            redraw()
+        }
+    }
+
     private fun nameSubnet(txid: String) {
         heading("A new subnet under your key")
         Diag.event("meet.subnet_name", "state" to (subnetNamed?.let { "named" } ?: "asked"), "txid" to txid.take(8))

@@ -458,7 +458,7 @@ impl Contents {
 /// set — an unreadable commitment is not a licence to discard, and it is
 /// not a licence to keep either; it is simply not a judgement this scan
 /// can make.
-fn subject_window(
+pub(crate) fn subject_window(
     store: &ClientStore,
     txid: &crate::Txid,
     subject: &crate::Keyhash,

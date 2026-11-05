@@ -2116,6 +2116,46 @@ object Kernel {
         return call("horizonRows", { emptyList() }) { p.horizonRows() }
     }
 
+    /**
+     * **Take a way to reach the party this record names**, as they gave it
+     * at the adoption (`light-client-requirements.md` §1.5).
+     *
+     * The window is not passed: the kernel reads the one *that party*
+     * declared in `txid`, so this shell cannot substitute one of its own.
+     * Whether it was taken.
+     */
+    fun takeReach(who: String, address: String, txid: String): Boolean {
+        val p = participant ?: return false
+        if (!who.isHash32() || !txid.isHash32()) return false
+        return call("takeReach", { false }) { p.takeReach(who.unhex(), address, txid.unhex()) }
+    }
+
+    /** The address held for a party, where one is and is still inside the
+     *  window its subject declared. Reading is also what drops a lapsed
+     *  one. */
+    fun reachHeld(who: String): String? {
+        val p = participant ?: return null
+        if (!who.isHash32()) return null
+        return call("reachHeld", { null }) { p.reach(who.unhex()) }
+    }
+
+    /** Forget it, which its subject may ask for at any time. */
+    fun forgetReach(who: String): Boolean {
+        val p = participant ?: return false
+        if (!who.isHash32()) return false
+        return call("forgetReach", { false }) { p.forgetReach(who.unhex()) }
+    }
+
+    /**
+     * **The invitations this patron owes**, for a node answering at `at`:
+     * where to send each and the link to send. Reading is also what drops
+     * an address past its subject's window.
+     */
+    fun invitations(at: String): List<uniffi.rhtn_ffi.Invite> {
+        val p = participant ?: return emptyList()
+        return call("invitations", { emptyList() }) { p.invitations(at) }
+    }
+
     /** The subnets this device roots and could bring under a patron. */
     fun subnetsRooted(): List<Subnet> {
         val p = participant ?: return emptyList()

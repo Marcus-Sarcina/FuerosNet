@@ -593,11 +593,40 @@ fn a_record_that_arrives_leaves_every_signer_a_contact() {
 #[test]
 fn an_address_is_held_for_its_subject_s_window_and_travels_with_nothing() {
     let mut s = setup(&["alice", "bob", "witness"]);
-    s.met("alice", "bob", "witness");
-    let two_years = 2 * 365 * 86_400;
+    let t = s.met("alice", "bob", "witness");
+    // **the two sides declare different windows**, so what is held can only
+    // have come from bob's own declaration and not from alice's
+    let set = rhtn_client::record::disclosures(
+        [
+            rhtn_client::record::capture_value(0, 4, 0, 2),
+            rhtn_client::record::empty_location_value(),
+            rhtn_client::record::integrity_value(false, 0),
+            rhtn_client::record::retention_value(1),
+            rhtn_client::record::integrity_value(false, 0),
+            rhtn_client::record::retention_value(3),
+        ],
+        std::array::from_fn(|i| [i as u8 + 1; 16]),
+    );
+    let bob_declared_years = {
+        let a = s.client("alice");
+        a.store.disclosures.insert(t, set);
+        let rec = rhtn_archive::record::Record::parse(a.store.records.get(&t).expect("the record"))
+            .expect("parses");
+        if rec.participants().first() == Some(&kh("bob")) {
+            1u64
+        } else {
+            3u64
+        }
+    };
     {
         let a = s.client("alice");
-        a.take_reach(kh("bob"), "+15550001111".into(), two_years);
+        // **the window comes from the record**, being the one bob declared
+        assert!(a.take_reach(kh("bob"), "+15550001111".into(), &t));
+        assert_eq!(
+            a.store.reach.get(&kh("bob")).expect("held").window_s,
+            bob_declared_years * 365 * 86_400,
+            "the window is the subject's own declaration, not this client's"
+        );
         assert_eq!(
             a.reaches(),
             vec![(kh("bob"), "+15550001111".to_string())],
@@ -619,6 +648,16 @@ fn an_address_is_held_for_its_subject_s_window_and_travels_with_nothing() {
         );
     }
 
+    // **no record, no window, and so nothing held** — rather than a
+    // default invented on the subject's behalf
+    {
+        let a = s.client("alice");
+        assert!(
+            !a.take_reach(kh("bob"), "+15559999999".into(), &[9u8; 32]),
+            "a record this client does not hold declares no window"
+        );
+    }
+
     // **the subject's to have deleted, at any time and for no reason**
     {
         let a = s.client("alice");
@@ -631,7 +670,7 @@ fn an_address_is_held_for_its_subject_s_window_and_travels_with_nothing() {
     // an act — the directory store keeps it beside the contacts
     {
         let a = s.client("alice");
-        a.take_reach(kh("bob"), "+15550003333".into(), two_years);
+        assert!(a.take_reach(kh("bob"), "+15550003333".into(), &t));
         let dir = std::env::temp_dir().join(format!("rhtn-reach-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         a.store.save(&dir).expect("saved");
@@ -657,10 +696,11 @@ fn an_address_is_held_for_its_subject_s_window_and_travels_with_nothing() {
     // nothing past it is ever returned, and it is deleted as that is read
     {
         let a = s.client("alice");
-        a.take_reach(kh("bob"), "+15550002222".into(), 60);
+        assert!(a.take_reach(kh("bob"), "+15550002222".into(), &t));
         assert_eq!(a.reaches().len(), 1);
-        let taken = a.store.reach.get(&kh("bob")).expect("held").taken_at;
-        a.store.reach.get_mut(&kh("bob")).expect("held").taken_at = taken.saturating_sub(120);
+        let held = a.store.reach.get(&kh("bob")).expect("held").clone();
+        a.store.reach.get_mut(&kh("bob")).expect("held").taken_at =
+            held.taken_at.saturating_sub(held.window_s + 86_400);
         assert!(
             a.reaches().is_empty(),
             "past its window, it is not returned"
