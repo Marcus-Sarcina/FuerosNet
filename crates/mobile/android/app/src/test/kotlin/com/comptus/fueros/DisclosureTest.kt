@@ -44,7 +44,10 @@ class DisclosureTest {
      * that asks for its words and what that row asks, so taking the
      * annotation off is the whole of closing it.
      */
-    @org.junit.Ignore("owed: the sentences in Disclosure.owed() are the author's to write")
+    @org.junit.Ignore(
+        "owed: BROKERED alone, as of 2026-11-05 — the other eight landed, and " +
+            "this annotation comes off when it does",
+    )
     @Test
     fun no_kind_of_disclosure_is_still_owed_its_words() {
         val owed = Disclosure.owed()

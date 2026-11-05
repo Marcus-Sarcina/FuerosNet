@@ -22,11 +22,16 @@ package com.comptus.fueros
  * topic shows the person nothing today, exactly as it does now, and the
  * test fails loudly rather than the screen saying something nobody wrote.
  *
- * **Why the gaps are not filled in here** [author, 2026-11-05]: the
- * missing sentences are the same text that is to be *"translated into a
- * more approachable language and then hidden behind expandable
- * headings"*, so writing them now would be composing them twice. They are
- * the author's to write, each listed with the obligation it has to meet.
+ * **The sentences here are the author's own** [author, 2026-11-05],
+ * written to this table's obligations and kept as written — a doubled word
+ * and a singular "message" were the only edits. They name the parties as
+ * `{patron}` and `{subnet}`, which [fill] replaces, because what is fixed
+ * by kind is the sentence and not the people in it.
+ *
+ * **What is still [Says.Owed] is owed**, and nothing here invents a
+ * sentence to cover it: an owed topic shows the person nothing, exactly as
+ * it does today, and the test says so rather than the screen saying
+ * something nobody wrote.
  */
 object Disclosure {
 
@@ -81,8 +86,28 @@ object Disclosure {
         WITNESSLESS,
     }
 
-    /** One obligation and the words that meet it, as `Meet.Item` is. */
+    /**
+     * One obligation and the words that meet it, as `Meet.Item` is.
+     *
+     * [text] may name the parties as `{patron}` and `{subnet}`, which
+     * [fill] replaces. **What goes in is a display name already decided**
+     * — an alias the party published, or its keyhash where none was
+     * (PRD-14: never a name this device was not given).
+     */
     data class Item(val row: String, val text: String)
+
+    /**
+     * The words with the parties named. A hole nobody filled is left as
+     * it is rather than blanked: a sentence with a visible `{patron}` in
+     * it is a bug somebody reports, where one with a gap reads as
+     * finished.
+     */
+    fun fill(text: String, patron: String? = null, subnet: String? = null): String {
+        var out = text
+        patron?.let { out = out.replace("{patron}", it) }
+        subnet?.let { out = out.replace("{subnet}", it) }
+        return out
+    }
 
     /** Where a topic's words are, or that they are owed. */
     sealed class Says {
@@ -133,49 +158,105 @@ object Disclosure {
                 "and says so permanently\"",
         )
 
-        // ---- owed, and each one a sentence the author is to write ------
+        // ---- the words themselves, [author, 2026-11-05] ---------------
 
-        Topic.ADOPTION_UPWARD -> Says.Owed(
-            "PRD-02",
-            "that this patron's policies reach upward, before the resources whose " +
-                "predicates do so are listed",
+        Topic.ADOPTION_UPWARD -> Says.Here(
+            listOf(
+                Item(
+                    "PRD-02",
+                    "You are accepting {patron} as your patron in the {subnet} subnet. " +
+                    "{patron} will be the route for messages between you and {subnet}. " +
+                    "{patron}'s policies and those of their patron will apply to any " +
+                    "resources you use or host in {subnet} until such a time as you depart " +
+                    "from their patronage.",
+                ),
+            ),
         )
-        Topic.ROTATION -> Says.Owed(
-            "PRD-03",
-            "that a plain rotation abandons the standing the prior identity held",
+        Topic.ROTATION -> Says.Here(
+            listOf(
+                Item(
+                    "PRD-03",
+                    "You are changing the core identifier connecting you to {subnet}. Your " +
+                    "previous identifier will still reach you in any other subnets you " +
+                    "participate in. Your new identifier will carry only such privileges " +
+                    "and relationships as you have established directly through {patron}.",
+                ),
+            ),
         )
-        Topic.RECOVERY -> Says.Owed(
-            "PRD-03",
-            "that a recovery publishes the link to the prior identity within the horizon, " +
-                "so the two are no longer unlinkable",
+        Topic.RECOVERY -> Says.Here(
+            listOf(
+                Item(
+                    "PRD-03",
+                    "You are changing the core identifier connecting you to {subnet} and " +
+                    "publishing the fact of your new identity. Your recovered identity will " +
+                    "be traceable to your previous identity. Your previous identifier will " +
+                    "still be active in any other subnets you participate in. Your new " +
+                    "identifier will carry only such privileges and relationships as you " +
+                    "have established directly through {patron}.",
+                ),
+            ),
         )
-        Topic.SECOND_PATRON -> Says.Owed(
-            "PRD-04",
-            "that a second independent adoption protects against a single patron — " +
-                "unobtrusively, and before any eclipse condition holds",
+        Topic.SECOND_PATRON -> Says.Here(
+            listOf(
+                Item(
+                    "PRD-04",
+                    "You are currently connected to FuerosNet through a single patron. This " +
+                    "means that your reachability and view of the network flow through a " +
+                    "single person and his infrastructure. Consider a second adoption to " +
+                    "strengthen your connection to the network as a whole.",
+                ),
+            ),
         )
-        Topic.BACKUP -> Says.Owed(
-            "PRD-07",
-            "what losing the device costs, on the screen that makes the backup",
+        Topic.BACKUP -> Says.Here(
+            listOf(
+                Item(
+                    "PRD-07",
+                    "You should consider making a backup of the data stored on your device. " +
+                    "Currently, losing a device means losing all of your transaction " +
+                    "history. Your identity can be recovered from the seed phrase and your " +
+                    "contacts can be recovered from a peer, but only a backup can protect " +
+                    "any files and transaction records you have accumulated.",
+                ),
+            ),
         )
-        Topic.RESTORE -> Says.Owed(
-            "PRD-09",
-            "that the restored history is complete only as far as its holder claims, and " +
-                "was not verified complete",
+        Topic.RESTORE -> Says.Here(
+            listOf(
+                Item(
+                    "PRD-09",
+                    "The archive you are recovering is complete only for the period of time " +
+                    "covered and does not preclude the existence of additional transactions " +
+                    "not recorded here.",
+                ),
+            ),
         )
         Topic.BROKERED -> Says.Owed(
             "PRD-08",
             "that the vendor's session outlives membership — shown once, before any " +
                 "traffic is routed",
         )
-        Topic.PROVISIONING -> Says.Owed(
-            "PRD-11",
-            "that the ordering of providers and zones speaks to this operator's own " +
-                "horizon and not to the network's",
+        Topic.PROVISIONING -> Says.Here(
+            listOf(
+                Item(
+                    "PRD-11",
+                    "Cloud providers are recommended to encourage a diversity of hosts " +
+                    "within your local subnet. The ordering below does not reflect the " +
+                    "distribution of all FuerosNet nodes in the world. You can also host " +
+                    "your own node physically or use a cloud provider not listed by using " +
+                    "the manual enrollment process.",
+                ),
+            ),
         )
-        Topic.OPERATOR_EXPOSURE -> Says.Owed(
+        // **the node already says this, and the client frames the page
+        // that says it** [2026-11-05]: `rhtn_daemon::operator` renders
+        // "what this node's configuration exposes the identities below it
+        // to", with how many sit below, whether their payload is relayed
+        // here and what is hosted here, and serves it on the operator's
+        // own page. Asked what configuration PRD-06 meant, the answer was
+        // that it is written already.
+        Topic.OPERATOR_EXPOSURE -> Says.Elsewhere(
             "PRD-06",
-            "what the operator's configuration exposes the identities below them to",
+            "rhtn_daemon::operator: \"what this node's configuration exposes the " +
+                "identities below it to\", on the page the client frames",
         )
     }
 
