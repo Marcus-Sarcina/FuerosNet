@@ -89,6 +89,7 @@ pub fn profile(
 pub fn horizon(
     view: &mut NodeView,
     pins: Option<&rhtn_transport::tls::Pins>,
+    ids: &mut Vec<rhtn_crypto::identity::Identity>,
     peer: &Keyhash,
     body: &[u8],
 ) -> Option<Vec<u8>> {
@@ -112,13 +113,35 @@ pub fn horizon(
             // this sender was never entitled to assert
             SUBMISSION_REFUSED
         }
+        // **the disk before the table, as the operator's route does**
+        // [2026-11-04]. The first cut of this wrote neither, so a row an
+        // attached client asserted bound in memory and was gone at the
+        // next start — and this node is restarted routinely. A node with
+        // nowhere to keep one refuses rather than taking it into a table
+        // that would forget it: the same discipline a grant act holds to,
+        // since an act that did not survive a restart would not be one.
+        Some(_) if view.horizon_dir.is_none() => SUBMISSION_REFUSED,
         Some(row) if a.retracted => {
-            match view
-                .table
-                .retract(&row.node, &row.patron, row.series, row.revision)
+            let dir = view.horizon_dir.clone().expect("checked above");
+            if crate::horizon::write(
+                &dir,
+                &crate::horizon::Row {
+                    row: row.clone(),
+                    material: None,
+                    retracted: true,
+                },
+            )
+            .is_err()
             {
-                rhtn_archive::topology::Asserting::Stale { .. } => SUBMISSION_REFUSED,
-                _ => SUBMISSION_ACCEPTED,
+                SUBMISSION_REFUSED
+            } else {
+                match view
+                    .table
+                    .retract(&row.node, &row.patron, row.series, row.revision)
+                {
+                    rhtn_archive::topology::Asserting::Stale { .. } => SUBMISSION_REFUSED,
+                    _ => SUBMISSION_ACCEPTED,
+                }
             }
         }
         Some(row) => {
@@ -130,7 +153,31 @@ pub fn horizon(
                 (Some(p), Some(m)) => p.pin(row.node, m).is_ok(),
                 _ => false,
             };
-            if !pinned {
+            let dir = view.horizon_dir.clone().expect("checked above");
+            let kept = pinned
+                && crate::horizon::write(
+                    &dir,
+                    &crate::horizon::Row {
+                        row: row.clone(),
+                        material: a.material.clone(),
+                        retracted: false,
+                    },
+                )
+                .is_ok();
+            // **known as well as pinned**: `ids` is what lets this node
+            // verify what the member signs, and a member bound without it
+            // has its bundle and its profile refused the moment it
+            // attaches, which detaches it [2026-11-04].
+            if kept
+                && let Some(id) = a
+                    .material
+                    .as_deref()
+                    .and_then(rhtn_crypto::Identity::from_key_material)
+                && !ids.iter().any(|k| k.keyhash == id.keyhash)
+            {
+                ids.push(id);
+            }
+            if !kept {
                 SUBMISSION_REFUSED
             } else {
                 match view.table.assert(&row) {

@@ -64,6 +64,11 @@ pub struct NodeView {
     pub table: Table,
     /// What it holds of the topology.
     pub store: TopologyStore,
+    /// **Where rows asserted about this horizon are kept**
+    /// ([`crate::horizon`]), so a row an attached client asserts survives
+    /// a restart. `None` keeps nothing, and the assertion is refused
+    /// rather than taken into a table that would forget it [2026-11-04].
+    pub horizon_dir: Option<std::path::PathBuf>,
     /// Locators this node holds for other parties (`wire-format.md` §2.3).
     pub locators: LocatorStore,
     /// Staples handed over with introductions, by subject (design §12.6.5).
@@ -160,6 +165,7 @@ impl NodeView {
             positions: BTreeMap::new(),
             table,
             store: TopologyStore::new(),
+            horizon_dir: None,
             locators: LocatorStore::new(),
             staples: BTreeMap::new(),
             prekeys: crate::prekeys::PrekeyService::default(),

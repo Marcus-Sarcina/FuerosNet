@@ -51,6 +51,9 @@ pub mod propagation;
 /// across a restart.
 pub mod queue;
 
+/// Where the rows asserted about this node's horizon are kept: the
+/// table's own persistence, as against the topology store's seen-set.
+pub mod horizon;
 /// The second leg, where a resource holds its own port.
 pub mod relay;
 /// The anchor table and the resolution exchange (`wire-format.md` §7.2,

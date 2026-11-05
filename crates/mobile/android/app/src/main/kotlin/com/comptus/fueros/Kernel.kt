@@ -2218,7 +2218,14 @@ object Kernel {
         front.setProvisioned(provision != null)
         // the identity is this device's own, whether or not anybody has
         // been told about it yet
-        val known = provision?.getJSONArray("known")
+        // **`opt`, not `get`** [2026-11-04]: `getJSONArray` throws where the
+        // key is absent, and the `?.let` below only ever guarded a null
+        // provision. A provision naming a node and an address and nothing
+        // else — which is what agreeing to an invitation writes
+        // ([serveFrom]) — crashed the kernel thread on every start, so two
+        // bench phones would not launch at all. A provision is a thing
+        // other code writes, and every field of it is optional to this.
+        val known = provision?.optJSONArray("known")
             ?.let { a -> (0 until a.length()).map { unhex(a.getString(it)) } }
             ?: listOf()
         val p = call("Participant.start", { e -> front.setStatus("kernel refused: ${e.reason}"); null }) {

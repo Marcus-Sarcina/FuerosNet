@@ -881,6 +881,17 @@ impl Courier {
                     other => out.left.push(other),
                 }
             }
+            // **what the node would not take, by name** [2026-11-04]. A
+            // refusal detaches the client that attached (`rhtn_ffi`'s
+            // attach reports "refused N of what attaching published,
+            // stocked or swept" and undoes the attach), and until here it
+            // said only how many — so which message it was had to be
+            // guessed at from the outside, which is what it cost an
+            // evening to do. The kind, never the bytes.
+            if !out.refused.is_empty() {
+                let which: Vec<&str> = out.refused.iter().map(rhtn_client::diag::msg).collect();
+                tracing::info!(target: "pay", refused = ?which, "pay.refused");
+            }
             out
         })
     }

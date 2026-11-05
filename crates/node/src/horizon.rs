@@ -1,4 +1,4 @@
-//! **Where the rows an operator asserts about its horizon are kept.**
+//! **Where the rows asserted about this node's horizon are kept.**
 //!
 //! A node learns its horizon two ways. The one that was always here is the
 //! replay: transactions arrive, each is judged against this node's own
@@ -37,7 +37,6 @@
 //! written by a newer node still binds here, and a tombstone written by
 //! one still retracts.
 
-use crate::hosting::{Refused, at};
 use rhtn_archive::Keyhash;
 use rhtn_archive::topology::Asserted;
 use std::path::{Path, PathBuf};
@@ -91,8 +90,8 @@ fn key(s: &str) -> Option<Keyhash> {
 ///
 /// Beside-then-rename, so a reader never sees half a row and a crash
 /// between the two leaves the previous one intact.
-pub fn write(dir: &Path, r: &Row) -> Result<(), Refused> {
-    std::fs::create_dir_all(dir).map_err(|e| at(0, format!("{}: {e}", dir.display())))?;
+pub fn write(dir: &Path, r: &Row) -> Result<(), String> {
+    std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let path = path_for(dir, &r.row.node, &r.row.patron, r.row.series);
     let mut text = String::from(
         "# A row this node's operator asserted about its horizon.  **Written\n\
@@ -125,8 +124,8 @@ pub fn write(dir: &Path, r: &Row) -> Result<(), Refused> {
         }
     }
     let beside = path.with_extension("row.new");
-    std::fs::write(&beside, &text).map_err(|e| at(0, format!("{}: {e}", beside.display())))?;
-    std::fs::rename(&beside, &path).map_err(|e| at(0, format!("{}: {e}", path.display())))?;
+    std::fs::write(&beside, &text).map_err(|e| format!("{}: {e}", beside.display()))?;
+    std::fs::rename(&beside, &path).map_err(|e| format!("{}: {e}", path.display()))?;
     Ok(())
 }
 
@@ -135,9 +134,8 @@ pub fn write(dir: &Path, r: &Row) -> Result<(), Refused> {
 /// **An unknown key is ignored and a missing one refuses**, which is the
 /// forward-compatible half: a row carrying fields this build has no name
 /// for still binds, and one missing its identity is not a row at all.
-pub fn read(path: &Path) -> Result<Row, Refused> {
-    let text =
-        std::fs::read_to_string(path).map_err(|e| at(0, format!("{}: {e}", path.display())))?;
+pub fn read(path: &Path) -> Result<Row, String> {
+    let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
     let mut node = None;
     let mut patron = None;
     let mut series = None;
@@ -154,7 +152,7 @@ pub fn read(path: &Path) -> Result<Row, Refused> {
             continue;
         }
         let Some((k, v)) = line.split_once('=') else {
-            return Err(at(n + 1, "a line is `key = value`"));
+            return Err(format!("line {}: {}", n + 1, "a line is `key = value`"));
         };
         let (k, v) = (k.trim(), v.trim());
         match k {
@@ -164,7 +162,8 @@ pub fn read(path: &Path) -> Result<Row, Refused> {
             "revision" => revision = v.parse::<u64>().ok(),
             "retracted" => retracted = v == "true",
             "adoption" => {
-                adoption = key(v).ok_or_else(|| at(n + 1, "an adoption is 64 hex digits"))?
+                adoption = key(v)
+                    .ok_or_else(|| format!("line {}: {}", n + 1, "an adoption is 64 hex digits"))?
             }
             "from" => from = v.parse::<u64>().unwrap_or(0),
             "anchor" => anchor = key(v),
@@ -176,10 +175,7 @@ pub fn read(path: &Path) -> Result<Row, Refused> {
     }
     let (Some(node), Some(patron), Some(series), Some(revision)) = (node, patron, series, revision)
     else {
-        return Err(at(
-            0,
-            "a row needs `node`, `patron`, `series` and `revision`",
-        ));
+        return Err("a row needs `node`, `patron`, `series` and `revision`".to_string());
     };
     Ok(Row {
         row: Asserted {
@@ -201,7 +197,7 @@ pub fn read(path: &Path) -> Result<Row, Refused> {
 /// caller should rely on. A file that cannot be read is skipped and said,
 /// rather than stopping a node from starting: one unreadable row is a
 /// member who cannot attach, and refusing to start is every member.
-pub fn read_all(dir: &Path) -> (Vec<Row>, Vec<Refused>) {
+pub fn read_all(dir: &Path) -> (Vec<Row>, Vec<String>) {
     let mut rows = Vec::new();
     let mut refused = Vec::new();
     let Ok(entries) = std::fs::read_dir(dir) else {

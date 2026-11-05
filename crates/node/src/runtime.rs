@@ -727,9 +727,11 @@ impl LiveNode {
                     Family::HorizonAssertion => {
                         let node = s.lock().unwrap().clone();
                         let mut view = v.lock().unwrap();
+                        let mut i = ids_for_requests.lock().unwrap();
                         crate::submissions::horizon(
                             &mut view,
                             node.as_ref().map(|n| &n.cfg.pins),
+                            &mut i,
                             &peer,
                             &body,
                         )

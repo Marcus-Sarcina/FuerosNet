@@ -1386,9 +1386,9 @@ impl Surface {
         // **the disk first, then the table.** A row bound in memory and not
         // written is a member who attaches until the next restart, which is
         // the failure `grants` refuses for the same reason.
-        if let Err(e) = crate::horizon::write(
+        if let Err(e) = rhtn_node::horizon::write(
             &dir,
-            &crate::horizon::Row {
+            &rhtn_node::horizon::Row {
                 row: row.clone(),
                 material: Some(material.clone()),
                 retracted: false,
@@ -1475,9 +1475,9 @@ impl Surface {
         // **the tombstone first.** If the row left the table and the
         // tombstone were not written, the next start would read the row
         // back and bind the member again.
-        if let Err(e) = crate::horizon::write(
+        if let Err(e) = rhtn_node::horizon::write(
             &dir,
-            &crate::horizon::Row {
+            &rhtn_node::horizon::Row {
                 row: rhtn_archive::topology::Asserted {
                     node: subject,
                     patron,

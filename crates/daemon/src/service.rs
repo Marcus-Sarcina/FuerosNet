@@ -519,6 +519,8 @@ impl Service {
             (None, None) => unreachable!("settled above"),
         };
         view.store = store;
+        // so a row an attached client asserts is kept, not only bound
+        view.horizon_dir = cfg.horizon.clone();
         // the standing acknowledgement policy: every adoption under one of
         // this node's subordinates, or none (`infra-client-requirements.md`
         // §10.1)
@@ -573,7 +575,7 @@ impl Service {
         // keyhash cannot authenticate a presented key on its own
         // (`Pins::keyhash_for_key` compares against material).
         if let Some(dir) = cfg.horizon.as_deref() {
-            let (rows, refused) = crate::horizon::read_all(dir);
+            let (rows, refused) = rhtn_node::horizon::read_all(dir);
             let mut bound = 0usize;
             let mut tombstones = 0usize;
             for r in &rows {
@@ -587,6 +589,22 @@ impl Service {
                 }
                 view.table.assert(&r.row);
                 bound += 1;
+                // **pinned and known, both** [2026-11-04]: the pin lets the
+                // transport resolve the key this member presents, and
+                // `known` — which becomes the node's `ids` below — is what
+                // lets it verify what that member *signs*. Giving one
+                // without the other bound a member whose bundle and
+                // profile the node then refused, which detached it: the
+                // bench found it as `pay.refused ["PublishBundle",
+                // "PublishProfile"]` after a restart.
+                if let Some(id) = r
+                    .material
+                    .as_deref()
+                    .and_then(rhtn_crypto::Identity::from_key_material)
+                    && !known.iter().any(|k| k.keyhash == id.keyhash)
+                {
+                    known.push(id);
+                }
                 if let Some(m) = &r.material
                     && pins.pin(r.row.node, m).is_err()
                 {

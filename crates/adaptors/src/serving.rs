@@ -297,10 +297,14 @@ impl Serving for LocalNode {
             let me = self.me();
             let mut view = self.node.view.lock().unwrap();
             let pins = &self.node.node.cfg.pins;
-            rhtn_node::submissions::horizon(&mut view, Some(pins), &me, bytes).is_some_and(|r| {
-                rhtn_archive::submission::SubmissionReply::decode(&r)
-                    .is_ok_and(|r| r.code == rhtn_archive::submission::SUBMISSION_ACCEPTED)
-            })
+            // the identities this node can verify a signature from, which a
+            // taken row adds to: in process as on the wire
+            let mut ids = self.node.ids.lock().unwrap();
+            rhtn_node::submissions::horizon(&mut view, Some(pins), &mut ids, &me, bytes)
+                .is_some_and(|r| {
+                    rhtn_archive::submission::SubmissionReply::decode(&r)
+                        .is_ok_and(|r| r.code == rhtn_archive::submission::SUBMISSION_ACCEPTED)
+                })
         })
     }
 
