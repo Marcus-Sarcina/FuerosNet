@@ -142,6 +142,8 @@ object Kernel {
      * @param tokenHex the enrolment token its configuration carries
      * @param credentials how many 48-hour delegations the run carries
      * @param endpoint the address to name in an endpoint record, or null
+     * @param asn the provider's autonomous system, where the caller knows it
+     * @param zone that provider's own name for the place, beside the ASN
      */
     fun enrol(
         at: String,
@@ -152,6 +154,13 @@ object Kernel {
          *  this device's own key: the records are signed on that line's
          *  series (`wire-format.md` §7.6). */
         subnet: String? = null,
+        /** **Where the machine is, as the launch chose it** [author,
+         *  2026-11-06]: the ASN and the provider's own zone label, which
+         *  ride in both records below so a horizon can be ordered by the
+         *  pair later (design §3.4). Null from the hand-typed enrolment,
+         *  which was told neither. */
+        asn: Long? = null,
+        zone: String? = null,
     ): List<String> {
         val p = participant ?: return listOf("the kernel is not running")
         val said = mutableListOf<String>()
@@ -180,7 +189,7 @@ object Kernel {
         // §4.4's two records, each signed here because the instance holds
         // no seed to sign its own
         if (endpoint != null) {
-            val point = point(endpoint) ?: return said + "`$endpoint` is not host:port"
+            val point = point(endpoint, asn, zone) ?: return said + "`$endpoint` is not host:port"
             val line = subnet?.takeIf { it.length == 64 }?.let { unhex(it) }
             val record = call("endpointRecord", { null }) { p.endpointRecord(line, listOf(point), 1u) }
                 ?: return said + "the endpoint record was not signed"
@@ -191,7 +200,7 @@ object Kernel {
         // 2026-10-25]: its size is the kernel's to state (nothing beneath a
         // fresh instance), not the operator's to type
         run {
-            val point = point(endpoint ?: at) ?: return said + "`$at` is not host:port"
+            val point = point(endpoint ?: at, asn, zone) ?: return said + "`$at` is not host:port"
             val line2 = subnet?.takeIf { it.length == 64 }?.let { unhex(it) }
             val entry = call("anchorEntryFresh", { null }) {
                 p.anchorEntryFresh(line2, listOf(point), 1u)
@@ -332,13 +341,23 @@ object Kernel {
         return call<ByteArray?>("ownCard", { null }) { p.ownCard() }
     }
 
-    /** A `NetworkPoint` for `host:port`, encoded, or null. */
-    /** A `NetworkPoint` for `host:port`, encoded, or null. */
-    private fun point(hostPort: String): ByteArray? {
+    /**
+      * A `NetworkPoint` for `host:port`, encoded, or null.
+      *
+      * **With the provider and the zone where the caller knows them**
+      * [author, 2026-11-06]: a launch does, and what the next operator can
+      * order by is what the records carry
+      * (`light-client-requirements.md` §6). Null for both where this is a
+      * hand-typed enrolment — a machine somebody already had is in a place
+      * this screen was not told.
+      */
+    private fun point(hostPort: String, asn: Long? = null, zone: String? = null): ByteArray? {
         val host = hostPort.substringBeforeLast(':', "")
         val port = hostPort.substringAfterLast(':', "").toUShortOrNull() ?: return null
         if (host.isEmpty()) return null
-        return call("networkPoint", { null }) { uniffi.rhtn_ffi.networkPoint(host, port) }
+        return call("networkPoint", { null }) {
+            uniffi.rhtn_ffi.networkPoint(host, port, asn?.toULong(), zone?.takeIf { it.isNotBlank() })
+        }
     }
 
     /** Seconds since the epoch, which is what a delegation's window is in. */
@@ -1977,6 +1996,20 @@ object Kernel {
         }
         val row = rows.firstOrNull() ?: return 0 to false
         return row.nodes.toInt() to row.crowded
+    }
+
+    /** **How crowded each of a provider's zones already is inside this
+     *  operator's own horizon** (PRD-11), keyed by the pair: dispersal by
+     *  ASN alone remediates the provider, and by ASN and zone together
+     *  also what attaches to a place (design §3.4). One call for the whole
+     *  list, a region picker holding a dozen of them. */
+    fun crowdedZones(asn: Long, zones: List<String>): Map<String, Pair<Int, Boolean>> {
+        val p = participant ?: return emptyMap()
+        if (zones.isEmpty()) return emptyMap()
+        val rows = call("zones_by_concentration", { emptyList() }) {
+            p.zonesByConcentration(asn.toULong(), zones)
+        }
+        return rows.associate { it.zone to (it.nodes.toInt() to it.crowded) }
     }
 
     /** This device's public key material, hex: what an instance is told

@@ -114,6 +114,7 @@ fn a_renewal_signs_the_next_run_and_re_signs_the_entry_where_the_subtree_moved()
             token,
             credentials: 1,
             endpoint: None,
+            place: None,
         },
     )
     .expect("the renewal goes through");
@@ -160,6 +161,7 @@ fn a_renewal_leaves_the_entry_alone_where_the_count_is_what_it_claims() {
             token,
             credentials: 1,
             endpoint: None,
+            place: None,
         },
     )
     .expect("the renewal goes through");
@@ -170,4 +172,78 @@ fn a_renewal_leaves_the_entry_alone_where_the_count_is_what_it_claims() {
     let asked = asked.lock().unwrap().clone();
     assert_eq!(asked.len(), 2, "nothing was put to the entry: {asked:?}");
     assert!(asked.iter().all(|(l, _)| !l.contains("anchor-entry")));
+}
+
+/// **An enrolment carries where the machine is into both records it
+/// signs** [author, 2026-11-06]: *"If we disperse by ASN + region, then we
+/// are remediating war, disaster, power grid, physical network backbone,
+/// and local government risk as well."* What the next operator can order
+/// its own choice by is what these records carry
+/// (`light-client-requirements.md` §6; design §3.4).
+// acceptance: PRD-11
+#[test]
+fn an_enrolment_puts_the_provider_and_the_zone_in_the_records_it_signs() {
+    let me = test_identity("bob");
+    let token = [7u8; 32];
+    let key = [9u8; 32];
+    let fields = "phase waiting\ncredentials 0\nrun-ends 0\nsubtree 0\n".to_string();
+    // the fetch, the endpoint record, the anchor entry and one credential
+    let (at, asked) = surface(token, key, fields, 4);
+    let endpoint: SocketAddr = "203.0.113.9:7447".parse().unwrap();
+    rhtn_cli::enrol::enrol(
+        &me,
+        &rhtn_cli::enrol::Ask {
+            at: at.to_string(),
+            token,
+            credentials: 1,
+            endpoint: Some(endpoint),
+            place: Some((14_061, Some("nyc1".to_string()))),
+        },
+    )
+    .expect("the enrolment goes through");
+
+    let want = rhtn_node::resolution::NetworkPoint::new([203, 0, 113, 9], Some(7447))
+        .with_asn(14_061)
+        .with_zone("nyc1")
+        .encode_bytes();
+    let pushed = asked.lock().unwrap().clone();
+    for which in ["/node/endpoint-record", "/node/anchor-entry"] {
+        let (_, body) = pushed
+            .iter()
+            .find(|(line, _)| line.contains(which))
+            .unwrap_or_else(|| panic!("nothing was pushed to {which}"));
+        assert!(
+            body.windows(want.len()).any(|w| w == want),
+            "{which} does not carry the point with its ASN and zone"
+        );
+    }
+    // **and a machine enrolled by hand, told neither, says neither**: a
+    // point naming a place nobody stated would be an invention
+    let (at2, asked2) = surface(token, key, "phase waiting\nsubtree 0\n".to_string(), 4);
+    rhtn_cli::enrol::enrol(
+        &me,
+        &rhtn_cli::enrol::Ask {
+            at: at2.to_string(),
+            token,
+            credentials: 1,
+            endpoint: Some(endpoint),
+            place: None,
+        },
+    )
+    .expect("the enrolment goes through");
+    let bare =
+        rhtn_node::resolution::NetworkPoint::new([203, 0, 113, 9], Some(7447)).encode_bytes();
+    let pushed2 = asked2.lock().unwrap().clone();
+    let (_, body) = pushed2
+        .iter()
+        .find(|(line, _)| line.contains("/node/endpoint-record"))
+        .expect("nothing was pushed to the endpoint record");
+    assert!(
+        body.windows(bare.len()).any(|w| w == bare),
+        "the bare point is not what was signed"
+    );
+    assert!(
+        !body.windows(want.len()).any(|w| w == want),
+        "a place nobody stated reached the record"
+    );
 }

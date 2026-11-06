@@ -88,15 +88,89 @@ class SizingTest {
         )
     }
 
+    // acceptance: PRD-11
+    @Test
+    fun the_least_crowded_zones_come_first_among_those_that_can_host() {
+        // **two keys, capability then concentration** [author, 2026-11-06]:
+        // "if we disperse by ASN + region, then we are remediating war,
+        // disaster, power grid, physical network backbone, and local
+        // government risk as well" — so among the regions a node can run
+        // in, the ones fewest of this operator's horizon already use come
+        // first
+        val crowding = mapOf("nyc1" to 4, "ams3" to 1, "syd1" to 0)
+        val ordered = Sizing.regionsByRecommended(
+            regions, sizes, { it.slug }, { it.mb }, { it.regions }, { crowding[it.slug] ?: 0 },
+        ).map { it.slug }
+        assertEquals(listOf("syd1", "ams3", "nyc1", "lon1"), ordered)
+        // **and capability outranks it**: lon1 is uncrowded and cannot
+        // host a node at all, so it stays last — the question of whether a
+        // node should run somewhere only arises where it can
+        assertEquals("lon1", ordered.last())
+        // a client holding no peering in any zone of this provider knows
+        // nothing to order by, and gets the ordering as it was
+        assertEquals(
+            listOf("nyc1", "ams3", "syd1", "lon1"),
+            Sizing.regionsByRecommended(regions, sizes, { it.slug }, { it.mb }, { it.regions })
+                .map { it.slug },
+        )
+    }
+
     @Test
     fun the_ordering_and_the_absence_both_say_why() {
         // `light-client-requirements.md` §9: a refusal renders its reason,
         // and a silent reordering is a refusal in disguise
         assertTrue(Sizing.whyBehind().contains("listed last"))
         assertTrue(Sizing.whyBehind().contains("not refused"))
+        // and the second key is said too, not left to be inferred from a
+        // list that moved (PRD-11)
+        assertTrue(Sizing.whyBehind().contains("fewest"))
+        assertTrue(Sizing.whyBehind().contains("how many"))
         val why = Sizing.whyAbsent("s-2vcpu-4gb", "ams3")
         assertTrue("names both: $why", why.contains("s-2vcpu-4gb") && why.contains("ams3"))
         assertTrue("says the provider said so: $why", why.contains("provider's own list"))
+    }
+
+    // acceptance: PRD-11
+    @Test
+    fun the_screen_orders_its_regions_by_the_pair_and_shows_the_counts() {
+        // **the drawing itself a JVM test cannot reach**, as
+        // `InsetSweepTest` and `ManifestTest` say: so the wiring is read
+        // from the source, the ordering above being what it wires to
+        val screen = java.io.File(
+            module(), "app/src/main/kotlin/com/comptus/fueros/OperatorActivity.kt",
+        ).readText()
+        assertTrue(
+            "the region picker no longer orders by concentration",
+            screen.contains("crowding[it.slug]?.first ?: 0"),
+        )
+        assertTrue(
+            "nothing asks the kernel how crowded this provider's zones are",
+            screen.contains("Kernel.crowdedZones(provider.asn, allRegions.map { it.slug })"),
+        )
+        assertTrue(
+            "the count is not shown beside the region",
+            screen.contains("in your horizon"),
+        )
+        // **and the launch records where it put the machine** [author,
+        // 2026-11-06], which is what makes the next operator's ordering
+        // possible at all (`light-client-requirements.md` §6)
+        assertTrue(
+            "the launch's enrolment no longer carries the provider and the zone",
+            screen.contains("provider.asn, region.slug"),
+        )
+        // a zone label is the provider's own word, so the counts cannot
+        // outlive the provider they were fetched for (design §3.4)
+        assertTrue("the counts survive a change of provider", screen.contains("crowding = mapOf()"))
+    }
+
+    /** Where the tree is, for the source-reading test above. */
+    private fun module(): java.io.File {
+        var at: java.io.File? = java.io.File(".").canonicalFile
+        while (at != null) {
+            if (java.io.File(at, "app/src/main/AndroidManifest.xml").isFile) return at
+            at = at.parentFile
+        }
+        throw AssertionError("no app/src/main/AndroidManifest.xml at or above here")
     }
 
     @Test

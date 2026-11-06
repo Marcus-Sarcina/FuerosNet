@@ -703,6 +703,11 @@ class OperatorActivity : Activity() {
         // everything the provider offers, before either picker narrows it
         var allRegions: List<Launch.Region> = listOf()
         var allSizes: List<Launch.Size> = listOf()
+        // **and how crowded each of this provider's zones already is**
+        // (PRD-11), fetched once per provider's region list rather than
+        // per draw: the count is of this operator's own horizon and does
+        // not change while the screen is open
+        var crowding: Map<String, Pair<Int, Boolean>> = mapOf()
         // what the person has settled on; whichever was chosen first stays
         var heldRegion: String? = null
         var heldSize: String? = null
@@ -734,6 +739,7 @@ class OperatorActivity : Activity() {
                 { it.slug },
                 { it.memoryMb.toLong() },
                 { it.regions },
+                { crowding[it.slug]?.first ?: 0 },
             )
             sizeRows = heldRegion?.let { Sizing.sizesIn(it, allSizes) { z -> z.regions } } ?: allSizes
             regions.adapter = android.widget.ArrayAdapter(
@@ -743,7 +749,13 @@ class OperatorActivity : Activity() {
                     val ok = Sizing.meetsRecommended(
                         reg.slug, allSizes, { it.memoryMb.toLong() }, { it.regions },
                     )
-                    "${reg.slug}  ${reg.name}" + if (ok) "" else "  — too small here"
+                    // **the count is shown and the region is not hidden**
+                    // (PRD-11): the marks are what the ordering rests on,
+                    // said rather than left to be inferred
+                    val (n, crowded) = crowding[reg.slug] ?: (0 to false)
+                    "${reg.slug}  ${reg.name}" +
+                        (if (crowded) "  — $n in your horizon" else "") +
+                        (if (ok) "" else "  — too small here")
                 },
             )
             sizes.adapter = android.widget.ArrayAdapter(
@@ -790,6 +802,9 @@ class OperatorActivity : Activity() {
                     // region of one provider is not a region of another
                     regionRows = listOf()
                     sizeRows = listOf()
+                    // a zone label is this provider's own word, so the
+                    // counts go with its list (design §3.4)
+                    crowding = mapOf()
                     val empty = android.widget.ArrayAdapter(
                         this@OperatorActivity,
                         android.R.layout.simple_spinner_dropdown_item,
@@ -820,6 +835,11 @@ class OperatorActivity : Activity() {
                         }
                         allRegions = r.getOrThrow().filter { it.available }
                         allSizes = s.getOrThrow().sortedBy { it.monthly }
+                        // **the zone half of PRD-11** [author,
+                        // 2026-11-06]: the provider chooser above orders
+                        // by ASN, and this orders that provider's own
+                        // places, the pair being what disperses
+                        crowding = Kernel.crowdedZones(provider.asn, allRegions.map { it.slug })
                         // **the two pickers constrain each other**
                         // (`Robot/future-features.md` entry 2): both lists
                         // already knew how they intersect — a size carries
@@ -955,7 +975,16 @@ class OperatorActivity : Activity() {
                         show(); runOnUiThread { isEnabled = true; drawInstances() }; return@Thread
                     }
                     said += "its surface answers; enrolling"; show()
-                    said += Kernel.enrol(surface, minted, creds, "$ip:${Launch.QUIC_PORT}", subnet)
+                    // **the launch knows where it put the machine, so the
+                    // records it signs say so** [author, 2026-11-06]: the
+                    // ASN and the provider's own zone label ride in the
+                    // endpoint record and the anchor entry, which is what
+                    // the next operator's ordering reads
+                    // (`light-client-requirements.md` §6)
+                    said += Kernel.enrol(
+                        surface, minted, creds, "$ip:${Launch.QUIC_PORT}", subnet,
+                        provider.asn, region.slug,
+                    )
                     val took = said.any { it.startsWith("credential") }
                     runOnUiThread {
                         narration.text = said.joinToString("\n")

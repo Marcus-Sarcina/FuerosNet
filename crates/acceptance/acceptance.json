@@ -8605,11 +8605,11 @@
   "rule": [
    {
     "where": "design §6.3",
-    "text": "The record carries each endpoint's network point. Address, and where available the ASN, so concentration is observable rather than asserted"
+    "text": "The record carries each endpoint's network point.** Address, and where\n  available the ASN and the zone, so **concentration** is observable rather\n  than asserted"
    },
    {
     "where": "design §3.4",
-    "text": "The peering record carries the ASN for each endpoint that runs an instance"
+    "text": "The peering record carries the ASN and the zone for each endpoint that runs an instance"
    }
   ],
   "given": "Users A and B, each running an instance, in different subtrees and both carrying ASNs, have peered; observer O is in A's horizon and has stored the peering record.",

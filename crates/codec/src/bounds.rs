@@ -61,6 +61,12 @@ pub const EXPLICIT_SCOPE_KEYHASHES: usize = 256;
 /// §7.6).  **This bound is those two structures' alone**: peering carries
 /// exactly one `NetworkPoint` or `Locator` per endpoint (§4.4).
 pub const NETWORK_POINTS_PER_RECORD: usize = 8;
+/// A `NetworkPoint`'s zone label (§1.3, §4.4): a provider's own slug —
+/// "ams3", "fsn1" — and no provider's is near this.  **Carried in signed
+/// records only**, which is why the point's signed and unsigned field
+/// tables differ: in an unsigned object the key is unknown, and §1 has a
+/// decoder reject it.
+pub const ZONE_LABEL_BYTES: usize = 32;
 /// A `CatalogEntry`'s total encoded bytes (§1.3).
 pub const CATALOG_ENTRY_BYTES: usize = 2048;
 /// `CatalogReply` entries (§1.3): an answering node answers for itself plus

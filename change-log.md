@@ -18027,3 +18027,46 @@ Meet each read, with the gutter visible and the controls dark.
 
 **Installed on all four bench phones** for the UI validation run, each
 launching clean. Android tests 280.
+
+### 2026-11-06 (the zone beside the ASN, because a company is not a place)
+
+**The peering record carried the ASN and nothing else of where a node
+is**, and the provisioning screen ordered a choice by it. The ruling
+[author]: *"If we only disperse by ASN then we are only remediating
+provider risk. Cloud providers are companies, not necessarily operators
+of distinct facilities and even if their regional cloud infra is not
+co-located with other providers, data centers tend to cluster
+geographically for various reasons. If we disperse by ASN + region, then
+we are remediating war, disaster, power grid, physical network backbone,
+and local government risk as well."*
+
+So `NetworkPoint` gained key 4, a 1–32-byte text label: the zone as the
+provider names it. **In signed records only** — a peering record, an
+endpoint record, an anchor entry — because a sibling list and a referral
+are unsigned, where §1 has a decoder reject an unknown key, and they
+exist to reach a node rather than to weigh it. The codec carries two
+field tables for the one structure for exactly that reason.
+
+**Keyed by the pair, and the ASN is the key of it.** A zone label is the
+provider's own word, so one company's `nyc1` says nothing about another's;
+a zone with no ASN is counted nowhere and an ASN with no zone is its own
+place, since guessing which zone an unplaced sighting sits in would invent
+the evidence the ordering rests on. The provider's own count folds its
+zones and counts parties rather than sightings.
+
+**And the launch records what it chose**, which is the half that was
+missing: an operator ordering by concentration is reading what other
+operators' launches wrote down, so the pair now rides into both records
+the enrolment signs — from the app's launch screen and from `node launch`,
+with `--asn` and `--zone` for a machine enrolled by hand. The region
+picker orders on two keys, capability then crowding: a zone that cannot
+host a node is not a dispersal.
+
+**What it costs is C8, sharpened.** An ASN is a company's whole customer
+base; an ASN with a zone is that company's customers in one of its places.
+The placement disclosure was already accepted (§19.7) and the zone is
+accepted on the same terms, the register carrying the narrower set an
+observer has to correlate against. An earlier objection of the assistant's
+— that a per-zone signal would cost a third-party lookup disclosing the
+operator's shortlist — was wrong and withdrawn: the exclusion criterion is
+nodes inside the trust horizon, which is by definition trusted.

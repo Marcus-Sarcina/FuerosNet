@@ -1,9 +1,9 @@
 {
  "format": "rhtn-test-corpus/1",
  "pins": {
-  "wire-format.md": "17f3e4e6e4244e59ce8870c1eb5f5d437d31b0539cf186814d3e2ca08d2f02e9",
-  "network-design.md": "7d638a750d2907f1f8d0264850447b77f33a4c422f93b6b0b72489ddc62f9945",
-  "light-client-requirements.md": "c7c4cc6678f3741da27ae772716b132b9614a4021409f60e82aa9cc1aea91124"
+  "wire-format.md": "e7b184c5a0a08ad809309d40803122fa05a4bec673b3139461638827dfbe473a",
+  "network-design.md": "1ed3cc4d44c544f778e69e00476ce1f5f826d57086c90205a6f34a247b6c87b6",
+  "light-client-requirements.md": "82194b1c45ce6655b9f6e35ac3917ec6220f7fe0405cc811404235a1297d5d8e"
  },
  "classes": {
   "bytes": "hex is the complete input",
@@ -1835,6 +1835,70 @@
     "reason": "writing the default port out is malformed; omission is the one spelling (s1, s4.4)"
    },
    "hex": "a201440a00000103191d07"
+  },
+  {
+   "id": "B-zone-1",
+   "class": "bytes",
+   "expect": {
+    "outcome": "accept",
+    "kind": "NetworkPoint",
+    "reason": "a one-byte zone label, the floor"
+   },
+   "hex": "a301440a0000010219fbff046161"
+  },
+  {
+   "id": "B-zone-32",
+   "class": "bytes",
+   "expect": {
+    "outcome": "accept",
+    "kind": "NetworkPoint",
+    "reason": "a 32-byte zone label, the ceiling"
+   },
+   "hex": "a301440a0000010219fbff0478207a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a"
+  },
+  {
+   "id": "B-zone-33",
+   "class": "bytes",
+   "expect": {
+    "outcome": "reject",
+    "kind": "NetworkPoint",
+    "layer": "schema",
+    "reason": "a 33-byte zone label exceeds the ceiling"
+   },
+   "hex": "a301440a0000010219fbff0478217a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a"
+  },
+  {
+   "id": "B-zone-0",
+   "class": "bytes",
+   "expect": {
+    "outcome": "reject",
+    "kind": "NetworkPoint",
+    "layer": "schema",
+    "reason": "an empty zone label names no place"
+   },
+   "hex": "a301440a0000010219fbff0460"
+  },
+  {
+   "id": "B-zone-not-text",
+   "class": "bytes",
+   "expect": {
+    "outcome": "reject",
+    "kind": "NetworkPoint",
+    "layer": "schema",
+    "reason": "the zone is text, not an identifier of some other shape"
+   },
+   "hex": "a301440a0000010219fbff0403"
+  },
+  {
+   "id": "B-zone-unsigned-sibling",
+   "class": "bytes",
+   "expect": {
+    "outcome": "reject",
+    "kind": "frame",
+    "layer": "schema",
+    "reason": "a zone in an AttachAck sibling: the message is unsigned, where s1 has a decoder reject an unknown key, so the zone is carried in signed records only (s4.4)"
+   },
+   "hex": "000000528202a501000281a201582000511331b14dfd14aa367a79e3896c8d5ac89838549b563effb7fafedc7c91cc0281a301440a0001010219fbff04646e7963310319012c040005a11b2dfcc247d11b765f420040"
   },
   {
    "id": "B-prekey-4096",

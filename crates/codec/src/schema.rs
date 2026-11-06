@@ -345,6 +345,18 @@ const SIBLING_REF: Fields = &[
     (3, false, KeyMaterial),
 ];
 const NETWORK_POINT: Fields = &[(1, true, Bstr), (2, false, Uint), (3, false, Uint)];
+/// The same point inside a signed record, where the zone rides beside the
+/// ASN (§4.4; design §3.4).  **Two tables rather than one**: in an
+/// unsigned object — a sibling list, a referral — key 4 is an unknown key
+/// and §1 has a decoder reject it, which is the rule §4.4 states as
+/// *carried in signed records only*.  Unknown keys past these are
+/// extensions in a signed object either way.
+const NETWORK_POINT_SIGNED: Fields = &[
+    (1, true, Bstr),
+    (2, false, Uint),
+    (3, false, Uint),
+    (4, false, Tstr(crate::bounds::ZONE_LABEL_BYTES)),
+];
 const SERVING_INFRA: Fields = &[
     (1, true, Keyhash),
     (2, true, NetworkPoints),
@@ -533,9 +545,15 @@ pub fn sign1_shape(it: &Item) -> Result<(), Error> {
 
 /// One `NetworkPoint` map (§4.4): its fields, a four-byte address, and a
 /// port in range that is not the default written out; in a signed object
-/// its unknown keys are extensions.
+/// its unknown keys are extensions and **the zone at key 4 is a known
+/// one**, where in an unsigned object it is neither.
 fn network_point_at(b: &[u8], at: usize, signed: bool) -> Result<(), Error> {
-    check_map_with(b, at, NETWORK_POINT, signed)?;
+    let schema = if signed {
+        NETWORK_POINT_SIGNED
+    } else {
+        NETWORK_POINT
+    };
+    check_map_with(b, at, schema, signed)?;
     let (Item::Map(ref m), _) = (Parser { b }).item(at)? else {
         unreachable!()
     };
@@ -1106,18 +1124,23 @@ fn record_extension_bounds(b: &[u8], kind: &str, item: &Item) -> Result<(), Erro
         "EndpointRecord" => Some(4),
         "CatalogEntry" => Some(9),
         "Locator" => Some(4),
-        "KeyGrant" | "SignedLocator" | "LateResponse" | "NetworkPoint" | "AdoptionDirection" => {
-            Some(3)
-        }
+        "KeyGrant" | "SignedLocator" | "LateResponse" | "AdoptionDirection" => Some(3),
+        // the address, the ASN, the port, and the zone beside the ASN
+        // (§4.4): four keys the schema names [2026-11-06]
+        "NetworkPoint" => Some(4),
         "VerifierResponse" => Some(10),
         _ => None,
     };
     let Some(top) = top else { return Ok(()) };
     extension_bounds(b, 0, |k| (1..=top).contains(&k))?;
     match kind {
-        // network points are maps of their own, three keys each
+        // network points are maps of their own, four keys each: the
+        // address, the ASN, the port and the zone beside the ASN (§4.4).
+        // **Four and not three** [2026-11-06]: a zone here is a key the
+        // schema names, and counting it as an extension would spend one
+        // of the sixteen §1.3 allows on a field that is not one
         "AnchorEntry" | "EndpointRecord" => {
-            nested_extension_bounds(b, 0, 2, &|k| (1..=3).contains(&k))
+            nested_extension_bounds(b, 0, 2, &|k| (1..=4).contains(&k))
         }
         // and so is a locator, four (§2.3)
         "SignedLocator" => nested_extension_bounds(b, 0, 2, &|k| (1..=4).contains(&k)),
@@ -1466,6 +1489,15 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
                 && (port == 0 || port > 65535 || port == 7431)
             {
                 return Err(Error("port invalid"));
+            }
+            // **the zone, where one is carried** (§4.4 key 4): text, not
+            // empty, and inside §1.3's bound. A point named on its own is
+            // judged as the signed shape, which is the one that carries a
+            // zone at all
+            match map_get(m, 4) {
+                None => {}
+                Some(Item::Text(r)) if !r.is_empty() && r.len() <= ZONE_LABEL_BYTES => {}
+                _ => return Err(Error("zone label")),
             }
             Ok(())
         }

@@ -1209,12 +1209,15 @@ TS_EVAL = TS_C2 + 100 * 86400   # a hypothetical next alice-bob ceremony's start
 
 # --- Peering (type 4): bob and carol as infra peers; alternative continuations
 # of their existing chain heads (bob: the adoption; carol: the formation).
-def network_point(ip, asn=None, port=None):
+def network_point(ip, asn=None, port=None, zone=None):
     assert port != 7431, 'the default port is never written out (§1, §4.4)'
     assert port is None or 1 <= port <= 65535, 'port: u16, never zero'
+    # the zone rides beside the ASN and only in a signed record (§4.4 key 4)
+    assert zone is None or asn is not None, 'a zone without an ASN says where but not whose (§4.4)'
     pairs = [(e_uint(1), e_bstr(bytes(ip)))]
     if asn is not None: pairs.append((e_uint(2), e_uint(asn)))
     if port is not None: pairs.append((e_uint(3), e_uint(port)))
+    if zone is not None: pairs.append((e_uint(4), e_tstr(zone)))
     return e_map(pairs)
 peer_body = e_map([
     (e_uint(0), backptrs([adopt_txid], [formation_txid])),
@@ -3504,6 +3507,22 @@ _np_raw = lambda p: e_map([(e_uint(1), e_bstr(bytes([10, 0, 0, 1]))), (e_uint(3)
 reg('B-port-65536', 'bytes', REJ('NetworkPoint', 'schema', 'port exceeds u16'), _np_raw(65536))
 reg('B-port-0', 'bytes', REJ('NetworkPoint', 'schema', 'zero is never a destination'), _np_raw(0))
 reg('B-port-7431-explicit', 'bytes', REJ('NetworkPoint', 'schema', 'writing the default port out is malformed; omission is the one spelling (s1, s4.4)'), _np_raw(7431))
+# the zone label (s1.3, s4.4 key 4): a provider's own slug, bounded, and
+# carried in signed records only [author, 2026-11-06]
+_np_zone = lambda z: e_map([(e_uint(1), e_bstr(bytes([10, 0, 0, 1]))), (e_uint(2), e_uint(64511)),
+                            (e_uint(4), e_tstr(z))])
+reg('B-zone-1', 'bytes', ACC('NetworkPoint', 'a one-byte zone label, the floor'), _np_zone('a'))
+reg('B-zone-32', 'bytes', ACC('NetworkPoint', 'a 32-byte zone label, the ceiling'), _np_zone('z' * 32))
+reg('B-zone-33', 'bytes', REJ('NetworkPoint', 'schema', 'a 33-byte zone label exceeds the ceiling'), _np_zone('z' * 33))
+reg('B-zone-0', 'bytes', REJ('NetworkPoint', 'schema', 'an empty zone label names no place'), _np_zone(''))
+reg('B-zone-not-text', 'bytes', REJ('NetworkPoint', 'schema', 'the zone is text, not an identifier of some other shape'),
+    e_map([(e_uint(1), e_bstr(bytes([10, 0, 0, 1]))), (e_uint(2), e_uint(64511)), (e_uint(4), e_uint(3))]))
+reg('B-zone-unsigned-sibling', 'bytes',
+    REJ('frame', 'schema', 'a zone in an AttachAck sibling: the message is unsigned, where s1 has a decoder reject an unknown key, so the zone is carried in signed records only (s4.4)'),
+    frame(2, e_map([(e_uint(1), e_uint(0)),
+                    (e_uint(2), e_arr([e_map([(e_uint(1), e_bstr(W16[0].keyhash)),
+                                              (e_uint(2), e_arr([network_point([10, 0, 1, 1], asn=64511, zone='nyc1')]))])])),
+                    (e_uint(3), e_uint(300)), (e_uint(4), e_uint(0)), (e_uint(5), caps_server)])))
 reg('B-prekey-4096', 'bytes', ACC('PrekeyBundle', 'blob at the 4 KB ceiling'),
     sign1_slot([(e_uint(1), e_bstr(alice.keyhash)), (e_uint(2), e_uint(1)),
                 (e_uint(3), e_bstr(b'k' * 4096)), (e_uint(4), e_uint(TS_REC)),

@@ -55,6 +55,11 @@ usage: rhtn <command> [...]
         key. Options:
           --credentials <n>   how many 48-hour credentials; default 7
           --endpoint <addr>   also sign an endpoint record naming <addr>
+          --asn <n>           the provider's autonomous system, carried in
+                              both records so concentration is observable
+                              (D §3.4); `node launch` fills it itself
+          --zone <label>      that provider's own name for the place, 1 to
+                              32 bytes, beside the ASN and never without it
         This is the provisioning page's work as an instrument: in a product
         the client does it (L §8.3). It crosses no protocol request.
 
@@ -242,6 +247,11 @@ fn do_node(rest: &[&str]) -> Result<String, String> {
         ));
     }
     let (mut token, mut credentials, mut endpoint) = (None, 7usize, None);
+    // **where the machine is, where the operator knows it** [author,
+    // 2026-11-06]: `node launch` fills both having chosen them, and a
+    // machine enrolled by hand is in a place only its operator can say
+    // (design §3.4, `light-client-requirements.md` §6)
+    let (mut asn, mut zone): (Option<u64>, Option<String>) = (None, None);
     let mut i = 0;
     while i < opts.len() {
         let value = opts.get(i + 1).copied();
@@ -262,9 +272,31 @@ fn do_node(rest: &[&str]) -> Result<String, String> {
                         .map_err(|_| "--endpoint takes an address and port".to_string())?,
                 )
             }
+            "--asn" => {
+                asn = Some(
+                    need("asn")?
+                        .trim_start_matches("AS")
+                        .parse()
+                        .map_err(|_| "--asn takes an autonomous system number".to_string())?,
+                )
+            }
+            "--zone" => {
+                let z = need("zone")?;
+                if z.is_empty() || z.len() > 32 {
+                    return Err("--zone takes the provider's own label, 1 to 32 bytes".into());
+                }
+                zone = Some(z.to_string());
+            }
             other => return Err(format!("{other} is not an option of `node {sub}`")),
         }
         i += 2;
+    }
+    // the zone rides beside the ASN and means nothing apart from it (§4.4)
+    if zone.is_some() && asn.is_none() {
+        return Err(
+            "--zone needs --asn: a provider's own label for a place says where but not whose"
+                .into(),
+        );
     }
     let token = token.ok_or("--token is 64 hex digits, the one the configuration carries")?;
     if credentials == 0 {
@@ -276,6 +308,7 @@ fn do_node(rest: &[&str]) -> Result<String, String> {
         token,
         credentials,
         endpoint,
+        place: asn.map(|a| (a, zone)),
     };
     if *sub == "renew" {
         return enrol::renew(&me, &ask);

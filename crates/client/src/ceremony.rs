@@ -3883,6 +3883,41 @@ impl Client {
         out.into_iter().map(|(_, asn, n)| (asn, n)).collect()
     }
 
+    /// **One provider's zones ordered the same way, least first**
+    /// [author, 2026-11-06]: *"If we only disperse by ASN then we are only
+    /// remediating provider risk … ASN + region … remediates war,
+    /// disaster, power grid, physical network backbone, and local
+    /// government risk as well."*  So the screen that chooses a region
+    /// asks this, and the screen that chooses a provider asks the
+    /// question above it.
+    ///
+    /// **Counted against this provider's zone of that name and nothing
+    /// else**: a zone label is the provider's own word
+    /// ([`crate::horizon::ProviderZone`]), so `nyc1` of one company
+    /// says nothing about `nyc1` of another. **A party seen at this
+    /// provider with no zone stated counts against no zone of it**, since
+    /// guessing which would be inventing the evidence the ordering rests
+    /// on — the provider's own count has it, and that is the row above.
+    ///
+    /// Nothing is hidden and nothing is scored, for the reasons
+    /// [`Client::providers_by_concentration`] gives.
+    #[must_use]
+    pub fn zones_by_concentration(&self, asn: u64, candidates: &[String]) -> Vec<(String, usize)> {
+        let seen = self.horizon.places_seen();
+        let mut out: Vec<(usize, &String, usize)> = candidates
+            .iter()
+            .enumerate()
+            .map(|(i, zone)| {
+                let n = seen
+                    .get(&(asn, Some(zone.clone())))
+                    .map_or(0, std::collections::BTreeSet::len);
+                (i, zone, n)
+            })
+            .collect();
+        out.sort_by_key(|(i, _, n)| (*n, *i));
+        out.into_iter().map(|(_, z, n)| (z.clone(), n)).collect()
+    }
+
     /// Write this client's own state where it can be read back: its
     /// archive, and the store beside it.
     ///

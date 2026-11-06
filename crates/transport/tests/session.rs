@@ -547,6 +547,7 @@ fn sibling(name: &str, port: u16) -> SiblingRef {
         endpoints: vec![NetworkPoint {
             ip: [127, 0, 0, 1],
             asn: None,
+            zone: None,
             port: Some(port as u64),
         }],
         key_material: Some(id.key_material()),

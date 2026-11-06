@@ -574,6 +574,23 @@ pub struct ProviderRow {
     pub crowded: bool,
 }
 
+/// One candidate zone of one provider, as a provisioning screen orders
+/// them (`light-client-requirements.md` §6; PRD-11). Separate from
+/// [`ProviderRow`] because the questions are: *which company*, then
+/// *which of its places*.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ZoneRow {
+    /// The zone as the provider names it, as the caller named it.
+    pub zone: String,
+    /// How many parties inside this client's own horizon are already seen
+    /// peering from that provider's zone of that name. **Parties at the
+    /// provider with no zone stated are not here** — the provider's own
+    /// count has them, and placing them would be guessing.
+    pub nodes: u32,
+    /// The display tag, on the same terms as [`ProviderRow::crowded`].
+    pub crowded: bool,
+}
+
 /// The two nominee lists a ceremony holds: this side's and the other's.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Nominees {
@@ -2656,6 +2673,27 @@ impl Participant {
         })
     }
 
+    /// **One provider's candidate zones ordered by concentration inside
+    /// this client's own horizon, least first** (PRD-11): the zone half of
+    /// the row above, keyed by the pair, because dispersal by ASN alone
+    /// remediates the provider while ASN and zone together also remediate
+    /// what attaches to a place (design §3.4).
+    #[must_use]
+    pub fn zones_by_concentration(&self, asn: u64, zones: Vec<String>) -> Vec<ZoneRow> {
+        crate::diag::call_plain("zones_by_concentration", || {
+            self.handle.with_blocking(move |c| {
+                c.zones_by_concentration(asn, &zones)
+                    .into_iter()
+                    .map(|(zone, nodes)| ZoneRow {
+                        zone,
+                        nodes: u32::try_from(nodes).unwrap_or(u32::MAX),
+                        crowded: nodes > 0,
+                    })
+                    .collect()
+            })
+        })
+    }
+
     /// **The `authorized_keys` line for a node this identity launches**
     /// (`rhtn_crypto::ssh`; `light-client-requirements.md` §10): what the
     /// launch installs on the machine, so the operator has a shell on it.
@@ -4172,12 +4210,31 @@ pub fn fresh_resource_keyhash() -> String {
 /// IPv4 only, said rather than guessed at: the point encoding carries four
 /// octets, and a provisioning page handed a v6 address should say so to
 /// its operator rather than quietly name a different host.
+///
+/// **The provider and the zone go in where the caller knows them**
+/// [author, 2026-11-06]: a launch does — it chose them both — and the next
+/// operator's ordering is only as good as what the records carry
+/// (`light-client-requirements.md` §6). Both are self-asserted and
+/// validated nowhere (design §17.3), and **a zone without an ASN is
+/// dropped**, the pair being the unit and a provider's own word meaning
+/// nothing apart from it.
 #[uniffi::export]
-pub fn network_point(host: String, port: u16) -> Result<Vec<u8>, Refused> {
+pub fn network_point(
+    host: String,
+    port: u16,
+    asn: Option<u64>,
+    zone: Option<String>,
+) -> Result<Vec<u8>, Refused> {
     let v4: std::net::Ipv4Addr = host
         .parse()
         .map_err(|_| Refused::new(format!("`{host}` is not an IPv4 address")))?;
-    let point = rhtn_transport::session::NetworkPoint::new(v4.octets(), Some(u64::from(port)));
+    let mut point = rhtn_transport::session::NetworkPoint::new(v4.octets(), Some(u64::from(port)));
+    if let Some(asn) = asn {
+        point = point.with_asn(asn);
+        if let Some(zone) = zone.filter(|z| !z.is_empty() && z.len() <= 32) {
+            point = point.with_zone(zone);
+        }
+    }
     let mut out = Vec::new();
     point.encode(&mut out);
     Ok(out)

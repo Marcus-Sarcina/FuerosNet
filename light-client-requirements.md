@@ -996,15 +996,19 @@ anchor up in, and it is what you hand onward in a bundle (§1.1,
 - **Before an operator commits an instance to a provider and zone, order the
   choices by how concentrated they already are inside that operator's own
   horizon, least concentrated first, and mark the crowded ones rather than
-  hiding them.** The peering record carries each endpoint's ASN (design §3.4),
-  and what an observer may use is its horizon plus the far endpoints of the
-  peering records it can see (design §16.2.1) — 221 nodes at f = 10 (design
+  hiding them.** The peering record carries each endpoint's ASN and the zone
+  that provider calls the place (design §3.4), and **concentration is keyed by
+  the pair**: the ASN disperses the company, the zone disperses the place, and
+  a zone label is a provider's own word and means nothing apart from it. What
+  an observer may use is its horizon plus the far endpoints of the peering
+  records it can see (design §16.2.1) — 221 nodes at f = 10 (design
   §15.1). Design §3.4 already asks the reference client to prefer peers
   differing in ASN and region and to surface it when they do not; this is that
   preference one screen earlier, while the choice is still free, and design
   §18.1 is what turns on it. Dana's patron and four of her nine siblings
-  already run inside one provider's ASN: that provider sorts last and is
-  marked, and Dana may still choose it.
+  already run inside one provider's ASN, three of them in the same zone of it:
+  that provider sorts last, that zone sorts last within it, both are marked,
+  and Dana may still choose either.
 - **Say what that ordering does not cover.** It speaks to one operator's own
   redundancy and not to the network's, because visibility does not compose: a
   provider uncrowded inside a horizon may be crowded one edge out, and design
@@ -1446,7 +1450,15 @@ one that is true.
   when it lapses. **The image is pulled from the reference registry unless the
   operator names another**, which is how a custom or third-party node is
   launched by the same pages. Order the providers and zones offered as §6
-  says, by concentration inside this operator's own horizon.
+  says, by concentration inside this operator's own horizon. **And record
+  where the machine was put** [author, 2026-11-06]: the provider's ASN and
+  that provider's own zone label ride in the endpoint record and the anchor
+  entry this client signs at enrolment (`wire-format.md` §4.4, design
+  §3.4), because the ordering above is only as good as what records carry
+  — an operator ordering by concentration is reading what other operators'
+  launches wrote down. A machine enrolled by hand is in a place only its
+  operator can state, so the pair is theirs to give or to omit, and a zone
+  is never written without its ASN.
 - **Install a resource on your own instance from here, not from a shell**
   [author, 2026-11-02]. An operator's only window on their machine may be
   this client, so installing a package is an act on the administration

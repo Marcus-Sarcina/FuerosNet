@@ -88,6 +88,7 @@ pub fn sibling_ref(name: &str, addr: SocketAddr) -> SiblingRef {
         endpoints: vec![NetworkPoint {
             ip: v4.octets(),
             asn: None,
+            zone: None,
             port: Some(addr.port() as u64),
         }],
         key_material: Some(id(name).public.key_material()),

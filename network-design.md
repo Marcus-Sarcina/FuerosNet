@@ -668,9 +668,17 @@ payload, so apex load scales with churn and introductions, not with usage.
   voluntary (§6.3), zero peers is a supported configuration, and a node with none
   simply does not have the property. §21 records the same figure as a
   recommendation for that reason.
-- **The peering record carries the ASN for each endpoint that runs an instance** (§6.3), so an
+- **The peering record carries the ASN and the zone for each endpoint that runs an instance** (§6.3), so an
   observer can see whether two peers are *concentrated*, not whether they are
-  independent, which ASN cannot show (§17.3). **Independence is
+  independent, which neither can show (§17.3). **The pair is the unit, and the
+  ASN alone would not be** [author, 2026-11-06]: an ASN names a company, and a
+  company is not a set of distinct facilities — cloud regions are not
+  necessarily separate places, and data centres cluster geographically for
+  reasons of power, fibre and land. Dispersal by ASN alone remediates the
+  **provider**: one legal order, one account, one firm's outage. Dispersal by
+  ASN *and zone* also remediates **war, disaster, the power grid, the physical
+  backbone and local government**, which attach to the place rather than to
+  the company. **Independence is
   adversarial, not only operational**: a party with legal compulsion over one
   provider reaches every node hosted there at once, so concentration bears on
   metadata confidentiality and local-state integrity as much as on fault
@@ -1221,8 +1229,13 @@ consequence of subnet plurality, not a gap in this mechanism.
 ### 6.3 Peering (cross-tree)
 - **Voluntary and ad-hoc.** Unlike adoption, not required to participate.
 - **The record carries each endpoint's network point.** Address, and where
-  available the ASN, so **concentration** is observable rather than asserted
-  (§3.4, §17.3). Independence is not: ASN is routing, not legal control.
+  available the ASN and the zone, so **concentration** is observable rather
+  than asserted (§3.4, §17.3). Independence is not: ASN is routing, not legal
+  control, and a zone is a provider's own label for a place. **The two
+  together are the unit** [author, 2026-11-06]: the ASN disperses the company
+  and the zone disperses the place, and the risks that attach to a place —
+  war, disaster, the grid, the backbone, a local government — do not stop at
+  a company's boundary.
 - **Two signatures, between two users in different subtrees** [author,
   2026-09-29]. Peering is a condition between users on the social graph, and
   what it carries depends on what each runs: where one or both are light
@@ -6734,8 +6747,9 @@ the subtree's point of view when that authority is withdrawn.
 Adoption, departure and disavowal travel rootward; **peering does not.** The
 memo summarises only changes to the membership slots this chain governs; a
 relationship formed outside its authority is not its business to summarise. A peering
-record names each peer by network point and ASN where it runs an instance and by
-locator otherwise (§6.3), and C8 maps that composition to a natural person. A memo carries keys and positions, so
+record names each peer by network point, ASN and zone where it runs an instance
+and by locator otherwise (§6.3), and C8 maps that composition to a natural
+person. A memo carries keys and positions, so
 an ancestor accumulating them holds structure and no routable or identifying
 information, and adding peering for symmetry would silently remove that property.
 **It is a constraint on what may travel rootward, not a scoping convenience.**
@@ -7513,9 +7527,15 @@ several at once, not one per acquisition.
      not guaranteed and not generalisable. The answer, when IPv6 is admitted, is
      to count by **routable prefix** rather than address; the unit, encoding and
      prior art are recorded with the deferral (§4).
-   - **Expose the ASN** as an attribute of the infra attestation.
-     Concentration (1,000 nodes in one ASN) is observable and is a signal
-     policies can weight — a visible signal, not a trust input.
+   - **Expose the ASN, and the zone beside it** as attributes of the infra
+     attestation. Concentration (1,000 nodes in one ASN, or in one zone of
+     one) is observable and is a signal policies can weight — a visible
+     signal, not a trust input. **The pair is what disperses** [author,
+     2026-11-06]: the ASN disperses the company and the zone disperses the
+     place, so ASN alone remediates provider risk while the two together
+     also remediate what attaches to a place (§3.4). **It also sharpens
+     C8**, the zone narrowing the provider's customer set an observer must
+     correlate against, which is the cost taken knowingly for the signal.
      **The signal runs one way.** Concentration in one ASN is evidence of
      concentration; ASN or region *diversity* is not evidence of independence.
      Both describe routing and geography rather than the entity subject to one
@@ -8304,11 +8324,14 @@ never told. It is a commitment by the implementer and the only lever available.
    not storage breach.
 5. **Persistent encounter evidence.** Presence facts are immutable; only derived
    standing decays (§16.5).
-6. **Visible infrastructure placement** — the ASN is exposed *so that*
-   concentration is observable (§17.3). What that buys is a concentration detector
+6. **Visible infrastructure placement** — the ASN, and since 2026-11-06 the
+   provider's own zone label beside it, are exposed *so that* concentration is
+   observable (§17.3, §3.4). What that buys is a concentration detector
    and not an independence proof: diversity in ASN or region does not establish
    separate legal control, which is the boundary §18.1's compelled provider turns
-   on (§1.2.3).
+   on (§1.2.3). **The zone is the sharper disclosure of the two** and is
+   accepted on the same terms: it is what makes dispersal remediate a place
+   and not only a company, and C8 carries what it costs.
 7. **Optional platform-vendor metadata. Superseded by item 13**, and the number
    is kept so a citation resolves here. The doorbell is posted to an endpoint the
    user's own service supplies and no vendor credential exists at the node
@@ -8403,7 +8426,7 @@ acknowledged and whose join is not.
 | **C5** | Queue metadata + heartbeat state | *When someone came online to retrieve a particular message.* Distinguishes daily routine from exceptional activity, and both ingredients sit with the same party, or below it: a compelled provider retains the joined view after the guest's deletion, so the C5 window is bounded by guest deletion only above the hypervisor (§18.1, §14.1.6) [2026-09-03] | High for a patron keeping logs, or a provider retaining below the guest |
 | **C6** | Push timestamps + patron queue state | The patron knows what is queued and sends the push; the platform vendor sees the push event. A party obtaining both **aligns network identity with a platform device account** more confidently than either dataset allows alone | High under legal process or platform compromise |
 | **C7** | Catalog entry + resource access log + topology | *Role and occupation inference.* A clinical service, code-review tool, family datastore or specialist tracker makes an otherwise pseudonymous subtree **semantically identifiable** | High |
-| **C8** | Peering ASN + ordinary provider records | Maps a pseudonymous infra key to a **natural person.** Sharpened by §3.3's rule that each server corresponds to a user. The placement disclosure is accepted (§19.7); this identification consequence was not worked through | Medium–High |
+| **C8** | Peering ASN and zone + ordinary provider records | Maps a pseudonymous infra key to a **natural person.** Sharpened by §3.3's rule that each server corresponds to a user, and **sharpened again by the zone** [author, 2026-11-06]: an ASN is a company's whole customer base and an ASN with a zone is that company's customers in one of its places, so the set an observer correlates against is smaller by the ratio of the provider's regions. The placement disclosure is accepted (§19.7) and the zone is accepted on the same terms, dispersal by the pair being what remediates a place rather than only a company (§3.4); this identification consequence was not worked through | Medium–High |
 | **C9** | Local face archive + transaction archive, on one device | **§7.5.2 breaks this for compliant clients.** A seized device yields an archive and ciphertext, and the join requires per-counterparty cooperation from the depicted person. **A face-to-key-to-social-history database.** Either store alone is far less sensitive: photos identify faces without network history, the archive identifies keys without biometrics. On a compromised device they coexist and join. **This is the central consequence of P5**, not a separate risk | Critical |
 | **C10** | Stable key + catalog + multi-subnet membership | The same person's **services** followed across socially independent contexts — P3's linkage plus P15's fingerprint. **Conditional on a single-identity client**, since the linkage half disappears when a user presents different identities in different subnets | High for such a client |
 | C11 | **One-time key request** + queue and routing metadata | **Largely addressed** (§14.2.4). Reusable prekey material is prefetched across the trust horizon as a **batch**, so an ordinary fetch names a population rather than a person and carries no intent signal, and the two request forms are structurally distinct on the wire, so a serving node sees which it received rather than inferring motive. **What remains** is the on-demand one-time key request, which is made when a session is actually being opened and therefore precedes its message by a short interval: a node sees a request followed by traffic or by nothing, so an abandoned contact still leaves a trace. Depletion is bounded by per-requester rate limiting rather than by policing motive | Low–Medium |

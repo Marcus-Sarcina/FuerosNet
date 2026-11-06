@@ -1168,14 +1168,30 @@ fn a_client_says_who_serves_a_peer_from_its_own_copy_and_asks_nobody() {
 /// where an ASN is given and at its locator where it is not
 /// (`wire-format.md` §4.4).
 fn peering(w: &mut World, a: &str, b: &str, a_asn: Option<u64>, b_asn: Option<u64>) -> Record {
+    peering_at(w, a, b, a_asn.map(|n| (n, None)), b_asn.map(|n| (n, None)))
+}
+
+/// The same, each endpoint's place given as the pair the record carries:
+/// the ASN, and the zone the provider calls that place where it stated one
+/// (`wire-format.md` §4.4 key 4; design §3.4).
+fn peering_at(
+    w: &mut World,
+    a: &str,
+    b: &str,
+    a_asn: Option<(u64, Option<&str>)>,
+    b_asn: Option<(u64, Option<&str>)>,
+) -> Record {
     let pop = w.meet(a, b).txid;
     let t = w.tick();
-    let at = |who: &str, asn: Option<u64>| match asn {
-        Some(n) => {
+    let at = |who: &str, asn: Option<(u64, Option<&str>)>| match asn {
+        Some((n, zone)) => {
             let mut out = Vec::new();
-            rhtn_transport::session::NetworkPoint::new([10, 0, 0, 1], Some(7447))
-                .with_asn(n)
-                .encode(&mut out);
+            let mut p =
+                rhtn_transport::session::NetworkPoint::new([10, 0, 0, 1], Some(7447)).with_asn(n);
+            if let Some(z) = zone {
+                p = p.with_zone(z);
+            }
+            p.encode(&mut out);
             PeerAt::Point(out)
         }
         None => {
@@ -1278,6 +1294,119 @@ fn candidate_providers_are_ordered_by_what_the_horizon_already_holds() {
     assert_eq!(
         c.providers_by_concentration(&[64503, 64502, 64500, 64501]),
         vec![(64503, 0), (64502, 0), (64501, 1), (64500, 2)],
+    );
+}
+
+/// **The same question keyed by the pair, which is the unit that
+/// disperses** [author, 2026-11-06]: *"If we only disperse by ASN then we
+/// are only remediating provider risk … If we disperse by ASN + region,
+/// then we are remediating war, disaster, power grid, physical network
+/// backbone, and local government risk as well."*
+// acceptance: PRD-11
+#[test]
+fn zones_of_one_provider_are_counted_and_ordered_apart_from_each_other() {
+    let mut w = World::new();
+    let adoptions = vec![
+        adopt(&mut w, "alice", "bob", vec![0x10], 1),
+        adopt(&mut w, "carol", "bob", vec![0x20], 1),
+        adopt(&mut w, "w1", "bob", vec![0x30], 1),
+    ];
+    // one provider, three of its places: bob and carol in "nyc1", w1 in
+    // "ams3", and carol again at the provider with no zone stated
+    let peerings = vec![
+        peering_at(
+            &mut w,
+            "bob",
+            "carol",
+            Some((64500, Some("nyc1"))),
+            Some((64500, Some("nyc1"))),
+        ),
+        peering_at(
+            &mut w,
+            "w1",
+            "carol",
+            Some((64500, Some("ams3"))),
+            Some((64500, None)),
+        ),
+    ];
+    let mut recs = adoptions;
+    recs.extend(peerings);
+    let h = fed("alice", &recs);
+
+    let places = h.places_seen();
+    assert_eq!(
+        places
+            .get(&(64500, Some("nyc1".to_string())))
+            .map(std::collections::BTreeSet::len),
+        Some(2),
+        "bob and carol are both seen in that zone of that provider"
+    );
+    assert_eq!(
+        places
+            .get(&(64500, Some("ams3".to_string())))
+            .map(std::collections::BTreeSet::len),
+        Some(1),
+        "w1 alone"
+    );
+    // **a point stating the provider and no zone is its own place**, not a
+    // member of any zone of it: nothing here may guess which
+    assert_eq!(
+        places
+            .get(&(64500, None))
+            .map(std::collections::BTreeSet::len),
+        Some(1),
+        "carol at the provider, somewhere unstated"
+    );
+    assert_eq!(
+        places.get(&(64500, Some("syd1".to_string()))),
+        None,
+        "and nothing is held of a zone nobody was seen in"
+    );
+
+    // **the provider's own count folds its zones**, and counts parties
+    // rather than sightings: carol is in two of its places and is one
+    // party at it
+    let asns = h.asns_seen();
+    assert_eq!(
+        asns.get(&64500).map(std::collections::BTreeSet::len),
+        Some(3),
+        "bob, carol and w1 — carol once, seen twice"
+    );
+
+    let mut c = rhtn_client::ceremony::Client::new(
+        common::id("alice"),
+        common::ids(),
+        Default::default(),
+        harness::device(
+            std::rc::Rc::new(std::cell::Cell::new(1_790_000_000_000u64)),
+            7,
+            0,
+        )
+        .0,
+    );
+    c.horizon = fed("alice", &recs);
+    let zones: Vec<String> = ["nyc1", "ams3", "syd1", "lon1"]
+        .iter()
+        .map(|z| (*z).to_string())
+        .collect();
+    let ordered = c.zones_by_concentration(64500, &zones);
+    assert_eq!(
+        ordered,
+        vec![
+            ("syd1".to_string(), 0),
+            ("lon1".to_string(), 0),
+            ("ams3".to_string(), 1),
+            ("nyc1".to_string(), 2),
+        ],
+        "least first, ties in the caller's order, nothing hidden"
+    );
+    // **and the label is this provider's own word**: the same zone names
+    // under another ASN are counted against nothing
+    assert!(
+        c.zones_by_concentration(64501, &zones)
+            .iter()
+            .all(|(_, n)| *n == 0),
+        "nyc1 of one company says nothing about nyc1 of another"
     );
 }
 

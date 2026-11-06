@@ -210,6 +210,7 @@ malformed, not merely unusual.
 | Asserted locations per record | 4 |
 | Corroborations per record | 16 (one per witness) |
 | Explicit-scope keyhash list | 256 |
+| Zone label in a `NetworkPoint` (§4.4) | 32 bytes — a provider's own slug, and none is near it |
 | NetworkPoint entries per anchor entry or endpoint record (§7.2, §7.6) | 8 — this row is the anchor entry's and the endpoint record's alone; **peering carries exactly one `NetworkPoint` or `Locator` per endpoint** (§4.4) |
 | `Introduction` entries per `IntentExchange` or `BundleContinuation` (§14.3.2) | 256 — a bound on the carriage; the bundle itself has none (§5.4) |
 | `Candidate` entries per `CandidateHandover` or per payload-path candidate exchange (§14.3.2) | 8 |
@@ -1450,12 +1451,24 @@ NetworkPoint = {
                        ;   IPv6 endpoints are deferred by decision (design §4),
                        ;   and a 16-byte address here is malformed in v1
   2: ? uint,           ; ASN. U32 RANGE per RFC 6793 4-byte ASNs
-  3: ? uint            ; UDP port, u16 range. Absent means the default 7431,
+  3: ? uint,           ; UDP port, u16 range. Absent means the default 7431,
                        ;   and WRITING 7431 OUT IS MALFORMED (§1's
                        ;   default-omission rule) — omission is the one
                        ;   spelling, so §7.6's distinct-entries rule never
                        ;   meets the same destination twice.
                        ;   ZERO IS MALFORMED — it is never a destination
+  4: ? tstr .size (1..32)
+                       ; the zone, as the provider names it: "ams3", "fsn1".
+                       ;   Beside the ASN and meaningless without it, the pair
+                       ;   being what disperses (design §3.4). Self-asserted
+                       ;   like the ASN, and validated nowhere.
+                       ;   **CARRIED IN SIGNED RECORDS ONLY** — a peering
+                       ;   record, an endpoint record, an anchor entry. A
+                       ;   sibling list (§8.2) and a referral (§7.7) are
+                       ;   unsigned, where §1 has a decoder reject an unknown
+                       ;   key, and they exist to reach a node rather than to
+                       ;   weigh it: emitting a zone there would break a peer
+                       ;   and buy nothing
 }
 
 Audit = {
@@ -1465,8 +1478,19 @@ Audit = {
 }
 ```
 
-ASN is exposed deliberately so policies can weight network diversity, and so
-concentration (many nodes in one ASN) is observable. **Concentration is a visible
+ASN and zone are exposed deliberately so policies can weight network
+diversity, and so concentration (many nodes in one place) is observable.
+
+**The pair is what disperses, and the ASN alone would not** [author,
+2026-11-06]. An ASN names a company, and a company is not a set of distinct
+facilities: *"Cloud providers are companies, not necessarily operators of
+distinct facilities, and even if their regional cloud infra is not
+co-located with other providers, data centers tend to cluster
+geographically."* So dispersal by ASN alone remediates **provider** risk —
+one legal order, one account, one outage of one firm. Dispersal by ASN and
+zone together also remediates **war, disaster, power grid, physical network
+backbone and local government** risk, which attach to the place and not to
+the company. **Concentration is a visible
 signal, not a trust input** — nothing in the metric consumes it. **The signal runs
 one way**: many nodes in one ASN is evidence of concentration, while differing ASNs
 are not evidence of independence, since ASN is routing and not the entity subject to
@@ -4927,7 +4951,7 @@ the horizon; only memos travel further up.**
 **Restricted to membership operations — adoption, departure and disavowal, and the
 restriction is load-bearing.** Peering is topology class and is **excluded from
 rootward travel**: a peering record carries `NetworkPoint` for both endpoints plus
-ASN (§4.4), and design §19.8 C8 maps that composition to a
+ASN and zone (§4.4), and design §19.8 C8 maps that composition to a
 natural person. A memo carries keys and positions and no address, which is what
 makes a root's accumulated view tolerable; adding peering for symmetry would
 silently remove that property.

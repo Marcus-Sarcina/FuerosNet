@@ -18334,6 +18334,36 @@ screen is to say it. The screen itself and the candidate list are owed:
 nothing supplies providers and zones yet. The row stays unmarked, being
 manual.
 
+**PRD-11 closed, and keyed by the pair** [author, 2026-11-06]. The ruling:
+*"If we only disperse by ASN then we are only remediating provider risk.
+Cloud providers are companies, not necessarily operators of distinct
+facilities … If we disperse by ASN + region, then we are remediating war,
+disaster, power grid, physical network backbone, and local government risk
+as well."* So the zone rides beside the ASN: `NetworkPoint` key 4, a
+1–32-byte tstr, **in signed records only** — a peering record, an endpoint
+record, an anchor entry — because a sibling list and a referral are
+unsigned, where §1 has a decoder reject an unknown key, and they exist to
+reach a node rather than to weigh it. `NETWORK_POINT_SIGNED` is a second
+field table for exactly that, and `B-zone-unsigned-sibling` is the vector.
+
+`Horizon::places_seen` counts by `(u64, Option<String>)`; `asns_seen` folds
+it, so the provider chooser's answer is unchanged and counts parties rather
+than sightings. `Client::zones_by_concentration` orders one provider's own
+places. **A zone with no ASN is keyed nowhere and an ASN with no zone is
+its own place**: two companies' words for a city are not comparable, and
+guessing which zone an unplaced sighting sits in would invent the evidence
+the ordering rests on. The launch hands `provider.asn` and the region slug
+to `Kernel.enrol`, which puts them in both records it signs — what the
+*next* operator orders by is what these records carry. The region picker
+orders on two keys, capability then crowding, because a zone that cannot
+host a node is not a dispersal.
+
+Marked from `SizingTest` (the ordering, and a source-reading test for the
+wiring the JVM cannot draw) and `client/tests/horizon.rs`. The drawing
+itself stays a walkthrough's to confirm, UX-013's rule being that
+automation is evidence of kernel behaviour and not of a person seeing a
+screen.
+
 **Item 4, the catalog and the resource round trip.** The kernel had
 `browse` and `catalog` and no way to ask a resource anything. Built:
 `Msg::ResourceRequest`, `Client::request_resource` /

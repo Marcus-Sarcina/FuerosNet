@@ -269,21 +269,47 @@ pub fn peering_names(bytes: &[u8], a: &Keyhash, b: &Keyhash) -> bool {
     (x == *a && y == *b) || (x == *b && y == *a)
 }
 
-/// The ASN in a peering's address field, where that field is a network
-/// point carrying one (`wire-format.md` §4.4: a point's field 2, absent
-/// where the peer did not state it). **Nothing where the field is a
-/// locator**: that peer runs no instance, so it is inside no provider.
-fn asn_at(body: &[u8], field: u64) -> Option<u64> {
+/// **Where a party runs, as the record says it**: the provider, and the
+/// zone that provider calls the place (`wire-format.md` §4.4 fields 2 and
+/// 4).
+///
+/// **The pair is the unit and the ASN is the key of it** [author,
+/// 2026-11-06]: dispersal by ASN alone remediates the provider, and
+/// dispersal by ASN *and* zone also remediates what attaches to a place —
+/// war, disaster, the grid, the backbone, a local government (design
+/// §3.4). The zone is a provider's own word, so it means nothing apart
+/// from its ASN, which is why it refines a key rather than being one.
+pub type ProviderZone = (u64, Option<String>);
+
+/// The place in a peering's address field, where that field is a network
+/// point carrying an ASN (`wire-format.md` §4.4: a point's field 2, absent
+/// where the peer did not state it; field 4 is the zone beside it).
+/// **Nothing where the field is a locator**: that peer runs no instance,
+/// so it is inside no provider.
+///
+/// **A zone with no ASN is nothing here**, not a place of its own: two
+/// providers' words for a city are not comparable without a geography
+/// this client does not hold.
+fn place_at(body: &[u8], field: u64) -> Option<ProviderZone> {
     use rhtn_codec::cbor::{Item, as_uint, map_get, parse_all, value_slice};
     let r = value_slice(body, field)?;
-    let item = parse_all(&body[r]).ok()?;
+    let buf = &body[r];
+    let item = parse_all(buf).ok()?;
     let Item::Map(m) = &item else { return None };
     // a locator's field 1 is a 32-byte anchor; a point's is four octets
     match map_get(m, 1) {
         Some(Item::Bytes(b)) if b.len() == 4 => {}
         _ => return None,
     }
-    map_get(m, 2).and_then(as_uint)
+    let asn = map_get(m, 2).and_then(as_uint)?;
+    // the ranges a parse hands back are into `buf`, not into `body`
+    let zone = match map_get(m, 4) {
+        Some(Item::Text(t)) => std::str::from_utf8(&buf[t.clone()])
+            .ok()
+            .map(str::to_string),
+        _ => None,
+    };
+    Some((asn, zone))
 }
 
 impl Horizon {
@@ -923,19 +949,25 @@ impl Horizon {
             .filter(|k| *k != self.me)
             .collect()
     }
-    /// **Where this horizon has seen each party peering from, by ASN**
-    /// (`light-client-requirements.md` §6; design §3.4): a peering record
-    /// carries each endpoint's address and, where that endpoint runs an
-    /// instance, its ASN, so this is the whole of what one operator can
-    /// see of provider concentration. A party seen at two ASNs counts at
-    /// both; a party whose field holds a locator rather than a point runs
-    /// no instance and counts nowhere.
+    /// **Where this horizon has seen each party peering from, by provider
+    /// and zone** (`light-client-requirements.md` §6; design §3.4): a
+    /// peering record carries each endpoint's address and, where that
+    /// endpoint runs an instance, its ASN and the zone the provider calls
+    /// that place, so this is the whole of what one operator can see of
+    /// concentration. A party seen at two places counts at both; a party
+    /// whose field holds a locator rather than a point runs no instance
+    /// and counts nowhere.
+    ///
+    /// **Keyed by the pair** [author, 2026-11-06], because the two answer
+    /// different risks: see [`ProviderZone`]. A point stating an ASN and no zone
+    /// is a place of its own — the provider, somewhere unstated — and not
+    /// a member of any of its zones, since nothing here may guess which.
     ///
     /// **Nothing beyond the horizon is counted**, which is design
     /// §16.3.1's bound read the honest way: what is held is what was
     /// propagated here.
-    pub fn asns_seen(&self) -> BTreeMap<u64, BTreeSet<Keyhash>> {
-        let mut out: BTreeMap<u64, BTreeSet<Keyhash>> = BTreeMap::new();
+    pub fn places_seen(&self) -> BTreeMap<ProviderZone, BTreeSet<Keyhash>> {
+        let mut out: BTreeMap<ProviderZone, BTreeSet<Keyhash>> = BTreeMap::new();
         for bytes in self.records.values() {
             let Ok(rec) = Record::parse(bytes) else {
                 continue;
@@ -948,10 +980,22 @@ impl Horizon {
                 let Some(who) = rec.field_hash(party) else {
                     continue;
                 };
-                if let Some(asn) = asn_at(body, field) {
-                    out.entry(asn).or_default().insert(who);
+                if let Some(place) = place_at(body, field) {
+                    out.entry(place).or_default().insert(who);
                 }
             }
+        }
+        out
+    }
+
+    /// **The same, by provider alone**: every zone of one ASN folded
+    /// together, which is the question the provider chooser asks. A party
+    /// seen in two zones of one provider counts once there, the set being
+    /// of parties and not of sightings.
+    pub fn asns_seen(&self) -> BTreeMap<u64, BTreeSet<Keyhash>> {
+        let mut out: BTreeMap<u64, BTreeSet<Keyhash>> = BTreeMap::new();
+        for ((asn, _), who) in self.places_seen() {
+            out.entry(asn).or_default().extend(who);
         }
         out
     }

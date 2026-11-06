@@ -37,6 +37,13 @@ pub struct Ask {
     pub credentials: usize,
     /// The address to name in an endpoint record, where one is wanted.
     pub endpoint: Option<SocketAddr>,
+    /// **Where the machine is, where the caller knows it** [author,
+    /// 2026-11-06]: the provider's autonomous system and that provider's
+    /// own name for the place, which ride in both records signed below so
+    /// a horizon can be ordered by the pair later (design §3.4,
+    /// `light-client-requirements.md` §6). `node launch` fills it, having
+    /// chosen both; a hand-enrolled machine was told neither.
+    pub place: Option<(u64, Option<String>)>,
 }
 
 /// **Renew a run before it lapses** (`infra-client-requirements.md` §7):
@@ -97,7 +104,7 @@ fn reanchored(
     // the addresses the standing entry names, so a re-signing moves the
     // size and nothing else; where it named none, the one in hand
     let points: Vec<NetworkPoint> = if points.is_empty() {
-        vec![point_of(ask.endpoint.unwrap_or(addr))]
+        vec![point_of(ask.endpoint.unwrap_or(addr), ask.place.as_ref())]
     } else {
         points.clone()
     };
@@ -213,7 +220,7 @@ pub fn enrol(me: &SigningIdentity, ask: &Ask) -> Result<String, String> {
     // the instance's wait, and the node then reads the two records from the
     // paths its configuration names (§4.4)
     if let Some(ep) = ask.endpoint {
-        let point = point_of(ep);
+        let point = point_of(ep, ask.place.as_ref());
         let record = endpoint_record(me, std::slice::from_ref(&point), seqno(1));
         let said = push(addr, "/node/endpoint-record", &record)?;
         out.push_str(&format!("endpoint record naming {ep}: {said}\n"));
@@ -222,7 +229,7 @@ pub fn enrol(me: &SigningIdentity, ask: &Ask) -> Result<String, String> {
     // 2026-10-25], with the subtree a fresh instance has beneath it
     {
         let size = rhtn_node::resolution::FRESH_SUBTREE;
-        let point = point_of(ask.endpoint.unwrap_or(addr));
+        let point = point_of(ask.endpoint.unwrap_or(addr), ask.place.as_ref());
         let entry = anchor_entry(me, std::slice::from_ref(&point), size, seqno(1));
         let said = push(addr, "/node/anchor-entry", &entry)?;
         out.push_str(&format!(
@@ -277,13 +284,19 @@ fn resolve(at: &str) -> Result<SocketAddr, String> {
         .ok_or_else(|| format!("{at}: no address"))
 }
 
-fn point_of(a: SocketAddr) -> NetworkPoint {
-    match a.ip() {
+fn point_of(a: SocketAddr, place: Option<&(u64, Option<String>)>) -> NetworkPoint {
+    let bare = match a.ip() {
         std::net::IpAddr::V4(v4) => NetworkPoint::new(v4.octets(), Some(u64::from(a.port()))),
         // a v6 instance is a case this instrument does not carry: the point
         // encoding is the node's and this is a bench tool, said rather than
         // guessed at
         std::net::IpAddr::V6(_) => NetworkPoint::new([127, 0, 0, 1], Some(u64::from(a.port()))),
+    };
+    // the zone rides beside the ASN and never without it (§4.4)
+    match place {
+        Some((asn, Some(zone))) => bare.with_asn(*asn).with_zone(zone.clone()),
+        Some((asn, None)) => bare.with_asn(*asn),
+        None => bare,
     }
 }
 

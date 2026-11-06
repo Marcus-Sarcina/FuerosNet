@@ -249,6 +249,11 @@ pub fn launch(me: &SigningIdentity, ask: &Ask) -> Result<String, String> {
                 .parse()
                 .map_err(|_| "the address did not parse")?,
         ),
+        // **this instrument chose both, so the records it signs say
+        // both** [author, 2026-11-06]: what the next operator can order
+        // its own choice by is what these records carry
+        // (`light-client-requirements.md` §6)
+        place: Some((provider.asn(), Some(ask.plan.region.clone()))),
     };
     let started = Instant::now();
     let mut last = String::new();

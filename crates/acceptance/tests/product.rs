@@ -56,22 +56,6 @@ fn prd_06_disclose_to_operators_what_their_subordinates_ar() {
     todo!("PRD-06: Disclose to operators what their subordinates are exposed to, the hosting model, and the roles users hold")
 }
 
-/// Order provider and zone choices by concentration inside the operator's own horizon
-///
-/// Spec: light-client-requirements.md §6
-/// Milestone: manual.  Kind: manual.  Oracle: behaviour.
-///
-/// Rule (light-client-requirements.md §6): "order the choices by how concentrated they already are inside that operator's own horizon, least concentrated first"
-///
-/// Given: An operator provisioning an instance whose horizon already holds instances at two providers.
-/// When: The provisioning screen lists providers and zones.
-/// Then: The least concentrated come first, the crowded ones are marked rather than hidden, and the screen says the ordering speaks to this operator's horizon and not the network's.
-#[test]
-#[ignore = "acceptance PRD-11: owed at milestone manual"]
-fn prd_11_order_provider_and_zone_choices_by_concentration() {
-    todo!("PRD-11: Order provider and zone choices by concentration inside the operator's own horizon")
-}
-
 /// Present a node's administration pages in a frame isolated from the client's keys, archive and sealed captures
 ///
 /// Spec: infra-client-requirements.md §8.3

@@ -153,14 +153,28 @@ object Sizing {
     ): List<R> = if (sizeRegions.isEmpty()) regions else regions.filter { slugOf(it) in sizeRegions }
 
     /**
-     * **Regions where the recommendation can actually be met, first**
-     * [author, 2026-11-05].
+     * **Regions where the recommendation can actually be met, first; then
+     * the least crowded of those** [author, 2026-11-05, 2026-11-06].
      *
      * A region that cannot offer a size this project would put a node on
      * is still shown — it may suit an operator who knows better — but it
      * is shown after the ones that can, and [whyBehind] says what the
      * ordering means. Ties keep the provider's own order, which is the
      * same rule the concentration ordering keeps.
+     *
+     * **Two keys, and capability is the first of them** [2026-11-06]. The
+     * second is how many parties in this operator's own horizon already
+     * run in that zone of this provider (PRD-11;
+     * `light-client-requirements.md` §6) — the author's reason being that
+     * *"if we disperse by ASN + region, then we are remediating war,
+     * disaster, power grid, physical network backbone, and local
+     * government risk as well"*. Capability comes first because a zone
+     * that cannot host a node is not a dispersal: the question *should it
+     * run here* only arises where it can.
+     *
+     * [crowding] is zero by default, which is the ordering as it was
+     * before the pair was carried — and what a client holding no peering
+     * in any zone of this provider genuinely knows.
      */
     fun <R, S> regionsByRecommended(
         regions: List<R>,
@@ -168,9 +182,11 @@ object Sizing {
         slugOf: (R) -> String,
         memoryOf: (S) -> Long,
         regionsOf: (S) -> List<String>,
+        crowding: (R) -> Int = { 0 },
     ): List<R> = regions.withIndex().sortedWith(
         compareBy(
             { (_, r) -> if (meetsRecommended(slugOf(r), sizes, memoryOf, regionsOf)) 0 else 1 },
+            { (_, r) -> crowding(r) },
             { (i, _) -> i },
         ),
     ).map { it.value }
@@ -205,7 +221,9 @@ object Sizing {
     fun whyBehind(): String =
         "Regions that cannot offer a recommended size are listed last. They are " +
             "not refused — a smaller machine may suit you — but a node with three " +
-            "bundles on it will be tight."
+            "bundles on it will be tight. Among the rest, the regions where fewest " +
+            "of the people in your horizon already run come first, and any that are " +
+            "crowded say how many."
 
     /**
      * **Why a combination is absent**, which is a different fact from a

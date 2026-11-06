@@ -307,6 +307,23 @@ async fn two_at_their_genesis_whose_every_nominee_declines_still_form_a_record()
 /// test here that runs at the real capture's length, because its subject
 /// is that length.
 // acceptance: CER-03
+/// Wait until bob has sealed his capture for `t`, which is the end of the
+/// batch his camera recorded for it: `guided_capture` appends each prompt
+/// inside the capture and the seal follows the last frame, so a sealed
+/// capture means the prompts for it are all written.
+async fn sealed_by(m: &Meeting, t: rhtn_archive::Txid) {
+    for _ in 0..100 {
+        if m.party("bob")
+            .with(move |c| c.store.sealed.contains_key(&t))
+            .await
+        {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    panic!("bob never sealed the capture for that ceremony");
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn the_guided_capture_takes_three_to_five_frames_over_ten_to_fifteen_seconds_under_prompts_that_vary()
  {
@@ -331,12 +348,25 @@ async fn the_guided_capture_takes_three_to_five_frames_over_ten_to_fifteen_secon
     )
     .await;
     let t1 = m.meet("alice", "bob", &[], &[]).await.expect("a formation");
+    // **each batch is sampled once bob has sealed it, not when the meet
+    // returns** [2026-11-06]. A meet returns when the record is signed,
+    // and bob's camera is driven by bob's own side, which can still be
+    // mid-batch: the assertion below failed under the gate's full load
+    // with "2 prompts", a count `guided_capture` cannot produce at all,
+    // `min_frames` being 3 (`rhtn_client::device::CaptureParams`). So the
+    // batch was part-written when it was read. The camera's prompt is
+    // appended inside the capture and the seal happens after the last
+    // frame, which makes the seal the definite end of the batch — and the
+    // thing to wait for, rather than a count a four- or five-frame draw
+    // would still race. On an idle machine this returns on the first poll.
+    sealed_by(&m, t1).await;
     let first: Vec<rhtn_client::device::Prompt> = m.party("bob").kept.cam.prompts();
     // the second, past genesis, with a nominee that attests
     let t2 = m
         .meet("alice", "bob", &["w1"], &[])
         .await
         .expect("a witnessed record");
+    sealed_by(&m, t2).await;
     let second = m.party("bob").kept.cam.prompts()[first.len()..].to_vec();
     // **the prompts are drawn, not fixed**, which is held deterministically
     // in `rhtn-client`'s own tests against a controlled source: two live

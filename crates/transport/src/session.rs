@@ -229,6 +229,22 @@ pub struct NetworkPoint {
     pub asn: Option<u64>,
     /// The port, absent meaning the profile's default.
     pub port: Option<u64>,
+    /// **The zone the provider calls this place**, where it is known: the
+    /// other half of what disperses (`wire-format.md` §4.4, design §3.4).
+    ///
+    /// **Beside the ASN and meaningless without it.** An ASN names a
+    /// company and a company is not a set of distinct facilities, so the
+    /// ASN disperses the firm and the zone disperses the place — and the
+    /// risks that attach to a place, war and weather and the grid and a
+    /// local government, do not stop at a company's boundary [author,
+    /// 2026-11-06].
+    ///
+    /// **Set only where the point rides a signed record** — a peering
+    /// record, an endpoint record, an anchor entry. A sibling list and a
+    /// referral are unsigned, where a decoder rejects an unknown key
+    /// (`wire-format.md` §1), and they exist to reach a node rather than
+    /// to weigh it.
+    pub zone: Option<String>,
 }
 
 /// A sibling a node names to a client attaching to it, so the client can
@@ -256,7 +272,15 @@ impl NetworkPoint {
             ip,
             asn: None,
             port: port.filter(|p| *p != DEFAULT_PORT),
+            zone: None,
         }
+    }
+
+    /// The same point, in `zone`, which only a signed record carries.
+    #[must_use]
+    pub fn with_zone(mut self, zone: impl Into<String>) -> Self {
+        self.zone = Some(zone.into());
+        self
     }
     /// The same point, in `asn`.
     pub fn with_asn(mut self, asn: u64) -> Self {
@@ -291,7 +315,9 @@ impl NetworkPoint {
     pub fn encode(&self, out: &mut Vec<u8>) {
         emit_map_head(
             out,
-            1 + self.asn.is_some() as usize + self.port.is_some_and(|p| p != DEFAULT_PORT) as usize,
+            1 + self.asn.is_some() as usize
+                + self.port.is_some_and(|p| p != DEFAULT_PORT) as usize
+                + self.zone.is_some() as usize,
         );
         emit_uint(out, 1);
         emit_bstr(out, &self.ip);
@@ -303,6 +329,10 @@ impl NetworkPoint {
         if let Some(p) = self.port.filter(|p| *p != DEFAULT_PORT) {
             emit_uint(out, 3);
             emit_uint(out, p);
+        }
+        if let Some(z) = &self.zone {
+            emit_uint(out, 4);
+            emit_tstr(out, z);
         }
     }
     /// A point from a parsed item and the bytes it indexes.
@@ -322,10 +352,25 @@ impl NetworkPoint {
             Some(p) if p == 0 || p > u16::MAX as u64 => return None,
             other => other,
         };
+        // **the bound is the decoder's too**: a zone past 32 bytes makes
+        // the point malformed rather than being truncated into a label
+        // nothing announced (`wire-format.md` §4.4, §1.3)
+        let zone = match map_get(m, 4) {
+            None => None,
+            Some(Item::Text(r)) => {
+                let text = std::str::from_utf8(&b[r.clone()]).ok()?;
+                if text.is_empty() || text.len() > 32 {
+                    return None;
+                }
+                Some(text.to_string())
+            }
+            Some(_) => return None,
+        };
         Some(NetworkPoint {
             ip,
             asn: map_get(m, 2).and_then(as_uint),
             port,
+            zone,
         })
     }
 }
@@ -2909,6 +2954,7 @@ mod bounds_and_validity {
         let point = NetworkPoint {
             ip: [10, 0, 0, 1],
             asn: None,
+            zone: None,
             port: None,
         };
         let sib = |k: u8| SiblingRef {
