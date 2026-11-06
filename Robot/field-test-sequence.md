@@ -120,6 +120,23 @@ reports `run-ends`, the next run opens exactly there, and the CLI, the
 kernel and the Operator screen each do it (`light-client-requirements.md`
 §10).
 
+**C1a The pair the launch records** [author, 2026-11-06]. A launch chooses
+a provider and a region and now writes both into the records it signs, so
+what to check on the next cloud run is the byte string: the endpoint
+record's and the anchor entry's `NetworkPoint` should carry key 2 and key
+4, not the bare `{1: <four octets>}` the live node's entry still holds
+(`a101448e5d565a`, read off `142.93.86.90:7449` on 2026-11-06 — every node
+launched before this commit is unplaced in everyone's ordering). Then the
+other end of it: a second operator whose horizon holds that peering sees
+the zone counted against that provider's zone of that name, and the region
+picker puts its least crowded zones first. Held in-process by
+`zones_of_one_provider_are_counted_and_ordered_apart_from_each_other`,
+`an_enrolment_puts_the_provider_and_the_zone_in_the_records_it_signs` and
+`SizingTest`; what a run adds is a real provider's own slugs and a real
+peering between two launched nodes. **Open with the author**: whether a
+renewal may add the pair to the points it carries over, which is the only
+way a node launched earlier gains one.
+
 **C2 Node-to-node peering** — two containers; proven in-process
 (`a_new_root_peers_floods_and_is_reached_over_real_sessions`).
 

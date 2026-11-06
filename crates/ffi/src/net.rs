@@ -53,6 +53,15 @@ pub struct Wake {
     pub url: String,
     /// What the posted body is encrypted to.
     pub key: Vec<u8>,
+    /// **What the post is signed with** [author, 2026-11-06]: the
+    /// client's own key, since the push service refuses a post signed by
+    /// any key but the one its subscription was bound to, and the seed
+    /// lives here (design §14.1.5). 32 bytes, a P-256 scalar.
+    ///
+    /// **A secret this shell hands to its node on purpose**, which is why
+    /// it is derived rather than minted: a client restoring from its
+    /// phrase re-derives the key its subscription is bound to.
+    pub signing_key: Vec<u8>,
     /// When the service says the endpoint stops working, if it said.
     pub lapses_at: Option<u64>,
 }
@@ -1163,11 +1172,29 @@ impl Net {
     pub(crate) fn wake(&self, endpoint: Option<Wake>) -> Result<(), Refused> {
         let courier = self.live_courier()?;
         let me = courier.me();
-        let ep = endpoint.map(|w| WakeEndpoint {
-            url: w.url,
-            key: w.key,
-            lapses_at: w.lapses_at,
-        });
+        let ep = match endpoint {
+            Some(mut w) => {
+                let signing_key = <[u8; 32]>::try_from(w.signing_key.as_slice()).map_err(|_| {
+                    Refused::new("the signing key is 32 bytes, a P-256 scalar (design §14.1.5)")
+                });
+                // **this copy is wiped either way** (the new-key-path walk,
+                // 2026-11-06): the shell handed a secret across the seam, so
+                // the one buffer this side owns does not outlive the call,
+                // refusal included. **What the shell's own array holds is
+                // the shell's to wipe** — a JVM `ByteArray` is not Rust's
+                // to zero, which is a limit of the boundary and is said
+                // rather than papered over.
+                use zeroize::Zeroize;
+                w.signing_key.zeroize();
+                Some(WakeEndpoint {
+                    url: w.url,
+                    key: w.key,
+                    signing_key: signing_key?,
+                    lapses_at: w.lapses_at,
+                })
+            }
+            None => None,
+        };
         let took = self
             .rt()
             .block_on(async move { courier.serving.wake(me, ep).await });

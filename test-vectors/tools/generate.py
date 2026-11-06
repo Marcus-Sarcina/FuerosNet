@@ -2736,11 +2736,15 @@ f_relay = frame(11, e_map([(e_uint(1), e_bstr(carol.keyhash)),
 f_relay_nodevice = frame(11, e_map([(e_uint(1), e_bstr(carol.keyhash)),
                                     (e_uint(2), e_bstr(H(b'rhtn-test-vectors:relayed-ciphertext'))),
                                     (e_uint(3), e_bstr(NONCE(b'relay')))]))
+# field 5 is the key the post is SIGNED with: the client's own, since the
+# push service refuses a post signed by any other (design s14.1.5)
+WAKE_SIGNER = H(b'rhtn-test-vectors:wake-signing-key')
 f_wake = frame(12, e_map([(e_uint(1), e_bstr(NONCE(b'wake'))),
                           (e_uint(2), e_tstr('https://push.example/rhtn/a3f9')),
                           (e_uint(3), e_bstr(H(b'rhtn-test-vectors:wake-endpoint-key'))),
-                          (e_uint(4), e_uint(1_800_090_000))]))
-# a withdrawal: field 2 absent, and 3 and 4 absent with it
+                          (e_uint(4), e_uint(1_800_090_000)),
+                          (e_uint(5), e_bstr(WAKE_SIGNER))]))
+# a withdrawal: field 2 absent, and 3, 4 and 5 absent with it
 f_wake_off = frame(12, e_map([(e_uint(1), e_bstr(NONCE(b'wake-withdraw')))]))
 r_sub = e_map([(e_uint(1), e_bstr(NONCE(b'publication'))), (e_uint(2), e_uint(0))])
 r_sub_bound = e_map([(e_uint(1), e_bstr(NONCE(b'deposit'))), (e_uint(2), e_uint(2))])
@@ -2797,8 +2801,8 @@ _msg_pairs = [
     ('PrekeyPublication (request 9) — the subject\'s own bundle, published by the subject', f_pub),
     ('OneTimeDeposit (request 10) — three keys, opaque to the node', f_dep),
     ('RelaySubmission (request 11) — ciphertext for carol, which this node cannot read', f_relay),
-    ('WakeRegistration (request 12) — endpoint, its key, and when the client expects it to lapse', f_wake),
-    ('WakeRegistration — the WITHDRAWAL: field 2 absent, and fields 3 and 4 absent with it', f_wake_off),
+    ('WakeRegistration (request 12) — endpoint, the key its body is encrypted to, the key its post is signed with, and when the client expects it to lapse', f_wake),
+    ('WakeRegistration — the WITHDRAWAL: field 2 absent, and fields 3, 4 and 5 absent with it', f_wake_off),
     # appended 2026-09-22, after the request families, so every earlier fixture keeps its id
     ('Attach — from a DELEGATED DEVICE, alice\'s desktop: field 4 carries alice\'s delegation naming the key the handshake presented (§8.2)', f_attach_deleg),
     ('AttachAck — from an INSTANCE: field 6 carries bob\'s delegation, the normal case (§8.2)', f_ack_deleg),
@@ -3703,6 +3707,23 @@ reg('N-shape-prekey-request-onetime-without-device', 'bytes',
     REJ('frame', 'schema', 'field 4 required when field 2 = 1: a one-time key is one device\'s'), f_pk1_nodevice)
 reg('N-shape-relay-missing-device', 'bytes',
     REJ('frame', 'schema', 'RelaySubmission field 4 required: a session is with a device'), f_relay_nodevice)
+# type 12's paired shapes (s7.10): the endpoint, its body key and its
+# signing key stand or fall together [author, 2026-11-06]
+reg('N-shape-wake-missing-signer', 'bytes',
+    REJ('frame', 'schema', "an endpoint with no key its post is signed with: without it the post carries no sender, the push service takes one from anybody, and the URL alone rings the doorbell (design s14.1.5)"),
+    frame(12, e_map([(e_uint(1), e_bstr(NONCE(b'wake-nosign'))),
+                     (e_uint(2), e_tstr('https://push.example/rhtn/a3f9')),
+                     (e_uint(3), e_bstr(H(b'rhtn-test-vectors:wake-endpoint-key')))])))
+reg('N-shape-wake-orphan-signer', 'bytes',
+    REJ('frame', 'schema', 'a signing key describing an endpoint that is not there: a withdrawal carries none of the three'),
+    frame(12, e_map([(e_uint(1), e_bstr(NONCE(b'wake-orphan'))),
+                     (e_uint(5), e_bstr(WAKE_SIGNER))])))
+reg('B-wake-signer-31', 'bytes',
+    REJ('frame', 'schema', 'a 31-byte signing key: field 5 is a P-256 scalar, exactly 32 bytes'),
+    frame(12, e_map([(e_uint(1), e_bstr(NONCE(b'wake-short'))),
+                     (e_uint(2), e_tstr('https://push.example/rhtn/a3f9')),
+                     (e_uint(3), e_bstr(H(b'rhtn-test-vectors:wake-endpoint-key'))),
+                     (e_uint(5), e_bstr(WAKE_SIGNER[:31]))])))
 reg('B-prekey-reply-8', 'bytes', ACC('PrekeyReply', 'eight bundles, the ceiling'), r_pk_8)
 reg('B-prekey-reply-9', 'bytes', REJ('PrekeyReply', 'schema', 'nine bundles exceed the ceiling of eight'), r_pk_9)
 reg('N-peering-endpoint-neither', 'bytes', REJ('body', 'schema', 'a peering endpoint is a network point or a locator, told apart by key 1'), peer_neither_body)

@@ -450,6 +450,7 @@ async fn the_kernel_holds_the_session_and_no_wire_byte_crosses_outward() {
             q.wake(Some(Wake {
                 url: "https://push.example/rhtn/a3f9".into(),
                 key: vec![7; 32],
+                signing_key: vec![3; 32],
                 lapses_at: None,
             }))
         })

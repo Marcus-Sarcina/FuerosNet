@@ -142,6 +142,7 @@ fn a_conditional_field_stands_or_falls_with_the_field_it_describes() {
     let endpoint = || WakeEndpoint {
         url: "https://push.example/rhtn/a3f9".into(),
         key: vec![7; 32],
+        signing_key: [3; 32],
         lapses_at: None,
     };
 
@@ -157,6 +158,17 @@ fn a_conditional_field_stands_or_falls_with_the_field_it_describes() {
     let withdrawn = WakeRegistration::of(nonce, None).encode();
     let w = WakeRegistration::decode(&withdrawn).expect("a withdrawal is the nonce alone");
     assert!(w.withdraws() && w.key.is_none() && w.lapses_at.is_none());
+    assert!(
+        w.signing_key.is_none(),
+        "a withdrawal carries no signing key either"
+    );
+    // and a registration carries it, which is what the service checks the
+    // post against (design §14.1.5)
+    assert_eq!(
+        WakeRegistration::decode(&registered).unwrap().signing_key,
+        Some([3; 32]),
+        "the client's own signing key reaches the node"
+    );
 
     // a key with no endpoint to attach it to
     let orphan_key = WakeRegistration {
@@ -164,6 +176,7 @@ fn a_conditional_field_stands_or_falls_with_the_field_it_describes() {
         endpoint: None,
         key: Some(vec![7; 32]),
         lapses_at: None,
+        signing_key: None,
     }
     .encode();
     assert!(
@@ -176,6 +189,7 @@ fn a_conditional_field_stands_or_falls_with_the_field_it_describes() {
         endpoint: None,
         key: None,
         lapses_at: Some(1_800_090_000),
+        signing_key: None,
     }
     .encode();
     assert!(
@@ -188,15 +202,73 @@ fn a_conditional_field_stands_or_falls_with_the_field_it_describes() {
         endpoint: Some("https://push.example/x".into()),
         key: None,
         lapses_at: None,
+        signing_key: Some([3; 32]),
     }
     .encode();
     assert!(
         WakeRegistration::decode(&no_key).is_err(),
         "an endpoint nothing can be sent to"
     );
+    // **an endpoint nothing may sign for** [author, 2026-11-06]: without
+    // the client's key the post carries no sender, the push service takes
+    // one from anybody, and the URL alone rings the doorbell
+    let no_signer = WakeRegistration {
+        nonce,
+        endpoint: Some("https://push.example/x".into()),
+        key: Some(vec![7; 32]),
+        lapses_at: None,
+        signing_key: None,
+    }
+    .encode();
+    assert!(
+        WakeRegistration::decode(&no_signer).is_err(),
+        "an endpoint that would be a bearer capability"
+    );
+    // an orphan signing key, like the other two
+    let orphan_signer = WakeRegistration {
+        nonce,
+        endpoint: None,
+        key: None,
+        lapses_at: None,
+        signing_key: Some([3; 32]),
+    }
+    .encode();
+    assert!(
+        WakeRegistration::decode(&orphan_signer).is_err(),
+        "a signing key describes an endpoint that is not there"
+    );
+
+    // **the lent secret is named and not shown** (the new-key-path walk,
+    // 2026-11-06): a `{:?}` on either carrier is one log line away, and
+    // field 5 is a secret the client handed over for one act
+    let shown = format!("{:?}", endpoint());
+    assert!(
+        shown.contains("signing_key") && shown.contains("<redacted>"),
+        "the field is named: {shown}"
+    );
+    assert!(
+        !shown.contains("3, 3, 3") && !shown.contains("0303"),
+        "and its value is not: {shown}"
+    );
+    let reg_shown = format!("{:?}", WakeRegistration::of(nonce, Some(endpoint())));
+    assert!(
+        reg_shown.contains("<redacted>"),
+        "nor on the registration: {reg_shown}"
+    );
+    let withdrawal_shown = format!("{:?}", WakeRegistration::withdrawal(nonce));
+    assert!(
+        withdrawal_shown.contains("none") && !withdrawal_shown.contains("<redacted>"),
+        "a withdrawal has none to redact: {withdrawal_shown}"
+    );
 
     // every one of them fails at the decoder, before any node policy runs
-    for bytes in [&orphan_key, &orphan_lapse, &no_key] {
+    for bytes in [
+        &orphan_key,
+        &orphan_lapse,
+        &no_key,
+        &no_signer,
+        &orphan_signer,
+    ] {
         assert!(
             rhtn_codec::schema::check_unsigned(
                 rhtn_codec::schema::Family::WakeRegistration,

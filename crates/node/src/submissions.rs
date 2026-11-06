@@ -267,7 +267,23 @@ pub fn wake(
     device: &[u8; 32],
     body: &[u8],
 ) -> Option<Vec<u8>> {
-    let w = WakeRegistration::decode(body).ok()?;
+    let mut w = WakeRegistration::decode(body).ok()?;
+    // **the signing key is decoded, wiped and not kept, and that is
+    // deliberate rather than an oversight** [2026-11-06].
+    // `wire-format.md` §7.10 field 5 carries the client's own key so this
+    // node can sign the post a push service will accept (design §14.1.5)
+    // — and nothing here posts a doorbell yet (SUB-14, milestone
+    // after-5). Keeping it would mean writing a secret the client lent us
+    // into this register's own files, which is a decision about those
+    // files' contents and permissions that the author has not made. So it
+    // is wiped where it can be seen to be wiped, and the registration is
+    // still taken: the endpoint, its body key and its lapse are what a
+    // node without the posting path can act on.
+    if let Some(k) = w.signing_key.as_mut() {
+        use zeroize::Zeroize;
+        k.zeroize();
+    }
+    w.signing_key = None;
     let code = match view
         .wake
         .register(*peer, *device, w.endpoint, w.key, w.lapses_at)

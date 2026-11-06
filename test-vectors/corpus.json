@@ -1,8 +1,8 @@
 {
  "format": "rhtn-test-corpus/1",
  "pins": {
-  "wire-format.md": "e7b184c5a0a08ad809309d40803122fa05a4bec673b3139461638827dfbe473a",
-  "network-design.md": "1ed3cc4d44c544f778e69e00476ce1f5f826d57086c90205a6f34a247b6c87b6",
+  "wire-format.md": "c22516be852157455c4715b050e9942a806f1c2dbf7f8ac77bdabac1f8f7014e",
+  "network-design.md": "b0b310b355245ff9866bea1b489babbcbefddf282341ba3a43dab8fbc71ab1ee",
   "light-client-requirements.md": "82194b1c45ce6655b9f6e35ac3917ec6220f7fe0405cc811404235a1297d5d8e"
  },
  "classes": {
@@ -633,8 +633,8 @@
     "outcome": "accept",
     "kind": "frame"
    },
-   "hex": "0000005f820ca40150727e0cf02d74eb27aa6a712d38badb6f02781e68747470733a2f2f707573682e6578616d706c652f7268746e2f613366390358207d28eb7ff6b8e9e842fc662867a87e8b4d61d89d5a777562482d5d4ac2cbd076041a6b4b3190",
-   "note": "WakeRegistration (request 12) \u2014 endpoint, its key, and when the client expects it to lapse"
+   "hex": "00000082820ca50150727e0cf02d74eb27aa6a712d38badb6f02781e68747470733a2f2f707573682e6578616d706c652f7268746e2f613366390358207d28eb7ff6b8e9e842fc662867a87e8b4d61d89d5a777562482d5d4ac2cbd076041a6b4b3190055820ec5ce4721ffd8573ee7dc876b79ad79237cbd8e21b108fc0211358d281692b6d",
+   "note": "WakeRegistration (request 12) \u2014 endpoint, the key its body is encrypted to, the key its post is signed with, and when the client expects it to lapse"
   },
   {
    "id": "P-frame-22",
@@ -644,7 +644,7 @@
     "kind": "frame"
    },
    "hex": "00000015820ca101505bb3999edb24fe7ca438a873fafa8e37",
-   "note": "WakeRegistration \u2014 the WITHDRAWAL: field 2 absent, and fields 3 and 4 absent with it"
+   "note": "WakeRegistration \u2014 the WITHDRAWAL: field 2 absent, and fields 3, 4 and 5 absent with it"
   },
   {
    "id": "P-frame-23",
@@ -2503,6 +2503,39 @@
     "reason": "RelaySubmission field 4 required: a session is with a device"
    },
    "hex": "0000005b820ba301582071591ef14497c49bd95fc61e243ccc9e2d041f54d210e89ad6654f61554a2cf202582018564c22b6674f09a7ca123ddfd4b071a45df48054715c17e4945aabdcb238c40350eee185c6d2aaa010d92f3b656634ca91"
+  },
+  {
+   "id": "N-shape-wake-missing-signer",
+   "class": "bytes",
+   "expect": {
+    "outcome": "reject",
+    "kind": "frame",
+    "layer": "schema",
+    "reason": "an endpoint with no key its post is signed with: without it the post carries no sender, the push service takes one from anybody, and the URL alone rings the doorbell (design s14.1.5)"
+   },
+   "hex": "00000059820ca30150612d45f58abda021d6bfa3b2a50ea9ff02781e68747470733a2f2f707573682e6578616d706c652f7268746e2f613366390358207d28eb7ff6b8e9e842fc662867a87e8b4d61d89d5a777562482d5d4ac2cbd076"
+  },
+  {
+   "id": "N-shape-wake-orphan-signer",
+   "class": "bytes",
+   "expect": {
+    "outcome": "reject",
+    "kind": "frame",
+    "layer": "schema",
+    "reason": "a signing key describing an endpoint that is not there: a withdrawal carries none of the three"
+   },
+   "hex": "00000038820ca201502140adedd8652719a07c7582b5c9f5eb055820ec5ce4721ffd8573ee7dc876b79ad79237cbd8e21b108fc0211358d281692b6d"
+  },
+  {
+   "id": "B-wake-signer-31",
+   "class": "bytes",
+   "expect": {
+    "outcome": "reject",
+    "kind": "frame",
+    "layer": "schema",
+    "reason": "a 31-byte signing key: field 5 is a P-256 scalar, exactly 32 bytes"
+   },
+   "hex": "0000007b820ca401506525cf2169564fbcb3b206cf3100ec3602781e68747470733a2f2f707573682e6578616d706c652f7268746e2f613366390358207d28eb7ff6b8e9e842fc662867a87e8b4d61d89d5a777562482d5d4ac2cbd07605581fec5ce4721ffd8573ee7dc876b79ad79237cbd8e21b108fc0211358d281692b"
   },
   {
    "id": "B-prekey-reply-8",

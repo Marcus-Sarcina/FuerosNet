@@ -247,3 +247,52 @@ fn an_enrolment_puts_the_provider_and_the_zone_in_the_records_it_signs() {
         "a place nobody stated reached the record"
     );
 }
+
+/// **A renewal takes the place its operator states, beside the addresses
+/// it already named** [author, 2026-11-06]: *"I see no reason it
+/// shouldn't, seems like it would aid in error correction and
+/// upgradability for the entry to accept new fields after upgrade."*
+/// (`infra-client-requirements.md` §4.4; `wire-format.md` §4.4).
+// acceptance: PRD-11
+#[test]
+fn a_renewal_places_the_addresses_it_carries_over_and_corrects_a_wrong_one() {
+    let me = test_identity("bob");
+    let token = [7u8; 32];
+    let key = [9u8; 32];
+    // the standing entry names one address, already placed — wrongly
+    let standing = rhtn_node::resolution::NetworkPoint::new([203, 0, 113, 9], Some(7431))
+        .with_asn(64_496)
+        .with_zone("ams3");
+    let fields = format!(
+        "phase serving\ncredentials 1\nrun-ends 1800000000\nendpoint-record held\n\
+         anchor-entry held\nsubtree 4\nanchor-claims 1\nanchor-seqno 3\nanchor-points {}\n",
+        hex(&standing.encode_bytes())
+    );
+    let (at, asked) = surface(token, key, fields, 3);
+    rhtn_cli::enrol::renew(
+        &me,
+        &rhtn_cli::enrol::Ask {
+            at: at.to_string(),
+            token,
+            credentials: 1,
+            endpoint: None,
+            place: Some((14_061, Some("nyc1".to_string()))),
+        },
+    )
+    .expect("the renewal goes through");
+
+    let asked = asked.lock().unwrap().clone();
+    let entry = rhtn_node::resolution::AnchorEntry::parse(&asked[2].1).expect("an anchor entry");
+    let got = &entry.endpoints[0];
+    assert_eq!(got.ip, [203, 0, 113, 9], "the address is not changed here");
+    assert_eq!(
+        got.asn,
+        Some(14_061),
+        "the stated ASN replaces the carried one"
+    );
+    assert_eq!(
+        got.zone.as_deref(),
+        Some("nyc1"),
+        "and the stated zone replaces the carried one"
+    );
+}

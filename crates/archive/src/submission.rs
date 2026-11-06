@@ -98,9 +98,9 @@ pub struct RelaySubmission {
 
 /// A client registering, refreshing or withdrawing a wake endpoint
 /// (design §14.1.5).  **No endpoint withdraws**: opting out is as sayable
-/// as opting in, and the key and the lapse describe an endpoint, so
-/// neither may be carried without one.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// as opting in, and the keys and the lapse describe an endpoint, so none
+/// of them may be carried without one.
+#[derive(Clone, PartialEq, Eq)]
 pub struct WakeRegistration {
     /// The nonce the reply must echo.
     pub nonce: [u8; 16],
@@ -110,6 +110,11 @@ pub struct WakeRegistration {
     pub key: Option<Vec<u8>>,
     /// When the registration lapses.
     pub lapses_at: Option<u64>,
+    /// The key the post is signed with ([`WakeEndpoint::signing_key`]).
+    /// **Present with an endpoint and absent with a withdrawal**, like the
+    /// other two: an endpoint nothing may sign for is one the push service
+    /// will not take a post to.
+    pub signing_key: Option<[u8; 32]>,
 }
 
 /// The answer to any of the four: the nonce and a code, and nothing
@@ -237,15 +242,26 @@ impl RelaySubmission {
 }
 
 /// Where a client asks to be rung, as it hands it over (design §14.1.5):
-/// a URL the client obtained from a service its user picked, and the key
-/// the posted body is encrypted to.  The node holds both and reads
-/// neither beyond posting to the one and encrypting to the other.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// a URL the client obtained from a service its user picked, the key the
+/// posted body is encrypted to, and the key the post is signed with.  The
+/// node holds all three and reads none of them beyond posting to the
+/// first, encrypting to the second and signing with the third.
+#[derive(Clone, PartialEq, Eq)]
 pub struct WakeEndpoint {
     /// Where to ring, as the user's chosen service gave it.
     pub url: String,
-    /// The key the service authenticates the ring with.
+    /// The key the body is encrypted to.
     pub key: Vec<u8>,
+    /// **The key the post is signed with** [author, 2026-11-06]: the
+    /// client's own, derived where its seed is, because the push service
+    /// refuses a post signed by any key but the one its subscription was
+    /// bound to (design §14.1.5). A P-256 scalar; the public half is
+    /// computed from it.
+    ///
+    /// **A secret, and one the node is given deliberately.** It signs a
+    /// content-free post to one endpoint and does nothing else, and a node
+    /// that wanted to ring spuriously already held the endpoint.
+    pub signing_key: [u8; 32],
     /// When the client expects the endpoint to stop working, if it knows.
     pub lapses_at: Option<u64>,
 }
@@ -259,6 +275,7 @@ impl WakeRegistration {
                 endpoint: Some(e.url),
                 key: Some(e.key),
                 lapses_at: e.lapses_at,
+                signing_key: Some(e.signing_key),
             },
             None => WakeRegistration::withdrawal(nonce),
         }
@@ -271,6 +288,7 @@ impl WakeRegistration {
             endpoint: None,
             key: None,
             lapses_at: None,
+            signing_key: None,
         }
     }
 
@@ -284,7 +302,8 @@ impl WakeRegistration {
         let n = 1
             + self.endpoint.is_some() as usize
             + self.key.is_some() as usize
-            + self.lapses_at.is_some() as usize;
+            + self.lapses_at.is_some() as usize
+            + self.signing_key.is_some() as usize;
         let mut out = Vec::new();
         emit_map_head(&mut out, n);
         emit_uint(&mut out, 1);
@@ -300,6 +319,10 @@ impl WakeRegistration {
         if let Some(t) = self.lapses_at {
             emit_uint(&mut out, 4);
             emit_uint(&mut out, t);
+        }
+        if let Some(k) = &self.signing_key {
+            emit_uint(&mut out, 5);
+            emit_bstr(&mut out, k);
         }
         out
     }
@@ -322,12 +345,51 @@ impl WakeRegistration {
         // the decoder above has already refused the shapes where they do
         // not (`wire-format.md` §7.10)
         let lapses_at = map_get(m, 4).and_then(as_uint);
+        let signing_key = match map_get(m, 5) {
+            Some(_) => Some(
+                bytes_at(b, m, 5)
+                    .ok()
+                    .and_then(|v| <[u8; 32]>::try_from(v.as_slice()).ok())
+                    .ok_or("the signing key is not 32 bytes")?,
+            ),
+            None => None,
+        };
         Ok(WakeRegistration {
             nonce: nonce_at(b, m, 1)?,
             endpoint,
             key,
             lapses_at,
+            signing_key,
         })
+    }
+}
+
+/// **The signing key is named and not shown** [2026-11-06]: it is a secret
+/// the client lent this node (design §14.1.5), and one `{:?}` away from a
+/// log line — the same reason `OpticalContribution` redacts its own.
+impl std::fmt::Debug for WakeEndpoint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WakeEndpoint")
+            .field("url", &self.url)
+            .field("key", &self.key.len())
+            .field("signing_key", &"<redacted>")
+            .field("lapses_at", &self.lapses_at)
+            .finish()
+    }
+}
+
+/// The same, for the registration that carries one.
+impl std::fmt::Debug for WakeRegistration {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WakeRegistration")
+            .field("endpoint", &self.endpoint)
+            .field("key", &self.key.as_ref().map(Vec::len))
+            .field(
+                "signing_key",
+                &self.signing_key.map(|_| "<redacted>").unwrap_or("none"),
+            )
+            .field("lapses_at", &self.lapses_at)
+            .finish()
     }
 }
 

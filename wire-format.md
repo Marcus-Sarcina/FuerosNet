@@ -3504,6 +3504,15 @@ WakeRegistration = {           ; type 12
                                ;   §14.1.5); ABSENT WITHDRAWS the registration
   3: ? bstr .size (1..256),    ; the key the posted body is encrypted to
   4: ? timestamp,              ; when the client expects the endpoint to lapse
+  5: ? bstr .size 32           ; THE KEY THE POST IS SIGNED WITH: the client's
+                               ;   own, derived where its seed is and handed
+                               ;   over here, since the push service refuses a
+                               ;   post signed by any other (design §14.1.5).
+                               ;   The public half is computed from it. A
+                               ;   SECRET THE NODE HOLDS, which is why it is
+                               ;   this small and this short-lived: it signs a
+                               ;   content-free post to one endpoint and
+                               ;   nothing else
 }
 
 ProfilePublication = {         ; type 13
@@ -3518,12 +3527,22 @@ SubmissionReply = {            ; the answer to any of the five
 }
 ```
 
-**A withdrawal is field 2 absent, and fields 3 and 4 absent with it.** An
-endpoint's key and lapse describe an endpoint; carrying either without one
+**A withdrawal is field 2 absent, and fields 3, 4 and 5 absent with it.** An
+endpoint's keys and lapse describe an endpoint; carrying any of them without one
 would be a shape with no meaning, and a decoder rejects it. **An endpoint
-arrives with its key**, for the same reason in the other direction: the body
-is encrypted to that key before it is posted, so an endpoint without one is an
-endpoint nothing can be sent to.
+arrives with both its keys**, for the same reason in the other direction: the
+body is encrypted to field 3 before it is posted and the post is signed with
+field 5, so an endpoint missing either is an endpoint nothing can be sent to.
+
+**Field 5 is why an endpoint is not a bearer capability.** Without it the post
+carries no sender identification, the push service accepts one from anybody,
+and the URL alone is enough to ring the doorbell of whoever holds it; with it,
+only a party the client handed the key can. **It is the client's key and not
+the node's** [author, 2026-11-06]: the seed lives on the client, the
+subscription is bound to the key the client derived, and every node serving
+that client signs identically — so the key says nothing to the service about
+which node rang, and a client re-deriving it can ring its own doorbell when its
+node is gone (design §14.1.5).
 
 **The subject of a publication is the sender, and the node checks it.** A
 bundle names its subject and is signed by it (§7.8); a client publishing

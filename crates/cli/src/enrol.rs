@@ -108,6 +108,19 @@ fn reanchored(
     } else {
         points.clone()
     };
+    // **and the place, where the operator states one** [author,
+    // 2026-11-06]: *"I see no reason it shouldn't, seems like it would aid
+    // in error correction and upgradability for the entry to accept new
+    // fields after upgrade."*  A node launched before the pair existed, or
+    // placed wrongly, is corrected at the visit its operator already
+    // makes. **The addresses are not changed here** — a different address
+    // is its own act (`infra-client-requirements.md` §4.4) — and a zone
+    // beside the same address is not one. Stated replaces carried, so a
+    // wrong ASN can be corrected rather than only filled in.
+    let points: Vec<NetworkPoint> = match &ask.place {
+        Some(place) => points.into_iter().map(|p| placed(p, place)).collect(),
+        None => points,
+    };
     // **the same series, or it supersedes nothing**: a sequence number
     // orders two entries only within one series (`wire-format.md` §2.3)
     let next = seqno
@@ -282,6 +295,17 @@ fn resolve(at: &str) -> Result<SocketAddr, String> {
         .map_err(|e| format!("{at}: {e}"))?
         .next()
         .ok_or_else(|| format!("{at}: no address"))
+}
+
+/// The same point, in the place stated: the ASN, and the zone beside it
+/// where one was given (`wire-format.md` §4.4). Stated replaces carried.
+fn placed(p: NetworkPoint, place: &(u64, Option<String>)) -> NetworkPoint {
+    let (asn, zone) = place;
+    let p = NetworkPoint { zone: None, ..p }.with_asn(*asn);
+    match zone {
+        Some(z) => p.with_zone(z.clone()),
+        None => p,
+    }
 }
 
 fn point_of(a: SocketAddr, place: Option<&(u64, Option<String>)>) -> NetworkPoint {

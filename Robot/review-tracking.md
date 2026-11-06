@@ -18334,6 +18334,44 @@ screen is to say it. The screen itself and the candidate list are owed:
 nothing supplies providers and zones yet. The row stays unmarked, being
 manual.
 
+**SUB-14's key question answered, and what it leaves open** [author,
+2026-11-06]. The doorbell's sender key: *"Just salt the keygen with some
+fact about the server or subnet which the operator must hold anyway.
+Subnet ID hash or whatever. What matters is that the salt is unique to the
+context and reconstructable any time you have enough information to launch
+the instance."*  So derived from the operator's seed rather than minted —
+a rebuild re-derives instead of orphaning every registration — and salted
+per instance, so no push service sees one key across an operator's
+machines. Recorded at design §14.1.5 as the rule, not as a chosen fact:
+the salt the implementation picks has to meet the test, and the test is
+his.
+
+**Which fact meets it.** The enrolment token is the candidate: 32 bytes
+minted per launch, written into the instance's configuration, and held by
+the operator anyway since it is what proves the instance theirs at
+enrolment and at every renewal. **The subnet id alone does not meet the
+test** — an operator running two nodes in one subnet would give both the
+same salt, and his criterion is uniqueness to the context. Not written
+into a root document: the fact is the implementation's to choose and the
+rule is what binds it.
+
+**The residual, named by him in the same breath**: a push service willing
+to work from the origin addresses it is posted from can still group the
+nodes, which is higher effort and is accepted. Recorded beside the ruling
+rather than as a new register row, §14.1.5's caveats already being where
+the doorbell's disclosures live.
+
+**Still owed to him, and the reason nothing is built**: a client binds its
+subscription to the sender's key at subscribe time, and the push service
+refuses a post signed by any other — but nothing in `wire-format.md`
+carries a node's push public key *to* a client. Either a field does, or a
+client subscribes unbound and the endpoint becomes a bearer capability
+anyone who learns the URL can ring, which contradicts §14.1.5's sentence
+about the patron authenticating itself. That is a protocol addition and
+his. Meanwhile the key is not built: its only consumer is the doorbell
+path at SUB-14's own milestone, and a derivation nothing calls is
+machinery ahead of its use.
+
 **PRD-11 closed, and keyed by the pair** [author, 2026-11-06]. The ruling:
 *"If we only disperse by ASN then we are only remediating provider risk.
 Cloud providers are companies, not necessarily operators of distinct

@@ -246,7 +246,15 @@ more, which understates your reach rather than overstating it — and design §1
 wants it for an estimate with hysteresis either side. A client finding the count
 and the claim different signs a new entry over the same addresses at the next
 counter **in the same series**, since a sequence number orders two entries only
-within one (`wire-format.md` §2.3). **Say on your administration surface (§8.3)
+within one (`wire-format.md` §2.3). **It may take the place its operator
+states beside each of those addresses** [author, 2026-11-06] — the ASN and
+the provider's own zone label (`wire-format.md` §4.4) — the reason being
+*"error correction and upgradability for the entry to accept new fields
+after upgrade"*: a node launched before the pair existed, or placed
+wrongly, is corrected at the visit its operator already makes, and what is
+stated replaces what was carried. **The addresses themselves do not change
+here.** A different address is the separate act above, and a zone beside
+the same address is not one. **Say on your administration surface (§8.3)
 that one is owed**, with both numbers, as you say the records are owed at
 enrolment. The renewal of §7 is where a client does this, being the visit its
 operator already makes; an instance whose subtree moves between renewals carries
@@ -449,6 +457,16 @@ serving node.
 - **Hold at most one wake endpoint per relationship, and post nothing but a
   doorbell to it** (design §14.1.5). The body carries no payload, no sender and
   no count: it says only that there is something to come back for.
+- **The key you sign that post with is the client's, lent to you for it**
+  [author, 2026-11-06]. It arrives with the endpoint (`wire-format.md` §7.10
+  field 5) because the push service refuses a post signed by any other, and
+  the seed it came from stays on the client. So **use it for that endpoint's
+  doorbell and nothing else, keep it no longer than the endpoint it belongs
+  to, and forget it with the endpoint** — the rule below applies to the key
+  as much as to the URL, and more sharply, a borrowed secret being worse to
+  keep past its reason than a routable identifier. It is a narrow key: what it
+  authorises is a content-free post to one address, which is the act you were
+  given it for.
 - **Forget an endpoint when the relationship ends**, and when a client
   withdraws it. It is a routable identifier for a person, and keeping one past
   the reason you were given it is a retention decision made by omission

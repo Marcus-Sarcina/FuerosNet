@@ -60,6 +60,10 @@ usage: rhtn <command> [...]
                               (D §3.4); `node launch` fills it itself
           --zone <label>      that provider's own name for the place, 1 to
                               32 bytes, beside the ASN and never without it
+        `node renew` takes both too, and a re-signed anchor entry then
+        carries the place beside each address it already named — which is
+        how a node launched before the pair existed gains one, or a wrong
+        one is corrected (I §4.4). The addresses themselves do not change.
         This is the provisioning page's work as an instrument: in a product
         the client does it (L §8.3). It crosses no protocol request.
 

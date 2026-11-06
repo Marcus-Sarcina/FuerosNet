@@ -240,6 +240,9 @@ const WAKE_REGISTRATION: Fields = &[
     (2, false, Tstr(2048)),
     (3, false, BstrMax(256)),
     (4, false, Uint),
+    // the key the post is signed with, the client's own (§7.10, design
+    // §14.1.5): a P-256 scalar, so exactly 32 bytes
+    (5, false, Bytes32),
 ];
 const SUBMISSION_REPLY: Fields = &[(1, true, Nonce16), (2, true, Uint)];
 const PROFILE_PUBLICATION: Fields = &[(1, true, Profile), (2, true, Nonce16)];
@@ -933,12 +936,14 @@ pub fn check_unsigned(f: Family, b: &[u8], at: usize) -> Result<(), Error> {
                     }
                 }
                 Family::WakeRegistration => {
-                    // a withdrawal is field 2 absent, and its key and lapse
-                    // absent with it: they describe an endpoint, and either
-                    // without one is a shape with no meaning
+                    // a withdrawal is field 2 absent, and its keys and lapse
+                    // absent with it: they describe an endpoint, and any of
+                    // them without one is a shape with no meaning
                     // (`wire-format.md` §7.10)
                     if map_get(m, 2).is_none()
-                        && (map_get(m, 3).is_some() || map_get(m, 4).is_some())
+                        && (map_get(m, 3).is_some()
+                            || map_get(m, 4).is_some()
+                            || map_get(m, 5).is_some())
                     {
                         return Err(Error("a withdrawal carries no key and no lapse"));
                     }
@@ -948,6 +953,12 @@ pub fn check_unsigned(f: Family, b: &[u8], at: usize) -> Result<(), Error> {
                         return Err(Error(
                             "an endpoint without the key its body is encrypted to",
                         ));
+                    }
+                    // and one it cannot sign for is one the push service
+                    // will not take the post of (design §14.1.5): without
+                    // field 5 the endpoint is a bearer capability
+                    if map_get(m, 2).is_some() && map_get(m, 5).is_none() {
+                        return Err(Error("an endpoint without the key its post is signed with"));
                     }
                 }
                 Family::SubmissionReply => {

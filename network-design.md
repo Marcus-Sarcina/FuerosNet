@@ -6126,11 +6126,38 @@ the network's own channel and notification text is rendered locally. Signal's
 content-free pushes are the same pattern.
 
 **The endpoint is what the patron holds, and it is all the patron needs.** A
-URL to post to and the key the body is encrypted to, so the service carrying it
-cannot read even the nothing that is in it. The patron authenticates itself to
-that service with a key pair of its own rather than a credential a platform
-issued, which is what keeps a serving node able to ring the doorbell of a
-client it has never shared a vendor with. **This is the shape RFC 8030 fixed**
+URL to post to, the key the body is encrypted to — so the service carrying it
+cannot read even the nothing that is in it — and the key the post is signed
+with, which is what keeps a serving node able to ring the doorbell of a client
+it has never shared a vendor with: no credential a platform issued to the node,
+and nothing registered to this project.
+
+**The signing key is the client's, handed over with the endpoint** [author,
+2026-11-06]: *"The light client will have to supply the sender's key to the
+node since the seed lives on the light client."*  A push service refuses a post
+signed by any key but the one the subscription was bound to, and the party that
+subscribes is the client — so the key is derived where the seed is and travels
+in the registration (`wire-format.md` §7.10). **Derived and salted rather than
+minted**, the rule being that the salt is a fact unique to the context and
+reconstructable by anyone holding enough to stand the thing up again: a client
+restoring from its phrase re-derives the key its subscription is bound to
+rather than going back to its platform for a new one. The derivation is one
+way, so what the node is handed does not walk back to the seed.
+
+**What the node can do with it is what it could do already.** The doorbell is
+content-free and the body is encrypted to the client, so a node holding the
+signing key can ring that endpoint — which is what it is being asked to do —
+and nothing more: it cannot read a body, and a node that wanted to ring
+spuriously already held the endpoint.
+
+**A client does not normally send its own** [author, 2026-11-06]: *"Light
+clients shouldn't be sending push notifications as a routine matter, but if the
+operator's client needed it for some reason (perhaps as a way to coordinate
+rehoming at a new server after the loss of the node?) it could be reconstructed
+in exactly the way previously described."*  So the key is not the node's
+exclusively: whoever holds the seed and the salt re-derives it, which is what
+lets a client ring its own doorbell when the node that was supposed to is
+gone. **This is the shape RFC 8030 fixed**
 for the same problem, with RFC 8291 for the body's encryption and RFC 8292 for
 the sender's own key pair, and adopting its shape rather than a vendor's is what
 makes one obligation cover every platform.
@@ -6138,7 +6165,12 @@ makes one obligation cover every platform.
 **What the push service still learns:** that a body went to this endpoint at
 this time, and the frequency pattern that implies. Real, and a different order
 of magnitude from payload. Which service that is, is the client's choice and
-not the network's.
+not the network's. **The signing key tells it nothing further**, being the
+client's own: every node serving that client signs identically, so the key does
+not say which one rang. **The addresses do, at a cost** [author, 2026-11-06]:
+a service willing to work from the origin addresses it is posted from can see
+how many machines ring one doorbell and group them, which is higher effort than
+reading a key and is accepted here.
 
 **One platform is an exception, and it is named rather than designed around.**
 A native iOS application receives a device token rather than an endpoint, and

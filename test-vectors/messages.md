@@ -1,6 +1,6 @@
 # Unsigned message families (`wire-format.md` §§6–11)
 
-Generated against `wire-format.md` `e7b184c5a0a08ad8…`, `network-design.md` `1ed3cc4d44c544f7…` and `light-client-requirements.md` `82194b1c45ce6655…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
+Generated against `wire-format.md` `c22516be85215745…`, `network-design.md` `b0b310b355245ff9…` and `light-client-requirements.md` `82194b1c45ce6655…` (full hashes, producer and output hashes in `tools/spec-pins.json`). The design wins on any disagreement; a change to any pinned document stales these vectors.
 
 **Canonical. Spec-derived, reproduced by the independent harness.** Canonical bar 9:
 one positive known-answer encoding per framed message family. Framing is
@@ -1294,15 +1294,16 @@ e89ad6654f61554a2cf202582018564c22b6674f09a7ca123ddfd4b071a45df4
 58202d952f29a29261715f9b1aefce27620f0705a4a848ac772ca2bdeca41606
 4cf0
 ```
-**WakeRegistration (request 12) — endpoint, its key, and when the client expects it to lapse** (99 bytes, length prefix included):
+**WakeRegistration (request 12) — endpoint, the key its body is encrypted to, the key its post is signed with, and when the client expects it to lapse** (134 bytes, length prefix included):
 
 ```
-0000005f820ca40150727e0cf02d74eb27aa6a712d38badb6f02781e68747470
+00000082820ca50150727e0cf02d74eb27aa6a712d38badb6f02781e68747470
 733a2f2f707573682e6578616d706c652f7268746e2f613366390358207d28eb
 7ff6b8e9e842fc662867a87e8b4d61d89d5a777562482d5d4ac2cbd076041a6b
-4b3190
+4b3190055820ec5ce4721ffd8573ee7dc876b79ad79237cbd8e21b108fc02113
+58d281692b6d
 ```
-**WakeRegistration — the WITHDRAWAL: field 2 absent, and fields 3 and 4 absent with it** (25 bytes, length prefix included):
+**WakeRegistration — the WITHDRAWAL: field 2 absent, and fields 3, 4 and 5 absent with it** (25 bytes, length prefix included):
 
 ```
 00000015820ca101505bb3999edb24fe7ca438a873fafa8e37

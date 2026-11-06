@@ -215,20 +215,27 @@ impl Instrument {
                 self.client.wake(None).map_err(|e| e.reason().to_string())?;
                 Ok(vec!["wake off".into()])
             }
-            ["wake", url, key, rest @ ..] => {
+            // the signing key is the client's own and arrives as an input
+            // like the rest: this harness drives inputs and derives
+            // nothing (design §14.1.5)
+            ["wake", url, key, signer, rest @ ..] => {
                 let lapses_at = match rest {
                     [] => None,
                     [t] => Some(
                         t.parse::<u64>()
                             .map_err(|_| format!("`{t}` is not a time"))?,
                     ),
-                    _ => return Err("wake <url> <key-hex> [<lapses-at>]".into()),
+                    _ => {
+                        return Err("wake <url> <key-hex> <signing-key-hex> [<lapses-at>]".into());
+                    }
                 };
                 let key = unhex(key).ok_or_else(|| format!("`{key}` is not hex"))?;
+                let signing_key = unhex(signer).ok_or_else(|| format!("`{signer}` is not hex"))?;
                 self.client
                     .wake(Some(Wake {
                         url: (*url).to_string(),
                         key,
+                        signing_key,
                         lapses_at,
                     }))
                     .map_err(|e| e.reason().to_string())?;
@@ -876,7 +883,10 @@ attach <node> <addr>[,<addr>] [<party>...]
 attached                  whether a session is held
 maintain                  rotate, replenish and ask for what is due
 send <to> <kind> <hex>    payload, over the direct path or through the node
-wake <url> <key> [<at>]   where to be rung; `wake off` withdraws it
+wake <url> <key> <signer> [<at>]
+                          where to be rung, what the body is encrypted
+                          to and what the post is signed with (the
+                          client's own key); `wake off` withdraws it
 events [<ms>]             what arrived; waits <ms> for the first
 horizon                   what this client holds of its neighbourhood
 resolvable                everybody it can place without asking anyone

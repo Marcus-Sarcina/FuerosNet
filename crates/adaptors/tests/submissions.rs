@@ -424,11 +424,13 @@ async fn one_wake_endpoint_per_relationship_replaced_on_re_registration() {
     let e1 = WakeEndpoint {
         url: "https://push.example/one".into(),
         key: vec![1; 32],
+        signing_key: [3; 32],
         lapses_at: None,
     };
     let e2 = WakeEndpoint {
         url: "https://push.example/two".into(),
         key: vec![2; 32],
+        signing_key: [3; 32],
         lapses_at: Some(1_900_000_000),
     };
     assert!(carol.serving.wake(carol.me, Some(e1)).await);
@@ -455,6 +457,7 @@ async fn a_registration_with_no_endpoint_withdraws_and_a_key_without_one_is_malf
     let e = WakeEndpoint {
         url: "https://push.example/one".into(),
         key: vec![1; 32],
+        signing_key: [3; 32],
         lapses_at: None,
     };
     assert!(carol.serving.wake(carol.me, Some(e)).await);
@@ -473,6 +476,7 @@ async fn a_registration_with_no_endpoint_withdraws_and_a_key_without_one_is_malf
         endpoint: None,
         key: Some(vec![3; 32]),
         lapses_at: None,
+        signing_key: None,
     }
     .encode();
     assert!(
@@ -532,6 +536,7 @@ async fn every_reply_echoes_its_own_nonce_and_says_nothing_else() {
                 Some(WakeEndpoint {
                     url: "https://push.example/x".into(),
                     key: vec![1; 32],
+                    signing_key: [3; 32],
                     lapses_at: None,
                 }),
             )
