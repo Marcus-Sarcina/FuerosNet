@@ -87,4 +87,66 @@ class RotationTest {
             assertTrue("a hole was left unfilled: $said", !said.contains("{subnet}"))
         }
     }
+    // ---- the resume, which is what makes a rotation survivable ---------
+
+    /**
+     * **A mark outranks the sealed seeds**, which is the whole invariant.
+     *
+     * `Participant.rotating` opens the new identity on this device's own
+     * storage, so between beginning a rotation and sealing its new seeds
+     * the archive belongs to a key the seeds do not name. A start obeying
+     * the seeds there would open the wrong identity on the right archive.
+     */
+    @Test
+    fun a_start_obeys_the_mark_over_the_seeds() {
+        assertTrue(
+            "a mark means finish the rotation, whatever the seeds say",
+            Rotation.start(hasSeeds = true, hasMark = true) is Rotation.Start.Rotate,
+        )
+        // and even with no seeds at all: the mark carries its own
+        assertTrue(
+            Rotation.start(hasSeeds = false, hasMark = true) is Rotation.Start.Rotate,
+        )
+    }
+
+    @Test
+    fun without_a_mark_the_sealed_seeds_are_the_identity() {
+        assertTrue(
+            Rotation.start(hasSeeds = true, hasMark = false) is Rotation.Start.Ordinary,
+        )
+    }
+
+    @Test
+    fun with_neither_there_is_nothing_to_start() {
+        // a device whose first run never completed, which must not be
+        // reported as a refused kernel
+        assertTrue(
+            Rotation.start(hasSeeds = false, hasMark = false) is Rotation.Start.Unstarted,
+        )
+    }
+
+    @Test
+    fun re_entering_the_rotation_after_a_crash_is_the_same_decision() {
+        // **idempotent by construction**: the inputs a start reads do not
+        // change until the new seeds are sealed, so a process that dies
+        // mid-rotation reaches the same branch next time rather than a
+        // different one
+        val first = Rotation.start(hasSeeds = true, hasMark = true)
+        val again = Rotation.start(hasSeeds = true, hasMark = true)
+        assertEquals(first::class, again::class)
+        // and once the seeds are the new ones and the mark is gone, it is
+        // an ordinary start — the only transition out
+        assertTrue(Rotation.start(hasSeeds = true, hasMark = false) is Rotation.Start.Ordinary)
+    }
+
+    @Test
+    fun the_mark_is_kept_under_names_of_its_own() {
+        // not under "seeds", which is the identity in force: a rotation
+        // that overwrote it before finishing would be the hazard this
+        // whole mechanism exists to avoid
+        assertTrue(Rotation.MARK_NEW != "seeds")
+        assertTrue(Rotation.MARK_PRIOR != "seeds")
+        assertTrue(Rotation.MARK_NEW != Rotation.MARK_PRIOR)
+    }
+
 }

@@ -19,7 +19,7 @@
 //! **It is one key per identity, not per machine.** Every instance an
 //! operator runs already names them in its endpoint record, so one
 //! authorized key across their own machines links nothing that was not
-//! already linked, and a per-machine key would want a label the recovery
+//! already linked, and a per-machine key would want a label the restore
 //! path would have to carry.
 //!
 //! **What it is not**: it is not the identity's own key, cannot sign for
@@ -265,7 +265,7 @@ mod tests {
         let key = id.host_control_key();
 
         // **the same identity derives the same key**, which is the whole
-        // of the recovery: a device restored from the phrase holds these
+        // of the restore: a device restored from the phrase holds these
         // seeds and therefore this key
         let again = SigningIdentity::from_seeds(&ed, &pq).host_control_key();
         assert_eq!(key, again);
@@ -363,7 +363,7 @@ mod tests {
         assert_ne!(control.public_line, runner.public_line);
         assert!(control.public_line.ends_with(" rhtn-host-control"));
         assert!(runner.public_line.ends_with(" rhtn-host-runner"));
-        // each comes back with the identity, which is the recovery
+        // each comes back with the identity, which is the restore
         assert_eq!(
             runner,
             SigningIdentity::from_seeds(&[7u8; 32], &[9u8; 32]).host_runner_key()

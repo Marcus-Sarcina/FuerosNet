@@ -696,8 +696,8 @@ payload, so apex load scales with churn and introductions, not with usage.
 ### In scope for v1
 - Client software (light, end-user devices)
 - Server software (always-up infrastructure nodes)
-- Transaction types: **adoption**, which subsumes key rotation, recovery and
-  transfer between patrons (§9.0, §6.2); **departure**, **disavowal**,
+- Transaction types: **adoption**, which subsumes key rotation and transfer
+  between patrons (§9.0, §6.2); **departure**, **disavowal**,
   peering, **proof of presence**, **series reissue** (§6.2.1,
   `wire-format.md` §4.6)
 - **End-to-end payload encryption** to the addressed endpoint (§14.2). The
@@ -839,14 +839,14 @@ only until the receiving party decides; afterwards what an evaluator relies on i
 
 **That justification fails where the decision is a permanent identity change.** A patron's hybrid signature preserves *that the patron
 decided*, not *that the evidence was true*. Once the classical primitive is
-forgeable, an attacker forges the one `match` a recovery structurally requires,
+forgeable, an attacker forges the one `match` a rotation structurally requires,
 induces a patron to accept it, and **the forgery is sealed inside an authentic
 post-quantum record that outlives the primitive that produced it.** The evidence
 expired; the identity change it caused did not.
 
 **So verifier responses inside a `Recovery` block are hybrid**, unlike every other
 embedded signature. The cost falls where the argument below assumed it would not:
-a recovery is rare, and ~10 responses at 3,373 B is ~34 KB rather than the ~211 KB
+a rotation is rare, and ~10 responses at 3,373 B is ~34 KB rather than the ~211 KB
 that figure was computed against for 32.
 
 **Everywhere else the original rule stands**, because everywhere else the decision
@@ -854,7 +854,7 @@ an evaluator relies on can be revisited: a presence record's weight, a resource
 grant, a currency attestation. **Only an identity replacement cannot be undone by a
 later reader.**
 
-Without that limit the cost is prohibitive rather than acceptable: a recovery
+Without that limit the cost is prohibitive rather than acceptable: a rotation
 adoption may carry 32 verifier responses, each with two embedded signatures.
 Hybridising all 64 costs 64 × (64 + 3,309) ≈ **211 KB** against ≈ **4 KB** as
 classical, a fifty-fold increase on a single transaction.
@@ -984,8 +984,8 @@ none makes it malformed** [author, 2026-09-05]:
   patron it already had. That signature does the job a meeting otherwise does:
   a party who has already vouched for this node vouches again, to a named
   successor; or
-- **a recovery's own evidence**, where the adoption is a recovery (§9.1). A
-  recovery carries its presence half *inside* itself: verifier responses from
+- **a rotation's own evidence**, where the adoption is a rotation (§9.1). A
+  a rotation carries its presence half *inside* itself: verifier responses from
   a prior counterparty who **met the subject again**, so it neither needs nor
   takes a separate reference. **Rotation is adoption** (§9.0), and this is the
   form its evidence takes.
@@ -993,14 +993,14 @@ none makes it malformed** [author, 2026-09-05]:
 **The requirement is the point, not a cost the design regrets** [author,
 2026-09-05]: *the aim is to incentivise people to meet face to face widely and
 frequently*, and every mechanism that creates a trust-bearing relationship is
-priced accordingly — recovery and rotation (§9.0.1, §9.1) and peering (§6.3)
+priced accordingly — rotation (§9.0.1, §9.1) and peering (§6.3)
 all require a meeting outright, and adoption requires one unless somebody who
 has already met you says otherwise.
 
 **This is checkable by every validator identically**, which is why it can be a
 structural rule rather than a policy preference. All three are facts about the
 object: field 8 names a presence record, field 9 carries the former patron's
-signature, and field 6 carries a recovery's own (`wire-format.md` §4.1). Neither asks a validator to
+signature, and field 6 carries a rotation's own (`wire-format.md` §4.1). Neither asks a validator to
 compute anything from its own topology, so no node rejects an object its
 neighbour accepts — the rule `wire-format.md` §6.8 states for scopes and §3.3
 for timestamps.
@@ -1012,7 +1012,7 @@ topology can confirm and one without it cannot, and it weighs the edge
 accordingly (§16.1). Structural validity stays objective; the strength of the
 evidence stays per-observer, as everything else here does.
 
-§13.1 requires a ceremony before the formation adoption, and §9.1's recovery
+§13.1 requires a ceremony before the formation adoption, and §9.1's rotation
 depends on prior ones.
 
 ### 6.2 Ending a patron relationship
@@ -1024,7 +1024,7 @@ out.
 **There is no transfer transaction *type*, and there is a transfer** [author,
 2026-09-05]. The two are not in tension, because what §6.1.1 adds is not a new
 object: a transfer is **an ordinary adoption carrying the former patron's
-countersignature** (field 9, `wire-format.md` §4.1), exactly as a recovery is an
+countersignature** (field 9, `wire-format.md` §4.1), exactly as a rotation is an
 ordinary adoption carrying the old key's proof. The former patron's signature
 stands where a meeting otherwise would.
 
@@ -1255,7 +1255,7 @@ consequence of subnet plurality, not a gap in this mechanism.
   holds no peering with; the record, signed by the two of them, is what it
   takes the sender as a peer by, the sender's material having come with
   its first message, and from then the rest of its dataset comes back
-  from the blob the peer holds. **No node is needed for the recovery**
+  from the blob the peer holds. **No node is needed for the restore**
   [author, 2026-10-30]: the peer dials the last address it held, presents
   its introduction first on the connection so a client that knows nobody
   can take it as a cold call, asks that client for its prekey material on
@@ -1270,10 +1270,10 @@ consequence of subnet plurality, not a gap in this mechanism.
   the next contact that holds one, and the relay never carries it. **The
   interval is the client's own** (§21.1.1's freely-tunable class), and it
   is to be set low [author, 2026-10-25]: peering is not a bandwidth-
-  intensive feature, recovery of contacts is not time-sensitive, and a
+  intensive feature, restoring contacts is not time-sensitive, and a
   dataset that dribbles back from one's peers over a day after a device
-  loses its storage is recovered well enough. A user with several peers
-  costs the network several rounds and recovers several times as fast.
+  loses its storage is restored well enough. A user with several peers
+  costs the network several rounds and restores several times as fast.
   The reference client's figure is a placeholder to be de-rated before
   release; the field-test build runs a minute, for the reason the
   witness window runs thirty seconds (§7.1): a test cycle at production
@@ -2430,8 +2430,8 @@ recorded.
 
 **A subject who withholds broadly degrades their own recoverability.** Every
 counterparty A cuts off is one that can no longer answer `photo_match` if A later
-needs recovery (§9), leaving `personal_knowledge` as the basis. An aggressive
-retention policy is therefore a trade against A's own ability to recover, and a
+needs a rotation (§9), leaving `personal_knowledge` as the basis. An aggressive
+retention policy is therefore a trade against A's own ability to rotate, and a
 client should say so at the moment the user sets it.
 
 **The same reservation applies as everywhere else in this section: none of it binds
@@ -2457,16 +2457,16 @@ Verifier privacy is currently one-sided — P18 records that a verifier learns a
 ceremony is under way while the subject learns nothing about who was asked. The
 key-release channel makes it symmetric without a new message type.
 
-##### 7.5.2.5 Interaction with recovery
+##### 7.5.2.5 Interaction with key rotation
 
 **Absent a restored backup, seeds die with the device — consistent rather than a new fragility.**
-A rotated or recovered key inherits only local standing (§9); rotation never
+A rotated key inherits only local standing (§9); rotation never
 carries state forward from beyond the local trust horizon. So a participant who
 loses their device and its backup loses the ability to unlock their likeness on
 every counterparty's device, in the same way and for the same reason they lose portable
 standing (§10.2).
 
-The practical consequence is that a post-loss recovery ceremony rests on
+The practical consequence is that a post-loss rotation ceremony rests on
 `personal_knowledge` rather than `photo_match`, which §7.4.4 already treats as the
 weaker basis. **The scheme adds no dependency here; it makes an existing one
 visible.**
@@ -2635,9 +2635,9 @@ backed up, replicated or lost on its own.
 
 **Losing the identity still costs it, and that is expected behaviour rather
 than a failure mode to engineer around.** A user who loses their key material
-and recovers by presence (§9.1) returns under a new key, which derives none of
+and rotates by presence (§9.1) returns under a new key, which derives none of
 the old capture keys: it is the same loss, for the same reason, as losing
-portable standing, since rotation and recovery never carry state forward from
+portable standing, since rotation never carries state forward from
 beyond the local trust horizon (§9).
 
 ### 7.6 Route latency — what it can and cannot show
@@ -3038,7 +3038,7 @@ evaluate a presence record, and what each actually reads decides what may be wit
 | Adoption's proof-of-presence reference (§6.1.1) | that the record exists and names these two parties | no |
 | Archive presentation to a prospective patron (§16.7) | signatures, and counterparties the patron already knows (§10.1) | **benefits** |
 | Trust metric (§16.2) | graph edges — adoptions, and the acquaintance edges a presence record or peering establishes (§16.2.1). **That an edge exists, never the record's disclosable contents** | no |
-| Presence-based recovery (§9.1) | verifier responses | no |
+| Presence-anchored key rotation (§9.1) | verifier responses | no |
 | Late response, capture key grant (`wire-format.md` §7.3, §7.4) | `txid` | no |
 
 **Ten of eleven have no use for it.** The mechanism exists because a record currently
@@ -3188,7 +3188,7 @@ distant audience could have checked one.
 - **Rate**: far below the 1-per-100s threshold in §1. Ceremony duration is
   deliberately minutes (§7.1), which caps throughput at the human.
 
-## 9. Key compromise and recovery
+## 9. Key compromise and key rotation
 
 **The threat decay cannot reach.** Inactivity decay (§16.5) is useless here: a
 compromised account has *fresh* activity by definition. The danger is not the
@@ -3197,6 +3197,27 @@ legitimately built standing over years being taken over, with the attacker
 cashing out that endowment in a burst of abuse.
 
 ### 9.0 Rotation is adoption
+
+**Four words, and they are not interchangeable** [author, 2026-11-05]. This
+section is where they are fixed, because three of them were used for each
+other's meanings and the confusion reached the code.
+
+| | What it does | What it keeps |
+|---|---|---|
+| **key rotation** | replaces the key a subnet knows you by, one subnet at a time (§13.6), anchored by presence (§9.1) | local status, permissions and state — the new key is adopted *as* the member the old one was |
+| **series reissue** | restarts the sequence your transactions count in, so history can branch per subnet (`wire-format.md` §4.6) | the key **and** the data; nothing is replaced and nothing reloaded |
+| **restore** | brings data back to the key that already held it — from a backup (§13.7.1), or an archive a holder kept | the key, the series, and everything but what was lost |
+| **`Recovery`** | **a block on the wire and nothing else** (`wire-format.md` §4.1): the old key's signature and a counterparty's recognition, which is how a rotation carries its inheritance | — |
+
+**All three procedures keep local status, permissions and state** [author,
+2026-11-05]: none of them is a way to lose standing in a subnet. Where this
+document says prior standing is *abandoned*, it means the case below — a key
+adopted with no `Recovery` arrives as a genuinely-new user, vouched for
+afresh — and never that rotating costs a member what they hold.
+
+**So "recovery" is not an operation here.** A key coming back by presence is
+a rotation; data coming back is a restore; the thing called `Recovery` is the
+block that carries the first one's inheritance.
 
 **Adoption and key rotation are one operation, not two.** Both instantiate a
 keypair on the network with some initial attestation state, and the credibility
@@ -3236,9 +3257,9 @@ revocation object to express either.
 the inheritance is carried at all is the subject's choice.** A plain rotation
 carries nothing: the upstream sees a disavowal and an adoption in quick succession
 and **cannot prove they are the same person** — the arriving node may equally be one
-that displaced another from a slot. A **recovery** adoption is the other case and
+that displaced another from a slot. A **rotation** adoption is the other case and
 publishes the link deliberately, `prior_key` plus verifier continuity attestations
-(`wire-format.md` §4.1), which is why §19.7 item 3 accepts that recovery destroys
+(`wire-format.md` §4.1), which is why §19.7 item 3 accepts that a rotation destroys
 unlinkability. **That publication reaches the horizon and stops there.**
 
 **Beyond the horizon neither case exposes anything**: the old locator is simply an
@@ -3278,16 +3299,16 @@ typical case a verifier outside the user's last active trust horizon cannot
 substitute a new key for an old one without bringing the user into their own
 neighbourhood, which is to say: without adopting them.
 
-**Recovery cost scales with reach, automatically.**
+**Rotation cost scales with reach, automatically.**
 
-| Recovering through | Topology change | Cost |
+| Rotating through | Topology change | Cost |
 |---|---|---|
 | Your own patron | None. They re-adopt you under a new key | Minimal; the common case |
 | A nearby node in your trust horizon | Local | Modest |
 | A distant friend who knows you personally | Transplant into their neighbourhood | Loss of old position and most standing |
 
 No parameter tuning required. It also answers "what if my patron is the
-attacker": recover elsewhere and accept the transplant.
+attacker": rotate elsewhere and accept the transplant.
 
 #### 9.0.1 One procedure: key and presence together
 
@@ -3296,7 +3317,7 @@ and a prior counterparty's in-person recognition.** Neither alone is enough, and
 there is **no lost-key variant**. A plain rotation carries neither and claims
 nothing, which is §9.0's other case and the subject's to choose. **The
 recognition requires a meeting, and requires it every time** [author,
-2026-09-05] — for a linked rotation and a recovery alike, which are one
+2026-09-05] — for a linked rotation, the two names it once had being one thing
 procedure (§9.0). `wire-format.md` §4.1's `Recovery` block puts it in the
 field's own definition: the presence half is *"a prior counterparty who **met
 the subject again** and recognised them."* Past acquaintance is what makes
@@ -3311,7 +3332,7 @@ between patrons, and nobody's countersignature substitutes for the human act
 | **A prior counterparty recognises you, in person** | A human who knows you says you are you | A verifier can be mistaken or lying, and nothing checks it |
 
 **A key you cannot sign with is not recoverable.** You make a new identity and are
-re-adopted by people who know you. This is harsher than a recovery mechanism and
+re-adopted by people who know you. This is harsher than a rotation mechanism and
 cheaper than one: subnet status is a vague thing, and in a network of close personal
 acquaintance a team that recognises you reconstitutes your access quickly.
 
@@ -3332,7 +3353,7 @@ differently.** After a **plain** rotation no message says "rotation" and no
 inheritance is carried anywhere: a horizon member sees a disavowal and an
 adoption in quick succession and cannot prove they are the same person, which
 is the subject's privacy choice and the reason §19.7 item 3 exists. A
-**recovery** adoption publishes the link on purpose — `prior_key` and the
+**rotation** adoption publishes the link on purpose — `prior_key` and the
 successor statement travel inside the adoption itself (`wire-format.md` §4.1
 field 6), which is topology class and forwarded byte-for-byte
 (`wire-format.md` §10.1).
@@ -3349,7 +3370,7 @@ notify nobody — and a notice object would not compel it either, since nothing
 makes a party speak (§1.1). An artefact that changes neither the honest case
 nor the dishonest one is machinery for its own sake.
 
-**So within the horizon a recovery adoption replaces the binding, and does not
+**So within the horizon a rotation adoption replaces the binding, and does not
 sit beside it** [author, 2026-09-05]: members holding the old key **remove it
 from their records and overwrite it with the new one**. The publication
 reaches the horizon and stops there (§9.0), so **beyond it nothing changes**:
@@ -3364,7 +3385,7 @@ and this is structural, not a convention.** What travels past the horizon is
 the memo (§15.2), and its five fields are the patron, the patron's position,
 the slot, the transaction's timestamp, and the key now occupying that slot
 (`wire-format.md` §10.2). **There is no field for a prior key and none
-discriminating a recovery from any other adoption**, so an ancestor sees a
+discriminating a rotation from any other adoption**, so an ancestor sees a
 slot emptied and a slot filled and has nothing with which to join them. The
 horizon is therefore not merely where the link stops being *sent*; past it
 there is no object capable of carrying one. So the gap
@@ -3376,7 +3397,7 @@ precisely what was compromised. It comes from the adopting patron's signature
 and the verifier attestations behind it.
 
 **Identity can fork, and that is correct behaviour, not a defect.** Two
-competing recovery claims become two adoptions by different patrons, and since
+competing rotation claims become two adoptions by different patrons, and since
 the two keys are distinct nodes each with their own patron, both can be
 simultaneously valid. Observers route
 to and trust whichever attester they trust; there is no mechanism to declare a
@@ -3386,14 +3407,14 @@ indefinitely.
 **A fork costs the old key a second signature; one leaked proof does not make
 heirs.** Each successor is authorised by its own statement from the old key
 naming *that* successor and *that* patron (`wire-format.md` §4.1), so a party
-who merely observes one recovery cannot assemble a competing one from it. Two
+who merely observes one rotation cannot assemble a competing one from it. Two
 claims therefore mean the old key signed twice — the legitimate holder once
 and a thief once, each to their own patron, which is the case below, and not
 one proof spawning unlimited successors.
 
 **A fork does not give one observer two current keys; it gives it a choice.**
 The overwrite above is per identity per observer, so a member receiving two
-competing recovery adoptions for the same `prior_key` does not hold both as
+competing rotation adoptions for the same `prior_key` does not hold both as
 current — it resolves to one, by which patron it trusts, which is what
 "choosing between X and Y" below means. Both successors remain valid *nodes*
 network-wide; what is not global is which of them any given observer treats as
@@ -3405,11 +3426,11 @@ A person's LinkedIn reputation and Twitter reputation are separately persisted
 and the platforms neither talk to nor trust each other, yet nothing prevents
 using the same password on both, or changing it on one and not the other. The
 adversarial case maps too: a stolen password changed on one site loses you that
-site and leaves the other intact, recovered through that site's own process.
+site and leaves the other intact, restored through that site's own process.
 
 **Implementers assuming an identity has one current key *globally* will build
 something subtly wrong.** Within one observer's horizon there is exactly one
-current key per identity, because a recovery adoption overwrites the binding.
+current key per identity, because a rotation adoption overwrites the binding.
 Across horizons there is no such thing: the same person is one identity to
 those who received the adoption and two unrelated ones to everyone else, and
 no party holds a view that reconciles them.
@@ -3458,9 +3479,9 @@ Two consequences requiring mitigation:
     **The disclosure this creates runs in the design's favour.** It reads at first
     as a privacy cost — a stranger's inquiry generating notifications that name
     parties to it, and that reading does not survive inspection. **The
-    inquirer's exposure predates the recovery**: a thief holding the key already
+    inquirer's exposure predates the rotation**: a thief holding the key already
     reads everything addressed to it, so whatever the inquirer lost was lost at the
-    theft. Recovery only lets the legitimate holder regain one subnet, up from
+    theft. A rotation only lets the legitimate holder regain one subnet, up from
     none.
 
     **And a third party who sees a rotation and doubts the un-rotated binding
@@ -3488,7 +3509,7 @@ Two consequences requiring mitigation:
   with attribution everywhere else in the design, the patron's countersignature
   is what is on the line.
 
-### 9.1 Presence-based recovery
+### 9.1 Presence-anchored key rotation
 
 **Physical presence is the half of a rotation a key thief cannot steal**, which is
 why every rotation carries it (§9.0.1). Run §7.3 in reverse:
@@ -3512,10 +3533,10 @@ where recognition is somebody who knows you saying so.
 (`wire-format.md` §4.1): the subject stands in front of
 the party answering, so that party's client generates the verification query
 and answers it — §7.3 run in reverse needs no third role. The meeting opens as
-a ceremony (§7.5.2 calls a post-loss recovery exactly that), whose countersigned
+a ceremony (§7.5.2 calls a post-loss rotation exactly that), whose countersigned
 pre-commitment binds the query; the subject's new key countersigns for the
 anti-oracle rule (§7.4.2), and continuity rests on the response's prior-key
-binding and the old key's proof, never on the consent. And because a recovery
+binding and the old key's proof, never on the consent. And because a rotation
 verifier is by definition a prior counterparty recognising the subject, its
 `selection_basis` is *met* — the encoding fixes it (`wire-format.md` §4.1).
 
@@ -3603,7 +3624,7 @@ anything can be blocked:
 
 What remains is a thief cashing out **in place**, which notification and
 behavioural anomaly weighting surface rather than prevent, with presence-based
-recovery (§9.1) as the backstop and disavowal as the response.
+rotation (§9.1) as the backstop and disavowal as the response.
 
 **Social revocation is each voucher disavowing for itself** [author,
 2026-10-16]. The shape is native to the hierarchy — the parties who vouched can
@@ -3799,7 +3820,7 @@ ceremony id among them**, since that and the identity root are what derive a
 capture key (§7.5.2.6).
 
 **Except inside the 730-day window, where they are still required.** What a
-subject holds inside the window is its own recovery substrate (§9), and the
+subject holds inside the window is its own rotation substrate (§9), and the
 evidence behind every counterparty it would name to a verifier-seeking
 counterparty (`wire-format.md` §5.4). **Pruning is therefore permitted only
 beyond the window**, which costs nothing anyone wants: the storage saving
@@ -3847,22 +3868,22 @@ non-exportable, held elsewhere — is what would change that adversary's positio
 is undesigned, and would cost ordinary usability, so it is a trade rather than an
 oversight.
 
-**The cost:** archive loss is history loss. Presence-based recovery (§9.1)
-restores the *key*, not the archive, so a user who loses their device and recovers
+**The cost:** archive loss is history loss. Presence-anchored key rotation (§9.1)
+restores the *key*, not the archive, so a user who loses their device and rotates
 their key returns with standing intact in their existing subnets and **nothing
 portable to a new one**. This makes §13.7.1's backup requirements
 load-bearing.
 
-**And no protocol path restores the archive** [author, 2026-10-16]. Recovery
+**And no protocol path restores the archive** [author, 2026-10-16]. A rotation
 returns the key, and any mechanism that returned the history with it would hand
-an attacker who completes the same recovery the same history — the archive being
+an attacker who completes the same rotation the same history — the archive being
 the second factor this section exists to describe. So the archive is restored
 from the user's own backup or not at all, and a client says plainly that
-recovery restores **standing, not history**
+a rotation restores **standing, not history**
 (`light-client-requirements.md` §6, PRD-09). **The backup opens under the
 identity's own key** (§13.7.1) [author, 2026-10-24], which is consistent
-with this: recovery mints a new key and never returns the old seed, so the
-blob a peer or a desktop holds stays shut to whoever recovered, and open to
+with this: a rotation mints a new key and never returns the old seed, so the
+blob a peer or a desktop holds stays shut to whoever rotated, and open to
 the holder who carried the seed to a new device. The factor the archive adds
 is against a key *rotated* without the seed, not against a seed stolen —
 §12.4's device-theft case, which this section already concedes.
@@ -4717,7 +4738,7 @@ introduction it carries its own signature, which is what `SignedLocator` is
 information and does not stand in for it** [author, 2026-09-18]: it is
 issuer-signed and vouches only that a key is live, never binding an identity to a
 key on the issuer's authority. Which key a relying party addresses is authored by
-the participant, through a `SignedLocator` or a recovery adoption (§9.0.2); the
+the participant, through a `SignedLocator` or a rotation adoption (§9.0.2); the
 staple confirms currency of that key and no more (§12.6.5, `wire-format.md` §7.1).
 
 Identity (public key) is permanent; locator is mutable. Standard
@@ -5108,7 +5129,7 @@ patron's reachability keeps the stolen key working indefinitely.
 2026-09-10]. Stapling supports routing operations only: a staple tells a party
 which key to address for an identity, and no trust transaction or user
 operation waits on it (below). What answers the thief is supersession inside
-the horizon — a recovery adoption replaces the binding in every member's
+the horizon — a rotation adoption replaces the binding in every member's
 records (§9.0.2), and a party holding that knowledge serves nothing under the
 old key — and, beyond the horizon, where the adoption never arrives, nothing
 stronger than the staple's own expiry: parties there go on holding the old and
@@ -5193,7 +5214,7 @@ is in continuous contact with by construction, so refresh is a local operation
 between neighbours rather than a round trip to a remote CA.
 
 **What would derive it:** the lifetime should be at most the expected time for a
-legitimate holder to notice a compromise and begin recovery, since that is
+legitimate holder to notice a compromise and begin a rotation, since that is
 exactly the window in which a thief holding a captured staple is still
 addressed as the current key by parties beyond the horizon (inside it, use is
 bounded by supersession knowledge, not by expiry — the rule below). **That detection latency is unmeasured**, so the current value is
@@ -5242,13 +5263,13 @@ direction is detectable from inside the protocol.
 **Fail-open is for ignorance, never for knowledge** [author, 2026-09-03]. The
 rows above govern a party that cannot establish currentness. A party holding
 **authenticated supersession evidence** for a binding — a verified reissue
-chain onto a new series (`wire-format.md` §4.6), a recovery it has validated
+chain onto a new series (`wire-format.md` §4.6), a rotation it has validated
 (§9.1) — MUST NOT continue
 serving it: sessions under the superseded credential terminate, and nothing
 further is delivered to it, queued material and capture-key grants included.
 
 **For the key binding, inside the horizon, this is enforced by replacement
-rather than by a check** (§9.0.2): a recovery adoption overwrites the old key
+rather than by a check** (§9.0.2): a rotation adoption overwrites the old key
 in a member's records, so there is no superseded binding left to serve under
 and the rule bites on **sessions and queues already running** rather than on
 future lookups. **Outside the horizon there is no supersession to know**, the
@@ -5344,8 +5365,8 @@ not a gap in the mechanism; the question the mechanism answers does not arise.
 Currency attestation exists to resolve **which of several possible keys
 represents this accumulated history**. With no history, no competing claim is
 constructible, so **self-attestation is complete**. If the key is lost, creating
-a new identity is cheaper than recovery — recovery only becomes worth having
-once there is something to recover.
+a new identity is cheaper than a rotation — a rotation only becomes worth having
+once there is standing to carry across.
 
 **Nothing a Genesis user does waits on a staple, as nothing anyone does**
 (§12.6.5). Its first presence ceremony proceeds on the in-person meeting alone,
@@ -5658,7 +5679,7 @@ two keys belong to one person is to propagate a compromise warning between
 subnets, which requires exactly the linkage this design refuses. So it stays
 client-local by necessity rather than convenience: the client can warn its user
 across all bindings, and the network never learns why. The one protocol-level
-requirement that remains is the key rotation/recovery transaction, which is
+requirement that remains is the key rotation transaction, which is
 needed regardless (§9, §13.6).
 
 **Exhaustive-disclosure investigation degrades as the client matures, but only
@@ -5670,10 +5691,10 @@ were **independent from birth.** But it *will* turn up any key rotation
 involving a known key as either the pre- or post-rotation key, since the rotation
 record publicly binds the two and the chain can be walked in both directions.
 
-**Therefore: recovery and unlinkability are the same choice seen from two sides.**
-Recovery works precisely by publishing the link. Unlinkability survives only for
+**Therefore: a rotation and unlinkability are the same choice seen from two sides.**
+A rotation works precisely by publishing the link. Unlinkability survives only for
 separate Genesis identities (§12.7.1), never for rotations. This makes "abandon
-and start fresh" a **privacy operation distinct from recovery**, and the client
+and start fresh" a **privacy operation distinct from a rotation**, and the client
 should present it as such rather than treating rotation as the default answer to
 "I want out of this subnet". The capability is also bounded by §12.4: with no cold
 lookup, an investigator needs standing in each subnet before key-matching is even
@@ -5747,7 +5768,7 @@ reaches the cryptosystem or the wire.
 detecting a bad share needs a verifiable scheme — Feldman and Pedersen VSS are the
 classic examples rather than the only options. Social recovery also has a poor practical
   record; the usual failure is holders being lost track of or unreachable when
-  needed. **If adopted, share holders should be disjoint from the presence-recovery
+  needed. **If adopted, share holders should be disjoint from the presence-anchored rotation's
   quorum (§9.1).** Otherwise compromising one group of *k* people yields both
   the backup key and the identity attestation.
 - **A backup that outlives declared retention makes the retention commitment
@@ -5783,8 +5804,8 @@ classic examples rather than the only options. Social recovery also has a poor p
   undetectable against hostile ones**, and the document should not suggest
   otherwise.
 
-Note that backup and presence-based recovery (§9.1) are complementary rather
-than redundant: backup covers key *loss*, recovery covers key *compromise*, and
+Note that backup and a presence-anchored rotation (§9.1) are complementary rather
+than redundant: backup covers key *loss*, a rotation covers key *compromise*, and
 a compromised backup is itself a compromise path.
 
 ### 13.8 The subnet's identity
@@ -6510,7 +6531,7 @@ not the usual participants-patrons-witnesses set:
 
 | Class | Contents | Reach | Persistence |
 |---|---|---|---|
-| **Topology** | adoption (incl. Rotation/recovery and former transfer, §9.0), departure, disavowal, peering, node endpoint records (`wire-format.md` §7.6). **Resource registration is NOT in this class**, and is not a transaction at all — a signed entry goes to the hosting node and is answered on request, never propagated (§11.5) | **horizon** as the full transaction; **ancestors** as a memo only (§15.2) | stored within horizon, folded into aggregate state beyond |
+| **Topology** | adoption (incl. rotation and former transfer, §9.0), departure, disavowal, peering, node endpoint records (`wire-format.md` §7.6). **Resource registration is NOT in this class**, and is not a transaction at all — a signed entry goes to the hosting node and is answered on request, never propagated (§11.5) | **horizon** as the full transaction; **ancestors** as a memo only (§15.2) | stored within horizon, folded into aggregate state beyond |
 | **Catalog** | resource registrations (§11.5) | **the hosting node alone**, answered on request | **current state only, and not archived** (§10): the host holds what it serves now, replaces it on re-registration, and keeps no history. Never propagated, and no copy exists to reconcile |
 | **Attestation** | presence records (§8.1), verifier responses, other trust-bearing transactions | **pull, not push** | stored by participants, their patrons, and witnesses; fetched on demand by evaluators |
 | **Attestation, point-to-point** | abuse reports (§11.6) | delivered to the addressed party only, never broadcast | stored by the resource owner alone. **Not** by patrons or witnesses, an abuse report is a private complaint, and giving it the generic attestation audience would make it the public accusation §6.2.2 declines to build |
@@ -7468,7 +7489,7 @@ several at once, not one per acquisition.
    leg; specified in §7. **Since 2026-09-05 it has no unattested bypass**:
    §6.1.1 requires every adoption to carry either a meeting or a former
    patron's countersignature, peering requires a meeting outright (§6.3), and
-   recovery and rotation require one every time (§9.0.1). What an attacker
+   a rotation requires one every time (§9.0.1). What an attacker
    can still do is acquire one attested identity and move it by transfer,
    which is what A34 prices. Note it is a *cost*, not an unforgeable
    primitive — bilateral collusion defeats it, and the flow metric is what
@@ -7653,8 +7674,8 @@ several at once, not one per acquisition.
   key cannot make that transaction, and cannot pre-poison the space either: with no
   global registration of series, it would have to exhaust 2³² **and reach every party
   it wanted to block with every one of them.** Residual: the patron must not countersign
-  a reissue for a thief, which is the same social check adoption and recovery rest on.
-- **A stolen device composes into false presence evidence and fraudulent recovery.**
+  a reissue for a thief, which is the same social check adoption and rotation rest on.
+- **A stolen device composes into false presence evidence and fraudulent rotation.**
   Theft grants the key and the archive at once, the key deriving every capture
   key with it (§7.5.2.6), and the pieces
   compose further than any of them registers alone. With a colluding counterparty, the
@@ -7665,7 +7686,7 @@ several at once, not one per acquisition.
   back**, since the record finalises with whatever responses arrived and absence
   blocks nothing (`wire-format.md` §5.5), and the subject-side refusal §7.4.1 relies on is the
   thief's to make. The colluder is then a prior counterparty, positioned to supply the
-  recognition half of §9.1's recovery. **Two bounds hold, stated at their true
+  recognition half of §9.1's rotation. **Two bounds hold, stated at their true
   width** [author, 2026-09-03]. Honest verifiers' signatures are unforgeable, so
   **nothing positive can be manufactured**, but unforgeability is not
   completeness, and this pair suppresses freely: both custody legs of the dual
@@ -8266,7 +8287,7 @@ never told. It is a commitment by the implementer and the only lever available.
    genuinely independent branches. That lowers the cost of the expensive step in
    §17.3's attack without creating any standing, and it is priced here rather than
    concealed.
-3. **Recovery destroys unlinkability.** Rotation publishes the predecessor link;
+3. **A rotation destroys unlinkability.** It publishes the predecessor link;
    a fresh Genesis identity is the privacy-preserving alternative (§13.7).
 4. **Source-photo retention.** Full photographs rather than templates alone, for
    algorithm migration — sealed under the subject's keystream (§7.5.2), so the
@@ -8450,7 +8471,7 @@ mistaken for established results.
 | 6.2.5 | Bootstrap mutual adoption is a "likely accident" | SUPPORTING. Cycle prevention must work regardless of whether cycles are accidental or malicious |
 | 12.2 | "Real early networks will be thousands to tens of thousands of nodes" | SUPPORTING. Characterises expected early operation; the anchor mechanism is stress-tested independently |
 | 12.6.5 | "The industry direction is away from long-lived credentials" toward short-lived ones | SUPPORTING. Persuasive background; the local renewal mechanism does not depend on the trend |
-| 12.7.1 | "Creating a new identity is cheaper than recovery" | SUPPORTING. The stronger structural reason is that a Genesis identity has no accumulated history to recover |
+| 12.7.1 | "Creating a new identity is cheaper than a rotation" | SUPPORTING. The stronger structural reason is that a Genesis identity has no accumulated history to carry across |
 | 14.1.3 | 0-RTT "saves battery" and permits a lazy heartbeat | SUPPORTING. Heartbeat interval is unset; this affects tuning, not architecture |
 | 14.1.1 | "A substantial minority" of connections will fall back to TURN relay | Drawn from general familiarity with WebRTC-style deployments, not measured for this topology. **Two mobile peers behind CGNAT is the worst case and the common case here**, so the true fraction may be much higher, which would put the infra economics of §16.6 back in question |
 | 7.1 | Randomised motion prompts "constitute the liveness check" against print, replay and generated video | Presentation-attack detection is method- and attack-dependent. Motion and parallax are **inputs** to a PAD system, not a defence in themselves. **Needs evaluation of a named algorithm against a specified attack suite**, particularly for generated video |
@@ -8978,8 +8999,8 @@ rules that conflict only on malformed input.
 5. Reference flow-based trust metric + conformance test (§16.2, §16.4).
 6. Proof-of-presence ceremony and record (§7–7.3).
 7. Verification-by-query and the local face store (§7.2–7.3).
-8. Recovery adoption (§9), depends on 7, since the local photo archives are
-   the recovery substrate.
+8. Rotation adoption (§9), depends on 7, since the local photo archives are
+   the rotation substrate.
 9. End-to-end payload encryption (§14.2) — **integrate PQXDH and the Triple
    Ratchet** (§14.2.4) rather than designing key agreement. Independent of 1–8 and
    can proceed in parallel once transport exists. **Leaf-to-leaf only**: patron and

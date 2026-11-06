@@ -110,4 +110,45 @@ class DisclosureTest {
             )
         }
     }
+    /**
+     * **PRD-11: the screen says what the ordering means.**
+     *
+     * The ordering itself is proven in `client/tests/horizon.rs` — least
+     * concentrated first, ties in the caller's order, every candidate
+     * returned with its count rather than dropped. What this holds is the
+     * sentence beside it, and that the screen renders it from the table
+     * rather than from a string of its own.
+     *
+     * Read from the source, as [InsetSweepTest] and [ManifestTest] read
+     * theirs: a JVM test cannot lay out the provisioning form.
+     */
+    @Test
+    fun the_provisioning_screen_says_whose_horizon_the_ordering_speaks_to() {
+        val said = Disclosure.words(Disclosure.Topic.PROVISIONING).joinToString(" ")
+        assertTrue("there are words", said.isNotEmpty())
+        assertTrue("says it is about your own subnet: $said", said.contains("local subnet"))
+        assertTrue(
+            "and not the network's: $said",
+            said.contains("does not reflect the distribution of all FuerosNet nodes"),
+        )
+        // and the screen renders them rather than saying it in its own words
+        val screen = java.io.File(
+            module(), "app/src/main/kotlin/com/comptus/fueros/OperatorActivity.kt",
+        ).readText()
+        assertTrue(
+            "OperatorActivity no longer renders the table's provisioning words",
+            screen.contains("Disclosure.Topic.PROVISIONING"),
+        )
+    }
+
+    /** Where the tree is, for the source-reading test above. */
+    private fun module(): java.io.File {
+        var at: java.io.File? = java.io.File(".").canonicalFile
+        while (at != null) {
+            if (java.io.File(at, "app/src/main/AndroidManifest.xml").isFile) return at
+            at = at.parentFile
+        }
+        throw AssertionError("no app/src/main/AndroidManifest.xml at or above here")
+    }
+
 }

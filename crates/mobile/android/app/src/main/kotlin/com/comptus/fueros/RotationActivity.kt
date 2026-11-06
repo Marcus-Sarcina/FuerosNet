@@ -53,16 +53,22 @@ import android.widget.TextView
  *
  * ## What this screen does not do, and why
  *
- * **It does not perform the rotation** [2026-11-05], and that is a
- * deliberate stop rather than an omission. `Participant::recovering` opens
- * the new identity on *this device's own storage* and saves — so the
- * archive on disk is the new identity's the moment it runs, and a process
- * that died between sealing the new seeds and that save would leave a key
- * and an archive that do not belong to each other. Doing it safely needs a
- * mark the next start reads and resumes from, and the prior seeds held
- * across that gap, which is a new key path and owes the walk every holder
- * of one owes. Until then this screen says what each path costs and sends
- * the unlinked one through the door that already exists.
+ * **The linked path is performed here, and survives a dying process**
+ * [2026-11-05]. `Participant::rotating` opens the new identity on *this
+ * device's own storage* and saves, so the archive on disk becomes the new
+ * identity's the moment it runs. A mark is therefore sealed *before*
+ * anything opens and cleared only after the new seeds are the sealed ones,
+ * and [Rotation.start] has every start obey a mark over the seeds — so a
+ * process dying mid-rotation leaves one a later start finishes rather than
+ * a key and an archive that do not match.
+ *
+ * **The unlinked path is not a door here, and is not a rotation.**
+ * `wire-format.md` §4.1 admits no `Recovery` carrying one half, so a
+ * prior key is required and an unlinked path is not this operation at all:
+ * it is starting over with a new identity, which on a device that already
+ * holds one needs the old archive cleared, or the fresh key opens on the
+ * old identity's records. That is the most destructive act in the app and
+ * is owed its own care rather than a button here.
  */
 class RotationActivity : Activity() {
 
@@ -136,12 +142,49 @@ class RotationActivity : Activity() {
             startActivity(Intent(this, MeetActivity::class.java))
         }
         sub(
-            "Carrying your standing across needs the old key present to sign the " +
-                "recovery, and the old line is sealed as that key's last act " +
-                "(`wire-format.md` §4.6). Neither half is a door on this device yet: " +
-                "the new key opens on this device's own storage, so it needs a resume " +
-                "the next start can finish, and that is being built rather than risked.",
+            "Carrying your standing across needs the old key present to sign with, " +
+                "and this device holds it — so nothing is typed. The old line is " +
+                "sealed as that key's last act, and a series is never re-entered.",
         )
+        said?.let { para(it) }
+        button("Rotate now, carrying your standing") { rotate() }
+    }
+
+    /** What came of beginning one, across a redraw. */
+    private var said: String? = null
+
+    /**
+     * **Begin the rotation** ([Kernel.beginRotation]).
+     *
+     * A new identity is minted here and the one this device holds signs
+     * for it. **The phrase is not asked for**: design §9.0 has the old key
+     * in hand wherever a rotation carries its inheritance, and this device
+     * has it — asking a person to type a phrase it already holds would
+     * prove nothing and put the phrase through a keyboard.
+     *
+     * **The mark is written before anything opens**, so a process dying
+     * here leaves a rotation some later start finishes rather than a key
+     * and an archive that do not match ([Rotation.start]).
+     */
+    private fun rotate() {
+        val prior = Kernel.heldSeedsForRotation(this)
+        if (prior == null) {
+            said = "This device holds no key to rotate from."
+            draw()
+            return
+        }
+        val master = ByteArray(Identity.ENTROPY_BYTES).also {
+            java.security.SecureRandom().nextBytes(it)
+        }
+        val fresh = Identity.seeds(master)
+        master.fill(0)
+        said = if (Kernel.beginRotation(this, fresh, prior)) {
+            "The rotation has begun. It completes on this start, and any later one " +
+                "if this is interrupted."
+        } else {
+            "This device's own storage refused it, and nothing was begun."
+        }
+        draw()
     }
 
     private fun heading(t: String) = body.addView(

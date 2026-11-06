@@ -1079,10 +1079,10 @@ impl Participant {
     /// the standing rather than giving up the unlinkability.
     ///
     /// **The archive is optional, and its absence is ordinary**
-    /// (`light-client-requirements.md` §6): *recovery restores standing
+    /// (`light-client-requirements.md` §6): *a rotation restores standing
     /// and not history*. Where the person kept their own backup it is
     /// opened here under the prior identity and the old lines come back
-    /// with it; where they did not, the recovery still carries their
+    /// with it; where they did not, the rotation still carries their
     /// standing and the history is simply gone. **Neither is presented as
     /// the other**: what came back is `old_lines`, and a screen that found
     /// none says so.
@@ -1095,7 +1095,7 @@ impl Participant {
     /// Both copies of a seed are wiped on this side as soon as they are
     /// read, as [`Participant::start`] wipes its own.
     #[uniffi::constructor]
-    pub fn recovering(
+    pub fn rotating(
         seeds: Vec<u8>,
         prior_seeds: Vec<u8>,
         backup: Option<Vec<u8>>,
@@ -1275,7 +1275,7 @@ impl Participant {
     pub fn save(&self) -> Result<(), Refused> {
         crate::diag::call("save", || {
             // a poisoned lock is a thread that panicked mid-save, and the
-            // next save overwriting whatever it left is the recovery
+            // next save overwriting whatever it left is the repair
             let _one = self.saving.lock().unwrap_or_else(|e| e.into_inner());
             let bytes = self.handle.with_blocking(|c| {
                 let held = c.payload.sessions.held().len();
@@ -3593,9 +3593,9 @@ impl Participant {
         })
     }
 
-    // ---- recovery (A1's third door, E4) --------------------------------
+    // ---- key rotation (A1's third door, E4) --------------------------------
 
-    /// **The prior key this device is recovering from**, where it is one.
+    /// **The prior key this device is rotating from**, where it is one.
     ///
     /// Nothing else here answers until this does: every call below is
     /// about a key that is being succeeded, and a device holding no prior
@@ -3608,7 +3608,7 @@ impl Participant {
         })
     }
 
-    /// **As a recovery verifier, the query about the person in front of
+    /// **As a rotation's verifier, the query about the person in front of
     /// me** (design §9.1), under this meeting's pre-commitment and
     /// addressed to myself.
     ///
@@ -3626,13 +3626,13 @@ impl Participant {
         })
     }
 
-    /// **As a recovery verifier: the one question of the meeting**
+    /// **As a rotation's verifier: the one question of the meeting**
     /// (design §9.1), and on yes the hybrid response naming the prior key.
     ///
     /// **The recognition is the person's**, not the device's: this asks
     /// through the platform's own operator and refuses on anything but
     /// yes. The response says *personal knowledge* and *met*, which is
-    /// what a recovery verifier has and all they have.
+    /// what a rotation's verifier has and all they have.
     pub fn recognise(
         &self,
         query: Vec<u8>,
@@ -3650,11 +3650,11 @@ impl Participant {
         })
     }
 
-    /// **As the recovering subject: take a verifier's answer**, verified
+    /// **As the rotating subject: take a verifier's answer**, verified
     /// hybrid under that verifier and held.
     ///
     /// Refused where it is not about me, where it answers a query I did
-    /// not consent to, or where it names another prior key: a recovery
+    /// not consent to, or where it names another prior key: a rotation
     /// gathers recognitions of *one* predecessor, and a response about
     /// another is not evidence of this one.
     pub fn take_recovery_response(&self, bytes: Vec<u8>) -> Result<(), Refused> {
@@ -3664,12 +3664,12 @@ impl Participant {
         })
     }
 
-    /// **As the recovering subject: the block the adoption carries**
+    /// **As the rotating subject: the block the adoption carries**
     /// (design §9.1) — the old key's successor statement over prior, new
     /// and patron, with the recognitions gathered — and the old archive's
     /// head where there is one.
     ///
-    /// **Refused until somebody has recognised them.** A recovery with no
+    /// **Refused until somebody has recognised them.** A rotation with no
     /// match in it is a claim about a person that nobody made.
     pub fn recovery_block(&self, patron: Id) -> Result<RecoveryBlock, Refused> {
         crate::diag::call("recovery_block", || {
@@ -3739,7 +3739,7 @@ pub struct Evaluation {
     pub joint: f64,
 }
 
-/// The block a recovery adoption carries, and the head of the archive the
+/// The block a rotation adoption carries, and the head of the archive the
 /// prior key left behind.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct RecoveryBlock {

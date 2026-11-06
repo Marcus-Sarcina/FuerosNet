@@ -253,7 +253,7 @@ object Disclosure {
             listOf(
                 Item(
                     "PRD-09",
-                    "The archive you are recovering is complete only for the period of time " +
+                    "The archive you are restoring is complete only for the period of time " +
                     "covered and does not preclude the existence of additional transactions " +
                     "not recorded here.",
                 ),

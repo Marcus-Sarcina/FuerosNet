@@ -222,7 +222,7 @@ impl Signers {
         self.commit(TYPE_PRESENCE, &body, &[a, b, "witness"])
     }
 
-    /// A recovery adoption (`wire-format.md` §4.1): `new` claims `old`'s
+    /// A rotation adoption (`wire-format.md` §4.1): `new` claims `old`'s
     /// history under `patron`, placed at `(anchor, path, series)`, with
     /// `verifier`, a prior counterparty, recognising the holder.
     pub fn recover(

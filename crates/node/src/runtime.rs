@@ -130,7 +130,7 @@ impl Adjacency for LiveAdjacency {
 }
 
 /// Carry a supersession the view has just stored into the serving state
-/// (`infra-client-requirements.md` §2, design §12.6.5): a validated recovery
+/// (`infra-client-requirements.md` §2, design §12.6.5): a validated rotation
 /// or reissue ends the old credential's sessions and queue at the transport
 /// as it does in the table.  Anything but a verified transaction of those
 /// two kinds carries nothing.

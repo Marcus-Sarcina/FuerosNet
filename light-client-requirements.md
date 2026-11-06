@@ -268,7 +268,7 @@ shell exists.
 - **Let the user set their own retention horizon, and tell them what it costs.**
   Declining to release a key enforces retention unilaterally against a
   compliant holder, but every counterparty cut off is one that can no longer
-  answer `photo_match` if the user later needs recovery, leaving the weaker
+  answer `photo_match` if the user later needs a rotation, leaving the weaker
   `personal_knowledge` basis (design §9). Say so when the policy is set, not
   afterwards.
 - **Do not present withholding as private.** It is indistinguishable from
@@ -440,7 +440,7 @@ job.
   derived from your own identity and the ceremony's id when you want it (design
   §7.5.2.6), so what a pruned record must still yield is the record and its
   ceremony-id, not a secret stored beside it. Deleting it with the chain would discard the evidence a later
-  adoption and a later recovery both depend on, and would put a patron's willingness
+  adoption and a later rotation both depend on, and would put a patron's willingness
   to countersign a series reissue astride evidence design §6.4 says it must not gate.
 - **Keep retention and disclosure as separate controls.** Choosing how far back to
   *disclose* must never delete anything: disclosure is reversible and can be widened
@@ -500,17 +500,17 @@ job.
   which siblings replicate (design §3.4) and which is the wrong place for
   something nobody else has any business holding. Encrypted under the
   identity's own key (design §13.7.1), it is as protected as the records
-  beside it, and it makes a restore a whole one: a replacement device recovers
+  beside it, and it makes a restore a whole one: a replacement device regains
   the ability to administer, not only to participate. It is also the piece whose
   loss is recoverable outside this network, a provider having its own account
-  recovery and its own facility to withdraw and reissue.
+  recovery of its own and its own facility to withdraw and reissue.
 - **Restoring your own archive from a holder is an act of trust, and the
   interface must say so.** A client that lost its archive does not know its own
   head, so it fetches from the newest record the holder claims
   (`wire-format.md` §7.9) — the chain verifies internally, its completeness does
   not, and the same reduced footing extends through the whole lost-archive path:
   re-adoption on a fresh series presents no history and rests on the patron's
-  personal judgment. Surface both as what they are: recovery on trust rather
+  personal judgment. Surface both as what they are: a restore on trust rather
   than on verification, and never present a restored archive as
   verified-complete.
 
@@ -965,13 +965,13 @@ anchor up in, and it is what you hand onward in a bundle (§1.1,
 
 ## 6. Warnings before irreversible or surprising actions
 
-- **Say that recovery restores standing and not history** [author,
-  2026-10-16]. Presence-based recovery returns the key; the archive comes
+- **Say that a rotation restores standing and not history** [author,
+  2026-10-16]. A presence-anchored key rotation returns the key; the archive comes
   from the person's own backup or not at all, because a protocol path that
   restored it would hand the same history to whoever completes the same
-  recovery (design §10.2, §22). So a client that has recovered an identity
+  rotation (design §10.2, §22). So a client that has rotated an identity
   says what came back and what did not, and a restored archive is shown as
-  recovered on trust rather than as verified-complete (PRD-09).
+  restored on trust rather than as verified-complete (PRD-09).
 
 - **Encourage a second independent adoption early**, while the user can still reach
   one freely. Subnet plurality is what defeats patron eclipse (design §18.4), and
@@ -1071,9 +1071,9 @@ anchor up in, and it is what you hand onward in a bundle (§1.1,
   of a replication commitment here**: §4.4's field is optional and what it
   promises is bytes held for a peer (design §3.4), which is an operator's
   offer and not this meeting's.
-- **A recovery adoption and a transfer are assembled by their own subjects**
+- **A rotation adoption and a transfer are assembled by their own subjects**
   (design §9.0, §6.2), who hold the material that makes them. A body carrying
-  somebody else's recovery block or transfer statement is not one you were shown
+  somebody else's `Recovery` block or transfer statement is not one you were shown
   to sign.
 - **Ask which subnet before you invite, and say which subnet before you
   accept** [author, 2026-10-15]. A patron holding positions in several subnets
@@ -1282,7 +1282,7 @@ client carried would be.
   resource would undo the resource layer's pairwise separation. The secret
   is kept with the device's own state (§9) and **never in the backup**
   [author, 2026-10-31]: a device restored from its phrase signs under a
-  new key, which is the recovery policy — an application key is not the
+  new key, which is the rotation policy — an application key is not the
   identity and comes back with nothing. Deriving it from the identity root
   instead would bring it back with the phrase and tie every claim a
   resource holds to the one recoverable secret, which is the opposite of
@@ -1585,11 +1585,11 @@ one that is true.
   identity's own signing seed under one fixed label, hands the public line
   to the machine in the script it runs once, and keeps nothing: **the
   phrase that restores the identity restores control of the machines it
-  launched**, which is the only recovery story a rented node can have
+  launched**, which is the only restore story a rented node can have
   once the launching device is gone. **It is one key for this identity,
   not one per machine**, since the machines are already named together by
   their endpoint records and a key per machine would want a label the
-  recovery path has to carry. **It is not the identity's key and signs
+  restore path has to carry. **It is not the identity's key and signs
   nothing for it**: a derived key cannot be walked back to the seed, it is
   no part of the protocol, and ordinary tools read it as the ordinary ssh
   key it is. **Show it to the operator rather than storing it**: the

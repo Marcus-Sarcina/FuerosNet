@@ -3284,7 +3284,7 @@
    },
    {
     "where": "wire-format.md §1.3",
-    "text": "Verifier responses per recovery | 32"
+    "text": "Verifier responses per rotation | 32"
    }
   ],
   "given": "Three at-ceiling objects for rows whose corpus coverage is a rejection only: (a) a Capabilities map carrying one value of exactly 1024 encoded bytes (B-caps-value-1025 is the rejection; no 1024 accept exists); (b) a normal presence record carrying 32 verifier responses from 32 distinct synthetic verifiers, 16 per subject, sorted as §4.5 requires (U-responses-33 is the unit-recipe rejection); (c) a recovery adoption carrying 32 verifier responses (U-recovery-responses-33 is the rejection). Identities from the keygen recipe.",
@@ -6043,10 +6043,10 @@
    }
   ],
   "given": "A release build.",
-  "when": "A reviewer starts a plain rotation, then a recovery.",
-  "then": "The plain rotation warns that prior standing is abandoned; the recovery states that the link to the prior identity will be published within the horizon.",
+  "when": "A reviewer starts an identity path that links the new credential to prior history, and one that does not.",
+  "then": "The unlinked path warns that prior standing is abandoned — the new key arriving as a genuinely-new user, vouched for afresh, and not that the member loses the status they hold; the linked path states that the link to the prior identity will be published within the horizon.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": "The documents call these identity paths and not rotations (`light-client-requirements.md` §6); design §9.0 fixes the vocabulary [author, 2026-11-05]: a key rotation replaces the key a subnet knows, a series reissue keeps the key and the data, a restore brings data back to the key that held it, and `Recovery` is the wire block alone. The linked path is a rotation carrying one."
  },
  {
   "id": "PRD-04",
@@ -6066,9 +6066,9 @@
   ],
   "given": "A release build with a user holding one adoption.",
   "when": "A reviewer uses the client through its first sessions.",
-  "then": "The client prompts, unobtrusively and before any eclipse condition, that a second independent adoption protects against a single patron.",
+  "then": "The client prompts, unobtrusively, that a second independent adoption protects against a single patron; it is absent once a second is held.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": "The eclipse condition is out of the sequence [author, 2026-11-05]: *\"It is a theoretical attack, not an intended feature of the network.\"* So what is testable is the prompt and when it is absent, not its timing against an attack nobody intends to stage. design §18.4 still prices eclipse and `light-client-requirements.md` §6 still gives it as the reason plurality is worth having early; neither is a condition a test waits for."
  },
  {
   "id": "PRD-05",
@@ -6167,7 +6167,7 @@
   "id": "PRD-09",
   "area": "product",
   "gap": "product",
-  "title": "Present a restored archive as recovered on trust, never as verified-complete",
+  "title": "Present a restored archive as restored on trust, never as verified-complete",
   "milestone": "manual",
   "kind": "manual",
   "spec": [
@@ -8041,7 +8041,7 @@
   "rule": [
    {
     "where": "wire-format.md §4.1",
-    "text": "A recovery requires both, always: the old key and a present human."
+    "text": "A rotation requires both, always: the old key and a present human."
    },
    {
     "where": "wire-format.md §4.1",
@@ -11936,7 +11936,7 @@
   "rule": [
    {
     "where": "design §9.0.2",
-    "text": "a member receiving two competing recovery adoptions for the same prior_key does not hold both as current — it resolves to one, by which patron it trusts"
+    "text": "a member receiving two competing rotation adoptions for the same prior_key does not hold both as current — it resolves to one, by which patron it trusts"
    }
   ],
   "given": "O's table holding K_old under P; two recovery adoptions, K_a under P_a and K_b under P_b, each with prior_key = K_old and each passing the evidence gate; which of P_a and P_b O trusts more is O's own policy, fixed by no document, and the test sets it as a parameter.",
@@ -14145,7 +14145,7 @@
   "rule": [
    {
     "where": "light-client-requirements.md §7",
-    "text": "A recovery adoption and a transfer are assembled by their own subjects"
+    "text": "A rotation adoption and a transfer are assembled by their own subjects"
    }
   ],
   "given": "A subject that has gathered recognition and can assemble a recovery block.",

@@ -41,7 +41,7 @@ async fn a_node_serves_its_own_archive_on_request_and_an_empty_batch_for_another
     else {
         panic!("C attaches to N")
     };
-    // head absent: the holder's newest record, the recovery case
+    // head absent: the holder's newest record, the restore case
     let req = ArchiveRequest {
         subject: kh("bob"),
         frontier: Vec::new(),

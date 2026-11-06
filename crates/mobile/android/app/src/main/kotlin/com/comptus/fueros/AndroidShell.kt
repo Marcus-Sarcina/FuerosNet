@@ -190,6 +190,20 @@ class AndroidShell(private val context: Context) :
         }
     }
 
+    /**
+     * **Forget what [seal] wrote**, which a rotation's prior seeds need:
+     * they are the one thing held across a rotation that must not linger
+     * once it is done (design §23.3 keeps a seed off every wire; keeping a
+     * superseded one on disk afterwards would be the same mistake at
+     * rest).
+     *
+     * Whether nothing is there now, which is true where there never was.
+     */
+    fun forget(name: String): Boolean {
+        val f = File(dir, name)
+        return !f.isFile || f.delete()
+    }
+
     /** What [seal] wrote under `name`, or nothing. */
     fun unseal(name: String): ByteArray? {
         val f = File(dir, name)

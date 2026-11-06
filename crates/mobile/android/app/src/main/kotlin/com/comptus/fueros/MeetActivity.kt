@@ -947,6 +947,15 @@ class MeetActivity : Activity() {
             para("• None nominated. With no horizon to draw from, neither side had anyone to ask; the record carries that it had none.")
             return
         }
+        // **the split, before the list** (PRD-19): how many attested and
+        // whose nominees they were is what an evaluator weighs later, and
+        // a reader should not have to count a list to learn it
+        val attested = m.attested()
+        Witnessing.split(
+            mine = attested.count { it.mine },
+            others = attested.count { !it.mine },
+            theirs = m.counterpartyName,
+        )?.let { para(it) }
         w.forEach { n ->
             val by = if (n.mine) "nominated by you" else "nominated by ${m.counterpartyName}"
             val answer = when (n.answer) {

@@ -200,7 +200,7 @@ malformed, not merely unusual.
 | Envelope **logical signers** | **Derived, not a constant.** The sum of the transaction type's per-role bounds. For a presence record: 2 participants + 16 witnesses = **18**. **Verifiers are not envelope signers.** Their signatures are embedded evidence inside the body (§3.5, design §5.1) |
 | Envelope `COSE_Signature` **entries** | **Twice the logical-signer bound**, since each contributes one classical and one PQ entry (§3.5). For a presence record, **36** |
 | Archive subset references | 256 |
-| Verifier responses per recovery | 32 |
+| Verifier responses per rotation | 32 |
 | Witnesses per presence record | 16 |
 | Path length | 24 nibbles (depth 24 at f=10 exceeds any plausible network) |
 | Prekey bundle blob | 4 KB. A PQXDH bundle is an ML-KEM-768 encapsulation key (1,184 B) plus signed prekeys and their signatures — roughly 1.5–2 KB, so this is a DoS ceiling with headroom rather than a capacity figure |
@@ -976,7 +976,7 @@ Scope = uint / [uint, uint] / [uint, [ + keyhash ]]
 
 ### 4.1 Adoption (type 1)
 
-Subsumes key rotation and recovery.
+Subsumes key rotation.
 
 ```
 {
@@ -999,15 +999,15 @@ Subsumes key rotation and recovery.
                        ; holds the key is recipient state and a signed object
                        ; cannot depend on it. Senders include it when they believe
                        ; the recipient may lack the key
-  6: ? Recovery,       ; present iff this is a recovery adoption. It is also
+  6: ? Recovery,       ; present iff this is a rotation adoption. It is also
                        ;   that adoption's EVIDENCE (design §6.1.1): a
-                       ;   recovery carries its presence half inside itself,
+                       ;   a rotation carries its presence half inside itself,
                        ;   so fields 8 and 9 are absent
   7: ? txid,           ; archive HEAD presented (design §16.7), one hash, not
                        ; a list. The chain gives the rest
   8: ? txid,           ; proof-of-presence record between these two parties.
                        ;   EXACTLY ONE of fields 6, 8 and 9 is present (design
-                       ;   §6.1.1) — a recovery's evidence is its own block;
+                       ;   §6.1.1) — a rotation's evidence is its own block;
                        ;   none of the three, or more than one, is malformed
   9: ? Transfer        ; present iff this adoption is a transfer — the former
                        ;   patron vouching in place of a meeting
@@ -1024,7 +1024,7 @@ Transfer = {
   1: keyhash,          ; the FORMER patron, whose signature stands where a
                        ;   proof of presence otherwise would (design §6.1.1)
   2: COSE_Sign         ; by that former patron. COSE_Sign rather than
-                       ;   COSE_Sign1 for the same reason field 3 of Recovery
+                       ;   COSE_Sign1 for the same reason field 3 of `Recovery`
                        ;   is: the signer is hybrid and one logical signer
                        ;   contributes two entries (§3.5)
 }
@@ -1052,7 +1052,7 @@ two-signer types the envelope layer agrees independently: a required signer set
 collapsing to one identity collides with §3.5's no-duplicate-signers rule.
 
 `Recovery` is present iff the adoption claims a predecessor's history — the
-recovery adoption of design §9, and absent otherwise. A **plain rotation
+rotation adoption of design §9, and absent otherwise. A **plain rotation
 carries nothing** (design §9): on the wire it is an ordinary adoption,
 indistinguishable from a fresh one, and no `Recovery` appears. **There are no
 variants of the block itself**: every claim of predecessor history carries both
@@ -1073,14 +1073,14 @@ signature verifies and the assembly still means something other than it claims:
 
 - **A verifier's authentication inside a `Recovery` block is HYBRID**, not
 classical — **field 9 only.** Every other embedded signature is classical because
-its relevance expires; **a recovery's does not**: it induces a permanent identity
+its relevance expires; **a rotation's does not**: it induces a permanent identity
 change that a later evaluator cannot revisit, so a forged classical `match` would sit
 inside an authentic post-quantum record indefinitely (design §5.1). Field 9 becomes an
 untagged detached `COSE_Sign` carrying one Ed25519 and one ML-DSA-65 entry (§4.5).
 
-  **Field 7 stays classical**, and the reason is not cost. A recovery response's
+  **Field 7 stays classical**, and the reason is not cost. A rotation response's
   `subject` MUST equal the newly adopted node, so **field 7 is signed by the very key
-  an attacker mounting a fraudulent recovery already controls** — hybridising it
+  an attacker mounting a fraudulent rotation already controls** — hybridising it
   protects nothing. Field 9 forges a *verifier's* attestation, which is the attack.
   Field 7's protection is anti-oracle and expires with the ceremony window; field 9's
   is permanent. Cost follows: ~10 responses at 3,373 B is ~34 KB, one pair each.
@@ -1107,19 +1107,19 @@ untagged detached `COSE_Sign` carrying one Ed25519 and one ML-DSA-65 entry (§4.
   not. Stated here because it is the half of that principle a **patron can
   check from the block alone** — prior-counterparty status generally is not
   validator-visible, but this inequality is, and without it an attacker holding
-  the old key satisfies both of recovery's factors by controlling one new
+  the old key satisfies both of a rotation's factors by controlling one new
   identity.
 - **Duplicate responses from one verifier are malformed**, as they are in a
   presence record (§4.5) and for the same reason: one verifier occupies one slot.
-- **The querier is the verifier** (design §9.1): recovery runs §7.3 in reverse,
+- **The querier is the verifier** (design §9.1): a rotation runs §7.3 in reverse,
   the subject standing in front of the party answering, so each response's
   `query_id` derives from a `VerificationQuery` whose field 2 names the
   responding verifier — a mismatch is malformed where the query is held. The
-  pre-commitment in that query is the recovery meeting's own: the meeting opens
+  pre-commitment in that query is the rotation meeting's own: the meeting opens
   as a ceremony (design §7.5.2) and yields this block instead of a presence
   record.
 - **`selection_basis` MUST be 0 (met) in every response here** [2026-09-02]: a
-  recovery verifier is by definition a prior counterparty who recognises the
+  a rotation's verifier is by definition a prior counterparty who recognises the
   subject (design §9.1). Values 1 and 2 are malformed inside a `Recovery`
   block.
 - **An old-key proof and verifier responses both appear, always.** They are
@@ -1127,11 +1127,11 @@ untagged detached `COSE_Sign` carrying one Ed25519 and one ML-DSA-65 entry (§4.
   **neither substitutes for the other**, which is why both are required rather than
   weighed against a threshold.
 
-**A recovery requires both, always: the old key and a present human.** Field 3
+**A rotation requires both, always: the old key and a present human.** Field 3
 carries the prior identity's own signature and field 2 carries **at least one
-`match`**, and neither substitutes for the other. **Key alone is not recovery**,
+`match`**, and neither substitutes for the other. **Key alone is not a rotation**,
 because a thief holds the key too and could rotate with it; **presence alone is not
-recovery**, because a verifier can be mistaken or lying and nothing checks it.
+a rotation**, because a verifier can be mistaken or lying and nothing checks it.
 Together they cost an attacker both the secret and a person willing to assert a
 meeting that did not happen.
 
@@ -1222,15 +1222,15 @@ no binding.
 **The evidence fields — 6, 8 and 9, and exactly one is present.** design
 §6.1.1: an adoption rests on a proof of presence between the two parties
 (field 8, that record's `txid`), on the former patron's countersignature
-(field 9, a `Transfer` block), or on a recovery's own evidence (field 6, a
+(field 9, a `Transfer` block), or on a rotation's own evidence (field 6, a
 `Recovery` block, whose responses are the presence half). **An adoption
 carrying none of the three is malformed**, and one carrying more than one is
 malformed too; they are alternatives, and an object offering two answers to
 the same question invites a validator to pick.
 
-**A recovery takes no separate reference and MUST NOT carry one.** Its
+**A rotation takes no separate reference and MUST NOT carry one.** Its
 presence half is embedded rather than named: `Recovery` field 2's responses
-come from a prior counterparty who met the subject again. A recovery adoption
+come from a prior counterparty who met the subject again. A rotation adoption
 carrying field 8 or field 9 beside field 6 is malformed on the same rule as
 any other double answer.
 
@@ -1697,7 +1697,7 @@ VerifierResponse = {
                        ; identity X can be embedded under a Recovery claiming old
                        ; identity Y, and every signature still verifies. Without it the verifier's signature never
                        ; names the old identity it is attesting continuity with,
-                       ; and the assertion the recovery rests on is unsigned
+                       ; and the assertion the rotation rests on is unsigned
   9: COSE_Sign1 / COSE_Sign
                        ; BY THE VERIFIER. Payload: canonical CBOR of fields 1-8
                        ; and 10 of THIS map. External_aad = "rhtn/1:verifier".
@@ -1866,7 +1866,7 @@ separately here.
 | Structural verification (§3) | **None.** |
 | Adoption's proof-of-presence reference (§4.1 field 8) | **None.** Confirms the record exists and names these two parties |
 | Archive fetch by a prospective patron (§7.9) | **Holder's choice.** The only exchange with a use for location |
-| Presence-based recovery (§4.1 `Recovery`) | **None.** Reads field 9 |
+| Presence-anchored key rotation (§4.1 `Recovery`) | **None.** Reads field 9 |
 | Late verifier response (§7.4) | **None.** References `txid` |
 | Capture key grant (§7.3) | **None.** References `txid` |
 
@@ -1905,7 +1905,7 @@ node and its patron.
 cannot be advanced by the node's key alone, so a party holding a stolen key can
 exhaust the current counter and cannot escape into a fresh series, while the
 legitimate holder can, because their patron will sign for them and not for a thief.
-This is the same social check adoption and recovery already rest on, applied to the
+This is the same social check adoption and rotation already rest on, applied to the
 one operation that repairs an exhausted or poisoned counter.
 
 **Seal the old series before leaving it, and field 3 is what records that.** A
@@ -2263,7 +2263,7 @@ verifier's signature, and no earlier element carried it — the specified
 response was unconstructible from the specified request. It travels outside
 every signature because the transport already authenticates the requester, who
 is the selector making the claim; the verifier echoes it into field 10 and
-signs the echo. The recovery form is untouched: there the verifier is its own
+signs the echo. The rotation form is untouched: there the verifier is its own
 querier (§4.1) and no type-4 request travels.
 
 **The querier a verifier limits and attributes is the party the transport
@@ -2709,7 +2709,7 @@ names a key other than the one that signed field 7 is malformed.
 participant-authenticated routing information design §12.1 confines to the
 participant, and it never binds an identity to a key on the issuer's signature
 alone. A relying party addresses a key it holds by participant-authored evidence:
-a `SignedLocator` (§2.3) or a recovery adoption (§4.1), whose successor statement
+a `SignedLocator` (§2.3) or a rotation adoption (§4.1), whose successor statement
 and verifier responses are what author a key change (design §9.0.2). A field 2 that
 differs from such a key is a rotation-or-fork *signal*, resolved by that evidence
 or by re-introduction, never a redirect: an inquirer holding one issuer's differing
@@ -3375,7 +3375,7 @@ ArchiveRequest = {
   2: ? [ + txid ],     ; the frontier to walk back from: one txid for an
                        ;   unmerged chain, several where a merge left more than
                        ;   one branch unreturned (§3.1). ABSENT: the holder's
-                       ;   newest record for this subject — the recovery case,
+                       ;   newest record for this subject — the restore case,
                        ;   where the requester lost the one thing this field
                        ;   asks for
   3: uint,             ; max_records, 1..256
@@ -4657,7 +4657,7 @@ Same framing as stream 0 (§8.0), same rule — **unknown request types are reje
 on a bidirectional stream**, unlike unknown control frames which are skipped, but
 **a larger bound: 256 KB — exactly 262,144 bytes.** Stream 0's 64 KB cannot carry what
 bidirectional streams exist to fetch: a maximum-signer presence record is ~65 KB
-before its presentation slots, and a recovery adoption ~42 KB. Control frames stay at
+before its presentation slots, and a rotation adoption ~42 KB. Control frames stay at
 64 KB — nothing on stream 0 approaches it. A control frame arrives on a shared stream where skipping preserves the
 session; a bidirectional stream *is* the request, so a type nobody understands has
 no continuation to preserve.
@@ -5342,7 +5342,7 @@ column.
 | Object | Classical | Post-quantum |
 |---|---|---|
 | Adoption | — | **~8 KB** |
-| Adoption carrying a recovery (~10 responses) | — | **~42 KB** — ~8 KB plus ~34 KB of hybrid verifier authentications (§4.1, §4.5). The second-largest object in the protocol, and rare by construction |
+| Adoption carrying a `Recovery` (~10 responses) | — | **~42 KB** — ~8 KB plus ~34 KB of hybrid verifier authentications (§4.1, §4.5). The second-largest object in the protocol, and rare by construction |
 | Adoption carrying a transfer | — | **~11 KB** — ~8 KB plus one hybrid logical signer at 3,373 B for the former patron's countersignature (§4.1). The `txid` alternative in field 8 costs 32 B, so a transfer is the more expensive of the two evidence routes |
 | Departure | — | **~4 KB** |
 | Disavowal | — | **~4 KB** |

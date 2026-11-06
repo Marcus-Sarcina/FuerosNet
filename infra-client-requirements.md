@@ -85,7 +85,7 @@ documents. Where a requirement leaves a visible artifact, that is noted in place
   device, arrival time. Nothing further.
 - **Stop serving a binding you have verified superseded** (design §12.6.5)
   [2026-09-03]: authenticated supersession evidence — a verified reissue chain,
-  a validated recovery — ends the old credential's service. Terminate its
+  a validated rotation — ends the old credential's service. Terminate its
   sessions and deliver nothing further to it, its queue included. Fail-open is
   for staleness you cannot resolve, never for knowledge you hold.
 - **Do not log queue events**, and **state what your deployment actually does** —
@@ -100,7 +100,7 @@ documents. Where a requirement leaves a visible artifact, that is noted in place
   grandpatron and down-line issuance paths when the patron is unavailable (design
   §12.6.5.1).
 - **Issue fresh, never extend stale.**
-- **Issue only for the key you currently record.** A recovery adoption you
+- **Issue only for the key you currently record.** A rotation adoption you
   have received overwrites your record of that subject (design §9.0.2), and
   after it you have nothing to issue for the old key and MUST NOT.
   **Nobody can check this for you, and this is a commitment rather than an
@@ -182,7 +182,7 @@ guarantee, which is a floor rather than a ceiling.
   came to rather than the act** [author, 2026-09-23]. Its effect on the
   topology, the counterparties it adds to what you can reach, and what it
   moves in your own representation of their trust: those you keep. The
-  transaction you do not. Where a key is later rotated or recovered, what
+  transaction you do not. Where a key is later rotated, what
   connects to the new key is those accumulated representations and not a
   history of the acts behind them.
 - **A copy of a transaction sits in the archive of every node party to it,
@@ -749,7 +749,7 @@ whatever a signature said. **So the envelope's signature is carried and not
 verified here**, and the narrower claim is the one to make — not the wider one
 worded loosely. What the narrower claim does not cover is anything that outlives
 the connection carrying it: a record verifiable at a node it did not come from, a
-receipt an operator can hold up afterwards, an envelope recovered from a backup,
+receipt an operator can hold up afterwards, an envelope restored from a backup,
 and a provenance that survives a transport key being rolled. Each of those wants
 the instance's own signature checked before the record state moves, and that waits
 on a key contract — introduction, proof of possession, algorithm, rotation,

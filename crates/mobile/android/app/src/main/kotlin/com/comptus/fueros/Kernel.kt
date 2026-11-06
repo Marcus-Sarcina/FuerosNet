@@ -2274,9 +2274,63 @@ object Kernel {
         val known = provision?.optJSONArray("known")
             ?.let { a -> (0 until a.length()).map { unhex(a.getString(it)) } }
             ?: listOf()
-        val p = call("Participant.start", { e -> front.setStatus("kernel refused: ${e.reason}"); null }) {
-            Participant.start(heldSeeds(shell), known, platformOf(shell))
-        } ?: return
+        // **a mark outranks the seeds** ([Rotation.start]): a rotation that
+        // began and may not have finished is performed here, because
+        // `Participant.rotating` opens the new identity on this device's
+        // own storage — so between beginning one and sealing its new seeds
+        // the archive belongs to a key the seeds do not name, and a start
+        // that trusted the seeds would open the wrong identity on the
+        // right archive
+        val mark = shell.unseal(Rotation.MARK_NEW)
+        val p = when (Rotation.start(shell.unseal("seeds")?.size == 64, mark?.size == 64)) {
+            is Rotation.Start.Unstarted -> {
+                front.setStatus("no identity on this device")
+                return
+            }
+            is Rotation.Start.Rotate -> {
+                // bound here rather than asserted: the predicate above read
+                // the same value, and a `!!` would say this code knows
+                // something the compiler cannot check
+                val fresh = mark ?: return
+                val prior = shell.unseal(Rotation.MARK_PRIOR)
+                if (prior == null || prior.size != 64) {
+                    // **half a mark is no mark**: without the prior key
+                    // there is no rotation to make (`wire-format.md` §4.1
+                    // admits no variant carrying one half), so the mark is
+                    // dropped and the device starts as it was
+                    shell.forget(Rotation.MARK_NEW)
+                    front.note("· a rotation was begun without its prior key and was dropped")
+                    call("Participant.start", { e -> front.setStatus("kernel refused: ${e.reason}"); null }) {
+                        Participant.start(heldSeeds(shell), known, platformOf(shell))
+                    } ?: return
+                } else {
+                    val out = call("Participant.rotating", { e ->
+                        front.setStatus("the rotation was refused: ${e.reason}"); null
+                    }) {
+                        Participant.rotating(fresh.copyOf(), prior.copyOf(), null, known, platformOf(shell))
+                    }
+                    prior.fill(0)
+                    if (out == null) return
+                    // **the new seeds become the identity only now**, and
+                    // the mark goes after them: cleared first and the
+                    // process dying would leave an archive nothing names
+                    if (!shell.seal("seeds", fresh)) {
+                        front.setStatus("the rotation held but its seeds could not be kept")
+                        return
+                    }
+                    shell.forget(Rotation.MARK_PRIOR)
+                    shell.forget(Rotation.MARK_NEW)
+                    fresh.fill(0)
+                    Diag.event("rotation.done")
+                    front.note("· the rotation completed and this device holds its new key")
+                    out
+                }
+            }
+            is Rotation.Start.Ordinary ->
+                call("Participant.start", { e -> front.setStatus("kernel refused: ${e.reason}"); null }) {
+                    Participant.start(heldSeeds(shell), known, platformOf(shell))
+                } ?: return
+        }
         participant = p
         show(p, Connection.Detached)
         // the shell's copy of the nouns, from a kernel that is up now
@@ -2648,6 +2702,57 @@ object Kernel {
         }
         val held = p ?: return Result.failure(IllegalStateException("the kernel did not start"))
         return runCatching { held.restoreBackup(blob) }
+    }
+
+    /**
+     * **The seeds this device holds**, for a rotation to sign its
+     * `Recovery` with (design §9.0: *"the old key is in hand wherever the
+     * rotation carries its inheritance, since it signs the `Recovery`"*).
+     *
+     * **The one caller is [beginRotation]'s screen**, and the copy is the
+     * caller's to wipe. Nothing else has business reading these: a seed
+     * crosses no wire (design §23.3), and this returns it only so the
+     * device can sign with the key it already has rather than asking a
+     * person to type a phrase it holds.
+     */
+    fun heldSeedsForRotation(context: Context): ByteArray? =
+        AndroidShell(context.applicationContext).unseal("seeds")?.takeIf { it.size == 64 }
+
+    /**
+     * **Begin a key rotation, in a way a dying process cannot spoil**
+     * (design §9.0, §9.1; PRD-03).
+     *
+     * The two seed pairs are sealed as a mark *before* anything is opened,
+     * and [bringUp] obeys a mark over the sealed seeds — so the rotation
+     * either has not begun or will be finished by some later start, and
+     * there is no state in which the archive on disk belongs to a key
+     * nothing names. The mark is cleared only after the new seeds are the
+     * sealed ones.
+     *
+     * **Both halves or neither**: `wire-format.md` §4.1 admits no variant
+     * of a `Recovery` carrying one, so a mark without its prior key is
+     * dropped rather than half-performed.
+     *
+     * False where custody refused either, and nothing was begun. The
+     * caller's copies are this function's to wipe.
+     */
+    fun beginRotation(context: Context, newSeeds: ByteArray, priorSeeds: ByteArray): Boolean {
+        require(newSeeds.size == 64) { "the kernel's seeds are 64 bytes" }
+        require(priorSeeds.size == 64) { "a prior identity is 64 bytes of seed" }
+        val shell = AndroidShell(context.applicationContext)
+        // the prior key first: a mark whose new seeds landed and whose
+        // prior did not is the half-mark [bringUp] has to drop, so make it
+        // the harder half to be missing
+        if (!shell.seal(Rotation.MARK_PRIOR, priorSeeds)) return false
+        if (!shell.seal(Rotation.MARK_NEW, newSeeds)) {
+            shell.forget(Rotation.MARK_PRIOR)
+            return false
+        }
+        newSeeds.fill(0)
+        priorSeeds.fill(0)
+        Diag.event("rotation.begun")
+        start(context)
+        return true
     }
 
     /** The default name the kernel holds, or null. */

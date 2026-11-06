@@ -328,8 +328,8 @@ const DIRECT_PORT: u16 = 7432;
 /// hold each other's present address.  A chosen value, freely tunable
 /// (design §21.1.1).  **Fifteen minutes is a placeholder to be de-rated
 /// before release** [author, 2026-10-25]: peering is not a bandwidth-
-/// intensive feature, recovery of contacts is not time-sensitive, and a
-/// dataset that dribbles back from one's peers over a day is recovered
+/// intensive feature, restoring contacts is not time-sensitive, and a
+/// dataset that dribbles back from one's peers over a day is restored
 /// well enough.  One minute on the bench, for the reason the witness
 /// window runs thirty seconds: a test cycle at production values would
 /// be prohibitively slow.

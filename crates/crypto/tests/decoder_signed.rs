@@ -306,7 +306,7 @@ fn dec_06_objects_exactly_at_a_ceiling_no_fixture_reaches_are_accepted() {
         "33 responses"
     );
 
-    // (c) a recovery adoption with 32 hybrid responses
+    // (c) a rotation adoption with 32 hybrid responses
     let rec = fixture("P-recovery-adoption").bytes;
     let body = body_of(&rec);
     let kh =

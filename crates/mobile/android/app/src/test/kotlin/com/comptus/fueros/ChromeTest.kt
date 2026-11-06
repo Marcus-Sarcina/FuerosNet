@@ -133,4 +133,32 @@ class ChromeTest {
         assertEquals("a3f21c081234…" to "home", Chrome.foot(null, sub))
         assertEquals("a3f21c081234…" to "home", Chrome.foot(" ", sub))
     }
+    /**
+     * **PRD-04: a second patron is suggested while only one is held.**
+     *
+     * **Nothing here waits for an eclipse** [author, 2026-11-05]: *"It is
+     * a theoretical attack, not an intended feature of the network."* So
+     * what is asked is how many patrons there are, and nothing else.
+     */
+    // acceptance: PRD-04
+    @Test
+    fun a_second_patron_is_suggested_while_one_is_held_and_not_otherwise() {
+        assertTrue("one patron is the case it is for", Chrome.suggestingSecondPatron(1))
+        // nobody with no patron has a second to add
+        assertFalse("no patron, nothing to add to", Chrome.suggestingSecondPatron(0))
+        // and once a second is held it is done, however many follow
+        assertFalse("two is already plurality", Chrome.suggestingSecondPatron(2))
+        assertFalse(Chrome.suggestingSecondPatron(7))
+    }
+
+    // acceptance: PRD-04
+    @Test
+    fun the_suggestion_says_what_a_single_patron_costs() {
+        val said = Disclosure.words(Disclosure.Topic.SECOND_PATRON).joinToString(" ")
+        assertTrue("the words come from the table", said.isNotEmpty())
+        assertTrue("names the single patron: $said", said.contains("single patron"))
+        assertTrue("says what flows through them: $said", said.contains("reachability"))
+        assertTrue("and suggests the remedy: $said", said.contains("second adoption"))
+    }
+
 }

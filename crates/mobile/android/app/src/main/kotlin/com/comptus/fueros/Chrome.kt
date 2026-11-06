@@ -170,6 +170,20 @@ object Chrome {
      * is a number anybody reads, and a four-digit badge would be wider
      * than the orb it sits on.
      */
+    /**
+     * **Whether to suggest a second patron** (PRD-04,
+     * `light-client-requirements.md` §6): a person standing under exactly
+     * one patron reaches the network through one person and their
+     * infrastructure, and a second adoption is what changes that.
+     *
+     * **Not timed against an eclipse** [author, 2026-11-05]: *"It is a
+     * theoretical attack, not an intended feature of the network."* So
+     * this asks only how many patrons are held — suggested at one, absent
+     * at none, because somebody with no patron has nothing to add a second
+     * to, and absent at two or more, because it is then done.
+     */
+    fun suggestingSecondPatron(patrons: Int): Boolean = patrons == 1
+
     fun badge(n: Int): String? = when {
         n <= 0 -> null
         n > 99 -> "99+"

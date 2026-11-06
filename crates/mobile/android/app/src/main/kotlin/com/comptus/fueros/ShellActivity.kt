@@ -437,6 +437,33 @@ class ShellActivity : Activity() {
      * view it is not.
      */
     /**
+     * **The second-patron suggestion, or nothing** (PRD-04).
+     *
+     * Unobtrusive in the same way the backup prompt is: a line and nothing
+     * modal, which a person can act on or scroll past. The words are the
+     * author's, from [Disclosure]; the decision is [Chrome]'s and asks only
+     * how many patrons this key stands under — one line per patron
+     * (`Kernel.lines`).
+     *
+     * **It is not timed against an eclipse** [author, 2026-11-05], that
+     * being a theoretical attack rather than something to wait for.
+     */
+    private fun secondPatronPrompt(): View? {
+        if (!Chrome.suggestingSecondPatron(Kernel.lines().size)) return null
+        val said = Disclosure.words(Disclosure.Topic.SECOND_PATRON)
+        if (said.isEmpty()) return null
+        return TextView(this).apply {
+            textSize = 13f
+            setTextColor(Palette.now.sub)
+            setPadding(
+                Screen.gutter(this@ShellActivity), 0,
+                Screen.gutter(this@ShellActivity), 16,
+            )
+            text = said.joinToString("\n\n")
+        }
+    }
+
+    /**
      * **The backup prompt, or nothing** (PRD-10, PRD-07).
      *
      * Unobtrusive by being a line and a button rather than a dialog: a
@@ -484,6 +511,10 @@ class ShellActivity : Activity() {
                 // is still there, so there is nowhere to keep a count of
                 // having asked
                 backupPrompt()?.let { column.addView(it) }
+                // **and a second patron, where only one is held** (PRD-04):
+                // reaching the network through one person and their
+                // infrastructure is the thing a second adoption changes
+                secondPatronPrompt()?.let { column.addView(it) }
                 column.addView(
                     owed(
                         "Home — every subnet's notices, newest first, each saying where it " +

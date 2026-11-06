@@ -1,4 +1,4 @@
-//! Recovery entries at the patron and the observer (design §9; `wire-format.md`
+//! Rotation entries at the patron and the observer (design §9; `wire-format.md`
 //! §4.1): what a patron countersigns and what it refuses, and what a plain
 //! rotation carries.
 
@@ -34,7 +34,7 @@ fn a_recovery_whose_successor_statement_names_another_successor_or_patron_is_not
     let (w, mut p, _fab) = patron();
     let back = [rhtn_archive::genesis(&kh("carol"))];
     let bindings = p.table.bindings().len();
-    // the statement lifted from a recovery of another new key
+    // the statement lifted from a rotation of another new key
     let lifted = recovery_block_for("bob", "alice2", "alice", "w2");
     let body = p
         .propose_adoption(&kh("carol"), Evidence::Recovery(lifted), 3, &back)
@@ -44,7 +44,7 @@ fn a_recovery_whose_successor_statement_names_another_successor_or_patron_is_not
             .is_none(),
         "names a different successor"
     );
-    // the statement lifted from a recovery under another patron
+    // the statement lifted from a rotation under another patron
     let lifted = recovery_block_for("bob", "carol", "w2", "w2");
     let body = p
         .propose_adoption(&kh("carol"), Evidence::Recovery(lifted), 3, &back)
@@ -219,7 +219,7 @@ fn the_chain_is_presented_when_asked_and_never_propagated() {
     assert!(s.present_chain(&kh("carol")).is_empty());
 }
 
-/// **A recognised recovery ends the superseded key's relationship**
+/// **A recognised rotation ends the superseded key's relationship**
 /// (`infra-client-requirements.md` §6.1; design §9.0.2): the old key is
 /// not a party this node serves any more, so what it registered to be
 /// woken at is not this node's to keep.
@@ -246,7 +246,7 @@ fn a_recovery_forgets_what_the_superseded_key_registered_to_be_woken_at() {
     assert!(p.wake.get(&kh("bob")).is_some());
     let slot = p.slot_of(&kh("bob"));
 
-    // carol recovers bob's identity under the same patron
+    // carol rotates bob's identity under the same patron
     let good = recovery_block_for("bob", "carol", "alice", "w2");
     let back = [rhtn_archive::genesis(&kh("carol"))];
     let body = p

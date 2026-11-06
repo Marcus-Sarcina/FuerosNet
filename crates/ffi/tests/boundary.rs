@@ -1288,7 +1288,7 @@ fn anothers_key_does_not_open_the_state_and_the_start_is_refused() {
 
 /// **The authority calls a shell needs, over the boundary**: what this key
 /// holds, what ending one does, what its own policy makes of a party, and
-/// the recovery surface before there is anything to recover.
+/// the rotation surface before there is anything to rotate.
 ///
 /// The positive departure and the positive standing are proved where the
 /// evidence can exist, across four `rhtnp` processes (`rhtn-participant`'s
@@ -1337,7 +1337,7 @@ fn authority_recovery_and_standing_answer_before_there_is_anything_to_answer_abo
     );
 
     // **THE RECOVERY SURFACE, WITH NO PRIOR KEY.** A device that is not
-    // recovering is an ordinary device, and says so on every call rather
+    // a rotating device is an ordinary device, and says so on every call rather
     // than half-answering.
     assert_eq!(p.prior_key(), None, "nothing is being succeeded");
     assert!(p.seal_old_lines().is_empty(), "no old key, no last act");
@@ -1391,7 +1391,7 @@ fn authority_recovery_and_standing_answer_before_there_is_anything_to_answer_abo
 ///
 /// The prior key is required, because `wire-format.md` §4.1 admits no
 /// variant of the `Recovery` block — both halves or nothing — and the
-/// archive is not, because `light-client-requirements.md` §6 has recovery
+/// archive is not, because `light-client-requirements.md` §6 has a rotation
 /// restoring standing and not history. So this proves the two cases apart:
 /// a succession opens with the person's own backup and equally without
 /// one, and a backup that is not the succeeded key's is refused however it
@@ -1415,7 +1415,7 @@ fn a_key_succeeds_another_with_its_backup_and_without_one() {
 
     // A NEW KEY SUCCEEDS HERS, with that backup in hand
     let shell = Arc::new(Shell::default());
-    let heir = Participant::recovering(
+    let heir = Participant::rotating(
         seeds("bob"),
         seeds("alice"),
         Some(blob.clone()),
@@ -1445,7 +1445,7 @@ fn a_key_succeeds_another_with_its_backup_and_without_one() {
 
     // AND WITHOUT A BACKUP the succession still stands: standing is what
     // comes back, history is what does not
-    let bare = Participant::recovering(
+    let bare = Participant::rotating(
         seeds("bob"),
         seeds("alice"),
         None,
@@ -1477,7 +1477,7 @@ fn a_key_succeeds_another_with_its_backup_and_without_one() {
     .expect("starts");
     let bobs = other.export_backup().expect("bob's own");
     drop(other);
-    let wrong = Participant::recovering(
+    let wrong = Participant::rotating(
         seeds("carol"),
         seeds("alice"),
         Some(bobs),
@@ -1496,7 +1496,7 @@ fn a_key_succeeds_another_with_its_backup_and_without_one() {
 
     // a prior seed of the wrong measure is refused by name, as the new
     // identity's own is at `start`
-    let short = Participant::recovering(
+    let short = Participant::rotating(
         seeds("bob"),
         vec![1, 2, 3],
         None,

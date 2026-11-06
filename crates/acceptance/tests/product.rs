@@ -28,28 +28,14 @@ fn prd_02_warn_before_an_authority_change_that_revokes_res() {
 /// Rule (light-client-requirements.md §6): "warn that prior standing will be abandoned"
 ///
 /// Given: A release build.
-/// When: A reviewer starts a plain rotation, then a recovery.
-/// Then: The plain rotation warns that prior standing is abandoned; the recovery states that the link to the prior identity will be published within the horizon.
+/// When: A reviewer starts an identity path that links the new credential to prior history, and one that does not.
+/// Then: The unlinked path warns that prior standing is abandoned — the new key arriving as a genuinely-new user, vouched for afresh, and not that the member loses the status they hold; the linked path states that the link to the prior identity will be published within the horizon.
+///
+/// Interpretation: The documents call these identity paths and not rotations (`light-client-requirements.md` §6); design §9.0 fixes the vocabulary [author, 2026-11-05]: a key rotation replaces the key a subnet knows, a series reissue keeps the key and the data, a restore brings data back to the key that held it, and `Recovery` is the wire block alone. The linked path is a rotation carrying one.
 #[test]
 #[ignore = "acceptance PRD-03: owed at milestone manual"]
 fn prd_03_warn_that_an_unlinked_identity_path_abandons_sta() {
     todo!("PRD-03: Warn that an unlinked identity path abandons standing, and that a linked one loses unlinkability")
-}
-
-/// Encourage a second independent adoption early
-///
-/// Spec: light-client-requirements.md §6
-/// Milestone: manual.  Kind: manual.  Oracle: behaviour.
-///
-/// Rule (light-client-requirements.md §6): "Encourage a second independent adoption early"
-///
-/// Given: A release build with a user holding one adoption.
-/// When: A reviewer uses the client through its first sessions.
-/// Then: The client prompts, unobtrusively and before any eclipse condition, that a second independent adoption protects against a single patron.
-#[test]
-#[ignore = "acceptance PRD-04: owed at milestone manual"]
-fn prd_04_encourage_a_second_independent_adoption_early() {
-    todo!("PRD-04: Encourage a second independent adoption early")
 }
 
 /// Disclose to operators what their subordinates are exposed to, the hosting model, and the roles users hold
@@ -116,21 +102,4 @@ fn prd_12_present_a_node_s_administration_pages_in_a_frame() {
 #[ignore = "acceptance PRD-13: owed at milestone manual"]
 fn prd_13_ship_the_provisioning_pages_and_no_other_adminis() {
     todo!("PRD-13: Ship the provisioning pages and no other administration pages")
-}
-
-/// Show who witnessed the record and whose nominees they were, saying a witnessless one plainly
-///
-/// Spec: light-client-requirements.md §1.1; wire-format.md §3.2
-/// Milestone: manual.  Kind: manual.  Oracle: behaviour.
-///
-/// Rule (light-client-requirements.md §1.1): "Check the `nominated_by` split before you sign, and tell the user when your own nominees are absent or outnumbered"
-/// Rule (wire-format.md §3.2): "**There is no witness floor** [author, 2026-10-19]."
-///
-/// Given: Three records: one witnessed by both sides' survivors, one by the counterparty's alone, and one by nobody.
-/// When: Each meeting reaches its end screen.
-/// Then: The first states how many attested and how the nominated_by split fell; the second says so and that this side's own nominees are absent from it; the third says nobody witnessed it and that the record says so permanently. None of the three is presented as a fault.
-#[test]
-#[ignore = "acceptance PRD-19: owed at milestone manual"]
-fn prd_19_show_who_witnessed_the_record_and_whose_nominees() {
-    todo!("PRD-19: Show who witnessed the record and whose nominees they were, saying a witnessless one plainly")
 }

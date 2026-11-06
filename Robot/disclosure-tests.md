@@ -33,7 +33,7 @@ what ships). Only the conduct half needs a test of its own.
 | Row | Narrative half | Conduct half, which is what remains |
 |---|---|---|
 | PRD-02 | the departure warning; the adoption listing's own words | the **named resources** that will be lost, computed, and shown *before* confirmation; the predicates that reach upward |
-| PRD-03 | both warnings, one per kind: plain rotation, recovery | selection by kind, and nothing else |
+| PRD-03 | both warnings, one per kind: the unlinked identity path, the linked one | selection by kind, and nothing else |
 | PRD-04 | the prompt's words | that it comes **before any eclipse condition**, and unobtrusively |
 | PRD-06 | the operator view's exposure statement | hosted shown against brokered; a member's view showing **roles and not predicates** |
 | PRD-07 | what device loss costs | the backup **is** under a passphrase-derived key not stored beside it; the import **deletes** the expired captures |
@@ -60,7 +60,7 @@ what ships). Only the conduct half needs a test of its own.
   requirement of PRD-02, 03, 04, 06, 07, 08, 09, 11, 17, 19 and RSC-58's
   refusal message: eleven rows, one test, because the words are fixed and the
   only question is whether each type has them.
-- **T2 — the table is selected by type.** Rotation against recovery (PRD-03),
+- **T2 — the table is selected by type.** The unlinked path against the linked one (PRD-03),
   departure against adoption (PRD-02), hosted against brokered (PRD-06), the
   three witness cases (PRD-19): one parameterized test over the type → text
   mapping, not four tests.
@@ -211,7 +211,7 @@ What each one changes is narrower than that.
   previously existing member such that the new member inherits all local
   status, permissions, and state… to recover a subnet membership after a
   lost or compromised key, re-anchoring to the new identity based on proof
-  by physical presence."* Design §9.0 is titled **Rotation is adoption**
+  by physical presence."* Design design §9.0 is titled **Rotation is adoption**
   and says the same: *"rotation is simply the case where the presented
   archive belongs to a different key."*
 - **Recovery** — *"just reloading backed up data from a lost device to the
@@ -227,7 +227,7 @@ two operations apart.
 
 **And what the warnings must not be read as saying.** The unlinked path
 abandons *prior standing* in the sense design §9.0 means — the new key
-arrives as §9.0's *"genuinely-new user"*, vouched for afresh — not that
+arrives as design §9.0's *"genuinely-new user"*, vouched for afresh — not that
 rotating costs a member the status they hold in that subnet. All three
 procedures keep local status, permissions and state; what the unlinked
 path does not carry is the inheritance a `Recovery` would have brought

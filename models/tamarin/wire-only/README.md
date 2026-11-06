@@ -51,3 +51,12 @@
 - The delegation's window and a receiver's leeway (`wire-format.md` §8.2): there is no clock, so a delegation is verified or not, and the currency theory's event-order expiry is not repeated. Nor the connection modes: an attach and a request-only contact are one exchange, so *first on the connection* is *before the commit*, and a frame and an attach field are the same thing. A held delegation arrives by `In`, over-approximating the flood. One transport key per run, and the run, are not represented.
 - Mutual agreement on one TLS connection. The two authentication lemmas are each side's own authentication fact; the server challenge is public, so it is a session distinguisher and not a connection handle, and the transcript machinery that would bind both endpoints to the same connection is abstracted away.
 - Availability, ordering, or delivery. The adversary controls the network entirely.
+
+**On the word "recovery" in these lemma names** [2026-11-05]. The design
+fixes the vocabulary at §9.0: a **key rotation** replaces the key a subnet
+knows, a **series reissue** keeps the key and the data, a **restore** brings
+data back to the key that held it, and **`Recovery`** is the wire block
+alone. These lemmas are about that block and the rotation it carries, and
+their names are identifiers bound to stamped results — renaming them would
+mean re-proving, so they keep the older word. Read `recovery` here as *the
+`Recovery` block, and the rotation it effects*.
