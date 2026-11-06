@@ -1295,7 +1295,7 @@ impl Node {
         // the store this one leaves
         let _gate = self.queue_gate.lock().unwrap();
         if let Some(cap) = self.cfg.queue_cap
-            && self.cfg.queue.bytes(&keyhash) + bytes.len() > cap
+            && self.cfg.queue.occupied(&keyhash) + bytes.len() > cap
         {
             return Err(queue::Refusal::AtCap);
         }

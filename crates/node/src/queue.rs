@@ -104,6 +104,21 @@ fn sync_dir(dir: &std::path::Path) -> std::io::Result<()> {
 }
 
 impl QueueStore for DirStore {
+    /// **A file per item, so a block is what an item costs** (design
+    /// §14.1.6 as restated [author, 2026-11-06]: the cap means the disk
+    /// consumed).
+    ///
+    /// **4 KiB, assumed rather than asked.** It is the block size of every
+    /// filesystem a node is plausibly deployed on — ext4, xfs and btrfs all
+    /// default to it — and asking the kernel would mean `statvfs` and a
+    /// libc dependency this crate does not have. An operator on an unusual
+    /// filesystem is over-counted or under-counted by the ratio of its
+    /// block to this one, which is a smaller error than counting content
+    /// and calling it disk.
+    fn block(&self) -> usize {
+        4096
+    }
+
     fn push(&self, item: Queued) -> bool {
         use std::io::Write;
         let dir = self.recipient_dir(&item.recipient);

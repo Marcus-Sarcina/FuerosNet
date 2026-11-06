@@ -12,7 +12,7 @@ their purpose: **a disagreement between a vector and the specification is a
 finding against one of them**, and either answer is progress. Review rounds
 have produced specification fixes.
 
-**Pinned**: wire-format.md `17f3e4e6e4244e59ce8870c1eb5f5d437d31b0539cf186814d3e2ca08d2f02e9` · network-design.md `a0ea247507d4c9326bfb53e2aed1130288b8d09144afc06a5c7adfb5635335e9`
+**Pinned**: wire-format.md `17f3e4e6e4244e59ce8870c1eb5f5d437d31b0539cf186814d3e2ca08d2f02e9` · network-design.md `7d638a750d2907f1f8d0264850447b77f33a4c422f93b6b0b72489ddc62f9945`
 
 **Scope**: wire-format/protocol **interoperability** vectors.
 `light-client-requirements.md` is pinned alongside the two protocol documents

@@ -68,6 +68,12 @@ documents. Where a requirement leaves a visible artifact, that is noted in place
 - **Hold ciphertext for offline clients** (design §14.1.4, design §14.1.6).
 - **Queue indefinitely, bounded by a per-subordinate storage cap** (design
   §14.1.6). No time limit: a message survives an absence of any length.
+  **The cap is the disk you lend, not the bytes you hold** [author,
+  2026-11-06]: count each queued message as the blocks it occupies, because
+  that is what it costs you and what an operator sizing a machine from your
+  caps is counting on. A cap read against content over-lends by the ratio of
+  your block size to your messages' size, which for small messages is most of
+  a factor of two.
 - **Do not replicate queue state to siblings.** Failover covers sessions, not
   mailboxes, a client attached to a sibling collects from its own serving node when
   that node returns.

@@ -545,8 +545,8 @@ fn two_submissions_at_once_cannot_both_take_the_room_for_one() {
         fn drop_all(&self, k: &[u8; 32]) {
             self.0.drop_all(k)
         }
-        fn bytes(&self, k: &[u8; 32]) -> usize {
-            let n = self.0.bytes(k);
+        fn occupied(&self, k: &[u8; 32]) -> usize {
+            let n = self.0.occupied(k);
             std::thread::sleep(Duration::from_millis(60));
             n
         }
@@ -605,4 +605,81 @@ fn a_submission_the_store_will_not_take_is_refused_and_never_acknowledged() {
     );
     // and nothing is left claiming to be queued
     assert_eq!(node.queued(&kh("carol")), 0);
+}
+
+/// **The cap means the disk a queue consumes, not the bytes it holds**
+/// [author, 2026-11-06] (design §14.1.6; `infra-client-requirements.md`
+/// §2).
+///
+/// A store keeping a file per item consumes a block per item, so a cap
+/// read against content promised an operator a fraction of the disk the
+/// queue actually took: the bench node held 3.1 MB of content in 5.2 MB of
+/// blocks. `QueueStore::occupied` rounds each item to the store's block, so
+/// the number an operator configures is the number of bytes of disk they
+/// are lending.
+#[test]
+fn the_cap_counts_the_disk_a_queue_occupies_and_not_its_content() {
+    use rhtn_transport::queue::{MemoryStore, QueueStore};
+
+    /// A store that costs a block per item, as a directory store does.
+    struct Blocky(MemoryStore);
+    impl QueueStore for Blocky {
+        fn push(&self, item: Queued) -> bool {
+            self.0.push(item)
+        }
+        fn peek_oldest(&self, k: &[u8; 32]) -> Option<Queued> {
+            self.0.peek_oldest(k)
+        }
+        fn remove(&self, k: &[u8; 32], q: &Queued) -> bool {
+            self.0.remove(k, q)
+        }
+        fn list(&self, k: &[u8; 32]) -> Vec<Queued> {
+            self.0.list(k)
+        }
+        fn drop_all(&self, k: &[u8; 32]) {
+            self.0.drop_all(k)
+        }
+        fn block(&self) -> usize {
+            4096
+        }
+    }
+    let store = Blocky(MemoryStore::default());
+    let who = kh("carol");
+    // **three small messages cost three blocks, not three hundred bytes**
+    for n in 0..3u8 {
+        assert!(store.push(Queued {
+            recipient: who,
+            device: [n; 32],
+            ciphertext: vec![n; 100],
+            arrival: u64::from(n),
+        }));
+    }
+    assert_eq!(
+        store.occupied(&who),
+        3 * 4096,
+        "a hundred bytes in a block costs a block"
+    );
+    // and a store that holds nothing on a disk rounds nothing, because
+    // there is no disk for the cap to be about
+    let plain = MemoryStore::default();
+    for n in 0..3u8 {
+        plain.push(Queued {
+            recipient: who,
+            device: [n; 32],
+            ciphertext: vec![n; 100],
+            arrival: u64::from(n),
+        });
+    }
+    assert_eq!(plain.occupied(&who), 300, "in memory, content is the cost");
+
+    // **an item larger than a block rounds up and not down**: two blocks
+    // for anything past the first, which is what a sender can push against
+    let big = Blocky(MemoryStore::default());
+    big.push(Queued {
+        recipient: who,
+        device: [9; 32],
+        ciphertext: vec![0; 4097],
+        arrival: 1,
+    });
+    assert_eq!(big.occupied(&who), 2 * 4096);
 }

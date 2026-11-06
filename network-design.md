@@ -6148,6 +6148,15 @@ it and a patron does not cache one as an immutable identifier.
 direct patron, where that patron is infrastructure (§14.1.2): bounded by a
 per-subordinate storage cap.** No time limit; a space limit.
 
+**The space is the disk consumed and not the content held** [author,
+2026-11-06]. A queue keeps a file per message, so a two-hundred-byte message
+in a four-kilobyte block costs the block, and a cap read against content
+promises an operator a fraction of the disk their queue takes: the reference
+node held 3.1 MB of messages in 5.2 MB of blocks. An operator sizing a
+machine from the caps they set would under-count by that ratio, which is the
+error the cap exists to prevent. **What is counted is the data blocks**; a
+file's own metadata costs more and how much is the filesystem's business.
+
 **Two reasons, and the second is the stronger one.**
 
 **Light clients may connect rarely**, and a time-based window would drop the

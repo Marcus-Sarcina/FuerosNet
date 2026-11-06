@@ -55,7 +55,27 @@ and is not this; what a scan should take is the card one of them hands over
 
 ---
 
-## 2. The launch screen's pickers constrain each other [author, 2026-11-02]
+## 2. The launch screen's pickers constrain each other — **built 2026-11-06**
+
+**Done** (`Sizing`, `OperatorActivity.narrowPickers`, `SizingTest`): a region
+narrows the sizes to those offered there, a size narrows the regions offering
+it, whichever was chosen first stays chosen, and both the ordering and an
+absent combination say why rather than only hiding — `light-client-requirements.md`
+§9's rule, since a silent reordering is a refusal in disguise.
+
+**And the sizing it is indexed on** [author, 2026-11-05]: 2 GB recommended,
+1 GB the floor, **both marked**, from design §3.2's `f = 10` ceiling — a node
+serves at most ten members, so 80% is eight. The arithmetic and the confidence
+of each term are in `Sizing`'s own documentation, including the author's
+correction that the bench node carries no traffic, hosts nothing and has
+served no resource call, so its 12.7 MB is a floor and not a measurement of
+load.
+
+**One thing it turned up, ruled and fixed** [author, 2026-11-06]: `queue_cap`
+counted content while the disk it consumed was block-dominated. The cap now
+means the disk, counted in blocks.
+
+### As it was asked for [author, 2026-11-02]
 
 **Asked for from the bench**: *"the 'fetch regions and sizes' control on the
 launch screen populates every size and every region, but many combinations result

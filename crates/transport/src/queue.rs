@@ -94,12 +94,36 @@ pub trait QueueStore: Send + Sync {
             .filter(|q| for_device(q, device))
             .count()
     }
-    /// How many bytes wait for `recipient`, which is what the cap is read
-    /// against.
-    fn bytes(&self, recipient: &[u8; 32]) -> usize {
+    /// **The granularity this store consumes space in**, which is what
+    /// turns a queue's content into the disk it occupies.
+    ///
+    /// One means no rounding, for a store that holds nothing on a disk.  A
+    /// store keeping a file per item returns that filesystem's block size:
+    /// a 200-byte message in a 4 KiB block costs 4 KiB, and a cap read
+    /// against content would promise an operator a fifth of the disk it
+    /// actually takes.
+    fn block(&self) -> usize {
+        1
+    }
+
+    /// **The disk `recipient`'s queue occupies, which is what the cap
+    /// means** [author, 2026-11-06].
+    ///
+    /// Each item is rounded up to [`QueueStore::block`], because that is
+    /// what it costs: the bench node's queue held 3.1 MB of content in
+    /// 5.2 MB of blocks, so a cap counted in content under-stated the disk
+    /// by most of a factor of two — and an operator sizing a machine from
+    /// the caps they set was under-counting by the same.
+    ///
+    /// **Data blocks only.** A file's own metadata costs more, and how
+    /// much is the filesystem's business rather than this crate's; what
+    /// this promises is that the content's blocks are counted, which is
+    /// the part that scales with what a sender can send.
+    fn occupied(&self, recipient: &[u8; 32]) -> usize {
+        let block = self.block().max(1);
         self.list(recipient)
             .iter()
-            .map(|q| q.ciphertext.len())
+            .map(|q| q.ciphertext.len().div_ceil(block) * block)
             .sum()
     }
 }
