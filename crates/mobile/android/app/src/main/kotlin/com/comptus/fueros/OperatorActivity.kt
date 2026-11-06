@@ -700,9 +700,61 @@ class OperatorActivity : Activity() {
         val sizes = android.widget.Spinner(this)
         var regionRows: List<Launch.Region> = listOf()
         var sizeRows: List<Launch.Size> = listOf()
+        // everything the provider offers, before either picker narrows it
+        var allRegions: List<Launch.Region> = listOf()
+        var allSizes: List<Launch.Size> = listOf()
+        // what the person has settled on; whichever was chosen first stays
+        var heldRegion: String? = null
+        var heldSize: String? = null
+
         val about = TextView(this).apply {
             textSize = 13f
             setTextColor(Palette.now.sub)
+        }
+
+        /**
+         * **Draw both pickers against each other**, and say what the
+         * ordering and the marks mean.
+         *
+         * A region chosen narrows the sizes to those offered there; a size
+         * chosen narrows the regions to those offering it. Regions that
+         * cannot host a node at all are shown **last and not hidden**,
+         * because an operator may know better than this screen, and
+         * `light-client-requirements.md` §9's rule is that a refusal
+         * renders its reason — a silent reordering is a refusal in
+         * disguise.
+         */
+        fun narrowPickers(regions: android.widget.Spinner, sizes: android.widget.Spinner) {
+            val forSize = heldSize?.let { held ->
+                allSizes.firstOrNull { it.slug == held }?.regions ?: listOf()
+            } ?: listOf()
+            regionRows = Sizing.regionsByRecommended(
+                Sizing.regionsFor(forSize, allRegions) { it.slug },
+                allSizes,
+                { it.slug },
+                { it.memoryMb.toLong() },
+                { it.regions },
+            )
+            sizeRows = heldRegion?.let { Sizing.sizesIn(it, allSizes) { z -> z.regions } } ?: allSizes
+            regions.adapter = android.widget.ArrayAdapter(
+                this@OperatorActivity,
+                android.R.layout.simple_spinner_dropdown_item,
+                regionRows.map { reg ->
+                    val ok = Sizing.meetsRecommended(
+                        reg.slug, allSizes, { it.memoryMb.toLong() }, { it.regions },
+                    )
+                    "${reg.slug}  ${reg.name}" + if (ok) "" else "  — too small here"
+                },
+            )
+            sizes.adapter = android.widget.ArrayAdapter(
+                this@OperatorActivity,
+                android.R.layout.simple_spinner_dropdown_item,
+                sizeRows.map { z ->
+                    val mark = if (Sizing.recommended(z.memoryMb.toLong())) "★ " else ""
+                    "$mark${z.slug}  ${z.memoryMb} MB, ${z.vcpus} vcpu, \$${z.monthly}/month"
+                },
+            )
+            about.text = Sizing.note() + "\n\n" + Sizing.whyBehind()
         }
         fun describe() {
             val (count, crowded) = Kernel.crowded(provider.asn)
@@ -766,18 +818,56 @@ class OperatorActivity : Activity() {
                             narration.text = (r.exceptionOrNull() ?: s.exceptionOrNull())?.message ?: "refused"
                             return@runOnUiThread
                         }
-                        regionRows = r.getOrThrow().filter { it.available }
-                        sizeRows = s.getOrThrow().sortedBy { it.monthly }
-                        regions.adapter = android.widget.ArrayAdapter(
-                            this@OperatorActivity,
-                            android.R.layout.simple_spinner_dropdown_item,
-                            regionRows.map { "${it.slug}  ${it.name}" },
-                        )
-                        sizes.adapter = android.widget.ArrayAdapter(
-                            this@OperatorActivity,
-                            android.R.layout.simple_spinner_dropdown_item,
-                            sizeRows.map { "${it.slug}  ${it.memoryMb} MB, ${it.vcpus} vcpu, \$${it.monthly}/month" },
-                        )
+                        allRegions = r.getOrThrow().filter { it.available }
+                        allSizes = s.getOrThrow().sortedBy { it.monthly }
+                        // **the two pickers constrain each other**
+                        // (`Robot/future-features.md` entry 2): both lists
+                        // already knew how they intersect — a size carries
+                        // the regions it is offered in — and the screen
+                        // populated them independently, so many pairs a
+                        // person could choose were refused at creation.
+                        narrowPickers(regions, sizes)
+                        // **whichever was chosen first stays chosen**
+                        // (entry 2): a listener that re-narrowed on every
+                        // redraw would move the selection under the
+                        // person's thumb
+                        regions.onItemSelectedListener =
+                            object : android.widget.AdapterView.OnItemSelectedListener {
+                                override fun onItemSelected(
+                                    parent: android.widget.AdapterView<*>?,
+                                    view: android.view.View?,
+                                    position: Int,
+                                    id: Long,
+                                ) {
+                                    val picked = regionRows.getOrNull(position) ?: return
+                                    if (heldRegion == picked.slug) return
+                                    heldRegion = picked.slug
+                                    heldSize = null
+                                    narrowPickers(regions, sizes)
+                                }
+
+                                override fun onNothingSelected(p: android.widget.AdapterView<*>?) = Unit
+                            }
+                        sizes.onItemSelectedListener =
+                            object : android.widget.AdapterView.OnItemSelectedListener {
+                                override fun onItemSelected(
+                                    parent: android.widget.AdapterView<*>?,
+                                    view: android.view.View?,
+                                    position: Int,
+                                    id: Long,
+                                ) {
+                                    val picked = sizeRows.getOrNull(position) ?: return
+                                    if (heldSize == picked.slug) return
+                                    // a size chosen while a region is held
+                                    // narrows nothing further: the region
+                                    // already decided this list
+                                    if (heldRegion != null) return
+                                    heldSize = picked.slug
+                                    narrowPickers(regions, sizes)
+                                }
+
+                                override fun onNothingSelected(p: android.widget.AdapterView<*>?) = Unit
+                            }
                         // the credential is kept once it has worked, and
                         // travels in the backup from here
                         Kernel.holdProviderCredential(provider.name.lowercase(), cred)?.let { narration.text = it }
