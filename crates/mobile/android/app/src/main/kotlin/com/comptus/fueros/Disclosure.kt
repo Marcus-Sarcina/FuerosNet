@@ -208,8 +208,11 @@ object Disclosure {
                     "PRD-03",
                     "You are changing the core identifier connecting you to {subnet}. Your " +
                     "previous identifier will still reach you in any other subnets you " +
-                    "participate in. Your new identifier will carry only such privileges " +
-                    "and relationships as you have established directly through {patron}.",
+                    "participate in. On {subnet} it loses its reachability, and any standing " +
+                    "which depends on it goes with it. Your new identifier will carry only " +
+                    "such privileges and relationships as you have established directly " +
+                    "through {patron}, which are granted only within the trust horizon on " +
+                    "{subnet}.",
                 ),
             ),
         )
@@ -220,7 +223,9 @@ object Disclosure {
                     "You are changing the core identifier connecting you to {subnet} and " +
                     "publishing the fact of your new identity. Your recovered identity will " +
                     "be traceable to your previous identity. Your previous identifier will " +
-                    "still be active in any other subnets you participate in. Your new " +
+                    "still be active in any other subnets you participate in. On {subnet} it " +
+                    "loses its reachability, and what it held there is carried to the new " +
+                    "identifier rather than lost. Your new " +
                     "identifier will carry only such privileges and relationships as you " +
                     "have established directly through {patron}.",
                 ),

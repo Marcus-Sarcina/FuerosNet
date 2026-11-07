@@ -479,6 +479,24 @@ job.
   device** [author, 2026-11-07]: supporting key rotation means supporting
   more than one, so removal is of *an* identity and adding one is another
   way into the same door that starts a new one.
+- **Hold several identities at once, and divide what they may do**
+  [author, 2026-11-07]. A key rotation replaces the key one subnet knows
+  and leaves every other subnet untouched (design §9.0, §13.6), so a
+  device that has rotated holds a key that is still live elsewhere: the
+  rotated-away key **stays usable to join new subnets and to act in any
+  subnet that was not rotated**, and only on the subnet it rotated does
+  it lose its reachability and the standing that depended on it.
+  - **Concurrent for viewing and for acting within subnets.** Every
+    identity the device holds is usable at once for what happens inside
+    the subnets it belongs to.
+  - **A conversation continues in the identity it started in.** Which key
+    a direct exchange belongs to is settled when it begins and is not a
+    choice made again later.
+  - **One identity at a time for a meeting or an operator action**, so
+    neither has to ask which key it belongs to. **Chosen by press and
+    hold on the nameplate at the foot of the home screen**, which opens a
+    scrollable list of the identities held.
+  The reason for the division is the author's and is not restated here.
 - **Merge automatically on noticing divergence.** A user has no reason to want
   outstanding branches, and an unmerged fork means their history is incomplete
   wherever they present it (design §10.3).

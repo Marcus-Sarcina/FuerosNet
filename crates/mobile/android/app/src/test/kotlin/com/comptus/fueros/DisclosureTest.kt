@@ -122,6 +122,48 @@ class DisclosureTest {
      * Read from the source, as [InsetSweepTest] and [ManifestTest] read
      * theirs: a JVM test cannot lay out the provisioning form.
      */
+    /**
+     * **What a rotation costs on the subnet it rotates** [author,
+     * 2026-11-07]: *"The old key loses its reachability on the rotated
+     * subnet as well as any standing which depends on it. They are
+     * granted roles and standing only within the trust horizon on the
+     * rotated subnet."*
+     *
+     * The table already said what the old key **keeps** — every other
+     * subnet — and said nothing about what it loses on this one, which
+     * left both paths reading as though a rotation cost nothing anywhere.
+     */
+    @Test
+    fun both_paths_say_what_the_old_key_loses_on_the_subnet_it_rotates() {
+        val unlinked = Disclosure.words(Disclosure.Topic.UNLINKED_PATH).joinToString(" ")
+        val linked = Disclosure.words(Disclosure.Topic.LINKED_PATH).joinToString(" ")
+        for ((name, said) in listOf("unlinked" to unlinked, "linked" to linked)) {
+            assertTrue(
+                "$name does not say the old key keeps the other subnets: $said",
+                said.contains("other subnets"),
+            )
+            assertTrue(
+                "$name does not say it loses reachability on this one: $said",
+                said.contains("loses its reachability"),
+            )
+        }
+        // **and the two differ on what happens to the standing**, which is
+        // the difference between the paths: unlinked loses it on that
+        // subnet, linked carries it
+        assertTrue(
+            "unlinked does not say the standing goes: $unlinked",
+            unlinked.contains("any standing which depends on it goes with it"),
+        )
+        assertTrue(
+            "linked does not say it is carried: $linked",
+            linked.contains("carried to the new") && linked.contains("rather than lost"),
+        )
+        assertTrue(
+            "unlinked does not scope the new identifier: $unlinked",
+            unlinked.contains("within the trust horizon"),
+        )
+    }
+
     @Test
     fun the_provisioning_screen_says_whose_horizon_the_ordering_speaks_to() {
         val said = Disclosure.words(Disclosure.Topic.PROVISIONING).joinToString(" ")
