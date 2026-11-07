@@ -145,7 +145,26 @@ recorded and not enforced until there is an answer to give.
 
 ---
 
-## How a node is taught a subnet older than itself [raised 2026-11-03, open]
+## How a node is taught a subnet older than itself [raised 2026-11-03, answered]
+
+**Answered, and not the way this entry assumed** [author, 2026-11-07]:
+*"we didn't go with a bundle, we went with a record-level replay directly
+into the node's horizon table."*  So everything below about a bounded
+bundle — where it travels, how it is sized, what the surface takes — is
+**superseded**, and kept only because it records what was considered. The
+mechanism that landed is the operator's own replay, record by record, each
+judged against the horizon built so far and in whatever order it arrives:
+`infra-client-requirements.md` §4.4,
+*"A node takes its own operator's replay as its own state"* (written 2026-11-03), with `functional_tests.md`
+OPS-026 and OPS-027 as its rows, `POST /node/horizon` on the
+administration surface, and `assertHorizon` on the client side calling it
+at launch and at every drawing of the instance roll.
+
+**So nothing is owed here.** The assistant reported this on 2026-11-07 as
+an open decision with a root-document rule still owed; the rule had been
+in that section of `infra-client-requirements.md` for four days, and the
+thing that was stale was this file.
+
 
 **The bench established it with the field-test node's own log.** GXV attached and
 replayed four transactions; the node judged each and stored none:

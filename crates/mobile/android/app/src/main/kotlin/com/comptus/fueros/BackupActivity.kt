@@ -82,6 +82,29 @@ class BackupActivity : Activity() {
                 setOnClickListener { write() }
             },
         )
+        // **the destroying door sits under the one that makes destruction
+        // survivable** (PRD-03): a person reaching for a wipe passes the
+        // backup on the way, and a device with no backup has been told
+        // what that costs twice over by the time they get here
+        body.addView(
+            TextView(this).apply {
+                textSize = 13f
+                setTextColor(Palette.now.sub)
+                text = if (held() == null) {
+                    "No backup has been written from this device."
+                } else {
+                    "A backup exists, which is what makes the next door survivable."
+                }
+            },
+        )
+        body.addView(
+            Button(this).apply {
+                text = "Wipe this identity from this device"
+                setOnClickListener {
+                    startActivity(Intent(this@BackupActivity, WipeActivity::class.java))
+                }
+            },
+        )
     }
 
     /** Where the last backup went, if this device wrote one and can still reach it. */

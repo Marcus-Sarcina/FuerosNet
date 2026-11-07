@@ -2700,6 +2700,58 @@ object Kernel {
         AndroidShell(context.applicationContext).unseal("seeds")?.size == 64
 
     /**
+     * **Take the identity off this device** ([Wipe]; PRD-03): the key,
+     * the archive, the store, every sealed capture, the shell's own
+     * preference stores, and last the Keystore key that wrapped them, so
+     * a byte that survived a delete cannot be read.
+     *
+     * **The kernel handle goes first**, before anything is deleted: a
+     * live `Participant` writes through the shell's custody, and a writer
+     * running against a half-deleted directory could put a file back.
+     * The caller kills the process afterwards for the same reason — the
+     * one guarantee that nothing in flight outlives this.
+     *
+     * Returns what would **not** go, for [Wipe.left] to say. An empty
+     * list is a device holding no identity.
+     */
+    fun wipe(context: Context): List<String> {
+        participant = null
+        meet = null
+        val app = context.applicationContext
+        val left = mutableListOf<String>()
+        if (!clear(java.io.File(app.filesDir, Wipe.KERNEL_DIR))) left += Wipe.KERNEL_DIR
+        if (!clear(java.io.File(app.filesDir, Wipe.DIAG_DIR))) left += Wipe.DIAG_DIR
+        for (store in Wipe.STORES) {
+            val ok = runCatching {
+                app.getSharedPreferences(store, Context.MODE_PRIVATE).edit().clear().commit()
+            }.getOrDefault(false)
+            // **and the file itself**, not only its contents: a cleared
+            // store still names itself on disk
+            runCatching { app.deleteSharedPreferences(store) }
+            if (!ok) left += store
+        }
+        // **the wrapping key last of all**: while it exists, anything
+        // recovered from the storage it wrapped is readable, and once it
+        // is gone nothing is (`light-client-requirements.md` §6 gives the
+        // same reasoning for a deleted archive window's capture keys)
+        val alias = runCatching {
+            val ks = java.security.KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+            ks.deleteEntry(Wipe.AT_REST_ALIAS)
+            !ks.containsAlias(Wipe.AT_REST_ALIAS)
+        }.getOrDefault(false)
+        if (!alias) left += Wipe.AT_REST_ALIAS
+        Diag.event("identity.wiped")
+        return left
+    }
+
+    /** `dir` and everything under it gone, or false where some of it stays. */
+    private fun clear(dir: java.io.File): Boolean {
+        if (!dir.exists()) return true
+        dir.listFiles()?.forEach { if (it.isDirectory) clear(it) else it.delete() }
+        return dir.deleteRecursively() || !dir.exists()
+    }
+
+    /**
      * **The first run hands the seeds over and the kernel starts on them**
      * ([FirstRunActivity]): sealed under the shell's custody first, so a
      * process that dies between the two finds them at its next start.

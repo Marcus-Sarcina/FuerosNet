@@ -460,6 +460,25 @@ job.
   threshold, which is a thing an evaluator can see you did (design §10.1).
 
 
+- **Offer a way to take an identity off the device, as its own control**
+  [author, 2026-11-07]. Starting a new identity and removing the one held
+  are both necessary and they are **two functions, not one**: fused, the
+  only way to start fresh would be a destruction and the only way to
+  destroy would be a fresh start, and a person confirming one control
+  could not say which they had agreed to. So removal clears the key, the
+  archive, the store and every capture sealed to that identity, leaves the
+  device holding no identity, and the doors for starting or restoring one
+  take it from there. **Say what it cannot give back**: the seed phrase
+  and a backup are the only way to that identity again, and a device
+  without both is the last place it existed. **It is not a rotation**
+  (design §9.0): a rotation replaces the key a subnet knows you by and
+  keeps you in that subnet, while this keeps nothing and tells nobody.
+  **And what comes after is a genuinely-new user, vouched for afresh** —
+  not a person who lost a status they hold, which is a different claim and
+  a false one (design §9.0, PRD-03). **Do not assume one identity per
+  device** [author, 2026-11-07]: supporting key rotation means supporting
+  more than one, so removal is of *an* identity and adding one is another
+  way into the same door that starts a new one.
 - **Merge automatically on noticing divergence.** A user has no reason to want
   outstanding branches, and an unmerged fork means their history is incomplete
   wherever they present it (design §10.3).

@@ -3,7 +3,7 @@
  "pins": {
   "wire-format.md": "c22516be852157455c4715b050e9942a806f1c2dbf7f8ac77bdabac1f8f7014e",
   "network-design.md": "b0b310b355245ff9866bea1b489babbcbefddf282341ba3a43dab8fbc71ab1ee",
-  "light-client-requirements.md": "82194b1c45ce6655b9f6e35ac3917ec6220f7fe0405cc811404235a1297d5d8e"
+  "light-client-requirements.md": "80f20f2531b7c18bc44dbc411462b30ac0de93bfef2aaaf0808b498218fb2c62"
  },
  "classes": {
   "bytes": "hex is the complete input",

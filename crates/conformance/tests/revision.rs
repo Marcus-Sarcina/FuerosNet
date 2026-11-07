@@ -85,7 +85,7 @@ fn s02_departure_must_forget_the_clients_registered_wake_endpoint() {
     let (a,b,c)=(test_identity("alice"),Arc::new(test_identity("bob")),test_identity("carol"));
     let ids=vec![a.public.clone(),b.public.clone(),c.public.clone()];let r=adoption(&a,&b,&c,0,100);let mut v=view(b.clone());
     assert_eq!(v.take_object(&Quiet,&b.public.keyhash,KIND_TRANSACTION,&r.bytes,&ids),Decision::Stored);
-    assert_eq!(v.wake.register(a.public.keyhash,[0;32],Some("https://wake.example/client".into()),Some(vec![1;32]),None),rhtn_node::wake::Registered::Held);
+    assert_eq!(v.wake.register(a.public.keyhash,[0;32],Some("https://wake.example/client".into()),Some(vec![1;32]),None,Some([3;32])),rhtn_node::wake::Registered::Held);
     let d=envelope(TYPE_DEPARTURE,&departure_body(&[r.txid],&a.public.keyhash,&b.public.keyhash,Seqno {series:1,counter:1},101,None),&[&a]);
     assert_eq!(v.take_object(&Quiet,&b.public.keyhash,KIND_TRANSACTION,&d,&ids),Decision::Stored);
     assert!(!v.table.patrons(&a.public.keyhash).contains(&b.public.keyhash),"control: relationship ended");

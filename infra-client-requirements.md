@@ -466,7 +466,17 @@ serving node.
   as much as to the URL, and more sharply, a borrowed secret being worse to
   keep past its reason than a routable identifier. It is a narrow key: what it
   authorises is a content-free post to one address, which is the act you were
-  given it for.
+  given it for. **Keep it where only you can read it**, which on a host with
+  file modes means the endpoint's own file and directory closed to everything
+  else: it is a secret of somebody else's sitting on your machine, and the
+  default is usually readable.
+- **And keep it, rather than holding it only while you run** [author,
+  2026-11-07]. A doorbell that lapsed whenever you restarted would make the
+  layer above you degrade on your circumstances — *"breaking resource
+  functionality if a patron's phone goes offline for a few days"* — and the
+  client whose tokens would have to be topped up is the one that is away,
+  which is the case the doorbell exists for. So it survives a restart, and
+  the cost of that is this obligation and the one above it.
 - **Forget an endpoint when the relationship ends**, and when a client
   withdraws it. It is a routable identifier for a person, and keeping one past
   the reason you were given it is a retention decision made by omission

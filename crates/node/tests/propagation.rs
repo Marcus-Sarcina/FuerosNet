@@ -1211,7 +1211,8 @@ fn with_endpoint(s: &mut Scene, client: &str) {
             [0u8; 32],
             Some("https://push.example/rhtn/a3f9".into()),
             Some(vec![7; 32]),
-            None
+            None,
+            Some([3; 32])
         ),
         rhtn_node::wake::Registered::Held
     );

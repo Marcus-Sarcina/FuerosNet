@@ -235,6 +235,7 @@ fn a_recovery_forgets_what_the_superseded_key_registered_to_be_woken_at() {
         Some("https://push.example/bob".into()),
         Some(vec![7; 32]),
         None,
+        Some([3; 32]),
     );
     p.wake.register(
         kh("w1"),
@@ -242,6 +243,7 @@ fn a_recovery_forgets_what_the_superseded_key_registered_to_be_woken_at() {
         Some("https://push.example/w1".into()),
         Some(vec![9; 32]),
         None,
+        Some([4; 32]),
     );
     assert!(p.wake.get(&kh("bob")).is_some());
     let slot = p.slot_of(&kh("bob"));

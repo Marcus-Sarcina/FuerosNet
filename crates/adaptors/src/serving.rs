@@ -447,6 +447,7 @@ impl Serving for LocalNode {
                         Some(e.url),
                         Some(e.key),
                         e.lapses_at,
+                        Some(e.signing_key),
                     ) != rhtn_node::wake::Registered::Refused
                 }
                 None => {
