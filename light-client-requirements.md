@@ -496,6 +496,13 @@ job.
     neither has to ask which key it belongs to. **Chosen by press and
     hold on the nameplate at the foot of the home screen**, which opens a
     scrollable list of the identities held.
+  - **A row a screen shows carries the identity that holds it, and acting
+    on that row acts through that identity** [2026-11-07]. The merged
+    lists are the point of the first rule, and a screen that acted on a
+    merged row through whichever identity happens to be active would act
+    as the wrong key — an act nothing would refuse, since the key it used
+    is one the device holds. Say the wrong thing and a reader can correct
+    it; sign the wrong thing and they cannot.
   The reason for the division is the author's and is not restated here.
 - **A rotation makes a new identity beside the old one** [author,
   2026-11-07]: *"just start a new archive for the new identity … The old

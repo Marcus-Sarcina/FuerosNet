@@ -95,7 +95,11 @@ class LeavingActivity : Activity() {
         chosen = null
         armed = false
         Thread({
-            val held = Kernel.lines()
+            // **every held identity's lines** [author, 2026-11-07]:
+            // leaving a patron is acting within a subnet, so the lines of
+            // every identity are shown and each is left **by the identity
+            // that holds it** rather than by whichever one acts
+            val held = Kernel.linesHeld()
             val known = Kernel.aliases()
             runOnUiThread {
                 names = known
@@ -108,14 +112,26 @@ class LeavingActivity : Activity() {
     }
 
     /** One line, tappable: tapping it asks what leaving it would cost. */
-    private fun row(l: uniffi.rhtn_model.Line): TextView {
-        val who = l.patron.hex()
-        return body(Leaving.line(l, names[who])).apply {
+    private fun row(o: Identities.Owned<uniffi.rhtn_model.Line>): TextView {
+        val who = o.row.patron.hex()
+        return body(Leaving.line(o.row, names[who])).apply {
             setPadding(0, 20, 0, 20)
             isClickable = true
-            setOnClickListener { cost(who to names[who]) }
+            setOnClickListener {
+                by = o.by
+                cost(who to names[who])
+            }
         }
     }
+
+    /**
+     * **Which identity holds the line being left** ([Identities.Owned]),
+     * set when a line is tapped. The departure goes through it: a device
+     * holding two identities under two patrons would otherwise leave as
+     * whichever one acts, which is an act by the wrong key that nothing
+     * would refuse.
+     */
+    private var by: String? = null
 
     private fun cost(patron: Pair<String, String?>) {
         chosen = patron
@@ -161,7 +177,15 @@ class LeavingActivity : Activity() {
         leave.visibility = android.view.View.GONE
         said.text = "leaving…"
         Thread({
-            val out = Kernel.departFrom(patron.first)
+            // **through the identity that holds the line** where one is
+            // known, and through the one that acts where the tap came from
+            // somewhere this screen did not record
+            val holder = by
+            val out = if (holder == null) {
+                Kernel.departFrom(patron.first)
+            } else {
+                Kernel.departAs(holder, patron.first)
+            }
             runOnUiThread {
                 if (isFinishing) return@runOnUiThread
                 said.text = out

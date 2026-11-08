@@ -59,7 +59,11 @@ class ShellActivity : Activity() {
     private var place: Chrome.Place = Chrome.Place.Home
 
     /** The subnets as the rail last read them, for a place that names one. */
-    private var scopes: List<uniffi.rhtn_model.Subnet> = emptyList()
+    // **every held identity's subnets, each saying whose it is** [author,
+    // 2026-11-07]: the rail shows them all at once, and a screen acting
+    // inside one acts through the identity that holds it rather than
+    // through whichever one is active ([Identities.Owned])
+    private var scopes: List<Identities.Owned<uniffi.rhtn_model.Subnet>> = emptyList()
 
     /** The Options row that reads the connection, while Options is shown. */
     private var connection: TextView? = null
@@ -254,20 +258,24 @@ class ShellActivity : Activity() {
 
     // ---- the rail ------------------------------------------------------
 
-    private fun drawRail(subnets: List<uniffi.rhtn_model.Subnet>) {
+    private fun drawRail(subnets: List<Identities.Owned<uniffi.rhtn_model.Subnet>>) {
         railColumn.removeAllViews()
         val rungs = Chrome.rail(
             // **zero, and not a guess**: nothing tracks read state yet
             unseenDirect = 0,
-            subnets = subnets.map {
+            // **the rail is every identity's subnets together** [author,
+            // 2026-11-07]: a subnet is a place this device belongs to,
+            // and which of its identities holds it is not the rail's
+            // question — it is the question of whatever acts there
+            subnets = subnets.map { o ->
                 Chrome.Rung.Subnet(
-                    id = it.id.hex(),
-                    alias = it.alias,
+                    id = o.row.id.hex(),
+                    alias = o.row.alias,
                     unseen = 0,
                     crown = Chrome.crown(
-                        root = it.rank.root,
-                        operator = it.rank.operator,
-                        hasSubordinate = it.rank.subordinates > 0u,
+                        root = o.row.rank.root,
+                        operator = o.row.rank.operator,
+                        hasSubordinate = o.row.rank.subordinates > 0u,
                     ),
                 )
             },
@@ -493,6 +501,11 @@ class ShellActivity : Activity() {
      * being a theoretical attack rather than something to wait for.
      */
     private fun secondPatronPrompt(): View? {
+        // **the identity that acts, and not every one held** [2026-11-07]:
+        // a second patron is protection for one identity's standing, and
+        // counting the lines of every identity would silence the prompt on
+        // a device holding two identities with one patron each — the case
+        // it exists for
         if (!Chrome.suggestingSecondPatron(Kernel.lines().size)) return null
         val said = Disclosure.words(Disclosure.Topic.SECOND_PATRON)
         if (said.isEmpty()) return null
@@ -569,7 +582,7 @@ class ShellActivity : Activity() {
                 )
             }
             is Chrome.Place.Subnet -> {
-                val scope = scopes.firstOrNull { it.id.hex() == where.id }
+                val scope = scopes.firstOrNull { it.row.id.hex() == where.id }?.row
                 column.addView(
                     bar(scope?.alias ?: "subnet ${where.id.take(8)}…", back = null) {
                         go(Chrome.Place.SubnetOptions(where.id))
@@ -622,7 +635,8 @@ class ShellActivity : Activity() {
                 )
             }
             is Chrome.Place.SubnetOptions -> {
-                val scope = scopes.firstOrNull { it.id.hex() == where.id }
+                val holder = scopes.firstOrNull { it.row.id.hex() == where.id }
+                val scope = holder?.row
                 val s = scope?.rank
                 column.addView(
                     bar(scope?.alias ?: "subnet ${where.id.take(8)}…", back = Chrome.Place.Subnet(where.id)),

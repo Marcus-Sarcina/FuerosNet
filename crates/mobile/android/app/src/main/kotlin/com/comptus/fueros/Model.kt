@@ -33,14 +33,20 @@ object Model {
         fun changed(nouns: Set<Noun>)
     }
 
-    @Volatile var contacts: List<Contact> = emptyList(); private set
-    @Volatile var subnets: List<Subnet> = emptyList(); private set
-    @Volatile var lines: List<Line> = emptyList(); private set
+    // **viewing is every held identity's at once** [author, 2026-11-07],
+    // so each of these rows carries whose it is ([Identities.Owned]) and a
+    // screen acting on one acts through that identity. **Instances are the
+    // exception**: every act on one is an operator action, which is the
+    // active identity's alone, so they are read from it and carry no
+    // holder.
+    @Volatile var contacts: List<Identities.Owned<Contact>> = emptyList(); private set
+    @Volatile var subnets: List<Identities.Owned<Subnet>> = emptyList(); private set
+    @Volatile var lines: List<Identities.Owned<Line>> = emptyList(); private set
     @Volatile var instances: List<Instance> = emptyList(); private set
-    @Volatile var resources: List<Resource> = emptyList(); private set
+    @Volatile var resources: List<Identities.Owned<Resource>> = emptyList(); private set
 
     /** The meetings this device took part in, newest first: outcomes, not the ceremony's state. */
-    @Volatile var meetings: List<Meeting> = emptyList(); private set
+    @Volatile var meetings: List<Identities.Owned<Meeting>> = emptyList(); private set
     @Volatile var connection: Connection = Connection.Detached; private set
 
     /** The aliases held, by keyhash in hex, which is how a screen names a party. */
@@ -62,15 +68,20 @@ object Model {
         if (nouns.isEmpty()) return
         Thread({
             if (Noun.CONTACTS in nouns || Noun.PROFILES in nouns) {
-                val held = Kernel.contacts()
+                val held = Kernel.contactsHeld()
                 contacts = held
-                aliases = held.mapNotNull { c -> c.alias?.let { c.keyhash.hex() to it } }.toMap()
+                // **an alias is a name for a party, not for a party under
+                // one identity**: two identities that both know somebody
+                // hold the same alias for them, and a map keyed by party
+                // is what a screen naming one needs
+                aliases = held.mapNotNull { o -> o.row.alias?.let { o.row.keyhash.hex() to it } }
+                    .toMap()
             }
-            if (Noun.SUBNETS in nouns || Noun.PROFILES in nouns) subnets = Kernel.subnets()
-            if (Noun.LINES in nouns) lines = Kernel.lines()
+            if (Noun.SUBNETS in nouns || Noun.PROFILES in nouns) subnets = Kernel.subnetsHeld()
+            if (Noun.LINES in nouns) lines = Kernel.linesHeld()
             if (Noun.INSTANCES in nouns) instances = Kernel.instances()
-            if (Noun.RESOURCES in nouns) resources = Kernel.resources()
-            if (Noun.MEETINGS in nouns) meetings = Kernel.meetings()
+            if (Noun.RESOURCES in nouns) resources = Kernel.resourcesHeld()
+            if (Noun.MEETINGS in nouns) meetings = Kernel.meetingsHeld()
             Diag.event("model.refreshed", "nouns" to nouns.joinToString(",") { it.name.lowercase() })
             tell(nouns)
         }, "fueros-model").start()

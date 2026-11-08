@@ -60,6 +60,26 @@ object Identities {
      */
     val LEGACY_SCOPE: String? = null
 
+    /**
+     * **One row and the identity that holds it** [author, 2026-11-07]:
+     * *"Concurrent for viewing or acting within subnets"*, so a list that
+     * merges several identities' rows has to say whose each one is.
+     *
+     * **Not decoration — it is what an action routes by.** A screen that
+     * acted on a merged row through whichever identity happened to be
+     * active would act as the wrong key, and nothing would fail: the act
+     * would succeed, signed by somebody the person did not choose. So the
+     * holder travels with the row and the screen acts through it, and only
+     * a meeting and an operator action take the active identity
+     * ([needsTheActive]).
+     */
+    data class Owned<T>(
+        /** The id of the identity that holds [row]. */
+        val by: String,
+        /** The row, as that identity's kernel reported it. */
+        val row: T,
+    )
+
     /** One identity the device holds. */
     data class Held(
         /** Its keyhash, lower-case hex — what names it everywhere. */

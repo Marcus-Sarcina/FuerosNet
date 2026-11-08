@@ -57,12 +57,36 @@ class ResourceActivity : Activity() {
 
     private var web: WebView? = null
 
+    /** The identity that holds the entry this screen was opened from. */
+    private var by: String? = null
+
+    /** Ask as that identity, or as the one that acts where none came. */
+    private fun askAsHolder(node: String, resource: String, path: String): Kernel.Answered? {
+        val holder = by
+        return if (holder == null) {
+            Kernel.ask(node, resource, path)
+        } else {
+            Kernel.askAs(holder, node, resource, path)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val node = intent.getStringExtra("node").orEmpty()
         val resource = intent.getStringExtra("resource").orEmpty()
         val name = intent.getStringExtra("name").orEmpty()
         val path = intent.getStringExtra("path") ?: "/"
+        // **whose entry brought us here** [author, 2026-11-07]: a resource
+        // is reached inside a subnet, so the identity holding its catalog
+        // entry is the one that asks ([Identities.Owned]). Absent where
+        // this screen was opened from a pasted keyhash with no entry, and
+        // then the identity that acts asks.
+        by = intent.getStringExtra("by")
+        // **whose entry brought us here** [author, 2026-11-07]: a resource
+        // is reached inside a subnet, so the identity that holds its
+        // catalog entry is the one that asks ([Identities.Owned]). Absent
+        // where the screen was opened from a pasted keyhash with no entry,
+        // and then the identity that acts asks.
 
         val title = TextView(this).apply {
             textSize = 19f
@@ -104,7 +128,7 @@ class ResourceActivity : Activity() {
         held.addView(note("asking…"))
         // **off the drawing thread**: asking a resource is a round trip
         // through the hosting node
-        Thread({ show(Kernel.ask(node, resource, path)) }, "fueros-resource").start()
+        Thread({ show(askAsHolder(node, resource, path)) }, "fueros-resource").start()
     }
 
     private var held: LinearLayout? = null

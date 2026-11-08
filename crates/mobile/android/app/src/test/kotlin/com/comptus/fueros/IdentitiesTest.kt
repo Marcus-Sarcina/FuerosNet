@@ -240,6 +240,53 @@ class IdentitiesTest {
     }
 
     @Test
+    fun viewing_is_every_identity_s_and_a_meeting_is_the_active_one_s() {
+        // **the division, pinned in both directions** [author,
+        // 2026-11-07]: a screen that listed merged rows and acted through
+        // the identity that happens to be active would act as the wrong
+        // key and nothing would refuse it, so the holder has to reach the
+        // act — and a meeting or an operator action must *not* be routed
+        // by a holder, since those take the active identity.
+        val model = source("Model.kt")
+        for (noun in listOf("contacts", "subnets", "lines", "resources", "meetings")) {
+            assertTrue(
+                "$noun is not read across every held identity",
+                model.contains("Kernel.${noun}Held()"),
+            )
+        }
+        assertTrue(
+            "the merged rows do not carry their holder",
+            model.contains("List<Identities.Owned<Subnet>>"),
+        )
+        // **instances are the exception**, every act on one being an
+        // operator action: read from the identity that acts, no holder
+        assertTrue("instances are not the active identity's", model.contains("Kernel.instances()"))
+        assertFalse("instances should carry no holder", model.contains("Kernel.instancesHeld()"))
+
+        // acting inside a subnet goes through the row's holder
+        assertTrue(
+            "leaving a line does not go through the identity that holds it",
+            source("LeavingActivity.kt").contains("Kernel.departAs(holder, patron.first)"),
+        )
+        val catalog = source("CatalogActivity.kt")
+        assertTrue("the catalog does not ask as the entry's holder", catalog.contains("Kernel.askAs("))
+        assertTrue("the entry's holder does not travel to the resource screen", catalog.contains("\"by\", entry.by"))
+        assertTrue(
+            "the resource screen does not ask as the holder it was given",
+            source("ResourceActivity.kt").contains("Kernel.askAs(holder, node, resource, path)"),
+        )
+
+        // **and a meeting and an operator action stay the active one's**
+        for (screen in listOf("MeetActivity.kt", "OperatorActivity.kt", "RotationActivity.kt")) {
+            val text = source(screen)
+            assertFalse(
+                "$screen reads subnets across identities, but a meeting and an operator action take the active one",
+                text.contains("Kernel.subnetsHeld()"),
+            )
+        }
+    }
+
+    @Test
     fun only_the_two_acts_that_need_one_can_be_refused_for_want_of_one() {
         assertTrue(Identities.refusal(Identities.Act.MEETING)!!.contains("meet as"))
         assertTrue(Identities.refusal(Identities.Act.OPERATOR)!!.contains("act as"))

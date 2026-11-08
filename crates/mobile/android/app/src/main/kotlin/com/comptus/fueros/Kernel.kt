@@ -918,9 +918,16 @@ object Kernel {
 
     /** Sweep the serving node's catalog (`wire-format.md` §6.4). */
     fun browse(): String? {
-        val p = participant ?: return "the kernel is not running"
+        // **every held identity sweeps its own** [author, 2026-11-07]: a
+        // catalog is read inside the subnets an identity belongs to, and
+        // the roll below shows them together. The refusal reported is the
+        // first, since one identity's node refusing says nothing about
+        // another's.
+        if (loaded.isEmpty()) return "the kernel is not running"
         var why: String? = null
-        call("browse", { why = it.reason }) { p.browse() }
+        for ((_, p) in loaded) {
+            call("browse", { if (why == null) why = it.reason }) { p.browse() }
+        }
         return why
     }
 
@@ -932,7 +939,18 @@ object Kernel {
      * answers is the application's, and nothing is kept of it.
      */
     fun ask(node: String, resource: String, path: String): Answered? {
-        val p = participant ?: return null
+        val me = activeId ?: return null
+        return askAs(me, node, resource, path)
+    }
+
+    /**
+     * **Reach a resource as the identity that holds its catalog entry**
+     * [author, 2026-11-07]: a resource is reached inside a subnet, which
+     * is acting within one — so the entry's holder is who asks, and not
+     * whichever identity happens to act ([Identities.Owned]).
+     */
+    fun askAs(by: String, node: String, resource: String, path: String): Answered? {
+        val p = asHolder(by) ?: return null
         val request = ("GET $path HTTP/1.1\r\nhost: resource\r\n\r\n").toByteArray()
         return call("requestResource", { null }) {
             answered(p.requestResource(unhex(node), unhex(resource), request))
@@ -2911,6 +2929,67 @@ object Kernel {
             start(context)
         }
         return true
+    }
+
+    /**
+     * **Every held identity's rows, each carrying whose it is** — the
+     * concurrent half of the author's division [2026-11-07]: *"Concurrent
+     * for viewing or acting within subnets"*.
+     *
+     * **The holder is what an action routes by** ([Identities.Owned]): a
+     * screen acting on a merged row through whichever identity happened
+     * to be active would act as the wrong key, and nothing would fail —
+     * the act would succeed under somebody the person did not choose.
+     *
+     * In the index's order, so the list a person reads does not reshuffle
+     * between refreshes.
+     */
+    private fun <T> acrossHeld(what: String, of: (Participant) -> List<T>): List<Identities.Owned<T>> {
+        val app = appContext ?: return listOf()
+        return identities(app).flatMap { h ->
+            val p = loaded[h.id] ?: return@flatMap listOf<Identities.Owned<T>>()
+            call(what, { emptyList<T>() }) { of(p) }.map { Identities.Owned(h.id, it) }
+        }
+    }
+
+    /** Every identity's subnets, each saying whose it is. */
+    fun subnetsHeld(): List<Identities.Owned<Subnet>> = acrossHeld("subnets") { it.subnets() }
+
+    /** Every identity's contacts, each saying whose it is. */
+    fun contactsHeld(): List<Identities.Owned<Contact>> = acrossHeld("contacts") { it.contacts() }
+
+    /** Every identity's lines, each saying whose it is. */
+    fun linesHeld(): List<Identities.Owned<Line>> = acrossHeld("lines") { it.lines() }
+
+    /** Every identity's resources, each saying whose it is. */
+    fun resourcesHeld(): List<Identities.Owned<Resource>> =
+        acrossHeld("resources") { it.resources() }
+
+    /** Every identity's meetings, each saying whose it is. */
+    fun meetingsHeld(): List<Identities.Owned<Meeting>> =
+        acrossHeld("meetings") { it.meetings() }
+
+    /**
+     * **Act as the identity that holds a row** rather than as the one that
+     * acts ([Identities.Owned]). Null where that identity is not open
+     * here, which a caller reports rather than falling back to the active
+     * one: falling back is the wrong-key act this exists to prevent.
+     */
+    private fun asHolder(by: String): Participant? = loaded[by]
+
+    /**
+     * **Leave a patron as the identity that holds that line** [author,
+     * 2026-11-07]: a departure is acting within a subnet, so it belongs to
+     * the identity that is in it and not to whichever one is active.
+     */
+    fun departAs(by: String, patronHex: String): String {
+        val p = asHolder(by) ?: return "that identity is not open on this device"
+        val who = runCatching { unhex(patronHex) }.getOrNull() ?: return "not a key: $patronHex"
+        return call("depart", { e -> "refused: ${e.reason}" }) {
+            val t = p.depart(who, null)
+            front.note("· ${by.take(8)}… left ${patronHex.take(8)}…; the departure is ${hex(t).take(8)}…")
+            "left ${patronHex.take(8)}… as ${by.take(8)}… — the departure is ${hex(t).take(8)}…"
+        }
     }
 
     /** Every identity this device holds, in the order the index names. */

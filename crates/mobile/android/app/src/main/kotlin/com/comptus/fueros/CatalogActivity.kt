@@ -112,9 +112,13 @@ class CatalogActivity : Activity() {
                 }
                 startActivity(
                     android.content.Intent(this@CatalogActivity, ResourceActivity::class.java)
-                        .putExtra("node", entry.node)
-                        .putExtra("resource", entry.resource)
-                        .putExtra("name", entry.instance)
+                        .putExtra("node", entry.row.node)
+                        .putExtra("resource", entry.row.resource)
+                        .putExtra("name", entry.row.instance)
+                        // **whose entry it is travels with it** [author,
+                        // 2026-11-07]: the resource is reached as the
+                        // identity that holds the entry
+                        .putExtra("by", entry.by)
                         .putExtra("path", path.text.toString().trim().ifBlank { "/" }),
                 )
             }
@@ -128,9 +132,14 @@ class CatalogActivity : Activity() {
                     return@setOnClickListener
                 }
                 isEnabled = false
-                answer.text = "asking ${entry.node}…"
+                answer.text = "asking ${entry.row.node}…"
                 Thread {
-                    val got = Kernel.ask(entry.node.hex(), entry.resource.hex(), path.text.toString().trim())
+                    val got = Kernel.askAs(
+                        entry.by,
+                        entry.row.node.hex(),
+                        entry.row.resource.hex(),
+                        path.text.toString().trim(),
+                    )
                     runOnUiThread {
                         answer.text = when {
                             got == null -> "the kernel would not ask"
@@ -194,13 +203,17 @@ class CatalogActivity : Activity() {
     }
 
     /** The catalog entry the pasted keyhash names, or null. */
-    private fun chosen(which: EditText): uniffi.rhtn_model.Resource? {
+    private fun chosen(which: EditText): Identities.Owned<uniffi.rhtn_model.Resource>? {
         val want = which.text.toString().trim().lowercase()
-        return Kernel.resources().firstOrNull { it.resource.hex() == want }
+        // **every held identity's entries** [author, 2026-11-07], each
+        // carrying whose it is: reaching a resource is acting within a
+        // subnet, so the ask goes through the identity that holds the
+        // entry rather than through whichever one acts
+        return Kernel.resourcesHeld().firstOrNull { it.row.resource.hex() == want }
     }
 
     private fun draw() {
-        roll.text = Catalog.roll(Kernel.resources())
+        roll.text = Catalog.roll(Kernel.resourcesHeld().map { it.row })
     }
 
     private fun said(a: Kernel.Answered): String = Catalog.answer(a)
