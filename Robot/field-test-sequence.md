@@ -149,8 +149,21 @@ fetches nothing at all while a node's own pages may load from their
 origin, and that every setting the frames shut reads shut off the engine's
 own object. One of its tests allows script on purpose, to establish that
 the page is loud when it can be — without which the silence the others
-rest on would prove nothing. **Ran 2026-11-08 on GXV** (SM-G996U1,
-Android 15): 5 tests, 0 failures, 0 errors.
+rest on would prove nothing. **Ran 2026-11-08 on GXV and MRK** (SM-G996U1,
+Android 15): 5 tests, 0 failures, 0 errors on each.
+
+**ZU8 and 4VC cannot run an instrumentation test at all**, which is a fact
+about those two phones and not about the frames [2026-11-08]. Both are
+`4188C` / `Jetta_ATT`; both register the instrumentation (`pm list
+instrumentation` names it, target `com.comptus.fueros`) and both carry a
+current WebView (`com.google.android.webview` 156.0.8078.47). But
+`am instrument -w` produces **no output at all** and does not return —
+including when asked for a class that does not exist, which a working
+mechanism answers immediately with "no tests found". So the frame run is
+held on the Samsungs, and these two are for the app and not for
+instrumentation. **Do not read a timeout here as a frame failure**; the
+reason it is written down is that it looks exactly like one from the
+gradle output, which says only that the build failed.
 
 **The run earned its keep on the first attempt, which failed.** The first
 version of the test asserted that the frame was never *asked* to navigate;
