@@ -18334,6 +18334,50 @@ screen is to say it. The screen itself and the candidate list are owed:
 nothing supplies providers and zones yet. The row stays unmarked, being
 manual.
 
+**Several identities on a device: the foundation, and the question that
+stopped it** [author, 2026-11-07]. The ruling: *"Concurrent for viewing
+or acting within subnets, each DM continues in the identity it started
+with, but only one ID active for meetings or performing operator
+actions, selectable by press-and-hold the nameplate/home button at the
+bottom of the home screen"*, and the rotated-away key *"stays useable to
+join new subnets or to interact with any existing subnets which were not
+rotated"*.
+
+**Built**: `Identities` with the act division, the index format, the
+migration and the active-identity rule, held by ten tests;
+`AndroidShell` taking a per-identity scope, because two kernels over one
+directory would each overwrite the other's archive; `keyhash_of_seeds`
+in the FFI, so storage can be named before a kernel opens on it; and the
+kernel holding a map of participants with an active id, `participant`
+becoming an accessor for the active one — which is what every one of its
+roughly two hundred uses already meant, so meetings and operator actions
+are gated without touching them.
+
+**The identity a device already holds keeps the top-level directory.** A
+migration that relocated an archive would be a destructive step at the
+one moment there is nothing to fall back on, so the scope is null for
+that one and nothing moves.
+
+**Not built, and a device still holds one**: the kernel does not yet
+write or read the index, `createIdentity` replaces rather than adds,
+there is no selector on the nameplate, and concurrent *viewing* wants
+`Model` to aggregate across participants rather than read one.
+
+**The blocker, which is the author's** [raised 2026-11-07]:
+`Participant.rotating` opens the new key **on the existing storage**,
+because the archive is the inheritance a rotation carries — and the old
+key is to stay usable in subnets that were not rotated, while an archive
+holds records of all of them. So after a rotation two keys want one
+archive and two participants cannot share a directory. **Does the
+rotated-away key keep its own copy, or does the archive go to the new
+key and the old one keep only what the un-rotated subnets need?**  The
+first duplicates history on the device and lets the copies diverge; the
+second needs a rule for what "only what it needs" is, when records of
+different subnets are interleaved in one chain. **"Add an identity" does
+not meet this** — a new identity starts empty in its own scope — so the
+rest of the feature can be finished without an answer, and the rotation
+path cannot.
+
 **SUB-14's key question answered, and what it leaves open** [author,
 2026-11-06]. The doorbell's sender key: *"Just salt the keygen with some
 fact about the server or subnet which the operator must hold anyway.

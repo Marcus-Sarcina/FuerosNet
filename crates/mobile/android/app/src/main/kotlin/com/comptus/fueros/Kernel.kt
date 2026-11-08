@@ -38,7 +38,33 @@ object Kernel {
     val front = Front()
 
     private val lock = Any()
-    @Volatile private var participant: Participant? = null
+
+    /**
+     * **Every identity this device holds, open at once**, by its id
+     * ([Identities]). A key rotation replaces the key one subnet knows and
+     * leaves the others live (design §9.0), so a device that has rotated
+     * holds a key still usable elsewhere [author, 2026-11-07].
+     *
+     * Each has storage of its own ([AndroidShell]'s scope): two kernels
+     * over one directory would each overwrite the other's archive.
+     */
+    private val loaded = java.util.concurrent.ConcurrentHashMap<String, Participant>()
+
+    /**
+     * **Which identity acts** — a meeting's and an operator action's
+     * ([Identities.needsTheActive]), chosen by press and hold on the
+     * nameplate. Null only where the device holds none.
+     */
+    @Volatile private var activeId: String? = null
+
+    /**
+     * **The identity that acts.** Every use of this in the shell means
+     * the active one, which is what a meeting and an operator action
+     * take; viewing and acting inside a subnet are every identity's at
+     * once and read [loaded] instead.
+     */
+    private val participant: Participant?
+        get() = activeId?.let { loaded[it] }
     @Volatile private var peer: ByteArray? = null
     @Volatile private var peerKey: String? = null
     private var peerName: String = "peer"
@@ -2364,7 +2390,17 @@ object Kernel {
                     Participant.start(heldSeeds(shell), known, platformOf(shell))
                 } ?: return
         }
-        participant = p
+        // **held under its own id** ([Identities]), which the kernel it
+        // opened is the authority for: a device holding identities always
+        // has one that acts, or a meeting would have nothing to offer and
+        // no way to say why ([Identities.active]).
+        val id = call("me", { null }) { hex(p.me()) }
+        if (id == null || !Identities.names(id)) {
+            front.setStatus("the kernel came up without naming itself")
+            return
+        }
+        loaded[id] = p
+        activeId = id
         show(p, Connection.Detached)
         // the shell's copy of the nouns, from a kernel that is up now
         Model.refreshAll()
@@ -2715,7 +2751,8 @@ object Kernel {
      * list is a device holding no identity.
      */
     fun wipe(context: Context): List<String> {
-        participant = null
+        loaded.clear()
+        activeId = null
         meet = null
         val app = context.applicationContext
         val left = mutableListOf<String>()

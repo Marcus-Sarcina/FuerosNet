@@ -57,11 +57,17 @@ class WipeTest {
 
     @Test
     fun the_kernel_directory_is_the_one_the_shell_seals_into() {
+        // **the tie is structural now** [2026-11-07]: the shell reads
+        // `Wipe.KERNEL_DIR` rather than a literal of its own, which is
+        // stronger than asserting the two strings match — they cannot
+        // differ. What this holds is that the shell still takes it from
+        // here, so a shell given a directory of its own would fail.
         val shell = sources().first { it.name == "AndroidShell.kt" }.readText()
         assertTrue(
-            "the shell no longer seals into ${Wipe.KERNEL_DIR}",
-            shell.contains("File(context.filesDir, \"${Wipe.KERNEL_DIR}\")"),
+            "the shell no longer takes its directory from Wipe.KERNEL_DIR",
+            stripped(shell).contains("File(context.filesDir, Wipe.KERNEL_DIR)"),
         )
+        assertEquals("and that directory is still the one a wipe clears", "kernel", Wipe.KERNEL_DIR)
     }
 
     @Test

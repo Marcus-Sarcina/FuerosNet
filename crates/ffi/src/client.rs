@@ -4204,6 +4204,39 @@ pub fn fresh_resource_keyhash() -> String {
         .collect()
 }
 
+/// **The keyhash a seed pair names**, lower-case hex: what a device calls
+/// one of the identities it holds ([author, 2026-11-07]: several at once,
+/// since a key rotation replaces the key one subnet knows and leaves the
+/// others live).
+///
+/// **Needed before a kernel is opened on them.** A shell holding several
+/// identities has to name each one's storage, and the name is its
+/// keyhash — so it must be derivable from the seeds alone, without
+/// starting anything. Takes the 64 bytes a shell seals: the Ed25519 seed
+/// and the ML-DSA seed, in that order.
+///
+/// **Derives and keeps nothing.** The identity it builds lives for the
+/// length of the call and the seeds are the caller's.
+#[uniffi::export]
+pub fn keyhash_of_seeds(seeds: Vec<u8>) -> Result<String, Refused> {
+    if seeds.len() != 64 {
+        return Err(Refused::new(
+            "a seed pair is 64 bytes: the Ed25519 seed and the ML-DSA seed",
+        ));
+    }
+    let (ed, pq): ([u8; 32], [u8; 32]) = (
+        seeds[..32].try_into().expect("32 of 64"),
+        seeds[32..].try_into().expect("32 of 64"),
+    );
+    let id = rhtn_crypto::SigningIdentity::from_seeds(&ed, &pq);
+    Ok(id
+        .public
+        .keyhash
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect())
+}
+
 /// **A `NetworkPoint` for an instance at this address** (`wire-format.md`
 /// §4.4), encoded, for the two records below.
 ///

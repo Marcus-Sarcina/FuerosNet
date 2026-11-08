@@ -36,15 +36,35 @@ import timber.log.Timber
  * application's private files directory; the kernel's state file names
  * contain no path.
  */
-class AndroidShell(private val context: Context) :
-    Camera, Clock, Random, Operator, Notices, Storage, Custody, Diagnostics {
+class AndroidShell(
+    private val context: Context,
+    /**
+     * **Which identity's storage this shell reads and writes** — the
+     * directory under [Wipe.KERNEL_DIR] an identity's own files live in,
+     * or null for the one that holds the top level ([Identities]).
+     *
+     * **Two kernels over one directory would each overwrite the other's
+     * archive**, which is why a device holding several identities gives
+     * each its own. The identity held before that model keeps the top
+     * level and nothing was moved: a migration that relocated an archive
+     * would be a destructive step at the one moment there is nothing to
+     * fall back on.
+     *
+     * The index, the active choice and the provision blob are the
+     * device's rather than an identity's, so they stay at the top level
+     * and are read through a shell with no scope.
+     */
+    private val scope: String? = null,
+) : Camera, Clock, Random, Operator, Notices, Storage, Custody, Diagnostics {
 
     /** An asset's bytes, or none where the app ships without it. */
     fun asset(name: String): ByteArray =
         runCatching { context.assets.open(name).use { it.readBytes() } }.getOrDefault(ByteArray(0))
 
 
-    private val dir: File = File(context.filesDir, "kernel").apply { mkdirs() }
+    private val dir: File = File(context.filesDir, Wipe.KERNEL_DIR)
+        .let { if (scope == null) it else File(it, scope) }
+        .apply { mkdirs() }
     private val rng = SecureRandom()
 
     /** The selfie camera for D4, opened on first frame and closed when the
