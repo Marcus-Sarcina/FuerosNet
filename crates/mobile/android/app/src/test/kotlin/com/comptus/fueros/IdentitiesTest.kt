@@ -14,6 +14,26 @@ class IdentitiesTest {
 
     private fun id(n: Int) = "%064x".format(n)
 
+    /** One of the shell's sources, with its comments stripped. */
+    private fun source(name: String): String {
+        val f = java.io.File(module(), "app/src/main/kotlin/com/comptus/fueros/$name")
+        val text = f.readText()
+        return text
+            .replace(Regex("""/\*[\s\S]*?\*/"""), " ")
+            .lines()
+            .joinToString("\n") { it.substringBefore("//") }
+    }
+
+    /** Where the tree is, for the source-reading test. */
+    private fun module(): java.io.File {
+        var at: java.io.File? = java.io.File(".").canonicalFile
+        while (at != null) {
+            if (java.io.File(at, "app/src/main/AndroidManifest.xml").isFile) return at
+            at = at.parentFile
+        }
+        throw AssertionError("no app/src/main/AndroidManifest.xml at or above here")
+    }
+
     private fun held(n: Int, scope: String? = null, alias: String? = null) =
         Identities.Held(id(n), scope, alias)
 
@@ -136,6 +156,42 @@ class IdentitiesTest {
         assertTrue("says the subnets run at once: $said", said.contains("at the same time"))
         assertTrue("says a conversation stays put: $said", said.contains("stays with the identity"))
         assertTrue("and what the mark means: $said", said.contains("meeting"))
+    }
+
+    @Test
+    fun the_nameplate_opens_the_list_and_the_kernel_adds_rather_than_replaces() {
+        // **the drawing a JVM test cannot reach**, as `InsetSweepTest` and
+        // `ManifestTest` say, so the wiring is read from the source
+        val shell = source("ShellActivity.kt")
+        assertEquals(
+            "both the mark and the plate open the list on a press and hold",
+            2,
+            Regex("""setOnLongClickListener \{ whichIdentity\(\)""").findAll(shell).count(),
+        )
+        assertTrue(
+            "the list is not drawn from the index and the active choice",
+            shell.contains("Identities.listed(held, Kernel.activeIdentity())"),
+        )
+        assertTrue(
+            "nothing says what is concurrent and what is not",
+            shell.contains("Identities.words()"),
+        )
+
+        val kernel = source("Kernel.kt")
+        // **adding, not replacing** [author, 2026-11-07]: an identity
+        // already held stays held, which is the whole of "Add an identity"
+        assertTrue(
+            "a new identity is not written into the index",
+            kernel.contains("Identities.encode(index + Identities.Held(id, scope, null))"),
+        )
+        assertTrue(
+            "a new identity does not get storage of its own",
+            kernel.contains("AndroidShell(app, scope).seal(Identities.LEGACY_SEEDS, seeds)"),
+        )
+        assertTrue(
+            "the held identities are not opened each on its own scope",
+            kernel.contains("AndroidShell(app, h.scope)"),
+        )
     }
 
     @Test

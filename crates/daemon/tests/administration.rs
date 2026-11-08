@@ -641,9 +641,21 @@ fn enrolled_with(
         assert_eq!(200, status(&ask(at, "PUT /node/run HTTP/1.1", &c)));
     }
     let said = d.lines();
+    // **and whether the process is still there** [2026-11-07]: `serving`
+    // blocks on stdout and answers `None` on EOF, so a daemon that died
+    // and a daemon that is slow read the same from here. Under a full
+    // parallel run this failed once with the waiting-for-the-run lines
+    // and no way to tell which it was. The exit status is the number that
+    // tells them apart, so the message carries it.
+    let serving = d.serving();
+    let gone = d.gone();
     assert!(
-        d.serving().is_some(),
-        "it serves once enrolled; the daemon said {said:?}"
+        serving.is_some(),
+        "it serves once enrolled; the daemon said {said:?} and its process was {}",
+        match gone {
+            Some(st) => format!("gone with {st}"),
+            None => "still running".to_string(),
+        }
     );
     (l, d, at)
 }

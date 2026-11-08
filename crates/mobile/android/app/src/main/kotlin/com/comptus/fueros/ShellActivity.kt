@@ -1,6 +1,7 @@
 package com.comptus.fueros
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.Canvas
 import android.graphics.Paint
@@ -377,6 +378,43 @@ class ShellActivity : Activity() {
         }
     }
 
+    /**
+     * **Which identity acts** ([Identities]; author, 2026-11-07): the
+     * list the nameplate opens on a press and hold, marked at the one a
+     * meeting and an operator action use.
+     *
+     * **It says what is concurrent and what is not** before the list,
+     * because the division is not visible from a list of names: every
+     * identity reads and acts in its own subnets at once, a conversation
+     * stays with the identity it started in, and only this choice moves.
+     */
+    private fun whichIdentity() {
+        val held = Kernel.identities(this)
+        if (held.size <= 1) {
+            // **nothing to choose between is said, not shown**: a list of
+            // one offers a decision that does not exist
+            Kernel.front.note("· this device holds one identity")
+            return
+        }
+        val rows = Identities.listed(held, Kernel.activeIdentity()).toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("Which identity acts")
+            .setMessage(Identities.words())
+            .setItems(rows) { _, which ->
+                val chosen = held.getOrNull(which) ?: return@setItems
+                if (Kernel.chooseActive(this, chosen.id)) {
+                    // the foot carries the name, so the place is redrawn
+                    // under the identity that now acts
+                    drawFromModel()
+                    go(place)
+                } else {
+                    Kernel.front.note("· that identity is not open on this device")
+                }
+            }
+            .setNegativeButton("Keep this one", null)
+            .show()
+    }
+
     private fun drawFoot(mine: Pair<String?, String>) {
         val c = Palette.now
         val (alias, me) = mine
@@ -394,6 +432,7 @@ class ShellActivity : Activity() {
                 contentDescription = "You, and this device's options"
                 isClickable = true
                 setOnClickListener { go(Chrome.Place.Options) }
+                setOnLongClickListener { whichIdentity(); true }
             },
         )
         footBar.addView(
@@ -406,6 +445,11 @@ class ShellActivity : Activity() {
                     .apply { weight = 1f; setMargins(dp(10), 0, 0, 0) }
                 isClickable = true
                 setOnClickListener { go(Chrome.Place.Home) }
+                // **press and hold for which identity acts** [author,
+                // 2026-11-07]: "selectable by press-and-hold the
+                // nameplate/home button at the bottom of the home
+                // screen to open a scrollable list of identities"
+                setOnLongClickListener { whichIdentity(); true }
                 addView(
                     TextView(this@ShellActivity).apply {
                         text = name
