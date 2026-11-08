@@ -18334,6 +18334,62 @@ screen is to say it. The screen itself and the candidate list are owed:
 nothing supplies providers and zones yet. The row stays unmarked, being
 manual.
 
+**The rotation path, and the question answered** [author, 2026-11-07]:
+*"just start a new archive for the new identity. From the user's
+standpoint, it is a completely new identity that just happened to spawn
+into an adoption to a subnet where it already carried roles and other
+state. The old archive should show the old ID leaving the subnet that
+rotated, but should otherwise remain unchanged."*  And on the ordering,
+confirming the reading put to him: the departure follows the adoption, so
+the person is never briefly outside the subnet — with *"An in-flight
+rotation should not impact the patron's 10 sub limit, so the same address
+can be assigned to the new ID as was held by the old and so long as the
+address doesn't transmit anywhere before it concludes, it should not cause
+any conflict."*
+
+**It turned out `Participant::rotating` already did the right thing.** The
+prior archive it builds is a separate in-memory one, used only to compose
+the `Recovery`; the new identity opens on whatever storage the platform
+hands it. The only thing making it inherit the old archive was the Kotlin
+handing it the old identity's directory, so the fix was scoping and no
+Rust changed for it.
+
+**A real defect fell out of the slot rule.** `Client::free_index` took the
+lowest unissued index for every adoption, a rotation's included, so the
+new key took a *second* address — and a patron holding ten subordinates
+would have refused the rotation outright with *"all ten subordinate slots
+are taken"*. Now an adoption carrying a `Recovery` takes the index the
+succeeded key occupies, read from **the block's own field 1** rather than
+from the composer: a caller able to name the succeeded key could take an
+address belonging to somebody else. `index_held_by` refuses a key holding
+no address beneath that position, and one this patron can see has
+departed. Demonstrated rather than assumed: with the reuse disabled the
+rotation's adoption took slot 1 while the old key held slot 0.
+
+**The departure is owed until signed.** A `rotation.succeeds` mark records
+which key is being succeeded, because the marks holding the prior seeds
+are forgotten the moment the rotation completes and the pairing has to
+outlive them. `Kernel.concludeRotation` runs at the end of every meeting
+and at every start, does nothing until the new identity holds a line —
+the state between beginning a rotation and meeting the patron — then has
+the prior key sign its own `depart`. A refusal leaves the mark; a
+succeeded key not held on the device spends it and says so, nothing being
+able to sign for it.
+
+**Also found**: `heldSeedsForRotation` read the top-level `"seeds"`, which
+on a device holding two identities is the wrong one's. It reads the active
+identity's scope now.
+
+**Still owed, and never blocked**: `Model` aggregating across
+participants. The wrinkle to settle first is that its rows carry no
+holder, so a merged list would act through the *active* identity rather
+than the one that holds the row — acting as the wrong key rather than
+failing to compile. The rule follows from the author's own division:
+acting within a subnet acts **as the identity that holds it**, and only a
+meeting and an operator action take the active one. So each aggregated
+noun carries its holder and every screen that acts inside a subnet routes
+through that holder.
+
 **Several identities on a device: the foundation, and the question that
 stopped it** [author, 2026-11-07]. The ruling: *"Concurrent for viewing
 or acting within subnets, each DM continues in the identity it started

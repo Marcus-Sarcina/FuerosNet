@@ -195,6 +195,51 @@ class IdentitiesTest {
     }
 
     @Test
+    fun a_rotation_makes_a_new_identity_and_owes_the_old_one_a_departure() {
+        // **the drawing and the kernel's own flow a JVM test cannot run**,
+        // so the three parts of the author's ruling are read from the
+        // source: a new archive for the new identity, the same address,
+        // and the departure after the adoption
+        val kernel = source("Kernel.kt")
+        assertTrue(
+            "the rotation's marks are not sealed in the new identity's own scope",
+            kernel.contains("val own = AndroidShell(app, scope)") &&
+                kernel.contains("own.seal(Rotation.MARK_PRIOR, priorSeeds)"),
+        )
+        assertTrue(
+            "the new identity is not named in the index, so a start would not open it",
+            kernel.contains("Identities.encode(index + Identities.Held(newId, scope, null))"),
+        )
+        assertTrue(
+            "nothing records which key the rotation succeeds",
+            kernel.contains("own.seal(Rotation.MARK_SUCCEEDS, priorId.toByteArray())"),
+        )
+        // **the departure follows the adoption**: the conclusion runs at
+        // the end of a meeting and at every start, and does nothing until
+        // the new identity holds a line
+        assertTrue("the conclusion is not reached when a meeting ends", kernel.contains("concludeRotation()"))
+        assertEquals(
+            "it runs at the end of a meeting and at every start",
+            2,
+            Regex("""^\s+concludeRotation\(\)""", RegexOption.MULTILINE).findAll(kernel).count(),
+        )
+        assertTrue(
+            "the departure is not the prior key's own act",
+            kernel.contains("old.depart(patron, null)"),
+        )
+        assertTrue(
+            "a refused departure does not stay owed",
+            kernel.contains("still owed"),
+        )
+        // and a rotation of a key this device does not hold cannot sign
+        // anything, so the mark is spent rather than retried forever
+        assertTrue(
+            "a succeeded key that is not held leaves the mark for ever",
+            kernel.contains("is not on this device, so its departure was not signed"),
+        )
+    }
+
+    @Test
     fun only_the_two_acts_that_need_one_can_be_refused_for_want_of_one() {
         assertTrue(Identities.refusal(Identities.Act.MEETING)!!.contains("meet as"))
         assertTrue(Identities.refusal(Identities.Act.OPERATOR)!!.contains("act as"))

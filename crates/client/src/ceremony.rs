@@ -865,6 +865,24 @@ fn hex8(k: &Keyhash) -> String {
     k[..4].iter().map(|b| format!("{b:02x}")).collect()
 }
 
+/// **The key a `Recovery` block says is being succeeded**
+/// (`wire-format.md` §4.1 field 1), where the block reads as one.
+///
+/// **Read from the block rather than taken from a caller** (design §9.1):
+/// the address a rotation reuses is the succeeded key's, so a composer
+/// able to name that key could take an address belonging to somebody
+/// else. The block is the party's own statement and is verified with the
+/// rest of the body.
+fn succeeded_key(block: &[u8]) -> Option<Keyhash> {
+    use rhtn_codec::cbor::{Item, map_get, parse_all};
+    let item = parse_all(block).ok()?;
+    let Item::Map(m) = &item else { return None };
+    match map_get(m, 1) {
+        Some(Item::Bytes(r)) if r.len() == 32 => block[r.clone()].try_into().ok(),
+        _ => None,
+    }
+}
+
 /// An abort on its way out of a step: the step and the variant are the
 /// event, and the abort is returned as it was, so `return Err(abort(..))`
 /// reads as the `return Err(..)` it replaces.  Compiled out of a
@@ -3289,7 +3307,27 @@ impl Client {
                 .ok_or_else(|| Abort::PatronRefused(format!("no position in {}", hex8(&s))))?,
             None => self.own_position(),
         };
-        let index = self.free_index(&pos)?;
+        // **a rotation reuses the address the succeeded key holds, and
+        // takes no second slot** [author, 2026-11-07]: *"An in-flight
+        // rotation should not impact the patron's 10 sub limit, so the
+        // same address can be assigned to the new ID as was held by the
+        // old"* (design §9.1). A patron at all ten would otherwise refuse
+        // every rotation inside a full subnet, since the adoption would
+        // be an eleventh subordinate — and a rotation adds no member.
+        //
+        // **Which key is being succeeded is the `Recovery` block's own
+        // statement** (`wire-format.md` §4.1 field 1), not a caller's
+        // claim: a composer that could name the party whose address it
+        // takes could take somebody else's.
+        let index = match &evidence {
+            Evidence::Recovery(block) => {
+                let prior = succeeded_key(block).ok_or_else(|| {
+                    Abort::PatronRefused("that recovery block names no prior key".into())
+                })?;
+                self.index_held_by(&pos, &prior)?
+            }
+            _ => self.free_index(&pos)?,
+        };
         let mut path = pos.path.clone();
         let nibbles = pos.nibbles + 1;
         if pos.nibbles.is_multiple_of(2) {
@@ -3321,6 +3359,59 @@ impl Client {
         verify::adoption_evidence(&self.known, &body)
             .map_err(|e| Abort::PatronRefused(e.to_string()))?;
         Ok(body)
+    }
+
+    /// **The index a party already occupies beneath `pos`**, which is what
+    /// a rotation takes rather than a free one (design §9.1).
+    ///
+    /// **Refused where that party holds none here.** A rotation is of a
+    /// member of this subnet; a key that is not one has no address to
+    /// reuse, and taking a free index for it would make the rotation an
+    /// ordinary adoption wearing a `Recovery`. **A relationship this
+    /// client can see has ended is not an address held**, which is the
+    /// same test [`Client::free_index`] applies in the other direction —
+    /// a key that departed and then presented a recovery is rotating
+    /// nothing.
+    fn index_held_by(&self, pos: &Locator, who: &Keyhash) -> Result<u8, Abort> {
+        let me = self.keyhash();
+        let ended: BTreeSet<Keyhash> = self
+            .horizon
+            .table
+            .bindings()
+            .iter()
+            .filter(|b| b.patron == me && b.end.is_some())
+            .map(|b| b.node)
+            .collect();
+        if ended.contains(who) {
+            return Err(Abort::PatronRefused(format!(
+                "{} has left this subnet, so it holds no address to rotate into",
+                hex8(who)
+            )));
+        }
+        for rec in self
+            .archive
+            .records()
+            .filter(|r| r.tx_type == TYPE_ADOPTION)
+        {
+            let (Some(patron), Some(node), Some(loc)) =
+                (rec.field_hash(2), rec.field_hash(1), rec.locator())
+            else {
+                continue;
+            };
+            let below = loc.anchor == pos.anchor
+                && loc.nibbles == pos.nibbles + 1
+                && (loc.subnet == pos.subnet || Some(rec.txid) == pos.subnet);
+            if patron != me || !below || node != *who {
+                continue;
+            }
+            if let Some(i) = loc.slot() {
+                return Ok(i);
+            }
+        }
+        Err(Abort::PatronRefused(format!(
+            "{} is not a subordinate of this position, so there is no address to rotate into",
+            hex8(who)
+        )))
     }
 
     /// The lowest subordinate index this client has not already issued in

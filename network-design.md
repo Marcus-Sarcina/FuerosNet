@@ -3542,6 +3542,34 @@ why every rotation carries it (§9.0.1). Run §7.3 in reverse:
 one: a template match is a machine agreeing that two images resemble each other,
 where recognition is somebody who knows you saying so.
 
+**An in-flight rotation takes no second slot** [author, 2026-11-07]. The new
+key is adopted into **the address the old one holds**, so a patron whose ten
+subordinate slots are all occupied (§3.1, §3.2) can still rotate one of them:
+the ten are members, and a rotation does not add a member. A patron that
+looked for a free index instead would refuse every rotation at a full subnet,
+which is the case this rule exists to answer.
+
+**The departure follows the adoption and does not precede it.** The old key
+leaves the subnet that rotated once the new key is adopted into its place, so
+the person is never briefly outside the subnet they are rotating inside —
+and the record of the leaving is the old key's own act in its own archive
+(§6.2), which is where a reader of that key's history finds what became of it.
+
+**Two keys at one address is only safe while nothing has transmitted.** The
+new position does not propagate before the rotation concludes: *"so long as
+the address doesn't transmit anywhere before it concludes, it should not cause
+any conflict"* [author]. What makes a repeated address a conflict is a holder
+elsewhere resolving it to two parties, and a position nobody has been told is
+held by nobody but the patron and the subject.
+
+**And the new key's archive is its own, started empty** [author, 2026-11-07]:
+*"just start a new archive for the new identity … The old archive should show
+the old ID leaving the subnet that rotated, but should otherwise remain
+unchanged."*  So the inheritance a rotation carries is what the patron's
+adoption says about the new key, not a history copied under it: from the
+subject's own standpoint it is a new identity that happened to arrive already
+holding the roles and state the old one had in that subnet.
+
 **Mechanically, the counterparty is its own querier** [2026-09-02]
 (`wire-format.md` §4.1): the subject stands in front of
 the party answering, so that party's client generates the verification query

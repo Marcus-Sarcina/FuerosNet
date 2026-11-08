@@ -497,6 +497,20 @@ job.
     hold on the nameplate at the foot of the home screen**, which opens a
     scrollable list of the identities held.
   The reason for the division is the author's and is not restated here.
+- **A rotation makes a new identity beside the old one** [author,
+  2026-11-07]: *"just start a new archive for the new identity … The old
+  archive should show the old ID leaving the subnet that rotated, but
+  should otherwise remain unchanged."*  So the new key gets storage and a
+  history of its own rather than the old one's, and from the person's own
+  standpoint it is a new identity that arrived already holding the roles
+  and state the old one had in that subnet — which the patron's adoption
+  is what carries, not a history copied beneath it. **The old key leaves
+  that subnet once the new one is adopted into its place, and not
+  before**, so the person is never briefly outside the subnet they are
+  rotating inside; the leaving is the old key's own act in its own archive
+  and it is owed until it is signed. **And the new key takes the address
+  the old one held** (design §9.1), so a rotation inside a full subnet is
+  possible: it adds no member.
 - **Merge automatically on noticing divergence.** A user has no reason to want
   outstanding branches, and an unmerged fork means their history is incomplete
   wherever they present it (design §10.3).

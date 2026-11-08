@@ -2328,7 +2328,12 @@ object Kernel {
         // that trusted the seeds would open the wrong identity on the
         // right archive
         val mark = shell.unseal(Rotation.MARK_NEW)
-        val p = when (Rotation.start(shell.unseal("seeds")?.size == 64, mark?.size == 64)) {
+        val p = when (
+            Rotation.start(
+                shell.unseal(Identities.LEGACY_SEEDS)?.size == 64,
+                mark?.size == 64,
+            )
+        ) {
             is Rotation.Start.Unstarted -> {
                 // **one identity's seeds being gone is that identity's
                 // fact and not the device's** [2026-11-07]: the device
@@ -2364,7 +2369,7 @@ object Kernel {
                     // **the new seeds become the identity only now**, and
                     // the mark goes after them: cleared first and the
                     // process dying would leave an archive nothing names
-                    if (!shell.seal("seeds", fresh)) {
+                    if (!shell.seal(Identities.LEGACY_SEEDS, fresh)) {
                         front.setStatus("the rotation held but its seeds could not be kept")
                         return null
                     }
@@ -2461,6 +2466,10 @@ object Kernel {
         // offer and no way to say why
         val saved = shell.unseal(Identities.ACTIVE)?.toString(Charsets.UTF_8)?.trim()
         activeId = Identities.active(index.filter { loaded.containsKey(it.id) }, saved)
+        // **a departure a rotation owes is owed at every start**, since a
+        // process that died between the adoption and the departure left
+        // the mark behind ([concludeRotation])
+        concludeRotation()
         val p = participant ?: run {
             front.setStatus("no identity on this device came up")
             return
@@ -2725,6 +2734,11 @@ object Kernel {
                     // and the peering the invitation's checkbox asked for,
                     // which is independent of the adoption
                     peeringBegins()
+                    // **and the departure a concluded rotation owes**
+                    // [author, 2026-11-07]: the old key leaves the subnet
+                    // that rotated once the new one is adopted into its
+                    // place, so this is the moment it is owed
+                    concludeRotation()
                 }
                 if (m.stepStale()) {
                     m.stop("nothing has moved for ${Meet.STALE_MS / 1000} s at ${m.step().name.lowercase()}; the other phone may have stopped")
@@ -2790,7 +2804,7 @@ object Kernel {
      * fault to say rather than paper over.
      */
     private fun heldSeeds(shell: AndroidShell): ByteArray {
-        val s = shell.unseal("seeds")
+        val s = shell.unseal(Identities.LEGACY_SEEDS)
         check(s != null && s.size == 64) { "no identity on this device: the first run was not completed" }
         return s
     }
@@ -2959,8 +2973,77 @@ object Kernel {
      * device can sign with the key it already has rather than asking a
      * person to type a phrase it holds.
      */
-    fun heldSeedsForRotation(context: Context): ByteArray? =
-        AndroidShell(context.applicationContext).unseal("seeds")?.takeIf { it.size == 64 }
+    fun heldSeedsForRotation(context: Context): ByteArray? {
+        // **the identity being rotated is the one that acts** ([Identities]:
+        // a rotation is a meeting, and a meeting takes the active
+        // identity), so its seeds come from its own scope and not the
+        // top-level directory a single-identity device used
+        val app = context.applicationContext
+        val id = activeId
+        val scope = if (id == null) {
+            Identities.LEGACY_SCOPE
+        } else {
+            val held = identities(app).firstOrNull { it.id == id } ?: return null
+            held.scope
+        }
+        return AndroidShell(app, scope).unseal(Identities.LEGACY_SEEDS)?.takeIf { it.size == 64 }
+    }
+
+    /**
+     * **The departure a concluded rotation owes** [author, 2026-11-07]:
+     * *"the rotation completes, the new key is adopted by patron P, and
+     * then the prior key departs P"* — in that order, so the person is
+     * never briefly outside the subnet they are rotating inside (design
+     * §9.1).
+     *
+     * **The mark is the trigger and forgetting it is the completion**, the
+     * same shape the rest of the rotation uses: this runs at every start
+     * and at the end of every meeting, does nothing where there is no
+     * mark, and does nothing where the new identity holds no line yet —
+     * which is the state between beginning a rotation and meeting the
+     * patron. A process that dies in the middle leaves the mark, and the
+     * next start owes the same act.
+     *
+     * **Nothing is guessed about which subnet.** The patron is the one
+     * the new identity's own line names; a new identity's archive is new
+     * ([beginRotation]), so the line it holds is the adoption the
+     * rotation just made.
+     */
+    private fun concludeRotation() {
+        val app = appContext ?: return
+        for (h in identities(app)) {
+            val own = AndroidShell(app, h.scope)
+            val priorId = own.unseal(Rotation.MARK_SUCCEEDS)
+                ?.toString(Charsets.UTF_8)?.trim()
+                ?.takeIf { Identities.names(it) }
+                ?: continue
+            val fresh = loaded[h.id] ?: continue
+            // the rotation has not reached its adoption yet: nothing owed
+            val patron = call("lines", { null }) { fresh.lines().firstOrNull()?.patron }
+                ?: continue
+            val old = loaded[priorId] ?: run {
+                // the key being succeeded is not open here — taken off the
+                // device, or never held. Nothing can sign its departure,
+                // and the mark is spent rather than retried forever
+                own.forget(Rotation.MARK_SUCCEEDS)
+                front.note("· the key this rotation succeeded is not on this device, so its departure was not signed")
+                return@run null
+            } ?: continue
+            val said = call("depart", { e -> e.reason }) {
+                old.depart(patron, null)
+                null
+            }
+            if (said == null) {
+                own.forget(Rotation.MARK_SUCCEEDS)
+                Diag.event("rotation.departed", "who" to priorId.take(8))
+                front.note("· the key you rotated away from has left that subnet")
+            } else {
+                // **left for the next start**: the mark stays, so the
+                // departure is owed rather than lost
+                front.note("· that departure was refused and is still owed: $said")
+            }
+        }
+    }
 
     /**
      * **Begin a key rotation, in a way a dying process cannot spoil**
@@ -2983,19 +3066,54 @@ object Kernel {
     fun beginRotation(context: Context, newSeeds: ByteArray, priorSeeds: ByteArray): Boolean {
         require(newSeeds.size == 64) { "the kernel's seeds are 64 bytes" }
         require(priorSeeds.size == 64) { "a prior identity is 64 bytes of seed" }
-        val shell = AndroidShell(context.applicationContext)
+        val app = context.applicationContext
+        // **the new key is a new identity, with an archive of its own**
+        // [author, 2026-11-07]: *"just start a new archive for the new
+        // identity … The old archive should show the old ID leaving the
+        // subnet that rotated, but should otherwise remain unchanged."*
+        // So the marks are sealed in the **new** identity's scope, not the
+        // rotating one's: [openOn] then performs the rotation on empty
+        // storage, and the key being succeeded opens from its own
+        // directory untouched.
+        val newId = idOfSeeds(newSeeds) ?: return false
+        val priorId = idOfSeeds(priorSeeds) ?: return false
+        if (newId == priorId) return false
+        val scope = Identities.scopeFor(newId)
+        val own = AndroidShell(app, scope)
         // the prior key first: a mark whose new seeds landed and whose
-        // prior did not is the half-mark [bringUp] has to drop, so make it
+        // prior did not is the half-mark [openOn] has to drop, so make it
         // the harder half to be missing
-        if (!shell.seal(Rotation.MARK_PRIOR, priorSeeds)) return false
-        if (!shell.seal(Rotation.MARK_NEW, newSeeds)) {
-            shell.forget(Rotation.MARK_PRIOR)
+        if (!own.seal(Rotation.MARK_PRIOR, priorSeeds)) return false
+        if (!own.seal(Rotation.MARK_NEW, newSeeds)) {
+            own.forget(Rotation.MARK_PRIOR)
+            return false
+        }
+        // **which key it succeeds, kept for the departure that follows**
+        // [author, 2026-11-07]: the old key leaves the rotated subnet once
+        // the new one is adopted into its place, and the marks that hold
+        // the prior seeds are forgotten the moment the rotation completes
+        own.seal(Rotation.MARK_SUCCEEDS, priorId.toByteArray())
+        // **and the index names it**, so a start opens it beside the one
+        // it succeeds rather than instead of it
+        val device = AndroidShell(app)
+        val index = Identities.decode(device.unseal(Identities.INDEX))
+        if (index.none { it.id == newId } &&
+            !device.seal(Identities.INDEX, Identities.encode(index + Identities.Held(newId, scope, null)))
+        ) {
+            own.forget(Rotation.MARK_NEW)
+            own.forget(Rotation.MARK_PRIOR)
+            own.forget(Rotation.MARK_SUCCEEDS)
             return false
         }
         newSeeds.fill(0)
         priorSeeds.fill(0)
         Diag.event("rotation.begun")
-        start(context)
+        if (started) {
+            openHeld(app, Identities.Held(newId, scope, null), listOf())
+            chooseActive(context, newId)
+        } else {
+            start(context)
+        }
         return true
     }
 

@@ -17,6 +17,15 @@ object Rotation {
     /** And the prior identity's, which the rotation needs to sign with. */
     const val MARK_PRIOR = "rotation.prior"
 
+    /**
+     * **Which key the new identity succeeds**, kept beside the marks
+     * [author, 2026-11-07]: the old key leaves the subnet that rotated
+     * once the new one is adopted into its place, and the marks holding
+     * the prior seeds are forgotten the moment the rotation completes —
+     * so the pairing has to outlive them to be acted on.
+     */
+    const val MARK_SUCCEEDS = "rotation.succeeds"
+
     /** What a start does, given what custody holds. */
     sealed class Start {
         /** No rotation outstanding: the sealed seeds are the identity. */

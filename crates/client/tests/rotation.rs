@@ -294,3 +294,55 @@ fn the_old_lines_are_sealed_before_the_rotation_adoption_goes_anywhere() {
         "nothing signed by the old key follows"
     );
 }
+
+/// **The new key takes the address the old one held, and the patron's ten
+/// slots stay ten** [author, 2026-11-07]: *"An in-flight rotation should
+/// not impact the patron's 10 sub limit, so the same address can be
+/// assigned to the new ID as was held by the old"* (design §9.1).
+///
+/// Before this, the patron composed a rotation's adoption with
+/// `free_index` like any other, so the new key took a *second* slot — and
+/// a patron whose ten were occupied would have refused the rotation
+/// outright, with "all ten subordinate slots are taken".
+// acceptance: REC-01
+#[test]
+fn a_rotation_reuses_the_address_it_succeeds_and_takes_no_second_slot() {
+    let (mut s, t, _) = rotated();
+    let slot_of = |s: &mut Setup, who: &str, subject: [u8; 32]| -> Option<u8> {
+        s.client(who)
+            .archive
+            .records()
+            .filter(|r| r.tx_type == rhtn_archive::tx::TYPE_ADOPTION)
+            .filter(|r| r.field_hash(1) == Some(subject))
+            .filter_map(|r| r.locator())
+            .filter_map(|l| l.slot())
+            .next()
+    };
+    // the patron's own archive holds both adoptions: the old key's and the
+    // rotation's
+    let old = slot_of(&mut s, "w1", kh("alice")).expect("alice held an address");
+    let env = s.client("w1").store.records[&t].clone();
+    let rec = Record::parse(&env).unwrap();
+    let got = rec.locator().expect("a locator").slot().expect("a slot");
+    assert_eq!(
+        got, old,
+        "the rotation's adoption names the address alice held, not a fresh one"
+    );
+
+    // **and the patron is no fuller than it was**: one subordinate address
+    // is occupied by this member, before and after
+    let taken: std::collections::BTreeSet<u8> = s
+        .client("w1")
+        .archive
+        .records()
+        .filter(|r| r.tx_type == rhtn_archive::tx::TYPE_ADOPTION)
+        .filter(|r| r.field_hash(2) == Some(kh("w1")))
+        .filter_map(|r| r.locator())
+        .filter_map(|l| l.slot())
+        .collect();
+    assert_eq!(
+        taken.len(),
+        1,
+        "two adoptions, one address: a rotation adds no member (design §9.1)"
+    );
+}
