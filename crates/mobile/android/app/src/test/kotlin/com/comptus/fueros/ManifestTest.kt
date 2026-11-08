@@ -180,14 +180,26 @@ class ManifestTest {
             )
         }
         // and what keeps the frame off this device is a setting, not a
-        // habit: the page gets no file, no content provider and no script
+        // habit: the page gets no file, no content provider and no script.
+        // **The settings live in [Frames] since 2026-11-08** so the
+        // instrumentation run can apply the same code to a real `WebView`;
+        // what this holds is that the screen reaches for them and that
+        // they are what they were.
+        assertTrue(
+            "NodePageActivity no longer frames through Frames.node",
+            code.contains("Frames.node(this)"),
+        )
+        val frames = File(
+            module(),
+            "app/src/main/kotlin/com/comptus/fueros/Frames.kt",
+        ).readText()
         for (shut in listOf(
             "javaScriptEnabled = false",
             "domStorageEnabled = false",
             "allowFileAccess = false",
             "allowContentAccess = false",
         )) {
-            assertTrue("NodePageActivity no longer sets `$shut`", code.contains(shut))
+            assertTrue("the node's frame no longer sets `$shut`", frames.contains(shut))
         }
     }
 

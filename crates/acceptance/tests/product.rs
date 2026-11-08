@@ -56,22 +56,6 @@ fn prd_06_disclose_to_operators_what_their_subordinates_ar() {
     todo!("PRD-06: Disclose to operators what their subordinates are exposed to, the hosting model, and the roles users hold")
 }
 
-/// Present a node's administration pages in a frame isolated from the client's keys, archive and sealed captures
-///
-/// Spec: infra-client-requirements.md §8.3
-/// Milestone: manual.  Kind: manual.  Oracle: behaviour.
-///
-/// Rule (infra-client-requirements.md §8.3): "The frame is a sandbox, isolated from the presenting client's keys, archive and sealed captures."
-///
-/// Given: A light client presenting the administration pages of the operator's instance.
-/// When: A page served by the instance attempts to reach the client's keys, archive or captures.
-/// Then: It cannot: the frame exposes none of them, and a seized instance serving a hostile page reaches nothing on the device.
-#[test]
-#[ignore = "acceptance PRD-12: owed at milestone manual"]
-fn prd_12_present_a_node_s_administration_pages_in_a_frame() {
-    todo!("PRD-12: Present a node's administration pages in a frame isolated from the client's keys, archive and sealed captures")
-}
-
 /// Ship the provisioning pages and no other administration pages
 ///
 /// Spec: infra-client-requirements.md §8.3

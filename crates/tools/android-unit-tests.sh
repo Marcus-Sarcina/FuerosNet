@@ -15,7 +15,13 @@ LOG="$ANDROID/app/build/gate-unit-tests.log"
 mkdir -p "$ANDROID/app/build"
 # the releasable flavour's variant: the test sources are one set for both
 # flavours, and the gate builds the releasable
-if (cd "$ANDROID" && ./gradlew --no-daemon -q testReleasableDebugUnitTest > "$LOG" 2>&1); then
+# **and the instrumentation source set is compiled, not run** [2026-11-08]:
+# PRD-12 and RSC-58 rest on a real `WebView`'s behaviour, which wants a
+# device the gate has not got -- but a test nothing compiles rots, and a
+# rotted one is discovered at the moment somebody needs it. So the gate
+# assembles it and the bench runs it
+# (`./gradlew connectedFieldtestDebugAndroidTest`).
+if (cd "$ANDROID" && ./gradlew --no-daemon -q testReleasableDebugUnitTest assembleFieldtestDebugAndroidTest > "$LOG" 2>&1); then
   # the count, not a state: read what actually ran
   python3 - "$ANDROID" <<'PY'
 import glob, sys

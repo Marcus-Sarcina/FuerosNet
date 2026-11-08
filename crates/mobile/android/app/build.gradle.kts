@@ -38,6 +38,12 @@ android {
         // ranging is gone [author, 2026-10-24] and the bearer keeps it.
         minSdk = 31
         targetSdk = 36
+        // **the instrumentation run** (PRD-12, RSC-58): frame isolation
+        // wants a real `WebView` and a hostile page, which no JVM test
+        // reaches. Not part of the gate, which has no device: run it with
+        // `./gradlew connectedFieldtestDebugAndroidTest` against a bench
+        // phone (`Robot/field-test-sequence.md`).
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         versionCode = 1
         versionName = "0.1"
         // Only the ABIs the kernel is built for: JNA's @aar carries its
@@ -106,4 +112,10 @@ dependencies {
     // Unit tests hold the shell's own logic on the JVM; what needs a
     // device stays on the device.
     testImplementation("junit:junit:4.13.2")
+    // The instrumentation run, which needs a device: the frame isolation
+    // PRD-12 and RSC-58 rest on is a real `WebView`'s behaviour and not
+    // the shell's logic. Apache-2.0, like everything else here.
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test:rules:1.6.1")
 }

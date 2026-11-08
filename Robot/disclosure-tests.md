@@ -87,6 +87,29 @@ which no JVM test reaches and which belongs in an instrumentation run.
 CER-55 needs a second conforming shell and is already marked provisional
 until the iOS one exists.
 
+**That instrumentation run exists now** [2026-11-08]:
+`app/src/androidTest/.../FrameIsolationTest.kt`, run with `./gradlew
+connectedFieldtestDebugAndroidTest` against a bench phone. The settings
+both screens had inline moved into `Frames` so the run applies **the same
+code the screens use** rather than a copy of it — a test asserting a copy
+would pass while the screens drifted, which is worse than no test. Two
+frames and not one, because a resource's page fetches nothing ever while a
+node's own pages are served by the instance and must load from its origin.
+
+**What is observable without script**, the frames refusing it: a page that
+tried to navigate, fetch or open a window reaches
+`shouldOverrideUrlLoading` or `shouldInterceptRequest`, and a recording
+client counts them — so silence is the evidence. **And the silence is only
+evidence because the same page is loud with script allowed**, which one of
+the tests establishes before the others rely on it; without it a frame
+that rendered nothing would pass everything here. The settings are also
+read back off the engine's own object after the frame is applied, which
+catches a widening that no probe in the file happens to exercise.
+
+**The gate compiles it and does not run it** (`tools/android-unit-tests.sh`
+assembles `FieldtestDebugAndroidTest`): there is no device in the gate, and
+a test nothing compiles rots — discovered at the moment somebody needs it.
+
 **So: 13 tests replace 16 manual rows, 11 of those rows closing on two
 tests between them.**
 

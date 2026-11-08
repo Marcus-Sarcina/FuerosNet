@@ -137,6 +137,30 @@ peering between two launched nodes. **Open with the author**: whether a
 renewal may add the pair to the points it carries over, which is the only
 way a node launched earlier gains one.
 
+**C1b The frames, on a real WebView** [2026-11-08]. PRD-12 and RSC-58 are
+frame isolation, which no JVM test reaches: run
+`./gradlew connectedFieldtestDebugAndroidTest` from
+`crates/mobile/android` against a bench phone and read the result.
+`FrameIsolationTest` feeds both frames a page that tries to run script,
+write local storage, fetch, open a window, navigate away, load a remote
+image and read `file:///etc/hosts`, and holds that neither frame follows a
+navigation, that neither reaches the filesystem, that a resource's page
+fetches nothing at all while a node's own pages may load from their
+origin, and that every setting the frames shut reads shut off the engine's
+own object. One of its tests allows script on purpose, to establish that
+the page is loud when it can be — without which the silence the others
+rest on would prove nothing. **Ran 2026-11-08 on GXV** (SM-G996U1,
+Android 15): 5 tests, 0 failures, 0 errors.
+
+**The run earned its keep on the first attempt, which failed.** The first
+version of the test asserted that the frame was never *asked* to navigate;
+the device answered with `file:///etc/hosts`, because an
+`iframe src="file://…"` reaches `shouldOverrideUrlLoading` — being asked
+is the page trying, and refusing is the frame's answer. The two were
+conflated, and nothing on the JVM would ever have said so. The decision
+is now `Frames.nodeGoing` / `Frames.resourceGoing`, which both the screen
+and the run ask rather than the run standing in for the screen's client.
+
 **C2 Node-to-node peering** — two containers; proven in-process
 (`a_new_root_peers_floods_and_is_reached_over_real_sessions`).
 

@@ -761,27 +761,10 @@ class ResourceActivity : Activity() {
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.MATCH_PARENT,
         )
-        settings.apply {
-            javaScriptEnabled = false
-            javaScriptCanOpenWindowsAutomatically = false
-            domStorageEnabled = false
-            databaseEnabled = false
-            allowFileAccess = false
-            allowContentAccess = false
-            allowFileAccessFromFileURLs = false
-            allowUniversalAccessFromFileURLs = false
-            // nothing in the page can be fetched, and the arithmetic of
-            // whether a `src` resolves is not what this rests on
-            blockNetworkLoads = true
-            blockNetworkImage = true
-            setGeolocationEnabled(false)
-            mediaPlaybackRequiresUserGesture = true
-            cacheMode = android.webkit.WebSettings.LOAD_NO_CACHE
-            useWideViewPort = true
-            loadWithOverviewMode = true
-            builtInZoomControls = true
-            displayZoomControls = false
-        }
+        // **the frame itself is [Frames.resource]**, which the
+        // instrumentation run applies to a real `WebView` of its own: one
+        // definition, so a test cannot pass while this screen drifts
+        Frames.resource(this)
         webViewClient = object : WebViewClient() {
             /** **No origin, so no navigation.** Every one is refused. */
             override fun shouldOverrideUrlLoading(

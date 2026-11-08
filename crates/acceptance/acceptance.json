@@ -6249,7 +6249,7 @@
   "when": "A page served by the instance attempts to reach the client's keys, archive or captures.",
   "then": "It cannot: the frame exposes none of them, and a seized instance serving a hostile page reaches nothing on the device.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": " **Closed by an instrumentation run** [2026-11-08]: `app/src/androidTest/.../FrameIsolationTest.kt`, five tests, run on GXV (SM-G996U1, Android 15) with `./gradlew connectedFieldtestDebugAndroidTest` — 0 failures. A real `WebView` is fed a page that tries to run script, write local storage, fetch, open a window, navigate away, load a remote image and read `file:///etc/hosts`. The settings both screens had inline moved into `Frames`, so the run applies **the same code the screens use**: a test asserting a copy would pass while the screens drifted. **The gate compiles the source set and does not run it**, there being no device in the gate and a test nothing compiles being one that rots. **The first attempt failed on the device and was right to**: it asserted the frame was never *asked* to navigate, and an `iframe src=\"file://…\"` reaches `shouldOverrideUrlLoading` — being asked is the page trying, refusing is the frame's answer, and the two were conflated. The decision is now `Frames.nodeGoing` and `Frames.resourceGoing`, which the screen and the run both ask rather than the run standing in for the screen's client. One test allows script on purpose, to establish that the page is loud when it can be; without it a frame that rendered nothing would pass everything."
  },
  {
   "id": "PRD-13",
@@ -15619,7 +15619,7 @@
   "when": "A reviewer serves a page that attempts script, a fetch, storage, a file URL and a navigation away.",
   "then": "None of them takes effect: the document has no origin to share, nothing is published into it, no fetch is served, nothing it stored outlives the screen, and the navigation is refused with the person told the frame did not go. The client's own styling applies where the page sets none and loses where it sets any, and the page's markup is unaltered.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": " **Closed by an instrumentation run** [2026-11-08]: `app/src/androidTest/.../FrameIsolationTest.kt`, five tests, run on GXV (SM-G996U1, Android 15) with `./gradlew connectedFieldtestDebugAndroidTest` — 0 failures. A real `WebView` is fed a page that tries to run script, write local storage, fetch, open a window, navigate away, load a remote image and read `file:///etc/hosts`. The settings both screens had inline moved into `Frames`, so the run applies **the same code the screens use**: a test asserting a copy would pass while the screens drifted. **The gate compiles the source set and does not run it**, there being no device in the gate and a test nothing compiles being one that rots. **The first attempt failed on the device and was right to**: it asserted the frame was never *asked* to navigate, and an `iframe src=\"file://…\"` reaches `shouldOverrideUrlLoading` — being asked is the page trying, refusing is the frame's answer, and the two were conflated. The decision is now `Frames.nodeGoing` and `Frames.resourceGoing`, which the screen and the run both ask rather than the run standing in for the screen's client. One test allows script on purpose, to establish that the page is loud when it can be; without it a frame that rendered nothing would pass everything."
  },
  {
   "id": "RSC-59",

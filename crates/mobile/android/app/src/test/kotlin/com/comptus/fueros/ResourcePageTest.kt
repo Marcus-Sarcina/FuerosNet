@@ -151,7 +151,16 @@ class ResourcePageTest {
 
     @Test
     fun the_frame_asks_for_every_refusal_the_policy_names() {
-        val src = source("ResourceActivity.kt")
+        // **the settings moved to [Frames] and the screen calls it**
+        // [2026-11-08], so the instrumentation run can apply the same code
+        // to a real `WebView` instead of a copy of it. Both halves are
+        // asserted: the definition refuses, and the screen reaches for the
+        // definition — either alone would pass while the other drifted.
+        val src = source("Frames.kt")
+        assertTrue(
+            "ResourceActivity no longer frames through Frames.resource",
+            source("ResourceActivity.kt").contains("Frames.resource(this)"),
+        )
         for (setting in listOf(
             "javaScriptEnabled = false",
             "domStorageEnabled = false",
@@ -167,10 +176,12 @@ class ResourcePageTest {
             assertTrue("the frame does not set $setting", src.contains(setting))
         }
         // the null base is the isolation, so it is asserted as text: a
-        // base URL here would give the document an origin to share
+        // base URL here would give the document an origin to share. **It
+        // stays with the screen that loads**, not with [Frames], which
+        // configures and does not load
         assertTrue(
             "the page must load with a null base, which is its opaque origin",
-            src.contains("loadDataWithBaseURL(null,"),
+            source("ResourceActivity.kt").contains("loadDataWithBaseURL(null,"),
         )
         // and nothing is published into the page
         assertFalse("a bridge is the one way in", src.contains("addJavascriptInterface"))
@@ -196,10 +207,29 @@ class ResourcePageTest {
     /** And neither of them enables script, whatever else they differ on. */
     @Test
     fun neither_frame_runs_somebody_elses_script() {
+        val frames = source("Frames.kt")
+        // one definition each, and both refuse
+        assertEquals(
+            "both frames must refuse script",
+            2,
+            Regex("javaScriptEnabled = false").findAll(frames).count(),
+        )
+        assertFalse("a frame enables script", frames.contains("javaScriptEnabled = true"))
+        // and each screen reaches for its own frame rather than setting
+        // anything of its own
+        assertTrue(
+            "NodePageActivity does not frame through Frames.node",
+            source("NodePageActivity.kt").contains("Frames.node(this)"),
+        )
+        assertTrue(
+            "ResourceActivity does not frame through Frames.resource",
+            source("ResourceActivity.kt").contains("Frames.resource(this)"),
+        )
         for (name in listOf("NodePageActivity.kt", "ResourceActivity.kt")) {
-            val src = source(name)
-            assertTrue("$name does not refuse script", src.contains("javaScriptEnabled = false"))
-            assertFalse("$name enables script", src.contains("javaScriptEnabled = true"))
+            assertFalse(
+                "$name sets a web setting of its own, outside the frame it shares",
+                source(name).contains("settings.apply"),
+            )
         }
     }
 }

@@ -94,24 +94,14 @@ class NodePageActivity : Activity() {
             LinearLayout.LayoutParams.MATCH_PARENT,
             0,
         ).apply { weight = 1f }
-        settings.apply {
-            // the node's pages carry no script, so refusing it costs
-            // nothing and is the strongest single thing this frame does
-            javaScriptEnabled = false
-            domStorageEnabled = false
-            databaseEnabled = false
-            allowFileAccess = false
-            allowContentAccess = false
-            // a page that could not be read at phone width would be one
-            // the operator has to fight; §8.3 leaves the presentation here
-            useWideViewPort = true
-            loadWithOverviewMode = true
-            builtInZoomControls = true
-            displayZoomControls = false
-            // nothing is cached, so nothing of the node's state outlives
-            // the screen on this device
-            cacheMode = android.webkit.WebSettings.LOAD_NO_CACHE
-        }
+        // **the frame itself is [Frames.node]**, which the
+        // instrumentation run applies to a real `WebView` of its own: one
+        // definition, so a test cannot pass while this screen drifts.
+        // **It shuts more than this screen used to**: file-URL access and
+        // window opening were left at their defaults here while the
+        // resource frame refused them, which was an inconsistency and not
+        // a decision [2026-11-08].
+        Frames.node(this)
         webViewClient = object : WebViewClient() {
             /**
              * **One origin.** The instance's own address and nothing else:
@@ -147,8 +137,12 @@ class NodePageActivity : Activity() {
                 }
                 // **a read of this instance's own page is proved too**, so
                 // the frame re-signs each navigation inside the origin
-                // rather than following it bare
-                if (going.startsWith("$origin/") || going == origin) {
+                // rather than following it bare.
+                // **The decision is [Frames.nodeGoing]'s**, so the
+                // instrumentation run can ask the same question this
+                // answers rather than standing in for this client
+                // [2026-11-08]
+                if (Frames.nodeGoing(origin, going, bounced = false) == Frames.Going.INSIDE) {
                     // **a URL this frame already proved is let through**,
                     // which is what stops `go` re-entering itself: a
                     // target carrying a proof is one we minted, and a
