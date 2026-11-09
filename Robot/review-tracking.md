@@ -18334,6 +18334,56 @@ screen is to say it. The screen itself and the candidate list are owed:
 nothing supplies providers and zones yet. The row stays unmarked, being
 manual.
 
+**PRD-13 closed, and the presence-record review deferred from the initial
+release** [author, 2026-11-09].
+
+**PRD-13's owed note was stale.** `Robot/light-client-screens.md` recorded
+that the two records and the run were signed over the position the device
+acts in rather than the chosen subnet's, and that a kernel
+`endpoint_record_in(subnet)` was wanted. It exists and is used:
+`Client::endpoint_record_in` and `anchor_entry_in` take the subnet and
+take that line's series from `line_in`, and `Kernel.enrol` passes the
+chosen subnet to both. **The run needs no subnet** — a delegation is the
+key's own act over a transport key and a window (`wire-format.md` §8.2),
+with no position in it, so there is no line for it to be wrong about.
+
+**And the second half of the row got the test it was missing**: every door
+to the instance's own pages names an address that came from an instance.
+**There are two doors, not one** — a standalone control disabled until an
+enrolment takes a credential, and one per row of the instance roll, which
+cannot exist with no instance — and the first version of the test asserted
+a property of only one of them, which the test itself caught.
+
+**The deferral** [author]: *"MET-12 and the whole presence record review
+are to be deferred from the initial release … I'm still planning for this
+as part of the fully realized design, but it demands a level of platform
+sophistication which an initial adopting public won't have and will in the
+near term just add complexity to the interface and dissuade adoption."*
+
+**Where the boundary was drawn, and why.** The deferral is of a patron
+*reviewing* a candidate's presence records to form an initial trust state
+— the thing with an interface. The mechanisms beneath it stay and are
+built: a presenter serves its own archive, a fetcher verifies the
+structure of what came back (`light-client-requirements.md` §2). Those are
+the wire and cost nothing. Until the review exists an evaluator's initial
+trust state is what the metric reads from its own copy, asking nobody,
+which is MET-09 — so the deferral leaves a coherent behaviour rather than
+a hole.
+
+Recorded at design §16.7 (where *"this is review, not edge creation"*
+lives) and §23.1's deferred-by-decision list, in
+`light-client-requirements.md` §2 beside the serving obligation, in
+`Robot/implementation-plan.md`'s stage-3 archive row, and on MET-12's
+`deferred` field. **Not in `functional_tests.md`**: that document is a
+summation of the design as written and a release-scope decision is not a
+change to the design, so the rows that specify the weighting stand.
+
+**And a stale deferral struck while in there**: §4, §13.7 and §23.1 each
+said multiple identities per client was a v1 client-scope exclusion. It
+was built on 2026-11-07 at the author's instruction, so all three are
+corrected — §16.7's *"acceptable for v1, given multiple-identity support
+is deferred"* with them.
+
 **PAY-13's oracle restated, and the primitive vectors added** [author,
 2026-11-08]. It had read *"the key agreement and ratchet outputs match the
 adopted specifications for the same inputs"*, which nobody in this project

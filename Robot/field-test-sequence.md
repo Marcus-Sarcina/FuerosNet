@@ -165,6 +165,20 @@ instrumentation. **Do not read a timeout here as a frame failure**; the
 reason it is written down is that it looks exactly like one from the
 gradle output, which says only that the build failed.
 
+**And take the instrumentation APK off again** [2026-11-09]. Installing
+`app-fieldtest-debug-androidTest.apk` by hand — which is what debugging
+the two phones above took — leaves the app being stopped on every launch:
+`am_kill: stop com.comptus.fueros due to finished inst` in the event
+buffer, the app resident for a few seconds and then gone, **with no
+`FATAL EXCEPTION` and no native crash**, so it reads as a mysterious
+death. `adb uninstall com.comptus.fueros.test` fixes it and the app then
+stays up. Gradle removes it after its own run; a hand install is a hand
+uninstall.
+
+**ZU8's clock runs about five hours off the host's**, worth knowing before
+reading its `logcat` timestamps against anything else: an event stamped
+"23:52" there was minutes old, not hours.
+
 **The run earned its keep on the first attempt, which failed.** The first
 version of the test asserted that the frame was never *asked* to navigate;
 the device answered with `file:///etc/hosts`, because an

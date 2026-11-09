@@ -20,19 +20,3 @@
 fn prd_03_warn_that_an_unlinked_identity_path_abandons_sta() {
     todo!("PRD-03: Warn that an unlinked identity path abandons standing, and that a linked one loses unlinkability")
 }
-
-/// Ship the provisioning pages and no other administration pages
-///
-/// Spec: infra-client-requirements.md §8.3
-/// Milestone: manual.  Kind: manual.  Oracle: behaviour.
-///
-/// Rule (infra-client-requirements.md §8.3): "A client ships the provisioning pages and no others."
-///
-/// Given: A light client with no instance provisioned, then one provisioned.
-/// When: The operator's tab is opened in each state.
-/// Then: Before provisioning the tab carries the provisioning pages only, working with no node present; after, what administers the instance arrives from the instance and nothing administrative is the client's own.
-#[test]
-#[ignore = "acceptance PRD-13: owed at milestone manual"]
-fn prd_13_ship_the_provisioning_pages_and_no_other_adminis() {
-    todo!("PRD-13: Ship the provisioning pages and no other administration pages")
-}

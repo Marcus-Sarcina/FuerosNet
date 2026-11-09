@@ -138,6 +138,79 @@ class ManifestTest {
         assertTrue("no launcher declared", launcher != null)
         assertTrue("the launcher is ${launcher!!.groupValues[1]}, not the shell", launcher.groupValues[1] == "ShellActivity")
     }
+
+    /**
+     * **PRD-13's other half: the tab works with no node, and the door to
+     * the instance's own pages opens only once there is one**
+     * (`infra-client-requirements.md` §8.3).
+     *
+     * The first half — that the client ships no administrative page of
+     * its own — is below. This is the state half of the row's oracle:
+     * *"Before provisioning the tab carries the provisioning pages only,
+     * working with no node present; after, what administers the instance
+     * arrives from the instance"*. Read from the source, a JVM test being
+     * unable to open the tab.
+     */
+    // acceptance: PRD-13
+    @Test
+    fun the_operator_tab_provisions_with_no_node_and_opens_no_page_until_there_is_one() {
+        val screen = File(
+            module(),
+            "app/src/main/kotlin/com/comptus/fueros/OperatorActivity.kt",
+        ).readText()
+        // **there are two doors, not one** [2026-11-09, found by this
+        // test]: a standalone control, and one per row of the instance
+        // roll. The first starts shut; the second cannot exist with no
+        // instance, being drawn inside the roll. So what is asserted is
+        // the property both share — **every door names an address that
+        // came from an instance**, `pageAt` after a credential was taken
+        // or `i.at` off a remembered one, and nothing else can open it.
+        val doors = Regex("""NodePageActivity::class\.java\)[\s\S]{0,120}?putExtra\("at", ([A-Za-z.]+)""")
+            .findAll(screen)
+            .map { it.groupValues[1] }
+            .toList()
+        assertTrue("no door to the node's pages was found at all", doors.isNotEmpty())
+        assertEquals(
+            "a door to the node's pages names an address from somewhere other than an instance: $doors",
+            setOf("it", "i.at"),
+            doors.toSet(),
+        )
+        // and the standalone one starts shut, `it` being `pageAt`'s value
+        assertTrue(
+            "the standalone administration-page control is not disabled to begin with",
+            screen.contains("text = \"Open its administration page\"\n            isEnabled = false"),
+        )
+        // and it opens exactly when an instance has taken a credential,
+        // which is what makes it an instance rather than a machine
+        assertTrue(
+            "the door does not open on the enrolment's own result",
+            screen.contains("open.isEnabled = pageAt != null"),
+        )
+        assertTrue(
+            "the door does not open after a launch enrols",
+            screen.contains("open.isEnabled = true"),
+        )
+        // **and the provisioning itself reaches no page**: it is native,
+        // so it works with no node present (`Provision`, `Launch`)
+        for (native in listOf("Provision.fetch", "Launch.providers()")) {
+            assertTrue("the tab no longer provisions natively: $native", screen.contains(native))
+        }
+        // the records the enrolment signs name the chosen subnet, so an
+        // operator holding positions in two can enrol in the second
+        val kernel = File(
+            module(),
+            "app/src/main/kotlin/com/comptus/fueros/Kernel.kt",
+        ).readText()
+        assertTrue(
+            "the endpoint record is not signed on the chosen subnet's line",
+            kernel.contains("p.endpointRecord(line, listOf(point), 1u)"),
+        )
+        assertTrue(
+            "the anchor entry is not signed on the chosen subnet's line",
+            kernel.contains("p.anchorEntryFresh(line2, listOf(point), 1u)"),
+        )
+    }
+
     /**
      * **PRD-13: the client ships the provisioning pages and no other
      * administration pages** (`infra-client-requirements.md` §8.3).
@@ -149,6 +222,7 @@ class ManifestTest {
      * Kotlin ([Provision]), so it works with no node present; everything
      * that administers an instance is fetched from that instance.
      */
+    // acceptance: PRD-13
     @Test
     fun the_client_ships_provisioning_and_no_administrative_page_of_its_own() {
         val root = module()

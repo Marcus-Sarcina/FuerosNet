@@ -756,10 +756,14 @@ distinct from §22's open questions about mechanisms that *are* specified.
   re-introduced, which is where §12.4 puts discovery anyway. *Revisit only with a
   delivery message and an accepted linkability window.*
 - Transaction types beyond those listed above
-- Multiple identities per client — **a v1 client-scope exclusion, not a protocol
-  limit.** The protocol permits them already (§13.7); what v1 omits is the key
-  management and interface work. A single-identity client correlates across
-  subnets; a multi-identity one does not, with no wire difference between them
+- ~~Multiple identities per client~~ — **no longer deferred: built 2026-11-07**
+  [author]. The protocol always permitted them (§13.7); what was deferred was
+  the key management and the interface, and both exist — a device holds several
+  identities with storage of its own for each, one of them acting for a meeting
+  or an operator action and every one of them reading and acting inside its own
+  subnets (`light-client-requirements.md` §2). A single-identity client
+  correlates across subnets; a multi-identity one does not, with no wire
+  difference between them
 - **Autonomous-AI participation** (§23.2, *Autonomous participation*). Note this is
   deferred *participation*,
   not a deferred mechanism: an autonomous participant that bears its own costs and
@@ -5701,10 +5705,11 @@ prompt rotation across all of them on compromise.
 
 **Multiple identities is a client capability the protocol already permits.** Nothing in the wire format or the topology binds a device to
 one key: an identity *is* a key, adoptions are per-identity, and a client holding
-several is running several identities as far as the network can tell. **What is
-deferred is the client work**: key management and the interface for choosing
-between them, and §4 lists it as a v1 client-scope exclusion, not an architectural
-limit.
+several is running several identities as far as the network can tell. **The client
+work that was deferred is done** [author, 2026-11-07]: key management and the
+interface for choosing between them, the reference client holding several at once
+with storage of its own for each and one of them acting for a meeting or an
+operator action (`light-client-requirements.md` §2). §4's exclusion is struck.
 
 **The consequence is therefore conditional, and belongs to the client.** §3.1.1's
 analogies presume different names in different domains, and a **single-identity
@@ -7511,10 +7516,24 @@ once, which transactions are legible at all, and how much each legible one
 weighs. **This is review, not edge creation**: the archive informs the
 initial trust state and installs no standing capacity (§16.2.1).
 
+**The review itself is deferred from the initial release** [author, 2026-11-09],
+and the mechanisms under it are not. The presenter still serves its own archive
+and a recipient still verifies the structure of what it fetched
+(`light-client-requirements.md` §2) — those are the wire and they cost nothing.
+What waits is a patron *reviewing* a candidate's presence records to form an
+initial trust state: *"it demands a level of platform sophistication which an
+initial adopting public won't have and will in the near term just add complexity
+to the interface and dissuade adoption."*  **It stays part of the design**, which
+is why it is written here rather than struck; §23.1 carries the deferral. Until
+it is built the initial trust state is what §16.2's metric reads from the
+evaluator's own copy, asking nobody — which is the behaviour a client has
+anyway.
+
 Open tension: an archive presented *lacking* previously-seen transactions may
 itself be read as evidence of deviousness. This probably pushes users wanting to
-participate in rival networks toward creating separate identities — acceptable
-for v1, given multiple-identity support is deferred.
+participate in rival networks toward creating separate identities — **which the
+client now supports** [author, 2026-11-07], so the pressure has somewhere to go
+rather than being a tension the design absorbs.
 
 ---
 
@@ -8868,8 +8887,20 @@ line here says *this is not being built yet*.
 
 - **Autonomous participation** and the attention question depending on it (§22). Not to
   be implemented in this or any intervening version.
-- **Transaction types beyond the current six** (seven numbers allocated; type 6 is a tombstone), and **multiple identities per client** (§4) —
-  a v1 client-scope exclusion, not a protocol limit.
+- **Transaction types beyond the current six** (seven numbers allocated; type 6
+  is a tombstone). ~~And multiple identities per client~~ — **built 2026-11-07**
+  [author] and struck from here; it was a client-scope exclusion rather than a
+  protocol limit, and the client scope changed.
+- **Reviewing a candidate's presence records to form an initial trust state**
+  (§16.7). Not in the initial release [author, 2026-11-09]: *"it demands a level
+  of platform sophistication which an initial adopting public won't have and will
+  in the near term just add complexity to the interface and dissuade adoption."*
+  **Part of the fully realized design**, which is why §16.7 still describes it:
+  what is deferred is the building, not the intent. The mechanisms beneath it
+  stay — a presenter serves its own archive, a recipient verifies the structure
+  of what it fetched — and until the review is built an evaluator's initial trust
+  state is what §16.2 reads from its own copy, asking nobody. Revisiting it means
+  the interface work, not a protocol change.
 - **IPv6 endpoints and prefix-based reputation** (§4). v1 demands IPv4; the
   /64 unit, NLRI encoding and prior art are recorded with the deferral.
 - **Hard-fork departure and forwarding** (§4). Not in v1: it needs a delivery

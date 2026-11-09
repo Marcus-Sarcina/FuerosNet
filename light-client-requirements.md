@@ -582,6 +582,13 @@ job.
 - **Serve archive requests for your own archive** (`wire-format.md` §7.9). The
   subject holds their archive, so a patron evaluating you fetches from you — this
   is peer-to-peer payload, not something an infra node serves on your behalf.
+  **Serving is owed in the initial release; reviewing what was served is not**
+  [author, 2026-11-09]. A patron forming an initial trust state by reading a
+  candidate's presence records is deferred past it (design §16.7, §23.1) —
+  *"it demands a level of platform sophistication which an initial adopting
+  public won't have"* — so a client serves, and a client that fetches verifies
+  the structure of what came back, and neither is obliged to weigh it yet. What
+  an evaluator reads meanwhile is its own copy, asking nobody (design §16.2).
 - **When fetching someone else's archive, verify the structure yourself.** Every
   returned record must be named by the frontier you requested or by another
   returned record's back-pointers, and every back-pointer naming nothing in the

@@ -5298,7 +5298,8 @@
   "when": "P's operator asks P to evaluate C for adoption.",
   "then": "P fetches C's presence records from C's client, verifies the walk, keeps the records as evidence, and the evaluation P reports reflects them; before the fetch C's standing at P was zero.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": null,
+  "deferred": "the initial release [author, 2026-11-09]: \"it demands a level of platform sophistication which an initial adopting public won't have and will in the near term just add complexity to the interface and dissuade adoption\". **Part of the fully realized design and not withdrawn** — design §16.7 still describes the review and §23.1 carries the deferral; what waits is the building. The mechanisms beneath it stay owed and are built: a presenter serves its own archive and a fetcher verifies the structure of what came back (`light-client-requirements.md` §2). Until the review exists an evaluator's initial trust state is what the metric reads from its own copy, asking nobody, which is MET-09."
  },
  {
   "id": "PAY-01",
@@ -6271,7 +6272,7 @@
   "when": "The operator's tab is opened in each state.",
   "then": "Before provisioning the tab carries the provisioning pages only, working with no node present; after, what administers the instance arrives from the instance and nothing administrative is the client's own.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": "**Both halves held, and the owed note was stale** [2026-11-09]. `Robot/light-client-screens.md` had recorded that the two records and the run were signed over the position this device acts in rather than the chosen subnet's, and that a kernel `endpoint_record_in(subnet)` was wanted before an operator in two subnets could enrol in the second. **It exists and is used**: `Client::endpoint_record_in` and `anchor_entry_in` take the subnet, take that line's series from `line_in`, and `Kernel.enrol` passes the chosen subnet to both. The run needs none — a delegation is the key's own act over a transport key and a window (`wire-format.md` §8.2), with no position in it, so there is no line for it to be wrong about. **The second half of the oracle now has a test**: every door to the instance's own pages names an address that came from an instance. There turned out to be **two** doors rather than one — a standalone control that starts disabled until an enrolment takes a credential, and one per row of the instance roll, which cannot exist with no instance — and the first version of the test asserted a property of only one of them. What is held is what both share, which is also what the row actually asks. The first half, that the client ships no administrative page of its own, was already held by `ManifestTest`: no HTML in the assets, and the one screen that loads a page loads it from the instance, read from the code with comments stripped."
  },
  {
   "id": "PRP-01",
