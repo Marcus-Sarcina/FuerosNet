@@ -18334,6 +18334,44 @@ screen is to say it. The screen itself and the candidate list are owed:
 nothing supplies providers and zones yet. The row stays unmarked, being
 manual.
 
+**PAY-13's oracle restated, and the primitive vectors added** [author,
+2026-11-08]. It had read *"the key agreement and ratchet outputs match the
+adopted specifications for the same inputs"*, which nobody in this project
+can check: PQXDH and the Double Ratchet are adopted rather than designed
+here (design §14.2.4) and their specifications are prose with formal
+analysis — neither publishes known-answer vectors. Comparing the
+composition would need another implementation, and libsignal is AGPL-3.0,
+which the licence policy admits only in segregated client apps and never
+as a gate dependency. **Same grounds as the 2026-10-02 restatement**: a
+bar nobody here can meet is a permanent open item that re-finds itself in
+every review, which is why *"an independent implementation reproduces
+every vector"* went the first time.
+
+**The claim now splits.** The primitives publish vectors and are checked
+against them (`crypto/tests/primitives.rs`): X25519 against RFC 7748 §6.1
+with **both** sides reaching the shared secret rather than one direction
+of the arithmetic, and HKDF-SHA-256 against RFC 5869 A.1. The hex is
+published rather than computed here — a vector this project produced
+would say only that the implementation agrees with itself. The
+composition is held by this project's own canonical vectors and the
+independent harness, which is the restated bar.
+
+**Writing published hex from memory is checkable, and that is why it was
+safe to do**: had either vector been misremembered the test would have
+failed against an implementation that knows nothing of my recollection.
+Both passed first run.
+
+**ML-KEM-768's published answers are not carried**, with the reason
+stated: NIST distributes them as ACVP JSON rather than in FIPS 203's text,
+and pulling that corpus in is a decision about what this repository holds
+rather than something to do quietly inside a test. What is checked is the
+parameter set — 1184-byte encapsulation key, 1088-byte ciphertext, 32-byte
+secret, which is what tells 768 from 512 and 1024 — the round trip, the
+refusal of a short ciphertext, and that the seed regenerates the key.
+
+**Still owed on the entry**: the composition's own canonical vectors and
+the ratchet, at its own milestone.
+
 **The rotation path, and the question answered** [author, 2026-11-07]:
 *"just start a new archive for the new identity. From the user's
 standpoint, it is a completely new identity that just happened to spawn
