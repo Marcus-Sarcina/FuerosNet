@@ -6022,9 +6022,9 @@
   ],
   "given": "A release build with the user holding access to resources under the current patron.",
   "when": "A reviewer initiates a departure, then accepts a new patron.",
-  "then": "The departure flow warns and names the resources that will be lost before confirmation; the adoption flow lists resources whose predicates reach upward.",
+  "then": "The departure flow works out the cost, names each resource that will be lost with the reason it goes and says what the figure is a floor of, and shows all of it before the control that leaves appears; the first press arms and the second acts, with nothing re-read between them. The adoption flow states, in the author's own words, that the patron's policies and their patron's will apply to any resource the person uses or hosts in that subnet.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": "**The adoption half was restated by the author's own sentence** [author, 2026-11-05]. This row had read that the flow *\"lists resources whose predicates reach upward\"*, and the assistant's rendering of it — \"resources whose access reaches upward through a patron\" — did not survive being read back: asked what it meant, the author wrote the obligation plainly instead, and `Disclosure.Topic.ADOPTION_UPWARD` carries his sentence. **Enumerating is also not something the client could do honestly**: a predicate is relative to the owner, so which resources reach upward is a fact about the neighbourhood the person has not moved into yet, and a list drawn before the move would be a prediction presented as a fact. So the disclosure states the rule. **Both halves are built and held**: the departure by `LeavingTest` — each loss named with its instance, service type and reason, the limits said, and a source-reading test that the warning precedes the arming and that nothing is re-read between arming and acting — and the adoption by `MeetTest`, which asserts the brief renders the table's sentence rather than a phrase of its own."
  },
  {
   "id": "PRD-03",
@@ -6115,7 +6115,7 @@
   "when": "A reviewer binds each resource and views a member's access.",
   "then": "The binding view shows hosted against brokered; the operator view states the exposure the configuration creates; the accessing user's view shows the roles held and not the predicates.",
   "oracle": "behaviour",
-  "interpretation": null
+  "interpretation": "**Built on the node and framed by the client** [2026-11-08]. All three rules are `rhtn_daemon::operator`'s: §10.6's binding view renders hosted against brokered, §10.7's role view renders the roles a principal holds and never the predicates that granted them, and §8's exposure view states what the configuration exposes the identities below it to — each with its own test in that module. The client's part is to frame those pages rather than to re-render them, which is PRD-12 (closed by an instrumentation run on hardware), and `Disclosure.Topic.OPERATOR_EXPOSURE` records that the words live there rather than in the client's own table. **The exposure view was read off the live node on 2026-11-08** over its loopback, where arriving is the authorisation: \"What this exposes the identities below it to\", with how many sit below, whether their payload is relayed and what is hosted. The other two views need a bound resource to render and the bench node hosts none, so they stand on their tests."
  },
  {
   "id": "PRD-07",

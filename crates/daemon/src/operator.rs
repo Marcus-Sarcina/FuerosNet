@@ -362,6 +362,7 @@ mod tests {
     }
 
     // acceptance: DMN-44
+    // acceptance: PRD-06
     #[test]
     fn hosted_and_brokered_render_differently() {
         let resource = [1u8; 32];
@@ -429,6 +430,7 @@ mod tests {
         assert_eq!(BindingView::of(&gateway, [9u8; 32]), None);
     }
 
+    // acceptance: PRD-06
     #[test]
     fn a_role_view_never_renders_a_predicate() {
         // the predicate is the operator's, and lives entirely outside the
@@ -505,6 +507,7 @@ mod tests {
         );
     }
 
+    // acceptance: PRD-06
     #[test]
     fn the_exposure_view_states_every_answer_either_way() {
         let exposed = ExposureView::new(4, true, true, true);

@@ -1125,6 +1125,7 @@ class MeetRowsTest {
         assertFalse(meet().brief().joinToString(" ") { it.text }.contains("patron"))
     }
 
+    // acceptance: PRD-02
     @Test
     fun an_adoption_names_the_authority_it_moves_and_which_way() {
         val under = meet(Meet.Adopt.ME_UNDER_THEM).brief()

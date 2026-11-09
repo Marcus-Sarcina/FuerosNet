@@ -171,6 +171,7 @@ class LeavingTest {
         )
     }
 
+    // acceptance: PRD-02
     @Test
     fun a_host_that_goes_and_an_owner_that_goes_are_told_apart() {
         val host = Leaving.lost(lost(hostLeaves = true), names)
@@ -182,6 +183,58 @@ class LeavingTest {
             own.contains("the node stays"),
         )
         assertTrue(host, host.startsWith("Standpipe rota   rhtn-forum"))
+    }
+
+    /**
+     * **The warning comes before the confirmation, and the figure the
+     * person agreed to is the one acted on** (PRD-02;
+     * `light-client-requirements.md` §6).
+     *
+     * The flow a JVM test cannot drive is read from the source, as
+     * `InsetSweepTest` and `ManifestTest` read theirs: the leave control
+     * is hidden until a cost has been worked out, the first press arms
+     * rather than leaves, and nothing is re-read between arming and
+     * acting — re-computing under the person's thumb would show them one
+     * figure and act on another.
+     */
+    // acceptance: PRD-02
+    @Test
+    fun nothing_is_left_before_the_cost_of_leaving_it_has_been_shown() {
+        val screen = source("LeavingActivity.kt")
+        // the control starts hidden and is only shown once a cost is in
+        assertTrue(
+            "the leave control is not hidden before a cost is worked out",
+            screen.contains("leave.visibility = android.view.View.GONE"),
+        )
+        assertTrue(
+            "the cost is not rendered from the table's own words",
+            screen.contains("Leaving.words(c, names)"),
+        )
+        // **two presses**: the first arms and says so, the second acts
+        assertTrue("the first press does not arm", screen.contains("if (!armed) {"))
+        assertTrue(
+            "arming does not say that it cannot be taken back",
+            screen.contains("This cannot be taken back."),
+        )
+        // and no refetch between them: `cost` is not called from `pressed`
+        val pressed = screen.substringAfter("private fun pressed()").substringBefore("private fun ")
+        assertFalse(
+            "the cost is re-read between arming and acting, so the figure shown is not the figure acted on",
+            pressed.contains("costOfLeaving"),
+        )
+    }
+
+    /** One of the shell's sources, comments stripped. */
+    private fun source(name: String): String {
+        var at: java.io.File? = java.io.File(".").canonicalFile
+        while (at != null && !java.io.File(at, "app/src/main/AndroidManifest.xml").isFile) {
+            at = at.parentFile
+        }
+        val text = java.io.File(at, "app/src/main/kotlin/com/comptus/fueros/$name").readText()
+        return text
+            .replace(Regex("""/\*[\s\S]*?\*/"""), " ")
+            .lines()
+            .joinToString("\n") { it.substringBefore("//") }
     }
 
     // ---- the name, and the keyhash under it ----------------------------

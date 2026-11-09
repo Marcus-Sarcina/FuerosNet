@@ -3,23 +3,6 @@
 //! still owed for this area.  tests/rustfmt.toml keeps rustfmt off
 //! this directory: the titles are the catalogue's, not hand-laid code.
 
-/// Warn before an authority change that revokes resource access, and list upward-reaching policies on a new patron
-///
-/// Spec: light-client-requirements.md §6
-/// Milestone: manual.  Kind: manual.  Oracle: behaviour.
-///
-/// Rule (light-client-requirements.md §6): "warn if the resulting topology change will revoke access to resources the user currently uses"
-/// Rule (light-client-requirements.md §6): "When accepting a new patron, list any resources whose policy reaches upward."
-///
-/// Given: A release build with the user holding access to resources under the current patron.
-/// When: A reviewer initiates a departure, then accepts a new patron.
-/// Then: The departure flow warns and names the resources that will be lost before confirmation; the adoption flow lists resources whose predicates reach upward.
-#[test]
-#[ignore = "acceptance PRD-02: owed at milestone manual"]
-fn prd_02_warn_before_an_authority_change_that_revokes_res() {
-    todo!("PRD-02: Warn before an authority change that revokes resource access, and list upward-reaching policies on a new patron")
-}
-
 /// Warn that an unlinked identity path abandons standing, and that a linked one loses unlinkability
 ///
 /// Spec: light-client-requirements.md §6
@@ -36,24 +19,6 @@ fn prd_02_warn_before_an_authority_change_that_revokes_res() {
 #[ignore = "acceptance PRD-03: owed at milestone manual"]
 fn prd_03_warn_that_an_unlinked_identity_path_abandons_sta() {
     todo!("PRD-03: Warn that an unlinked identity path abandons standing, and that a linked one loses unlinkability")
-}
-
-/// Disclose to operators what their subordinates are exposed to, the hosting model, and the roles users hold
-///
-/// Spec: infra-client-requirements.md §8; infra-client-requirements.md §10.6; infra-client-requirements.md §10.7
-/// Milestone: manual.  Kind: manual.  Oracle: behaviour.
-///
-/// Rule (infra-client-requirements.md §8): "Tell an operator plainly what their subordinates are exposed to"
-/// Rule (infra-client-requirements.md §10.6): "Display whether a resource is hosted here or brokered to an external service."
-/// Rule (infra-client-requirements.md §10.7): "The roles they hold on each resource."
-///
-/// Given: A release build of the infra client with one hosted and one brokered resource.
-/// When: A reviewer binds each resource and views a member's access.
-/// Then: The binding view shows hosted against brokered; the operator view states the exposure the configuration creates; the accessing user's view shows the roles held and not the predicates.
-#[test]
-#[ignore = "acceptance PRD-06: owed at milestone manual"]
-fn prd_06_disclose_to_operators_what_their_subordinates_ar() {
-    todo!("PRD-06: Disclose to operators what their subordinates are exposed to, the hosting model, and the roles users hold")
 }
 
 /// Ship the provisioning pages and no other administration pages
