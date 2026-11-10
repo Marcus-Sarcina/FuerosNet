@@ -330,6 +330,14 @@ impl NodeView {
             from8 = %crate::diag::id8(from),
             bytes = object.len(),
             decision = %crate::diag::decision(&decision),
+            // **what the reach test had to answer with** [bench,
+            // 2026-11-10]: an `OutOfStore` is a statement about this
+            // node's horizon at that instant, and on run
+            // `18521b9-new-universe-1` three refusals could not be told
+            // from a node that had forgotten its clients, because nothing
+            // said how many it held ([`HorizonSnapshot::within`] counts an
+            // attached client as within at any distance).
+            attached = self.attached.len(),
             "node.object"
         );
         decision

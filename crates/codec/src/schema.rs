@@ -1591,9 +1591,14 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             };
             // the nominees no longer ride the intent [author, 2026-10-19]:
             // the sets travel by locator once the id has fixed (§7.10.2,
-            // kind 22), so an intent is eight fields
-            if a.len() != 8 {
-                return Err(Error("eight fields"));
+            // kind 22), so an intent is eight fields — **nine where the
+            // sender's own number rides with it** [author, 2026-11-10],
+            // which a device that has none, or an older one, simply does
+            // not send. The counterparty keeps it with the rest of what it
+            // holds of that party and it goes in no transaction and to no
+            // witness or verifier.
+            if a.len() != 8 && a.len() != 9 {
+                return Err(Error("eight fields, or nine with a number"));
             }
             if as_uint(&a[0]) != Some(1) {
                 return Err(Error("version 1"));
@@ -1625,6 +1630,14 @@ pub fn check_kind(b: &[u8], kind: &str, item: &Item) -> Result<(), Error> {
             let sub = &b[r.clone()];
             check_kind(sub, "SignedLocator", &parse_all(sub)?)
                 .map_err(|_| Error("the sender's locator is a SignedLocator"))?;
+            // **bounded, and text**: a number is what a handset reports
+            // and nothing reads it as anything else
+            if let Some(it) = a.get(8) {
+                match it {
+                    Item::Text(t) if !t.is_empty() && t.len() <= NUMBER_CHARS => {}
+                    _ => return Err(Error("a number is 1 to 32 characters of text")),
+                }
+            }
             Ok(())
         }
         "BundleContinuation" => {

@@ -2186,33 +2186,27 @@ object Kernel {
     }
 
     /**
-     * **Take a way to reach the party this record names**, as they gave it
-     * at the adoption (`light-client-requirements.md` §1.5).
+     * **The number this handset reports for itself, handed to the kernel
+     * for the meeting about to run** [author, 2026-11-10]: *"Pull from the
+     * handset at meeting time and pass it to the counterparty during the
+     * bluetooth session."* It rides the intent over the local bearer and
+     * nothing else carries it.
      *
-     * The window is not passed: the kernel reads the one *that party*
-     * declared in `txid`, so this shell cannot substitute one of its own.
-     * Whether it was taken.
+     * **Nullable, and nothing is asked of anybody.** No SIM, a carrier
+     * that does not provision the number, or a refused permission all
+     * come to the same call with null, and the meeting runs unchanged
+     * (`light-client-requirements.md` §1.5).
      */
-    fun takeReach(who: String, address: String, txid: String): Boolean {
-        val p = participant ?: return false
-        if (!who.isHash32() || !txid.isHash32()) return false
-        return call("takeReach", { false }) { p.takeReach(who.unhex(), address, txid.unhex()) }
+    fun declareNumber(number: String?) {
+        val p = participant ?: return
+        call("declareNumber", { }) { p.declareNumber(number) }
     }
 
-    /** The address held for a party, where one is and is still inside the
-     *  window its subject declared. Reading is also what drops a lapsed
-     *  one. */
-    fun reachHeld(who: String): String? {
+    /** The number held for a party, where their device reported one. */
+    fun numberHeld(who: String): String? {
         val p = participant ?: return null
         if (!who.isHash32()) return null
-        return call("reachHeld", { null }) { p.reach(who.unhex()) }
-    }
-
-    /** Forget it, which its subject may ask for at any time. */
-    fun forgetReach(who: String): Boolean {
-        val p = participant ?: return false
-        if (!who.isHash32()) return false
-        return call("forgetReach", { false }) { p.forgetReach(who.unhex()) }
+        return call("numberHeld", { null }) { p.number(who.unhex()) }
     }
 
     /**

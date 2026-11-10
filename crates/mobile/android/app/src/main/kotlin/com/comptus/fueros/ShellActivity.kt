@@ -398,17 +398,24 @@ class ShellActivity : Activity() {
      */
     private fun whichIdentity() {
         val held = Kernel.identities(this)
-        if (held.size <= 1) {
-            // **nothing to choose between is said, not shown**: a list of
-            // one offers a decision that does not exist
-            Kernel.front.note("· this device holds one identity")
-            return
-        }
+        // **the list always opens, because it always has something to
+        // offer** [author, 2026-11-09]: its last row is the door to
+        // another identity ([Identities.ANOTHER]), so a device holding
+        // one is not answered with a notice and nothing shown.
         val rows = Identities.listed(held, Kernel.activeIdentity()).toTypedArray()
+        // **the list and nothing else** [author, 2026-11-10]: *"I want no
+        // narrative and I want a drop down that just says '[identity
+        // alias]' and '<New Identity>' as options."* No title, no
+        // explanation, no cancel: a tap outside dismisses it.
         AlertDialog.Builder(this)
-            .setTitle("Which identity acts")
-            .setMessage(Identities.words())
             .setItems(rows) { _, which ->
+                if (Identities.adding(held, which)) {
+                    startActivity(
+                        Intent(this, FirstRunActivity::class.java)
+                            .putExtra(FirstRunActivity.ADDING, true),
+                    )
+                    return@setItems
+                }
                 val chosen = held.getOrNull(which) ?: return@setItems
                 if (Kernel.chooseActive(this, chosen.id)) {
                     // the foot carries the name, so the place is redrawn
@@ -419,7 +426,6 @@ class ShellActivity : Activity() {
                     Kernel.front.note("· that identity is not open on this device")
                 }
             }
-            .setNegativeButton("Keep this one", null)
             .show()
     }
 

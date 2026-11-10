@@ -453,6 +453,9 @@ pub struct Intent {
     pub initiator: bool,
     /// Its own `SignedLocator`, the most recent it has signed.
     pub locator: Vec<u8>,
+    /// The number this device reports for itself, where the shell read one
+    /// ([`Client::declare_number`]).
+    pub number: Option<String>,
 }
 
 impl std::fmt::Debug for Intent {
@@ -466,6 +469,9 @@ impl std::fmt::Debug for Intent {
             .field("started_at", &self.started_at)
             .field("retention_years", &self.retention_years)
             .field("initiator", &self.initiator)
+            // the counterparty's number is not a log's business, and
+            // neither is this device's
+            .field("number", &self.number.is_some())
             .finish()
     }
 }
@@ -664,6 +670,14 @@ pub struct Client {
     /// changed nothing deposits nothing.  This process's memory alone: a
     /// restart deposits once more, which is the cheaper error.
     deposited: BTreeMap<Keyhash, [u8; 32]>,
+    /// **The number this device reports for itself**, as the shell read it
+    /// off the handset [author, 2026-11-10]
+    /// (`light-client-requirements.md` §1.5): carried beside the intent
+    /// over the local bearer and nowhere else. **This process's memory
+    /// alone and never written**: it is read again at each meeting, so a
+    /// SIM that changed, or a platform that stops answering, changes what
+    /// goes out without anything having to be forgotten.
+    number: Option<String>,
     /// Rounds a peer has been greeted without a word back, and the count
     /// at which the session with it is opened anew: `light-client-
     /// requirements.md` §3's rule for a verifier that lost its sessions,
@@ -954,6 +968,7 @@ impl Client {
             public,
             signer,
             provider_credential: None,
+            number: None,
             known,
             archive: Archive::new(kh),
             store: ClientStore::default(),
@@ -1138,7 +1153,18 @@ impl Client {
             retention_years: self.cfg.retention_years,
             initiator: a.initiator,
             locator: self.own_locator()?,
+            number: self.number.clone(),
         })
+    }
+
+    /// **The number this device reports for itself, as the shell read it**
+    /// (`light-client-requirements.md` §1.5): set before a meeting and
+    /// cleared by passing nothing. Nothing prompts for it and nothing
+    /// persists it.
+    pub fn declare_number(&mut self, number: Option<String>) {
+        self.number = number
+            .map(|n| n.trim().to_string())
+            .filter(|n| !n.is_empty() && n.chars().count() <= rhtn_codec::bounds::NUMBER_CHARS);
     }
 
     /// **Take an introduction** (`wire-format.md` §2.3): a party's key
@@ -1426,82 +1452,20 @@ impl Client {
         self.prune_contacts();
     }
 
-    /// **Take a way to reach `who` outside this network**, as its subject
-    /// gave it at a ceremony (`light-client-requirements.md` §1.5): a
-    /// number or an address, so that an invitation to a node this client's
-    /// user stands up later can arrive without waiting for the next
-    /// meeting.
+    /// **Every number a counterparty's device reported for itself**, by
+    /// party, as an invitation needs them (`light-client-requirements.md`
+    /// §1.5).
     ///
-    /// **The window is the record's to say, which is why `txid` is the
-    /// argument and a window is not.** It is the one *its subject*
-    /// declared at that ceremony, read from the record's own disclosure
-    /// set: a holder applying its own to somebody else's address would be
-    /// substituting its policy for theirs, which design §7.5.1 already
-    /// rules for a capture. Passing a number here would have made that a
-    /// caller's duty to remember; passing the record makes it structural.
-    ///
-    /// Whether it was taken: nothing is held for a record this client does
-    /// not hold, or one that declares no window for `who` — there being no
-    /// window to honour, rather than a default to invent.
-    ///
-    /// Marked under [`rhtn_model::Noun::Contacts`], the table it lives
-    /// beside, rather than a noun of its own.
-    pub fn take_reach(&mut self, who: Keyhash, address: String, txid: &crate::Txid) -> bool {
-        let Some((taken_at, window_s)) = crate::backup::subject_window(&self.store, txid, &who)
-        else {
-            return false;
-        };
-        self.changed.insert(rhtn_model::Noun::Contacts);
-        self.store.reach.insert(
-            who,
-            crate::contacts::Reach {
-                address,
-                taken_at,
-                window_s,
-            },
-        );
-        true
-    }
-
-    /// **Forget it**, which is its subject's to ask for at any time and
-    /// needs no reason (`light-client-requirements.md` §1.5).  Whether one
-    /// was held.
-    pub fn forget_reach(&mut self, who: &Keyhash) -> bool {
-        let had = self.store.reach.remove(who).is_some();
-        if had {
-            self.changed.insert(rhtn_model::Noun::Contacts);
-        }
-        had
-    }
-
-    /// **Every address still inside the window its subject declared**, and
-    /// **the lapsed ones dropped as this reads**.
-    ///
-    /// There is no periodic sweep to claim: this is the read path, and it
-    /// is the only way an address is reached, so one past its window can
-    /// never be used and is deleted at the first moment it would have
-    /// been. The wake register answers the same shape for the same reason
-    /// (`rhtn_node::wake`: a lapsed endpoint is not posted to).
-    pub fn reaches(&mut self) -> Vec<(Keyhash, String)> {
-        let now = self.now_s();
-        let lapsed: Vec<Keyhash> = self
-            .store
-            .reach
-            .iter()
-            .filter(|(_, r)| r.lapsed(now))
-            .map(|(k, _)| *k)
-            .collect();
-        if !lapsed.is_empty() {
-            self.changed.insert(rhtn_model::Noun::Contacts);
-            for k in &lapsed {
-                self.store.reach.remove(k);
-            }
-            tracing::info!(target: "pay", dropped = lapsed.len(), "pay.reach.lapsed");
-        }
+    /// **Read off the contacts, which is where one is kept** [author,
+    /// 2026-11-10]: it is ordinary contact information, so there is no
+    /// window to honour and nothing to sweep. What was given is held as
+    /// long as the contact is, and goes wherever a contact goes — the
+    /// store, and the peer backup.
+    pub fn numbers(&self) -> Vec<(Keyhash, String)> {
         self.store
-            .reach
+            .contacts
             .iter()
-            .map(|(k, r)| (*k, r.address.clone()))
+            .filter_map(|(k, c)| c.number.clone().map(|n| (*k, n)))
             .collect()
     }
 
@@ -1760,6 +1724,7 @@ impl Client {
                 initiator: intent.initiator,
                 continuations: 0,
                 locator: intent.locator,
+                number: intent.number,
             },
             &cid,
         );
@@ -1811,6 +1776,7 @@ impl Client {
                 retention_years: read.retention_years,
                 initiator: read.initiator,
                 locator: read.locator,
+                number: read.number,
             },
         )?;
         Ok(taken)
@@ -1997,6 +1963,16 @@ impl Client {
         // its own statement replaces whatever a third party said of it
         self.hold_locator(&from, &intent.locator, true)?;
         self.touch_contact(&from);
+        // **the number goes with the rest of what is held of them**
+        // [author, 2026-11-10]: a later meeting replaces it, and a
+        // meeting that carried none leaves what is held alone — a
+        // counterparty whose platform stopped answering has not withdrawn
+        // the number it gave before
+        if let Some(n) = &intent.number
+            && let Some(c) = self.store.contacts.get_mut(&from)
+        {
+            c.number = Some(n.clone());
+        }
         self.opening_id_fixed(cid);
         tracing::info!(
             target: "cer",

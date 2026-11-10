@@ -403,3 +403,72 @@ fn a_handover_is_checked_against_this_ceremony_and_its_own_signature() {
         .expect_err("refused");
     assert!(matches!(refused, Abort::Unsealable), "{refused:?}");
 }
+
+/// **The number a device reports for itself crosses with the intent, both
+/// ways, and lands on the counterparty's contact** (NET-033;
+/// `light-client-requirements.md` §1.5; `wire-format.md` §14.3.2's ninth
+/// field) [author, 2026-11-10].
+///
+/// **One side declares one and the other does not**, which is the shape
+/// the bench has: a handset without a subscription sends eight fields, and
+/// a meeting where only one number crosses is unremarkable in every other
+/// respect.
+#[test]
+fn the_number_a_device_reports_crosses_with_the_intent_and_lands_on_the_contact() {
+    let mut s = setup(&["alice", "bob"]);
+    s.face_off("alice", "bob");
+    // alice's handset answered; bob's did not, which is the ordinary case
+    s.client("alice")
+        .declare_number(Some("+15550001111".into()));
+    s.client("bob").declare_number(None);
+    s.client("alice")
+        .begin(Some(kh("bob")), vec![], true)
+        .expect("alice begins");
+    s.client("bob")
+        .begin(Some(kh("alice")), vec![], false)
+        .expect("bob begins");
+
+    let oa = s.client("alice").optical_contribution().unwrap();
+    let ob = s.client("bob").optical_contribution().unwrap();
+    s.client("alice").take_optical(&carry(&ob)).unwrap();
+    s.client("bob").take_optical(&carry(&oa)).unwrap();
+    let ta = s.client("alice").transcript_confirm().unwrap();
+    let tb = s.client("bob").transcript_confirm().unwrap();
+    s.client("alice").take_transcript(&carry(&tb)).unwrap();
+    s.client("bob").take_transcript(&carry(&ta)).unwrap();
+
+    let ia = s.client("alice").intent_carriage().unwrap();
+    let ib = s.client("bob").intent_carriage().unwrap();
+    // the carriages are sealed, so what they carry is asserted where it
+    // lands rather than read off the wire here; the encoding itself is
+    // `local.rs`'s `an_intent_carries_a_number_or_does_not`
+    let carried: Vec<Vec<u8>> = ia.iter().map(|m| carry(m)).collect();
+    s.client("bob")
+        .take_intent_carriage(kh("alice"), &carried)
+        .unwrap();
+    let carried: Vec<Vec<u8>> = ib.iter().map(|m| carry(m)).collect();
+    s.client("alice")
+        .take_intent_carriage(kh("bob"), &carried)
+        .unwrap();
+
+    // bob keeps what alice's device reported, with the rest of what it
+    // holds of alice
+    assert_eq!(
+        s.client("bob").numbers(),
+        vec![(kh("alice"), "+15550001111".to_string())],
+        "the number is on bob's contact for alice"
+    );
+    // and alice holds none for bob, nothing having been sent or invented
+    assert!(
+        s.client("alice").numbers().is_empty(),
+        "a device that sent no number leaves none behind"
+    );
+    // **and it is not in the card bob would hand alice on in** (§2.3):
+    // bob's own bundle entries carry key material and locators alone
+    for intro in s.client("bob").introductions() {
+        assert!(
+            !intro.windows(12).any(|w| w == b"+15550001111"),
+            "an introduction carries no number"
+        );
+    }
+}

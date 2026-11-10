@@ -368,24 +368,36 @@ job.
 
 - **Tell participants what the record will contain and who will be able to read
   it**, at the moment of capture, not in a policy document.
-- **An address taken at a ceremony is optional, is the subject's to have
-  deleted, and never reaches a record or a wire** [author, 2026-11-05]. A
-  patron may be given a way to reach a member — a number, an address —
-  so that an invitation to a node the patron stands up later can arrive
-  without waiting for the next meeting (design §12.6.3's code is the
-  alternative). Ask for it at the adoption, where the decision to give
-  that member access was already made; take nothing from a member who
-  declines, and say that declining costs them only the invitation.
-  **Hold it for the window its subject declared** and drop it when that
-  closes, as a capture is dropped — but **say what the difference is
-  rather than implying the protections are the same**: a likeness is
-  sealed under its subject's keys, so retaining one past the window gets
-  a holder nothing it can open (design §7.5.2), where an address is
-  plaintext and nothing structural stops you keeping it. **So this window
-  is your own commitment**, design §1.1's unenforceable kind, and the
-  register says so (design §19.8, C25). It goes in no transaction, is
-  never propagated, never introduced with the contact, and is not part of
-  what a backup is for.
+- **The number a device reports for itself crosses at a meeting, both
+  ways, and nobody is asked for it** [author, 2026-11-10]. Read it off the
+  handset at meeting time and carry it to the counterparty **on the local
+  bearer, beside the intent** (`wire-format.md` §14.3.2), so that an
+  invitation to a node a patron stands up later can arrive without waiting
+  for the next meeting (design §12.6.3's code is the alternative). **No
+  control collects it and no screen explains it**: a number is plumbing,
+  and the people meeting are doing something else.
+  - **Nullable, and that is the ordinary case.** A number is
+    carrier-provisioned rather than device-known, so a handset without a
+    subscription, a carrier that never provisioned one, or a platform that
+    will not answer all send nothing — and a meeting where neither side
+    sends one is unchanged in every other respect. **Never prompt for what
+    the platform would not give.**
+  - **It goes in no transaction and to no witness or verifier.** What
+    crosses is the local session between the two devices present, and the
+    record carries nothing of it.
+  - **Keep it with the rest of what is held of that party**, so it is
+    preserved by what already preserves a contact: this client's store and
+    the backup a peer holds (design §6.3). A later meeting replaces it; a
+    meeting that carries none leaves what is held alone, a device whose
+    platform stopped answering not having withdrawn what it gave before.
+  - **It is not handed on with the contact.** A card that introduces a
+    party carries its key material and its locator (`wire-format.md`
+    §2.3, §2.4) and nothing else: the number was given to the device that
+    was present, not to its acquaintances.
+  - **Plaintext, and nothing structural keeps it.** A likeness is sealed
+    under its subject's keys, so a holder retains nothing it can open
+    (design §7.5.2); a number is text in another person's phone. Design
+    §19.8's C25 registers what holding many of them composes into.
 
 
 ---
@@ -495,7 +507,10 @@ job.
   - **One identity at a time for a meeting or an operator action**, so
     neither has to ask which key it belongs to. **Chosen by press and
     hold on the nameplate at the foot of the home screen**, which opens a
-    scrollable list of the identities held.
+    scrollable list of the identities held. **The list carries the door to
+    another identity as its last row** [author, 2026-11-09], so it always
+    has something to offer and the only way to add one is not a control of
+    its own somewhere else.
   - **A row a screen shows carries the identity that holds it, and acting
     on that row acts through that identity** [2026-11-07]. The merged
     lists are the point of the first rule, and a screen that acted on a

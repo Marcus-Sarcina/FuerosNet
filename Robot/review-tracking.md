@@ -19938,3 +19938,224 @@ twice in gate runs while a native build and an APK build shared the
 machine; alone it passes in 91 s, which is most of the budget. The
 budget is the test's own constant and the work is the decoder's; neither
 was touched today. Load-dependent, as recorded above.
+
+---
+
+## The reach address becomes automatic, and the three permissions [author, 2026-11-09]
+
+Found on run `18521b9-new-universe-1`, T1's Done screen: the patron was
+shown a text field hinted *"their number or address"* with a **Keep it**
+button (`MeetActivity.askReach`, in since 2026-11-03,
+`light-client-requirements.md` §1.5's *"Ask for it at the adoption"*).
+
+**The author's ruling.** *"There should not be a control to collect a
+number or address, phone numbers should collect bidirectionally and
+automatically with no user prompt. Exchanging phone numbers is part of
+the adoption."* And: *"It was a later addition, but I never said it
+should add a user interaction. A general design goal is to expose as
+little plumbing and administration to users as possible."*
+
+**On the source.** Nothing automatic could be read on the bench: all four
+phones report `gsm.sim.state=ABSENT` and no `mLine1Number`. In the field
+`TelephonyManager.getLine1Number()` needs `READ_PHONE_NUMBERS`, a runtime
+permission, and is empty on many carriers regardless. Ruled: *"read phone
+numbers, use bluetooth, and use camera permissions while the app is open
+should be installation requests. IF this is not possible when side-loading
+like we are doing, then the phone number permission can be a one-time ask
+like we are doing for the others. Phone number can be nullable to allow
+the bench to move forward without SIMs or cell networks."*
+
+Install-time grants are not available for any of the three on any install
+path (the runtime model since API 23; `CAMERA`, `READ_PHONE_NUMBERS` and
+the `BLUETOOTH_*` trio are all dangerous permissions, and sideloading
+makes no difference), so the fallback applies: the number joins the
+one-time ask the camera and Bluetooth already use.
+
+**To do after the run**: delete `askReach` and its call site; the number
+rides the adoption both ways and is nullable; `READ_PHONE_NUMBERS` joins
+the meeting's existing `requestPermissions` batch; §1.5, design §19.8 C25
+and the registers revised together.
+
+---
+
+## No functional narrative in the interface [author, 2026-11-10]
+
+From the bench, on the identity selector: *"I don't see a drop down, I do
+see some narrative around the meaning of identity. I want no narrative and
+I want a drop down that just says '[identity alias]' and '<New Identity>'
+as options.  In general, please stop inserting descriptions of the
+functional significance of UI controls into the interface. The users should
+only interact with the abstractions we present them."*
+
+**Done on the selector**: the dialog is the list alone — no title, no
+`Identities.words()` (deleted), no cancel button; a tap outside dismisses.
+Rows are the alias (`●` on the one that acts) and `<New Identity>`.
+
+**What the ruling reaches, counted**: `para(` calls per screen —
+`MeetActivity` 59, `FirstRunActivity` 11, `RotationActivity` 7, and ten
+`owed(...)` placeholder blocks on `ShellActivity`'s places. No other screen
+carries prose.
+
+**The tension to resolve before sweeping any of it**, and the reason this
+is a question rather than a pass: `light-client-requirements.md` §1.5 is a
+positive duty — *"Tell participants what the record will contain and who
+will be able to read it, at the moment of capture, not in a policy
+document"* — and design §19.6 has the schema unable to fix comprehension.
+Consent-bearing disclosure and an explanation of a control's plumbing are
+not the same thing, but a good deal of `MeetActivity`'s 59 is the former.
+The `owed(...)` blocks are a third kind: developer scaffolding that says
+what is not built yet, addressed to the bench and not to a user.
+
+**Answered (a)** [author, 2026-11-10]: *"For now, just remove the plumbing
+descriptions. When we get closer to release, I will want to go back over
+disclosure and context messaging and probably hand-write disclosures like I
+did for rotation and such. The user's view of the system is necessarily very
+different than the design docs view, but the more design-conscious versions
+are fine for testing; I know what they mean, but a user shouldn't have to."*
+
+So: disclosure and context messaging stay until he writes them; the
+`owed(...)` scaffolding and the bench's own lines stay, being for testing;
+`RotationActivity` is untouched, its seven paragraphs being the hand-written
+kind he named.
+
+**The pass, all in `MeetActivity`** — seventeen lines, of which two were
+also false and one cited the design on screen:
+
+| What went | Why |
+|---|---|
+| a peering defined as an edge *"priced in this meeting (design §6.3)"* | a design citation in the interface; replaced by what the person gets from it |
+| *"nothing of the meeting's own anchor, which comes later and goes both ways"* | what the code carries internally |
+| *"The code needs the kernel's identifier"* | → *"This code is not ready yet."* |
+| *"until your horizon can offer them"*, *"With no horizon to draw from"* | the horizon is the design's noun, not a person's |
+| *"Verifiers are weighed, not required; a thin meeting is honest, not malformed."* | a reassurance about the protocol's own tolerance |
+| *"The intent crosses over Bluetooth…"* | → *"This meeting needs Bluetooth, which is not yet allowed."* |
+| *"Your device picks … The choice is computed, not offered: there is nothing here to pick."* | how the selection works, on a screen with nothing to do |
+| *"so there is no pool to draw from and none is owed; a meeting with fewer verifiers is thinner, not malformed"* | → *"• None required."* |
+| *"Each query goes to … on the same end-to-end path … the kernel carries it to its verifier"* | the path a query takes |
+| *"consent is bound to the ceremony you are standing in"* | the consent itself is disclosure and stayed; its binding went |
+| *"the back-pointers are going out"*, *"Waiting on the kernel's first word"* | internals as status |
+| *"the body"* ×4, *"checked it against what it holds, the root, the back-pointers and the disclosures"*, *"refused with its code"* | the body is the wire's noun; the screens say *the record* |
+| *"the specific weaknesses listed at D6"* | a design citation in the interface |
+| *"Your device will hand the record to its node when it has one. Until then it is held here"* ×2 | **false as well as plumbing**: both phones were attached and had already submitted (run `18521b9-new-universe-1`, T1 and T2) |
+| *"Its profile is published to your node"* | → *"Named $it. Yours to change in the subnet's options."* |
+
+What stayed, and why: the capture's disclosure of what is held and who may
+see it (§1.5), the witnessless record saying so permanently, what a
+verifier's silence means, that a signature has gone and is not withdrawn
+from the screen, the 24 words being the whole of an identity, and what a
+restore does not bring back.
+
+---
+
+## The node's store on run `18521b9-new-universe-1`, and why the log could not explain it
+
+**What the run showed.** Of four ceremonies the node stored two objects —
+T2's adoption and T3's — and refused T1's rooting adoption (9,174 bytes,
+from GXV and MRK) and T4's peering (7,288 bytes, from MRK and 4VC) as
+`OutOfStore`. Every presence record was refused too, which is correct:
+`is_topology_class` excludes them. So the node's table holds *ZU8 under
+GXV* and *4VC under ZU8*, with no root for GXV and no MRK at all — a
+subnet known from the middle.
+
+**What the code says.** `stores()` (`node/src/store.rs`) admits an adoption
+when the subject is within h = 2 or the patron within h = 1, and a peering
+when either subject is within h = 2. `HorizonSnapshot::within`
+(`node/src/propagation.rs`) answers **true for this node, for anything in
+the ball, and for any attached client at any distance**. All four phones
+were attached — `method=attach` returned 36 times on GXV with no
+`ok:false`, and the kernels' loops ran throughout — so on the face of it
+every one of those objects should have been stored.
+
+**In-process the rule holds.** `a_running_node_learns_who_is_attached_to_it_and_forwards_to_them`
+asserts *"an attached client is within the store"* and passes
+(re-run 2026-11-10). So the refusals say the node did not hold those
+clients as attached **at those instants**, not that the predicate is wrong.
+
+**Why that could not be read off the run, and what was done.** The node
+emitted no event when a client attached or detached, so an `OutOfStore`
+could not be told from a node that had forgotten its clients. Added, both
+at `debug`: `node.attached` and `node.detached` carrying the peer, that
+client's device count and the size of the attached set, and
+`attached = <count>` on every `node.object`. With 31,078
+`transport.session` events in this run, session churn against the
+attach set is the first hypothesis to test, and these two lines are what
+would show it.
+
+**Not fixed, and not yet a defect**: the next run with a node answers it.
+The live run's daemon is the old binary, and restarting it would mint a
+fresh node and lose the two adoptions it holds, so the instrument waits
+for the next run.
+
+---
+
+## The number crosses at the meeting [author, 2026-11-10]
+
+*"Pull from the handset at meeting time and pass it to the counterparty
+during the bluetooth session. Do not include it in the transaction record
+or send it to witnesses/verifiers. Store with the other contact information
+in the counterparty's device so it gets preserved through standard peering
+and backup."*
+
+**This reverses two things the documents asserted** and both were revised
+rather than reconciled: §1.5's *"never introduced with the contact, and is
+not part of what a backup is for"* — the backup is now exactly what carries
+it — and the retention window. A declared window and *"preserved through
+standard peering and backup"* cannot both hold, so **the window is gone**:
+it is ordinary contact information, kept as long as the contact is. If that
+was not the intent, the window is what comes back.
+
+**What went.** `contacts::Reach` (its own table, deliberately off the
+contact so that nothing propagating a contact could carry it),
+`ClientStore::reach` and its files, `Client::take_reach` /
+`forget_reach` / `reaches`, the three FFI methods, the three Kotlin
+wrappers, and `MeetActivity.askReach` with its text field and **Keep it**
+button.
+
+**What replaced it.** `IntentExchange` gained a ninth field, `tstr .size
+(1..32)`, absent where the platform gave nothing — eight fields and nine
+are both well formed, so nothing has to be true of the counterparty's
+build. `Contact.number` holds what arrived, inside the contact's own
+encoding, so the store and the peer backup carry it; `Client::numbers()`
+reads them and the invitation path draws on that. `declare_number` on the
+client and the FFI; `Kernel.declareNumber`; `MeetActivity.ownNumber()`
+reads `SubscriptionManager.getPhoneNumber` on API 33+ and `line1Number`
+below it, under `READ_PHONE_NUMBERS`, asked once at the meeting entry and
+never inside a ceremony.
+
+**Where it is not.** Not in a transaction body, not on a witness or
+verifier leg, and not in the card that introduces the party — the
+introduction is material plus locator by construction
+(`Client::introductions`), which the tests assert directly.
+
+**Documents**: `light-client-requirements.md` §1.5 rewritten as six
+clauses; design §19.8 C25 restated around a number that is kept rather
+than windowed; `wire-format.md` §14.3.2's CDDL, its bounds table and the
+§15 audience row; `functional_tests.md` **NET-033** added (563 → 564
+families, NET 32 → 33). Vectors and pins regenerated, refcheck 5,709
+references and 0 flags.
+
+**Tests**: `an_intent_carries_a_number_or_does_not` (nine fields and
+eight, the round trip, nothing of a number in an intent without one, 33
+characters refused) and
+`the_number_a_device_reports_crosses_with_the_intent_and_lands_on_the_contact`
+(one side declares one and the other does not, which is the bench's shape),
+plus `a_number_is_kept_with_the_contact_and_is_not_handed_on_with_it`
+replacing the window test.
+
+**Unexercised on this bench, and say so**: every phone reports
+`gsm.sim.state=ABSENT`, so every number in run `18521b9-new-universe-1` is
+null and the crossing is proven in-process only.
+
+**One defect of my own on the way in** [2026-11-10]: the first install of
+this change crash-looped all four phones —
+`UnsatisfiedLinkError: undefined symbol:
+uniffi_rhtn_ffi_fn_method_participant_declare_number`, thrown from
+`Platform.<init>` inside `Kernel.openHeld`. The Kotlin binding had been
+regenerated from `target/debug/librhtn_ffi.so` but the Android libraries
+had not: `app/src/fieldtest/jniLibs/*/librhtn_ffi.so` were still dated
+Nov 8 00:04, and gradle packs only what jniLibs holds. `nm -D` on the
+rebuilt arm64 library finds `declare_number` twice where the old one found
+none. The crash is at startup and before any write, so nothing on the
+phones was lost. **The rule already existed** and is the one to read before
+every install that adds an FFI method, not only when the Rust changes
+"look" big.

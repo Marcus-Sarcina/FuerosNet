@@ -71,9 +71,14 @@ class FirstRunActivity : Activity() {
         // appearance recreates this activity on the TCLs, and a restored
         // identity sitting on the name step came back as the choice of new
         // or restored, which reads as a wipe
+        // **[ADDING] is tried after the name step, not before it**, for the
+        // same reason: the intent survives a recreation, so an add that had
+        // reached the name would come back as the choice of new or restored
+        // and read as a wipe. A device owing a name owes it first.
         when {
             !Kernel.hasIdentity(this) -> choice()
             intent.getBooleanExtra(NAME_ONLY, false) || Kernel.defaultAlias() == null -> name()
+            intent.getBooleanExtra(ADDING, false) -> choice()
             else -> {
                 startActivity(Intent(this, ShellActivity::class.java))
                 finish()
@@ -85,6 +90,15 @@ class FirstRunActivity : Activity() {
         /** The extra that opens this screen at the name step alone. */
         const val NAME_ONLY = "name_only"
 
+        /**
+         * The extra that opens the choice although this device already
+         * holds an identity: the selector's own last row
+         * ([Identities.ANOTHER]) is the only thing that passes it, and
+         * both doors behind it add rather than replace
+         * ([Kernel.createIdentity]).
+         */
+        const val ADDING = "adding"
+
         /** The one request code this screen opens a file under. */
         private const val OPEN_BACKUP = 7449
     }
@@ -95,8 +109,14 @@ class FirstRunActivity : Activity() {
         body.removeAllViews()
         title("Fueros")
         para(
-            "This device has no identity yet. Start a new one, or restore one " +
-                "from the phrase you wrote down when it was made.",
+            if (Kernel.hasIdentity(this)) {
+                "Another identity on this device. Start a new one, or restore one " +
+                    "from the phrase you wrote down when it was made. What this " +
+                    "device already holds stays held."
+            } else {
+                "This device has no identity yet. Start a new one, or restore one " +
+                    "from the phrase you wrote down when it was made."
+            },
         )
         button("Start a new identity") { create() }
         button("Restore from a seed phrase") { restore() }

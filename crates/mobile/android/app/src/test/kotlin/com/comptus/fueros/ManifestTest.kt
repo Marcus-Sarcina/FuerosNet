@@ -101,6 +101,17 @@ class ManifestTest {
      * the invitation to its node [author, 2026-11-05], chosen over the
      * system composer because the invitation carries out a decision taken
      * at the adoption and a composer would put a tap on each one.
+     *
+     * **`READ_PHONE_NUMBERS`** [author, 2026-11-10]: the number this
+     * handset reports for itself crosses to the counterparty at a meeting,
+     * on the local bearer beside the intent, so neither person has to type
+     * the other's in (`light-client-requirements.md` §1.5). It reads one
+     * value about this device and nothing about anybody else — not the
+     * call log, not the contacts, not the subscriber identity — and the
+     * number it reads is the one this device is about to hand over
+     * deliberately. Install-time grants are not available for it, or for
+     * the camera and the radios, on any install path, so it is a one-time
+     * ask at the meeting entry and a refusal costs the number alone.
      */
     @Test
     fun the_permissions_asked_for_are_the_ones_reviewed() {
@@ -119,6 +130,7 @@ class ManifestTest {
             "INTERNET",
             "NFC",
             "POST_NOTIFICATIONS",
+            "READ_PHONE_NUMBERS",
             "SEND_SMS",
             "VIBRATE",
         )

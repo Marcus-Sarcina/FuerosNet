@@ -15,70 +15,6 @@ use std::collections::BTreeMap;
 /// about the party, never a rank.
 pub use rhtn_model::How;
 
-/// **A way to reach a party outside this network**, given at a ceremony so
-/// that an invitation to a node its patron stands up later can arrive
-/// without waiting for the next meeting (`light-client-requirements.md`
-/// §1.5; design §12.6.3's code is the alternative).
-///
-/// **Kept in a table of its own and not on [`Contact`]** [2026-11-05]: a
-/// contact is encoded by the paths that introduce one and hand it on, and
-/// an address that must never be propagated has no business travelling
-/// through a function whose job is to propagate. Out here, no path that
-/// serialises a contact can carry it by accident.
-///
-/// **Plaintext, and that is the whole difference from a capture.** A
-/// likeness is sealed under its subject's keys, so a holder retains
-/// nothing it can open and the window enforces itself (design §7.5.1,
-/// §7.5.2); nothing structural stops a holder keeping an address. So the
-/// window here is this client's own commitment, design §1.1's
-/// unenforceable kind, and design §19.8's C25 registers what holding many
-/// of them composes into.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Reach {
-    /// The address as its subject gave it.
-    pub address: String,
-    /// When it was given, in seconds.
-    pub taken_at: u64,
-    /// The window its subject declared, in seconds.
-    pub window_s: u64,
-}
-
-impl Reach {
-    /// Whether the subject's window has closed by `now`.
-    #[must_use]
-    pub fn lapsed(&self, now: u64) -> bool {
-        now >= self.taken_at.saturating_add(self.window_s)
-    }
-
-    /// The holding as the store keeps it.
-    #[must_use]
-    pub fn encode(&self) -> Vec<u8> {
-        let mut out = Vec::new();
-        emit_array_head(&mut out, 4);
-        emit_uint(&mut out, 1);
-        emit_tstr(&mut out, &self.address);
-        emit_uint(&mut out, self.taken_at);
-        emit_uint(&mut out, self.window_s);
-        out
-    }
-
-    /// Read one back, or nothing.
-    #[must_use]
-    pub fn decode(b: &[u8]) -> Option<Reach> {
-        let item = parse_all(b).ok()?;
-        let Item::Array(a) = &item else { return None };
-        if a.len() != 4 || as_uint(&a[0]) != Some(1) {
-            return None;
-        }
-        let Item::Text(r) = &a[1] else { return None };
-        Some(Reach {
-            address: String::from_utf8(b[r.clone()].to_vec()).ok()?,
-            taken_at: as_uint(&a[2])?,
-            window_s: as_uint(&a[3])?,
-        })
-    }
-}
-
 /// One contact, as the store keeps it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Contact {
@@ -144,6 +80,18 @@ pub struct Contact {
     pub image: Option<(u64, Vec<u8>)>,
     /// When the profile held was published, so a later one replaces it.
     pub profile_at: u64,
+    /// **The number this party's device reported for itself** at a meeting
+    /// [author, 2026-11-10]: *"Store with the other contact information in
+    /// the counterparty's device so it gets preserved through standard
+    /// peering and backup."*
+    ///
+    /// **Here and not in a table of its own**, which is where an address
+    /// taken at a ceremony used to sit: it is ordinary contact
+    /// information, so it rides what a contact rides — the store and the
+    /// peer backup — and is excluded from the card a contact is handed on
+    /// in (§2.4), since it was given to this device and not to its
+    /// friends (`light-client-requirements.md` §1.5).
+    pub number: Option<String>,
 }
 
 impl Contact {
@@ -177,6 +125,7 @@ impl Contact {
             alias: None,
             image: None,
             profile_at: 0,
+            number: None,
         }
     }
 
@@ -218,7 +167,9 @@ impl Contact {
     /// image or null, profile_at]`.
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::new();
-        emit_array_head(&mut out, 12);
+        // thirteen where a number is held, twelve where none is: an
+        // older store reads back as a contact with no number
+        emit_array_head(&mut out, if self.number.is_some() { 13 } else { 12 });
         emit_uint(&mut out, 1);
         emit_bstr(&mut out, &self.material);
         match &self.locator {
@@ -251,6 +202,9 @@ impl Contact {
             None => out.push(0xf6),
         }
         emit_uint(&mut out, self.profile_at);
+        if let Some(n) = &self.number {
+            emit_tstr(&mut out, n);
+        }
         out
     }
 
@@ -260,8 +214,9 @@ impl Contact {
         let Item::Array(a) = &item else { return None };
         // six before a contact could hold an address, eight with the
         // records it publishes, nine with the addresses a referral
-        // asserted, twelve with the profile it published
-        if !matches!(a.len(), 6 | 8 | 9 | 12) || as_uint(&a[0]) != Some(1) {
+        // asserted, twelve with the profile it published, thirteen with
+        // the number its device reported
+        if !matches!(a.len(), 6 | 8 | 9 | 12 | 13) || as_uint(&a[0]) != Some(1) {
             return None;
         }
         let bytes = |it: &Item| match it {
@@ -293,6 +248,10 @@ impl Contact {
             _ => None,
         };
         let profile_at = a.get(11).and_then(as_uint).unwrap_or(0);
+        let number = match a.get(12) {
+            Some(Item::Text(r)) => Some(std::str::from_utf8(&b[r.clone()]).ok()?.to_string()),
+            _ => None,
+        };
         Some(Contact {
             material: bytes(&a[1])?,
             locator,
@@ -305,6 +264,7 @@ impl Contact {
             alias,
             image,
             profile_at,
+            number,
         })
     }
 }

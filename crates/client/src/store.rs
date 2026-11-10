@@ -309,14 +309,6 @@ pub struct ClientStore {
     /// §4.3): every party whose locator became visible, with the material
     /// that verifies it, bounded and pruned toward what still resolves.
     pub contacts: BTreeMap<Keyhash, crate::contacts::Contact>,
-    /// **Ways to reach parties outside this network**, each given at a
-    /// ceremony by the party it names, for an invitation that has to
-    /// arrive before the next meeting (`light-client-requirements.md`
-    /// §1.5).  Its own table so that nothing which propagates a contact
-    /// can carry one ([`crate::contacts::Reach`]), dropped when the
-    /// window its subject declared closes, and the subject's to have
-    /// deleted at any time.
-    pub reach: BTreeMap<Keyhash, crate::contacts::Reach>,
     /// This client's own profiles, by subnet (`wire-format.md` §7.11):
     /// what it publishes to its serving node at attach and on change.
     pub profiles: BTreeMap<Txid, Vec<u8>>,
@@ -473,10 +465,6 @@ impl ClientStore {
         rewrite(
             &dir.join("contacts"),
             self.contacts.iter().map(|(k, c)| (*k, c.encode())),
-        )?;
-        rewrite(
-            &dir.join("reach"),
-            self.reach.iter().map(|(k, r)| (*k, r.encode())),
         )?;
         rewrite(
             &dir.join("profiles"),
@@ -678,11 +666,6 @@ impl ClientStore {
         for (k, b) in read_dir_of(&dir.join("contacts"))? {
             if let Some(c) = crate::contacts::Contact::decode(&b) {
                 st.contacts.insert(k, c);
-            }
-        }
-        for (k, b) in read_dir_of(&dir.join("reach"))? {
-            if let Some(r) = crate::contacts::Reach::decode(&b) {
-                st.reach.insert(k, r);
             }
         }
         for (k, b) in read_dir_of(&dir.join("profiles"))? {

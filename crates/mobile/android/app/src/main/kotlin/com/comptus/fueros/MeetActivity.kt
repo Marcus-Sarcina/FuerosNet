@@ -6,7 +6,10 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Typeface
+import android.os.Build
 import android.os.Bundle
+import android.telephony.SubscriptionManager
+import android.telephony.TelephonyManager
 import android.widget.Button
 import android.widget.EditText
 import android.widget.CheckBox
@@ -380,9 +383,30 @@ class MeetActivity : Activity() {
         Manifest.permission.BLUETOOTH_CONNECT,
     )
 
+    /** **Asked with the rest, and never inside a ceremony** [author,
+     *  2026-11-10]: install-time grants are not available for a dangerous
+     *  permission on any install path, so the number joins the batch the
+     *  camera and the radios are already asked for. A refusal costs the
+     *  number and nothing else. */
+    private val numberPermission = Manifest.permission.READ_PHONE_NUMBERS
+
+    /** Whether this screen has asked for it already, so the entry does not
+     *  ask again on every redraw. */
+    private var numberAsked = false
+
     // ---- the entry, before a ceremony is live --------------------------
 
     private fun entry() {
+        // **asked here, once, and never inside a ceremony** [author,
+        // 2026-11-10]: the number crosses with the intent, so the one
+        // moment to ask for it is while the person is still choosing what
+        // kind of meeting this is. A refusal is answered by sending no
+        // number, and the platform stops offering the dialog of its own
+        // accord.
+        if (!held(numberPermission) && !numberAsked) {
+            numberAsked = true
+            ask(4, numberPermission)
+        }
         // **A meeting is with a stranger** [author, 2026-10-07]: the
         // invitation code is the first thing either device knows of the
         // other, so nothing here needs to know who that is. One side shows
@@ -406,7 +430,7 @@ class MeetActivity : Activity() {
             setTextColor(Palette.now.muted)
         }
         body.addView(peer)
-        para("A peering is an edge between the two of you where neither is over the other, priced in this meeting (design §6.3). It is what lets either of you hold an encrypted backup of the other's contacts and records.")
+        para("Also hold an encrypted backup of each other's contacts and records.")
         button("Show my code") {
             start(Meet.Kind(Meet.Adopt.NONE, peer.isChecked), Meet.Role.INITIATOR)
         }
@@ -450,8 +474,41 @@ class MeetActivity : Activity() {
     }
 
     private fun start(kind: Meet.Kind, role: Meet.Role) {
+        Kernel.declareNumber(ownNumber())
         Kernel.startMeet(kind, role)?.bind(sink) ?: para("could not begin: the kernel is not running")
         redraw()
+    }
+
+    /**
+     * **The number this handset reports for itself, read at meeting time**
+     * [author, 2026-11-10] (`light-client-requirements.md` §1.5). It rides
+     * the intent over the local bearer to the counterparty, who keeps it
+     * with the rest of what it holds of this party.
+     *
+     * **Null is an ordinary answer and the common one.** The number is
+     * carrier-provisioned rather than device-known, so a handset with no
+     * SIM, a carrier that never provisioned it, or a refused permission
+     * all return nothing, and nobody is prompted in the meeting for what
+     * the platform would not give. Every bench phone answers null: all
+     * four report `gsm.sim.state=ABSENT`.
+     */
+    @Suppress("DEPRECATION")
+    private fun ownNumber(): String? {
+        if (!held(numberPermission)) return null
+        return runCatching {
+            val tm = getSystemService(TelephonyManager::class.java) ?: return null
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                getSystemService(SubscriptionManager::class.java)
+                    ?.let { sm ->
+                        runCatching { sm.getPhoneNumber(SubscriptionManager.getDefaultSubscriptionId()) }
+                            .getOrNull()
+                    }
+                    ?.takeIf { it.isNotBlank() }
+                    ?: tm.line1Number
+            } else {
+                tm.line1Number
+            }
+        }.getOrNull()?.trim()?.takeIf { it.isNotEmpty() }
     }
 
     // ---- D1 intent -----------------------------------------------------
@@ -459,10 +516,10 @@ class MeetActivity : Activity() {
     private fun intent(m: Meet) {
         when (m.role) {
             Meet.Role.INITIATOR -> {
-                para("Hold this up for ${m.counterpartyName} to scan with their REAR camera. It carries who you are and what kind of meeting this is — nothing of the meeting's own anchor, which comes later and goes both ways.")
+                para("Hold this up for ${m.counterpartyName} to scan with their REAR camera. It carries who you are and what kind of meeting this is.")
                 val code = Kernel.bootstrap()
                 if (code == null) {
-                    para("The code needs the kernel's identifier, which this device has not got yet.")
+                    para("This code is not ready yet.")
                 } else {
                     qr(code, "bootstrap")
                 }
@@ -723,13 +780,12 @@ class MeetActivity : Activity() {
         m.brief().forEach { para("• ${it.text}") }
 
         heading("What may be weak in this meeting")
-        para("• Nominated witnesses: none, until your horizon can offer them. The record carries that it had none.")
-        para("• Verifiers are weighed, not required; a thin meeting is honest, not malformed.")
+        para("• Nominated witnesses: none. The record carries that it had none.")
         if (bluetooth.any { !held(it) }) {
             // the bearer that carries the intent is Bluetooth LE; without
             // the permissions the exchange stops at the radio, said here
             // where the person can still act rather than caught there
-            para("The intent crosses over Bluetooth, which this app is not yet allowed to use. Without it the meeting will stop at the exchange.")
+            para("This meeting needs Bluetooth, which is not yet allowed.")
             button("Allow Bluetooth") { ask(3, *bluetooth) }
         }
         button("Accept — begin") { m.accept() }
@@ -887,7 +943,6 @@ class MeetActivity : Activity() {
     // ---- D5 verifiers --------------------------------------------------
 
     private fun verification(m: Meet) {
-        para("Your device picks ${m.counterpartyName}'s verifiers from the records they handed over, preferring people you have met. The choice is computed, not offered: there is nothing here to pick.")
         if (!m.selectionRun()) {
             // the selection is the kernel's, asked for once as the flow
             // enters this step, and never from inside a draw
@@ -897,7 +952,7 @@ class MeetActivity : Activity() {
         val chosen = m.chosen()
         heading("Selected")
         if (chosen.isEmpty()) {
-            para("• None required. ${m.counterpartyName} handed over no records, so there is no pool to draw from and none is owed; a meeting with fewer verifiers is thinner, not malformed.")
+            para("• None required.")
         } else {
             chosen.forEach { c ->
                 val answer = when (c.verdict) {
@@ -909,20 +964,19 @@ class MeetActivity : Activity() {
                 }
                 para("• ${c.key.take(16)}…  ${basisWords(c.basis)}; $answer")
             }
-            para("Each query goes to ${m.counterpartyName}'s device for consent on the same end-to-end path the rest of this conversation uses. Consented, the kernel carries it to its verifier and the answer lands above.")
         }
         val mine = m.queriesAboutMe()
         if (mine.isNotEmpty()) {
             heading("Queries about you")
-            para("${m.counterpartyName} asked these verifiers about you. Your device consented on each: consent is bound to the ceremony you are standing in, so it is given without stopping to ask, and you are told instead.")
+            para("${m.counterpartyName} asked these verifiers about you. Your device consented on each, and tells you rather than stopping to ask.")
             mine.forEach { para("• $it…") }
         }
         witnesses(m)
         heading("The conversation")
         val p = m.progress()
         when {
-            !m.opened() -> para("Opening: the nominees are being asked to witness, and the back-pointers are going out.")
-            p == null -> para("Waiting on the kernel's first word of where it stands.")
+            !m.opened() -> para("Opening: the nominees are being asked to witness.")
+            p == null -> para("Waiting…")
             p.queriesOutstanding > 0 -> {
                 val left = (m.patienceLeftMs() ?: 0L) / 1000
                 para("${p.queriesOutstanding} of the queries have no answer yet. A verifier that never answers does not appear in the record; this device goes on without it in $left s, or now if you say so.")
@@ -944,7 +998,7 @@ class MeetActivity : Activity() {
         heading("Witnesses")
         val w = m.witnesses()
         if (w.isEmpty()) {
-            para("• None nominated. With no horizon to draw from, neither side had anyone to ask; the record carries that it had none.")
+            para("• None nominated. The record carries that it had none.")
             return
         }
         // **the split, before the list** (PRD-19): how many attested and
@@ -990,9 +1044,9 @@ class MeetActivity : Activity() {
         val proposer = p?.proposer == true
         para(
             if (proposer) {
-                "Your device proposed the body and signed it. Every other signer is shown it now and answers with a signature or a refusal."
+                "Your device proposed the record and signed it. Every other signer is shown it now and answers with a signature or a refusal."
             } else {
-                "${m.counterpartyName}'s device proposed the body. Yours checked it against what it holds, the root, the back-pointers and the disclosures, and signed it; a body that did not check would have been refused with its code and this meeting stopped."
+                "${m.counterpartyName}'s device proposed the record. Yours checked it and signed it; one that did not check out would have been refused and this meeting stopped."
             },
         )
         heading("Signers")
@@ -1026,12 +1080,12 @@ class MeetActivity : Activity() {
             para("${p.signed.size} of the signers have signed so far, this device among them. The record is finalized here when every one has, and goes to each of them.")
             p.refused.forEach { para("• ${it.take(16)}…  refused to sign") }
         } else {
-            para("The record arrives from ${m.counterpartyName} once every signer has signed, is checked against this body, and is held.")
+            para("The record arrives from ${m.counterpartyName} once every signer has signed, and is checked and held.")
         }
         val warnings = m.presign()
         if (warnings.isEmpty()) {
             heading("Nothing to flag")
-            para("Every check this screen makes came back unremarkable. That is not a guarantee about the person in front of you; it is the absence of the specific weaknesses listed at D6.")
+            para("Every check this screen makes came back unremarkable. That is not a guarantee about the person in front of you; it is the absence of the weaknesses this screen looks for.")
         } else {
             heading("What is thin about this meeting")
             warnings.forEach { para("• ${it.text}") }
@@ -1108,7 +1162,6 @@ class MeetActivity : Activity() {
         when (p.step()) {
             Peering.Step.HELD -> {
                 para("The peering is recorded: ${p.txid()}")
-                para("Your device will hand the record to its node when it has one. Until then it is held here, which is where it is evidence.")
             }
             Peering.Step.REFUSED ->
                 para("The peering did not happen: ${p.reason()}. The meeting itself is untouched — the record above stands, and either of you can offer again.")
@@ -1146,9 +1199,7 @@ class MeetActivity : Activity() {
                 } else {
                     para("The adoption is recorded: $t")
                     para("Where you sit now: ${a.position()}")
-                    para("Your device will hand the record to its node when it has one. Until then it is held here, which is where it is evidence.")
                     if (a.patron && m.scope() == Meet.Scope.OWN) nameSubnet(t)
-                    if (a.patron) askReach(m, t)
                 }
             }
             Adoption.Step.REFUSED ->
@@ -1158,8 +1209,6 @@ class MeetActivity : Activity() {
     }
 
     /** The address field and what came of it, across a redraw. */
-    private var reachField: EditText? = null
-    private var reachSaid: String? = null
 
     /** The field and its outcome outlive a redraw of the Done screen. */
     private var subnetName: EditText? = null
@@ -1176,72 +1225,11 @@ class MeetActivity : Activity() {
      * to Options so a subnet is not shown to its first member as eight
      * hex characters.
      */
-    /**
-     * **Where to reach them, so an invitation need not wait for the next
-     * meeting** [author, 2026-11-03] (`light-client-requirements.md` §1.5).
-     *
-     * Asked here because this is where the decision it serves was already
-     * made: *"If the patron has adopted people into a subnet then he has
-     * decided to give those people access to his node that serves that
-     * subnet"* [author, 2026-11-03]. So it is not a second consent — it is
-     * the plumbing for the first, and the screen says what it is for and
-     * what declining costs.
-     *
-     * **Optional, and theirs to have deleted.** The window is not asked
-     * and not this device's to choose: the kernel takes the one they
-     * declared in this very record, so a patron cannot set a policy over
-     * somebody else's address.
-     *
-     * **Unlike the captures, nothing structural keeps this promise.** A
-     * likeness is sealed under its subject's keys; an address is plain
-     * text in this phone's hands, which design §19.8's C25 registers and
-     * the screen does not pretend otherwise.
-     */
-    private fun askReach(m: Meet, txid: String) {
-        val who = m.counterpartyKey ?: return
-        heading("Reaching ${m.counterpartyName} later")
-        val held = Kernel.reachHeld(who)
-        if (held != null) {
-            para("Held: $held — used only to send ${m.counterpartyName} an invitation to a node you stand up, and kept for the window they declared here.")
-            button("Delete it") {
-                Kernel.forgetReach(who)
-                reachSaid = "Deleted."
-                redraw()
-            }
-            return
-        }
-        reachSaid?.let { para(it); return }
-        para("If ${m.counterpartyName} gives you a number or an address, this phone can send them an invitation the moment you stand up a node — without waiting until you are next in a room together.")
-        para("Optional. Declining costs them nothing but that: they can still scan a code at your next meeting. It goes in no record, is sent to nobody else, and is theirs to have deleted.")
-        val field = reachField ?: EditText(this).apply {
-            hint = "their number or address"
-            textSize = 18f
-            setSingleLine()
-        }.also { reachField = it }
-        (field.parent as? android.view.ViewGroup)?.removeView(field)
-        body.addView(field)
-        button("Keep it") {
-            val typed = field.text.toString().trim()
-            if (typed.isEmpty()) {
-                reachSaid = null
-                return@button
-            }
-            val took = Kernel.takeReach(who, typed, txid)
-            Diag.event("meet.reach", "state" to if (took) "held" else "refused", "txid" to txid.take(8))
-            reachSaid = if (took) {
-                "Held. It will carry an invitation when you stand up a node."
-            } else {
-                "This phone could not read a retention window out of the record, so it is keeping nothing: an address with no window would be one with no end."
-            }
-            redraw()
-        }
-    }
-
     private fun nameSubnet(txid: String) {
         heading("A new subnet under your key")
         Diag.event("meet.subnet_name", "state" to (subnetNamed?.let { "named" } ?: "asked"), "txid" to txid.take(8))
         subnetNamed?.let {
-            para("Named $it. Its profile is published to your node, and the name is yours to change in the subnet's options.")
+            para("Named $it. Yours to change in the subnet's options.")
             return
         }
         para("Name it: what everybody who joins under you will see it as.")

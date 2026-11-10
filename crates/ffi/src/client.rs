@@ -3174,54 +3174,34 @@ impl Participant {
         })
     }
 
-    /// **Take a way to reach `who` outside this network**, as they gave it
-    /// at the adoption (`light-client-requirements.md` §1.5): optional,
-    /// theirs to have deleted, kept for the window *they* declared, and
-    /// carried by nothing — not a record, not an introduction, not a
-    /// backup.
+    /// **The number this device reports for itself**, as the shell read it
+    /// off the handset at meeting time [author, 2026-11-10]
+    /// (`light-client-requirements.md` §1.5): carried beside the intent
+    /// over the local bearer and nowhere else — not in a record, not to a
+    /// witness or a verifier.
     ///
-    /// **`txid` is the record the two of them made**, and the window comes
-    /// out of it: the one *this subject* declared there. There is no window
-    /// argument because there is no window of the holder's to supply —
-    /// design §7.5.1's rule for a capture, made structural.
-    ///
-    /// Whether it was taken. Nothing is held for a `who` that is not a
-    /// keyhash, a record this device does not hold, or a record declaring
-    /// no window for them.
-    pub fn take_reach(&self, who: Id, address: String, txid: Id) -> bool {
-        crate::diag::call_plain("take_reach", || {
-            let Some(k) = keyhash(&who) else { return false };
-            let Some(t) = keyhash(&txid) else {
-                return false;
-            };
+    /// Nullable, and nothing prompts for it: a handset with no SIM, a
+    /// carrier that does not provision the number, or a platform that
+    /// refuses it all send nothing. Held in memory for this process and
+    /// read again at the next meeting.
+    pub fn declare_number(&self, number: Option<String>) {
+        crate::diag::call_plain("declare_number", || {
             self.handle
-                .with_blocking(move |c| c.take_reach(k, address, &t))
-        })
+                .with_blocking(move |c| c.declare_number(number.clone()));
+        });
     }
 
-    /// **The address held for `who`**, where one is and is still inside the
-    /// window its subject declared; `None` otherwise.
-    ///
-    /// Reading is what collects: one past its window is dropped here
-    /// rather than returned (`Client::reaches`).
-    pub fn reach(&self, who: Id) -> Option<String> {
-        crate::diag::call_plain("reach", || {
+    /// **The number held for `who`**, where their device reported one at a
+    /// meeting; `None` otherwise.
+    pub fn number(&self, who: Id) -> Option<String> {
+        crate::diag::call_plain("number", || {
             let k = keyhash(&who)?;
             self.handle.with_blocking(move |c| {
-                c.reaches()
+                c.numbers()
                     .into_iter()
                     .find(|(h, _)| *h == k)
-                    .map(|(_, a)| a)
+                    .map(|(_, n)| n)
             })
-        })
-    }
-
-    /// **Forget it.** Its subject may ask at any time and owes no reason.
-    /// Whether one was held.
-    pub fn forget_reach(&self, who: Id) -> bool {
-        crate::diag::call_plain("forget_reach", || {
-            let Some(k) = keyhash(&who) else { return false };
-            self.handle.with_blocking(move |c| c.forget_reach(&k))
         })
     }
 
@@ -3241,7 +3221,7 @@ impl Participant {
         crate::diag::call_plain("invitations", || {
             let me = self.handle.me();
             self.handle.with_blocking(move |c| {
-                c.reaches()
+                c.numbers()
                     .into_iter()
                     .map(|(k, to)| Invite {
                         who: k.iter().map(|b| format!("{b:02x}")).collect(),

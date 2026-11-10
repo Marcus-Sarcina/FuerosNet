@@ -141,7 +141,7 @@ class IdentitiesTest {
     fun the_list_names_each_one_and_marks_the_one_that_acts() {
         val two = listOf(held(1, null, "Marcus"), held(2))
         val rows = Identities.listed(two, id(2))
-        assertEquals(2, rows.size)
+        assertEquals("two held and the door to another", 3, rows.size)
         assertTrue("the alias is used where there is one: ${rows[0]}", rows[0].contains("Marcus"))
         // **never a name this device was not given** (PRD-14): the first
         // eight of the id where there is no alias
@@ -150,12 +150,24 @@ class IdentitiesTest {
         assertTrue("the active one is marked: ${rows[1]}", rows[1].contains("●"))
     }
 
+    /**
+     * **A device holding one identity still has something to choose**
+     * [author, 2026-11-09]: the door to another is the list's last row,
+     * which is what keeps the press and hold from opening nothing.
+     */
     @Test
-    fun the_selector_says_what_is_concurrent_and_what_is_not() {
-        val said = Identities.words()
-        assertTrue("says the subnets run at once: $said", said.contains("at the same time"))
-        assertTrue("says a conversation stays put: $said", said.contains("stays with the identity"))
-        assertTrue("and what the mark means: $said", said.contains("meeting"))
+    fun the_list_always_offers_another_identity() {
+        val one = listOf(held(1, null, "Marcus"))
+        val rows = Identities.listed(one, id(1))
+        assertEquals("one held is never a list of one", 2, rows.size)
+        assertEquals("the door is last", Identities.ANOTHER, rows[1])
+        assertTrue("and it is the door", Identities.adding(one, 1))
+        assertFalse("the identity's own row is not", Identities.adding(one, 0))
+
+        // **and on a device holding none**, which is the first run's own
+        // screen rather than this list, the door is all there is
+        assertEquals(listOf(Identities.ANOTHER), Identities.listed(listOf(), null))
+        assertTrue(Identities.adding(listOf(), 0))
     }
 
     @Test
@@ -172,9 +184,34 @@ class IdentitiesTest {
             "the list is not drawn from the index and the active choice",
             shell.contains("Identities.listed(held, Kernel.activeIdentity())"),
         )
+        // **the list and nothing else** [author, 2026-11-10]: no title, no
+        // explanation of what an identity is for, no cancel button
+        assertFalse(
+            "the selector explains itself again",
+            shell.contains("setTitle(\"Which identity acts\")") ||
+                shell.contains("Identities.words()") ||
+                shell.contains("setNegativeButton(\"Keep this one\""),
+        )
+        // **the list opens whatever the device holds**: the early return
+        // that answered one identity with a notice is what made the press
+        // and hold do nothing visible on the bench (2026-11-09)
+        assertFalse(
+            "a device holding one identity is answered with a notice again",
+            shell.contains("this device holds one identity"),
+        )
         assertTrue(
-            "nothing says what is concurrent and what is not",
-            shell.contains("Identities.words()"),
+            "the last row does not reach the door to another identity",
+            shell.contains("Identities.adding(held, which)") &&
+                shell.contains("putExtra(FirstRunActivity.ADDING, true)"),
+        )
+
+        val first = source("FirstRunActivity.kt")
+        // **a name owed is owed before the choice is offered again**, or a
+        // recreation mid-add reads as a wipe
+        assertTrue(
+            "the choice is offered before the name step, which a recreation would undo",
+            first.indexOf("Kernel.defaultAlias() == null -> name()") <
+                first.indexOf("intent.getBooleanExtra(ADDING, false) -> choice()"),
         )
 
         val kernel = source("Kernel.kt")

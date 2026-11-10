@@ -53,6 +53,14 @@
          number where the composer would not; nothing is sent anywhere
          else, and the project registers no sender and ships no gateway. -->
     <uses-permission android:name="android.permission.SEND_SMS" />
+    <!-- **The number this handset reports for itself** [author,
+         2026-11-10] (`light-client-requirements.md` §1.5): read at meeting
+         time and handed to the counterparty over the local bearer, so that
+         neither side has to type the other's in. Asked for with the rest
+         and never inside a ceremony; a refusal costs the number and
+         nothing else. Install-time grants are not available for it, or for
+         the camera and the radios, on any install path. -->
+    <uses-permission android:name="android.permission.READ_PHONE_NUMBERS" />
     <!-- Neither is required to install: a device without one carries the
          exchange another way, and `light-client-requirements.md` §1.3 has a
          missing capability reported unavailable rather than absent. -->

@@ -95,6 +95,11 @@ pub const PEERING_AUDIT_HISTORY: usize = 8;
 /// (§1.3, §14.3.2): a bound on the **carriage**; the bundle itself has none
 /// (§5.4).
 pub const INTENT_BUNDLE_ENTRIES: usize = 256;
+/// Characters of the number a device reports for itself, carried beside
+/// the intent (§1.3, §14.3.2) [author, 2026-11-10]. E.164 allows fifteen
+/// digits and a plus; a handset reports its own string, and this leaves
+/// room for the separators one may carry without admitting a field.
+pub const NUMBER_CHARS: usize = 32;
 /// `Candidate` entries per `CandidateHandover`, and per candidate exchange
 /// on the payload path (§1.3, §14.3.2).
 pub const CANDIDATES_PER_EXCHANGE: usize = 8;

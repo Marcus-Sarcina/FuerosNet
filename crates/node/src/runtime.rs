@@ -474,6 +474,19 @@ impl LiveNode {
             if up {
                 ds.entry(peer).or_default().insert(device);
                 v.attached.insert(peer);
+                // **a node that says nothing about this cannot explain an
+                // `OutOfStore`** [bench, 2026-11-10]: an attached client
+                // is within the store at any distance, so whether one was
+                // held is the whole of why an object was kept or refused —
+                // and on run `18521b9-new-universe-1` the log could not
+                // say.
+                tracing::debug!(
+                    target: "node",
+                    peer8 = %crate::diag::id8(&peer),
+                    devices = ds.get(&peer).map_or(0, |s| s.len()),
+                    attached = v.attached.len(),
+                    "node.attached"
+                );
             } else {
                 let left = ds.get_mut(&peer).map(|s| {
                     s.remove(&device);
@@ -483,6 +496,13 @@ impl LiveNode {
                     ds.remove(&peer);
                     v.attached.remove(&peer);
                 }
+                tracing::debug!(
+                    target: "node",
+                    peer8 = %crate::diag::id8(&peer),
+                    devices = left.unwrap_or(0),
+                    attached = v.attached.len(),
+                    "node.detached"
+                );
                 return;
             }
             drop(ds);

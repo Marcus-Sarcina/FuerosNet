@@ -213,6 +213,7 @@ malformed, not merely unusual.
 | Zone label in a `NetworkPoint` (§4.4) | 32 bytes — a provider's own slug, and none is near it |
 | NetworkPoint entries per anchor entry or endpoint record (§7.2, §7.6) | 8 — this row is the anchor entry's and the endpoint record's alone; **peering carries exactly one `NetworkPoint` or `Locator` per endpoint** (§4.4) |
 | `Introduction` entries per `IntentExchange` or `BundleContinuation` (§14.3.2) | 256 — a bound on the carriage; the bundle itself has none (§5.4) |
+| Characters of the number a device reports for itself, in `IntentExchange` (§14.3.2) | 32 |
 | `Candidate` entries per `CandidateHandover` or per payload-path candidate exchange (§14.3.2) | 8 |
 | `Introduction` entries per `FishingProposal` (§7.10.2) | 1 — one candidate per proposal, in turns (§5.1) |
 | `VerifierResponse` entries per `GatheredResponses` (§7.10.2) | 32 — the per-record bound above |
@@ -5459,7 +5460,7 @@ design already depends on.
 
 | What | Between | Where it is stated | Encoding |
 |---|---|---|---|
-| The ceremony's intent exchange — the contribution, the bundle of introductions, the sender's locator, the timing and who initiated; the nominees no longer ride it [author, 2026-10-19], each side's set crossing by locator at the prune (§7.10.1 kind 22) | Two participants' devices | design §7.1, §7.5.2, §8.1.2 | `IntentExchange` (§14.3.2), carried by the shell's chosen bearer (§14.3.1) and bound to the pre-commitment. The CBOR is specified; two vendors' clients compute the same pre-commitment, the ceremony-id (design §7.5.2.6), either way |
+| The ceremony's intent exchange — the contribution, the bundle of introductions, the sender's locator, the timing, who initiated and, where the platform gave one, the number the sender's device reports for itself [author, 2026-11-10]; the nominees no longer ride it [author, 2026-10-19], each side's set crossing by locator at the prune (§7.10.1 kind 22) | Two participants' devices | design §7.1, §7.5.2, §8.1.2 | `IntentExchange` (§14.3.2), carried by the shell's chosen bearer (§14.3.1) and bound to the pre-commitment. The CBOR is specified; two vendors' clients compute the same pre-commitment, the ceremony-id (design §7.5.2.6), either way |
 | The optical transcript — each device's key material and contribution, then the derived ceremony-id, screen to camera | Two participants' devices | design §7.1 item 3, design §7.5.2, design §12.3 | `OpticalContribution` then `TranscriptConfirm` (§14.3.2): the key material is pinned at this first contact, the contribution is the key-exchange input, the ceremony-id is the transcript hash both display and check |
 | Traversal candidates | Two participants' devices | design §12.6.3 [author, 2026-09-25] | `CandidateHandover` (§14.3.2), carrying the `Candidate` structure this document now defines; the same candidates travel the end-to-end payload path when a direct connection is set up remotely (design §12.6.3, §14.1.1) |
 | The capture-key handover — the key each participant derived for the captures the other holds of them, handed across at capture time | Two participants' devices | design §7.5.2, design §7.5.2.6 | `CaptureKeyHandover` (§14.3.2): the 32-byte key design §7.5.2.6 derives, anchored to the ceremony-id like the proximity outcomes and the candidates [author, 2026-10-02] |
@@ -5657,7 +5658,8 @@ IntentExchange = [             ; carried by the bearer (§14.3.1), not optical
                                ;   [author, 2026-10-19]: each side's set
                                ;   travels by locator once the id has
                                ;   fixed (§7.10.2, kind 22), and this
-                               ;   exchange is eight fields
+                               ;   exchange is eight fields, or nine where
+                               ;   the sender's own number rides with it
   [ * Introduction ],          ; the bundle's first carriage: the prior
                                ;   counterparties the sender names for
                                ;   verifier selection, each with the most
@@ -5683,6 +5685,19 @@ IntentExchange = [             ; carried by the bearer (§14.3.1), not optical
                                ;   the sender's key from the screen, keeps
                                ;   this as the locator it holds for them,
                                ;   and hands it onward in its own bundles
+  ? tstr .size (1..32),        ; the number the sender's device reports for
+                               ;   itself [author, 2026-11-10], where the
+                               ;   platform gave one. ABSENT IS THE ORDINARY
+                               ;   CASE: the number is carrier-provisioned
+                               ;   rather than device-known, so a handset
+                               ;   without a subscription sends eight fields
+                               ;   and nine is not required of anybody. The
+                               ;   receiver keeps it with the rest of what it
+                               ;   holds of that party (§2.3's contact), where
+                               ;   the peer backup carries it (design §6.3);
+                               ;   it enters no transaction body, reaches no
+                               ;   witness or verifier, and is not in the card
+                               ;   that introduces that party (§2.4)
 ]
 
 BundleContinuation = [         ; the bundle past its first carriage

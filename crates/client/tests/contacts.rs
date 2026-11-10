@@ -585,129 +585,73 @@ fn a_record_that_arrives_leaves_every_signer_a_contact() {
     }
 }
 
-/// **An address given at a ceremony is held apart from the contact**
-/// (`light-client-requirements.md` §1.5, design §19.8 C25): used only to
-/// reach its subject with an invitation, dropped when the window its
-/// subject declared closes, and never carried by anything that hands a
-/// contact on.
+/// **The number a counterparty's device reported is kept with the rest of
+/// what is held of that party** (`light-client-requirements.md` §1.5,
+/// NET-033): it travels in the contact's own encoding, so the store and
+/// the peer backup carry it, and it is absent from the card that
+/// introduces that party.
 #[test]
-fn an_address_is_held_for_its_subject_s_window_and_travels_with_nothing() {
+fn a_number_is_kept_with_the_contact_and_is_not_handed_on_with_it() {
     let mut s = setup(&["alice", "bob", "witness"]);
-    let t = s.met("alice", "bob", "witness");
-    // **the two sides declare different windows**, so what is held can only
-    // have come from bob's own declaration and not from alice's
-    let set = rhtn_client::record::disclosures(
-        [
-            rhtn_client::record::capture_value(0, 4, 0, 2),
-            rhtn_client::record::empty_location_value(),
-            rhtn_client::record::integrity_value(false, 0),
-            rhtn_client::record::retention_value(1),
-            rhtn_client::record::integrity_value(false, 0),
-            rhtn_client::record::retention_value(3),
-        ],
-        std::array::from_fn(|i| [i as u8 + 1; 16]),
-    );
-    let bob_declared_years = {
-        let a = s.client("alice");
-        a.store.disclosures.insert(t, set);
-        let rec = rhtn_archive::record::Record::parse(a.store.records.get(&t).expect("the record"))
-            .expect("parses");
-        if rec.participants().first() == Some(&kh("bob")) {
-            1u64
-        } else {
-            3u64
-        }
-    };
+    s.met("alice", "bob", "witness");
     {
         let a = s.client("alice");
-        // **the window comes from the record**, being the one bob declared
-        assert!(a.take_reach(kh("bob"), "+15550001111".into(), &t));
+        // what a meeting left: the number bob's device reported
+        a.store
+            .contacts
+            .get_mut(&kh("bob"))
+            .expect("a contact")
+            .number = Some("+15550001111".into());
         assert_eq!(
-            a.store.reach.get(&kh("bob")).expect("held").window_s,
-            bob_declared_years * 365 * 86_400,
-            "the window is the subject's own declaration, not this client's"
-        );
-        assert_eq!(
-            a.reaches(),
+            a.numbers(),
             vec![(kh("bob"), "+15550001111".to_string())],
-            "held, and inside the window"
+            "read off the contacts, which is where it is kept"
         );
 
-        // **it is not on the contact**, so no path that encodes one can
-        // carry it: the propagating functions never see it
-        let contact = a.store.contacts.get(&kh("bob")).expect("a contact");
+        // **it rides the contact's own encoding**, which is what the store
+        // writes and what a peer's backup carries (design §6.3)
+        let contact = a.store.contacts.get(&kh("bob")).expect("a contact").clone();
         let encoded = contact.encode();
         assert!(
-            !encoded.windows(12).any(|w| w == b"+15550001111"),
-            "an encoded contact carries no address"
+            encoded.windows(12).any(|w| w == b"+15550001111"),
+            "an encoded contact carries the number"
         );
+        assert_eq!(
+            rhtn_client::contacts::Contact::decode(&encoded)
+                .expect("decodes")
+                .number
+                .as_deref(),
+            Some("+15550001111"),
+            "and reads back"
+        );
+
+        // **but not the card that introduces them** (§2.3, §2.4): it was
+        // given to this device, not to its acquaintances
         let handed = a.own_introduction().expect("an introduction");
         assert!(
             !handed.windows(12).any(|w| w == b"+15550001111"),
-            "nor does an introduction"
+            "an introduction carries no number"
         );
+        for intro in a.introductions() {
+            assert!(
+                !intro.windows(12).any(|w| w == b"+15550001111"),
+                "nor does a bundle entry"
+            );
+        }
     }
 
-    // **no record, no window, and so nothing held** — rather than a
-    // default invented on the subject's behalf
+    // **a contact holding no number encodes as one did before numbers**,
+    // so an older store reads back rather than failing
     {
         let a = s.client("alice");
-        assert!(
-            !a.take_reach(kh("bob"), "+15559999999".into(), &[9u8; 32]),
-            "a record this client does not hold declares no window"
-        );
-    }
-
-    // **the subject's to have deleted, at any time and for no reason**
-    {
-        let a = s.client("alice");
-        assert!(a.forget_reach(&kh("bob")));
-        assert!(a.reaches().is_empty());
-        assert!(!a.forget_reach(&kh("bob")), "and gone is gone");
-    }
-
-    // **it survives a restart**, since an act that did not would not be
-    // an act — the directory store keeps it beside the contacts
-    {
-        let a = s.client("alice");
-        assert!(a.take_reach(kh("bob"), "+15550003333".into(), &t));
-        let dir = std::env::temp_dir().join(format!("rhtn-reach-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        a.store.save(&dir).expect("saved");
-        let back = rhtn_client::store::ClientStore::load(&dir).expect("loaded");
+        let mut contact = a.store.contacts.get(&kh("bob")).expect("a contact").clone();
+        contact.number = None;
+        let twelve = contact.encode();
         assert_eq!(
-            back.reach.get(&kh("bob")).map(|r| r.address.as_str()),
-            Some("+15550003333"),
-            "the holding came back"
-        );
-        // **and the backup blob does not carry it**, which §1.5 says
-        // plainly: a backup is for the archive, not for an address held
-        // about somebody else
-        let blob = a.store.encode();
-        assert!(
-            !blob.windows(12).any(|w| w == b"+15550003333"),
-            "no address in the durable blob"
-        );
-        let _ = std::fs::remove_dir_all(&dir);
-        a.forget_reach(&kh("bob"));
-    }
-
-    // **the window is the subject's, and the read path is what collects**:
-    // nothing past it is ever returned, and it is deleted as that is read
-    {
-        let a = s.client("alice");
-        assert!(a.take_reach(kh("bob"), "+15550002222".into(), &t));
-        assert_eq!(a.reaches().len(), 1);
-        let held = a.store.reach.get(&kh("bob")).expect("held").clone();
-        a.store.reach.get_mut(&kh("bob")).expect("held").taken_at =
-            held.taken_at.saturating_sub(held.window_s + 86_400);
-        assert!(
-            a.reaches().is_empty(),
-            "past its window, it is not returned"
-        );
-        assert!(
-            !a.store.reach.contains_key(&kh("bob")),
-            "and not merely hidden: the read is what deletes it"
+            rhtn_client::contacts::Contact::decode(&twelve)
+                .expect("decodes")
+                .number,
+            None,
         );
     }
 }

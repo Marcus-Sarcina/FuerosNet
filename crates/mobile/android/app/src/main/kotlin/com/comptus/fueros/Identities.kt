@@ -210,15 +210,28 @@ object Identities {
      */
     fun label(h: Held): String = h.alias?.takeIf { it.isNotBlank() } ?: h.id.take(8)
 
-    /** The one that acts, marked, as the selector draws the list. */
-    fun listed(held: List<Held>, active: String?): List<String> =
-        held.map { h -> (if (h.id == active) "● " else "  ") + label(h) }
+    /**
+     * **The door to another identity is a row of the list, not a screen
+     * of its own** [author, 2026-11-09]: *"a nice way to present this
+     * visually would be to have <New Identity> as a list item … which
+     * would also mean the drop down never had only one item and wouldn't
+     * necessitate adding a new screen/button."* Before this, a device
+     * holding one identity answered the press and hold with a notice and
+     * nothing opened, and nothing anywhere reached [Kernel.createIdentity]
+     * past the first run.
+     */
+    const val ANOTHER = "<New Identity>"
 
-    /** What the selector says above the list. */
-    fun words(): String =
-        "Every identity here reads and acts in its own subnets at the same time, " +
-            "and a conversation stays with the identity it started in. A meeting or " +
-            "an action on your own node uses the one marked here."
+    /**
+     * The one that acts, marked, as the selector draws the list, and
+     * [ANOTHER] last — so the list never holds one item and a choice
+     * between identities is never displaced by the door.
+     */
+    fun listed(held: List<Held>, active: String?): List<String> =
+        held.map { h -> (if (h.id == active) "● " else "") + label(h) } + ANOTHER
+
+    /** Whether the row chosen at [which] is [ANOTHER] rather than one held. */
+    fun adding(held: List<Held>, which: Int): Boolean = which == held.size
 
     /**
      * **What an act refused for want of an identity says.** Only

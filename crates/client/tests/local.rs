@@ -271,6 +271,7 @@ fn a_sealed_carriage_opens_only_under_its_own_key_and_ceremony() {
         initiator: true,
         continuations: 0,
         locator: fixture("P-signedlocator"),
+        number: None,
     }
     .encode();
 
@@ -373,4 +374,49 @@ fn hexbytes(s: &str) -> Vec<u8> {
 
 fn hex(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
+}
+
+/// **An intent carries a number or does not, and both are well formed**
+/// (`wire-format.md` §14.3.2's ninth field; NET-033) [author, 2026-11-10]:
+/// a handset without a subscription sends the eight fields it always sent,
+/// so nothing has to be true of the counterparty's build.
+#[test]
+fn an_intent_carries_a_number_or_does_not() {
+    let plain = |number: Option<String>| IntentExchange {
+        contribution: [1u8; 16],
+        bundle: vec![],
+        started_at: 5,
+        retention_years: 2,
+        initiator: true,
+        continuations: 0,
+        locator: fixture("P-signedlocator"),
+        number,
+    };
+    let with = plain(Some("+15550001111".into())).encode();
+    let without = plain(None).encode();
+    assert_eq!(with[0], 0x89, "nine fields with a number");
+    assert_eq!(without[0], 0x88, "eight without");
+    assert_eq!(
+        IntentExchange::decode(&with)
+            .expect("reads")
+            .number
+            .as_deref(),
+        Some("+15550001111")
+    );
+    assert_eq!(
+        IntentExchange::decode(&without).expect("reads").number,
+        None
+    );
+    assert!(
+        !without.windows(2).any(|w| w == b"+1"),
+        "an intent with no number carries nothing of one"
+    );
+
+    // **bounded**: a number past the bound is not one
+    let long = "+".to_string() + &"9".repeat(32);
+    let over = plain(Some(long)).encode();
+    assert!(
+        IntentExchange::decode(&over).is_err(),
+        "33 characters is refused rather than truncated"
+    );
 }
