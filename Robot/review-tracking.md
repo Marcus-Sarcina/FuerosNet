@@ -20159,3 +20159,51 @@ none. The crash is at startup and before any write, so nothing on the
 phones was lost. **The rule already existed** and is the one to read before
 every install that adds an FFI method, not only when the Rust changes
 "look" big.
+
+---
+
+## The added identity's phrase was skipped, and one is gone [bench, 2026-11-10]
+
+**Found by the author on GXV**, adding the second identity through the new
+selector door on run `18521b9-new-universe-1`: *"On the new identity, it
+skipped past the recovery phrase page."*
+
+**What happened.** `FirstRunActivity.onCreate` routes on what the device
+holds. `createIdentity` makes the new identity active, and a new identity
+has no alias, so `Kernel.defaultAlias()` is null — and the branch
+`intent.getBooleanExtra(NAME_ONLY, false) || Kernel.defaultAlias() == null
+-> name()` fires on **any recreation of that activity**, of which the soft
+keyboard alone is enough. The phrase lived in `create()`'s local, so the
+one screen it is ever shown on was never drawn. The kernel did not navigate
+anywhere: `show()` sets status text and `Model.refreshAll()` tells
+observers, and neither fronts an activity.
+
+**The ordering was mine and deliberate**, which is the part worth keeping:
+I put the name step ahead of `ADDING` precisely so a recreation mid-add
+would not come back as the choice of new or restored, the failure the
+2026-10-30 bench note records as reading like a wipe. Both failures have
+one root — the routing reads device state while the phrase was
+activity-local — so reordering alone would only trade one for the other.
+
+**The cost, stated rather than softened**: GXV's second identity
+`7b80a786…` has **no recovery phrase anywhere**. `create()` zeroes the
+master entropy and the seeds immediately after sealing, and
+`field-setup.sh` captures phrases at first run only. The identity works on
+the device and cannot be restored off it. Acceptable here [author,
+2026-10-29: test identities only] and data loss in the field.
+
+**The fix.** `FirstRunActivity.owedPhrase`, a process-scoped slot armed
+*before* `createIdentity` touches the kernel and cleared by nothing but the
+person tapping *I have written them down*. A phrase owed outranks every
+other route, including `!hasIdentity -> choice()`. Deliberately **not** in
+`onSaveInstanceState`: a `Bundle` is written where the system pleases,
+including a recents snapshot, and this is the whole of an identity. Process
+death still loses it, which nothing held outside the process could fix, and
+the comment says so rather than implying otherwise. Asserted in
+`IdentitiesTest`: the branch order, the slot armed before the kernel call,
+only the acknowledgement clearing it, and no saved-state path.
+
+**Still unfinished, which is where this started**: the second identity's
+own exercise — concurrent viewing across two identities, the gating of
+meetings and operator actions on the active one, and PRD-14's row-holder
+routing.

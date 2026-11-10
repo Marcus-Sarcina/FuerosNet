@@ -3000,6 +3000,52 @@ object Kernel {
      * selector offering what the device does not hold is a bug, and
      * switching to it would leave the device unable to meet.
      */
+    /**
+     * **Take one identity off this device, leaving the others** [author,
+     * 2026-11-10]. The refusals are [Identities.removable]'s and are
+     * returned as they are; null means it went.
+     *
+     * **The index is rewritten before the storage is deleted**, which is
+     * the opposite order from [createIdentity] and for the same reason: a
+     * process that dies between leaves storage nothing opens rather than
+     * an index naming storage that is not there. Half-removed is the
+     * failure to design against, and an orphaned directory is the
+     * harmless half.
+     *
+     * **A rotation owed in that identity's scope stops it.** The marks say
+     * a prior key is still to depart ([Rotation.MARK_PRIOR]); deleting the
+     * identity that owes the departure would leave the old key standing in
+     * a subnet it has been replaced in, with nothing on the device able to
+     * say so.
+     */
+    fun removeIdentity(context: Context, id: String): String? {
+        val app = context.applicationContext
+        val device = AndroidShell(app)
+        val index = Identities.decode(device.unseal(Identities.INDEX))
+        Identities.removable(index, id)?.let { return it }
+        val (kept, scope) = Identities.without(index, id)
+        val own = AndroidShell(app, scope)
+        if (own.unseal(Rotation.MARK_PRIOR) != null) {
+            return "this identity owes a departure from a rotation; finish that first"
+        }
+        if (!device.seal(Identities.INDEX, Identities.encode(kept))) {
+            return "this device's storage would not keep its list of identities"
+        }
+        // nothing opens it from here on: the index no longer names it
+        loaded.remove(id)
+        val left = scope?.let { java.io.File(app.filesDir, "${Wipe.KERNEL_DIR}/$it").deleteRecursively() } ?: false
+        if (activeId == id) {
+            Identities.active(kept.filter { loaded.containsKey(it.id) }, null)?.let { chooseActive(context, it) }
+        }
+        Diag.event("identity.removed", "who" to id.take(8), "storage" to left.toString())
+        Model.refreshAll()
+        return if (left) {
+            null
+        } else {
+            "the identity is off this device's list; some of its storage would not go"
+        }
+    }
+
     fun chooseActive(context: Context, id: String): Boolean {
         if (!loaded.containsKey(id)) return false
         activeId = id

@@ -410,10 +410,7 @@ class ShellActivity : Activity() {
         AlertDialog.Builder(this)
             .setItems(rows) { _, which ->
                 if (Identities.adding(held, which)) {
-                    startActivity(
-                        Intent(this, FirstRunActivity::class.java)
-                            .putExtra(FirstRunActivity.ADDING, true),
-                    )
+                    howToAdd()
                     return@setItems
                 }
                 val chosen = held.getOrNull(which) ?: return@setItems
@@ -425,6 +422,61 @@ class ShellActivity : Activity() {
                 } else {
                     Kernel.front.note("· that identity is not open on this device")
                 }
+            }
+            .show()
+    }
+
+    /**
+     * **Which way to add one** [author, 2026-11-10]: the picker's last row
+     * opens this rather than a screen, so the two ways in and the way out
+     * are one choice. Each row goes straight to its own process; nothing
+     * in between explains itself.
+     */
+    private fun howToAdd() {
+        val ways = arrayOf("Generate new ID", "Add ID from seed phrase", "Cancel")
+        AlertDialog.Builder(this)
+            .setItems(ways) { _, which ->
+                val extra = when (which) {
+                    0 -> FirstRunActivity.GENERATE
+                    1 -> FirstRunActivity.RESTORE
+                    else -> return@setItems
+                }
+                startActivity(
+                    Intent(this, FirstRunActivity::class.java)
+                        .putExtra(FirstRunActivity.ADDING, true)
+                        .putExtra(extra, true),
+                )
+            }
+            .show()
+    }
+
+    /**
+     * **Taking one identity off this device** [author, 2026-11-10], from
+     * the Options screen. The list is what the device holds; the one that
+     * acts is marked, as the picker marks it.
+     *
+     * Two steps, because it cannot be undone: the identity, then what
+     * removing it takes ([Identities.removes]).
+     */
+    private fun removeIdentity() {
+        val held = Kernel.identities(this)
+        val rows = held.map { (if (it.id == Kernel.activeIdentity()) "● " else "") + Identities.label(it) }
+        AlertDialog.Builder(this)
+            .setItems(rows.toTypedArray()) { _, which ->
+                val chosen = held.getOrNull(which) ?: return@setItems
+                Identities.removable(held, chosen.id)?.let {
+                    Kernel.front.note("· $it")
+                    return@setItems
+                }
+                AlertDialog.Builder(this)
+                    .setMessage(Identities.removes(Identities.label(chosen)))
+                    .setPositiveButton("Remove") { _, _ ->
+                        Kernel.removeIdentity(this, chosen.id)?.let { Kernel.front.note("· $it") }
+                        drawFromModel()
+                        go(place)
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
             }
             .show()
     }
@@ -631,6 +683,9 @@ class ShellActivity : Activity() {
                     row("Instances you run", "enrol one, launch one at a provider, its pages, its run") {
                         startActivity(Intent(this, OperatorActivity::class.java))
                     },
+                )
+                column.addView(
+                    row("Remove an identity", null) { removeIdentity() },
                 )
                 column.addView(
                     owed(

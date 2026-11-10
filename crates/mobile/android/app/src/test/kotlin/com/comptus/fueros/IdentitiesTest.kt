@@ -170,6 +170,43 @@ class IdentitiesTest {
         assertTrue(Identities.adding(listOf(), 0))
     }
 
+    /**
+     * **Taking one identity off a device that holds several** [author,
+     * 2026-11-10], and the three it refuses.
+     */
+    @Test
+    fun one_identity_comes_off_and_three_cases_refuse() {
+        val two = listOf(held(1, "aa".repeat(32), "Marcus"), held(2, "bb".repeat(32)))
+        assertEquals("one of two comes off", null, Identities.removable(two, id(2)))
+
+        assertTrue(
+            "an identity this device does not hold is refused",
+            Identities.removable(two, id(9))!!.contains("not on this device"),
+        )
+        // **the only one is the device's door, not this one**: a device
+        // holding identities always has one that acts
+        assertTrue(
+            "the last identity is taken off by this door",
+            Identities.removable(listOf(held(1)), id(1))!!.contains("only identity"),
+        )
+        // **and the one whose storage is the top level cannot be singled
+        // out**, the index and the provision living there too
+        val legacy = listOf(held(1, Identities.LEGACY_SCOPE), held(2, "bb".repeat(32)))
+        assertTrue(
+            "the pre-index identity is removed as if it had its own storage",
+            Identities.removable(legacy, id(1))!!.contains("device's own"),
+        )
+
+        val (kept, scope) = Identities.without(two, id(2))
+        assertEquals("the other identity stays", listOf(id(1)), kept.map { it.id })
+        assertEquals("and its storage is named for deletion", "bb".repeat(32), scope)
+
+        // what the person is told, once, where they decide
+        val said = Identities.removes("Marcus")
+        assertTrue("names what goes: $said", said.contains("every capture sealed to it"))
+        assertTrue("and what does not: $said", said.contains("other identities here are"))
+    }
+
     @Test
     fun the_nameplate_opens_the_list_and_the_kernel_adds_rather_than_replaces() {
         // **the drawing a JVM test cannot reach**, as `InsetSweepTest` and
@@ -212,6 +249,49 @@ class IdentitiesTest {
             "the choice is offered before the name step, which a recreation would undo",
             first.indexOf("Kernel.defaultAlias() == null -> name()") <
                 first.indexOf("intent.getBooleanExtra(ADDING, false) -> choice()"),
+        )
+        // **and a phrase owed outranks both** [bench, 2026-11-10]: the
+        // second identity made on GXV in run `18521b9-new-universe-1` was
+        // routed to the name step by a recreation and its phrase, which
+        // nothing can show twice, was never displayed
+        assertTrue(
+            "a phrase owed does not come first, so a recreation can route past it",
+            first.indexOf("owedPhrase != null -> shown(") <
+                first.indexOf("!Kernel.hasIdentity(this) -> choice()"),
+        )
+        assertTrue(
+            "the phrase is not owed before the kernel is touched, so the window is still open",
+            first.indexOf("owedPhrase = phrase") < first.indexOf("Kernel.createIdentity(this, seeds)"),
+        )
+        assertTrue(
+            "nothing but the person's own acknowledgement clears it",
+            first.contains("I have written them down") &&
+                first.indexOf("I have written them down") < first.indexOf("owedPhrase = null\n            name()"),
+        )
+        // **and it is never in the saved state**, a Bundle being written
+        // where the system pleases and this being the whole of an identity
+        assertFalse(
+            "the phrase reaches onSaveInstanceState",
+            first.contains("onSaveInstanceState"),
+        )
+        // **the picker asks which way before anything opens** [author,
+        // 2026-11-10], so neither door is offered twice
+        assertTrue(
+            "the last row does not ask which way to add",
+            shell.contains("Generate new ID") && shell.contains("Add ID from seed phrase") &&
+                shell.contains("Cancel"),
+        )
+        assertTrue(
+            "the choice does not route straight to its own process",
+            first.contains("intent.getBooleanExtra(GENERATE, false) -> create()") &&
+                first.contains("intent.getBooleanExtra(RESTORE, false) -> restore()"),
+        )
+        // **and the removal is on the Options screen**, two steps deep
+        assertTrue(
+            "no control takes one identity off this device",
+            shell.contains("row(\"Remove an identity\"") &&
+                shell.contains("Identities.removable(held, chosen.id)") &&
+                shell.contains("Kernel.removeIdentity(this, chosen.id)"),
         )
 
         val kernel = source("Kernel.kt")

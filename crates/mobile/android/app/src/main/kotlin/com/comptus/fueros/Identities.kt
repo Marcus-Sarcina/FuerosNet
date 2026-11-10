@@ -234,6 +234,54 @@ object Identities {
     fun adding(held: List<Held>, which: Int): Boolean = which == held.size
 
     /**
+     * **Why this identity cannot be taken off this device on its own**, or
+     * null where it can [author, 2026-11-10: a single-identity delete, on
+     * the Options screen].
+     *
+     * Three refusals, each for a different reason:
+     *
+     * - **It is not held.** Nothing to do, and saying so beats a silent
+     *   success.
+     * - **It is the only one.** A device holding identities always has one
+     *   that acts ([active]), and emptying the index by this door would
+     *   leave a device that is neither wiped nor usable. Taking the last
+     *   one off is the device's own door ([Wipe]), which clears the
+     *   at-rest key as well and is confirmed as the destructive act it is.
+     * - **Its storage is the device's own** ([LEGACY_SCOPE]). The identity
+     *   held before this model writes the top level, where the index, the
+     *   active choice and the provision also live, so removing it is not a
+     *   directory to delete — and inventing a list of its files is how a
+     *   half-removal happens. It can be rotated, and the device can be
+     *   wiped; it cannot be singled out.
+     */
+    fun removable(held: List<Held>, id: String): String? {
+        val it = held.firstOrNull { h -> h.id == id }
+            ?: return "that identity is not on this device"
+        if (held.size <= 1) {
+            return "this is the only identity on this device; wiping the device is the other door"
+        }
+        if (it.scope == LEGACY_SCOPE) {
+            return "this identity's storage is the device's own and cannot be taken away on its own"
+        }
+        return null
+    }
+
+    /** The index without `id`, and the scope whose storage goes with it. */
+    fun without(held: List<Held>, id: String): Pair<List<Held>, String?> =
+        held.filter { it.id != id } to held.firstOrNull { it.id == id }?.scope
+
+    /**
+     * **What removing one identity takes**, said once where the person
+     * decides. The other identities are untouched, which is the whole
+     * difference from the device's wipe.
+     */
+    fun removes(label: String): String =
+        "Remove $label from this device: its key, everything it signed or was " +
+            "shown, and every capture sealed to it. The other identities here are " +
+            "untouched. Nothing is sent anywhere and nobody is told, and the seed " +
+            "phrase is the only way back."
+
+    /**
      * **What an act refused for want of an identity says.** Only
      * [Act.MEETING] and [Act.OPERATOR] can be refused this way, and only
      * on a device holding none — a device holding any always has one that

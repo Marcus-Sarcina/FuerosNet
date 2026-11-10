@@ -71,13 +71,21 @@ class FirstRunActivity : Activity() {
         // appearance recreates this activity on the TCLs, and a restored
         // identity sitting on the name step came back as the choice of new
         // or restored, which reads as a wipe
-        // **[ADDING] is tried after the name step, not before it**, for the
-        // same reason: the intent survives a recreation, so an add that had
-        // reached the name would come back as the choice of new or restored
-        // and read as a wipe. A device owing a name owes it first.
+        // **A phrase owed outranks everything** ([owedPhrase]): it is the
+        // one thing here that cannot be shown again, and every other
+        // branch reads device state that a recreation reads the same way.
+        // **[ADDING] is tried after the name step**, for the matching
+        // reason: the intent survives a recreation, so an add that had
+        // reached the name would come back as the choice of new or
+        // restored and read as a wipe.
         when {
+            owedPhrase != null -> shown(Kernel.materialHex(), owedPhrase)
             !Kernel.hasIdentity(this) -> choice()
             intent.getBooleanExtra(NAME_ONLY, false) || Kernel.defaultAlias() == null -> name()
+            // **the picker already asked which way**, so neither door is
+            // offered a second time
+            intent.getBooleanExtra(GENERATE, false) -> create()
+            intent.getBooleanExtra(RESTORE, false) -> restore()
             intent.getBooleanExtra(ADDING, false) -> choice()
             else -> {
                 startActivity(Intent(this, ShellActivity::class.java))
@@ -98,6 +106,44 @@ class FirstRunActivity : Activity() {
          * ([Kernel.createIdentity]).
          */
         const val ADDING = "adding"
+
+        /**
+         * **The phrase this screen still owes somebody** [bench,
+         * 2026-11-10], held for the process and nowhere else.
+         *
+         * **The defect it answers.** The routing below reads what the
+         * device holds, and the phrase lived in one activity's memory: a
+         * recreation — the soft keyboard is enough — came back, found an
+         * identity whose alias was not set yet, and went to the name step,
+         * **skipping the one screen the phrase is ever shown on**. It
+         * happened on GXV to the second identity of run
+         * `18521b9-new-universe-1`, whose phrase is gone. The opposite
+         * ordering has the same shape of failure: a recreation mid-add
+         * comes back as the choice of new or restored, which reads as a
+         * wipe.
+         *
+         * **So a phrase owed outranks every other route**, and nothing
+         * clears it but the person saying they have written it down.
+         *
+         * **In memory and never in the saved state.** A `Bundle` is
+         * written where the system pleases, including a recents snapshot,
+         * and this is the whole of an identity. Process death still loses
+         * it — nothing held outside the process could be safe — and that
+         * is the one case this cannot cover.
+         */
+        @Volatile
+        var owedPhrase: List<String>? = null
+
+        /**
+         * **Which way the picker chose** [author, 2026-11-10]: its
+         * `<New Identity>` row asks *generate* or *from a seed phrase*
+         * before anything opens, so this screen goes straight to the one
+         * that was chosen and the choice is not put twice.
+         */
+        const val GENERATE = "generate"
+
+        /** The other way, by the same route. */
+        const val RESTORE = "restore"
 
         /** The one request code this screen opens a file under. */
         private const val OPEN_BACKUP = 7449
@@ -136,7 +182,12 @@ class FirstRunActivity : Activity() {
         body.removeAllViews()
         title("Your identity")
         para("Bringing the kernel up on it…")
+        // **owed before the kernel is touched**: everything after this
+        // line can recreate this activity, and from here on a recreation
+        // redraws the phrase rather than routing past it
+        owedPhrase = phrase
         if (!Kernel.createIdentity(this, seeds)) {
+            owedPhrase = null
             para("This device's own storage refused the seeds; nothing was made.")
             button("Back") { choice() }
             return
@@ -210,7 +261,12 @@ class FirstRunActivity : Activity() {
             restoreSaid?.let { para(it) }
             button("Open a backup file") { openBackup() }
         }
-        button(if (phrase == null) "Continue" else "I have written them down") { name() }
+        button(if (phrase == null) "Continue" else "I have written them down") {
+            // **the only thing that clears it** ([owedPhrase]): the person
+            // saying they have it, not a redraw and not a route
+            owedPhrase = null
+            name()
+        }
     }
 
     // ---- the archive, from a backup the person kept ---------------------
