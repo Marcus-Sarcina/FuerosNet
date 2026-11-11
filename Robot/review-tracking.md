@@ -20351,11 +20351,17 @@ with devices beneath, so two identities on one handset are two clients.
    loaded identity but the focused one; `createIdentity` and
    `beginRotation` call it for an identity added while the kernel is up,
    from the provision kept in `provisionJson`; `watchNetwork` hands the
-   network change to every loaded participant. Kotlin 371 / 0. **Unproven
-   on hardware until GXV runs it**: the expected shape is two
-   `kernel.loop` lines with two `who`s, `node.attached` for the admitted
-   identity, and `identity.attach refused` for `feb8843a`, with the device
-   attached either way — the measurement that opened this.
+   network change to every loaded participant. Kotlin 371 / 0. **Proven
+   on hardware 2026-11-11, GXV on `c6ce294`**, in the shape expected: two
+   `kernel.loop` lines, `who` `703a82c2` and `feb8843a`; the focused
+   identity's attach `True` and the other's attempted and `False`;
+   `identity.attach who=feb8843a refused="the serving node refused this
+   client"`; `node.attached 703a82c2 attached=3`; no crash. The device
+   stays attached through its admitted identity while the unadmitted one
+   is refused by name, on the node's own terms — the condition the first
+   measurement found missing, and the ruling made visible. Step 4 changes
+   `feb8843a`'s line from *refused* to *no node* (`node=none`), since an
+   identity that never agreed to a node has none to try.
 4. Gate initiation on the active identity: joining a subnet, attaching,
    starting a DM, beside the meeting and operator gates already there.
    **Read from the source 2026-11-11**: joining is a meeting (gated);
@@ -20381,9 +20387,36 @@ with devices beneath, so two identities on one handset are two clients.
    hardware expectation for GXV's `feb8843a` changes from *refused* to *no
    attempt, recorded detached*. This is the foundation step 5 stands on:
    several attachments per identity is that record becoming a list.
+   **Built 2026-11-11**: `Act.ATTACH` and `Act.NEW_THREAD` take the
+   focused identity, pinned in the rule's test; `SERVING` is the record in
+   an identity's own scope; `serveFrom` writes it for the one in focus and
+   attaches; `launchHeld(id, p, scope)` reads it and attaches only where it
+   exists, saying `identity.attach … node=none` otherwise; `bringUp`,
+   `createIdentity` and `beginRotation` pass the identity's scope; the
+   device-level provision is read by `bringUp` for the focused identity
+   alone, and `provisionJson` is gone. One test pin contradicted itself —
+   the step 3 pin still expected the old call — and was corrected.
 5. Several attachments per identity: `payload.serving` from one to a set
    (six call sites and a persistence field), with the routing rule stated —
    which attachment relays an outbound payload, which hold a mailbox.
+   **Framed from the six sites 2026-11-11, owed to the author.** What the
+   serving node is used for in the client: `attach`/`reattached` set it;
+   `browse` sweeps *its* catalog; `send_payload` puts a message addressed
+   *to it* on the transport session directly; the bundle is published to
+   it so it can answer for this identity; nothing else — an outbound
+   payload to a peer goes to *that peer's* serving node, dialled by the
+   sender (PAY-012), never relayed by the sender's own. So the sender's
+   node carries the identity's mailbox, bundle and catalog, and "several
+   attachments" splits into two things that are not the same: (A) several
+   *serving* relationships — bundle published to each, mailbox on each,
+   and resolution having to learn the set, which reaches the protocol
+   (how a resolver finds which of several nodes serves a client); or (B)
+   one serving node as now — mailbox, bundle, locator — and several nodes
+   an identity is *attached to for what they host*: their catalogs swept,
+   their resources asked, messages to them on the session; contained in
+   the client, the documents' singular untouched, and a tab being a
+   server you use while your home is one. Recommended (B); the author
+   decides. (C) is to defer until the resource work needs it.
 
 **Not yet in the documents** [author, 2026-11-11: not just yet]: §2's
 concurrency block and SES-017 are parked above with the wording they need.

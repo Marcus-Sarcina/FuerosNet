@@ -52,6 +52,11 @@ class IdentitiesTest {
             "a conversation follows neither the active identity nor the caller",
             Identities.needsTheActive(Identities.Act.CONVERSATION),
         )
+        // **opening a tab is the focused window's** [author, 2026-11-11]:
+        // attaching to a node and starting a thread take the active
+        // identity, where continuing a thread does not
+        assertTrue("attaching is not the focused identity's", Identities.needsTheActive(Identities.Act.ATTACH))
+        assertTrue("a new thread is not the focused identity's", Identities.needsTheActive(Identities.Act.NEW_THREAD))
     }
 
     @Test
@@ -350,8 +355,8 @@ class IdentitiesTest {
         )
         assertTrue(
             "an identity out of focus is not attached and run for itself",
-            loopSource.contains("private fun launchHeld(id: String, p: Participant, provision: JSONObject?)") &&
-                loopSource.contains("if (hid != activeId) launchHeld(hid, hp, provision)"),
+            loopSource.contains("private fun launchHeld(id: String, p: Participant, scope: String?)") &&
+                loopSource.contains("if (hid != activeId) launchHeld(hid, hp, index.firstOrNull { it.id == hid }?.scope)"),
         )
         assertTrue(
             "an identity added while the kernel is up gets no loop of its own",
@@ -360,6 +365,23 @@ class IdentitiesTest {
         assertTrue(
             "the network callback reaches only the focused identity",
             loopSource.contains("loaded.values.flatMap { q -> q.networkChanged() }"),
+        )
+        // **step 4: the node an identity agrees to is its own**, so an
+        // identity attaches only to one it agreed to and never inherits
+        // the device's — the finding that `serveFrom` wrote the device's
+        // provision, which with an attach per identity would have joined
+        // every identity to a node one of them agreed to
+        assertTrue(
+            "serveFrom still remembers the node as the device's rather than the focused identity's",
+            loopSource.contains("AndroidShell(app, scope).write(SERVING, record.toString().toByteArray())"),
+        )
+        assertTrue(
+            "launchHeld attaches from something other than the identity's own record",
+            loopSource.contains("AndroidShell(a, scope).read(SERVING)"),
+        )
+        assertFalse(
+            "an identity out of focus is still handed the device's provision",
+            loopSource.contains("launchHeld(hid, hp, provision)"),
         )
         // **step 2: what the loop shares with the device is the meeting,
         // and it is the focused identity's** — read every turn, since

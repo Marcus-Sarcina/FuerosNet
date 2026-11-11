@@ -106,6 +106,15 @@ object Identities {
 
         /** An operator action. The active identity alone. */
         OPERATOR,
+
+        /** Attaching to a node — opening a tab. The active identity alone
+         *  [author, 2026-11-11], and the node it agrees to is remembered as
+         *  that identity's own, never the device's. */
+        ATTACH,
+
+        /** Starting a direct exchange where none is under way — a new tab.
+         *  The active identity alone; continuing one is [CONVERSATION]. */
+        NEW_THREAD,
     }
 
     /**
@@ -118,7 +127,7 @@ object Identities {
      * already under way.
      */
     fun needsTheActive(act: Act): Boolean = when (act) {
-        Act.MEETING, Act.OPERATOR -> true
+        Act.MEETING, Act.OPERATOR, Act.ATTACH, Act.NEW_THREAD -> true
         Act.VIEWING, Act.WITHIN_SUBNET, Act.CONVERSATION -> false
     }
 

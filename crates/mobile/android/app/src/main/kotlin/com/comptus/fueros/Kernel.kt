@@ -75,10 +75,16 @@ object Kernel {
     private var started = false
     private var provisioned = false
 
-    /** The provision as the bring-up read it, kept for an identity added
-     *  while the kernel is up ([launchHeld]): the node it names is the
-     *  device's, and a new identity attaches to the same one. */
-    @Volatile private var provisionJson: JSONObject? = null
+    /**
+     * **An identity's own serving node**, in its own scope — step 4 of the
+     * browser model [author, 2026-11-11]: the node an identity agrees to
+     * ([serveFrom]) is that identity's tab and not the device's, so an
+     * identity attaches only to a node it agreed to ([launchHeld]). The
+     * device-level provision stays the bench's convenience for the
+     * identity a phone was set up with, read by [bringUp] for the one in
+     * focus alone.
+     */
+    private const val SERVING = "serving"
 
     /** The ceremony in progress, or null. Process-scoped like the
      *  connection: a font change mid-ceremony must not lose it. */
@@ -1913,16 +1919,17 @@ object Kernel {
      * could usefully type.
      */
     fun serveFrom(context: Context, nodeHex: String, address: String) {
-        val shell = AndroidShell(context.applicationContext)
-        // the rest of the provision is kept: `known` is what this device
-        // was told about other parties, and losing it to an attach would
-        // cost it the population it sweeps at start
-        val held = runCatching {
-            shell.read("provision")?.let { org.json.JSONObject(String(it)) }
-        }.getOrNull() ?: org.json.JSONObject()
-        held.put("node", nodeHex)
-        held.put("addr", address)
-        runCatching { shell.write("provision", held.toString().toByteArray()) }
+        // **the node an identity agrees to is that identity's** — step 4
+        // of the browser model [author, 2026-11-11]. Written into the
+        // device's provision before this, so that with an attach per
+        // identity every identity on the device would have joined a node
+        // one of them agreed to at the next start: a profile joining a
+        // server it never agreed to. Remembered in the focused identity's
+        // own scope instead, which is the one that agreed ([SERVING]).
+        val app = context.applicationContext
+        val scope = activeId?.let { id -> identities(app).firstOrNull { it.id == id }?.scope }
+        val record = org.json.JSONObject().put("node", nodeHex).put("addr", address)
+        runCatching { AndroidShell(app, scope).write(SERVING, record.toString().toByteArray()) }
             .onFailure { front.note("· the node could not be remembered: ${it.message}") }
         attachTo(nodeHex, address)
     }
@@ -2474,7 +2481,6 @@ object Kernel {
             try { JSONObject(String(it)) } catch (_: Exception) { null }
         }
         synchronized(lock) { provisioned = provision != null }
-        provisionJson = provision
         front.setProvisioned(provision != null)
         // the identity is this device's own, whether or not anybody has
         // been told about it yet
@@ -2645,37 +2651,44 @@ object Kernel {
         // stays on this thread, as it always did, and each of the rest
         // gets its own ([launchHeld])
         for ((hid, hp) in loaded) {
-            if (hid != activeId) launchHeld(hid, hp, provision)
+            if (hid != activeId) launchHeld(hid, hp, index.firstOrNull { it.id == hid }?.scope)
         }
         runLoop(p, activeId ?: "")
     }
 
     /**
-     * **An identity that is not in focus still attaches and still
-     * receives** — step 3 of the browser model [author, 2026-11-11]: a
-     * browser window out of focus keeps its tabs open and its
-     * notifications arriving. Attached to the provision's node with no
-     * peer to follow — the peer is the bench's convenience and the focused
-     * identity's — the result recorded for this identity alone
-     * ([Model.connectionOf]), and its loop on a thread of its own.
+     * **An identity that is not in focus still receives, and still
+     * attaches to a node it agreed to** — steps 3 and 4 of the browser
+     * model [author, 2026-11-11]: a browser window out of focus keeps its
+     * tabs open and its notifications arriving, and opens no tab it was
+     * never told to. The node is the identity's own record ([SERVING]),
+     * written where it agreed ([serveFrom]); an identity with none —
+     * one just added, or a rotation's new key before its patron — has no
+     * node until it agrees to one, and is recorded detached rather than
+     * handed the device's. The result is this identity's alone
+     * ([Model.connectionOf]), and its loop runs on a thread of its own.
      *
      * **The node admits an identity or refuses it on its own terms**,
      * which is the author's ruling that a node serves an identity and not
-     * a handset: a refusal here is that identity detached, said to the
+     * a handset: a refusal is that identity detached, said to the
      * diagnostics and the model, and nothing else on the device changes.
      * Called by [bringUp] for every loaded identity but the focused one,
      * and by [createIdentity] and [beginRotation] for one added while the
      * kernel is up.
      */
-    private fun launchHeld(id: String, p: Participant, provision: JSONObject?) {
-        val nodeHex = provision?.optString("node", "") ?: ""
+    private fun launchHeld(id: String, p: Participant, scope: String?) {
+        val record = appContext?.let { a ->
+            runCatching { AndroidShell(a, scope).read(SERVING)?.let { JSONObject(String(it)) } }.getOrNull()
+        }
+        val nodeHex = record?.optString("node", "") ?: ""
         if (nodeHex.isNotEmpty()) {
             val node = unhex(nodeHex)
             val a = call("attach", { e -> Diag.event("identity.attach", "who" to id.take(8), "refused" to e.reason); null }) {
-                p.attach(node, listOf(provision?.optString("addr", "") ?: ""), listOf())
+                p.attach(node, listOf(record?.optString("addr", "") ?: ""), listOf())
             }
             Model.connectionOf(id, if (a == null) Connection.Detached else Connection.Attached(node, a.primary))
         } else {
+            Diag.event("identity.attach", "who" to id.take(8), "node" to "none")
             Model.connectionOf(id, Connection.Detached)
         }
         Thread({ runLoop(p, id) }, "fueros-kernel-${id.take(8)}").start()
@@ -3046,7 +3059,7 @@ object Kernel {
             // waiting for a restart, and let it act since a person who
             // just made an identity means to use it
             openHeld(app, Identities.Held(id, scope, null), listOf())
-            loaded[id]?.let { launchHeld(id, it, provisionJson) }
+            loaded[id]?.let { launchHeld(id, it, scope) }
             chooseActive(context, id)
         } else {
             start(context)
@@ -3372,7 +3385,7 @@ object Kernel {
         Diag.event("rotation.begun")
         if (started) {
             openHeld(app, Identities.Held(newId, scope, null), listOf())
-            loaded[newId]?.let { launchHeld(newId, it, provisionJson) }
+            loaded[newId]?.let { launchHeld(newId, it, scope) }
             chooseActive(context, newId)
         } else {
             start(context)
