@@ -5625,6 +5625,42 @@ catalog's reach (§11.5) and not topology's.
 
 ---
 
+### 12.9 An identity's addresses
+
+**One key, one position per subnet, one serving node per position.** An
+identity is a single name — one key, one keyhash — and holds a position in
+each subnet it has been adopted into (§6, §13). Each such position is an
+**address** of that name [author, 2026-11-11: *"Each ID:Subnet is
+effectively a unique FN address. Work, school, home."*]: it has its own
+locator (§12.1, held by a counterparty one per anchor), its own path, and
+its own serving node — the node that serves the identity *in that subnet* —
+where its bundle is published and its mail for that subnet is held
+(§14.1.6). A sender reaches an address down that subnet's path and no
+other; the addresses of one identity are never merged into one path, since
+a merged path would disclose to a counterparty in one subnet which others
+the identity is in.
+
+**Everything above in this section, and the sessions of §14, is said of one
+address.** The resolution walk, the mailbox, the attach, the failover to a
+sibling: each is one client and one node, and an identity holding several
+addresses runs that description once per address, with nothing shared
+between the runs but the key. That is deliberate. The protocol's unit is the
+pair, and the dimensions of parallelism above it — several addresses per
+identity, several identities per device (`light-client-requirements.md` §2)
+— are the application's to arrange and change nothing that passes on the
+wire.
+
+**The key is a name, and identities are the unit of unlinkability**
+[author, 2026-11-11]. The same bundle reaches every address's node, so two
+nodes that compare notes can link an identity's addresses by its key. That
+is intended: *"If you choose to introduce yourself by the same name to
+different people, you are inviting them to link your visibility to other
+people through the key of that name."* Where audiences must not be linked
+the answer is a separate identity, which is a separate key — never a second
+key under one identity. §19.8's C14 and C25 are read with this in mind: a
+node sees one address's share, and what sits beneath several nodes is the
+provider's boundary rather than the node's.
+
 ## 13. Subnet formation and lifecycle
 
 **Not a genesis procedure.** This runs every time a disconnected group starts,
@@ -8529,7 +8565,7 @@ acknowledged and whose join is not.
 | **C20** | Pairwise fanout deliveries + patron queue metadata | **Latent group membership.** §14.3 is deliberate that a fanout is a set of independent pairwise messages with no group identity on the wire — true at every endpoint, and **not true for the patron**: a burst of same-sender deliveries, tightly timed, to a recurring set is a cluster, and repetition yields the group's membership and cadence. Both ingredients are priced — pairwise expansion at §14.3, the metadata chokepoint at P4, and the join was not. **No traffic-shaping mitigation is specified, and none is promised** | Medium |
 | **C21** | Capability set + attachment continuity | **An implementation and configuration fingerprint** at the serving node. Greasing (`wire-format.md` §8.1.1) defeats ossification, not identification: a greased parameter is indistinguishable from an unknown one, but the **real** supported set is visible on every attach, and a distinctive set distinguishes a rare client population or tracks a device across software migrations. P32 prices retaining the history; this is what the history identifies | Low–Medium |
 | **C22** | Materialised role table + catalog entry store, at one host | **An operator-readable classification matrix**: person, role, service — topology and trust evidence the operator already holds as inputs (`infra-client-requirements.md` §10.2 derives the table from nothing else), precomputed into the form compulsion or compromise finds most useful. **No new disclosure crosses any interface; the cost of extraction drops.** C7 composes the access log with topology across parties; this is the same yield sitting pre-joined at one | Low–Medium |
-| **C23** | Every request class one serving node answers, kept as histories | **An interest graph** [author, 2026-09-18]. A resolution says whom a client wants to reach (P26), a one-time key request that a session is opening (C11), a filtered catalog query what kind of service it seeks (P38), a currency fallback whom it is evaluating (§19.7 item 12), a publication or deposit that it is making itself reachable. Each is priced alone, and one node answers all of them, so histories of them join into whom a client looks for, listens to and asks about, which no single class yields. §19.1's rule applied to the serving node: the mitigation is one obligation rather than one per class, the state serving needs and no history of the requests that produced it (`infra-client-requirements.md` §1) | High for a node keeping histories; the obligation is what keeps it low |
+| **C23** | Every request class one serving node answers, kept as histories | **An interest graph** [author, 2026-09-18]. A resolution says whom a client wants to reach (P26), a one-time key request that a session is opening (C11), a filtered catalog query what kind of service it seeks (P38), a currency fallback whom it is evaluating (§19.7 item 12), a publication or deposit that it is making itself reachable. Each is priced alone, and one node answers all of them, so histories of them join into whom a client looks for, listens to and asks about, which no single class yields. §19.1's rule applied to the serving node: the mitigation is one obligation rather than one per class, the state serving needs and no history of the requests that produced it (`infra-client-requirements.md` §1). **And for one address**: the node serving an identity in one subnet answers that subnet's requests and sees that subnet's share; the identity's other addresses are served elsewhere and are not in this history (§12.9) | High for a node keeping histories; the obligation is what keeps it low |
 | **C24** | A candidate's IP handed over at a ceremony + the presence the two parties already share | **No location that was not disclosed by standing there, and possibly the network operator** [author, 2026-09-25]. The join that looks alarming is not one: §7.6 makes an IP a coarse location, but this counterparty was in the room, so the geography it yields is geography they already have. P40 therefore adds nothing to C1's third ingredient, and C1's withholding mitigation (§8.1.1) is not weakened by it. **What the address can add is the carrier or ISP behind it**, which physical presence does not imply, which the user carries between places, and which is a handle for parties other than the counterparty. Light clients are recommended a transport order that minimises it (`light-client-requirements.md` §4) | Low |
 | **C25** | A patron's adoption topology + the plaintext number each member's device reported | *A contact graph with identifiers in it.* Both halves already sit with the patron: the topology because they adopted, and the number because the member's device handed it over at the meeting so an invitation to the patron's node could reach them (`light-client-requirements.md` §1.5). The join resolves a subnet's members to people reachable outside it. **Unlike every other capture this one has no structural limit** [author, 2026-11-05]: a likeness is sealed under its subject's keys, so a holder retains nothing it can open and the window enforces itself by the subject declining a capture key (§7.5.1, §7.5.2), where a number is plaintext in the holder's hands. **It is ordinary contact information and is kept as long as the contact is** [author, 2026-11-10], so §1.1's test makes nothing about its retention enforceable — what bounds the exposure is that it crosses only the local session between two devices present, enters no transaction, reaches no witness or verifier, and is not handed on when the contact is introduced | High for a patron holding many, and not detectable |
 

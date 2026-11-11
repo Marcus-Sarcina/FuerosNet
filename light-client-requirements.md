@@ -530,6 +530,31 @@ job.
     another identity as its last row** [author, 2026-11-09], so it always
     has something to offer and the only way to add one is not a control of
     its own somewhere else.
+  - **An identity is one name, and each subnet it holds a position in is
+    an address of that name** [author, 2026-11-11]: *"Each ID:Subnet is
+    effectively a unique FN address. Work, school, home."* An address has
+    its own node — the one serving the identity in that subnet — its own
+    path and its own mail. A party you met in one subnet holds your
+    locator for that subnet alone (§4.3, one per anchor), and nothing
+    merges your addresses into one path, which would tell them which
+    other subnets you are in.
+  - **A session per address.** Attach to the node serving each of your
+    addresses, publish your bundle to each so sessions open there, and
+    receive at each; never route one address's mail through another's
+    node. The serving node of §4, and of the wire format throughout, is
+    one such session described alone: the wire level speaks of one client
+    and one node, and this is the dimension it does not carry (design
+    §12.9).
+  - **The key is a name, and identities are the unit of unlinkability**
+    [author, 2026-11-11]. The same bundle reaches every address's node, so
+    two nodes comparing notes can link an identity's addresses by its
+    key: intended, and often the point of using one name. Where audiences
+    must not be linked, that is a second identity, never a second key.
+  - **In focus, one identity opens new tabs.** Joining a subnet, attaching
+    to a node and starting a thread are the focused identity's acts;
+    receiving is every identity's, at every address, in or out of focus —
+    as a browser out of focus keeps its tabs open and its notifications
+    arriving.
   - **A row a screen shows carries the identity that holds it, and acting
     on that row acts through that identity** [2026-11-07]. The merged
     lists are the point of the first rule, and a screen that acted on a
@@ -707,6 +732,11 @@ only party who can tell them is their own client.
   on without the answer (§1.4).
 
 ## 4. Session
+
+**Said of one session.** Everything here is one address's session with the
+node serving it; an identity holds one such session per subnet it has a
+position in (§2), each dialled, kept and failed over on its own, and
+nothing below reaches across them.
 
 - **Dial the serving infra node**, which is the nearest infrastructure node on the
   patron chain and not necessarily the patron (design §14.1.2).
@@ -1496,7 +1526,7 @@ a display decision.
 | **Resource** | An entry as a catalog served it (§8; `wire-format.md` §6.4) | The node that served the entry, which is the node asked for the resource; the resource; its owner; its service type and instance name; its endpoint; its data practice where stated; whether the portion it came in was truncated, and whether it was stale |
 | **Profile** | What a party or a subnet published about itself (§4.4; `wire-format.md` §7.11) | The subject; the subnet; whether it is the subject's own or the subnet's; the alias; the image where one is carried; when it was published |
 | **Cost** | What ending a line costs (§6), computed before the act and never retained | What goes, each with why — the node serving it leaves the horizon, or its owner does; how many stay; who leaves the horizon; and every reason the list is a floor rather than a total — a predicate no client holds, a node whose portion is stale, one whose portion was truncated, one never swept, several lines to the one patron, this key's own adoption not yet in its table |
-| **Connection** | Where this client stands with its serving node (§4) | Detached; attached, to whom, and whether as a member of that node's subtree; reconnecting, from whom; lost, from whom and why |
+| **Connection** | Where each of this client's addresses stands with the node serving it (§4; one per subnet, §2) | Detached; attached, to whom, and whether as a member of that node's subtree; reconnecting, from whom; lost, from whom and why |
 | **Meeting** | A presence ceremony this client took part in, as its outcome (design §7.1, §8.1) | The presence record; the counterparty; when it finalised; every witness that signed it; the adoption or the peering that rested on it, where this client holds one. **The ceremony's own state is not a noun**: the step, the optical exchange, the window and the nominees' answers are the client's in-flight state, bound to a camera and a window of minutes, and nothing of them outlives the process or should |
 
 **And the kernel says which of these changed.** After each exchange it names

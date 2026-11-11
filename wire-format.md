@@ -3461,7 +3461,10 @@ batch, matching the archive-reference bound it replaces.
 prekey bundle, stock its own one-time pool, hold its own mail, be woken by a
 service it is not connected to, or hold its own profile where a stranger can
 fetch it. Each is an act the node it is already attached to performs on its
-behalf, and each needs a message. §6.2 gives a sixth member of this family, a
+behalf, and each needs a message. **Said of one session**: a client holds
+one with the node serving each subnet it has a position in, and hands that
+node these things for that subnet alone (`light-client-requirements.md` §2;
+design §12.9). §6.2 gives a sixth member of this family, a
 catalog registration, its own request type and says why: without a message,
 the one act that matters would be the one thing an attached client cannot say,
 and every implementation would invent its own.

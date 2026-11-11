@@ -19939,6 +19939,15 @@ machine; alone it passes in 91 s, which is most of the budget. The
 budget is the test's own constant and the work is the decoder's; neither
 was touched today. Load-dependent, as recorded above.
 
+**`the_guided_capture_takes_three_to_five_frames_over_ten_to_fifteen_seconds_under_prompts_that_vary`,
+2026-11-11**: the real-clock ceremony harness, failed once in a gate
+(`Waiting("the record never came")` at 90.8 s, bob at `no_witness: true,
+proposable: false`) on a pass that changed **no Rust** — `git diff
+--name-only HEAD -- crates/ | grep '\.rs$'` is empty; the one file under
+`crates/` touched was `spec-pins.json`, four lines. Alone it passes in
+29 s. Twelve gates earlier the same day had passed it. Joins the two above
+as load-dependent; the gate was re-run.
+
 ---
 
 ## The reach address becomes automatic, and the three permissions [author, 2026-11-09]
@@ -20423,7 +20432,47 @@ with devices beneath, so two identities on one handset are two clients.
    their resources asked, messages to them on the session; contained in
    the client, the documents' singular untouched, and a tab being a
    server you use while your home is one. Recommended (B); the author
-   decides. (C) is to defer until the resource work needs it.
+   decides. (C) is to defer until the resource work needs it. **Ruled (B)**
+   [author, 2026-11-11: *"Go with B"*] — **and withdrawn the same day,
+   because the framing it was given on was wrong.** The objection to (A)
+   — *"a resolver would have to learn the set"* — was false: a party holds
+   an identity's locators **one per anchor** (TX-031), resolution runs
+   down *that* subnet's path to the node serving the identity *there*, and
+   a merged path would expose participation in other subnets [author:
+   *"senders can reach you by different anchors in the various subnets you
+   participate in. Merging your path would expose your participation in
+   subnets other than the one you introduced yourself from"*]. So (B)'s
+   "one home" would itself have been the merge: one node seeing every
+   subnet's traffic for an identity.
+
+   **The model as ruled** [author, 2026-11-11]: *"Each ID:Subnet is
+   effectively a unique FN address. Work, school, home, etc."* and
+   *"Serving nodes are like webservers you have live sessions with bundled
+   as multiple tabs under a browser instance where you have some shared
+   profile information on a system which can run multiple such
+   browser/profiles at a time."* An identity is a browser instance with
+   its profile; a tab is a live session with a serving node, **one per
+   subnet the identity is in**, the bundle published to that node and the
+   subnet's mail arriving there through that subnet's path alone; the
+   device runs several browsers; focus opens tabs. No home above the tabs,
+   no node that sees more than its subnet, and no separate "hosting-only"
+   tab — a resource on a node one is not a member of is reached by
+   dialling, as a resource request already does.
+
+   **Key linkability across an identity's addresses is intended** [author]:
+   *"The ID is a name. If you choose to introduce yourself by the same
+   name to different people, you are inviting them to link your visibility
+   to other people through the key of that name … If you want your
+   visibility to be unlinkable to different audiences, that is where the
+   identity separation comes in."* One key per identity across all its
+   tabs; unlinkability is bought with identities, never with keys.
+
+   **The documents** [author]: the wire level stays singular — 1<>1 and
+   1<>1<>1 exchanges — and each dimension of parallelism gets its own
+   discussion at its own level; revisions polish inconsistencies and
+   clarify the level being spoken at rather than pushing the macro scale
+   down into the granular text. Order ruled: documents, then models, then
+   functional requirements and tests, then the code.
 
 **Not yet in the documents** [author, 2026-11-11: not just yet]: §2's
 concurrency block and SES-017 are parked above with the wording they need.
@@ -20453,3 +20502,62 @@ next restart — the same no-retry cost measured on GXV, now on a
 one-identity phone with an admitted identity. `phones.conf` also carries
 stale Wi-Fi addresses for GXV and MRK (`.6`/`.7`, now `.5`/`.6`);
 `field-setup.sh --address-only` refreshes them when the cable comes off.
+
+**Documents, models, register — done 2026-11-11, in the order ruled.**
+Light-client §2 gained the macro block (an identity is one name, an address
+per subnet with its own node, path and mail; a session per address; the
+key as a name and identities as the unit of unlinkability; focus opens
+tabs); §4 opens *"Said of one session"*; §9.1's *Connection* noun is per
+address. Design §12.9 *An identity's addresses* states it once at the macro
+level and says the rest of §12 and §14 are said of one address; C23 gains
+*"and for one address"*. Wire §7.10 gains one sentence fixing its level.
+Nothing in the 1<>1 text was rewritten. `functional_tests.md` SES-017 and
+UX-031 (565 → 567 families; SES 16 → 17, UX 29 → 30). Pins regenerated,
+refcheck 5,740 / 0, countcheck 0 flags. Models read and unchanged, for the
+reason recorded in `models/README.md`: their bindings and sessions already
+carry the node in the key.
+
+## Step 5 — the code for addresses, designed from the net layer [2026-11-11]
+
+**What holds one attachment today, read rather than remembered.**
+`ffi/src/net.rs` (1,560 lines): `live: Arc<Mutex<Option<Live>>>` with
+`Live { courier, _serving: Arc<AttachedNode>, tasks }`, `current:
+Option<Arc<Session>>`, and a second `attach` replacing the first; twelve
+sites inside pick "the" courier through `courier()` / `live_courier()`,
+three outside (`client.rs` attach, detach, `attached()`). The client's
+`Sessions` is per `PeerDevice` and is unaffected. `payload.serving:
+Option<Keyhash>` is one optional field of a seven-element array.
+
+**The seam.** `Courier::new(handle, serving: Arc<dyn Serving>, direct:
+Arc<dyn Direct>)`: one courier per device, holding one `Serving` — the
+trait `AttachedNode` implements live and `serving::Nobody` detached — and
+one `Direct`. The courier's own state (the direct socket's inlet, offered
+candidates, `Awaiting`, the inbox and the app channel) is device-level, so
+**N couriers would duplicate it and contend for one socket**; the right
+shape is one courier whose `Serving` is a map by subnet. `follow` and
+`collect` are per session already, so mailbox following is per address for
+free.
+
+**Where the address has to flow.** The courier passes `self.serving.me()`
+as the relay hint on every outbound carry — *this client's serving node* —
+and with several there is no "the": the hint for a payload is the serving
+node of the address it is sent from. So the client's `send_payload` and the
+courier's `send`/`carry` take the address (the subnet) and ask
+`serving.at(subnet)`; `Live` becomes one per subnet; `attach(subnet, node,
+addrs, population)` and `detach(subnet)` on the FFI; `payload.serving`
+becomes a map by subnet, an eighth field read as empty where absent; the
+bundle publishes to each; `browse` sweeps per node; "a message to the node
+itself" tests membership of the map.
+
+**The question this opens, the author's**: is a direct thread between
+*addresses* — {identity, subnet, peer}, a peer known in two subnets being
+two threads, each sent from its own address — or between *identities* with
+the subnet chosen for routing? The address rule as stated ("each ID:Subnet
+is effectively a unique FN address") reads as the former, and it is what
+keeps a DM inside the sandbox; step 2b keyed a thread by {identity, peer}
+and would gain the subnet. Nothing is built until this is answered; the
+order after it is net (`Live` by subnet, `Serving` by subnet), client
+(`payload.serving` by subnet, `send_payload` with the address, tests), FFI
+(`attach(subnet, …)`), then the device (the `SERVING` record by subnet,
+`launchHeld` attaching each, the thread key), each gated.
+

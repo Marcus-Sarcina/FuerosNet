@@ -901,3 +901,27 @@ rendering Tamarin counterexample graphs, not for proving.
   protocol cores the plan names; they are a filter, not a verdict, and the
   small finite instances (3 nodes, a handful of events) could in principle
   miss a defect that needs a larger configuration to appear.
+
+## The address model, and why the models do not change [2026-11-11]
+
+The design now states that an identity holds one serving node per subnet it
+has a position in — one **address** per {identity, subnet}, each with its
+own session, bundle and mail (design §12.9; `light-client-requirements.md`
+§2). Read against every model that touches attach or serving:
+
+- **`compliant/attach.spthy`**: the binding is `Binding($N, $C, k)` and a
+  session `Session($N, $C, k, role, s)`, with `OneRecordPerBinding`
+  quantified over `N C k`. A client bound at two nodes is two bindings with
+  nothing shared but `k`, which is the address model exactly; supersession
+  terminates `Binding($N, $C, k)` at that node alone. **Unchanged.**
+- **`tla/SupersessionDiscipline.tla`**: `serving[n]` is per node, each
+  holding its own copy. **Unchanged.**
+- **`tla/IssuerAuthorisation.tla`** and the rest: no serving relationship
+  modelled. **Unchanged.**
+
+This is the author's principle applied: the wire level and its models are
+1<>1 and 1<>1<>1, and the parallelism above them — several addresses per
+identity, several identities per device — is the application's and adds
+nothing a model of the pair has to carry. Nothing re-run, since nothing
+changed; `./run-all.sh` remains the check.
+
