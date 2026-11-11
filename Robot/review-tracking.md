@@ -20396,6 +20396,13 @@ with devices beneath, so two identities on one handset are two clients.
    device-level provision is read by `bringUp` for the focused identity
    alone, and `provisionJson` is gone. One test pin contradicted itself —
    the step 3 pin still expected the old call — and was corrected.
+   **Proven on hardware 2026-11-11, GXV on `db6fbf8`**: two `kernel.loop`
+   lines (`703a82c2`, `feb8843a`); one attach attempt, the focused
+   identity's, `True`; `identity.attach who=feb8843a node=none` and no
+   refusal at all; `node.attached 703a82c2 attached=3`; no crash. Under
+   step 3 the second identity was refused by the node; under step 4 it
+   does not try, having agreed to none — the difference between a server
+   turning a profile away and a profile with no tabs open.
 5. Several attachments per identity: `payload.serving` from one to a set
    (six call sites and a persistence field), with the routing rule stated —
    which attachment relays an outbound payload, which hold a mailbox.
