@@ -491,6 +491,25 @@ job.
   device** [author, 2026-11-07]: supporting key rotation means supporting
   more than one, so removal is of *an* identity and adding one is another
   way into the same door that starts a new one.
+- **There are two doors, and each says which it is** [author, 2026-11-11].
+  A device holding several identities can be asked for either act, and a
+  control that said *this identity* while taking the device would have a
+  person confirm the wrong one:
+  - **Take one identity off, leaving the others.** Its key, its archive,
+    its store and the captures sealed to it go; the other identities are
+    untouched, and the device keeps acting as one of them. **Refuse where
+    it cannot be honoured rather than half-doing it**: the only identity
+    held (the other door's act, which also clears the wrapping key), and
+    an identity whose storage is the device's own rather than its own
+    directory, where singling it out would mean inventing a list of files
+    to delete. **Refuse while that identity owes a departure from a
+    rotation**, or the key it replaced is left standing in a subnet with
+    nothing on the device able to say so. **Name the list before the
+    storage goes**, so a process that dies between leaves storage nothing
+    opens rather than a list naming storage that is not there.
+  - **Take the device**, which is every identity on it and the wrapping
+    key with them, leaving a device holding none. The words say *every
+    identity* and *their keys*, since one of them is not what goes.
 - **Hold several identities at once, and divide what they may do**
   [author, 2026-11-07]. A key rotation replaces the key one subnet knows
   and leaves every other subnet untouched (design §9.0, §13.6), so a

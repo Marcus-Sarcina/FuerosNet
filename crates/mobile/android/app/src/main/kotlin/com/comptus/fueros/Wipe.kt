@@ -87,10 +87,10 @@ object Wipe {
      * people's archives either way (design §16.2.1).
      */
     fun words(): List<String> = listOf(
-        "This takes the identity off this device: its key, everything it has " +
-            "signed or been shown, and every capture sealed to it. Nothing is " +
-            "sent anywhere and nobody is told.",
-        "It cannot be undone from here. The seed phrase written down when this " +
+        "This takes every identity off this device: their keys, everything " +
+            "they have signed or been shown, and every capture sealed to them. " +
+            "Nothing is sent anywhere and nobody is told.",
+        "It cannot be undone from here. The seed phrase written down when each " +
             "identity was made is the only way back to it, with a backup file for " +
             "the history; without both, this device is the last place it existed.",
         "A new identity started afterwards arrives as a genuinely-new user, " +
@@ -104,7 +104,7 @@ object Wipe {
      * nothing they did not already know; this says what the tap does.
      */
     fun confirm(): String =
-        "Wipe this identity. The phrase and a backup are the only way back."
+        "Wipe this device. The phrases and a backup are the only way back."
 
     /** What it says once it has, on the way to the first-run screen. */
     fun done(): String =

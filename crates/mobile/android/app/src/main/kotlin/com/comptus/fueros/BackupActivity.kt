@@ -99,7 +99,7 @@ class BackupActivity : Activity() {
         )
         body.addView(
             Button(this).apply {
-                text = "Wipe this identity from this device"
+                text = "Wipe this device"
                 setOnClickListener {
                     startActivity(Intent(this@BackupActivity, WipeActivity::class.java))
                 }

@@ -74,8 +74,8 @@ class WipeTest {
     fun the_warning_says_what_goes_what_cannot_come_back_and_what_a_new_one_is() {
         val said = Wipe.words()
         assertEquals("three things, in that order", 3, said.size)
-        assertTrue("names the key: ${said[0]}", said[0].contains("its key"))
-        assertTrue("and the sealed captures: ${said[0]}", said[0].contains("capture sealed to it"))
+        assertTrue("names the keys: ${said[0]}", said[0].contains("their keys"))
+        assertTrue("and the sealed captures: ${said[0]}", said[0].contains("capture sealed to them"))
         // **nothing is sent and nobody is told**: a wipe is local, and a
         // person must not read it as a departure
         assertTrue("says it is local: ${said[0]}", said[0].contains("Nothing is sent"))
@@ -101,7 +101,11 @@ class WipeTest {
     @Test
     fun the_confirmation_names_the_act_rather_than_asking_again() {
         val c = Wipe.confirm()
-        assertTrue("names the act: $c", c.contains("Wipe this identity"))
+        // **the door takes the device, not one identity** [author,
+        // 2026-11-11]: a device can hold several, and taking one off is
+        // its own control on the Options screen ([Identities.removable])
+        assertTrue("names the act: $c", c.contains("Wipe this device"))
+        assertFalse("still reads as one identity: $c", c.contains("this identity"))
         assertTrue("and the way back: $c", c.contains("phrase"))
         assertFalse("does not ask `are you sure`: $c", c.lowercase().contains("are you sure"))
     }

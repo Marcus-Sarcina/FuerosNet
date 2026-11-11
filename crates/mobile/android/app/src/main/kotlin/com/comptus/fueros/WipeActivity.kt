@@ -49,7 +49,7 @@ class WipeActivity : Activity() {
                 textSize = 18f
                 setTypeface(typeface, Typeface.BOLD)
                 setTextColor(Palette.now.ink)
-                text = "Wipe this identity"
+                text = "Wipe this device"
             },
         )
         for (said in Wipe.words()) {
