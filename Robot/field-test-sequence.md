@@ -586,6 +586,74 @@ on nothing else, which is the state the attach's replay is for.
   and T2 and **every store survived** — GXV 2.5 MB, MRK 1.27 MB, ZU8 944 KB,
   4VC 437 B — so the records held before the install were not remade.
 
+## H. The new universe, and the identities a device holds, 2026-11-09/11
+
+**Run `18521b9-new-universe-1`** — four phones wiped and made new through
+the first-run screen, a bench node minted for the run (no `--node`), the
+utility test resource hosted with GXV as owner, and the app rebuilt and
+reinstalled under it five times without losing the universe. The index
+migration from the pre-index layout was visible on disk on every phone
+before the wipe (`kernel/identities` written over `kernel/seeds` with no
+scope directory, 2026-11-08 00:05); after it, every phone's storage is
+scope-named.
+
+| # | Who | Record | Adoption / peering |
+|---|---|---|---|
+| T1 | GXV ← MRK | `79efef25`, 4 signers | subnet `aca30f7b`, named **Mirror Manse** |
+| T2 | GXV ← ZU8 | `7d6e094c`, 3 signers | `023d75b8`, series 1 |
+| T3 | 4VC → ZU8 | `cd46fd06`, 3 signers | `273f80e3`, series 1 — 4VC two steps from the root |
+| T4 | MRK ↔ 4VC | `784f0999`, 3 signers | peering `adea11a1`; deposits 98,168 and 91,655 bytes, converged in one interval |
+
+**What this run could do that no nodeless one has**: the subnet's name
+reached the adopted party — ZU8's Done screen read *"You under GXV — GXV's
+Mirror Manse"* — where stage G's nodeless pass said *"the name could not be
+sent"*. And the stranger-verifier path ran on hardware both ways: ZU8 asked
+MRK about GXV and got Match, MRK asked ZU8 about 4VC, 4VC asked GXV about
+MRK.
+
+**The identities a device holds — all five conditions passed on GXV
+[author, 2026-11-11]**: *"Picker listed all three, navigated successfully,
+MM remained viewable, the bad ID was removed from the options screen,
+defaulted back to the first identity."* The stream carries the order —
+`identity.active 7b80a786` (selected), `identity.active 703a82c2` (the
+removal's fallback), `identity.removed who=7b80a786 storage=true`,
+`identity.active feb8843a` (selected again) — and GXV's kernel directory
+holds exactly the two that remain. **Mirror Manse stayed on the rail under
+an identity that does not own it**, which is `light-client-requirements.md`
+§2's concurrency rule and the one thing in it no JVM test can draw.
+
+**Three defects it found, all fixed and committed under the run.**
+
+- **A TCL gets one ceremony per app start.** Face-camera opens against
+  closes read 2/0, 1/0, 2/1, 1/0 across the four phones — the session is
+  released only by `stopMeet`, which a successful ceremony reaches only
+  when the person taps **Done**, so a Done screen left standing holds the
+  camera and single-session hardware can open no other. 4VC also had no
+  camera permission at all, never having been in a ceremony. **Fixed
+  2026-11-11** [author: *"Move the camera release to the seal"*]: the
+  release is now in `trySeal`, beside the poll the seal unblocks, since
+  nothing takes a frame after it — the prompts and the continuity probe
+  both run inside the window the seal closes. `stopMeet` stays as the
+  backstop for a ceremony that never seals, `FaceCamera.close` being safe
+  twice, and a frame asked for later reopens the camera, so an early
+  release is recoverable where holding on was not. **Unproven on hardware
+  until two ceremonies run back to back on one TCL without a restart.**
+- **The Done screen said the record would go to a node "when it has one"**
+  while both phones were attached and had already submitted. Gone with the
+  plumbing pass.
+- **The added identity's phrase was skipped**, and GXV's second identity
+  `7b80a786…` lost its phrase for good before the fix — since removed by
+  the new door, which is what the door was built for.
+
+**The node's own store is the run's open question.** It took two objects of
+four ceremonies: T2's and T3's adoptions. T1's rooting adoption and T4's
+peering were `OutOfStore` although `HorizonSnapshot::within` counts an
+attached client as within at any distance and all four were attached — and
+nothing in the run can say whether the node still held them as attached at
+those instants, because it emitted no event when a client attached or
+detached. `node.attached`, `node.detached` and `attached=<count>` on every
+`node.object` were added for the next run with a node.
+
 ## Order
 
 A1 is done; a second plain pair was met deliberately (`82ffd1b-a2-adoption-1`, mislabelled) for series B. B1 nodeless hung at witness selection and showed that nothing met nodeless is reachable afterwards and no cross-pair verifier can qualify — so **B and A4 are with-node**, and the node bench (C1's proven half plus `field-run.sh`) is now the gate for nearly everything left. **[ruled, author, 2026-10-10]** witnesses are required where available and a witnessless meeting is not genesis-only; proceeding witnessless past genesis needs design §13.2 / `wire-format.md` §3.2 amended, which gates any nodeless meeting between non-genesis phones. **That amendment was made** [author, 2026-10-19] — no witness floor, design §13.2 reasoning from the same case the ruling was about — so the condition is met and the gate is lifted, and the rows above are re-planned against it below. **The node bench is up (2026-10-11, `82ffd1b-a4-node-1`), all four phones re-provisioned at genesis on it; the two met pairs are to be re-met there for B.** A4, B's with-node

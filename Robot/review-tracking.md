@@ -20203,7 +20203,17 @@ the comment says so rather than implying otherwise. Asserted in
 `IdentitiesTest`: the branch order, the slot armed before the kernel call,
 only the acknowledgement clearing it, and no saved-state path.
 
-**Still unfinished, which is where this started**: the second identity's
-own exercise — concurrent viewing across two identities, the gating of
-meetings and operator actions on the active one, and PRD-14's row-holder
-routing.
+**Closed on the bench 2026-11-11** [author]: *"All conditions passed.
+Picker listed all three, navigated successfully, MM remained viewable, the
+bad ID was removed from the options screen, defaulted back to the first
+identity."* The phrase screen held for the third identity — the same
+`identity.added` → `Participant.start` → `identity.active` path that
+skipped it before — and its 24 words are in `phones-recovery.conf` keyed
+`RFCRC1JDGXV:feb8843a`, the serial alone being the identity a phone was set
+up with. `7b80a786…`, whose phrase was lost, is gone by the new door with
+`storage=true`. Written up as stage H of `field-test-sequence.md`.
+
+**What the bench still owes on this**: the gating of a meeting and an
+operator action on the active identity, which needs a ceremony rather than
+a screen, and PRD-14's row-holder routing read off a stream rather than
+observed.

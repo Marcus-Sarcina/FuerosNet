@@ -1808,7 +1808,30 @@ object Kernel {
         }
         // the seal is what the proposal and the handover were waiting on;
         // outside the lock, since a poll calls back into the kernel
-        if (sealed) m.poll(courier(p))
+        if (sealed) {
+            // **the camera goes back at the seal** [author, 2026-11-11],
+            // not when the person taps Done. Nothing takes a frame after
+            // this: the hold's prompts and the continuity probe both run
+            // inside the window, and the window is what the seal closes.
+            // Held past it, the camera is lit through the proposal, the
+            // review, the signing and however long a Done screen stands —
+            // and on hardware that permits one camera session at a time it
+            // is what gave the bench **one ceremony per app start** (run
+            // `18521b9-new-universe-1`: face-camera opens against closes
+            // 2/0, 1/0, 2/1, 1/0 across the four phones, a Done screen
+            // left standing on each).
+            //
+            // **`stopMeet` still releases it**, which is the backstop for
+            // a ceremony that never reaches a seal — an abort, a stall, a
+            // dismissal — and a second release costs nothing
+            // ([FaceCamera.close] is safe to call twice).
+            //
+            // **A frame asked for after this reopens the camera**, which
+            // [AndroidShell.capture] already does and retries: releasing
+            // early is therefore recoverable, where holding on is not.
+            shell?.endCapture()
+            m.poll(courier(p))
+        }
     }
 
     /** The window's per-meeting state, cleared as a meeting starts or ends. */

@@ -174,6 +174,50 @@ class IdentitiesTest {
      * **Taking one identity off a device that holds several** [author,
      * 2026-11-10], and the three it refuses.
      */
+    /**
+     * **The camera goes back at the seal, not at the Done tap** [author,
+     * 2026-11-11]. Read from the source, as the drawing is: a JVM test
+     * cannot open a camera, and what is being asserted is which moment
+     * releases it.
+     *
+     * **The defect this closes** (run `18521b9-new-universe-1`): the only
+     * release was `stopMeet`, which a successful ceremony reaches when the
+     * person taps **Done** — so a Done screen left standing held the
+     * camera, and on hardware that permits one session at a time the next
+     * scan could open nothing. Face-camera opens against closes were 2/0,
+     * 1/0, 2/1 and 1/0 across the four phones.
+     */
+    @Test
+    fun the_camera_goes_back_at_the_seal_and_stop_is_only_the_backstop() {
+        val kernel = source("Kernel.kt")
+        val seal = kernel.indexOf("private fun trySeal(")
+        assertTrue("trySeal is not there to read", seal > 0)
+        val afterSeal = kernel.substring(seal, seal + 1200)
+        assertTrue(
+            "the seal does not give the camera back, so it is held through the proposal and the review",
+            afterSeal.contains("shell?.endCapture()"),
+        )
+        // **and the backstop stays**, for a ceremony that never seals: an
+        // abort, a stall, a dismissal
+        val stop = kernel.indexOf("fun stopMeet(")
+        assertTrue("stopMeet is not there to read", stop > 0)
+        assertTrue(
+            "nothing releases the camera for a ceremony that never reached a seal",
+            kernel.substring(stop, stop + 1400).contains("shell?.endCapture()"),
+        )
+        // **closing twice is what makes two release points safe**, and
+        // that is a property of the code rather than of its comment:
+        // `close` nulls what it closed, so a second call closes nothing.
+        // (`source` strips block comments, so the KDoc saying so is not
+        // there to read — which is how this assertion first failed.)
+        val cam = source("FaceCamera.kt")
+        assertTrue(
+            "close does not null what it closed, so a second call would close it twice",
+            cam.contains("session = null") && cam.contains("device = null") &&
+                cam.contains("reader = null"),
+        )
+    }
+
     @Test
     fun one_identity_comes_off_and_three_cases_refuse() {
         val two = listOf(held(1, "aa".repeat(32), "Marcus"), held(2, "bb".repeat(32)))
