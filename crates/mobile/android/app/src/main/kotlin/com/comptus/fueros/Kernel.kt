@@ -1407,7 +1407,7 @@ object Kernel {
             peerKey = key
             if (peerName.isEmpty() || peerName == "the other person") peerName = key.take(8)
         }
-        front.peerKnown(key, peerName)
+        activeId?.let { front.peerKnown(it, key, peerName) }
     }
 
     /** Who this device is talking to: the meeting's counterparty while one
@@ -1948,20 +1948,27 @@ object Kernel {
      * one. Who may be sent to is every party [adopt] has pinned, which is
      * every meeting this device has reached the optical step of.
      */
-    fun send(to: String, text: String) {
-        val p = participant
+    fun send(by: String, to: String, text: String) {
+        // **as the identity that holds the thread, never the one in
+        // focus** — step 2b of the browser model [author, 2026-11-11]: a
+        // reply typed into another identity's conversation went out under
+        // the focused key before this, which is the wrong-key act the
+        // row-holder rule exists to prevent, and nothing would have
+        // refused it. Refused here rather than fallen back from
+        // ([asHolder]).
+        val p = asHolder(by)
         val who = runCatching { unhex(to) }.getOrNull()
         if (p == null || who == null || who.size != 32) {
             front.note(
-                if (p == null) "· no kernel yet" else "· not a party to send to: ${to.take(8)}…",
+                if (p == null) "· that identity is not open on this device" else "· not a party to send to: ${to.take(8)}…",
             )
             return
         }
-        val id = front.outgoing(to, text)
+        val id = front.outgoing(by, to, text)
         Thread({
-            call("send", { e -> front.settle(to, id, Front.Delivery.UNSENT, e.reason) }) {
+            call("send", { e -> front.settle(by, to, id, Front.Delivery.UNSENT, e.reason) }) {
                 p.send(who, kindApplication(), text.toByteArray())
-                front.settle(to, id, Front.Delivery.SENT, null)
+                front.settle(by, to, id, Front.Delivery.SENT, null)
             }
         }, "fueros-send").start()
     }
@@ -2583,7 +2590,7 @@ object Kernel {
             ?.let { a -> (0 until a.length()).map { unhex(a.getString(it)) } }
             ?: listOf()
         peerKey = to?.let { hex(it) }
-        peerKey?.let { front.peerKnown(it, peerName) }
+        activeId?.let { by -> peerKey?.let { front.peerKnown(by, it, peerName) } }
         // **a provision may name no node, and then this device stays
         // detached** (design §6.4): a pair can meet with nothing reachable
         // but each other, and what they form is the witnessless shape —
@@ -2738,13 +2745,14 @@ object Kernel {
                             else -> pr.frame(e.bytes)
                         }
                     } else {
-                        front.incoming(from, who, String(e.bytes))
+                        front.incoming(id, from, who, String(e.bytes))
                     }
                 }
                 is Event.Connection -> {
+                    // every identity's connection is recorded for itself;
                     // the one status slot is the focused identity's, as a
-                    // browser's status bar is the focused window's; what an
-                    // unfocused identity's connection becomes is step 3's
+                    // browser's status bar is the focused window's
+                    Model.connectionOf(id, e.v1)
                     if (focused) {
                         show(p, e.v1)
                         Model.connection(e.v1)
@@ -2866,7 +2874,7 @@ object Kernel {
         // when that party was the current one
         for (t in front.threads()) {
             runCatching { unhex(t.peerKey) }.getOrNull()?.let { who ->
-                if (who.size == 32) front.directPath(t.peerKey, p.directTo(who))
+                if (who.size == 32) loaded[t.by]?.let { h -> front.directPath(t.by, t.peerKey, h.directTo(who)) }
             }
         }
     }

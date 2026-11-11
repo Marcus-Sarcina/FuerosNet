@@ -363,6 +363,23 @@ class IdentitiesTest {
             "the turn clock is still a field of the kernel rather than the loop's own",
             loopSource.contains("@Volatile private var lastEntryAt"),
         )
+        // **step 2b: a conversation belongs to an identity**, keyed by it
+        // and the peer, and a reply goes out as the one that holds it —
+        // refused, not fallen back from, where that identity is not open
+        val frontSource = source("Front.kt")
+        assertTrue(
+            "a thread is keyed by the peer alone, so two identities' conversations with one party collide",
+            frontSource.contains("private fun key(by: String, peerKey: String)"),
+        )
+        assertTrue(
+            "a reply goes out as the focused identity rather than the one holding the thread",
+            loopSource.contains("fun send(by: String, to: String, text: String)") &&
+                loopSource.contains("val p = asHolder(by)"),
+        )
+        assertTrue(
+            "an incoming message is not filed under the identity that received it",
+            loopSource.contains("front.incoming(id, from, who, String(e.bytes))"),
+        )
         // **and the removal is on the Options screen**, two steps deep
         assertTrue(
             "no control takes one identity off this device",

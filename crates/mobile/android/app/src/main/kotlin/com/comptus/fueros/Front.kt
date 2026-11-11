@@ -56,7 +56,16 @@ class Front {
 
     /** One conversation, as a screen shows it. */
     data class Thread(
-        /** The counterparty's keyhash in hex, which identifies the thread. */
+        /**
+         * **Whose conversation this is** — step 2b of the browser model
+         * [author, 2026-11-11]: each {identity, subnet} is sandboxed from
+         * every other on the device, so a thread is keyed by the identity
+         * that holds it and the peer, never by the peer alone — two
+         * identities' conversations with one party are two threads, and a
+         * reply goes out as the one that holds it ([Kernel.send]).
+         */
+        val by: String,
+        /** The counterparty's keyhash in hex, which with [by] identifies the thread. */
         val peerKey: String,
         /** What to call them on screen. */
         val peerName: String,
@@ -66,7 +75,7 @@ class Front {
         val messages: List<Message>,
     )
 
-    private class Convo(var name: String) {
+    private class Convo(val by: String, val peer: String, var name: String) {
         var direct: Boolean = false
         val messages = mutableListOf<Message>()
     }
@@ -118,13 +127,16 @@ class Front {
 
     /** Every conversation this shell holds. */
     fun threads(): List<Thread> =
-        synchronized(lock) { convos.entries.map { it.value.snapshot(it.key) } }
+        synchronized(lock) { convos.values.map { it.snapshot() } }
 
     /** The conversation with `peerKey`, where there is one. */
-    fun thread(peerKey: String): Thread? =
-        synchronized(lock) { convos[peerKey]?.snapshot(peerKey) }
+    fun thread(by: String, peerKey: String): Thread? =
+        synchronized(lock) { convos[key(by, peerKey)]?.snapshot() }
 
-    private fun Convo.snapshot(key: String) = Thread(key, name, direct, messages.toList())
+    /** The one key a conversation has: the identity that holds it and the peer. */
+    private fun key(by: String, peerKey: String) = "$by/$peerKey"
+
+    private fun Convo.snapshot() = Thread(by, peer, name, direct, messages.toList())
 
     // ---- mutators: the kernel's side -----------------------------------
 
@@ -158,18 +170,18 @@ class Front {
 
     /** The peer this device was provisioned to talk to is known: its thread
      *  exists from here, empty until something is said. */
-    fun peerKnown(peerKey: String, name: String) {
+    fun peerKnown(by: String, peerKey: String, name: String) {
         synchronized(lock) {
-            convos.getOrPut(peerKey) { Convo(name) }.name = name
+            convos.getOrPut(key(by, peerKey)) { Convo(by, peerKey, name) }.name = name
             changed()
         }
     }
 
     /** Whether a direct path to the peer is held now: **status, never a
      *  choice** — the path order is fixed (design §12.6.3). */
-    fun directPath(peerKey: String, held: Boolean) {
+    fun directPath(by: String, peerKey: String, held: Boolean) {
         synchronized(lock) {
-            convos[peerKey]?.let {
+            convos[key(by, peerKey)]?.let {
                 it.direct = held
                 changed()
             }
@@ -178,9 +190,9 @@ class Front {
 
     /** An arrival, attributed to its sender: the name it came with is the
      *  attribution and the thread's name from here. */
-    fun incoming(peerKey: String, name: String, text: String) {
+    fun incoming(by: String, peerKey: String, name: String, text: String) {
         synchronized(lock) {
-            val c = convos.getOrPut(peerKey) { Convo(name) }
+            val c = convos.getOrPut(key(by, peerKey)) { Convo(by, peerKey, name) }
             c.name = name
             c.messages.add(Message(seq++, false, name, text, Delivery.SENT, null))
             changed()
@@ -188,9 +200,9 @@ class Front {
     }
 
     /** An outgoing message, in flight. Returns its id for [settle]. */
-    fun outgoing(peerKey: String, text: String): Long {
+    fun outgoing(by: String, peerKey: String, text: String): Long {
         synchronized(lock) {
-            val c = convos.getOrPut(peerKey) { Convo(peerKey) }
+            val c = convos.getOrPut(key(by, peerKey)) { Convo(by, peerKey, peerKey) }
             val id = seq++
             c.messages.add(Message(id, true, "me", text, Delivery.SENDING, null))
             changed()
@@ -199,9 +211,9 @@ class Front {
     }
 
     /** The kernel's send returned: sent for carriage, or unsent with why. */
-    fun settle(peerKey: String, id: Long, delivery: Delivery, reason: String?) {
+    fun settle(by: String, peerKey: String, id: Long, delivery: Delivery, reason: String?) {
         synchronized(lock) {
-            val c = convos[peerKey] ?: return
+            val c = convos[key(by, peerKey)] ?: return
             val i = c.messages.indexOfFirst { it.id == id }
             if (i >= 0) {
                 c.messages[i] = c.messages[i].copy(delivery = delivery, reason = reason)

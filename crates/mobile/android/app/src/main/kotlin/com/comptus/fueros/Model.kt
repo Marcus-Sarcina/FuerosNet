@@ -96,6 +96,15 @@ object Model {
         tell(setOf(Noun.CONNECTION))
     }
 
+    /** Each identity's connection, by id — a browser window's own status
+     *  where [connection] is the focused window's [author, 2026-11-11]. */
+    @Volatile var connections: Map<String, Connection> = emptyMap(); private set
+
+    fun connectionOf(by: String, c: Connection) {
+        connections = connections + (by to c)
+        tell(setOf(Noun.CONNECTION))
+    }
+
     private fun tell(nouns: Set<Noun>) {
         val now = synchronized(lock) { watchers.toList() }
         for (w in now) w.changed(nouns)

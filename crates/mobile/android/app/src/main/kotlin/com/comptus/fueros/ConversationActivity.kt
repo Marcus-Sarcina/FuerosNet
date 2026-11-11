@@ -25,6 +25,12 @@ class ConversationActivity : Activity() {
     private lateinit var scroll: ScrollView
     private var peerKey: String? = null
 
+    /** The identity this conversation belongs to: the one a thread was
+     *  opened under, or the one in focus for a thread started here — a
+     *  new thread is the focused identity's, as a new tab is the focused
+     *  window's [author, 2026-11-11]. */
+    private var by: String? = null
+
     private val sink = object : Front.Ui {
         override fun render() = runOnUiThread { redraw() }
     }
@@ -34,6 +40,7 @@ class ConversationActivity : Activity() {
         // the peer named by the row that opened this, or the one party this
         // device has met or been provisioned to, where a row did not name one
         peerKey = intent.getStringExtra("peer") ?: Kernel.peerKey()
+        by = intent.getStringExtra("by") ?: Kernel.activeIdentity()
 
         messages = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         scroll = ScrollView(this).apply {
@@ -57,7 +64,8 @@ class ConversationActivity : Activity() {
                 return@setOnClickListener
             }
             box.setText("")
-            Kernel.send(to, text)
+            val holder = by ?: return@setOnClickListener
+            Kernel.send(holder, to, text)
         }
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -88,7 +96,7 @@ class ConversationActivity : Activity() {
 
     private fun header(): TextView =
         TextView(this).apply {
-            val t = peerKey?.let { Kernel.front.thread(it) }
+            val t = by?.let { b -> peerKey?.let { Kernel.front.thread(b, it) } }
             text = t?.let { Kernel.aliasOf(it.peerKey) ?: it.peerName } ?: "conversation"
             textSize = 22f
             typeface = Typeface.DEFAULT_BOLD
@@ -97,7 +105,7 @@ class ConversationActivity : Activity() {
 
     private fun redraw() {
         messages.removeAllViews()
-        val t = peerKey?.let { Kernel.front.thread(it) }
+        val t = by?.let { b -> peerKey?.let { Kernel.front.thread(b, it) } }
         if (t == null) {
             // **a screen with nobody behind it says so**: this opens from
             // the thread list, and a thread exists for every party met,

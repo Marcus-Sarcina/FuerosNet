@@ -20310,13 +20310,40 @@ with devices beneath, so two identities on one handset are two clients.
    `val focused = id == activeId` each turn and runs only for the identity
    in focus, a message or a peer's word or a changed noun running for any.
    No behaviour changes while bring-up runs one loop, which is always the
-   focused one. **Step 2b, still owed**: a message and a notice carrying
-   which identity received them — `Front.convos` is keyed by peer alone,
-   so two identities' conversations with one peer would collide, which the
-   sandbox rule forbids; and `Model.connection` is one slot, the focused
-   identity's, with an unfocused identity's connection recorded per
-   identity for the picker to show.
-3. Attach per identity.
+   focused one. **Step 2b done 2026-11-11**: a conversation belongs to an
+   identity. `Front.convos` is keyed by `"$by/$peerKey"` and `Thread`
+   carries `by`; `incoming`, `outgoing`, `settle`, `directPath`,
+   `peerKnown` and `thread` all take the identity first; the loop files an
+   incoming message under the identity that received it; the conversation
+   screen takes `by` from the thread it was opened under or the focused
+   identity for one started there, and the list labels a row with its
+   holder where the device holds more than one. **The finding inside it**:
+   `Kernel.send` used `participant` — the focused identity — so a reply
+   typed into another identity's thread went out under the wrong key and
+   nothing refused it; it now sends as `asHolder(by)` and refuses rather
+   than falls back. `Model.connectionOf` records every identity's
+   connection beside the focused slot. `FrontTest` rewritten to the keyed
+   calls with a new case, two identities and one peer being two threads.
+3. Attach per identity, and a loop per identity. **Planned from the
+   source 2026-11-11, to build after step 2b lands**: `start` spawns one
+   `fueros-kernel` thread that runs `bringUp`, which ends in the focused
+   identity's `runLoop`; `watchNetwork(p)` registers one connectivity
+   callback calling that participant's `networkChanged()`; `createIdentity`
+   and `beginRotation` on a started kernel call `openHeld` and
+   `chooseActive` but attach nothing and start no loop for the new
+   identity. So: a `launchHeld(id, p, provision)` that attaches that
+   identity to the provision's node with no peer (the peer is the bench's
+   convenience and the focused identity's), records the result with
+   `Model.connectionOf`, and spawns `runLoop(p, id)` on its own thread —
+   called by `bringUp` for every loaded identity but the focused one, whose
+   loop stays on the kernel thread as today, and by `createIdentity` and
+   `beginRotation` for an identity added at runtime; the provision kept as
+   a field for that. `watchNetwork` iterates every loaded participant from
+   one callback rather than registering one per identity. The
+   source-reading pin that bring-up runs exactly one loop changes on
+   purpose to two call sites, the kernel thread's and `launchHeld`'s.
+   `kernel.loop` is then said once per identity, each with `who`, which
+   the diag readers count and the field notes should expect.
 4. Gate initiation on the active identity: joining a subnet, attaching,
    starting a DM, beside the meeting and operator gates already there.
 5. Several attachments per identity: `payload.serving` from one to a set

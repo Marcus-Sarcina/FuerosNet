@@ -90,11 +90,20 @@ class ConversationsActivity : Activity() {
         threads.forEach { t -> list.addView(row(t)) }
     }
 
+    /** Which identity holds a thread, said on the row only where the
+     *  device holds more than one — a label, not an explanation. */
+    private fun holderLabel(by: String): String {
+        val held = Kernel.identities(this)
+        if (held.size <= 1) return ""
+        val h = held.firstOrNull { it.id == by } ?: return ""
+        return " · " + Identities.label(h)
+    }
+
     private fun row(t: Front.Thread): View {
         val name = TextView(this).apply {
             // the alias they published where one has reached this device,
             // else what the thread was opened as
-            text = Kernel.aliasOf(t.peerKey) ?: t.peerName
+            text = (Kernel.aliasOf(t.peerKey) ?: t.peerName) + holderLabel(t.by)
             textSize = 20f
         }
         val chip = TextView(this).apply {
@@ -128,7 +137,8 @@ class ConversationsActivity : Activity() {
             setOnClickListener {
                 startActivity(
                     Intent(this@ConversationsActivity, ConversationActivity::class.java)
-                        .putExtra("peer", t.peerKey),
+                        .putExtra("peer", t.peerKey)
+                        .putExtra("by", t.by),
                 )
             }
         }
