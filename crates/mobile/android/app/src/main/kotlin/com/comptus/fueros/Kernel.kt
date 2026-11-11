@@ -1164,21 +1164,29 @@ object Kernel {
      *  review already objected to [2026-10-11]. */
     private val turnDiagMs = 5_000L
 
-    @Volatile private var lastTurnState = ""
-
-    @Volatile private var lastTurnAt = 0L
-
-    @Volatile private var lastEntryAt = 0L
+    /**
+     * **One loop's instrumentation clock** — step 2 of the browser model
+     * [author, 2026-11-11]: these were three fields of the kernel, which
+     * with a loop per identity would have each loop's heartbeat
+     * suppressing the others' on the shared clock, so a park in one
+     * identity's `nextEvent` could hide behind another's turns. One of
+     * these per [runLoop], and the fields the loop reads are its own.
+     */
+    private class TurnDiag {
+        var lastTurnState = ""
+        var lastTurnAt = 0L
+        var lastEntryAt = 0L
+    }
 
     /** **That the loop is about to ask for an event**, on the clock. With
      *  [turnHeartbeat] this brackets the one call in the loop that can
      *  block: an entry with no heartbeat after it is a park in
      *  `nextEvent`, and no entry at all is a loop that is not running. */
-    private fun turnEntry(turns: Long) {
+    private fun turnEntry(d: TurnDiag, turns: Long) {
         if (!Diag.enabled()) return
         val now = System.currentTimeMillis()
-        if (now - lastEntryAt < turnDiagMs) return
-        lastEntryAt = now
+        if (now - d.lastEntryAt < turnDiagMs) return
+        d.lastEntryAt = now
         Diag.event("kernel.turn", "turns" to turns)
         // the heap beside it, on the same clock: a number that climbs across
         // a run is a leak, and one that does not rules it out [bench,
@@ -1194,13 +1202,13 @@ object Kernel {
     /** [Meet.turnState] into the diagnostics, on change or on the clock;
      *  `meet=null` where there is no meeting, so that a turn always says
      *  something and silence can only mean the loop. */
-    private fun turnHeartbeat(m: Meet?) {
+    private fun turnHeartbeat(d: TurnDiag, m: Meet?) {
         if (!Diag.enabled()) return
         val now = System.currentTimeMillis()
         val s = m?.turnState(now) ?: "meet=null"
-        if (s == lastTurnState && now - lastTurnAt < turnDiagMs) return
-        lastTurnState = s
-        lastTurnAt = now
+        if (s == d.lastTurnState && now - d.lastTurnAt < turnDiagMs) return
+        d.lastTurnState = s
+        d.lastTurnAt = now
         Diag.event("meet.turn", "state" to s)
     }
 
@@ -2640,6 +2648,7 @@ object Kernel {
         // that a run which never reaches the loop is distinguishable from
         // one whose loop parks in its first call (2026-10-24).
         Diag.event("kernel.loop", "state" to "entered", "who" to id.take(8))
+        val diag = TurnDiag()
         var turns = 0L
         while (true) {
             // **before the call that can park, not after.** The turn
@@ -2651,9 +2660,21 @@ object Kernel {
             // so this is the only line that can place it. On the clock
             // rather than every turn: a 2 s poll would otherwise write
             // thirty lines a minute for a loop doing nothing.
-            turnEntry(turns)
+            turnEntry(diag, turns)
             turns += 1
             val e = p.nextEvent(2000UL)
+            // **the meeting belongs to the identity in focus** — step 2 of
+            // the browser model [author, 2026-11-11]: a meeting, the
+            // adoption and peering it carries, and the tick that drives
+            // them are the device's one at a time and the focused
+            // identity's, where everything else below — a message, a
+            // peer's word, a changed noun — is this identity's whichever
+            // is in focus. Read every turn, since focus can move while
+            // this loop runs. **No behaviour changes while bring-up runs
+            // one loop for the identity that acts**: that loop is always
+            // the focused one, and the unfocused branches are reached only
+            // once step 3 runs a loop per identity.
+            val focused = id == activeId
             // the kind of thing that arrived and who from, as eight hex
             // characters; a payload's bytes are counted, never shown
             if (e != null && Diag.enabled()) {
@@ -2694,6 +2715,8 @@ object Kernel {
                         // show, and nobody else's to take
                         val m = meet
                         if (m != null && m.counterpartyKey == from) m.heard(said)
+                    } else if (!focused && (e.kind == Adoption.KIND || e.kind == Peering.KIND)) {
+                        front.note("· a message of a meeting arrived for an identity not in focus, and was not acted on")
                     } else if (e.kind == Adoption.KIND) {
                         val a = adoption
                         when {
@@ -2719,8 +2742,13 @@ object Kernel {
                     }
                 }
                 is Event.Connection -> {
-                    show(p, e.v1)
-                    Model.connection(e.v1)
+                    // the one status slot is the focused identity's, as a
+                    // browser's status bar is the focused window's; what an
+                    // unfocused identity's connection becomes is step 3's
+                    if (focused) {
+                        show(p, e.v1)
+                        Model.connection(e.v1)
+                    }
                 }
                 // **the nouns the kernel changed**: the shell's copy is
                 // refreshed for exactly those, and the screens watching
@@ -2738,7 +2766,7 @@ object Kernel {
                 is Event.Answered -> {
                     val v = e.answer
                     if (v != null) {
-                        meet?.responded(hex(e.from), verdictOf(v))
+                        (if (focused) meet else null)?.responded(hex(e.from), verdictOf(v))
                     } else {
                         front.note("· a response was refused: ${e.refused}")
                     }
@@ -2748,7 +2776,7 @@ object Kernel {
                 // both; outside a meeting it is this device witnessing
                 // somebody else's, which the notice line carries
                 is Event.Conversed -> {
-                    val m = meet
+                    val m = if (focused) meet else null
                     if (m != null) m.conversed(e.what, turnOf(e.step)) else front.note("· ${e.what}")
                     // a step taken on a message from a witness can owe the
                     // counterparty one: the last signature in, the record out
@@ -2771,8 +2799,9 @@ object Kernel {
             // (2026-10-24). Said when it changes, and otherwise once every
             // `turnDiagMs`. Diag is a no-op where no sink is installed,
             // which is every releasable build.
-            turnHeartbeat(meet)
-            meet?.let { m ->
+            val tick = if (focused) meet else null
+            turnHeartbeat(diag, tick)
+            tick?.let { m ->
                 // a conversation phase that landed before the flow reached
                 // the conversation is taken on the tick, as is one whose
                 // packet arrived while the step driver held the lock

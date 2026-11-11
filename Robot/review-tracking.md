@@ -20302,9 +20302,20 @@ with devices beneath, so two identities on one handset are two clients.
    Pure extraction, behaviour unchanged, a safe stop. **Done 2026-11-11**:
    `runLoop(p: Participant, id: String)`, `bringUp` calling it once for the
    identity that acts; the only body change is `kernel.loop` saying `who`.
-2. Separate per-device from per-identity inside it: the meeting is
-   per-device and the active identity's; notices and the mailbox are
-   per-identity and carry which identity they came from.
+2. Separate per-device from per-identity inside it. **Step 2a done
+   2026-11-11**: the three `@Volatile` turn-clock fields are a `TurnDiag`
+   per loop, so one identity's heartbeat cannot hide another's park; and
+   every meeting branch — the adoption and peering frames, `Answered`,
+   `Conversed`, the connection's status slot, and the whole tick — reads
+   `val focused = id == activeId` each turn and runs only for the identity
+   in focus, a message or a peer's word or a changed noun running for any.
+   No behaviour changes while bring-up runs one loop, which is always the
+   focused one. **Step 2b, still owed**: a message and a notice carrying
+   which identity received them — `Front.convos` is keyed by peer alone,
+   so two identities' conversations with one peer would collide, which the
+   sandbox rule forbids; and `Model.connection` is one slot, the focused
+   identity's, with an unfocused identity's connection recorded per
+   identity for the picker to show.
 3. Attach per identity.
 4. Gate initiation on the active identity: joining a subnet, attaching,
    starting a DM, beside the meeting and operator gates already there.
@@ -20314,3 +20325,29 @@ with devices beneath, so two identities on one handset are two clients.
 
 **Not yet in the documents** [author, 2026-11-11: not just yet]: §2's
 concurrency block and SES-017 are parked above with the wording they need.
+
+
+---
+
+## MRK cannot reach the bench node, and it is the bench network [2026-11-11]
+
+Found deploying step 1: MRK's attach `took_ms 10005, ok False`, and again
+`10007` on a restart, and again after its Wi-Fi was toggled — where GXV,
+ZU8 and 4VC attached in the same minutes (the node's set reached
+`attached=3`, MRK absent). **MRK cannot exchange packets with the laptop at
+all**: `ping 192.168.0.8` is 100% loss from MRK and 0% from GXV, and the
+laptop's neighbour entry for MRK's `192.168.0.6` sits STALE then DELAY,
+unanswered. MRK took `.6` today, which was GXV's address this morning, so a
+stale neighbour mapping on the laptop is the likely cause; it cannot be
+confirmed from here (the phones' MACs are hidden from `adb shell` on these
+builds) or cleared from here (`ip neigh del`: *Operation not permitted*,
+which is the harness's limit and not the network's). **The author's shell**:
+`sudo ip neigh flush dev wlx58d81272db96`.
+
+**What it shows about the app, which is the useful part**: a 10-second
+timeout is what an unreachable node looks like from the attach, and with
+one attempt and no retry a phone that misses it stays detached until its
+next restart — the same no-retry cost measured on GXV, now on a
+one-identity phone with an admitted identity. `phones.conf` also carries
+stale Wi-Fi addresses for GXV and MRK (`.6`/`.7`, now `.5`/`.6`);
+`field-setup.sh --address-only` refreshes them when the cable comes off.

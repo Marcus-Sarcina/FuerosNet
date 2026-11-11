@@ -341,9 +341,27 @@ class IdentitiesTest {
                 loopSource.contains("runLoop(p, activeId ?: \"\")"),
         )
         assertEquals(
-            "bring-up runs more than one loop before step 2 has separated the shared state",
+            "bring-up runs more than one loop before step 3 attaches per identity",
             1,
             Regex("""runLoop\(p, """).findAll(loopSource).count(),
+        )
+        // **step 2: what the loop shares with the device is the meeting,
+        // and it is the focused identity's** — read every turn, since
+        // focus can move while a loop runs; the instrumentation clock is
+        // the loop's own, so one identity's heartbeat cannot hide another's
+        // park
+        assertTrue(
+            "the loop does not read which identity is in focus each turn",
+            loopSource.contains("val focused = id == activeId"),
+        )
+        assertTrue(
+            "the tick drives the meeting for a loop that is not the focused identity's",
+            loopSource.contains("val tick = if (focused) meet else null") &&
+                loopSource.contains("turnHeartbeat(diag, tick)"),
+        )
+        assertFalse(
+            "the turn clock is still a field of the kernel rather than the loop's own",
+            loopSource.contains("@Volatile private var lastEntryAt"),
         )
         // **and the removal is on the Options screen**, two steps deep
         assertTrue(
