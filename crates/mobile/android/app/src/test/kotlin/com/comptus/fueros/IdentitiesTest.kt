@@ -340,10 +340,26 @@ class IdentitiesTest {
             loopSource.contains("private fun runLoop(p: Participant, id: String)") &&
                 loopSource.contains("runLoop(p, activeId ?: \"\")"),
         )
+        // **step 3: a loop and an attach per identity** — the focused one
+        // on the kernel thread as always, every other on its own via
+        // `launchHeld`, which an identity added at runtime goes through too
         assertEquals(
-            "bring-up runs more than one loop before step 3 attaches per identity",
-            1,
+            "the loop is started from somewhere other than the kernel thread and launchHeld",
+            2,
             Regex("""runLoop\(p, """).findAll(loopSource).count(),
+        )
+        assertTrue(
+            "an identity out of focus is not attached and run for itself",
+            loopSource.contains("private fun launchHeld(id: String, p: Participant, provision: JSONObject?)") &&
+                loopSource.contains("if (hid != activeId) launchHeld(hid, hp, provision)"),
+        )
+        assertTrue(
+            "an identity added while the kernel is up gets no loop of its own",
+            Regex("""loaded\[(id|newId)\]\?\.let \{ launchHeld\(""").findAll(loopSource).count() == 2,
+        )
+        assertTrue(
+            "the network callback reaches only the focused identity",
+            loopSource.contains("loaded.values.flatMap { q -> q.networkChanged() }"),
         )
         // **step 2: what the loop shares with the device is the meeting,
         // and it is the focused identity's** — read every turn, since

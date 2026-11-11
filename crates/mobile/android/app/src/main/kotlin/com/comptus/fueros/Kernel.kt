@@ -75,6 +75,11 @@ object Kernel {
     private var started = false
     private var provisioned = false
 
+    /** The provision as the bring-up read it, kept for an identity added
+     *  while the kernel is up ([launchHeld]): the node it names is the
+     *  device's, and a new identity attaches to the same one. */
+    @Volatile private var provisionJson: JSONObject? = null
+
     /** The ceremony in progress, or null. Process-scoped like the
      *  connection: a font change mid-ceremony must not lose it. */
     @Volatile private var meet: Meet? = null
@@ -1991,7 +1996,7 @@ object Kernel {
                     Diag.event("shell.network", "state" to "available")
                     Thread({
                         call("network_changed", { _ -> }) {
-                            val round = p.networkChanged()
+                            val round = loaded.values.flatMap { q -> q.networkChanged() }
                             Diag.event(
                                 "peer.round",
                                 "peers" to round.size,
@@ -2469,6 +2474,7 @@ object Kernel {
             try { JSONObject(String(it)) } catch (_: Exception) { null }
         }
         synchronized(lock) { provisioned = provision != null }
+        provisionJson = provision
         front.setProvisioned(provision != null)
         // the identity is this device's own, whether or not anybody has
         // been told about it yet
@@ -2634,7 +2640,45 @@ object Kernel {
                 show(p, Connection.Attached(node, a.primary))
             }
         }
+        // **every other identity attaches and receives for itself** — step
+        // 3 of the browser model [author, 2026-11-11]: the one in focus
+        // stays on this thread, as it always did, and each of the rest
+        // gets its own ([launchHeld])
+        for ((hid, hp) in loaded) {
+            if (hid != activeId) launchHeld(hid, hp, provision)
+        }
         runLoop(p, activeId ?: "")
+    }
+
+    /**
+     * **An identity that is not in focus still attaches and still
+     * receives** — step 3 of the browser model [author, 2026-11-11]: a
+     * browser window out of focus keeps its tabs open and its
+     * notifications arriving. Attached to the provision's node with no
+     * peer to follow — the peer is the bench's convenience and the focused
+     * identity's — the result recorded for this identity alone
+     * ([Model.connectionOf]), and its loop on a thread of its own.
+     *
+     * **The node admits an identity or refuses it on its own terms**,
+     * which is the author's ruling that a node serves an identity and not
+     * a handset: a refusal here is that identity detached, said to the
+     * diagnostics and the model, and nothing else on the device changes.
+     * Called by [bringUp] for every loaded identity but the focused one,
+     * and by [createIdentity] and [beginRotation] for one added while the
+     * kernel is up.
+     */
+    private fun launchHeld(id: String, p: Participant, provision: JSONObject?) {
+        val nodeHex = provision?.optString("node", "") ?: ""
+        if (nodeHex.isNotEmpty()) {
+            val node = unhex(nodeHex)
+            val a = call("attach", { e -> Diag.event("identity.attach", "who" to id.take(8), "refused" to e.reason); null }) {
+                p.attach(node, listOf(provision?.optString("addr", "") ?: ""), listOf())
+            }
+            Model.connectionOf(id, if (a == null) Connection.Detached else Connection.Attached(node, a.primary))
+        } else {
+            Model.connectionOf(id, Connection.Detached)
+        }
+        Thread({ runLoop(p, id) }, "fueros-kernel-${id.take(8)}").start()
     }
 
     /**
@@ -3002,6 +3046,7 @@ object Kernel {
             // waiting for a restart, and let it act since a person who
             // just made an identity means to use it
             openHeld(app, Identities.Held(id, scope, null), listOf())
+            loaded[id]?.let { launchHeld(id, it, provisionJson) }
             chooseActive(context, id)
         } else {
             start(context)
@@ -3327,6 +3372,7 @@ object Kernel {
         Diag.event("rotation.begun")
         if (started) {
             openHeld(app, Identities.Held(newId, scope, null), listOf())
+            loaded[newId]?.let { launchHeld(newId, it, provisionJson) }
             chooseActive(context, newId)
         } else {
             start(context)

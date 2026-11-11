@@ -20343,9 +20343,44 @@ with devices beneath, so two identities on one handset are two clients.
    source-reading pin that bring-up runs exactly one loop changes on
    purpose to two call sites, the kernel thread's and `launchHeld`'s.
    `kernel.loop` is then said once per identity, each with `who`, which
-   the diag readers count and the field notes should expect.
+   the diag readers count and the field notes should expect. **Built
+   2026-11-11 as planned**: `launchHeld(id, p, provision)` attaches the
+   identity with no peer, records the result with `Model.connectionOf`,
+   says `identity.attach … refused` where the node refuses, and runs
+   `runLoop(p, id)` on `fueros-kernel-<id8>`; `bringUp` calls it for every
+   loaded identity but the focused one; `createIdentity` and
+   `beginRotation` call it for an identity added while the kernel is up,
+   from the provision kept in `provisionJson`; `watchNetwork` hands the
+   network change to every loaded participant. Kotlin 371 / 0. **Unproven
+   on hardware until GXV runs it**: the expected shape is two
+   `kernel.loop` lines with two `who`s, `node.attached` for the admitted
+   identity, and `identity.attach refused` for `feb8843a`, with the device
+   attached either way — the measurement that opened this.
 4. Gate initiation on the active identity: joining a subnet, attaching,
    starting a DM, beside the meeting and operator gates already there.
+   **Read from the source 2026-11-11**: joining is a meeting (gated);
+   `attachTo` uses `participant`, the focused identity; a new thread took
+   the focused identity at step 2b. So the acts route through focus by
+   construction, and what is missing is the rule *stated* — `Act` names
+   only `MEETING` and `OPERATOR`, with `CONVERSATION` false, which is
+   right for continuing one and silent on starting one or attaching:
+   `ATTACH` and `NEW_THREAD` join `needsTheActive` as true, and the test
+   that pins the rule grows with them.
+   **And the finding that widens it**: `serveFrom` writes `node`/`addr`
+   into the **device-level** provision and then attaches the focused
+   identity — right at the moment of agreeing, but with step 3 every
+   identity on the device would attach to that node at the next start,
+   which is a profile joining a server it never agreed to. So **node
+   knowledge belongs to the identity**: `serveFrom` writes a `serving`
+   record (node, addr) into the focused identity's own scope; `launchHeld`
+   takes the identity's scope and attaches only where that record exists,
+   never falling back to the device's provision; `bringUp` keeps the
+   device-level provision as the bench's convenience for the focused
+   identity alone. An identity added at runtime, or by a rotation, has no
+   node until it agrees to one — a fresh profile has no tabs — so the
+   hardware expectation for GXV's `feb8843a` changes from *refused* to *no
+   attempt, recorded detached*. This is the foundation step 5 stands on:
+   several attachments per identity is that record becoming a list.
 5. Several attachments per identity: `payload.serving` from one to a set
    (six call sites and a persistence field), with the routing rule stated —
    which attachment relays an outbound payload, which hold a mailbox.
