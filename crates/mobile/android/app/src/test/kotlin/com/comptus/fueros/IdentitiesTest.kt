@@ -330,6 +330,21 @@ class IdentitiesTest {
             first.contains("intent.getBooleanExtra(GENERATE, false) -> create()") &&
                 first.contains("intent.getBooleanExtra(RESTORE, false) -> restore()"),
         )
+        // **the event loop is a function over one participant** [author,
+        // 2026-11-11, step 1 of the browser model]: extracted so a loop
+        // can run per identity; bring-up still runs one, for the one that
+        // acts, so this step moves code and changes nothing
+        val loopSource = source("Kernel.kt")
+        assertTrue(
+            "the event loop is still inline in bringUp rather than a function per participant",
+            loopSource.contains("private fun runLoop(p: Participant, id: String)") &&
+                loopSource.contains("runLoop(p, activeId ?: \"\")"),
+        )
+        assertEquals(
+            "bring-up runs more than one loop before step 2 has separated the shared state",
+            1,
+            Regex("""runLoop\(p, """).findAll(loopSource).count(),
+        )
         // **and the removal is on the Options screen**, two steps deep
         assertTrue(
             "no control takes one identity off this device",

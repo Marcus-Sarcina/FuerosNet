@@ -20217,3 +20217,100 @@ up with. `7b80a786…`, whose phrase was lost, is gone by the new door with
 operator action on the active identity, which needs a ceremony rather than
 a screen, and PRD-14's row-holder routing read off a stream rather than
 observed.
+
+---
+
+## A node serves an identity, not a handset [author, 2026-11-11]
+
+**Found while trying to make the attach instrument speak.** GXV makes one
+attach per app start, for the **active** identity, and every start since
+its second identity was added had failed: `1794294792 [True]` with the
+first identity acting, then `[False]` at every start after. The bench node
+admits only the four materials `field-run.sh` provisioned, so it refuses an
+identity it was never told about. The other three phones, each holding one
+admitted identity, have 12, 12 and 11 attaches and no failures.
+
+**Ruled correct** — *"A node serves an identity, not a handset — that's
+correct behavior"* — so no code changed.
+
+**Not in the documents yet** [author, 2026-11-11: *"don't put it in the
+documents just yet"*]. A §2 clause and a `functional_tests.md` SES-017 row
+were written and then reverted; the tree is back to 565 families and the
+pins are the committed ones. **What the wording would have to carry when it
+does land**, so it need not be rediscovered: the attach is the active
+identity's, one per start and per change of it; an identity no node admits
+leaves the device **detached** and the screen says so where the person who
+chose it can see; and what the device already holds stays readable, so a
+detached device is not a blank one.
+
+**Two corrections to this register's own earlier entries.**
+
+1. *"The droplet is on `7f0c4594`, which predates `node.attached`"* was
+   wrong. `git show --stat` says only `7f0c459` touched node-side code, and
+   that is the commit the instrument landed in — so the droplet has carried
+   it since that deploy. The zero count meant nothing had attached, which
+   is itself explained above.
+2. *"All four phones were attached — `method=attach` returned 36 times on
+   GXV with no `ok:false`"* was wrong: the grep matched a JSON spelling the
+   file does not use. GXV has five failed attaches. It does not move the
+   store question — T1 and T4's refusals happened while the first identity
+   was acting and attaching — but the claim as stated was false, and a
+   count is only evidence if the pattern matches the file.
+
+**Still open on the store**: the bench node now runs a binary carrying the
+instrument (rebuilt and restarted in place on its own identity and stores,
+`strings` confirming `node.attached` in it where the running one had none),
+so the next attach by an admitted identity is what will say whether the
+node holds its clients as attached when it decides a storage question.
+
+---
+
+## The browser model for identities on a device [author, 2026-11-11]
+
+*"Within any limits imposed by the host OS, it should operate like multiple
+browser instances on a single computer. I can have separate browsers open
+carrying separate profiles (Identities). Each browser window can have
+multiple open tabs (attached servers). I can only have one browser in focus
+at a time (active identity) where I can open new tabs (join new subnets,
+attach to subnets, start new DM threads). But I can receive notifications
+from any tab that's open on any browser. What limits this analogy is that
+unlike a browser, the Identity profile does not carry state or activity
+information between services that use that identity, each {ID,Subnet} is
+sandboxed from all others at least on the device level."*
+
+And on the documents' singular *serving node*: *"we should interpret this
+as a micro-scale description of the basic node/user relationship the
+network is built from … protocol documents that speak of the TCP/IP or HTTP
+server and client in the singular … did not constrain the development of
+the browser as an application layer."*
+
+**What this supersedes**: the re-attach-on-switch fix proposed from the
+measurement above is withdrawn — the model is that every identity holds its
+own attachments and receives on them whether or not it is in focus, and
+focus governs initiation alone.
+
+**Measured against what exists (same build, same phone, both arms)**: both
+identities open either way; one attach, device-level, for the active
+identity; one event loop over the active participant; local reads served
+identically in both arms; the node's attached set already keyed by client
+with devices beneath, so two identities on one handset are two clients.
+
+**The build, in the order ruled** [author: *"Begin at 1"*]:
+1. Extract the event loop — **~170 lines** (`Kernel.kt` 2622–2789, inline
+   in `bringUp`), not the ~690 first reported, which was an `awk` that ran
+   to the end of the file — into a function over `(Participant, identity)`.
+   Pure extraction, behaviour unchanged, a safe stop. **Done 2026-11-11**:
+   `runLoop(p: Participant, id: String)`, `bringUp` calling it once for the
+   identity that acts; the only body change is `kernel.loop` saying `who`.
+2. Separate per-device from per-identity inside it: the meeting is
+   per-device and the active identity's; notices and the mailbox are
+   per-identity and carry which identity they came from.
+3. Attach per identity.
+4. Gate initiation on the active identity: joining a subnet, attaching,
+   starting a DM, beside the meeting and operator gates already there.
+5. Several attachments per identity: `payload.serving` from one to a set
+   (six call sites and a persistence field), with the routing rule stated —
+   which attachment relays an outbound payload, which hold a mailbox.
+
+**Not yet in the documents** [author, 2026-11-11: not just yet]: §2's
+concurrency block and SES-017 are parked above with the wording they need.

@@ -151,6 +151,12 @@ class ShellActivity : Activity() {
                 FuerosApp.streamTo(this, it, intent.getStringExtra("diag_serial"))
             }
         }
+        // **the identity lever is read before the kernel starts**, since
+        // the bring-up is what applies it ([Kernel.requestActive]); every
+        // other lever needs a kernel that is already up
+        if (BuildConfig.FIELD_TEST) {
+            intent.getStringExtra("active_identity")?.let { Kernel.requestActive(it) }
+        }
         Kernel.start(this)
         benchLevers(intent)
         go(Chrome.Place.Home)
@@ -182,6 +188,11 @@ class ShellActivity : Activity() {
         if (intent.getBooleanExtra("forget_contacts", false)) Kernel.forgetContacts()
         intent.getStringExtra("forget_captures")?.let { Kernel.forgetCaptures(it) }
         if (intent.getBooleanExtra("contact_peers", false)) Kernel.contactPeersNow()
+        // **which identity acts, as a lever** [bench, 2026-11-11]: the
+        // choice is a person's input and nothing the kernel owns, so the
+        // harness may give it — and measuring what a device can still do
+        // while an identity no node admits is acting needs it driven
+        // rather than tapped. Field-test only, like the rest.
     }
 
     override fun onStart() {

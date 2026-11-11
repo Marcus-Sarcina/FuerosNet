@@ -2500,7 +2500,14 @@ object Kernel {
         // identities always has one, or a meeting would have nothing to
         // offer and no way to say why
         val saved = shell.unseal(Identities.ACTIVE)?.toString(Charsets.UTF_8)?.trim()
-        activeId = Identities.active(index.filter { loaded.containsKey(it.id) }, saved)
+        // **a bench lever's choice is read here and not at the door**
+        // [bench, 2026-11-11]: `chooseActive` refuses an identity that is
+        // not open yet, and a lever read from the launching intent runs
+        // before this loop has opened any — so the request joins the saved
+        // choice, which [Identities.active] already falls back from where
+        // the identity named is not held.
+        activeId = Identities.active(index.filter { loaded.containsKey(it.id) }, requestedActive ?: saved)
+        requestedActive = null
         // **a departure a rotation owes is owed at every start**, since a
         // process that died between the adoption and the departure left
         // the mark behind ([concludeRotation])
@@ -2612,10 +2619,27 @@ object Kernel {
                 show(p, Connection.Attached(node, a.primary))
             }
         }
+        runLoop(p, activeId ?: "")
+    }
+
+    /**
+     * **The event loop, over one participant** — step 1 of the browser
+     * model [author, 2026-11-11: *"Begin at 1"*]: extracted from [bringUp]
+     * so that a loop can be run per identity, which is what lets an
+     * identity receive while it is not the one in focus. **This step
+     * changes no behaviour**: [bringUp] still runs exactly one, for the
+     * identity that acts, on the thread it always did.
+     *
+     * What the loop still shares with the device rather than the identity
+     * — the meeting ([meet]), the front's notices, the model's refresh —
+     * is step 2's to separate, and is left as it was here so that this
+     * extraction can be read as a move and nothing else.
+     */
+    private fun runLoop(p: Participant, id: String) {
         // **the loop's own first word.** Said once, before any turn, so
         // that a run which never reaches the loop is distinguishable from
         // one whose loop parks in its first call (2026-10-24).
-        Diag.event("kernel.loop", "state" to "entered")
+        Diag.event("kernel.loop", "state" to "entered", "who" to id.take(8))
         var turns = 0L
         while (true) {
             // **before the call that can park, not after.** The turn
@@ -3067,6 +3091,20 @@ object Kernel {
         } else {
             "the identity is off this device's list; some of its storage would not go"
         }
+    }
+
+    /**
+     * **Which identity the next bring-up should make active**, for the
+     * bench's lever alone (`ShellActivity.benchLevers`): nothing in a
+     * releasable build sets it, and it is spent by the bring-up that
+     * reads it.
+     */
+    @Volatile
+    private var requestedActive: String? = null
+
+    /** Ask the next bring-up to make `id` the one that acts. */
+    fun requestActive(id: String) {
+        requestedActive = id.trim().takeIf { Identities.names(it) }
     }
 
     fun chooseActive(context: Context, id: String): Boolean {
