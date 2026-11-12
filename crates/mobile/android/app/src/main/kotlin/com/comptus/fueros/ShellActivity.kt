@@ -675,14 +675,6 @@ class ShellActivity : Activity() {
                 // reaching the network through one person and their
                 // infrastructure is the thing a second adoption changes
                 secondPatronPrompt()?.let { column.addView(it) }
-                column.addView(
-                    owed(
-                        "Home — every subnet's notices, newest first, each saying where it " +
-                            "is from.\n\nOwed: the kernel's notices are a ring of twelve strings " +
-                            "in memory, unpersisted and without the patron, subnet, resource " +
-                            "and type this line needs.",
-                    ),
-                )
             }
             is Chrome.Place.Subnet -> {
                 val scope = scopes.firstOrNull { it.row.id.hex() == where.id }?.row
@@ -698,17 +690,10 @@ class ShellActivity : Activity() {
                             "belong to this subnet is not a question it can answer yet",
                     ) { startActivity(Intent(this, CatalogActivity::class.java)) },
                 )
-                column.addView(
-                    owed(
-                        "The board — one per subnet, every post saying how far it " +
-                            "travels — is the shell's own and not yet built.",
-                    ),
-                )
             }
             is Chrome.Place.Direct -> {
                 // not reached: the rail's orb opens the conversations
                 // screen until the Direct view is built
-                column.addView(owed("Direct — recent threads, searched by alias or hash, and the contacts list."))
             }
             is Chrome.Place.Options -> {
                 column.addView(bar("Options", back = Chrome.Place.Home))
@@ -735,13 +720,6 @@ class ShellActivity : Activity() {
                 column.addView(
                     row("Remove an identity", null) { removeIdentity() },
                 )
-                column.addView(
-                    owed(
-                        "Owed here: your name and picture, appearance (dark or light), " +
-                            "retention, the wake endpoint, backup and recovery. Most of it " +
-                            "crosses the boundary already; it wants this screen.",
-                    ),
-                )
             }
             is Chrome.Place.SubnetOptions -> {
                 val holder = scopes.firstOrNull { it.row.id.hex() == where.id }
@@ -765,12 +743,6 @@ class ShellActivity : Activity() {
                         },
                     )
                 }
-                column.addView(
-                    owed(
-                        "Owed here: this subnet's notices, on or off; the upline drawn as a " +
-                            "line to the root; and for the root, the name and the logo.",
-                    ),
-                )
             }
             is Chrome.Place.Thread -> column.addView(owed("One thread, full screen."))
             is Chrome.Place.Resource -> column.addView(owed("A resource's page, in its frame."))
