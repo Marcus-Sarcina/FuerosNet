@@ -185,6 +185,16 @@ class ShellActivity : Activity() {
     private fun benchLevers(intent: Intent) {
         if (!BuildConfig.FIELD_TEST) return
         intent.getStringExtra("forget_contact")?.let { Kernel.forgetContact(it) }
+        // **the focused identity's public material, as an event** — the
+        // bench's way to a node configuration naming a phone's identity as
+        // operator without the key-material screen (which shows it once)
+        intent.getStringExtra("export_material")?.let {
+            Diag.event(
+                "identity.material",
+                "who" to (Kernel.activeIdentity() ?: "").take(8),
+                "hex" to Kernel.materialHex(),
+            )
+        }
         if (intent.getBooleanExtra("forget_contacts", false)) Kernel.forgetContacts()
         intent.getStringExtra("forget_captures")?.let { Kernel.forgetCaptures(it) }
         if (intent.getBooleanExtra("contact_peers", false)) Kernel.contactPeersNow()
