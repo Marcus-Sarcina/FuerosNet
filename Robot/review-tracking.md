@@ -20698,3 +20698,24 @@ record reads, a tab added replaces its node's entry, the source
 assertions). Stage 3 (FFI) landed with stage 2. The node code is
 untouched by stages 1–4, so the bench node and the droplet (77344c60)
 need no upgrade for them.
+
+**Deployed 2026-11-11 23:14** (`d94a673`, APK 188,366,754 bytes, `adb
+install -r` on all four: 4 Success; node code untouched since `0c05e12`,
+so the bench node and the droplet stay as they are). After a restart,
+from each phone's newest `files/diag/*.jsonl`: ZU8 `attach ok` in 1.8 s,
+4VC `attach ok` in 2.3 s, one loop each, no tabs (one identity, no
+serving record — nothing for stage 4 to attach beyond the provision's
+node, so no `identity.attach` is emitted); MRK `attach` refused `dial
+timed out` after 10 s — the laptop's stale neighbour entry for `.6`,
+unchanged, the author's `sudo ip neigh flush dev wlx58d81272db96` still
+owed; GXV: feb8843a in focus, `the serving node refused this client`
+(unadmitted at the node, as before), 703a82c2 held with `identity.attach
+node=none` and two loops entered. **Found by it:** an identity attached
+through the *provision* while in focus has no serving record, so it
+attaches to nothing once another identity takes focus — the provision
+is read only for the focused identity at bring-up. Asked of the author
+whether the provision's node is written into that identity's record
+(the bench identity then keeps it as a tab) or stays the bench's
+start-time convenience. The multi-tab path has no hardware exercise yet:
+it needs an identity invited into a second subnet (`serveFrom` from an
+invitation while one node is held).
