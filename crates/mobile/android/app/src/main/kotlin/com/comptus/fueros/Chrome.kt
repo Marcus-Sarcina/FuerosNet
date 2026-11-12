@@ -87,6 +87,8 @@ object Chrome {
             val alias: String?,
             val unseen: Int,
             val crown: Crown,
+            /** The identity that holds this subnet, whose colour the orb takes. */
+            val by: String = "",
         ) : Rung()
     }
 

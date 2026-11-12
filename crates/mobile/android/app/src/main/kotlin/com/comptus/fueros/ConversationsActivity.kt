@@ -99,6 +99,10 @@ class ConversationsActivity : Activity() {
         return " · " + Identities.label(h)
     }
 
+    private val colours: Map<String, Int> by lazy { Kernel.identityColours(this) }
+
+    private fun px(v: Int): Int = (v * resources.displayMetrics.density).toInt()
+
     private fun row(t: Front.Thread): View {
         val name = TextView(this).apply {
             // the alias they published where one has reached this device,
@@ -114,6 +118,14 @@ class ConversationsActivity : Activity() {
         val head = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
+            // the identity this thread is held as, by its colour
+            // [author, 2026-11-12]
+            addView(
+                View(this@ConversationsActivity).apply {
+                    setBackgroundColor(Identities.colourOf(colours, t.by))
+                    layoutParams = LinearLayout.LayoutParams(px(6), px(26)).apply { setMargins(0, 0, px(10), 0) }
+                },
+            )
             addView(name, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
             addView(chip)
         }

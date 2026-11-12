@@ -128,6 +128,25 @@ object Palette {
     /** A silver circlet: a subnet where they have a subordinate. */
     const val SILVER = 0xFFC2C8CF.toInt()
 
+    /**
+     * **An identity's colours** [author, 2026-11-12]: what the nameplate,
+     * the options orb and the meeting orb take from the identity in
+     * focus, each subnet orb from the identity that holds it, and each
+     * thread from the identity it is held as. A new identity takes the
+     * first one no identity on the device uses. Every one carries
+     * [RAIL_INK] above the floor.
+     */
+    val IDENTITY: List<Pair<String, Int>> = listOf(
+        "Red" to 0xFFB3362F.toInt(),
+        "Green" to 0xFF287047.toInt(),
+        "Purple" to 0xFF6A3FA0.toInt(),
+        "Blue" to 0xFF2F5FB3.toInt(),
+        "Orange" to 0xFF944C16.toInt(),
+        "Teal" to 0xFF1B6D6D.toInt(),
+        "Pink" to 0xFFA8356E.toInt(),
+        "Slate" to 0xFF4F5B66.toInt(),
+    )
+
     // ---- what is in force ---------------------------------------------
 
     /**

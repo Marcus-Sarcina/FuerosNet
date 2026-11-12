@@ -3161,6 +3161,28 @@ object Kernel {
     fun activeIdentity(): String? = activeId
 
     /**
+     * **Every identity held, with its colour** [author, 2026-11-12]: the
+     * device's colours file, each identity without one given the first
+     * unused and the file written back where that happened.
+     */
+    fun identityColours(context: Context): Map<String, Int> {
+        val shell = AndroidShell(context.applicationContext)
+        val stored = Identities.colours(runCatching { shell.read(Identities.COLOURS) }.getOrNull())
+        val now = Identities.assigned(stored, identities(context))
+        if (now != stored) runCatching { shell.write(Identities.COLOURS, Identities.encodeColours(now)) }
+        return now
+    }
+
+    /** The colour chosen for one identity on Options. */
+    fun setIdentityColour(context: Context, id: String, argb: Int) {
+        val shell = AndroidShell(context.applicationContext)
+        val now = LinkedHashMap(identityColours(context))
+        now[id] = argb
+        runCatching { shell.write(Identities.COLOURS, Identities.encodeColours(now)) }
+            .onFailure { front.note("· the colour could not be kept: ${it.message}") }
+    }
+
+    /**
      * **Choose the identity that acts** — a meeting's and an operator
      * action's ([Identities.needsTheActive]), from the nameplate's own
      * list [author, 2026-11-07]. Nothing where `id` is not held: a

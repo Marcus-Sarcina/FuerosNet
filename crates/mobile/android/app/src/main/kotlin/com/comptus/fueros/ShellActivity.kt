@@ -218,6 +218,7 @@ class ShellActivity : Activity() {
     private fun drawFromModel() {
         val rows = Model.subnets
         scopes = rows
+        colours = Kernel.identityColours(this)
         drawRail(rows)
         Thread({
             val mine = Kernel.ownAlias()
@@ -269,6 +270,12 @@ class ShellActivity : Activity() {
 
     // ---- the rail ------------------------------------------------------
 
+    /** Each identity's colour, read with the model and drawn by the rail and the foot. */
+    private var colours: Map<String, Int> = emptyMap()
+
+    /** The colour of the identity in focus. */
+    private fun focusColour(): Int = Identities.colourOf(colours, Kernel.activeIdentity())
+
     private fun drawRail(subnets: List<Identities.Owned<uniffi.rhtn_model.Subnet>>) {
         railColumn.removeAllViews()
         val rungs = Chrome.rail(
@@ -283,6 +290,7 @@ class ShellActivity : Activity() {
                     id = o.row.id.hex(),
                     alias = o.row.alias,
                     unseen = 0,
+                    by = o.by,
                     crown = Chrome.crown(
                         root = o.row.rank.root,
                         operator = o.row.rank.operator,
@@ -349,7 +357,16 @@ class ShellActivity : Activity() {
                 typeface = Typeface.DEFAULT_BOLD
                 setTextColor(Palette.RAIL_INK)
                 gravity = Gravity.CENTER
-                background = Crowns.disc(Palette.RAIL_ORB)
+                // **the orb's colour is its identity's** [author, 2026-11-12]:
+                // the meeting's that of the one in focus, a subnet's that of
+                // the one holding it; direct messages span them all
+                background = Crowns.disc(
+                    when (rung) {
+                        is Chrome.Rung.Meet -> focusColour()
+                        is Chrome.Rung.Subnet -> Identities.colourOf(colours, rung.by)
+                        else -> Palette.RAIL_ORB
+                    },
+                )
                 layoutParams = FrameLayout.LayoutParams(d, d)
             },
         )
@@ -443,6 +460,21 @@ class ShellActivity : Activity() {
      * are one choice. Each row goes straight to its own process; nothing
      * in between explains itself.
      */
+    /** The colour of the identity in focus, chosen from the palette by name. */
+    private fun chooseColour() {
+        val me = Kernel.activeIdentity() ?: return
+        val now = focusColour()
+        val rows = Palette.IDENTITY.map { (name, c) -> (if (c == now) "● " else "") + name }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setItems(rows) { _, which ->
+                val (_, c) = Palette.IDENTITY.getOrNull(which) ?: return@setItems
+                Kernel.setIdentityColour(this, me, c)
+                drawFromModel()
+                go(place)
+            }
+            .show()
+    }
+
     private fun howToAdd() {
         val ways = arrayOf("Generate new ID", "Add ID from seed phrase", "Cancel")
         AlertDialog.Builder(this)
@@ -502,9 +534,11 @@ class ShellActivity : Activity() {
                 text = Chrome.mark(alias, me)
                 textSize = 14f
                 typeface = Typeface.DEFAULT_BOLD
-                setTextColor(c.accent)
+                setTextColor(Palette.RAIL_INK)
                 gravity = Gravity.CENTER
-                background = Crowns.rounded(c.control, dp(13))
+                // the options orb and the nameplate wear the colour of the
+                // identity in focus [author, 2026-11-12]
+                background = Crowns.rounded(focusColour(), dp(13))
                 layoutParams = LinearLayout.LayoutParams(dp(40), dp(40))
                 contentDescription = "You, and this device's options"
                 isClickable = true
@@ -516,7 +550,7 @@ class ShellActivity : Activity() {
             LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                background = Crowns.rounded(c.ground, dp(12))
+                background = Crowns.rounded(focusColour(), dp(12))
                 setPadding(dp(12), dp(10), dp(12), dp(10))
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT)
                     .apply { weight = 1f; setMargins(dp(10), 0, 0, 0) }
@@ -532,7 +566,7 @@ class ShellActivity : Activity() {
                         text = name
                         textSize = 14f
                         typeface = Typeface.DEFAULT_BOLD
-                        setTextColor(c.ink)
+                        setTextColor(Palette.RAIL_INK)
                         layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT)
                             .apply { weight = 1f }
                     },
@@ -541,7 +575,7 @@ class ShellActivity : Activity() {
                     TextView(this@ShellActivity).apply {
                         text = says
                         textSize = 11f
-                        setTextColor(c.sub)
+                        setTextColor(Palette.RAIL_INK)
                     },
                 )
             },
@@ -694,6 +728,9 @@ class ShellActivity : Activity() {
                     row("Instances you run", "enrol one, launch one at a provider, its pages, its run") {
                         startActivity(Intent(this, OperatorActivity::class.java))
                     },
+                )
+                column.addView(
+                    row("Colour", Identities.colourName(focusColour())) { chooseColour() },
                 )
                 column.addView(
                     row("Remove an identity", null) { removeIdentity() },

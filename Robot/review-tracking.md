@@ -20735,3 +20735,22 @@ node of its own only by launching one or agreeing to an invitation —
 which is what the GXV reading showed, correctly. **And:** *"Work it in to
 the bench test sequence to create a second subnet"* — T5–T7 added to
 `field-test-sequence.md` §H.
+
+**Identity colours, 2026-11-12** [author: *"color-code the UI elements
+which are modified by the user focus… Identity color would be a selection
+in the user options for each identity and new identities would default to
+a currently unused color"*]. `Palette.IDENTITY`: eight named colours
+(Red, Green, Purple, Blue, Orange, Teal, Pink, Slate), each darkened to
+≥ 4.6 : 1 against `RAIL_INK` (the test `every_colour_carries_the_rail_ink`
+caught Green and Orange and Teal under the floor at first draft).
+`Identities.COLOURS` is a device file `id rrggbb` beside the index, so the
+index's form does not move; `assigned(stored, held)` gives each identity
+its stored colour or the first unused in held order;
+`Kernel.identityColours` reads, assigns and writes back. The shell: the
+nameplate, the options orb and the meeting orb wear the focused identity's
+colour (`focusColour()`), each subnet orb its holder's (`Rung.Subnet.by`),
+each thread in the direct list a 6 dp stripe of the identity it is held
+as; Options gains a **Colour** row listing the palette by name with the
+current marked. Document: `light-client-requirements.md` §2 bullet;
+UX-032 (568 families, UX 31). Tests: `ColoursTest.kt` (4). 378 Kotlin
+tests.

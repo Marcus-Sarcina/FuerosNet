@@ -555,6 +555,14 @@ job.
     receiving is every identity's, at every address, in or out of focus —
     as a browser out of focus keeps its tabs open and its notifications
     arriving.
+  - **Each identity has a colour, and what the focus changes wears it**
+    [author, 2026-11-12]. The nameplate, the door to the person's options
+    and the door to a meeting take the colour of the identity in focus;
+    each subnet's door takes the colour of the identity that holds it;
+    each thread in the list of direct messages is marked with the colour
+    of the identity it is held as. The colour is a choice in that
+    identity's options, and a new identity takes one no identity on the
+    device uses.
   - **A row a screen shows carries the identity that holds it, and acting
     on that row acts through that identity** [2026-11-07]. The merged
     lists are the point of the first rule, and a screen that acted on a

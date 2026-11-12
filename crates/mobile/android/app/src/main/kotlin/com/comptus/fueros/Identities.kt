@@ -143,6 +143,56 @@ object Identities {
         id.length == 64 && id.all { it in '0'..'9' || it in 'a'..'f' }
 
     /**
+     * **Where each identity's colour is kept** [author, 2026-11-12]: a
+     * device file, one `id rrggbb` line per identity, beside the index
+     * rather than in it, so the index's own form does not move.
+     */
+    const val COLOURS = "identity.colours"
+
+    /** The colours file read: id to ARGB. A line that is not one is skipped. */
+    fun colours(bytes: ByteArray?): Map<String, Int> {
+        val text = bytes?.toString(Charsets.UTF_8) ?: return emptyMap()
+        val out = LinkedHashMap<String, Int>()
+        for (line in text.lines()) {
+            val id = line.substringBefore(' ')
+            val hex = line.substringAfter(' ', "").trim()
+            if (!names(id) || hex.length != 6 || !hex.all { it in '0'..'9' || it in 'a'..'f' }) continue
+            out[id] = (0xFF000000L or hex.toLong(16)).toInt()
+        }
+        return out
+    }
+
+    /** The colours file written. */
+    fun encodeColours(colours: Map<String, Int>): ByteArray =
+        colours.entries.joinToString("") { (id, c) -> "$id ${"%06x".format(c and 0xFFFFFF)}\n" }.toByteArray()
+
+    /**
+     * **Every identity held, coloured**: the stored colour where there is
+     * one, else the first of [Palette.IDENTITY] no identity on the device
+     * uses yet, in the order held — so a new identity takes an unused
+     * colour, and the same one each time until it is chosen otherwise.
+     * Returns a map the caller writes back when it differs from [stored].
+     */
+    fun assigned(stored: Map<String, Int>, held: List<Held>): Map<String, Int> {
+        val out = LinkedHashMap<String, Int>()
+        for (h in held) stored[h.id]?.let { out[h.id] = it }
+        for (h in held) {
+            if (h.id in out) continue
+            val used = out.values.toSet()
+            out[h.id] = Palette.IDENTITY.map { it.second }.firstOrNull { it !in used }
+                ?: Palette.IDENTITY[out.size % Palette.IDENTITY.size].second
+        }
+        return out
+    }
+
+    /** An identity's colour, or the rail's own where it is not held here. */
+    fun colourOf(colours: Map<String, Int>, id: String?): Int =
+        id?.let { colours[it] } ?: Palette.RAIL_ORB
+
+    /** The palette's name for a colour, for the choice on Options. */
+    fun colourName(argb: Int): String = Palette.IDENTITY.firstOrNull { it.second == argb }?.first ?: "Colour"
+
+    /**
      * **The index, as one line each**: the id, the scope or `-`, and the
      * alias as the rest of the line.
      *
