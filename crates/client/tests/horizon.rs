@@ -1549,3 +1549,35 @@ fn a_client_that_issued_nothing_asserts_nothing_at_attach() {
         "a subordinate asserts nothing"
     );
 }
+
+/// **The walk held to one address, and the walk over every address**
+/// (design §12.9; SES-017).
+#[test]
+fn an_upstream_can_be_held_to_one_address_and_listed_for_all() {
+    let mut w = World::new();
+    let recs = vec![
+        adopt(&mut w, "alice", "bob", vec![0x10], 1),
+        adopt(&mut w, "carol", "bob", vec![0x20], 1),
+        adopt(&mut w, "w2", "carol", vec![0x21], 2),
+    ];
+    let mut h = fed("alice", &recs);
+    let (sib, _) = endpoints("carol", 7102, 1, 1);
+    h.ingest_endpoint(&sib, &ids());
+
+    // held to the subnet w2 is in: the same answer the full walk gives
+    assert_eq!(
+        h.upstream_of_in(&kh("w2"), &kh("bob")),
+        h.upstream_of(&kh("w2"))
+    );
+    // held to a subnet w2 has no place in: nothing, which a caller reads
+    // as "fall back to every address"
+    assert_eq!(
+        h.upstream_of_in(&kh("w2"), &kh("nobody")),
+        Upstream::Unknown
+    );
+    // and every address, each with its anchor: one here
+    let all = h.upstreams_of(&kh("w2"));
+    assert_eq!(all.len(), 1);
+    assert_eq!(all[0].0, kh("bob"));
+    assert_eq!(all[0].1, h.upstream_of(&kh("w2")));
+}

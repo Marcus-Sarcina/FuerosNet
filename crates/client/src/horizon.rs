@@ -603,6 +603,58 @@ impl Horizon {
     /// Bounded by the horizon throughout, since both of the stores this
     /// reads are.
     pub fn upstream_of(&self, peer: &Keyhash) -> Upstream {
+        self.upstream_among(peer, &self.places_of(peer))
+    }
+
+    /// **The same walk, held to one of the peer's addresses** — the subnet
+    /// whose anchor is `anchor` [author, 2026-11-11: *"Outbound messages
+    /// attempt to reach the recipient through the last subnet from which a
+    /// message by that user was received"*]. Unknown where the peer has no
+    /// place there, which the caller reads as *fall back to every address*.
+    pub fn upstream_of_in(&self, peer: &Keyhash, anchor: &Keyhash) -> Upstream {
+        let places: Vec<&Place> = self
+            .places_of(peer)
+            .into_iter()
+            .filter(|p| p.anchor == *anchor)
+            .collect();
+        if places.is_empty() && self.endpoints_of(peer).is_empty() {
+            return Upstream::Unknown;
+        }
+        self.upstream_among(peer, &places)
+    }
+
+    /// **One upstream per address the peer is known at**, each with its
+    /// anchor — for a first message, which floods every subnet known for
+    /// its recipient [author, 2026-11-11]. A peer addressable itself is one
+    /// entry under no anchor.
+    pub fn upstreams_of(&self, peer: &Keyhash) -> Vec<(Keyhash, Upstream)> {
+        let own = self.endpoints_of(peer);
+        if !own.is_empty() {
+            return vec![(
+                [0u8; 32],
+                Upstream::Known {
+                    node: *peer,
+                    endpoints: own,
+                    key_material: None,
+                },
+            )];
+        }
+        self.places_of(peer)
+            .into_iter()
+            .map(|p| {
+                (
+                    p.anchor,
+                    self.upstream_among(peer, std::slice::from_ref(&p)),
+                )
+            })
+            .collect()
+    }
+
+    /// The walk over the given places of `peer`: the peer itself where it
+    /// has an address, else the deepest known node with one on any of
+    /// those paths, else the first place as a position to ask a
+    /// resolution about, else nothing.
+    fn upstream_among(&self, peer: &Keyhash, places: &[&Place]) -> Upstream {
         let own = self.endpoints_of(peer);
         if !own.is_empty() {
             return Upstream::Known {
@@ -611,12 +663,11 @@ impl Horizon {
                 key_material: None,
             };
         }
-        let places = self.places_of(peer);
         // the longest proper prefix wins: the nearest ancestor, not any
         // ancestor.  An anchor sits at the empty path, so it is the last
         // candidate rather than a special case
         let mut best: Option<(u64, Keyhash, Vec<Vec<u8>>)> = None;
-        for p in &places {
+        for p in places {
             let theirs = nibbles_of(&p.path, p.nibbles);
             for ((node, anchor), place) in &self.places {
                 if *anchor != p.anchor || node == peer || place.nibbles >= p.nibbles {
@@ -643,8 +694,10 @@ impl Horizon {
             };
         }
         // a position with no address above it: there is something to ask
-        // a resolution about, and the first subnet is as good as any —
-        // a party in two of them is reachable through either
+        // a resolution about. **Which subnet is the caller's to say**
+        // [author, 2026-11-11] — the one the last message came by, or
+        // every one for a first message — where this once took the first
+        // as good as any
         match places.first() {
             Some(p) => Upstream::Position {
                 anchor: p.anchor,

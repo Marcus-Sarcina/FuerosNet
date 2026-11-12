@@ -1346,6 +1346,23 @@ pub struct PayloadState {
     pub sessions: Sessions,
     /// The node it publishes its bundle to, where it has one.
     pub serving: Option<Keyhash>,
+    /// **Every node this client is attached to** — step 5 of the browser
+    /// model [author, 2026-11-11]: a tab per subnet, and an attachment made
+    /// before any position (a bench provision, a genesis) belongs to no
+    /// subnet yet. `serving` above stays the one the single-session FFI
+    /// holds until the net layer holds one per node.
+    pub attachments: BTreeSet<Keyhash>,
+    /// **The node serving each of this client's addresses**, by the anchor
+    /// of the subnet: *"Each ID:Subnet is effectively a unique FN
+    /// address"* [author, 2026-11-11]. Written where an address is gained
+    /// through a node ([`crate::ceremony::Client::serve_at`]).
+    pub serving_at: BTreeMap<Keyhash, Keyhash>,
+    /// **The subnet the last message from each peer came by**, as its
+    /// anchor [author, 2026-11-11: *"Outbound messages attempt to reach the
+    /// recipient through the last subnet from which a message by that user
+    /// was received"*]. Recorded at arrival from the attachment it arrived
+    /// on ([`crate::ceremony::Client::record_arrival`]).
+    pub last_from: BTreeMap<Keyhash, Keyhash>,
     /// This device, by the key it presents (`wire-format.md` §7.8): what
     /// its bundle names and what its messages say they are from.  The
     /// identity's classical member until a device says otherwise.
@@ -1393,7 +1410,9 @@ impl PayloadState {
     pub fn encode(&self) -> Vec<u8> {
         use crate::durable::*;
         let mut out = Vec::new();
-        emit_array_head(&mut out, 7);
+        // ten fields since the address model; a reader of the seven-field
+        // form reads the three as empty
+        emit_array_head(&mut out, 10);
         emit_bstr(&mut out, &self.keys.encode());
         emit_bstr(&mut out, &self.sessions.encode());
         emit_opt_bstr(&mut out, self.serving.as_ref().map(|k| &k[..]));
@@ -1417,13 +1436,56 @@ impl PayloadState {
             }
         }
         emit_uint(&mut out, self.pool_reported as u64);
+        emit_array_head(&mut out, self.attachments.len());
+        for n in &self.attachments {
+            emit_bstr(&mut out, n);
+        }
+        emit_array_head(&mut out, self.serving_at.len());
+        for (anchor, node) in &self.serving_at {
+            emit_array_head(&mut out, 2);
+            emit_bstr(&mut out, anchor);
+            emit_bstr(&mut out, node);
+        }
+        emit_array_head(&mut out, self.last_from.len());
+        for (peer, anchor) in &self.last_from {
+            emit_array_head(&mut out, 2);
+            emit_bstr(&mut out, peer);
+            emit_bstr(&mut out, anchor);
+        }
         out
     }
 
     /// The state back under `cfg`, whole or not at all.
     pub fn decode(cfg: PayloadConfig, b: &[u8]) -> Option<PayloadState> {
         use crate::durable::*;
-        let (_, f) = parse_array(b, 7)?;
+        // the seven-field form predates the address model and still reads
+        let (_, f) = parse_array(b, 10).or_else(|| parse_array(b, 7))?;
+        let keyhashes = |it: &rhtn_codec::cbor::Item| -> Option<Vec<Keyhash>> {
+            array(it)?.iter().map(|x| fixed::<32>(b, x)).collect()
+        };
+        let pairs = |it: &rhtn_codec::cbor::Item| -> Option<Vec<(Keyhash, Keyhash)>> {
+            array(it)?
+                .iter()
+                .map(|p| {
+                    let [a, c] = array(p)?.as_slice() else {
+                        return None;
+                    };
+                    Some((fixed::<32>(b, a)?, fixed::<32>(b, c)?))
+                })
+                .collect()
+        };
+        let attachments: BTreeSet<Keyhash> = match f.get(7) {
+            Some(it) => keyhashes(it)?.into_iter().collect(),
+            None => BTreeSet::new(),
+        };
+        let serving_at: BTreeMap<Keyhash, Keyhash> = match f.get(8) {
+            Some(it) => pairs(it)?.into_iter().collect(),
+            None => BTreeMap::new(),
+        };
+        let last_from: BTreeMap<Keyhash, Keyhash> = match f.get(9) {
+            Some(it) => pairs(it)?.into_iter().collect(),
+            None => BTreeMap::new(),
+        };
         let signed_bundle = match &f[4] {
             rhtn_codec::cbor::Item::Null => None,
             it => {
@@ -1449,6 +1511,9 @@ impl PayloadState {
             keys: PayloadKeys::decode(&bytes(b, &f[0])?)?,
             sessions: Sessions::decode(&bytes(b, &f[1])?)?,
             serving: optional(&f[2], |it| fixed::<32>(b, it))?,
+            attachments,
+            serving_at,
+            last_from,
             device: fixed::<32>(b, &f[3])?,
             signed_bundle,
             pending,
@@ -1467,6 +1532,9 @@ impl PayloadState {
             cfg,
             sessions: Sessions::default(),
             serving: None,
+            attachments: BTreeSet::new(),
+            serving_at: BTreeMap::new(),
+            last_from: BTreeMap::new(),
             device: [0; 32],
             signed_bundle: None,
             pending: BTreeMap::new(),

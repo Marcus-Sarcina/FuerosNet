@@ -5066,6 +5066,7 @@ impl Client {
     /// §3).  Everything returned goes to the serving node.
     pub fn attach(&mut self, serving: Keyhash, population: &[Keyhash]) -> Vec<Msg> {
         self.payload.serving = Some(serving);
+        self.note_attachment(serving);
         if let Some(id) = self.known.iter().find(|k| k.keyhash == serving).cloned() {
             self.contact(&id, crate::contacts::How::Infra, true);
         }
@@ -6076,13 +6077,118 @@ impl Client {
     /// does not hold is still named: a resolution reply may carry its
     /// material, which is what §7.7.3's optional field is for.
     pub fn reach_for(&self, to: &Keyhash) -> Reach {
+        self.reach_with(to, self.upstream_preferred(to))
+    }
+
+    /// **The last subnet a message of theirs came by, where they still
+    /// have an address there** [author, 2026-11-11]; the walk across every
+    /// address otherwise.
+    fn upstream_preferred(&self, to: &Keyhash) -> Upstream {
+        match self.payload.last_from.get(to) {
+            Some(anchor) => match self.horizon.upstream_of_in(to, anchor) {
+                Upstream::Unknown => self.horizon.upstream_of(to),
+                u => u,
+            },
+            None => self.horizon.upstream_of(to),
+        }
+    }
+
+    /// **Every address the peer is known at, reached** — a first message
+    /// *"floods every subnet known for that recipient"* [author,
+    /// 2026-11-11]; once a message of theirs has arrived, the one it came
+    /// by. One entry per distinct node, since two addresses served by one
+    /// node are one carry.
+    pub fn reaches_for(&self, to: &Keyhash) -> Vec<Reach> {
+        if self.payload.last_from.contains_key(to) {
+            return vec![self.reach_for(to)];
+        }
+        let found = self.horizon.upstreams_of(to);
+        if found.is_empty() {
+            return vec![self.reach_for(to)];
+        }
+        let mut nodes = std::collections::BTreeSet::new();
+        found
+            .into_iter()
+            .filter_map(|(_, u)| {
+                if let Upstream::Known { node, .. } = &u
+                    && !nodes.insert(*node)
+                {
+                    return None;
+                }
+                Some(self.reach_with(to, u))
+            })
+            .collect()
+    }
+
+    /// **A message from `from` arrived on the attachment to `via`**: the
+    /// subnet that node serves this client under is where the next message
+    /// to them goes [author, 2026-11-11]. Where one node serves several of
+    /// this client's addresses, the one `from` has a place in breaks the
+    /// tie, the first otherwise; a node serving none of them records
+    /// nothing.
+    pub fn record_arrival(&mut self, from: Keyhash, via: &Keyhash) {
+        let anchors: Vec<Keyhash> = self
+            .payload
+            .serving_at
+            .iter()
+            .filter(|(_, n)| *n == via)
+            .map(|(a, _)| *a)
+            .collect();
+        let chosen = match anchors.as_slice() {
+            [] => return,
+            [one] => *one,
+            many => {
+                let theirs: Vec<Keyhash> = self
+                    .horizon
+                    .places_of(&from)
+                    .iter()
+                    .map(|p| p.anchor)
+                    .collect();
+                many.iter()
+                    .copied()
+                    .find(|a| theirs.contains(a))
+                    .unwrap_or(many[0])
+            }
+        };
+        self.payload.last_from.insert(from, chosen);
+    }
+
+    /// **This client's address under `anchor` is served by `node`** — a tab
+    /// opened [author, 2026-11-11], written where an invitation into that
+    /// subnet named the node, or where the one position this client holds
+    /// is attached through.
+    pub fn serve_at(&mut self, anchor: Keyhash, node: Keyhash) {
+        self.payload.serving_at.insert(anchor, node);
+        self.payload.attachments.insert(node);
+    }
+
+    /// Every node this client is attached to.
+    pub fn attachments(&self) -> Vec<Keyhash> {
+        self.payload.attachments.iter().copied().collect()
+    }
+
+    /// Each address's serving node, as `(anchor, node)`.
+    pub fn serving_at(&self) -> Vec<(Keyhash, Keyhash)> {
+        self.payload
+            .serving_at
+            .iter()
+            .map(|(a, n)| (*a, *n))
+            .collect()
+    }
+
+    /// The anchor of the subnet the last message from `peer` came by.
+    pub fn last_from(&self, peer: &Keyhash) -> Option<Keyhash> {
+        self.payload.last_from.get(peer).copied()
+    }
+
+    fn reach_with(&self, to: &Keyhash, found: Upstream) -> Reach {
         let binds = |node: &Keyhash| {
             self.known
                 .iter()
                 .find(|i| i.keyhash == *node)
                 .map(|i| i.key_material())
         };
-        let upstream = match self.horizon.upstream_of(to) {
+        let upstream = match found {
             Upstream::Known {
                 node,
                 endpoints,
@@ -6531,6 +6637,19 @@ impl Client {
     /// §4).
     pub fn reattached(&mut self, serving: Keyhash) {
         self.payload.serving = Some(serving);
+        self.note_attachment(serving);
+    }
+
+    /// An attachment made: the node joins the set, and where this client
+    /// holds exactly one position it is that address's node — the bench's
+    /// shape, and a device joined to one subnet; several positions are told
+    /// their node by the invitation that named it ([`Self::serve_at`]).
+    fn note_attachment(&mut self, serving: Keyhash) {
+        self.payload.attachments.insert(serving);
+        let mine: Vec<Keyhash> = self.positions.values().map(|l| l.anchor).collect();
+        if let [anchor] = mine.as_slice() {
+            self.payload.serving_at.insert(*anchor, serving);
+        }
     }
 
     /// The bundle to publish now, if this device can: signed here where

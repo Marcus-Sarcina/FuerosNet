@@ -20549,7 +20549,49 @@ becomes a map by subnet, an eighth field read as empty where absent; the
 bundle publishes to each; `browse` sweeps per node; "a message to the node
 itself" tests membership of the map.
 
-**The question this opens, the author's**: is a direct thread between
+**Two facts read after the design above, which sharpen it.** The
+`Serving` trait (`adaptors/src/serving.rs`: `me`, `node_device`, `holds`,
+`serves`, `publish`, `teach`, `stock`, `prekey`, `publish_profile`,
+`assert_horizon`) takes no address on any method, so a map-by-subnet
+cannot be hidden behind it: the **courier** holds `BTreeMap<Txid,
+Arc<dyn Serving>>` and every courier operation that reaches a serving
+node takes the address — `send`/`carry` for the relay hint, `attach`,
+`sweep`, and the publish/stock/prekey paths — while `AttachedNode` stays
+the one-node implementation it is and `Nobody` the detached one. And
+`sibling_cache` is one per `Net` (`net.rs:459`); failover is per
+attachment, so the cache becomes one per address beside the `Live` it
+belongs to.
+
+**Where the address comes from, inventoried.** `send_payload` has seven
+callers, all inside the client: the ceremony's legs to witnesses and
+verifiers (`ceremony.rs` 2329, 4574), the verifier queries and key grants
+(`sequence.rs` 396, 990), and the archive request and reply (`ceremony.rs`
+5724, 5757, 5834) — each with a subnet in its context, the ceremony's or
+the record's — plus the shell's one direct send over the FFI. So the
+address is plumbed through ceremony and sequence state rather than asked
+of the caller, and only the direct send needs it from outside. On the
+courier, `attach(population)` and `sweep(population)` both reach
+`self.serving.me()`, and `carry(msgs)` dispatches `Msg::PublishBundle` and
+its kin to "the" serving node — so the `Msg` variants that reach a serving
+node gain the address, and `carry` reads it off each.
+
+**Answered** [author, 2026-11-11]: *"This is client-defined behavior, so
+it should be modeled as such. From a wire standpoint a DM thread is just a
+series of messages which the client compiles into a thread based on
+message arrival time, much the way an SMS client composes threads out of
+independent messages. For the reference client, inbound messages thread
+by user regardless of which sender's node they transited. Outbound
+messages attempt to reach the recipient through the last subnet from
+which a message by that user was received. A first message floods every
+subnet known for that recipient."* So step 2b's {identity, peer} key
+stands; the client records, per peer, the subnet the last inbound came
+by; `send_payload` routes by it, and with none recorded sends through
+every subnet the peer is known in. The address is the client's to derive
+and nothing a caller supplies — which also answers the courier's relay
+hint. **Build order revised**: client first (the routing rule, tested
+in-process), then net, then FFI, then the device.
+
+**The question this opened, now answered above**: is a direct thread between
 *addresses* — {identity, subnet, peer}, a peer known in two subnets being
 two threads, each sent from its own address — or between *identities* with
 the subnet chosen for routing? The address rule as stated ("each ID:Subnet
@@ -20561,3 +20603,54 @@ order after it is net (`Live` by subnet, `Serving` by subnet), client
 (`attach(subnet, …)`), then the device (the `SERVING` record by subnet,
 `launchHeld` attaching each, the thread key), each gated.
 
+**The client's part, designed from the source 2026-11-11.**
+`Placement = (party, anchor)` — *"a party, and the subnet a place of theirs
+is in"* — and `horizon.locators` is keyed by it; `upstream_of(peer)` walks
+every placement of the peer and takes the deepest node with endpoints
+across all of them, so today it chooses a subnet by depth. `positions:
+BTreeMap<Txid, Locator>` gives my own anchor per subnet. So:
+
+- `PayloadState`: `attachments: BTreeSet<Keyhash>` (nodes attached, a
+  genesis attachment having no subnet yet) and `serving: BTreeMap<Keyhash
+  /*anchor*/, Keyhash /*node*/>` (address → node) replace `serving:
+  Option<Keyhash>`; `last_from: BTreeMap<Keyhash /*peer*/, Keyhash
+  /*anchor*/>` records the subnet the last inbound from each peer came by.
+  Three fields appended to the seven-element array, read as empty where
+  absent, with the old optional kept as a fallback read.
+- `receive(..., via: Keyhash)`: the node the inbound arrived on, from the
+  attachment's own `collect`; the anchor it serves me under is the record,
+  the sender's placement under one of its anchors breaking a tie.
+- `upstream_of_in(peer, anchor)` restricts the walk to one placement;
+  `upstreams_of(peer)` yields one per placement. `send_payload` prefers
+  `last_from[to]` where the peer still has a placement there, and otherwise
+  **floods**: one relay submission per placement's upstream, nodes
+  deduplicated — the author's first-message rule.
+- The relay hint the courier passes as *this client's serving node*
+  becomes the node serving the address the message is sent from, carried
+  on the message rather than taken from a single field.
+
+
+**Stage 1, the client, built 2026-11-11.** `PayloadState` gained
+`attachments`, `serving_at` and `last_from` as fields 8–10 of its array
+(`emit_array_head(10)`; decode tries 10 then 7, the three read as empty);
+`serving: Option<Keyhash>` stays for the single-session FFI until stage 2.
+`Horizon::upstream_of` became a walk over given places (`upstream_among`)
+with `upstream_of_in(peer, anchor)` and `upstreams_of(peer)` over it.
+`Client::reach_for` prefers `last_from[to]` where the peer still has a
+place there; `reaches_for(to)` floods one reach per address (nodes
+deduplicated) until a message of theirs has arrived; `record_arrival(from,
+via)` maps the node to the anchor it serves this client under;
+`serve_at`, `attachments()`, `serving_at()`, `last_from()` for the net
+layer and tests; `attach`/`reattached` note the attachment and, for a
+client with exactly one position, its address's node. Tests: 2 in
+`client/tests/addresses.rs`, 1 in `horizon.rs` (23 → 24 there; the
+client suite 0 failing lines). First gate: everything passed but `cargo
+fmt` (6 hunks); formatted and re-gated.
+
+**Ruled 2026-11-11: *"One pool per address, each node stocked
+separately."*** Stage 2 mints a pool per tab (`Msg::StockOneTimeAt`,
+`PayloadState.pools` by node, restocked in `maintain` where low, not
+persisted since an attach stocks a full pool); the bundle and profiles go
+to every node held. The question had been whether a tab shares the first
+node's pool — the same keys in two pools would let a one-time key be
+spent twice.

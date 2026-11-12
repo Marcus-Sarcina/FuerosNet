@@ -808,7 +808,10 @@ nothing below reaches across them.
   you at all. Each of your devices does this for itself, on its own session:
   the bundle it publishes carries material it generated and a signature your
   ceremony device made over it, and the pool it stocks is its own
-  (design §23.3) [author, 2026-09-22].
+  (design §23.3) [author, 2026-09-22]. **And a pool per address** [author,
+  2026-11-11]: each node you hold a session with (§2) is stocked
+  separately, with keys of its own, since a key in two pools could be
+  spent twice.
 - **Open a session with each of a recipient's devices, and send to each.** A
   fetch returns a bundle per device (`wire-format.md` §7.8), a session is with
   a device, and a message sent to one of them reaches one of them; the
