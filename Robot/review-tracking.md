@@ -20719,3 +20719,19 @@ whether the provision's node is written into that identity's record
 start-time convenience. The multi-tab path has no hardware exercise yet:
 it needs an identity invited into a second subnet (`serveFrom` from an
 invitation while one node is held).
+
+**Ruled 2026-11-12, on the identity attached through the bench provision**
+— the author read "provision" as the key-material screen, so the
+rulings are those: *"a new identity does not need to have a serving node,
+it can be adopted or launch a node just as a freshly wiped
+single-identity client would. The key material only needs to be displayed
+the one time… Focus is obtained by selecting the identity from the bottom
+nameplate press-and-hold dropdown… user options apply to the in-focus
+identity only."* All three are the current behaviour (`launchHeld` with no
+record → detached; the phrase page once, `c523d25`; the meeting and
+Options act for `activeId`). The bench `provision` blob stays the bench's
+start-time convenience for the focused identity, and an identity gains a
+node of its own only by launching one or agreeing to an invitation —
+which is what the GXV reading showed, correctly. **And:** *"Work it in to
+the bench test sequence to create a second subnet"* — T5–T7 added to
+`field-test-sequence.md` §H.

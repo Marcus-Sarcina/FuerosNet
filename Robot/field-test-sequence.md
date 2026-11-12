@@ -654,6 +654,23 @@ those instants, because it emitted no event when a client attached or
 detached. `node.attached`, `node.detached` and `attached=<count>` on every
 `node.object` were added for the next run with a node.
 
+**T5–T7, the second subnet — planned 2026-11-12** [author: *"Work it in
+to the bench test sequence to create a second subnet"*]. What it proves:
+an identity with two addresses holds a session per address (SES-017), a
+message arrives by one and the reply goes back by it (stages 1–4 of the
+address model, `6543d51`…`d94a673`), and one handset carries two
+identities on two nodes. **MRK must be reachable first** (the laptop's
+stale neighbour entry: `sudo ip neigh flush dev wlx58d81272db96`).
+
+| # | Who | Step | What to read |
+|---|---|---|---|
+| T5 | GXV as **feb8843a** | The second identity, in focus by the nameplate, with no position, launches a node from the Operator screen (the cloud flow of 2026-10-25, or `local.sh` as its stand-in). The node speaks as feb8843a; GXV attaches to it as operator, which writes feb8843a's own serving record. 703a82c2 keeps the bench node: two identities, two nodes, one handset. | GXV: `identity.attach who=feb8843a node=<new> attached=true` after a restart; the new node's `node.attached` |
+| T6 | feb8843a ← MRK | An adoption with feb8843a as patron founds the second subnet, anchored at feb8843a. MRK now holds two addresses: Mirror Manse under 703a82c2, and this one. | the record on the new node (`node.object`); MRK's Done screen names the new subnet |
+| T7 | MRK | The invitation feb8843a's Operator screen owes MRK. Without a SIM the SMS cannot go, so the bench carries the link: `adb -s RFCRC1JDMRK shell am start -a android.intent.action.VIEW -d "fueros://attach?v=1&at=<host:port>&patron=<feb8843a hex>"`. MRK's Invite screen resolves the key from its own records (the patron's), the person agrees, and `serveFrom` attaches **while the bench node is held** — a tab, not a replacement. Restart MRK. | MRK: `pay.tab.attached` on agreeing; after the restart two `identity.attach who=31c2d23f … attached=true`, the bench node's and the new one's; `attachments()` would list both |
+| then | feb8843a → MRK, MRK → feb8843a, 703a82c2 → MRK | feb8843a's first message floods: one carry per address MRK is known at, the second subnet's over its own node. MRK receives it by the tab, so its reply goes back by the tab (`last_from`). Then 703a82c2 writes to MRK over the bench node; MRK's reply to *that* goes by the bench node. MRK's conversation list shows GXV's two identities as two people — *"The ID is a name"* [author, 2026-11-11]. | MRK: `pay.relay via="their node"` for the reply to feb8843a with nothing relayed at the bench node for it (the bench node's `pay`/`node.relay` log); the bench node carrying the reply to 703a82c2; feb8843a's and 703a82c2's arrivals on GXV |
+
+The link's fields are `rhtn_client::invitation`'s (`fueros://attach?v=1&at=<host:port>[&patron=<hex>][&subnet=<hex>][&member=<hex>][&as=<label>]`); `InviteActivity` also takes it as an `invitation` string extra on `ShellActivity`'s intent, which is the same path as a tapped link.
+
 ## Order
 
 A1 is done; a second plain pair was met deliberately (`82ffd1b-a2-adoption-1`, mislabelled) for series B. B1 nodeless hung at witness selection and showed that nothing met nodeless is reachable afterwards and no cross-pair verifier can qualify — so **B and A4 are with-node**, and the node bench (C1's proven half plus `field-run.sh`) is now the gate for nearly everything left. **[ruled, author, 2026-10-10]** witnesses are required where available and a witnessless meeting is not genesis-only; proceeding witnessless past genesis needs design §13.2 / `wire-format.md` §3.2 amended, which gates any nodeless meeting between non-genesis phones. **That amendment was made** [author, 2026-10-19] — no witness floor, design §13.2 reasoning from the same case the ruling was about — so the condition is met and the gate is lifted, and the rows above are re-planned against it below. **The node bench is up (2026-10-11, `82ffd1b-a4-node-1`), all four phones re-provisioned at genesis on it; the two met pairs are to be re-met there for B.** A4, B's with-node
