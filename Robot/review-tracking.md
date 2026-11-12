@@ -20682,3 +20682,19 @@ next message is one carry over the tab, none over the serving node. The
 scene's records had to be fed to carol's horizon by hand: an adaptors
 client's horizon gets nothing from the scene otherwise, which is why the
 older relay tests all pass through the serving-node fallback.
+
+**Stage 4, the device, built 2026-11-11.** `Serving.kt`: an identity's
+serving record is a list of tabs `{"tabs":[{node, addr}, …]}`, the single
+`{node, addr}` it was reading as one tab (a phone upgraded in place keeps
+its node); `with` replaces the entry for a node, `without` drops one.
+`serveFrom` adds a tab to the focused identity's record; `launchHeld`
+attaches every tab of a held identity (the first attach being the session,
+each further one a tab on it, per stage 2) and shows the first's
+connection; bring-up attaches the focused identity's agreed tabs beside
+the provision's node. The thread key stays {identity, peer}: inbound
+threads by sender whichever node it transited, which the client's
+`last_from` routes the reply by. Tests: `ServingTest.kt` (3: the older
+record reads, a tab added replaces its node's entry, the source
+assertions). Stage 3 (FFI) landed with stage 2. The node code is
+untouched by stages 1–4, so the bench node and the droplet (77344c60)
+need no upgrade for them.

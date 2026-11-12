@@ -1928,9 +1928,12 @@ object Kernel {
         // own scope instead, which is the one that agreed ([SERVING]).
         val app = context.applicationContext
         val scope = activeId?.let { id -> identities(app).firstOrNull { it.id == id }?.scope }
-        val record = org.json.JSONObject().put("node", nodeHex).put("addr", address)
-        runCatching { AndroidShell(app, scope).write(SERVING, record.toString().toByteArray()) }
-            .onFailure { front.note("· the node could not be remembered: ${it.message}") }
+        // **one tab per address** [author, 2026-11-11]: the node joins the
+        // identity's record beside the others it agreed to
+        runCatching {
+            val shell = AndroidShell(app, scope)
+            shell.write(SERVING, Serving.with(shell.read(SERVING), Serving.Tab(nodeHex, address)))
+        }.onFailure { front.note("· the node could not be remembered: ${it.message}") }
         attachTo(nodeHex, address)
     }
 
@@ -2646,6 +2649,22 @@ object Kernel {
                 show(p, Connection.Attached(node, a.primary))
             }
         }
+        // **the tabs the focused identity agreed to** [author, 2026-11-11]:
+        // each attached beside the provision's node, a second node while
+        // one is held being a tab rather than a replacement
+        run {
+            val scope = activeId?.let { id -> index.firstOrNull { it.id == id }?.scope }
+            val tabs = appContext?.let { a -> runCatching { Serving.read(AndroidShell(a, scope).read(SERVING)) }.getOrNull() }
+                ?: emptyList()
+            for (t in tabs) {
+                if (t.node == nodeHex) continue
+                val node = unhex(t.node)
+                val a = call("attach", { e -> front.note("· tab ${t.node.take(8)}… refused: ${e.reason}"); null }) {
+                    p.attach(node, listOf(t.addr), listOfNotNull(to))
+                }
+                Diag.event("identity.attach", "who" to (activeId ?: "").take(8), "node" to t.node.take(8), "attached" to (a != null), "tab" to true)
+            }
+        }
         // **every other identity attaches and receives for itself** — step
         // 3 of the browser model [author, 2026-11-11]: the one in focus
         // stays on this thread, as it always did, and each of the rest
@@ -2677,19 +2696,25 @@ object Kernel {
      * kernel is up.
      */
     private fun launchHeld(id: String, p: Participant, scope: String?) {
-        val record = appContext?.let { a ->
-            runCatching { AndroidShell(a, scope).read(SERVING)?.let { JSONObject(String(it)) } }.getOrNull()
-        }
-        val nodeHex = record?.optString("node", "") ?: ""
-        if (nodeHex.isNotEmpty()) {
-            val node = unhex(nodeHex)
-            val a = call("attach", { e -> Diag.event("identity.attach", "who" to id.take(8), "refused" to e.reason); null }) {
-                p.attach(node, listOf(record?.optString("addr", "") ?: ""), listOf())
-            }
-            Model.connectionOf(id, if (a == null) Connection.Detached else Connection.Attached(node, a.primary))
-        } else {
+        // **every tab the identity agreed to** [author, 2026-11-11]: the
+        // first attach is the session, each further one a tab on it, and
+        // the connection shown is the first's
+        val tabs = appContext?.let { a -> runCatching { Serving.read(AndroidShell(a, scope).read(SERVING)) }.getOrNull() }
+            ?: emptyList()
+        if (tabs.isEmpty()) {
             Diag.event("identity.attach", "who" to id.take(8), "node" to "none")
             Model.connectionOf(id, Connection.Detached)
+        } else {
+            var first: Connection? = null
+            for (t in tabs) {
+                val node = unhex(t.node)
+                val a = call("attach", { e -> Diag.event("identity.attach", "who" to id.take(8), "node" to t.node.take(8), "refused" to e.reason); null }) {
+                    p.attach(node, listOf(t.addr), listOf())
+                }
+                Diag.event("identity.attach", "who" to id.take(8), "node" to t.node.take(8), "attached" to (a != null))
+                if (first == null) first = if (a == null) Connection.Detached else Connection.Attached(node, a.primary)
+            }
+            Model.connectionOf(id, first ?: Connection.Detached)
         }
         Thread({ runLoop(p, id) }, "fueros-kernel-${id.take(8)}").start()
     }

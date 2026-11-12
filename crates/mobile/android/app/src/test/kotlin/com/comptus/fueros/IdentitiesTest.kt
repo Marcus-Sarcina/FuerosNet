@@ -373,7 +373,8 @@ class IdentitiesTest {
         // every identity to a node one of them agreed to
         assertTrue(
             "serveFrom still remembers the node as the device's rather than the focused identity's",
-            loopSource.contains("AndroidShell(app, scope).write(SERVING, record.toString().toByteArray())"),
+            loopSource.contains("val shell = AndroidShell(app, scope)") &&
+                loopSource.contains("shell.write(SERVING, Serving.with(shell.read(SERVING), Serving.Tab(nodeHex, address)))"),
         )
         assertTrue(
             "launchHeld attaches from something other than the identity's own record",
