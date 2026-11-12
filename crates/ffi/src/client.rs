@@ -2136,6 +2136,26 @@ impl Participant {
         crate::diag::call_plain("attached", || self.net.session().is_some())
     }
 
+    /// **Every node this client is attached to**: the serving node first,
+    /// then the tabs — a session per address (`light-client-requirements.md`
+    /// §2) [author, 2026-11-11].
+    pub fn attachments(&self) -> Vec<Id> {
+        crate::diag::call_plain("attachments", || {
+            self.net.attachments().iter().map(id_of).collect()
+        })
+    }
+
+    /// **Close the tab to one node.** The serving node itself is closed by
+    /// `detach`, which closes every tab with it.
+    pub fn detach_from(&self, serving: Id) -> Result<(), Refused> {
+        crate::diag::call("detach_from", || {
+            let node = keyhash(&serving).ok_or_else(|| Refused::new("a node is 32 bytes"))?;
+            self.net.detach_from(&self.handle, &node);
+            self.save()?;
+            Ok(())
+        })
+    }
+
     /// Drop the ceremony under way without a record: the shell's Stop,
     /// told to the kernel so that nothing of the conversation is answered
     /// after it.  Nothing sealed is filed and the seed goes with it; the

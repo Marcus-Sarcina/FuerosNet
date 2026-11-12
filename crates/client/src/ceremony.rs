@@ -297,6 +297,14 @@ pub enum Msg {
     PublishBundle(Vec<u8>),
     /// One-time keys, to the serving node.
     StockOneTime(Vec<Vec<u8>>),
+    /// One-time keys for the pool at a node held as a tab — a pool of its
+    /// own per address [author, 2026-11-11].
+    StockOneTimeAt {
+        /// The node whose pool they stock.
+        node: Keyhash,
+        /// The keys.
+        keys: Vec<Vec<u8>>,
+    },
     /// A `PrekeyRequest` or `PrekeyBatchRequest`, to the serving node.
     PrekeyRequest(Vec<u8>),
     /// A `CatalogQuery` (`wire-format.md` §6.4), to the serving node.
@@ -420,6 +428,7 @@ impl Msg {
             | Msg::Relay { bytes, .. }
             | Msg::ResourceRequest { bytes, .. } => bytes.clone(),
             Msg::StockOneTime(v) => v.concat(),
+            Msg::StockOneTimeAt { keys, .. } => keys.concat(),
             Msg::RecoveryProposal { block, .. } => block.clone(),
             Msg::Consent { consent, .. } => consent.clone(),
             Msg::Responses(v) => v.concat(),
@@ -5866,6 +5875,16 @@ impl Client {
         if self.payload.pool_reported < self.payload.cfg.replenish_below {
             out.extend(self.restock());
         }
+        let low: Vec<Keyhash> = self
+            .payload
+            .pools
+            .iter()
+            .filter(|(_, n)| **n < self.payload.cfg.replenish_below)
+            .map(|(k, _)| *k)
+            .collect();
+        for node in low {
+            out.extend(self.restock_at(node));
+        }
         // bindings wanted for peers who wrote before this client held
         // theirs: reusable material only, one request each
         for subject in std::mem::take(&mut self.payload.wanted) {
@@ -6638,6 +6657,80 @@ impl Client {
     pub fn reattached(&mut self, serving: Keyhash) {
         self.payload.serving = Some(serving);
         self.note_attachment(serving);
+    }
+
+    /// **A further node attached to** — a tab beside the one `attach` took
+    /// as the session the single-session shell holds [author, 2026-11-11].
+    /// What it publishes there: the bundle and the profiles, so a peer in
+    /// that subnet fetching from its node finds this client, and **a pool
+    /// of one-time keys of its own** — *"One pool per address, each node
+    /// stocked separately"* [author, 2026-11-11], since a key in two pools
+    /// could be spent twice.
+    pub fn attach_tab(&mut self, node: Keyhash) -> Vec<Msg> {
+        self.note_attachment(node);
+        if let Some(id) = self.known.iter().find(|k| k.keyhash == node).cloned() {
+            self.contact(&id, crate::contacts::How::Infra, true);
+        }
+        let now = self.now_s();
+        let random = self.device.random.clone();
+        let mut fresh = |out: &mut [u8]| random.fill(out);
+        let n = self.payload.cfg.pool_target;
+        let keys = self.payload.keys.one_time_keys(n, &mut fresh);
+        self.payload.pools.insert(node, n);
+        let mut out: Vec<Msg> = self.bundle_to_publish(now).into_iter().collect();
+        out.push(Msg::StockOneTimeAt { node, keys });
+        out.extend(self.refreshed_profiles());
+        out
+    }
+
+    /// The pool at a tab's node, as the node reports it: restocked where
+    /// it has run low.
+    pub fn on_pool_report_at(&mut self, node: Keyhash, remaining: usize) -> Vec<Msg> {
+        if !self.payload.attachments.contains(&node) {
+            return Vec::new();
+        }
+        self.payload.pools.insert(node, remaining);
+        if remaining < self.payload.cfg.replenish_below {
+            self.restock_at(node)
+        } else {
+            Vec::new()
+        }
+    }
+
+    fn restock_at(&mut self, node: Keyhash) -> Vec<Msg> {
+        let have = self.payload.pools.get(&node).copied().unwrap_or(0);
+        let n = self.payload.cfg.pool_target.saturating_sub(have);
+        if n == 0 {
+            return Vec::new();
+        }
+        let random = self.device.random.clone();
+        let mut fresh = |out: &mut [u8]| random.fill(out);
+        let keys = self.payload.keys.one_time_keys(n, &mut fresh);
+        self.payload.pools.insert(node, have + n);
+        tracing::info!(target: "pay", minted = n, "pay.bundle.restock.tab");
+        vec![Msg::StockOneTimeAt { node, keys }]
+    }
+
+    /// A tab's session failed over to a sibling: every address served by
+    /// `from` is served by `to` now.
+    pub fn moved_tab(&mut self, from: Keyhash, to: Keyhash) {
+        self.payload.attachments.remove(&from);
+        self.payload.attachments.insert(to);
+        if let Some(n) = self.payload.pools.remove(&from) {
+            self.payload.pools.insert(to, n);
+        }
+        for n in self.payload.serving_at.values_mut() {
+            if *n == from {
+                *n = to;
+            }
+        }
+    }
+
+    /// A tab closed: the node leaves the set and serves no address here.
+    pub fn detached_from(&mut self, node: &Keyhash) {
+        self.payload.attachments.remove(node);
+        self.payload.pools.remove(node);
+        self.payload.serving_at.retain(|_, n| n != node);
     }
 
     /// An attachment made: the node joins the set, and where this client

@@ -9,11 +9,12 @@ use crate::verifier::Verifiers;
 use rhtn_archive::Keyhash;
 use rhtn_archive::prekey::{PrekeyRequest, REQUEST_PREKEY};
 use rhtn_client::ceremony::{Dispatched, Msg};
+use rhtn_client::horizon::Upstream;
 use rhtn_client::payload::{KIND_CANDIDATES, KIND_QUERY, KIND_RESPONSE, KIND_RESPONSE_COPY};
 use rhtn_client::query::QueryRequest;
 use rhtn_client::verifier::{Answer, GrantOutcome, QueryOutcome};
 use rhtn_transport::traversal::{decode_candidates, encode_candidates};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
@@ -74,7 +75,9 @@ impl Carried {
 
 /// One delivery as the node or the direct path hands it over: who from,
 /// the bytes, and the binding the node carried where it carried one.
-type Delivery = (Keyhash, Vec<u8>, Option<Vec<u8>>);
+/// What arrives: from whom, the bytes, a binding sent along, and **the
+/// node it came by** where a tab's collector delivered it.
+type Delivery = (Keyhash, Vec<u8>, Option<Vec<u8>>, Option<Keyhash>);
 
 /// What carries the client's messages: the serving node for what it
 /// relays, the direct path where one is held, and the client's own thread
@@ -84,6 +87,11 @@ pub struct Courier {
     pub handle: Handle,
     /// The serving node, for what it publishes, stocks and relays.
     pub serving: Arc<dyn Serving>,
+    /// **The further nodes this client holds a session with** — the tabs
+    /// of the browser model [author, 2026-11-11], one per address past the
+    /// first; a payload for a peer whose address is served by one of them
+    /// goes over that session rather than being dialled.
+    servings: Mutex<BTreeMap<Keyhash, Arc<dyn Serving>>>,
     /// The direct path, tried before the relay (design §12.6.3).
     pub direct: Arc<dyn Direct>,
     /// The network past this client's serving node, where a dialler was
@@ -168,6 +176,7 @@ impl Courier {
             Arc::new(Courier {
                 handle,
                 serving,
+                servings: Mutex::new(BTreeMap::new()),
                 direct,
                 beyond: Mutex::new(None),
                 inbox: Mutex::new(None),
@@ -179,6 +188,31 @@ impl Courier {
             }),
             rx,
         )
+    }
+
+    /// A tab opened: a further node this courier carries over.
+    pub fn serve_also(&self, s: Arc<dyn Serving>) {
+        self.servings.lock().unwrap().insert(s.me(), s);
+    }
+
+    /// A tab closed.
+    pub fn drop_serving(&self, node: &Keyhash) {
+        self.servings.lock().unwrap().remove(node);
+    }
+
+    /// Every node this courier carries over: the serving node first, then
+    /// the tabs.
+    pub fn servings(&self) -> Vec<Arc<dyn Serving>> {
+        let mut out = vec![self.serving.clone()];
+        out.extend(self.servings.lock().unwrap().values().cloned());
+        out
+    }
+
+    /// The session held with `node`, where one is: by what each answers
+    /// to now, so a tab that failed over to a sibling is found by the
+    /// sibling.
+    fn serving_for(&self, node: &Keyhash) -> Option<Arc<dyn Serving>> {
+        self.servings().into_iter().find(|s| s.me() == *node)
     }
 
     /// What to run after every arrival, once the client has taken it: the
@@ -217,14 +251,35 @@ impl Courier {
     /// away (design §14.1.4), and reaching it needs no cooperation from
     /// the sender's patron, which is what makes a route obtained in person
     /// survive an uncooperative one (design §12.6.3, §6.4).
-    async fn to_their_node(&self, to: Keyhash, bytes: &[u8], device: [u8; 32]) -> bool {
-        let Some(beyond) = self.beyond.lock().unwrap().clone() else {
-            return false;
-        };
-        let reach = self.handle.with(move |c| c.reach_for(&to)).await;
-        beyond
-            .carry(to, device, bytes.to_vec(), reach, Some(self.serving.me()))
-            .await
+    /// **To the node serving each address the client's routing names**
+    /// [author, 2026-11-11]: one reach where a message of theirs has
+    /// arrived, every address otherwise. A node this courier holds a
+    /// session with is reached over it; any other is dialled. How many
+    /// took it.
+    async fn to_their_nodes(&self, to: Keyhash, bytes: &[u8], device: [u8; 32]) -> usize {
+        let beyond = self.beyond.lock().unwrap().clone();
+        let reaches = self.handle.with(move |c| c.reaches_for(&to)).await;
+        let mut took = 0;
+        for reach in reaches {
+            if let Upstream::Known { node, .. } = &reach.upstream
+                && let Some(held) = self.serving_for(node)
+            {
+                if held.relay(self.me(), to, bytes.to_vec(), device).await {
+                    took += 1;
+                }
+                continue;
+            }
+            let Some(beyond) = beyond.as_ref() else {
+                continue;
+            };
+            if beyond
+                .carry(to, device, bytes.to_vec(), reach, Some(self.serving.me()))
+                .await
+            {
+                took += 1;
+            }
+        }
+        took
     }
 
     /// A targeted prekey fetch, put to the node that serves the subject.
@@ -316,9 +371,9 @@ impl Courier {
                     let (tx, mut rx) = mpsc::unbounded_channel::<Delivery>();
                     let weak = Arc::downgrade(self);
                     tokio::spawn(async move {
-                        while let Some((from, bytes, binding)) = rx.recv().await {
+                        while let Some((from, bytes, binding, via)) = rx.recv().await {
                             let Some(me) = weak.upgrade() else { break };
-                            me.receive(from, bytes, binding).await;
+                            me.receive_via(from, bytes, binding, via).await;
                         }
                     });
                     *slot = Some(tx.clone());
@@ -328,8 +383,21 @@ impl Courier {
         };
         Arc::new(move |from, bytes, binding| {
             // a courier whose task has gone is one nobody holds any more
-            let _ = tx.send((from, bytes, binding));
+            let _ = tx.send((from, bytes, binding, None));
         })
+    }
+
+    /// The inbound a tab's collector delivers to: what arrives is said to
+    /// have come by `via`, which is what the client's routing records.
+    pub fn inbound_via(self: &Arc<Self>, via: Keyhash) -> Inbound {
+        let plain = self.inbound();
+        let tx = self.inbox.lock().unwrap().clone();
+        match tx {
+            Some(tx) => Arc::new(move |from, bytes, binding| {
+                let _ = tx.send((from, bytes, binding, Some(via)));
+            }),
+            None => plain,
+        }
     }
 
     /// What arrived from `from` on the end-to-end channel: decrypted at the
@@ -337,6 +405,19 @@ impl Courier {
     /// this side offers its own if it has not; a grant that answered a
     /// waiting query completes its stream; the rest is the application's.
     pub async fn receive(self: Arc<Self>, from: Keyhash, bytes: Vec<u8>, binding: Option<Vec<u8>>) {
+        self.receive_via(from, bytes, binding, None).await
+    }
+
+    /// An arrival, with the node it came by where a tab delivered it: a
+    /// payload taken records that node as where the next message to its
+    /// sender goes [author, 2026-11-11].
+    pub async fn receive_via(
+        self: Arc<Self>,
+        from: Keyhash,
+        bytes: Vec<u8>,
+        binding: Option<Vec<u8>>,
+        via: Option<Keyhash>,
+    ) {
         // The binding the node carried is taken first, so an initial
         // message from a peer this client has never held one for is
         // attributable on arrival rather than a message too late
@@ -355,6 +436,11 @@ impl Courier {
                     c.take_binding(&b);
                 }
                 let d = c.receive_payload(from, &bytes);
+                if d.is_ok()
+                    && let Some(v) = via
+                {
+                    c.record_arrival(from, &v);
+                }
                 // what the client owes in answer goes now, on this courier:
                 // the conversation's replies (`wire-format.md` §7.10.1), an
                 // archive reply, a record to propagate
@@ -384,6 +470,11 @@ impl Courier {
                             .with(move |c| {
                                 let _ = c.take_prekey_reply(&reply);
                                 let d = c.receive_payload(from, &bytes);
+                                if d.is_ok()
+                                    && let Some(v) = via
+                                {
+                                    c.record_arrival(from, &v);
+                                }
                                 let mut more = owed;
                                 more.extend(c.outbox());
                                 (d, more)
@@ -665,7 +756,7 @@ impl Courier {
             );
             return false;
         }
-        let theirs = self.to_their_node(to, bytes, device).await;
+        let theirs = self.to_their_nodes(to, bytes, device).await > 0;
         let mine = !theirs
             && self
                 .serving
@@ -703,7 +794,14 @@ impl Courier {
             let mut out = Carried::default();
             for m in msgs {
                 match m {
+                    // **the bundle and the profiles go to every node held**:
+                    // a peer in any of this client's subnets fetches from
+                    // the node serving it there [author, 2026-11-11]. The
+                    // serving node's answer is the one reported
                     Msg::PublishBundle(b) => {
+                        for s in me.servings().iter().skip(1) {
+                            s.publish(&b).await;
+                        }
                         if !me.serving.publish(&b).await {
                             out.refused.push(Msg::PublishBundle(b));
                         }
@@ -713,7 +811,21 @@ impl Courier {
                             out.refused.push(Msg::StockOneTime(keys));
                         }
                     }
+                    // a tab's pool is the tab's: refused where the tab is
+                    // gone, since the keys would stock nothing
+                    Msg::StockOneTimeAt { node, keys } => {
+                        let took = match me.serving_for(&node) {
+                            Some(s) => s.stock(me.me(), keys.clone()).await,
+                            None => false,
+                        };
+                        if !took {
+                            out.refused.push(Msg::StockOneTimeAt { node, keys });
+                        }
+                    }
                     Msg::PublishProfile(b) => {
+                        for s in me.servings().iter().skip(1) {
+                            s.publish_profile(&b).await;
+                        }
                         if !me.serving.publish_profile(&b).await {
                             out.refused.push(Msg::PublishProfile(b));
                         }

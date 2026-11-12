@@ -288,9 +288,21 @@ impl Conversation {
 /// The session and everything hung off it, replaced whole on each attach;
 /// the session alone is replaced by a failover.
 struct Live {
+    /// The node attached to, as asked; a failover moves the session to a
+    /// sibling and this stays the name a further attach is compared to.
+    node: Keyhash,
     courier: Arc<Courier>,
     _serving: Arc<AttachedNode>,
     tasks: Vec<tokio::task::JoinHandle<()>>,
+}
+
+/// **A further attachment** — a tab of the browser model [author,
+/// 2026-11-11]: a session with another node, carried over by the one
+/// courier, with its own slot for a failover to replace.
+struct Tab {
+    _serving: Arc<AttachedNode>,
+    current: Current,
+    _tasks: Vec<tokio::task::JoinHandle<()>>,
 }
 
 /// What a detached client carries payload with (see [`Net::stand_detached`]).
@@ -386,6 +398,7 @@ pub(crate) struct Net {
     /// fallback and 0-RTT reattachment possible (§8.2, §9.2).
     cfg: ClientConfig,
     live: Arc<Mutex<Option<Live>>>,
+    tabs: Arc<Mutex<BTreeMap<Keyhash, Tab>>>,
     current: Current,
     status: Arc<Mutex<Status>>,
     events_tx: UnboundedSender<Event>,
@@ -474,6 +487,7 @@ impl Net {
             me,
             cfg,
             live: Arc::new(Mutex::new(None)),
+            tabs: Arc::new(Mutex::new(BTreeMap::new())),
             current: Arc::new(Mutex::new(None)),
             status: Arc::new(Mutex::new(Status::Detached)),
             events_tx,
@@ -558,6 +572,12 @@ impl Net {
             });
         }
         *self.live.lock().unwrap() = None;
+        let tabs = std::mem::take(&mut *self.tabs.lock().unwrap());
+        for (_, t) in tabs {
+            if let Some(s) = t.current.lock().unwrap().take() {
+                s.conn.close(quinn::VarInt::from_u32(0), b"detached");
+            }
+        }
         *self.status.lock().unwrap() = Status::Detached;
         // the direct socket delivers to the detached courier again, and
         // asks nobody for a reflexive candidate
@@ -569,6 +589,120 @@ impl Net {
 
     pub(crate) fn session(&self) -> Option<Arc<Session>> {
         self.current.lock().unwrap().clone()
+    }
+
+    /// **A tab closed**: its session, its place in the courier and its
+    /// addresses in the client. The serving node itself is closed by
+    /// [`Self::detach`].
+    pub(crate) fn detach_from(&self, handle: &Handle, node: &Keyhash) {
+        let tab = self.tabs.lock().unwrap().remove(node);
+        let Some(t) = tab else { return };
+        if let Some(s) = t.current.lock().unwrap().take() {
+            s.conn.close(quinn::VarInt::from_u32(0), b"detached");
+        }
+        if let Ok(c) = self.live_courier() {
+            c.drop_serving(node);
+        }
+        let node = *node;
+        handle.with_blocking(move |c| c.detached_from(&node));
+    }
+
+    /// Every node attached to: the serving node first, then the tabs.
+    pub(crate) fn attachments(&self) -> Vec<Keyhash> {
+        let mut out: Vec<Keyhash> = self
+            .live
+            .lock()
+            .unwrap()
+            .as_ref()
+            .map(|l| vec![l.node])
+            .unwrap_or_default();
+        out.extend(self.tabs.lock().unwrap().keys().copied());
+        out
+    }
+
+    /// **A further node attached while one is held** — a tab: a session
+    /// with it on the one courier, the bundle and profiles published there,
+    /// its arrivals said to have come by it. Replaces a tab to the same
+    /// node.
+    fn attach_tab(
+        &self,
+        handle: &Handle,
+        node: Keyhash,
+        addrs: &[SocketAddr],
+    ) -> Result<Attached, Refused> {
+        self.detach_from(handle, &node);
+        self.cfg
+            .addresses
+            .lock()
+            .unwrap()
+            .insert(node, addrs.to_vec());
+        let courier = self.live_courier()?;
+        let cfg = self.cfg.clone();
+        let (handle_for_task, ep, nonce) =
+            (handle.clone(), self.endpoint.clone(), self.nonce.clone());
+        let addrs = addrs.to_vec();
+        let (events_tx, status) = (self.events_tx.clone(), self.status.clone());
+        let built = self.rt().block_on(async move {
+            let mut session = match attach_any(&cfg, &ep, node, &addrs, false).await {
+                AttachOutcome::Attached(s) => s,
+                AttachOutcome::Refused => {
+                    return Err(Refused::new("the node refused this client"));
+                }
+                AttachOutcome::Unbound(why) => {
+                    return Err(Refused::new(format!("no session: {why}")));
+                }
+                AttachOutcome::EndpointFailure(e) => {
+                    return Err(Refused::new(format!(
+                        "no session: the node is unreachable ({e})"
+                    )));
+                }
+            };
+            let (deliveries, frames) = take_readers(&mut session);
+            let (mode, queued) = (session.ack.mode, session.ack.queued);
+            let session = Arc::new(session);
+            let current: Current = Arc::new(Mutex::new(Some(session.clone())));
+            let reads = current.clone();
+            let serving =
+                AttachedNode::new(node, Arc::new(move || reads.lock().unwrap().clone()), nonce);
+            courier.serve_also(serving.clone());
+            let msgs = handle_for_task.with(move |c| c.attach_tab(node)).await;
+            let carried = courier.carry(msgs).await;
+            let tasks = vec![
+                attached::follow(handle_for_task.clone(), frames),
+                attached::collect(courier.inbound_via(node), deliveries),
+                tokio::spawn(watch(
+                    session,
+                    node,
+                    cfg,
+                    ep,
+                    handle_for_task,
+                    current.clone(),
+                    status,
+                    events_tx,
+                    courier.clone(),
+                    serving.clone(),
+                    false,
+                )),
+            ];
+            Ok::<_, Refused>((
+                Tab {
+                    _serving: serving,
+                    current,
+                    _tasks: tasks,
+                },
+                mode,
+                queued,
+                carried.refused.len(),
+            ))
+        })?;
+        let (tab, mode, queued, refused) = built;
+        self.tabs.lock().unwrap().insert(node, tab);
+        tracing::info!(target: "pay", refused, "pay.tab.attached");
+        Ok(Attached {
+            serving: id_of(&node),
+            primary: mode == 0,
+            queued,
+        })
     }
 
     /// The courier payload goes by: the attach's while one is live, the
@@ -825,6 +959,15 @@ impl Net {
         addrs: &[SocketAddr],
         population: Vec<Keyhash>,
     ) -> Result<Attached, Refused> {
+        // **a second node while one is held is a tab**, not a replacement
+        // [author, 2026-11-11]; the same node again is the replacement it
+        // always was
+        let held = self.live.lock().unwrap().as_ref().map(|l| l.node);
+        if let Some(h) = held
+            && h != node
+        {
+            return self.attach_tab(handle, node, addrs);
+        }
         self.detach();
         self.cfg
             .addresses
@@ -908,6 +1051,7 @@ impl Net {
             let carried = courier.attach(population).await;
             Ok((
                 Live {
+                    node: serving_node,
                     courier,
                     _serving: serving,
                     tasks,
@@ -969,6 +1113,7 @@ impl Net {
             self.events_tx.clone(),
             live.courier.clone(),
             live._serving.clone(),
+            true,
         )));
         // the previous session's readers stop when this replaces it
         *self.live.lock().unwrap() = Some(live);
@@ -1416,6 +1561,7 @@ async fn watch(
     events: UnboundedSender<Event>,
     courier: Arc<Courier>,
     serving: Arc<AttachedNode>,
+    primary: bool,
 ) {
     let mut session = session;
     let mut peer = peer;
@@ -1436,9 +1582,13 @@ async fn watch(
             }
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
+        // a tab's failover is its own: the connection the shell is told of
+        // is the serving node's
         let tell = |s: Status| {
-            *status.lock().unwrap() = s.clone();
-            let _ = events.send(Event::Connection(s));
+            if primary {
+                *status.lock().unwrap() = s.clone();
+                let _ = events.send(Event::Connection(s));
+            }
         };
         tell(Status::Reconnecting { from: peer });
         session.conn.close(quinn::VarInt::from_u32(0), b"failover");
@@ -1463,7 +1613,16 @@ async fn watch(
         // is served by says so, and what it stores of the answers names
         // the sibling (`light-client-requirements.md` §4)
         serving.moved_to(to);
-        handle.with(move |c| c.reattached(to)).await;
+        let from = peer;
+        handle
+            .with(move |c| {
+                if primary {
+                    c.reattached(to)
+                } else {
+                    c.moved_tab(from, to)
+                }
+            })
+            .await;
         // the new session's readers feed the same courier and client
         tokio::spawn(attached::follow(handle.clone(), frames));
         tokio::spawn(attached::collect(courier.inbound(), deliveries));

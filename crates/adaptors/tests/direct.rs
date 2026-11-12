@@ -1028,3 +1028,97 @@ async fn nothing_else_is_taken_as_local_and_no_local_carriage_travels_the_networ
     );
     assert_eq!(counting.relayed(), 0, "none of this went through the node");
 }
+
+/// **A payload goes over the tab serving the address the last message
+/// came by** (design §12.9; SES-017): carol holds a session with bob's
+/// node and a tab to alice's; w1 has an address in both subnets. Before
+/// anything of w1's has arrived, carol's first message floods — and the
+/// tab carries it, alice's node being the one known with an address. An
+/// arrival said to have come by alice's node makes that the way back.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_payload_goes_over_the_tab_serving_the_address_the_last_message_came_by() {
+    let mut scene = Scene::new();
+    scene.adopt("carol", "bob", "bob", &[0]);
+    scene.adopt("w1", "bob", "bob", &[1]);
+    scene.adopt("w1", "alice", "alice", &[0]);
+    let node = live_node("bob", scene.table("bob", &["bob"]), "bob", &[]);
+    let other = live_node("alice", scene.table("alice", &["alice"]), "alice", &[]);
+    let inboxes = Inboxes::default();
+    let primary = Counting::over(LocalNode::new(node.clone(), inboxes.clone()));
+    let tab = Counting::over(LocalNode::new(other.clone(), inboxes.clone()));
+    let serving: Arc<dyn Serving> = primary.clone();
+    let mut carol = light_refusing("carol", &serving, &inboxes);
+    let mut w1 = light("w1", &node, &serving, &inboxes);
+    hold(&w1, "carol");
+    // what carol's horizon knows of w1: both addresses, as the records say
+    let recs: Vec<Vec<u8>> = scene.records.iter().map(|r| r.bytes.clone()).collect();
+    carol.handle.with_blocking(move |c| {
+        for r in &recs {
+            c.horizon.ingest(r, &ids());
+        }
+    });
+    carol.courier.attach(vec![kh("w1")]).await;
+    w1.courier.attach(vec![kh("carol")]).await;
+    // the tab: alice's node, known with an address and serving carol there
+    let tab_serving: Arc<dyn Serving> = tab.clone();
+    carol.courier.serve_also(tab_serving);
+    let point = rhtn_transport::session::NetworkPoint::new([127, 0, 0, 1], Some(7301));
+    let rec = rhtn_node::resolution::endpoint_record(
+        &id("alice"),
+        std::slice::from_ref(&point),
+        rhtn_archive::tx::Seqno {
+            series: 1,
+            counter: 1,
+        },
+    );
+    carol.handle.with_blocking(move |c| {
+        c.take_endpoint(&rec).expect("alice's address taken");
+        c.serve_at(kh("alice"), kh("alice"));
+    });
+    // whatever reaches carol is said to have come by the tab
+    inboxes.host(kh("carol"), carol.courier.inbound_via(kh("alice")));
+    carol.courier.sweep(vec![kh("w1")]).await;
+
+    // a first message: nothing of w1's has arrived, so every address is
+    // tried, and the one with a node known by address is the tab's
+    let (p0, t0) = (primary.relayed(), tab.relayed());
+    carol
+        .courier
+        .send(kh("w1"), KIND_APPLICATION, b"first".to_vec())
+        .await
+        .expect("sent");
+    let (from, d) = next(&mut w1.app, 3000).await.expect("delivered");
+    assert_eq!(from, kh("carol"));
+    assert!(
+        matches!(&d, Dispatched::Application { bytes, .. } if bytes == b"first"),
+        "{d:?}"
+    );
+    assert!(tab.relayed() > t0, "the tab carried the first message");
+    assert_eq!(primary.relayed(), p0, "the serving node did not");
+
+    // w1 answers; it arrives by the tab, which is where the next goes
+    w1.courier
+        .send(kh("carol"), KIND_APPLICATION, b"back".to_vec())
+        .await
+        .expect("sent");
+    let (from, _) = next(&mut carol.app, 3000).await.expect("delivered");
+    assert_eq!(from, kh("w1"));
+    assert_eq!(
+        carol.handle.with_blocking(|c| c.last_from(&kh("w1"))),
+        Some(kh("alice")),
+        "the subnet the message came by is recorded"
+    );
+    let (p1, t1) = (primary.relayed(), tab.relayed());
+    carol
+        .courier
+        .send(kh("w1"), KIND_APPLICATION, b"again".to_vec())
+        .await
+        .expect("sent");
+    let (_, d) = next(&mut w1.app, 3000).await.expect("delivered");
+    assert!(
+        matches!(&d, Dispatched::Application { bytes, .. } if bytes == b"again"),
+        "{d:?}"
+    );
+    assert_eq!(tab.relayed(), t1 + 1, "one carry, over the tab");
+    assert_eq!(primary.relayed(), p1);
+}

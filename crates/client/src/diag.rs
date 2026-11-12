@@ -261,6 +261,7 @@ pub fn msg(m: &crate::ceremony::Msg) -> &'static str {
         Seal(_) => "Seal",
         PublishBundle(_) => "PublishBundle",
         StockOneTime(_) => "StockOneTime",
+        StockOneTimeAt { .. } => "StockOneTimeAt",
         PrekeyRequest(_) => "PrekeyRequest",
         CatalogQuery(_) => "CatalogQuery",
         ResourceRequest { .. } => "ResourceRequest",

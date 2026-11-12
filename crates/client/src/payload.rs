@@ -1394,6 +1394,10 @@ pub struct PayloadState {
     pub handed: BTreeMap<PeerDevice, Vec<u8>>,
     /// What the node last reported of the pool, or what was uploaded.
     pub pool_reported: usize,
+    /// **The pool at each tab's node**, as last stocked or reported — one
+    /// pool per address [author, 2026-11-11]. Not written: an attach
+    /// stocks a full pool, so a restart starts each over.
+    pub pools: BTreeMap<Keyhash, usize>,
     /// Peers who sent an initial message this client could not attribute
     /// for want of their binding.  Routine maintenance asks for it, so a
     /// peer that published after this client's last sweep is reachable on
@@ -1521,6 +1525,7 @@ impl PayloadState {
             asked_at: BTreeMap::new(),
             handed: BTreeMap::new(),
             pool_reported: uint(&f[6])? as usize,
+            pools: BTreeMap::new(),
             wanted: BTreeSet::new(),
         })
     }
@@ -1542,6 +1547,7 @@ impl PayloadState {
             asked_at: BTreeMap::new(),
             handed: BTreeMap::new(),
             pool_reported: 0,
+            pools: BTreeMap::new(),
             wanted: BTreeSet::new(),
         }
     }

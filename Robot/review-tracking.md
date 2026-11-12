@@ -20654,3 +20654,31 @@ persisted since an attach stocks a full pool); the bundle and profiles go
 to every node held. The question had been whether a tab shares the first
 node's pool — the same keys in two pools would let a one-time key be
 spent twice.
+
+**Stage 2, the net layer, built 2026-11-11** (with stage 3's Rust surface,
+since `Net::attachments` would otherwise be dead code). The courier keeps
+its `serving` and gains `servings` — the tabs — with `serve_also`,
+`drop_serving`, `servings()` and `serving_for(node)` (matched on what each
+answers to, so a tab failed over to a sibling is found by the sibling).
+`to_their_node` became `to_their_nodes`: one carry per reach of
+`reaches_for(to)`, over the held session where the reach's node is one,
+dialled otherwise; the serving node's relay is the fallback as before.
+`inbound_via(node)` tags a delivery with the node it came by and
+`receive_via` records the arrival (`record_arrival`) once the payload is
+taken. The bundle and profiles go to every node held; `Msg::StockOneTimeAt
+{node, keys}` stocks a tab's own pool (`PayloadState.pools`, restocked in
+`maintain`). `Net` gains `tabs: BTreeMap<node, Tab{serving, current,
+tasks}>`: `attach` to a second node while one is held opens a tab
+(`attach_tab`) rather than replacing; `detach` closes every tab;
+`detach_from(node)` one; `watch(.., primary)` tells the shell's connection
+only for the serving node and moves a tab's addresses on failover
+(`Client::moved_tab`). FFI: `attachments()`, `detach_from(serving)`;
+binding regenerated. Test: `adaptors/tests/direct.rs`
+`a_payload_goes_over_the_tab_serving_the_address_the_last_message_came_by`
+— carol with a session to bob's node and a tab to alice's, w1 at both;
+the first message goes over the tab (alice's node being the one known by
+address), w1's reply tagged as by the tab makes `last_from` alice, and the
+next message is one carry over the tab, none over the serving node. The
+scene's records had to be fed to carol's horizon by hand: an adaptors
+client's horizon gets nothing from the scene otherwise, which is why the
+older relay tests all pass through the serving-node fallback.
