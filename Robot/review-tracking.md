@@ -20754,3 +20754,16 @@ as; Options gains a **Colour** row listing the palette by name with the
 current marked. Document: `light-client-requirements.md` §2 bullet;
 UX-032 (568 families, UX 31). Tests: `ColoursTest.kt` (4). 378 Kotlin
 tests.
+
+**MRK reachable again, 2026-11-12 01:40.** Not the laptop's neighbour
+table (flushed, no change) and not MRK's association (a Wi-Fi toggle and
+a rejoin kept its randomised MAC `06:07:ef:b9:c5:9f` and changed
+nothing): `tcpdump` on `wlx58d81272db96` showed every ARP request from
+MRK answered and MRK's entry for `.8` staying INCOMPLETE — the laptop's
+unicast frames to MRK's MAC were lost on the air while its broadcasts
+arrived and GXV on the same radio (`94:1c:56:b0:b8:f4`, 5785 MHz) worked
+both ways. `sudo nmcli dev disconnect wlx58d81272db96 && sudo nmcli dev
+connect wlx58d81272db96` fixed it at once: 3/3 both ways, MRK's entry
+REACHABLE. The stale station state was the dongle's own, for that one
+peer. Recorded as the first thing to try when one phone alone cannot
+reach the laptop and ARP is asymmetric.
