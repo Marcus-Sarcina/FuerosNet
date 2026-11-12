@@ -435,6 +435,27 @@ impl TopologyStore {
         out
     }
 
+    /// **Every identity a held record introduces** — carried in the record
+    /// under the keyhash it names (`Record::carried_identity`) — over the
+    /// transactions folded in and the records this node's own party made,
+    /// which is what a fresh load holds before any fold. A node pins these
+    /// again at start (`infra-client-requirements.md` §1).
+    pub fn introduced(&self) -> Vec<rhtn_crypto::Identity> {
+        let mut out: Vec<rhtn_crypto::Identity> = Vec::new();
+        let folded = self.transactions.values().map(|r| r.carried_identity());
+        let own = self
+            .own
+            .values()
+            .filter_map(|b| Record::parse(b).ok())
+            .map(|r| r.carried_identity());
+        for id in folded.chain(own).flatten() {
+            if !out.iter().any(|k| k.keyhash == id.keyhash) {
+                out.push(id);
+            }
+        }
+        out
+    }
+
     /// Whether an acknowledgement for this pair is held.
     pub fn holds_ack(&self, adoption: &Txid, grandpatron: &Keyhash) -> bool {
         self.acks.contains_key(&(*adoption, *grandpatron))

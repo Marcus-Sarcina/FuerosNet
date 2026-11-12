@@ -379,6 +379,7 @@ impl LiveNode {
 
         // stream 0: topology frames into the forwarding rule and the memo
         let (v, i, a, s) = (view.clone(), ids.clone(), adjacency.clone(), slot.clone());
+        let pins = cfg.pins.clone();
         let on_control: ControlHandler = Arc::new(move |peer, ft, body| {
             let mut view = v.lock().unwrap();
             let ids = i.lock().unwrap();
@@ -416,6 +417,12 @@ impl LiveNode {
                                 who8 = %crate::diag::id8(&id.keyhash),
                                 "node.learned"
                             );
+                            // **and pinned**: a member a record introduces may
+                            // attach from now on (`infra-client-requirements.md`
+                            // §1) — learned into the verifying set alone, a node
+                            // refused an invited member Unbound [bench,
+                            // 2026-11-12]
+                            pins.pin_identity(&id);
                             ids.push(id);
                             true
                         }

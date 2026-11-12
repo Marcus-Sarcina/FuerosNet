@@ -20767,3 +20767,31 @@ connect wlx58d81272db96` fixed it at once: 3/3 both ways, MRK's entry
 REACHABLE. The stale station state was the dongle's own, for that one
 peer. Recorded as the first thing to try when one phone alone cannot
 reach the laptop and ARP is asymmetric.
+
+**Found on the bench 2026-11-12 (T6): the enrol-by-hand path publishes
+one address and attaches to another.** `OperatorActivity` line ~1009:
+`Kernel.serveFrom(this, me, "$ip:${Launch.QUIC_PORT}")` — the endpoint
+the person typed (`192.168.0.8:7448`) went into the endpoint record, and
+the serving record was written with the launch flow's constant `7431`;
+the attach dialled nothing and timed out. Worked around by moving the
+node to 7431 (the instance's state survives a restart; GXV-2 attached on
+the next app start). Owed: `serveFrom` with the endpoint the form gave
+where it gave one, the constant only for a launch, and a test that the
+published and the attached address are the same.
+
+**Found on the bench 2026-11-12 (T7): a node admitted nobody it had learned.**
+MRK, invited to serve from feb8843a's node, was refused `Unbound`
+("presented key bound by nothing"): the node had learned MRK's identity
+from the adoption GXV-2 taught it (`node.learned 31c2d23f`) into the set
+that verifies records, but the transport's pins — what the handshake binds
+a client by — were seeded at start from the operator and the peers file
+and never from what the node learned. So no invited member could ever
+attach to a launched node. Fixed: `runtime.rs` pins an identity as it
+learns it; `TopologyStore::introduced()` lists the identities the held
+records carry (the folded transactions and the node's own, which is what a
+fresh load holds), and `Service::start` pins them before serving
+(`daemon.lifecycle step=members_pinned introduced=N`). Test:
+`lifecycle.rs::a_member_a_record_introduces_is_pinned_on_arrival_and_again_after_a_restart`
+(the first draft failed at the restart leg — `load` fills `own`, not
+`transactions`, so the seed had read the wrong map). Documents: infra §1
+bullet, SES-018 (569 families, SES 18).

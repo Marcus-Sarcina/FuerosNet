@@ -40,6 +40,16 @@ documents. Where a requirement leaves a visible artifact, that is noted in place
 
 - **Accept attachment from any node whose nearest infrastructure ancestor is this
   node**, and from siblings' clients in failover (design §14.1.2).
+- **Hold the key material of everyone you may admit, and hold it from the
+  records** [2026-11-12]. A client binds at the handshake by a key you have
+  pinned (`wire-format.md` §8.2, §4.1: full `KeyMaterial` on first contact,
+  pinned thereafter), so an identity you have not pinned cannot attach
+  whatever its position. Your operator and the peers you were started with
+  are pinned at start; **every identity a record you hold introduces is
+  pinned when the record arrives and again when you start**, from the
+  records you kept — a member invited to serve from you (`light-client-
+  requirements.md` §2) is admitted on the strength of the adoption that made
+  them a member, and nothing else is handed to you for it.
 - **Determine the attachment mode from local topology.** A client not in this
   node's subtree is in failover, and report it. The client may hold stale
   topology and not know which state it is in.

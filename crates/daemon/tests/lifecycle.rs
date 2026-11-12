@@ -256,6 +256,17 @@ async fn the_daemon_refuses_to_start_on_an_identity_it_would_have_to_mint_or_sha
 /// ten slots hold one occupant each, so a harness reusing one would be
 /// offering a table a record it cannot store.
 fn adoption_under_slot(patron: &str, child: &str, slot: u8) -> (Vec<u8>, Vec<u8>) {
+    adoption_under_slot_carrying(patron, child, slot, false)
+}
+
+/// The same, carrying the child's key material where asked, which is what
+/// introduces the child to a node that has never held it.
+fn adoption_under_slot_carrying(
+    patron: &str,
+    child: &str,
+    slot: u8,
+    material: bool,
+) -> (Vec<u8>, Vec<u8>) {
     use rhtn_archive::record::Record;
     use rhtn_archive::tx::*;
     let (p, c, w) = (
@@ -295,7 +306,7 @@ fn adoption_under_slot(patron: &str, child: &str, slot: u8) -> (Vec<u8>, Vec<u8>
             subnet: Some(SUBNET),
         },
         timestamp: 1_800_003_600,
-        key_material: None,
+        key_material: material.then(|| c.public.key_material()),
         evidence: Evidence::Presence(pop_id),
         presented_head: None,
         back: [&bc, &bp],
@@ -871,6 +882,76 @@ async fn a_derived_view_belonging_to_another_identity_is_discarded() {
             .collect::<Slots>(),
         Slots::new(),
         "and none of their routing slots either"
+    );
+    let _ = std::fs::remove_dir_all(&l.dir);
+}
+
+/// **A member a record introduces is pinned when it arrives, and again
+/// from the store at start** (`infra-client-requirements.md` §1; SES-018):
+/// carol is in no peers file, so the node holds nothing of her until the
+/// adoption carrying her material arrives on the node's own session, and
+/// from then on she may attach — across a restart too, where a node that
+/// re-read its peers file alone refused the member it had learned
+/// [bench, 2026-11-12].
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_member_a_record_introduces_is_pinned_on_arrival_and_again_after_a_restart() {
+    use rhtn_daemon::config::Config;
+    use rhtn_daemon::service::Service;
+    use rhtn_node::store::KIND_TRANSACTION;
+    let l = layout("introduced");
+    std::fs::write(
+        &l.peers,
+        format!("{}\n", hex(&test_identity("witness").public.key_material())),
+    )
+    .unwrap();
+    let cfg = Config::read(&l.config).unwrap();
+    let (pop, adoption) = adoption_under_slot_carrying("bob", "carol", 0, true);
+    {
+        let s = Service::start(&cfg, &l.peers).await.expect("starts");
+        let pins = s.node.node.cfg.pins.clone();
+        assert!(
+            pins.classical_key(&kh("carol")).is_none(),
+            "carol is nobody to this node yet"
+        );
+        let me = {
+            let mut view = s.node.view.lock().unwrap();
+            let pop_id = rhtn_archive::record::Record::parse(&pop).unwrap().txid;
+            view.store.keep_presence(pop_id, pop.clone());
+            view.me()
+        };
+        // the record arrives as the operator's own push would, on the control path
+        let on_control = s
+            .node
+            .node
+            .cfg
+            .on_control
+            .clone()
+            .expect("a control handler");
+        on_control(
+            me,
+            5,
+            rhtn_archive::topology::encode_push(KIND_TRANSACTION, &adoption),
+        );
+        assert!(
+            pins.classical_key(&kh("carol")).is_some(),
+            "pinned on arrival"
+        );
+        assert!(
+            s.node
+                .view
+                .lock()
+                .unwrap()
+                .store
+                .transactions()
+                .any(|r| r.carried_identity().is_some()),
+            "the record is held with the material it carries"
+        );
+        s.persist().expect("persists");
+    }
+    let s = Service::start(&cfg, &l.peers).await.expect("starts again");
+    assert!(
+        s.node.node.cfg.pins.classical_key(&kh("carol")).is_some(),
+        "pinned again from the store at start"
     );
     let _ = std::fs::remove_dir_all(&l.dir);
 }

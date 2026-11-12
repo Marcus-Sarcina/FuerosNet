@@ -517,6 +517,20 @@ impl Service {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => TopologyStore::new(),
             Err(e) => return Err(Startup::State(format!("{}: {e}", cfg.topology.display()))),
         };
+        // **every identity the store's records introduce is a member this
+        // node may admit** (`infra-client-requirements.md` §1): pinned again
+        // at start, as each was when its record arrived. Known and pinned
+        // from the peers file alone, a restarted node refused the member it
+        // had learned [bench, 2026-11-12]
+        let mut introduced = 0;
+        for id in store.introduced() {
+            if !known.iter().any(|k| k.keyhash == id.keyhash) {
+                pins.pin_identity(&id);
+                known.push(id);
+                introduced += 1;
+            }
+        }
+        tracing::info!(target: "daemon", step = "members_pinned", introduced, known = known.len(), "daemon.lifecycle");
         std::fs::create_dir_all(&cfg.queue)
             .map_err(|e| Startup::State(format!("{}: {e}", cfg.queue.display())))?;
         let queue = Arc::new(rhtn_node::queue::DirStore::new(&cfg.queue));
