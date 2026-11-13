@@ -20877,3 +20877,44 @@ to both nodes — the dongle's stale station state again, after an idle
 night (second occurrence; `wifi.powersave` suspected). The re-attach the
 invitation module quotes is now being built in the shell: on a lost
 session, each of the identity's attachments is tried again with backoff.
+
+**Review §7.6, corrections 1, 2, 4, 5 — 2026-11-13.** (1) The serving
+node's own deliveries are tagged with the node (`inbound_via(serving_node)`
+on the attach path and `inbound_via(to)` after a failover), so
+`last_from` is recorded on every path; the adaptors relay test now asserts
+it. (2) `refreshed_profiles` and `default_profile_if_absent` run over
+`subnets()`, every address, not `subnet()`'s first; test
+`an_identity_in_two_subnets_publishes_its_profile_for_each`. (4)
+`ConversationActivity` opened without a row's identity and party finishes
+with a warning; `Kernel.peerKey()` is gone. (5) A session lost is tried
+again in `Net::watch` beside the judgement of the loss — the node asked
+for at its addresses, then its siblings, 15/30/60/120/300 s — and the
+shell's chain keeps only the attach that never held (no session to
+watch). No automated failover test exists to extend; the loss case is
+proven on the bench by the next idle night. Correction 3 (one store for
+the serving node) follows as its own commit: it changes the FFI and the
+record's owner.
+
+**Flake record, 2026-11-13:** `adaptors::ceremony
+the_counterparty_prunes_to_three_and_the_dismissed_stands_down` failed in
+the gate at 65.7 s ("the record never came") with 15 tests still running
+beside it; alone it passes in 4.35 s. Second load-dependent ceremony
+timeout (the first: `the_guided_capture…` at 90.8 s, 2026-11-11). Both
+wait on a wall-clock budget under nextest's parallelism; owed a
+per-test budget that scales with load or a serial group for the two.
+
+**Second gate run failed on the same test differently** (4 signers for 5:
+a witness late under load, 6.8 s), passing alone and under nextest for
+its own crate (12/12). `.config/nextest.toml` now gives each test of
+`rhtn-adaptors::ceremony` `threads-required = 8`, halving what runs
+beside a test that measures time; the rest of the suite is unchanged.
+
+**Third gate run failed on a third test**: `daemon::administration
+an_envelope_is_delivered_from_the_surface_and_the_plane_is_readable`,
+the spawned daemon not yet serving within the budget (18/18 alone, 1.7 s;
+load average 5–12 on 32 cores, so scheduling rather than load). The six
+daemon binaries that spawn `rhtnd` now reserve a quarter of the slots
+each. **Added to the review's debt**: tests that measure wall-clock time
+under parallel scheduling — the ceremony and daemon-spawn families —
+need budgets that wait on a condition with a generous bound rather than a
+fixed second count; three different ones failed three gates in a row.

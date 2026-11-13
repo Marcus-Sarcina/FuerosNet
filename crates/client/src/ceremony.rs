@@ -5161,36 +5161,39 @@ impl Client {
     /// later than what it held (`infra-client-requirements.md` §6.2), and
     /// a refusal fails the attach — found on the bench 2026-10-29, two
     /// phones detached by their own names.
+    /// The profiles this identity holds, re-signed and published again —
+    /// **for every address it has** [review, 2026-11-13: `subnet()` answered
+    /// with the first alone, which left an identity in two subnets nameless
+    /// in the second].
     fn refreshed_profiles(&mut self) -> Vec<Msg> {
-        let Some(subnet) = self.subnet() else {
-            return Vec::new();
-        };
         let me = self.keyhash();
-        let held: Vec<(u64, rhtn_archive::profile::Profile)> = self
-            .store
-            .profiles
-            .get(&subnet)
-            .map(|b| (rhtn_archive::profile::KIND_OWN, b))
-            .into_iter()
-            .chain(
-                self.store
-                    .subnet_profiles
-                    .get(&subnet)
-                    .map(|b| (rhtn_archive::profile::KIND_SUBNET, b)),
-            )
-            .filter_map(|(kind, b)| {
-                rhtn_archive::profile::Profile::parse(b)
-                    .ok()
-                    .map(|p| (kind, p))
-            })
-            .filter(|(_, p)| p.subject == me)
-            .collect();
         let mut out = Vec::new();
-        for (kind, p) in held {
-            match self.publish_profile(subnet, kind, &p.alias, p.image.clone()) {
-                Ok(msgs) => out.extend(msgs),
-                Err(e) => {
-                    tracing::warn!(target: "cer", ?e, kind, "a held profile could not be re-signed")
+        for subnet in self.subnets() {
+            let held: Vec<(u64, rhtn_archive::profile::Profile)> = self
+                .store
+                .profiles
+                .get(&subnet)
+                .map(|b| (rhtn_archive::profile::KIND_OWN, b))
+                .into_iter()
+                .chain(
+                    self.store
+                        .subnet_profiles
+                        .get(&subnet)
+                        .map(|b| (rhtn_archive::profile::KIND_SUBNET, b)),
+                )
+                .filter_map(|(kind, b)| {
+                    rhtn_archive::profile::Profile::parse(b)
+                        .ok()
+                        .map(|p| (kind, p))
+                })
+                .filter(|(_, p)| p.subject == me)
+                .collect();
+            for (kind, p) in held {
+                match self.publish_profile(subnet, kind, &p.alias, p.image.clone()) {
+                    Ok(msgs) => out.extend(msgs),
+                    Err(e) => {
+                        tracing::warn!(target: "cer", ?e, kind, "a held profile could not be re-signed")
+                    }
                 }
             }
         }
@@ -5225,15 +5228,22 @@ impl Client {
     /// Where this client acts in a subnet and holds no profile of its own
     /// there, the default name is made one.  Nothing where there is no
     /// subnet, no default, or a name already held.
+    /// The default alias published as this identity's profile **in every
+    /// subnet it has an address in and no profile for yet** [review,
+    /// 2026-11-13: the first subnet alone before].
     fn default_profile_if_absent(&mut self) -> Result<Vec<Msg>, Abort> {
-        let (Some(subnet), Some(alias)) = (self.subnet(), self.store.default_alias.clone()) else {
+        let Some(alias) = self.store.default_alias.clone() else {
             return Ok(Vec::new());
         };
-        if self.store.profiles.contains_key(&subnet) {
-            return Ok(Vec::new());
+        let mut out = Vec::new();
+        for subnet in self.subnets() {
+            if self.store.profiles.contains_key(&subnet) {
+                continue;
+            }
+            tracing::info!(target: "cer", subnet = %hex8(&subnet), "cer.profile.default");
+            out.extend(self.publish_profile(subnet, 0, &alias, None)?);
         }
-        tracing::info!(target: "cer", subnet = %hex8(&subnet), "cer.profile.default");
-        self.publish_profile(subnet, 0, &alias, None)
+        Ok(out)
     }
 
     /// Publish an alias and, if the person chooses, an image, for

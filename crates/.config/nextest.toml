@@ -1,0 +1,19 @@
+# **The ceremony tests measure time** (a witness window of zero, a capture
+# window of seconds), so under the gate's 16-way concurrency they fail on
+# load alone: `the_guided_capture…` at 90.8 s on 2026-11-11, and
+# `the_counterparty_prunes_to_three…` twice on 2026-11-13 (a record that
+# never came at 65 s; a witness late, 4 signers for 5). Each of them
+# reserves half the slots while it runs, which halves what runs beside it;
+# the rest of the suite is unchanged.
+[[profile.default.overrides]]
+filter = 'package(rhtn-adaptors) and binary(ceremony)'
+threads-required = 8
+
+# **The daemon tests that spawn the real `rhtnd`** wait on its lines
+# ("transport key", "serving on") with a budget in seconds, and one failed
+# the gate on 2026-11-13 with the daemon still starting
+# (`administration::an_envelope_is_delivered…`; its own comment records
+# an earlier such failure). Each reserves a quarter of the slots.
+[[profile.default.overrides]]
+filter = 'package(rhtn-daemon) and (binary(administration) or binary(delegated) or binary(federation) or binary(fieldtest) or binary(scenarios) or binary(lifecycle))'
+threads-required = 4

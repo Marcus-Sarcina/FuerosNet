@@ -150,7 +150,7 @@ fn light(
     *slot.lock().unwrap() = Some(handle.clone());
     let (courier, app) = Courier::new(handle.clone(), serving.clone(), Arc::new(direct));
     inlet.bind(courier.inbound());
-    inboxes.host(kh(name), courier.inbound());
+    inboxes.host(kh(name), courier.inbound_via(serving.me()));
     Party {
         handle,
         courier,
@@ -189,7 +189,7 @@ fn light_refusing(name: &'static str, serving: &Arc<dyn Serving>, inboxes: &Inbo
     let handle = spawn_client(name, Config::default(), reachable.clone());
     let (courier, app) = Courier::new(handle.clone(), serving.clone(), Arc::new(direct));
     inlet.bind(courier.inbound());
-    inboxes.host(kh(name), courier.inbound());
+    inboxes.host(kh(name), courier.inbound_via(serving.me()));
     Party {
         handle,
         courier,
@@ -211,7 +211,7 @@ fn infra(
     let handle = spawn_client(name, Config::default(), reachable.clone());
     let (courier, app) = Courier::new(handle.clone(), serving.clone(), direct);
     inlet.bind(courier.inbound());
-    inboxes.host(kh(name), courier.inbound());
+    inboxes.host(kh(name), courier.inbound_via(serving.me()));
     Party {
         handle,
         courier,
@@ -352,6 +352,11 @@ async fn a_direct_path_the_local_decision_refuses_opens_in_neither_direction() {
     hold(&w1, "carol");
     carol.courier.attach(vec![kh("w1")]).await;
     w1.courier.attach(vec![kh("carol")]).await;
+    // w1's address under bob is served by bob's node — set by hand: a
+    // scene's client holds none of its own records, so nothing derives it
+    // as a device's attach does
+    w1.handle
+        .with_blocking(|c| c.serve_at(kh("bob"), kh("bob")));
     carol.courier.sweep(vec![kh("w1")]).await;
     // carol gathers nothing, so offers nothing
     assert!(
@@ -383,6 +388,13 @@ async fn a_direct_path_the_local_decision_refuses_opens_in_neither_direction() {
         "{d:?}"
     );
     assert!(counting.relayed() > relayed, "the serving node carried it");
+    // **and the arrival by the serving node is the subnet the reply goes
+    // back by** [review, 2026-11-13: recorded on a tab's path alone before].
+    assert_eq!(
+        w1.handle.with_blocking(|c| c.last_from(&kh("carol"))),
+        Some(kh("bob")),
+        "the serving node's delivery records the subnet it serves w1 under"
+    );
 }
 
 // acceptance: TRV-09
@@ -487,7 +499,7 @@ fn light_holding(
     let reachable = direct.reachable();
     let (courier, app) = Courier::new(handle.clone(), serving.clone(), Arc::new(direct));
     inlet.bind(courier.inbound());
-    inboxes.host(kh(name), courier.inbound());
+    inboxes.host(kh(name), courier.inbound_via(serving.me()));
     Party {
         handle,
         courier,
@@ -699,7 +711,7 @@ fn light_with(
     *slot.lock().unwrap() = Some(handle.clone());
     let (courier, app) = Courier::new(handle.clone(), serving.clone(), Arc::new(direct.clone()));
     inlet.bind(courier.inbound());
-    inboxes.host(kh(name), courier.inbound());
+    inboxes.host(kh(name), courier.inbound_via(serving.me()));
     (
         Party {
             handle,

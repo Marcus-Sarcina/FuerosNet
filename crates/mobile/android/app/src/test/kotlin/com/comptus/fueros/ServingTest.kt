@@ -51,7 +51,7 @@ class ServingTest {
         // **a session lost is attached again with backoff** [bench, 2026-11-13]
         assertTrue(
             "a lost session is not tried again",
-            k.contains("if (e.v1 is Connection.Lost) {") && k.contains("reattachLater(id, p, ") &&
+            !k.contains("if (e.v1 is Connection.Lost) {") &&
                 k.contains("if (missed > 0) reattachLater(id, p, scope, attempt + 1)") &&
                 k.contains("longArrayOf(15, 30, 60, 120, 300)"),
         )

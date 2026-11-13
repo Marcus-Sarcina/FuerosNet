@@ -1880,7 +1880,6 @@ object Kernel {
 
     /** The peer this device talks to — adopted at a meeting or named by the
      *  provision — or null: what a conversation screen opens onto. */
-    fun peerKey(): String? = peerKey
 
     /**
      * Start the kernel, once for the life of the process.
@@ -2762,12 +2761,12 @@ object Kernel {
     private val reattaching = java.util.concurrent.ConcurrentHashMap<String, Int>()
 
     /**
-     * **Attach again after a loss, with backoff** [author, 2026-11-04:
-     * *"all horizon members should re-attach every time they become
-     * detached"*; bench 2026-11-13: a night's sleep left every session dead
-     * until an app restart]. One retry chain per identity; a chain already
-     * running is not doubled. Each attempt is [attachTabs], which schedules
-     * the next where a tab still does not answer.
+     * **An attach that got no answer at start is tried again, with
+     * backoff** [author, 2026-11-04]. A session *lost* after it held is
+     * the kernel's to try again, beside its judgement of the loss
+     * (`Net::watch`); this chain is for the attach that never held, which
+     * the kernel has no session to watch. One chain per identity; a chain
+     * already running is not doubled.
      */
     private fun reattachLater(id: String, p: Participant, scope: String?, attempt: Int) {
         if (reattaching.putIfAbsent(id, attempt) != null) return
@@ -2901,10 +2900,6 @@ object Kernel {
                     // the one status slot is the focused identity's, as a
                     // browser's status bar is the focused window's
                     Model.connectionOf(id, e.v1)
-                    // **a session lost is tried again** [bench, 2026-11-13]
-                    if (e.v1 is Connection.Lost) {
-                        reattachLater(id, p, appContext?.let { a -> identities(a).firstOrNull { it.id == id }?.scope }, 1)
-                    }
                     if (focused) {
                         show(p, e.v1)
                         Model.connection(e.v1)

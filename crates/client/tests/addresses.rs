@@ -51,3 +51,26 @@ fn the_address_state_round_trips_and_the_older_form_still_reads() {
     assert_eq!(back.last_from, p.last_from);
     assert_eq!(bytes[0], 0x8a, "ten fields");
 }
+
+/// **An identity in two subnets publishes its profile for both** (review
+/// 2026-11-13: `subnet()` answered with the first, so the second went
+/// nameless).
+#[test]
+fn an_identity_in_two_subnets_publishes_its_profile_for_each() {
+    let mut s = setup(&["alice", "bob", "carol", "witness"]);
+    s.adopted("alice", "bob", "witness", 1);
+    s.adopted("alice", "carol", "witness", 2);
+    let a = s.client("alice");
+    let held = a.subnets();
+    assert_eq!(held.len(), 2, "two addresses: {held:?}");
+    a.set_default_alias("Alice").expect("an alias");
+    let msgs = a.attach(kh("node"), &[]);
+    let profiles = msgs
+        .iter()
+        .filter(|m| matches!(m, rhtn_client::ceremony::Msg::PublishProfile(_)))
+        .count();
+    assert!(
+        profiles >= 2,
+        "a profile published per address, got {profiles}"
+    );
+}

@@ -438,6 +438,10 @@ pub(crate) struct Net {
 /// wire.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
+/// The waits before each attempt to attach again after a loss, in seconds;
+/// the last repeats (`light-client-requirements.md` §4.1).
+const REATTACH_AFTER_S: [u64; 5] = [15, 30, 60, 120, 300];
+
 impl Net {
     /// A network for a client that has not attached to anything yet.
     ///
@@ -1044,7 +1048,10 @@ impl Net {
             inlet.bind(courier.inbound());
             let tasks = vec![
                 attached::follow(handle_for_task.clone(), frames),
-                attached::collect(courier.inbound(), deliveries),
+                // **said to have come by the serving node** [review,
+                // 2026-11-13]: what the routing records as the last subnet,
+                // on this path as on a tab's
+                attached::collect(courier.inbound_via(serving_node), deliveries),
             ];
             // the bundle published, the pool stocked and the population
             // swept, all over this session
@@ -1564,6 +1571,8 @@ async fn watch(
     primary: bool,
 ) {
     let mut session = session;
+    // the node asked for, whatever sibling the session is with now
+    let home = peer;
     let mut peer = peer;
     loop {
         loop {
@@ -1601,7 +1610,41 @@ async fn watch(
                     from: peer,
                     reason: last,
                 });
-                return;
+                // **and tried again, here** [author, 2026-11-04: *"all
+                // horizon members should re-attach every time they become
+                // detached"*; review 2026-11-13: the rule belongs beside the
+                // judgement of the loss, not in the shell]: the node asked
+                // for at its addresses, then its siblings, after 15, 30, 60,
+                // 120 and then every 300 seconds — until one answers, or
+                // another attach has replaced this session meanwhile
+                let mut attempt = 0usize;
+                loop {
+                    let wait = REATTACH_AFTER_S[attempt.min(REATTACH_AFTER_S.len() - 1)];
+                    tokio::time::sleep(Duration::from_secs(wait)).await;
+                    attempt += 1;
+                    if current.lock().unwrap().is_some() {
+                        return;
+                    }
+                    let addrs = cfg
+                        .addresses
+                        .lock()
+                        .unwrap()
+                        .get(&home)
+                        .cloned()
+                        .unwrap_or_default();
+                    if !addrs.is_empty()
+                        && let AttachOutcome::Attached(s) =
+                            attach_any(&cfg, &ep, home, &addrs, false).await
+                    {
+                        tracing::info!(target: "pay", attempt, "pay.reattach.landed");
+                        break (home, s);
+                    }
+                    if let Ok(l) = try_siblings(&cfg, &ep).await {
+                        tracing::info!(target: "pay", attempt, "pay.reattach.landed");
+                        break l;
+                    }
+                    tracing::info!(target: "pay", attempt, wait, "pay.reattach.missed");
+                }
             }
         };
         let (deliveries, frames) = take_readers(&mut sess);
@@ -1625,7 +1668,7 @@ async fn watch(
             .await;
         // the new session's readers feed the same courier and client
         tokio::spawn(attached::follow(handle.clone(), frames));
-        tokio::spawn(attached::collect(courier.inbound(), deliveries));
+        tokio::spawn(attached::collect(courier.inbound_via(to), deliveries));
         tell(Status::Attached {
             serving: to,
             primary: mode == 0,

@@ -39,8 +39,16 @@ class ConversationActivity : Activity() {
         super.onCreate(savedInstanceState)
         // the peer named by the row that opened this, or the one party this
         // device has met or been provisioned to, where a row did not name one
-        peerKey = intent.getStringExtra("peer") ?: Kernel.peerKey()
-        by = intent.getStringExtra("by") ?: Kernel.activeIdentity()
+        // **a conversation is one identity's with one party, named by the
+        // row that opened it** [review, 2026-11-13]: opened without either
+        // is a defect, not a default
+        peerKey = intent.getStringExtra("peer")
+        by = intent.getStringExtra("by")
+        if (peerKey == null || by == null) {
+            Diag.warn("conversation.opened", "why" to "no row named the identity and the party")
+            finish()
+            return
+        }
 
         messages = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         scroll = ScrollView(this).apply {

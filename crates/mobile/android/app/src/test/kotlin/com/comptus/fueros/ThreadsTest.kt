@@ -33,6 +33,7 @@ class ThreadsTest {
         assertTrue("threads are not written back to the identity's scope", k.contains("AndroidShell(a, scope).write(THREADS, Threads.encode(mine))"))
         val f = source("Front.kt")
         assertEquals("a change does not name the identity it belongs to", 5, Regex("""changed\(by\)""").findAll(f).count())
+        assertTrue("a conversation opened without a row falls back to 'the peer'", !source("ConversationActivity.kt").contains("Kernel.peerKey()") && !source("Kernel.kt").contains("fun peerKey(): String?"))
         assertTrue("a row is not named by the identity that holds it", source("ConversationsActivity.kt").contains("Kernel.aliasOfHeld(t.by, t.peerKey)") && source("ConversationActivity.kt").contains("Kernel.aliasOfHeld(it.by, it.peerKey)"))
     }
 
