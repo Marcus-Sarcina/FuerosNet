@@ -820,6 +820,12 @@ nothing below reaches across them.
   2026-11-11]: each node you hold a session with (§2) is stocked
   separately, with keys of its own, since a key in two pools could be
   spent twice.
+- **Attach again after a loss, without the person's hand** [author,
+  2026-11-04: *"all horizon members should re-attach every time they become
+  detached"*]. A session lost to the node serving one of your addresses,
+  or an attach at start that got no answer, is tried again with backoff
+  (seconds growing to minutes, then steady) until it holds; a restart is
+  not the way back. Each address is tried on its own.
 - **Open a session with each of a recipient's devices, and send to each.** A
   fetch returns a bundle per device (`wire-format.md` §7.8), a session is with
   a device, and a message sent to one of them reaches one of them; the

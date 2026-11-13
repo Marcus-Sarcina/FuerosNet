@@ -335,6 +335,7 @@ The Cargo workspace has **16 crates**. Components below follow responsibilities 
 | SES-016 | C | **A deadline already elapsed is this task's own starvation until the stream says otherwise.** Misses are counted by elapsed full intervals on a local monotonic clock (W §8.2), and a loop descheduled past three intervals finds the peer's heartbeats waiting unread: it reads what the stream holds before it believes the clock, and declares nothing when a fresh beat is among them. Two bounds keep that from becoming a deferral: a past deadline is floored a scheduler turn ahead, since the transport has had no turn to surface what arrived, and frames that refresh liveness nothing are counted so a peer flooding them cannot postpone the verdict. **A peer that has genuinely stopped is still declared within one interval of the loop waking**, which is SES-007's case and the complement of this one. | W §8.2; D §14.1.4 |
 | SES-017 | C | **An identity holds one session per address** [author, 2026-11-11]: for each subnet it holds a position in it attaches to the node serving it there, publishes its bundle to that node, stocks it with a pool of one-time keys of its own (no key in two pools), and receives that subnet's mail there — one client and one node per session, run once per address with nothing shared but the key. It never routes one address's mail through another's node, and a counterparty holds its locator one per anchor (TX-031), so its addresses are never merged into one path. Test: a client with positions in two subnets holds two attaches, two published bundles and two stocked pools with no key in both; mail for one subnet arrives at that subnet's node and never the other's; a session's failover (D §14.1.2) is to that session's siblings and leaves the other session untouched. | L §§2, 4; D §§12.9, 14.1; W §§7.10, 8.2 |
 | SES-018 | C | **A node admits the identities whose material it holds, and it holds it from the records** [2026-11-12]. A client binds at the handshake by a pinned key (W §8.2); the operator and the peers a node was started with are pinned at start, and every identity a record the node holds introduces (the key material a record carries under the keyhash it names, W §4.1) is pinned when the record arrives and again at start from the records kept. Test: a node started with no peers file entry for a member refuses that member Unbound; after the adoption carrying the member's material arrives on the node's own session the member attaches; after the node restarts, the member attaches again without the record being sent again. | I §1; W §§4.1, 8.2; L §2 |
+| SES-019 | C | **A client attaches again after a loss, without the person's hand** [author, 2026-11-04]. A session lost to the node serving one of its addresses, or an attach at start that got no answer, is tried again with backoff until it holds; each address on its own; one retry chain per identity. Test: with the node down at start the client reports detached and keeps trying; when the node answers the client is attached without any input; a session cut mid-run (the node restarted) is re-attached within the backoff; two losses do not start two chains. | L §4.1; D §14.1 |
 
 ### Prekey publication, opaque deposit and ciphertext relay
 
@@ -1043,7 +1044,7 @@ Open local parameters are not all specification defects: cache TTLs, queue cap, 
 
 ## 10. Document baseline and coverage totals
 
-This specification contains **569 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
+This specification contains **570 numbered requirement/test families** across **26 ID prefixes**, in addition to the dispatch, boundary, retention and source-coverage matrices. They specify work to verify; they do not report executed passes.
 
 | Prefix | Families |
 |---|---:|
@@ -1055,7 +1056,7 @@ This specification contains **569 numbered requirement/test families** across **
 | RES | 16 |
 | CUR | 12 |
 | NET | 33 |
-| SES | 18 |
+| SES | 19 |
 | MAIL | 27 |
 | CER | 31 |
 | VER | 18 |

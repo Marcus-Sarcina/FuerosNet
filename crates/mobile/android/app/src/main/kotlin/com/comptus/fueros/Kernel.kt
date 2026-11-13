@@ -2724,24 +2724,65 @@ object Kernel {
         // **every tab the identity agreed to** [author, 2026-11-11]: the
         // first attach is the session, each further one a tab on it, and
         // the connection shown is the first's
+        attachTabs(id, p, scope, attempt = 0)
+        Thread({ runLoop(p, id) }, "fueros-kernel-${id.take(8)}").start()
+    }
+
+    /**
+     * **Every tab the identity agreed to, attached** — the first attach the
+     * session, each further one a tab on it; the connection shown is the
+     * first's. Where one did not answer, [reattachLater] tries again.
+     */
+    private fun attachTabs(id: String, p: Participant, scope: String?, attempt: Int) {
         val tabs = appContext?.let { a -> runCatching { Serving.read(AndroidShell(a, scope).read(SERVING)) }.getOrNull() }
             ?: emptyList()
         if (tabs.isEmpty()) {
             Diag.event("identity.attach", "who" to id.take(8), "node" to "none")
             Model.connectionOf(id, Connection.Detached)
-        } else {
-            var first: Connection? = null
-            for (t in tabs) {
-                val node = unhex(t.node)
-                val a = call("attach", { e -> Diag.event("identity.attach", "who" to id.take(8), "node" to t.node.take(8), "refused" to e.reason); null }) {
-                    p.attach(node, listOf(t.addr), listOf())
-                }
-                Diag.event("identity.attach", "who" to id.take(8), "node" to t.node.take(8), "attached" to (a != null))
-                if (first == null) first = if (a == null) Connection.Detached else Connection.Attached(node, a.primary)
-            }
-            Model.connectionOf(id, first ?: Connection.Detached)
+            return
         }
-        Thread({ runLoop(p, id) }, "fueros-kernel-${id.take(8)}").start()
+        var first: Connection? = null
+        var missed = 0
+        for (t in tabs) {
+            val node = unhex(t.node)
+            val a = call("attach", { e -> Diag.event("identity.attach", "who" to id.take(8), "node" to t.node.take(8), "refused" to e.reason); null }) {
+                p.attach(node, listOf(t.addr), listOf())
+            }
+            Diag.event("identity.attach", "who" to id.take(8), "node" to t.node.take(8), "attached" to (a != null), "attempt" to attempt)
+            if (a == null) missed += 1
+            if (first == null) first = if (a == null) Connection.Detached else Connection.Attached(node, a.primary)
+        }
+        Model.connectionOf(id, first ?: Connection.Detached)
+        if (missed > 0) reattachLater(id, p, scope, attempt + 1)
+    }
+
+    /** The waits before each attempt to attach again, in seconds; the last repeats. */
+    private val REATTACH_AFTER_S = longArrayOf(15, 30, 60, 120, 300)
+
+    private val reattaching = java.util.concurrent.ConcurrentHashMap<String, Int>()
+
+    /**
+     * **Attach again after a loss, with backoff** [author, 2026-11-04:
+     * *"all horizon members should re-attach every time they become
+     * detached"*; bench 2026-11-13: a night's sleep left every session dead
+     * until an app restart]. One retry chain per identity; a chain already
+     * running is not doubled. Each attempt is [attachTabs], which schedules
+     * the next where a tab still does not answer.
+     */
+    private fun reattachLater(id: String, p: Participant, scope: String?, attempt: Int) {
+        if (reattaching.putIfAbsent(id, attempt) != null) return
+        val wait = REATTACH_AFTER_S[minOf(attempt - 1, REATTACH_AFTER_S.size - 1).coerceAtLeast(0)]
+        Diag.event("identity.reattach", "who" to id.take(8), "attempt" to attempt, "after_s" to wait)
+        Thread({
+            try {
+                Thread.sleep(wait * 1000)
+            } catch (_: InterruptedException) {
+                reattaching.remove(id)
+                return@Thread
+            }
+            reattaching.remove(id)
+            attachTabs(id, p, scope, attempt)
+        }, "fueros-reattach-${id.take(8)}").start()
     }
 
     /**
@@ -2860,6 +2901,10 @@ object Kernel {
                     // the one status slot is the focused identity's, as a
                     // browser's status bar is the focused window's
                     Model.connectionOf(id, e.v1)
+                    // **a session lost is tried again** [bench, 2026-11-13]
+                    if (e.v1 is Connection.Lost) {
+                        reattachLater(id, p, appContext?.let { a -> identities(a).firstOrNull { it.id == id }?.scope }, 1)
+                    }
                     if (focused) {
                         show(p, e.v1)
                         Model.connection(e.v1)

@@ -20865,3 +20865,15 @@ ms — the ruled behaviour for an identity without an agreed node, worth
 knowing on the bench. **Asked:** whether verifier and nominee
 relationships are offered as contacts to write to (MRK's "fourth" would
 be ZU8, consulted as a verifier, never met); met in person only meanwhile.
+
+**2026-11-13 morning.** My false alarm, corrected: the `7514c89` build was
+on the phones since 03:42 (laptop clock; 04:42 by the phones'), the APK's
+age read against a misjudged clock. What was real: the phones slept, the
+node logged both clients detached (~04:50 and ~06:15 by its clock), and
+nothing re-attaches, so the author's message was accepted by the ET node
+and **stored** for a MRK that was not there (`node.mailbox … Stored`, no
+delivery). After an app restart GXV-2 re-attached; MRK's dials timed out
+to both nodes — the dongle's stale station state again, after an idle
+night (second occurrence; `wifi.powersave` suspected). The re-attach the
+invitation module quotes is now being built in the shell: on a lost
+session, each of the identity's attachments is tried again with backoff.
