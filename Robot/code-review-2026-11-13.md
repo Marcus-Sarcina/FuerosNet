@@ -111,3 +111,81 @@ Findings:
 ## 6. What I would do first
 
 In this order, each gated: (1) the seam scenario, because it turns the bench's week into a test that runs in minutes; (2) `by` on every row; (3) the client blob split; (4) the registers linked. The god objects shrink as (1) and (2) pull the attach, thread and model code out of them; I would not start a decomposition for its own sake.
+
+## 7. The veneer: rules in screens and sequences, cardinalities assumed, facts held only in process
+
+[author, 2026-11-13]: *"a functional structure over a formal data model rather than an object structure with private state and assumptions around cardinality… a user can have many devices, many identities; an identity can exist in parallel on many devices and in many subnets; a contact and its DM history can exist in parallel for many identities; the light client and the node must be capable of independent reimplementation."* And the failure mode to root out: *"rules hard-coded into UI elements or specific process sequences and essential data never deserialized into a formal store, just annotated ephemerally in process state."*
+
+Audited against that, file and line. Items marked † are this week's, mine.
+
+### 7.1 Essential facts that live only in process state or in the shell
+
+| Fact | Where it lives | What is wrong |
+|---|---|---|
+| **A conversation's history** (identity × party → messages) | `Front.convos` in `Front.kt:89`, written to `threads` by `Threads.kt` † | The kernel has no conversation store at all — `client/src/conversation.rs` is the *ceremony's* conversation on the wire. DM history, a fact the author lists as fractal (per identity, in parallel), exists only as a shell-side JSON file with no kernel model, no spec, and no way for another client to carry it. This week's persistence made it durable without making it modelled. |
+| **Which node serves which address** (identity × subnet → node) | Twice: `PayloadState.serving_at` (sealed, `payload.rs:1359`) † and the shell's `serving` JSON (`Kernel.kt:87`, `Serving.kt`) † | Two stores of one fact, and the *shell's* is the one bring-up reads (`attachTabs`). The kernel's copy is written by the attach the shell drove. Neither is derived from the record that created the address. |
+| **The identities a device holds** (identity × device) | the shell's `Identities.INDEX` | The kernel sees one identity per `Participant`; the relation "this device holds these identities" is the shell's file, so nothing in the kernel can reason over it (e.g. "do not offer my own identities as contacts" is a filter in a screen, `ConversationsActivity.kt`). |
+| **"The peer"** | `Kernel.peerName`, `Kernel.peerKey()` from the provision; `ConversationActivity.kt:42` falls back to it | A singleton counterparty, from the bench's provision, used as the default where a screen was opened without saying whose thread it is. |
+| **Connection state** | `Model.connection` (singular, `Model.kt:50`) beside `Model.connectionOf(by)` | The singular is what the foot and the catalog read. |
+| **Aliases** | `Model.aliases`, `Kernel.aliasOf` — the focused participant's | Fixed this week by `aliasOfHeld(by, key)` †, i.e. by adding a second accessor rather than removing the first. |
+| **The current meeting's choices** (which subnet, which side) | `Meet.kt` (`kind.adopt` at 120/1459, `scope` at 1501) | Held in the shell's state machine and handed to the kernel at proposal time. The ceremony's *choice* is a shell fact; a kernel restored mid-ceremony (`Restored`) does not have it. |
+
+### 7.2 Rules that live in a screen or a sequence
+
+| Rule | Where | Consequence seen |
+|---|---|---|
+| The address an enrolled instance is attached at | `OperatorActivity.kt:1009`: `"$ip:${Launch.QUIC_PORT}"` | T6: published `:7448`, attached `:7431` |
+| Which subnet an adoption founds or joins | `MeetActivity.kt:746` offers `Kernel.subnets()` (the focused participant's) + `Scope.OWN`; `Meet.pendingChoice` decides | A screen computes a protocol choice from a focused-identity accessor |
+| A member's admission at attach | pins seeded at start from the operator and the peers file (`service.rs`); fixed to learn from records this week | T7: `Unbound` |
+| Re-attach after a loss | none until this week; now a backoff chain in `Kernel.reattachLater` † — in the shell, not the kernel | The kernel's `watch` judges the loss and stops; the shell dials again. The rule and its state (`reattaching`) are process state in the wrong layer. |
+| Which subnet a reply goes back by (`last_from`) | recorded only for arrivals on a *tab* (`inbound_via`, `net.rs:672`); the serving node's own deliveries go through `inbound()` with no node (`net.rs:1047`, `:1628`) † | **The rule is implemented on one of two paths.** A reply to a message that came by the serving node is routed by the flood, never by "the last subnet it came by". Found by this audit; not yet seen on the bench because the direct path won every reply. |
+| Profiles published at attach | `refreshed_profiles` publishes for `self.subnet()` — **the first position** (`ceremony.rs:4772`) | An identity in two subnets publishes its profile for one; MRK's bare-keyhash name for GXV-2 was partly this |
+| What a new identity attaches to | `bringUp`: the provision for the focused identity, the serving record for the rest; `launchHeld` † | Correct by ruling, but a sequence: the same identity attaches differently depending on which thread brought it up |
+| Contacts offered to write to | a filter in `ConversationsActivity.contacts()` † (`How.COUNTERPARTY`, not own identities) | A model rule expressed as a screen's list comprehension |
+
+### 7.3 Cardinalities assumed singular
+
+| Assumed | Where | The fractal fact |
+|---|---|---|
+| One serving node per client | `PayloadState.serving: Option<Keyhash>`; `Net.live: Option<Live>`, `current`, `status` (`net.rs:400`) | one per address — this week added `attachments`/`serving_at`/`tabs` *beside* the singletons rather than replacing them |
+| One subnet per client | `Client::subnet()` (`ceremony.rs:4772`, 3 callers) | many |
+| One focused participant as "the" participant | `Kernel.participant` (`Kernel.kt:66`) and every accessor over it | one in focus, many held |
+| One peer, one meeting | `Kernel.peerName`, `Kernel.meet` | one meeting per camera is real; one peer is not |
+| One identity per kernel | `Client` knows nothing of its siblings on the device | an identity in parallel on many devices needs the kernel to model *this device among its devices* (the bundle per device exists — `PayloadState.device`, `signed_bundle` — but "my other devices" does not) |
+
+### 7.4 What the wire gets right and the local side does not
+
+`wire-format.md` and the node are reimplementable from the documents: every object on the wire has a schema, a bound and a vector. The **local** side has none: the client blob is positional CBOR described by its decoder; the shell's files are described by their Kotlin; the FFI is described by `test-vectors/local-interfaces.md` as calls, not as a data model. So the second requirement — independent reimplementation of a light client — holds for the wire and fails for the state: a second client could speak to the node and could not carry this one's identities, addresses, contacts or conversations, because none of those is written down as data.
+
+### 7.5 The shape to move to
+
+A formal model, written down once, with its cardinalities stated and every rule a function over it. The entities the author's list implies, with the relations that carry the fractal:
+
+```
+Device(device_key)                          Identity(keyhash, material)
+Holding(identity, device)                   -- many-to-many: an identity on many devices, a device holding many
+Address(identity, subnet)                   -- an identity in many subnets; anchor, locator, series
+Attachment(identity, device, node)          -- the session that address holds from this device; state, last seen
+Node(keyhash, endpoints, operator)          -- a node is an identity's instance
+Serving(identity, subnet) -> node           -- derived from Address and the records, never written by a screen
+Party(identity, other)                      -- what one identity knows of another: how met, alias, number, profile
+Thread(identity, other)                     -- one per identity, in parallel across identities
+Message(thread, seq, mine, text, delivery)
+Record(identity, txid, bytes)               -- the archive, by the identity that holds it
+Capture(identity, other, ceremony)          -- sealed; the one window (§7.5.1)
+LastFrom(identity, other) -> subnet         -- the routing fact, written at every arrival, on every path
+```
+
+Over which the rules are functions: `node_for(identity, other)` = `LastFrom` where held else every `Serving` of `other`'s addresses; `admits(node, identity)` = a record the node holds introduces it; `attach_all(identity, device)` = for each `Serving` of each `Address`; `offer_to_write(device)` = for each `Holding`, each `Party` met in person without a `Thread`. Each is a pure function with a test; each screen renders rows that carry `identity` and calls a function with it.
+
+Where it lives: in the kernel, persisted per table (so a change to a thread does not rewrite the archive), with the shell as a projection that holds no fact of its own but the colours and the window geometry. The shell's `serving`, `threads` and the provision's "peer" go; `Front` and `Model` become views over kernel queries keyed by identity; `Net` becomes a map over `Attachment`.
+
+### 7.6 Immediate corrections, independent of the restructure
+
+1. `record_arrival` on the serving node's own path (`net.rs:1047`, `:1628`): the primary's collector tags its node too. Small; the rule is half-built without it.
+2. `refreshed_profiles` over every address, not `self.subnet()`.
+3. One store for the serving node: the kernel's `serving_at`, with the shell's `serving` file retired and bring-up reading the kernel.
+4. `Kernel.peerKey()` as a fallback removed: a conversation screen opened without `by` and `peer` is a defect, not a default.
+5. The re-attach moved into the kernel's `Net` (where the loss is judged), the shell told, not asked.
+
+Each is a day or less and each removes one instance of the category; none is the restructure, which is the author's call on scope.
