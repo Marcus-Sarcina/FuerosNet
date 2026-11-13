@@ -94,19 +94,22 @@ class ConversationsActivity : Activity() {
     }
 
     /**
-     * **The focused identity's contacts without a thread of its own** —
-     * starting a thread is the focused identity's act [author, 2026-11-11],
-     * and until it has one the list is the only door to a conversation. A
-     * contact met by another identity held here is not offered: the thread
-     * would be that identity's. Infrastructure is reached, not written to.
+     * **Everyone an identity held here has met, without a thread yet** —
+     * each placed as the identity that knows them [author, 2026-11-12:
+     * *"it should be placed as the identity which knows that recipient"*],
+     * striped in its colour and opened as it. Met in person only: a party
+     * handed over as somebody's prior counterparty, a nominee, a verifier,
+     * infrastructure or the bench's provisioned witnesses are known of, not
+     * known. The device's own identities are not offered to each other.
      */
     private fun contacts(threads: List<Front.Thread>) {
-        val active = Kernel.activeIdentity() ?: return
-        val open = threads.filter { it.by == active }.map { it.peerKey }.toSet()
-        val fresh = Kernel.contacts()
-            .filter { it.how != How.INFRA }
-            .map { it.keyhash.hex() }
-            .filter { it !in open }
+        val own = Kernel.identities(this).map { it.id }.toSet()
+        val open = threads.map { it.by to it.peerKey }.toSet()
+        val seen = HashSet<Pair<String, String>>()
+        val fresh = Kernel.contactsHeld()
+            .filter { it.row.how == How.COUNTERPARTY }
+            .map { it.by to it.row.keyhash.hex() }
+            .filter { it.second !in own && it !in open && seen.add(it) }
         if (fresh.isEmpty()) return
         list.addView(
             TextView(this).apply {
@@ -116,9 +119,9 @@ class ConversationsActivity : Activity() {
                 setPadding(0, 36, 0, 8)
             },
         )
-        for (key in fresh) {
+        for ((by, key) in fresh) {
             val name = TextView(this).apply {
-                text = Kernel.aliasOf(key) ?: "${key.take(8)}…"
+                text = (Kernel.aliasOf(key) ?: "${key.take(8)}…") + holderLabel(by)
                 textSize = 20f
             }
             list.addView(
@@ -129,7 +132,7 @@ class ConversationsActivity : Activity() {
                     isClickable = true
                     addView(
                         View(this@ConversationsActivity).apply {
-                            setBackgroundColor(Identities.colourOf(colours, active))
+                            setBackgroundColor(Identities.colourOf(colours, by))
                             layoutParams = LinearLayout.LayoutParams(px(6), px(26)).apply { setMargins(0, 0, px(10), 0) }
                         },
                     )
@@ -138,7 +141,7 @@ class ConversationsActivity : Activity() {
                         startActivity(
                             Intent(this@ConversationsActivity, ConversationActivity::class.java)
                                 .putExtra("peer", key)
-                                .putExtra("by", active),
+                                .putExtra("by", by),
                         )
                     }
                 },

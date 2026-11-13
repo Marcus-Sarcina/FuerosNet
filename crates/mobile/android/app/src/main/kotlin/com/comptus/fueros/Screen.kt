@@ -69,7 +69,10 @@ object Screen {
     fun insetting(frame: View) {
         val own = Pad(frame.paddingLeft, frame.paddingTop, frame.paddingRight, frame.paddingBottom)
         frame.setOnApplyWindowInsetsListener { v, insets ->
-            val b = insets.getInsets(WindowInsets.Type.systemBars())
+            // **and the keyboard** [author, 2026-11-12]: the inset the IME
+            // takes joins the bars', so a send box at the foot stays above
+            // it rather than behind it; the union is the larger per side
+            val b = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.ime())
             val p = padding(own, Pad(b.left, b.top, b.right, b.bottom))
             v.setPadding(p.left, p.top, p.right, p.bottom)
             insets

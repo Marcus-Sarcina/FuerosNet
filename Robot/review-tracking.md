@@ -20824,3 +20824,22 @@ re-attach every time they become detached"*] — a retry with backoff on
 `Lost`, per tab. Also owed in the courier: a `Position{anchor}` reach whose
 anchor's node this client holds a session with (its own `serving_at`) is
 carried over that session before anything is dialled.
+
+**The first message as GXV-2 → MRK, 2026-11-12:** `pay.relay via="their
+node"` — the ET node, matched as the node serving MRK's address there and
+reached over GXV-2's held session (stage 2's `serving_for`), MRK
+`pay.receive from feb8843a Application 6 bytes`, 160 ms. Three findings
+from the author on the way: (1) the contacts offered for a new thread were
+the focused identity's whole table — a ceremony hands over the other
+side's prior counterparties and nominees (P37), so GXV-2 held MRK's
+circle and the bench's two witnesses as introduced/nominee/provisioned
+and offered them under its own stripe; **ruled:** *"it should be placed
+as the identity which knows that recipient"* — now every held identity's
+counterparties (met in person only), striped and opened as the one that
+knows them, own identities excluded; (2) "the fourth contact" was one of
+those handed-over or provisioned entries, nothing injected; (3) the
+keyboard covered the send box — `Screen.insetting` now adds the IME inset
+and `ConversationActivity` resizes for it. **Asked of the author:**
+whether an *introduced* party (handed over as a counterparty's prior
+counterparty) should also be offered, under the identity that was handed
+them — met-in-person only is assumed meanwhile.

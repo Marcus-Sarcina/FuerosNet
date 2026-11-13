@@ -63,8 +63,9 @@ class ColoursTest {
         // its contacts without a thread of its own, opened held as it
         assertTrue(
             "the direct list offers no way to start a thread as the focused identity",
-            list.contains("Kernel.contacts()") && list.contains(".putExtra(\"by\", active)") &&
-                list.contains("threads.filter { it.by == active }.map { it.peerKey }.toSet()"),
+            list.contains("Kernel.contactsHeld()") && list.contains(".putExtra(\"by\", by)") &&
+                list.contains("Identities.colourOf(colours, by)") &&
+                list.contains(".filter { it.row.how == How.COUNTERPARTY }"),
         )
     }
 
