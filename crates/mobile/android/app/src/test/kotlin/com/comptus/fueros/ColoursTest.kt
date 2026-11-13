@@ -59,6 +59,13 @@ class ColoursTest {
         assertTrue("Options offers no colour", shell.contains("row(\"Colour\", Identities.colourName(focusColour())) { chooseColour() }"))
         val list = source("ConversationsActivity.kt")
         assertTrue("a thread is not coloured by the identity it is held as", list.contains("Identities.colourOf(colours, t.by)"))
+        // **and the focused identity can start one** [author, 2026-11-11]:
+        // its contacts without a thread of its own, opened held as it
+        assertTrue(
+            "the direct list offers no way to start a thread as the focused identity",
+            list.contains("Kernel.contacts()") && list.contains(".putExtra(\"by\", active)") &&
+                list.contains("threads.filter { it.by == active }.map { it.peerKey }.toSet()"),
+        )
     }
 
     private fun source(name: String): String {

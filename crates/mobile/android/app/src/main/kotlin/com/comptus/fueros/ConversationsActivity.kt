@@ -9,6 +9,7 @@ import android.view.View
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import uniffi.rhtn_model.How
 
 /**
  * Conversations (C1): the threads this device holds, one row per peer.
@@ -85,9 +86,64 @@ class ConversationsActivity : Activity() {
                     },
                 )
             }
+            contacts(threads)
             return
         }
         threads.forEach { t -> list.addView(row(t)) }
+        contacts(threads)
+    }
+
+    /**
+     * **The focused identity's contacts without a thread of its own** —
+     * starting a thread is the focused identity's act [author, 2026-11-11],
+     * and until it has one the list is the only door to a conversation. A
+     * contact met by another identity held here is not offered: the thread
+     * would be that identity's. Infrastructure is reached, not written to.
+     */
+    private fun contacts(threads: List<Front.Thread>) {
+        val active = Kernel.activeIdentity() ?: return
+        val open = threads.filter { it.by == active }.map { it.peerKey }.toSet()
+        val fresh = Kernel.contacts()
+            .filter { it.how != How.INFRA }
+            .map { it.keyhash.hex() }
+            .filter { it !in open }
+        if (fresh.isEmpty()) return
+        list.addView(
+            TextView(this).apply {
+                text = "Contacts"
+                textSize = 13f
+                setTextColor(Palette.now.sub)
+                setPadding(0, 36, 0, 8)
+            },
+        )
+        for (key in fresh) {
+            val name = TextView(this).apply {
+                text = Kernel.aliasOf(key) ?: "${key.take(8)}…"
+                textSize = 20f
+            }
+            list.addView(
+                LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(0, 20, 0, 20)
+                    isClickable = true
+                    addView(
+                        View(this@ConversationsActivity).apply {
+                            setBackgroundColor(Identities.colourOf(colours, active))
+                            layoutParams = LinearLayout.LayoutParams(px(6), px(26)).apply { setMargins(0, 0, px(10), 0) }
+                        },
+                    )
+                    addView(name, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                    setOnClickListener {
+                        startActivity(
+                            Intent(this@ConversationsActivity, ConversationActivity::class.java)
+                                .putExtra("peer", key)
+                                .putExtra("by", active),
+                        )
+                    }
+                },
+            )
+        }
     }
 
     /** Which identity holds a thread, said on the row only where the

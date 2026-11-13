@@ -20795,3 +20795,32 @@ fresh load holds), and `Service::start` pins them before serving
 (the first draft failed at the restart leg — `load` fills `own`, not
 `transactions`, so the seed had read the wrong map). Documents: infra §1
 bullet, SES-018 (569 families, SES 18).
+
+**T5–T7 run 2026-11-12.** T5 sealed `2ed2f116` (GXV-2 ← MRK, two
+signers, the nominee silent), the subnet named **E Two**; GXV's rail drew
+ET green under GXV-2 beside MM red. T6: the node enrolled by hand from
+GXV (admin 7450, run of 7 credentials), GXV-2 attached after the port
+defect above was worked around (`identity.attach who=feb8843a
+node=feb8843a attached=true tab=true`, `node.attached feb8843a`). T7: the
+invitation carried by `adb` (`fueros://attach?v=1&at=192.168.0.8:7431
+&patron=<feb8843a>`), the first tap refused Unbound (the admission defect
+above, fixed `4969ba2`), the recorded tab taken on MRK's next app start:
+bench node as the session (1.39 s, 6 taught) then `pay.tab.attached
+refused=0`, `identity.attach who=31c2d23f node=feb8843a attached=true
+tab=true`; the node `node.attached 31c2d23f`. **Small defect:**
+`InviteActivity`'s button does not try again after a refusal — the second
+tap produced no attach at all; owed a retry (or a re-read of the link).
+
+**Found on the bench 2026-11-12 (the first message): a client does not
+re-attach after its node restarts.** The ET node was restarted with the
+admission fix; GXV-2's session died with the old process, and the client
+holds one attach per app start — `watch` judges the loss and tells the
+shell, nothing dials again. GXV-2's sends then went "nowhere" (the beyond
+dial to the endpoint record's `:7448`, 3 s, then the serving node's relay
+with no session under it) and five profile requests were refused the same
+way. Worked around by restarting the app. **Owed:** the re-attach the
+invitation module quotes [author, 2026-11-04: *"all horizon members should
+re-attach every time they become detached"*] — a retry with backoff on
+`Lost`, per tab. Also owed in the courier: a `Position{anchor}` reach whose
+anchor's node this client holds a session with (its own `serving_at`) is
+carried over that session before anything is dialled.
