@@ -20918,3 +20918,17 @@ each. **Added to the review's debt**: tests that measure wall-clock time
 under parallel scheduling — the ceremony and daemon-spawn families —
 need budgets that wait on a condition with a generous bound rather than a
 fixed second count; three different ones failed three gates in a row.
+
+**Review §7.6, correction 3 — 2026-11-13.** The nodes an identity agreed
+to are the kernel's: `PayloadState.agreed` (node → addresses, field 11 of
+the payload array; 10- and 7-field forms still read), `Client::agree_to /
+disagree / agreed`, FFI `agree_to / disagree / agreed` (`Agreed` record).
+`serveFrom` hands the agreement to the kernel and attaches; bring-up and
+`attachTabs` attach what the kernel holds; the shell's `serving` file is
+imported once into an identity whose kernel holds nothing and forgotten
+(`importServingRecord`), `Serving.kt` keeping `read` for that alone.
+Tests: the payload round trip carries `agreed` (eleven fields), a client
+test agrees/withdraws/lists, `ServingTest` pins the shell's side. Also:
+the focused identity's bring-up loop now schedules the retry where a tab
+did not answer — GXV-2's attach timed out at 13:53 and nothing tried
+again, the held identities' path being the only one that did.

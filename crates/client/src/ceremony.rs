@@ -6191,6 +6191,27 @@ impl Client {
         self.payload.attachments.insert(node);
     }
 
+    /// **A node agreed to**: an invitation taken, an instance enrolled or
+    /// launched. Kept with the addresses the agreement named, which is
+    /// what the next start attaches to [review, 2026-11-13].
+    pub fn agree_to(&mut self, node: Keyhash, addresses: Vec<String>) {
+        self.payload.agreed.insert(node, addresses);
+    }
+
+    /// An agreement withdrawn: the node is not attached to at the next start.
+    pub fn disagree(&mut self, node: &Keyhash) {
+        self.payload.agreed.remove(node);
+    }
+
+    /// Every node agreed to, with its addresses, in key order.
+    pub fn agreed(&self) -> Vec<(Keyhash, Vec<String>)> {
+        self.payload
+            .agreed
+            .iter()
+            .map(|(n, a)| (*n, a.clone()))
+            .collect()
+    }
+
     /// Every node this client is attached to.
     pub fn attachments(&self) -> Vec<Keyhash> {
         self.payload.attachments.iter().copied().collect()

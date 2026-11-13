@@ -31,6 +31,15 @@ use std::time::Duration;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 /// What an attach achieved, as a screen shows it.
+/// A node an identity agreed to serve from, as the kernel keeps it.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct Agreed {
+    /// The node.
+    pub serving: Id,
+    /// Where the agreement said it answers, `host:port` each.
+    pub addresses: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct Attached {
     /// The node the session is with.

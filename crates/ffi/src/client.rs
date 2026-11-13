@@ -11,7 +11,7 @@
 //! or the hardware did.
 
 use crate::device::Platform;
-use crate::net::{Attached, Event, Net, Status, Wake, pins_for};
+use crate::net::{Agreed, Attached, Event, Net, Status, Wake, pins_for};
 use crate::types::{Answer, Id, Refused, id_of, keyhash};
 use rhtn_adaptors::actor::Handle;
 use rhtn_archive::Keyhash;
@@ -2142,6 +2142,46 @@ impl Participant {
     pub fn attachments(&self) -> Vec<Id> {
         crate::diag::call_plain("attachments", || {
             self.net.attachments().iter().map(id_of).collect()
+        })
+    }
+
+    /// **A node agreed to serve from** — an invitation taken, an instance
+    /// enrolled or launched — kept by the kernel with its addresses, which
+    /// is what the shell attaches at every start [review, 2026-11-13: one
+    /// store, the kernel's].
+    pub fn agree_to(&self, serving: Id, addresses: Vec<String>) -> Result<(), Refused> {
+        crate::diag::call("agree_to", || {
+            let node = keyhash(&serving).ok_or_else(|| Refused::new("a node is 32 bytes"))?;
+            if addresses.is_empty() {
+                return Err(Refused::new("an agreement names at least one address"));
+            }
+            self.handle
+                .with_blocking(move |c| c.agree_to(node, addresses.clone()));
+            self.save()
+        })
+    }
+
+    /// An agreement withdrawn.
+    pub fn disagree(&self, serving: Id) -> Result<(), Refused> {
+        crate::diag::call("disagree", || {
+            let node = keyhash(&serving).ok_or_else(|| Refused::new("a node is 32 bytes"))?;
+            self.handle.with_blocking(move |c| c.disagree(&node));
+            self.save()
+        })
+    }
+
+    /// Every node agreed to, with its addresses.
+    pub fn agreed(&self) -> Vec<Agreed> {
+        crate::diag::call_plain("agreed", || {
+            self.handle.with_blocking(|c| {
+                c.agreed()
+                    .into_iter()
+                    .map(|(n, addresses)| Agreed {
+                        serving: id_of(&n),
+                        addresses,
+                    })
+                    .collect()
+            })
         })
     }
 

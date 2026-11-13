@@ -44,12 +44,15 @@ fn the_address_state_round_trips_and_the_older_form_still_reads() {
     p.attachments.insert(kh("n1"));
     p.serving_at.insert(kh("a1"), kh("n1"));
     p.last_from.insert(kh("bob"), kh("a1"));
+    p.agreed
+        .insert(kh("n1"), vec!["192.168.0.8:7431".to_string()]);
     let bytes = p.encode();
     let back = PayloadState::decode(PayloadConfig::default(), &bytes).expect("reads");
     assert_eq!(back.attachments, p.attachments);
     assert_eq!(back.serving_at, p.serving_at);
     assert_eq!(back.last_from, p.last_from);
-    assert_eq!(bytes[0], 0x8a, "ten fields");
+    assert_eq!(back.agreed, p.agreed, "the agreement and its addresses");
+    assert_eq!(bytes[0], 0x8b, "eleven fields");
 }
 
 /// **An identity in two subnets publishes its profile for both** (review
@@ -73,4 +76,28 @@ fn an_identity_in_two_subnets_publishes_its_profile_for_each() {
         profiles >= 2,
         "a profile published per address, got {profiles}"
     );
+}
+
+/// **The nodes agreed to are the kernel's to keep** (review 2026-11-13):
+/// agreed, withdrawn, listed with their addresses.
+#[test]
+fn a_node_agreed_to_is_kept_with_its_addresses_until_withdrawn() {
+    let mut s = setup(&["alice", "bob", "witness"]);
+    let a = s.client("alice");
+    assert!(a.agreed().is_empty());
+    a.agree_to(kh("node-x"), vec!["192.168.0.8:7431".to_string()]);
+    a.agree_to(
+        kh("node-y"),
+        vec!["10.0.0.2:7447".to_string(), "10.0.0.3:7447".to_string()],
+    );
+    assert_eq!(a.agreed().len(), 2);
+    assert_eq!(
+        a.agreed()
+            .iter()
+            .find(|(n, _)| *n == kh("node-y"))
+            .map(|(_, v)| v.len()),
+        Some(2)
+    );
+    a.disagree(&kh("node-x"));
+    assert_eq!(a.agreed().len(), 1);
 }

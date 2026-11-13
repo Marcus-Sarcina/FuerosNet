@@ -1939,13 +1939,40 @@ object Kernel {
         // own scope instead, which is the one that agreed ([SERVING]).
         val app = context.applicationContext
         val scope = activeId?.let { id -> identities(app).firstOrNull { it.id == id }?.scope }
-        // **one tab per address** [author, 2026-11-11]: the node joins the
-        // identity's record beside the others it agreed to
-        runCatching {
-            val shell = AndroidShell(app, scope)
-            shell.write(SERVING, Serving.with(shell.read(SERVING), Serving.Tab(nodeHex, address)))
-        }.onFailure { front.note("· the node could not be remembered: ${it.message}") }
+        // **one tab per address** [author, 2026-11-11], **kept by the kernel**
+        // [review, 2026-11-13: the one store of what an identity agreed to]
+        val p = participant ?: run { front.note("· no kernel yet"); return }
+        val node = Attach.node(nodeHex)?.let { runCatching { unhex(it) }.getOrNull() }
+        if (node == null) {
+            front.note("· not a node: ${nodeHex.take(8)}…")
+            return
+        }
+        call("agreeTo", { e -> front.note("· the node could not be remembered: ${e.reason}") }) {
+            p.agreeTo(node, listOf(address))
+        }
         attachTo(nodeHex, address)
+    }
+
+    /**
+     * **The shell's own serving record, imported once** [review,
+     * 2026-11-13]: a phone from before the kernel kept the agreement holds
+     * `serving` in the identity's scope; its tabs become the kernel's and
+     * the file is forgotten. Nothing where the kernel already holds any.
+     */
+    private fun importServingRecord(p: Participant, scope: String?) {
+        val a = appContext ?: return
+        val shell = AndroidShell(a, scope)
+        val tabs = runCatching { Serving.read(shell.read(SERVING)) }.getOrNull() ?: return
+        if (tabs.isEmpty()) return
+        val held = call("agreed", { emptyList() }) { p.agreed() }
+        if (held.isEmpty()) {
+            for (t in tabs) {
+                val node = runCatching { unhex(t.node) }.getOrNull() ?: continue
+                call("agreeTo", { }) { p.agreeTo(node, listOf(t.addr)) }
+            }
+        }
+        shell.forget(SERVING)
+        Diag.event("serving.imported", "tabs" to tabs.size, "taken" to held.isEmpty())
     }
 
     fun provision(context: Context, blob: String) {
@@ -2665,16 +2692,21 @@ object Kernel {
         // one is held being a tab rather than a replacement
         run {
             val scope = activeId?.let { id -> index.firstOrNull { it.id == id }?.scope }
-            val tabs = appContext?.let { a -> runCatching { Serving.read(AndroidShell(a, scope).read(SERVING)) }.getOrNull() }
-                ?: emptyList()
-            for (t in tabs) {
-                if (t.node == nodeHex) continue
-                val node = unhex(t.node)
-                val a = call("attach", { e -> front.note("· tab ${t.node.take(8)}… refused: ${e.reason}"); null }) {
-                    p.attach(node, listOf(t.addr), listOfNotNull(to))
+            importServingRecord(p, scope)
+            var missed = 0
+            for (t in call("agreed", { emptyList() }) { p.agreed() }) {
+                val hex = t.serving.hex()
+                if (hex == nodeHex) continue
+                val a = call("attach", { e -> front.note("· tab ${hex.take(8)}… refused: ${e.reason}"); null }) {
+                    p.attach(t.serving, t.addresses, listOfNotNull(to))
                 }
-                Diag.event("identity.attach", "who" to (activeId ?: "").take(8), "node" to t.node.take(8), "attached" to (a != null), "tab" to true)
+                if (a == null) missed += 1
+                Diag.event("identity.attach", "who" to (activeId ?: "").take(8), "node" to hex.take(8), "attached" to (a != null), "tab" to true)
             }
+            // **and tried again where one did not answer** [bench, 2026-11-13:
+            // the focused identity's attach timed out at start and nothing
+            // retried it — the held identities' path did]
+            if (missed > 0) activeId?.let { reattachLater(it, p, scope, 1) }
         }
         // **every other identity attaches and receives for itself** — step
         // 3 of the browser model [author, 2026-11-11]: the one in focus
@@ -2733,8 +2765,8 @@ object Kernel {
      * first's. Where one did not answer, [reattachLater] tries again.
      */
     private fun attachTabs(id: String, p: Participant, scope: String?, attempt: Int) {
-        val tabs = appContext?.let { a -> runCatching { Serving.read(AndroidShell(a, scope).read(SERVING)) }.getOrNull() }
-            ?: emptyList()
+        if (attempt == 0) importServingRecord(p, scope)
+        val tabs = call("agreed", { emptyList() }) { p.agreed() }
         if (tabs.isEmpty()) {
             Diag.event("identity.attach", "who" to id.take(8), "node" to "none")
             Model.connectionOf(id, Connection.Detached)
@@ -2743,11 +2775,12 @@ object Kernel {
         var first: Connection? = null
         var missed = 0
         for (t in tabs) {
-            val node = unhex(t.node)
-            val a = call("attach", { e -> Diag.event("identity.attach", "who" to id.take(8), "node" to t.node.take(8), "refused" to e.reason); null }) {
-                p.attach(node, listOf(t.addr), listOf())
+            val node = t.serving
+            val hex = node.hex()
+            val a = call("attach", { e -> Diag.event("identity.attach", "who" to id.take(8), "node" to hex.take(8), "refused" to e.reason); null }) {
+                p.attach(node, t.addresses, listOf())
             }
-            Diag.event("identity.attach", "who" to id.take(8), "node" to t.node.take(8), "attached" to (a != null), "attempt" to attempt)
+            Diag.event("identity.attach", "who" to id.take(8), "node" to hex.take(8), "attached" to (a != null), "attempt" to attempt)
             if (a == null) missed += 1
             if (first == null) first = if (a == null) Connection.Detached else Connection.Attached(node, a.primary)
         }

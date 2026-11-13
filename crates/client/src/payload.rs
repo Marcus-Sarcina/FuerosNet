@@ -1363,6 +1363,12 @@ pub struct PayloadState {
     /// was received"*]. Recorded at arrival from the attachment it arrived
     /// on ([`crate::ceremony::Client::record_arrival`]).
     pub last_from: BTreeMap<Keyhash, Keyhash>,
+    /// **The nodes this identity agreed to serve from, with the addresses
+    /// the agreement named** [review, 2026-11-13: the one store of it — the
+    /// shell kept a copy of its own and read that at bring-up]. An
+    /// agreement is an invitation taken, an instance enrolled, or a node
+    /// launched; an attach the bench's provision drove is not one.
+    pub agreed: BTreeMap<Keyhash, Vec<String>>,
     /// This device, by the key it presents (`wire-format.md` §7.8): what
     /// its bundle names and what its messages say they are from.  The
     /// identity's classical member until a device says otherwise.
@@ -1414,9 +1420,9 @@ impl PayloadState {
     pub fn encode(&self) -> Vec<u8> {
         use crate::durable::*;
         let mut out = Vec::new();
-        // ten fields since the address model; a reader of the seven-field
-        // form reads the three as empty
-        emit_array_head(&mut out, 10);
+        // eleven fields since the agreed nodes; the ten- and seven-field
+        // forms still read, the fields they lack as empty
+        emit_array_head(&mut out, 11);
         emit_bstr(&mut out, &self.keys.encode());
         emit_bstr(&mut out, &self.sessions.encode());
         emit_opt_bstr(&mut out, self.serving.as_ref().map(|k| &k[..]));
@@ -1456,6 +1462,15 @@ impl PayloadState {
             emit_bstr(&mut out, peer);
             emit_bstr(&mut out, anchor);
         }
+        emit_array_head(&mut out, self.agreed.len());
+        for (node, addrs) in &self.agreed {
+            emit_array_head(&mut out, 2);
+            emit_bstr(&mut out, node);
+            emit_array_head(&mut out, addrs.len());
+            for a in addrs {
+                emit_tstr(&mut out, a);
+            }
+        }
         out
     }
 
@@ -1463,7 +1478,9 @@ impl PayloadState {
     pub fn decode(cfg: PayloadConfig, b: &[u8]) -> Option<PayloadState> {
         use crate::durable::*;
         // the seven-field form predates the address model and still reads
-        let (_, f) = parse_array(b, 10).or_else(|| parse_array(b, 7))?;
+        let (_, f) = parse_array(b, 11)
+            .or_else(|| parse_array(b, 10))
+            .or_else(|| parse_array(b, 7))?;
         let keyhashes = |it: &rhtn_codec::cbor::Item| -> Option<Vec<Keyhash>> {
             array(it)?.iter().map(|x| fixed::<32>(b, x)).collect()
         };
@@ -1488,6 +1505,27 @@ impl PayloadState {
         };
         let last_from: BTreeMap<Keyhash, Keyhash> = match f.get(9) {
             Some(it) => pairs(it)?.into_iter().collect(),
+            None => BTreeMap::new(),
+        };
+        let agreed: BTreeMap<Keyhash, Vec<String>> = match f.get(10) {
+            Some(it) => array(it)?
+                .iter()
+                .map(|p| {
+                    let [node, addrs] = array(p)?.as_slice() else {
+                        return None;
+                    };
+                    let addrs: Vec<String> = array(addrs)?
+                        .iter()
+                        .map(|a| match a {
+                            rhtn_codec::cbor::Item::Text(r) => {
+                                std::str::from_utf8(&b[r.clone()]).ok().map(str::to_string)
+                            }
+                            _ => None,
+                        })
+                        .collect::<Option<_>>()?;
+                    Some((fixed::<32>(b, node)?, addrs))
+                })
+                .collect::<Option<_>>()?,
             None => BTreeMap::new(),
         };
         let signed_bundle = match &f[4] {
@@ -1518,6 +1556,7 @@ impl PayloadState {
             attachments,
             serving_at,
             last_from,
+            agreed,
             device: fixed::<32>(b, &f[3])?,
             signed_bundle,
             pending,
@@ -1540,6 +1579,7 @@ impl PayloadState {
             attachments: BTreeSet::new(),
             serving_at: BTreeMap::new(),
             last_from: BTreeMap::new(),
+            agreed: BTreeMap::new(),
             device: [0; 32],
             signed_bundle: None,
             pending: BTreeMap::new(),
