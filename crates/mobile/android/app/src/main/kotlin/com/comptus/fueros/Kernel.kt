@@ -86,6 +86,9 @@ object Kernel {
      */
     private const val SERVING = "serving"
 
+    /** An identity's conversations, in its own scope ([Threads]). */
+    private const val THREADS = "threads"
+
     /** The ceremony in progress, or null. Process-scoped like the
      *  connection: a font change mid-ceremony must not lose it. */
     @Volatile private var meet: Meet? = null
@@ -767,6 +770,15 @@ object Kernel {
         val p = participant ?: return null
         return aliases(p)[keyHex]
     }
+
+    /**
+     * **The name a party goes by to the identity that holds the row**
+     * [author, 2026-11-12]: a thread or a contact of one identity is named
+     * by that identity's kernel, not the focused one's, which may not know
+     * the party at all.
+     */
+    fun aliasOfHeld(by: String, keyHex: String): String? =
+        loaded[by]?.let { aliases(it)[keyHex] } ?: aliasOf(keyHex)
 
     /**
      * **Fetch what every located contact published** (`wire-format.md`
@@ -2669,6 +2681,19 @@ object Kernel {
         // 3 of the browser model [author, 2026-11-11]: the one in focus
         // stays on this thread, as it always did, and each of the rest
         // gets its own ([launchHeld])
+        // **every identity's conversations, back from its own scope, and
+        // written there after each change** [author, 2026-11-12]
+        appContext?.let { a ->
+            for (h in index) {
+                front.restore(Threads.decode(runCatching { AndroidShell(a, h.scope).read(THREADS) }.getOrNull()))
+            }
+            front.persist = { by ->
+                val scope = identities(a).firstOrNull { it.id == by }?.scope
+                val mine = front.threads().filter { it.by == by }
+                runCatching { AndroidShell(a, scope).write(THREADS, Threads.encode(mine)) }
+                    .onFailure { Diag.warn("threads.persist", "who" to by.take(8), "why" to (it.message ?: "unsaid")) }
+            }
+        }
         for ((hid, hp) in loaded) {
             if (hid != activeId) launchHeld(hid, hp, index.firstOrNull { it.id == hid }?.scope)
         }

@@ -20843,3 +20843,25 @@ and `ConversationActivity` resizes for it. **Asked of the author:**
 whether an *introduced* party (handed over as a counterparty's prior
 counterparty) should also be offered, under the identity that was handed
 them — met-in-person only is assumed meanwhile.
+
+**Second exchange as GXV-2, 2026-11-13 00:xx.** GXV-2 → MRK `pay.relay
+via="their node"` (the ET node over the held session); MRK → GXV-2
+`pay.route path="direct"` — the phones share a LAN, so the reply took the
+direct path (§12.6.3) and no node; the relay-routing proof (`last_from`
+choosing the tab for a reply) needs the direct path closed, a run with
+the phones on different networks. **Three findings from the author and
+one of mine, fixed in one build:** (1) conversations lived in
+`Front.convos` only — every restart emptied every thread while the rows
+stayed; now kept per identity in its own scope (`Threads.kt`, the
+`threads` file, restored at bring-up, written after each change); (2) a
+row of one identity was named by the focused identity's kernel — GXV-2
+showed GXV's contact ZU8 as a bare keyhash ("an extra contact I can't
+identify"); now `aliasOfHeld(by, key)`; (3) MRK showed GXV-2 as hex: its
+profile request went to dial the ET node at the endpoint record's wrong
+port — profile and prekey requests now go over a held tab where the
+subject's node is one, as payloads do; (4) sending to ZU8 as GXV
+(703a82c2, held out of focus with no node of its own) went "nowhere" in 5
+ms — the ruled behaviour for an identity without an agreed node, worth
+knowing on the bench. **Asked:** whether verifier and nominee
+relationships are offered as contacts to write to (MRK's "fourth" would
+be ZU8, consulted as a verifier, never met); met in person only meanwhile.

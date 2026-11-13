@@ -121,7 +121,7 @@ class ConversationsActivity : Activity() {
         )
         for ((by, key) in fresh) {
             val name = TextView(this).apply {
-                text = (Kernel.aliasOf(key) ?: "${key.take(8)}…") + holderLabel(by)
+                text = (Kernel.aliasOfHeld(by, key) ?: "${key.take(8)}…") + holderLabel(by)
                 textSize = 20f
             }
             list.addView(
@@ -166,7 +166,7 @@ class ConversationsActivity : Activity() {
         val name = TextView(this).apply {
             // the alias they published where one has reached this device,
             // else what the thread was opened as
-            text = (Kernel.aliasOf(t.peerKey) ?: t.peerName) + holderLabel(t.by)
+            text = (Kernel.aliasOfHeld(t.by, t.peerKey) ?: t.peerName) + holderLabel(t.by)
             textSize = 20f
         }
         val chip = TextView(this).apply {

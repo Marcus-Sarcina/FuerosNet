@@ -306,6 +306,14 @@ impl Courier {
             PrekeyRequest::Batch { .. } => return None,
         };
         let reach = self.handle.with(move |c| c.reach_for(&subject)).await;
+        // **over a held tab where the subject's node is one** [author,
+        // 2026-11-12]: asked of the session rather than dialled, as a
+        // payload is carried
+        if let Upstream::Known { node, .. } = &reach.upstream
+            && let Some(held) = self.serving_for(node)
+        {
+            return held.prekey(self.me(), body).await;
+        }
         beyond
             .ask_their_node(
                 subject,
@@ -323,6 +331,11 @@ impl Courier {
             .ok()?
             .subject;
         let reach = self.handle.with(move |c| c.reach_for(&subject)).await;
+        if let Upstream::Known { node, .. } = &reach.upstream
+            && let Some(held) = self.serving_for(node)
+        {
+            return held.profile(body).await;
+        }
         beyond
             .ask_their_node(
                 subject,

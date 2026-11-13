@@ -109,10 +109,34 @@ class Front {
         }
     }
 
-    private fun changed() {
+    /** Written after every change to one identity's threads, where the shell wired one. */
+    var persist: ((String) -> Unit)? = null
+
+    private fun changed(by: String? = null) {
         // under the lock, so what a render reads is the state this change
         // produced and not the next one
         ui?.render()
+        by?.let { persist?.invoke(it) }
+    }
+
+    /**
+     * **The threads kept for an identity, back** [author, 2026-11-12]: what
+     * a file held, under what is already here, the sequence past every
+     * id read.
+     */
+    fun restore(threads: List<Thread>) {
+        synchronized(lock) {
+            for (t in threads) {
+                val c = convos.getOrPut(key(t.by, t.peerKey)) { Convo(t.by, t.peerKey, t.peerName) }
+                if (c.messages.isEmpty()) {
+                    c.name = t.peerName
+                    c.direct = t.direct
+                    c.messages.addAll(t.messages)
+                }
+                seq = maxOf(seq, (t.messages.maxOfOrNull { it.id } ?: -1L) + 1)
+            }
+            changed()
+        }
     }
 
     // ---- accessors: snapshots under the lock ---------------------------
@@ -173,7 +197,7 @@ class Front {
     fun peerKnown(by: String, peerKey: String, name: String) {
         synchronized(lock) {
             convos.getOrPut(key(by, peerKey)) { Convo(by, peerKey, name) }.name = name
-            changed()
+            changed(by)
         }
     }
 
@@ -183,7 +207,7 @@ class Front {
         synchronized(lock) {
             convos[key(by, peerKey)]?.let {
                 it.direct = held
-                changed()
+                changed(by)
             }
         }
     }
@@ -195,7 +219,7 @@ class Front {
             val c = convos.getOrPut(key(by, peerKey)) { Convo(by, peerKey, name) }
             c.name = name
             c.messages.add(Message(seq++, false, name, text, Delivery.SENT, null))
-            changed()
+            changed(by)
         }
     }
 
@@ -205,7 +229,7 @@ class Front {
             val c = convos.getOrPut(key(by, peerKey)) { Convo(by, peerKey, peerKey) }
             val id = seq++
             c.messages.add(Message(id, true, "me", text, Delivery.SENDING, null))
-            changed()
+            changed(by)
             return id
         }
     }
@@ -217,7 +241,7 @@ class Front {
             val i = c.messages.indexOfFirst { it.id == id }
             if (i >= 0) {
                 c.messages[i] = c.messages[i].copy(delivery = delivery, reason = reason)
-                changed()
+                changed(by)
             }
         }
     }
