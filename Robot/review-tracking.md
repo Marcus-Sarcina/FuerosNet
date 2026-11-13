@@ -20932,3 +20932,11 @@ test agrees/withdraws/lists, `ServingTest` pins the shell's side. Also:
 the focused identity's bring-up loop now schedules the retry where a tab
 did not answer — GXV-2's attach timed out at 13:53 and nothing tried
 again, the held identities' path being the only one that did.
+
+**Correction 3 on the bench, 2026-11-13 14:13** (`4a47495`): MRK imported
+its old serving file into the kernel (`serving.imported tabs=1
+taken=true`) and attached to the ET node from what the kernel holds
+(`identity.attach … attached=true tab=true`; node `node.attached
+31c2d23f`) after the author re-associated the dongle. GXV-2's dial to the
+same node timed out at start and its retry chain is running — the first
+live use of the focused identity's retry.
